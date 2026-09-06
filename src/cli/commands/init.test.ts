@@ -277,8 +277,8 @@ describe('initCommand — a scaffolded project is portable and has no dangling a
  *   2. the rules IMPORT the contract from `boardsmith/world` and re-declare
  *      none of it;
  *   3. the test drives the library rather than a hand-rolled fake runner;
- *   4. the project says what does and does not work yet, because `boardsmith
- *      dev` does not run a world until #167.
+ *   4. the project itself says how to run the world, because the terminal
+ *      scrolls and the README keeps.
  */
 describe('initCommand --world — a persistent world project (#168)', () => {
   const { scaffold: scaffoldWorld, read, has } = scaffoldSuite('bs-init-world-', 'tiny-world', {
@@ -359,7 +359,7 @@ describe('initCommand --world — a persistent world project (#168)', () => {
     await scaffoldWorld();
     const test = read('tests/world.test.ts');
     // `createWorld` is the one function every host calls — the platform's
-    // runner and, once #167 lands, `boardsmith dev`. A test that called the
+    // runner and `boardsmith dev` alike. A test that called the
     // command handlers itself would prove only that the author can call their
     // own functions, which is what all four existing world games do.
     expect(test).toContain("import { createWorld } from 'boardsmith/world'");
@@ -379,14 +379,16 @@ describe('initCommand --world — a persistent world project (#168)', () => {
     expect(read('src/ui/WorldApp.vue')).toContain('WorldShell');
   });
 
-  it('tells the author, in the project itself, that `boardsmith dev` does not run a world yet', async () => {
+  it('tells the author, in the project itself, how to run the world (#167)', async () => {
     await scaffoldWorld();
-    // The terminal scrolls; the README keeps. An author who is not told this
-    // finds it out by watching a genesis that never runs.
+    // The terminal scrolls; the README keeps. This block said the opposite
+    // until #167 -- "what does not work yet: boardsmith dev" -- and an author
+    // who is told the stale half discovers the truth by not trying.
     const readme = read('README.md');
+    expect(readme).toContain('boardsmith dev');
+    expect(readme).toContain('boardsmith dev --reset');
     expect(readme).toContain('boardsmith test');
-    expect(readme).toContain('#167');
-    expect(readme.toLowerCase()).toContain('does not work yet');
+    expect(readme.toLowerCase()).not.toContain('does not work yet');
   });
 
   it('leaves an ordinary game project untouched', async () => {

@@ -131,6 +131,18 @@ describe('the local world store', () => {
       await store.writeCheckpoint({ 'room/a': '{"n":1}' });
       expect(store.dirtyPartitions()).toEqual(['room/b']);
     });
+
+    it('can be discarded by a host that threw its resident world away (#167)', async () => {
+      // The ONE caller: `boardsmith dev` answering a checkpoint that would not
+      // land by dropping the live tree, the way the platform discards its child
+      // isolate. A mark describes a live tree, so once there is no live tree the
+      // mark is a partition no engine can ever serialize.
+      store.recordDirty(['room/a', 'room/b']);
+      store.discardDirty(['room/a']);
+      expect(store.dirtyPartitions()).toEqual(['room/b']);
+      store.discardDirty(store.dirtyPartitions());
+      expect(store.dirtyPartitions()).toEqual([]);
+    });
   });
 
   describe('a checkpoint', () => {

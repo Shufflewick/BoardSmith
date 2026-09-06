@@ -1,7 +1,6 @@
 /**
- * What a PERSISTENT-WORLD PROJECT is to this CLI, and what the CLI says about
- * one -- both in a single module, because for three architectures they were in
- * two and disagreed (#304).
+ * What a PERSISTENT-WORLD PROJECT is to this CLI -- one module, because for
+ * three architectures it was two and they disagreed (#304).
  *
  * A world is what a game IS, not something a run selects, so `boardsmith.json`'s
  * `world` block is the single declaration and NO COMMAND TAKES A FLAG TO SAY SO.
@@ -9,23 +8,28 @@
  * block, once, into a project that does not exist yet. Every command after it
  * reads the block and nothing asks again.
  *
- * What the block causes here is narrow and worth stating exactly once: the dev
- * host constructs the game with `GameOptions.worldMode`, the engine's residency
- * model (docs/core-concepts.md, "Snapshot Mode and World Mode"), and runs the
- * project's TABLE game under it.
+ * ## WHAT THE BLOCK CAUSES, AS OF #167
  *
- * It does NOT run the world half of the game definition. Commands, genesis, the
- * per-seat view, scheduled events and presence are driven by a HOST, and the
- * dev host is not one yet -- #167 is the work that makes it. So a sentence
- * claiming otherwise sends an author away believing they have exercised a
- * contract that never executed. That is what the old notice did, and why the
- * accurate one lives here with a test on its wording.
+ * `boardsmith dev` RUNS THE WORLD. It opens the project's durable local store,
+ * runs the bundle's genesis once, serves `world.html` (or the shell's own
+ * surface for a project that has not written one), dispatches commands through
+ * `partitions(args, seat)` and then `run`, projects `view(seat)` per attached
+ * seat, fires scheduled events on their due time, and reports presence from the
+ * seats it has open. It does NOT play the project's table half; a world project
+ * with no table half is not a problem for it, which is the shape
+ * `boardsmith init --world` scaffolds.
  *
- * What CHANGED under it, and what did not: since #165 the contract's runtime
- * lives in this repo as `boardsmith/world`, so a project's own
- * `tests/world.test.ts` drives the real thing on a laptop with no host at all,
- * and the hosting platform drives that same library in production. What has not
- * changed is this command: `boardsmith dev` still serves the table.
+ * That is a change of fact and not of wording. Until #167 the dev host served
+ * the TABLE game constructed with `worldMode`, and this file's job was to stop
+ * a notice claiming otherwise -- because a sentence claiming a world had run
+ * sends an author away believing they exercised a contract that never executed.
+ * The claim is now true, so the notice that denied it is gone rather than
+ * softened, and what says what a world run does is `dev-world.ts:worldDevBanner`,
+ * beside the code that does it.
+ *
+ * The runtime under all of it is `boardsmith/world` (#165): the same library the
+ * hosting platform drives in production, driven on a laptop by
+ * `cli/dev-host/world-host.ts` over `cli/dev-host/world-store.ts`.
  */
 
 /**
@@ -49,31 +53,4 @@ export interface WorldManifestBlock {
  */
 export function resolveWorldMode(config: { world?: unknown }): boolean {
   return config.world !== undefined && config.world !== null;
-}
-
-/**
- * The lines `boardsmith dev` prints for a world project, or none at all for a
- * game that is not one.
- *
- * Returned rather than printed so the wording is testable, which is the whole
- * point: the sentence this replaces was the defect.
- */
-export function worldModeNotice(config: { world?: WorldManifestBlock | null }): string[] {
-  if (!resolveWorldMode(config)) return [];
-  const capacity =
-    typeof config.world?.maxPlayers === 'number'
-      ? `world.maxPlayers ${config.world.maxPlayers}`
-      : 'no world.maxPlayers declared, which `boardsmith validate` requires';
-  return [
-    `Persistent world project (${capacity}).`,
-    `  \`boardsmith dev\` plays this project's TABLE game, constructed with worldMode --`,
-    '  the engine residency model a world uses, which unlocks the partition APIs and',
-    '  changes nothing about how ops run.',
-    '  The world half of your game definition is not run by this command yet',
-    '  (BoardSmith #167): nothing here dispatches a world command, runs its genesis,',
-    '  projects a world view, fires a scheduled event or reports presence.',
-    '  Your tests/world.test.ts drives that half through the `boardsmith/world`',
-    '  library, and the hosting platform drives the same library in production.',
-    `  BoardSmith ${WORLD_AUTHORING_DOC} says where a world runs and who owns that contract.`,
-  ];
 }

@@ -31,31 +31,37 @@ import { WORLD_AUTHORING_DOC } from './world-project.js';
 export const WORLD_SCAFFOLD_SEATS = 8;
 
 /**
- * WHAT WORKS TODAY AND WHAT DOES NOT, in one place because it is a moving
- * answer and two copies of it would move separately.
+ * WHAT A SCAFFOLDED WORLD CAN DO, in one place because two copies of a moving
+ * answer move separately.
  *
- * `boardsmith dev` does not run a world yet -- that is #167, and the sentence
- * the dev host itself prints lives next door in `world-project.ts`. An author
- * who scaffolds a world and is not told this discovers it by watching their
- * genesis never run, so the scaffold says it twice on purpose: printed once by
- * `init`, and written into the project's own README where it keeps.
+ * It used to be a "what does not work yet" list, because `boardsmith dev` did
+ * not run a world and an author who scaffolded one discovered that by watching
+ * their genesis never run. #167 built the local host, so this is now the list
+ * of commands rather than a warning -- and it is still said twice on purpose:
+ * printed once by `init`, and written into the project's own README where it
+ * keeps.
  */
 export function worldScaffoldStatus(): string[] {
   return [
-    'What works today:',
+    'What your world does now:',
+    '  boardsmith dev     runs YOUR WORLD in a browser, with no network: your genesis',
+    '                     once into a durable local store, every command through',
+    '                     partitions() then run(), a view per attached seat, and your',
+    '                     scheduled events on their due time. The dev bar switches',
+    '                     seats, fires due events without waiting for them, and wakes',
+    '                     the world from parked. world.html is the surface it serves.',
+    '  boardsmith dev --reset',
+    '                     deletes the local world and runs genesis again. Nothing else',
+    '                     deletes it -- closing the laptop is meant to be safe.',
     '  boardsmith test    runs tests/world.test.ts, which drives your world through',
     '                     the `boardsmith/world` library -- genesis, a command, the',
-    '                     clock, and one seat\'s view. No host, no network.',
+    '                     clock, and one seat\'s view. No host, no browser.',
     '  boardsmith lint    checks for BoardSmith pitfalls',
     '  boardsmith build   builds the publishable bundle',
     '',
-    'What does not work yet:',
-    '  boardsmith dev     serves the TABLE half of a project, and this project has none.',
-    '                     It refuses, rather than opening a blank page. Running a world',
-    '                     locally is BoardSmith #167: nothing here yet runs your genesis,',
-    '                     dispatches a command, projects a view or fires a scheduled',
-    '                     event, and world.html is the surface it will serve when it',
-    '                     lands. Until then your test is where your world actually runs.',
+    'The dev host and the hosting platform run the SAME library, with the same',
+    'budgets and the same refusals. What differs is lifecycle policy -- sockets,',
+    'hibernation, eviction timing -- and never what your world is.',
     '',
     `${WORLD_AUTHORING_DOC} is the authoring guide.`,
   ];
@@ -262,8 +268,8 @@ import { RIPEN_MS, plotPartition } from '../src/rules/world.js';
 /**
  * THE WORLD, DRIVEN THROUGH THE LIBRARY THAT RUNS IT.
  *
- * \`createWorld\` is what a host calls -- the hosting platform's runner and, once
- * BoardSmith #167 lands, \`boardsmith dev\` too. Driving it here rather than
+ * \`createWorld\` is what a host calls -- the hosting platform's runner, and
+ * \`boardsmith dev\` too. Driving it here rather than
  * hand-rolling a fake runner is what makes these assertions worth anything: a
  * change to the contract fails this file instead of passing it and failing in
  * production.
@@ -570,7 +576,7 @@ action, and a clock that acts on its own rather than a turn order.
 | \`world.html\` | the entry a world's own surface is served from |
 | \`src/ui/components/WorldBoard.vue\` | that surface |
 
-## Where you stand today
+## What you can run
 
 ${worldScaffoldStatus()
   .map((line) => (line === '' ? '' : `    ${line}`))

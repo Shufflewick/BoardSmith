@@ -10,11 +10,12 @@ whole engine, `boardsmith dev` hosts real multiplayer on your own machine with
 no server, database or service to provision, and `boardsmith test` drives the
 same rules headlessly. When the game is ready, `boardsmith publish` sends the
 bundle to ShufflewickPub, where a single account supplies the networking, the
-hosting and the social platform around it. Persistent worlds are the one part of
-this path still being built: a world's rules run locally today under
-`boardsmith test`, but a world itself runs only on the hosting platform, and
-`boardsmith dev` plays a world project's table half. See
-[Persistent worlds](./persistent-worlds.md) for which half is which.
+hosting and the social platform around it. A persistent world takes the same
+path: `boardsmith init --world` scaffolds one, and `boardsmith dev` runs it on
+your laptop with no network at all -- genesis, commands, per-seat views,
+scheduled events and presence, over a durable local store. See
+[Persistent worlds](./persistent-worlds.md) for what a world is and how one is
+written.
 
 ## Prerequisites
 
@@ -79,8 +80,13 @@ whose contract types are imported from `boardsmith/world` (never hand-copied), a
 world through the same library a host runs — genesis, a command, the clock and
 one seat's view, with no host and no network.
 
-`boardsmith dev` does not run a world yet; that is BoardSmith #167. The
-scaffolded project's README says exactly what does and does not work today, and
+`boardsmith dev` runs that world in a browser with no network: genesis once into
+a durable local store beside `boardsmith.json`, every command through
+`partitions()` then `run()`, a view per attached seat, and your scheduled events
+on their due time. The dev bar switches seats, fires due events without making
+you wait for them, and wakes the world from parked so the rehydration path is
+exercised rather than assumed. `boardsmith dev --reset` deletes the local world
+and runs genesis again; nothing else deletes it.
 [Persistent worlds](./persistent-worlds.md) is the authoring guide.
 
 ### 2. Start Development Server

@@ -1,24 +1,25 @@
 /**
- * #304: THE SENTENCE `boardsmith dev` PRINTED WAS THE DEFECT.
+ * #304, ANSWERED BY #167 RATHER THAN RE-WORDED.
  *
- * For any project whose `boardsmith.json` declared a `world` block, the dev
- * command printed `Persistent world: running resident (worldMode)`. The single
- * thing that branch caused was `worldMode: true` on the game the dev host
- * constructs, which unlocks the engine's partition APIs and changes nothing
- * else about how ops run. The dev host went on serving the project's TABLE
- * game -- both example worlds ship one deliberately -- so an author read the
- * line, played the table game, and was told they had run their world.
+ * The original defect: for any project whose `boardsmith.json` declared a
+ * `world` block, `boardsmith dev` printed `Persistent world: running resident
+ * (worldMode)` and then served the project's TABLE game. An author read the
+ * line, played the table game, and was told they had run their world. #304's
+ * answer was an accurate notice with its wording pinned here.
  *
- * The world half of a game definition is called by the HOSTING PLATFORM's
- * world runner. This CLI does not contain one and does not start one. So the
- * notice has to say what the run really is and where a world really runs, and
- * these assertions are on that sentence because the sentence is what failed.
+ * #167 makes the original claim TRUE: `boardsmith dev` opens the project's
+ * durable world store, runs genesis, dispatches commands, projects views, fires
+ * scheduled events and reports presence. So the notice that denied it is gone,
+ * and this file's job flips. What it now guards is the OPPOSITE staleness --
+ * a CLI surface still telling an author that a world cannot run here, which is
+ * the sentence that will rot next, in exactly the way #304's did.
  */
 import { describe, it, expect } from 'vitest';
 import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { WORLD_AUTHORING_DOC, resolveWorldMode, worldModeNotice } from './world-project.js';
+import { WORLD_AUTHORING_DOC, resolveWorldMode } from './world-project.js';
+import { worldDevBanner } from '../commands/dev-world.js';
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 
@@ -32,94 +33,108 @@ describe('resolveWorldMode (#158: the manifest\'s `world` block is the only way 
   });
 });
 
-describe('worldModeNotice (#304)', () => {
-  it('says nothing about a project that declares no world', () => {
-    expect(worldModeNotice({})).toEqual([]);
-    expect(worldModeNotice({ world: undefined })).toEqual([]);
-  });
-
-  const notice = worldModeNotice({ world: { maxPlayers: 40 } }).join('\n');
-
-  it('names the capacity the manifest declares, because that is the number an author checks', () => {
-    expect(notice).toContain('40');
-  });
-
-  it('says the dev host runs the TABLE game', () => {
-    expect(notice.toLowerCase()).toContain('table');
-  });
-
-  it('says the world half is run by the platform and not by this CLI', () => {
-    expect(notice.toLowerCase()).toContain('platform');
-  });
-
-  /**
-   * The claims the old line made. Each is matched against the whole notice; a
-   * future editor gets told WHY the sentence they just wrote is false.
-   */
-  const FALSE_CLAIMS: Array<{ pattern: RegExp; why: string }> = [
-    {
-      pattern: /running resident/i,
-      why: 'Nothing residing is what `boardsmith dev` starts. It constructs the table game with worldMode, which unlocks the partition APIs and nothing more.',
-    },
-    {
-      pattern: /stands? (a|the|this|your) world up/i,
-      why: 'No world is stood up locally. The world runner is the platform\'s and lives outside this repo.',
-    },
-    {
-      pattern: /(runs|hosts|serves) (a|the|this|your) world\b/i,
-      why: 'This CLI never dispatches a world command, runs a genesis, projects a world view, fires a scheduled event or reports presence.',
-    },
-  ];
-
-  it.each(FALSE_CLAIMS)('does not claim $pattern', ({ pattern, why }) => {
-    expect(pattern.test(notice), why).toBe(false);
-  });
-
-  it('points at the one doc that says where a world runs, and that doc exists', () => {
-    expect(notice).toContain(WORLD_AUTHORING_DOC);
+describe('the world authoring doc the CLI sends an author to', () => {
+  it('exists', () => {
     expect(
       existsSync(join(REPO_ROOT, WORLD_AUTHORING_DOC)),
       `${WORLD_AUTHORING_DOC} is what the CLI sends a world author to read, and it is not there.`,
     ).toBe(true);
   });
+});
 
-  it('an undeclared capacity names the check that requires it, rather than printing "unset"', () => {
-    const undeclared = worldModeNotice({ world: {} }).join('\n');
-    expect(undeclared).toContain('boardsmith validate');
-    expect(undeclared).not.toContain('unset');
+describe('#167: what a world run says about itself', () => {
+  const banner = worldDevBanner({
+    worldName: 'Example MUD',
+    seatCount: 40,
+    launched: false,
+    ownWorldUi: false,
+    storePath: '/tmp/p/.boardsmith-dev-world/world.db',
+  }).join('\n');
+
+  it('names the world, its seats and where it durably lives', () => {
+    expect(banner).toContain('Example MUD');
+    expect(banner).toContain('40 seats');
+    expect(banner).toContain('.boardsmith-dev-world/world.db');
+  });
+
+  it('says whether genesis is about to run or has already run', () => {
+    expect(banner).toContain('never been played');
+    expect(
+      worldDevBanner({
+        worldName: 'x',
+        seatCount: 2,
+        launched: true,
+        ownWorldUi: true,
+        storePath: '/tmp/w',
+      }).join('\n'),
+    ).toContain('Genesis has already run');
+  });
+
+  it('says which surface it is serving, because the two look different', () => {
+    expect(banner).toContain('no world.html');
+    expect(
+      worldDevBanner({
+        worldName: 'x',
+        seatCount: 2,
+        launched: true,
+        ownWorldUi: true,
+        storePath: '/tmp/w',
+      }).join('\n'),
+    ).toContain('Serving your world.html');
+  });
+
+  it('names the three controls an author cannot discover by looking at a board', () => {
+    expect(banner).toContain('switches seats');
+    expect(banner).toContain('fires due events');
+    expect(banner).toContain('wakes the');
+    expect(banner).toContain('--reset');
   });
 });
 
 /**
- * The sentence is only worth asserting if it is the only one. This is the gate
- * that keeps a second, contradicting claim from being written somewhere else
- * in the CLI, which is exactly how the first one survived three architectures.
+ * THE SWEEP, INVERTED BY #167.
+ *
+ * It used to forbid a CLI surface from claiming a world ran here. A world does
+ * run here now, so what it forbids is the leftover denial -- and the pattern
+ * list is the exact set of sentences this ticket had to delete, so a future
+ * editor who half-remembers the old rule is told it changed rather than quietly
+ * reinstating it.
  */
-describe('#304: no CLI surface claims a world runs locally', () => {
+describe('#167: no CLI surface still tells an author a world cannot run locally', () => {
   // Tests are excluded: they are not a surface an author reads, and this one
-  // has to quote the false sentence in order to forbid it.
+  // has to quote the false sentences in order to forbid them.
   const files = readdirSync(join(REPO_ROOT, 'src', 'cli'), { recursive: true, encoding: 'utf-8' })
     .filter((path) => path.endsWith('.ts') || path.endsWith('.vue'))
     .filter((path) => !path.endsWith('.test.ts') && !path.includes('__fixtures__'))
     .map((path) => join('src', 'cli', path));
 
-  const CLAIMS = [/running resident/i, /stands? (a|the|this|your) world up/i];
+  const STALE: Array<{ pattern: RegExp; why: string }> = [
+    {
+      pattern: /`?boardsmith dev`? (plays|serves) (this |the )?project's TABLE game/i,
+      why: "It does not, for a world project: #167 branches to `dev-world.ts`, which serves the world. A world project need not have a table half at all.",
+    },
+    {
+      pattern: /nothing here dispatches a world command/i,
+      why: '`cli/dev-host/world-host.ts` dispatches one, through `settleDeclaration` and `runner.apply`, exactly as the platform does.',
+    },
+    {
+      pattern: /(running a world locally|a world) is (BoardSmith )?#167 and is not built/i,
+      why: '#167 is built. This sentence is the refusal it deleted.',
+    },
+    {
+      pattern: /the world (runner|half) is (the )?platform's/i,
+      why: 'The runner is `boardsmith/world` in this repository (#165), and `boardsmith dev` drives it (#167). What is the platform\'s is its lifecycle policy -- sockets, hibernation, eviction timing, the park ladder.',
+    },
+  ];
 
   it('reads the CLI tree it thinks it is reading', () => {
     expect(files.length).toBeGreaterThan(50);
   });
 
-  it.each(files)('%s claims none of it', (relative) => {
-    // The notice module is where the accurate sentence lives; it is allowed to
-    // quote the false one only inside this test file, which is not shipped
-    // behaviour.
-    const source = readFileSync(join(REPO_ROOT, relative), 'utf-8');
-    for (const claim of CLAIMS) {
-      expect(
-        claim.test(source),
-        `${relative} tells an author that \`boardsmith dev\` runs their world. It does not: ` +
-          `the world runner is the platform's. Say what the run is and point at ${WORLD_AUTHORING_DOC}.`,
-      ).toBe(false);
+  it.each(files)('%s says none of it', (relative) => {
+    const source = readFileSync(join(REPO_ROOT, relative), 'utf-8').replace(/\s+/g, ' ');
+    for (const { pattern, why } of STALE) {
+      expect(pattern.test(source), `${relative}: ${why}`).toBe(false);
     }
   });
 });
