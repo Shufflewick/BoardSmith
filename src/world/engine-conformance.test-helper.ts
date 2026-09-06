@@ -104,7 +104,7 @@ export function assertWorldEngineConformance(makeEngine: WorldEngineFactory): vo
     expect([...engine.viewPartitions(alice)]).toEqual([...named]);
   });
 
-  it("SAYS WHAT A COMMAND IS ABOUT, FOR A PLAYER AND FOR THE CLOCK (#121)", async () => {
+  it("SAYS WHAT A COMMAND IS ABOUT, ONE ROUND AT A TIME, FOR A PLAYER AND FOR THE CLOCK (#121, #169)", async () => {
     // The write path's half of the same declaration, and it takes the ACTING
     // PLAYER -- which is the whole of #121. Before it, `partitions` was
     // answered from the arguments alone, so no command could name "my own
@@ -115,6 +115,16 @@ export function assertWorldEngineConformance(makeEngine: WorldEngineFactory): vo
     // nothing about absent-until-loaded changes: this is still answered with no
     // partition loaded and no world to consult, which is the property asserted
     // below rather than assumed.
+    //
+    // SINCE #169 IT ANSWERS THE NEXT UNMET ROUND, not the whole declaration. A
+    // world's verbs are Actions, and an action is a SEQUENCE, so its
+    // declaration is an ordered walk -- round one, then each selection's own
+    // round, then the execute round -- and a later round is allowed to read
+    // what an earlier one loaded. The host therefore drives it as a loop: ask,
+    // supply, ask again, ending when it answers nothing. That loop terminates
+    // because the walk has one round per step and every round it names becomes
+    // resident before it is asked again, which is what replaced the fixpoint's
+    // ceiling on this road.
     const engine = await makeEngine();
     const resident = engine.residency().map(({ name }) => name).sort();
     const command = { name: "touch", args: {} };
@@ -123,15 +133,30 @@ export function assertWorldEngineConformance(makeEngine: WorldEngineFactory): vo
     expect(Array.isArray(named)).toBe(true);
     expect(engine.residency().map(({ name }) => name).sort()).toEqual(resident);
 
-    // EVERYTHING IT NAMES IS WHAT THE COMMAND THEN DIRTIES. The platform loads
+    // THE LOOP ENDS. Driven exactly as a host drives it -- and an engine that
+    // kept naming a partition it had just been handed would hang here rather
+    // than passing quietly, which is the property the ceiling used to buy.
+    const walked = new Set<string>(named);
+    for (let round = 0; ; round++) {
+      const needs = engine.commandPartitions(alice, command);
+      if (needs.length === 0) break;
+      expect(round, "a command's declaration walk did not end").toBeLessThan(16);
+      for (const name of needs) walked.add(name);
+      await engine.hydrate(needs);
+    }
+
+    // EVERYTHING IT NAMED IS WHAT THE COMMAND THEN DIRTIES. The platform loads
     // this set and no other, so a declaration narrower than the command's reach
     // is a partition the handler will find absent.
     const applied = await engine.applyCommand(alice, command, STAMP);
-    for (const name of named) expect(applied.dirty).toContain(name);
+    for (const name of walked) expect(applied.dirty).toContain(name);
 
-    // AND THE CLOCK IS A LEGAL CALLER. A scheduled event has no seat, so `null`
-    // has to be answerable rather than a case an engine may assume away.
-    expect(Array.isArray(engine.commandPartitions(null, command))).toBe(true);
+    // AND THE CLOCK IS NOT A CALLER FOR THIS ONE. `touch` acts for a seat, and
+    // a scheduled event has no seat -- so `null` is refused here BY NAME rather
+    // than reaching `player.seat` on nothing and answering with a TypeError out
+    // of game code. The clock's own verbs are seatless, and `clockOnly is
+    // enforced on BOTH roads` below is where the pair is asserted.
+    expect(() => engine.commandPartitions(null, command)).toThrow(/no player/);
   });
 
   it("viewFor is PER PLAYER", async () => {
@@ -144,32 +169,77 @@ export function assertWorldEngineConformance(makeEngine: WorldEngineFactory): vo
     expect(seen).not.toEqual(other);
   });
 
-  it("OFFERS ITS COMMANDS, arguments and all, without applying anything (#85, #91)", async () => {
+  it("OFFERS THIS SEAT'S ACTIONS, candidates and all, without applying anything (#85, #91, #169)", async () => {
     // The non-mutating half of the action protocol. Until it existed nothing
     // could present a world's action to a player who did not already know its
     // name, which is why a world's UI was a watching surface.
+    //
+    // IT ENUMERATES NOW, and that is what #169 changed. `commandOffers()`
+    // answered from the bundle's own STATIC declaration and loaded nothing: it
+    // could say `tend` exists and wants a holding, and the only holdings it
+    // could name were all five hundred, because a bundle can state what a world
+    // CONTAINS and not what is legal this instant. `offersFor` is per seat, per
+    // instant, in the table's own `ActionMetadata`, with each selection's
+    // candidates already resolved -- so the shared action panel and the board
+    // bridge read a world's answer with no translation at all.
+    //
+    // AN OFFER LOADS WHAT IT MUST, so it is asynchronous and it is driven
+    // through the same declare-then-supply loop a command is: `offerPartitions`
+    // names the first unmet round of every action the seat could be given, the
+    // host supplies it, and the loop ends when nothing is left.
     const engine = await makeEngine();
     const before = JSON.stringify(await engine.viewFor(alice));
 
-    const offers = engine.commandOffers();
+    for (let round = 0; ; round++) {
+      const needs = engine.offerPartitions(alice);
+      if (needs.length === 0) break;
+      expect(round, "an offer's declaration walk did not end").toBeLessThan(16);
+      await engine.hydrate(needs);
+    }
+
+    const offers = await engine.offersFor(alice, { now: STAMP.now, presence: [] });
     expect(offers.length).toBeGreaterThan(0);
-    // SORTED BY NAME, so a client renders the same list twice: object key order
-    // is an implementation detail of whichever literal the bundle wrote.
+    // SORTED BY NAME, so a client renders the same list twice: registration
+    // order is an implementation detail of whichever list the bundle wrote.
     const names = offers.map((offer) => offer.name);
     expect([...names]).toEqual([...names].sort());
-    // EVERY OFFER DESCRIBES ITS ARGUMENTS (#91). An engine that answered names
-    // and nothing else would satisfy the type and leave the platform with
-    // nothing to draw but a JSON box, which is the thing #91 removed.
+
+    let questionsAsked = 0;
     for (const offer of offers) {
-      expect(Array.isArray(offer.args)).toBe(true);
-      for (const arg of offer.args) {
-        expect(arg.name).not.toBe("");
-        // A `now` argument is refused on the wire, so an offer that named one
-        // would describe an input no submission can carry.
-        expect(arg.name).not.toBe("now");
-        if (arg.kind === "choice") expect(arg.choices.length).toBeGreaterThan(0);
+      expect(offer.name).not.toBe("");
+      expect(Array.isArray(offer.selections)).toBe(true);
+      // A GREYED ACTION SAYS WHY. `disabled` is a REASON and never a boolean,
+      // because an offered-but-untakeable button with no explanation is the
+      // thing the channel exists to prevent -- the alternative being a world
+      // that accepts the click and refuses it afterwards.
+      if (offer.disabled !== undefined) expect(offer.disabled.length).toBeGreaterThan(0);
+
+      for (const pick of offer.selections) {
+        questionsAsked += 1;
+        expect(pick.name).not.toBe("");
+        expect(["choice", "element", "elements", "number", "text"]).toContain(pick.type);
+        // THE CANDIDATES ARRIVE WITH THE OFFER. A table fetches a pick's
+        // choices on demand because a table's protocol is step-wise; a world's
+        // is single-shot, so an engine that answered a bare pick shape would
+        // leave the platform with nothing to draw but the JSON box #91 removed.
+        // It is affordable exactly because a world action may not declare a
+        // dependent selection, so no selection's candidates are a function of
+        // another's value.
+        if (pick.type === "choice") {
+          expect(Array.isArray(pick.choices)).toBe(true);
+          expect(pick.choices!.length).toBeGreaterThan(0);
+        }
+        if (pick.type === "element" || pick.type === "elements") {
+          expect(Array.isArray(pick.validElements)).toBe(true);
+          expect(pick.validElements!.length).toBeGreaterThan(0);
+        }
       }
     }
+    // AND AT LEAST ONE OF THEM ASKS SOMETHING. Every assertion above is vacuous
+    // for a world whose every verb is a bare button, so a candidate engine has
+    // to offer one real question for this case to mean anything at all.
+    expect(questionsAsked).toBeGreaterThan(0);
+
     // Asking is not acting.
     expect(JSON.stringify(await engine.viewFor(alice))).toEqual(before);
   });

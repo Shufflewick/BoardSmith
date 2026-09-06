@@ -23,6 +23,7 @@ import {
   worldSeatCount,
   type WorldDefinition,
 } from "./definition.js";
+import { worldAction } from "./action.js";
 import { worldBudgets } from "./budgets.js";
 import { WorldRefusal } from "./refusals.js";
 
@@ -36,21 +37,27 @@ class TinyWorld extends Game<TinyWorld, Player> {
   }
 }
 
+/**
+ * The world's one verb, as an ACTION (#169).
+ *
+ * Declared at module scope rather than inside `bundle()` because `createWorld`
+ * REGISTERS what `world.actions` names on the game it builds -- so the array is
+ * the bundle's declaration and not a thing to rebuild per call.
+ */
+const poke = worldAction<TinyWorld>("poke")
+  .needs(() => ["yard:1"])
+  .execute((_args, ctx) => {
+    const yard = ctx.world.partition("yard:1") as Yard;
+    yard.pokes += 1;
+    ctx.world.emit("yard:1", { poked: true });
+  });
+
 /** A world bundle's definition, in the shape a real one exports. */
 function bundle(overrides: { world?: WorldDefinition; maxPlayers?: unknown } = {}) {
   const world: WorldDefinition = {
     genesis: (game) => ({ "yard:1": game.create(Yard, "yard") as GameElement }),
     view: () => ["yard:1"],
-    commands: {
-      poke: {
-        args: [],
-        partitions: () => ["yard:1"],
-        run: ({ partition }) => {
-          (partition("yard:1") as Yard).pokes += 1;
-          return [{ scope: "yard:1", payload: { poked: true } }];
-        },
-      },
-    },
+    actions: [poke],
   };
   return {
     gameClass: TinyWorld,
@@ -65,16 +72,16 @@ function bundle(overrides: { world?: WorldDefinition; maxPlayers?: unknown } = {
 describe("readWorldDefinition — what a bundle must export", () => {
   it("returns the block a real world bundle exports", () => {
     const world = readWorldDefinition(bundle());
-    expect(Object.keys(world.commands)).toEqual(["poke"]);
+    expect(world.actions.map((action) => action.name)).toEqual(["poke"]);
     expect(typeof world.view).toBe("function");
   });
 
-  it("REFUSES a bundle with no world.commands, naming what to export", () => {
+  it("REFUSES a bundle with no world.actions, naming what to export", () => {
     // The FIRST moment anything can check this. A manifest declares the intent
     // and nothing reading a manifest can see inside compiled rules, so a game
-    // that declared a world and shipped no commands would otherwise fail as a
+    // that declared a world and shipped no verbs would otherwise fail as a
     // TypeError on somebody's first command.
-    expect(() => readWorldDefinition({})).toThrow(/world: \{ commands, view \}/);
+    expect(() => readWorldDefinition({})).toThrow(/world: \{ actions, view \}/);
   });
 
   it("REFUSES a bundle with no world.view, because a look would show nothing", () => {
@@ -84,7 +91,7 @@ describe("readWorldDefinition — what a bundle must export", () => {
     // bug wearing a library decision's clothes; "everything" would be the
     // O(world) read the whole mode deletes.
     const noView = bundle({
-      world: { commands: bundle().world!.commands } as unknown as WorldDefinition,
+      world: { actions: [poke] } as unknown as WorldDefinition,
     });
     expect(() => readWorldDefinition(noView)).toThrow(/declares no `view`/);
   });
@@ -243,22 +250,13 @@ describe("createWorld — one construction, every host", () => {
     // queue enforced different numbers from the ones a handler was refused
     // against would let a command run to completion believing timers it will
     // not get.
-    const definition = bundle({
-      world: {
-        view: () => [],
-        commands: {
-          spam: {
-            args: [],
-            partitions: () => [],
-            run: ({ schedule }) => {
-              schedule({ delayMs: 1, command: "spam" });
-              schedule({ delayMs: 2, command: "spam" });
-              return [];
-            },
-          },
-        },
-      },
-    });
+    const spam = worldAction<TinyWorld>("spam")
+      .needs(() => [])
+      .execute((_args, ctx) => {
+        ctx.world.schedule({ delayMs: 1, action: "spam" });
+        ctx.world.schedule({ delayMs: 2, action: "spam" });
+      });
+    const definition = bundle({ world: { view: () => [], actions: [spam] } });
     const { runner } = createWorld({
       definition,
       seed: "s",
@@ -278,6 +276,6 @@ describe("createWorld — one construction, every host", () => {
         allowance: { unkeyed: 0, keys: [], worldPending: 0 },
         presence: [],
       }),
-    ).rejects.toMatchObject({ code: "schedule-cap" });
+    ).rejects.toThrow(/already has 1 unkeyed events pending, which is this world's limit/);
   });
 });

@@ -85,27 +85,25 @@ import { worldRefusal } from "./refusals.js";
  * A game that needs more is describing a traversal rather than a declaration,
  * and the refusal says so.
  */
-export const WORLD_DECLARATION_ROUNDS = 4;
+const WORLD_DECLARATION_ROUNDS = 4;
 
 /**
- * THE FIXPOINT IS RIGHT FOR A VIEW AND TRANSITIONAL FOR A COMMAND (#169).
+ * THE FIXPOINT IS A VIEW'S, AND ONLY A VIEW'S, SINCE #169.
  *
  * A VIEW has no other shape. "What is this seat looking at?" is answered by the
  * world's own state -- the room the player is standing in -- so it genuinely
  * has to be asked, loaded, and asked again until it stops changing its mind.
  * The ceiling above and the `declaration-unsettled` refusal are the safety on a
- * loop that cannot be bounded any other way, and they stay.
+ * loop that cannot be bounded any other way, and they stay. Neither is exported
+ * any more: the number is this loop's own business, and nothing outside decides
+ * when a view has settled.
  *
- * A COMMAND is a different question wearing the same clothes. Under Actions its
- * declaration becomes an ORDERED WALK whose length is the action's own
- * selection count: each selection names what the next one needs, and the walk
- * ends when the action runs out of selections rather than when a fixpoint
- * settles. So the command-side caller of `settleDeclaration`, and with it the
- * round ceiling and the refusal AS THEY APPLY TO COMMANDS, go away in #169.
- *
- * Which is why there is one of these and not two. A second copy written for the
- * command path would have to be deleted rather than adapted, and while both
- * existed they would be two places for the world's loading rule to disagree.
+ * A WRITE was a different question wearing the same clothes, and #169 undressed
+ * it. A world's verbs are Actions, and an action is a SEQUENCE, so its
+ * declaration is an ORDERED WALK -- round one, then each selection's own round,
+ * then the execute round -- whose length is the action's own selection count.
+ * `walkDeclaration` below drives it, and it needs no ceiling: what bounds it is
+ * the action's source rather than a number somebody chose.
  */
 
 /**
@@ -151,6 +149,43 @@ export async function settleDeclaration(
           `what it needs.`,
       );
     }
+    supplied = Object.create(null) as Record<string, StoredPartition>;
+    for (const name of needs) supplied[name] = await read(name);
+  }
+}
+
+/**
+ * Drive a WRITE's declaration to the end of its walk, loading what each round
+ * names (#169).
+ *
+ * The counterpart to `settleDeclaration`, and the difference between them is
+ * the whole of what Actions changed. This one has NO CEILING and no
+ * `declaration-unsettled` refusal, and that is not an omission: a world action
+ * answers the NEXT UNMET ROUND of a walk with one round per selection step, so
+ * every round this loop is given names a partition that was not resident, and
+ * every round it supplies makes those resident. The loop can therefore run at
+ * most as many times as the action has steps, which is a number in the game's
+ * own source rather than a budget a host has to pick.
+ *
+ * Two of them and not one, deliberately. A single loop covering both would have
+ * to carry the view's ceiling, which for an action would refuse a perfectly
+ * ordinary five-selection verb on its fifth honest round -- a limit read off
+ * the wrong question.
+ */
+export async function walkDeclaration(
+  declare: (supplied: Record<string, StoredPartition>) => Promise<readonly string[]>,
+  read: (name: string) => Promise<StoredPartition>,
+): Promise<void> {
+  // NULL PROTOTYPE, for the reason `settleDeclaration` gives: a partition name
+  // is the bundle's, and `supplied["__proto__"] = partition` on a plain object
+  // swaps this record's prototype rather than storing an entry (#190).
+  let supplied: Record<string, StoredPartition> = Object.create(null) as Record<
+    string,
+    StoredPartition
+  >;
+  for (;;) {
+    const needs = await declare(supplied);
+    if (needs.length === 0) return;
     supplied = Object.create(null) as Record<string, StoredPartition>;
     for (const name of needs) supplied[name] = await read(name);
   }

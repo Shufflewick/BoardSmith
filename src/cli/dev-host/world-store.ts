@@ -294,14 +294,14 @@ export function openWorldStore(path: string, budgets: WorldBudgets): LocalWorldS
     addDirty: db.prepare('INSERT INTO dirty (name) VALUES (?) ON CONFLICT(name) DO NOTHING'),
     clearDirty: db.prepare('DELETE FROM dirty WHERE name = ?'),
     listEvents: db.prepare(
-      'SELECT id, due, seq, key, owner, command, args, every_ms, attempts ' +
+      'SELECT id, due, seq, key, owner, action, args, every_ms, attempts ' +
         'FROM scheduled ORDER BY due, seq',
     ),
     writeEvent: db.prepare(
-      'INSERT INTO scheduled (id, due, seq, key, owner, command, args, every_ms, attempts) ' +
+      'INSERT INTO scheduled (id, due, seq, key, owner, action, args, every_ms, attempts) ' +
         'VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) ' +
         'ON CONFLICT(id) DO UPDATE SET due = excluded.due, seq = excluded.seq, key = excluded.key, ' +
-        'owner = excluded.owner, command = excluded.command, args = excluded.args, ' +
+        'owner = excluded.owner, action = excluded.action, args = excluded.args, ' +
         'every_ms = excluded.every_ms, attempts = excluded.attempts',
     ),
     deleteEvent: db.prepare('DELETE FROM scheduled WHERE id = ?'),
@@ -419,7 +419,7 @@ export function openWorldStore(path: string, budgets: WorldBudgets): LocalWorldS
             event.seq,
             event.key ?? null,
             event.owner,
-            event.command,
+            event.action,
             JSON.stringify(event.args),
             event.everyMs ?? null,
             event.attempts,
@@ -464,7 +464,7 @@ export function openWorldStore(path: string, budgets: WorldBudgets): LocalWorldS
         due: row.due,
         seq: row.seq,
         owner: row.owner,
-        command: row.command,
+        action: row.action,
         args: JSON.parse(row.args) as Record<string, unknown>,
         attempts: row.attempts,
         ...(row.key === null ? {} : { key: row.key }),
@@ -502,7 +502,7 @@ interface EventRow {
   seq: number;
   key: string | null;
   owner: string;
-  command: string;
+  action: string;
   args: string;
   every_ms: number | null;
   attempts: number;
@@ -536,7 +536,7 @@ CREATE TABLE IF NOT EXISTS scheduled (
   seq INTEGER NOT NULL,
   key TEXT,
   owner TEXT NOT NULL,
-  command TEXT NOT NULL,
+  action TEXT NOT NULL,
   args TEXT NOT NULL,
   every_ms INTEGER,
   attempts INTEGER NOT NULL
@@ -554,7 +554,7 @@ CREATE TABLE IF NOT EXISTS seats (player TEXT PRIMARY KEY, seat INTEGER NOT NULL
  * answer to a layout change. Silently reading a store this code does not
  * understand is how an author loses a world without being told.
  */
-const SCHEMA_VERSION = '1';
+const SCHEMA_VERSION = '2';
 
 function assertSchemaVersion(db: SqliteDatabase, path: string): void {
   const row = db.prepare('SELECT value FROM meta WHERE key = ?').get(SCHEMA_VERSION_KEY) as

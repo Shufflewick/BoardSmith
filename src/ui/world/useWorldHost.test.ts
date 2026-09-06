@@ -4,8 +4,18 @@ import {
   WORLD_HOST_SOURCE,
   WORLD_NARRATION_KEPT,
   WORLD_UI_SOURCE,
-  type WorldStateMessage,
+  type WorldHostMessage,
 } from './worldProtocol.js';
+
+/**
+ * The state frame, reached through the union rather than by name.
+ *
+ * `worldProtocol.ts` deliberately exports only `WorldHostMessage`: a reader of
+ * this protocol handles one union with one switch, and exported names nothing
+ * imports are things a future change can leave behind. A test is a reader like
+ * any other, so it narrows rather than asking for a second export.
+ */
+type WorldStateMessage = Extract<WorldHostMessage, { type: 'world_state' }>;
 
 /**
  * THE BUNDLE SIDE OF THE WORLD WIRE (ShufflewickPub #128).
@@ -25,7 +35,7 @@ function stateFrame(over: Partial<WorldStateMessage> = {}): WorldStateMessage {
     phase: 'watching',
     view: { player: 3, state: { id: 0, className: 'Game' } },
     seat: 3,
-    commands: [{ name: 'look', prompt: 'Look around', args: [] }],
+    actions: [{ name: 'look', prompt: 'Look around', selections: [] }],
     notice: null,
     worldName: 'Gloamhall Rooms',
     presence: [3, 5],
@@ -60,7 +70,7 @@ describe('useWorldHost', () => {
     expect(host.phase.value).toBe('attaching');
     expect(host.view.value).toBeNull();
     expect(host.seat.value).toBeNull();
-    expect(host.commands.value).toEqual([]);
+    expect(host.actions.value).toEqual([]);
     expect(host.presence.value).toBeNull();
     expect(host.heardFromHost.value).toBe(false);
   });
@@ -77,7 +87,7 @@ describe('useWorldHost', () => {
     deliver(host, stateFrame());
     expect(host.phase.value).toBe('watching');
     expect(host.seat.value).toBe(3);
-    expect(host.commands.value).toHaveLength(1);
+    expect(host.actions.value).toHaveLength(1);
     expect(host.worldName.value).toBe('Gloamhall Rooms');
     expect(host.presence.value).toEqual([3, 5]);
     expect(host.heardFromHost.value).toBe(true);
@@ -110,9 +120,9 @@ describe('useWorldHost', () => {
   it('sends a command and resolves it with its own answer', async () => {
     const host = make();
     const answered = host.act('say', { text: 'hello' });
-    const sent = posted[0] as { requestId: string; command: string; args: unknown; source: string };
+    const sent = posted[0] as { requestId: string; action: string; args: unknown; source: string };
     expect(sent.source).toBe(WORLD_UI_SOURCE);
-    expect(sent.command).toBe('say');
+    expect(sent.action).toBe('say');
     expect(sent.args).toEqual({ text: 'hello' });
     expect(host.acting.value).toBe(true);
 
@@ -276,7 +286,7 @@ describe('useWorldHost — the world narrating (#331)', () => {
   it('does not treat narration as having heard from the host about STATE', () => {
     // `heardFromHost` is what tells a UI it has been told what the world IS.
     // Narration says something happened and carries no view, no seat and no
-    // commands, so a frame of it must not silence the "nobody has spoken to
+    // actions, so a frame of it must not silence the "nobody has spoken to
     // this frame" warning -- which would replace an accurate complaint with a
     // blank board.
     const host = make();

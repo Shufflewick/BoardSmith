@@ -17,7 +17,7 @@ export type WorldContext = Pick<
   | 'phase'
   | 'view'
   | 'seat'
-  | 'commands'
+  | 'actions'
   | 'notice'
   | 'worldName'
   | 'presence'

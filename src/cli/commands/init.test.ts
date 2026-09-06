@@ -336,6 +336,11 @@ describe('initCommand --world — a persistent world project (#168)', () => {
     await scaffoldWorld();
     const world = read('src/rules/world.ts');
     expect(world).toContain("from 'boardsmith/world'");
+    // A world's verbs are Actions (#169), and `worldAction()` is the door: an
+    // action built any other way declares nothing, so the world would have to
+    // load everything before it could offer it. The scaffold must start an
+    // author on the builder that makes the declaration unavoidable.
+    expect(world).toContain("import { worldAction, worldClockAction } from 'boardsmith/world'");
     // The exact defect #165 exists to end: every world game written before it
     // hand-copied these declarations, and the copies drifted from the runtime.
     for (const copied of [
@@ -351,7 +356,7 @@ describe('initCommand --world — a persistent world project (#168)', () => {
   it('registers the world block on gameDefinition, typed by GameDefinition', async () => {
     await scaffoldWorld();
     const index = read('src/rules/index.ts');
-    expect(index).toContain('world: { commands: worldCommands, genesis: worldGenesis, view: worldView }');
+    expect(index).toContain('world: { actions: worldActions, genesis: worldGenesis, view: worldView }');
     expect(index).toContain('GameDefinition');
   });
 
@@ -362,15 +367,21 @@ describe('initCommand --world — a persistent world project (#168)', () => {
     // runner and `boardsmith dev` alike. A test that called the
     // command handlers itself would prove only that the author can call their
     // own functions, which is what all four existing world games do.
-    expect(test).toContain("import { createWorld } from 'boardsmith/world'");
+    expect(test).toContain("from 'boardsmith/world'");
+    expect(test).toContain('createWorld(');
     expect(test).toContain('runner.genesis()');
     expect(test).toContain('runner.declare(');
     expect(test).toContain('runner.apply(');
     expect(test).toContain('runner.serialize(');
     expect(test).toContain('runner.viewsFor(');
-    // The shape of a hand-rolled runner: reaching into the command table and
-    // calling `run` with a context the test invented.
-    expect(test).not.toContain('worldCommands[');
+    // And it drives the declaration with the library's own loops rather than
+    // deciding for itself when a world has finished loading: `walkDeclaration`
+    // for an action's ordered walk, `settleDeclaration` for a view's fixpoint.
+    expect(test).toContain('walkDeclaration(');
+    expect(test).toContain('settleDeclaration(');
+    // The shape of a hand-rolled runner: reaching into the world's own action
+    // list and calling a handler with a context the test invented.
+    expect(test).not.toContain('worldActions[');
   });
 
   it("serves the world's own surface from world.html, not the table's index.html", async () => {

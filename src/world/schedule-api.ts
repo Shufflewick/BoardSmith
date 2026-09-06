@@ -110,13 +110,28 @@ export interface ScheduleRequest {
    *
    * The same registry a player's frame reaches, and that is the whole design --
    * a scheduled event is the clock issuing one of the world's verbs, not a
-   * second kind of thing a world can be told. Today the registry is
-   * `world.commands`; under Actions it is the game's action registry and this
-   * field is named `action` (#169). A rename, deliberately, and not a concept:
-   * what must not change is that the clock and a player reach the same table.
+   * second kind of thing a world can be told. Since #169 that registry is the
+   * game's own action registry, which is why the field is `action` and no
+   * longer `command`: a rename and not a concept, because what must not change
+   * is that the clock and a player reach the same place.
+   *
+   * The action it names must be SEATLESS. A scheduled event has nobody acting,
+   * and the drain refuses a name that belongs to a seat's verb rather than
+   * inventing a player for it.
    */
-  readonly command: string;
-  /** The command's own arguments, opaque to the platform. Absent means none. */
+  readonly action: string;
+  /**
+   * The action's own arguments, opaque to the platform. Absent means none.
+   *
+   * JSON SCALARS ONLY, AND NEVER AN ELEMENT REFERENCE (#169). A schedule row
+   * outlives eviction and rehydration: a stored element id names an element
+   * that may not be resident when the event comes due, or in the worst case one
+   * that has been re-minted since. Pass the PARTITION NAME and let the action
+   * look inside it, which is what every clock verb in the catalogue already
+   * does -- so this codifies existing practice rather than constraining
+   * anybody. Refused in `planSchedules`, beside the other shape refusals, so it
+   * lands in the action and unwinds it.
+   */
   readonly args?: Readonly<Record<string, unknown>>;
   /**
    * HOW OFTEN TO REPEAT, in milliseconds. Absent asks for a one-shot.
@@ -151,7 +166,7 @@ export interface ScheduleRequest {
 export interface PlannedEvent extends ScheduledEvent {
   id: string;
   attempts: number;
-  command: string;
+  action: string;
   args: Readonly<Record<string, unknown>>;
   /**
    * WHOSE BUDGET THIS EVENT IS CHARGED TO, and it is never absent.
@@ -256,7 +271,7 @@ export function planSchedules(
       due: context.arrivedAt + request.delayMs,
       seq: seq++,
       attempts: 0,
-      command: request.command,
+      action: request.action,
       args: request.args ?? {},
       owner,
       ...(request.key === undefined ? {} : { key: request.key }),
@@ -432,13 +447,24 @@ export function scheduleBudget(
  */
 function shapeRefusal(request: ScheduleRequest): WorldRefusal | null {
   // A WAKE THAT RUNS NOTHING IS THE ONE THING A SCHEDULE MUST NOT BUY (#89).
-  if (typeof request.command !== "string" || request.command.length === 0) {
+  if (typeof request.action !== "string" || request.action.length === 0) {
     return worldRefusal(
       "invalid-schedule-command",
-      "A scheduled event must name the command the world runs when it comes due, and this one " +
-        `named ${JSON.stringify((request as { command?: unknown }).command)}. Write ` +
-        "`schedule({ delayMs, command: \"resolveRaid\", args: { raid: raid.name } })` -- the " +
-        "arguments are yours, the command name is how the world knows what to do with them.",
+      "A scheduled event must name the action the world runs when it comes due, and this one " +
+        `named ${JSON.stringify((request as { action?: unknown }).action)}. Write ` +
+        "`schedule({ delayMs, action: \"resolveRaid\", args: { raid: raid.name } })` -- the " +
+        "arguments are yours, the action name is how the world knows what to do with them.",
+    );
+  }
+  // ARGUMENTS THAT SURVIVE A HIBERNATION, AND NOTHING ELSE (#169).
+  const unstorable = unstorableArg(request.args);
+  if (unstorable !== null) {
+    return worldRefusal(
+      "invalid-schedule-command",
+      `A scheduled event's "${unstorable}" argument is not a JSON scalar. A schedule row ` +
+        "outlives eviction and rehydration, so an element -- or anything holding one -- names " +
+        "something that may not be resident when the event comes due, and may have been " +
+        "re-minted since. Pass the partition's NAME and let the action read inside it.",
     );
   }
   // A RECURRENCE WITH NO GAP IS A WAKE THAT RE-ARMS INSTANTLY, FOREVER (#127).
@@ -455,7 +481,7 @@ function shapeRefusal(request: ScheduleRequest): WorldRefusal | null {
       `A recurring schedule repeats every \`everyMs\` milliseconds, and this one asked for ` +
         `${JSON.stringify(request.everyMs)}. An interval must be a positive number of ` +
         `milliseconds: write \`schedule({ delayMs: HOUR, everyMs: HOUR, key: "tick", ` +
-        `command: "collectIncome" })\` for an hourly tick, or leave \`everyMs\` off entirely ` +
+        `action: "collectIncome" })\` for an hourly tick, or leave \`everyMs\` off entirely ` +
         `for a one-shot.`,
     );
   }
@@ -466,6 +492,28 @@ function shapeRefusal(request: ScheduleRequest): WorldRefusal | null {
         `${JSON.stringify(request.delayMs)}. To make something happen now, do it now; ` +
         `to make it happen in the past, it already did.`,
     );
+  }
+  return null;
+}
+
+/**
+ * The name of the first argument a schedule row could not survive, or null.
+ *
+ * Scalars and null are storable; everything else -- an element, an array, a
+ * nested object, a function, a `Date` -- either loses its identity through
+ * `JSON.stringify` or names something whose residency is a fact about a
+ * different moment. Nested containers are refused rather than walked, because
+ * an argument list a person has to reason about recursively is one they will
+ * eventually get wrong.
+ */
+function unstorableArg(args: Readonly<Record<string, unknown>> | undefined): string | null {
+  if (args === undefined) return null;
+  for (const [name, value] of Object.entries(args)) {
+    if (value === null) continue;
+    const type = typeof value;
+    if (type === "string" || type === "boolean") continue;
+    if (type === "number" && Number.isFinite(value as number)) continue;
+    return name;
   }
   return null;
 }

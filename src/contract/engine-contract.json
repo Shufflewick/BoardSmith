@@ -1,8 +1,8 @@
 {
-  "revision": 34,
+  "revision": 35,
   "bundleProtocol": 1,
   "surfaceHash": "82c8538fdca5837c",
-  "payloadHash": "a6ec38d2eb2ae3cd",
+  "payloadHash": "1d3a21bebd77753c",
   "history": [
     {
       "revision": 1,
@@ -275,6 +275,14 @@
       "surfaceHash": "82c8538fdca5837c",
       "payloadHash": "a6ec38d2eb2ae3cd",
       "summary": "The world wire gains a world_events message and WorldShell hands its payloads to a game's UI (ShufflewickPub #331). A world's narration is its routed events, and until now they reached no screen: the platform routed them per audience and put them on the socket, and the host page answered the frame with a view request and dropped the payloads, so anything a world narrated that left no residue in its tree -- an emote, combat text, a line somebody said -- was undeliverable and a game had to write it into its own stored state to show it. The host now sends { source: 'shufflewick-world', type: 'world_events', events: [{ scope, payload }] }, a SECOND message rather than a field on world_state, because state is re-pushed whenever any part of it moves and a line carried on it would be redelivered on every later push. useWorldHost appends each delivery into a new events ref, bounded at the new exported WORLD_NARRATION_KEPT (200, oldest dropped) and deliberately NOT counted as heardFromHost, since narration carries no view, seat or commands; WorldShell passes it as an events prop and through useWorld().events, and WorldNarration is exported from boardsmith/ui for a UI to declare the prop with. Purely additive to every existing message: a host that never sends world_events leaves the log empty, and a UI that ignores the prop is unchanged. Host pages must send the new message for a world's narration to be deliverable at all; the whole wire is part of payloadHash, which is what moved."
+    },
+    {
+      "revision": 35,
+      "date": "2026-09-06",
+      "bundleProtocol": 1,
+      "surfaceHash": "82c8538fdca5837c",
+      "payloadHash": "1d3a21bebd77753c",
+      "summary": "worlds(2a): a world command is an Action -- the world protocol frame carries enumerated ActionMetadata rather than a static command table, ScheduleRequest.command becomes .action, and ActionDefinition gains an optional world block (#169)"
     }
   ]
 }

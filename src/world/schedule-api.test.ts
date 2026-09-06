@@ -80,7 +80,7 @@ function unkeyed(owner: string, n: number): PlannedEvent[] {
     due: ARRIVED,
     seq: i,
     attempts: 0,
-    command: "tick",
+    action: "tick",
     args: {},
     owner,
   }));
@@ -91,7 +91,7 @@ describe("#37 item 3 — ctx.schedule() as the parent applies it", () => {
     // A world that woke late must not schedule everything late in turn, or a
     // parked world drifts further from its own clock at every wake. Same
     // reason a drained event's handler receives its scheduled `due`.
-    const result = plan([], [{ delayMs: 5_000, command: "tick", args: { tick: 1 } }]);
+    const result = plan([], [{ delayMs: 5_000, action: "tick", args: { tick: 1 } }]);
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -102,7 +102,7 @@ describe("#37 item 3 — ctx.schedule() as the parent applies it", () => {
     // The cap is decorative if a bundle can charge its events to somebody
     // else's budget, so the owner is never taken from the request. There is no
     // field on `ScheduleRequest` to put one in, and this is that as a fact.
-    const result = plan([], [{ delayMs: 1, command: "tick" }], "p2");
+    const result = plan([], [{ delayMs: 1, action: "tick" }], "p2");
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -113,7 +113,7 @@ describe("#37 item 3 — ctx.schedule() as the parent applies it", () => {
     // A scheduled event has no acting player. Leaving it unowned would leave
     // it uncapped, and a recurring handler re-arming itself without a key is
     // exactly the shape that would then grow the queue forever.
-    const result = plan([], [{ delayMs: 1, command: "tick" }], null);
+    const result = plan([], [{ delayMs: 1, action: "tick" }], null);
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -126,7 +126,7 @@ describe("#37 item 3 — ctx.schedule() as the parent applies it", () => {
   it("REFUSES a player's 33rd unkeyed event, and names the three ways forward", () => {
     // #35's single refusal, stated as "a player's 33rd unkeyed pending event".
     const full = unkeyed("p1", WORLD_MAX_UNKEYED_PENDING_PER_PLAYER);
-    const result = plan(full, [{ delayMs: 1, command: "tick" }]);
+    const result = plan(full, [{ delayMs: 1, action: "tick" }]);
 
     expect(result.ok).toBe(false);
     if (result.ok) return;
@@ -137,14 +137,14 @@ describe("#37 item 3 — ctx.schedule() as the parent applies it", () => {
 
   it("admits the 32nd, so the cap is the 33rd and not the 32nd", () => {
     const nearlyFull = unkeyed("p1", WORLD_MAX_UNKEYED_PENDING_PER_PLAYER - 1);
-    expect(plan(nearlyFull, [{ delayMs: 1, command: "tick" }]).ok).toBe(true);
+    expect(plan(nearlyFull, [{ delayMs: 1, action: "tick" }]).ok).toBe(true);
   });
 
   it("counts the cap PER PLAYER, so one player cannot exhaust another's budget", () => {
     // The abuse this shape exists to make impossible: a queue full of p2's
     // events must not refuse p1.
     const full = unkeyed("p2", WORLD_MAX_UNKEYED_PENDING_PER_PLAYER);
-    expect(plan(full, [{ delayMs: 1, command: "tick" }], "p1").ok).toBe(true);
+    expect(plan(full, [{ delayMs: 1, action: "tick" }], "p1").ok).toBe(true);
   });
 
   it("a KEYED schedule can never hit the cap, because it replaces rather than adds", () => {
@@ -154,7 +154,7 @@ describe("#37 item 3 — ctx.schedule() as the parent applies it", () => {
     const full = unkeyed("p1", WORLD_MAX_UNKEYED_PENDING_PER_PLAYER);
     let queue: readonly PlannedEvent[] = full;
     for (let i = 0; i < 10; i++) {
-      const result = plan(queue, [{ delayMs: i, key: "respawn", command: "respawn", args: { i } }]);
+      const result = plan(queue, [{ delayMs: i, key: "respawn", action: "respawn", args: { i } }]);
       expect(result.ok).toBe(true);
       queue = applied(queue, result);
     }
@@ -167,12 +167,12 @@ describe("#37 item 3 — ctx.schedule() as the parent applies it", () => {
   });
 
   it("a key is scoped to its owner: two players may hold the same key", () => {
-    const mine = plan([], [{ delayMs: 1, key: "respawn", command: "tick", args: { tag: "p1" } }], "p1");
+    const mine = plan([], [{ delayMs: 1, key: "respawn", action: "tick", args: { tag: "p1" } }], "p1");
     expect(mine.ok).toBe(true);
     if (!mine.ok) return;
 
     const queue = applied([], mine);
-    const theirs = plan(queue, [{ delayMs: 1, key: "respawn", command: "tick", args: { tag: "p2" } }], "p2");
+    const theirs = plan(queue, [{ delayMs: 1, key: "respawn", action: "tick", args: { tag: "p2" } }], "p2");
     expect(theirs.ok).toBe(true);
     if (!theirs.ok) return;
     // Nothing displaced: a key is scoped to its owner, so p2's respawn is not
@@ -187,24 +187,24 @@ describe("#37 item 3 — ctx.schedule() as the parent applies it", () => {
     // a world holding two of them is a state the bundle never anticipated.
     const nearlyFull = unkeyed("p1", WORLD_MAX_UNKEYED_PENDING_PER_PLAYER - 1);
     const result = plan(nearlyFull, [
-      { delayMs: 1, command: "tick", args: { tag: "first" } },
-      { delayMs: 2, command: "tick", args: { tag: "second" } },
+      { delayMs: 1, action: "tick", args: { tag: "first" } },
+      { delayMs: 2, action: "tick", args: { tag: "second" } },
     ]);
 
     expect(result.ok).toBe(false);
   });
 
   it("REFUSES a negative or non-finite delay, and says what to do instead", () => {
-    const bad = plan([], [{ delayMs: -1, command: "tick" }]);
+    const bad = plan([], [{ delayMs: -1, action: "tick" }]);
     expect(bad.ok).toBe(false);
     if (bad.ok) return;
     expect(bad.refusal.message).toContain("zero or more milliseconds");
     // The code, not the prose, is what the park ladder reads.
     expect(bad.refusal.code).toBe("invalid-schedule-delay");
     expect(bad.refusal.owner).toBe("game");
-    expect(plan([], [{ delayMs: Number.NaN, command: "tick" }]).ok).toBe(false);
+    expect(plan([], [{ delayMs: Number.NaN, action: "tick" }]).ok).toBe(false);
     // Zero is legal: "now" is a delay, not an error.
-    expect(plan([], [{ delayMs: 0, command: "tick" }]).ok).toBe(true);
+    expect(plan([], [{ delayMs: 0, action: "tick" }]).ok).toBe(true);
   });
 
   it("carries a RECURRENCE's interval into the stored event (#127)", () => {
@@ -212,8 +212,8 @@ describe("#37 item 3 — ctx.schedule() as the parent applies it", () => {
     // one due time and cannot tell a tick that fell three days behind from 73
     // unrelated one-shots, which is why the catch-up had no caller.
     const result = plan([], [
-      { delayMs: 1000, everyMs: 60_000, key: "tick", command: "collectIncome" },
-      { delayMs: 1000, command: "resolveRaid" },
+      { delayMs: 1000, everyMs: 60_000, key: "tick", action: "collectIncome" },
+      { delayMs: 1000, action: "resolveRaid" },
     ]);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -230,14 +230,14 @@ describe("#37 item 3 — ctx.schedule() as the parent applies it", () => {
     // refusal, rather than as a throw out of `catchUpPlan` on some later drain
     // -- which would be a platform-owned failure climbing the park ladder for a
     // bundle's typo.
-    const bad = plan([], [{ delayMs: 1000, everyMs: 0, command: "tick" }]);
+    const bad = plan([], [{ delayMs: 1000, everyMs: 0, action: "tick" }]);
     expect(bad.ok).toBe(false);
     if (bad.ok) return;
     expect(bad.refusal.code).toBe("invalid-schedule-interval");
     expect(bad.refusal.owner).toBe("game");
     expect(bad.refusal.message).toContain("positive number of");
-    expect(plan([], [{ delayMs: 1000, everyMs: -1, command: "tick" }]).ok).toBe(false);
-    expect(plan([], [{ delayMs: 1000, everyMs: Number.NaN, command: "tick" }]).ok).toBe(false);
+    expect(plan([], [{ delayMs: 1000, everyMs: -1, action: "tick" }]).ok).toBe(false);
+    expect(plan([], [{ delayMs: 1000, everyMs: Number.NaN, action: "tick" }]).ok).toBe(false);
   });
 
   it("gives every event a distinct seq, so ties within a millisecond are ordered", () => {
@@ -245,8 +245,8 @@ describe("#37 item 3 — ctx.schedule() as the parent applies it", () => {
     // not depend on how storage returns ties. Two events scheduled with the
     // same delay in one command must therefore differ.
     const result = plan([], [
-      { delayMs: 10, command: "tick", args: { tag: "a" } },
-      { delayMs: 10, command: "tick", args: { tag: "b" } },
+      { delayMs: 10, action: "tick", args: { tag: "a" } },
+      { delayMs: 10, action: "tick", args: { tag: "b" } },
     ]);
 
     expect(result.ok).toBe(true);
@@ -272,9 +272,9 @@ describe("#37 item 3 — ctx.schedule() as the parent applies it", () => {
     // would make that exemption a lie -- and the caller cannot work the row out
     // for itself, because the old event is under a key built from the `due` it
     // no longer has.
-    const first = plan([], [{ delayMs: 1, key: "respawn", command: "tick", args: { tag: "old" } }]);
+    const first = plan([], [{ delayMs: 1, key: "respawn", action: "tick", args: { tag: "old" } }]);
     const queue = applied([], first);
-    const second = plan(queue, [{ delayMs: 9, key: "respawn", command: "tick", args: { tag: "new" } }]);
+    const second = plan(queue, [{ delayMs: 9, key: "respawn", action: "tick", args: { tag: "new" } }]);
 
     expect(second.ok).toBe(true);
     if (!second.ok) return;
@@ -287,8 +287,8 @@ describe("#37 item 3 — ctx.schedule() as the parent applies it", () => {
     // first, which has not been written yet -- an append would leave the world
     // holding two events for a key that promises one.
     const result = plan([], [
-      { delayMs: 1, key: "respawn", command: "tick", args: { tag: "first" } },
-      { delayMs: 2, key: "respawn", command: "tick", args: { tag: "second" } },
+      { delayMs: 1, key: "respawn", action: "tick", args: { tag: "first" } },
+      { delayMs: 2, key: "respawn", action: "tick", args: { tag: "second" } },
     ]);
 
     expect(result.ok).toBe(true);
@@ -306,18 +306,24 @@ describe("#37 item 3 — ctx.schedule() as the parent applies it", () => {
  * `payload.command` and `payload.args` out of it. A payload that named no
  * command bought a wake and did nothing at all -- no refusal, no log, and the
  * queue advanced. The type now says what the platform always decided.
+ *
+ * THE FIELD IS `action` SINCE #169, and that is a rename rather than a concept:
+ * what a scheduled event names is a verb in the game's ONE registry of things
+ * this world can be told to do, and since #169 that registry is the game's own
+ * action registry. What must not change -- and does not -- is that the clock
+ * and a player reach the same place.
  */
-describe("#89 — a scheduled event names its command on the request", () => {
-  it("carries the command and its args as named fields", () => {
-    const result = plan([], [{ delayMs: 5_000, command: "resolveRaid", args: { raid: "north" } }]);
+describe("#89 — a scheduled event names its action on the request", () => {
+  it("carries the action and its args as named fields", () => {
+    const result = plan([], [{ delayMs: 5_000, action: "resolveRaid", args: { raid: "north" } }]);
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
-    expect(result.events[0]!.command).toBe("resolveRaid");
+    expect(result.events[0]!.action).toBe("resolveRaid");
     expect(result.events[0]!.args).toEqual({ raid: "north" });
   });
 
-  it("REFUSES a request that names no command, at the offending line", () => {
+  it("REFUSES a request that names no action, at the offending line", () => {
     // The Pit of Success half. A game author who writes
     // `schedule({ delayMs, raid: raid.name })` used to buy a wake that did
     // nothing; now `ctx.schedule()` throws inside the handler, the command
@@ -330,18 +336,58 @@ describe("#89 — a scheduled event names its command on the request", () => {
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.refusal.code).toBe("invalid-schedule-command");
-    expect(result.refusal.message).toContain("command");
+    // The sentence names the FIELD an author has to write, which is the whole
+    // of the Pit of Success here: a refusal that said "invalid request" would
+    // send them back to the type rather than to the line.
+    expect(result.refusal.message).toContain("action");
   });
 
-  it("refuses an empty command name too", () => {
-    const result = plan([], [{ delayMs: 1, command: "" }]);
+  it("refuses an empty action name too", () => {
+    const result = plan([], [{ delayMs: 1, action: "" }]);
     expect(result.ok).toBe(false);
+  });
+
+  it("REFUSES an argument a schedule row could not survive (#169)", () => {
+    // A SCHEDULE ROW OUTLIVES EVICTION AND REHYDRATION, which is the whole of
+    // why this rule exists. An element reference stored in a row names an
+    // element that may not be resident when the event comes due, and in the
+    // worst case one that has been RE-MINTED since -- so the wake would run
+    // against whatever now holds that id. Pass the partition's NAME and let the
+    // action read inside it, which is what every clock verb in the catalogue
+    // already does.
+    //
+    // Refused beside the other shape refusals, so it lands inside the action
+    // and unwinds it, rather than being discovered on a drain days later with
+    // nobody to tell.
+    for (const args of [
+      { room: { id: 7 } },
+      { rooms: ["a", "b"] },
+      { at: new Date(0) },
+    ]) {
+      const result = plan([], [{ delayMs: 1, action: "tick", args } as ScheduleRequest]);
+      expect(result.ok, JSON.stringify(args)).toBe(false);
+      if (result.ok) return;
+      expect(result.refusal.message).toContain("is not a JSON scalar");
+    }
+  });
+
+  it("takes every JSON scalar, because that is what a row can hold", () => {
+    // The other half, and it has to be stated: a rule that refused too much
+    // would push authors into encoding their own arguments as strings, which
+    // is the same hazard with a manual step in front of it.
+    const result = plan(
+      [],
+      [{ delayMs: 1, action: "tick", args: { name: "north", size: 4, on: true, none: null } }],
+    );
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.events[0]!.args).toEqual({ name: "north", size: 4, on: true, none: null });
   });
 
   it("defaults absent args to an empty object rather than leaving them undefined", () => {
     // A command that takes no arguments is the common case, and a handler must
     // not have to tell "no args" from "args I could not see".
-    const result = plan([], [{ delayMs: 1, command: "tick" }]);
+    const result = plan([], [{ delayMs: 1, action: "tick" }]);
     expect(result.ok).toBe(true);
     if (!result.ok) return;
     expect(result.events[0]!.args).toEqual({});
@@ -355,7 +401,7 @@ function keyed(owner: string, n: number): PlannedEvent[] {
     due: ARRIVED,
     seq: i,
     attempts: 0,
-    command: "tick",
+    action: "tick",
     args: {},
     owner,
     key: `k-${i}`,
@@ -369,7 +415,7 @@ describe("#105 — a key is not a way around the cap", () => {
     // `raid-3` grew the queue forever. "Its count never grows" is true per
     // key and false per owner.
     const full = keyed("p1", WORLD_MAX_KEYED_PENDING_PER_PLAYER);
-    const result = plan(full, [{ delayMs: 1, key: "brand-new", command: "tick" }]);
+    const result = plan(full, [{ delayMs: 1, key: "brand-new", action: "tick" }]);
 
     expect(result.ok).toBe(false);
     if (result.ok) return;
@@ -383,7 +429,7 @@ describe("#105 — a key is not a way around the cap", () => {
 
   it("admits the LAST key under the cap, so the cap is the 65th and not the 64th", () => {
     const nearlyFull = keyed("p1", WORLD_MAX_KEYED_PENDING_PER_PLAYER - 1);
-    expect(plan(nearlyFull, [{ delayMs: 1, key: "one-more", command: "tick" }]).ok).toBe(true);
+    expect(plan(nearlyFull, [{ delayMs: 1, key: "one-more", action: "tick" }]).ok).toBe(true);
   });
 
   it("still admits an UPSERT of a key already pending, at the cap", () => {
@@ -392,7 +438,7 @@ describe("#105 — a key is not a way around the cap", () => {
     // anything and must never be refused. A cap that refused it would break
     // every game the docs steer toward keys.
     const full = keyed("p1", WORLD_MAX_KEYED_PENDING_PER_PLAYER);
-    const result = plan(full, [{ delayMs: 5, key: "k-0", command: "tick", args: { again: true } }]);
+    const result = plan(full, [{ delayMs: 5, key: "k-0", action: "tick", args: { again: true } }]);
 
     expect(result.ok).toBe(true);
     if (!result.ok) return;
@@ -402,7 +448,7 @@ describe("#105 — a key is not a way around the cap", () => {
 
   it("counts distinct keys PER OWNER, so one player cannot exhaust another's", () => {
     const full = keyed("p2", WORLD_MAX_KEYED_PENDING_PER_PLAYER);
-    expect(plan(full, [{ delayMs: 1, key: "mine", command: "tick" }], "p1").ok).toBe(true);
+    expect(plan(full, [{ delayMs: 1, key: "mine", action: "tick" }], "p1").ok).toBe(true);
   });
 
   it("counts the keys THIS COMMAND has already minted, not just the durable ones", () => {
@@ -410,8 +456,8 @@ describe("#105 — a key is not a way around the cap", () => {
     // asked for the cap's worth in one breath would otherwise land the lot.
     const one = keyed("p1", WORLD_MAX_KEYED_PENDING_PER_PLAYER - 1);
     const result = plan(one, [
-      { delayMs: 1, key: "new-a", command: "tick" },
-      { delayMs: 2, key: "new-b", command: "tick" },
+      { delayMs: 1, key: "new-a", action: "tick" },
+      { delayMs: 2, key: "new-b", action: "tick" },
     ]);
 
     expect(result.ok).toBe(false);
@@ -433,7 +479,7 @@ describe("#105 — a command may not ask for an unbounded number of events", () 
     const requests = Array.from({ length: WORLD_MAX_SCHEDULES_PER_COMMAND + 1 }, () => ({
       delayMs: 1,
       key: "k-0",
-      command: "tick",
+      action: "tick",
     }));
     const result = plan(held, requests);
 
@@ -449,7 +495,7 @@ describe("#105 — a command may not ask for an unbounded number of events", () 
     const requests = Array.from({ length: WORLD_MAX_SCHEDULES_PER_COMMAND }, () => ({
       delayMs: 1,
       key: "k-0",
-      command: "tick",
+      action: "tick",
     }));
     expect(plan(held, requests).ok).toBe(true);
   });
@@ -464,7 +510,7 @@ describe("#105 — a command may not ask for an unbounded number of events", () 
     const requests = Array.from({ length: 40 }, (_, i) => ({
       delayMs: 1,
       key: `building-${i}`,
-      command: "tick",
+      action: "tick",
     }));
     expect(plan([], requests).ok).toBe(true);
   });
@@ -475,7 +521,7 @@ describe("#105 — the per-world ceiling is the backstop", () => {
     // Below the sum of the per-owner caps deliberately: a ceiling only a
     // fully-seated world of maxed-out players could reach is a ceiling that
     // never trips.
-    const result = plan([], [{ delayMs: 1, command: "tick" }], "p1", {
+    const result = plan([], [{ delayMs: 1, action: "tick" }], "p1", {
       worldPending: WORLD_MAX_PENDING_EVENTS,
     });
 
@@ -491,7 +537,7 @@ describe("#105 — the per-world ceiling is the backstop", () => {
     // it was. Refusing it would strand a full world with no way to re-arm the
     // timers it already holds.
     const held = keyed("p1", 1);
-    const result = plan(held, [{ delayMs: 5, key: "k-0", command: "tick" }], "p1", {
+    const result = plan(held, [{ delayMs: 5, key: "k-0", action: "tick" }], "p1", {
       worldPending: WORLD_MAX_PENDING_EVENTS,
     });
 
@@ -499,7 +545,7 @@ describe("#105 — the per-world ceiling is the backstop", () => {
   });
 
   it("admits the event that brings the world exactly TO the ceiling", () => {
-    const result = plan([], [{ delayMs: 1, command: "tick" }], "p1", {
+    const result = plan([], [{ delayMs: 1, action: "tick" }], "p1", {
       worldPending: WORLD_MAX_PENDING_EVENTS - 1,
     });
     expect(result.ok).toBe(true);

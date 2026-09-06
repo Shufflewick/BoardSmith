@@ -44,6 +44,7 @@
  */
 export * from './budgets.js';
 export * from './refusals.js';
+export * from './action.js';
 export * from './contract.js';
 export * from './partition-store.js';
 export * from './declaration.js';

@@ -14,8 +14,21 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-import { Game, Player, Space, type GameOptions, type GameElement } from '../../engine/index.js';
-import { WorldRefusal, worldBudgets, type WorldDefinition } from '../../world/index.js';
+import {
+  Game,
+  Player,
+  Space,
+  type ActionDefinition,
+  type GameOptions,
+  type GameElement,
+} from '../../engine/index.js';
+import {
+  WorldRefusal,
+  worldAction,
+  worldBudgets,
+  worldClockAction,
+  type WorldDefinition,
+} from '../../world/index.js';
 import { openWorldStore, worldStorePath, type LocalWorldStore } from './world-store.js';
 import { LocalWorldHost, devWorldPlayer, type WorldDevClock } from './world-host.js';
 
@@ -35,44 +48,47 @@ class Village extends Game<Village, Player> {
 
 const HEARTH = 'hearth';
 
+// ── The village's verbs, as ACTIONS (#169) ──────────────────────────────────
+//
+// The bundle hands `world.actions` to `createWorld`, which registers them on
+// the game it builds -- so they are declared once here rather than rebuilt per
+// call, and the game class registers none of them itself.
+
+const chop = worldAction<Village>('chop')
+  .prompt('Cut a log')
+  .needs(() => [HEARTH])
+  .execute((_args, ctx) => {
+    const hearth = ctx.world.partition(HEARTH) as Hearth;
+    hearth.logs += 1;
+    ctx.world.emit(HEARTH, { chopped: ctx.player.seat, logs: hearth.logs });
+  });
+
+const bank = worldAction<Village>('bank')
+  .prompt('Bank a log on a slow burn')
+  .needs(() => [HEARTH])
+  .execute((_args, ctx) => {
+    (ctx.world.partition(HEARTH) as Hearth).logs += 1;
+    ctx.world.schedule({ delayMs: 600_000, action: 'burn', args: {} });
+    ctx.world.emit(HEARTH, { banked: true });
+  });
+
+/** SEATLESS: the clock's own, and no player may issue it (#120). */
+const burn = worldClockAction<Village>('burn')
+  .prompt('The fire takes what was banked')
+  .needs(() => [HEARTH])
+  .execute((_args, ctx) => {
+    const hearth = ctx.world.partition(HEARTH) as Hearth;
+    hearth.burns += 1;
+    ctx.world.emit(HEARTH, { burned: hearth.burns });
+  });
+
+const VILLAGE_ACTIONS: readonly ActionDefinition[] = [chop, bank, burn];
+
 function worldBlock(overrides: Partial<WorldDefinition> = {}): WorldDefinition {
   return {
     genesis: (game) => ({ [HEARTH]: game.create(Hearth, 'hearth') as GameElement }),
     view: () => [HEARTH],
-    commands: {
-      chop: {
-        prompt: 'Cut a log',
-        args: [],
-        partitions: () => [HEARTH],
-        run: ({ partition, seat }) => {
-          const hearth = partition(HEARTH) as Hearth;
-          hearth.logs += 1;
-          return [{ scope: HEARTH, payload: { chopped: seat, logs: hearth.logs } }];
-        },
-      },
-      bank: {
-        prompt: 'Bank a log on a slow burn',
-        args: [],
-        partitions: () => [HEARTH],
-        run: ({ partition, schedule }) => {
-          (partition(HEARTH) as Hearth).logs += 1;
-          schedule({ delayMs: 600_000, command: 'burn', args: {} });
-          return [{ scope: HEARTH, payload: { banked: true } }];
-        },
-      },
-      burn: {
-        clockOnly: true,
-        prompt: 'The fire takes what was banked',
-        args: [],
-        partitions: () => [HEARTH],
-        run: ({ partition }) => {
-          const hearth = partition(HEARTH) as Hearth;
-          hearth.burns += 1;
-          return [{ scope: HEARTH, payload: { burned: hearth.burns } }];
-        },
-      },
-      ...overrides.commands,
-    },
+    actions: VILLAGE_ACTIONS,
     ...overrides,
   } as WorldDefinition;
 }
@@ -184,18 +200,18 @@ describe('#167: genesis runs once, into the local store', () => {
     const second = openHost({ dir });
     await second.host.start();
     await second.host.handleMessage('c1', { type: 'hello' });
-    await second.host.handleMessage('c1', { type: 'command', requestId: 'r1', command: 'chop', args: {} });
+    await second.host.handleMessage('c1', { type: 'action', requestId: 'r1', action: 'chop', args: {} });
     const state = last(second.sent, 'c1', 'world_state');
     expect(JSON.stringify(state?.view)).toContain('"logs":1');
     await second.host.close();
   });
 });
 
-describe('#167: a command is dispatched through partitions() then run', () => {
+describe('#167: an action is dispatched through its ordered declaration, then run', () => {
   it('changes the world, pushes the acting seat a new view, and narrates', async () => {
     const { host, sent } = await attached({ dir });
 
-    await host.handleMessage('c1', { type: 'command', requestId: 'r1', command: 'chop', args: {} });
+    await host.handleMessage('c1', { type: 'action', requestId: 'r1', action: 'chop', args: {} });
 
     expect(last(sent, 'c1', 'world_response')).toMatchObject({ requestId: 'r1', ok: true });
     expect(JSON.stringify(last(sent, 'c1', 'world_state')?.view)).toContain('"logs":1');
@@ -205,10 +221,14 @@ describe('#167: a command is dispatched through partitions() then run', () => {
     await host.close();
   });
 
-  it('offers only the commands a player may issue', async () => {
+  it('offers only the actions a player may issue', async () => {
+    // `burn` is the clock's own, so it is not on the frame: a client that was
+    // never offered it cannot send it by accident, and the submit path refuses
+    // it besides -- filtering alone would leave the rule enforceable only by
+    // the client, which is not a place a rule can live.
     const { host, sent } = await attached({ dir });
-    const offers = last(sent, 'c1', 'world_state')?.commands as Array<{ name: string }>;
-    expect(offers.map((o) => o.name).sort()).toEqual(['bank', 'chop']);
+    const offers = last(sent, 'c1', 'world_state')?.actions as Array<{ name: string }>;
+    expect(offers.map((o) => o.name)).toEqual(['bank', 'chop']);
     await host.close();
   });
 });
@@ -249,25 +269,18 @@ describe('#167: presence is the seats this host has open', () => {
 
   it('hands the running command the same set, so a world can ask who is here', async () => {
     const seen: number[][] = [];
+    const roll = worldAction<Village>('roll')
+      .prompt('Call the roll')
+      .needs(() => [HEARTH])
+      .execute((_args, ctx) => {
+        seen.push([...ctx.world.presence].sort((a, b) => a - b));
+      });
     const definition = bundle({
-      world: worldBlock({
-        commands: {
-          ...worldBlock().commands,
-          roll: {
-            prompt: 'Call the roll',
-            args: [],
-            partitions: () => [HEARTH],
-            run: ({ presence }) => {
-              seen.push([...presence].sort((a, b) => a - b));
-              return [];
-            },
-          },
-        },
-      }),
+      world: worldBlock({ actions: [...VILLAGE_ACTIONS, roll] }),
     });
     const { host } = await attached({ dir, definition });
     await host.handleMessage('c2', { type: 'hello' });
-    await host.handleMessage('c1', { type: 'command', requestId: 'r1', command: 'roll', args: {} });
+    await host.handleMessage('c1', { type: 'action', requestId: 'r1', action: 'roll', args: {} });
     expect(seen).toEqual([[1, 2]]);
     await host.close();
   });
@@ -278,7 +291,7 @@ describe('#167: scheduled events fire on their due time', () => {
     const clock = testClock();
     const { host, sent } = await attached({ dir, clock });
 
-    await host.handleMessage('c1', { type: 'command', requestId: 'r1', command: 'bank', args: {} });
+    await host.handleMessage('c1', { type: 'action', requestId: 'r1', action: 'bank', args: {} });
     expect(clock.armedDelay).toBe(600_000);
     expect(JSON.stringify(last(sent, 'c1', 'world_state')?.view)).toContain('"burns":0');
 
@@ -292,7 +305,7 @@ describe('#167: scheduled events fire on their due time', () => {
   it('"fire due events now" moves the world\'s clock to the due instant instead of waiting', async () => {
     const clock = testClock();
     const { host, sent } = await attached({ dir, clock });
-    await host.handleMessage('c1', { type: 'command', requestId: 'r1', command: 'bank', args: {} });
+    await host.handleMessage('c1', { type: 'action', requestId: 'r1', action: 'bank', args: {} });
 
     // NOT A FABRICATED TICK. The world's clock jumps to the moment the event
     // was due, so the handler receives its own `due` and the world computes
@@ -314,7 +327,7 @@ describe('#167: scheduled events fire on their due time', () => {
 describe('#167: wake from parked really drops residency', () => {
   it('rehydrates the world from the store and answers the same view', async () => {
     const { host, sent } = await attached({ dir });
-    await host.handleMessage('c1', { type: 'command', requestId: 'r1', command: 'chop', args: {} });
+    await host.handleMessage('c1', { type: 'action', requestId: 'r1', action: 'chop', args: {} });
     expect(host.residency().length).toBeGreaterThan(0);
 
     await host.handleMessage('c1', { type: 'wake' });
@@ -324,7 +337,7 @@ describe('#167: wake from parked really drops residency', () => {
     // that finds an `{ __elementId }` that never adopted.
     expect(host.residencyBeforeLastWake()).toBeGreaterThan(0);
     expect(JSON.stringify(last(sent, 'c1', 'world_state')?.view)).toContain('"logs":1');
-    await host.handleMessage('c1', { type: 'command', requestId: 'r2', command: 'chop', args: {} });
+    await host.handleMessage('c1', { type: 'action', requestId: 'r2', action: 'chop', args: {} });
     expect(JSON.stringify(last(sent, 'c1', 'world_state')?.view)).toContain('"logs":2');
     await host.close();
   });
@@ -335,8 +348,8 @@ describe('#167: the world is where it was left after a restart', () => {
     const first = openHost({ dir });
     await first.host.start();
     await first.host.handleMessage('c1', { type: 'hello' });
-    await first.host.handleMessage('c1', { type: 'command', requestId: 'r1', command: 'chop', args: {} });
-    await first.host.handleMessage('c1', { type: 'command', requestId: 'r2', command: 'bank', args: {} });
+    await first.host.handleMessage('c1', { type: 'action', requestId: 'r1', action: 'chop', args: {} });
+    await first.host.handleMessage('c1', { type: 'action', requestId: 'r2', action: 'bank', args: {} });
     await first.host.close();
 
     const second = openHost({ dir });
@@ -362,13 +375,13 @@ describe('#167: the refusals a bundle hits on the platform are hit locally, in t
           store,
           send: () => {},
         }),
-    ).toThrow(/A world game exports `world: \{ commands, view \}` alongside `gameClass`/);
+    ).toThrow(/A world game exports `world: \{ actions, view \}` alongside `gameClass`/);
     store.close();
   });
 
   it('clock-only-command: a seat reaching for the clock\'s own verb', async () => {
     const { host, sent } = await attached({ dir });
-    await host.handleMessage('c1', { type: 'command', requestId: 'r1', command: 'burn', args: {} });
+    await host.handleMessage('c1', { type: 'action', requestId: 'r1', action: 'burn', args: {} });
     const answer = last(sent, 'c1', 'world_response');
     expect(answer).toMatchObject({ ok: false });
     expect(answer?.message).toBe(
@@ -379,25 +392,18 @@ describe('#167: the refusals a bundle hits on the platform are hit locally, in t
   });
 
   it('partition-too-large: a partition that outgrew what one storage value holds', async () => {
+    const hoard = worldAction<Village>('hoard')
+      .prompt('Pile it up')
+      .needs(() => [HEARTH])
+      .execute((_args, ctx) => {
+        const hearth = ctx.world.partition(HEARTH) as Hearth & { pile?: string };
+        hearth.pile = 'x'.repeat(600_000);
+      });
     const definition = bundle({
-      world: worldBlock({
-        commands: {
-          ...worldBlock().commands,
-          hoard: {
-            prompt: 'Pile it up',
-            args: [],
-            partitions: () => [HEARTH],
-            run: ({ partition }) => {
-              const hearth = partition(HEARTH) as Hearth & { pile?: string };
-              hearth.pile = 'x'.repeat(600_000);
-              return [];
-            },
-          },
-        },
-      }),
+      world: worldBlock({ actions: [...VILLAGE_ACTIONS, hoard] }),
     });
     const { host, sent, store } = await attached({ dir, definition });
-    await host.handleMessage('c1', { type: 'command', requestId: 'r1', command: 'hoard', args: {} });
+    await host.handleMessage('c1', { type: 'action', requestId: 'r1', action: 'hoard', args: {} });
     const answer = last(sent, 'c1', 'world_response');
     expect(answer).toMatchObject({ ok: false });
     expect(answer?.message).toContain(
@@ -417,23 +423,23 @@ describe('#167: the refusals a bundle hits on the platform are hit locally, in t
 
   it('unknown-command: the world says what it does answer to', async () => {
     const { host, sent } = await attached({ dir });
-    await host.handleMessage('c1', { type: 'command', requestId: 'r1', command: 'yodel', args: {} });
+    await host.handleMessage('c1', { type: 'action', requestId: 'r1', action: 'yodel', args: {} });
     expect(last(sent, 'c1', 'world_response')?.message).toBe(
-      'This world has no command named "yodel". It answers to: chop, bank, burn.',
+      'This world has no action named "yodel". It answers to: chop, bank, burn.',
     );
     await host.close();
   });
 
   it('a refusal leaves the world unchanged and the store clean', async () => {
     const { host, store } = await attached({ dir });
-    await host.handleMessage('c1', { type: 'command', requestId: 'r1', command: 'yodel', args: {} });
+    await host.handleMessage('c1', { type: 'action', requestId: 'r1', action: 'yodel', args: {} });
     expect(store.dirtyPartitions()).toEqual([]);
     await host.close();
   });
 
   it('classifies every refusal it surfaces with the library\'s own code', async () => {
     const { host, sent } = await attached({ dir });
-    await host.handleMessage('c1', { type: 'command', requestId: 'r1', command: 'burn', args: {} });
+    await host.handleMessage('c1', { type: 'action', requestId: 'r1', action: 'burn', args: {} });
     expect(last(sent, 'c1', 'world_response')?.code).toBe('clock-only-command');
     await host.close();
   });

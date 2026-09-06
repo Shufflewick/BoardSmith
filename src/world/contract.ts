@@ -231,101 +231,59 @@
   */
 
 import type { ScheduleAllowance, ScheduleRequest } from "./schedule-api.js";
+// TYPE ONLY. A world's offer IS the table's action metadata (#169) -- one
+// shape, so the shared action panel and board bridge read a world's answer
+// with no translation -- and a type import keeps `boardsmith/world` free of a
+// runtime dependency on the session layer.
+import type { ActionMetadata } from "../session/types.js";
+
 
 /**
- * THE ARGUMENT A CLIENT MAY NOT SEND, NAMED ONCE (#57, #91).
+ * WHAT ONE SEAT MAY DO HERE, ONE ACTION AT A TIME (#169).
  *
- * `ctx.now` carries the platform's stamped arrival instant to a handler, so a
- * frame that carries a `now` argument is refused before it runs -- a player who
- * could name the time would finish every timer the moment they started it.
+ * The world's answer to "what can I do?", and it is the TABLE'S OWN
+ * `ActionMetadata` -- the same shape the shared action panel, the board bridge
+ * and the drag-drop targets already consume, so a world's surface is the shell
+ * rather than something written beside it.
  *
- * It lives HERE, at the contract, because two sides need the same word for it:
- * `WorldSession` refuses a frame that carries one, and the engine refuses a
- * BUNDLE that DECLARES one, so a world can never offer a player an input its
- * own protocol will always reject.
+ * It replaces `WorldCommandOffer`, which was a parallel vocabulary invented
+ * because a world's verbs were not Actions: it could say `tend` exists and that
+ * it wants a holding, and the only holdings it could name were all five hundred
+ * of them, because a bundle can state what a world CONTAINS and not what is
+ * legal this instant. An enumerated offer answers the second question, which is
+ * the one a player is actually asking.
+ *
+ * ITS CANDIDATES ARE ALREADY RESOLVED. A table fetches each pick's choices on
+ * demand, because a table's protocol is step-wise; a world's is single-shot, so
+ * an offer carries `selections[i].choices` / `.validElements` filled in. That is
+ * affordable exactly because a world action may not declare a dependent
+ * selection -- see `assertWorldAction` -- so no selection's candidates are a
+ * function of another's value and the whole offer is one pass.
  */
-export const RESERVED_COMMAND_ARG = "now";
-
-/** One value a `choice` argument offers, and how to say it to a person. */
-// Reachable without being exported: it is named by `WorldCommandOffer` below,
-// which is exported, and TypeScript checks a caller's literal structurally. A
-// name nothing imports is a public surface larger than its callers.
-interface WorldCommandChoice {
-  readonly value: string;
-  readonly label: string;
+export interface WorldActionOffer extends ActionMetadata {
+  /**
+   * Why this action is offered but cannot be taken right now.
+   *
+   * Absent when it can. A world uses the engine's own `.disabled()` channel
+   * rather than a refusal thrown from inside the rules, so a neighbour at full
+   * growth is greyed with a reason instead of accepting the click and refusing
+   * it afterwards.
+   */
+  readonly disabled?: string;
 }
 
 /**
- * ONE ARGUMENT A COMMAND ASKS A PLAYER FOR (#91).
+ * WHAT THE HOST KNOWS AT THE MOMENT IT ASKS FOR AN OFFER.
  *
- * Answered from the bundle's own declaration, never from the world: this is
- * read by the same non-loading path `commandOffers()` is, so a `choice`'s
- * options are what the GAME can state without a partition -- Example RTS's twelve
- * holdings, a season's four suits. Anything narrower is the rules' business and
- * is refused by the handler, which is the side that has the world in front of
- * it. A surface that offered only what is legal this instant would have to load
- * the world to draw a form.
- *
- * THREE KINDS AND NO MORE. Each one is a control a generic surface can actually
- * render -- a select, a number field, a text field. A kind nothing can draw
- * would put the JSON box back under a different name.
+ * The same two facts a command's stamp carries, and for the same reason: time
+ * and presence live outside the world, so they arrive as arguments. An offer
+ * needs them because a condition may legitimately ask whether a timer has come
+ * due or whether anybody is watching, and a world that read a clock would
+ * compute a different offer depending on how busy its host was.
  */
-/**
- * TRANSITIONAL -- #169 DELETES THIS TYPE.
- *
- * It is a parallel declaration of something the engine already has: a table
- * action says what it asks a player for through SELECTIONS, and this says the
- * same thing in a second vocabulary that only worlds speak. That is why a world
- * has no board clicks, no accessible action panel and no enumeration -- the
- * shell is built over selections and this is not one. #169 replaces the whole
- * type with the selection it should always have been.
- */
-export type WorldCommandArgument =
-  | {
-      readonly name: string;
-      /** What to ask the player, in their language rather than the code's. */
-      readonly prompt: string;
-      readonly kind: "choice";
-      readonly choices: readonly WorldCommandChoice[];
-    }
-  | {
-      readonly name: string;
-      readonly prompt: string;
-      readonly kind: "number";
-      readonly min?: number;
-      readonly max?: number;
-      /** Whole numbers only. What a surface turns into a step of 1. */
-      readonly integer?: boolean;
-    }
-  | {
-      readonly name: string;
-      readonly prompt: string;
-      readonly kind: "text";
-    };
-
-/**
- * WHAT A WORLD OFFERS A PLAYER: one command, and what it asks for (#91).
- *
- * Before this, a world could say `gather` exists and could not say that it
- * wants a `holding`, or that a holding is one of twelve. The only honest
- * surface for that was a free-text JSON box, which is not a surface anybody
- * should have to use.
- */
-/**
- * TRANSITIONAL -- #169 DELETES THIS TYPE.
- *
- * The world's own answer to "what can I do here?", invented because a world's
- * verbs are not Actions and so cannot be enumerated the way a table's are. Once
- * they ARE Actions, a world is asked the same question the shell asks a table
- * and this parallel surface has nothing left to carry.
- */
-export interface WorldCommandOffer {
-  readonly name: string;
-  /** What the command does, if the bundle troubled to say. */
-  readonly prompt?: string;
-  /** In the order a player should be asked. Empty for a command that asks
-   *  nothing, which is a real shape and not a missing declaration. */
-  readonly args: readonly WorldCommandArgument[];
+export interface WorldOfferStamp {
+  readonly now: number;
+  readonly presence: readonly number[];
 }
 
 /** A command as the platform hands it to the engine: opaque, ~100 bytes. */
@@ -763,13 +721,14 @@ export interface WorldEngine {
    * exactly once, in the instance where `world.genesis` happened to leave every
    * partition resident.
    *
-   * A WORLD'S ACTIONS ARE `commandOffers()`, answered from the bundle's own
-   * command table. Its flow does not run. So this returns STATE.
+   * A WORLD'S ACTIONS ARE `offersFor()`, which enumerates them under the
+   * bounded contract `assertWorldAction` enforces. Its flow does not run. So
+   * this returns STATE.
    */
   viewFor(player: string): Promise<unknown>;
 
   /**
-   * WHAT THIS WORLD ANSWERS TO, AND WHAT EACH COMMAND ASKS FOR (#85, #91).
+   * WHAT THIS SEAT MAY DO HERE, ENUMERATED (#85, #91, #169).
    *
    * The NON-MUTATING half of the action protocol, and the reason a world had
    * none until #85: this interface had exactly one verb, `applyCommand`, so
@@ -777,19 +736,36 @@ export interface WorldEngine {
    * could present an action a player had not already been told the name of. A
    * world's UI was a watching surface because of this method's absence.
    *
-   * It answered NAMES ONLY until #91, which is why the action panel offered
-   * the real commands and then a free-text JSON box: the platform could say
-   * `gather` exists and could not say it wants a `holding`. An OFFER carries
-   * both, so a generic surface renders a real form.
+   * It answered NAMES ONLY until #91 and then a static ARGUMENT DECLARATION,
+   * which is why a 500-seat village put five hundred holdings on the wire for
+   * every offer: the bundle could state what the world contains and not what
+   * was legal this instant. Since #169 a world's verbs are Actions, so this
+   * enumerates them FOR THIS SEAT -- the same question the shell asks a table,
+   * answered by the same `getAvailableActions`, in the same `ActionMetadata`.
+   *
+   * PER SEAT, AND IT LOADS WHAT IT MUST. Enumeration walks each action's own
+   * declaration and hydrates it, which for every catalogue game is a subset of
+   * what that seat's `view` already names -- so in practice an offer costs
+   * nothing beyond a look. Where it is not a subset, the author pays a
+   * hydration per action per offer and should be told so; it is a fact about
+   * the bundle's declaration and not about this method.
    *
    * SORTED BY NAME, so a client renders the same list twice and a test can
-   * assert one. Object key order is an implementation detail of whichever
-   * object literal a bundle happened to write.
-   *
-   * It applies NOTHING and reads no partition: the command table is the
-   * bundle's own declaration, answerable without loading a world.
+   * assert one.
    */
-  commandOffers(): readonly WorldCommandOffer[];
+  offersFor(player: string, stamp: WorldOfferStamp): Promise<readonly WorldActionOffer[]>;
+
+  /**
+   * Which partitions an offer for this seat still needs, one round at a time.
+   *
+   * The read path's `commandPartitions`, and it exists because the engine names
+   * and the HOST reads: a child isolate has no storage binding, so an offer's
+   * declaration walk is driven from outside exactly as a command's is. Answer,
+   * supply, ask again; the loop ends when this answers nothing, and it
+   * terminates because every round it names becomes resident before it is asked
+   * again.
+   */
+  offerPartitions(player: string): readonly string[];
 
   /**
    * Serialize exactly the named partitions.

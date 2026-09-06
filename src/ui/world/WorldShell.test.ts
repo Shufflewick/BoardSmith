@@ -20,7 +20,7 @@ const Rooms = defineComponent({
   props: {
     view: { type: null, required: true },
     seat: { type: null, required: true },
-    commands: { type: Array, required: true },
+    actions: { type: Array, required: true },
     acting: { type: Boolean, required: true },
     worldName: { type: null, required: true },
     presence: { type: null, required: true },
@@ -38,7 +38,7 @@ const Rooms = defineComponent({
         ),
         h('p', { class: 'awake' }, ((props.presence as number[] | null) ?? []).join(',')),
         h('p', { class: 'title' }, String(props.worldName)),
-        h('p', { class: 'verbs' }, props.commands.map((c: any) => c.name).join(',')),
+        h('p', { class: 'verbs' }, props.actions.map((a: any) => a.name).join(',')),
         h('p', { class: 'said' }, String((props.view as any)?.said ?? '')),
         h('button', { class: 'go', onClick: () => emit('act', 'move', { to: 'cellar' }) }, 'go'),
       ]);
@@ -52,7 +52,7 @@ function stateFrame(over: Record<string, unknown> = {}) {
     phase: 'watching',
     view: { said: 'the fire is low' },
     seat: 4,
-    commands: [{ name: 'look', args: [] }, { name: 'move', args: [] }],
+    actions: [{ name: 'look', selections: [] }, { name: 'move', selections: [] }],
     notice: null,
     worldName: 'Gloamhall Rooms',
     presence: [2, 4],
@@ -119,7 +119,7 @@ describe('WorldShell', () => {
     wrapper.unmount();
   });
 
-  it('sends a command the game\'s UI emitted', async () => {
+  it('sends an action the game\'s UI emitted', async () => {
     const posted: any[] = [];
     const spy = vi.spyOn(window.parent, 'postMessage').mockImplementation((m) => posted.push(m));
     const wrapper = mount(WorldShell, { props: { ui: Rooms, displayName: 'Gloamhall' } });
@@ -127,7 +127,7 @@ describe('WorldShell', () => {
     await nextTick();
     await wrapper.find('.go').trigger('click');
     const command = posted.find((m) => m.type === 'world_command');
-    expect(command).toMatchObject({ source: WORLD_UI_SOURCE, command: 'move', args: { to: 'cellar' } });
+    expect(command).toMatchObject({ source: WORLD_UI_SOURCE, action: 'move', args: { to: 'cellar' } });
     spy.mockRestore();
     wrapper.unmount();
   });

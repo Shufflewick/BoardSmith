@@ -119,18 +119,57 @@ describe("#165: boardsmith/world reaches no environment", () => {
     }
   });
 
-  it.each(SOURCES)("%s imports only from this module and the engine", (relative) => {
+  it.each(SOURCES)("%s brings in nothing at runtime but this module and the engine", (relative) => {
     // The reachability half. A clean file that imports a dirty one is dirty,
     // and the cheapest way to keep the whole graph honest is to keep the graph
     // small: `boardsmith/world` depends on the engine and on itself.
-    const specifiers = [...code(relative).matchAll(/from\s+["']([^"']+)["']/g)].map((m) => m[1]!);
-    for (const specifier of specifiers) {
+    //
+    // WHAT COUNTS IS WHAT SURVIVES THE COMPILE, and since #169 that distinction
+    // is doing real work rather than being a technicality. A world's offer IS
+    // the table's `ActionMetadata` and a world action IS an `ActionDefinition`,
+    // so `contract.ts` and `engine.ts` name shapes that live in
+    // `../session/types.js`. An `import type` of one emits NO import at all:
+    // there is nothing left in the built file for a Cloudflare Worker to fail
+    // to resolve, and nothing for `node:fs` to arrive one hop behind. A VALUE
+    // import of the same file would be exactly the hazard this case is about,
+    // which is why the two are told apart here rather than both waved through.
+    //
+    // The engine itself is reachable by whatever door the importer needs.
+    // `engine.ts` reaches `../engine/element/action-metadata.js` for
+    // `buildPickMetadata` -- the very function that builds a TABLE's pick
+    // metadata, which is the whole point: a world's picks and a table's are the
+    // same shape by construction rather than by inspection. Insisting on the
+    // barrel would only mean re-exporting an internal to satisfy a regex.
+    const source = code(relative);
+    const imports = [...source.matchAll(/(^|\n)\s*import\s+(type\s+)?([\s\S]*?)from\s+["']([^"']+)["']/g)];
+    for (const match of imports) {
+      const specifier = match[4]!;
+      const local = specifier.startsWith("./");
+      const engine = specifier.startsWith("../engine/");
+      const erased = match[2] !== undefined || everyBindingIsAType(match[3]!);
       expect(
-        specifier.startsWith("./") || specifier === "../engine/index.js",
-        `${relative} imports "${specifier}". This module may reach the engine and itself, and ` +
-          "nothing else -- every other dependency is a chance for something environment-specific " +
-          "to arrive one import away from a file that looks clean.",
+        local || engine || erased,
+        `${relative} imports "${specifier}" for a VALUE. This module may reach the engine and ` +
+          "itself at runtime, and nothing else -- every other runtime dependency is a chance for " +
+          "something environment-specific to arrive one import away from a file that looks " +
+          "clean. A shape it only needs to NAME may come from anywhere, because `import type` " +
+          "leaves nothing behind to resolve.",
       ).toBe(true);
     }
   });
 });
+
+/**
+ * Whether an import clause brings in only types, written binding by binding.
+ *
+ * `import type { X } from` is the whole-clause form; `import { type X, type Y }`
+ * is the per-binding one, and both erase completely. A clause with a default
+ * binding, a namespace binding or one bare name is a value import and is not
+ * this function's business to forgive.
+ */
+function everyBindingIsAType(clause: string): boolean {
+  const braced = clause.trim();
+  if (!braced.startsWith("{") || !braced.endsWith("}")) return false;
+  const bindings = braced.slice(1, -1).split(",").map((binding) => binding.trim()).filter(Boolean);
+  return bindings.length > 0 && bindings.every((binding) => binding.startsWith("type "));
+}

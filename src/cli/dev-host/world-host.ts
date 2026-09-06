@@ -55,6 +55,7 @@ import {
   rearmAt,
   readWorldDefinition,
   settleDeclaration,
+  walkDeclaration,
   worldRefusal,
   WorldRefusal,
   type PlannedEvent,
@@ -66,6 +67,7 @@ import {
   type WorldPresenceDeclaration,
   type WorldRunner,
   type WorldRunnerOptions,
+  type WorldActionOffer,
   type WorldTiming,
 } from '../../world/index.js';
 import type { LocalWorldStore } from './world-store.js';
@@ -142,7 +144,7 @@ interface LocalWorldHostOptions {
 export type WorldDevRequest =
   | { type: 'hello' }
   | { type: 'attach'; seat: number }
-  | { type: 'command'; requestId: string; command: string; args?: Record<string, unknown> }
+  | { type: 'action'; requestId: string; action: string; args?: Record<string, unknown> }
   | { type: 'fire_due' }
   | { type: 'wake' };
 
@@ -251,8 +253,8 @@ export class LocalWorldHost {
         case 'attach':
           await this.#attach(clientId, message.seat);
           return;
-        case 'command':
-          await this.#command(clientId, message.requestId, message.command, message.args ?? {});
+        case 'action':
+          await this.#command(clientId, message.requestId, message.action, message.args ?? {});
           return;
         case 'fire_due':
           await this.#fireDueNow(clientId);
@@ -499,14 +501,19 @@ export class LocalWorldHost {
     // decided by state names an index, is handed it, and names the room on the
     // round after -- which is the one thing no arrangement of arguments could
     // express.
-    await settleDeclaration(
+    // WALK THE ACTION'S DECLARATION (BoardSmith #169). One round per step, in
+    // the order the author wrote them: round one, then each selection's own,
+    // then what execute writes. No ceiling and no `declaration-unsettled`,
+    // because the length is the action's own selection count -- see
+    // `walkDeclaration`, and `settleDeclaration` beside it, which is still what
+    // a VIEW needs.
+    await walkDeclaration(
       async (supplied) => (await runner.declare(command, player, supplied)).needs,
       (name) =>
         this.#readPartition(
           name,
-          `Command "${command.name}" needs partition "${name}", which this world's store does not have.`,
+          `Action "${command.name}" needs partition "${name}", which this world's store does not have.`,
         ),
-      `Command "${command.name}"'s declaration`,
     );
 
     const owner = player ?? WORLD_OWNER;
@@ -648,7 +655,7 @@ export class LocalWorldHost {
         try {
           const events = await this.#dispatch({
             player: null,
-            command: { name: event.command, args: event.args },
+            command: { name: event.action, args: event.args },
             timing,
             // ITS `now` IS ITS `due`, never the wall clock at execution: a
             // world that drained late must produce the state a punctual one
@@ -663,7 +670,7 @@ export class LocalWorldHost {
           // effects rolled back, so the world is unchanged; dropping it
           // silently is how a world stops ticking with nobody told.
           this.#broadcastNotice(
-            `The scheduled command "${event.command}" refused, and stays queued: ${messageOf(error)}`,
+            `The scheduled action "${event.action}" refused, and stays queued: ${messageOf(error)}`,
           );
           break;
         }
@@ -788,12 +795,31 @@ export class LocalWorldHost {
     for (const [clientId, seat] of this.#attached) {
       const player = devWorldPlayer(seat);
       const refusal = failed[player];
+      if (refusal !== undefined) {
+        this.#send(clientId, this.#stateFrame(clientId, null, refusal.message, 'refused'));
+        continue;
+      }
+      // ONE SEAT'S OFFER IS ONE SEAT'S FATE, exactly as its view is. An action
+      // whose enumeration refuses -- a candidate outside its declaration, a
+      // selection past the budget -- is a bundle mistake, and raising it here
+      // would refuse the whole audience for one seat's bad verb.
+      let actions: readonly WorldActionOffer[] = [];
+      let offerRefusal: string | null = null;
+      try {
+        actions = await this.#offersFor(seat);
+      } catch (error) {
+        offerRefusal = messageOf(error);
+      }
       this.#send(
         clientId,
-        refusal === undefined
-          ? this.#stateFrame(clientId, views[player] ?? null, this.#notices(), 'watching')
-          : this.#stateFrame(clientId, null, refusal.message, 'refused'),
+        this.#stateFrame(clientId, views[player] ?? null, this.#notices(), 'watching', actions),
       );
+      // SAID OUT LOUD IN THE DEV BAR, because the reader is the AUTHOR. An
+      // offer that refuses is a bundle mistake -- a candidate outside its own
+      // declaration, a selection past the budget -- and the seat it happened to
+      // is simply offered nothing. Left on the state frame alone it would be a
+      // world that quietly stopped having verbs.
+      if (offerRefusal !== null) this.#send(clientId, { type: 'world_notice', message: offerRefusal });
     }
     this.#broadcastStatus();
   }
@@ -803,19 +829,44 @@ export class LocalWorldHost {
     view: unknown,
     notice: string | null,
     phase: 'watching' | 'refused',
+    actions: readonly WorldActionOffer[] = [],
   ): Record<string, unknown> {
     return {
       type: 'world_state',
       phase,
       view,
       seat: this.#attached.get(clientId) ?? null,
-      // FROM THE BUNDLE'S OWN TABLE, and never a clockOnly command: a client
-      // that was never offered one cannot send it by accident.
-      commands: this.#world.runner.commandOffers(),
+      // ENUMERATED FOR THIS SEAT, and never a seatless one: a client that was
+      // never offered the clock's own cannot send it by accident.
+      actions,
       notice,
       worldName: this.#worldName,
       presence: this.#presence(),
     };
+  }
+
+  /**
+   * WHAT THIS SEAT MAY DO, over what it can see (BoardSmith #169).
+   *
+   * Declared and supplied exactly as a command's partitions are, because the
+   * engine names and this host reads: an offer walks each action's round-one
+   * declaration and each selection's own, and every round it names is read out
+   * of the local store before it is asked again.
+   */
+  async #offersFor(seat: number): Promise<readonly WorldActionOffer[]> {
+    const runner = this.#world.runner;
+    const player = devWorldPlayer(seat);
+    await walkDeclaration(
+      async (supplied) => (await runner.declareOffers(player, supplied)).needs,
+      (name) =>
+        this.#readPartition(
+          name,
+          `An action offered to seat ${seat} needs partition "${name}", which this world's ` +
+            "store does not have. The action's `needs` names it; either the name is wrong or " +
+            'the partition was never created.',
+        ),
+    );
+    return runner.offersFor(player, { now: this.#worldNow(), presence: this.#presence() });
   }
 
   #notices(): string | null {
@@ -874,7 +925,7 @@ export class LocalWorldHost {
       pending: pending.map((event) => ({
         id: event.id,
         due: event.due,
-        command: event.command,
+        command: event.action,
         owner: event.owner,
         ...(event.everyMs === undefined ? {} : { everyMs: event.everyMs }),
       })),

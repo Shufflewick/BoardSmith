@@ -32,6 +32,19 @@
         {{ host.notice.value ?? 'The connection to this world dropped. This is the last view it sent.' }}
       </p>
 
+      <!-- WHY THE LAST THING YOU TRIED DID NOT HAPPEN.
+           A world refuses constantly and legitimately -- a bare holding, a door
+           that is not there -- and the sentence is the one the player can act
+           on. A board that emits `act` rather than awaiting `useWorld().act()`
+           has nowhere of its own to put that sentence, so the SHELL puts it
+           here: this is one of the three states the shell owns precisely
+           because a game should never have to write it. Replaced by the next
+           attempt and cleared by the one that succeeds, so it can only ever
+           describe the thing that just failed. -->
+      <p v-if="refusal !== null" class="world-shell__refusal" role="alert">
+        {{ refusal }}
+      </p>
+
       <!-- NO VIEW YET. Narration alone does not draw a board: a frame that has
            only been narrated at has been told nothing about what the world IS,
            and mounting the game's UI over a null view would put an empty room
@@ -46,7 +59,7 @@
         v-else
         :view="host.view.value"
         :seat="host.seat.value"
-        :commands="host.commands.value"
+        :actions="host.actions.value"
         :acting="host.acting.value"
         :world-name="host.worldName.value"
         :presence="host.presence.value"
@@ -58,7 +71,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, provide, type Component } from 'vue';
+import { computed, onMounted, onUnmounted, provide, ref, type Component } from 'vue';
 import { useWorldHost } from './useWorldHost.js';
 import { WORLD_CONTEXT_KEY } from './useWorld.js';
 
@@ -78,7 +91,7 @@ import { WORLD_CONTEXT_KEY } from './useWorld.js';
  * they are in, which is the `ui` component and the whole point of the ticket.
  */
 const props = defineProps<{
-  /** The game's own world UI. Handed `view`, `seat`, `commands`, `acting`,
+  /** The game's own world UI. Handed `view`, `seat`, `actions`, `acting`,
    *  `worldName`, `presence` and `events`, and expected to emit
    *  `act(command, args)`. */
   ui: Component;
@@ -98,7 +111,7 @@ provide(WORLD_CONTEXT_KEY, {
   phase: host.phase,
   view: host.view,
   seat: host.seat,
-  commands: host.commands,
+  actions: host.actions,
   notice: host.notice,
   worldName: host.worldName,
   presence: host.presence,
@@ -107,11 +120,34 @@ provide(WORLD_CONTEXT_KEY, {
   act: host.act,
 });
 
-/** A UI that emits rather than injecting gets the same verb. The outcome is
- *  dropped here on purpose: a component that wants the world's sentence back
- *  calls `useWorld().act()` and awaits it. */
-function onAct(command: string, args: Record<string, unknown> = {}): void {
-  void host.act(command, args);
+/**
+ * WHY THE EMIT PATH GETS ITS ANSWER SHOWN AND THE INJECTED PATH DOES NOT.
+ *
+ * `useWorld().act()` RETURNS the outcome, so a board that injects it already
+ * has the world's sentence and decides where it belongs -- next to the button
+ * that failed, over the room that refused, wherever the game means it. A board
+ * that EMITS has no return value to hold, and this used to drop the outcome on
+ * the floor: a player pressed a button, the world refused, and nothing at all
+ * appeared. That is not degradation, it is silence, and it hid exactly the
+ * refusals `boardsmith dev` exists to make identical to the platform's.
+ *
+ * So an emitted act's refusal is shown by the shell. It is deliberately not
+ * pushed back into the emitting board: a board that had to render it would be
+ * every board having to write the same three lines, which is the thing the
+ * shell is for.
+ */
+const refusal = ref<string | null>(null);
+
+async function onAct(command: string, args: Record<string, unknown> = {}): Promise<void> {
+  refusal.value = null;
+  const outcome = await host.act(command, args);
+  // A refusal RESOLVES rather than throwing -- a world refuses legitimately --
+  // so `ok` is the only place the answer lives. A refusal with no message is a
+  // host that answered without saying anything, which the player still has to
+  // be told about rather than left guessing at.
+  if (!outcome.ok) {
+    refusal.value = outcome.message ?? 'The world refused that, and did not say why.';
+  }
 }
 
 onMounted(host.start);
@@ -133,6 +169,14 @@ defineExpose({ host });
   border-radius: 0.5rem;
   background: #4a3410;
   color: #f7e6c4;
+}
+
+.world-shell__refusal {
+  margin: 0 0 1rem;
+  padding: 0.75rem 1rem;
+  border-radius: 0.5rem;
+  background: #4a1414;
+  color: #f7cdcd;
 }
 
 .world-shell__silent,

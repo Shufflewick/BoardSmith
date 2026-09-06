@@ -97,19 +97,27 @@ const WORLD_WIRE_FIXTURE = {
     phase: 'watching',
     view: { player: 2, state: { id: 0, className: 'Game' }, phase: 'started' },
     seat: 2,
-    commands: [
+    actions: [
       {
         name: 'move',
         prompt: 'Walk somewhere',
-        args: [
+        disabled: 'You are carrying too much',
+        selections: [
           {
             name: 'to',
+            type: 'element',
             prompt: 'Which way?',
-            kind: 'choice',
-            choices: [{ value: 'cellar', label: 'The cellar' }],
+            validElements: [
+              {
+                id: 7,
+                display: 'The cellar',
+                refs: [{ ref: { id: 7 }, role: 'highlight' }],
+                disabled: 'The door is barred',
+              },
+            ],
           },
-          { name: 'paces', prompt: 'How far?', kind: 'number', min: 1, max: 9, integer: true },
-          { name: 'note', prompt: 'Say why', kind: 'text' },
+          { name: 'paces', type: 'number', prompt: 'How far?', min: 1, max: 9, integer: true },
+          { name: 'note', type: 'text', prompt: 'Say why' },
         ],
       },
     ],
@@ -136,8 +144,8 @@ const WORLD_WIRE_FIXTURE = {
     source: 'shufflewick-world-ui',
     type: 'world_command',
     requestId: 'wc-1',
-    command: 'move',
-    args: { to: 'cellar' },
+    action: 'move',
+    args: { to: 7 },
   },
   world_ready: {
     source: 'shufflewick-world-ui',

@@ -34,25 +34,27 @@ Read this before you plan your week.
   every refusal. You can drive all of it from an ordinary `vitest` file today.
 - **`boardsmith dev` runs your world, on your laptop, with no network** (#167).
   It opens a durable local store beside `boardsmith.json`, runs your genesis
-  once into it, dispatches every command through `partitions(args, seat)` and
-  then `run`, projects `view(seat)` for each attached seat and pushes it when it
-  changes, fires your scheduled events on their due time, and reports presence
-  from the seats it has open. It serves your `world.html`; a project that has
-  not written one gets the shell's own surface, which mounts the same
-  `WorldShell` over the same wire. Three controls exist because a person is
-  watching: a **seat switcher**, so one author can be several players;
-  **fire due events now**, which moves the world's clock forward to the instant
-  the next event was due rather than making you wait for it; and **wake from
-  parked**, which drops everything resident and rehydrates from the store.
+  once into it, walks each action's declaration a round at a time and hydrates
+  what each round named before running the action, enumerates what each seat can
+  do, projects `view(seat)` for each attached seat and pushes it when it changes,
+  fires your scheduled events on their due time, and reports presence from the
+  seats it has open. It serves your `world.html`; a project that has not written
+  one gets the shell's own surface, which mounts the same `WorldShell` over the
+  same wire. Three controls exist because a person is watching: a **seat
+  switcher**, so one author can be several players; **fire due events now**,
+  which moves the world's clock forward to the instant the next event was due
+  rather than making you wait for it; and **wake from parked**, which drops
+  everything resident and rehydrates from the store.
 - **It is the same library the hosting platform runs.** Same `createWorld`, same
-  declaration rounds, same schedule planning, same budgets, same refusals in the
+  declaration walk, same schedule planning, same budgets, same refusals in the
   same sentences. What a host owns is its own lifecycle policy -- sockets,
   hibernation, eviction timing, rate limits, the park ladder -- and the table
   further down this page says which is which.
 - **`boardsmith build` builds a world's UI.** A project with a `world.html`
   entry gets a second bundle mounting `WorldShell`, which is what a world loads
   on the hosting platform.
-- **The command surface is transitional.** See the next section.
+- **A world's verbs are Actions** (#169), so a world is enumerated, clickable
+  from the board and drawn by the shared action panel. See the next section.
 
 So the loop for writing a world is the loop for writing anything else: write the
 rules, drive them from a test file against `createWorld`, open them in a browser
@@ -63,33 +65,35 @@ else does: a persistent world that erased itself when its host stopped would be
 a session, and closing the laptop is the one thing an author has to be able to
 do.
 
-## The transitional part, named up front
+## A world action is an Action
 
-A world's verbs are a flat **command table** today. That is why a world has no
-board clicks, no accessible action panel, no move enumeration and no bots: those
-are all built over the engine's **Action** system, and a world does not use it.
+A world's verbs used to be a flat **command table**: a name, a prompt, and typed
+arguments of kind `choice`, `number` or `text`. That was a second vocabulary for
+something the engine already had, and it is why a world had no board clicks, no
+accessible action panel, no move enumeration and no bots -- every one of those is
+built over the engine's **Action** system, and a command was not one.
 
-Issue #169 replaces a world command with an Action. When it lands, these types
-change shape or disappear:
+Since #169, a world action **is** an `ActionDefinition`. It is registered in the
+same registry a table's action is registered in, reached through the same
+`game.getAction`, and enumerated by the same machinery. What a world adds is one
+optional block on the definition -- `world: { needs, seatless }` -- and you never
+write it by hand: `worldAction()` and `worldClockAction()` produce it.
 
-| Type | What happens to it |
-| --- | --- |
-| `WorldCommandHandler` | Becomes an Action. `partitions()` becomes an ordered walk driven by the action's own selections. |
-| `WorldCommandContext` | Replaced by the engine's action context. `now`, `timing`, `presence`, `schedule` and `complete` all survive in some form; `args` and `partition` change shape. |
-| `WorldCommandArgument` | Replaced by a selection. |
-| `WorldCommandOffer`, `commandOffers()` | Deleted. A world gets asked the same enumeration question a table is asked. |
-| `WorldCommandTable`, and the `genesis` / `view` / `presence` signatures | Change with them. |
-| `ScheduleRequest.command` | Renamed to `action`. A rename, not a concept: the clock and a player still reach the same registry. |
-| `WorldCommandHandler.clockOnly` | Likely renamed rather than deleted. Under Actions the same fact is "this verb has no acting seat". |
+That one fact is what pays for everything below. The action panel, the board
+bridge and the drag-drop targets are written against `ActionMetadata`, and a
+world's offer *is* `ActionMetadata`, so a world's surface is the shell rather
+than something written beside it -- and a bot reaching a world action through
+`getAction` has no world-only path to be taught.
 
-The types are exported and marked rather than hidden, because a bundle has to
-name the shape it exports, and hand-copying it is how the contract drifted in the
-first place. Write against them. Expect one migration pass in which every
-catalogue game is updated at once. The design for it is in issue #169.
+The types that surrounded the old command table -- `WorldCommandHandler`,
+`WorldCommandContext`, `WorldCommandArgument`, `WorldCommandOffer`,
+`WorldCommandTable`, `WorldCommandChoice` -- are deleted from the library and
+from every catalogue game. A bundle that hand-copied one deletes its copy rather
+than adapting it.
 
-Nothing else on this page is transitional: partitions, residency, genesis, the
+Nothing else on this page changed with them: partitions, residency, genesis, the
 dirty set, scopes, views, presence, the schedule semantics, the refusals and the
-budgets are the model, and Actions do not change any of them.
+budgets are the model, and Actions do not touch any of them.
 
 ## Declaring a world
 
@@ -116,13 +120,20 @@ export const gameDefinition: GameDefinition = {
   gameType: 'gloamhall',
   minPlayers: 1,
   maxPlayers: 200,
-  world: { commands, view, genesis, presence },
+  world: { actions, view, genesis, presence },
 };
 ```
 
 `GameDefinition.world` is typed by `WorldDefinition` from `boardsmith/world`, so
-you get the shape checked without importing anything extra. `commands` and
-`view` are required; `genesis` and `presence` are optional.
+you get the shape checked without importing anything extra. `actions` and `view`
+are required; `genesis` and `presence` are optional.
+
+`actions` is a plain array of `ActionDefinition`, and it is named here rather
+than read off the game because a game class may register a **table's** actions in
+its own constructor and those are not this world's verbs. What this list holds is
+what a seat may be offered. `createWorld` registers it on the game for you, so
+the game class must not register the same actions again; if it registers table
+actions whose names collide, guard those with `if (!this.worldMode)`.
 
 **`maxPlayers` is declared twice on purpose.** The manifest's number is checked
 at build time. The number a host actually seats against is
@@ -137,9 +148,9 @@ prepared to keep resident, and a bundle declaring more is refused with
 `bundle-not-a-world`.
 
 If a bundle's manifest declares a world and its compiled rules export no
-`world.commands`, or no `world.view`, it is refused on the world's first wake,
-with a message written for you rather than for whoever is reading the log.
-That is the first moment anything *can* check.
+`world.actions`, or no `world.view`, it is refused on the world's first wake with
+`bundle-not-a-world`, in a message written for you rather than for whoever is
+reading the log. That is the first moment anything *can* check.
 
 ## Genesis: the world a first player walks into
 
@@ -161,157 +172,268 @@ before it writes any of them (`WorldPartitionWriter.createAll`), so a world
 whose genesis names one partition it may not hold is refused outright rather
 than left half-created and wedged forever.
 
-## A command: declare, then run
+## An action: declare, then execute
 
-Every world verb is two functions, and the split is the whole cost model.
-
-```ts
-interface WorldCommandHandler {
-  readonly args: readonly WorldCommandArgument[];
-  readonly prompt?: string;
-  readonly clockOnly?: boolean;
-  partitions(
-    args: Readonly<Record<string, unknown>>,
-    seat: number | null,
-    world: WorldResidency,
-  ): readonly string[];
-  run(context: WorldCommandContext): WorldEvents;
-}
-```
-
-### `args`: what this command asks a player for
-
-Required, and `args: []` is a legal answer. Making it explicit is what stops
-"asks for nothing" and "never got round to declaring" from looking identical
-from outside.
-
-Three kinds, and no more, because each is a control a generic surface can
-actually draw: `choice` (a select), `number` (a number field), `text` (a text
-field). Anything else would put the free-text JSON box back under a new name.
-
-A `choice`'s options are what the **game** can state without loading anything:
-every kind of holding, every suit. Whether a particular option is legal *this
-instant* is the handler's business, because the handler is the side with the
-world in front of it. A surface that offered only what is legal right now would
-have to load the world to draw a form.
-
-Four declarations are refused at construction, with `invalid-command-args`,
-because each produces a form whose every submission fails:
-
-- an argument named `now`. That name is reserved: a client does not get to say
-  what time it is, and a frame carrying one is refused before it runs. Read
-  `ctx.now` instead.
-- two arguments with one name.
-- an argument with no name.
-- a `choice` between nothing.
-
-### `partitions(args, seat, world)`: what must be loaded
-
-Answered **before** anything is loaded. That is what "absent until named" means:
-a partition is not in memory until a declaration asks for it.
-
-- `args` is the player's own frame.
-- `seat` is the acting seat, or `null` when the clock is acting. A command that
-  needs a seat and is handed `null` must say so by throwing. Use `seat` to name
-  a player's own partition rather than making them pass it as an argument with
-  exactly one legal answer.
-- `world` is what an **earlier round** of this same declaration already loaded.
-
-**Everything named on the last round is loaded, and is reported dirty whether or
-not `run` wrote to it.**
-
-**Two-phase declaration.** A world whose player location is itself state cannot
-answer this in one go: to know which room a player's `look` is about, you must
-first read a partition. So the declaration is asked again once what it named is
-resident:
+Every world verb is an action built with `worldAction()`, and every one of them
+declares which partitions each of its steps needs resident before it reads any of
+them. That split is the whole cost model: a partition is absent until a
+declaration names it, so a verb that could not say what it needs in advance would
+have to be run against the whole world.
 
 ```ts
-partitions: (args, seat, world) => {
-  const index = world.partition('wanderers');
-  if (!index) return ['wanderers'];            // round 1: nothing is resident
-  return ['wanderers', roomPartitionFor(index, seat)];  // round 2: read it
-},
+import { worldAction } from 'boardsmith/world';
+
+export const tend = worldAction<VillageGame>('tend')
+  .prompt("Spend a log putting timber back on a neighbour's land")
+  // ROUND ONE: answered before any selection, with nothing resident.
+  .needs(({ player }) => [holdingPartition(player.seat)])
+  .disabled(({ game, player }) =>
+    game.holdingOf(player.seat).woodpile < 1 ? 'You have no log to spend' : false,
+  )
+  .chooseElement('neighbour', {
+    // THIS SELECTION'S ROUND: answered with round one resident.
+    needs: ({ player }) => neighboursOf(player.seat).map(holdingPartition),
+    // Evaluated with this selection's round resident.
+    elements: ({ game, player }) => neighboursOf(player.seat).map((s) => game.holdingOf(s)),
+    disabled: (holding) =>
+      holding.standing >= STANDING_MAX ? 'Already at full growth' : false,
+  })
+  .execute(({ neighbour }, ctx) => {
+    ctx.game.holdingOf(ctx.player.seat).woodpile -= 1;
+    neighbour.standing += 2;
+    ctx.world.emit(holdingPartition(neighbour.seat), { tended: 2 });
+  });
 ```
 
-Round one sees `undefined` for every partition. Keep naming what you already
-asked for: what is named on the final round is what gets loaded.
+The builder is the engine's own with every callback's context re-typed, so what
+you write is a table action with `ctx.world` in scope and one method added:
+`.needs()`. `prompt`, `help`, `condition`, `disabled`, `validate`, `manual`,
+`suppressFromActionPanel`, `chooseFrom`, `chooseElement`, `enterText`,
+`enterNumber`, `execute` and `build` all mean what they mean on a table. The
+result is an ordinary `ActionDefinition`, which is why it needs no world-only
+registry, panel or board bridge.
 
-A declaration is asked at most **four** times (`WORLD_DECLARATION_ROUNDS`).
-Three is the deepest chain a declaration has a reason to have, and the fourth is
-the round that comes back empty and proves it settled. A declaration that names
-something new every round is walking the world rather than declaring, and is
-refused with `declaration-unsettled`. A declaration whose first round asks for
-nothing is never asked again, so the steady state costs one round.
+### The ordered declaration walk
 
-**A declaration may not write.** What `world.partition(name)` hands you is a
-read-only projection, and an assignment through it is refused with
-`declaration-write`. A declaration runs before the rollback snapshot on the
-write path, and with no snapshot at all on the read path, so nothing it writes
-could ever be checkpointed: it would either survive a command the player was
-told was refused, or be reverted at the next hibernation with nobody told. Do
-the write in `run`.
+The flat command table answered "what do I need?" with one
+`partitions(args, seat, world)` function, asked repeatedly until it stopped
+naming anything new. That is a **fixpoint**: it needed a round ceiling, and an
+author who wrote a traversal instead of a declaration met a
+`declaration-unsettled` refusal telling them so.
 
-### `run(context)`: change the world and say what happened
+An action needs no fixpoint, because **an action is already ordered**. Its
+selections are a sequence the engine resolves one step at a time, so its
+declaration is a list of rounds written against those steps, in the author's own
+order, with hydration in between:
+
+| Where you write it | When it is asked | What is resident when it runs |
+| --- | --- | --- |
+| `.needs()` before any selection | round one | nothing, or whatever an earlier `.needs()` loaded |
+| a selection's own `needs:` option | that selection's round | round one, and every earlier selection's round |
+| `.needs()` after the last selection | the execute round | everything above |
+
+**Round one is a pure function of the seat.** Nothing is loaded when it is asked,
+so it can only be arithmetic on the acting seat and constants from your source.
+That is enough for the common case: "my own holding" is a function of the seat,
+and asking a player to name it would be a form with exactly one legal answer.
+
+**A selection's own round is answered with round one in front of it,** which is
+what lets it read what round one loaded. In `tend` above it does not need to --
+the village ring is arithmetic -- but a world whose player location is itself
+state depends on exactly this: name the index in round one, read the index, and
+name the room it points at in the selection's round.
+
+**The trailing `.needs()` is the execute round, and it exists for the partitions
+`execute` writes that no candidate list ever mentioned.** The case that makes it
+necessary is a move that can miss: sotf's navigate rolls, and *a declaration may
+not roll*, so a jump that could land in any of four sectors must declare all four
+even though the player only ever aimed at one. Without this round the action
+would either roll inside its declaration -- which is refused, because a
+declaration is asked more than once and a rolled declaration would answer
+differently each time -- or write into a partition nothing checkpointed.
+
+**This replaces the fixpoint for the write path, and it has no ceiling.** There
+is no number to tune and no unsettled refusal to explain, because the walk's
+length is the number of rounds you wrote, which is bounded by the action's own
+selection count and read off its own source. A host supplies what a round names
+and asks again; the loop ends when a round names nothing. There is no round you
+are obliged to write: an action whose every partition was named in round one
+writes no later round at all.
+
+**`.needs()` may be chained, and two of them in the same position are two
+rounds.** The second is answered with what the first loaded, and that is not a
+convenience -- it is how a declaration whose subject is *itself state* gets
+written. A MUD's `look` names the wanderer index, reads it, and names the room
+the index points at; with one declaration per position it would instead have to
+branch on whether its own partition happened to be resident yet, which is exactly
+the branch two-phase declaration exists to delete.
 
 ```ts
-interface WorldCommandContext {
-  readonly args: Readonly<Record<string, unknown>>;
-  readonly seat: number | null;
-  readonly now: number;
-  readonly timing: { readonly due: number; readonly missedCount: number } | null;
-  readonly presence: ReadonlySet<number>;
-  partition(name: string): GameElement;
-  schedule(request: ScheduleRequest): void;
-  complete(): void;
-}
+worldAction<MudGame>('look')
+  .needs(() => [WANDERERS])                              // nothing is resident
+  .needs(({ game, player }) => [roomOf(game, player)])   // reads what the last one loaded
+  .execute((_args, ctx) => { /* ... */ });
 ```
 
-**There is no `game`.** You read and write the world through `partition()`, and
-only through partitions this command declared. Reaching a resident but
-undeclared partition through a global query used to be possible, and it was
-silent: every watcher saw the new value, the checkpoint never wrote it, and
-hibernation reverted it. A cross-partition move travels on an element reference
-a declared partition already holds; the engine tracks the re-parent whichever way
-the reference was obtained. Reading an undeclared partition is refused with
-`undeclared-partition`.
+A round that names a step the action does not have is refused at construction
+with `invalid-world-action`.
 
-**`ctx.now` is the only clock you may read.** It is the platform's stamped
-arrival instant for a player's command, and a scheduled event's own `due` for one
+**A declaration may not write.** What it is handed is a read-only projection of
+the game, and an assignment through it is refused with `declaration-write`. A
+declaration runs before the rollback snapshot on the write path, and with no
+snapshot at all on the read path, so nothing it writes could ever be
+checkpointed: it would either survive an action the player was told was refused,
+or be reverted at the next hibernation with nobody told. Do the write in
+`execute`.
+
+### Selections: what an action asks a player for
+
+`WorldCommandArgument` is gone, and what replaces it is the engine's own
+selections. There are four you may write:
+
+- **`chooseElement(name, { elements, ... })`** -- one element off the board, from
+  a list you compute. This is the one worlds existed without: a `Holding` *is* a
+  `GameElement`, so the board bridge wires a click straight through with no
+  `boardRefs` mapping to write, and the wire carries the two candidates the
+  declaration named rather than the five hundred a static choice list would.
+  `elements:` is **required**, and the searching form (`from`, `filter`,
+  `elementClass`) is refused -- see the next section for why.
+- **`chooseFrom(name, { choices, ... })`** -- a choice between values the game
+  names, with `choices` precomputed for the same reason.
+- **`enterNumber(name, { min, max, integer })`** -- a number, bounded where the
+  game knows the bound, so a surface draws a stepper and "at least one log" is a
+  fact the shell knows before anything is sent.
+- **`enterText(name, { minLength, maxLength, pattern })`** -- free text.
+
+Each of them takes `needs:` as its own declaration round, `optional:`, and
+`disabled:` -- and `disabled:` is the one to reach for before `validate:`, for
+the reason the next-but-one heading gives.
+
+### `ctx.world`: what a world gives an action that a table cannot
+
+`ActionContext` is `{ game, player, args }` and stays that: the table backend has
+no clock and no partitions, and widening the shared context so a world could
+reach its own facilities would put `now` on a surface where it means nothing. So
+a world's facilities ride on one added property.
+
+```ts
+ctx.game       // your game class, typed
+ctx.player     // the acting Player -- absent on a seatless action
+ctx.args       // what the player sent
+
+ctx.world.now                    // the host's stamped instant
+ctx.world.timing                 // {due, missedCount} for a clock action, else null
+ctx.world.presence               // ReadonlySet<number> of connected seats
+ctx.world.partition(name)        // the resident root of a partition this walk declared
+ctx.world.emit(scope, payload)   // narration, routed by scope
+ctx.world.schedule(request)      // ask the host to wake this world later
+ctx.world.complete()             // declare the season over
+```
+
+**`ctx.world.now` is the only clock you may read.** It is the host's stamped
+arrival instant for a player's action, and a scheduled event's own `due` for one
 the clock issued, so a world drained a week late computes exactly what a punctual
-one would. `Date.now()` inside the isolate is the execution instant, which
-diverges from the arrival instant exactly when the world is busy. `args` is the
-client's frame, and a player who could name the time would finish every timer the
-moment they started it.
+one would. `Date.now()` inside the isolate is the *execution* instant, which
+diverges from the arrival instant exactly when the world is busy. And a time
+arriving in `args` would be the client's, and a player who could name the time
+would finish every timer the moment they started it.
 
-**`ctx.timing`** is `null` for a player's command. For a scheduled event, `due`
-is the scheduled instant, never the wall clock. `missedCount` is how many
+**`ctx.world.timing`** is `null` for a player's action. For a scheduled event,
+`due` is the scheduled instant, never the wall clock. `missedCount` is how many
 occurrences of a recurrence got no call of their own and were folded into this
-one; this call is not one of them, so integrate with `1 + timing.missedCount`.
-It is `0` whenever the world kept up, so a handler that never reads it is correct
-on a healthy world.
+one; this call is not one of them, so integrate with `1 + timing.missedCount`. It
+is `0` whenever the world kept up, so an action that never reads it is correct on
+a healthy world.
 
-**`ctx.presence`** is the set of seats holding at least one open connection at
-this instant. Per seat, so a player with two tabs is present once. Derived at the
-moment of the call and never stored, so a world woken hours after parking sees
-whoever is actually there, usually nobody. It does not distinguish "left" from
-"dropped and reconnecting": a world that wants durable consequences of leaving
-writes them as state, through commands. Presence is not world state unless a
-handler deliberately makes it so.
+**`ctx.world.presence`** is the set of seats holding at least one open connection
+at this instant. Per seat, so a player with two tabs is present once. Derived at
+the moment of the call and never stored, so a world woken hours after parking
+sees whoever is actually there, usually nobody. It does not distinguish "left"
+from "dropped and reconnecting": a world that wants durable consequences of
+leaving writes them as state, through actions. Presence is not world state unless
+an action deliberately makes it so.
 
-**`clockOnly: true`** marks a command as the clock's own. It is left out of
-`commandOffers()`, so no surface draws a button for it, and a player's frame
-naming it is refused at the door with `clock-only-command`, before any partition
-is read. Both halves are needed: filtering alone would leave the rule enforceable
-only by the client. It says nothing about what the command may *do*; whether a
-due burn is legal this instant is still your judgement, made with the holding in
-front of you.
+**`ctx.world.partition(name)` is refused for a partition this walk did not
+declare**, with `undeclared-partition`. Reaching a resident but undeclared
+partition used to be possible through a global query, and it was silent: every
+watcher saw the new value, the checkpoint never wrote it, and hibernation
+reverted it. A cross-partition move travels on an element reference a declared
+partition already holds; the engine tracks the re-parent whichever way the
+reference was obtained.
+
+Unlike the old `WorldCommandContext`, **`ctx.game` is here**, because an action's
+`ctx.game` is the same live game its selections were enumerated against and
+`chooseElement` hands you real elements. It does not widen what you may reach:
+what an element you were *handed* lets you write is bounded by
+`undeclared-partition` on the read side and by the dirty-set comparison on the
+write side, exactly as before.
+
+### `.disabled()`: grey it out with a reason, do not throw
+
+A flat command handler could only refuse from inside `run`, which meant a surface
+drew a button that looked available, the player pressed it, and the world said no
+afterwards. An action has a channel for this and a world uses it:
+
+- **`.disabled(ctx => string | false)`** on the action greys the whole verb with
+  the reason. It is evaluated with empty args, so it can only ask about the seat
+  and the world, which is exactly the question "may this player do this at all?".
+  The reason travels to the client on the offer as `disabled`.
+- **`disabled: (candidate, ctx) => string | false`** on a selection greys one
+  candidate. A neighbour whose land is already at full growth is shown, greyed,
+  with the reason, rather than accepted and refused afterwards.
+- **`.condition()`** hides the action entirely, for a verb that is not merely
+  unavailable but irrelevant here. Use it sparingly: a hidden verb teaches a
+  player nothing, and a false condition also stops the offer walking that
+  action's later rounds, so an irrelevant verb costs one predicate and no
+  hydration.
+- **`.validate()`** is still the whole-action gate, checked at submit with every
+  selection resolved. It is the backstop, not the surface: anything `validate`
+  can say, a player would rather have been told before they pressed anything.
+
+### `worldClockAction()`: the clock's own verbs
+
+```ts
+import { worldClockAction } from 'boardsmith/world';
+
+export const settleBurn = worldClockAction<VillageGame>('settleBurn')
+  .prompt('The clock: a slow burn reaching the fire')
+  // Seatless: the declaration reads `{ args, seat: null }`. There is no `player`.
+  .needs(({ args }) => [COMMONS_PARTITION, String(args.holding)])
+  .execute((args, ctx) => {
+    const holding = ctx.world.partition(String(args.holding)) as Holding;
+    const commons = ctx.world.partition(COMMONS_PARTITION) as Commons;
+    commons.embers += holding.woodpile;
+    holding.woodpile = 0;
+    ctx.world.emit(COMMONS_PARTITION, { embers: commons.embers });
+  });
+```
+
+This is what `clockOnly: true` used to mark, and the type says it now rather than
+a boolean. A seatless action:
+
+- **declares no selections.** A selection is a question and there is nobody to
+  ask; a clock action runs when the event scheduled for it comes due, whether or
+  not anybody is here. It takes its arguments from the schedule row. Declaring
+  one is refused with `invalid-world-action` at construction.
+- **has no `player`,** in its declaration or in its `execute` context. There is
+  no synthetic clock seat standing in for one, because inventing a player is the
+  kind of fallback that masks the real problem later: the flat table's
+  `requireSeat` helpers existed precisely because a null seat could reach a
+  handler that assumed one.
+- **is left out of every seat's offer, and refused on submit** with
+  `clock-only-command`. Both halves, and it must stay both: filtering alone would
+  leave the rule enforceable only by the client, which is not a place a rule can
+  live, and refusing alone would leave a dead button on the panel.
+
+It has `prompt`, `needs` and `execute`, and nothing else -- there is nothing for
+a condition or a disabled reason to speak to.
 
 ### Events, and what `scope` means
 
-`run` returns events:
+Events are **emitted**, not returned:
 
 ```ts
-return [{ scope: roomPartition(here.key), payload: { said: seat, text } }];
+ctx.world.emit(roomPartition(here.key), { said: seat, text });
 ```
 
 `scope` is what makes a broadcast cost what the room costs rather than what the
@@ -322,24 +444,147 @@ world contains. A scope is either:
 
 The engine resolves the scope into the seats that can see it, and the host's job
 is a membership test against the seat behind each attached socket. You express
-co-location by giving two players the same scope. A scope that is neither the
-reserved word nor a loaded partition is refused with `unknown-scope`: an event
-addressed to a place nobody can be in reaches nobody, and it is better refused
-than delivered silently to no one.
+co-location by giving two players the same scope. Who can see a scope is the
+engine's answer and not the game's: an action says where something happened, and
+the world decides who was there. A scope that is neither the reserved word nor a
+loaded partition is refused with `unknown-scope`: an event addressed to a place
+nobody can be in reaches nobody, and it is better refused than delivered silently
+to no one.
 
 Nothing reads inside `payload`. It is yours.
 
 **Events are a world's narration, and there is no second channel.** The game
 root's message log lives outside every partition, so a checkpoint never persists
-it. Anything you want a player to be told, tell them with a scoped event.
+it and nobody who was not connected would ever see a `game.message()`. Anything
+you want a player to be told, tell them with a scoped event.
 
-### What a command returns to the host
+`emit`, `schedule` and `complete` all refuse outside a real dispatch. An offer is
+a question, and answering a question must not narrate a line, arm a timer or end
+a season -- and it is the same boundary a bot needs, since a search rolls the
+tree back many times inside one real dispatch and a schedule escapes the tree.
+
+### What a dispatch returns to the host
 
 `WorldCommandResult` carries the routed events, the **dirty set** (the partitions
 whose serialized form changed, which is the engine's answer and not the host's
-guess), any schedule requests, and `ending: "completed"` if the handler called
-`ctx.complete()`. An empty dirty set with a full event list is legal and normal:
-a command that only tells people something changed nothing durable.
+guess), any schedule requests, and `ending: "completed"` if the action called
+`ctx.world.complete()`. An empty dirty set with a full event list is legal and
+normal: an action that only tells people something changed nothing durable.
+
+## What keeps enumeration O(view), and never O(world)
+
+A world may not build a player view the way a table does, because that evaluates
+every registered action's selections against whatever happens to be resident --
+and what is resident is a fact about what every *other* player recently touched.
+The measured shape of that mistake was 260 KB per view in a 500-seat village.
+Enumeration is back since #169, and four rules are what make it affordable.
+Three of them -- (a), (c) and (d) -- are refused with `invalid-world-action`;
+(b) is refused with `undeclared-partition`, the same code the dispatch path
+raises, because it is the same rule asked at a different moment.
+
+**(a) The unbounded element form is refused.** An element selection must supply
+`elements:`; `from`, `filter` and `elementClass` are not accepted. With
+`elements` absent the engine resolves `from` (defaulting to the whole game) and
+walks `all()`, filtering over every result. On a table that is a walk of the
+board. In a world it is a walk of the resident tree, so such an action is not
+merely slow, it is slow **non-deterministically** -- its cost is a function of
+who else has been playing. Name your candidates instead, computed from what this
+step's `needs` declared.
+
+**(b) Every candidate must lie inside a partition that step declared.** Checked
+at enumeration with the same predicate the dispatch path uses, because two copies
+of a residency rule is exactly how a world comes to offer a player a choice its
+own dispatch then refuses. It is a real guard and not a formality: everything a
+candidate list can reach may well be resident already, in which case the
+declaration is the *only* thing standing between the action and the whole
+village. An element in no partition at all is refused too -- nothing would
+checkpoint a write to it, so choosing it would change the world exactly until the
+next hibernation.
+
+**(c) `WorldBudgets.maxCandidatesPerSelection` caps a selection** (200 by
+default), checked where the candidates are actually produced. This is the guard
+the other two cannot supply: a 500-seat roster is one partition and one perfectly
+honest declaration, and enumerating it yields 500 candidates. Every candidate is
+evaluated on the read path, so an unbounded selection is paid by every watcher
+rather than by whoever acted. Narrow it with an earlier selection -- offer the
+exits of the room the player is in, not the rooms of the world.
+
+**(d) A world action may not declare a dependent (`dependsOn`, `filterBy`) or
+repeating (`repeat`, `repeatUntil`) selection.** A dependent selection asks the
+engine to compute candidates for *every* value of the selection it depends on,
+which in a world is a declaration and a hydration per candidate; a repeating one
+round-trips once per iteration, and each trip is a declaration and a hydration.
+The world protocol is single-shot, so an offer would have to carry the whole
+product. The fix is **one action per shape** -- if a game wants kind-dependent
+arguments, write an action per kind -- which is also what makes each one's
+declaration honest. This is a consequence of the single-shot protocol rather than
+a permanent law; a step-wise world protocol is #170.
+
+**What none of this covers, and there is no guard for it.** A `condition` or a
+`disabled` predicate is ordinary code with the resident tree in front of it, and
+nothing stops one walking it. The four rules bound the *candidates*; they say
+nothing about what a predicate does before returning `false`. Write those against
+the partitions your declaration named and nothing else. This paragraph is the
+whole of the enforcement.
+
+## `offersFor(player, { now, presence })`: what a seat can do here
+
+```ts
+const offers = await runner.offersFor('alice', { now, presence: [1, 3] });
+```
+
+This replaces `commandOffers()`, and the difference is not a rename. The flat
+table answered from the bundle's own static declaration and loaded nothing: it
+could say `tend` exists and that it wants a holding, and the only holdings it
+could name were all five hundred, because a bundle can state what a world
+*contains* and not what is legal this instant. That is a JSON box wearing a
+form's clothes.
+
+What comes back is the seat's actions in the table's own **`ActionMetadata`**
+shape -- the same shape the shared action panel, the board bridge and the
+drag-drop targets already consume -- with an optional `disabled` reason added,
+and **each selection's candidates already resolved**. `tend` offers the two
+neighbouring holdings that exist right now, as element ids the board bridge wires
+straight to a click.
+
+**The candidates arrive with the offer rather than being fetched per pick**
+because a world's protocol is single-shot where a table's is step-wise. That is
+affordable exactly because rule (d) above holds: no selection's candidates are a
+function of another's value, so the whole offer is one pass and there is no
+product to enumerate.
+
+Seatless actions are filtered out here. An action whose `condition` is false is
+not offered, and neither is one whose non-optional selection has no candidates at
+all -- with no dependent selections, "is there a legal path through this action"
+is exactly "does every question it asks have at least one answer".
+
+It costs `O(actions) x (condition + each selection's own candidates)`. There is
+no term that scales with the world.
+
+### What an offer costs to hydrate, and how to keep it free
+
+An offer walks round one of every action the seat could be offered, then each
+selection's round, hydrating as it goes. So **the offer's hydration cost is the
+union of the actions' round-one declarations** -- and for every game in the
+catalogue that union is a subset of what `world.view(seat)` already names. A seat
+that has just looked at the world therefore pays **no storage read at all** for
+its offer.
+
+That is a property of how the games are written, not a guarantee the library
+makes. If one of your actions declares in round one a partition your `view` omits,
+every offer for every seat pays a hydration for it -- one read per action per
+offer, on the read path, where it is paid by watchers rather than by whoever
+acted. Either name it in the view as well, or move it to the selection's round if
+the selection is what actually needs it.
+
+The later rounds are the honest extra cost of enumerating. In the village,
+`tend`'s selection round names the two neighbouring holdings, which the view does
+not: two reads, and two however large the village gets. The execute round is
+deliberately not walked, because an offer executes nothing.
+
+Hosts drive this the same way they drive the write path:
+`runner.declareOffers(player, supplied)` names what is still missing,
+`runner.offersFor(player, stamp)` answers once everything is resident.
 
 ## `view(seat, world)`: what one seat sees
 
@@ -347,14 +592,25 @@ a command that only tells people something changed nothing durable.
 view: (seat, world) => readonly string[];
 ```
 
-Required. It is the read path's counterpart to `partitions()`, and it is
-required for the same reason `args` is: a game that never declared one and a
-game that declared nothing must not look the same from outside. A world whose
-view needs no partition writes `view: () => []`.
+Required. It is the read path's counterpart to an action's declaration, and it is
+required for the same reason: a game that never declared one and a game that
+declared nothing must not look the same from outside. A world whose view needs no
+partition writes `view: () => []`.
 
-It is answered with the same two-phase rule and the same read-only projection, so
-a look at the room a player is standing in names the index first and reads the
-room from it on the next round.
+**A view is still a fixpoint, and it is the only thing that still is.** It is
+asked, what it named is loaded, and it is asked again until it stops naming
+anything new, so a look at the room a player is standing in names the index first
+and reads the room from it on the next round. That loop cannot be bounded by the
+declaration's own shape the way an action's walk can -- "what is this seat
+looking at?" is answered by world state and genuinely has to be asked again -- so
+it keeps a ceiling of **four** rounds, and a view that names something new every
+round is walking the world and is refused with `declaration-unsettled`. Round one
+sees `undefined` for every partition; keep naming what you already asked for,
+because what is named on the final round is what gets loaded. A view whose first
+round asks for nothing is never asked again, so the steady state costs one round.
+
+It sees the same read-only projection an action's declaration does, and an
+assignment through it is refused with `declaration-write`.
 
 What the seat receives is `{ player, state, phase }`, where `state` is the
 engine's own per-player projection, with its fog of war already applied, **pruned
@@ -363,9 +619,10 @@ everybody's doing, and a view built from the raw resident tree grew with the
 world's popularity rather than with what the seat asked for. What a seat sees is
 a function of its own declaration.
 
-There is no turn, no available-action list and no message log in a world's view.
-A world's flow does not run, its verbs come from `commandOffers()` rather than
-from the tree, and its narration is its events.
+There is no turn, no message log and no available-action list inside a world's
+view. A world's flow does not run, its narration is its events, and its verbs
+arrive separately through `offersFor()` -- which is what lets a seat's offer be
+enumerated at the moment it is asked for rather than baked into a projection.
 
 ## Presence
 
@@ -377,10 +634,11 @@ presence?: {
 };
 ```
 
-Each hook names a `clockOnly` command from your **own** command table, so an
-arrival or a departure is the clock issuing one of your world's verbs. A world
-still has exactly one way to change. A player who could send "seat 3 departed"
-would forge it; `clockOnly` is what makes that structural.
+Each hook names a **seatless** action from your **own** action list -- one built
+with `worldClockAction()` -- so an arrival or a departure is the clock issuing
+one of your world's verbs. A world still has exactly one way to change. A player
+who could send "seat 3 departed" would forge it; seatlessness is what makes that
+structural.
 
 The library types the declaration. What a host *does* with it is that host's
 lifecycle policy: how long a departure's grace really is, whether a dropped
@@ -391,20 +649,29 @@ holding 500 sockets, and should.
 ## Scheduling
 
 ```ts
-ctx.schedule({ delayMs, command, args?, key?, everyMs? });
+ctx.world.schedule({ delayMs, action, args?, key?, everyMs? });
 ```
 
-A **request**, never an insertion. The queue belongs to the host, and your
-handler runs in a child isolate with no bindings, so the only thing a handler can
-do is ask. The request rides home on the command's result and the host stamps the
-owner from the acting seat, enforces the caps and inserts. The abusive path
-cannot reach the queue, rather than failing a check on the way in.
+A **request**, never an insertion. The queue belongs to the host, and your action
+runs in a child isolate with no bindings, so the only thing it can do is ask. The
+request rides home on the dispatch's result and the host stamps the owner from
+the acting seat, enforces the caps and inserts. The abusive path cannot reach the
+queue, rather than failing a check on the way in.
 
-- **`delayMs`** is measured from `ctx.now`, so a world woken late schedules the
-  instant a punctual one would. It is the delay the event actually fires at.
-- **`command`** names a verb in your own command table. A scheduled event is the
-  clock issuing one of the world's verbs, not a second kind of thing a world can
-  be told. (Renamed to `action` by #169.)
+- **`delayMs`** is measured from `ctx.world.now`, so a world woken late schedules
+  the instant a punctual one would. It is the delay the event actually fires at.
+- **`action`** names one of this world's actions, and it must be a **seatless**
+  one. A scheduled event is the clock issuing one of the world's verbs, not a
+  second kind of thing a world can be told -- the clock and a player reach the
+  same registry. It has nobody acting, so naming a seated action is refused
+  rather than answered by inventing a player for it.
+- **`args`** are the action's own, and they must be **JSON scalars**: a string, a
+  number, a boolean or null. Never an element, an array or an object. A schedule
+  row outlives eviction and rehydration, so a stored element id names an element
+  that may not be resident when the event comes due -- or, worse, one that has
+  been re-minted since, in which case the id silently names something else. Pass
+  a **partition name** and let the action look inside it, which is what every
+  clock verb in the catalogue already does.
 - **`key`** makes it an **upsert**: it replaces the pending event with the same
   owner and key, so the count under one key never grows. This is the shape you
   should usually be writing, and it is why the cap refusal's first suggestion is
@@ -420,24 +687,24 @@ cannot reach the queue, rather than failing a check on the way in.
 
 **A scheduled event costs a wake, so do not buy one you do not need.** If the
 effect is only visible when somebody next looks, write a `completesAt` timestamp
-from `ctx.now` and compute it on read. That costs nothing at all and the world
-sleeps through the whole thing. This is the lazy half of the timer primitive and
-it is the one you should reach for first.
+from `ctx.world.now` and compute it on read. That costs nothing at all and the
+world sleeps through the whole thing. This is the lazy half of the timer
+primitive and it is the one you should reach for first.
 
-`ctx.schedule()` **throws** when the request cannot be taken, at the offending
-line, so the whole command unwinds and the player is told no over a world that
-did not change.
+`ctx.world.schedule()` **throws** when the request cannot be taken, at the
+offending line, so the whole action unwinds and the player is told no over a
+world that did not change.
 
 ## Ending a season
 
-`ctx.complete()` declares this season over. It takes no argument, so it cannot
+`ctx.world.complete()` declares this season over. It takes no argument, so it cannot
 name any other ending: only the game may declare a completion, because if ending
 a world counted as completing it, a publisher could end seasons on demand to
 harvest verification. Every other way a world can stop, cancellation and parking
 included, is the host's own answer about a world that stopped.
 
-Calling it does not stop the command. The handler runs to its end and its events
-and dirty set are reported normally; what ends is the season, once the command's
+Calling it does not stop the action. `execute` runs to its end and its events and
+dirty set are reported normally; what ends is the season, once the dispatch's
 changes are durable.
 
 ## The refusals
@@ -453,9 +720,9 @@ your game.
 
 | Code | What happened |
 | --- | --- |
-| `unknown-command` | A client named a command this world does not have. |
+| `unknown-command` | A client named an action this world does not have. |
 | `unknown-player` | A command named somebody this world does not seat. |
-| `clock-only-command` | A player sent a `clockOnly` command. |
+| `clock-only-command` | A player sent a seatless action -- one built with `worldClockAction()`, which the clock reaches and nobody else does. |
 | `world-full` | A seating would exceed the bundle's own `maxPlayers`. Seats are assigned once and never handed on. |
 | `seat-conflict` | A seating named a player who already holds a different seat. |
 | `rate-limited` | A connection sent frames faster than the host accepts. Well-formed traffic, refused at the door. |
@@ -465,25 +732,25 @@ thing next time.
 
 | Code | What happened |
 | --- | --- |
-| `bundle-not-a-world` | The manifest declares a world and the compiled rules export no `world.commands`, no `world.view`, or a `maxPlayers` the host will not seat. |
-| `invalid-command-args` | An `args` declaration that cannot be drawn: a reserved `now`, a repeated name, a nameless argument, a choice between nothing, or a missing `args`. |
-| `undeclared-partition` | `run` read a partition `partitions()` did not declare. |
-| `declaration-unsettled` | A `partitions()` or `view` named something new on every round. |
-| `declaration-write` | A declaration tried to write through the read-only projection. Do it in `run`. |
+| `bundle-not-a-world` | The manifest declares a world and the compiled rules export no `world.actions`, no `world.view`, or a `maxPlayers` the host will not seat. |
+| `invalid-world-action` | A world action the platform cannot offer or cannot bound: an action not built with `worldAction()`, an unbounded `from`/`filter`/`elementClass` element form, an element selection with no `elements:`, a candidate outside what the step declared, a selection past `maxCandidatesPerSelection`, a dependent or repeating selection, a seatless action that asks a question, or a round declared before a step the action does not have. |
+| `not-in-a-world` | An action built with `worldAction()` reached `ctx.world` with no world running it -- registered on a table, or reached after the dispatch that bound its facilities finished. |
+| `undeclared-partition` | `execute` read a partition the action's own walk did not declare. |
+| `declaration-unsettled` | A `world.view` named something new on every round. **A view only**, since an action's walk has no ceiling to trip. |
+| `declaration-write` | A declaration tried to write through the read-only projection. Do it in `execute`. |
 | `unknown-scope` | An event was addressed to something that is neither `"world"` nor a loaded partition. |
 | `partition-missing` | A declaration named a partition this world's store does not have. Usually a typo, or a partition nothing has created yet. |
 | `invalid-partition-name` | A partition name a store may not hold: empty, over 128 characters, outside `A-Za-z0-9._:@/-`, or one of `__proto__`, `constructor`, `prototype`. |
 | `partition-too-large` | A partition serialized past `partitionMaxBytes`. The fix is to split it. See the next section. |
 | `schedule-cap` | This owner's unkeyed pending events are at the cap. Use a key. |
 | `schedule-key-cap` | This owner holds as many distinct keys as one owner may. Reuse a key rather than minting one per action. |
-| `schedule-batch-cap` | One command asked for more scheduled events than a command may ask for. |
+| `schedule-batch-cap` | One dispatch asked for more scheduled events than one may ask for. |
 | `schedule-world-cap` | The world's whole queue is at its ceiling. |
 | `invalid-schedule-delay` | A negative or non-finite `delayMs`. |
 | `invalid-schedule-interval` | A non-positive or non-finite `everyMs`, which is a wake that re-arms instantly forever. |
-| `invalid-schedule-command` | A schedule request that names no command, which is a wake that runs nothing. |
+| `invalid-schedule-command` | A schedule request that names no action, names a seated one, or carries an argument that is not a JSON scalar. |
 | `engine-not-world-mode` | The engine was built over a game that is not in world mode. |
 | `child-timeout` | The bundle did not answer a host's call inside its deadline. |
-
 **`platform`**: a host's own bookkeeping broke. Not yours to fix, and
 deterministic, so a host with a park ladder parks on it:
 `partition-not-resident`, `partition-vanished`, `checkpoint-unknown-partition`,
@@ -517,7 +784,7 @@ makes local behaviour a poor guide to published behaviour.
 | `maxPendingEvents` | derived: 16000 | The whole world's queue. `maxPlayers` times the unkeyed cap. |
 | `catchUpMaxRealIterations` | 4 | Real occurrences a late recurrence runs before the rest are coalesced into one call. |
 | `drainBatch` | 200 | Due events one drain runs. A world still behind re-arms: overload degrades to latency, never refusal. |
-| `maxCandidatesPerSelection` | 200 | Candidates one selection may offer. **Nothing enforces this yet**; it is declared so #169 configures a budget rather than inventing one. |
+| `maxCandidatesPerSelection` | 200 | Candidates one selection may offer, checked at enumeration. A 500-seat roster is one honest partition and one honest declaration, and enumerating it yields 500 candidates, so this is the guard the declaration itself cannot supply. |
 
 Overriding a holding cap recomputes both derived fields, so a host that raises
 `maxPlayers` gets a queue sized for it. Naming a derived field explicitly
@@ -563,7 +830,7 @@ argument** and **storage arrives as an interface**.
 
 | This library owns | A host owns |
 | --- | --- |
-| What a world *is*: residency, declare-then-run, rollback baselines, the dirty set, per-seat views, event routing by scope | The session that holds a world in memory, sockets and transport |
+| What a world *is*: residency, the declaration walk, rollback baselines, the dirty set, per-seat views, event routing by scope | The session that holds a world in memory, sockets and transport |
 | Genesis, seat assignment and the seat ceiling | Attach, authentication, who is allowed in |
 | Schedule semantics: drift-free recurrence, keyed upserts, catch-up, the caps | The queue itself, the alarm that fires it, the drain |
 | The partition-store *interface* (`WorldPartitionStore`, `WorldPartitionWriter`) and the naming and size rules every store must enforce | The store: a Durable Object's storage, a SQLite file, an in-memory map, its key layout and its atomicity |
@@ -611,13 +878,15 @@ const { runner, seatCount } = createWorld({
 // they are already resident in this instance.
 const born = await runner.genesis();
 
-// A host asks the declaration first, and sends back whatever it says is
-// missing. Everything genesis created is already here, so `needs` is empty.
-const { needs } = await runner.declare({ name: 'tend', args: {} }, 'alice', {});
+// A host walks the declaration: ask what is missing, supply it, ask again. The
+// loop ends when the walk names nothing. Everything genesis created is already
+// here, so this first ask answers nothing at all.
+const command = { name: 'tend', args: { neighbour: 7 } };
+const { needs } = await runner.declare(command, 'alice', {});
 
 const result = await runner.apply({
   player: 'alice',
-  command: { name: 'tend', args: {} },
+  command,
   timing: null,
   arrivedAt: 1_800_000_000_000,
   allowance: { unkeyed: 0, keys: [], worldPending: 0 },
@@ -628,17 +897,31 @@ const result = await runner.apply({
 const bytes = await runner.serialize([...result.dirty]);
 ```
 
-`runner.declareViews(...)` and `runner.viewsFor(...)` drive the read path the
-same way, and `runner.evict(names)` releases partitions. Every refusal on this
-page is reachable from a test file.
+`runner.declareOffers(player, supplied)` and `runner.offersFor(player, stamp)`
+drive the offer path the same way, `runner.declareViews(...)` and
+`runner.viewsFor(...)` drive the read path, and `runner.evict(names)` releases
+partitions. `walkDeclaration(declare, read)` is the loop itself, exported so a
+host writes it once rather than three times; `settleDeclaration` is the view's
+fixpoint. Every refusal on this page is reachable from a test file.
 
 The example worlds each drive their whole world contract from their own project
 under plain `vitest`: `~/BoardSmithGames/example-mud/tests/world.test.ts` and
-`~/BoardSmithGames/example-rts/tests/world.test.ts`. Both of those predate this
-module, so each carries a **hand-written harness** that imitates a host and a
-**hand-copied** version of the authoring types. They are deliberately left that
-way for now: #169 changes the command shape itself, so moving them onto
-`boardsmith/world` first would mean rewriting every example twice.
+`~/BoardSmithGames/example-rts/tests/world.test.ts`. Both are written against
+`boardsmith/world` itself, so the types they import are the ones this page
+documents and the ones a host imports. `~/BoardSmithGames/example-rts/src/rules/world.ts`
+is the shortest complete reading of everything above: four actions, one of them
+the clock's own.
+
+**On a hosting platform.** The world runtime a published world runs under is the
+host's, built over this module.
+
+**Under `boardsmith dev`.** The same module, driven by
+`src/cli/dev-host/world-host.ts` over the durable store in
+`src/cli/dev-host/world-store.ts`. Nothing about a world is decided there: the
+host owns which sockets are open, when it checkpoints, and the two controls a
+watching person needs, and the library owns everything else. That is what makes
+"the same world here and in production" a property of the code rather than a
+promise on this page.
 
 **On a hosting platform.** The world runtime a published world runs under is the
 host's, built over this module.
