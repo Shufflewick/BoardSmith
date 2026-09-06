@@ -182,3 +182,104 @@ describe('HexBoardRenderer candidate focus (#172)', () => {
     expect(cells[0].attributes('tabindex')).toBe('0');
   });
 });
+
+/**
+ * #190 — the roving cursor and real focus must never disagree.
+ *
+ * The move a keyboard player makes succeeds either way; the defect is that it
+ * was a different move. So every case here focuses one cell and then asserts
+ * WHICH element the key resolved, not that focus moved.
+ */
+describe('HexBoardRenderer keyboard activation follows focus (#190)', () => {
+  function pickableHex(candidateIds: number[]) {
+    const interaction = createBoardInteraction();
+    const picked: number[] = [];
+    interaction.setValidElements(
+      candidateIds.map((id) => ({ id, ref: { id } })),
+      (id) => picked.push(id),
+    );
+    return { ...mountHex(buildHexElement(6), interaction), picked };
+  }
+
+  it('Enter resolves the cell that holds focus, not the one the cursor parked on', async () => {
+    const { wrapper, picked } = pickableHex([102, 104]);
+    await nextTick();
+    const cells = wrapper.findAll('[role="gridcell"]');
+    // The cursor parks itself on the first candidate (102, index 2).
+    expect(cells[2].attributes('tabindex')).toBe('0');
+
+    (cells[4].element as SVGGElement).focus();
+    await nextTick();
+    await wrapper.find('svg').trigger('keydown', { key: 'Enter' });
+
+    expect(picked).toEqual([104]);
+  });
+
+  it('Enter resolves the cell it was delivered to even when no focus event ever fired', async () => {
+    // Measured in Chrome: .focus() on a cell in a document that does not hold
+    // system focus moves document.activeElement and fires neither focus nor
+    // focusin. The key still arrives at that cell, and that is what must decide.
+    const { wrapper, picked } = pickableHex([102, 104]);
+    await nextTick();
+    const cells = wrapper.findAll('[role="gridcell"]');
+    expect(cells[2].attributes('tabindex')).toBe('0');
+
+    await cells[4].trigger('keydown', { key: 'Enter' });
+
+    expect(picked).toEqual([104]);
+  });
+
+  it('Space resolves the cell that holds focus too', async () => {
+    const { wrapper, picked } = pickableHex([102, 104]);
+    await nextTick();
+    const cells = wrapper.findAll('[role="gridcell"]');
+
+    (cells[4].element as SVGGElement).focus();
+    await nextTick();
+    await wrapper.find('svg').trigger('keydown', { key: ' ' });
+
+    expect(picked).toEqual([104]);
+  });
+
+  it('a re-offer does not drag the cursor off the cell the player has focused', async () => {
+    const { wrapper, interaction, picked } = pickableHex([102, 104]);
+    await nextTick();
+    const cells = wrapper.findAll('[role="gridcell"]');
+
+    // The player focuses a cell this choice does not accept — an occupied hex,
+    // say, on the way to somewhere else.
+    (cells[5].element as SVGGElement).focus();
+    await nextTick();
+    expect(cells[5].attributes('tabindex')).toBe('0');
+
+    // Any state update re-offers the same candidates as a fresh array.
+    interaction.setValidElements(
+      [102, 104].map((id) => ({ id, ref: { id } })),
+      (id) => picked.push(id),
+    );
+    await nextTick();
+
+    expect(document.activeElement).toBe(cells[5].element);
+
+    await wrapper.find('svg').trigger('keydown', { key: 'Enter' });
+    // The focused cell is not a candidate, so it resolves as a passive select.
+    // What must NOT happen is a stone landing on a cell the player never chose.
+    expect(picked).toEqual([]);
+    expect(interaction.isSelected({ id: 105 })).toBe(true);
+    expect(cells[5].attributes('tabindex')).toBe('0');
+  });
+
+  it('ArrowRight steps from the cell that holds focus, not from a stale cursor', async () => {
+    const { wrapper } = pickableHex([102, 104]);
+    await nextTick();
+    const cells = wrapper.findAll('[role="gridcell"]');
+
+    (cells[4].element as SVGGElement).focus();
+    await nextTick();
+    await wrapper.find('svg').trigger('keydown', { key: 'ArrowRight' });
+    await nextTick();
+
+    expect(cells[5].attributes('tabindex')).toBe('0');
+    expect(document.activeElement).toBe(cells[5].element);
+  });
+});

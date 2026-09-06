@@ -16,7 +16,7 @@
  * so the composable degrades gracefully when used outside a <GameShell>
  * (caller uses tryUseBoardInteraction() which returns undefined outside provider).
  */
-import { computed, watch, type ComputedRef } from 'vue';
+import { computed, nextTick, watch, type ComputedRef } from 'vue';
 import { ref } from 'vue';
 import { anchorAttrs, candidateAttrs } from './useBoardInteraction.js';
 import type { BoardInteraction, ElementRef } from './useBoardInteraction.js';
@@ -93,6 +93,9 @@ export function useSelectable(
  * @param cols            ComputedRef of the column count
  * @param getIdentity     Maps a cell to its ElementRef (id/name/notation)
  * @param boardInteraction  BoardInteraction from tryUseBoardInteraction() — may be null/undefined
+ * @param onActivate      What Enter/Space does to a cell. The composable calls it
+ *   with the cell that actually received the key — see `handleGridKeydown` for why
+ *   the renderer must not pick that cell itself (#190).
  * @param elementType     Optional label identifying the caller's grid-cell kind (e.g.
  *   `'grid-cell'`, `'hex-cell'`), forwarded to `anchorAttrs()`'s missing-anchor
  *   dev-warning dedup key so distinct grid renderers each warn once instead of
@@ -102,22 +105,82 @@ export function useSelectable(
  *   candidate-aware (#172) — see `focusFirstCandidate` below. Omit it and the
  *   grid behaves exactly as it did: a plain spatial cursor over every cell.
  *
- * @returns { currentIdx, focusCell, handleGridKeydown, cellAttrs, candidateIndices, focusFirstCandidate }
+ * @returns { currentIdx, focusCell, handleGridKeydown, handleGridFocusIn, registerCell,
+ *            focusCursorCell, cellAttrs, candidateIndices, focusFirstCandidate }
  *   - currentIdx          — reactive index of the cell that owns tabindex="0"
  *   - focusCell(i)        — move cursor to cell i (clamped to valid range)
- *   - handleGridKeydown   — bind to @keydown on the grid container element
+ *   - handleGridKeydown   — bind to @keydown on the grid container: navigation AND
+ *                           Enter/Space activation, both aimed at the focused cell
+ *   - handleGridFocusIn   — bind to @focusin on the grid container element
+ *   - registerCell(el, i) — bind as each cell's :ref, so the composable can move focus
+ *   - focusCursorCell     — put DOM focus on the cursor's cell
  *   - candidateIndices    — indices of the cells that are valid targets right now
  *   - focusFirstCandidate — put the cursor on the first of them; returns whether it could
+ *
+ * #190: the cursor and real focus are ONE thing, and this composable owns both.
+ * They used to be two: the cell reported its own focus, the renderer held the DOM
+ * refs and picked the cell to activate, and the candidate cursor below could move
+ * with no focus event anywhere. When they drifted, Enter activated the cursor's
+ * cell while the player was looking at another one — a move that succeeds and is
+ * not the move they made.
  */
 export function useSelectableGrid<T>(
   cells: ComputedRef<T[]>,
   cols: ComputedRef<number>,
   getIdentity: (cell: T) => ElementRef,
   boardInteraction: BoardInteraction | null | undefined,
+  onActivate: (cell: T) => void,
   elementType?: string,
   isCandidate?: (cell: T) => boolean,
 ) {
   const currentIdx = ref(0);
+
+  // The cell elements themselves, in cell order. Registered by the renderer as
+  // each cell's :ref — DOM focus is not something the renderer can be trusted to
+  // keep in step with the cursor by hand, so the composable holds both ends.
+  const cellEls: (HTMLElement | SVGElement | null)[] = [];
+
+  /** Bind as each cell's `:ref`. */
+  function registerCell(el: Element | null, idx: number) {
+    cellEls[idx] = el instanceof HTMLElement || el instanceof SVGElement ? el : null;
+  }
+
+  /**
+   * Index of the cell containing `node`, or -1. Walks containment rather than
+   * matching the cell itself, because focus can land on something a cell holds
+   * (a card, a piece) and the cursor still belongs on the cell.
+   */
+  function cellIndexOf(node: Node | null): number {
+    if (!node) return -1;
+    for (let i = 0; i < cellEls.length; i++) {
+      const el = cellEls[i];
+      if (el && (el === node || el.contains(node))) return i;
+    }
+    return -1;
+  }
+
+  /** Does the grid hold the document's focus right now? False when rendered on a server. */
+  function gridOwnsFocus(): boolean {
+    if (typeof document === 'undefined') return false;
+    return cellIndexOf(document.activeElement) !== -1;
+  }
+
+  /**
+   * Bind to `@focusin` on the grid container: the cursor follows real focus.
+   *
+   * `focusin` bubbles and `focus` does not, which is why this lives on the
+   * container rather than on each cell — one listener that cannot be missed,
+   * and it catches focus landing inside a cell as well as on it.
+   */
+  function handleGridFocusIn(e: FocusEvent) {
+    const idx = cellIndexOf(e.target as Node | null);
+    if (idx !== -1) currentIdx.value = idx;
+  }
+
+  /** Put DOM focus on the cursor's cell, so the tab stop and the focus ring agree. */
+  function focusCursorCell() {
+    cellEls[currentIdx.value]?.focus();
+  }
 
   /**
    * Indices of the cells the current choice will actually accept.
@@ -156,6 +219,11 @@ export function useSelectableGrid<T>(
   watch(candidateIndices, (indices) => {
     if (indices.length === 0) return;
     if (indices.includes(currentIdx.value)) return;
+    // #190: never while the player is standing on the board. Candidates are
+    // re-offered on every state update, so this fires constantly during a game;
+    // moving the cursor out from under a focused cell is how Enter came to play
+    // a cell nobody chose. A player who has focus decides where the cursor is.
+    if (gridOwnsFocus()) return;
     currentIdx.value = indices[0];
   }, { immediate: true });
 
@@ -173,32 +241,51 @@ export function useSelectableGrid<T>(
   }
 
   /**
-   * Handle arrow-key navigation (Arrow/Home/End) for the grid's roving tabindex.
-   * Bind to @keydown on the `role="grid"` container element.
+   * Move the cursor for one navigation key — follows mockup lines 601-606 exactly.
+   * Returns false when the key is not one this grid navigates by, so the caller
+   * can leave the event alone.
+   */
+  function moveCursorBy(key: string): boolean {
+    const COLS = cols.value;
+    const i = currentIdx.value;
+    switch (key) {
+      case 'ArrowRight': focusCell(i + 1); return true;
+      case 'ArrowLeft': focusCell(i - 1); return true;
+      case 'ArrowDown': focusCell(i + COLS); return true;
+      case 'ArrowUp': focusCell(i - COLS); return true;
+      case 'Home': focusCell(i - (i % COLS)); return true;
+      case 'End': focusCell(i - (i % COLS) + COLS - 1); return true;
+      default: return false;
+    }
+  }
+
+  /**
+   * Handle the grid's keyboard: Enter/Space activate, Arrow/Home/End navigate and
+   * carry DOM focus with them. Bind to @keydown on the `role="grid"` container.
    *
-   * NOTE: Enter/Space activation is intentionally NOT handled here. Both grid
-   * renderer consumers (GridBoardRenderer, HexBoardRenderer) intercept Enter/Space
-   * before delegating to this function, applying their own passive-select and
-   * triggerElementSelect logic. Adding an Enter/Space branch here would be dead
-   * code that could interfere with future renderer-specific activation paths.
+   * #190: the cell this acts on comes from the EVENT, not from the cursor. A key
+   * event is delivered to the focused element, so its target is the cell the player
+   * is on — the one fact that is true even when no focus event ever arrived. And
+   * one does not always arrive: measured in Chrome, `.focus()` on a cell in a
+   * document that lacks system focus moves `document.activeElement` and fires
+   * neither `focus` nor `focusin`. A handler that trusted the cursor instead played
+   * a cell the player never chose, silently, because the move still succeeded.
    */
   function handleGridKeydown(e: KeyboardEvent) {
-    const k = e.key;
-    const COLS = cols.value;
-    let handled = true;
+    const focusedIdx = cellIndexOf(e.target as Node | null);
+    if (focusedIdx !== -1) currentIdx.value = focusedIdx;
 
-    // Navigation — follows mockup lines 601-606 exactly
-    if (k === 'ArrowRight') focusCell(currentIdx.value + 1);
-    else if (k === 'ArrowLeft') focusCell(currentIdx.value - 1);
-    else if (k === 'ArrowDown') focusCell(currentIdx.value + COLS);
-    else if (k === 'ArrowUp') focusCell(currentIdx.value - COLS);
-    else if (k === 'Home') focusCell(currentIdx.value - (currentIdx.value % COLS));
-    else if (k === 'End') focusCell(currentIdx.value - (currentIdx.value % COLS) + COLS - 1);
-    else {
-      handled = false;
+    if (e.key === 'Enter' || e.key === ' ') {
+      const cell = cells.value[currentIdx.value];
+      if (cell) onActivate(cell);
+      e.preventDefault();
+      return;
     }
 
-    if (handled) e.preventDefault();
+    if (!moveCursorBy(e.key)) return;
+    e.preventDefault();
+    // The cursor moved synchronously; the tab stop it implies is a render away.
+    void nextTick(focusCursorCell);
   }
 
   /**
@@ -215,5 +302,15 @@ export function useSelectableGrid<T>(
     };
   }
 
-  return { currentIdx, focusCell, handleGridKeydown, cellAttrs, candidateIndices, focusFirstCandidate };
+  return {
+    currentIdx,
+    focusCell,
+    handleGridKeydown,
+    handleGridFocusIn,
+    registerCell,
+    focusCursorCell,
+    cellAttrs,
+    candidateIndices,
+    focusFirstCandidate,
+  };
 }

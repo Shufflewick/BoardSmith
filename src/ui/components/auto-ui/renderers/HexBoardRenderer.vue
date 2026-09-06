@@ -10,14 +10,22 @@
  *
  * A11Y-01: uses useSelectableGrid() for roving-tabindex keyboard navigation.
  * Each hex <g> cell gets role="gridcell" + tabindex + aria-label.
- * The SVG root gets role="grid" + aria-label + aria-rowcount/colcount + @keydown.
+ * The SVG root gets role="grid" + aria-label + aria-rowcount/colcount + @keydown
+ * + @focusin. Both belong on the root, not on each cell: `focusin` bubbles where
+ * `focus` does not, and the keydown handler reads its own target to find the cell
+ * the player is on, so a key can never act on a different one (#190).
  *
- * MANUAL VERIFICATION REQUIRED (research Open Q3):
+ * MANUAL VERIFICATION, PART DONE (research Open Q3):
  * tabindex="0" on SVG <g> is spec-valid in modern browsers but Safari/VoiceOver
- * SVG focus has historically been unreliable. Run a manual VoiceOver/Safari pass
- * before marking A11Y-01 complete for HexBoardRenderer. If VO cannot land focus
- * on hex cells, escalate to transparent overlay <button> elements positioned over
- * each hex cell using position:absolute within a position:relative container.
+ * SVG focus has historically been unreliable.
+ *   - Chrome 2026-09-06, Hex under `boardsmith dev`: VERIFIED. .focus() on a hex
+ *     <g> lands, the roving tab stop follows it, and Enter places the stone on
+ *     the focused cell.
+ *   - Safari: NOT VERIFIED. VoiceOver: NOT VERIFIED, and neither can be driven
+ *     from an agent — a person has to sit with VO and try it.
+ * If VO cannot land focus on hex cells, escalate to transparent overlay <button>
+ * elements positioned over each hex cell using position:absolute within a
+ * position:relative container.
  */
 
 import { computed, inject, nextTick, watch, type ComputedRef } from 'vue';
@@ -254,30 +262,6 @@ const hexRows = computed(() => {
   return maxR - minR + 1;
 });
 
-const {
-  currentIdx,
-  focusCell,
-  handleGridKeydown: _composableKeydown,
-  cellAttrs,
-  focusFirstCandidate,
-} = useSelectableGrid(
-  hexCells,
-  hexCols,
-  cellIdentity,
-  boardInteraction,
-  'hex-cell',
-  // #172: the roving cursor has to know which cells the current choice accepts.
-  // Hex is the case this exists for: ~50 empty cells, and a cursor parked on
-  // cell 0 leaves a keyboard player arrowing across squares nobody can pick.
-  isCellActionSelectable,
-);
-
-// DOM refs for each hex <g> cell — needed to call .focus() after arrow navigation
-const hexCellRefs: (SVGGElement | null)[] = [];
-function setHexCellRef(el: Element | null, idx: number) {
-  hexCellRefs[idx] = el instanceof SVGGElement ? el : null;
-}
-
 // Hex cell activation: selectable AND passive selectElement branches.
 // Called from both click and keyboard (Enter/Space) for consistent behavior.
 function handleHexActivate(cell: GameElement) {
@@ -290,20 +274,26 @@ function handleHexActivate(cell: GameElement) {
   }
 }
 
-// SVG keydown handler: intercepts Enter/Space for activation,
-// delegates Arrow/Home/End navigation to the composable.
-function handleSvgKeydown(e: KeyboardEvent) {
-  if (e.key === 'Enter' || e.key === ' ') {
-    const cell = hexCells.value[currentIdx.value];
-    if (cell) handleHexActivate(cell);
-    e.preventDefault();
-    return;
-  }
-  _composableKeydown(e);
-  void nextTick(() => {
-    hexCellRefs[currentIdx.value]?.focus();
-  });
-}
+const {
+  currentIdx,
+  handleGridKeydown,
+  handleGridFocusIn,
+  registerCell,
+  focusCursorCell,
+  cellAttrs,
+  focusFirstCandidate,
+} = useSelectableGrid(
+  hexCells,
+  hexCols,
+  cellIdentity,
+  boardInteraction,
+  handleHexActivate,
+  'hex-cell',
+  // #172: the roving cursor has to know which cells the current choice accepts.
+  // Hex is the case this exists for: ~50 empty cells, and a cursor parked on
+  // cell 0 leaves a keyboard player arrowing across squares nobody can pick.
+  isCellActionSelectable,
+);
 
 // #172: when the Action Panel hands a large board-anchored choice to the board,
 // the board is the ONLY path into it, so focus has to make the journey too.
@@ -312,9 +302,7 @@ watch(
   (tick) => {
     if (!tick) return;
     if (!focusFirstCandidate()) return;
-    void nextTick(() => {
-      hexCellRefs[currentIdx.value]?.focus();
-    });
+    void nextTick(focusCursorCell);
   },
 );
 
@@ -344,10 +332,10 @@ function hexCellAriaLabel(cell: GameElement): string {
       + aria-rowcount/aria-colcount from the hex coordinate ranges
       + @keydown for roving-tabindex keyboard navigation (A11Y-01).
 
-      MANUAL VERIFICATION REQUIRED (research Open Q3):
-      tabindex="0" on SVG <g> is spec-valid; ships here first. Run a manual
-      VoiceOver/Safari pass. If VO cannot land focus on hex <g> cells, escalate
-      to transparent overlay <button> elements (position:absolute) over each hex.
+      @focusin keeps the roving cursor on the cell that really holds focus (#190).
+
+      MANUAL VERIFICATION, PART DONE (research Open Q3): Chrome verified
+      2026-09-06; Safari and VoiceOver still unverified. See the script header.
     -->
     <svg
       class="hex-board-svg"
@@ -360,17 +348,18 @@ function hexCellAriaLabel(cell: GameElement): string {
       :aria-label="displayLabel"
       :aria-rowcount="hexRows"
       :aria-colcount="hexCols"
-      @keydown="handleSvgKeydown"
+      @keydown="handleGridKeydown"
+      @focusin="handleGridFocusIn"
     >
       <!--
         One group per hex cell: polygon + piece tokens + coordinate label.
-        role="gridcell" + roving tabindex (A11Y-01).
-        MANUAL VERIFICATION: tabindex on SVG <g> — test with VoiceOver/Safari (Open Q3).
+        role="gridcell" + roving tabindex (A11Y-01). tabindex on SVG <g> is
+        verified in Chrome; Safari/VoiceOver are still unverified (Open Q3).
       -->
       <g
         v-for="(cell, idx) in hexCells"
         :key="cell.id"
-        :ref="(el) => setHexCellRef(el as Element | null, idx)"
+        :ref="(el) => registerCell(el as Element | null, idx)"
         v-bind="cellAttrs(cell)"
         class="hex-cell-group"
         role="gridcell"
@@ -379,7 +368,6 @@ function hexCellAriaLabel(cell: GameElement): string {
         :aria-selected="isCellBoardSelected(cell) || undefined"
         :aria-disabled="isCellDisabled(cell) || undefined"
         :transform="`translate(${getCellPosition(cell).x}, ${getCellPosition(cell).y})`"
-        @focus="focusCell(idx)"
         @click="handleHexActivate(cell)"
         @dragover="handleHexDragOver($event, cell)"
         @drop="handleHexDrop($event, cell)"

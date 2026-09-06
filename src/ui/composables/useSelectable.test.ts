@@ -196,6 +196,7 @@ describe('useSelectableGrid (grid mode)', () => {
       colsRef,
       (c) => ({ id: c.id }),
       bi as BoardInteraction,
+      () => {},
     );
     expect(currentIdx.value).toBe(0);
     handleGridKeydown(makeKeyEvent('ArrowRight'));
@@ -210,6 +211,7 @@ describe('useSelectableGrid (grid mode)', () => {
       colsRef,
       (c) => ({ id: c.id }),
       bi as BoardInteraction,
+      () => {},
     );
     focusCell(1);
     handleGridKeydown(makeKeyEvent('ArrowLeft'));
@@ -224,6 +226,7 @@ describe('useSelectableGrid (grid mode)', () => {
       colsRef,
       (c) => ({ id: c.id }),
       bi as BoardInteraction,
+      () => {},
     );
     handleGridKeydown(makeKeyEvent('ArrowDown'));
     expect(currentIdx.value).toBe(3);
@@ -237,6 +240,7 @@ describe('useSelectableGrid (grid mode)', () => {
       colsRef,
       (c) => ({ id: c.id }),
       bi as BoardInteraction,
+      () => {},
     );
     focusCell(3);
     handleGridKeydown(makeKeyEvent('ArrowUp'));
@@ -251,6 +255,7 @@ describe('useSelectableGrid (grid mode)', () => {
       colsRef,
       (c) => ({ id: c.id }),
       bi as BoardInteraction,
+      () => {},
     );
     focusCell(4); // row 1, col 1 → row start = 4 - (4%3) = 4-1 = 3
     handleGridKeydown(makeKeyEvent('Home'));
@@ -265,6 +270,7 @@ describe('useSelectableGrid (grid mode)', () => {
       colsRef,
       (c) => ({ id: c.id }),
       bi as BoardInteraction,
+      () => {},
     );
     focusCell(4); // row 1, col 1 → row end = 4 - (4%3) + 3 - 1 = 3+3-1 = 5
     handleGridKeydown(makeKeyEvent('End'));
@@ -279,6 +285,7 @@ describe('useSelectableGrid (grid mode)', () => {
       colsRef,
       (c) => ({ id: c.id }),
       bi as BoardInteraction,
+      () => {},
     );
     expect(currentIdx.value).toBe(0);
     handleGridKeydown(makeKeyEvent('ArrowLeft'));
@@ -295,6 +302,7 @@ describe('useSelectableGrid (grid mode)', () => {
       colsRef,
       (c) => ({ id: c.id }),
       bi as BoardInteraction,
+      () => {},
     );
     focusCell(2);
     handleGridKeydown(makeKeyEvent('ArrowRight'));
@@ -312,6 +320,7 @@ describe('useSelectableGrid (grid mode)', () => {
       colsRef,
       (c) => ({ id: c.id }),
       bi as BoardInteraction,
+      () => {},
     );
     handleGridKeydown(makeKeyEvent('Tab'));
     handleGridKeydown(makeKeyEvent('Escape'));
@@ -359,6 +368,7 @@ describe('useSelectableGrid candidate awareness', () => {
         colsRef,
         (c) => ({ id: c.id }),
         makeMockInteraction() as BoardInteraction,
+        () => {},
         'grid-cell',
         isCandidate,
       ),
@@ -403,6 +413,7 @@ describe('useSelectableGrid candidate awareness', () => {
       colsRef,
       (c) => ({ id: c.id }),
       makeMockInteraction() as BoardInteraction,
+      () => {},
     );
     expect(candidateIndices.value).toEqual([]);
     expect(focusFirstCandidate()).toBe(false);

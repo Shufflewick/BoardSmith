@@ -203,6 +203,7 @@ describe('useSelectableGrid.cellAttrs returns anchorAttrs for cell identity', ()
       computed(() => 2),
       (c) => ({ id: c.id }),
       bi as BoardInteraction,
+      () => {},
     );
     expect(cellAttrs(cells[0])).toEqual({ 'data-bs-el-id': '100', 'data-element-id': '100' });
     expect(cellAttrs(cells[1])).toEqual({ 'data-bs-el-id': '101', 'data-element-id': '101' });
@@ -216,6 +217,7 @@ describe('useSelectableGrid.cellAttrs returns anchorAttrs for cell identity', ()
       computed(() => 1),
       (c) => ({ id: c.id, notation: (c as typeof cells[0]).notation }),
       bi as BoardInteraction,
+      () => {},
     );
     expect(cellAttrs(cells[0])).toMatchObject({ 'data-bs-el-notation': 'a1' });
   });
