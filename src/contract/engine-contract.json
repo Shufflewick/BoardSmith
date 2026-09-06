@@ -1,8 +1,8 @@
 {
-  "revision": 40,
+  "revision": 41,
   "bundleProtocol": 2,
   "surfaceHash": "cff09a3012ba8835",
-  "payloadHash": "197ca272284235c1",
+  "payloadHash": "46b8052956779cd6",
   "history": [
     {
       "revision": 1,
@@ -323,6 +323,14 @@
       "surfaceHash": "cff09a3012ba8835",
       "payloadHash": "197ca272284235c1",
       "summary": "ABI break, recorded late: r38 made world.maxPlayers required inside the world block, so readWorldDefinition refuses every world bundle built before it. That invalidates published world bundles, which is exactly what bundleProtocol exists to signal, and r38 left the number alone. Bundle protocol 1 becomes 2 here. Every world bundle must be rebuilt and republished."
+    },
+    {
+      "revision": 41,
+      "date": "2026-09-06",
+      "bundleProtocol": 2,
+      "surfaceHash": "cff09a3012ba8835",
+      "payloadHash": "46b8052956779cd6",
+      "summary": "The payload fixture now projects a world view: one seat's {player, state, phase} from a five-seat village whose declaration names a subset of its partitions with one resident partition it does not name, so a world view's two prunes, the partitions a seat declared and the game root's roster, are fingerprinted rather than invisible. Carries #181 and #186 themselves: a seat's view no longer ships the whole roster, and emit(scope, payload, narration?) gives a world a log line the shared shell renders."
     }
   ]
 }
