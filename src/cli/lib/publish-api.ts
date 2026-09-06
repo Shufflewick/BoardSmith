@@ -101,10 +101,20 @@ async function throwResponseError(
  *   property `true` forwards it, by construction; a property that declares
  *   neither fails `validate.test.ts`. There is nothing left to remember.
  *
- * Only two keys stay explicit, and neither is an authorable schema key:
- * `playerCount` is derived by `deriveManifest` from the compiled game
- * definition, and `displayName` needs its fallback chain. They are applied
+ * Four keys stay explicit, and none is an authorable schema key. `playerCount`,
+ * `capabilities` and `world` are DERIVED by `deriveManifest` from the compiled
+ * game definition, and `displayName` needs its fallback chain. They are applied
  * AFTER the spread so the derivation can never shadow them.
+ *
+ * `capabilities` (#171) is the one the platform reads for every feature
+ * decision -- whether the game has a table, whether it can be played
+ * asynchronously, whether a seat may be a bot, whether a move may be taken
+ * back. It REPLACES the per-flag keys `asyncPlay`, `joinInProgress`,
+ * `persistence` and `bot`, which the platform used to parse one at a time with
+ * a separate function each; none of the four exists in a manifest any more.
+ * `backend` travels beside it as an authorable schema key, for diagnostics and
+ * for the one question a capability set cannot answer (which host runs this),
+ * never as the thing a feature is decided from.
  *
  * The body this produces becomes ShufflewickPub's `gameVersions.manifestJson`
  * row verbatim (`convex/publish.ts` stringifies whatever it receives), so this
@@ -126,7 +136,13 @@ function buildInitiateManifest(
 
   return {
     ...forwarded,
-    playerCount: manifest.playerCount,
+    // ABSENT stays absent: a world-only bundle has no `playerCount` and no
+    // `world` block is present on a table, and forwarding either as an explicit
+    // `undefined` would make "this game has no table" indistinguishable from
+    // "nobody derived one".
+    ...(manifest.playerCount === undefined ? {} : { playerCount: manifest.playerCount }),
+    ...(manifest.world === undefined ? {} : { world: manifest.world }),
+    capabilities: manifest.capabilities,
     displayName: manifest.displayName ?? manifest.name ?? gameSlug,
   };
 }

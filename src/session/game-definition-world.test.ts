@@ -50,9 +50,10 @@ class WorldGame extends Game<WorldGame, Player> {}
 const definition: GameDefinition = {
   gameClass: WorldGame,
   gameType: 'gloamhall',
-  minPlayers: 2,
-  maxPlayers: 40,
+  // NO minPlayers/maxPlayers: a world has no table roster (#171). Its seats
+  // are `world.maxPlayers`, a lifetime count.
   world: {
+    maxPlayers: 40,
     // A WORLD'S VERBS ARE ACTIONS (BoardSmith #169). `walk` is written with
     // `worldAction()` -- the ordered declaration walk, `.needs()` for round one
     // and a `needs:` on the selection that names where it is going -- and lands

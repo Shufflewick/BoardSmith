@@ -8,7 +8,13 @@ import { ENGINE_REVISION } from '../../contract/index.js';
 import { getProjectContext, loadGameDefinition } from './game-runtime.js';
 import { buildCli, CLI_ENTRY, CLI_OUTFILE } from '../lib/build-cli.js';
 import { requireGameProjectManifests } from '../lib/game-project.js';
-import type { GameDefinition } from '../../session/index.js';
+import type { GameBackend, GameDefinition } from '../../session/index.js';
+import {
+  GAME_BACKENDS,
+  capabilityContradictions,
+  isGameBackend,
+  resolveCapabilities,
+} from '../../session/index.js';
 
 /**
  * The project-root HTML file that, when present, makes this bundle's world
@@ -63,16 +69,57 @@ function resolveGameVersion(
 }
 
 /**
- * Pure manifest-derivation function (T-135-07). Takes the raw parsed
- * `boardsmith.json` config and the COMPILED `gameDefinition`, and returns the
- * publish manifest with `playerCount` explicitly computed from
- * `gameDefinition.minPlayers`/`maxPlayers` — set AFTER the `...config`
- * spread so the derived value always overwrites any stale/hand-edited
- * `playerCount` key that might be present in `config` (CLIX-01 / F9).
+ * WHICH BACKEND THIS PROJECT DECLARED, or a refusal naming both answers.
  *
- * Keeps the existing `playerCount: { min, max }` key name and shape to
- * preserve the external publish-platform contract (135-RESEARCH.md Open
- * Question A1).
+ * `boardsmith.json` is where it is declared and the compiled rules are what it
+ * is checked against (`capabilityContradictions` below). There is no default:
+ * a default backend is a backend nobody chose, and the two hold state in
+ * fundamentally different ways.
+ */
+function readBackend(config: Record<string, unknown>): GameBackend {
+  const declared = config.backend;
+  if (isGameBackend(declared)) return declared;
+  const named = GAME_BACKENDS.map((backend) => `"${backend}"`).join(' or ');
+  throw new Error(
+    `boardsmith.json must declare a "backend": ${named}. `
+    + '"table" holds the whole element tree resident, snapshots per action, and keeps history, '
+    + 'undo, bots and spectators; "world" keeps only named partitions resident, checkpoints what '
+    + 'a command dirtied, and runs continuously. '
+    + (declared === undefined
+      ? 'It has no default: what a game may promise its players follows from it.'
+      : `Got ${JSON.stringify(declared)}, which is not a backend this engine runs.`),
+  );
+}
+
+/**
+ * Pure manifest-derivation function (T-135-07). Takes the raw parsed
+ * `boardsmith.json`, the COMPILED `gameDefinition`, and what the build actually
+ * produced, and returns the publish manifest.
+ *
+ * ## Everything a reader needs is DERIVED here, and derived once
+ *
+ * `backend` is the one thing an author declares, and this is where it is
+ * checked against the code that implements it. Everything that FOLLOWS from it
+ * -- whether the game has a table, whether it can be played asynchronously,
+ * whether a seat can be a bot, whether a move can be taken back -- is resolved
+ * into the single `capabilities` object (#171) that the shell, the CLI and the
+ * publishing platform all read INSTEAD OF THE BACKEND'S NAME. The flags that
+ * object was resolved from do not travel beside it: two places to look is how
+ * the platform ended up with three separate per-flag manifest parsers, each
+ * read by a different surface.
+ *
+ * `playerCount` is a TABLE's seat range and is derived from
+ * `gameDefinition.minPlayers/maxPlayers`, set AFTER the `...config` spread so
+ * the derived value always overwrites a stale hand-edited one (CLIX-01 / F9).
+ * A WORLD-ONLY bundle emits none at all: it has no table, and a derived one is
+ * exactly what made the three example worlds ship a vestigial table half the
+ * game page then led with (ShufflewickPub #354).
+ *
+ * `world.maxPlayers` is likewise derived, from `gameDefinition.world.maxPlayers`
+ * -- the number the RUNTIME enforces. It used to be hand-written in
+ * `boardsmith.json` beside a second hand-written copy in the rules, and only
+ * the manifest's was ever checked at publish while only the code's was ever
+ * enforced at run time.
  *
  * The version comes from `package.json` and is likewise never copied from the
  * config spread; `resolveGameVersion` above is the whole rule.
@@ -80,51 +127,72 @@ function resolveGameVersion(
 export function deriveManifest(
   config: Record<string, unknown>,
   pkg: Record<string, unknown>,
-  gameDefinition: Pick<GameDefinition, 'minPlayers' | 'maxPlayers'>,
+  gameDefinition: Pick<
+    GameDefinition,
+    'minPlayers' | 'maxPlayers' | 'bot' | 'persistence' | 'world'
+  >,
   engine: { protocol: number; revision: number },
-  artifacts: { worldUi: boolean },
+  artifacts: { tableUi: boolean; worldUi: boolean },
 ): Record<string, unknown> {
-  const { minPlayers, maxPlayers } = gameDefinition;
-  // The platform syncs playerCount on every publish (the catalog must never
-  // disagree with what the lobby enforces), so a bundle without it is
-  // unpublishable — fail the build here with the fix, not later on the server.
-  if (!Number.isInteger(minPlayers) || !Number.isInteger(maxPlayers)) {
-    throw new Error(
-      'Cannot determine player count: the game definition is missing minPlayers/maxPlayers. '
-      + 'Declare both as integers in your gameDefinition (src/rules/index.ts), e.g. minPlayers: 2, maxPlayers: 4.',
-    );
+  const backend = readBackend(config);
+
+  // EVERY WAY THE DECLARATION AND THE CODE DISAGREE, IN ONE ERROR. Reporting
+  // them one at a time turns a single bad edit into a queue of rebuilds.
+  const contradictions = capabilityContradictions({
+    backend,
+    definition: gameDefinition,
+    declared: config,
+  });
+  if (contradictions.length > 0) {
+    throw new Error(contradictions.join('\n\n'));
   }
 
   const version = resolveGameVersion(config, pkg);
 
-  // WHETHER THIS BUNDLE SHIPS A WORLD UI (ShufflewickPub #128).
+  // WHICH SURFACE THIS BUNDLE SHIPS, DERIVED FROM WHAT THE BUILD PRODUCED, and
+  // it OVERWRITES anything an author wrote, exactly as `playerCount` does. A
+  // host reads it to decide between mounting the bundle's own world surface and
+  // showing its generic one, and that decision has to be a fact about the
+  // bundle rather than a probe: a host that treated a missing `world.html` as
+  // "this game ships no world UI" could not tell that apart from a UI that
+  // failed to deploy, and would answer a broken publish with a surface that
+  // looks deliberate.
   //
-  // Derived from what the build actually produced, and it OVERWRITES anything
-  // an author wrote, exactly as `playerCount` does. A host reads this to decide
-  // between mounting the bundle's own world surface and showing its generic
-  // one, and that decision has to be a fact about the bundle rather than a
-  // probe: a host that treated a missing `world.html` as "this game ships no
-  // world UI" could not tell that apart from a UI that failed to deploy, and
-  // would answer a broken publish with a surface that looks deliberate.
-  //
-  // A world UI in a bundle that declares no `world` block is refused here.
-  // Nothing could ever mount it -- `campaigns:createWorld` refuses a game whose
-  // manifest has no world block -- so it is bytes in every download for a
-  // surface no player can reach, and the author almost certainly meant to
-  // declare the block.
-  const world = config.world as Record<string, unknown> | undefined;
-  if (artifacts.worldUi && (world === undefined || world === null)) {
+  // A surface the declared backend cannot mount is refused, in both directions.
+  // Nothing could ever load it, so it is bytes in every download for a page no
+  // player can reach.
+  if (backend === 'table' && artifacts.worldUi) {
     throw new Error(
-      'This project has a world.html entry but boardsmith.json declares no "world" block, '
-      + 'so nothing could ever mount it. Add e.g. "world": { "maxPlayers": 40 }, or delete world.html.',
+      'This project has a world.html entry but boardsmith.json declares "backend": "table", so '
+      + 'nothing could ever mount it. Set "backend": "world" and export a `world` block from your '
+      + 'gameDefinition, or delete world.html.',
+    );
+  }
+  if (backend === 'table' && !artifacts.tableUi) {
+    throw new Error(
+      'This project declares "backend": "table" and has no index.html, so a player has no table '
+      + 'surface to load. A table mounts GameShell from index.html; add one, or declare '
+      + '"backend": "world".',
     );
   }
 
+  const { minPlayers, maxPlayers } = gameDefinition;
+  const hasTableRoster = Number.isInteger(minPlayers) && Number.isInteger(maxPlayers);
+
+  // The flags the capability set was RESOLVED FROM never travel beside it.
+  const { asyncPlay: _asyncPlay, joinInProgress: _joinInProgress, ...rest } = config;
+
   return {
-    ...config,
-    ...(world === undefined || world === null
-      ? {}
-      : { world: { ...world, ui: artifacts.worldUi } }),
+    ...rest,
+    backend,
+    capabilities: resolveCapabilities({
+      backend,
+      definition: gameDefinition,
+      declared: config,
+    }),
+    ...(backend === 'world'
+      ? { world: { maxPlayers: gameDefinition.world!.maxPlayers, ui: artifacts.worldUi } }
+      : {}),
     buildTime: new Date().toISOString(),
     version,
     // Stamp the engine ABI version so the executor can reject a bundle built
@@ -137,12 +205,10 @@ export function deriveManifest(
     // the skew that produces mystery runtime bugs. The platform rejects a
     // bundle whose revision exceeds its own. Also automatic.
     engineRevision: engine.revision,
-    // Derived — never copied from the raw config spread. Overwrites any
-    // stale playerCount that may still be present in boardsmith.json.
-    playerCount: {
-      min: gameDefinition.minPlayers,
-      max: gameDefinition.maxPlayers,
-    },
+    // Derived — never copied from the raw config spread. Absent entirely for a
+    // world-only bundle, which is how the manifest says "this game has no
+    // table".
+    ...(hasTableRoster ? { playerCount: { min: minPlayers, max: maxPlayers } } : {}),
   };
 }
 
@@ -341,7 +407,7 @@ export async function buildCommand(options: BuildOptions): Promise<void> {
         protocol: BUNDLE_PROTOCOL_VERSION,
         revision: ENGINE_REVISION,
       },
-      { worldUi: hasWorldUi },
+      { tableUi: hasTableUi, worldUi: hasWorldUi },
     );
 
     mkdirSync(join(cwd, outDir), { recursive: true });

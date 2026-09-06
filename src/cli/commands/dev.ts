@@ -18,7 +18,7 @@ import type { PersistenceStore } from '../../persistence/index.js';
 import { getProjectContext, boardsmithResolvePlugin, toPosix } from './game-runtime.js';
 import { findUnknownKeys } from '../lib/config-schema.js';
 import { requireGameProject, resolveRulesDir, requireRulesIndex } from '../lib/game-project.js';
-import { resolveWorldMode, type WorldManifestBlock } from '../lib/world-project.js';
+import { resolveWorldMode } from '../lib/world-project.js';
 import { startWorldDevServer } from './dev-world.js';
 import {
   claimWebSocketPath,
@@ -73,14 +73,14 @@ export class DevFlagError extends Error {}
  * Refuse `--reset` on a project that has no world to reset.
  *
  * A flag that silently did nothing on three quarters of projects is a flag an
- * author uses in the wrong place and believes worked. The `world` block is the
- * whole declaration, so its absence is a complete answer.
+ * author uses in the wrong place and believes worked. `backend` is the whole
+ * declaration, so anything but `"world"` is a complete answer.
  */
 export function assertWorldProjectForReset(worldMode: boolean): void {
   if (worldMode) return;
   throw new DevFlagError(
-    'Error: --reset deletes a PERSISTENT WORLD\'s local store, and this project declares no ' +
-      '`world` block in boardsmith.json, so it has no world to delete. A table game\'s ' +
+    'Error: --reset deletes a PERSISTENT WORLD\'s local store, and this project does not declare ' +
+      '"backend": "world" in boardsmith.json, so it has no world to delete. A table game\'s ' +
       'cross-session state lives in .boardsmith-dev-store.json; delete that file directly if ' +
       'that is what you meant.',
   );
@@ -298,12 +298,12 @@ interface BoardSmithConfig {
   /** Custom color palette (hex strings or objects with hex/value + label) */
   colorPalette?: Array<string | Record<string, unknown>>;
   /**
-   * The persistent-world block. Its PRESENCE is what makes this game a world
-   * (`boardsmith.schema.json`); `maxPlayers` is the capacity the platform
-   * sizes the world against. What this CLI does with it -- and, just as
-   * importantly, what it does not -- lives in `../lib/world-project.ts`.
+   * WHICH BACKEND RUNS THIS GAME (#171). `"world"` is what makes this project a
+   * persistent world; anything else is a table. What this CLI does with it --
+   * and, just as importantly, what it does not -- lives in
+   * `../lib/world-project.ts`.
    */
-  world?: WorldManifestBlock;
+  backend?: string;
 }
 
 /**
@@ -791,11 +791,54 @@ export async function devCommand(options: DevOptions): Promise<void> {
     const runtime = await loadGameRuntime(rulesPath, tempDir, context);
     gameDefinition = runtime.gameDefinition;
     runExecuteOp = runtime.executeOp;
+  } catch (error) {
+    console.error(chalk.red('Failed to load game rules:'), error);
+    process.exit(1);
+  }
 
+  // A WORLD IS A DIFFERENT RUN, AND THIS IS WHERE THE ROADS PART (#167).
+  //
+  // AS EARLY AS THE RULES ALLOW. Everything below this branch is the TABLE dev
+  // host: a seat range, game options, presets, bots, a lobby and a snapshot
+  // session. A world has none of them -- it is already running before anybody
+  // opens a browser -- so it gets its own server rather than a mode of this
+  // one, and running a table's setup for it first is not merely wasted work: a
+  // world declares no minPlayers/maxPlayers as of #171, so `--players`
+  // resolution below has no range to resolve against. `dev-world.ts` says why
+  // at length.
+  if (worldMode) {
+    await startWorldDevServer({
+      cwd,
+      uiPath,
+      gameDefinition,
+      displayName: config.displayName || gameDefinition.displayName || gameDefinition.gameType,
+      context,
+      port,
+      host,
+      tempDir,
+      openBrowser: shouldOpenBrowser(options),
+    });
+    return;
+  }
+
+  try {
     // CLIX-01: gameDefinition (code) is the SOLE source of truth for player
     // count — the boardsmith.json config.playerCount/minPlayers fallbacks are
     // removed (they are provably dead: the scaffold always writes
     // gameDefinition.minPlayers/maxPlayers, per the F9 verdict).
+    //
+    // A TABLE'S RANGE, and only a table's. `minPlayers`/`maxPlayers` are
+    // optional as of #171 because a world has no roster, so a table project
+    // that omits them is refused BY NAME here rather than compared against
+    // `undefined` — every bound check below reads false against it, which would
+    // let `--players 99` through and fail somewhere deep in game code.
+    if (gameDefinition.minPlayers === undefined || gameDefinition.maxPlayers === undefined) {
+      throw new Error(
+        `Game "${gameDefinition.gameType}" declares "backend": "table" and no minPlayers/` +
+          'maxPlayers, so there is no seat range to open a table with. Declare both as integers ' +
+          'in your gameDefinition (src/rules/index.ts), e.g. minPlayers: 2, maxPlayers: 4.',
+      );
+    }
     minPlayers = gameDefinition.minPlayers;
     maxPlayers = gameDefinition.maxPlayers;
 
@@ -834,7 +877,7 @@ export async function devCommand(options: DevOptions): Promise<void> {
 
     console.log(chalk.dim(`  Loaded game: ${gameDefinition.displayName || gameDefinition.gameType}`));
   } catch (error) {
-    console.error(chalk.red('Failed to load game rules:'), error);
+    console.error(chalk.red('Failed to open a table for this game:'), error);
     process.exit(1);
   }
 
@@ -859,29 +902,6 @@ export async function devCommand(options: DevOptions): Promise<void> {
   // defaults to minPlayers instead of a hardcoded '2'.
   const effectivePlayerCount = exitOnDevFlagError(() => resolvePlayerCount(rawPlayers, minPlayers, maxPlayers));
   exitOnDevFlagError(() => validateBotSeats(botPlayers, effectivePlayerCount));
-
-  // A WORLD IS A DIFFERENT RUN, AND THIS IS WHERE THE ROADS PART (#167).
-  //
-  // `worldMode` is resolved once above, before --reset, because #166's reset
-  // has to know whether this is a world before any rules are loaded. Everything
-  // below this branch is the TABLE dev host: a lobby, seats to claim, game
-  // options, presets, bots and a snapshot session. A world has none of them --
-  // it is already running before anybody opens a browser -- so it gets its own
-  // server rather than a mode of this one. `dev-world.ts` says why at length.
-  if (worldMode) {
-    await startWorldDevServer({
-      cwd,
-      uiPath,
-      gameDefinition,
-      displayName: config.displayName || gameDefinition.displayName || gameDefinition.gameType,
-      context,
-      port,
-      host,
-      tempDir,
-      openBrowser: shouldOpenBrowser(options),
-    });
-    return;
-  }
 
   const devConfig = buildDevConfig({
     gameDefinition,

@@ -102,6 +102,7 @@ function writeFixtureFiles(dir: string, ui?: string): void {
   const files = generateScaffoldFiles(
     {
       name: 'treeshake-test',
+      backend: 'table' as const,
       displayName: 'TreeShake Test',
       description: 'Test fixture for tree-shaking verification',
       playerCount: { min: 2, max: 2 },

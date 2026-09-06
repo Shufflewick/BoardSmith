@@ -80,8 +80,22 @@ export type GameClass<G extends Game = Game> = new (options: {
 export interface GameDefinition {
   gameClass: GameClass;
   gameType: string;
-  minPlayers: number;
-  maxPlayers: number;
+  /**
+   * THE TABLE'S SEAT RANGE, and the table backend's alone.
+   *
+   * Optional because a world has no table: it does not start, so there is no
+   * minimum to reach, and its seats are `world.maxPlayers` -- a lifetime count,
+   * not a roster a match is assembled from. A world game that declared these
+   * shipped a vestigial table half beside its world, and a person opened one,
+   * was asked for a second player by a game one person plays alone, and started
+   * the table instead of the world (ShufflewickPub #354).
+   *
+   * A game whose backend is `table` must declare both; `capabilityContradictions`
+   * refuses one that does not, and `boardsmith build` omits `playerCount` from
+   * the manifest when they are absent.
+   */
+  minPlayers?: number;
+  maxPlayers?: number;
   displayName?: string;
   /** bot configuration (objectives and threat response hooks) */
   bot?: BotStrategy;

@@ -484,16 +484,19 @@ Three things to know before using it:
   twice before its rollback copy paid a third time (ShufflewickPub #316).
 
 **Declaring a world, and what `boardsmith dev` then does.** A project's
-`boardsmith.json` declares one with a `world` block:
+`boardsmith.json` declares which BACKEND runs it:
 
 ```json
-{ "name": "gloamhall", "world": { "maxPlayers": 200 } }
+{ "name": "gloamhall", "backend": "world" }
 ```
 
-There is no `--world` flag. The block's PRESENCE is what makes a game a world
-(its absence means "this game is not a persistent world"), so the dev host
-reads it and constructs the game with `worldMode: true` — one way to say it
-rather than two. World mode then travels in the start op's gameOptions and so
+There is no `--world` flag. `backend` is required on every project and has no
+default, and `"world"` is what makes a game a world, so the dev host reads it
+and constructs the game with `worldMode: true` — one way to say it rather than
+two. What the choice IMPLIES (no undo, no bots, no spectators; always
+asynchronous, always joinable in progress) is resolved by `boardsmith build`
+into the manifest's `capabilities` object, which is what every reader consults
+instead of the backend's name. World mode then travels in the start op's gameOptions and so
 into the snapshot, which is what makes a restored world come back resident
 rather than reading its `{ __elementId }` references against a residency model
 that never wrote them.

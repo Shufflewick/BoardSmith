@@ -47,12 +47,12 @@ class RaceGame extends Game<RaceGame, Player> {
   }
 }
 
-const raceDef: GameDefinitionLike = {
+const raceDef = {
   gameClass: RaceGame,
   gameType: 'race',
   minPlayers: 2,
   maxPlayers: 2,
-};
+} satisfies GameDefinitionLike;
 
 /** A deferred promise the test resolves manually, to gate the `start` op. */
 function makeDeferred(): { promise: Promise<void>; resolve: () => void } {

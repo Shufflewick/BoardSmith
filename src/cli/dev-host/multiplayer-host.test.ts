@@ -27,12 +27,12 @@ class PassGame extends Game<PassGame, Player> {
   }
 }
 
-const def: GameDefinitionLike = {
+const def = {
   gameClass: PassGame,
   gameType: 'pass',
   minPlayers: 1,
   maxPlayers: 4,
-};
+} satisfies GameDefinitionLike;
 
 // Each seat passes exactly once (no outer loop), then the flow completes →
 // game over. Lets tests observe whether bot played the open seat (isComplete)
@@ -49,12 +49,12 @@ class AlternateGame extends Game<AlternateGame, Player> {
   }
 }
 
-const altDef: GameDefinitionLike = {
+const altDef = {
   gameClass: AlternateGame,
   gameType: 'alternate',
   minPlayers: 2,
   maxPlayers: 2,
-};
+} satisfies GameDefinitionLike;
 
 function makeAltHost() {
   const sent: Array<{ clientId: string; msg: HostOutbound }> = [];

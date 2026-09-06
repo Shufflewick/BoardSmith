@@ -10,7 +10,8 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 
 /**
  * Minimal fixture gameDefinition — only the fields deriveManifest reads
- * (minPlayers/maxPlayers) are meaningful; the rest satisfy the type.
+ * (the seat range, the world block, `bot` and `persistence`) are meaningful;
+ * the rest satisfy the type.
  */
 function makeGameDefinition(minPlayers: number, maxPlayers: number): GameDefinition {
   return {
@@ -18,6 +19,16 @@ function makeGameDefinition(minPlayers: number, maxPlayers: number): GameDefinit
     gameType: 'fixture',
     minPlayers,
     maxPlayers,
+  };
+}
+
+/** A world game's compiled definition: a world block with its own seat count,
+ *  and NO table roster (#171 / ShufflewickPub #354). */
+function makeWorldDefinition(maxPlayers = 40): GameDefinition {
+  return {
+    gameClass: class FixtureWorld extends Game<FixtureWorld, Player> {},
+    gameType: 'fixture-world',
+    world: { maxPlayers, actions: [], view: () => [] },
   };
 }
 
@@ -37,9 +48,15 @@ const PKG = { name: 'fixture', version: '1.0.0' };
  */
 function derive(
   config: Record<string, unknown>,
-  gameDefinition: Pick<GameDefinition, 'minPlayers' | 'maxPlayers'> = makeGameDefinition(2, 4),
+  gameDefinition: GameDefinition = makeGameDefinition(2, 4),
 ): Record<string, unknown> {
-  return deriveManifest(config, PKG, gameDefinition, { protocol: 1, revision: 7 }, { worldUi: false });
+  return deriveManifest(
+    { backend: 'table', ...config },
+    PKG,
+    gameDefinition,
+    { protocol: 1, revision: 7 },
+    { tableUi: true, worldUi: false },
+  );
 }
 
 describe('deriveManifest', () => {
@@ -49,36 +66,94 @@ describe('deriveManifest', () => {
     expect(manifest.playerCount).toEqual({ min: 2, max: 4 });
   });
 
-  it('carries the platform-consumed blocks through the config spread untouched', () => {
-    // `world` (and its FR-006 siblings) have no derivation of their own: the
-    // platform reads them straight out of manifest.json, so the spread is the
-    // whole transport. If a future manifest allowlist ever replaces the
+  it('carries the round-policy blocks through the config spread untouched', () => {
+    // `roundDeadline`/`idleAction` are platform POLICY rather than capabilities:
+    // the platform reads them straight out of manifest.json, so the spread is
+    // the whole transport. If a future manifest allowlist ever replaces the
     // spread, this is the test that catches the drop.
     const config = {
       name: 'fixture',
-      // The live block, not the round architecture's: `validate` refuses that
-      // shape's keys by name, so a fixture written in it taught a manifest the
-      // toolchain rejects (#304).
-      world: { maxPlayers: 200 },
-      persistence: true,
-      bot: true,
-      joinInProgress: true,
-      asyncPlay: true,
       idleAction: { name: 'pass' },
       roundDeadline: { defaultHours: 24, minHours: 6, maxHours: 72, mindingSafe: true },
     };
 
     const manifest = derive(config);
 
-    // `world.ui` is the one key inside the block the BUILD owns rather than the
-    // author (ShufflewickPub #128); everything else the author wrote survives.
-    expect(manifest.world).toEqual({ ...config.world, ui: false });
-    expect(manifest.persistence).toBe(true);
-    expect(manifest.bot).toBe(true);
-    expect(manifest.joinInProgress).toBe(true);
-    expect(manifest.asyncPlay).toBe(true);
     expect(manifest.idleAction).toEqual({ name: 'pass' });
     expect(manifest.roundDeadline).toEqual(config.roundDeadline);
+  });
+
+  it('resolves the capability set, and does NOT leave the flags it was resolved from beside it', () => {
+    // The whole point of #171: one object, and nothing to read instead of it.
+    // `asyncPlay`/`joinInProgress` were the manifest's answer AND a capability
+    // input; leaving both in would give a reader two places to look and one of
+    // them would drift.
+    const manifest = derive(
+      { name: 'fixture', asyncPlay: true, joinInProgress: true },
+      { ...makeGameDefinition(2, 4), persistence: true },
+    );
+
+    expect(manifest.backend).toBe('table');
+    expect(manifest.capabilities).toEqual({
+      table: true,
+      world: false,
+      undo: true,
+      spectators: true,
+      bots: false,
+      asyncPlay: true,
+      joinInProgress: true,
+      crossSessionState: true,
+    });
+    expect(manifest.asyncPlay).toBeUndefined();
+    expect(manifest.joinInProgress).toBeUndefined();
+    expect(manifest.persistence).toBeUndefined();
+    expect(manifest.bot).toBeUndefined();
+  });
+
+  it('refuses a manifest that declares no backend, naming both answers', () => {
+    expect(() =>
+      deriveManifest(
+        { name: 'fixture' },
+        PKG,
+        makeGameDefinition(2, 4),
+        { protocol: 1, revision: 7 },
+        { tableUi: true, worldUi: false },
+      ),
+    ).toThrow(/"backend".*"table".*"world"/s);
+  });
+
+  it('refuses a backend name it does not run', () => {
+    expect(() => derive({ name: 'fixture', backend: 'tables' })).toThrow(/"backend"/);
+  });
+
+  it('refuses a declaration the compiled rules contradict', () => {
+    // The manifest says table; the rules export a world. Both directions are
+    // refused rather than resolved by a precedence rule — picking a winner
+    // would ship the mistake.
+    expect(() => derive({ name: 'fixture' }, makeWorldDefinition())).toThrow(/"backend": "table"/);
+    expect(() =>
+      deriveManifest(
+        { name: 'fixture', backend: 'world' },
+        PKG,
+        makeGameDefinition(2, 4),
+        { protocol: 1, revision: 7 },
+        { tableUi: true, worldUi: false },
+      ),
+    ).toThrow(/"backend": "world"/);
+  });
+
+  it('refuses each flag the world backend already answers, naming it', () => {
+    for (const key of ['asyncPlay', 'joinInProgress'] as const) {
+      expect(() =>
+        deriveManifest(
+          { name: 'fixture', backend: 'world', [key]: true },
+          PKG,
+          makeWorldDefinition(),
+          { protocol: 1, revision: 7 },
+          { tableUi: false, worldUi: true },
+        ),
+      ).toThrow(/world backend already answers/);
+    }
   });
 
   it('PROC-02: a stale config playerCount does NOT reach the manifest — gameDefinition wins', () => {
@@ -95,12 +170,13 @@ describe('deriveManifest', () => {
   it('preserves buildTime/engineProtocol and other passthrough config keys', () => {
     const config = {
       name: 'fixture',
+      backend: 'table',
       displayName: 'Fixture Game',
       description: 'A test game',
     };
     const gameDefinition = makeGameDefinition(1, 8);
 
-    const manifest = deriveManifest(config, { version: '2.0.0' }, gameDefinition, { protocol: 3, revision: 7 }, { worldUi: false });
+    const manifest = deriveManifest(config, { version: '2.0.0' }, gameDefinition, { protocol: 3, revision: 7 }, { tableUi: true, worldUi: false });
 
     expect(manifest.name).toBe('fixture');
     expect(manifest.displayName).toBe('Fixture Game');
@@ -142,14 +218,63 @@ describe('deriveManifest', () => {
     expect(manifest.cooperative).toBe(false);
   });
 
-  it('throws an actionable error when the gameDefinition lacks minPlayers/maxPlayers', () => {
-    // minPlayers/maxPlayers are optional on GameDefinition — a game that never
-    // declared them must fail the BUILD with the fix, not publish a bundle
-    // whose playerCount silently serialized to nothing.
-    const gameDefinition = {} as Pick<GameDefinition, 'minPlayers' | 'maxPlayers'>;
+  it('throws an actionable error when a TABLE game lacks minPlayers/maxPlayers', () => {
+    // minPlayers/maxPlayers are optional on GameDefinition — a TABLE game that
+    // never declared them must fail the BUILD with the fix, not publish a
+    // bundle whose playerCount silently serialized to nothing.
+    const gameDefinition = { gameType: 'fixture' } as unknown as GameDefinition;
 
     expect(() => derive({ name: 'fixture' }, gameDefinition))
       .toThrow(/minPlayers\/maxPlayers.*src\/rules\/index\.ts/s);
+  });
+});
+
+/**
+ * ShufflewickPub #354: A WORLD-ONLY BUNDLE HAS NO TABLE, and the manifest has
+ * to be able to say so. `playerCount` used to be derived unconditionally, so
+ * deleting it from a world game's config did nothing — the next build stamped
+ * it straight back, and the game page led with a Start button for a table the
+ * game was never written to play.
+ */
+describe('deriveManifest — a world-only bundle', () => {
+  const worldConfig = { name: 'fixture', displayName: 'Fixture', backend: 'world' };
+
+  const deriveWorld = (
+    config: Record<string, unknown> = worldConfig,
+    definition: GameDefinition = makeWorldDefinition(),
+    artifacts = { tableUi: false, worldUi: true },
+  ) => deriveManifest(config, PKG, definition, { protocol: 1, revision: 7 }, artifacts);
+
+  it('omits playerCount entirely rather than inventing a seat range', () => {
+    expect(deriveWorld()).not.toHaveProperty('playerCount');
+  });
+
+  it('resolves the world backend\'s implied capability set', () => {
+    expect(deriveWorld().capabilities).toEqual({
+      table: false,
+      world: true,
+      undo: false,
+      spectators: false,
+      bots: false,
+      asyncPlay: true,
+      joinInProgress: true,
+      crossSessionState: true,
+    });
+  });
+
+  it('derives world.maxPlayers from the compiled rules, the number the runtime enforces', () => {
+    // Two hand-written copies of a world's capacity is one too many: only the
+    // manifest's was ever checked at publish, and only the code's was ever
+    // enforced at run time.
+    expect(deriveWorld(worldConfig, makeWorldDefinition(200)).world).toEqual({
+      maxPlayers: 200,
+      ui: true,
+    });
+  });
+
+  it('refuses a world whose rules still declare a table roster', () => {
+    const withRoster = { ...makeWorldDefinition(), minPlayers: 2, maxPlayers: 40 };
+    expect(() => deriveWorld(worldConfig, withRoster)).toThrow(/minPlayers/);
   });
 });
 
@@ -167,11 +292,11 @@ describe('deriveManifest', () => {
 describe('deriveManifest - the game version', () => {
   it('takes the version from package.json', () => {
     const manifest = deriveManifest(
-      { name: 'fixture' },
+      { name: 'fixture', backend: 'table' },
       { name: 'fixture', version: '1.1.12' },
       makeGameDefinition(2, 2),
       { protocol: 1, revision: 7 },
-      { worldUi: false },
+      { tableUi: true, worldUi: false },
     );
 
     expect(manifest.version).toBe('1.1.12');
@@ -180,11 +305,11 @@ describe('deriveManifest - the game version', () => {
   it('fails the build, naming the file and key, when package.json states no version', () => {
     expect(() =>
       deriveManifest(
-        { name: 'fixture' },
+        { name: 'fixture', backend: 'table' },
         { name: 'fixture' },
         makeGameDefinition(2, 2),
         { protocol: 1, revision: 7 },
-        { worldUi: false },
+        { tableUi: true, worldUi: false },
       ),
     ).toThrow(/package\.json.*"version"/s);
   });
@@ -193,11 +318,11 @@ describe('deriveManifest - the game version', () => {
     let manifest: Record<string, unknown> | undefined;
     try {
       manifest = deriveManifest(
-        { name: 'fixture' },
+        { name: 'fixture', backend: 'table' },
         { name: 'fixture' },
         makeGameDefinition(2, 2),
         { protocol: 1, revision: 7 },
-        { worldUi: false },
+        { tableUi: true, worldUi: false },
       );
     } catch {
       manifest = undefined;
@@ -208,11 +333,11 @@ describe('deriveManifest - the game version', () => {
   it('rejects an empty version string rather than labelling the bundle with nothing', () => {
     expect(() =>
       deriveManifest(
-        { name: 'fixture' },
+        { name: 'fixture', backend: 'table' },
         { name: 'fixture', version: '  ' },
         makeGameDefinition(2, 2),
         { protocol: 1, revision: 7 },
-        { worldUi: false },
+        { tableUi: true, worldUi: false },
       ),
     ).toThrow(/package\.json.*"version"/s);
   });
@@ -222,11 +347,11 @@ describe('deriveManifest - the game version', () => {
     // not read drifts, and nothing notices until a release is labelled wrong.
     expect(() =>
       deriveManifest(
-        { name: 'fixture', version: '1.1.12' },
+        { name: 'fixture', backend: 'table', version: '1.1.12' },
         { name: 'fixture', version: '1.1.12' },
         makeGameDefinition(2, 2),
         { protocol: 1, revision: 7 },
-        { worldUi: false },
+        { tableUi: true, worldUi: false },
       ),
     ).toThrow(/boardsmith\.json.*"version".*package\.json/s);
   });
@@ -262,33 +387,56 @@ describe('build temp-dir scoping (WR-02)', () => {
  * second.
  */
 describe('deriveManifest — the world UI flag', () => {
-  const worldConfig = { name: 'fixture', displayName: 'Fixture', world: { maxPlayers: 40 } };
+  const worldConfig = { name: 'fixture', displayName: 'Fixture', backend: 'world' };
+  const worldDef = makeWorldDefinition();
+
+  const derive = (worldUi: boolean) =>
+    deriveManifest(worldConfig, PKG, worldDef, { protocol: 1, revision: 7 }, {
+      tableUi: false,
+      worldUi,
+    });
 
   it('records a world UI when the build produced one', () => {
-    const manifest = deriveManifest(worldConfig, PKG, makeGameDefinition(2, 4), { protocol: 1, revision: 7 }, { worldUi: true });
-    expect(manifest.world).toEqual({ maxPlayers: 40, ui: true });
+    expect(derive(true).world).toEqual({ maxPlayers: 40, ui: true });
   });
 
   it('records its absence rather than leaving it unsaid', () => {
-    const manifest = deriveManifest(worldConfig, PKG, makeGameDefinition(2, 4), { protocol: 1, revision: 7 }, { worldUi: false });
-    expect(manifest.world).toEqual({ maxPlayers: 40, ui: false });
+    expect(derive(false).world).toEqual({ maxPlayers: 40, ui: false });
   });
 
-  it('overwrites a hand-written flag, because the build is the only thing that knows', () => {
-    const config = { ...worldConfig, world: { maxPlayers: 40, ui: true } };
-    const manifest = deriveManifest(config, PKG, makeGameDefinition(2, 4), { protocol: 1, revision: 7 }, { worldUi: false });
-    expect(manifest.world).toEqual({ maxPlayers: 40, ui: false });
-  });
-
-  it('leaves a game that is not a world alone', () => {
-    const manifest = deriveManifest({ name: 'fixture' }, PKG, makeGameDefinition(2, 4), { protocol: 1, revision: 7 }, { worldUi: false });
+  it('leaves a game that is not a world with no world block at all', () => {
+    const manifest = deriveManifest(
+      { name: 'fixture', backend: 'table' },
+      PKG,
+      makeGameDefinition(2, 4),
+      { protocol: 1, revision: 7 },
+      { tableUi: true, worldUi: false },
+    );
     expect(manifest.world).toBeUndefined();
   });
 
-  it('refuses a world UI in a bundle that declares no world, rather than shipping dead bytes', () => {
+  it('refuses a world UI in a bundle whose backend is a table, rather than shipping dead bytes', () => {
     expect(() =>
-      deriveManifest({ name: 'fixture' }, PKG, makeGameDefinition(2, 4), { protocol: 1, revision: 7 }, { worldUi: true }),
+      deriveManifest(
+        { name: 'fixture', backend: 'table' },
+        PKG,
+        makeGameDefinition(2, 4),
+        { protocol: 1, revision: 7 },
+        { tableUi: true, worldUi: true },
+      ),
     ).toThrow(/world\.html/);
+  });
+
+  it('refuses a table backend that built no table surface', () => {
+    expect(() =>
+      deriveManifest(
+        { name: 'fixture', backend: 'table' },
+        PKG,
+        makeGameDefinition(2, 4),
+        { protocol: 1, revision: 7 },
+        { tableUi: false, worldUi: false },
+      ),
+    ).toThrow(/index\.html/);
   });
 });
 

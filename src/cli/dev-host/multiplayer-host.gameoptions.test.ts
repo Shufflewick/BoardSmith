@@ -29,12 +29,12 @@ class DifficultyGame extends Game<DifficultyGame, Player> {
   }
 }
 
-const def: GameDefinitionLike = {
+const def = {
   gameClass: DifficultyGame,
   gameType: 'difficulty-game',
   minPlayers: 1,
   maxPlayers: 4,
-};
+} satisfies GameDefinitionLike;
 
 const declaredGameOptions: DevOptionDef[] = [
   {

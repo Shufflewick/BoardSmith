@@ -52,9 +52,16 @@ const poke = worldAction<TinyWorld>("poke")
     ctx.world.emit("yard:1", { poked: true });
   });
 
-/** A world bundle's definition, in the shape a real one exports. */
-function bundle(overrides: { world?: WorldDefinition; maxPlayers?: unknown } = {}) {
+/**
+ * A world bundle's definition, in the shape a real one exports.
+ *
+ * NO `minPlayers`/`maxPlayers`. A world has no table roster; the ONE seat count
+ * it has is `world.maxPlayers`, which is also what the manifest's is derived
+ * from, so the two can never disagree (#171 / ShufflewickPub #354).
+ */
+function bundle(overrides: { world?: WorldDefinition } = {}) {
   const world: WorldDefinition = {
+    maxPlayers: 2,
     genesis: (game) => ({ "yard:1": game.create(Yard, "yard") as GameElement }),
     view: () => ["yard:1"],
     actions: [poke],
@@ -62,8 +69,6 @@ function bundle(overrides: { world?: WorldDefinition; maxPlayers?: unknown } = {
   return {
     gameClass: TinyWorld,
     gameType: "tiny-world",
-    minPlayers: 1,
-    maxPlayers: 2,
     world,
     ...overrides,
   } as Parameters<typeof createWorld>[0]["definition"];
@@ -84,6 +89,16 @@ describe("readWorldDefinition — what a bundle must export", () => {
     expect(() => readWorldDefinition({})).toThrow(/world: \{ actions, view \}/);
   });
 
+  it("REFUSES a world block that declares no seats", () => {
+    // The seat count moved INTO the block (#171): a world's roster is not a
+    // table's, and leaving it on `gameDefinition.maxPlayers` is what let a world
+    // game ship a vestigial table half beside its world.
+    const noSeats = bundle({
+      world: { actions: [poke], view: () => [] } as unknown as WorldDefinition,
+    });
+    expect(() => readWorldDefinition(noSeats)).toThrow(/world\.maxPlayers/);
+  });
+
   it("REFUSES a bundle with no world.view, because a look would show nothing", () => {
     // A resident world's partitions are absent until something names them, so a
     // look that names nothing projects an EMPTY world -- and the one thing
@@ -91,7 +106,7 @@ describe("readWorldDefinition — what a bundle must export", () => {
     // bug wearing a library decision's clothes; "everything" would be the
     // O(world) read the whole mode deletes.
     const noView = bundle({
-      world: { actions: [poke] } as unknown as WorldDefinition,
+      world: { maxPlayers: 2, actions: [poke] } as unknown as WorldDefinition,
     });
     expect(() => readWorldDefinition(noView)).toThrow(/declares no `view`/);
   });
@@ -194,6 +209,21 @@ describe("createWorld — one construction, every host", () => {
     expect(seatCount).toBe(2);
   });
 
+  it("takes its seat count from world.maxPlayers, not from a table roster", () => {
+    const { seatCount } = createWorld({
+      // A stale table roster beside the world block changes nothing: the world
+      // reads its own number, so there is only ever one to read.
+      definition: {
+        ...bundle({ world: { ...bundle().world!, maxPlayers: 7 } }),
+        minPlayers: 2,
+        maxPlayers: 4,
+      } as Parameters<typeof createWorld>[0]["definition"],
+      seed: "s",
+      seats: new Map([["p1", 1]]),
+    });
+    expect(seatCount).toBe(7);
+  });
+
   it("runs the bundle's genesis and hands back what a store must write", async () => {
     const { runner } = createWorld({
       definition: bundle(),
@@ -256,7 +286,7 @@ describe("createWorld — one construction, every host", () => {
         ctx.world.schedule({ delayMs: 1, action: "spam" });
         ctx.world.schedule({ delayMs: 2, action: "spam" });
       });
-    const definition = bundle({ world: { view: () => [], actions: [spam] } });
+    const definition = bundle({ world: { maxPlayers: 2, view: () => [], actions: [spam] } });
     const { runner } = createWorld({
       definition,
       seed: "s",

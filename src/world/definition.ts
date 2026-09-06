@@ -41,6 +41,27 @@ import { worldBudgets, type WorldBudgets } from "./budgets.js";
  */
 export interface WorldDefinition {
   /**
+   * HOW MANY SEATS THIS WORLD HAS, FOR ITS WHOLE LIFETIME.
+   *
+   * THE ONE SEAT COUNT A WORLD HAS. A world does not start, so there is no
+   * minimum to reach; a seat is assigned once and never handed on, because a
+   * departed player's holdings are still standing in the world. So this is not
+   * a table's roster and it does not live where a table's roster lives: a world
+   * game that declared `gameDefinition.minPlayers/maxPlayers` shipped a
+   * vestigial table half beside its world, and a person opened one and started
+   * the table (ShufflewickPub #354).
+   *
+   * `boardsmith build` DERIVES the manifest's `world.maxPlayers` from this
+   * number, so the compiled rules and the published manifest cannot disagree
+   * about a world's capacity -- which they previously could, and only the
+   * manifest's copy was ever checked at publish.
+   *
+   * Bounded at run time by the HOST's `budgets.maxPlayers`: this is how large a
+   * world the GAME is built for, that is how large a world the host is prepared
+   * to keep resident, and both doors are needed.
+   */
+  readonly maxPlayers: number;
+  /**
    * THIS WORLD'S VERBS, built with `worldAction()` (#169).
    *
    * A LIST OF `ActionDefinition`s and not a table keyed by name, because that
@@ -127,6 +148,15 @@ export function readWorldDefinition(definition: {
         "`world` block declares the intent, and this is what implements it.",
     );
   }
+  if (!Number.isInteger(world.maxPlayers) || world.maxPlayers < 1) {
+    throw worldRefusal(
+      "bundle-not-a-world",
+      "This bundle's `gameDefinition.world` declares no usable `world.maxPlayers`, so its world " +
+        "has no seats for anybody to play. Declare the largest roster this world holds, e.g. " +
+        "`world: { maxPlayers: 40, actions, view }`. It is the ONE seat count a world has -- a " +
+        "world does not start, so it has no minimum to reach, and its seats are never handed on.",
+    );
+  }
   if (typeof world.view !== "function") {
     throw worldRefusal(
       "bundle-not-a-world",
@@ -148,18 +178,19 @@ export function readWorldDefinition(definition: {
  * THE BUNDLE'S NUMBER, BOUNDED BY THE HOST'S. `maxPlayers` is what the game
  * says its world holds; `budgets.maxPlayers` is how large a world this host is
  * prepared to keep resident. Both doors are needed and neither is the other:
- * a build can cap what a manifest declares, but the number read here comes from
- * the COMPILED definition, which a build's manifest validation never sees. A
+ * the number read here comes from the COMPILED definition, and the manifest's
+ * own `world.maxPlayers` is DERIVED from it at build -- so the two agree by
+ * construction, and this door is what holds the HOST's ceiling. A
  * hand-built bundle with a spotless manifest and `maxPlayers: 10_000_000` was
  * handed straight to `new GameClass({ playerCount })` beside a ten-million-entry
  * colour palette, so the door that was supposed to hold the ceiling held only
  * the floor.
  */
 export function worldSeatCount(
-  definition: { maxPlayers?: unknown },
+  declaration: { maxPlayers?: unknown },
   budgets: WorldBudgets,
 ): number {
-  const declared = definition.maxPlayers;
+  const declared = declaration.maxPlayers;
   if (typeof declared !== "number" || !Number.isInteger(declared) || declared < 1) {
     throw worldRefusal(
       "bundle-not-a-world",
@@ -170,7 +201,7 @@ export function worldSeatCount(
   if (declared > budgets.maxPlayers) {
     throw worldRefusal(
       "bundle-not-a-world",
-      `This bundle's compiled rules declare maxPlayers: ${declared}, and the largest resident ` +
+      `This bundle's compiled rules declare world.maxPlayers: ${declared}, and the largest resident ` +
         `world this host runs holds ${budgets.maxPlayers} players. A manifest's own ` +
         `world.maxPlayers is checked at build; this is the number inside the rules, which build ` +
         `validation cannot see. Lower it to ${budgets.maxPlayers} or fewer and rebuild, or raise ` +
@@ -321,7 +352,6 @@ export interface WorldRunnerOptions {
       colors?: string[];
       worldMode?: boolean;
     }) => Game;
-    readonly maxPlayers?: unknown;
     readonly world?: WorldDefinition;
   };
   /** The world's seed. The same seed on every wake, or the world's randomness
@@ -362,7 +392,10 @@ export interface WorldRunner {
 export function createWorld(options: WorldRunnerOptions): WorldRunner {
   const budgets = options.budgets ?? worldBudgets();
   const world = readWorldDefinition(options.definition);
-  const seatCount = worldSeatCount(options.definition, budgets);
+  // THE WORLD BLOCK'S OWN NUMBER. Not `definition.maxPlayers`: a table's roster
+  // is a different fact, and a world game that has one at all is one #174 has
+  // not reached yet.
+  const seatCount = worldSeatCount(world, budgets);
   for (const [player, seat] of options.seats) {
     assertSeatWithinWorld(player, seat, seatCount);
   }

@@ -97,18 +97,25 @@ budgets are the model, and Actions do not touch any of them.
 
 ## Declaring a world
 
-Two declarations, and they must agree.
+Two declarations, and neither repeats the other.
 
-**`boardsmith.json`** declares the intent to the catalogue:
+**`boardsmith.json`** declares which BACKEND runs this game:
 
 ```json
-{ "name": "gloamhall", "world": { "maxPlayers": 200 } }
+{ "name": "gloamhall", "backend": "world" }
 ```
 
-**The block's existence is what makes a game a world.** There is no `--world`
-flag and no run-time choice, because a world is what a game *is*.
-`boardsmith validate` requires `maxPlayers` once the block exists: a world block
-that declares nothing says nothing about the world.
+**That declaration is what makes a game a world.** There is no `--world` flag
+and no run-time choice, because a world is what a game *is*. `backend` is
+required on every project and has no default: `"table"` holds the whole element
+tree resident, snapshots per action, and keeps history, undo, bots and
+spectators; `"world"` keeps only named partitions resident, checkpoints what a
+command dirtied, and runs continuously.
+
+There is no `world` *block* in `boardsmith.json`. What follows from the backend
+is not written by hand anywhere: `boardsmith build` resolves it into the
+manifest's `capabilities` object, and every reader — the shell, the CLI, the
+publishing platform — reads that object rather than the backend's name.
 
 **`gameDefinition.world`** implements it:
 
@@ -118,15 +125,22 @@ import type { GameDefinition } from 'boardsmith/session';
 export const gameDefinition: GameDefinition = {
   gameClass: GloamhallGame,
   gameType: 'gloamhall',
-  minPlayers: 1,
-  maxPlayers: 200,
-  world: { actions, view, genesis, presence },
+  world: { maxPlayers: 200, actions, view, genesis, presence },
 };
 ```
 
 `GameDefinition.world` is typed by `WorldDefinition` from `boardsmith/world`, so
-you get the shape checked without importing anything extra. `actions` and `view`
-are required; `genesis` and `presence` are optional.
+you get the shape checked without importing anything extra. `maxPlayers`,
+`actions` and `view` are required; `genesis` and `presence` are optional.
+
+**No `minPlayers`/`maxPlayers` on the definition.** Those are a *table's*
+roster, and a world has none: it does not start, so there is no minimum to
+reach, and a seat is assigned once and never handed on because a departed
+player's holdings are still standing in the world. A world game that declared
+them shipped a vestigial table half beside its world, and the game page led
+with it. `boardsmith build` refuses one now, and it omits `playerCount` from
+the manifest entirely — which is how the manifest says "this game has no
+table".
 
 `actions` is a plain array of `ActionDefinition`, and it is named here rather
 than read off the game because a game class may register a **table's** actions in
@@ -135,17 +149,39 @@ what a seat may be offered. `createWorld` registers it on the game for you, so
 the game class must not register the same actions again; if it registers table
 actions whose names collide, guard those with `if (!this.worldMode)`.
 
-**`maxPlayers` is declared twice on purpose.** The manifest's number is checked
-at build time. The number a host actually seats against is
-`gameDefinition.maxPlayers`, read out of your **compiled** rules by
-`worldSeatCount`, because nothing that reads a manifest can see inside a bundle.
-A hand-built bundle with a spotless manifest and `maxPlayers: 10_000_000` was
-handed straight to `new GameClass({ playerCount })`, which is why the second door
-exists. Keep the two the same.
+**`world.maxPlayers` is declared exactly once.** It lives in your compiled
+rules, because that is the number a host actually seats against —
+`worldSeatCount` reads it, and nothing that reads a manifest can see inside a
+bundle. `boardsmith build` *derives* the manifest's copy from it, so the two
+cannot disagree. They used to be two hand-written numbers, and only the
+manifest's was ever checked at publish while only the code's was ever enforced
+at run time.
 
 A host also caps you: `budgets.maxPlayers` is the largest world that host is
 prepared to keep resident, and a bundle declaring more is refused with
 `bundle-not-a-world`.
+
+## What the backend implies, and what you still declare
+
+`boardsmith build` writes one `capabilities` object into `dist/manifest.json`:
+
+| Capability | A table | A world |
+| --- | --- | --- |
+| `table` | true | false — no start, no minimum, no end |
+| `world` | false | true |
+| `undo` | true — the per-action snapshot is what it rewinds to | false — checkpoints on dirty, and a neighbour has already acted |
+| `spectators` | true | false — a world projects a view per *seat* |
+| `bots` | `gameDefinition.bot` exists | false — no turn, no terminal state to search toward |
+| `asyncPlay` | your declared `asyncPlay` | true, always |
+| `joinInProgress` | your declared `joinInProgress` | true, always |
+| `crossSessionState` | your `gameDefinition.persistence` | true — the partitions *are* the state that survives |
+
+`asyncPlay` and `joinInProgress` are the only two you write, in
+`boardsmith.json`, and they are **table-only**: a world is always asynchronous
+and always joinable in progress, so writing either on a world is refused rather
+than quietly ignored. `bot` and `persistence` are no longer manifest keys at
+all — they are read out of your compiled `gameDefinition`, so a manifest can no
+longer claim a bot the bundle does not ship.
 
 If a bundle's manifest declares a world and its compiled rules export no
 `world.actions`, or no `world.view`, it is refused on the world's first wake with
@@ -732,7 +768,7 @@ thing next time.
 
 | Code | What happened |
 | --- | --- |
-| `bundle-not-a-world` | The manifest declares a world and the compiled rules export no `world.actions`, no `world.view`, or a `maxPlayers` the host will not seat. |
+| `bundle-not-a-world` | The manifest declares `"backend": "world"` and the compiled rules export no `world.actions`, no `world.view`, no `world.maxPlayers`, or a `world.maxPlayers` the host will not seat. |
 | `invalid-world-action` | A world action the platform cannot offer or cannot bound: an action not built with `worldAction()`, an unbounded `from`/`filter`/`elementClass` element form, an element selection with no `elements:`, a candidate outside what the step declared, a selection past `maxCandidatesPerSelection`, a dependent or repeating selection, a seatless action that asks a question, or a round declared before a step the action does not have. |
 | `not-in-a-world` | An action built with `worldAction()` reached `ctx.world` with no world running it -- registered on a table, or reached after the dispatch that bound its facilities finished. |
 | `undeclared-partition` | `execute` read a partition the action's own walk did not declare. |

@@ -23,13 +23,21 @@ import { worldDevBanner } from '../commands/dev-world.js';
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 
-describe('resolveWorldMode (#158: the manifest\'s `world` block is the only way to say "this is a world")', () => {
-  it('is false for an ordinary game, which declares no world block', () => {
-    expect(resolveWorldMode({})).toBe(false);
+describe('resolveWorldMode (#171: the declared `backend` is the only way to say "this is a world")', () => {
+  it('is false for a table game', () => {
+    expect(resolveWorldMode({ backend: 'table' })).toBe(false);
   });
 
-  it('is true once the manifest declares a world block', () => {
-    expect(resolveWorldMode({ world: { maxPlayers: 200 } })).toBe(true);
+  it('is true once the project declares the world backend', () => {
+    expect(resolveWorldMode({ backend: 'world' })).toBe(true);
+  });
+
+  it('is false for a project that declares nothing, which `boardsmith validate` refuses by name', () => {
+    // Not a default: `deriveManifest` and `checkMetadataIssues` both refuse a
+    // manifest with no backend. This only says what the dev host does with one
+    // that got that far -- it starts a table, and the table path then reports
+    // the missing declaration.
+    expect(resolveWorldMode({})).toBe(false);
   });
 });
 

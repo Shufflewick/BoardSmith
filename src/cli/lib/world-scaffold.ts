@@ -189,7 +189,8 @@ import { Plot, Row } from './elements.js';
  * steps you wrote.
  */
 
-/** Seats in this world: the definition's \`maxPlayers\` and the manifest's \`world.maxPlayers\`. */
+/** Seats in this world, for its whole lifetime. The ONE place it is declared:
+ *  the manifest's \`world.maxPlayers\` is derived from it at build. */
 export const WORLD_SEATS = ${WORLD_SCAFFOLD_SEATS};
 
 /** How long a tended row takes to ripen. */
@@ -334,16 +335,18 @@ export * from './world.js';
 
 /**
  * What this game IS. \`world\` is what makes it runnable as a persistent world;
- * \`boardsmith.json\`'s \`world\` block declares the same intent to the catalogue,
- * and \`boardsmith validate\` checks the two agree.
+ * \`boardsmith.json\`'s \`"backend": "world"\` declares the same intent to the
+ * catalogue, and \`boardsmith build\` refuses a bundle where the two disagree.
+ *
+ * NO \`minPlayers\`/\`maxPlayers\`: those are a TABLE's roster, and a world has
+ * none. A world does not start, so there is no minimum to reach, and its seats
+ * are \`world.maxPlayers\` -- assigned once and never handed on.
  */
 export const gameDefinition: GameDefinition = {
   gameClass: ${pascal}Game,
   gameType: '${config.name}',
   displayName: '${config.displayName}',
-  minPlayers: 1,
-  maxPlayers: WORLD_SEATS,
-  world: { actions: worldActions, genesis: worldGenesis, view: worldView },
+  world: { maxPlayers: WORLD_SEATS, actions: worldActions, genesis: worldGenesis, view: worldView },
 };
 `;
 }

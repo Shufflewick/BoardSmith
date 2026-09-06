@@ -200,21 +200,41 @@ describe('initiatePublish manifest payload', () => {
 
   // The initiate body is an ALLOW-LIST projection, not the whole manifest, so a
   // key the platform reads must be named here or it is silently dropped between
-  // dist/manifest.json and Convex's gameVersions.manifestJson. `asyncPlay` is
-  // read by ShufflewickPub's convex/games.ts parseAsyncPlayFlag off exactly that
-  // row; it was authorable and present in dist/manifest.json and still arrived
-  // as `asyncPlaySupported: false` because of this projection.
-  it('threads asyncPlay through to the initiate body', async () => {
-    expect((await sentManifest({ displayName: 'Fixture', asyncPlay: true })).asyncPlay).toBe(true);
+  // dist/manifest.json and Convex's gameVersions.manifestJson. `asyncPlay` was
+  // lost exactly that way: authorable, present in dist/manifest.json, and still
+  // arriving as `asyncPlaySupported: false`. It is no longer a manifest key at
+  // all -- it is a member of the DERIVED `capabilities` object (#171) -- so the
+  // case that guards the drop is the one below, on that object.
+  it('threads the resolved capability set through to the initiate body', async () => {
+    const capabilities = {
+      table: true,
+      world: false,
+      undo: true,
+      spectators: true,
+      bots: false,
+      asyncPlay: true,
+      joinInProgress: false,
+      crossSessionState: true,
+    };
+    expect((await sentManifest({ displayName: 'Fixture', capabilities })).capabilities)
+      .toEqual(capabilities);
   });
 
-  // The CLI must not editorialize the author's declaration on the way through:
-  // an explicit `asyncPlay: false` arrives as `false`, not as an absent key.
-  // Guards against "simplifying" the conditional spread to the truthy form its
-  // neighbours use (`manifest.colorPalette ? ... : {}`), which would silently
-  // swallow a declared false.
-  it('carries a declared asyncPlay: false through as false', async () => {
-    expect((await sentManifest({ displayName: 'Fixture', asyncPlay: false })).asyncPlay).toBe(false);
+  // A declared `false` inside the set is an ANSWER and must arrive as `false`,
+  // not as an absent key the platform reads its own default into. The set is
+  // forwarded whole, so this is one assertion rather than one per member.
+  it('carries every false in the set through as false', async () => {
+    const capabilities = {
+      table: false, world: true, undo: false, spectators: false,
+      bots: false, asyncPlay: true, joinInProgress: true, crossSessionState: true,
+    };
+    const sent = await sentManifest({ displayName: 'Fixture', capabilities });
+    expect(sent.capabilities).toEqual(capabilities);
+  });
+
+  it('threads the derived backend through beside the set', async () => {
+    expect((await sentManifest({ displayName: 'Fixture', backend: 'world' })).backend)
+      .toBe('world');
   });
 
   // The same drop, a second time, in the very function written to stop it:
@@ -229,25 +249,20 @@ describe('initiatePublish manifest payload', () => {
       .toEqual(roundDeadline);
   });
 
-  // ShufflewickPub issue #323. `persistence` was an R2-sink key only: the
-  // Durable Object read it out of the bundle's own manifest and Convex never
-  // saw it at all. So Convex could not tell a campaign game from any other one,
-  // and `createCampaign` minted a campaign for chess while the UI promised the
-  // party it would remember. The platform gates the campaign on the pinned
-  // version's declaration now (ShufflewickPub convex/campaigns.ts
-  // `requireCarryCapableVersion`), which it can only do if the key reaches the
-  // Convex sink -- exactly as `world` already does for a world.
-  it('threads persistence through to the initiate body', async () => {
-    expect((await sentManifest({ displayName: 'Fixture', persistence: true })).persistence)
-      .toBe(true);
+  // A world's capacity and whether it ships its own surface. DERIVED by
+  // `deriveManifest` rather than authored, so like `playerCount` it is
+  // forwarded explicitly and is absent entirely on a table.
+  it('threads a derived world block through, and omits it for a table', async () => {
+    const world = { maxPlayers: 40, ui: true };
+    expect((await sentManifest({ displayName: 'Fixture', world })).world).toEqual(world);
+    expect(await sentManifest({ displayName: 'Fixture' })).not.toHaveProperty('world');
   });
 
-  // Same reason the `asyncPlay: false` case above exists: a declared `false` is
-  // the author's answer and must arrive as `false`, not as an absent key the
-  // platform then reads its own default into.
-  it('carries a declared persistence: false through as false', async () => {
-    expect((await sentManifest({ displayName: 'Fixture', persistence: false })).persistence)
-      .toBe(false);
+  // A world-only bundle has no seat range, and "no table" must not be
+  // indistinguishable from "nobody derived one" (ShufflewickPub #354).
+  it('omits playerCount entirely for a world-only bundle', async () => {
+    const sent = await sentManifest({ displayName: 'Fixture', backend: 'world' });
+    expect(sent).not.toHaveProperty('playerCount');
   });
 
   /**

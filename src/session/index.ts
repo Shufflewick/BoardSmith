@@ -154,3 +154,17 @@ export * from './snapshot-session-host.js';
 // ============================================
 
 export { createHeadlessSession } from './headless-session.js';
+
+/**
+ * THE BACKEND AND THE CAPABILITY SET IT RESOLVES TO (#171).
+ *
+ * One object, derived at build from the backend plus the compiled definition,
+ * that every reader consults instead of the backend's name.
+ */
+export {
+  GAME_BACKENDS,
+  isGameBackend,
+  resolveCapabilities,
+  capabilityContradictions,
+} from './capabilities.js';
+export type { GameBackend, GameCapabilities, CapabilityInputs } from './capabilities.js';

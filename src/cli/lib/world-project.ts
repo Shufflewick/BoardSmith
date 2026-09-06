@@ -3,10 +3,10 @@
  * three architectures it was two and they disagreed (#304).
  *
  * A world is what a game IS, not something a run selects, so `boardsmith.json`'s
- * `world` block is the single declaration and NO COMMAND TAKES A FLAG TO SAY SO.
- * `boardsmith init --world` is not an exception to that: it is what WRITES the
- * block, once, into a project that does not exist yet. Every command after it
- * reads the block and nothing asks again.
+ * `"backend": "world"` is the single declaration and NO COMMAND TAKES A FLAG TO
+ * SAY SO. `boardsmith init --world` is not an exception to that: it is what
+ * WRITES the declaration, once, into a project that does not exist yet. Every
+ * command after it reads it and nothing asks again.
  *
  * ## WHAT THE BLOCK CAUSES, AS OF #167
  *
@@ -40,17 +40,22 @@
  */
 export const WORLD_AUTHORING_DOC = 'docs/persistent-worlds.md';
 
-/** The `world` block, as `boardsmith.json` carries it. */
-export interface WorldManifestBlock {
-  maxPlayers?: number;
-}
-
 /**
- * Is this project a persistent world (#158)?
+ * Is this project a persistent world (#158, #171)?
  *
- * The block's PRESENCE is the declaration; its absence means "this game is not
- * a persistent world".
+ * READ FROM THE DECLARED BACKEND, not from the presence of a block. Until #171
+ * the answer was "boardsmith.json has a `world` key", which made the backend a
+ * thing every reader inferred rather than a thing the project stated -- and it
+ * left a world's capacity restated in two files free to disagree. The block is
+ * gone from `boardsmith.json`: `backend` says which backend runs, and the
+ * world's own `maxPlayers` lives in the compiled `gameDefinition.world`, which
+ * is the number the runtime actually enforces.
+ *
+ * This is the one place the CLI is allowed to branch on the backend NAME, and
+ * it branches on it to pick a HOST -- which host to start is the one question a
+ * capability set cannot answer, and it has to be answered before any rules are
+ * loaded. Everything a game may PROMISE is `capabilities`, never this.
  */
-export function resolveWorldMode(config: { world?: unknown }): boolean {
-  return config.world !== undefined && config.world !== null;
+export function resolveWorldMode(config: { backend?: unknown }): boolean {
+  return config.backend === 'world';
 }
