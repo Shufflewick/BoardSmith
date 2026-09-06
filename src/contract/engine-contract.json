@@ -1,8 +1,8 @@
 {
-  "revision": 41,
+  "revision": 42,
   "bundleProtocol": 2,
-  "surfaceHash": "cff09a3012ba8835",
-  "payloadHash": "46b8052956779cd6",
+  "surfaceHash": "cea0ff4b43a08441",
+  "payloadHash": "67a7a5d320b9ce2b",
   "history": [
     {
       "revision": 1,
@@ -331,6 +331,14 @@
       "surfaceHash": "cff09a3012ba8835",
       "payloadHash": "46b8052956779cd6",
       "summary": "The payload fixture now projects a world view: one seat's {player, state, phase} from a five-seat village whose declaration names a subset of its partitions with one resident partition it does not name, so a world view's two prunes, the partitions a seat declared and the game root's roster, are fingerprinted rather than invisible. Carries #181 and #186 themselves: a seat's view no longer ships the whole roster, and emit(scope, payload, narration?) gives a world a log line the shared shell renders."
+    },
+    {
+      "revision": 42,
+      "date": "2026-09-06",
+      "bundleProtocol": 2,
+      "surfaceHash": "cea0ff4b43a08441",
+      "payloadHash": "67a7a5d320b9ce2b",
+      "summary": "A world's OFFER is fingerprinted alongside its view. offersFor has decided which verbs every seat is given since #169 and no fixture reached it, so #187's fix (a disabled action whose every candidate is greyed is offered with its reason, while an enabled one with no answerable question is still dropped) changed what every seat in every world sees and moved neither hash. The payload fixture now projects one seat's offer over four verbs covering every decision the enumerator makes, and a coverage table plus test makes any platform-facing world verb the fixture does not drive fail the suite instead of being described in a comment."
     }
   ]
 }
