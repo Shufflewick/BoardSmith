@@ -10,7 +10,14 @@
 import { describe, it, expect } from 'vitest';
 
 import { ENGINE_CONTRACT } from './index.js';
-import { computeFingerprints, PLATFORM_ENTRYPOINTS } from './fingerprint.js';
+import {
+  computeFingerprints,
+  computePayloadHash,
+  PLATFORM_ENTRYPOINTS,
+  WORLD_FIXTURE_COVERAGE,
+  WORLD_VERBS_THE_FIXTURE_DRIVES,
+} from './fingerprint.js';
+import { BoardSmithWorldEngine, WORLD_ENGINE_METHODS } from '../world/index.js';
 
 const UPDATE_HINT = (dimension: string) =>
   `The engine's ${dimension} no longer matches src/contract/engine-contract.json.\n\n`
@@ -65,6 +72,63 @@ describe('engine contract', () => {
     const revisions = ENGINE_CONTRACT.history.map((entry) => entry.revision);
     expect(revisions).toEqual(revisions.map((_, index) => index + 1));
     expect(ENGINE_CONTRACT.revision).toBe(revisions[revisions.length - 1]);
+  });
+
+  // THE GAP ITSELF, MADE LOUD.
+  //
+  // Three platform-visible world changes have now shipped with no revision
+  // minted, and none of them was a case of anybody ignoring the KNOWN LIMITS in
+  // fingerprint.ts: the limits were accurate, and three careful people read
+  // them and went on, because nothing failed. `viewFor` was unfingerprinted
+  // from #165 to #181; `offersFor` from #169 to #187.
+  //
+  // What those three share is one shape -- a verb the PLATFORM calls that the
+  // payload fixture never drives -- and that shape is decidable. So it is
+  // decided here rather than described there.
+  describe("the payload fixture's world coverage is measured, not claimed", () => {
+    it('classifies every platform-facing world verb as covered or not', () => {
+      // `WORLD_ENGINE_METHODS` is `keyof WorldEngine` as values; a verb added to
+      // the interface and not to that list fails to compile inside
+      // `tsconfig.public.json`'s graph. This is the second half: it must also be
+      // CLASSIFIED, and only a human can say which of the two it is.
+      expect(
+        Object.keys(WORLD_FIXTURE_COVERAGE).sort(),
+        'A platform-facing world verb is unclassified. Add it to WORLD_FIXTURE_COVERAGE in '
+        + 'src/contract/fingerprint.ts: `true` if the payload fixture drives it, or one '
+        + 'sentence saying why it is out of scope.',
+      ).toEqual([...WORLD_ENGINE_METHODS].sort());
+    });
+
+    it('drives exactly the world verbs it says it drives', async () => {
+      const called = new Set<string>();
+      const prototype = BoardSmithWorldEngine.prototype as unknown as Record<string, Function>;
+      const originals = new Map<string, Function>();
+
+      for (const name of WORLD_ENGINE_METHODS) {
+        const original = prototype[name]!;
+        originals.set(name, original);
+        prototype[name] = function instrumented(this: unknown, ...args: unknown[]) {
+          called.add(name);
+          return original.apply(this, args);
+        };
+      }
+      try {
+        await computePayloadHash();
+      } finally {
+        for (const [name, original] of originals) prototype[name] = original;
+      }
+
+      expect(
+        [...called].sort(),
+        'The payload fixture and WORLD_FIXTURE_COVERAGE disagree about what is fingerprinted.\n'
+        + 'A verb marked `true` that was NOT called is a coverage claim that has quietly become '
+        + 'false -- the fixture narrowed, and payloadHash goes on moving for other reasons while '
+        + 'covering that verb not at all.\n'
+        + 'A verb the fixture called that is marked with a reason is a stated limit that has '
+        + 'quietly become untrue.\n'
+        + 'Fix whichever half is wrong in src/contract/fingerprint.ts.',
+      ).toEqual([...WORLD_VERBS_THE_FIXTURE_DRIVES]);
+    });
   });
 
   it('agrees with the head of its own history', async () => {

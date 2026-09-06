@@ -803,3 +803,36 @@ export interface WorldEngine {
    */
   serializePartitions(dirty: readonly string[]): Promise<Record<string, string>>;
 }
+
+/**
+ * THE ENGINE'S PLATFORM-FACING VERBS, AS VALUES.
+ *
+ * `keyof WorldEngine` is a type, and a type cannot be enumerated at runtime --
+ * which is why nothing could ever ask "does the engine contract's fixture
+ * actually exercise every verb the platform calls?". Three times it did not,
+ * and three times a platform-visible world change shipped with no revision
+ * minted: `viewFor` went unfingerprinted until #181, `offersFor` until #187.
+ *
+ * This list is that question's missing half. `src/contract/fingerprint.ts`
+ * classifies every name here as covered by the payload fixture or explicitly
+ * not, and `engine-contract.test.ts` proves the covered ones are really called.
+ * A verb added to `WorldEngine` and not here fails to COMPILE -- `satisfies`
+ * refuses a missing key as it refuses an excess one, and this file is inside
+ * `tsconfig.public.json`'s graph, so `public-typecheck.test.ts` fails on it
+ * during an ordinary `vitest run`. A verb listed here and not classified fails
+ * the contract suite. Neither can be arrived at by forgetting.
+ */
+export const WORLD_ENGINE_METHODS = Object.keys({
+  applyCommand: null,
+  commandPartitions: null,
+  evict: null,
+  hydrate: null,
+  offerPartitions: null,
+  offersFor: null,
+  onEvent: null,
+  residency: null,
+  seat: null,
+  serializePartitions: null,
+  viewFor: null,
+  viewPartitions: null,
+} satisfies Record<keyof WorldEngine, null>) as readonly (keyof WorldEngine)[];
