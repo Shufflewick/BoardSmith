@@ -445,7 +445,8 @@ export interface WorldCommandHandler {
    *
    * Everything named on the LAST round is what gets loaded and reported dirty,
    * so a declaration must keep naming what it already asked for -- see the
-   * worked example in `docs/PERSISTENT-WORLDS.md`.
+   * worked example in `docs/persistent-worlds.md`, which is this repository's
+   * authoring guide now that the contract is here (#165).
    */
   partitions(
     args: Readonly<Record<string, unknown>>,
