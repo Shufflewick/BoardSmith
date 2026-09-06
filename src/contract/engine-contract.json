@@ -1,7 +1,7 @@
 {
-  "revision": 36,
+  "revision": 37,
   "bundleProtocol": 1,
-  "surfaceHash": "475a587c20948b74",
+  "surfaceHash": "6bcfaf5333f02205",
   "payloadHash": "1d3a21bebd77753c",
   "history": [
     {
@@ -291,6 +291,14 @@
       "surfaceHash": "475a587c20948b74",
       "payloadHash": "1d3a21bebd77753c",
       "summary": "A world's verbs are Actions. worldAction() and worldClockAction() replace the flat command table; the seat's offer is its enumerated actions as ActionMetadata; ActionDefinition gains an optional world block carrying needs and seatless; ScheduleRequest names an action rather than a command and takes scalar args only. The world command contract types are deleted."
+    },
+    {
+      "revision": 37,
+      "date": "2026-09-06",
+      "bundleProtocol": 1,
+      "surfaceHash": "6bcfaf5333f02205",
+      "payloadHash": "1d3a21bebd77753c",
+      "summary": "A world action can take back a keyed timer with ctx.world.cancel(key), and boardsmith/world exports resumeDueOf() -- the inverse of catchUpPlan's fold, which a host stamps a failed occurrence's retry with so the fold is not lost."
     }
   ]
 }

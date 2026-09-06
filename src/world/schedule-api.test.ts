@@ -131,7 +131,9 @@ describe("#37 item 3 — ctx.schedule() as the parent applies it", () => {
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.refusal.message).toContain("give the schedule a KEY");
-    expect(result.refusal.message).toContain("cancel one");
+    // NAMING A REMEDY THAT EXISTS (#177). This said "cancel one of the pending
+    // events" while `ScheduleRequest` had no cancel on it at all.
+    expect(result.refusal.message).toContain("ctx.world.cancel(key)");
     expect(result.refusal.message).toContain("LAZY");
   });
 
@@ -549,5 +551,166 @@ describe("#105 — the per-world ceiling is the backstop", () => {
       worldPending: WORLD_MAX_PENDING_EVENTS - 1,
     });
     expect(result.ok).toBe(true);
+  });
+});
+
+/**
+ * Issue #177: A SCHEDULE REQUEST CAN CANCEL.
+ *
+ * `schedule.ts`'s two cap refusals have told an author to "cancel a pending
+ * timer you no longer need" since the caps existed, and there was no way to do
+ * it -- a refusal naming a remedy the API did not offer, which is the trap this
+ * repo's own rule forbids.
+ *
+ * A cancel is KEYED THE WAY ARMING IS KEYED: `(owner, key)`, with the owner
+ * stamped from the acting seat rather than named by the request. That is the
+ * same sentence the arm side rests on -- a bundle cannot charge its events to
+ * somebody else's budget -- read backwards: a bundle cannot forget somebody
+ * else's timer either, because it has no way to address one.
+ */
+describe("#177 — a keyed timer can be taken back", () => {
+  it("NAMES the pending row for deletion and plans no event in its place", () => {
+    const held = plan([], [{ delayMs: 60_000, key: "raid", action: "resolveRaid" }]);
+    const queue = applied([], held);
+
+    const result = plan(queue, [{ cancel: "raid" }]);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.events).toEqual([]);
+    expect(result.replaced).toEqual([queue[0]!.id]);
+    expect(applied(queue, result)).toEqual([]);
+  });
+
+  it("is IDEMPOTENT: cancelling a key nothing holds changes nothing", () => {
+    // A wake can always be late, and the queue is not readable from a handler.
+    // "Whoever arrives first clears the field, the loser finds it cleared and
+    // returns" is the pattern a keyed deadline is for, and the loser is exactly
+    // the caller whose timer already fired. Refusing here would unwind a seat's
+    // perfectly good answer over a race it cannot observe or avoid.
+    const held = unkeyed("p1", 2);
+    const result = plan(held, [{ cancel: "never-armed" }]);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.events).toEqual([]);
+    expect(result.replaced).toEqual([]);
+    expect(applied(held, result)).toEqual(held);
+  });
+
+  it("reaches only THIS owner's key, so one player cannot forget another's timer", () => {
+    const theirs = plan([], [{ delayMs: 60_000, key: "raid", action: "resolveRaid" }], "p2");
+    const queue = applied([], theirs);
+
+    const result = plan(queue, [{ cancel: "raid" }], "p1");
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.replaced).toEqual([]);
+    expect(applied(queue, result)).toEqual(queue);
+  });
+
+  it("FREES the keyed budget, which is what makes the cap's advice true", () => {
+    // `keyedScheduleRefusal` tells an author at the cap to cancel a timer they
+    // no longer need. If a cancel did not release the key it named, that
+    // sentence would still be false -- the author would do exactly as told and
+    // be refused again in the same breath.
+    const full = keyed("p1", WORLD_MAX_KEYED_PENDING_PER_PLAYER);
+    const refused = plan(full, [{ delayMs: 5, key: "fresh", action: "tick" }]);
+    expect(refused.ok).toBe(false);
+
+    const result = plan(full, [
+      { cancel: "k-0" },
+      { delayMs: 5, key: "fresh", action: "tick" },
+    ]);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.replaced).toEqual([full[0]!.id]);
+    expect(result.events.map((e) => e.key)).toEqual(["fresh"]);
+  });
+
+  it("FREES the world's own ceiling too, so a full queue is not a dead end", () => {
+    const held = keyed("p1", 1);
+    const refused = plan(held, [{ delayMs: 5, key: "fresh", action: "tick" }], "p1", {
+      worldPending: WORLD_MAX_PENDING_EVENTS,
+    });
+    expect(refused.ok).toBe(false);
+
+    const result = plan(
+      held,
+      [{ cancel: "k-0" }, { delayMs: 5, key: "fresh", action: "tick" }],
+      "p1",
+      { worldPending: WORLD_MAX_PENDING_EVENTS },
+    );
+    expect(result.ok).toBe(true);
+  });
+
+  it("takes back an event THIS SAME COMMAND armed, rather than planning a ghost", () => {
+    // Arm-then-cancel in one handler. The planned event must not survive, and
+    // the durable row it displaced must still be named once -- naming it twice
+    // would ask the host to delete a key it has already deleted.
+    const held = plan([], [{ delayMs: 1, key: "raid", action: "resolveRaid" }]);
+    const queue = applied([], held);
+
+    const result = plan(queue, [
+      { delayMs: 60_000, key: "raid", action: "resolveRaid" },
+      { cancel: "raid" },
+    ]);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.events).toEqual([]);
+    expect(result.replaced).toEqual([queue[0]!.id]);
+    expect(applied(queue, result)).toEqual([]);
+  });
+
+  it("re-arming after a cancel in one command leaves exactly one event", () => {
+    const held = plan([], [{ delayMs: 1, key: "raid", action: "resolveRaid" }]);
+    const queue = applied([], held);
+
+    const result = plan(queue, [
+      { cancel: "raid" },
+      { delayMs: 60_000, key: "raid", action: "resolveRaid" },
+    ]);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.events).toHaveLength(1);
+    expect(result.replaced).toEqual([queue[0]!.id]);
+    expect(applied(queue, result)).toHaveLength(1);
+  });
+
+  it("charges a clock action's cancel to the WORLD, like its schedules", () => {
+    const world = plan([], [{ delayMs: 1, key: "tick", action: "settle" }], null);
+    const queue = applied([], world);
+    expect(queue[0]!.owner).toBe(WORLD_OWNER);
+
+    const result = plan(queue, [{ cancel: "tick" }], null);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.replaced).toEqual([queue[0]!.id]);
+  });
+
+  it("COUNTS AGAINST THE BATCH CAP, because the host still has to carry it", () => {
+    // The batch cap bounds the ASKING rather than the queue -- a handler
+    // looping a million times over one key writes no row and still hands the
+    // host a million requests to walk. A cancel is one of those.
+    const result = plan(
+      [],
+      Array.from({ length: WORLD_MAX_SCHEDULES_PER_COMMAND + 1 }, () => ({
+        cancel: "raid",
+      })),
+    );
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.refusal.code).toBe("schedule-batch-cap");
+  });
+
+  it("REFUSES a cancel that names no key, at the offending line", () => {
+    const result = plan([], [{ cancel: "" }]);
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.refusal.code).toBe("invalid-schedule-cancel");
+    expect(result.refusal.message).toMatch(/name the key/i);
   });
 });

@@ -100,6 +100,8 @@ import {
   scheduleBudget,
   WORLD_OWNER,
   type ScheduleAllowance,
+  type ScheduleArm,
+  type ScheduleCancel,
   type ScheduleRequest,
 } from "./schedule-api.js";
 import { worldRefusal, WorldRefusal } from "./refusals.js";
@@ -885,6 +887,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
         return this.rootOf(name);
       },
       schedule: () => refuse("schedule"),
+      cancel: () => refuse("cancel"),
       complete: () => refuse("complete"),
       emit: () => refuse("emit"),
     };
@@ -1291,11 +1294,21 @@ export class BoardSmithWorldEngine implements WorldEngine {
       emit: (scope: string, payload: unknown) => {
         ledger.events.push({ scope, payload });
       },
-      schedule: (request: ScheduleRequest) => {
+      schedule: (request: ScheduleArm) => {
         // REFUSED AT THE OFFENDING LINE. The host is still the authority and
         // re-plans everything before it writes a single event; this is what
         // makes the refusal land inside the action, so the whole thing unwinds
         // and `refused` means the world is unchanged.
+        const refusal = budget.admit(request);
+        if (refusal !== null) raise(refusal);
+        ledger.schedules.push(request);
+      },
+      // ONTO THE SAME LIST, in the order the handler wrote them. Cancel-then-arm
+      // under one key leaves a timer and arm-then-cancel leaves none, so the two
+      // cannot be collected separately without the host deciding which came
+      // first for the author.
+      cancel: (key: string) => {
+        const request: ScheduleCancel = { cancel: key };
         const refusal = budget.admit(request);
         if (refusal !== null) raise(refusal);
         ledger.schedules.push(request);
