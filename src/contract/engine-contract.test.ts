@@ -50,6 +50,7 @@ describe('engine contract', () => {
       'boardsmith/session',
       'boardsmith/session-host',
       'boardsmith/persistence',
+      'boardsmith/world',
     ]);
   });
 

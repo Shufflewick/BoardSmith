@@ -75,6 +75,17 @@ export const PLATFORM_ENTRYPOINTS = [
     specifier: 'boardsmith/persistence',
     module: () => import('../persistence/index.js'),
   },
+  // Imported directly by the games worker as its world runner core (#165):
+  // `games/src/world-*.ts` runs this entrypoint rather than its own copy, and a
+  // launched world pins the revision that carries it. Absent from this list, a
+  // build that adds or changes the world core mints no new revision, and the
+  // platform vendors a world-carrying engine under the label of a world-less
+  // archived one -- two different engines with one identity, which is the skew
+  // the archive exists to prevent.
+  {
+    specifier: 'boardsmith/world',
+    module: () => import('../world/index.js'),
+  },
 ] as const;
 
 /**
