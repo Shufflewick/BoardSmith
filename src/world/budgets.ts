@@ -28,6 +28,8 @@
  * deliberate.
  */
 
+import { MAX_FLAT_CHOICE_CANDIDATES } from "../engine/element/action-metadata.js";
+
 /** Every budget a world runs against. Complete, so nothing reads a default at
  *  the point of enforcement. */
 export interface WorldBudgets {
@@ -197,9 +199,11 @@ export function worldBudgets(overrides: WorldBudgetOverrides = {}): WorldBudgets
       overrides.maxPendingEvents ?? maxPlayers * maxUnkeyedPendingPerPlayer,
       "maxPendingEvents",
     ),
-    maxCandidatesPerSelection: positive(
-      overrides.maxCandidatesPerSelection ?? BASE.maxCandidatesPerSelection,
-      "maxCandidatesPerSelection",
+    maxCandidatesPerSelection: aboveReadingThreshold(
+      positive(
+        overrides.maxCandidatesPerSelection ?? BASE.maxCandidatesPerSelection,
+        "maxCandidatesPerSelection",
+      ),
     ),
     catchUpMaxRealIterations: positive(
       overrides.catchUpMaxRealIterations ?? BASE.catchUpMaxRealIterations,
@@ -207,6 +211,38 @@ export function worldBudgets(overrides: WorldBudgetOverrides = {}): WorldBudgets
     ),
     drainBatch: positive(overrides.drainBatch ?? BASE.drainBatch, "drainBatch"),
   };
+}
+
+/**
+ * THE TWO CANDIDATE NUMBERS, RECONCILED IN ONE PLACE (#170 R2).
+ *
+ * `MAX_FLAT_CHOICE_CANDIDATES` is the Action Panel's READING threshold: past it
+ * a wrapping row of pills stops being a sentence and becomes an unlabelled grid,
+ * so the panel renders the prompt and one control that hands focus to the board
+ * (`shouldDeferElementPickToBoard`). `maxCandidatesPerSelection` is the host's
+ * SAFETY NET: past it the offer's size is a function of the resident tree rather
+ * than of the declaration, which is the O(world) read the partitioned model
+ * exists to delete, so the world is refused when it is built.
+ *
+ * They describe one phenomenon and were set by two tickets (#172 and #169), so
+ * the relationship is stated once, here, and enforced: the safety net is
+ * STRICTLY ABOVE the reading threshold. A host that set it lower would make the
+ * panel's board handoff unreachable for worlds -- every set the engine admitted
+ * would already fit in the panel -- and #172's keyboard rule would have nothing
+ * to land on, silently, with no test able to catch it.
+ */
+function aboveReadingThreshold(value: number): number {
+  if (value > MAX_FLAT_CHOICE_CANDIDATES) return value;
+  throw new Error(
+    `\`maxCandidatesPerSelection\` is ${value}, which is not above the Action Panel's ` +
+    `reading threshold of ${MAX_FLAT_CHOICE_CANDIDATES}.\n` +
+    `  The two are one phenomenon: the panel hands a pick wider than ${MAX_FLAT_CHOICE_CANDIDATES} ` +
+    `candidates to the board, and this budget refuses a selection so wide that its size ` +
+    `is a function of the world rather than of the declaration.\n` +
+    `  Set it above ${MAX_FLAT_CHOICE_CANDIDATES} (the shipped default is ` +
+    `${BASE.maxCandidatesPerSelection}). To narrow what a world OFFERS, narrow the action's ` +
+    `\`from\`/\`filter\` -- offer the exits of the room the player is in, not the rooms of the world.`,
+  );
 }
 
 function positive(value: number, field: string): number {

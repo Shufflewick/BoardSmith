@@ -322,7 +322,6 @@ describe('initCommand --world — a persistent world project (#168)', () => {
     for (const file of [
       'src/rules/actions.ts',
       'src/rules/flow.ts',
-      'src/ui/uis.ts',
       'src/ui/App.vue',
       'index.html',
       'src/main.ts',
@@ -330,6 +329,33 @@ describe('initCommand --world — a persistent world project (#168)', () => {
     ]) {
       expect(has(file), `${file} should not be scaffolded`).toBe(false);
     }
+  });
+
+  it('DOES write src/ui/uis.ts — a world declares its boards like a table (#170)', async () => {
+    await scaffoldWorld();
+    const uis = read('src/ui/uis.ts');
+    expect(uis).toContain('defineGameUIs');
+    expect(uis).toContain('defaultUI(WorldBoard)');
+    // AutoUI as a dev-only alternate: the shell's own renderer over the element
+    // tree, which a world's view IS. It costs nothing in a production build.
+    expect(uis).toContain("devUI(() => import('boardsmith/ui/auto-ui'))");
+  });
+
+  it("mounts WorldShell over that registry, not over a hand-rolled prop bag", async () => {
+    await scaffoldWorld();
+    const main = read('src/world-main.ts');
+    expect(main).toContain('WorldShell');
+    expect(main).toContain("./ui/uis.js");
+  });
+
+  it("scaffolds a BOARD, not a second action panel", async () => {
+    await scaffoldWorld();
+    const board = read('src/ui/components/WorldBoard.vue');
+    // The shell draws the verbs. A board that read the offers and drew its own
+    // buttons is the duplication #170 took out of four games.
+    expect(board).not.toContain('validElements');
+    expect(board).not.toContain("emit('act'");
+    expect(board).toContain('gameView');
   });
 
   it('IMPORTS the contract from boardsmith/world and re-declares none of it', async () => {
@@ -387,7 +413,11 @@ describe('initCommand --world — a persistent world project (#168)', () => {
   it("serves the world's own surface from world.html, not the table's index.html", async () => {
     await scaffoldWorld();
     expect(read('world.html')).toContain('/src/world-main.ts');
-    expect(read('src/ui/WorldApp.vue')).toContain('WorldShell');
+    // The mount is `src/world-main.ts` itself now: `WorldApp.vue` was one more
+    // file whose only job was to name the shell and hand it a board, and the
+    // registry does that (#170).
+    expect(read('src/world-main.ts')).toContain('WorldShell');
+    expect(has('src/ui/WorldApp.vue')).toBe(false);
   });
 
   it('tells the author, in the project itself, how to run the world (#167)', async () => {

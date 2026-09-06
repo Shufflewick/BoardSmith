@@ -545,166 +545,76 @@ describe('the world', () => {
 `;
 }
 
-/** `world.html` -- the entry a world's own surface is served from. */
-export function generateWorldHtml(config: ProjectConfig): string {
-  return `<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <title>${config.displayName}</title>
-    <style>
-      * { margin: 0; padding: 0; box-sizing: border-box; }
-      html, body { height: 100%; }
-    </style>
-  </head>
-  <body>
-    <div id="app"></div>
-    <script type="module" src="/src/world-main.ts"></script>
-  </body>
-</html>
-`;
-}
-
-/** `src/world-main.ts` -- the world entry point's mount. */
-export function generateWorldMainTs(): string {
-  return `import { createApp } from 'vue';
-import { WorldApp } from './ui/index.js';
-
-createApp(WorldApp).mount('#app');
-`;
-}
-
-/** `src/ui/index.ts` for a world project. */
-export function generateWorldUiIndexTs(): string {
-  return `import WorldApp from './WorldApp.vue';
-export { WorldApp };
-`;
-}
-
-/** `src/ui/WorldApp.vue` -- the shell, wrapped round this world's board. */
-export function generateWorldAppVue(config: ProjectConfig): string {
-  return `<script setup lang="ts">
 /**
- * WorldShell is GameShell's twin, not a mode of it: a world has no turn, no
- * flow position and no action table, so it owns the wire and the three states
- * no game should have to write itself -- a host that has said nothing, a
- * refusal, and a dropped connection. Everything a player looks at once they are
- * in is WorldBoard, below, and yours.
+ * `src/ui/uis.ts` -- the board registry, which a WORLD has too now (#170).
+ *
+ * The same file a table declares, for the same reason: it is the one place a
+ * game says which boards it owns and which one production renders, and the
+ * compiler counts the defaults. A world had none because it "had no turn, no
+ * flow position and no action table to switch boards over" -- #169 gave it an
+ * action table and the rest of that reason went with it.
+ *
+ * `devUI` costs nothing in a production build: its `import()` sits inside a
+ * branch on `import.meta.env.DEV`, which Vite constant-folds away, so AutoUI is
+ * a switcher entry under `boardsmith dev` and absent from what players download.
  */
-import { WorldShell } from 'boardsmith/ui';
+export function generateWorldUisTs(): string {
+  return `import { defineGameUIs, defaultUI, devUI } from 'boardsmith/ui';
 import WorldBoard from './components/WorldBoard.vue';
-</script>
 
-<template>
-  <WorldShell :ui="WorldBoard" display-name="${config.displayName}" />
-</template>
+export default defineGameUIs({
+  WorldBoard: defaultUI(WorldBoard),
+  // The shell's own renderer over your element tree. A world's view IS the
+  // serialized tree a table's is, so this works with no renderer of your own --
+  // useful before your board exists, and for seeing what the engine actually
+  // holds.
+  Auto: devUI(() => import('boardsmith/ui/auto-ui')),
+});
 `;
 }
 
-/** `src/ui/components/WorldBoard.vue` -- this world's own surface. */
+/** `src/ui/components/WorldBoard.vue` -- this world's BOARD AREA. */
 export function generateWorldBoardVue(): string {
   return `<script setup lang="ts">
 /**
- * This world's board. WorldShell hands it everything below and expects \`act\`
- * back; a board that would rather inject than emit calls \`useWorld()\`.
+ * This world's board, and ONLY its board.
  *
- * \`view\` is YOUR shape -- the per-seat projection your \`world.view\`
- * declaration named -- so nothing between your rules and here interprets it.
+ * The shell around it draws the seat list, who is here, the log, and the action
+ * panel over every verb this seat may take -- so nothing here has to, and
+ * nothing here can lose them. A custom UI is a board area inside the shared
+ * shell, never a replacement for it; that rule has always held for tables and
+ * holds for worlds since BoardSmith #170.
  *
- * \`actions\` is what this seat may do, enumerated by the world with each
- * selection's candidates already resolved: an element selection arrives as
- * \`validElements\`, a choice as \`choices\`. That is the difference an Action
- * makes -- the world can say WHICH rows are tendable this instant, so this
- * board draws a button per real candidate instead of asking the player to
- * describe one.
+ * \`gameView\` is the serialized element tree for this seat, pruned to the
+ * partitions your \`world.view\` declaration named -- the same shape a table's
+ * board renders, which is why the shell's own AutoUI can draw it too.
+ *
+ * TO MAKE SOMETHING CLICKABLE, give it \`v-bind="boardRef(element)"\` from
+ * \`useBoardInteraction()\`: the action panel and the board are two
+ * representations of one state, and the bridge keeps them in step. Do not read
+ * the offers and draw your own buttons -- that is the panel's job, and a second
+ * copy is how the two drift apart.
  */
-import { computed } from 'vue';
-import type { WorldActionOffer, WorldNarration } from 'boardsmith/ui';
-
 const props = defineProps<{
-  view: unknown;
-  seat: number | null;
-  actions: readonly WorldActionOffer[];
-  acting: boolean;
+  gameView: unknown;
+  playerSeat: number;
+  availableActions: string[];
   worldName: string | null;
-  presence: readonly number[];
-  events: readonly WorldNarration[];
+  presence: readonly number[] | null;
 }>();
-
-const emit = defineEmits<{ act: [action: string, args?: Record<string, unknown>] }>();
-
-/** An action that asks nothing can be a button on its own. */
-const simpleActions = computed(() => props.actions.filter((action) => action.selections.length === 0));
-
-/** An action with one question is a button per candidate. A verb that asks two
- *  questions in a row wants a surface of your own, which is what this file is
- *  for. */
-const askingActions = computed(() => props.actions.filter((action) => action.selections.length === 1));
-
-/** The answer to an action's first question, under the name that question was
- *  asked by -- which is what \`act\` sends and the engine resolves. */
-function answer(action: WorldActionOffer, value: unknown): Record<string, unknown> {
-  const selection = action.selections[0];
-  return selection ? { [selection.name]: value } : {};
-}
 </script>
 
 <template>
   <main class="world-board">
-    <h1>{{ worldName ?? 'This world' }}</h1>
-    <p class="world-board__seat">
-      You are seat {{ seat ?? 'none' }}. {{ presence.length }} here right now.
+    <!-- Replace this with your world. Everything the shell already says -- the
+         world's name, your seat, who is here, what you may do -- is chrome, and
+         repeating it here is the duplication #170 removed from four games. -->
+    <p class="world-board__placeholder">
+      This world has no board of its own yet. Draw one here, or switch to
+      <strong>Auto</strong> in the dev UI switcher to see the element tree the
+      engine actually holds.
     </p>
-
-    <ul class="world-board__verbs">
-      <li v-for="action in simpleActions" :key="action.name">
-        <button
-          type="button"
-          :disabled="acting || !!action.disabled"
-          :aria-label="action.disabled ?? action.prompt ?? action.name"
-          @click="emit('act', action.name)"
-        >
-          {{ action.prompt ?? action.name }}
-        </button>
-      </li>
-    </ul>
-
-    <section v-for="action in askingActions" :key="action.name" class="world-board__ask">
-      <h2>{{ action.prompt ?? action.name }}</h2>
-      <!-- A greyed action always says why: the world answered with a reason,
-           and swallowing it leaves a dead button on the screen. -->
-      <p v-if="action.disabled">{{ action.disabled }}</p>
-      <ul v-else class="world-board__verbs">
-        <li v-for="element in action.selections[0]?.validElements ?? []" :key="element.id">
-          <button
-            type="button"
-            :disabled="acting || !!element.disabled"
-            :aria-label="element.disabled ?? element.display ?? String(element.id)"
-            @click="emit('act', action.name, answer(action, element.id))"
-          >
-            {{ element.display ?? element.id }}
-          </button>
-        </li>
-        <li v-for="choice in action.selections[0]?.choices ?? []" :key="String(choice.value)">
-          <button
-            type="button"
-            :disabled="acting || !!choice.disabled"
-            :aria-label="choice.disabled ?? choice.display"
-            @click="emit('act', action.name, answer(action, choice.value))"
-          >
-            {{ choice.display }}
-          </button>
-        </li>
-      </ul>
-    </section>
-
-    <h2>What has happened</h2>
-    <ol class="world-board__narration">
-      <li v-for="(event, index) in events" :key="index">
-        {{ JSON.stringify(event.payload) }}
-      </li>
-    </ol>
+    <pre class="world-board__view">{{ gameView }}</pre>
   </main>
 </template>
 
@@ -715,15 +625,12 @@ function answer(action: WorldActionOffer, value: unknown): Record<string, unknow
   gap: 1rem;
   padding: 1rem;
 }
-.world-board__seat {
+.world-board__placeholder {
   color: var(--bsg-ink-2);
 }
-.world-board__verbs,
-.world-board__narration {
-  list-style: none;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
+.world-board__view {
+  overflow: auto;
+  font-size: 12px;
 }
 </style>
 `;
@@ -740,36 +647,21 @@ import WorldBoard from '../src/ui/components/WorldBoard.vue';
 describe('WorldBoard — a11y floor (axe-core scan)', () => {
   it('has no axe-core violations', async () => {
     // axe.run() only scans nodes that are actually IN the document, so mount
-    // with attachTo and detach in \`finally\`. Mount with a real offer -- one
-    // whose selection carries the candidates the world enumerated -- so the
-    // board renders focusable controls with game-semantic labels; an empty
-    // render proves nothing. This is the copy-me template for every UI chunk.
+    // with attachTo and detach in \`finally\`. This is the copy-me template for
+    // every UI chunk: mount your board with a real view, so it renders the
+    // controls a player would meet -- an empty render proves nothing.
+    //
+    // The VERBS are not here, and that is the point: the shell's action panel
+    // draws them, and it carries the accessible names and the keyboard path.
+    // What this scan is for is what YOU draw.
     const wrapper = mount(WorldBoard, {
       attachTo: document.body,
       props: {
-        view: {},
-        seat: 1,
-        actions: [
-          {
-            name: 'tend',
-            prompt: 'Tend one row of your plot',
-            selections: [
-              {
-                name: 'row',
-                type: 'element',
-                prompt: 'Which row?',
-                validElements: [
-                  { id: 11, display: 'north' },
-                  { id: 12, display: 'south', disabled: 'This row is fully grown' },
-                ],
-              },
-            ],
-          },
-        ],
-        acting: false,
+        gameView: { className: 'Game', children: [] },
+        playerSeat: 1,
+        availableActions: ['tend'],
         worldName: 'A world',
         presence: [1],
-        events: [],
       },
     });
     try {

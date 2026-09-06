@@ -3,21 +3,18 @@
  *
  * The server itself is exercised in a browser (that is what a dev host is for);
  * what is asserted here is the part that decides things before a socket exists
- * -- which document a project's world surface comes from, and the fact that a
+ * -- which document a project's world surface comes from (#170: there is now
+ * exactly one, and a project that had none is given one), and the fact that a
  * world project no longer needs a table half at all.
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, readdirSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, readdirSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import {
-  WORLD_ENTRY_HTML,
-  WORLD_IFRAME_PATH,
-  WORLD_WS_PATH,
-  resolveWorldSurface,
-} from './dev-world.js';
+import { WORLD_IFRAME_PATH, WORLD_WS_PATH } from './dev-world.js';
+import { ensureWorldEntry, WORLD_ENTRY_HTML } from '../lib/world-entry.js';
 import { GAME_IFRAME_PATH } from './dev.js';
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
@@ -32,30 +29,26 @@ afterEach(() => {
 });
 
 describe('which surface a world run serves', () => {
-  it("serves the bundle's own world.html when it has one", () => {
-    writeFileSync(join(dir, WORLD_ENTRY_HTML), '<!doctype html>');
-    const surface = resolveWorldSurface(dir, DEV_HOST_DIR);
-    expect(surface.ownWorldUi).toBe(true);
-    expect(surface.path).toBe(join(dir, WORLD_ENTRY_HTML));
+  it('serves the bundle\'s own world.html, and nothing else (#170)', async () => {
+    // There used to be two documents and a branch: the bundle's `world.html`
+    // when it had one, and a fallback with a debug board when it did not. Only
+    // one of those is a path production takes, which made local behaviour a
+    // poor guide to published behaviour for exactly the games most likely to be
+    // prototypes.
+    //
+    // The branch is gone because the case it existed for is: a world project
+    // always has an entry, and `ensureWorldEntry` writes it into the author's
+    // own repository the first time the world is built or run.
+    const { created } = await ensureWorldEntry(dir, 'Gloamhall');
+    expect(created).toContain(WORLD_ENTRY_HTML);
+    expect(existsSync(join(dir, WORLD_ENTRY_HTML))).toBe(true);
   });
 
-  it("serves the shell's own surface when the project has written none", () => {
-    // `example-rts` and `example-mud` are both this shape. A world with no UI
-    // must still be openable, or the games most likely to be prototypes are
-    // the ones with no local loop.
-    const surface = resolveWorldSurface(dir, DEV_HOST_DIR);
-    expect(surface.ownWorldUi).toBe(false);
-    expect(surface.path).toBe(join(DEV_HOST_DIR, 'world-fallback.html'));
-  });
-
-  it("the shell's own surface really mounts WorldShell, not a second protocol", () => {
-    // The whole argument for the fallback: a world with no UI is exercised
-    // through the code path a world with one takes. If this ever stopped
-    // mounting WorldShell it would be a private debug console wearing the
-    // fallback's name, and would prove nothing about a published run.
-    const main = readFileSync(join(DEV_HOST_DIR, 'world-fallback-main.ts'), 'utf-8');
+  it('mounts WorldShell over the registry, so there is no second protocol', async () => {
+    await ensureWorldEntry(dir, 'Gloamhall');
+    const main = readFileSync(join(dir, 'src', 'world-main.ts'), 'utf-8');
     expect(main).toContain('WorldShell');
-    expect(main).toContain('WorldDevBoard');
+    expect(main).toContain("./ui/uis.js");
   });
 });
 
@@ -78,10 +71,13 @@ describe('the two dev hosts share no path and no socket', () => {
 });
 
 describe('#167: `boardsmith dev` no longer needs a table half to open a world', () => {
-  it('a world project scaffolded with no src/main.ts has a surface to serve', () => {
+  it('a world project scaffolded with no src/main.ts has a surface to serve', async () => {
     mkdirSync(join(dir, 'src'), { recursive: true });
     expect(readdirSync(join(dir, 'src'))).not.toContain('main.ts');
-    expect(resolveWorldSurface(dir, DEV_HOST_DIR).path).toBeTruthy();
+    await ensureWorldEntry(dir, 'Gloamhall');
+    expect(existsSync(join(dir, WORLD_ENTRY_HTML))).toBe(true);
+    // Still no table half: the world entry is the whole of what a world needs.
+    expect(readdirSync(join(dir, 'src'))).not.toContain('main.ts');
   });
 
   it('devCommand takes the world road before anything reads the table entry', () => {

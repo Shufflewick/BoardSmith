@@ -3,12 +3,12 @@
  * #13: the Action Panel's footprint is a CONSTANT declared in CSS, and the board
  * region reserves it as layout — nothing measures the panel.
  *
- * These assertions are made against GameShell.vue's real `<style scoped>` block
+ * These assertions are made against the shells' real `<style scoped>` blocks
  * (parsed here, not reproduced), because the reservation IS the CSS: a test that
  * restated the numbers would pass while the shell shipped different ones.
  *
  * What must hold, per tier:
- *   1. The tokens exist on `.game-shell` and every consumer reads them — no
+ *   1. The tokens exist on `.game-shell__game` and every consumer reads them — no
  *      second magic number anywhere.
  *   2. Reachability: `.boardregion`'s padding-bottom + `.game-shell__zoom-container`'s
  *      margin-bottom >= `.actionbar`'s max-height, so even a panel grown to its
@@ -22,10 +22,20 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const source = fs.readFileSync(
-  path.join(path.dirname(fileURLToPath(import.meta.url)), 'GameShell.vue'),
-  'utf-8',
-);
+/**
+ * BOTH HALVES OF THE SHELL, because since #170 the constraint spans the pair.
+ *
+ * The footprint tokens, the action bar and the board region live in the shared
+ * chrome (`PlayShell`); the bot demo control bar, which reads the same reserved
+ * quantity so it never sits over the panel, stays with the table adapter. The
+ * reachability arithmetic below must hold ACROSS the two, and one definition of
+ * each token must serve both -- which is exactly what reading them as one text
+ * proves. `PlayShell` comes first so its declarations are the ones found.
+ */
+const source = [
+  fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), 'PlayShell.vue'), 'utf-8'),
+  fs.readFileSync(path.join(path.dirname(fileURLToPath(import.meta.url)), 'GameShell.vue'), 'utf-8'),
+].join('\n');
 
 /** Every declaration of `prop` in the file, in source order (later wins per tier). */
 function declarations(prop: string): string[] {
@@ -36,18 +46,18 @@ function declarations(prop: string): string[] {
 /** The last declaration of `prop` inside the block that follows `selector`. */
 function declaration(selector: string, prop: string): string {
   const at = source.indexOf(`\n${selector} {`);
-  expect(at, `${selector} { … } not found in GameShell.vue`).toBeGreaterThan(-1);
+  expect(at, `${selector} { … } not found in PlayShell.vue or GameShell.vue`).toBeGreaterThan(-1);
   const block = source.slice(at, source.indexOf('\n}', at));
   const m = block.match(new RegExp(`${prop}\\s*:\\s*([^;]+);`));
   expect(m, `${prop} not declared on ${selector}`).not.toBeNull();
   return m![1].trim();
 }
 
-/** The `.game-shell` block inside the landscape-short media query. */
+/** The token block inside the landscape-short media query. */
 function landscapeTokens(): string {
   const at = source.indexOf('@media (orientation: landscape) and (max-height: 600px)');
   expect(at).toBeGreaterThan(-1);
-  return source.slice(at, source.indexOf('\n}\n', source.indexOf('.game-shell {', at)));
+  return source.slice(at, source.indexOf('\n}\n', source.indexOf('.game-shell__game {', at)));
 }
 
 type Env = { safeArea: number; dvh: number };
@@ -83,11 +93,11 @@ function px(expr: string, tokens: Record<string, string>, env: Env): number {
 function tokensFor(tier: 'base' | 'landscape-short', zoom = 1): Record<string, string> {
   const base: Record<string, string> = {
     '--zoom-level': String(zoom),
-    '--bsg-panel-row': declaration('.game-shell', '--bsg-panel-row'),
-    '--bsg-panel-gap': declaration('.game-shell', '--bsg-panel-gap'),
-    '--bsg-panel-pad': declaration('.game-shell', '--bsg-panel-pad'),
-    '--bsg-panel-max': declaration('.game-shell', '--bsg-panel-max'),
-    '--bsg-panel-reserved': declaration('.game-shell', '--bsg-panel-reserved'),
+    '--bsg-panel-row': declaration('.game-shell__game', '--bsg-panel-row'),
+    '--bsg-panel-gap': declaration('.game-shell__game', '--bsg-panel-gap'),
+    '--bsg-panel-pad': declaration('.game-shell__game', '--bsg-panel-pad'),
+    '--bsg-panel-max': declaration('.game-shell__game', '--bsg-panel-max'),
+    '--bsg-panel-reserved': declaration('.game-shell__game', '--bsg-panel-reserved'),
   };
   if (tier === 'base') return base;
   const block = landscapeTokens();
@@ -107,8 +117,8 @@ const ENVIRONMENTS: Env[] = [
 
 describe('#13: the Action Panel reserves a constant, token-derived footprint', () => {
   it('the shell declares the panel tokens and every consumer reads them', () => {
-    expect(declaration('.game-shell', '--bsg-panel-row')).toBe('44px'); // WCAG 2.5.8
-    expect(declaration('.game-shell', '--bsg-panel-gap')).toBe(declaration('.actionbar', 'gap'));
+    expect(declaration('.game-shell__game', '--bsg-panel-row')).toBe('44px'); // WCAG 2.5.8
+    expect(declaration('.game-shell__game', '--bsg-panel-gap')).toBe(declaration('.actionbar', 'gap'));
 
     expect(declaration('.actionbar', 'max-height')).toBe('var(--bsg-panel-max)');
     expect(declaration('.boardregion', 'padding-bottom')).toBe('var(--bsg-panel-reserved)');

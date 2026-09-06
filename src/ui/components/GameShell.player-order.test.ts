@@ -166,10 +166,23 @@ describe('GameShell.vue source: panel ordering wiring', () => {
     expect(source).toMatch(/playerOrder:\s*'turn'/);
   });
 
-  it('feeds BOTH panels the ordered list (sidebar via playersWithConnection, mobile strip directly)', () => {
+  it('feeds the shared chrome ONE ordered list, which both its panels read', () => {
+    // Before #170 the sidebar took `playersWithConnection` and the mobile strip
+    // took `panelPlayers`, which is two sources for one ordering. `PlayShell`
+    // takes the list once and feeds both panels from it, so the strip now also
+    // carries the connection flags it was silently missing.
     expect(source).toMatch(/return panelPlayers\.value/);
-    expect(source).toMatch(/:players="panelPlayers"/);
     expect(source).toMatch(/:players="playersWithConnection"/);
+    expect(source).not.toMatch(/:players="panelPlayers"/);
+
+    const shellSource = fs.readFileSync(
+      path.join(path.dirname(fileURLToPath(import.meta.url)), 'PlayShell.vue'),
+      'utf-8',
+    );
+    // Two PlayersPanels -- the desktop sidebar and the mobile strip -- and one
+    // list feeding both.
+    expect(shellSource.match(/<PlayersPanel/g)).toHaveLength(2);
+    expect(shellSource).not.toMatch(/<PlayersPanel[\s\S]{0,300}:players="(?!players")/);
   });
 
   it('leaves the seat-ordered `players` array alone for every other consumer', () => {

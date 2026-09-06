@@ -5,6 +5,8 @@ import { mount } from '@vue/test-utils';
 import WorldShell from './WorldShell.vue';
 import { useWorld, type WorldContext } from './useWorld.js';
 import { WORLD_HOST_SOURCE, WORLD_UI_SOURCE } from './worldProtocol.js';
+import { defineGameUIs, defaultUI } from '../game-uis.js';
+import { useToast } from '../composables/useToast.js';
 
 /**
  * THE SHELL A BUNDLE MOUNTS FOR A RESIDENT WORLD (ShufflewickPub #128).
@@ -14,23 +16,32 @@ import { WORLD_HOST_SOURCE, WORLD_UI_SOURCE } from './worldProtocol.js';
  * is the game's own UI with the world in its props.
  */
 
-/** A world UI that renders what it was handed, so the props are visible in the
- *  markup rather than asserted against the component's internals. */
+/**
+ * A world BOARD that renders what it was handed, so the props are visible in
+ * the markup rather than asserted against the component's internals.
+ *
+ * Since #170 a world board is reached through the registry, exactly as a
+ * table's is, and it declares the SHARED board-area props rather than the
+ * hand-rolled prop bag `WorldShell` used to pass. Everything it used to draw
+ * for itself -- the world's name, the seat, presence, the log, the refusal --
+ * is the shell's now, which is the whole point of the ticket. What it still
+ * gets are the world-only props no table has.
+ */
 const Rooms = defineComponent({
   props: {
-    view: { type: null, required: true },
-    seat: { type: null, required: true },
-    actions: { type: Array, required: true },
-    acting: { type: Boolean, required: true },
+    gameView: { type: null, required: true },
+    playerSeat: { type: Number, required: true },
+    availableActions: { type: Array, required: true },
     worldName: { type: null, required: true },
     presence: { type: null, required: true },
     events: { type: Array, required: true },
+    phase: { type: String, required: true },
   },
-  emits: ['act'],
-  setup(props, { emit }) {
+  setup(props) {
+    const world = useWorld();
     return () =>
       h('div', { class: 'rooms' }, [
-        h('p', { class: 'seat' }, String(props.seat)),
+        h('p', { class: 'seat' }, String(props.playerSeat)),
         h(
           'p',
           { class: 'narration' },
@@ -38,19 +49,29 @@ const Rooms = defineComponent({
         ),
         h('p', { class: 'awake' }, ((props.presence as number[] | null) ?? []).join(',')),
         h('p', { class: 'title' }, String(props.worldName)),
-        h('p', { class: 'verbs' }, props.actions.map((a: any) => a.name).join(',')),
-        h('p', { class: 'said' }, String((props.view as any)?.said ?? '')),
-        h('button', { class: 'go', onClick: () => emit('act', 'move', { to: 'cellar' }) }, 'go'),
+        h('p', { class: 'verbs' }, (props.availableActions as string[]).join(',')),
+        h('p', { class: 'said' }, String((props.gameView as any)?.said ?? '')),
+        h('button', { class: 'go', onClick: () => void world.act('move', { to: 'cellar' }) }, 'go'),
       ]);
   },
 });
+
+const ROOMS_REGISTRY = defineGameUIs({ Rooms: defaultUI(Rooms) });
+
+/** Mount the shell over the registry, the way a bundle's `world.html` does. */
+function mountShell() {
+  return mount(WorldShell, { props: { uis: ROOMS_REGISTRY, displayName: 'Gloamhall' } });
+}
 
 function stateFrame(over: Record<string, unknown> = {}) {
   return {
     source: WORLD_HOST_SOURCE,
     type: 'world_state',
     phase: 'watching',
-    view: { said: 'the fire is low' },
+    // `viewFor` returns `{player, state, phase}` and `state` is the serialized
+    // element tree -- the SAME call a table's `PlayerState.view` carries, which
+    // is what lets AutoUI be a world's default board.
+    view: { player: 4, phase: 'watching', state: { said: 'the fire is low' } },
     seat: 4,
     actions: [{ name: 'look', selections: [] }, { name: 'move', selections: [] }],
     notice: null,
@@ -81,7 +102,9 @@ function mountNested(className: string, read: (world: WorldContext) => string) {
     },
   });
   const Outer = defineComponent({ setup: () => () => h('div', [h(Nested)]) });
-  return mount(WorldShell, { props: { ui: Outer, displayName: 'Gloamhall' } });
+  return mount(WorldShell, {
+    props: { uis: defineGameUIs({ Outer: defaultUI(Outer) }), displayName: 'Gloamhall' },
+  });
 }
 
 describe('WorldShell', () => {
@@ -92,20 +115,24 @@ describe('WorldShell', () => {
   it('says hello to the host on mount so a quiet world still draws', () => {
     const posted: unknown[] = [];
     const spy = vi.spyOn(window.parent, 'postMessage').mockImplementation((m) => posted.push(m));
-    const wrapper = mount(WorldShell, { props: { ui: Rooms, displayName: 'Gloamhall' } });
+    const wrapper = mountShell();
     expect(posted).toContainEqual({ source: WORLD_UI_SOURCE, type: 'world_ready' });
     spy.mockRestore();
     wrapper.unmount();
   });
 
   it('renders the game\'s own UI with the world in its props', async () => {
-    const wrapper = mount(WorldShell, { props: { ui: Rooms, displayName: 'Gloamhall' } });
+    const wrapper = mountShell();
     tell(wrapper, stateFrame());
     await nextTick();
     expect(wrapper.find('.rooms').exists()).toBe(true);
     expect(wrapper.find('.seat').text()).toBe('4');
     expect(wrapper.find('.title').text()).toBe('Gloamhall Rooms');
     expect(wrapper.find('.verbs').text()).toBe('look,move');
+    // The world's name, the seat list and the log are the SHELL's now — the
+    // board no longer has to draw any of them, and no longer can lose them.
+    expect(wrapper.find('[data-testid="bs-seats"]').text()).toContain('Seat 4');
+    expect(wrapper.find('[data-testid="bs-actionbar"]').exists()).toBe(true);
     expect(wrapper.find('.said').text()).toBe('the fire is low');
     expect(wrapper.find('.awake').text()).toBe('2,4');
     wrapper.unmount();
@@ -122,7 +149,7 @@ describe('WorldShell', () => {
   it('sends an action the game\'s UI emitted', async () => {
     const posted: any[] = [];
     const spy = vi.spyOn(window.parent, 'postMessage').mockImplementation((m) => posted.push(m));
-    const wrapper = mount(WorldShell, { props: { ui: Rooms, displayName: 'Gloamhall' } });
+    const wrapper = mountShell();
     tell(wrapper, stateFrame());
     await nextTick();
     await wrapper.find('.go').trigger('click');
@@ -133,7 +160,7 @@ describe('WorldShell', () => {
   });
 
   it('shows the refusal the host worded, and no board', async () => {
-    const wrapper = mount(WorldShell, { props: { ui: Rooms, displayName: 'Gloamhall' } });
+    const wrapper = mountShell();
     tell(wrapper, stateFrame({ phase: 'refused', view: null, notice: 'You are not a member of this world.' }));
     await nextTick();
     expect(wrapper.text()).toContain('You are not a member of this world.');
@@ -142,7 +169,7 @@ describe('WorldShell', () => {
   });
 
   it('keeps the last view on screen when the connection drops, and says so', async () => {
-    const wrapper = mount(WorldShell, { props: { ui: Rooms, displayName: 'Gloamhall' } });
+    const wrapper = mountShell();
     tell(wrapper, stateFrame());
     await nextTick();
     tell(wrapper, stateFrame({ phase: 'lost', notice: 'The connection dropped.' }));
@@ -154,7 +181,7 @@ describe('WorldShell', () => {
 
   it('says so when the host never speaks, rather than showing an empty world', async () => {
     vi.useFakeTimers();
-    const wrapper = mount(WorldShell, { props: { ui: Rooms, displayName: 'Gloamhall' } });
+    const wrapper = mountShell();
     vi.advanceTimersByTime(20_000);
     await nextTick();
     expect(wrapper.text()).toContain('has not sent it any state');
@@ -196,7 +223,7 @@ describe('WorldShell — narration (#331)', () => {
   }
 
   it('hands the log to the game\'s UI as a prop, oldest first', async () => {
-    const wrapper = mount(WorldShell, { props: { ui: Rooms, displayName: 'Gloamhall' } });
+    const wrapper = mountShell();
     tell(wrapper, stateFrame());
     narrate(wrapper, [{ scope: 'room:hall', payload: { said: 'hello' } }]);
     narrate(wrapper, [{ scope: 'world', payload: { dawn: true } }]);
@@ -227,12 +254,156 @@ describe('WorldShell — narration (#331)', () => {
     // A frame that has only been narrated at has been told nothing about what
     // the world IS. Drawing the game's UI over a null view would put an empty
     // room on screen for a world that simply has not answered yet.
-    const wrapper = mount(WorldShell, { props: { ui: Rooms, displayName: 'Gloamhall' } });
+    const wrapper = mountShell();
     narrate(wrapper, [{ scope: 'world', payload: { dawn: true } }]);
     await nextTick();
 
     expect(wrapper.find('.rooms').exists()).toBe(false);
     expect(wrapper.text()).toContain('Looking around');
+    wrapper.unmount();
+  });
+});
+
+/**
+ * #170: A WORLD GETS THE TABLE'S CHROME, AND THE GAME SUPPLIES THE BOARD.
+ *
+ * Four bundles were each hand-writing the same masthead, the same refusal line
+ * and the same "waiting for your projection" panel against an untyped prop bag
+ * that did not even match. These are the surfaces they no longer have to.
+ */
+describe('WorldShell — the shared chrome (#170)', () => {
+  it('draws the seat list, the log and the action bar the table draws', async () => {
+    const wrapper = mountShell();
+    tell(wrapper, stateFrame());
+    await nextTick();
+    expect(wrapper.find('[data-testid="bs-seats"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="bs-log"]').exists()).toBe(true);
+    expect(wrapper.find('[data-testid="bs-action-panel"]').exists()).toBe(true);
+    wrapper.unmount();
+  });
+
+  it('offers the seat its enumerated actions in the shared panel', async () => {
+    const wrapper = mountShell();
+    tell(wrapper, stateFrame());
+    await nextTick();
+    expect(wrapper.find('[data-testid="bs-action-panel"]').text().toLowerCase()).toContain('look');
+    wrapper.unmount();
+  });
+
+  it('names the seats when the host says who they are, and numbers them when it does not', async () => {
+    const numbered = mountShell();
+    tell(numbered, stateFrame());
+    await nextTick();
+    expect(numbered.find('[data-testid="bs-seats"]').text()).toContain('Seat 4');
+    numbered.unmount();
+
+    const named = mountShell();
+    tell(named, stateFrame({ players: [{ seat: 4, name: 'Ivy' }, { seat: 2, name: 'Rook' }] } as never));
+    await nextTick();
+    expect(named.find('[data-testid="bs-seats"]').text()).toContain('Ivy');
+    named.unmount();
+  });
+
+  it('marks who is here on the seat rows rather than in a list of its own', async () => {
+    const wrapper = mountShell();
+    tell(wrapper, stateFrame({ players: [{ seat: 2, name: 'Rook' }, { seat: 4, name: 'Ivy' }] } as never));
+    await nextTick();
+    // presence is [2, 4]: both here.
+    expect(wrapper.findAll('[data-testid="bs-seats"] .conn-status.is-online').length).toBe(2);
+    wrapper.unmount();
+  });
+
+  it('puts a narration line in the log ONLY when the game wrote one', async () => {
+    const wrapper = mountShell();
+    tell(wrapper, stateFrame());
+    tell(wrapper, {
+      source: WORLD_HOST_SOURCE,
+      type: 'world_events',
+      events: [
+        { scope: 'room:hall', payload: { said: 'hello' } },
+        { scope: 'room:hall', payload: { said: 'hello' }, text: 'Rook says hello.' },
+      ],
+    });
+    await nextTick();
+    const log = wrapper.find('[data-testid="bs-log"]').text();
+    expect(log).toContain('Rook says hello.');
+    expect(log).not.toContain('{');
+    wrapper.unmount();
+  });
+
+  it('says what an empty world log means, which is not what an empty table log means', async () => {
+    const wrapper = mountShell();
+    tell(wrapper, stateFrame());
+    await nextTick();
+    expect(wrapper.find('[data-testid="bs-log"]').text()).toContain('since you arrived');
+    wrapper.unmount();
+  });
+
+  it('greys an offered-but-refused action with its reason rather than hiding it', async () => {
+    const wrapper = mountShell();
+    tell(wrapper, stateFrame({
+      actions: [{ name: 'look', selections: [] }, { name: 'move', selections: [], disabled: 'the door is barred' }],
+    }));
+    await nextTick();
+    expect(wrapper.find('[data-testid="bs-action-panel"]').html()).toContain('the door is barred');
+    wrapper.unmount();
+  });
+
+  it('speaks a post-hoc refusal through the toast a table refuses through', async () => {
+    const posted: any[] = [];
+    const spy = vi.spyOn(window.parent, 'postMessage').mockImplementation((m) => posted.push(m));
+    const { toasts } = useToast();
+    const before = toasts.value.length;
+    const wrapper = mountShell();
+    tell(wrapper, stateFrame());
+    await nextTick();
+    await wrapper.find('.go').trigger('click');
+    // The host answers the request the board just sent.
+    const requestId = posted.find((m) => m.type === 'world_command').requestId;
+    tell(wrapper, {
+      source: WORLD_HOST_SOURCE,
+      type: 'world_response',
+      requestId,
+      ok: false,
+      message: 'Your holding is bare.',
+    });
+    await nextTick();
+    await nextTick();
+    expect(toasts.value.slice(before).map((t) => t.message)).toContain('Your holding is bare.');
+    expect(toasts.value.slice(before).map((t) => t.type)).toContain('error');
+    spy.mockRestore();
+    wrapper.unmount();
+  });
+
+  it('names the fix rather than rendering blank when the registry resolves to nothing', async () => {
+    const wrapper = mount(WorldShell, {
+      props: {
+        uis: { names: ['Broken'], defaultName: 'Broken', entries: { Broken: { component: null, devOnly: false } } },
+        displayName: 'Gloamhall',
+      },
+    });
+    tell(wrapper, stateFrame());
+    await nextTick();
+    expect(wrapper.text()).toContain('defaultUI()');
+    wrapper.unmount();
+  });
+});
+
+/**
+ * The shared chrome is drawn in `--bsg-*` tokens, and something has to emit
+ * them. `GameShell` calls `applyTheme()` on mount; before #170 a world shell had
+ * no chrome of its own so it never needed to, and the first browser pass over a
+ * world showed exactly that: a seat list, a log and an action bar with no
+ * surface, no lines and no colour, because every token resolved to nothing.
+ */
+describe('WorldShell — the chrome has tokens to be drawn in', () => {
+  it('emits the theme on mount, as the table shell does', async () => {
+    document.getElementById('bsg-tokens')?.remove();
+    const wrapper = mountShell();
+    await nextTick();
+    const style = document.getElementById('bsg-tokens');
+    expect(style, 'no --bsg-* tokens: the shared chrome would render unstyled').not.toBeNull();
+    expect(style!.textContent).toContain('--bsg-bg');
     wrapper.unmount();
   });
 });

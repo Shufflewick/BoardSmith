@@ -27,6 +27,12 @@ import { dirname, join } from 'node:path';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const source = readFileSync(join(HERE, 'GameShell.vue'), 'utf8');
+/**
+ * The log moved into the shared chrome in #170, so the assertions about the log
+ * itself read the file that now owns it. The COUPLING to the debug panel's
+ * copy/clear stays on the adapter, because that is the adapter's wiring.
+ */
+const shellSource = readFileSync(join(HERE, 'PlayShell.vue'), 'utf8');
 
 describe('game log cannot be suppressed by a game', () => {
   it('exposes no showHistory prop', () => {
@@ -35,21 +41,22 @@ describe('game log cannot be suppressed by a game', () => {
       'GameShell must not offer a way to hide the game log. A game that needs a seat ' +
         'to see less uses game.messageTo() to control what enters the log.',
     ).not.toMatch(/showHistory/);
+    expect(shellSource).not.toMatch(/showHistory/);
   });
 
   it('gates GameHistory only on the player\'s own rail collapse', () => {
-    const match = source.match(/<GameHistory\s+v-if="([^"]+)"/);
+    const match = shellSource.match(/<GameHistory\s+v-if="([^"]+)"/);
     expect(match, 'GameHistory must still render conditionally on layout only').not.toBeNull();
     expect(
       match![1],
       'the only gate on the log is the viewport / the player\'s own sidebar collapse',
-    ).toBe('isCompact || !sidebarRail');
+    ).toBe('isCompact || !railed');
   });
 
   it('still mounts the history ref the copy/clear controls depend on', () => {
     // These menu items read `historyPanel`, so a log that never mounts silently
     // disables them too — that coupling is why suppression was so total.
-    expect(source).toMatch(/ref="historyPanel"/);
+    expect(shellSource).toMatch(/ref="historyPanel"/);
     expect(source).toMatch(/@copy-history/);
     expect(source).toMatch(/@clear-history/);
   });

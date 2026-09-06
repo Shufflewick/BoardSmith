@@ -16,9 +16,29 @@ interface GameMessage {
   type: string;
 }
 
+/**
+ * ONE LINE IN THE LOG, whichever backend wrote it.
+ *
+ * A table's come from `game.messages`; a world's from a `WorldNarration` that
+ * carried a `text` (#170 §2.4). The shape is the same because the log is the
+ * same component -- what differs is durability, and that difference is carried
+ * by `emptyText` rather than papered over.
+ */
+export type HistoryMessage = string | { text: string; type?: string };
+
 interface GameHistoryProps {
   /** Array of messages from game state */
-  messages: Array<string | { text: string; type?: string }>;
+  messages: HistoryMessage[];
+  /**
+   * What the log says when it holds nothing, if the default is a lie.
+   *
+   * A TABLE's log is state: re-sent whole, durable across a reload, the whole
+   * history -- so an empty one honestly means nothing has happened yet. A
+   * WORLD's is a live tail bounded at 200 lines that starts empty on every
+   * mount and is gone on reload, so the same sentence there would claim a
+   * silence the log has no way to know about. The backend supplies its own.
+   */
+  emptyText?: string;
 }
 
 /**
@@ -250,7 +270,7 @@ defineExpose({ clearHistory, copyHistory, hasMessages });
         <span class="text">{{ msg.text }}</span>
       </div>
       <div v-if="processedMessages.length === 0" class="no-messages">
-        No activity yet
+        {{ emptyText ?? 'No activity yet' }}
       </div>
     </div>
   </div>

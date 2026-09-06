@@ -268,7 +268,6 @@ describe('deriveManifest — a world-only bundle', () => {
     // enforced at run time.
     expect(deriveWorld(worldConfig, makeWorldDefinition(200)).world).toEqual({
       maxPlayers: 200,
-      ui: true,
     });
   });
 
@@ -377,16 +376,22 @@ describe('build temp-dir scoping (WR-02)', () => {
 });
 
 /**
- * WHETHER THIS BUNDLE SHIPS A WORLD UI (ShufflewickPub #128).
+ * THE WORLD UI FLAG IS GONE (BoardSmith #170).
  *
- * DERIVED FROM THE BUILD, NEVER AUTHORED. A host that had to guess -- probe
- * for `world.html` and treat a 404 as "no UI" -- could not tell a bundle that
- * ships none from a bundle whose UI failed to deploy, and would answer both
- * with the same generic surface. The manifest says which, so the host can show
- * the generic surface deliberately in the first case and complain in the
- * second.
+ * It said whether the build had produced a world surface, so a host could
+ * choose between mounting the bundle's own and showing a generic one. #170
+ * makes the entry ALWAYS emitted for a world project, which is what
+ * ShufflewickPub #128 actually needed: a host reading "no world.html" as "this
+ * game ships no world UI" cannot tell that apart from a UI that failed to
+ * deploy, and answers a broken publish with a surface that looks deliberate.
+ *
+ * A constant-true flag is worse than no flag -- it invites a branch on a
+ * question with one answer -- so the field went with the branch. Declaring
+ * "backend": "world" IS the claim that a surface is there, a bundle that has
+ * none is refused, and `uiUrl === null` now means the publish is broken
+ * (ShufflewickPub #357).
  */
-describe('deriveManifest — the world UI flag', () => {
+describe('deriveManifest — the world surface', () => {
   const worldConfig = { name: 'fixture', displayName: 'Fixture', backend: 'world' };
   const worldDef = makeWorldDefinition();
 
@@ -396,12 +401,17 @@ describe('deriveManifest — the world UI flag', () => {
       worldUi,
     });
 
-  it('records a world UI when the build produced one', () => {
-    expect(derive(true).world).toEqual({ maxPlayers: 40, ui: true });
+  it('emits the world block with its seat count and NO ui flag', () => {
+    // The flag would be constant-true, and a constant-true flag invites a
+    // branch on a question with one answer.
+    expect(derive(true).world).toEqual({ maxPlayers: 40 });
   });
 
-  it('records its absence rather than leaving it unsaid', () => {
-    expect(derive(false).world).toEqual({ maxPlayers: 40, ui: false });
+  it('refuses a world backend that built no world surface, rather than recording its absence', () => {
+    // This is what replaced `world.ui: false`. There is no manifest that says
+    // "a world with no surface" any more, which is what lets the platform read
+    // `uiUrl === null` as "the publish is broken" and nothing else (#357).
+    expect(() => derive(false)).toThrow(/world\.html/);
   });
 
   it('leaves a game that is not a world with no world block at all', () => {

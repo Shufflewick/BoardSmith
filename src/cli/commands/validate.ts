@@ -859,13 +859,20 @@ export async function validateRequiredFiles(cwd: string, isWorld: boolean): Prom
     'src/rules/game.ts',
     // A WORLD AND A TABLE HAVE DIFFERENT ENTRY POINTS, and requiring both would
     // require every world to carry a table half it does not have. A table
-    // mounts GameShell from index.html and picks its board out of the UI
-    // registry; a world mounts WorldShell from world.html, and has no registry
-    // because it has no turn, no flow position and no action table to switch
-    // boards over.
+    // mounts GameShell from index.html; a world mounts WorldShell from
+    // world.html.
+    //
+    // BOTH DECLARE THEIR BOARDS IN `src/ui/uis.ts` (BoardSmith #170). This used
+    // to say a world "has no registry because it has no turn, no flow position
+    // and no action table to switch boards over". #169 gave a world an action
+    // table, and the rest of the reason went with it: the dev UI switcher works
+    // for a world now, and `devUI(() => import('boardsmith/ui/auto-ui'))` makes
+    // AutoUI a world's default board with no new renderer at all -- a world's
+    // view IS the serialized element tree a table's is.
+    'src/ui/uis.ts',
     ...(isWorld
-      ? ['world.html', 'src/world-main.ts', 'src/ui/WorldApp.vue', 'src/rules/world.ts']
-      : ['src/ui/App.vue', 'src/ui/uis.ts']),
+      ? ['world.html', 'src/world-main.ts', 'src/rules/world.ts']
+      : ['src/ui/App.vue']),
   ];
 
   const missing: string[] = [];

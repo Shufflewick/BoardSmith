@@ -15,19 +15,17 @@ import {
 import {
   WORLD_SCAFFOLD_SEATS,
   generateWorldA11yTestTs,
-  generateWorldAppVue,
   generateWorldBoardVue,
   generateWorldElementsTs,
   generateWorldGameTs,
-  generateWorldHtml,
-  generateWorldMainTs,
+  generateWorldUisTs,
   generateWorldReadme,
   generateWorldRulesIndexTs,
   generateWorldTestTs,
   generateWorldTs,
-  generateWorldUiIndexTs,
   worldScaffoldStatus,
 } from '../lib/world-scaffold.js';
+import { ensureWorldEntry } from '../lib/world-entry.js';
 import { ingestArchiveCommand } from './ingest-archive.js';
 import { installIngestHook } from '../lib/ingest-hook.js';
 
@@ -165,10 +163,12 @@ const WORLD_SCAFFOLD: ProjectScaffold = {
     await writeFile(join(projectPath, 'src', 'rules', 'index.ts'), generateWorldRulesIndexTs(config));
     await writeFile(join(projectPath, 'tests', 'world.test.ts'), generateWorldTestTs());
     await writeFile(join(projectPath, 'tests', 'a11y.example.test.ts'), generateWorldA11yTestTs());
-    await writeFile(join(projectPath, 'world.html'), generateWorldHtml(config));
-    await writeFile(join(projectPath, 'src', 'world-main.ts'), generateWorldMainTs());
-    await writeFile(join(projectPath, 'src', 'ui', 'index.ts'), generateWorldUiIndexTs());
-    await writeFile(join(projectPath, 'src', 'ui', 'WorldApp.vue'), generateWorldAppVue(config));
+    // The world entry is the SAME pair `boardsmith build` and `boardsmith dev`
+    // write for a world project that has none (#170), from the same generator:
+    // one definition of what a world's entry is, so a scaffolded project and a
+    // rescued one are the same project.
+    await ensureWorldEntry(projectPath, String(config.displayName || config.name));
+    await writeFile(join(projectPath, 'src', 'ui', 'uis.ts'), generateWorldUisTs());
     await writeFile(
       join(projectPath, 'src', 'ui', 'components', 'WorldBoard.vue'),
       generateWorldBoardVue(),

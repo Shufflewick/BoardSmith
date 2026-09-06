@@ -76,7 +76,8 @@ boardsmith test
 
 That scaffolds the `world` block in `boardsmith.json`, a `src/rules/world.ts`
 whose contract types are imported from `boardsmith/world` (never hand-copied), a
-`world.html` mounting `WorldShell`, and a `tests/world.test.ts` that drives your
+`world.html` mounting `WorldShell` over your `src/ui/uis.ts` (a world declares
+its boards exactly as a table does), and a `tests/world.test.ts` that drives your
 world through the same library a host runs — genesis, a command, the clock and
 one seat's view, with no host and no network.
 

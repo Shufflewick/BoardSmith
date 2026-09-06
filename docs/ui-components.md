@@ -303,7 +303,9 @@ board) or `dependsOn` (narrow it with an earlier step).
 
 **What the panel does with a set that is still too large.** Above
 `MAX_FLAT_CHOICE_CANDIDATES` (24, in
-`components/auto-ui/action-panel-helpers.ts`), an `element`/`elements` pick whose
+`engine/element/action-metadata.ts`, beside the code that builds a pick's
+candidates — three things read it: this panel, `boardsmith validate`, and
+`worldBudgets`, whose own per-selection cap must sit strictly above it), an `element`/`elements` pick whose
 candidates ALL carry a board ref is handed to the board: the panel keeps the
 prompt and renders one control, "Choose on the board (N)", instead of N buttons.
 The board is the better surface for a set that size — it draws the candidates in

@@ -8,6 +8,7 @@ import { ENGINE_REVISION } from '../../contract/index.js';
 import { getProjectContext, loadGameDefinition } from './game-runtime.js';
 import { buildCli, CLI_ENTRY, CLI_OUTFILE } from '../lib/build-cli.js';
 import { requireGameProjectManifests } from '../lib/game-project.js';
+import { ensureWorldEntry, WORLD_ENTRY_HTML } from '../lib/world-entry.js';
 import type { GameBackend, GameDefinition } from '../../session/index.js';
 import {
   GAME_BACKENDS,
@@ -15,14 +16,6 @@ import {
   isGameBackend,
   resolveCapabilities,
 } from '../../session/index.js';
-
-/**
- * The project-root HTML file that, when present, makes this bundle's world
- * surface (ShufflewickPub #128). Named here rather than inline so the build,
- * the manifest flag it derives, and the error that explains it all say the same
- * filename.
- */
-const WORLD_ENTRY_HTML = 'world.html';
 
 interface BuildOptions {
   outDir?: string;
@@ -149,18 +142,35 @@ export function deriveManifest(
 
   const version = resolveGameVersion(config, pkg);
 
-  // WHICH SURFACE THIS BUNDLE SHIPS, DERIVED FROM WHAT THE BUILD PRODUCED, and
-  // it OVERWRITES anything an author wrote, exactly as `playerCount` does. A
-  // host reads it to decide between mounting the bundle's own world surface and
-  // showing its generic one, and that decision has to be a fact about the
-  // bundle rather than a probe: a host that treated a missing `world.html` as
-  // "this game ships no world UI" could not tell that apart from a UI that
-  // failed to deploy, and would answer a broken publish with a surface that
-  // looks deliberate.
+  // WHAT THE BUILD ACTUALLY PRODUCED HAS TO MATCH THE DECLARED BACKEND, and a
+  // mismatch is refused in every direction rather than recorded.
   //
-  // A surface the declared backend cannot mount is refused, in both directions.
-  // Nothing could ever load it, so it is bytes in every download for a page no
+  // There is no `world.ui` flag any more (BoardSmith #170), and its absence is
+  // the point. It said whether the build had produced a world surface, so a
+  // host could choose between mounting the bundle's own and showing a generic
+  // one of its own. ShufflewickPub #128 is the reason that could not hold: a
+  // host reading "no world.html" as "this game ships no world UI" cannot tell
+  // that apart from a UI that failed to deploy, and answers a broken publish
+  // with a surface that looks deliberate.
+  //
+  // So a world project ALWAYS emits its entry (`ensureWorldEntry`), the flag
+  // would be constant-true, and a constant-true flag is worse than no flag: it
+  // invites a branch on a question with one answer. Declaring "backend":
+  // "world" IS the claim that a surface is there, which is why the missing one
+  // below is an error and not a `false`. `uiUrl === null` then means the
+  // publish is broken, which is the one thing the platform needs it to mean
+  // (ShufflewickPub #357).
+  //
+  // The other two directions are a surface the declared backend cannot mount:
+  // nothing could ever load it, so it is bytes in every download for a page no
   // player can reach.
+  if (backend === 'world' && !artifacts.worldUi) {
+    throw new Error(
+      'This project declares "backend": "world" but the build produced no ' + WORLD_ENTRY_HTML
+      + ', so a player would have no world surface to load. A world project always emits its '
+      + 'entry; if this bundle has none, the build that made it did not run `boardsmith build`.',
+    );
+  }
   if (backend === 'table' && artifacts.worldUi) {
     throw new Error(
       'This project has a world.html entry but boardsmith.json declares "backend": "table", so '
@@ -190,8 +200,10 @@ export function deriveManifest(
       definition: gameDefinition,
       declared: config,
     }),
+    // A world's seat count, and nothing else: the surface is guaranteed above
+    // rather than described here (#170).
     ...(backend === 'world'
-      ? { world: { maxPlayers: gameDefinition.world!.maxPlayers, ui: artifacts.worldUi } }
+      ? { world: { maxPlayers: gameDefinition.world!.maxPlayers } }
       : {}),
     buildTime: new Date().toISOString(),
     version,
@@ -254,6 +266,29 @@ async function buildLibrary(repoRoot: string): Promise<void> {
  * `input` is left undefined for a table alone, which is Vite's own default and
  * the case that must keep behaving identically.
  */
+/**
+ * Give a world project its entry if it has none, and say so.
+ *
+ * Its own function so `buildCommand` stays readable, and because the same two
+ * files are written by `boardsmith dev` and `boardsmith init --world` from the
+ * same generator -- one definition of what a world's entry is.
+ */
+async function writeWorldEntryIfMissing(
+  cwd: string,
+  config: Record<string, unknown>,
+): Promise<void> {
+  // The DECLARED backend is what decides, because it is the only thing the
+  // build knows before it compiles the rules -- and #171 made it the one place
+  // the answer is written (`world` is no longer a boardsmith.json key at all).
+  if (config.backend !== 'world') return;
+  const { created } = await ensureWorldEntry(cwd, String(config.displayName || config.name));
+  for (const file of created) {
+    console.log(
+      chalk.dim(`  Wrote ${file} - a world project needs an entry, and this one had none.`),
+    );
+  }
+}
+
 export function resolveUiBuild(
   cwd: string,
   hasTableUi: boolean,
@@ -345,12 +380,18 @@ export async function buildCommand(options: BuildOptions): Promise<void> {
     //
     // Both land at the bundle root (`src/cli/lib/zip.ts` strips the `ui/`
     // prefix), so the host asks for `.../index.html` or `.../world.html` and
-    // gets the surface it meant. Vite is told about each entry only when it
-    // exists -- in EITHER direction, since a world-only project has no
-    // index.html -- because naming a missing input fails the build.
+    // gets the surface it meant.
+    //
+    // A WORLD PROJECT ALWAYS EMITS THE WORLD ENTRY (#170). If the author never
+    // wrote one, it is written into their project here -- ordinary files, in
+    // source control, identical to what `boardsmith init --world` scaffolds --
+    // rather than conjured at build time, so what `boardsmith dev` serves is
+    // what production loads. `world.ui` is gone from the manifest with the
+    // branch it fed; see `deriveManifest`.
     const tableEntry = join(cwd, 'index.html');
     const worldEntry = join(cwd, WORLD_ENTRY_HTML);
     const hasTableUi = existsSync(tableEntry);
+    await writeWorldEntryIfMissing(cwd, config);
     const hasWorldUi = existsSync(worldEntry);
     const ui = resolveUiBuild(cwd, hasTableUi, hasWorldUi);
     spinner.start(`Building UI${ui.surfaces === '' ? '' : ` (${ui.surfaces})`}...`);

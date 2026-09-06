@@ -241,10 +241,6 @@ onUnmounted(() => {
         Wake from parked
       </button>
       <span class="world-dev__field">Resident: {{ status?.resident.length ?? 0 }}</span>
-
-      <span v-if="!cfg.ownWorldUi" class="world-dev__field world-dev__generic">
-        no world.html — showing the shell's own surface
-      </span>
     </header>
 
     <p v-for="(line, i) in notices" :key="i" class="world-dev__notice" role="status">{{ line }}</p>

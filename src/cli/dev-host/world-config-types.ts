@@ -15,14 +15,6 @@ export interface WorldDevConfig {
   readonly seatCount: number;
   /** The document the world's own surface is served from. */
   readonly worldUrl: string;
-  /**
-   * Whether that surface is the BUNDLE'S OWN (`world.html`) or the shell's.
-   *
-   * Said out loud on screen rather than left to be guessed, because the two
-   * look different and an author who does not know which they are looking at
-   * will read the generic surface as their own UI failing to render.
-   */
-  readonly ownWorldUi: boolean;
   /** Where this world durably lives, so an author can find it and delete it. */
   readonly storePath: string;
 }

@@ -603,7 +603,9 @@ describe('#169: what stops an author writing an O(world) enumeration', () => {
   it('(c) refuses a selection past this host\'s candidate budget', async () => {
     const { engine } = newEngine(
       [tend],
-      worldBudgets({ maxCandidatesPerSelection: 1 }),
+      // See the note in src/world/action.test.ts: the #170 R2 floor is stepped
+      // over by hand so this proves the ENGINE's enforcement of the budget.
+      { ...worldBudgets(), maxCandidatesPerSelection: 1 },
     );
     await expect(engine.offersFor('p1', OFFER)).rejects.toThrow(/allows 1 per selection/);
     expect(guide).toContain('maxCandidatesPerSelection');

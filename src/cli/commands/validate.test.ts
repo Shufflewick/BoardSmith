@@ -687,7 +687,10 @@ describe('validateRequiredFiles — a world has a different entry point (#168)',
   function writeWorldUi(): void {
     writeFileSync(join(dir, 'world.html'), '');
     writeFileSync(join(dir, 'src', 'world-main.ts'), '');
-    writeFileSync(join(dir, 'src', 'ui', 'WorldApp.vue'), '');
+    // A world declares its boards in `src/ui/uis.ts` like a table (#170): #169
+    // gave it an action table, which is the whole of what `validate` used to
+    // cite for denying it a registry.
+    writeFileSync(join(dir, 'src', 'ui', 'uis.ts'), '');
     writeFileSync(join(dir, 'src', 'rules', 'world.ts'), '');
   }
 
