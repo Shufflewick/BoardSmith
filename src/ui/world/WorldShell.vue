@@ -111,7 +111,7 @@ import { createBoardInteraction, provideBoardInteraction } from '../composables/
 import { useBoardActionBridge } from '../composables/useBoardActionBridge.js';
 import { providePlayContext } from '../composables/useGameContext.js';
 import { useToast } from '../composables/useToast.js';
-import { BREAKPOINTS } from '../theme.js';
+import { applyTheme, BREAKPOINTS } from '../theme.js';
 
 /**
  * A BUNDLE'S OWN SURFACE FOR A RESIDENT WORLD (ShufflewickPub #128, #170).
@@ -312,6 +312,12 @@ function trackCompact(event: MediaQueryListEvent | MediaQueryList): void {
 }
 
 onMounted(() => {
+  // THE CHROME HAS TO HAVE TOKENS TO BE DRAWN IN. `PlayShell` is written in
+  // `--bsg-*` throughout, and nothing else emits them -- `GameShell` calls this
+  // for the same reason. A host re-themes by overriding the same tokens, so a
+  // world embedded in ShufflewickPub picks up the platform's palette exactly as
+  // a table does.
+  applyTheme();
   host.start();
   if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
     compactQuery = window.matchMedia(`(max-width: ${BREAKPOINTS.compact - 1}px)`);

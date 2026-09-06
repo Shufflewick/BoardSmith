@@ -1,8 +1,8 @@
 {
-  "revision": 36,
+  "revision": 37,
   "bundleProtocol": 1,
   "surfaceHash": "475a587c20948b74",
-  "payloadHash": "1d3a21bebd77753c",
+  "payloadHash": "197ca272284235c1",
   "history": [
     {
       "revision": 1,
@@ -291,6 +291,14 @@
       "surfaceHash": "475a587c20948b74",
       "payloadHash": "1d3a21bebd77753c",
       "summary": "A world's verbs are Actions. worldAction() and worldClockAction() replace the flat command table; the seat's offer is its enumerated actions as ActionMetadata; ActionDefinition gains an optional world block carrying needs and seatless; ScheduleRequest names an action rather than a command and takes scalar args only. The world command contract types are deleted."
+    },
+    {
+      "revision": 37,
+      "date": "2026-09-06",
+      "bundleProtocol": 1,
+      "surfaceHash": "475a587c20948b74",
+      "payloadHash": "197ca272284235c1",
+      "summary": "One shell for tables and worlds (#170): world_state gains players? (host-composed seat names) and WorldNarration gains text?/type? (the line the shared shell logs). world.ui is gone from the manifest -- boardsmith build always emits the world entry now, so a world block implies a surface and uiUrl === null means the publish is broken"
     }
   ]
 }

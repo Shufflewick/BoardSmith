@@ -388,3 +388,22 @@ describe('WorldShell — the shared chrome (#170)', () => {
     wrapper.unmount();
   });
 });
+
+/**
+ * The shared chrome is drawn in `--bsg-*` tokens, and something has to emit
+ * them. `GameShell` calls `applyTheme()` on mount; before #170 a world shell had
+ * no chrome of its own so it never needed to, and the first browser pass over a
+ * world showed exactly that: a seat list, a log and an action bar with no
+ * surface, no lines and no colour, because every token resolved to nothing.
+ */
+describe('WorldShell — the chrome has tokens to be drawn in', () => {
+  it('emits the theme on mount, as the table shell does', async () => {
+    document.getElementById('bsg-tokens')?.remove();
+    const wrapper = mountShell();
+    await nextTick();
+    const style = document.getElementById('bsg-tokens');
+    expect(style, 'no --bsg-* tokens: the shared chrome would render unstyled').not.toBeNull();
+    expect(style!.textContent).toContain('--bsg-bg');
+    wrapper.unmount();
+  });
+});

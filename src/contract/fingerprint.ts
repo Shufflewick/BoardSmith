@@ -135,12 +135,30 @@ const WORLD_WIRE_FIXTURE = {
     notice: 'The fire is low.',
     worldName: 'Contract Fixture World',
     presence: [2, 5],
+    // WHO THE SEATS ARE (#170). Host-composed and platform-only: BoardSmith
+    // never derives a name, so this field exists precisely so ShufflewickPub can
+    // fill it. In the fixture because the shared shell renders seat NUMBERS
+    // without it, and a platform that does not know it may send names would
+    // ship a world whose player list is a column of integers.
+    players: [
+      { seat: 2, name: 'Ivy', color: '#3aa06a' },
+      { seat: 5, name: 'Rook' },
+    ],
   },
   world_events: {
     source: 'shufflewick-world',
     type: 'world_events',
     events: [
-      { scope: 'room:cellar', payload: { said: 'the fire is low', by: 2 } },
+      // WITH a sentence and WITHOUT, because the difference is the contract
+      // (#170): `text` is the line the shared shell puts in its log, and an
+      // event that carries none puts no line there rather than an invented one.
+      // The platform relays both untouched and composes neither.
+      {
+        scope: 'room:cellar',
+        payload: { said: 'the fire is low', by: 2 },
+        text: 'Ivy says the fire is low.',
+        type: 'speech',
+      },
       { scope: 'world', payload: { dawn: true } },
     ],
   },

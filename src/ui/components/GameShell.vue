@@ -1889,6 +1889,7 @@ if ((import.meta as any).hot) {
            playback bar. Every one of them reads a table fact -- `flowState`,
            `state.hint`, `state.heatmap` -- so none of them is the shell's. -->
       <template #board-overlays>
+        <!-- Game Over result card: overlays the board behind a Slate scrim (IA-07, D10).
              Scrim is absolute inside .boardregion — cannot cover the .actionbar sibling
              or browser chrome (T-100-06-02). winnerSeats degrades to [] in dev-WS mode;
              isDraw distinguishes that degrade from a genuine draw.
