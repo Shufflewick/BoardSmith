@@ -60,7 +60,11 @@ const chop = worldAction<Village>('chop')
   .execute((_args, ctx) => {
     const hearth = ctx.world.partition(HEARTH) as Hearth;
     hearth.logs += 1;
-    ctx.world.emit(HEARTH, { chopped: ctx.player.seat, logs: hearth.logs });
+    ctx.world.emit(
+      HEARTH,
+      { chopped: ctx.player.seat, logs: hearth.logs },
+      `Seat ${ctx.player.seat} cut a log.`,
+    );
   });
 
 const bank = worldAction<Village>('bank')
@@ -217,6 +221,10 @@ describe('#167: an action is dispatched through its ordered declaration, then ru
     // NARRATION IS NOT STATE: the routed event arrives on its own frame.
     const narration = last(sent, 'c1', 'world_events');
     expect(JSON.stringify(narration?.events)).toContain('"chopped":1');
+    // AND THE SENTENCE SURVIVES THE HOST (#186). It used to re-map every event
+    // to `{ scope, payload }` on the way to the wire, so the shell's log --
+    // which filters on `text` -- was empty in every world there has ever been.
+    expect((narration?.events as unknown[])[0]).toMatchObject({ text: 'Seat 1 cut a log.' });
     await host.close();
   });
 

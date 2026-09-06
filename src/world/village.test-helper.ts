@@ -49,9 +49,9 @@ export const STANDING_MAX = 8;
  * selection's own declaration name a neighbour's partition before anything has
  * been loaded.
  */
-export const neighboursOf = (seat: number): number[] => [
-  seat === 1 ? SETTLERS : seat - 1,
-  seat === SETTLERS ? 1 : seat + 1,
+export const neighboursOf = (seat: number, settlers: number = SETTLERS): number[] => [
+  seat === 1 ? settlers : seat - 1,
+  seat === settlers ? 1 : seat + 1,
 ];
 
 // The four fields below are read by the ACTIONS each suite writes, not by this
@@ -105,14 +105,22 @@ function throughStorage(json: ElementJSON): ElementJSON {
   return JSON.parse(JSON.stringify(json)) as ElementJSON;
 }
 
-/** Build the village once and keep only its bytes. */
-export function villageGenesis(): Map<string, StoredPartition> {
-  const game = new VillageFixture({ playerCount: SETTLERS, seed: "village", worldMode: true });
+/**
+ * Build the village once and keep only its bytes.
+ *
+ * `settlers` IS A PARAMETER because one claim about a world is only measurable
+ * at population (#181): a view that costs O(world) and a view that costs
+ * O(what the seat named) are indistinguishable in a village of six. Every
+ * seat-dependent helper here takes the same number, so a bigger village is the
+ * same village and not a second one.
+ */
+export function villageGenesis(settlers: number = SETTLERS): Map<string, StoredPartition> {
+  const game = new VillageFixture({ playerCount: settlers, seed: "village", worldMode: true });
   const commons = game.create(Commons, "commons");
   const stored = new Map<string, StoredPartition>([
     [COMMONS, { parentId: game.id, json: throughStorage(commons.toJSON()) }],
   ]);
-  for (let seat = 1; seat <= SETTLERS; seat++) {
+  for (let seat = 1; seat <= settlers; seat++) {
     const holding = game.create(Holding, `holding-${seat}`, {
       seat,
       standing: STANDING_MAX - 1,
@@ -145,11 +153,12 @@ export class CountingStore implements WorldPartitionSource {
 export function newVillageEngine(
   actions: readonly ActionDefinition[],
   budgets: WorldBudgets = worldBudgets(),
+  settlers: number = SETTLERS,
 ): { engine: BoardSmithWorldEngine; store: CountingStore; game: VillageFixture } {
-  const game = new VillageFixture({ playerCount: SETTLERS, seed: "village", worldMode: true });
-  const store = new CountingStore(villageGenesis());
+  const game = new VillageFixture({ playerCount: settlers, seed: "village", worldMode: true });
+  const store = new CountingStore(villageGenesis(settlers));
   const seats = new Map<string, number>();
-  for (let seat = 1; seat <= SETTLERS; seat++) seats.set(`p${seat}`, seat);
+  for (let seat = 1; seat <= settlers; seat++) seats.set(`p${seat}`, seat);
   const engine = new BoardSmithWorldEngine({
     game,
     seats,
