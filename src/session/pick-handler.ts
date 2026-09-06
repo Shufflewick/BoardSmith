@@ -17,7 +17,11 @@ import {
 } from './types.js';
 import { PendingActionManager, type PickStepResult } from './pending-action-manager.js';
 import { buildSingleActionMetadata } from './utils.js';
-import { isDevThrowEnabled } from '../utils/dev.js';
+import {
+  formatChoiceCandidates,
+  formatElementCandidates,
+  type AnnotatedCandidate,
+} from '../engine/element/pick-candidates.js';
 
 /** Serialize a pending action's state to a JSON-safe object (Set -> array). */
 function serializePendingState(s: PendingActionState): Record<string, unknown> {
@@ -34,25 +38,24 @@ function deserializePendingState(s: Record<string, unknown>): PendingActionState
 }
 
 /**
- * Turn a throw out of a game-authored `boardRefs()`/`display()`/`boardRef()`
- * callback into a message that is safe to put on the wire (T-126-07, #47).
+ * A `multiSelect` config as the WIRE carries it: absent max means unlimited.
  *
- * It used to return `error.message` verbatim, which is not sanitizing: a
- * runtime `TypeError: Cannot read properties of undefined (reading 'suit')`
- * reached the player as-is, leaking implementation detail and offering no next
- * step. The full error is now logged where the game runs, and only in a
- * positively-labelled dev/test environment does the underlying text travel —
- * where the reader is the author who needs it and there is no player to leak to.
- *
- * @param source - Which callback failed, e.g. `boardRefs(...)`. Named in the
- *   message so the author knows where to look even in production.
+ * Deliberately not `resolveMultiSelect` from the engine, which normalises an
+ * unlimited maximum to `Infinity` for enumeration's arithmetic. `Infinity`
+ * does not survive `JSON.stringify` -- it arrives as `null` -- so the wire
+ * keeps the field absent instead, and this is the one place that decides it.
  */
-function sanitizeErrorMessage(error: unknown, source: string): string {
-  console.error(`[BoardSmith] ${source} threw and its result was dropped:`, error);
-  if (isDevThrowEnabled()) {
-    return `${source} threw: ${error instanceof Error ? error.message : String(error)}`;
-  }
-  return `${source} could not be evaluated for this choice.`;
+function resolveMultiSelectConfig(
+  multiSelect: unknown,
+  ctx: { game: Game; player: Player; args: Record<string, unknown> },
+): { min: number; max?: number } | undefined {
+  if (multiSelect === undefined) return undefined;
+  const config = typeof multiSelect === 'function'
+    ? (multiSelect as (c: typeof ctx) => number | { min?: number; max?: number } | undefined)(ctx)
+    : (multiSelect as number | { min?: number; max?: number });
+  if (config === undefined) return undefined;
+  if (typeof config === 'number') return { min: 1, max: config };
+  return { min: config.min ?? 1, max: config.max };
 }
 
 /**
@@ -212,139 +215,41 @@ export class PickHandler<G extends Game = Game> {
     // as a top-level array. Never flips success:false (T-126-08).
     const warnings: WarningEntry[] = [];
 
-    // Helper function to generate default display
-    const defaultDisplay = (value: unknown): string => {
-      if (value === null || value === undefined) return String(value);
-      if (typeof value !== 'object') return String(value);
-      const obj = value as Record<string, unknown>;
-      if (typeof obj.display === 'string') return obj.display;
-      if (typeof obj.name === 'string') return obj.name;
-      if (typeof obj.label === 'string') return obj.label;
-      try { return JSON.stringify(value); } catch { return '[Complex Object]'; }
-    };
-
-    // Handle based on selection type
     switch (selection.type) {
       case 'choice': {
-        const choiceSel = selection as any;
-        let annotatedChoices: Array<{ value: unknown; disabled: string | false }>;
+        let annotatedChoices: AnnotatedCandidate[];
         try {
-          annotatedChoices = executor.getChoices(selection, player, resolvedArgs) as Array<{ value: unknown; disabled: string | false }>;
+          annotatedChoices = executor.getChoices(selection, player, resolvedArgs) as AnnotatedCandidate[];
         } catch (error) {
           const errorMsg = error instanceof Error ? error.message : 'Unknown error';
           return { success: false, error: `Error evaluating choices: ${errorMsg}`, errorCode: ErrorCode.CHOICES_EVALUATION_ERROR };
         }
 
-        // Convert to display format with board refs
-        const formattedChoices = annotatedChoices.map(({ value: rawValue, disabled }) => {
-          // Check if the choice already has { value, display } structure (e.g., from playerChoices())
-          // If so, use those directly instead of wrapping again
-          let value: unknown;
-          let display: string;
+        const choices = formatChoiceCandidates(annotatedChoices, selection, ctx, warnings);
+        const multiSelect = resolveMultiSelectConfig(selection.multiSelect, ctx);
 
-          if (rawValue && typeof rawValue === 'object' && 'value' in rawValue && 'display' in rawValue) {
-            // Already formatted choice (like from playerChoices)
-            const formatted = rawValue as { value: unknown; display: string };
-            value = formatted.value;
-            display = formatted.display;
-          } else {
-            // Raw value - wrap it
-            value = rawValue;
-            display = choiceSel.display ? choiceSel.display(rawValue) : defaultDisplay(rawValue);
-          }
-
-          const choice: any = { value, display };
-
-          // Add board refs if provided (pass the original rawValue for compatibility)
-          if (choiceSel.boardRefs) {
-            try {
-              const result = choiceSel.boardRefs(rawValue, ctx);
-              choice.refs = result.refs;
-            } catch (e) {
-              warnings.push({
-                code: 'BOARD_REFS_ERROR',
-                message: sanitizeErrorMessage(e, 'boardRefs(...)'),
-                source: 'boardRefs(...)',
-              });
-            }
-          }
-
-          if (disabled !== false) {
-            choice.disabled = disabled;
-          }
-
-          return choice;
-        });
-
-        // Evaluate multiSelect config if present
-        let multiSelect: { min: number; max?: number } | undefined;
-        if (choiceSel.multiSelect !== undefined) {
-          const multiSelectConfig = typeof choiceSel.multiSelect === 'function'
-            ? choiceSel.multiSelect(ctx)
-            : choiceSel.multiSelect;
-
-          if (multiSelectConfig !== undefined) {
-            if (typeof multiSelectConfig === 'number') {
-              multiSelect = { min: 1, max: multiSelectConfig };
-            } else {
-              multiSelect = {
-                min: multiSelectConfig.min ?? 1,
-                max: multiSelectConfig.max,
-              };
-            }
-          }
-        }
-
-        return { success: true, choices: formattedChoices, multiSelect, warnings: warnings.length > 0 ? warnings : undefined };
+        return { success: true, choices, multiSelect, warnings: warnings.length > 0 ? warnings : undefined };
       }
 
-      case 'element': {
-        const elemSel = selection as any;
-        let annotatedElements: Array<{ value: unknown; disabled: string | false }>;
-        try {
-          annotatedElements = executor.getChoices(selection, player, resolvedArgs) as Array<{ value: unknown; disabled: string | false }>;
-        } catch (error) {
-          const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-          return { success: false, error: `Error evaluating elements: ${errorMsg}`, errorCode: ErrorCode.ELEMENTS_EVALUATION_ERROR };
-        }
-
-        // Build validElements list with display and refs
-        const validElements = this.#buildValidElementsList(annotatedElements, elemSel, ctx, warnings);
-
-        return { success: true, validElements, warnings: warnings.length > 0 ? warnings : undefined };
-      }
-
+      // ONE BRANCH FOR BOTH ELEMENT PICKS. They differ in exactly one thing --
+      // `elements` resolves to an array and carries a multiSelect config -- and
+      // two bodies that agreed about everything else is how they came to
+      // disagree about a label.
+      case 'element':
       case 'elements': {
-        const elementsSel = selection as any;
-        let annotatedElements: Array<{ value: unknown; disabled: string | false }>;
+        let annotatedElements: AnnotatedCandidate[];
         try {
-          annotatedElements = executor.getChoices(selection, player, resolvedArgs) as Array<{ value: unknown; disabled: string | false }>;
+          annotatedElements = executor.getChoices(selection, player, resolvedArgs) as AnnotatedCandidate[];
         } catch (error) {
           const errorMsg = error instanceof Error ? error.message : 'Unknown error';
           return { success: false, error: `Error evaluating elements: ${errorMsg}`, errorCode: ErrorCode.ELEMENTS_EVALUATION_ERROR };
         }
 
-        // Build validElements list with display and refs
-        const validElements = this.#buildValidElementsList(annotatedElements, elementsSel, ctx, warnings);
-
-        // Evaluate multiSelect config if present
-        let multiSelect: { min: number; max?: number } | undefined;
-        if (elementsSel.multiSelect !== undefined) {
-          const multiSelectConfig = typeof elementsSel.multiSelect === 'function'
-            ? elementsSel.multiSelect(ctx)
-            : elementsSel.multiSelect;
-
-          if (multiSelectConfig !== undefined) {
-            if (typeof multiSelectConfig === 'number') {
-              multiSelect = { min: 1, max: multiSelectConfig };
-            } else {
-              multiSelect = {
-                min: multiSelectConfig.min ?? 1,
-                max: multiSelectConfig.max,
-              };
-            }
-          }
-        }
+        const validElements = formatElementCandidates(annotatedElements, selection, ctx, warnings);
+        const multiSelect =
+          selection.type === 'elements'
+            ? resolveMultiSelectConfig(selection.multiSelect, ctx)
+            : undefined;
 
         return { success: true, validElements, multiSelect, warnings: warnings.length > 0 ? warnings : undefined };
       }
@@ -362,81 +267,4 @@ export class PickHandler<G extends Game = Game> {
     }
   }
 
-  /**
-   * Build validElements list with auto-disambiguation.
-   * Used internally by getPickChoices.
-   */
-  #buildValidElementsList(
-    annotatedElements: Array<{ value: unknown; disabled: string | false }>,
-    elemSel: any,
-    ctx: { game: Game; player: Player; args: Record<string, unknown> },
-    warnings: WarningEntry[]
-  ): ValidElement[] {
-    const elements = annotatedElements.map(({ value }) => value) as Array<{ id: number; name?: string; notation?: string }>;
-
-    // Auto-disambiguate display names
-    const nameCounts = new Map<string, number>();
-    for (const el of elements) {
-      const name = el.name || 'Element';
-      nameCounts.set(name, (nameCounts.get(name) || 0) + 1);
-    }
-    const nameIndices = new Map<string, number>();
-
-    return annotatedElements.map(({ value: elementRaw, disabled }) => {
-      const element = elementRaw as any;
-      const validElem: any = { id: element.id };
-
-      // Add display text if display function provided
-      if (elemSel.display) {
-        try {
-          // Support both display signatures: (element, ctx) and (element, ctx, allElements)
-          validElem.display = elemSel.display(element, ctx, elements);
-        } catch (e) {
-          warnings.push({
-            code: 'DISPLAY_ERROR',
-            message: sanitizeErrorMessage(e, 'display(...)'),
-            source: 'display(...)',
-          });
-          validElem.display = element.name || String(element.id);
-        }
-      } else {
-        // Auto-disambiguation for elements with same name
-        const baseName = element.name || 'Element';
-        const count = nameCounts.get(baseName) || 1;
-        if (count > 1) {
-          const idx = (nameIndices.get(baseName) || 0) + 1;
-          nameIndices.set(baseName, idx);
-          validElem.display = `${baseName} #${idx}`;
-        } else {
-          // Default display: use element's name or notation if available
-          validElem.display = element.notation || element.name || String(element.id);
-        }
-      }
-
-      // Add board refs — always emit refs: [{ ref, role: 'highlight' }]
-      const rawRef = elemSel.boardRef
-        ? (() => {
-            try {
-              return elemSel.boardRef!(element, ctx);
-            } catch (e) {
-              // CHOICES_ERROR is the reserved stable code for boardRef() failures
-              // (see the taxonomy in the plan's <interfaces> CONTEXT note).
-              warnings.push({
-                code: 'CHOICES_ERROR',
-                message: sanitizeErrorMessage(e, 'boardRef(...)'),
-                source: 'boardRef(...)',
-              });
-              return { id: element.id };
-            }
-          })()
-        : { id: element.id, ...(element.notation ? { notation: element.notation } : {}) };
-      validElem.refs = [{ ref: rawRef, role: 'highlight' }];
-
-      if (disabled !== false) {
-        validElem.disabled = disabled;
-      }
-
-      return validElem;
-    });
-  }
 }

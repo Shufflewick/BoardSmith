@@ -20,12 +20,10 @@
 // adoption worked without ever running it (docs/TEST-FIXTURES.md).
 import { describe, expect, it } from "vitest";
 import { Game, Piece, Player, Space } from "../engine/index.js";
-import type { ElementJSON, GameOptions } from "../engine/index.js";
+import type { ActionDefinition, ElementJSON, GameOptions } from "../engine/index.js";
 import { assertWorldEngineConformance } from "./engine-conformance.test-helper.js";
-import {
-  BoardSmithWorldEngine,
-  type WorldCommandTable,
-} from "./engine.js";
+import { BoardSmithWorldEngine } from "./engine.js";
+import { worldAction, worldClockAction } from "./action.js";
 import type { StoredPartition, WorldPartitionSource } from "./contract.js";
 
 class Token extends Piece<WorldFixtureGame> {}
@@ -53,7 +51,22 @@ class WorldFixtureGame extends Game<WorldFixtureGame, Player> {
     // Registered in the class constructor, not the Game constructor: world
     // mode has no handler re-bind pass on adoption, so anything a grafted
     // element needs must come from its own class.
+    //
+    // ITS ACTIONS ARE NOT REGISTERED HERE (#169). A world's verbs are handed
+    // to the engine, which registers them itself -- so "the actions the engine
+    // offers" and "the actions the game holds" are the same list by
+    // construction rather than by convention, and a game class that also
+    // registered them would be registering each one twice.
     this.registerElements([Room, Token]);
+  }
+
+  /** The room by its element name, or a refusal naming the fixture's own
+   *  precondition. Written once because a dozen actions below need it and
+   *  `first` returning `undefined` is a much worse sentence than this one. */
+  room(name: string): Room {
+    const found = this.first(Room, name);
+    if (!found) throw new Error(`the fixture needs ${name} resident`);
+    return found;
   }
 }
 
@@ -65,6 +78,11 @@ const STAMP = {
   allowance: { unkeyed: 0, keys: [], worldPending: 0 },
   // Nobody connected: the platform's presence stamp is derived from attached
   // sockets, and this suite attaches none (#144).
+  presence: [],
+};
+
+const EVENT_STAMP = {
+  allowance: { unkeyed: 0, keys: [], worldPending: 0 },
   presence: [],
 };
 
@@ -97,7 +115,7 @@ function genesis(): Map<string, StoredPartition> {
 }
 
 function newWorldGame(): WorldFixtureGame {
-  const game = new WorldFixtureGame({ playerCount: 2, seed: "world-fixture", worldMode: true });
+  const game = new WorldFixtureGame({ playerCount: 4, seed: "world-fixture", worldMode: true });
   return game;
 }
 
@@ -115,227 +133,340 @@ class CountingStore implements WorldPartitionSource {
   forget(): void {}
 }
 
-const COMMANDS: WorldCommandTable = {
-  // Names ONE partition. The whole model is that this costs one room.
-  touch: {
-    args: [],
-    partitions: () => [ROOM_ONE],
-    run: ({ partition, seat }) => {
-      const room = partition(ROOM_ONE) as Room;
+// ── THE WORLD'S VERBS (#169) ────────────────────────────────────────────────
+//
+// Each one is an ACTION, out of the same registry a table's actions come from,
+// declaring what each of its steps needs resident. Where the flat table wrote
+// `partitions(args, seat, world)` and was asked again until it stopped naming
+// anything new, an action writes `.needs()` for round one, a `needs:` on each
+// selection for that selection's round, and a trailing `.needs()` for whatever
+// `execute` writes that no candidate list ever mentioned. The walk is ordered,
+// so there is no ceiling to tune and no unsettled refusal to explain.
+//
+// SEATED AND SEATLESS ARE DIFFERENT VERBS, and where this fixture needs both
+// roads to reach the same behaviour it writes both. That is not duplication for
+// its own sake: a seatless action's context has NO `player`, deliberately, so
+// one definition standing in for both would be exactly the invented-player
+// fallback `worldClockAction` exists to make unrepresentable.
+
+/** Names ONE partition. The whole model is that this costs one room. */
+const touch = worldAction<WorldFixtureGame>("touch")
+  .needs(() => [ROOM_ONE])
+  .execute((_args, ctx) => {
+    const room = ctx.game.room("room-one");
+    room.visits += 1;
+    ctx.world.emit(ROOM_ONE, { by: ctx.player.seat, visits: room.visits });
+  });
+
+/** Names both, so the suite has something strictly larger to compare against. */
+const touchAll = worldAction<WorldFixtureGame>("touchAll")
+  .needs(() => [ROOM_ONE, ROOM_TWO])
+  .execute((_args, ctx) => {
+    for (const [name, element] of [
+      [ROOM_ONE, "room-one"],
+      [ROOM_TWO, "room-two"],
+    ] as const) {
+      const room = ctx.game.room(element);
       room.visits += 1;
-      return [{ scope: ROOM_ONE, payload: { by: seat, visits: room.visits } }];
-    },
-  },
-  // Names both, so the suite has something strictly larger to compare against.
-  touchAll: {
-    args: [],
-    partitions: () => [ROOM_ONE, ROOM_TWO],
-    run: ({ partition, seat }) =>
-      [ROOM_ONE, ROOM_TWO].map((name) => {
-        const room = partition(name) as Room;
-        room.visits += 1;
-        return { scope: name, payload: { by: seat, visits: room.visits } };
-      }),
-  },
-  // Names NOTHING and changes nothing durable: a scheduled beat whose output
-  // is a function of its scheduled `due` alone.
-  tick: {
-    args: [],
-    partitions: () => [],
-    run: ({ timing }) => [
-      { scope: "world", payload: { at: timing?.due, folded: timing?.missedCount } },
-    ],
-  },
-  // A SCHEDULED beat that does touch a partition: the catch-up path integrates
-  // the missed occurrences instead of asking the platform to replay them.
-  decay: {
-    args: [],
-    partitions: () => [ROOM_ONE],
-    run: ({ partition, timing }) => {
-      const room = partition(ROOM_ONE) as Room;
-      room.visits += 1 + (timing?.missedCount ?? 0);
-      return [{ scope: ROOM_ONE, payload: { at: timing?.due, visits: room.visits } }];
-    },
-  },
-  // DECLARES THE SEASON OVER. The one ending a game may name, and it names it
-  // by calling a no-argument hook rather than returning a string -- see
-  // `WorldCommandContext.complete`.
-  finish: {
-    args: [],
-    partitions: () => [ROOM_ONE],
-    run: ({ partition, complete }) => {
-      complete();
-      return [{ scope: ROOM_ONE, payload: { over: true } }];
-    },
-  },
-  // Reports the clock the PLATFORM handed it, beside whatever the caller put
-  // in `args` -- so a test can see which of the two reached the handler (#57).
-  stamp: {
-    args: [],
-    partitions: () => [],
-    run: ({ now, args }) => [{ scope: "world", payload: { now, claimed: args.now } }],
-  },
-  // Reads the platform's presence stamp (#144): which seats are connected,
-  // as a handler sees it -- a Set, asked by membership.
-  who: {
-    args: [],
-    partitions: () => [],
-    run: ({ presence }) => [
-      { scope: "world", payload: { online: [...presence].sort((a, b) => a - b) } },
-    ],
-  },
-  // MUTATES, THEN THROWS. The shape #68 is about: the platform expects
-  // handlers to throw -- it quarantines them -- and a handler that debits and
-  // then fails must not leave the debit behind a `refused` answer.
-  tearRoom: {
-    args: [],
-    partitions: () => [ROOM_ONE],
-    run: ({ partition }) => {
-      const room = partition(ROOM_ONE) as Room;
-      room.visits += 100;
-      throw new Error("this handler fails halfway, deliberately");
-    },
-  },
-  // The same, but it first throws a token into a room it never declared -- so
-  // the torn state is spread across a partition no snapshot could cover. The
-  // context no longer hands over the game (#152), so the undeclared room is
-  // reached the one way left: walking up from a declared root. The engine's
-  // re-parent tracking catches the move whichever way the room was found.
-  tearAcross: {
-    args: [],
-    partitions: () => [ROOM_ONE],
-    run: ({ partition }) => {
-      const room = partition(ROOM_ONE) as Room;
-      const token = room.first(Token);
-      const destination = room.game.first(Room, "room-two");
-      if (!token || !destination) throw new Error("tearAcross needs both rooms resident");
-      token.putInto(destination);
-      throw new Error("this handler fails after moving something, deliberately");
-    },
-  },
-  // WRITES FROM ITS OWN DECLARATION (#219). `partitions` runs before the
-  // rollback snapshot is taken, so a write here used to be captured INTO the
-  // snapshot and survive the refusal the player was told discarded it.
-  declareAndWrite: {
-    args: [],
-    partitions: (_args, _seat, world) => {
-      const room = world.partition(ROOM_ONE) as Room | undefined;
-      if (room) room.visits = 500;
-      return [ROOM_ONE];
-    },
-    run: () => [],
-  },
-  // TAKES SOMETHING OUT OF EVERY PARTITION, and then throws (#294).
-  // `remove()` parks the token in the game's PILE, which is not a partition:
-  // nothing marks it touched, nothing names it, and nothing evicts it -- and
-  // `adoptSubtree` looks for an id clash in the pile as well as in the tree.
-  tearRemove: {
-    args: [],
-    partitions: () => [ROOM_ONE],
-    run: ({ partition }) => {
-      const room = partition(ROOM_ONE) as Room;
-      const token = room.first(Token);
-      if (!token) throw new Error("tearRemove needs a token in room-one");
-      token.remove();
-      throw new Error("this handler fails after removing something, deliberately");
-    },
-  },
-  // MOVES BETWEEN TWO DECLARED PARTITIONS, and then throws (#189). Both
-  // endpoints are declared, so the collateral pass drops neither and the
-  // rollback has to restore two snapshots whose ids overlap: old room:1 holds
-  // the token that is, at restore time, still live inside room:2.
-  tearBetween: {
-    args: [],
-    partitions: () => [ROOM_ONE, ROOM_TWO],
-    run: ({ partition }) => {
-      const room = partition(ROOM_ONE) as Room;
-      const destination = partition(ROOM_TWO) as Room;
-      const token = room.first(Token);
-      if (!token) throw new Error("tearBetween needs a token in room-one");
-      token.putInto(destination);
-      throw new Error("this handler fails after a declared-to-declared move, deliberately");
-    },
-  },
-  // NAMES ONE PARTITION TWICE, and then throws (#263). A command whose
-  // declaration is "the actor's own land, and the land the arguments chose"
-  // names one partition when a settler aims at themselves -- nothing the
-  // author did wrong, and the shape `partitions(args, seat)` exists to make
-  // writable. The rollback then holds two snapshots of the same subtree.
-  tearOwn: {
-    args: [],
-    partitions: () => [ROOM_ONE, ROOM_ONE],
-    run: ({ partition }) => {
-      const room = partition(ROOM_ONE) as Room;
-      room.visits += 100;
-      throw new Error("this handler refuses in the game's own words, deliberately");
-    },
-  },
-  // MUTATES, RETURNS, and only then fails: the event names a scope that is
-  // neither "world" nor a partition. The #151 shape -- the handler SUCCEEDED,
-  // so the #68 catch around `run` alone would never see the refusal.
-  misroute: {
-    args: [],
-    partitions: () => [ROOM_ONE],
-    run: ({ partition }) => {
-      const room = partition(ROOM_ONE) as Room;
-      room.visits += 100;
-      return [{ scope: "tavern:9", payload: { typo: true } }];
-    },
-  },
-  // MUTATES, RETURNS, and fails the OTHER post-run check: it moves a token
-  // into a partition root the engine never loaded and cannot name, so
-  // dirty-set resolution refuses after the handler already succeeded (#151).
-  strand: {
-    args: [],
-    partitions: () => [ROOM_ONE],
-    run: ({ partition }) => {
-      const room = partition(ROOM_ONE) as Room;
-      const rogue = room.game.create(Room, "rogue-room");
-      room.game.definePartition(rogue.id);
-      const token = room.first(Token);
-      if (!token) throw new Error("strand needs a token in room-one");
-      token.putInto(rogue);
-      return [];
-    },
-  },
-  // Names ONE partition and writes an ATTRIBUTE in another, reached by walking
-  // up from the declared root and querying (#173, #295). Nothing re-parents,
-  // so `moveToInternal` never sees it: the only thing that can report this is
-  // the serialized-form comparison -- and the comparison only runs over
-  // room-two because the query that produced it is a door the engine marks.
-  reachAndWrite: {
-    args: [],
-    partitions: () => [ROOM_ONE],
-    run: ({ partition }) => {
-      const room = partition(ROOM_ONE) as Room;
-      const other = room.game.first(Room, "room-two");
-      if (!other) {
-        throw new Error("reachAndWrite needs a resident room-two; run touchAll first.");
-      }
-      other.visits += 7;
-      return [{ scope: ROOM_ONE, payload: { wrote: other.visits } }];
-    },
-  },
-  // Names ONE partition and moves a token OUT of it, into a room it never
-  // declared. This is the half of the dirty set only the engine can supply.
-  throwToken: {
-    args: [],
-    partitions: () => [ROOM_ONE],
-    run: ({ partition }) => {
-      const room = partition(ROOM_ONE) as Room;
-      const token = room.first(Token);
-      const destination = room.game.first(Room, "room-two");
-      if (!token || !destination) {
-        throw new Error(
-          "throwToken needs a token in room-one and a resident room-two; " +
-            "run touchAll first so both rooms are in the tree.",
-        );
-      }
-      token.putInto(destination);
-      return [{ scope: ROOM_TWO, payload: { landed: token.name } }];
-    },
-  },
-};
+      ctx.world.emit(name, { by: ctx.player.seat, visits: room.visits });
+    }
+  });
+
+/**
+ * ASKS A QUESTION, which is what makes the offer case mean anything.
+ *
+ * Every other verb here is a bare button, and an enumeration assertion over a
+ * world of bare buttons is vacuous. This one names its candidates the way #169
+ * requires -- an `elements:` list computed from what this step's `needs`
+ * declared -- so the offer carries two resolved element ids rather than an
+ * instruction to search the resident tree.
+ */
+const visit = worldAction<WorldFixtureGame>("visit")
+  .prompt("Look in on a room")
+  .chooseElement("room", {
+    needs: () => [ROOM_ONE, ROOM_TWO],
+    elements: ({ game }) => [game.room("room-one"), game.room("room-two")],
+  })
+  .execute(({ room }, ctx) => {
+    room.visits += 1;
+    ctx.world.emit(ROOM_ONE, { visited: room.name });
+  });
+
+/**
+ * DECLARES THE SEASON OVER. The one ending a game may name, and it names it by
+ * calling a no-argument hook rather than returning a string -- see
+ * `WorldFacilities.complete`.
+ */
+const finish = worldAction<WorldFixtureGame>("finish")
+  .needs(() => [ROOM_ONE])
+  .execute((_args, ctx) => {
+    ctx.world.complete();
+    ctx.world.emit(ROOM_ONE, { over: true });
+  });
+
+/**
+ * Reports the clock the PLATFORM handed it, beside what the CLIENT sent (#57).
+ *
+ * The selection is called `now` on purpose. Under the flat table that name was
+ * RESERVED and a bundle declaring it was refused, because a command's arguments
+ * and its clock arrived in the same context and a player who could name the
+ * time would finish every timer the moment they started it. An action has no
+ * such collision to defend against: arguments are `args` and the clock is
+ * `ctx.world.now`, two channels that never meet, so the name is now ordinary
+ * and this case is what says so.
+ */
+const stamp = worldAction<WorldFixtureGame>("stamp")
+  .needs(() => [])
+  .enterNumber("now")
+  .execute((args, ctx) => {
+    ctx.world.emit("world", { now: ctx.world.now, claimed: args.now });
+  });
+
+/**
+ * Reads the platform's presence stamp (#144): which seats are connected, as an
+ * action sees it -- a Set, asked by membership.
+ */
+const who = worldAction<WorldFixtureGame>("who")
+  .needs(() => [])
+  .execute((_args, ctx) => {
+    ctx.world.emit("world", { online: [...ctx.world.presence].sort((a, b) => a - b) });
+  });
+
+/**
+ * MUTATES, THEN THROWS. The shape #68 is about: the platform expects handlers
+ * to throw -- it quarantines them -- and a handler that debits and then fails
+ * must not leave the debit behind a `refused` answer.
+ */
+const tearRoom = worldAction<WorldFixtureGame>("tearRoom")
+  .needs(() => [ROOM_ONE])
+  .execute((_args, ctx) => {
+    ctx.game.room("room-one").visits += 100;
+    throw new Error("this handler fails halfway, deliberately");
+  });
+
+/**
+ * The same, but it first throws a token into a room it never declared -- so the
+ * torn state is spread across a partition no snapshot could cover. The engine's
+ * re-parent tracking catches the move whichever way the room was found.
+ */
+const tearAcross = worldAction<WorldFixtureGame>("tearAcross")
+  .needs(() => [ROOM_ONE])
+  .execute((_args, ctx) => {
+    const room = ctx.game.room("room-one");
+    const token = room.first(Token);
+    if (!token) throw new Error("tearAcross needs a token in room-one");
+    token.putInto(ctx.game.room("room-two"));
+    throw new Error("this handler fails after moving something, deliberately");
+  });
+
+/**
+ * TAKES SOMETHING OUT OF EVERY PARTITION, and then throws (#294). `remove()`
+ * parks the token in the game's PILE, which is not a partition: nothing marks
+ * it touched, nothing names it, and nothing evicts it -- and `adoptSubtree`
+ * looks for an id clash in the pile as well as in the tree.
+ */
+const tearRemove = worldAction<WorldFixtureGame>("tearRemove")
+  .needs(() => [ROOM_ONE])
+  .execute((_args, ctx) => {
+    const token = ctx.game.room("room-one").first(Token);
+    if (!token) throw new Error("tearRemove needs a token in room-one");
+    token.remove();
+    throw new Error("this handler fails after removing something, deliberately");
+  });
+
+/**
+ * MOVES BETWEEN TWO DECLARED PARTITIONS, and then throws (#189). Both endpoints
+ * are declared, so the collateral pass drops neither and the rollback has to
+ * restore two snapshots whose ids overlap: old room:1 holds the token that is,
+ * at restore time, still live inside room:2.
+ */
+const tearBetween = worldAction<WorldFixtureGame>("tearBetween")
+  .needs(() => [ROOM_ONE, ROOM_TWO])
+  .execute((_args, ctx) => {
+    const token = ctx.game.room("room-one").first(Token);
+    if (!token) throw new Error("tearBetween needs a token in room-one");
+    token.putInto(ctx.game.room("room-two"));
+    throw new Error("this handler fails after a declared-to-declared move, deliberately");
+  });
+
+/**
+ * NAMES ONE PARTITION TWICE, ACROSS TWO ROUNDS, and then throws (#263).
+ *
+ * The flat table named it twice in one list -- "the actor's own land, and the
+ * land the arguments chose", which is one partition when a settler aims at
+ * themselves. An action's walk has more than one round, so the same collision
+ * arrives a step apart instead: round one names the room, and the execute round
+ * names it again for what `execute` writes. Nothing the author did is wrong in
+ * either shape, and the platform's job is the same -- absorb the duplicate --
+ * because the rollback snapshots the declaration verbatim, and two snapshots of
+ * one subtree meant the second adopt met the first one's ids and `adoptSubtree`
+ * refused. The GAME's own refusal was then replaced by a platform error about
+ * element ids, which no author can act on.
+ */
+const tearOwn = worldAction<WorldFixtureGame>("tearOwn")
+  // ROUND ONE: the actor's own land.
+  .needs(() => [ROOM_ONE])
+  .chooseFrom("aim", {
+    // THIS SELECTION'S ROUND: the land the arguments chose -- which, when a
+    // settler aims at themselves, is the land round one already named.
+    needs: () => [ROOM_ONE],
+    choices: ["room-one"],
+  })
+  .execute((_args, ctx) => {
+    ctx.game.room("room-one").visits += 100;
+    throw new Error("this handler refuses in the game's own words, deliberately");
+  });
+
+/**
+ * MUTATES, RETURNS, and only then fails: the event names a scope that is
+ * neither "world" nor a partition. The #151 shape -- the handler SUCCEEDED, so
+ * a catch around `execute` alone would never see the refusal.
+ */
+const misroute = worldAction<WorldFixtureGame>("misroute")
+  .needs(() => [ROOM_ONE])
+  .execute((_args, ctx) => {
+    ctx.game.room("room-one").visits += 100;
+    ctx.world.emit("tavern:9", { typo: true });
+  });
+
+/**
+ * MUTATES, RETURNS, and fails the OTHER post-run check: it moves a token into a
+ * partition root the engine never loaded and cannot name, so dirty-set
+ * resolution refuses after the handler already succeeded (#151).
+ */
+const strand = worldAction<WorldFixtureGame>("strand")
+  .needs(() => [ROOM_ONE])
+  .execute((_args, ctx) => {
+    const room = ctx.game.room("room-one");
+    const rogue = ctx.game.create(Room, "rogue-room");
+    ctx.game.definePartition(rogue.id);
+    const token = room.first(Token);
+    if (!token) throw new Error("strand needs a token in room-one");
+    token.putInto(rogue);
+  });
+
+/**
+ * Names ONE partition and writes an ATTRIBUTE in another, reached through
+ * `ctx.game` (#173, #295, and the successor to #152).
+ *
+ * #152 removed the raw game from a command's context entirely, on the argument
+ * that an undeclared write reaching a resident partition through `ctx.game` was
+ * not refused, not named and not touched -- visible in every view, then silently
+ * reverted at the next hibernation. A world action IS an Action, so `ctx.game`
+ * is back, and it has to be: it is what a table's action is written against and
+ * the whole point of one registry. What replaced the removal is the pass that
+ * makes such a write IMPOSSIBLE TO LOSE -- BoardSmith marks every element its
+ * own queries and accessors hand out, and the dirty set is computed over the
+ * partitions the action REACHED. So this is the case that holds the successor
+ * rule: reach past what you declared, and the engine reports it dirty and
+ * checkpoints it, rather than the door being nailed shut.
+ *
+ * Nothing re-parents, so `moveToInternal` never sees it: the only thing that
+ * can report this is the serialized-form comparison -- and the comparison only
+ * runs over room-two because the query that produced it is a door the engine
+ * marks.
+ */
+const reachAndWrite = worldAction<WorldFixtureGame>("reachAndWrite")
+  .needs(() => [ROOM_ONE])
+  .execute((_args, ctx) => {
+    // The declared room is REACHED, exactly as any honest action reaches what
+    // it declared -- so the comparison below pays for two partitions and the
+    // case can tell "both, because both were reached" from "one, by accident".
+    ctx.world.partition(ROOM_ONE);
+    const other = ctx.game.room("room-two");
+    other.visits += 7;
+    ctx.world.emit(ROOM_ONE, { wrote: other.visits });
+  });
+
+/**
+ * Names ONE partition and moves a token OUT of it, into a room it never
+ * declared. This is the half of the dirty set only the engine can supply.
+ */
+const throwToken = worldAction<WorldFixtureGame>("throwToken")
+  .needs(() => [ROOM_ONE])
+  .execute((_args, ctx) => {
+    const room = ctx.game.room("room-one");
+    const token = room.first(Token);
+    if (!token) throw new Error("throwToken needs a token in room-one");
+    token.putInto(ctx.game.room("room-two"));
+    ctx.world.emit(ROOM_TWO, { landed: token.name });
+  });
+
+/**
+ * Names NOTHING and changes nothing durable: a scheduled beat whose output is a
+ * function of its scheduled `due` alone. SEATLESS, because the clock is the
+ * only caller a beat has and a seatless action's context has no `player` to
+ * invent.
+ */
+const tick = worldClockAction<WorldFixtureGame>("tick")
+  .needs(() => [])
+  .execute((_args, ctx) => {
+    ctx.world.emit("world", {
+      at: ctx.world.timing?.due,
+      folded: ctx.world.timing?.missedCount,
+    });
+  });
+
+/**
+ * A SCHEDULED beat that does touch a partition: the catch-up path integrates
+ * the missed occurrences instead of asking the platform to replay them.
+ */
+const decay = worldClockAction<WorldFixtureGame>("decay")
+  .needs(() => [ROOM_ONE])
+  .execute((_args, ctx) => {
+    const room = ctx.world.partition(ROOM_ONE) as Room;
+    room.visits += 1 + (ctx.world.timing?.missedCount ?? 0);
+    ctx.world.emit(ROOM_ONE, { at: ctx.world.timing?.due, visits: room.visits });
+  });
+
+/** `stamp` on the clock's road: the same fact asked of a seatless action. */
+const clockStamp = worldClockAction<WorldFixtureGame>("clockStamp")
+  .needs(() => [])
+  .execute((_args, ctx) => {
+    ctx.world.emit("world", { now: ctx.world.now });
+  });
+
+/** `who` on the clock's road: the 03:00 raid asking who is watching. */
+const clockWho = worldClockAction<WorldFixtureGame>("clockWho")
+  .needs(() => [])
+  .execute((_args, ctx) => {
+    ctx.world.emit("world", { online: [...ctx.world.presence].sort((a, b) => a - b) });
+  });
+
+/** `tearRoom` on the clock's road, for the rollback a quarantine hides. */
+const clockTear = worldClockAction<WorldFixtureGame>("clockTear")
+  .needs(() => [ROOM_ONE])
+  .execute((_args, ctx) => {
+    (ctx.world.partition(ROOM_ONE) as Room).visits += 100;
+    throw new Error("this handler fails halfway, deliberately");
+  });
+
+/**
+ * Every verb the fixture world answers to, in the order it declares them --
+ * which is the order `unknown-command` names them back in.
+ */
+const ACTIONS: readonly ActionDefinition[] = [
+  touch,
+  touchAll,
+  visit,
+  finish,
+  stamp,
+  who,
+  tearRoom,
+  tearAcross,
+  tearRemove,
+  tearBetween,
+  tearOwn,
+  misroute,
+  strand,
+  reachAndWrite,
+  throwToken,
+  tick,
+  decay,
+  clockStamp,
+  clockWho,
+  clockTear,
+];
 
 function newEngine(store: WorldPartitionSource = new CountingStore(genesis())) {
   return new BoardSmithWorldEngine({
@@ -345,7 +476,7 @@ function newEngine(store: WorldPartitionSource = new CountingStore(genesis())) {
       ["player-b", 2],
     ]),
     store,
-    commands: COMMANDS,
+    actions: ACTIONS,
     // WHAT A LOOK IS ABOUT (#95). Both rooms, so the conformance suite's views
     // are of a world that is actually there rather than of a bare root.
     view: () => [ROOM_ONE, ROOM_TWO],
@@ -379,7 +510,7 @@ function genesisEngine(): BoardSmithWorldEngine {
       ["player-b", 2],
     ]),
     store: new CountingStore(new Map()),
-    commands: COMMANDS,
+    actions: ACTIONS,
     view: () => [ROOM_ONE, ROOM_TWO],
   });
   engine.registerResident(ROOM_ONE, roomOne);
@@ -400,7 +531,7 @@ describe("BoardSmithWorldEngine — the properties the suite cannot see", () => 
         game,
         seats: new Map([["player-a", 1]]),
         store: new CountingStore(genesis()),
-        commands: COMMANDS,
+        actions: ACTIONS,
         view: () => [],
       }),
     ).toThrow(/needs a game in world mode/);
@@ -669,7 +800,7 @@ describe("BoardSmithWorldEngine — the properties the suite cannot see", () => 
     const drained = await engine.onEvent(
       { name: "decay", args: {} },
       { due: 5_000, missedCount: 68 },
-      { allowance: { unkeyed: 0, keys: [], worldPending: 0 }, presence: [] },
+      EVENT_STAMP,
     );
 
     expect(drained.dirty).toEqual([ROOM_ONE]);
@@ -678,12 +809,14 @@ describe("BoardSmithWorldEngine — the properties the suite cannot see", () => 
       .toMatchObject({ attributes: { visits: 69 } });
   });
 
-  it("refuses a command the world does not answer to, naming what it does", async () => {
+  it("refuses an action the world does not answer to, naming what it does", async () => {
     const engine = newEngine();
 
     await expect(
       engine.applyCommand("player-a", { name: "unbolt", args: {} }, STAMP),
-    ).rejects.toThrow(/touch, touchAll, tick, decay, finish, stamp, who, tearRoom, tearAcross, declareAndWrite, tearRemove, tearBetween, tearOwn, misroute, strand, reachAndWrite, throwToken/);
+    ).rejects.toThrow(
+      /touch, touchAll, visit, finish, stamp, who, tearRoom, tearAcross, tearRemove, tearBetween, tearOwn, misroute, strand, reachAndWrite, throwToken, tick, decay, clockStamp, clockWho, clockTear/,
+    );
   });
 
   it("refuses a player it does not seat", async () => {
@@ -694,54 +827,63 @@ describe("BoardSmithWorldEngine — the properties the suite cannot see", () => 
     );
   });
 
-  it("hands a handler NO raw game -- an undeclared write has no vehicle (#152)", async () => {
-    // The dirty-set contract is "everything a command may have written is
-    // reported dirty", and it was enforced only through the `partition()`
-    // accessor while the same context handed the whole tree over as `game`.
-    // An attribute write reaching a resident-but-undeclared partition through
-    // `ctx.game` was not refused, not named, and not touched: visible in every
-    // view, then silently reverted on eviction or hibernation. The context no
-    // longer carries the game at all, so the easy wrong way is gone.
-    let handed: unknown = "unset";
-    const engine = new BoardSmithWorldEngine({
-      game: newWorldGame(),
-      seats: new Map([["player-a", 1]]),
-      store: new CountingStore(genesis()),
-      commands: {
-        probe: {
-          args: [],
-          partitions: () => [],
-          run: (ctx) => {
-            handed = (ctx as unknown as Record<string, unknown>).game;
-            return [];
-          },
-        },
-      },
-      view: () => [],
-    });
+  it("reports a write reached through ctx.game rather than losing it (#152, #295)", async () => {
+    // WHAT #152 DID, AND WHAT REPLACED IT. The dirty-set contract is
+    // "everything a command may have written is reported dirty", and under the
+    // flat table it was enforced only through the `partition()` accessor while
+    // the same context handed the whole tree over as `game`. An attribute write
+    // reaching a resident-but-undeclared partition through `ctx.game` was not
+    // refused, not named, and not touched: visible in every view, then silently
+    // reverted on eviction or hibernation. #152 closed it by taking the game
+    // out of the context altogether.
+    //
+    // That door cannot stay shut. A world action IS an `ActionDefinition`, so
+    // its context is the engine's own `{game, player, args}` with `ctx.world`
+    // added -- which is the single property that lets one registry and one
+    // enumeration serve both backends, and therefore the thing an MCTS bot
+    // reaches a world action through. Removing `game` from it would mean a
+    // world action was not an action after all.
+    //
+    // So the guarantee is upheld the other way now, and this is the case that
+    // says so: BoardSmith marks every element its own queries and accessors
+    // hand out, and the dirty pass runs over the partitions the action REACHED
+    // (#295). A write through the raw game is therefore reported and
+    // checkpointed rather than being made unreachable -- which is a stronger
+    // promise than the removal was, because it also covers the room a handler
+    // legitimately reaches past its declaration to touch.
+    const engine = newEngine();
+    await engine.applyCommand("player-a", { name: "touchAll", args: {} }, STAMP);
 
-    await engine.applyCommand("player-a", { name: "probe", args: {} }, STAMP);
-    expect(handed).toBeUndefined();
+    const result = await engine.applyCommand(
+      "player-a",
+      { name: "reachAndWrite", args: {} },
+      STAMP,
+    );
+
+    expect([...result.dirty].sort()).toEqual([ROOM_ONE, ROOM_TWO]);
+    const written = await engine.serializePartitions([ROOM_TWO]);
+    expect(
+      (JSON.parse(written[ROOM_TWO]!) as { attributes: { visits: number } }).attributes.visits,
+    ).toBe(8);
   });
 
-  it("refuses a partition the command did not declare", async () => {
+  it("refuses a partition the action did not declare", async () => {
     // The undeclared partition is the silent-corruption case: it would not be
-    // resident, and it would not be reported dirty either.
+    // resident, and it would not be reported dirty either. `ctx.world.partition`
+    // is the accessor that hands back a PARTITION ROOT, and it is held to the
+    // running declaration -- so an action that reaches for a room it never
+    // named is refused BY NAME rather than meeting whatever the last command
+    // happened to leave loaded.
+    const sneak = worldAction<WorldFixtureGame>("sneak")
+      .needs(() => [ROOM_ONE])
+      .execute((_args, ctx) => {
+        ctx.world.partition(ROOM_TWO);
+      });
     const engine = new BoardSmithWorldEngine({
       game: newWorldGame(),
       seats: new Map([["player-a", 1]]),
       store: new CountingStore(genesis()),
-      commands: {
-        ...COMMANDS,
-        sneak: {
-          args: [],
-          partitions: () => [ROOM_ONE],
-          run: ({ partition }) => {
-            partition(ROOM_TWO);
-            return [];
-          },
-        },
-      },
+      actions: [...ACTIONS, sneak],
       view: () => [],
     });
 
@@ -751,8 +893,16 @@ describe("BoardSmithWorldEngine — the properties the suite cannot see", () => 
   });
 });
 
+/** The one verb that writes to the game root's message log. */
+const gossip = worldAction<WorldFixtureGame>("gossip")
+  .needs(() => [ROOM_ONE])
+  .execute((_args, ctx) => {
+    ctx.game.message("gossip travels");
+    ctx.world.emit(ROOM_ONE, {});
+  });
+
 describe("#163 — a world has no message-log surface", () => {
-  /** An engine whose one command writes to the game root's message log, plus
+  /** An engine whose one action writes to the game root's message log, plus
    *  the game itself so the test can measure what stays resident. */
   function gossipWorld() {
     const game = newWorldGame();
@@ -760,16 +910,7 @@ describe("#163 — a world has no message-log surface", () => {
       game,
       seats: new Map([["player-a", 1]]),
       store: new CountingStore(genesis()),
-      commands: {
-        gossip: {
-          args: [],
-          partitions: () => [ROOM_ONE],
-          run: ({ partition }) => {
-            (partition(ROOM_ONE) as Room).game.message("gossip travels");
-            return [{ scope: ROOM_ONE, payload: {} }];
-          },
-        },
-      },
+      actions: [gossip],
       view: () => [ROOM_ONE],
     });
     return { game, engine };
@@ -836,16 +977,35 @@ describe("#190 — a partition name that is also an Object.prototype key", () =>
 });
 
 describe("#219 — a declaration reads, and cannot write", () => {
-  it("REFUSES a command whose partitions() writes, and leaves the world alone", async () => {
+  it("REFUSES an action whose needs() writes, and leaves the world alone", async () => {
     // The declaration runs BEFORE the rollback snapshot, so the write was
     // captured into the snapshot rather than covered by it: a later refusal
     // "rolled back" to the mutated state and the write survived.
-    const engine = newEngine();
+    //
+    // KEPT IN AN ENGINE OF ITS OWN, and that is a fact about #169 rather than
+    // tidiness: a declaration is now walked by the OFFER path as well as the
+    // dispatch path, so an action whose `needs` writes would refuse every
+    // enumeration this fixture's other cases make -- including the conformance
+    // suite's, which asks what seat one can do here.
+    const writing = worldAction<WorldFixtureGame>("declareAndWrite")
+      .needs(({ game }) => {
+        const room = game.first(Room, "room-one");
+        if (room) room.visits = 500;
+        return [ROOM_ONE];
+      })
+      .execute(() => {});
+    const engine = new BoardSmithWorldEngine({
+      game: newWorldGame(),
+      seats: new Map([["player-a", 1]]),
+      store: new CountingStore(genesis()),
+      actions: [touch, writing],
+      view: () => [],
+    });
     await engine.applyCommand("player-a", { name: "touch", args: {} }, STAMP);
 
     await expect(
       engine.applyCommand("player-a", { name: "declareAndWrite", args: {} }, STAMP),
-    ).rejects.toThrow(/partitions\(\)/);
+    ).rejects.toThrow(/A declaration tried to write/);
 
     expect(visitsIn(await engine.serializePartitions([ROOM_ONE]))).toBe(1);
   });
@@ -859,7 +1019,7 @@ describe("#219 — a declaration reads, and cannot write", () => {
       game: newWorldGame(),
       seats: new Map([["player-a", 1]]),
       store,
-      commands: COMMANDS,
+      actions: ACTIONS,
       view: (_seat, world) => {
         const room = world.partition(ROOM_ONE) as Room | undefined;
         if (room) room.visits = 500;
@@ -906,7 +1066,7 @@ describe("#68 — a refused command leaves the world unchanged", () => {
     await engine.applyCommand("player-a", { name: "touch", args: {} }, STAMP);
 
     await expect(
-      engine.onEvent({ name: "tearRoom", args: {} }, { due: 1_000, missedCount: 0 }, { allowance: { unkeyed: 0, keys: [], worldPending: 0 }, presence: [] }),
+      engine.onEvent({ name: "clockTear", args: {} }, { due: 1_000, missedCount: 0 }, EVENT_STAMP),
     ).rejects.toThrow(/fails halfway/);
 
     expect(visitsIn(await engine.serializePartitions([ROOM_ONE]))).toBe(1);
@@ -1046,7 +1206,7 @@ describe("#68 — a refused command leaves the world unchanged", () => {
     await engine.applyCommand("player-a", { name: "touch", args: {} }, STAMP);
 
     await expect(
-      engine.applyCommand("player-a", { name: "tearOwn", args: {} }, STAMP),
+      engine.applyCommand("player-a", { name: "tearOwn", args: { aim: "room-one" } }, STAMP),
     ).rejects.toThrow(/in the game's own words/);
 
     // The mutation is gone, the partition is still resident and readable, and
@@ -1063,7 +1223,7 @@ describe("#68 — a refused command leaves the world unchanged", () => {
     // boundary twice for one command.
     const engine = newEngine();
     expect(
-      engine.commandPartitions("player-a", { name: "tearOwn", args: {} }),
+      engine.commandPartitions("player-a", { name: "tearOwn", args: { aim: "room-one" } }),
     ).toEqual([ROOM_ONE]);
   });
 
@@ -1146,9 +1306,9 @@ describe("#57 — the clock a handler can trust is the platform's", () => {
     // platform happened to wake them.
     const engine = newEngine();
     const result = await engine.onEvent(
-      { name: "stamp", args: {} },
+      { name: "clockStamp", args: {} },
       { due: 5_000, missedCount: 0 },
-      { allowance: { unkeyed: 0, keys: [], worldPending: 0 }, presence: [] },
+      EVENT_STAMP,
     );
     expect((result.events[0]!.payload as { now: number }).now).toBe(5_000);
   });
@@ -1175,9 +1335,9 @@ describe("#57 — the clock a handler can trust is the platform's", () => {
     // empty world is told nobody is here, rather than remembering somebody.
     const engine = newEngine();
     const result = await engine.onEvent(
-      { name: "who", args: {} },
+      { name: "clockWho", args: {} },
       { due: 5_000, missedCount: 0 },
-      { allowance: { unkeyed: 0, keys: [], worldPending: 0 }, presence: [] },
+      EVENT_STAMP,
     );
     expect(result.events[0]!.payload).toEqual({ online: [] });
   });
@@ -1201,7 +1361,7 @@ describe("#183 — a view is scoped to what the seat's declaration named", () =>
         ["player-b", 2],
       ]),
       store,
-      commands: COMMANDS,
+      actions: ACTIONS,
       // Seat 1's view is about room one ALONE; seat 2's about room two.
       view: (seat) => (seat === 1 ? [ROOM_ONE] : [ROOM_TWO]),
     });

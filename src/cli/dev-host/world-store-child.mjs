@@ -48,7 +48,7 @@ function seededEvents() {
     due: 1_000 + index,
     seq: index,
     owner: 'player-a',
-    command: 'tick',
+    action: 'tick',
     args: { index },
     attempts: 0,
   }));
@@ -59,7 +59,7 @@ function armedEvents() {
     due: 9_000 + index,
     seq: 20 + index,
     owner: 'world:self',
-    command: 'raid',
+    action: 'raid',
     args: { index },
     attempts: 0,
   }));

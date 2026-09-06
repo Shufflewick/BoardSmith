@@ -24,7 +24,8 @@
 import { DEFAULT_COLOR_PALETTE } from "../engine/index.js";
 import type { Game, GameElement } from "../engine/index.js";
 import { BoardSmithWorldEngine } from "./engine.js";
-import type { WorldCommandTable, WorldViewDeclaration } from "./engine.js";
+import type { WorldViewDeclaration } from "./engine.js";
+import type { ActionDefinition } from "../engine/index.js";
 import { createInlinedPartitionStore, createWorldRunner } from "./runner.js";
 import type { InlinedPartitionStore, WorldRunnerHandle } from "./runner.js";
 import type { StoredPartition } from "./contract.js";
@@ -32,19 +33,27 @@ import { worldRefusal } from "./refusals.js";
 import { worldBudgets, type WorldBudgets } from "./budgets.js";
 
 /**
- * TRANSITIONAL -- #169 REPLACES A WORLD'S COMMANDS WITH ACTIONS.
+ * WHAT A WORLD BUNDLE EXPORTS ALONGSIDE ITS GAME CLASS.
  *
- * `commands`, and the `genesis` / `view` / `presence` signatures below, are the
- * flat command-table shape a world has today. #169 makes a world command an
- * Action, which is what gives worlds board clicks, an accessible action panel,
- * enumeration and bots -- and this block changes shape when it does. It is
- * exported and marked rather than hidden, because the alternative is what
- * happened: every world bundle hand-copied the declaration and the copies
- * drifted.
+ * One declaration both sides import, which is the whole point of
+ * `boardsmith/world`: every world bundle used to hand-copy this shape because
+ * it had no way to reach it, and the four copies drifted.
  */
 export interface WorldDefinition {
-  /** What this world answers to. */
-  readonly commands: WorldCommandTable;
+  /**
+   * THIS WORLD'S VERBS, built with `worldAction()` (#169).
+   *
+   * A LIST OF `ActionDefinition`s and not a table keyed by name, because that
+   * is what they are: the same class a table registers, registered into the
+   * same `_actions` map, enumerated by the same `getAvailableActions`. A world
+   * that had its own verb type would need its own action panel, its own board
+   * bridge and its own bot, which is exactly the position worlds were in.
+   *
+   * NAMED HERE RATHER THAN READ OFF THE GAME, because a game class may register
+   * a TABLE's actions in its own constructor and those are not this world's
+   * verbs. What this list holds is what a seat may be offered.
+   */
+  readonly actions: readonly ActionDefinition[];
   /**
    * WHAT A LOOK IS ABOUT, DECLARED OR THE WORLD DOES NOT RUN.
    *
@@ -76,10 +85,10 @@ export interface WorldDefinition {
   /**
    * WHAT HAPPENS WHEN A SEAT ARRIVES OR LEAVES.
    *
-   * Each hook names a `clockOnly` command from this world's own table, so a
-   * transition is the clock issuing a command and a world still has exactly one
-   * way to change. A player who could send "seat 3 departed" would forge it;
-   * `clockOnly` is what makes that structural.
+   * Each hook names a SEATLESS action from this world's own list, so a
+   * transition is the clock acting and a world still has exactly one way to
+   * change. A player who could send "seat 3 departed" would forge it;
+   * `seatless` is what makes that structural.
    *
    * The library types the declaration. What a host DOES with it -- how long a
    * departure's grace is, whether a dropped socket is a departure at all,
@@ -90,8 +99,7 @@ export interface WorldDefinition {
   readonly presence?: WorldPresenceDeclaration;
 }
 
-/** TRANSITIONAL, with the rest of `WorldDefinition`. Each hook names a
- *  `clockOnly` command from the world's own table. */
+/** Each hook names a SEATLESS action from the world's own list. */
 export interface WorldPresenceDeclaration {
   readonly onArrive?: string;
   readonly onDepart?: string;
@@ -110,12 +118,13 @@ export function readWorldDefinition(definition: {
   world?: WorldDefinition;
 }): WorldDefinition {
   const world = definition.world;
-  if (!world || !world.commands) {
+  if (!world || !Array.isArray(world.actions)) {
     throw worldRefusal(
       "bundle-not-a-world",
-      "This bundle's gameDefinition has no `world.commands`, so it cannot run as a resident " +
-        "world. A world game exports `world: { commands, view }` alongside `gameClass` -- the " +
-        "manifest's `world` block declares the intent, and this is what implements it.",
+      "This bundle's gameDefinition has no `world.actions`, so it cannot run as a resident " +
+        "world. A world game exports `world: { actions, view }` alongside `gameClass`, where " +
+        "each action is built with `worldAction()` from `boardsmith/world` -- the manifest's " +
+        "`world` block declares the intent, and this is what implements it.",
     );
   }
   if (typeof world.view !== "function") {
@@ -124,7 +133,7 @@ export function readWorldDefinition(definition: {
       "This bundle's `gameDefinition.world` declares no `view`, so nothing can say what a player " +
         "who is merely LOOKING should be shown. A resident world's partitions are absent until " +
         "something names them, and a look that names nothing projects an empty world. Export " +
-        "`world: { commands, genesis, view }`, where `view(seat, world)` answers the partition " +
+        "`world: { actions, genesis, view }`, where `view(seat, world)` answers the partition " +
         "names that seat's view is about -- `() => []` if it genuinely needs none. `world` is " +
         "what an earlier round already loaded, so a view about the room a player is standing in " +
         "names its index first and reads the room from it on the next round.",
@@ -370,7 +379,7 @@ export function createWorld(options: WorldRunnerOptions): WorldRunner {
     game,
     seats: options.seats,
     store,
-    commands: world.commands,
+    actions: world.actions,
     view: world.view,
     budgets,
   });

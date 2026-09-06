@@ -146,9 +146,9 @@ function onWindowMessage(event: MessageEvent): void {
   }
   if (data.type === 'world_command') {
     wsSend({
-      type: 'command',
+      type: 'action',
       requestId: data.requestId as string,
-      command: data.command as string,
+      action: data.action as string,
       args: (data.args as Record<string, unknown>) ?? {},
     });
   }

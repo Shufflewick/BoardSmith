@@ -4,9 +4,9 @@
  *
  * Handed to `WorldShell` by `world-fallback-main.ts`, so it receives exactly
  * what a game's own board receives and emits exactly what one emits. It is a
- * BOARD and not a debug console: it draws the verbs the world declared, the
- * arguments they ask for, what the world narrated, and the view as the engine
- * projected it.
+ * BOARD and not a debug console: it draws the actions the world offered THIS
+ * SEAT, the candidates each of their selections actually has, what the world
+ * narrated, and the view as the engine projected it.
  *
  * The view is rendered as JSON, and that is the honest answer rather than a
  * shortcut. Only the game knows what its projection MEANS -- a room, a holding,
@@ -16,43 +16,62 @@
  * their `world.view` is still being written.
  */
 import { computed, reactive, ref } from 'vue';
-import type { WorldCommandOffer, WorldNarration } from '../../ui/world/worldProtocol.js';
+import type { PickMetadata, WorldActionOffer, WorldNarration } from '../../ui/world/worldProtocol.js';
 
 const props = defineProps<{
   view: unknown;
   seat: number | null;
-  commands: readonly WorldCommandOffer[];
+  actions: readonly WorldActionOffer[];
   acting: boolean;
   worldName: string | null;
   presence: readonly number[] | null;
   events: readonly WorldNarration[];
 }>();
 
-const emit = defineEmits<{ act: [command: string, args: Record<string, unknown>] }>();
+const emit = defineEmits<{ act: [action: string, args: Record<string, unknown>] }>();
 
-/** One draft per command, so filling in `move`'s destination does not clear
- *  what was typed into `say`. */
+/** One draft per action, so filling in `tend`'s neighbour does not clear what
+ *  was typed into `say`. */
 const drafts = reactive<Record<string, Record<string, unknown>>>({});
 
-function draft(command: WorldCommandOffer): Record<string, unknown> {
-  drafts[command.name] ??= Object.fromEntries(
-    command.args.map((arg) => [arg.name, arg.kind === 'choice' ? (arg.choices[0]?.value ?? '') : '']),
-  );
-  return drafts[command.name]!;
+/**
+ * What a selection is asking for, and the first answer it will accept.
+ *
+ * An element selection's value is an ELEMENT ID, which is what
+ * `chooseElement`'s wire encoding already is -- so this board hands the id
+ * straight back and the engine resolves it. That is the whole reason the
+ * element form matters: a custom board wires a click on the element to exactly
+ * this value with nothing in between.
+ */
+function firstAnswer(pick: PickMetadata): unknown {
+  if (pick.validElements) return pick.validElements.find((e) => !e.disabled)?.id ?? '';
+  if (pick.choices) return pick.choices.find((c) => !c.disabled)?.value ?? '';
+  return '';
 }
 
-function send(command: WorldCommandOffer): void {
-  const filled = draft(command);
-  const args: Record<string, unknown> = {};
-  for (const arg of command.args) {
-    const raw = filled[arg.name];
-    // A `number` argument is declared as one, so it is sent as one. Handing a
-    // string to a handler that declared a number is the shape of bug this
-    // surface exists to keep out of an author's way.
-    args[arg.name] = arg.kind === 'number' ? Number(raw) : raw;
-  }
-  emit('act', command.name, args);
+function draft(action: WorldActionOffer): Record<string, unknown> {
+  drafts[action.name] ??= Object.fromEntries(
+    action.selections.map((pick) => [pick.name, firstAnswer(pick)]),
+  );
+  return drafts[action.name]!;
 }
+
+function send(action: WorldActionOffer): void {
+  const filled = draft(action);
+  const args: Record<string, unknown> = {};
+  for (const pick of action.selections) {
+    const raw = filled[pick.name];
+    // A number selection is declared as one, so it is sent as one. An element
+    // selection's id is a number too, and `<select>` hands back strings.
+    args[pick.name] =
+      pick.type === 'number' || pick.type === 'element' || pick.type === 'elements'
+        ? Number(raw)
+        : raw;
+  }
+  emit('act', action.name, args);
+}
+
+const label = (pick: PickMetadata): string => pick.prompt || pick.name;
 
 const viewJson = computed(() => JSON.stringify(props.view, null, 2));
 const viewOpen = ref(true);
@@ -73,38 +92,59 @@ const viewOpen = ref(true);
     </header>
 
     <section class="dev-board__commands">
-      <h2>What this world answers to</h2>
-      <p v-if="commands.length === 0" class="dev-board__empty">
-        This world declares no command a player may issue.
+      <h2>What you can do here</h2>
+      <p v-if="actions.length === 0" class="dev-board__empty">
+        This world offers this seat nothing it can do right now.
       </p>
       <form
-        v-for="command in commands"
-        :key="command.name"
+        v-for="action in actions"
+        :key="action.name"
         class="dev-board__command"
-        @submit.prevent="send(command)"
+        @submit.prevent="send(action)"
       >
         <div class="dev-board__command-name">
-          <strong>{{ command.name }}</strong>
-          <span v-if="command.prompt">{{ command.prompt }}</span>
+          <strong>{{ action.name }}</strong>
+          <span v-if="action.prompt">{{ action.prompt }}</span>
         </div>
-        <label v-for="arg in command.args" :key="arg.name" class="dev-board__arg">
-          <span>{{ arg.prompt || arg.name }}</span>
-          <select v-if="arg.kind === 'choice'" v-model="draft(command)[arg.name]">
-            <option v-for="choice in arg.choices" :key="choice.value" :value="choice.value">
-              {{ choice.label }}
+        <label v-for="pick in action.selections" :key="pick.name" class="dev-board__arg">
+          <span>{{ label(pick) }}</span>
+          <select v-if="pick.validElements" v-model="draft(action)[pick.name]">
+            <option
+              v-for="element in pick.validElements"
+              :key="element.id"
+              :value="element.id"
+              :disabled="!!element.disabled"
+            >
+              {{ element.display ?? element.id }}{{ element.disabled ? ` — ${element.disabled}` : '' }}
+            </option>
+          </select>
+          <select v-else-if="pick.choices" v-model="draft(action)[pick.name]">
+            <option
+              v-for="(choice, index) in pick.choices"
+              :key="index"
+              :value="choice.value"
+              :disabled="!!choice.disabled"
+            >
+              {{ choice.display }}{{ choice.disabled ? ` — ${choice.disabled}` : '' }}
             </option>
           </select>
           <input
-            v-else-if="arg.kind === 'number'"
-            v-model="draft(command)[arg.name]"
+            v-else-if="pick.type === 'number'"
+            v-model="draft(action)[pick.name]"
             type="number"
-            :min="arg.min"
-            :max="arg.max"
-            :step="arg.integer ? 1 : 'any'"
+            :min="pick.min"
+            :max="pick.max"
+            :step="pick.integer ? 1 : 'any'"
           />
-          <input v-else v-model="draft(command)[arg.name]" type="text" />
+          <input v-else v-model="draft(action)[pick.name]" type="text" />
         </label>
-        <button type="submit" :disabled="acting">Send</button>
+        <button type="submit" :disabled="acting || !!action.disabled" :title="action.disabled">
+          Send
+        </button>
+        <!-- A GREYED BUTTON MUST SAY WHY. The engine's own `.disabled()` reason
+             is the whole channel, so a player never meets a dead button with no
+             explanation. -->
+        <span v-if="action.disabled" class="dev-board__why-not">{{ action.disabled }}</span>
       </form>
     </section>
 
@@ -157,6 +197,7 @@ h2 { font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.06em; colo
 .dev-board__command-name span { color: #666; }
 .dev-board__arg { display: grid; gap: 0.15rem; }
 .dev-board__arg span { color: #666; font-size: 0.85em; }
+.dev-board__why-not { color: #a33; }
 .dev-board input, .dev-board select {
   font: inherit;
   padding: 0.25rem 0.4rem;

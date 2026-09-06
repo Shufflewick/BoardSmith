@@ -1991,8 +1991,16 @@ export class Game<
    * Shared by `getDisabledActions` (projection) and `performAction`
    * (enforcement) so the button a player sees and the gate the server applies
    * can never disagree.
+   *
+   * PUBLIC because a THIRD caller needs it (#169). A persistent world builds a
+   * seat's offer one action at a time, hydrating each one's declaration as it
+   * goes, so it cannot use `getDisabledActions` -- that re-enumerates every
+   * registered action at once, against partitions this world deliberately does
+   * not hold, which is the exact failure `world/engine.ts:viewFor` refuses to
+   * repeat. Reaching the shared evaluator is what stops the world growing a
+   * fourth opinion about what "disabled" means.
    */
-  private getActionDisabledReason(action: ActionDefinition, player: P): string | null {
+  getActionDisabledReason(action: ActionDefinition, player: P): string | null {
     if (!action.disabled) return null;
     const reason = action.disabled({ game: this, player, args: {} });
     return reason === false ? null : reason;

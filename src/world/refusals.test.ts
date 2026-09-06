@@ -23,11 +23,9 @@ import {
 } from "./refusals.js";
 import { createInlinedPartitionStore, createWorldRunner } from "./runner.js";
 import { Game, Player, Space } from "../engine/index.js";
-import type { GameOptions } from "../engine/index.js";
-import {
-  BoardSmithWorldEngine,
-  type WorldCommandTable,
-} from "./engine.js";
+import type { ActionDefinition, GameOptions } from "../engine/index.js";
+import { BoardSmithWorldEngine } from "./engine.js";
+import { worldAction, worldClockAction } from "./action.js";
 import { planSchedules } from "./schedule-api.js";
 import { worldBudgets } from "./budgets.js";
 
@@ -44,15 +42,15 @@ class RefusalWorld extends Game<RefusalWorld, Player> {
   }
 }
 
-/** A REAL engine over a real world-mode game, holding the table under test.
+/** A REAL engine over a real world-mode game, holding the actions under test.
  *  A stub would prove the shape of the refusal and not that the module raises
  *  one, which is the whole point of these cases. */
-function engineWith(commands: WorldCommandTable): BoardSmithWorldEngine {
+function engineWith(actions: readonly ActionDefinition[]): BoardSmithWorldEngine {
   return new BoardSmithWorldEngine({
     game: new RefusalWorld({ playerCount: 2, seed: "refusals", worldMode: true }),
     seats: new Map([["p1", 1]]),
     store: createInlinedPartitionStore(),
-    commands,
+    actions,
     view: () => [],
   });
 }
@@ -86,7 +84,7 @@ describe("#37 item 5 — the world refusal taxonomy", () => {
     expect(ownerOf(worldRefusal("partition-not-resident", "x"))).toBe("platform");
   });
 
-  it("classifies a bad command as the CALLER's, so one client cannot park a world", () => {
+  it("classifies a bad action name as the CALLER's, so one client cannot park a world", () => {
     // The distinction the two-owner vocabulary could not express. A client
     // naming a command that does not exist says nothing about the world's
     // health, and a world that parked over it would be trivially griefable.
@@ -146,6 +144,23 @@ describe("#37 item 5 — the world refusal taxonomy", () => {
       // world after two wakes; the platform's own bookkeeping breaking keeps
       // its own codes below.
       "partition-missing",
+      // #169, and the successor to `invalid-command-args`. That code covered a
+      // command table declaring arguments the platform could not offer -- a
+      // reserved `now`, a repeated name, a nameless argument, a choice between
+      // nothing -- all of which were facts about an argument DECLARATION that
+      // no longer exists. What replaced it is a wider rule about the same
+      // hazard: a world action the platform cannot offer or cannot BOUND. Same
+      // owner, for the same reason it always had one -- a bundle whose verbs
+      // are wrong is wrong for every player who will ever attach, and the same
+      // bundle does it again on the next wake.
+      "invalid-world-action",
+      // #169's other new code. An action built with `worldAction()` that
+      // reaches `ctx.world` outside a world was, before it, a TypeError raised
+      // from inside library code on `undefined.partition` -- unclassified, and
+      // therefore already the game's by `ownerOf`'s safe default. Naming it is
+      // what turns an unreadable stack into a sentence about registering a
+      // world action on a table.
+      "not-in-a-world",
     ] as const) {
       expect(WORLD_REFUSALS[code].owner, code).toBe("game");
     }
@@ -167,7 +182,7 @@ describe("#37 item 5 — the world refusal taxonomy", () => {
 
   // ---- The refusals as the modules actually raise them ----
 
-  it("the world raises a CLASSIFIED refusal for an unknown command", async () => {
+  it("the world raises a CLASSIFIED refusal for an unknown action", async () => {
     // Driven through the real modules rather than asserted about the table, so
     // a site that goes back to a bare `new Error` fails here rather than
     // looking correct in a taxonomy nothing reaches.
@@ -176,11 +191,11 @@ describe("#37 item 5 — the world refusal taxonomy", () => {
     // through: since #121 the declaration is answered from the engine, because
     // it may name the acting seat's own partition and only the engine holds the
     // roster.
-    const runner = createWorldRunner(engineWith({}), createInlinedPartitionStore());
+    const runner = createWorldRunner(engineWith([]), createInlinedPartitionStore());
 
     try {
       await runner.declare({ name: "nope", args: {} }, "p1", {});
-      expect.unreachable("declare accepted an unknown command");
+      expect.unreachable("declare accepted an action this world does not have");
     } catch (error) {
       expect(error).toBeInstanceOf(WorldRefusal);
       expect((error as WorldRefusal).code).toBe("unknown-command");
@@ -188,15 +203,16 @@ describe("#37 item 5 — the world refusal taxonomy", () => {
     }
   });
 
-  it("refuses a player who reaches for the CLOCK'S OWN command (#120)", async () => {
+  it("refuses a player who reaches for the CLOCK'S OWN action (#120)", async () => {
     // The declaration is the earliest door there is -- before a partition is
-    // read and before a handler runs -- and it is where a bundle's `clockOnly`
-    // is enforced. A game that had to refuse this by hand inside `run` was
-    // answering a button the platform should never have drawn.
+    // read and before an action runs -- and it is where a `worldClockAction`'s
+    // seatlessness is enforced. A game that had to refuse this by hand inside
+    // its own rules was answering a button the platform should never have drawn.
+    const settle = worldClockAction<RefusalWorld>("settle")
+      .needs(() => [])
+      .execute(() => {});
     const runner = createWorldRunner(
-      engineWith({
-        settle: { clockOnly: true, args: [], partitions: () => [], run: () => [] },
-      }),
+      engineWith([settle]),
       createInlinedPartitionStore(),
     );
 
@@ -205,7 +221,7 @@ describe("#37 item 5 — the world refusal taxonomy", () => {
 
     try {
       await runner.declare({ name: "settle", args: {} }, "p1", {});
-      expect.unreachable("declare accepted the clock's command from a player");
+      expect.unreachable("declare accepted the clock's own action from a player");
     } catch (error) {
       expect(error).toBeInstanceOf(WorldRefusal);
       expect((error as WorldRefusal).code).toBe("clock-only-command");
@@ -215,8 +231,65 @@ describe("#37 item 5 — the world refusal taxonomy", () => {
     }
   });
 
+  it("refuses a bundle whose action cannot be bounded, when the world is BUILT (#169)", () => {
+    // Driven through the real engine rather than asserted about the table, for
+    // the reason the two cases above are: a rule enforced nowhere reads exactly
+    // like a rule enforced everywhere from inside a taxonomy.
+    //
+    // AT CONSTRUCTION, and that is the half worth pinning. A bundle whose
+    // declaration is wrong is wrong for every player who will ever attach, so
+    // it is refused once, before the world is built, rather than on whichever
+    // player first asked what they could do here -- which is where an
+    // enumeration-time refusal would land, looking like a bug in that seat.
+    const searching = worldAction<RefusalWorld>("searching")
+      .needs(() => [])
+      .chooseElement("anything", {} as never)
+      .execute(() => {});
+
+    try {
+      engineWith([searching]);
+      expect.unreachable("the engine built a world around an unbounded enumeration");
+    } catch (error) {
+      expect(error).toBeInstanceOf(WorldRefusal);
+      expect((error as WorldRefusal).code).toBe("invalid-world-action");
+      // GAME-owned: a bundle mistake dead-letters rather than parking a world
+      // 499 other players are in.
+      expect(ownerOf(error)).toBe("game");
+    }
+  });
+
+  it("names the world an action needs, rather than reporting a TypeError (#169)", () => {
+    // The producer is real and ordinary: a world action registered on a TABLE
+    // game. Its callback reads `ctx.world`, which does not exist there, and
+    // before this code the failure was `undefined.partition` raised from inside
+    // library code -- a stack an author cannot act on, about a mistake with a
+    // one-line fix.
+    const table = new RefusalWorld({ playerCount: 2, seed: "table" });
+    // `.disabled()` is what makes the refusal land where a table can see it
+    // classified: every world callback's context is built with `ctx.world`
+    // resolved eagerly, and a table's executor CATCHES what `execute` throws
+    // and answers `{success: false, error}` -- deliberately, so the game's own
+    // sentence travels unclassified and a bug in a game's rules is never
+    // relabelled as one of the platform's words. The availability check runs
+    // outside that catch, so this is the door the code comes through.
+    const tend = worldAction<RefusalWorld>("tend")
+      .needs(() => [])
+      .disabled(({ player }) => (player.seat === 99 ? "never" : false))
+      .execute(() => {});
+    table.registerAction(tend);
+
+    try {
+      table.performAction("tend", table.players[0]!, {});
+      expect.unreachable("a world action ran on a table");
+    } catch (error) {
+      expect(error).toBeInstanceOf(WorldRefusal);
+      expect((error as WorldRefusal).code).toBe("not-in-a-world");
+      expect(ownerOf(error)).toBe("game");
+    }
+  });
+
   it("the schedule cap comes back classified, with #35's wording intact", () => {
-    const result = planSchedules([{ delayMs: 1, command: "tick" }], {
+    const result = planSchedules([{ delayMs: 1, action: "tick" }], {
       owner: "p1",
       arrivedAt: 0,
       nextSeq: 99,

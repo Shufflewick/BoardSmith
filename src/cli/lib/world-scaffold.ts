@@ -3,7 +3,7 @@
  *
  * A persistent world is the other backend, not a variation on a table (#164,
  * #175): named partitions rather than a whole resident tree, a checkpoint of
- * what a command dirtied rather than a snapshot per action, a clock that acts
+ * what an action dirtied rather than a snapshot per action, a clock that acts
  * on its own rather than a turn order. A scaffold that started from the card
  * game and bolted a `world` block onto it would teach the wrong model on the
  * first day, so the world project's rules are written from the world down.
@@ -16,13 +16,14 @@
  * into their own source, four copies drifted, and the library that RUNS the
  * contract now also types it. A new project starts on the shared declaration.
  *
- * ## TRANSITIONAL, deliberately and cheaply
+ * ## OBVIOUS RATHER THAN ELABORATE
  *
- * A world's verbs are a flat command table today and become Actions in #169,
- * which rewrites this template. So the generated rules are kept small and
- * obvious -- two commands, one partition per seat -- rather than elaborate:
- * the rewrite should cost an afternoon, and nothing here is built around a
- * shape that is about to go.
+ * The generated rules are one partition per seat and two verbs: a seat's
+ * `tend`, which asks WHICH row of its own plot, and the clock's own `ripen`,
+ * which nobody may press. That is the smallest shape that still shows all
+ * three things an author has to learn on the first day -- a partition, an
+ * action's ordered declaration, and a selection whose candidates the world
+ * enumerates -- and nothing beyond them is here to be read past.
  */
 import { toPascalCase, type ProjectConfig } from './project-scaffold.js';
 import { WORLD_AUTHORING_DOC } from './world-project.js';
@@ -45,16 +46,16 @@ export function worldScaffoldStatus(): string[] {
   return [
     'What your world does now:',
     '  boardsmith dev     runs YOUR WORLD in a browser, with no network: your genesis',
-    '                     once into a durable local store, every command through',
-    '                     partitions() then run(), a view per attached seat, and your',
-    '                     scheduled events on their due time. The dev bar switches',
-    '                     seats, fires due events without waiting for them, and wakes',
-    '                     the world from parked. world.html is the surface it serves.',
+    '                     once into a durable local store, every action declared then',
+    '                     run, a view per attached seat, and your scheduled events on',
+    '                     their due time. The dev bar switches seats, fires due events',
+    '                     without waiting for them, and wakes the world from parked.',
+    '                     world.html is the surface it serves.',
     '  boardsmith dev --reset',
     '                     deletes the local world and runs genesis again. Nothing else',
     '                     deletes it -- closing the laptop is meant to be safe.',
     '  boardsmith test    runs tests/world.test.ts, which drives your world through',
-    '                     the `boardsmith/world` library -- genesis, a command, the',
+    '                     the `boardsmith/world` library -- genesis, an action, the',
     '                     clock, and one seat\'s view. No host, no browser.',
     '  boardsmith lint    checks for BoardSmith pitfalls',
     '  boardsmith build   builds the publishable bundle',
@@ -74,16 +75,27 @@ export function generateWorldElementsTs(): string {
 /**
  * One seat's corner of the world, and one PARTITION.
  *
- * A partition is the unit a world loads, checkpoints and evicts. A command
- * names the partitions it needs before it runs, touches only those, and the
- * host writes back only what it dirtied -- so a world of five hundred plots
- * costs one plot to tend.
+ * A partition is the unit a world loads, checkpoints and evicts. An action
+ * declares the partitions each of its steps needs before it may read any of
+ * them, touches only those, and the host writes back only what it dirtied --
+ * so a world of five hundred plots costs one plot to tend.
  */
 export class Plot extends Space {
-  /** How far along this plot's crop is. */
-  growth: number = 0;
   /** The seat this plot belongs to. */
   seat: number = 0;
+}
+
+/**
+ * One row of a plot, and the thing a player actually picks.
+ *
+ * It exists so \`tend\` has a QUESTION to ask. An action's selection is offered
+ * with its candidates already resolved -- these rows, by element id -- which is
+ * what lets a board wire a click straight to the row that was clicked, and what
+ * an action panel reads to draw the same choice as a list.
+ */
+export class Row extends Space {
+  /** How far along this row's crop is. */
+  growth: number = 0;
 }
 `;
 }
@@ -91,7 +103,7 @@ export class Plot extends Space {
 /** `src/rules/game.ts` -- the element tree a world adopts partitions into. */
 export function generateWorldGameTs(pascal: string): string {
   return `import { Game, Player, type GameOptions } from 'boardsmith';
-import { Plot } from './elements.js';
+import { Plot, Row } from './elements.js';
 
 export class ${pascal}Player extends Player<${pascal}Game, ${pascal}Player> {}
 
@@ -103,13 +115,29 @@ export class ${pascal}Player extends Player<${pascal}Game, ${pascal}Player> {}
  * wake adopts them back from the store as partitions -- so a constructor that
  * created a plot would create a second one beside the plot the world already
  * has. Register the element classes here; create the world in \`world.ts\`.
+ *
+ * IT REGISTERS NO ACTIONS EITHER. A world's actions are the ones its
+ * \`gameDefinition\`'s \`world.actions\` names, and the runtime registers them on
+ * this game when it builds the world; a constructor that registered them too
+ * would be a second, silently different list.
  */
 export class ${pascal}Game extends Game<${pascal}Game, ${pascal}Player> {
   static PlayerClass = ${pascal}Player;
 
   constructor(options: GameOptions) {
     super(options);
-    this.registerElements([Plot]);
+    this.registerElements([Plot, Row]);
+  }
+
+  /** One seat's plot, once it is resident. Actions reach for it through their
+   *  own declaration, so this throws rather than answering for a partition
+   *  nothing asked the host to load. */
+  plotOf(seat: number): Plot {
+    const plot = this.first(Plot, \`plot-\${seat}\`);
+    if (!plot) {
+      throw new Error(\`Seat \${seat}'s plot is not resident. Declare it with 'needs' first.\`);
+    }
+    return plot;
   }
 }
 `;
@@ -118,8 +146,10 @@ export class ${pascal}Game extends Game<${pascal}Game, ${pascal}Player> {
 /** `src/rules/world.ts` -- the world half, typed by `boardsmith/world`. */
 export function generateWorldTs(pascal: string): string {
   return `import type { GameElement } from 'boardsmith';
-import type { WorldCommandTable, WorldDefinition, WorldViewDeclaration } from 'boardsmith/world';
-import { Plot } from './elements.js';
+import { worldAction, worldClockAction } from 'boardsmith/world';
+import type { WorldDefinition, WorldViewDeclaration } from 'boardsmith/world';
+import type { ${pascal}Game } from './game.js';
+import { Plot, Row } from './elements.js';
 
 /**
  * This world, as the runtime reads it.
@@ -129,24 +159,54 @@ import { Plot } from './elements.js';
  * against is what executes -- on your laptop under \`boardsmith test\` and on
  * the hosting platform, from the same declaration.
  *
- * TRANSITIONAL: a world's verbs are a flat command table today and become
- * Actions (BoardSmith #169), which is what will give a world board clicks, an
- * accessible action panel and bots. Expect this file to change shape once, with
- * every world game updated in the same pass.
+ * ## A WORLD'S VERBS ARE ACTIONS
+ *
+ * \`tend\` below is an ordinary BoardSmith Action with one world block on it, so
+ * it reaches the same action panel, the same board clicks, the same enumeration
+ * and the same bots a table game's actions do. What a world adds is the
+ * DECLARATION: a world holds nothing until something names it, so every step of
+ * an action has to say which partitions it needs BEFORE it may read any of
+ * them.
+ *
+ * ## THE DECLARATION IS AN ORDERED WALK
+ *
+ * It is ordered because an action already is: its selections are a sequence the
+ * engine resolves one step at a time, so the declaration is one step of its own
+ * per step of the action, in the order you wrote them.
+ *
+ *   \`.needs()\` before the first selection is ROUND ONE. Nothing is resident
+ *     when it is asked, so it is a pure function of the acting seat -- "my own
+ *     plot" and nothing that requires reading the world to name.
+ *   a selection's own \`needs:\` is THAT SELECTION'S ROUND, asked with round one
+ *     already loaded. This is what lets a candidate list read the world, and
+ *     every candidate must lie inside a partition this step named -- the engine
+ *     refuses one that strays, by name.
+ *   \`.needs()\` after the last selection is THE EXECUTE ROUND, for a partition
+ *     \`execute\` writes that no candidate list ever mentioned.
+ *
+ * The host walks them in that order, loading what each round names and asking
+ * again. Nothing here has a ceiling to tune: the walk is exactly as long as the
+ * steps you wrote.
  */
 
 /** Seats in this world: the definition's \`maxPlayers\` and the manifest's \`world.maxPlayers\`. */
 export const WORLD_SEATS = ${WORLD_SCAFFOLD_SEATS};
 
-/** How long a tended plot takes to ripen. */
+/** How long a tended row takes to ripen. */
 export const RIPEN_MS = 10 * 60 * 1000;
+
+/** How far a row grows before there is nothing left to do to it. */
+export const MAX_GROWTH = 5;
+
+/** The rows every plot is divided into, and therefore what \`tend\` offers. */
+export const PLOT_ROWS = ['north', 'south'] as const;
 
 /** One seat's plot, by the name the store holds it under. */
 export function plotPartition(seat: number): string {
   return \`plot:\${seat}\`;
 }
 
-/** A seat off a command's arguments, or a refusal saying so. */
+/** A seat off a scheduled event's arguments, or a refusal saying so. */
 function requireSeat(value: unknown): number {
   if (typeof value !== 'number' || !Number.isInteger(value)) {
     throw new Error(\`Expected a seat number, got \${JSON.stringify(value)}.\`);
@@ -165,7 +225,10 @@ export const worldGenesis: NonNullable<WorldDefinition['genesis']> = (game) => {
   for (const player of game.players) {
     const plot = game.create(Plot, \`plot-\${player.seat}\`);
     plot.seat = player.seat;
-    // WHO CAN SEE A PARTITION IS WHO HEARS ABOUT IT. An event a command
+    for (const row of PLOT_ROWS) {
+      plot.create(Row, row);
+    }
+    // WHO CAN SEE A PARTITION IS WHO HEARS ABOUT IT. An event an action
     // addresses to a partition reaches exactly the seats that can see it, so
     // this one line is what makes a plot private: its owner's business, told to
     // its owner. A world where everything is public simply leaves it out.
@@ -184,50 +247,77 @@ export const worldGenesis: NonNullable<WorldDefinition['genesis']> = (game) => {
  */
 export const worldView: WorldViewDeclaration = (seat) => [plotPartition(seat)];
 
-/** Everything this world answers to. */
-export const worldCommands: WorldCommandTable = {
-  tend: {
-    prompt: 'Tend your plot',
-    args: [],
-    /**
-     * Answered BEFORE anything is loaded, which is why it may not read the
-     * world. \`seat\` is the acting seat, so a command can name "my own plot"
-     * without asking the player to pass it.
-     */
-    partitions: (_args, seat) => {
-      if (seat === null) throw new Error('Tending is something a player does.');
-      return [plotPartition(seat)];
-    },
-    run: ({ seat, partition, schedule }) => {
-      const plot = partition(plotPartition(seat as number)) as Plot;
-      plot.growth += 1;
-      // THE WORLD KEEPS GOING WHILE NOBODY IS LOOKING. A keyed schedule
-      // upserts, so tending twice re-arms one timer rather than queueing two.
-      schedule({ delayMs: RIPEN_MS, key: \`ripen:\${seat}\`, command: 'ripen', args: { seat } });
-      return [{ scope: plotPartition(seat as number), payload: { tended: seat, growth: plot.growth } }];
-    },
-  },
+/**
+ * A SEAT TENDS ONE ROW OF ITS OWN PLOT.
+ *
+ * Two steps, and a declaration for each: round one names the plot, and the
+ * selection reads the rows out of it. The selection declares nothing of its own
+ * because its candidates live in the partition round one already named -- which
+ * is an ordinary shape, not an omission. A verb whose candidates lived
+ * somewhere else (a neighbour's plot, the room next door) would say so in that
+ * selection's \`needs:\`, and only then may it name them.
+ */
+const tend = worldAction<${pascal}Game>('tend')
+  .prompt('Tend one row of your plot')
+  .needs(({ player }) => [plotPartition(player.seat)])
+  .chooseElement('row', {
+    prompt: 'Which row?',
+    // NAMED, NEVER SEARCHED. A world action's element selection must hand over
+    // its candidates: the alternative is a walk of whatever happens to be
+    // resident, whose size is a fact about what other players recently did.
+    elements: ({ game, player }) => [...game.plotOf(player.seat).all(Row)],
+    // GREYED WITH THE REASON, rather than accepting the click and refusing it
+    // afterwards. A player can see that the row is finished and why.
+    disabled: (row) => (row.growth >= MAX_GROWTH ? 'This row is fully grown' : false),
+  })
+  .execute(({ row }, ctx) => {
+    row.growth += 1;
+    // THE WORLD KEEPS GOING WHILE NOBODY IS LOOKING. A keyed schedule upserts,
+    // so tending twice re-arms one timer rather than queueing two, and its
+    // arguments are plain JSON scalars because a schedule outlives the tree the
+    // elements in it belong to.
+    ctx.world.schedule({
+      delayMs: RIPEN_MS,
+      key: \`ripen:\${ctx.player.seat}\`,
+      action: 'ripen',
+      args: { seat: ctx.player.seat },
+    });
+    // NARRATION IS ADDRESSED, not broadcast: a payload scoped to a partition
+    // reaches the seats that can see it, and this plot is its owner's alone.
+    ctx.world.emit(plotPartition(ctx.player.seat), {
+      tended: ctx.player.seat,
+      row: row.name,
+      growth: row.growth,
+    });
+  });
 
-  ripen: {
-    // THE CLOCK'S OWN, AND NO PLAYER MAY SEND IT. A scheduled event runs a
-    // command out of this same table -- one way for a world to change, not two
-    // -- and this is what keeps it off the action panel and refuses a player
-    // who names it anyway.
-    clockOnly: true,
-    prompt: 'A plot ripens',
-    args: [],
-    partitions: (args) => [plotPartition(requireSeat(args.seat))],
-    run: ({ args, partition, timing }) => {
-      const seat = requireSeat(args.seat);
-      const plot = partition(plotPartition(seat)) as Plot;
-      // \`missedCount\` is how many occurrences got no call of their own, so a
-      // world that was parked for a week catches up in one wake instead of
-      // being replayed a thousand times.
-      plot.growth += 1 + (timing?.missedCount ?? 0);
-      return [{ scope: plotPartition(seat), payload: { ripened: seat, growth: plot.growth } }];
-    },
-  },
-};
+/**
+ * THE CLOCK'S OWN, AND NO PLAYER MAY SEND IT.
+ *
+ * A scheduled event runs an action out of the same registry a player's comes
+ * from -- one way for a world to change, not two -- and \`worldClockAction\` is
+ * what keeps this one off the action panel and refuses a player who names it
+ * anyway. It has nobody acting, so it has no \`player\` and asks no questions:
+ * its arguments come off the schedule row.
+ */
+const ripen = worldClockAction<${pascal}Game>('ripen')
+  .prompt('A plot ripens')
+  .needs(({ args }) => [plotPartition(requireSeat(args.seat))])
+  .execute((args, ctx) => {
+    const seat = requireSeat(args.seat);
+    const plot = ctx.world.partition(plotPartition(seat)) as Plot;
+    // \`missedCount\` is how many occurrences got no call of their own, so a
+    // world that was parked for a week catches up in one wake instead of being
+    // replayed a thousand times.
+    const grown = 1 + (ctx.world.timing?.missedCount ?? 0);
+    for (const row of plot.all(Row)) {
+      row.growth = Math.min(MAX_GROWTH, row.growth + grown);
+    }
+    ctx.world.emit(plotPartition(seat), { ripened: seat, grown });
+  });
+
+/** Everything this world answers to, a player's verbs and the clock's alike. */
+export const worldActions: WorldDefinition['actions'] = [tend, ripen];
 `;
 }
 
@@ -236,7 +326,7 @@ export function generateWorldRulesIndexTs(config: ProjectConfig): string {
   const pascal = toPascalCase(config.name);
   return `import type { GameDefinition } from 'boardsmith/session';
 import { ${pascal}Game } from './game.js';
-import { WORLD_SEATS, worldCommands, worldGenesis, worldView } from './world.js';
+import { WORLD_SEATS, worldActions, worldGenesis, worldView } from './world.js';
 
 export { ${pascal}Game, ${pascal}Player } from './game.js';
 export * from './elements.js';
@@ -253,7 +343,7 @@ export const gameDefinition: GameDefinition = {
   displayName: '${config.displayName}',
   minPlayers: 1,
   maxPlayers: WORLD_SEATS,
-  world: { commands: worldCommands, genesis: worldGenesis, view: worldView },
+  world: { actions: worldActions, genesis: worldGenesis, view: worldView },
 };
 `;
 }
@@ -261,22 +351,22 @@ export const gameDefinition: GameDefinition = {
 /** `tests/world.test.ts` -- the world driven by the library that runs it. */
 export function generateWorldTestTs(): string {
   return `import { describe, expect, it } from 'vitest';
-import { createWorld } from 'boardsmith/world';
+import { createWorld, settleDeclaration, walkDeclaration } from 'boardsmith/world';
 import { gameDefinition } from '../src/rules/index.js';
-import { RIPEN_MS, plotPartition } from '../src/rules/world.js';
+import { PLOT_ROWS, RIPEN_MS, plotPartition } from '../src/rules/world.js';
 
 /**
  * THE WORLD, DRIVEN THROUGH THE LIBRARY THAT RUNS IT.
  *
  * \`createWorld\` is what a host calls -- the hosting platform's runner, and
- * \`boardsmith dev\` too. Driving it here rather than
- * hand-rolling a fake runner is what makes these assertions worth anything: a
- * change to the contract fails this file instead of passing it and failing in
- * production.
+ * \`boardsmith dev\` too. Driving it here rather than hand-rolling a fake runner
+ * is what makes these assertions worth anything: a change to the contract fails
+ * this file instead of passing it and failing in production.
  *
- * The loop is the real one. \`declare\` says which partitions the command needs,
- * a host loads them, \`apply\` runs the command against a world that is finished
- * assembling, and \`serialize\` writes back exactly what was dirtied.
+ * The loop is the real one. The runner says which partitions the next step
+ * needs, a host loads them and asks again, \`apply\` runs the action against a
+ * world that is finished assembling, and \`serialize\` writes back exactly what
+ * was dirtied.
  */
 const T0 = 1_800_000_000_000;
 
@@ -294,6 +384,60 @@ function launch() {
   });
 }
 
+type Runner = ReturnType<typeof launch>['runner'];
+type Command = { name: string; args: Record<string, unknown> };
+
+/**
+ * WHERE A HOST WOULD READ A PARTITION FROM.
+ *
+ * This world was built by \`genesis\` in this process, so everything a
+ * declaration names is already resident and nothing is ever read. It refuses by
+ * name rather than inventing an empty partition, so an action that declares
+ * something genesis never created fails here saying which.
+ */
+function unstored(name: string): Promise<never> {
+  return Promise.reject(new Error(\`Nothing in this test holds partition "\${name}".\`));
+}
+
+/** What this seat may do, declared and then enumerated -- the two calls a host
+ *  makes to draw a player's options. */
+async function offersFor(runner: Runner, player: string) {
+  await walkDeclaration(
+    async (supplied) => (await runner.declareOffers(player, supplied)).needs,
+    unstored,
+  );
+  return runner.offersFor(player, { now: T0, presence: [1] });
+}
+
+/**
+ * One action, walked and then applied.
+ *
+ * \`walkDeclaration\` is the loop for a WRITE: one round per step of the action,
+ * in the order its author wrote them. It ends when the runner asks for nothing,
+ * and it needs no ceiling, because the walk is as long as the action's own
+ * steps.
+ */
+async function perform(
+  runner: Runner,
+  player: string | null,
+  command: Command,
+  timing: { due: number; missedCount: number } | null = null,
+  arrivedAt: number = T0,
+) {
+  await walkDeclaration(
+    async (supplied) => (await runner.declare(command, player, supplied)).needs,
+    unstored,
+  );
+  return runner.apply({
+    player,
+    command,
+    timing,
+    arrivedAt,
+    allowance: NO_TIMERS,
+    presence: player === null ? [] : [1],
+  });
+}
+
 describe('the world', () => {
   it('gives every seat a plot at genesis, once in the world\\'s lifetime', async () => {
     const { runner, seatCount } = launch();
@@ -302,67 +446,70 @@ describe('the world', () => {
     expect(genesis[plotPartition(1)]).toBeDefined();
   });
 
-  it('tends a plot, dirties only that plot, and arms one ripening', async () => {
+  it('offers a seat the rows of its own plot, as elements it can click', async () => {
     const { runner } = launch();
     await runner.genesis();
 
-    // Genesis CREATED the plots, so the engine already holds them and the host
-    // is told to send nothing.
-    const declared = await runner.declare({ name: 'tend', args: {} }, 'alice', {});
-    expect(declared.needs).toEqual([]);
+    const offers = await offersFor(runner, 'alice');
+    // \`ripen\` is the clock's own, so it is not a seat's to take and is not here.
+    expect(offers.map((offer) => offer.name)).toEqual(['tend']);
 
-    const result = await runner.apply({
-      player: 'alice',
-      command: { name: 'tend', args: {} },
-      timing: null,
-      arrivedAt: T0,
-      allowance: NO_TIMERS,
-      presence: [1],
-    });
+    const row = offers[0]!.selections[0]!;
+    expect(row.type).toBe('element');
+    // THE CANDIDATES ARRIVE WITH THE OFFER, resolved to the rows that exist
+    // right now -- which is what an offer can say and a static declaration
+    // never could.
+    expect(row.validElements).toHaveLength(PLOT_ROWS.length);
+  });
 
-    // ONE SEAT'S COMMAND COSTS ONE SEAT'S PLOT. Bob's plot is untouched, so a
+  it('tends one row, dirties only that plot, and arms one ripening', async () => {
+    const { runner } = launch();
+    await runner.genesis();
+
+    const offers = await offersFor(runner, 'alice');
+    const row = offers[0]!.selections[0]!.validElements![0]!;
+    const result = await perform(runner, 'alice', { name: 'tend', args: { row: row.id } });
+
+    // ONE SEAT'S ACTION COSTS ONE SEAT'S PLOT. Bob's plot is untouched, so a
     // checkpoint writes one partition however many players the world holds.
     expect(result.dirty).toEqual([plotPartition(1)]);
     expect(result.schedules).toEqual([
-      { delayMs: RIPEN_MS, key: 'ripen:1', command: 'ripen', args: { seat: 1 } },
+      { delayMs: RIPEN_MS, key: 'ripen:1', action: 'ripen', args: { seat: 1 } },
+    ]);
+    // Addressed to the one seat who can see the plot, which is who the platform
+    // delivers it to.
+    expect(result.events).toEqual([
+      { scope: plotPartition(1), payload: { tended: 1, row: PLOT_ROWS[0], growth: 1 }, seats: [1] },
     ]);
 
     const bytes = await runner.serialize([...result.dirty]);
-    expect(JSON.parse(bytes[plotPartition(1)]!)).toMatchObject({
-      attributes: { growth: 1, seat: 1 },
-    });
+    expect(JSON.parse(bytes[plotPartition(1)]!)).toMatchObject({ attributes: { seat: 1 } });
   });
 
-  it('REFUSES a player who reaches for the clock\\'s own command', async () => {
+  it('REFUSES a player who reaches for the clock\\'s own action', async () => {
     const { runner } = launch();
     await runner.genesis();
     await expect(
       runner.declare({ name: 'ripen', args: { seat: 1 } }, 'alice', {}),
     ).rejects.toThrow();
-    // And it is not offered to them in the first place.
-    expect(runner.commandOffers().map((offer) => offer.name)).toEqual(['tend']);
   });
 
   it('catches a parked world up in one wake instead of replaying it', async () => {
     const { runner } = launch();
     await runner.genesis();
-    await runner.declare({ name: 'ripen', args: { seat: 1 } }, null, {});
 
-    const result = await runner.apply({
-      player: null,
-      command: { name: 'ripen', args: { seat: 1 } },
-      // Three occurrences came due while nobody was watching: this one, and
-      // two that got no call of their own.
-      timing: { due: T0 + RIPEN_MS, missedCount: 2 },
-      arrivedAt: T0 + RIPEN_MS,
-      allowance: NO_TIMERS,
-      presence: [],
-    });
-    // ONE OCCURRENCE OF WORK, THREE OCCURRENCES OF GROWTH -- and addressed to
-    // the one seat who can see the plot, which is who the platform delivers it
-    // to.
+    const result = await perform(
+      runner,
+      null,
+      { name: 'ripen', args: { seat: 1 } },
+      // Three occurrences came due while nobody was watching: this one, and two
+      // that got no call of their own.
+      { due: T0 + RIPEN_MS, missedCount: 2 },
+      T0 + RIPEN_MS,
+    );
+    // ONE OCCURRENCE OF WORK, THREE OCCURRENCES OF GROWTH.
     expect(result.events).toEqual([
-      { scope: plotPartition(1), payload: { ripened: 1, growth: 3 }, seats: [1] },
+      { scope: plotPartition(1), payload: { ripened: 1, grown: 3 }, seats: [1] },
     ]);
   });
 
@@ -370,9 +517,22 @@ describe('the world', () => {
     const { runner } = launch();
     await runner.genesis();
 
-    const needs = await runner.declareViews(['alice'], {});
-    expect(needs.needs).toEqual([]);
-    expect(needs.refused).toEqual({});
+    // A VIEW'S DECLARATION IS A FIXPOINT, not a walk: "what is this seat looking
+    // at" is answered by the world's own state -- the room they are standing in
+    // -- so it is asked, loaded and asked again until it stops changing its
+    // mind. \`settleDeclaration\` is that loop, beside \`walkDeclaration\` for an
+    // action.
+    let refused: Record<string, unknown> = {};
+    await settleDeclaration(
+      async (supplied) => {
+        const declared = await runner.declareViews(['alice'], supplied);
+        refused = declared.refused;
+        return declared.needs;
+      },
+      unstored,
+      "this world's \`world.view\`",
+    );
+    expect(refused).toEqual({});
 
     const { views } = await runner.viewsFor(['alice']);
     expect(JSON.stringify(views.alice)).toContain('plot-1');
@@ -448,46 +608,93 @@ export function generateWorldBoardVue(): string {
  *
  * \`view\` is YOUR shape -- the per-seat projection your \`world.view\`
  * declaration named -- so nothing between your rules and here interprets it.
+ *
+ * \`actions\` is what this seat may do, enumerated by the world with each
+ * selection's candidates already resolved: an element selection arrives as
+ * \`validElements\`, a choice as \`choices\`. That is the difference an Action
+ * makes -- the world can say WHICH rows are tendable this instant, so this
+ * board draws a button per real candidate instead of asking the player to
+ * describe one.
  */
 import { computed } from 'vue';
-import type { WorldCommandOffer, WorldNarration } from 'boardsmith/ui';
+import type { WorldActionOffer, WorldNarration } from 'boardsmith/ui';
 
 const props = defineProps<{
   view: unknown;
   seat: number | null;
-  commands: readonly WorldCommandOffer[];
+  actions: readonly WorldActionOffer[];
   acting: boolean;
   worldName: string | null;
   presence: readonly number[];
   events: readonly WorldNarration[];
 }>();
 
-const emit = defineEmits<{ act: [command: string, args?: Record<string, unknown>] }>();
+const emit = defineEmits<{ act: [action: string, args?: Record<string, unknown>] }>();
 
-/** Commands that ask for nothing can be a button. One that asks for arguments
- *  needs a surface of your own to collect them. */
-const simpleCommands = computed(() => props.commands.filter((command) => command.args.length === 0));
+/** An action that asks nothing can be a button on its own. */
+const simpleActions = computed(() => props.actions.filter((action) => action.selections.length === 0));
+
+/** An action with one question is a button per candidate. A verb that asks two
+ *  questions in a row wants a surface of your own, which is what this file is
+ *  for. */
+const askingActions = computed(() => props.actions.filter((action) => action.selections.length === 1));
+
+/** The answer to an action's first question, under the name that question was
+ *  asked by -- which is what \`act\` sends and the engine resolves. */
+function answer(action: WorldActionOffer, value: unknown): Record<string, unknown> {
+  const selection = action.selections[0];
+  return selection ? { [selection.name]: value } : {};
+}
 </script>
 
 <template>
   <main class="world-board">
     <h1>{{ worldName ?? 'This world' }}</h1>
     <p class="world-board__seat">
-      You are seat {{ seat ?? '—' }}. {{ presence.length }} here right now.
+      You are seat {{ seat ?? 'none' }}. {{ presence.length }} here right now.
     </p>
 
     <ul class="world-board__verbs">
-      <li v-for="command in simpleCommands" :key="command.name">
+      <li v-for="action in simpleActions" :key="action.name">
         <button
           type="button"
-          :disabled="acting"
-          :aria-label="command.prompt ?? command.name"
-          @click="emit('act', command.name)"
+          :disabled="acting || !!action.disabled"
+          :aria-label="action.disabled ?? action.prompt ?? action.name"
+          @click="emit('act', action.name)"
         >
-          {{ command.prompt ?? command.name }}
+          {{ action.prompt ?? action.name }}
         </button>
       </li>
     </ul>
+
+    <section v-for="action in askingActions" :key="action.name" class="world-board__ask">
+      <h2>{{ action.prompt ?? action.name }}</h2>
+      <!-- A greyed action always says why: the world answered with a reason,
+           and swallowing it leaves a dead button on the screen. -->
+      <p v-if="action.disabled">{{ action.disabled }}</p>
+      <ul v-else class="world-board__verbs">
+        <li v-for="element in action.selections[0]?.validElements ?? []" :key="element.id">
+          <button
+            type="button"
+            :disabled="acting || !!element.disabled"
+            :aria-label="element.disabled ?? element.display ?? String(element.id)"
+            @click="emit('act', action.name, answer(action, element.id))"
+          >
+            {{ element.display ?? element.id }}
+          </button>
+        </li>
+        <li v-for="choice in action.selections[0]?.choices ?? []" :key="String(choice.value)">
+          <button
+            type="button"
+            :disabled="acting || !!choice.disabled"
+            :aria-label="choice.disabled ?? choice.display"
+            @click="emit('act', action.name, answer(action, choice.value))"
+          >
+            {{ choice.display }}
+          </button>
+        </li>
+      </ul>
+    </section>
 
     <h2>What has happened</h2>
     <ol class="world-board__narration">
@@ -530,15 +737,32 @@ import WorldBoard from '../src/ui/components/WorldBoard.vue';
 describe('WorldBoard — a11y floor (axe-core scan)', () => {
   it('has no axe-core violations', async () => {
     // axe.run() only scans nodes that are actually IN the document, so mount
-    // with attachTo and detach in \`finally\`. Mount with a real command so the
-    // board renders a focusable control with a game-semantic label -- an empty
+    // with attachTo and detach in \`finally\`. Mount with a real offer -- one
+    // whose selection carries the candidates the world enumerated -- so the
+    // board renders focusable controls with game-semantic labels; an empty
     // render proves nothing. This is the copy-me template for every UI chunk.
     const wrapper = mount(WorldBoard, {
       attachTo: document.body,
       props: {
         view: {},
         seat: 1,
-        commands: [{ name: 'tend', prompt: 'Tend your plot', args: [] }],
+        actions: [
+          {
+            name: 'tend',
+            prompt: 'Tend one row of your plot',
+            selections: [
+              {
+                name: 'row',
+                type: 'element',
+                prompt: 'Which row?',
+                validElements: [
+                  { id: 11, display: 'north' },
+                  { id: 12, display: 'south', disabled: 'This row is fully grown' },
+                ],
+              },
+            ],
+          },
+        ],
         acting: false,
         worldName: 'A world',
         presence: [1],
@@ -561,15 +785,20 @@ export function generateWorldReadme(config: ProjectConfig): string {
   return `# ${config.displayName}
 
 A BoardSmith **persistent world**: named partitions rather than a whole
-resident tree, a checkpoint of what a command dirtied rather than a snapshot per
+resident tree, a checkpoint of what an action dirtied rather than a snapshot per
 action, and a clock that acts on its own rather than a turn order.
+
+Its verbs are **actions**, built with \`worldAction()\`. Every step of one
+declares which partitions it needs before it may read them, so the world offers
+a seat the candidates that are legal this instant rather than everything it
+contains.
 
 ## Where things are
 
 | File | What it is |
 | --- | --- |
 | \`boardsmith.json\` | the \`world\` block, which is how this game says it is a world |
-| \`src/rules/world.ts\` | the world half: commands, genesis, and the per-seat view |
+| \`src/rules/world.ts\` | the world half: actions, genesis, and the per-seat view |
 | \`src/rules/elements.ts\` | the furniture a partition is made of |
 | \`src/rules/index.ts\` | \`gameDefinition\`, where the world block is registered |
 | \`tests/world.test.ts\` | your world, driven through \`boardsmith/world\` |

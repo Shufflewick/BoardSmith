@@ -7,7 +7,7 @@ import {
   WORLD_NARRATION_KEPT,
   WORLD_UI_SOURCE,
   type WorldActionOutcome,
-  type WorldCommandOffer,
+  type WorldActionOffer,
   type WorldHostMessage,
   type WorldNarration,
   type WorldPhase,
@@ -29,7 +29,8 @@ export interface WorldHost {
   phase: Ref<WorldPhase>;
   view: ShallowRef<unknown>;
   seat: Ref<number | null>;
-  commands: Ref<readonly WorldCommandOffer[]>;
+  /** What this seat may do, enumerated by the world over what it can see. */
+  actions: Ref<readonly WorldActionOffer[]>;
   notice: Ref<string | null>;
   worldName: Ref<string | null>;
   /** Who holds an open connection right now, or `null` when the host has no
@@ -105,7 +106,7 @@ export function useWorldHost(options: WorldHostOptions = {}): WorldHost {
    */
   const view = shallowRef<unknown>(null);
   const seat = ref<number | null>(null);
-  const commands = ref<readonly WorldCommandOffer[]>([]);
+  const actions = ref<readonly WorldActionOffer[]>([]);
   const notice = ref<string | null>(null);
   const worldName = ref<string | null>(null);
   const presence = ref<readonly number[] | null>(null);
@@ -148,7 +149,7 @@ export function useWorldHost(options: WorldHostOptions = {}): WorldHost {
     phase.value = data.phase;
     view.value = data.view;
     seat.value = data.seat;
-    commands.value = data.commands ?? [];
+    actions.value = data.actions ?? [];
     notice.value = data.notice;
     worldName.value = data.worldName;
     presence.value = data.presence;
@@ -208,13 +209,13 @@ export function useWorldHost(options: WorldHostOptions = {}): WorldHost {
     acting.value = true;
     // Structured clone cannot carry a Vue proxy, and a UI's natural
     // `someRef.value` is exactly what a caller will hand this. One JSON round
-    // trip is the whole of what a world command's arguments need: they are
-    // declared `choice`, `number` or `text` by the bundle itself.
+    // trip is the whole of what an action's arguments need: a selection's value
+    // is a scalar or an element id, never an element.
     post({
       source: WORLD_UI_SOURCE,
       type: 'world_command',
       requestId,
-      command,
+      action: command,
       args: JSON.parse(JSON.stringify(args ?? {})) as Record<string, unknown>,
     });
     return await answered;
@@ -252,7 +253,7 @@ export function useWorldHost(options: WorldHostOptions = {}): WorldHost {
     phase,
     view,
     seat,
-    commands,
+    actions,
     notice,
     worldName,
     presence,

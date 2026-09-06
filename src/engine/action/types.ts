@@ -1,6 +1,10 @@
 import type { GameElement } from '../element/game-element.js';
 import type { Player } from '../player/player.js';
 import type { Game, PlayerOf } from '../element/game.js';
+// TYPE ONLY, and it must stay type only: `boardsmith/world` imports the engine
+// at runtime, so a value import here would close the cycle. See
+// `ActionDefinition.world`.
+import type { WorldActionBlock } from '../../world/action.js';
 import type { ElementClass } from '../element/types.js';
 
 /**
@@ -577,6 +581,20 @@ export interface ActionDefinition {
    * result throws unless the chain later calls `.execute(fn)`.
    */
   handlerless?: boolean;
+  /**
+   * THE ONE WORLD-OWNED BLOCK, and the only thing a persistent world adds to
+   * an action (#169).
+   *
+   * Typed by `boardsmith/world` and imported here as a TYPE ONLY, which is the
+   * same reversal `GameDefinition.world` already makes: the world runtime
+   * declares its own contract and the engine leaves it a slot, rather than the
+   * engine growing an opinion about partitions it has no other reason to hold.
+   * A table action never sets it and nothing on a table ever reads it.
+   *
+   * Absent on every action a table registers. Present on every action a world
+   * bundle registers, because `worldAction()` is what builds one.
+   */
+  world?: WorldActionBlock;
 }
 
 /**

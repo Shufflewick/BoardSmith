@@ -64,25 +64,46 @@
  * about a live Durable Object, not something this class can decide alone.
  * `Game#evictSubtree` is the primitive it will use when that policy exists.
  */
-import type { ElementJSON, Game, GameElement } from "../engine/index.js";
 import type {
+  ActionContext,
+  ActionDefinition,
+  ElementJSON,
+  Game,
+  GameElement,
+  Player,
+} from "../engine/index.js";
+import type { ActionMetadata, PickMetadata } from "../session/types.js";
+import { buildPickMetadata } from "../engine/element/action-metadata.js";
+import {
+  formatChoiceCandidates,
+  formatElementCandidates,
+  type AnnotatedCandidate,
+} from "../engine/element/pick-candidates.js";
+import {
+  assertCandidateBudget,
+  assertWorldAction,
+  bindWorldFacilities,
+  type WorldFacilities,
+  type WorldNeedsRound,
+} from "./action.js";
+import type {
+  WorldActionOffer,
   WorldCommand,
-  WorldCommandArgument,
-  WorldCommandOffer,
   WorldCommandResult,
   WorldCommandStamp,
   WorldEngine,
   WorldEventStamp,
+  WorldOfferStamp,
   WorldPartitionSource,
 } from "./contract.js";
-import { RESERVED_COMMAND_ARG } from "./contract.js";
 import {
   scheduleBudget,
   WORLD_OWNER,
   type ScheduleAllowance,
   type ScheduleRequest,
 } from "./schedule-api.js";
-import { worldRefusal } from "./refusals.js";
+import { worldRefusal, WorldRefusal } from "./refusals.js";
+import { evaluateCondition } from "../engine/index.js";
 import { readOnlyProjection } from "./readonly.js";
 import { worldBudgets, type WorldBudgets } from "./budgets.js";
 
@@ -90,15 +111,13 @@ import { worldBudgets, type WorldBudgets } from "./budgets.js";
  * The authoring types below are EXPORTED, and that reverses the call this file
  * used to make.
  *
- * They were reachable structurally -- a caller writes a handler into a
- * `WorldCommandTable` and TypeScript checks it -- so exporting them looked like
- * a public surface larger than its callers. It was not: the callers are world
- * BUNDLES, in other repositories, and every one of them hand-copied these
- * declarations because it had no way to import them. Three copies of a contract
- * is three places for it to drift, and it drifted. One declaration both sides
- * import is the whole point of `boardsmith/world`.
- *
- * Every one of them is TRANSITIONAL; see the note on `WorldCommandHandler`.
+ * They were reachable structurally -- a bundle writes a declaration and
+ * TypeScript checks it -- so exporting them looked like a public surface larger
+ * than its callers. It was not: the callers are world BUNDLES, in other
+ * repositories, and every one of them hand-copied these declarations because it
+ * had no way to import them. Four copies of a contract is four places for it to
+ * drift, and it drifted. One declaration both sides import is the whole point
+ * of `boardsmith/world`.
  */
 
 /**
@@ -157,211 +176,6 @@ function idsIn(json: ElementJSON, into: number[] = []): number[] {
 }
 
 /**
- * REFUSE A COMMAND DECLARATION THAT CANNOT BE HONOURED (#91).
- *
- * A descriptor is a PROMISE to a surface: this command asks for these things,
- * so draw these inputs. Three declarations break the promise before a player
- * ever sees them, and each one produces a form whose every submission is
- * refused -- the worst failure a generic UI has, because it looks like the
- * player's mistake.
- *
- *   - a `now` argument. `WorldSession` refuses any frame carrying one (#57),
- *     so an input for it could never be filled in successfully. The reserved
- *     name is `RESERVED_COMMAND_ARG`, defined once at the contract, because
- *     the refusing side and the declaring side must mean the same word.
- *   - two arguments of one name. The second silently wins whichever way a
- *     surface builds its object, so which one the handler reads is a fact
- *     about the client rather than about the game.
- *   - an empty name, or a `choice` offering nothing. Neither can be drawn.
- *
- * Refused at construction, so the bundle's author learns of it on the world's
- * first wake rather than from a player who cannot do anything.
- */
-function checkDeclaredArgs(
-  command: string,
-  args: readonly WorldCommandArgument[] | undefined,
-): void {
-  if (!Array.isArray(args)) {
-    throw worldRefusal(
-      "invalid-command-args",
-      `The "${command}" command declares no \`args\`. Every world command must say what it ` +
-        "asks a player for, so the platform can offer a real form instead of a JSON box. A " +
-        "command that asks for nothing declares `args: []`.",
-    );
-  }
-  const seen = new Set<string>();
-  for (const arg of args) {
-    if (typeof arg.name !== "string" || arg.name === "") {
-      throw worldRefusal(
-        "invalid-command-args",
-        `The "${command}" command declares an argument with no name. Every argument needs the ` +
-          "name its handler reads it by.",
-      );
-    }
-    if (arg.name === RESERVED_COMMAND_ARG) {
-      throw worldRefusal(
-        "invalid-command-args",
-        `The "${command}" command declares an argument named "${RESERVED_COMMAND_ARG}", and a ` +
-          "client does not get to say what time it is -- a frame carrying one is refused before " +
-          "it runs. Read the platform's own stamped instant as `ctx.now` and drop the argument.",
-      );
-    }
-    if (seen.has(arg.name)) {
-      throw worldRefusal(
-        "invalid-command-args",
-        `The "${command}" command declares "${arg.name}" twice. One argument, one name: a ` +
-          "client can only send one value under it, so the second declaration describes an " +
-          "input nothing will read.",
-      );
-    }
-    seen.add(arg.name);
-    if (arg.kind === "choice" && arg.choices.length === 0) {
-      throw worldRefusal(
-        "invalid-command-args",
-        `The "${command}" command's "${arg.name}" is a choice between nothing. Declare the ` +
-          "values the game itself can name -- the world's own state is the handler's business, " +
-          "and this is answered before any partition is loaded.",
-      );
-    }
-  }
-}
-
-
-/**
- * What a command handler is given when it runs.
- *
- * DELIBERATELY NO `game` (#152). The dirty-set contract -- everything a
- * command may have written is reported dirty -- was enforced only through the
- * `partition()` accessor below, while the same context handed the whole tree
- * over as `game`. An attribute write reaching a resident-but-undeclared
- * partition through a global query (`game.getElementById(id).at.price = 5`)
- * was not refused, not named, and not touched: every watcher's view showed the
- * new value, the checkpoint never serialized it, and eviction or hibernation
- * silently reverted it. The API made the wrong way exactly as easy as the
- * right way, so the wrong way is no longer on the surface at all: a handler
- * reads and writes the world through `partition()`, and a cross-partition move
- * travels on an element reference a declared partition already holds -- whose
- * re-parent the engine tracks (`takeTouchedPartitions`) whichever way the
- * reference was obtained.
- */
-/**
- * TRANSITIONAL -- #169 DELETES THIS TYPE.
- *
- * A world command's handler receives this; a world ACTION's will receive the
- * engine's own action context. Everything on it survives in some form -- `now`,
- * `timing`, `presence`, `schedule` and `complete` are all facts an action needs
- * just as much -- but the OBJECT does not, and `args` and `partition` in
- * particular change shape: an action's arguments are its selections, and what
- * it may reach is what its own `needs` declared.
- */
-export interface WorldCommandContext {
-  /** The command's own payload, unread by the platform. */
-  readonly args: Readonly<Record<string, unknown>>;
-  /** The seat that issued this command, or null for a scheduled event. */
-  readonly seat: number | null;
-  /**
-   * WHEN THIS COMMAND HAPPENS, according to the platform (#57).
-   *
-   * The stamped ARRIVAL instant for a player's command, and a scheduled
-   * event's own `due` for one the clock issued -- so a world drained a week
-   * late computes exactly what a punctual one would.
-   *
-   * THIS IS THE ONLY CLOCK A HANDLER MAY TRUST. `args` is the client's frame:
-   * a player who could name the time would backdate every timer they start,
-   * and every building would finish the moment it was begun. `Date.now()`
-   * inside the isolate is the execution instant rather than the arrival one,
-   * and the two diverge exactly when the world is busy -- which is when it
-   * matters.
-   *
-   * Measure a delay FROM THIS, and give `ctx.schedule()` the delay rather than
-   * an absolute instant, so both halves of a timer read the same clock.
-   */
-  readonly now: number;
-  /**
-   * A scheduled event's timing, or null for a player command.
-   *
-   * `due` is the SCHEDULED time and never the wall clock, so a world that
-   * drained late produces the same state as one that drained on time.
-   *
-   * `missedCount` is how many occurrences of a RECURRENCE got no call of their
-   * own, folded into this one (#127). This call is not one of them, so
-   * integrate with `1 + timing.missedCount`. It is 0 for a one-shot and for
-   * every occurrence that ran on its own, so a handler that never reads it is
-   * correct whenever the world kept up.
-   */
-  readonly timing: {
-    readonly due: number;
-    readonly missedCount: number;
-  } | null;
-  /**
-   * WHICH SEATS ARE CONNECTED RIGHT NOW (#144).
-   *
-   * The platform's stamp, exactly as `now` is: socket state lives on the
-   * parent, so this is handed down rather than read, and a handler asking
-   * `ctx.presence.has(seat)` is asking the only side that can know. PER SEAT
-   * -- a player with two tabs is present once -- and DERIVED at the moment of
-   * this command, never stored, so it cannot claim anybody across a
-   * hibernation: a world woken hours after parking sees whoever is actually
-   * attached, usually nobody.
-   *
-   * It means exactly "this seat holds an open connection at this instant".
-   * The platform does not distinguish "left" from "dropped and reconnecting";
-   * a world that wants durable consequences of leaving writes them as state,
-   * through commands. Presence is not world state and never becomes any
-   * unless a handler deliberately writes it.
-   */
-  readonly presence: ReadonlySet<number>;
-  /** The resident root of one of the partitions this command declared. */
-  partition(name: string): GameElement;
-  /**
-   * ASK THE PLATFORM TO WAKE THIS WORLD LATER (#37 item 3, #56).
-   *
-   * The EAGER half of the timer primitive, and the expensive one: a scheduled
-   * event costs a wake, because the world must exist at that instant to do
-   * something nobody asked for. If the effect is only visible when somebody
-   * next looks, write a `completesAt` timestamp from `ctx.now` instead and
-   * compute it on read -- that costs nothing at all, and the world sleeps
-   * through the whole thing.
-   *
-   * A REQUEST, not an insertion. The queue is a key in the parent's storage
-   * and this runs in a child isolate with no bindings, so the request rides
-   * home on the command's result and the parent stamps the owner, enforces the
-   * cap and inserts. That is section 7's "the abusive path cannot reach the
-   * queue rather than failing a check" as a property of the surface.
-   *
-   * `delayMs` is measured from `ctx.now`, so a world woken late schedules the
-   * instant a punctual one would.
-   *
-   * `everyMs` MAKES IT A RECURRENCE, and the platform re-arms it: `delayMs` is
-   * the first occurrence, `everyMs` the gap between the rest. A handler never
-   * writes the re-arm and cannot forget it, and one that fell behind is caught
-   * up by `catchUpPlan` rather than replayed -- four real occurrences and one
-   * coalesced call carrying `timing.missedCount`. It costs ONE queue row for
-   * the life of the world, because the drain replaces its event rather than
-   * adding beside it.
-   *
-   * It THROWS when the request cannot be taken -- a negative delay, or this
-   * player's unkeyed events at the cap -- and it throws HERE rather than
-   * quietly later, so the whole command unwinds and the player is told no over
-   * a world that did not change. A keyed schedule upserts and can never hit the
-   * cap, which is why the refusal's first suggestion is to use one.
-   */
-  schedule(request: ScheduleRequest): void;
-  /**
-   * DECLARE THIS SEASON OVER.
-   *
-   * The one ending a game may name, and it takes no argument so it cannot name
-   * any other -- section 8's "only the game may declare a completion" as a
-   * property of the surface rather than a check downstream.
-   *
-   * Calling it does not stop the command: the handler runs to its end and its
-   * events and dirty set are reported normally. What ends is the SEASON, which
-   * the platform settles once the command's changes are durable.
-   */
-  complete(): void;
-}
-
-/**
  * WHAT A DECLARATION CAN SEE OF THE WORLD SO FAR (#122).
  *
  * The third argument to `partitions` and the second to `world.view`, and the
@@ -388,124 +202,22 @@ export interface WorldResidency {
 }
 
 /**
- * TRANSITIONAL -- #169 REPLACES A WORLD'S COMMANDS WITH ACTIONS.
- *
- * A world's verbs are a flat command table today, which is why a world has no
- * board clicks, no accessible action panel, no enumeration and no bots: those
- * are all built over the engine's Action system, and a world does not use it.
- * #169 makes a world command an Action, and this type and everything shaped
- * around it (`WorldCommandContext`, `WorldCommandTable`, `WorldCommandOffer`,
- * `WorldCommandArgument`, and the `genesis` / `view` / `presence` signatures on
- * `WorldDefinition`) go with it.
- *
- * It is exported anyway, and marked rather than hidden, because a bundle has to
- * name the shape it exports and hand-copying it into every world game is how
- * the contract drifted in the first place. Write against it; expect it to
- * change in one pass, with every catalogue game updated at once.
- */
-/** One command the world answers to. */
-export interface WorldCommandHandler {
-  /**
-   * WHAT THIS COMMAND ASKS A PLAYER FOR (#91).
-   *
-   * REQUIRED, and empty is a legal answer. `partitions(args)` reads the
-   * arguments and `run` reads them, and until this existed both discovered
-   * what they were by looking -- so the platform could name a command and
-   * could not name one thing it wanted, and the action panel's only honest
-   * surface was a JSON box. A command that asks for nothing says `args: []`;
-   * making that explicit is what stops "asks nothing" and "never got round to
-   * declaring" from looking identical from outside.
-   */
-  readonly args: readonly WorldCommandArgument[];
-  /**
-   * Which partitions must be resident before `run`.
-   *
-   * Declared WITHOUT THE WORLD, because it is answered BEFORE the world is
-   * loaded -- that is what absent-until-loaded means. Everything named here
-   * is reported dirty whether or not `run` wrote to it.
-   *
-   * `seat` IS THE ACTING SEAT, or null when the clock is acting (#121). It was
-   * not there until 2026-08-28, and its absence was the reason no command could
-   * name "my own holding": a per-player world had to make every settler pass
-   * their own land as an argument with exactly one legal answer, and then have
-   * `run` refuse everybody who named somebody else's. The seat is known before
-   * the child is called -- the roster is the engine's and `dispatch` already
-   * resolves it -- so nothing about the lazy-hydration argument changes: this
-   * is still answered with no partition loaded and no world to consult.
-   *
-   * A command that needs the seat and is handed null must SAY SO, by throwing.
-   * `clockOnly` below is the declaration for the opposite case.
-   *
-   * `world` IS WHAT AN EARLIER ROUND LOADED (#122), and it is what makes a
-   * command in a world whose player LOCATION is state expressible at all. The
-   * platform asks this again once what it named is resident, so a MUD's `look`
-   * names its wanderer index while everything is absent and, reading it, names
-   * the room that player is standing in. On the first round every partition is
-   * `undefined`; declare what you need to READ, and the next round can read it.
-   *
-   * Everything named on the LAST round is what gets loaded and reported dirty,
-   * so a declaration must keep naming what it already asked for -- see the
-   * worked example in `docs/persistent-worlds.md`, which is this repository's
-   * authoring guide now that the contract is here (#165).
-   */
-  partitions(
-    args: Readonly<Record<string, unknown>>,
-    seat: number | null,
-    world: WorldResidency,
-  ): readonly string[];
-  /** Mutate the resident tree and say what happened. */
-  run(context: WorldCommandContext): WorldEvents;
-  /** What this command does, for a surface that has to label a button. */
-  readonly prompt?: string;
-  /**
-   * THIS COMMAND IS THE CLOCK'S, AND NO PLAYER MAY SEND IT (#120).
-   *
-   * A scheduled event runs a command out of THIS SAME TABLE -- that is the
-   * design, and a good one: a world has one way to change rather than two. The
-   * consequence, until this flag, was that a completion handler nobody should
-   * ever press was enumerated to players like everything else, so every game
-   * with an eager timer grew a dead button on its action panel AND a
-   * hand-written refusal inside `run` to answer whoever pressed it.
-   *
-   * Declaring it does two things and they are deliberately both:
-   * `commandOffers` leaves it out, so no surface draws it; and a player's frame
-   * naming it is refused at the door, before a partition is read or a handler
-   * is reached. Filtering alone would leave the rule enforceable only by the
-   * client, which is not a place a rule can live.
-   *
-   * It says nothing about what the command may DO. Whether a due burn is legal
-   * this instant stays the game's judgement, made with the holding in front of
-   * it; this is only about who may issue it.
-   *
-   * EXACTLY TWO SITES READ THIS, AND IT MUST STAY TWO: the filter in
-   * `commandOffers`, and the refusal in `handlerFor`. Neither is redundant --
-   * filtering alone leaves the rule enforceable only by the client, which is
-   * not a place a rule can live, and refusing alone leaves the dead button on
-   * the panel. A third reader would be a third opinion about what "the clock's
-   * own" means.
-   *
-   * TRANSITIONAL, and likely to be RENAMED rather than deleted (#169). Under
-   * Actions the same fact is "this verb has no acting seat", which is what
-   * `seatless` says and what `clockOnly` only implies -- the flag is about who
-   * may issue it, and "the clock" is one answer to that rather than the
-   * question. Both sites move together whichever name wins.
-   */
-  readonly clockOnly?: boolean;
-}
-
-/** The world's whole command surface, by name. */
-export type WorldCommandTable = Readonly<Record<string, WorldCommandHandler>>;
-
-/**
  * WHICH PARTITIONS ONE SEAT'S VIEW IS ABOUT (#95).
  *
- * The read path's counterpart to `WorldCommandHandler.partitions`, and it is
- * required of a world bundle for the same reason `args` is required of a
- * command: a game that never declared one and a game that declared nothing
- * must not look the same from outside. `() => []` is the whole of the second.
+ * The read path's counterpart to a world action's own `needs` walk, and it is
+ * required of a world bundle: a game that never declared one and a game that
+ * declared nothing must not look the same from outside. `() => []` is the whole
+ * of the second.
+ *
+ * A VIEW KEEPS THE FIXPOINT an action's declaration gave up (#169). An action
+ * is a sequence, so its declaration is an ordered walk whose length is its own
+ * selection count; a view has no steps, so "what is this seat looking at?" can
+ * only be answered by asking, loading, and asking again until it stops changing
+ * its mind. That is why `settleDeclaration` is still here and why it still has
+ * a ceiling.
  *
  * Reachable without being exported: a bundle writes one into its `world` block
- * and TypeScript checks it structurally, exactly as a command handler is.
+ * and TypeScript checks it structurally.
  */
 export type WorldViewDeclaration = (
   seat: number,
@@ -528,8 +240,21 @@ export interface BoardSmithWorldEngineOptions {
   readonly seats: ReadonlyMap<string, number>;
   /** Where partitions are read from, and told when this engine lets one go. */
   readonly store: WorldPartitionSource;
-  /** What the world answers to. */
-  readonly commands: WorldCommandTable;
+  /**
+   * THE WORLD'S VERBS, as `worldAction()` built them (#169).
+   *
+   * Registered on the game by this engine, so they land in the SAME `_actions`
+   * registry a table's actions land in and are reached through the same
+   * `game.getAction`. That is what lets one enumeration serve both backends --
+   * and it is the single property that keeps a world bot possible, since MCTS
+   * finds its moves through `getAction` and `enumerateSelectionsInternal` with
+   * no world-only path to teach it.
+   *
+   * Taken as a list rather than read off the game, because a game class may
+   * register a table's actions in its own constructor and those are not this
+   * world's verbs. What is named here is what a seat may be offered.
+   */
+  readonly actions: readonly ActionDefinition[];
   /**
    * WHAT ONE SEAT'S VIEW IS ABOUT (#95).
    *
@@ -560,7 +285,8 @@ export class BoardSmithWorldEngine implements WorldEngine {
   /** MUTABLE, and that is the point: see `seat`. */
   private readonly seats: Map<string, number>;
   private readonly store: WorldPartitionSource;
-  private readonly commands: WorldCommandTable;
+  /** This world's verbs by name, in the order the bundle declared them. */
+  private readonly actions = new Map<string, ActionDefinition>();
   /** What a seat's view is about, from the bundle (#95). */
   private readonly view: WorldViewDeclaration;
 
@@ -593,15 +319,20 @@ export class BoardSmithWorldEngine implements WorldEngine {
     this.game = options.game;
     this.seats = new Map(options.seats);
     this.store = options.store;
-    this.commands = options.commands;
     this.view = options.view;
     this.budgets = options.budgets ?? worldBudgets();
     // AT CONSTRUCTION, NOT AT THE FIRST OFFER. A bundle whose declaration is
     // wrong is wrong for every player who will ever attach, so it is refused
     // once, before the world is built, rather than on whichever player first
     // asked what they could do here.
-    for (const [name, handler] of Object.entries(this.commands)) {
-      checkDeclaredArgs(name, handler.args);
+    for (const action of options.actions) {
+      assertWorldAction(action);
+      // ONE REGISTRY, and this is where a world's verbs enter it. Registering
+      // here rather than asking the bundle to do it in its game constructor is
+      // what makes "the actions the engine offers" and "the actions the game
+      // holds" the same list by construction rather than by convention.
+      this.game.registerAction(action);
+      this.actions.set(action.name, action);
     }
   }
 
@@ -710,114 +441,372 @@ export class BoardSmithWorldEngine implements WorldEngine {
     });
   }
 
-  commandOffers(): readonly WorldCommandOffer[] {
-    // From the TABLE and not from the tree: asking what a world answers to
-    // must not load a partition, or "what can I do here?" would cost what
-    // acting costs. The ARGUMENTS come from the same place for the same
-    // reason -- a choice's options are what the bundle can state about itself,
-    // never what the world happens to hold this instant (#91).
-    return Object.keys(this.commands)
-      .sort()
-      // THE CLOCK'S OWN COMMANDS ARE NOT OFFERED (#120). They are in the table
-      // -- a scheduled event reaches them through it -- and they are not
-      // actions a player has, so a surface that drew one would be drawing a
-      // button whose every press is refused.
-      .filter((name) => this.commands[name]!.clockOnly !== true)
-      .map((name) => {
-        const handler = this.commands[name]!;
-        return handler.prompt === undefined
-          ? { name, args: handler.args }
-          : { name, prompt: handler.prompt, args: handler.args };
-      });
+  /**
+   * WHAT THIS SEAT CAN DO HERE, ENUMERATED (#169).
+   *
+   * The flat command table's `commandOffers()` answered from the bundle's own
+   * static declaration and loaded nothing: it could say `tend` exists and that
+   * it wants a holding, and the only holdings it could name were all five
+   * hundred, because the bundle can state what it holds and not what is legal
+   * this instant. That is the JSON box wearing a form's clothes.
+   *
+   * This answers the seat's ACTIONS, in the table's own `ActionMetadata` shape,
+   * with each selection's candidates already resolved -- so `tend` offers the
+   * two to four neighbouring holdings that exist right now, as element IDs the
+   * board bridge wires straight to a click.
+   *
+   * ## Why this does not resurrect what `viewFor` refuses to do
+   *
+   * `viewFor` argues at length that a world may never call `createPlayerView`,
+   * because that reaches `getAvailableActions` and evaluates every registered
+   * action's selections against a tree the world deliberately does not hold.
+   * That argument is the CONSTRAINT this method satisfies, not an obsolete
+   * note. What makes the difference is that a world action declares what each
+   * of its steps needs, and three rules hold the declaration to it:
+   *
+   *   the unbounded `from`/`filter` element form is refused at construction;
+   *   every candidate must lie inside a partition this step declared, checked
+   *     with the SAME `assertDeclared` the dispatch path uses; and
+   *   a selection may not offer more than `maxCandidatesPerSelection`.
+   *
+   * So an action that reaches an undeclared partition is refused BY NAME at the
+   * enumeration boundary, which is the difference between a bug that looks like
+   * a wake bug and a message that names the action.
+   *
+   * ## What it costs
+   *
+   * `O(actions) x (condition + each selection's own candidates)`. There is no
+   * term that scales with the world: it scales with what the declaration named,
+   * and the declaration is authored, finite and readable. The hydration is the
+   * union of the actions' round-one declarations, which for every game in the
+   * catalogue is a subset of what `world.view` already names -- so in practice
+   * an offer over a seat's own view loads nothing at all.
+   */
+  async offersFor(player: string, stamp: WorldOfferStamp): Promise<readonly WorldActionOffer[]> {
+    const seat = this.seatFor(player);
+    const acting = this.playerFor(seat);
+    const offers: WorldActionOffer[] = [];
+
+    for (const definition of this.actions.values()) {
+      // THE CLOCK'S OWN ARE NOT OFFERED (#120), and this is the FIRST of the
+      // exactly two sites that read `seatless`. Filtering alone would leave the
+      // rule enforceable only by the client, which is not a place a rule can
+      // live; `actionFor` is the other half.
+      if (definition.world?.seatless === true) continue;
+      const offer = await this.offerOf(definition, seat, acting, stamp);
+      if (offer !== null) offers.push(offer);
+    }
+    // By name, so a surface's order is the game's own fact rather than the
+    // order a Map happened to iterate.
+    return offers.sort((left, right) => left.name.localeCompare(right.name));
   }
 
   /**
-   * WHICH PARTITIONS THIS COMMAND IS ABOUT, BEFORE IT RUNS (#121).
+   * WHAT AN OFFER FOR THIS SEAT STILL NEEDS RESIDENT, one round at a time.
+   *
+   * The read path's `commandPartitions`, and it exists for the same reason: a
+   * host reads storage and the engine does not, so the engine names and the
+   * host supplies. It walks every action the seat could be offered -- round
+   * one, then each selection's own round -- and answers the first unmet round
+   * of each, unioned, because the actions are independent of one another and
+   * batching them keeps an offer to one storage round trip per LEVEL rather
+   * than one per action.
+   *
+   * A CONDITION THAT IS FALSE STOPS THAT ACTION'S WALK. A verb that is
+   * irrelevant here should not make the world load the partitions it would have
+   * acted on, which is the difference between an offer costing what the seat
+   * can do and an offer costing what the bundle declared.
+   *
+   * The EXECUTE round is deliberately not walked: it names what `execute`
+   * writes, and an offer executes nothing.
+   */
+  offerPartitions(player: string): readonly string[] {
+    const seat = this.seatFor(player);
+    const acting = this.playerFor(seat);
+    const missing: string[] = [];
+    for (const definition of this.actions.values()) {
+      if (definition.world?.seatless === true) continue;
+      missing.push(...this.offerPartitionsOf(definition, seat, acting));
+    }
+    return declaredOnce(missing);
+  }
+
+  /** One action's share of the answer above: the first round it cannot yet
+   *  make, or nothing when its whole offer is already resident. */
+  private offerPartitionsOf(
+    definition: ActionDefinition,
+    seat: number,
+    acting: Player,
+  ): readonly string[] {
+    for (let step = 0; step < definition.selections.length || step === 0; step++) {
+      for (const round of definition.world!.needs) {
+        if (round.before !== step) continue;
+        const unmet = this.declareRound(round, seat, {}).filter(
+          (name) => !this.residentIds.has(name),
+        );
+        // ONE ROUND AT A TIME. A later round may read what an earlier one
+        // loaded, so there is nothing to say about it until the host has
+        // supplied this one.
+        if (unmet.length > 0) return unmet;
+      }
+      // A CONDITION THAT IS FALSE STOPS THE WALK, once round one is resident.
+      // A verb that is irrelevant here should not make the world load the
+      // partitions it would have acted on, which is the difference between an
+      // offer costing what the seat can do and an offer costing what the bundle
+      // declared.
+      if (
+        step === 0 &&
+        definition.condition &&
+        !evaluateCondition(
+          definition.condition,
+          { game: this.game, player: acting, args: {} },
+          `action '${definition.name}'`,
+        )
+      ) {
+        return [];
+      }
+    }
+    return [];
+  }
+
+  /** One action's offer, or null when this seat may not take it at all. */
+  private async offerOf(
+    definition: ActionDefinition,
+    seat: number,
+    acting: Player,
+    stamp: WorldOfferStamp,
+  ): Promise<WorldActionOffer | null> {
+    const named: string[] = [];
+    const facilities = this.readOnlyFacilities(definition.name, named, stamp);
+    bindWorldFacilities(this.game, facilities);
+    try {
+      // ROUND ONE (and any round that shares its place), before anything is
+      // asked of the player.
+      await this.hydrateRounds(definition, 0, seat, {}, named);
+
+      // WITH EMPTY ARGS, exactly as a table evaluates availability. An action
+      // whose condition is false is not offered and no further round runs, so a
+      // verb that is irrelevant here costs one predicate and no hydration past
+      // round one.
+      if (
+        definition.condition &&
+        !evaluateCondition(
+          definition.condition,
+          { game: this.game, player: acting, args: {} },
+          `action '${definition.name}'`,
+        )
+      ) {
+        return null;
+      }
+
+      // ONE ROUND, THEN ONE SELECTION, IN THE AUTHOR'S ORDER.
+      //
+      // Deliberately NOT `isActionAvailable`, and the reason is the whole of
+      // why `viewFor` refuses `createPlayerView`: that helper enumerates every
+      // selection of every registered action in one pass, against whatever
+      // happens to be resident, and a world's partitions are absent until a
+      // declaration names them. Interleaving is what makes enumeration possible
+      // at all here -- selection i's candidates are evaluated with selection
+      // i's declaration resident and not before.
+      const selections: PickMetadata[] = [];
+      let satisfiable = true;
+      for (let index = 0; index < definition.selections.length; index++) {
+        if (index > 0) await this.hydrateRounds(definition, index, seat, {}, named);
+        const pick = this.pickOf(definition, index, acting, named);
+        selections.push(pick);
+        // WHAT `hasValidSelectionPath` MEANS FOR A WORLD ACTION. On a table it
+        // recurses, because a later selection may depend on an earlier one's
+        // value; a world action may not declare a dependent selection, so the
+        // whole of "is there a legal path through this action" is "does every
+        // question it asks have at least one answer".
+        if (!pick.optional && candidateless(pick)) satisfiable = false;
+      }
+      if (!satisfiable) return null;
+
+      return offerOf(definition, selections, this.game.getActionDisabledReason(definition, acting));
+    } finally {
+      bindWorldFacilities(this.game, null);
+    }
+  }
+
+  /**
+   * One selection's metadata WITH ITS CANDIDATES, and both guards applied.
+   *
+   * The static half is `buildPickMetadata`, the engine's own -- the same
+   * function that builds a table's, so a world's picks and a table's are the
+   * same shape by construction rather than by inspection. The candidates are
+   * resolved here rather than fetched on demand because a world's offer is
+   * answered in one frame; the cap and the residency check are what keep that
+   * affordable.
+   */
+  private pickOf(
+    definition: ActionDefinition,
+    index: number,
+    acting: Player,
+    named: readonly string[],
+  ): PickMetadata {
+    const selection = definition.selections[index]!;
+    const pick = buildPickMetadata(this.game, acting, selection);
+    if (selection.type === "number" || selection.type === "text") return pick;
+
+    const candidates = this.game
+      .getActionExecutor()
+      .getChoices(selection, acting, {}, definition.name) as AnnotatedCandidate[];
+
+    // (c) THE PER-SELECTION CAP, this host's own number.
+    assertCandidateBudget(definition.name, selection.name, candidates.length, this.budgets);
+
+    const context = { game: this.game, player: acting, args: {} };
+    // Warnings are the SESSION's channel for a soft-failed display callback and
+    // a world has no frame to carry them; collected so the formatters have
+    // somewhere to put one, and dropped, because the console already has it.
+    const warnings: never[] = [];
+    if (selection.type === "choice") {
+      pick.choices = formatChoiceCandidates(candidates, selection, context, warnings);
+      return pick;
+    }
+
+    // (b) EVERY CANDIDATE INSIDE A DECLARED PARTITION, checked with the same
+    // predicate the dispatch path uses. Two copies of a residency rule is
+    // exactly how a world comes to offer a player a choice its own dispatch
+    // then refuses.
+    for (const candidate of candidates) {
+      assertDeclared(definition.name, this.partitionOf(candidate.value as GameElement), named);
+    }
+    pick.validElements = formatElementCandidates(candidates, selection, context, warnings);
+    return pick;
+  }
+
+  /**
+   * WHICH PARTITION AN ELEMENT LIVES IN, walking up to the root that names one.
+   *
+   * An element outside every partition is not a candidate a world can offer:
+   * nothing would checkpoint a write to it, so choosing it would change the
+   * world exactly until the next hibernation. The refusal names the action so
+   * the author knows which candidate list to narrow.
+   */
+  private partitionOf(element: GameElement): string {
+    for (let node: GameElement | undefined = element; node; node = node.parent) {
+      const name = this.residentNames.get(node.id);
+      if (name !== undefined) return name;
+    }
+    return "(no partition)";
+  }
+
+  /**
+   * WHAT THIS ACTION STILL NEEDS RESIDENT, one round at a time (#169).
    *
    * The write path's counterpart to `viewPartitions(player)`, and it is on the
    * engine for the same reason that one is: the ROSTER is the engine's, so the
-   * seat a command acts from can only be resolved here. `world-runner.ts` used
-   * to reach into the command table itself and call `partitions(args)` -- which
-   * is exactly why a command could not name the acting player's own partition,
-   * because the one caller that could have supplied a seat did not have one.
+   * seat an action acts from can only be resolved here.
    *
-   * `player` is null for a scheduled event, which reaches `partitions` as a
-   * null seat.
+   * IT ANSWERS THE NEXT UNMET ROUND, not the whole declaration. An action's
+   * declaration is an ORDERED WALK -- round one, then each selection's own
+   * round, then the execute round -- and a later round is allowed to read what
+   * an earlier one loaded, so it cannot be answered until that one is resident.
+   * The host supplies what this names and asks again; the loop ends when this
+   * answers nothing, and it terminates because the walk has one round per step
+   * and every round it returns becomes resident before it is asked again. That
+   * is what replaces the fixpoint's ceiling and its `declaration-unsettled`
+   * refusal for the write path: there is no number to tune, because the length
+   * is the action's own source.
    *
-   * IT LOADS NOTHING and applies nothing. The declaration is the bundle's own,
-   * answerable while every partition is still absent -- that is the whole of
-   * declare-then-apply.
+   * IT LOADS NOTHING. Everything named here is answered while the partitions
+   * are still absent -- that is the whole of declare-then-apply.
+   *
+   * `player` is null for a scheduled event, which reaches a seatless action's
+   * declaration as a null seat and no player at all.
    */
   commandPartitions(player: string | null, command: WorldCommand): readonly string[] {
     const seat = player === null ? null : this.seatFor(player);
-    return this.declaredFor(command, seat);
+    const definition = this.actionFor(command.name, seat);
+    for (const round of definition.world!.needs) {
+      const missing = this.declareRound(round, seat, command.args).filter(
+        (name) => !this.residentIds.has(name),
+      );
+      if (missing.length > 0) return declaredOnce(missing);
+    }
+    return [];
   }
 
   /**
-   * WHAT A COMMAND NAMES, EACH PARTITION ONCE (#263).
+   * One round of a declaration, answered read-only.
    *
-   * Read here rather than at the two call sites -- `commandPartitions` on the
-   * parent's behalf and `dispatch` when the command actually runs -- because
-   * the whole of "everything the declaration named is resident" rests on those
-   * two asking the same question and getting the same answer.
-   *
-   * A DECLARATION MAY NAME ONE PARTITION TWICE, and that is an author writing
-   * ordinary code rather than an author making a mistake: `partitions: (args,
-   * seat) => [ownHolding(seat), args.neighbour]` names one partition whenever a
-   * settler aims at their own land. Nothing downstream is written for a repeat
-   * -- `ensureResident` returns early on the second, so the write path looked
-   * fine -- but the ROLLBACK snapshots this list verbatim, and since #189 every
-   * declared root comes out before any goes back in, so the second restore met
-   * the first one's element ids and `adoptSubtree` refused. The game's own
-   * refusal was replaced by a platform error about ids, which is precisely the
-   * thing the author cannot act on. It also costs a duplicate: the parent reads
-   * every name this answers out of storage and ships it to the child.
-   *
-   * THE THIRD ARGUMENT IS WHAT AN EARLIER ROUND LOADED (#122). It is empty on
-   * the first round of a cold world, which is the state this declaration was
-   * always answered in; what is new is that there IS a later round.
+   * READ-ONLY TWICE OVER, and both halves matter (#219, #295). The game is
+   * handed over as a projection that REFUSES every write, because a declaration
+   * runs before the host has decided what this action may change, so nothing it
+   * wrote could be checkpointed -- it would either ride a rollback the player
+   * was told discarded it, or revert at the next hibernation with nobody told.
+   * And the whole call runs inside `readingOnly`, so what a declaration merely
+   * LOOKED at does not enter the next dispatch's dirty comparison, which is the
+   * O(resident) cost that removed.
    */
-  private declaredFor(command: WorldCommand, seat: number | null): readonly string[] {
-    // READ-ONLY, AND THE ENGINE IS TOLD SO (#295). `residentWorld()` hands out
-    // projections that refuse every write (#219), so nothing a declaration
-    // touches can end up dirty -- and the engine's dirty-set comparison now
-    // runs only over what a command REACHED. Left unsaid, a declaration that
-    // walked the world would put every partition it looked at into the next
-    // command's comparison, which is the O(resident) cost this removed; and
-    // the mark itself would be refused by the very projection that makes the
-    // read safe.
+  private declareRound(
+    round: WorldNeedsRound,
+    seat: number | null,
+    args: Readonly<Record<string, unknown>>,
+  ): readonly string[] {
+    const player = seat === null ? null : this.playerFor(seat);
     return declaredOnce(
       this.game.readingOnly(() =>
-        this.handlerFor(command.name, seat).partitions(
-          command.args,
+        round.declare({
+          game: readOnlyProjection(this.game),
+          player: player === null ? null : readOnlyProjection(player),
           seat,
-          this.residentWorld(),
-        ),
+          args: args as Record<string, unknown>,
+        }),
       ),
     );
   }
 
   /**
-   * The handler for this command, and WHETHER THIS CALLER MAY HAVE IT.
+   * Evaluate every round that comes before step `step`, in order, making what
+   * each names resident before the next is asked.
    *
-   * Both refusals live here rather than at each of the two call sites --
-   * `commandPartitions` and `dispatch` -- because the declaration path and the
-   * apply path are separate calls across a boundary, and a rule enforced in
-   * only one of them is a rule a caller can step around by skipping a call.
+   * IN ORDER AND ONE AT A TIME, because that is the whole mechanism: a later
+   * round is allowed to READ what an earlier one loaded, which is how a
+   * declaration whose subject is itself state -- the room a wanderer is
+   * standing in -- gets written without branching on whether the partition
+   * happens to be there yet.
    */
-  private handlerFor(name: string, seat: number | null): WorldCommandHandler {
-    const handler = this.commands[name];
-    if (!handler) {
-      const known = Object.keys(this.commands);
+  private async hydrateRounds(
+    definition: ActionDefinition,
+    step: number,
+    seat: number | null,
+    args: Readonly<Record<string, unknown>>,
+    named: string[],
+  ): Promise<void> {
+    for (const round of definition.world!.needs) {
+      if (round.before !== step) continue;
+      for (const name of this.declareRound(round, seat, args)) {
+        if (!named.includes(name)) named.push(name);
+        await this.ensureResident(name);
+      }
+    }
+  }
+
+  /**
+   * The action for this name, and WHETHER THIS CALLER MAY HAVE IT.
+   *
+   * Both refusals live here rather than at each call site -- `commandPartitions`
+   * and `dispatch` -- because the declaration path and the apply path are
+   * separate calls across a boundary, and a rule enforced in only one of them
+   * is a rule a caller can step around by skipping a call.
+   */
+  private actionFor(name: string, seat: number | null): ActionDefinition {
+    const definition = this.actions.get(name);
+    if (!definition) {
+      const known = [...this.actions.keys()];
       throw worldRefusal(
         "unknown-command",
-        `This world has no command named "${name}". It answers to: ` +
-          `${known.length > 0 ? known.join(", ") : "no commands at all"}.`,
+        `This world has no action named "${name}". It answers to: ` +
+          `${known.length > 0 ? known.join(", ") : "no actions at all"}.`,
       );
     }
-    // A PLAYER MAY NOT ISSUE THE CLOCK'S COMMAND (#120). `seat === null` is the
-    // clock, and it is the only caller this command has.
-    if (handler.clockOnly === true && seat !== null) {
+    // A PLAYER MAY NOT ISSUE THE CLOCK'S OWN (#120), and this is the SECOND of
+    // the two sites that read `seatless`. `seat === null` is the clock, and it
+    // is the only caller a seatless action has.
+    if (definition.world?.seatless === true && seat !== null) {
       throw worldRefusal(
         "clock-only-command",
         `"${name}" is this world's own clock at work, not an action you take. It runs when the ` +
@@ -825,7 +814,80 @@ export class BoardSmithWorldEngine implements WorldEngine {
           "it, and no player may issue it.",
       );
     }
-    return handler;
+    // AND THE CLOCK MAY NOT ISSUE A SEAT'S. The other half of the same rule,
+    // and it was missing: a scheduled event naming an ordinary action reached
+    // `player.seat` on nothing and answered with a TypeError out of game code,
+    // which tells a bundle author neither what happened nor which schedule row
+    // did it. A seated action asks a person a question, and a due event has
+    // nobody to ask.
+    if (definition.world?.seatless !== true && seat === null) {
+      throw worldRefusal(
+        "clock-only-command",
+        `A scheduled event named "${name}", which is something a seat does rather than something ` +
+          "the clock does: it acts for a player, and a due event has no player. Build the verb " +
+          "the clock runs with `worldClockAction()`, or schedule one that is already seatless.",
+      );
+    }
+    return definition;
+  }
+
+  /**
+   * The Game player holding this seat.
+   *
+   * A REAL PLAYER AND NEVER A SYNTHETIC ONE: a world's game is constructed with
+   * `playerCount` equal to the bundle's own `maxPlayers`, so every seat in the
+   * world has a chair in the tree and `ActionContext.player` is honest. That is
+   * what lets a world action be enumerated by the engine's own
+   * `getAvailableActions` rather than by something written beside it.
+   */
+  private playerFor(seat: number): Player {
+    const player = this.game.getPlayer(seat);
+    if (!player) {
+      throw worldRefusal(
+        "world-full",
+        `This world's game holds ${this.game.players.length} seats and nothing sits at seat ` +
+          `${seat}. A seat is minted by the bundle's own maxPlayers; nothing else may mint one.`,
+      );
+    }
+    return player;
+  }
+
+  /**
+   * The facilities an OFFER runs against: reads only.
+   *
+   * `schedule`, `complete` and `emit` refuse. An offer is a question, and a
+   * question that armed a timer, ended a season or narrated a line would do
+   * those things once per watcher per frame. It is also the boundary a bot
+   * needs: an MCTS search rolls the tree back many times inside one real
+   * dispatch, and a schedule or a completion escapes the tree and cannot be
+   * rolled back with it.
+   */
+  private readOnlyFacilities(
+    action: string,
+    named: readonly string[],
+    stamp: WorldOfferStamp,
+  ): WorldFacilities {
+    const refuse = (what: string): never => {
+      throw worldRefusal(
+        "not-in-a-world",
+        `The "${action}" action called ctx.world.${what}() while the world was deciding what to ` +
+          "OFFER this seat, which is a question rather than a moment. Nothing an offer does can " +
+          "be checkpointed or rolled back, so a timer armed here would be armed once per " +
+          `watcher. Move the ${what}() into the action's execute().`,
+      );
+    };
+    return {
+      now: stamp.now,
+      timing: null,
+      presence: new Set(stamp.presence),
+      partition: (name: string) => {
+        assertDeclared(action, name, named);
+        return this.rootOf(name);
+      },
+      schedule: () => refuse("schedule"),
+      complete: () => refuse("complete"),
+      emit: () => refuse("emit"),
+    };
   }
 
   viewPartitions(player: string): readonly string[] {
@@ -886,11 +948,13 @@ export class BoardSmithWorldEngine implements WorldEngine {
     // wake bug because the instance that ran `world.genesis` holds every
     // partition: the view was right once and threw on every view afterwards.
     //
-    // A WORLD'S VERBS ARE ITS COMMANDS, offered by `commandOffers()` from the
-    // bundle's own table and never from the tree, for the same reason. Its flow
-    // does not run -- `definition.ts:createWorld` never starts one -- so there is
-    // no turn to report, and the three things below are the whole of what a
-    // world has to say to one seat.
+    // A WORLD'S VERBS ARE ANSWERED BY `offersFor()`, which enumerates them
+    // under the bounded contract `assertWorldAction` enforces -- one action at
+    // a time, hydrating each one's own declaration as it goes, rather than
+    // evaluating every registered action against whatever happens to be
+    // resident. Its flow does not run -- `definition.ts:createWorld` never
+    // starts one -- so there is no turn to report, and the three things below
+    // are the whole of what a world has to say to one seat.
     //
     // AND NO MESSAGES (#163). The game root's message log lives outside every
     // partition, so a checkpoint never persisted it: a `messages` surface here
@@ -980,7 +1044,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
   private async dispatch(
     command: WorldCommand,
     seat: number | null,
-    timing: WorldCommandContext["timing"],
+    timing: { readonly due: number; readonly missedCount: number } | null,
     charge: {
       now: number;
       owner: string;
@@ -988,13 +1052,24 @@ export class BoardSmithWorldEngine implements WorldEngine {
       presence: readonly number[];
     },
   ): Promise<WorldCommandResult> {
-    const handler = this.handlerFor(command.name, seat);
+    const definition = this.actionFor(command.name, seat);
 
-    // THE SAME SEAT THE DECLARATION SAW (#121). `commandPartitions` answered
-    // this a moment ago on the parent's behalf, from the same table with the
-    // same seat, which is what makes "everything named here is loaded" true.
-    const named = this.declaredFor(command, seat);
-    for (const name of named) await this.ensureResident(name);
+    // THE ORDERED WALK, WITH EVERY ARGUMENT ALREADY IN HAND (#169).
+    //
+    // An offer walks with empty args, because it is asking what could be
+    // chosen. A dispatch walks with the args the player actually sent, so every
+    // round -- round one, each selection's, and the execute round -- is
+    // answered against the move being made. Hydration happens BETWEEN rounds,
+    // which is what lets a later round read what an earlier one loaded, and it
+    // all happens before the rollback snapshot below, because adopting a
+    // partition is not a change this dispatch could be asked to undo.
+    //
+    // `named` is the union of every round, and it is what the dirty set starts
+    // from and what `assertDeclared` holds the action to.
+    const named: string[] = [];
+    for (let step = 0; step <= definition.selections.length; step++) {
+      await this.hydrateRounds(definition, step, seat, command.args, named);
+    }
 
     // Raised once per command and stamped on everything this one NAMED, so two
     // partitions named by the same command are equally warm and the tiebreak
@@ -1004,9 +1079,9 @@ export class BoardSmithWorldEngine implements WorldEngine {
 
     // THE MESSAGE LOG IS CLEARED HERE (#163). Nothing platform-side reads
     // it -- `viewFor` deliberately ships no messages -- so a `game.message()`
-    // a handler emits is a write into resident memory nobody will ever see,
+    // an action emits is a write into resident memory nobody will ever see,
     // and left alone it grows for the life of the isolate. Clearing at each
-    // dispatch bounds the log at one command's worth on both the success and
+    // dispatch bounds the log at one action's worth on both the success and
     // the rollback path.
     //
     // THE TOUCHED SET USED TO BE CLEARED ALONGSIDE IT, and is not any more
@@ -1017,29 +1092,14 @@ export class BoardSmithWorldEngine implements WorldEngine {
     // sees still belongs to the next command and nothing pays twice.
     this.game.pruneMessages({ keepLast: 0 });
 
-    // Per command, and declared here rather than as a field so it cannot leak
-    // into the next one. A leaked ending would settle the season again on the
-    // following move, at a later `endedAt` -- so it is not a replay the settle
-    // identity absorbs (#106), and since #339 it is not a second season either:
-    // `convex/seasons.ts:settleSeason` REFUSES an ending that differs from the
-    // one the campaign already has, so the world's bounded retries end in
-    // `markSeasonSettleFailed` and an operator is left to explain a settle that
-    // never landed.
-    let completed = false;
-
-    // WHAT THIS COMMAND ASKED THE PLATFORM TO WAKE FOR (#56). Declared per
-    // command rather than as a field for the same reason `completed` is: a
-    // request that leaked into the next command would arm a timer nobody asked
-    // for, charged to whoever acted next.
-    const schedules: ScheduleRequest[] = [];
-    // Requests are not durable until the parent writes them, so the caps have
-    // to count this command's own as it goes -- otherwise a handler could ask
-    // for a cap's worth twice in one command and the parent would refuse the
-    // batch after the command had already changed the world. The budget does
-    // that counting, so this side and the parent cannot count differently.
+    // Requests are not durable until the host writes them, so the caps have to
+    // count this dispatch's own as they go -- otherwise an action could ask for
+    // a cap's worth twice and the host would refuse the batch after the world
+    // had already changed. The budget does that counting, so this side and the
+    // host cannot count differently.
     const budget = scheduleBudget(charge.owner, charge.allowance, this.budgets);
 
-    // WHAT THE WORLD LOOKS LIKE BEFORE THIS COMMAND (#68, #294).
+    // WHAT THE WORLD LOOKS LIKE BEFORE THIS ACTION (#68, #294).
     const before = this.snapshotResident();
 
     // TAKEN AT MOST ONCE, WHICHEVER WAY THIS DISPATCH ENDS (#316).
@@ -1058,97 +1118,222 @@ export class BoardSmithWorldEngine implements WorldEngine {
       return taken;
     };
 
+    // WHAT THE ACTION DID BESIDE CHANGING THE TREE.
+    //
+    // PER DISPATCH, and one object rather than four closed-over variables
+    // because the facilities that write into it are built by a method of their
+    // own. Declared here rather than as a field so none of it can leak into the
+    // next dispatch: a leaked ending would settle the season again on the
+    // following move; a leaked schedule would arm a timer nobody asked for,
+    // charged to whoever acted next; a leaked event would narrate one action's
+    // news over another's.
+    const ledger: DispatchLedger = { completed: false, schedules: [], events: [], refused: null };
+    const facilities = this.dispatchFacilities(command.name, named, timing, charge, budget, ledger);
+
     // EVERYTHING BETWEEN THE SNAPSHOT AND THE RETURN IS UNDER THE ROLLBACK
-    // (#68, #151). The catch used to wrap `handler.run` alone, and the two
+    // (#68, #151). The catch used to wrap the handler alone, and the two
     // refusals thrown after it -- dirty-set resolution and event routing --
     // landed on a tree the handler had already successfully mutated. `refused`
     // then meant "mutated, and durably so once anything else checkpointed the
     // same partition". The only way out of this block without the rollback is
     // the successful return at its end.
+    bindWorldFacilities(this.game, facilities);
     try {
-      const events = handler.run({
-        args: command.args,
-        seat,
-        now: charge.now,
-        timing,
-        // A SET, built per dispatch from the platform's stamp, so a handler
-        // asks membership rather than scanning -- and so nothing a handler
-        // does to it can outlive this command (#144).
-        presence: new Set(charge.presence),
-        complete: () => {
-          completed = true;
-        },
-        schedule: (request: ScheduleRequest) => {
-          // REFUSED AT THE OFFENDING LINE. The parent is still the authority
-          // and re-plans everything below before it writes a single event; this
-          // is what makes the refusal land inside the handler, so the command
-          // unwinds and `refused` means the world is unchanged.
-          const refusal = budget.admit(request);
-          if (refusal !== null) throw refusal;
-          schedules.push(request);
-        },
-        partition: (name: string) => {
-          assertDeclared(command.name, name, named);
-          const root = this.rootOf(name);
-          // THE ONE DOOR THE ENGINE CANNOT SEE (#295). The dirty-set
-          // comparison runs only over the partitions a command could have
-          // written, and BoardSmith knows that set because it marks every
-          // element its own queries and tree accessors hand out. This root did
-          // not come from one of those -- the platform looked it up -- and
-          // `room.visits += 1` on it touches no accessor at all, so without
-          // this line the comparison would skip exactly the partition the
-          // command was about. `Game#reachPartition` is deliberately separate
-          // from `partitionRoot` so the platform's OWN reads below --
-          // `serializePartitions`, `audienceOf`, both after the command has
-          // finished -- do not enlarge the next command's comparison.
-          this.game.reachPartition(root.id);
-          return root;
-        },
-      });
-
-      // TAKEN, not read: one pass both reports what changed and re-baselines
-      // for the next command (#316) -- and since #295 that pass runs over the
-      // partitions this command REACHED rather than over the resident set, so
-      // what it costs is the room.
-      const dirty = new Set<string>(named);
-      for (const id of touchedOnce()) {
-        const name = this.residentNames.get(id);
-        if (name === undefined) {
-          throw worldRefusal(
-            "partition-not-resident",
-            `Command "${command.name}" moved something into or out of partition root ${id}, which ` +
-              `this engine never loaded and cannot name. Every partition must reach the tree through ` +
-              `the partition store, or its changes cannot be checkpointed.`,
-          );
-        }
-        dirty.add(name);
+      const result =
+        seat === null
+          ? this.executeSeatless(definition, command.args)
+          : // THROUGH THE ENGINE'S OWN EXECUTOR, which resolves element ids to
+            // elements, runs each selection's `validate`, fires `onSelect`, and
+            // applies the action's `disabled` rule server-side. A world that
+            // called `execute` directly would be a second, quieter action
+            // system, and the greyed-out button would stop being a closed door.
+            this.game.performAction(command.name, this.playerFor(seat), {
+              ...command.args,
+            });
+      if (!result.success) {
+        // THE GAME'S OWN SENTENCE, BACK ON THE ROAD IT CAME IN ON.
+        // `executeAction` catches a throw out of the rules and answers
+        // `{success: false, error}`; a world needs it as a throw, because the
+        // throw is what triggers the rollback that makes "refused" mean the
+        // world is unchanged.
+        //
+        // A PLAIN ERROR AND NOT A `worldRefusal`, deliberately. Under the flat
+        // table a refusing handler threw the game's own exception and it
+        // travelled unclassified, which is how a host tells "the rules said no"
+        // from "the platform's bookkeeping broke". Giving it a code here would
+        // relabel every bug in a game's rules as one of the platform's words.
+        // THE CLASSIFIED ONE IF THERE WAS ONE, and the game's own sentence
+        // otherwise. A plain `Error` is deliberate for the second case: under
+        // the flat table a refusing handler threw the game's own exception and
+        // it travelled unclassified, which is how a host tells "the rules said
+        // no" from "the platform's bookkeeping broke". Giving that a code would
+        // relabel every bug in a game's rules as one of the platform's words.
+        throw (
+          ledger.refused ??
+          new Error(
+            result.error ?? `The "${command.name}" action was refused and said nothing about why.`,
+          )
+        );
       }
 
       return {
-        // ROUTED HERE AND NOWHERE ELSE (#58). The handler said where; this is
+        // ROUTED HERE AND NOWHERE ELSE (#58). The action said where; this is
         // the engine saying who, once per event, while the world it is a fact
-        // about is still in front of us. A parent that had to ask would be a
-        // second round trip per command into a child that has the answer
-        // already.
-        events: events.map((event) => ({
+        // about is still in front of us.
+        events: ledger.events.map((event) => ({
           ...event,
           seats: this.audienceOf(command.name, event.scope),
         })),
-        dirty: [...dirty],
-        schedules,
-        ...(completed ? { ending: "completed" as const } : {}),
+        // TAKEN, not read: one pass both reports what changed and re-baselines
+        // for the next command (#316) -- and since #295 that pass runs over the
+        // partitions this command REACHED rather than over the resident set, so
+        // what it costs is the room.
+        dirty: this.dirtySet(command.name, named, touchedOnce()),
+        schedules: ledger.schedules,
+        ...(ledger.completed ? { ending: "completed" as const } : {}),
       };
     } catch (error) {
-      // A REFUSED COMMAND LEAVES THE WORLD UNCHANGED, or the word is worthless
-      // (#68). The platform EXPECTS handlers to throw -- it quarantines them --
-      // and until this the throw simply propagated: a handler that debited gold
-      // and failed before crediting the unit sent the player `refused`, which
-      // means "nothing changed" to any client, over a tree that had lost the
-      // gold. The same word is owed for a refusal thrown AFTER a handler
-      // succeeded -- an unroutable event scope, a touch on a partition root
-      // this engine cannot name (#151) -- so the rollback covers those too.
+      // A REFUSED ACTION LEAVES THE WORLD UNCHANGED, or the word is worthless
+      // (#68). The host EXPECTS rules to refuse -- it quarantines them -- and
+      // until this the throw simply propagated: an action that debited gold and
+      // failed before crediting the unit sent the player `refused`, which means
+      // "nothing changed" to any client, over a tree that had lost the gold.
+      // The same word is owed for a refusal thrown AFTER the rules succeeded --
+      // an unroutable event scope, a touch on a partition root this engine
+      // cannot name (#151) -- so the rollback covers those too.
       this.rollback(before, named, touchedOnce());
       throw error;
+    } finally {
+      // THE FACILITIES DO NOT OUTLIVE THE DISPATCH. An action that squirrelled
+      // `ctx.world` away would otherwise hold a `partition()` that reaches a
+      // tree the host has since evicted, and a `schedule()` charged to whoever
+      // acted next.
+      bindWorldFacilities(this.game, null);
+    }
+  }
+
+  /**
+   * WHAT THIS DISPATCH CHANGED: loaded-or-touched.
+   *
+   * LOADED -- every partition the walk NAMED. Not "every partition the walk
+   * actually hydrated": one left resident by an earlier command is still one
+   * this action was free to write, and there is no write barrier that could
+   * tell us it did not. TOUCHED -- the engine's own half, which carries BOTH
+   * endpoints of every physical re-parent, the half a host structurally cannot
+   * see.
+   */
+  private dirtySet(
+    action: string,
+    named: readonly string[],
+    touched: ReadonlySet<number>,
+  ): string[] {
+    const dirty = new Set<string>(named);
+    for (const id of touched) {
+      const name = this.residentNames.get(id);
+      if (name === undefined) {
+        throw worldRefusal(
+          "partition-not-resident",
+          `Action "${action}" moved something into or out of partition root ${id}, which this ` +
+            `engine never loaded and cannot name. Every partition must reach the tree through ` +
+            `the partition store, or its changes cannot be checkpointed.`,
+        );
+      }
+      dirty.add(name);
+    }
+    return [...dirty];
+  }
+
+  /**
+   * THE WORLD AN ACTION ACTS THROUGH, for the length of one dispatch.
+   *
+   * Every refusal these raise is RECORDED before it propagates, and that is
+   * what the ledger is for. A refusal thrown from inside `execute` travels out
+   * through `ActionExecutor.executeAction`, which catches it and answers
+   * `{success: false, error}` -- a STRING. That is right for a game's own
+   * refusal, whose sentence is the whole of what it carries, and wrong for the
+   * platform's: `schedule-cap`, `invalid-schedule-delay` and
+   * `undeclared-partition` are classified, and a host's park ladder reads the
+   * CODE rather than the sentence.
+   */
+  private dispatchFacilities(
+    action: string,
+    named: readonly string[],
+    timing: { readonly due: number; readonly missedCount: number } | null,
+    charge: { now: number; presence: readonly number[] },
+    budget: ReturnType<typeof scheduleBudget>,
+    ledger: DispatchLedger,
+  ): WorldFacilities {
+    const raise = (refusal: WorldRefusal): never => {
+      ledger.refused = refusal;
+      throw refusal;
+    };
+    return {
+      now: charge.now,
+      timing,
+      // A SET, built per dispatch from the host's stamp, so an action asks
+      // membership rather than scanning -- and so nothing an action does to it
+      // can outlive this dispatch (#144).
+      presence: new Set(charge.presence),
+      partition: (name: string) => {
+        const undeclared = declaredRefusal(action, name, named);
+        if (undeclared !== null) raise(undeclared);
+        const root = this.rootOf(name);
+        // THE ONE DOOR THE ENGINE CANNOT SEE (#295). The dirty-set comparison
+        // runs only over the partitions an action could have written, and
+        // BoardSmith knows that set because it marks every element its own
+        // queries and tree accessors hand out. This root did not come from one
+        // of those -- the world looked it up -- and `room.visits += 1` on it
+        // touches no accessor at all, so without this line the comparison would
+        // skip exactly the partition the action was about.
+        this.game.reachPartition(root.id);
+        return root;
+      },
+      emit: (scope: string, payload: unknown) => {
+        ledger.events.push({ scope, payload });
+      },
+      schedule: (request: ScheduleRequest) => {
+        // REFUSED AT THE OFFENDING LINE. The host is still the authority and
+        // re-plans everything before it writes a single event; this is what
+        // makes the refusal land inside the action, so the whole thing unwinds
+        // and `refused` means the world is unchanged.
+        const refusal = budget.admit(request);
+        if (refusal !== null) raise(refusal);
+        ledger.schedules.push(request);
+      },
+      complete: () => {
+        ledger.completed = true;
+      },
+    };
+  }
+
+  /**
+   * RUN A SEATLESS ACTION DIRECTLY, and why that is sound rather than a
+   * shortcut.
+   *
+   * `ActionExecutor.executeAction` exists to resolve and validate selection
+   * args and fire `onSelect` hooks, and a seatless action HAS NO SELECTIONS --
+   * that is refused at construction. What it would add here is the one thing a
+   * clock cannot supply: `ActionContext.player` is not optional, and a
+   * scheduled event genuinely has nobody acting. Inventing a player to satisfy
+   * a signature is exactly the kind of fallback that masks a real problem
+   * later, so the drain calls the definition's own `execute` and the seatless
+   * context the builder hands the author has no `player` on it at all.
+   */
+  private executeSeatless(
+    definition: ActionDefinition,
+    args: Readonly<Record<string, unknown>>,
+  ): { success: boolean; error?: string } {
+    try {
+      const result = definition.execute({ ...args }, {
+        game: this.game,
+        args: { ...args },
+      } as unknown as ActionContext);
+      return result ?? { success: true };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : String(error),
+      };
     }
   }
 
@@ -1492,17 +1677,24 @@ export class BoardSmithWorldEngine implements WorldEngine {
  * undeclared partition would be visible to every watcher and serialized by no
  * checkpoint.
  */
-function assertDeclared(
+function assertDeclared(command: string, name: string, declared: readonly string[]): void {
+  const refusal = declaredRefusal(command, name, declared);
+  if (refusal !== null) throw refusal;
+}
+
+/** The same question, answered rather than raised, for the one caller that has
+ *  to record a refusal before it propagates. */
+function declaredRefusal(
   command: string,
   name: string,
   declared: readonly string[],
-): void {
-  if (declared.includes(name)) return;
-  throw worldRefusal(
+): WorldRefusal | null {
+  if (declared.includes(name)) return null;
+  return worldRefusal(
     "undeclared-partition",
-    `Command "${command}" asked for partition "${name}", which it did not declare. ` +
-      `Add it to the command's partitions() so the platform loads it before the command runs; ` +
-      `an undeclared partition is not resident and would not be reported dirty either.`,
+    `Action "${command}" asked for partition "${name}", which it did not declare. ` +
+      `Name it in the needs() of the step that reaches it, so the host loads it before that step ` +
+      `runs; an undeclared partition is not resident and would not be reported dirty either.`,
   );
 }
 
@@ -1521,4 +1713,53 @@ function pruneUnnamedPartitions(
   );
   for (const child of json.children) pruneUnnamedPartitions(child, unnamed, named);
   return json;
+}
+
+/**
+ * A question with no answer.
+ *
+ * Every candidate greyed out counts as none: a selection whose only options
+ * carry a reason they cannot be taken leaves the player nothing to do, and an
+ * action offered on that basis is a button whose every press is refused --
+ * which is what `disabled` on the ACTION exists to say instead.
+ */
+function candidateless(pick: PickMetadata): boolean {
+  const candidates = pick.validElements ?? pick.choices;
+  if (candidates === undefined) return false;
+  return !candidates.some((candidate) => candidate.disabled === undefined);
+}
+
+/**
+ * The wire shape of one offered action.
+ *
+ * Every field the table's own `buildActionMetadata` sets, plus the one a world
+ * adds. Absent rather than `undefined` throughout, because these travel as
+ * JSON and a key whose value is `undefined` is a key that vanishes on the way
+ * -- which makes "the bundle said nothing" and "the bundle said nothing about
+ * this" indistinguishable on the far side.
+ */
+function offerOf(
+  definition: ActionDefinition,
+  selections: PickMetadata[],
+  disabled: string | null,
+): WorldActionOffer {
+  return {
+    name: definition.name,
+    ...(definition.prompt === undefined ? {} : { prompt: definition.prompt }),
+    ...(definition.help === undefined ? {} : { help: definition.help }),
+    ...(definition.manual ? { manual: true } : {}),
+    ...(definition.suppressFromActionPanel ? { suppressFromActionPanel: true } : {}),
+    ...(disabled === null ? {} : { disabled }),
+    selections,
+  };
+}
+
+/** What one dispatch collects while the rules run. */
+interface DispatchLedger {
+  completed: boolean;
+  readonly schedules: ScheduleRequest[];
+  readonly events: { scope: string; payload: unknown }[];
+  /** The classified refusal a facility raised, kept so the failure path can
+   *  rethrow the object rather than a fresh Error carrying only its message. */
+  refused: WorldRefusal | null;
 }

@@ -71,10 +71,11 @@
 import type {
   StoredPartition,
   WorldPartitionSource,
+  WorldActionOffer,
   WorldCommand,
-  WorldCommandOffer,
   WorldCommandResult,
   WorldEngine,
+  WorldOfferStamp,
 } from "./contract.js";
 import type { ScheduleAllowance } from "./schedule-api.js";
 import { WorldRefusal } from "./refusals.js";
@@ -405,8 +406,24 @@ export function createWorldRunner(
       return { views, refused };
     },
 
-    commandOffers(): readonly WorldCommandOffer[] {
-      return engine.commandOffers();
+    async declareOffers(
+      player: string,
+      supplied: Readonly<Record<string, StoredPartition>>,
+    ): Promise<WorldDeclaration> {
+      // The offer path's half of the same adoption the write path makes: a
+      // declaration reads through the ENGINE's live tree, and bytes sitting in
+      // the store answer nothing.
+      await adopt(engine, store, supplied);
+      const resident = residentNames(engine);
+      return {
+        needs: engine
+          .offerPartitions(player)
+          .filter((name) => !store.holds(name) && !resident.has(name)),
+      };
+    },
+
+    offersFor(player: string, stamp: WorldOfferStamp): Promise<readonly WorldActionOffer[]> {
+      return engine.offersFor(player, stamp);
     },
 
     evict(names: readonly string[]): void {
@@ -519,9 +536,24 @@ export interface WorldRunnerHandle {
   viewsFor(players: readonly string[]): Promise<WorldViews>;
   /** Release these partitions. Safe only immediately after a checkpoint. */
   evict(names: readonly string[]): void;
-  /** What this world answers to, and what each command asks for (#85, #91).
-   *  Applies nothing and loads nothing. */
-  commandOffers(): readonly WorldCommandOffer[];
+  /**
+   * What this SEAT may do here, enumerated (#85, #91, #169).
+   *
+   * Applies nothing. It LOADS what each action's round-one declaration names,
+   * which for every catalogue game is a subset of what that seat's view already
+   * names -- so an offer over a seat that has just looked reads no storage.
+   */
+  offersFor(player: string, stamp: WorldOfferStamp): Promise<readonly WorldActionOffer[]>;
+  /**
+   * Which partitions an offer for this seat still needs (#169).
+   *
+   * `supplied` is what the last round asked for. Drive it with
+   * `walkDeclaration`, exactly as a command's declaration is driven.
+   */
+  declareOffers(
+    player: string,
+    supplied: Readonly<Record<string, StoredPartition>>,
+  ): Promise<WorldDeclaration>;
   /**
    * Which partitions this command needs, and who is asking for them (#121).
    *

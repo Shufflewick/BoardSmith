@@ -90,7 +90,7 @@ function stateFrame(overrides: Record<string, unknown> = {}): Record<string, unk
     phase: 'watching',
     view: { here: 'hall' },
     seat: 1,
-    commands: [{ name: 'look', prompt: 'Look around', args: [] }],
+    actions: [{ name: 'look', prompt: 'Look around', selections: [] }],
     notice: null,
     worldName: 'The Dusk Hall',
     presence: [1],
@@ -248,7 +248,7 @@ describe('#167: wake from parked', () => {
 });
 
 describe('#167: the bar bridges the socket to the world frame and back', () => {
-  it('relays a command from the world UI onto the socket', async () => {
+  it('relays an action from the world UI onto the socket', async () => {
     const wrapper = await open();
     window.dispatchEvent(
       new MessageEvent('message', {
@@ -256,14 +256,14 @@ describe('#167: the bar bridges the socket to the world frame and back', () => {
           source: WORLD_UI_SOURCE,
           type: 'world_command',
           requestId: 'wc-1',
-          command: 'say',
+          action: 'say',
           args: { text: 'hello' },
         },
       }),
     );
     await wrapper.vm.$nextTick();
-    expect(frames('command')).toEqual([
-      { type: 'command', requestId: 'wc-1', command: 'say', args: { text: 'hello' } },
+    expect(frames('action')).toEqual([
+      { type: 'action', requestId: 'wc-1', action: 'say', args: { text: 'hello' } },
     ]);
     wrapper.unmount();
   });

@@ -166,11 +166,15 @@ export const WORLD_REFUSALS = {
   },
   "bundle-not-a-world": {
     owner: "game",
-    why: "a bundle reached a world isolate without `world.commands`, or asked to require a module the child does not have -- the manifest declared a world and the compiled rules do not implement one, which upload validation cannot see",
+    why: "a bundle reached a world isolate without `world.actions`, or asked to require a module the child does not have -- the manifest declared a world and the compiled rules do not implement one, which upload validation cannot see",
   },
-  "invalid-command-args": {
+  "invalid-world-action": {
     owner: "game",
-    why: "a bundle's command table declares arguments the platform cannot offer (#91) -- a reserved `now`, a repeated name, a nameless argument, or a choice between nothing. Every player attaching would be drawn a form whose submissions are all refused, so it is the bundle's own doing and the same bundle will do it again",
+    why: "a bundle registered a world action the platform cannot offer or cannot bound (#169) -- an unbounded `from`/`filter` element form, a candidate outside what the step declared, a selection past `budgets.ts:WorldBudgets.maxCandidatesPerSelection`, a seatless action that asks a question, or two declarations for one step. Every one of them would produce an offer whose size is a function of the RESIDENT tree rather than of the declaration, which is the O(world) read the partitioned model exists to delete -- so it is refused once when the world is built rather than on whichever player first asked what they could do here",
+  },
+  "not-in-a-world": {
+    owner: "game",
+    why: "an action built with `worldAction()` reached `ctx.world` while no world was running it (#169) -- registered on a table, or reached after the dispatch that bound its facilities finished. The bundle's own doing, and the same bundle does it again",
   },
   "unknown-scope": {
     owner: "game",
@@ -186,7 +190,7 @@ export const WORLD_REFUSALS = {
   },
   "declaration-unsettled": {
     owner: "game",
-    why: "#122: a bundle's `partitions()` or `world.view()` named a partition it had not seen on every round of declaration, so `declaration.ts:WORLD_DECLARATION_ROUNDS` stopped it. Two-phase declaration exists so a game can read an index and then name the room the index names; one that names something new every round is walking the world, which is the O(world) read the mechanism exists to prevent. GAME-owned because the declaration is the bundle's own and the same bundle writes the same one next time",
+    why: "#122: a bundle's `world.view()` named a partition it had not seen on every round of declaration, so `declaration.ts`'s round ceiling stopped it. Two-phase declaration exists so a view can read an index and then name the room the index names; one that names something new every round is walking the world, which is the O(world) read the mechanism exists to prevent. A VIEW ONLY, since #169: an action's declaration is an ordered walk whose length is its own selection count, so it cannot fail this way and has no ceiling to trip. GAME-owned because the declaration is the bundle's own and the same bundle writes the same one next time",
   },
   "partition-too-large": {
     owner: "game",

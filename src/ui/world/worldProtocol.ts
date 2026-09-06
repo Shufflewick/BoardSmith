@@ -27,6 +27,12 @@
  * `WORLD_HELLO_TIMEOUT_MS` rather than sitting blank forever.
  */
 
+import type { ActionMetadata, PickMetadata } from '../../session/types.js';
+
+/** Re-exported because a world UI renders a `WorldActionOffer` selection by
+ *  selection, and the item type is the shape it declares a prop of. */
+export type { PickMetadata };
+
 /** What the HOST page stamps on everything it sends into the world frame. */
 export const WORLD_HOST_SOURCE = 'shufflewick-world';
 
@@ -61,36 +67,28 @@ export const WORLD_COMMAND_TIMEOUT_MS = 20_000;
  */
 export const WORLD_NARRATION_KEPT = 200;
 
-/** One value a `choice` argument offers, and how to say it to a person. */
-export interface WorldCommandChoice {
-  readonly value: string;
-  readonly label: string;
-}
-
-/** One argument a world command asks for, as the bundle declared it. */
-export type WorldCommandArgument =
-  | {
-      readonly name: string;
-      readonly prompt: string;
-      readonly kind: 'choice';
-      readonly choices: readonly WorldCommandChoice[];
-    }
-  | {
-      readonly name: string;
-      readonly prompt: string;
-      readonly kind: 'number';
-      readonly min?: number;
-      readonly max?: number;
-      readonly integer?: boolean;
-    }
-  | { readonly name: string; readonly prompt: string; readonly kind: 'text' };
-
-/** One command the world says it answers to. */
-export interface WorldCommandOffer {
-  readonly name: string;
-  readonly prompt?: string;
-  readonly args: readonly WorldCommandArgument[];
-}
+/**
+ * ONE ACTION THIS SEAT MAY TAKE, ENUMERATED (BoardSmith #169).
+ *
+ * The TABLE'S OWN `ActionMetadata`, which is the point: a world's verbs are
+ * Actions now, so the shell's action panel, the board bridge and the drag-drop
+ * targets read a world's answer with no translation at all. It replaces
+ * `WorldCommandOffer`, a parallel vocabulary that existed only because a
+ * world's verbs were not Actions -- and which could say `tend` wants a holding
+ * without being able to say WHICH, because a bundle can state what a world
+ * contains and not what is legal this instant.
+ *
+ * ITS CANDIDATES ARRIVE WITH IT. A table fetches each pick's choices on demand,
+ * because a table's protocol is step-wise; a world's is single-shot, so
+ * `selections[i].validElements` and `.choices` are filled in. That is
+ * affordable because a world action may not declare a dependent selection, so
+ * no selection's candidates are a function of another's value.
+ */
+export type WorldActionOffer = ActionMetadata & {
+  /** Why this action is offered but cannot be taken right now. Absent when it
+   *  can: a greyed button must always say why. */
+  readonly disabled?: string;
+};
 
 /**
  * ONE THING THAT HAPPENED, AS THE WORLD ADDRESSED IT (ShufflewickPub #331).
@@ -137,8 +135,9 @@ interface WorldStateMessage {
   readonly view: unknown;
   /** The seat this player holds, or `null` before the world has said. */
   readonly seat: number | null;
-  /** What the world answers to. Empty until it has said. */
-  readonly commands: readonly WorldCommandOffer[];
+  /** What this seat may do, enumerated over what it can see. Empty until the
+   *  world has said. */
+  readonly actions: readonly WorldActionOffer[];
   /** The host's or the world's own sentence about the current state. */
   readonly notice: string | null;
   /** What the world's name is, for a UI that wants to say it. */
@@ -200,7 +199,11 @@ interface WorldCommandMessage {
   readonly source: typeof WORLD_UI_SOURCE;
   readonly type: 'world_command';
   readonly requestId: string;
-  readonly command: string;
+  /** The action's name, from the offer this seat was given. */
+  readonly action: string;
+  /** Every selection's resolved value, by selection name. An element selection
+   *  carries the element's id, which is what `chooseElement`'s wire encoding
+   *  already is. */
   readonly args: Readonly<Record<string, unknown>>;
 }
 

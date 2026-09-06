@@ -34,6 +34,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { Game, Player, type GameElement } from '../engine/index.js';
+import { worldAction } from '../world/index.js';
 import type { GameDefinition } from './types.js';
 
 const SRC = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -52,13 +53,22 @@ const definition: GameDefinition = {
   minPlayers: 2,
   maxPlayers: 40,
   world: {
-    commands: {
-      walk: {
-        args: [{ name: 'to', prompt: 'Where to?', kind: 'text' }],
-        partitions: (args) => [`room:${String(args.to)}`],
-        run: () => [],
-      },
-    },
+    // A WORLD'S VERBS ARE ACTIONS (BoardSmith #169). `walk` is written with
+    // `worldAction()` -- the ordered declaration walk, `.needs()` for round one
+    // and a `needs:` on the selection that names where it is going -- and lands
+    // in the same `_actions` registry a table's action lands in. What the
+    // bundle exports is a plain array, and `createWorld` registers it.
+    actions: [
+      worldAction<WorldGame>('walk')
+        .prompt('Walk into another room')
+        .needs(() => ['rooms:index'])
+        .chooseFrom('to', {
+          prompt: 'Where to?',
+          needs: () => ['rooms:index'],
+          choices: ['hall', 'cellar'],
+        })
+        .execute(() => {}),
+    ],
     genesis: () => ({}) as Record<string, GameElement>,
     view: () => [] as readonly string[],
   },
@@ -85,7 +95,7 @@ describe('#304: the round-world shape is gone from GameDefinition', () => {
   });
 
   it('carries the block a world bundle really exports', () => {
-    expect(definition.world).toHaveProperty('commands');
+    expect(definition.world).toHaveProperty('actions');
     expect(definition.world).toHaveProperty('genesis');
     expect(definition.world).toHaveProperty('view');
   });
