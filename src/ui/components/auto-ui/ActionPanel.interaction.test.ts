@@ -14,11 +14,11 @@
  *   Reproduction: mount the panel WHILE the destination pick is active but choices
  *   haven't arrived yet, then resolve the deferred fetch and assert re-render.
  *
- * Test D1: D-02 footer-presence rule
- *   allCurrentChoicesAnchored must be FALSE for a choice-type pick (even if choices
- *   carry notation refs). Under the old notation-walking implementation, notation
- *   choices returned TRUE (footer suppressed). Under D-02 the computed becomes
- *   `validElements.value.length > 0`, which is always 0 for choice picks → false.
+ * Test D1: a choice pick never yields its options to the board
+ *   Even when every choice carries a notation ref, a choice pick contributes no
+ *   board element candidates and is never deferred to the board, so the panel stays
+ *   the surface that offers them. An earlier notation-walking rule got this wrong and
+ *   removed the only keyboard-reachable control.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -27,6 +27,7 @@ import { nextTick, ref } from 'vue';
 import { useActionController } from '../../composables/useActionController.js';
 import type { ActionMetadata } from '../../composables/useActionController.js';
 import ActionPanel from './ActionPanel.vue';
+import { shouldDeferElementPickToBoard } from './action-panel-helpers.js';
 import { GAME_CONTEXT_KEYS } from '../../composables/useGameContext.js';
 
 // ── Fixture: two-step move ────────────────────────────────────────────────
@@ -47,10 +48,10 @@ const twoStepMoveAction: ActionMetadata = {
   ],
 };
 
-// Fixture: notation-anchored choice action (used for D-02 test)
-// All destination choices carry notation refs — under the OLD allCurrentChoicesAnchored
-// impl (notation-walking), this returns TRUE (footer suppressed). Under D-02 it must
-// return FALSE (choice picks never suppress footer because validElements is always []).
+// Fixture: notation-anchored choice action (used for test D1)
+// All destination choices carry notation refs. A notation ref makes a choice
+// highlightable on the board; it does not turn the choice into a board element
+// candidate, so the panel must still be the surface that offers it.
 const notationChoiceAction: ActionMetadata = {
   name: 'notationChoice',
   prompt: 'Place',
@@ -291,12 +292,8 @@ describe('ActionPanel interaction tests', () => {
     expect((submittedArgs.destination as { toNotation: string }).toNotation).toBe('c5');
   });
 
-  // ── Test D1: D-02 — notation choice picks should NOT suppress footer ─────
-  it('D1: allCurrentChoicesAnchored is false for choice picks (D-02 footer stays present)', async () => {
-    // This action has choice picks with notation refs. Under the OLD allCurrentChoicesAnchored
-    // implementation, notation refs make the computed return TRUE (footer suppressed).
-    // Under D-02 the rule is: choice picks ALWAYS keep the footer (validElements is [] for
-    // choice types), so allCurrentChoicesAnchored must be FALSE regardless of ref type.
+  // ── Test D1: a notation choice pick still belongs to the panel ───────────
+  it('D1: a choice pick offers no board candidates and is never deferred, even with notation refs', async () => {
     const controller = useActionController({
       sendAction,
       availableActions: ref(['notationChoice']),
@@ -311,10 +308,11 @@ describe('ActionPanel interaction tests', () => {
 
     expect(controller.currentPick.value?.type).toBe('choice');
 
-    // D-02 assertion: choice picks must NOT anchor the footer, regardless of notation refs.
-    // RED before D-02 fix: the old notation-walking impl returns true here.
-    // GREEN after D-02 fix: validElements.value.length === 0 → false.
-    expect(controller.allCurrentChoicesAnchored.value).toBe(false);
+    // A choice pick produces no board element candidates, regardless of ref type...
+    expect(controller.validElements.value).toEqual([]);
+    // ...and is therefore never handed to the board (see action-panel-helpers.test.ts),
+    // so the panel keeps every option reachable by keyboard.
+    expect(shouldDeferElementPickToBoard('choice', controller.validElements.value)).toBe(false);
 
     // Mount to verify the panel is renderable (smoke-level check: no throw)
     const wrapper = mount(ActionPanel, {

@@ -5,8 +5,8 @@
  * ROOT CAUSE TRACE (Open Question 2 resolution — documented here before any fix):
  *
  * Bug B claim: "Go Fish ask shows 0 .action-selectable, footer suppressed."
- * Contradiction: 'ask' has id-only refs → old allCurrentChoicesAnchored should be
- * false (id-only refs fail the notation check) → footer should be present.
+ * Contradiction: 'ask' is a pair of choice picks carrying id-only refs, and a choice
+ * pick never yields its options to the board — so the footer should have been present.
  *
  * Trace findings (file:line evidence):
  *
@@ -30,10 +30,11 @@
  *    when rank choices arrived. Panel showed "No options available" (or blank if the
  *    regular-choice template's `filteredChoices.length > 0` gate was false).
  *
- *    allCurrentChoicesAnchored under OLD notation-walking code: rank pick has id-only
- *    refs → notation !== undefined = false → every() = false → false. So the footer
- *    was PRESENT but empty (no choices). "Footer suppressed" in CONTEXT was inaccurate;
- *    the footer was present but showed nothing actionable. Candidate cause (2) was real.
+ *    Nothing ever suppressed the footer here: the rank pick is a choice pick, so it
+ *    contributes no board element candidates and is never deferred to the board. The
+ *    footer was PRESENT but empty (no choices). "Footer suppressed" in CONTEXT was
+ *    inaccurate; the footer was present but showed nothing actionable. Candidate
+ *    cause (2) was real.
  *
  * 3. RESIDUAL BUG B ROOT CAUSE — D-03 filter (action-panel-helpers.ts:filterAnchoredChoices):
  *    Even though plan 02 fixed the reactive choices path, Bug B persists because of a
@@ -73,8 +74,8 @@ import { GAME_CONTEXT_KEYS } from '../../composables/useGameContext.js';
 //   .chooseFrom('target', { choices: playerChoices(excludeSelf), boardRefs: id-only })
 //   .chooseFrom('rank',   { choices: getPlayerRanks(player),    boardRefs: id-only })
 //
-// Both picks carry id-only refs (no notation) — key for the allCurrentChoicesAnchored
-// assertion: choice picks with id-only refs must NOT suppress the footer under D-02.
+// Both picks carry id-only refs (no notation) — an id-only ref highlights a card, it
+// is not a board click surface, so the panel must keep offering every rank.
 const goFishAskAction: ActionMetadata = {
   name: 'ask',
   prompt: 'Ask another player for cards',
@@ -108,9 +109,8 @@ describe('GoFish ask interaction tests', () => {
     //   rank:   player holds Aces, Sevens, Kings → 3 choices, each with id-only boardRef
     //
     // The rank boardRefs ({ ref: { id: card.id }, role: 'target' }) are id-only (no notation).
-    // Under old allCurrentChoicesAnchored (notation walk): notation undefined → false → footer stays.
-    // Under D-02 (validElements.length > 0): choice pick → validElements=[] → false → footer stays.
-    // In both cases footer stays, but pre-plan-02 it showed nothing (Bug B root cause above).
+    // A choice pick contributes no board element candidates, so the footer always stays —
+    // but pre-plan-02 it showed nothing (Bug B root cause above).
     const fetchPickChoices = vi.fn(async (_action: string, selectionName: string) => {
       if (selectionName === 'target') {
         // 2-player: exactly 1 opponent → triggers auto-fill
@@ -161,8 +161,10 @@ describe('GoFish ask interaction tests', () => {
     expect(controller.currentPick.value?.name).toBe('rank');
     // — rank choices are in currentChoices (tracks snapshotVersion)
     expect(controller.currentChoices.value.length).toBe(3);
-    // — D-02: choice pick → validElements = [] → not anchored → footer shows
-    expect(controller.allCurrentChoicesAnchored.value).toBe(false);
+    // — a choice pick offers no board element candidates and is never deferred to the
+    //   board (shouldDeferElementPickToBoard('choice', ...) === false — see
+    //   action-panel-helpers.test.ts), so the panel must render the ranks itself
+    expect(controller.validElements.value).toEqual([]);
 
     // Mount ActionPanel with rank as active pick and choices populated.
     // filteredChoices reads currentChoices.value (reactive, plan-02 fix) → shows ranks.

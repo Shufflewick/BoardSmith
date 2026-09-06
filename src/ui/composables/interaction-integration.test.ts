@@ -10,7 +10,7 @@
  * Test A1 (Checkers destination populates after board-select):
  *   Board-selecting a Checkers piece (element pick) must trigger the next-step
  *   choice fetch so the destination cells appear selectable on the board AND
- *   parity holds with the footer (allCurrentChoicesAnchored=false, choice pick).
+ *   parity holds with the footer (the panel still offers every destination).
  *   EXPECTED RED before Task 2 fix: `selection.type === 'choice' && selection.choices`
  *   guard in useBoardActionBridge.ts fails because selection.choices is undefined
  *   for dynamically-fetched choices, so validElems for destination cells stays
@@ -42,6 +42,7 @@ import { nextTick, ref } from 'vue';
 import { useActionController } from './useActionController.js';
 import { useBoardActionBridge } from './useBoardActionBridge.js';
 import { createBoardInteraction } from './useBoardInteraction.js';
+import { shouldDeferElementPickToBoard } from '../components/auto-ui/action-panel-helpers.js';
 import type { ActionMetadata } from './useActionControllerTypes.js';
 
 // ── Flush helper ────────────────────────────────────────────────────────────
@@ -210,9 +211,15 @@ describe('Board + controller interaction integration', () => {
     expect(board.isSelectableElement({ notation: 'a5' })).toBe(true);
     expect(board.isSelectableElement({ notation: 'c5' })).toBe(true);
 
-    // (c) Parity: choice pick → allCurrentChoicesAnchored=false → footer stays visible
-    // (validElements is [] for choice type, so D-02 keeps the footer present)
-    expect(controller.allCurrentChoicesAnchored.value).toBe(false);
+    // (c) Parity: the same two destinations the board just made selectable are the
+    // ones the panel offers. A choice pick contributes no board element candidates
+    // (validElements is [] for choice types) and is never deferred to the board
+    // (shouldDeferElementPickToBoard('choice', ...) === false — see
+    // action-panel-helpers.test.ts), so the panel stays the keyboard-reachable
+    // surface for exactly these choices.
+    expect(controller.validElements.value).toEqual([]);
+    expect(shouldDeferElementPickToBoard('choice', controller.validElements.value)).toBe(false);
+    expect(controller.currentChoices.value.map((c) => c.display)).toEqual(['a5', 'c5']);
   });
 
   // ── Test A2 ───────────────────────────────────────────────────────────────

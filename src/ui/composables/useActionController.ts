@@ -805,41 +805,6 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   });
 
   /**
-   * True when the board can offer EVERY current choice as a real, clickable board
-   * target.
-   *
-   * NOTE: nothing in the shipped UI unmounts the ActionPanel on this. The panel
-   * stays on and stays in parity with the board; what it does do for an oversized
-   * board-anchored element pick is swap fifty buttons for one control that hands
-   * keyboard focus to the board (#172, `shouldDeferElementPickToBoard`). This
-   * flag is exposed for custom UIs that want the same signal.
-   *
-   * Anchoring rules:
-   * - No action in progress (currentPick === null) → false. Show the panel so the
-   *   player can start an action (Pitfall 4 guard).
-   * - element / elements picks → true. Board selection is the native surface.
-   * - choice picks → anchored ONLY when there are choices AND every choice's
-   *   clickable ref (the `target`-role ref, else the first ref) identifies a board
-   *   cell by NOTATION. A notation ref denotes board geometry the AutoUI grid
-   *   renders and makes clickable (Checkers destination squares). id-only refs
-   *   (e.g. Go Fish's hand/card refs) are highlight HINTS, not a reliable click
-   *   surface — clicking lands on child elements and selects nothing — so the
-   *   footer MUST remain as the fallback selection surface.
-   * - empty choices → false (vacuous case must not suppress the panel).
-   * - number / text picks → false (panel only).
-   *
-   * Reactive to snapshotVersion via currentChoices so it updates when async-fetched
-   * choices arrive.
-   */
-  const allCurrentChoicesAnchored = computed((): boolean => {
-    // D-02: suppress footer ONLY when the board offers clickable element picks
-    // (i.e. validElements is non-empty). Choice picks keep the footer because
-    // validElements is always [] for non-element pick types — those selections
-    // surface through the ActionPanel's choice buttons, not board cells.
-    return validElements.value.length > 0;
-  });
-
-  /**
    * Reactive valid elements for the current pick.
    * This is the "pit of success" for custom UIs - just use this computed directly.
    * It automatically updates when:
@@ -2084,11 +2049,6 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     // availableActions as "stale, cancel it" — doing so cancels live followUp chains
     // (e.g. explore -> take equipment) the instant a state broadcast arrives.
     pendingOnServer: readonly(pendingOnServer),
-    // True when the board can offer every current choice as a real click target.
-    // Read by custom UIs deciding how much of their own chrome to draw; the auto
-    // ActionPanel does NOT hide itself on it (#172 — the panel yields a single
-    // oversized element pick to the board and keeps everything else).
-    allCurrentChoicesAnchored,
     // Reactive choices for the current pick (re-runs when async-fetched choices arrive).
     currentChoices,
 

@@ -2285,7 +2285,12 @@ describe('useActionController', () => {
     });
   });
 
-  describe('allCurrentChoicesAnchored', () => {
+  // `validElements` is the board's candidate surface: the enumeration a custom UI
+  // or the AutoUI board offers as clickable. These cases pin the one property the
+  // panel/board split depends on — only element/elements picks ever produce board
+  // candidates, and a choice pick produces none no matter what refs its choices
+  // carry, so the panel stays the selection surface for choices.
+  describe('validElements (the board candidate surface)', () => {
     let anchoredActionMetadata: ReturnType<typeof ref<Record<string, ActionMetadata> | undefined>>;
 
     beforeEach(() => {
@@ -2305,7 +2310,7 @@ describe('useActionController', () => {
           }],
         },
         // Choices carry refs, but they are id-only HIGHLIGHT hints (Go Fish hand/card
-        // refs) — NOT a reliable board click surface. Must NOT count as anchored.
+        // refs) — NOT a reliable board click surface.
         idHintAnchored: {
           name: 'idHintAnchored',
           selections: [{
@@ -2329,17 +2334,16 @@ describe('useActionController', () => {
       });
     });
 
-    it('returns false when currentPick is null (no action in progress — Pitfall 4 guard)', () => {
+    it('is empty when currentPick is null (no action in progress)', () => {
       const controller = useActionController({
         sendAction, availableActions, actionMetadata, isMyTurn,
       });
       // No action started → currentPick === null
       expect(controller.currentPick.value).toBeNull();
-      expect(controller.allCurrentChoicesAnchored.value).toBe(false);
+      expect(controller.validElements.value).toEqual([]);
     });
 
-    it('returns true when pick.type is element and valid elements are available (D-02 board-anchored)', async () => {
-      // D-02: footer suppressed when validElements is non-empty (board can fully drive pick).
+    it('is populated when pick.type is element and the fetch returned candidates', async () => {
       const fetchPickChoices = vi.fn(async () => ({ success: true, validElements: [{ id: 100 }, { id: 101 }] }));
       const controller = useActionController({
         sendAction, availableActions, actionMetadata, isMyTurn, autoFill: false, fetchPickChoices,
@@ -2348,12 +2352,10 @@ describe('useActionController', () => {
       await nextTick();
 
       expect(controller.currentPick.value?.type).toBe('element');
-      expect(controller.allCurrentChoicesAnchored.value).toBe(true);
+      expect(controller.validElements.value.map((e) => e.id)).toEqual([100, 101]);
     });
 
-    it('returns false when pick.type is element but no valid elements were fetched (vacuous case)', async () => {
-      // D-02: without a fetch result, validElements is empty → footer must remain so player
-      // isn't left with no interaction surface.
+    it('is empty when pick.type is element but nothing was fetched (vacuous case — the panel must stay the surface)', async () => {
       const controller = useActionController({
         sendAction, availableActions, actionMetadata, isMyTurn, autoFill: false,
         // no fetchPickChoices → snapshot validElements stays empty
@@ -2362,11 +2364,10 @@ describe('useActionController', () => {
       await nextTick();
 
       expect(controller.currentPick.value?.type).toBe('element');
-      expect(controller.allCurrentChoicesAnchored.value).toBe(false);
+      expect(controller.validElements.value).toEqual([]);
     });
 
-    it('returns true when pick.type is elements and valid elements are available (D-02 board-anchored)', async () => {
-      // D-02: footer suppressed when validElements is non-empty for multi-element picks too.
+    it('is populated for multi-element picks too', async () => {
       const fetchPickChoices = vi.fn(async () => ({ success: true, validElements: [{ id: 1 }, { id: 2 }] }));
       const extendedAvailable = ref([...(availableActions.value ?? []), 'selectMultiple']);
       const controller = useActionController({
@@ -2381,11 +2382,10 @@ describe('useActionController', () => {
       await nextTick();
 
       expect(controller.currentPick.value?.type).toBe('elements');
-      expect(controller.allCurrentChoicesAnchored.value).toBe(true);
+      expect(controller.validElements.value.map((e) => e.id)).toEqual([1, 2]);
     });
 
-    it('returns false when pick.type is elements but no valid elements were fetched (vacuous case)', async () => {
-      // D-02: without a fetch result, validElements is empty → footer must remain.
+    it('is empty when pick.type is elements but nothing was fetched (vacuous case)', async () => {
       const extendedAvailable = ref([...(availableActions.value ?? []), 'selectMultiple']);
       const controller = useActionController({
         sendAction,
@@ -2399,10 +2399,10 @@ describe('useActionController', () => {
       await nextTick();
 
       expect(controller.currentPick.value?.type).toBe('elements');
-      expect(controller.allCurrentChoicesAnchored.value).toBe(false);
+      expect(controller.validElements.value).toEqual([]);
     });
 
-    it('returns false when pick.type is choice and no choice has refs', async () => {
+    it('is empty for a choice pick whose choices carry no refs', async () => {
       const controller = useActionController({
         sendAction, availableActions, actionMetadata, isMyTurn, autoFill: false, autoExecute: false,
       });
@@ -2411,13 +2411,13 @@ describe('useActionController', () => {
       await nextTick();
 
       expect(controller.currentPick.value?.type).toBe('choice');
-      expect(controller.allCurrentChoicesAnchored.value).toBe(false);
+      expect(controller.validElements.value).toEqual([]);
     });
 
-    it('returns false when pick.type is choice even when every choice has a NOTATION ref (D-02: choice picks keep the footer)', async () => {
-      // D-02 semantic change: notation refs no longer suppress the footer. Only a non-empty
-      // validElements (element/elements picks) suppresses the panel. Choice picks always keep
-      // the footer present because validElements is [] for choice types.
+    it('is empty for a choice pick even when every choice carries a NOTATION ref', async () => {
+      // A notation ref makes a choice highlightable on the board, not a board element
+      // candidate. splitAnchoredChoices partitions those in the panel; the candidate
+      // surface stays empty, so the panel keeps every choice reachable.
       const extendedAvailable = ref([...(availableActions.value ?? []), 'allAnchored']);
       const controller = useActionController({
         sendAction,
@@ -2431,10 +2431,10 @@ describe('useActionController', () => {
       await nextTick();
 
       expect(controller.currentPick.value?.type).toBe('choice');
-      expect(controller.allCurrentChoicesAnchored.value).toBe(false);
+      expect(controller.validElements.value).toEqual([]);
     });
 
-    it('returns false when choices carry only id refs (highlight hints, not board cells — Go Fish ask)', async () => {
+    it('is empty when choices carry only id refs (highlight hints, not board cells — Go Fish ask)', async () => {
       const extendedAvailable = ref([...(availableActions.value ?? []), 'idHintAnchored']);
       const controller = useActionController({
         sendAction,
@@ -2448,14 +2448,14 @@ describe('useActionController', () => {
       await nextTick();
 
       expect(controller.currentPick.value?.type).toBe('choice');
-      // id-only refs are NOT a reliable board click surface → footer must remain.
-      expect(controller.allCurrentChoicesAnchored.value).toBe(false);
+      // id-only refs are NOT a reliable board click surface → no board candidates.
+      expect(controller.validElements.value).toEqual([]);
     });
 
-    it('two-step: element pick anchored, destination choice pick NOT anchored under D-02 (Checkers move)', async () => {
-      // Two-step action: step 1 element pick (piece) — fetches validElements → anchored.
-      // Step 2 choice pick (destination) — validElements is [] for choice types → NOT anchored (D-02).
-      // Both steps react correctly when async-fetched results arrive.
+    it('two-step: element pick yields board candidates, the destination choice pick yields none (Checkers move)', async () => {
+      // Step 1 element pick (piece) — fetches validElements → board candidates.
+      // Step 2 choice pick (destination) — no board candidates, but currentChoices must
+      // populate reactively from the async fetch so the panel can offer them.
       const fetchPickChoices = vi.fn(async (_action: string, selectionName: string) => {
         if (selectionName === 'piece') {
           return { success: true, validElements: [{ id: 77 }, { id: 78 }] };
@@ -2496,7 +2496,7 @@ describe('useActionController', () => {
       await nextTick();
       // Step 1 is an element pick with fetchPickChoices returning validElements → anchored (D-02).
       expect(controller.currentPick.value?.name).toBe('piece');
-      expect(controller.allCurrentChoicesAnchored.value).toBe(true);
+      expect(controller.validElements.value.map((e) => e.id)).toEqual([77, 78]);
 
       // Fill the piece → advances to the destination choice pick and fetches its choices.
       await controller.fill('piece', 77);
@@ -2505,8 +2505,9 @@ describe('useActionController', () => {
       expect(controller.currentPick.value?.name).toBe('destination');
       // The reactive currentChoices must reflect the freshly-fetched destination choices...
       expect(controller.currentChoices.value).toHaveLength(2);
-      // D-02: choice picks keep the footer regardless of ref type (validElements is [] for choice).
-      expect(controller.allCurrentChoicesAnchored.value).toBe(false);
+      // ...and the choice pick contributes no board element candidates, so the panel
+      // remains the surface that offers them.
+      expect(controller.validElements.value).toEqual([]);
     });
   });
 
