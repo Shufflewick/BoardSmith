@@ -4,7 +4,7 @@ import { createServer as createViteServer } from 'vite';
 import type { Plugin as VitePlugin } from 'vite';
 import { build } from 'esbuild';
 import { pathToFileURL, fileURLToPath } from 'node:url';
-import { WebSocketServer, WebSocket } from 'ws';
+import { WebSocket } from 'ws';
 import chalk from 'chalk';
 import open from 'open';
 
@@ -15,15 +15,18 @@ import { createDevHostConnectionHandler } from '../dev-host/connection-handler.j
 import { devStorePath, loadDevStore } from '../dev-host/persistence-file-store.js';
 import { resetWorldStore, worldResetNotice, worldStoreDir } from '../dev-host/world-store.js';
 import type { PersistenceStore } from '../../persistence/index.js';
-import { getProjectContext, boardsmithResolvePlugin, cliMonorepoRoot, toPosix, BOARDSMITH_PACKAGE_DIRS } from './game-runtime.js';
+import { getProjectContext, boardsmithResolvePlugin, toPosix } from './game-runtime.js';
 import { findUnknownKeys } from '../lib/config-schema.js';
 import { requireGameProject, resolveRulesDir, requireRulesIndex } from '../lib/game-project.js';
+import { resolveWorldMode, type WorldManifestBlock } from '../lib/world-project.js';
+import { startWorldDevServer } from './dev-world.js';
 import {
-  WORLD_AUTHORING_DOC,
-  resolveWorldMode,
-  worldModeNotice,
-  type WorldManifestBlock,
-} from '../lib/world-project.js';
+  claimWebSocketPath,
+  devNotFoundMiddleware,
+  monorepoBoardsmithResolvePlugin,
+  resolveDevHostDir,
+  serveDevDocuments,
+} from './dev-server.js';
 import { parseBotLevel } from '../../bot/index.js';
 
 /** executeOp bundled from the SAME module graph as the rules (one engine). */
@@ -435,28 +438,9 @@ function optionRecordToList(record: Record<string, unknown> | undefined): DevOpt
   return Object.entries(record).map(([id, def]) => ({ id, ...(def as object) } as DevOptionDef));
 }
 
-// Get the CLI's directory to find the dev-host source (cliMonorepoRoot is
-// imported from game-runtime.ts, computed there so `__dirname` path-depth
-// math for both files stays identical).
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
-
-/**
- * Locate the dev-host source directory. It ships in the package `src/` (the
- * package `files` array includes `src`), so it is present whether the CLI runs
- * from source (tsx) or from the bundled `dist/cli.js`.
- */
-function resolveDevHostDir(): string {
-  const candidates = [
-    resolve(__dirname, '..', 'dev-host'),                 // tsx: src/cli/commands → src/cli/dev-host
-    resolve(__dirname, '..', 'src', 'cli', 'dev-host'),   // bundled: dist → <root>/src/cli/dev-host
-    resolve(__dirname, 'dev-host'),
-  ];
-  for (const c of candidates) {
-    if (existsSync(join(c, 'host-main.ts'))) return c;
-  }
-  return candidates[0];
-}
+// Where this file sits, so `resolveDevHostDir` can find the dev-host source
+// whether the CLI runs from source (tsx) or from the bundled `dist/cli.js`.
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 /**
  * Bundle and load the game runtime (Node side): the author's `gameDefinition`
@@ -589,51 +573,30 @@ export function boardsmithDevHostPlugin(args: {
       return null;
     },
     configureServer(server) {
-      // The dev host serves exactly two HTML documents, and routes both here:
-      // the Dev chrome in the main window, and the game UI in the board iframe
-      // (GAME_IFRAME_PATH) in platform mode. Registered in the configureServer
-      // BODY so it runs before Vite's own middlewares.
-      server.middlewares.use(async (req, res, next) => {
-        const url = (req.url ?? '/').split('?')[0];
-
+      // The dev host serves exactly two HTML documents: the Dev chrome in the
+      // main window, and the game UI in the board iframe (GAME_IFRAME_PATH) in
+      // platform mode.
+      serveDevDocuments(server, (url) => {
         const isHostPage = url === '/' || url === '/index.html';
-        if (!isHostPage && url !== GAME_IFRAME_PATH) return next();
-
-        try {
-          const source = readFileSync(isHostPage ? hostHtmlPath : gameHtmlPath, 'utf-8');
-          // Only the host page carries the placeholder; the game's own
-          // index.html is served as the author wrote it.
-          const raw = isHostPage
-            ? source.replace('__HOST_MAIN_SRC__', `/@fs/${toPosix(hostMainPath)}`)
-            : source;
-          const html = await server.transformIndexHtml(url, raw, req.originalUrl);
-          res.statusCode = 200;
-          res.setHeader('Content-Type', 'text/html');
-          res.end(html);
-        } catch (err) {
-          next(err as Error);
-        }
+        if (!isHostPage && url !== GAME_IFRAME_PATH) return null;
+        // Only the host page carries the placeholder; the game's own
+        // index.html is served as the author wrote it.
+        return isHostPage
+          ? readFileSync(hostHtmlPath, 'utf-8').replace(
+              '__HOST_MAIN_SRC__',
+              `/@fs/${toPosix(hostMainPath)}`,
+            )
+          : readFileSync(gameHtmlPath, 'utf-8');
       });
 
-      // Installed AFTER Vite's own middlewares (that is what returning a
-      // function from configureServer does), so it only ever sees a request
-      // nothing served. Without it, connect's default handler answers with an
-      // HTML 404 body — and an HTML body is exactly what made the missing-asset
-      // failure invisible in the first place. Plain text, naming the fix.
-      return () => {
-        server.middlewares.use((req, res) => {
-          const url = (req.url ?? '/').split('?')[0];
-          res.statusCode = 404;
-          res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-          res.end(
-            `boardsmith dev: nothing is served at ${url}\n\n` +
-              `Game assets live in the project's public/ directory and are served from the ` +
-              `site root: public/cards/x.png is /cards/x.png.\n` +
-              `Reference them relatively ("cards/x.png"), which is how the built bundle ` +
-              `resolves them too.\n`,
-          );
-        });
-      };
+      return devNotFoundMiddleware(
+        server,
+        () =>
+          `Game assets live in the project's public/ directory and are served from the site ` +
+          `root: public/cards/x.png is /cards/x.png.\n` +
+          `Reference them relatively ("cards/x.png"), which is how the built bundle resolves ` +
+          `them too.\n`,
+      );
     },
   };
 }
@@ -707,39 +670,6 @@ function openDevStore(
   const devStore = loadDevStore(storeFile);
   devStore.save();
   return devStore;
-}
-
-/**
- * A WORLD WITH NO TABLE HALF HAS NOTHING FOR THIS COMMAND TO SERVE.
- *
- * What the dev host serves is the TABLE game, mounted from `src/main.ts`, and a
- * game that is only a world does not have one -- `boardsmith init --world`
- * scaffolds exactly that shape, because a vestigial table half is what
- * BoardSmith #174 is taking OUT of the world games that have one.
- *
- * Without this the host started, the notice printed, and the browser opened on
- * a page whose one script was a 404: a blank screen, which looks exactly like a
- * world with nothing in it. That is the confusion #304's notice exists to
- * prevent, arriving by a different road, so the answer is the same one --
- * say what this command is and is not, and name what does exercise a world.
- *
- * Returns the sentence, or null when there is nothing to refuse.
- */
-export function worldWithoutTableRefusal(
-  worldMode: boolean,
-  tableEntryExists: boolean,
-  tableEntryPath: string,
-): string | null {
-  if (!worldMode || tableEntryExists) return null;
-  return (
-    '\nThis project is a persistent world with no table half, and `boardsmith dev` serves the table.\n' +
-    `  There is no ${tableEntryPath}, so this command has no surface to open.\n` +
-    '  Running a world locally is BoardSmith #167 and is not built yet: nothing here dispatches a\n' +
-    '  world command, runs its genesis, projects a world view or fires a scheduled event.\n' +
-    '\n  What DOES exercise your world today, with no host and no network:\n' +
-    '    boardsmith test   drives tests/world.test.ts through the `boardsmith/world` library\n' +
-    `\n  ${WORLD_AUTHORING_DOC} is the authoring guide.\n`
-  );
 }
 
 // a 460-line entrypoint over every threshold before #41 added the dev store;
@@ -930,17 +860,27 @@ export async function devCommand(options: DevOptions): Promise<void> {
   const effectivePlayerCount = exitOnDevFlagError(() => resolvePlayerCount(rawPlayers, minPlayers, maxPlayers));
   exitOnDevFlagError(() => validateBotSeats(botPlayers, effectivePlayerCount));
 
+  // A WORLD IS A DIFFERENT RUN, AND THIS IS WHERE THE ROADS PART (#167).
+  //
   // `worldMode` is resolved once above, before --reset, because #166's reset
-  // has to know whether this is a world before any rules are loaded.
-  const tableEntry = join(uiPath, 'src', 'main.ts');
-  const refusal = worldWithoutTableRefusal(worldMode, existsSync(tableEntry), relative(cwd, tableEntry));
-  if (refusal !== null) {
-    console.error(chalk.red(refusal));
-    process.exit(1);
-  }
-
-  for (const line of worldModeNotice(config)) {
-    console.log(chalk.dim(`  ${line}`));
+  // has to know whether this is a world before any rules are loaded. Everything
+  // below this branch is the TABLE dev host: a lobby, seats to claim, game
+  // options, presets, bots and a snapshot session. A world has none of them --
+  // it is already running before anybody opens a browser -- so it gets its own
+  // server rather than a mode of this one. `dev-world.ts` says why at length.
+  if (worldMode) {
+    await startWorldDevServer({
+      cwd,
+      uiPath,
+      gameDefinition,
+      displayName: config.displayName || gameDefinition.displayName || gameDefinition.gameType,
+      context,
+      port,
+      host,
+      tempDir,
+      openBrowser: shouldOpenBrowser(options),
+    });
+    return;
   }
 
   const devConfig = buildDevConfig({
@@ -954,7 +894,7 @@ export async function devCommand(options: DevOptions): Promise<void> {
     teachingDisabled,
   });
 
-  const devHostDir = resolveDevHostDir();
+  const devHostDir = resolveDevHostDir(__dirname, 'host-main.ts');
   const boardsmithRoot = resolve(devHostDir, '..', '..', '..');
 
   // Clear Vite cache to prevent stale file references when switching games
@@ -972,51 +912,10 @@ export async function devCommand(options: DevOptions): Promise<void> {
     boardsmithDevHostPlugin({ devHostDir, uiPath, rulesIndexPath, devConfig }),
   ];
 
-  // In monorepo context, add plugin to resolve boardsmith imports to src/
+  // In monorepo context, `boardsmith/*` must resolve to this repo's own src/,
+  // or the dev host runs a different engine from the one being edited.
   if (context === 'monorepo') {
-    const boardsmithVitePlugin: VitePlugin = {
-      name: 'boardsmith-resolve',
-      enforce: 'pre',
-      resolveId(source: string) {
-        if (!source.startsWith('boardsmith')) return null;
-
-        const srcDirs = BOARDSMITH_PACKAGE_DIRS;
-
-        const srcDir = srcDirs[source];
-        if (srcDir) {
-          return join(cliMonorepoRoot, 'src', srcDir, 'index.ts');
-        }
-
-        if (source.startsWith('boardsmith/')) {
-          const parts = source.replace('boardsmith/', '').split('/');
-          const pkgName = parts[0];
-          const subpath = parts.slice(1).join('/');
-          const pkgSrcDir = srcDirs[`boardsmith/${pkgName}`];
-
-          if (pkgSrcDir && subpath) {
-            const srcPath = join(cliMonorepoRoot, 'src', pkgSrcDir);
-            if (subpath.endsWith('.css')) {
-              return join(srcPath, 'src', subpath);
-            }
-            const subpathFile = join(srcPath, 'src', `${subpath}.ts`);
-            if (existsSync(subpathFile)) {
-              return subpathFile;
-            }
-            const subpathIndex = join(srcPath, 'src', subpath, 'index.ts');
-            if (existsSync(subpathIndex)) {
-              return subpathIndex;
-            }
-            const componentsPath = join(srcPath, 'src', 'components', subpath, 'index.ts');
-            if (existsSync(componentsPath)) {
-              return componentsPath;
-            }
-          }
-        }
-
-        return null;
-      },
-    };
-    vitePlugins.unshift(boardsmithVitePlugin);
+    vitePlugins.unshift(monorepoBoardsmithResolvePlugin());
   }
 
   // Always exclude all boardsmith subpaths - Vite requires exact matches for deep imports
@@ -1115,30 +1014,16 @@ export async function devCommand(options: DevOptions): Promise<void> {
     });
 
     if (!vite.httpServer) throw new Error('Vite dev server has no HTTP server to attach the WS host to.');
-    // CRITICAL: use `noServer` and route upgrades ourselves. Attaching a second
-    // WebSocketServer with `{ server }` collides with Vite's own HMR WebSocket on
-    // the same http server — both break, HMR drops, and Vite reload-loops the
-    // page. We only claim `/__boardsmith/ws` and leave every other upgrade
-    // (including Vite HMR) for Vite's handler.
-    const WS_PATH = '/__boardsmith/ws';
-    const wss = new WebSocketServer({ noServer: true });
-    vite.httpServer.on('upgrade', (req, socket, head) => {
-      let pathname: string;
-      try {
-        pathname = new URL(req.url ?? '/', 'http://localhost').pathname;
-      } catch {
-        return;
-      }
-      if (pathname !== WS_PATH) return; // not ours — Vite HMR handles it
-      wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req));
-    });
-
-    // Per-connection WS handling (hello routing + DEF-C stale-close guard) lives
-    // in one shared, unit-tested factory so the dev server and the DEF-C
-    // regression test run the identical implementation. A rejected message
-    // handler must never crash the dev process — log and continue.
-    wss.on(
-      'connection',
+    // The `noServer` upgrade routing that leaves Vite's HMR socket alone lives
+    // in `dev-server.ts`, shared with the world run: two copies of it is how
+    // one road quietly reacquires the collision the other fixed.
+    const wss = claimWebSocketPath(
+      vite.httpServer,
+      '/__boardsmith/ws',
+      // Per-connection WS handling (hello routing + DEF-C stale-close guard)
+      // lives in one shared, unit-tested factory so the dev server and the
+      // DEF-C regression test run the identical implementation. A rejected
+      // message handler must never crash the dev process — log and continue.
       createDevHostConnectionHandler({
         mpHost,
         clients,

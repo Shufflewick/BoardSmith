@@ -195,6 +195,24 @@ export interface LocalWorldStore extends WorldPartitionStore, WorldPartitionWrit
   recordDirty(names: readonly string[]): void;
 
   /**
+   * FORGET THAT THESE PARTITIONS WERE EVER DIRTY, because the live bytes they
+   * were about are gone.
+   *
+   * The only caller is a host that has just THROWN ITS RESIDENT WORLD AWAY --
+   * `boardsmith dev`'s answer to a checkpoint that would not land, and the
+   * platform's `discardChild` by another name. A dirty mark says "this
+   * partition's durable bytes are older than the live tree"; once there is no
+   * live tree, that sentence is false, and a mark nobody can ever satisfy would
+   * make every later checkpoint try to serialize a partition no engine holds.
+   *
+   * It is NOT a way to skip a checkpoint. Discarding a mark without discarding
+   * the residency it describes is exactly the corruption `writeCheckpoint`'s
+   * one-transaction rule exists to prevent, which is why this is documented
+   * against that single caller and against no other.
+   */
+  discardDirty(names: readonly string[]): void;
+
+  /**
    * Every pending scheduled event, ordered `(due, seq)`.
    *
    * The same order `nextDueBatch` sorts by, because a world's behaviour must
@@ -431,6 +449,12 @@ export function openWorldStore(path: string, budgets: WorldBudgets): LocalWorldS
           assertStorablePartitionName(name);
           stmt.addDirty.run(name);
         }
+      });
+    },
+
+    discardDirty(names: readonly string[]): void {
+      transact(() => {
+        for (const name of names) stmt.clearDirty.run(name);
       });
     },
 

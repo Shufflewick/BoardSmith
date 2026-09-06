@@ -28,11 +28,13 @@
  *
  * ## What stays from the #304 guard
  *
- * The FALSE_CLAIMS sweep over every prose doc. A world still does not run under
- * `boardsmith dev` at this commit -- #167 is the ticket that makes it -- and a
- * doc that says it does sends an author to spend a day on a loop that does not
- * exist. The patterns are matched against every `docs/*.md`, because the
- * sentence is free to move.
+ * The FALSE_CLAIMS sweep over every prose doc. It used to forbid saying that
+ * `boardsmith dev` runs a world, because it did not and a doc claiming
+ * otherwise sent an author to spend a day on a loop that did not exist. #167
+ * built that loop, so the ban is lifted and what replaces it is the opposite
+ * ban: a doc still telling an author the CLI cannot run their world. The
+ * patterns are matched against every `docs/*.md`, because a sentence is free to
+ * move.
  */
 import { describe, it, expect } from 'vitest';
 import { readFileSync, existsSync, readdirSync } from 'node:fs';
@@ -53,27 +55,33 @@ const guide = read(GUIDE);
 /**
  * Claims no doc may make. Matched case-insensitively against every prose doc.
  *
- * The first three are #304's: this toolchain does not run a world. The rest are
- * #165's: the contract is no longer somebody else's, and the two sentences that
- * went stale unnoticed are named so they cannot be written again by anyone who
- * half-remembers the old page.
+ * The first two are #304's, and they survive #167 unchanged: they are about
+ * saying imprecisely what a world does, not about denying that one runs. The
+ * third USED to forbid "`boardsmith dev` runs a world"; #167 replaced it with
+ * its inverse, because the sentence that can now rot is the denial. The rest
+ * are #165's: the contract is no longer somebody else's, and the two sentences
+ * that went stale unnoticed are named so they cannot be written again by anyone
+ * who half-remembers the old page.
  */
 const FALSE_CLAIMS: Array<{ pattern: RegExp; why: string }> = [
   {
     pattern: /stands? (a|the|this|your) world up/i,
-    why: 'Nothing here stands a world up. `boardsmith dev` constructs the project\'s table game with worldMode, which unlocks the partition APIs and changes nothing about how ops run. #167 is the ticket that changes this.',
+    why: 'Say what actually happens. `boardsmith dev` opens a durable local store, runs genesis once, and dispatches commands against it -- "stands a world up" is a phrase that could equally describe provisioning infrastructure, which is the one thing #164 promises an author never does.',
   },
   {
     pattern: /(running|runs) resident/i,
     why: 'Residency here means the engine\'s partition model, not a running world. Say which one you mean.',
   },
   {
-    // "a world PROJECT" is excluded on purpose. `boardsmith dev` really does
-    // play a world project's table half, and the pitch in README.md and
-    // getting-started.md says exactly that. What this pattern is for is a
-    // sentence claiming the CLI plays the WORLD.
-    pattern: /`?boardsmith dev`? (runs|hosts|serves|plays) (a|the|this|your) world\b(?!\s+project)/i,
-    why: 'The CLI dispatches no world command, runs no genesis, projects no world view, fires no scheduled event and reports no presence. It plays the project\'s TABLE game. #167 is the ticket that changes this; until it lands, do not write a guide that implies a local run works.',
+    // INVERTED BY #167. This slot held the ban on saying `boardsmith dev` runs
+    // a world; the CLI does run one now, so what is forbidden is the leftover
+    // denial. Two patterns, because the denial was written two ways.
+    pattern: /`?boardsmith dev`? (plays|serves) (a|the|this|your) world project's table half/i,
+    why: 'It does not, as of #167: `devCommand` branches to `startWorldDevServer` for any project whose manifest declares a `world` block, and a world project need not have a table half at all.',
+  },
+  {
+    pattern: /(no host in this repos(itory)? runs a world|dispatches no world command|runs no genesis|projects no world view|fires no scheduled event)/i,
+    why: '`src/cli/dev-host/world-host.ts` does all five, through `boardsmith/world` (#167). This sentence was true until that landed.',
   },
   {
     pattern: /nothing in this repo reads it/i,
@@ -164,30 +172,51 @@ describe('#165: the world contract is in THIS repository', () => {
  * opposite failure: a page that is silent about it, which an author reads as a
  * loop that works. #167 must come back and rewrite what these assert.
  */
-describe('#167: the guide is honest that no host here runs a world yet', () => {
-  it('names the ticket, so the sentences to revisit are findable', () => {
-    expect(
-      guide.includes('#167'),
-      'The guide must name #167 where it says a world does not run locally, so whoever lands ' +
-        'that ticket can find every sentence it falsifies.',
-    ).toBe(true);
+describe('#167: the guide says what a local world run actually does', () => {
+  it('names every one of the eight things the dev host drives', () => {
+    // ONE LINE, and asterisks stripped: this page is hard-wrapped and bolds
+    // the control names, so a phrase is routinely broken across a newline or
+    // interrupted by `**`. A check that missed those would pass on exactly the
+    // sentences it exists to hold in place.
+    const flat = guide.replace(/[*`]/g, '').replace(/\s+/g, ' ').toLowerCase();
+    // The ticket's own list. A guide that named four of them would send an
+    // author looking for the loop they were not told about -- which is the
+    // failure this file has caught twice already, in the other direction.
+    for (const promise of [
+      'genesis',
+      'partitions(args, seat)',
+      'view(seat)',
+      'scheduled events',
+      'presence',
+      'seat switcher',
+      'fire due events now',
+      'wake from parked',
+    ]) {
+      expect(
+        flat.includes(promise.toLowerCase()),
+        `The guide stopped saying that \`boardsmith dev\` drives "${promise}". Every one of ` +
+          'the eight is something an author cannot discover by looking at a board.',
+      ).toBe(true);
+    }
   });
 
-  it('says what `boardsmith dev` actually does with a world project', () => {
-    expect(guide).toContain('boardsmith dev');
-    expect(
-      /table (game|half)/i.test(guide),
-      '`boardsmith dev` plays the project\'s TABLE game, constructed with worldMode. Saying so ' +
-        'is what stops an author looking for a world that is not there.',
-    ).toBe(true);
+  it('says the local run and the published run are the same library', () => {
+    // The whole argument for #164/#165. If a laptop ran its own world runtime,
+    // local behaviour would stop predicting published behaviour and the page
+    // would have to say so.
+    expect(guide).toContain('same library the hosting platform runs');
   });
 
-  it('names a way to run the world contract that DOES work today', () => {
+  it('names the one thing that deletes a local world, because nothing else does', () => {
+    expect(guide).toContain('boardsmith dev --reset');
+  });
+
+  it('still names a way to run the world contract with no host at all', () => {
     expect(
       guide.includes('createWorld'),
-      'A guide that lists no runnable procedure repeats the defect the pointer page had. ' +
-        '`createWorld` drives genesis, declaration, dispatch, views and checkpoints from an ' +
-        'ordinary test file, and that is the loop an author has at this commit.',
+      'A browser loop does not replace the test loop. `createWorld` drives genesis, ' +
+        'declaration, dispatch, views and checkpoints from an ordinary test file, and that is ' +
+        'still where a world\'s automated coverage lives.',
     ).toBe(true);
     expect(guide).toContain('tests/world.test.ts');
   });

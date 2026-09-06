@@ -32,18 +32,36 @@ Read this before you plan your week.
   builds a world from your bundle's own definition, runs genesis, dispatches
   commands, projects per-seat views, routes events, plans schedules and issues
   every refusal. You can drive all of it from an ordinary `vitest` file today.
-- **No host in this repository runs a world yet.** `boardsmith dev` plays your
-  project's **table** game, constructed with `worldMode: true`. It dispatches no
-  world command, runs no genesis, projects no world view, fires no scheduled
-  event and reports no presence. Issue #167 is the ticket that changes that;
-  until it lands, a local browser session of your world does not exist.
-- **`boardsmith build` does build a world's UI.** A project with a `world.html`
+- **`boardsmith dev` runs your world, on your laptop, with no network** (#167).
+  It opens a durable local store beside `boardsmith.json`, runs your genesis
+  once into it, dispatches every command through `partitions(args, seat)` and
+  then `run`, projects `view(seat)` for each attached seat and pushes it when it
+  changes, fires your scheduled events on their due time, and reports presence
+  from the seats it has open. It serves your `world.html`; a project that has
+  not written one gets the shell's own surface, which mounts the same
+  `WorldShell` over the same wire. Three controls exist because a person is
+  watching: a **seat switcher**, so one author can be several players;
+  **fire due events now**, which moves the world's clock forward to the instant
+  the next event was due rather than making you wait for it; and **wake from
+  parked**, which drops everything resident and rehydrates from the store.
+- **It is the same library the hosting platform runs.** Same `createWorld`, same
+  declaration rounds, same schedule planning, same budgets, same refusals in the
+  same sentences. What a host owns is its own lifecycle policy -- sockets,
+  hibernation, eviction timing, rate limits, the park ladder -- and the table
+  further down this page says which is which.
+- **`boardsmith build` builds a world's UI.** A project with a `world.html`
   entry gets a second bundle mounting `WorldShell`, which is what a world loads
-  on the hosting platform. Building it is not running it.
+  on the hosting platform.
 - **The command surface is transitional.** See the next section.
 
-So the loop for writing a world today is: write the rules, drive them from a
-test file against `createWorld`, and publish to a host that has a world runtime.
+So the loop for writing a world is the loop for writing anything else: write the
+rules, drive them from a test file against `createWorld`, open them in a browser
+under `boardsmith dev`, and publish.
+
+`boardsmith dev --reset` deletes the local world and runs genesis again. Nothing
+else does: a persistent world that erased itself when its host stopped would be
+a session, and closing the laptop is the one thing an author has to be able to
+do.
 
 ## The transitional part, named up front
 
@@ -625,6 +643,10 @@ way for now: #169 changes the command shape itself, so moving them onto
 **On a hosting platform.** The world runtime a published world runs under is the
 host's, built over this module.
 
-**Not yet under `boardsmith dev`.** See "What works today" at the top of this
-page. `boardsmith dev` plays your project's table half, and #167 is what makes it
-run the world half.
+**Under `boardsmith dev`.** The same module, driven by
+`src/cli/dev-host/world-host.ts` over the durable store in
+`src/cli/dev-host/world-store.ts`. Nothing about a world is decided there: the
+host owns which sockets are open, when it checkpoints, and the two controls a
+watching person needs, and the library owns everything else. That is what makes
+"the same world here and in production" a property of the code rather than a
+promise on this page.

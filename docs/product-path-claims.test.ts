@@ -18,10 +18,13 @@
  * 1. Every landing page carries the SAME paragraph, byte for byte apart from
  *    the relative prefix each needs to reach `docs/`. Copies of a pitch that
  *    are free to diverge become several pitches.
- * 2. The worlds sentence is still the one that is true today. A world does not
- *    run on a laptop until #167 lands `boardsmith dev` for worlds, so the
- *    paragraph says so. When #167 ships, this test fails, and the failure names
- *    the sentence to rewrite. That is the point of it.
+ * 2. The worlds sentence is still the one that is true today. It was a CAVEAT
+ *    until #167 -- "a world itself runs only on the hosting platform, and
+ *    `boardsmith dev` plays a world project's table half" -- and that test
+ *    existed so that the ticket which made it false could not land without
+ *    rewriting it. #167 landed, so the sentence is now the claim that a world
+ *    runs on a laptop, pinned in the same way and for the same reason: the next
+ *    thing that makes it false must fail here first.
  */
 import { describe, it, expect } from 'vitest';
 import { readFileSync } from 'node:fs';
@@ -57,20 +60,29 @@ whole engine, \`boardsmith dev\` hosts real multiplayer on your own machine with
 no server, database or service to provision, and \`boardsmith test\` drives the
 same rules headlessly. When the game is ready, \`boardsmith publish\` sends the
 bundle to ShufflewickPub, where a single account supplies the networking, the
-hosting and the social platform around it. Persistent worlds are the one part of
-this path still being built: a world's rules run locally today under
-\`boardsmith test\`, but a world itself runs only on the hosting platform, and
-\`boardsmith dev\` plays a world project's table half. See
-[Persistent worlds](${docsPrefix}persistent-worlds.md) for which half is which.`;
+hosting and the social platform around it. A persistent world takes the same
+path: \`boardsmith init --world\` scaffolds one, and \`boardsmith dev\` runs it on
+your laptop with no network at all -- genesis, commands, per-seat views,
+scheduled events and presence, over a durable local store. See
+[Persistent worlds](${docsPrefix}persistent-worlds.md) for what a world is and how one is
+written.`;
 
 /** The one copy the step and caveat assertions below are written against. */
 const PITCH = pitch('./');
 
-/** The sentence #167 comes back and rewrites once a world runs on a laptop. */
-const WORLDS_CAVEAT =
-  "Persistent worlds are the one part of\nthis path still being built: a world's rules run locally today under\n" +
-  "`boardsmith test`, but a world itself runs only on the hosting platform, and\n" +
-  "`boardsmith dev` plays a world project's table half.";
+/**
+ * The worlds sentence, as #167 rewrote it.
+ *
+ * It replaces `WORLDS_CAVEAT`, which said the opposite and was pinned here so
+ * that the ticket making it false could not land without editing this file.
+ * That worked, and this is the same pin pointing the other way: a world runs on
+ * a laptop now, and the next change that makes THAT false has to come here
+ * first.
+ */
+const WORLDS_CLAIM =
+  'A persistent world takes the same\npath: `boardsmith init --world` scaffolds one, and `boardsmith dev` runs it on\n' +
+  'your laptop with no network at all -- genesis, commands, per-seat views,\n' +
+  'scheduled events and presence, over a durable local store.';
 
 describe('#168: the product path is written down where an author lands', () => {
   it.each(LANDING_PAGES)('$path states it', ({ path, docsPrefix }) => {
@@ -102,13 +114,23 @@ describe('#168: the product path is written down where an author lands', () => {
   });
 });
 
-describe('#168: the worlds sentence is the one that is true today', () => {
-  it('says a world runs on the hosting platform and not on the laptop', () => {
+describe('#167: the worlds sentence is the one that is true today', () => {
+  it('says `boardsmith dev` runs a world on the laptop, with no network', () => {
     expect(
       PITCH,
-      'A world cannot be developed and played locally until #167 lands ' +
-        '`boardsmith dev` for worlds. Until then the paragraph must say so.',
-    ).toContain(WORLDS_CAVEAT);
+      '`boardsmith dev` runs a world project\'s world as of #167: genesis into a durable ' +
+        'local store, command dispatch, per-seat views, scheduled events and presence. The ' +
+        'landing pages are where an author learns that, so they have to say it.',
+    ).toContain(WORLDS_CLAIM);
+  });
+
+  it('does not still carry the caveat #167 deleted', () => {
+    expect(
+      /runs only on the hosting platform|plays a world project's table half/.test(PITCH),
+      'That was true until #167 and is not any more. `boardsmith dev` does not play a world ' +
+        "project's table half; it runs the world, and a world project need not have a table " +
+        'half at all.',
+    ).toBe(false);
   });
 
   it.each(LANDING_PAGES)('$path sends the reader to the page that owns the detail', ({ docsPrefix }) => {

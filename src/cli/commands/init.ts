@@ -173,17 +173,18 @@ const WORLD_SCAFFOLD: ProjectScaffold = {
     await writeFile(join(projectPath, 'README.md'), generateWorldReadme(config));
   },
 
-  // THE HONEST FIRST COMMAND. `boardsmith dev` does not run a world yet
-  // (BoardSmith #167), so it is not what a world project is sent to first;
-  // the status below says so in the same breath, and the README the
-  // scaffold wrote keeps saying it after this scrolls away.
+  // THE FIRST COMMAND IS THE ONE THAT OPENS THE WORLD. Until #167 it could not
+  // be: `boardsmith dev` served the table half and a world project has none, so
+  // an author was sent to `boardsmith test` instead. The status below lists
+  // both, and the README the scaffold wrote keeps listing them after this
+  // scrolls away.
   printNextSteps: (name) => {
     console.log(`
 ${chalk.cyan('Next steps:')}
 
   cd ${name}
   npm install
-  boardsmith test
+  boardsmith dev
 
 ${worldScaffoldStatus()
   .map((line) => chalk.dim(line))

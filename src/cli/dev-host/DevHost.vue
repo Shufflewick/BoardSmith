@@ -16,6 +16,7 @@ import type { DevHostConfig } from './config-types.js';
 import Toast from '../../ui/components/Toast.vue';
 import { useToast } from '../../ui/composables/useToast.js';
 import { applyTheme } from '../../ui/theme.js';
+import { loadDevClientId, TABLE_CLIENT_KEY } from './dev-client-id.js';
 
 const props = defineProps<{ config: DevHostConfig }>();
 const cfg = props.config;
@@ -24,16 +25,9 @@ const cfg = props.config;
 // fits on the one "Dev" line; overflow goes to the … menu on narrow screens.
 
 // ── Persistent client identity (so a reload reclaims the same seat) ──────────
-const CLIENT_KEY = 'boardsmith:dev-client-id';
-function loadClientId(): string {
-  let id = localStorage.getItem(CLIENT_KEY);
-  if (!id) {
-    id = `c-${Math.random().toString(36).slice(2)}-${Date.now().toString(36)}`;
-    localStorage.setItem(CLIENT_KEY, id);
-  }
-  return id;
-}
-const clientId = loadClientId();
+// Shared with the world dev host, which needs the identical guarantee under its
+// own key; `dev-client-id.ts` says why the keys are separate.
+const clientId = loadDevClientId(TABLE_CLIENT_KEY, 'c');
 
 // ── Lobby / game state (driven by the host over WS) ──────────────────────────
 interface SeatInfo {

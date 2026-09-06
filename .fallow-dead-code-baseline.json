@@ -2,6 +2,8 @@
   "unused_files": [
     "scripts/ingest-harness/run.mjs",
     "src/cli/dev-host/host-main.ts",
+    "src/cli/dev-host/world-fallback-main.ts",
+    "src/cli/dev-host/world-host-main.ts",
     "src/cli/lib/__fixtures__/asset-scan/bare-img/src/ui/components/GameTable.vue",
     "src/cli/lib/__fixtures__/asset-scan/commented-img/src/ui/CommentedImg.vue",
     "src/cli/lib/__fixtures__/asset-scan/wrapped/src/ui/components/GameTable.vue",
@@ -510,6 +512,8 @@
   ],
   "unresolved_imports": [
     "src/cli/dev-host/host.html:./__HOST_MAIN_SRC__",
+    "src/cli/dev-host/world-fallback.html:./__WORLD_MAIN_SRC__",
+    "src/cli/dev-host/world-host.html:./__HOST_MAIN_SRC__",
     "src/ui/game-uis.ts:./components/CribbageBoard.vue",
     "src/ui/game-uis.ts:./heirloom/HeirloomTable.vue",
     "src/ui/game-uis.ts:./three/scene.js"
