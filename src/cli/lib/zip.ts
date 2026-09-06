@@ -12,6 +12,56 @@ import { join, relative } from 'node:path';
  *   ui/**           -> (strip ui/ prefix)
  *   (root dirs)     -> public assets at dist root (equipment/, etc.)
  */
+
+/**
+ * WHICH ENTRY AND WHICH SEAT COUNT ARE THE BACKEND'S TO SAY (#188).
+ *
+ * `readDistDir` was written when every game had a table, so it demanded
+ * `ui/index.html` and a `playerCount` of everything. `boardsmith build` emits
+ * `ui/world.html` for a world and deliberately omits `playerCount`, which is
+ * how a manifest says "this game has no table" -- so the whole world half of
+ * the catalogue built and validated cleanly and then died in packaging.
+ * `validate.ts` was already backend-aware; this was the one place left that
+ * was not.
+ */
+function assertBackendIsPackageable(distDir: string, manifest: Record<string, unknown>): void {
+  const backend = manifest.backend;
+  if (backend !== 'table' && backend !== 'world') {
+    throw new Error(
+      'manifest.json must declare a backend of "table" or "world". ' +
+        `Got: ${JSON.stringify(backend)}. Rebuild with \`boardsmith build\`.`,
+    );
+  }
+
+  const entry = backend === 'world' ? 'world.html' : 'index.html';
+  if (!existsSync(join(distDir, 'ui', entry))) {
+    throw new Error(`ui/${entry} not found in dist directory. Run \`boardsmith build\` first.`);
+  }
+
+  assertSeatCount(backend, manifest);
+}
+
+/**
+ * A table declares a RANGE it must fill to start; a world declares the one
+ * ceiling it never exceeds. A world does not start, so it has no minimum to
+ * reach, which is why `world.maxPlayers` is the only number it carries.
+ */
+function assertSeatCount(backend: 'table' | 'world', manifest: Record<string, unknown>): void {
+  if (backend === 'table') {
+    const seats = manifest.playerCount as { min?: number; max?: number } | undefined;
+    if (seats?.min && seats?.max) return;
+    throw new Error(
+      `manifest.json must contain playerCount with min and max fields. Got: ${JSON.stringify(seats)}`,
+    );
+  }
+
+  const world = manifest.world as { maxPlayers?: number } | undefined;
+  if (world?.maxPlayers) return;
+  throw new Error(
+    `manifest.json must contain world.maxPlayers for a world backend. Got: ${JSON.stringify(world)}`,
+  );
+}
+
 export function readDistDir(distDir: string): Map<string, Uint8Array> {
   if (!existsSync(distDir)) {
     throw new Error(`dist directory not found: ${distDir}\nRun \`boardsmith build\` first.`);
@@ -30,17 +80,18 @@ export function readDistDir(distDir: string): Map<string, Uint8Array> {
     throw new Error('rules/rules.js is empty. Build may have failed.');
   }
 
-  const uiIndexPath = join(distDir, 'ui', 'index.html');
-  if (!existsSync(uiIndexPath)) {
-    throw new Error('ui/index.html not found in dist directory. Run `boardsmith build` first.');
-  }
-
   const manifestData = JSON.parse(readFileSync(manifestPath, 'utf-8'));
-  if (!manifestData.playerCount?.min || !manifestData.playerCount?.max) {
-    throw new Error(
-      `manifest.json must contain playerCount with min and max fields. Got: ${JSON.stringify(manifestData.playerCount)}`
-    );
-  }
+
+  // WHICH ENTRY AND WHICH SEAT COUNT ARE THE BACKEND'S TO SAY (#188).
+  //
+  // This gate was written when every game had a table, so it demanded
+  // `ui/index.html` and a `playerCount` of everything. `boardsmith build`
+  // emits `ui/world.html` for a world and deliberately omits `playerCount`,
+  // which is how a manifest says "this game has no table" -- so the whole
+  // world half of the catalogue built and validated cleanly and then died
+  // here. `validate.ts` was already backend-aware; this was the one place
+  // left that was not.
+  assertBackendIsPackageable(distDir, manifestData);
 
   const fileMap = new Map<string, Uint8Array>();
 

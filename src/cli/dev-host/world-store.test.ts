@@ -279,9 +279,14 @@ describe('the local world store', () => {
       const dist = join(root, 'dist');
       mkdirSync(join(dist, 'rules'), { recursive: true });
       mkdirSync(join(dist, 'ui'), { recursive: true });
-      writeFileSync(join(dist, 'manifest.json'), JSON.stringify({ playerCount: { min: 1, max: 2 } }));
+      // A WORLD's dist, since a world is what has a store to leak: its entry is
+      // ui/world.html and it carries no playerCount (#188).
+      writeFileSync(
+        join(dist, 'manifest.json'),
+        JSON.stringify({ backend: 'world', world: { maxPlayers: 8 } }),
+      );
       writeFileSync(join(dist, 'rules', 'rules.js'), 'export const rules = 1;');
-      writeFileSync(join(dist, 'ui', 'index.html'), '<!doctype html>');
+      writeFileSync(join(dist, 'ui', 'world.html'), '<!doctype html>');
 
       store.recordDirty(['room/a']);
       const bundle = [...readDistDir(dist).keys()];
