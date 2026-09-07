@@ -1,7 +1,7 @@
 {
-  "revision": 43,
+  "revision": 44,
   "bundleProtocol": 2,
-  "surfaceHash": "50aca0e8b24c7afd",
+  "surfaceHash": "666dc78358c83dca",
   "payloadHash": "67a7a5d320b9ce2b",
   "history": [
     {
@@ -347,6 +347,14 @@
       "surfaceHash": "50aca0e8b24c7afd",
       "payloadHash": "67a7a5d320b9ce2b",
       "summary": "worlds: player commands carry a durable order identity and hosts answer a repeat from its receipt (#195); world.stateVersion is declared in the rules and derived into the manifest (#194)"
+    },
+    {
+      "revision": 44,
+      "date": "2026-09-07",
+      "bundleProtocol": 2,
+      "surfaceHash": "666dc78358c83dca",
+      "payloadHash": "67a7a5d320b9ce2b",
+      "summary": "worlds: a bundle may declare world.migration, moving a live world one stateVersion forward (partitions and queued event arguments, all-or-nothing); WorldEngine gains migratePartition (#200)"
     }
   ]
 }

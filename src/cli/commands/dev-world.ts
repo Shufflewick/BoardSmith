@@ -213,7 +213,19 @@ export async function startWorldDevServer(options: WorldDevServerOptions): Promi
     },
   });
 
-  await worldHost.start();
+  const started = await worldHost.start();
+  if (started.migrated !== undefined) {
+    // SAID IN THE TERMINAL, because a migration runs before the first socket
+    // exists: there is nobody in the world to tell, and the person who
+    // published the new rules is standing here (#200).
+    const { from, to, partitions, events } = started.migrated;
+    console.log(
+      chalk.green(
+        `  Migrated this world from state version ${from} to ${to}: ` +
+          `${partitions} partition(s) and ${events} queued event(s), in one durable step.`,
+      ),
+    );
+  }
 
   const config: WorldDevConfig = {
     displayName: options.displayName,

@@ -55,3 +55,4 @@ export * from './engine.js';
 export * from './runner.js';
 export * from './definition.js';
 export * from './orders.js';
+export * from './migration.js';

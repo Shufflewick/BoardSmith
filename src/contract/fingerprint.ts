@@ -133,6 +133,11 @@ export const WORLD_FIXTURE_COVERAGE: Record<(typeof WORLD_ENGINE_METHODS)[number
   viewFor: true,
   viewPartitions: true,
 
+  migratePartition: 'A world MOVING BETWEEN state versions (#200), which happens once, at '
+    + 'startup, before any player is in it -- never on the path this fixture drives. What it '
+    + 'produces is ordinary partition bytes: `serializePartitions` is what writes them, and that '
+    + 'is fingerprinted.',
+
   applyCommand: 'A world\'s write path. The fixture dispatches nothing, so the dirty set, '
     + 'rollback and the checkpoint bytes are unfingerprinted.',
   commandPartitions: 'The declaration walk a DISPATCH drives, and the fixture drives none. '

@@ -188,10 +188,11 @@ the same manifest, so the default is a fact of the published bytes rather than a
 convention each reader re-implements. A negative, fractional or non-numeric one
 is refused with `bundle-not-a-world` at build.
 
-Bump it when a new version reads a live world's stored state differently, and a
-hosting platform will refuse to move a running world onto it: that world plays
+Bump it when a new version reads a live world's stored state differently. Say
+nothing more and a hosting platform refuses to move a running world onto it: that world plays
 its season out on the rules it started under. Leave it alone and an upgrade is
-judged on what the platform can check for itself. The declaration can only ever
+judged on what the platform can check for itself. **Declare a migration and the
+answer changes from "never" to "here is how"** -- see below. The declaration can only ever
 refuse *more* than the platform would, never permit more, because the platform's
 own comparison runs anyway.
 
@@ -939,6 +940,56 @@ Calling it does not stop the action. `execute` runs to its end and its events an
 dirty set are reported normally; what ends is the season, once the dispatch's
 changes are durable.
 
+### `world.migration`: how the old bytes become the new ones
+
+A veto is the right answer for a change nobody can reconcile. It was the ONLY
+answer, so a season anybody was in could never gain a feature -- however plainly
+you could say how the old state becomes the new. A migration is that sentence:
+
+```ts
+world: {
+  stateVersion: 2,
+  migration: {
+    from: 1,
+    partition: (element, { name }) => { element.plots ??= []; },
+    event: (queued) => ({ ...queued.args, tier: queued.args.tier ?? 1 }),
+  },
+  actions, view,
+}
+```
+
+**One step, not a chain.** A world is migrated only when its own recorded
+version is exactly `from`. A world two versions back is refused by name rather
+than walked through migrations each written against a world you have not seen;
+publish the intermediate version and upgrade twice, which is a thing you can see
+the result of.
+
+**Partitions and queued events, because those are the only two things a world
+durably holds that outlive its rules.** `partition` is handed the element the
+partition's stored bytes deserialized to under the NEW rules, and mutates it in
+place. `event` is handed a queued event and answers the arguments the new
+handler should see -- a frozen argument is as opaque to a host as a partition's
+bytes, and means exactly as much to the new rules.
+
+**It is not a command.** No clock, no schedule, no seat: a migration that could
+schedule would be arming timers against a world whose own timers are mid-
+transformation, and one that could act would be a command no seat sent.
+
+**All of it, or none of it.** Every transformed partition, every queued event's
+new arguments, and the version they are now written under commit together. A
+migration that landed halfway is a world whose rooms disagree about which rules
+wrote them, and unlike a checkpoint there is no retry that could finish it --
+the second attempt would read bytes the first had already moved. `boardsmith
+dev` gets that from one SQLite transaction; a host whose storage cannot do it
+owes the same guarantee by its own means before it may claim this contract.
+
+**If the migration throws, nothing happened.** The world stays on its old rules,
+playable, and the failure is reported to whoever started the host.
+
+Refused by name as `world-migration-unavailable`: a version gap with no
+migration, a migration declared from a different version, and a bundle older
+than the world. In every case the world is not changed.
+
 ## An order that survives a lost reply
 
 A player presses "found a colony". The command commits. The reply is lost on the
@@ -1001,7 +1052,8 @@ thing next time.
 
 | Code | What happened |
 | --- | --- |
-| `bundle-not-a-world` | The manifest declares `"backend": "world"` and the compiled rules export no `world.actions`, no `world.view`, no `world.maxPlayers`, a `world.maxPlayers` the host will not seat, or a `world.stateVersion` that is not a whole number from 0 up. |
+| `bundle-not-a-world` | The manifest declares `"backend": "world"` and the compiled rules export no `world.actions`, no `world.view`, no `world.maxPlayers`, a `world.maxPlayers` the host will not seat, a `world.stateVersion` that is not a whole number from 0 up, or a `world.migration` that is not usable (no `from`, a `from` at or past this version, or a hook that is not a function). |
+| `world-migration-unavailable` | A world's recorded `stateVersion` and its bundle's differ, and no migration in that bundle can cross the gap: none declared, one declared from a different version, or a bundle older than the world. The world is not changed. |
 | `invalid-world-action` | A world action the platform cannot offer or cannot bound: an action not built with `worldAction()`, an unbounded `from`/`filter`/`elementClass` element form, an element selection with no `elements:`, a candidate outside what the step declared, a selection past `maxCandidatesPerSelection`, a dependent or repeating selection, a seatless action that asks a question, or a round declared before a step the action does not have. |
 | `not-in-a-world` | An action built with `worldAction()` reached `ctx.world` with no world running it -- registered on a table, or reached after the dispatch that bound its facilities finished. |
 | `undeclared-partition` | `execute` read a partition the action's own walk did not declare. |

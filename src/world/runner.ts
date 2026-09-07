@@ -77,6 +77,7 @@ import type {
   WorldEngine,
   WorldOfferStamp,
 } from "./contract.js";
+import type { GameElement } from "../engine/index.js";
 import type { ScheduleAllowance } from "./schedule-api.js";
 import { WorldRefusal } from "./refusals.js";
 
@@ -330,6 +331,17 @@ export function createWorldRunner(
       return engine.serializePartitions(dirty);
     },
 
+    async migratePartition(
+      name: string,
+      stored: StoredPartition,
+      transform: (element: GameElement) => void,
+    ): Promise<string> {
+      await adopt(engine, store, { [name]: stored });
+      engine.migratePartition(name, transform);
+      const written = await engine.serializePartitions([name]);
+      return written[name] as string;
+    },
+
     seat(player: string, seat: number): void {
       engine.seat(player, seat);
     },
@@ -482,6 +494,24 @@ export interface WorldRunnerHandle {
    * hands back what it accumulated and gets bytes.
    */
   serialize(dirty: readonly string[]): Promise<Record<string, string>>;
+
+  /**
+   * MIGRATE ONE PARTITION, from bytes to bytes (#200).
+   *
+   * Hands the partition's own element to the bundle's migration hook and
+   * answers what it serializes to. Adoption is done here rather than by the
+   * caller because a migration reads bytes the CALLER holds -- a world's
+   * stored partitions -- rather than anything this runner already has resident.
+   *
+   * Nothing is written: the caller collects every answer and commits them
+   * together, because a migration that landed halfway is a world whose rooms
+   * disagree about which rules wrote them.
+   */
+  migratePartition(
+    name: string,
+    stored: StoredPartition,
+    transform: (element: GameElement) => void,
+  ): Promise<string>;
   /**
    * Admit a player to a world that is already running (#37 item 2).
    *
