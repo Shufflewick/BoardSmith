@@ -88,6 +88,22 @@ import type { LocalWorldStore } from './world-store.js';
  * that minted a random id per run would strand every seat it ever opened -- a
  * world with three logs in it and nobody who can reach them.
  */
+/**
+ * WHAT AN AUTHOR IS TOLD WHEN THEIR RULES MOVED UNDER A RUNNING WORLD (#201).
+ *
+ * One sentence, said in the notice and again on every refused command, because
+ * the two arrive at different moments and an author who missed the first is
+ * owed the second.
+ */
+export function rulesChangedNotice(what: string): string {
+  return (
+    `The rules changed on disk (${what}), and this world is still running the ones loaded when ` +
+    '`boardsmith dev` started -- the page is drawn by your new UI. Commands are refused rather ' +
+    'than run against a world made of two versions. Restart `boardsmith dev`: your world is ' +
+    'durable and comes back on the new rules, with everything in it.'
+  );
+}
+
 export function devWorldPlayer(seat: number): string {
   return `seat-${seat}`;
 }
@@ -168,6 +184,23 @@ export class LocalWorldHost {
   #closed = false;
   /** The one shutdown, once it has been asked for. */
   #closing: Promise<void> | null = null;
+  /**
+   * HAS THE PROJECT'S RULE SOURCE CHANGED UNDER THIS RUNNING WORLD (#201)?
+   *
+   * The Node runtime is loaded ONCE, before Vite starts, so an author who edits
+   * their rules gets hot-reloaded UI over the rules this process loaded at
+   * startup. The two then disagree in the worst possible way: the new surface
+   * offers a verb the old rules do not have, or sends the new shape of one they
+   * do -- and the world commits the result. That is a world made of two
+   * versions, which is the one thing a durable world must never be.
+   *
+   * So a rule edit STOPS this world rather than being half-applied. Every
+   * command is refused with a sentence naming the restart, the world is not
+   * touched, and nothing is lost: the store is durable, and `boardsmith dev`
+   * comes back to the same world on the new rules.
+   */
+  #rulesStale: string | null = null;
+
   /** The world lock. Every entry point queues behind it. */
   #lock: Promise<unknown> = Promise.resolve();
 
@@ -262,6 +295,18 @@ export class LocalWorldHost {
       if (seat !== undefined && !this.#seatIsOpen(seat)) this.#armDeparture(seat);
       await this.#pushViews();
     });
+  }
+
+  /**
+   * THE RULES ON DISK ARE NO LONGER THE RULES THIS WORLD IS RUNNING (#201).
+   *
+   * Called by the dev server's watcher. Idempotent, and it says so once: an
+   * author saving a file five times is one stale world, not five notices.
+   */
+  markRulesStale(what: string): void {
+    if (this.#rulesStale !== null) return;
+    this.#rulesStale = what;
+    this.#broadcastNotice(rulesChangedNotice(what));
   }
 
   /**
@@ -443,6 +488,19 @@ export class LocalWorldHost {
         requestId,
         ok: false,
         message: 'This page holds no seat in this world yet, so it cannot act in it.',
+      });
+      return;
+    }
+    if (this.#rulesStale !== null) {
+      // REFUSED, NOT QUEUED AND NOT RUN (#201). This world is running the rules
+      // this process loaded at startup, and the page in front of the author is
+      // drawn by the ones they just saved. Running the command would commit a
+      // world made of both.
+      this.#send(clientId, {
+        type: 'world_response',
+        requestId,
+        ok: false,
+        message: rulesChangedNotice(this.#rulesStale),
       });
       return;
     }
