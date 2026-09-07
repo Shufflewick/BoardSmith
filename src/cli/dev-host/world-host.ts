@@ -179,8 +179,14 @@ export class LocalWorldHost {
    * world computes exactly the state ten real minutes of waiting would have
    * produced. A control that invented a tick at `now` would produce a state no
    * published world ever reaches.
+   *
+   * A CACHE OF THE STORE'S VALUE, not a second copy of it (#216). The advance
+   * is durable because the state it settled is, so it is read from the store
+   * when this host is built and only ever reassigned from the store's own
+   * answer -- a host that started at the wall over a world already settled in
+   * the future would stamp commands that world has to refuse.
    */
-  #skewMs = 0;
+  #skewMs: number;
   /** How many partitions were resident immediately before the last `wake`, so
    *  the control can say what it dropped rather than claim it. */
   #droppedOnWake = 0;
@@ -204,6 +210,7 @@ export class LocalWorldHost {
     this.#worldName = options.worldName;
     this.#send = options.send;
     this.#clock = options.clock ?? createNodeWorldClock();
+    this.#skewMs = this.#store.clockSkewMs();
     this.#world = this.#build();
     this.#presenceDeclaration = readWorldDefinition(options.definition).presence;
   }
@@ -822,7 +829,11 @@ export class LocalWorldHost {
     }
     const earliest = Math.min(...pending.map((event) => event.due));
     const jump = Math.max(0, earliest - this.#worldNow());
-    this.#skewMs += jump;
+    // DURABLE BEFORE IT IS DRAINED. The partitions this firing settles become
+    // durable at the advanced time, so the advance itself has to be on disk
+    // first or a crash between the two leaves a world settled in a future its
+    // next host does not know about.
+    this.#skewMs = this.#store.advanceClock(jump);
     await this.#drain();
     await this.#pushViews();
     this.#broadcastNotice(

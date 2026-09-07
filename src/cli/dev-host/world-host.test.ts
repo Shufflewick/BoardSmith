@@ -357,6 +357,71 @@ describe('#167: scheduled events fire on their due time', () => {
   });
 });
 
+describe("#216: an advanced clock belongs to the world, not to the host that advanced it", () => {
+  /**
+   * A RULE RELOAD REPLACES THE RUNTIME, NOT THE WORLD.
+   *
+   * `dev-world.ts` answers a rules edit by closing this host and opening
+   * another over the same store (#201). Everything durable survives that --
+   * including partitions a fired event settled at a time that has not arrived
+   * yet -- so a second host starting its clock at the wall would issue command
+   * timestamps EARLIER than state already on disk, and a game that checks its
+   * own monotonicity refuses the next order until real time catches up.
+   *
+   * The same sentence covers a cold `boardsmith dev`: reopening a store is
+   * reopening a world, and the two must not disagree about what time it is.
+   */
+  async function advanced() {
+    const clock = testClock();
+    const opened = await attached({ dir, clock });
+    await opened.host.handleMessage('c1', {
+      type: 'action',
+      order: nextOrder(),
+      requestId: 'r1',
+      action: 'bank',
+      args: {},
+    });
+    await opened.host.handleMessage('c1', { type: 'fire_due' });
+    const status = last(opened.sent, 'c1', 'world_status');
+    expect(status?.clockSkewMs).toBe(600_000);
+    return { ...opened, clock, worldNow: status?.worldNow as number };
+  }
+
+  it('carries the advance into the host a rule reload opens over the same store', async () => {
+    const first = await advanced();
+    await first.host.close();
+
+    // What `hostOver` does: a new host, the same store, a clock that only ever
+    // knew the wall.
+    const second = await attached({ dir, clock: testClock() }, 'c2');
+    const status = last(second.sent, 'c2', 'world_status');
+    expect(status?.clockSkewMs).toBe(600_000);
+    expect(status?.worldNow as number).toBeGreaterThanOrEqual(first.worldNow);
+    await second.host.close();
+  });
+
+  it('never hands a command a timestamp earlier than the world already settled at', async () => {
+    const first = await advanced();
+    await first.host.close();
+
+    const second = await attached({ dir, clock: testClock() }, 'c2');
+    // The order the reproduction was refused on: the next command after the
+    // reload, against state the fired event already settled in the future.
+    await second.host.handleMessage('c2', {
+      type: 'action',
+      order: nextOrder(),
+      requestId: 'r2',
+      action: 'chop',
+      args: {},
+    });
+    const answer = last(second.sent, 'c2', 'world_response');
+    expect(answer?.ok).toBe(true);
+    const status = last(second.sent, 'c2', 'world_status');
+    expect(status?.worldNow as number).toBeGreaterThanOrEqual(first.worldNow);
+    await second.host.close();
+  });
+});
+
 describe('#167: wake from parked really drops residency', () => {
   it('rehydrates the world from the store and answers the same view', async () => {
     const { host, sent } = await attached({ dir });
