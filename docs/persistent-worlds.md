@@ -990,6 +990,12 @@ Refused by name as `world-migration-unavailable`: a version gap with no
 migration, a migration declared from a different version, and a bundle older
 than the world. In every case the world is not changed.
 
+`boardsmith build` writes `world.migratesFrom` into the manifest when you
+declare one, and nothing else about it: a hosting platform decides whether an
+upgrade may go ahead **before** it loads any bundle, and that one number is the
+whole of what it needs at that moment. The migration itself stays in your rules,
+where the elements are.
+
 ## An order that survives a lost reply
 
 A player presses "found a colony". The command commits. The reply is lost on the

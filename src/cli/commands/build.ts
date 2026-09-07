@@ -135,9 +135,23 @@ function readBackend(config: Record<string, unknown>): GameBackend {
  * `stateVersion` is written down even when it is 0, so an author who declares
  * nothing and one who declares zero publish the same bytes.
  */
-function deriveWorldBlock(world: WorldDefinition): { maxPlayers: number; stateVersion: number } {
+function deriveWorldBlock(world: WorldDefinition): {
+  maxPlayers: number;
+  stateVersion: number;
+  migratesFrom?: number;
+} {
   const declared = readWorldDefinition({ world });
-  return { maxPlayers: declared.maxPlayers, stateVersion: declared.stateVersion ?? 0 };
+  return {
+    maxPlayers: declared.maxPlayers,
+    stateVersion: declared.stateVersion ?? 0,
+    // WHICH VERSION THIS BUNDLE CAN MIGRATE A WORLD FROM (#200), and nothing
+    // else about the migration. A platform decides whether an upgrade may go
+    // ahead BEFORE it loads any bundle -- all it has at that moment is the
+    // manifest -- and what it needs to know is exactly this one number. The
+    // migration itself stays inside the rules, where it can see the elements;
+    // a manifest that carried the hook would be a copy of code nobody runs.
+    ...(declared.migration === undefined ? {} : { migratesFrom: declared.migration.from }),
+  };
 }
 
 export function deriveManifest(

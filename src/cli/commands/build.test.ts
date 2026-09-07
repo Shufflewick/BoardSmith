@@ -301,6 +301,24 @@ describe('deriveManifest — a world-only bundle', () => {
     });
   });
 
+  it('names the version a declared migration reads, so a platform can decide from the manifest', () => {
+    // A platform decides whether an upgrade may go ahead before it loads any
+    // bundle: all it has then is the manifest, and this one number is the whole
+    // of what it needs. The hook stays in the rules, where the elements are.
+    const world = { ...makeWorldDefinition(12).world!, stateVersion: 2, migration: { from: 1, partition: () => {} } };
+    expect(deriveWorld(worldConfig, { ...makeWorldDefinition(12), world } as GameDefinition).world).toEqual({
+      maxPlayers: 12,
+      stateVersion: 2,
+      migratesFrom: 1,
+    });
+  });
+
+  it('leaves the field off entirely for a bundle that declares no migration', () => {
+    expect(deriveWorld(worldConfig, makeWorldDefinition(12)).world).not.toHaveProperty(
+      'migratesFrom',
+    );
+  });
+
   it.each([-1, 1.5, Number.NaN, '1', null])(
     'refuses %p as a stateVersion, naming what a usable one is',
     (bad) => {
