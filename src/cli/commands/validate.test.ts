@@ -842,3 +842,97 @@ describe("#196: what validation tells an author to do next", () => {
     }
   });
 });
+
+/**
+ * ShufflewickPub #370: A PICTURE THAT RENDERS HERE AND IS BLOCKED THERE.
+ *
+ * A published bundle's HTML is served under an `img-src` allowlist, and a game
+ * says what belongs on it with `boardsmith.json`'s `imageSources`. Without this
+ * scan, a game whose artwork lives in another repository builds cleanly,
+ * validates cleanly, publishes cleanly, and shows no pictures at all -- with the
+ * only evidence a CSP violation in a console nobody is watching.
+ */
+describe('remote image sources must be declared before they are used (#370)', () => {
+  function project(files: Record<string, string>): string {
+    const cwd = mkdtempSync(join(tmpdir(), 'bs-image-sources-'));
+    for (const [rel, contents] of Object.entries(files)) {
+      const full = join(cwd, rel);
+      mkdirSync(join(full, '..'), { recursive: true });
+      writeFileSync(full, contents);
+    }
+    return cwd;
+  }
+
+  const REMOTE = 'https://raw.githubusercontent.com/owner/art/abc123/planet.png';
+
+  async function scan(imageSources: string[] | undefined, source = REMOTE) {
+    const cwd = project({
+      'boardsmith.json': JSON.stringify(imageSources === undefined ? {} : { imageSources }),
+      'dist/ui/index.html': `<!doctype html><img src="${source}">`,
+    });
+    try {
+      const result = await validateAssetPaths(cwd);
+      return { passed: result.passed, details: (result.details ?? []).join('\n'), message: result.message };
+    } finally {
+      rmSync(cwd, { recursive: true, force: true });
+    }
+  }
+
+  it('FAILS a bundle that loads a remote image it never declared', async () => {
+    const { passed, details, message } = await scan(undefined);
+    expect(passed).toBe(false);
+    expect(details).toContain(REMOTE);
+    expect(details).toContain('https://raw.githubusercontent.com');
+    expect(details).toContain('imageSources');
+    expect(message).toContain('not declared in imageSources');
+  });
+
+  it('PASSES when a declared origin covers it', async () => {
+    expect((await scan(['https://raw.githubusercontent.com'])).passed).toBe(true);
+  });
+
+  it('PASSES when a declared path prefix covers it, the way CSP matches one', async () => {
+    expect((await scan(['https://raw.githubusercontent.com/owner/art/abc123/'])).passed).toBe(true);
+  });
+
+  it('FAILS when the declared prefix is for a DIFFERENT directory', async () => {
+    // The whole value of pinning a prefix: a declaration for last release's
+    // commit does not quietly cover this release's URLs.
+    const { passed } = await scan(['https://raw.githubusercontent.com/owner/art/999999/']);
+    expect(passed).toBe(false);
+  });
+
+  it('leaves a non-image URL alone, so a documentation link is not an asset problem', async () => {
+    expect((await scan(undefined, 'https://boardsmith.dev/docs/worlds')).passed).toBe(true);
+  });
+
+  it('finds one in built CSS and in built rules, not only in HTML', async () => {
+    for (const [rel, contents] of [
+      ['dist/ui/assets/app.css', `.board { background: url(${REMOTE}); }`],
+      ['dist/rules/rules.js', `const sprite = "${REMOTE}";`],
+    ] as const) {
+      const cwd = project({ 'boardsmith.json': '{}', [rel]: contents });
+      try {
+        const result = await validateAssetPaths(cwd);
+        expect(result.passed, `${rel} should have been scanned`).toBe(false);
+        expect((result.details ?? []).join('\n')).toContain(REMOTE);
+      } finally {
+        rmSync(cwd, { recursive: true, force: true });
+      }
+    }
+  });
+
+  it('names each distinct URL once, however many times it appears', async () => {
+    const cwd = project({
+      'boardsmith.json': '{}',
+      'dist/ui/index.html': `<img src="${REMOTE}"><img src="${REMOTE}"><img src="${REMOTE}">`,
+    });
+    try {
+      const result = await validateAssetPaths(cwd);
+      const lines = (result.details ?? []).filter((line) => line.includes(REMOTE));
+      expect(lines).toHaveLength(1);
+    } finally {
+      rmSync(cwd, { recursive: true, force: true });
+    }
+  });
+});

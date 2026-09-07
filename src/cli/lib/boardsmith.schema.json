@@ -159,6 +159,17 @@
       "$ref": "#/definitions/namedAction",
       "description": "The action the platform submits on behalf of a seat whose round deadline expired, for a game that ships no bot. Required by the platform alongside `roundDeadline` when the bundle ships no bot. Whether it does is not authorable: `boardsmith build` derives it from the compiled `gameDefinition.bot` and sends it as `capabilities.bots`. Consumed by the platform (manifest-schema.ts `idleAction`)."
     },
+    "imageSources": {
+      "x-convex-sink": false,
+      "type": "array",
+      "maxItems": 8,
+      "items": {
+        "type": "string",
+        "pattern": "^https://[a-z0-9]([a-z0-9-]*[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+(:[0-9]{1,5})?(/[A-Za-z0-9._~/-]*/)?$"
+      },
+      "description": "Where this game's artwork may be loaded from besides its own bundle. A published bundle's HTML is served under `img-src 'self' data:`, so a game whose artwork lives in a separate repository shows no pictures at all unless it declares the origins here. Each entry is an https:// origin (\"https://cdn.example.com\") or an origin and a path PREFIX ending in a slash (\"https://raw.githubusercontent.com/owner/art/abc123/\"), which pins one directory at one commit rather than opening a whole host. Images only: scripts, styles, fonts, connections and form targets stay exactly as bounded as they were. Consumed by the platform (manifest-schema.ts `imageSources`), which validates the same shape at upload and writes the entries into the served Content-Security-Policy.",
+      "examples": [["https://raw.githubusercontent.com/owner/art/abc123/"]]
+    },
     "roundDeadline": {
       "x-convex-sink": true,
       "type": "object",

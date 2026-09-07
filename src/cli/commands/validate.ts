@@ -796,6 +796,18 @@ function listFilesWithExtension(dir: string, extension: string): string[] {
     .map((entry) => join(dir, entry));
 }
 
+/** Every file under `dir`, at any depth, whose name ends in one of `extensions`. */
+function listFilesUnder(dir: string, extensions: readonly string[]): string[] {
+  if (!existsSync(dir)) return [];
+  const found: string[] = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const full = join(dir, entry.name);
+    if (entry.isDirectory()) found.push(...listFilesUnder(full, extensions));
+    else if (extensions.some((ext) => entry.name.endsWith(ext))) found.push(full);
+  }
+  return found;
+}
+
 /**
  * One issue per offending file: the first `"/<publicDir>/"` reference it
  * contains is enough to tell the author the path style is wrong.
@@ -853,6 +865,81 @@ function findDanglingManifestAssets(cwd: string): string[] {
  * Two failures, one gate: an asset path a game DECLARES must resolve to a real
  * file, and an asset path a game REFERENCES must be relative.
  */
+/**
+ * REMOTE IMAGE URLS THE BUNDLE USES BUT DOES NOT DECLARE (ShufflewickPub #370).
+ *
+ * A published bundle's HTML is served under an `img-src` allowlist, and a game
+ * says what belongs on it with `boardsmith.json`'s `imageSources`. Nothing here
+ * can tell whether the platform will actually fetch a given URL -- only that
+ * the game names one no declaration covers, which is a picture that renders on
+ * a laptop and is blocked the moment it is published.
+ *
+ * PREFIX MATCHING, exactly as CSP does it: a declaration ending in `/` covers
+ * every URL beginning with it, and a bare origin covers every path on that
+ * origin. Anything the scan finds and no declaration covers is named, once per
+ * distinct URL, with the line the author has to add.
+ */
+function findUndeclaredImageSources(cwd: string, files: string[]): string[] {
+  const declared = declaredImageSources(cwd);
+  const found = new Map<string, string>();
+  for (const filePath of files) {
+    const content = readFileSync(filePath, 'utf-8');
+    for (const match of content.matchAll(REMOTE_IMAGE_URL_RE)) {
+      const url = match[0];
+      if (declared.some((source) => coversUrl(source, url))) continue;
+      if (!found.has(url)) found.set(url, filePath.replace(cwd + '/', ''));
+    }
+  }
+
+  return [...found].map(([url, where]) => {
+    const origin = originOf(url);
+    return (
+      `${where}: "${url}" is loaded from outside the bundle, and boardsmith.json declares no ` +
+      `imageSources entry covering it. A published bundle may only load images from its own ` +
+      `files and from the origins it declares, so this picture renders here and is blocked ` +
+      `once the game is published. Add "${origin}" (or a narrower path prefix ending in "/") ` +
+      `to "imageSources" in boardsmith.json.`
+    );
+  });
+}
+
+/** `boardsmith.json`'s declared sources, or none. A malformed config is the
+ *  Project Config check's business, not this one's. */
+function declaredImageSources(cwd: string): string[] {
+  const configPath = join(cwd, 'boardsmith.json');
+  if (!existsSync(configPath)) return [];
+  try {
+    const config = JSON.parse(readFileSync(configPath, 'utf-8')) as { imageSources?: unknown };
+    return Array.isArray(config.imageSources)
+      ? config.imageSources.filter((entry): entry is string => typeof entry === 'string')
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+/** CSP's own rule: a source ending in `/` is a path prefix, a bare origin
+ *  covers its whole host. */
+function coversUrl(source: string, url: string): boolean {
+  return source.endsWith('/') ? url.startsWith(source) : url.startsWith(`${source}/`);
+}
+
+/** The scheme and host of a URL, for the line the author has to add. */
+function originOf(url: string): string {
+  const afterScheme = url.indexOf('://') + 3;
+  const slash = url.indexOf('/', afterScheme);
+  return slash === -1 ? url : url.slice(0, slash);
+}
+
+/**
+ * An absolute http(s) URL ending in an image extension, wherever it appears --
+ * an `<img src>` in built HTML, a `url()` in built CSS, a string literal in
+ * built JS. Deliberately extension-driven: a scan that flagged every absolute
+ * URL would flag every documentation link a game's UI carries.
+ */
+const REMOTE_IMAGE_URL_RE =
+  /https?:\/\/[A-Za-z0-9._~:\/?#[\]@!$&'()*+,;=%-]+?\.(?:png|jpe?g|gif|webp|avif|svg|bmp|ico)/gi;
+
 export async function validateAssetPaths(cwd: string): Promise<ValidationResult> {
   const danglingIssues = findDanglingManifestAssets(cwd);
 
@@ -878,11 +965,28 @@ export async function validateAssetPaths(cwd: string): Promise<ValidationResult>
 
   const absoluteIssues = findAbsolutePathIssues(cwd, filesToScan, publicDirs);
 
-  if (danglingIssues.length === 0 && absoluteIssues.length === 0) {
+  // REMOTE ARTWORK IS SCANNED OVER THE WHOLE BUILT BUNDLE, not only when the
+  // project has a `public/` tree: a game whose artwork lives entirely off-bundle
+  // has no `public/` directory at all, which is exactly the case this catches.
+  const remoteIssues = findUndeclaredImageSources(cwd, [
+    // RECURSIVELY, unlike the absolute-path scan above: Vite emits the built UI
+    // into `dist/ui/assets/`, so a flat listing of `dist/ui` opens the entry
+    // HTML and misses every stylesheet and chunk the game's artwork is actually
+    // named in.
+    ...listFilesUnder(join(cwd, 'dist', 'ui'), ['.js', '.css', '.html']),
+    ...listFilesUnder(join(cwd, 'dist', 'rules'), ['.js']),
+    ...listFilesUnder(join(cwd, 'data'), ['.json']),
+  ]);
+
+  if (danglingIssues.length === 0 && absoluteIssues.length === 0 && remoteIssues.length === 0) {
     return { name: 'Asset Paths', passed: true, message: '' };
   }
 
   const details: string[] = [...danglingIssues];
+  if (remoteIssues.length > 0) {
+    if (details.length > 0) details.push('');
+    details.push(...remoteIssues.slice(0, 5));
+  }
   if (absoluteIssues.length > 0) {
     if (details.length > 0) details.push('');
     details.push(
@@ -897,14 +1001,28 @@ export async function validateAssetPaths(cwd: string): Promise<ValidationResult>
   return {
     name: 'Asset Paths',
     passed: false,
-    message:
-      danglingIssues.length > 0 && absoluteIssues.length > 0
-        ? 'Declared assets are missing, and absolute asset paths will break on the publishing platform'
-        : danglingIssues.length > 0
-          ? 'boardsmith.json declares an asset the project does not have'
-          : 'Absolute asset paths will break on the publishing platform',
+    message: assetPathMessage(danglingIssues, absoluteIssues, remoteIssues),
     details,
   };
+}
+
+/**
+ * ONE SENTENCE NAMING EVERY KIND OF ASSET PROBLEM THIS RUN FOUND.
+ *
+ * Three independent scans share one result, and a message that named only the
+ * first would send an author looking in one place for three problems.
+ */
+function assetPathMessage(
+  dangling: readonly string[],
+  absolute: readonly string[],
+  remote: readonly string[],
+): string {
+  const parts: string[] = [];
+  if (dangling.length > 0) parts.push('boardsmith.json declares an asset the project does not have');
+  if (absolute.length > 0) parts.push('absolute asset paths will break on the publishing platform');
+  if (remote.length > 0) parts.push('remote images are used but not declared in imageSources');
+  const sentence = parts.join(', and ');
+  return sentence.charAt(0).toUpperCase() + sentence.slice(1);
 }
 
 export async function validateRequiredFiles(cwd: string, isWorld: boolean): Promise<ValidationResult> {
