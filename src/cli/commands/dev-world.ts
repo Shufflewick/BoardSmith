@@ -42,6 +42,7 @@ import { WebSocket } from 'ws';
 import { worldBudgets } from '../../world/index.js';
 import { LocalWorldHost, type WorldDevRequest } from '../dev-host/world-host.js';
 import { openWorldStore, worldStorePath } from '../dev-host/world-store.js';
+import { announceHost, onShutdown } from '../dev-host/shutdown.js';
 import type { WorldDevConfig } from '../dev-host/world-config-types.js';
 import { ensureWorldEntry, WORLD_ENTRY_HTML } from '../lib/world-entry.js';
 import type { GameDefinition } from '../../session/index.js';
@@ -299,14 +300,19 @@ export async function startWorldDevServer(options: WorldDevServerOptions): Promi
     ? parseInt(new URL(vite.resolvedUrls.local[0]).port || String(options.port), 10)
     : options.port;
   const hostUrl = `http://localhost:${uiPort}`;
-  console.log(chalk.green(`  World host running on ${hostUrl}`));
-  for (const networkUrl of vite.resolvedUrls?.network ?? []) {
-    console.log(chalk.cyan(`  Network (others can join this world): ${networkUrl}`));
-  }
+  announceHost({
+    hostUrl,
+    what: 'World host',
+    join: 'others can join this world',
+    networkUrls: vite.resolvedUrls?.network ?? [],
+    say: (line) => console.log(line),
+    green: chalk.green,
+    cyan: chalk.cyan,
+  });
   if (options.openBrowser) await open(hostUrl);
   console.log(chalk.green('\n  Ready! Press Ctrl+C to stop.\n'));
 
-  const cleanup = async () => {
+  onShutdown(async () => {
     console.log(chalk.dim('\n  Shutting down...'));
     wss.close();
     clients.clear();
@@ -321,7 +327,5 @@ export async function startWorldDevServer(options: WorldDevServerOptions): Promi
       // best-effort
     }
     process.exit(0);
-  };
-  process.on('SIGINT', cleanup);
-  process.on('SIGTERM', cleanup);
+  });
 }

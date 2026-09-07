@@ -14,6 +14,7 @@ import { MultiplayerHost } from '../dev-host/multiplayer-host.js';
 import { createDevHostConnectionHandler } from '../dev-host/connection-handler.js';
 import { devStorePath, loadDevStore } from '../dev-host/persistence-file-store.js';
 import { resetWorldStore, worldResetNotice, worldStoreDir } from '../dev-host/world-store.js';
+import { announceHost, onShutdown } from '../dev-host/shutdown.js';
 import type { PersistenceStore } from '../../persistence/index.js';
 import { getProjectContext, boardsmithResolvePlugin, toPosix } from './game-runtime.js';
 import { findUnknownKeys } from '../lib/config-schema.js';
@@ -1061,10 +1062,15 @@ export async function devCommand(options: DevOptions): Promise<void> {
     }
 
     const hostUrl = `http://localhost:${uiPort}`;
-    console.log(chalk.green(`  Dev host running on ${hostUrl}`));
-    for (const networkUrl of vite.resolvedUrls?.network ?? []) {
-      console.log(chalk.cyan(`  Network (others can join): ${networkUrl}`));
-    }
+    announceHost({
+      hostUrl,
+      what: 'Dev host',
+      join: 'others can join',
+      networkUrls: vite.resolvedUrls?.network ?? [],
+      say: (line) => console.log(line),
+      green: chalk.green,
+      cyan: chalk.cyan,
+    });
 
     console.log(chalk.dim(`  ${multiplayerBannerLine(isNonLocal)}`));
     console.log(chalk.cyan(`  Seats: ${effectivePlayerCount} (open seats play as bot${botPlayers.length ? `; --bot ${botPlayers.join(',')} pre-marked` : ''}, level ${botLevel}).`));
@@ -1090,7 +1096,7 @@ export async function devCommand(options: DevOptions): Promise<void> {
 
     console.log(chalk.green('\n  Ready! Press Ctrl+C to stop.\n'));
 
-    const cleanup = async () => {
+    onShutdown(async () => {
       console.log(chalk.dim('\n  Shutting down...'));
       wss.close();
       clients.clear();
@@ -1101,10 +1107,7 @@ export async function devCommand(options: DevOptions): Promise<void> {
         // Ignore cleanup errors
       }
       process.exit(0);
-    };
-
-    process.on('SIGINT', cleanup);
-    process.on('SIGTERM', cleanup);
+    });
 
   } catch (error) {
     console.error(chalk.red('Failed to start Vite dev server:'), error);
