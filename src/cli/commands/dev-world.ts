@@ -31,7 +31,7 @@
  */
 
 import { existsSync, readFileSync, rmSync } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, join, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import chalk from 'chalk';
@@ -40,7 +40,7 @@ import { createServer as createViteServer, type Plugin as VitePlugin } from 'vit
 import { WebSocket } from 'ws';
 
 import { worldBudgets } from '../../world/index.js';
-import { LocalWorldHost, type WorldDevRequest } from '../dev-host/world-host.js';
+import { LocalWorldHost, rulesChangedNotice, type WorldDevRequest } from '../dev-host/world-host.js';
 import { openWorldStore, worldStorePath } from '../dev-host/world-store.js';
 import { announceHost, onShutdown } from '../dev-host/shutdown.js';
 import type { WorldDevConfig } from '../dev-host/world-config-types.js';
@@ -257,6 +257,27 @@ export async function startWorldDevServer(options: WorldDevServerOptions): Promi
     optimizeDeps: { exclude: ['boardsmith', 'boardsmith/ui', 'boardsmith/client', 'boardsmith/session'] },
   });
   await vite.listen();
+
+  // THE RULES THIS PROCESS LOADED ARE THE RULES THIS WORLD RUNS (#201).
+  //
+  // The Node runtime is loaded ONCE, before this server starts, so an author's
+  // saved rules reach the browser through HMR and never reach the world. A
+  // world that then took a command would be committing the new UI's intent
+  // against the old rules -- a durable world made of two versions, which is the
+  // one thing it must never be.
+  //
+  // Vite's own watcher is what notices, because it is already watching the
+  // project; what it does here is stop the world rather than reload it. A
+  // coordinated reload -- checkpoint, re-validate, rehydrate without genesis,
+  // reload every client -- is the better answer and is not this one.
+  const rulesDir = join(options.cwd, 'src', 'rules');
+  vite.watcher.add(rulesDir);
+  vite.watcher.on('change', (changed: string) => {
+    if (!changed.startsWith(rulesDir)) return;
+    const named = relative(options.cwd, changed);
+    console.log(chalk.yellow(`\n  ${rulesChangedNotice(named)}\n`));
+    worldHost.markRulesStale(named);
+  });
 
   if (!vite.httpServer) throw new Error('Vite dev server has no HTTP server to attach the world socket to.');
   const wss = claimWebSocketPath(vite.httpServer, WORLD_WS_PATH, (socket: WebSocket) => {
