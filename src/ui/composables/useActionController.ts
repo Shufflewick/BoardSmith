@@ -97,6 +97,7 @@ import { ref, readonly, computed, watch, inject, nextTick, getCurrentScope, onSc
 import { isDevMode, devWarn, getDisplayFromValue, actionNeedsWizardMode, resolveMultiSelectConfig as resolveEffectiveMultiSelect } from './actionControllerHelpers.js';
 import { createEnrichment } from './useGameViewEnrichment.js';
 import { useBoardInteraction, type BoardInteraction } from './useBoardInteraction.js';
+import { findMatchingChoice } from '../../engine/action/choice-matching.js';
 
 // Re-export all types from the types module for consumers
 export type {
@@ -495,11 +496,6 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     return value === undefined;
   }
 
-  /** Type guard for values that may have an id property */
-  function hasId(obj: unknown): obj is { id: unknown } {
-    return typeof obj === 'object' && obj !== null && 'id' in obj;
-  }
-
   /** Type guard for values that may have a value property */
   function hasValue(obj: unknown): obj is { value: unknown } {
     return typeof obj === 'object' && obj !== null && 'value' in obj;
@@ -511,26 +507,21 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       return { valid: true };
     }
 
-    // Check if value is in valid choices
+    // Check if value is in valid choices.
+    //
+    // #219: this used identity equality (`c.value === v`) and then compared
+    // nested `.id`/`.value` against the WHOLE submitted value, so it never
+    // structurally compared two objects. A custom UI holding a JSON choice
+    // from its game view -- object identity cannot survive the wire -- had
+    // that choice displayed correctly and then refused when selected, while
+    // the engine accepted the same object. `findMatchingChoice` is now the
+    // engine's own matcher, imported rather than reimplemented.
     const choices = getChoices(selection);
     if (choices.length > 0) {
-      // Helper to find the matching choice for a single value
-      const findMatchingChoice = (v: unknown) => {
-        return choices.find(c => {
-          // Handle both direct match and value property match
-          if (c.value === v) return true;
-          if (typeof c.value === 'object' && c.value !== null) {
-            return (hasValue(c.value) && c.value.value === v) ||
-                   (hasId(c.value) && c.value.id === v);
-          }
-          return false;
-        });
-      };
-
       // Handle arrays (multiSelect) - check each element is valid and not disabled
       if (Array.isArray(value)) {
         for (const v of value) {
-          const matched = findMatchingChoice(v);
+          const matched = findMatchingChoice(v, choices);
           if (matched && matched.disabled) {
             return { valid: false, error: `Selection disabled: ${matched.disabled}` };
           }
@@ -540,14 +531,14 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         }
       } else {
         // Single value - check disabled BEFORE containment for specific error message
-        const matchedChoice = findMatchingChoice(value);
+        const matchedChoice = findMatchingChoice(value, choices);
         if (matchedChoice && matchedChoice.disabled) {
           return { valid: false, error: `Selection disabled: ${matchedChoice.disabled}` };
         }
         if (!matchedChoice) {
           // PIT OF SUCCESS: Check if they passed an object with a .value that would have matched
           // This helps catch cases where auto-unwrap didn't trigger (e.g., object has value but not display)
-          if (hasValue(value) && findMatchingChoice((value as { value: unknown }).value)) {
+          if (hasValue(value) && findMatchingChoice((value as { value: unknown }).value, choices)) {
             return {
               valid: false,
               error: `Invalid selection for "${selection.name}". Did you mean to pass choice.value (${JSON.stringify((value as { value: unknown }).value)}) instead of the choice object?`

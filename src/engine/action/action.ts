@@ -27,6 +27,7 @@ import { isDevMode, devWarn, isDevThrowEnabled } from '../../utils/dev.js';
 import { Action } from './action-builder.js';
 import { PlayerFacingError, NotSimulableError } from '../errors.js';
 import { getActiveStep, getGateReasonForValue } from '../tutorial/gate.js';
+import { findMatchingChoice, trySmartResolveChoice, valuesEqual } from './choice-matching.js';
 
 // Re-export Action class from action-builder
 export { Action };
@@ -766,16 +767,13 @@ export class ActionExecutor {
   }
 
   /**
-   * Check if two values are equal (handles objects by comparing JSON)
+   * Check if two values are equal (handles objects by comparing JSON).
+   *
+   * Delegates to `choice-matching.ts`, which the browser's action controller
+   * imports too -- the two had separate implementations and disagreed (#219).
    */
   private valuesEqual(a: unknown, b: unknown): boolean {
-    if (a === b) return true;
-    if (typeof a !== typeof b) return false;
-    if (typeof a === 'object' && a !== null && b !== null) {
-      // For objects, compare by JSON serialization
-      return JSON.stringify(a) === JSON.stringify(b);
-    }
-    return false;
+    return valuesEqual(a, b);
   }
 
   /**
@@ -803,53 +801,7 @@ export class ActionExecutor {
     value: unknown,
     choices: AnnotatedChoice<unknown>[]
   ): AnnotatedChoice<unknown> | undefined {
-    // Try element ID match or value match for numbers
-    if (typeof value === 'number') {
-      for (const choice of choices) {
-        const actual = choice.value;
-        if (actual && typeof actual === 'object') {
-          // Check if choice is an element with matching ID
-          if ('id' in actual && (actual as { id: number }).id === value) {
-            return choice;
-          }
-          // Check if choice has matching 'value' property (for playerChoices pattern)
-          if ('value' in actual && (actual as { value: number }).value === value) {
-            return choice;
-          }
-        }
-      }
-    }
-
-    // Try string match against choice properties
-    if (typeof value === 'string') {
-      const lowerValue = value.toLowerCase();
-      for (const choice of choices) {
-        const actual = choice.value;
-        if (actual && typeof actual === 'object') {
-          const obj = actual as Record<string, unknown>;
-          // Check value property first (for {value, display} pattern), then display, name, label
-          // Both exact match and case-insensitive match are tried
-          const propsToCheck = ['value', 'display', 'name', 'label'];
-          for (const prop of propsToCheck) {
-            const propValue = obj[prop];
-            if (propValue !== undefined) {
-              // Exact match (for value property especially)
-              if (propValue === value) {
-                return choice;
-              }
-              // Case-insensitive string match
-              if (typeof propValue === 'string' && propValue.toLowerCase() === lowerValue) {
-                return choice;
-              }
-            }
-          }
-        } else if (typeof actual === 'string' && actual.toLowerCase() === lowerValue) {
-          return choice;
-        }
-      }
-    }
-
-    return undefined;
+    return trySmartResolveChoice(value, choices);
   }
 
   /**
@@ -859,87 +811,8 @@ export class ActionExecutor {
    * @returns The resolved choice value, or the original value if no match found
    */
   private smartResolveChoiceValue(value: unknown, choices: AnnotatedChoice<unknown>[]): unknown {
-    // Try element ID match
-    if (typeof value === 'number') {
-      for (const choice of choices) {
-        const actual = choice.value;
-        if (actual && typeof actual === 'object' && 'id' in actual) {
-          if ((actual as { id: number }).id === value) {
-            return actual;
-          }
-        }
-      }
-    }
-
-    // Try string match against choice properties
-    if (typeof value === 'string') {
-      const lowerValue = value.toLowerCase();
-      for (const choice of choices) {
-        const actual = choice.value;
-        if (actual && typeof actual === 'object') {
-          const obj = actual as Record<string, unknown>;
-          // Check value property first (for {value, display} pattern), then display, name, label
-          const propsToCheck = ['value', 'display', 'name', 'label'];
-          for (const prop of propsToCheck) {
-            const propValue = obj[prop];
-            if (propValue !== undefined) {
-              // Exact match (for value property especially)
-              if (propValue === value) {
-                return actual;
-              }
-              // Case-insensitive string match
-              if (typeof propValue === 'string' && propValue.toLowerCase() === lowerValue) {
-                return actual;
-              }
-            }
-          }
-        } else if (typeof actual === 'string' && actual.toLowerCase() === lowerValue) {
-          return actual;
-        }
-      }
-    }
-
-    // Try object-subset match: a custom UI may submit a choice object carrying only
-    // the identifying fields, omitting presentation-only metadata the server bakes
-    // into the choice value (e.g. `capturedNotations`/`refs` used purely for board
-    // highlights). Resolve to the canonical choice when the submitted object is a
-    // subset of exactly one choice — every submitted key deep-equals that choice's
-    // corresponding field. This mirrors the id/display resolution above: the UI sends
-    // an identity, the engine canonicalizes it. A non-unique or zero match falls
-    // through to `return value`, so validation still rejects ambiguous/unknown input
-    // with a clear error rather than silently picking the wrong choice.
-    if (this.isPlainObject(value)) {
-      const matches = choices.filter(c => this.isObjectSubset(value, c.value));
-      if (matches.length === 1) {
-        return matches[0].value;
-      }
-    }
-
-    return value;
-  }
-
-  /** True for a plain data object (not null, not array, not a serialized element). */
-  private isPlainObject(value: unknown): value is Record<string, unknown> {
-    return (
-      typeof value === 'object' &&
-      value !== null &&
-      !Array.isArray(value) &&
-      !this.isSerializedElement(value)
-    );
-  }
-
-  /**
-   * True when every own key of `subset` exists on `full` and deep-equals it.
-   * `full` may carry extra keys (the presentation-only metadata). Both must be
-   * plain objects for a subset relationship to be meaningful.
-   */
-  private isObjectSubset(subset: unknown, full: unknown): boolean {
-    if (!this.isPlainObject(subset) || !this.isPlainObject(full)) return false;
-    for (const key of Object.keys(subset)) {
-      if (!(key in full)) return false;
-      if (!this.valuesEqual(subset[key], full[key])) return false;
-    }
-    return true;
+    const match = findMatchingChoice(value, choices);
+    return match === undefined ? value : match.value;
   }
 
   /**

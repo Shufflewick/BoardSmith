@@ -1,7 +1,7 @@
 {
-  "revision": 44,
+  "revision": 45,
   "bundleProtocol": 2,
-  "surfaceHash": "666dc78358c83dca",
+  "surfaceHash": "35beccf9c0e3cf5b",
   "payloadHash": "67a7a5d320b9ce2b",
   "history": [
     {
@@ -355,6 +355,14 @@
       "surfaceHash": "666dc78358c83dca",
       "payloadHash": "67a7a5d320b9ce2b",
       "summary": "worlds: a bundle may declare world.migration, moving a live world one stateVersion forward (partitions and queued event arguments, all-or-nothing); WorldEngine gains migratePartition (#200)"
+    },
+    {
+      "revision": 45,
+      "date": "2026-09-07",
+      "bundleProtocol": 2,
+      "surfaceHash": "35beccf9c0e3cf5b",
+      "payloadHash": "67a7a5d320b9ce2b",
+      "summary": "worlds and tables agree on choice identity: the engine's choice matcher moved to src/engine/action/choice-matching.ts, which the browser action controller now imports instead of reimplementing, and it resolves a string id shorthand and an identifying-subset object everywhere the engine already did (#219)"
     }
   ]
 }
