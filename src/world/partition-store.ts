@@ -179,18 +179,16 @@ export interface WorldPartitionWriter {
    * either an empty world or a launched one, and never the state in between
    * that had no way out.
    */
-  createAll(
-    records: Record<string, StoredPartition>,
-    /**
-     * THE STATE VERSION GENESIS WROTE THESE BYTES UNDER (#200).
-     *
-     * With the bytes, in the same write: a world born on stateVersion 2 that
-     * recorded 0 would be asked, on its very next start, to migrate from a
-     * version it was never written in. Optional, and absent means 0, which is
-     * the same default `boardsmith build` writes into a manifest.
-     */
-    stateVersion?: number,
-  ): Promise<void>;
+  /**
+   * Create every partition a genesis produced, in one write.
+   *
+   * A host may widen this -- the local dev store takes the state version
+   * genesis wrote under, and the platform's takes the rows that ride the same
+   * write (#200, #369) -- because what ELSE lands with a genesis is that
+   * host's storage business. What the contract requires is only that the
+   * partitions land together.
+   */
+  createAll(records: Record<string, StoredPartition>): Promise<void>;
   /**
    * Write exactly what a checkpoint serialized.
    *
