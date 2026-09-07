@@ -818,6 +818,11 @@ export async function devCommand(options: DevOptions): Promise<void> {
       host,
       tempDir,
       openBrowser: shouldOpenBrowser(options),
+      // HOW THE WORLD HOST GETS THE RULES AGAIN (#201). `loadGameRuntime`
+      // already cache-busts its own import, so re-running it is a genuine
+      // re-read of the author's edited source rather than the module this
+      // process loaded at startup.
+      reloadRules: async () => (await loadGameRuntime(rulesPath, tempDir, context)).gameDefinition,
     });
     return;
   }

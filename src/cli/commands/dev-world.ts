@@ -40,8 +40,8 @@ import { createServer as createViteServer, type Plugin as VitePlugin } from 'vit
 import { WebSocket } from 'ws';
 
 import { worldBudgets } from '../../world/index.js';
-import { LocalWorldHost, rulesChangedNotice, type WorldDevRequest } from '../dev-host/world-host.js';
-import { openWorldStore, worldStorePath } from '../dev-host/world-store.js';
+import { LocalWorldHost, type WorldDevRequest } from '../dev-host/world-host.js';
+import { openWorldStore, worldStorePath, type LocalWorldStore } from '../dev-host/world-store.js';
 import { announceHost, onShutdown } from '../dev-host/shutdown.js';
 import type { WorldDevConfig } from '../dev-host/world-config-types.js';
 import { ensureWorldEntry, WORLD_ENTRY_HTML } from '../lib/world-entry.js';
@@ -167,6 +167,16 @@ interface WorldDevServerOptions {
   readonly host: string;
   readonly tempDir: string;
   readonly openBrowser: boolean;
+  /**
+   * READ THE PROJECT'S RULES AGAIN (#201).
+   *
+   * A world runs the rules this process loaded at startup, and an author's
+   * saved edits reach only the browser -- so a rule edit used to leave the new
+   * UI acting on the old rules, and the world committed the result. This is how
+   * the host gets the new ones: `loadGameRuntime` cache-busts its own import,
+   * so calling it again is a genuine re-read of the edited source.
+   */
+  readonly reloadRules: () => Promise<GameDefinition>;
 }
 
 /**
@@ -196,22 +206,29 @@ export async function startWorldDevServer(options: WorldDevServerOptions): Promi
   const launchedBefore = store.isLaunched();
 
   const clients = new Map<string, WebSocket>();
-  const worldHost = new LocalWorldHost({
-    definition: options.gameDefinition as unknown as ConstructorParameters<
-      typeof LocalWorldHost
-    >[0]['definition'],
-    worldName: options.displayName,
-    // ONE SEED FOREVER, derived from the project rather than from the run: the
-    // same world has to come back on every wake, and a fresh seed per run would
-    // make a rebuilt world a different world.
-    seed: `world:${options.gameDefinition.gameType}`,
-    budgets,
-    store,
-    send: (clientId, message) => {
-      const socket = clients.get(clientId);
-      if (socket && socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message));
-    },
-  });
+  const send = (clientId: string, message: unknown) => {
+    const socket = clients.get(clientId);
+    if (socket && socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message));
+  };
+  const hostOver = (definition: GameDefinition, over: LocalWorldStore) =>
+    new LocalWorldHost({
+      definition: definition as unknown as ConstructorParameters<
+        typeof LocalWorldHost
+      >[0]['definition'],
+      worldName: options.displayName,
+      // ONE SEED FOREVER, derived from the project rather than from the run: the
+      // same world has to come back on every wake, and a fresh seed per run
+      // would make a rebuilt world a different world.
+      seed: `world:${definition.gameType}`,
+      budgets,
+      store: over,
+      send,
+    });
+
+  // MUTABLE, because a rule edit replaces the whole world host (#201): the
+  // rules, the store handle and the resident tree go together, or the two
+  // halves are a world made of two versions.
+  let worldHost: LocalWorldHost = hostOver(options.gameDefinition, store);
 
   const started = await worldHost.start();
   if (started.migrated !== undefined) {
@@ -270,26 +287,87 @@ export async function startWorldDevServer(options: WorldDevServerOptions): Promi
   });
   await vite.listen();
 
-  // THE RULES THIS PROCESS LOADED ARE THE RULES THIS WORLD RUNS (#201).
+  // A RULE EDIT IS A COORDINATED WORLD RELOAD (#201).
   //
-  // The Node runtime is loaded ONCE, before this server starts, so an author's
-  // saved rules reach the browser through HMR and never reach the world. A
-  // world that then took a command would be committing the new UI's intent
-  // against the old rules -- a durable world made of two versions, which is the
-  // one thing it must never be.
+  // The Node runtime is loaded once, before this server starts, so an author's
+  // saved rules used to reach the browser through HMR and never reach the
+  // world: the new surface offered a verb the old rules did not have, or the
+  // new shape of one they did, and the world committed the result. A durable
+  // world made of two versions is the one thing it must never be.
   //
-  // Vite's own watcher is what notices, because it is already watching the
-  // project; what it does here is stop the world rather than reload it. A
-  // coordinated reload -- checkpoint, re-validate, rehydrate without genesis,
-  // reload every client -- is the better answer and is not this one.
+  // So the two halves switch TOGETHER, and the order below is the whole of the
+  // safety:
+  //
+  //   1. LOAD THE NEW RULES FIRST. A broken edit -- a syntax error, a bundle
+  //      that will not build -- throws here, and the world is still the old
+  //      one, still running, still playable.
+  //   2. STOP THE OLD WORLD. `close` checkpoints whatever the resident tree
+  //      holds, so nothing a command left in memory is lost with the isolate.
+  //   3. OPEN THE SAME WORLD AGAIN, on the new rules. Genesis does not re-run
+  //      (`start` runs it only for a world that has never launched), and a
+  //      `stateVersion` bump is migrated or refused there (#200) -- the same
+  //      path a fresh `boardsmith dev` takes.
+  //   4. TELL EVERY PAGE. Vite is hot-reloading the bundle's UI in the same
+  //      moment; a page that kept its socket would be new UI holding a seat in
+  //      a world that has just been rebuilt.
+  //
+  // A FAILURE AT ANY STEP LEAVES THE WORLD IT COULD NOT REPLACE. Step 1 leaves
+  // the old host untouched; 2-3 can only fail on rules that already loaded, and
+  // the refusal is printed with the world durable on disk, exactly where the
+  // old host checkpointed it.
   const rulesDir = join(options.cwd, 'src', 'rules');
+  let reloading: Promise<void> = Promise.resolve();
   vite.watcher.add(rulesDir);
   vite.watcher.on('change', (changed: string) => {
     if (!changed.startsWith(rulesDir)) return;
-    const named = relative(options.cwd, changed);
-    console.log(chalk.yellow(`\n  ${rulesChangedNotice(named)}\n`));
-    worldHost.markRulesStale(named);
+    // QUEUED, so a save-all across four files is one reload rather than four
+    // overlapping ones tearing down each other's world.
+    reloading = reloading.then(() => reloadWorld(relative(options.cwd, changed)));
   });
+
+  async function reloadWorld(named: string): Promise<void> {
+    console.log(chalk.dim(`\n  ${named} changed -- reloading the world's rules...`));
+    let rules: GameDefinition;
+    try {
+      rules = await options.reloadRules();
+    } catch (error) {
+      console.error(
+        chalk.red('  Those rules did not load, so this world is still running the ones it had:'),
+        error,
+      );
+      return;
+    }
+    try {
+      await worldHost.close();
+      worldHost = hostOver(rules, openWorldStore(worldStorePath(options.cwd), budgets));
+      const restarted = await worldHost.start();
+      if (restarted.migrated !== undefined) {
+        const { from, to, partitions, events } = restarted.migrated;
+        console.log(
+          chalk.green(
+            `  Migrated this world from state version ${from} to ${to}: ` +
+              `${partitions} partition(s) and ${events} queued event(s), in one durable step.`,
+          ),
+        );
+      }
+    } catch (error) {
+      console.error(
+        chalk.red('  Those rules cannot run this world, so nothing was changed on disk:'),
+        error instanceof Error ? error.message : String(error),
+      );
+      return;
+    }
+    // EVERY PAGE STARTS AGAIN. Their sockets are attached to a host that no
+    // longer exists, and their UI has just been hot-reloaded to match rules the
+    // world only now has.
+    for (const [clientId, socket] of clients) {
+      if (socket.readyState === WebSocket.OPEN) {
+        socket.send(JSON.stringify({ type: 'world_reload' }));
+      }
+      clients.delete(clientId);
+    }
+    console.log(chalk.green('  Reloaded. The world is durable and running the new rules.\n'));
+  }
 
   if (!vite.httpServer) throw new Error('Vite dev server has no HTTP server to attach the world socket to.');
   const wss = claimWebSocketPath(vite.httpServer, WORLD_WS_PATH, (socket: WebSocket) => {

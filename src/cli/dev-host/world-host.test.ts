@@ -639,55 +639,6 @@ describe('#195: an uncertain order is answered from its receipt, never spent twi
 });
 
 /**
- * #201: A RULE EDIT STOPS THIS WORLD RATHER THAN BEING HALF-APPLIED.
- *
- * `boardsmith dev` loads the Node runtime once, before Vite, so an author's
- * saved rules reach the BROWSER through HMR and never reach the world. The two
- * then disagree in the worst way: the new surface offers a verb the old rules
- * do not have, or the new shape of one they do, and the world commits the
- * result -- a durable world made of two versions.
- */
-describe('#201: rules that moved under a running world', () => {
-  it('refuses a command and names the restart, leaving the world untouched', async () => {
-    const { host, sent } = await attached({ dir });
-    await host.handleMessage('c1', {
-      type: 'action',
-      order: nextOrder(),
-      requestId: 'r1',
-      action: 'chop',
-      args: {},
-    });
-    const before = JSON.stringify(last(sent, 'c1', 'world_state')?.view);
-
-    host.markRulesStale('src/rules/index.ts');
-    await host.handleMessage('c1', {
-      type: 'action',
-      order: nextOrder(),
-      requestId: 'r2',
-      action: 'chop',
-      args: {},
-    });
-
-    const answer = last(sent, 'c1', 'world_response');
-    expect(answer?.ok).toBe(false);
-    expect(answer?.message).toContain('src/rules/index.ts');
-    expect(answer?.message).toContain('Restart `boardsmith dev`');
-    expect(JSON.stringify(last(sent, 'c1', 'world_state')?.view)).toBe(before);
-    await host.close();
-  });
-
-  it('says it once, however many times a file is saved', async () => {
-    const { host, sent } = await attached({ dir });
-    host.markRulesStale('src/rules/index.ts');
-    host.markRulesStale('src/rules/index.ts');
-    host.markRulesStale('src/rules/actions.ts');
-    const notices = sent.filter((one) => one.message.type === 'world_notice');
-    expect(notices).toHaveLength(1);
-    await host.close();
-  });
-});
-
-/**
  * #200: A WORLD ANYBODY IS IN CAN STILL GAIN A FEATURE.
  *
  * `stateVersion` was a veto and nothing else, so a season somebody was playing

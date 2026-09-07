@@ -116,6 +116,14 @@ function onHostMessage(message: Record<string, unknown>): void {
     case 'world_status':
       status.value = message as unknown as WorldStatus;
       return;
+    case 'world_reload':
+      // THE WORLD'S RULES CHANGED AND IT HAS BEEN REBUILT (#201). This page's
+      // socket is attached to a host that no longer exists, and Vite has just
+      // hot-reloaded the UI to match rules the world only now has -- so the
+      // honest move is to start again, which is what a player would do.
+      note('The world reloaded on its new rules.');
+      location.reload();
+      return;
     case 'world_notice':
       note(message.message as string);
       return;

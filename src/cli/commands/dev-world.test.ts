@@ -93,3 +93,47 @@ describe('#167: `boardsmith dev` no longer needs a table half to open a world', 
     expect(source.indexOf('new MultiplayerHost(')).toBeGreaterThan(branch);
   });
 });
+
+/**
+ * #201: A RULE EDIT IS A COORDINATED WORLD RELOAD, IN ONE ORDER.
+ *
+ * `boardsmith dev` loads the Node runtime once, so an author's saved rules used
+ * to reach only the browser: the new UI acted on the old rules and the world
+ * committed the result -- a durable world made of two versions.
+ *
+ * The reload itself needs a Vite server, a socket and a world on disk, which is
+ * what `boardsmith dev` is; what a test can hold is the ORDER, because the order
+ * is the whole of the safety. Load the new rules FIRST (a broken edit leaves the
+ * running world untouched), then stop the old world (its checkpoint is what
+ * makes the swap lossless), then open the same world again on the new rules
+ * (genesis does not re-run, and a `stateVersion` bump is migrated or refused
+ * there), then tell every page.
+ */
+describe('#201: reloading a world\'s rules', () => {
+  const source = readFileSync(join(REPO_ROOT, 'src', 'cli', 'commands', 'dev-world.ts'), 'utf-8');
+  const at = (needle: string): number => {
+    const index = source.indexOf(needle);
+    expect(index, `dev-world.ts no longer contains ${JSON.stringify(needle)}`).toBeGreaterThan(-1);
+    return index;
+  };
+
+  it('reads the new rules before it stops the old world', () => {
+    // A broken edit -- a syntax error, a bundle that will not build -- must
+    // leave the world running. That is only true if the load comes first.
+    expect(at('await options.reloadRules()')).toBeLessThan(at('await worldHost.close()'));
+  });
+
+  it('reopens the same world on the new rules, and only then tells the pages', () => {
+    expect(at('await worldHost.close()')).toBeLessThan(at('worldHost = hostOver(rules,'));
+    expect(at('worldHost = hostOver(rules,')).toBeLessThan(at("type: 'world_reload'"));
+  });
+
+  it('keeps the world when the new rules cannot run it, and says so', () => {
+    expect(source).toContain('still running the ones it had');
+    expect(source).toContain('nothing was changed on disk');
+  });
+
+  it('queues reloads, so a save-all is one reload and not four', () => {
+    expect(source).toContain('reloading = reloading.then(');
+  });
+});
