@@ -31,17 +31,31 @@ That asymmetry is why this is easy to miss. A 9 KB tree is 9 KB at action 1 and
 9 KB at action 1000 — nothing you can observe while playing suggests a problem.
 The snapshot at action 1000 is 9 MB.
 
-| Tree size | Actions until ~2 MB |
+| Tree size | Actions until ~7 MB |
 |---|---|
-| 2 KB | ~1,000 |
-| 4 KB | ~500 |
-| 10 KB | ~200 |
-| 30 KB | ~65 |
+| 2 KB | ~3,600 |
+| 4 KB | ~1,800 |
+| 10 KB | ~720 |
+| 30 KB | ~240 |
 
-Hosts cap how large a saved game may be (ShufflewickPub's limit is ~1.87 MB, set
-by Cloudflare's per-value Durable Object storage ceiling). A game with a high
-action count — 18xx, campaign and legacy games, worker placement with many small
-actions, anything async and multi-round — reaches that cap on ordinary play.
+Hosts cap how large a saved game may be. **The number is the host's to publish,
+not this page's to restate** — ShufflewickPub's is
+[`docs/GAME-STATE-BUDGET.md`](https://github.com/Shufflewick/ShufflewickPub/blob/main/docs/GAME-STATE-BUDGET.md),
+which as of this writing budgets 7,274,496 bytes for the snapshot and derives it
+from what is left of the executor's request after the bundle and the envelope
+reserve. The table above is scaled to that figure; check the host's document for
+the current one rather than trusting a second copy here, because a second copy
+of a limit is how this page previously came to state a ceiling that had moved by
+a factor of four.
+
+A game with a high action count — 18xx, campaign and legacy games, worker
+placement with many small actions, anything async and multi-round — reaches that
+cap on ordinary play. **The lever is `checkpoints: { max: N }`**, described
+below: measured on the real engine, a 15x15 grid modelled as 225 elements with
+one action per keystroke reaches 5.19 MB after 190 actions under the default
+unbounded retention, and 117 KB at `checkpoints: { max: 3 }`. If your game's
+realistic action count runs into the hundreds, reach for it while you are
+designing rather than after a host refuses a session.
 
 ## Two costs that are invisible until measured
 
@@ -50,9 +64,9 @@ actions, anything async and multi-round — reaches that cap on ordinary play.
   multiplied by the checkpoint count — but nothing caps it, and at roughly 90
   bytes per entry a game that narrates every action accumulates that text
   forever. Measured on an 8-seat game with a 6.5 KB model and three narration
-  lines per action: 75 KB of log at 325 actions, 13% of a 1.78 MB ceiling. The
-  same game before the log moved out of the tree was 1671 KB — 96% of the
-  ceiling, of which the model was under 8%.
+  lines per action: 75 KB of log at 325 actions. The same game before the log
+  moved out of the tree was 1671 KB, of which the model was under 8% — the log
+  was the snapshot.
 
   Read `measureSnapshotSize().messageLogBytes` rather than inferring the log's
   share from the remainder, and note that `projectSnapshotSize` infers the log's
@@ -151,9 +165,12 @@ remove `checkpoints: { max }` on the game definition to reach further back.
 Refused, not approximated. A bounded window trades undo depth for size, and the
 trade is stated rather than silently taken.
 
-The default is unbounded — every checkpoint retained, forever. That is the
-behaviour every game has today, and it is the behaviour that eventually hits the
-host's ceiling.
+The default is unbounded — every checkpoint retained, forever. That is the right
+default for the ordinary game, which never comes near the ceiling, and it is a
+cliff for a high-action-count one: the 15x15 grid above is 44x smaller at
+`max: 3` than at the default. Reach for `max` when a realistic game runs to
+hundreds of actions, or when `projectSnapshotSize` (below) puts your projected
+size within a factor of two of the host's budget.
 
 ## Measuring your own game
 
@@ -163,7 +180,7 @@ Do not infer. Assert it in CI:
 import { createTestGame, measureSnapshotSize, projectSnapshotSize } from 'boardsmith/testing';
 
 const EXPECTED_ACTIONS_PER_GAME = 325;   // your longest realistic game
-const HOST_BUDGET_BYTES = 1_800_000;
+const HOST_BUDGET_BYTES = 7_000_000;  // read your host's published budget; ShufflewickPub's is 7,274,496
 
 it('fits the host state budget for a full game', () => {
   const game = createTestGame(MyGame, {
