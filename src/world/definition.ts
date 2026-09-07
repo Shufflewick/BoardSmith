@@ -30,6 +30,7 @@ import { createInlinedPartitionStore, createWorldRunner } from "./runner.js";
 import type { InlinedPartitionStore, WorldRunnerHandle } from "./runner.js";
 import type { StoredPartition } from "./contract.js";
 import { worldRefusal } from "./refusals.js";
+import { assertWorldMigration, type WorldMigration } from "./migration.js";
 import { worldBudgets, type WorldBudgets } from "./budgets.js";
 
 /**
@@ -87,6 +88,19 @@ export interface WorldDefinition {
    * is exactly the split #171 closed for capacity.
    */
   readonly stateVersion?: number;
+  /**
+   * HOW A WORLD WRITTEN UNDER AN OLDER `stateVersion` BECOMES THIS ONE (#200).
+   *
+   * `stateVersion` alone is a veto: bump it and a host refuses to move a
+   * running world onto these rules, and that season plays out on the ones it
+   * started under. Declare a migration and the answer changes from "never" to
+   * "here is how" -- the author's sentence about their own bytes, which is the
+   * only place it can come from.
+   *
+   * See `migration.ts` for what one may be, what it may not, and why it is one
+   * step rather than a chain.
+   */
+  readonly migration?: WorldMigration;
   /**
    * THIS WORLD'S VERBS, built with `worldAction()` (#169).
    *
@@ -193,6 +207,9 @@ export function readWorldDefinition(definition: {
         "platform will refuse to move a running world onto it. Leave it out entirely and this " +
         "world is version 0.",
     );
+  }
+  if (world.migration !== undefined) {
+    assertWorldMigration(world.migration, world.stateVersion ?? 0);
   }
   if (typeof world.view !== "function") {
     throw worldRefusal(

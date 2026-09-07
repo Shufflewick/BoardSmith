@@ -230,6 +230,7 @@
  * everything" is the case that proves the model.
   */
 
+import type { GameElement } from "../engine/index.js";
 import type { ScheduleAllowance, ScheduleRequest } from "./schedule-api.js";
 // TYPE ONLY. A world's offer IS the table's action metadata (#169) -- one
 // shape, so the shared action panel and board bridge read a world's answer
@@ -726,6 +727,15 @@ export interface WorldEngine {
   hydrate(names: readonly string[]): Promise<void>;
 
   /**
+   * TRANSFORM ONE RESIDENT PARTITION IN PLACE (#200).
+   *
+   * The migration hook's one reach into a world: the partition's own element,
+   * live and mutable, as a command handler sees it -- and nothing else. No
+   * clock, no schedule, no seat, because a migration is not a command.
+   */
+  migratePartition(name: string, transform: (element: GameElement) => void): void;
+
+  /**
    * One player's view of the world.
    *
    * Per player and computed on demand, so a fan-out costs what each player can
@@ -828,6 +838,7 @@ export const WORLD_ENGINE_METHODS = Object.keys({
   evict: null,
   hydrate: null,
   offerPartitions: null,
+  migratePartition: null,
   offersFor: null,
   onEvent: null,
   residency: null,

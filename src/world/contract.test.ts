@@ -137,6 +137,15 @@ class ReferenceWorldEngine implements WorldEngine {
     return about.filter((name) => !this.resident.has(name));
   }
 
+  /**
+   * The reference world has no tree, so there is no element to hand a
+   * migration -- and a conformance engine is asked to have the METHOD, not to
+   * have a world in it (#200).
+   */
+  migratePartition(): void {
+    throw new Error("the reference world holds no elements to migrate");
+  }
+
   async hydrate(names: readonly string[]): Promise<void> {
     // ADOPTION AND NOTHING ELSE (#122). The reference world has no tree, so
     // residency IS the resident set -- and a declaration asked a second time

@@ -59,6 +59,8 @@ import {
   worldRefusal,
   WorldRefusal,
   assertWorldOrder,
+  migratedArgs,
+  planMigration,
   receiptFloor,
   resolveOrder,
   type PlannedEvent,
@@ -126,6 +128,24 @@ interface LocalWorldHostOptions {
   readonly store: LocalWorldStore;
   readonly send: (clientId: string, message: unknown) => void;
   readonly clock?: WorldDevClock;
+}
+
+/**
+ * WHAT STARTING A WORLD ANSWERED (#200).
+ *
+ * `migrated` is absent for the ordinary start -- a new world, or one whose
+ * bytes already read as these rules read them -- and present when this start
+ * moved the world forward a state version, with what it moved. A refusal is
+ * thrown rather than reported here: a world these rules cannot read is not a
+ * world this host may serve.
+ */
+interface WorldStartOutcome {
+  readonly migrated?: {
+    readonly from: number;
+    readonly to: number;
+    readonly partitions: number;
+    readonly events: number;
+  };
 }
 
 /** Everything a browser may ask this host to do. */
@@ -250,13 +270,80 @@ export class LocalWorldHost {
    * every command it ever received for a partition whose absence nothing
    * explains.
    */
-  async start(): Promise<void> {
+  async start(): Promise<WorldStartOutcome> {
+    let migrated: WorldStartOutcome['migrated'] = undefined;
     await this.#run(async () => {
       if (!this.#store.isLaunched()) {
-        await this.#store.createAll(await this.#world.runner.genesis());
+        // GENESIS RECORDS THE VERSION IT WROTE UNDER (#200), with the bytes: a
+        // world born on stateVersion 2 that recorded 0 would be asked to
+        // migrate from a version it was never written in.
+        await this.#store.createAll(
+          await this.#world.runner.genesis(),
+          readWorldDefinition(this.#definition).stateVersion ?? 0,
+        );
+      } else {
+        migrated = await this.#migrateIfNeeded();
       }
       this.#rearm();
     });
+    return { migrated };
+  }
+
+  /**
+   * MOVE THIS WORLD ONTO THESE RULES, OR REFUSE TO RUN THEM OVER IT (#200).
+   *
+   * Before the first frame, before a browser is pointed at anything: an author
+   * whose bundle cannot read the world in front of it meets the refusal in the
+   * terminal, with the world untouched, rather than through a page whose every
+   * command fails for a reason nothing states.
+   *
+   * ONE TRANSACTION for the whole thing (`store.migrate`). A migration that
+   * landed halfway is a world whose rooms disagree about which rules wrote
+   * them -- and unlike a checkpoint there is no retry that could finish it,
+   * because the second attempt would read bytes the first had already moved.
+   * A laptop's store is SQLite, so "all of it or none of it" is a transaction;
+   * a host whose storage cannot do that owes the same guarantee by its own
+   * means before it may claim this contract.
+   */
+  async #migrateIfNeeded(): Promise<WorldStartOutcome['migrated']> {
+    const declaration = readWorldDefinition(this.#definition);
+    const plan = planMigration({
+      stored: this.#store.stateVersion(),
+      declared: declaration.stateVersion ?? 0,
+      migration: declaration.migration,
+    });
+    if (plan.kind === 'current') return undefined;
+    if (plan.kind === 'refuse') throw plan.refusal;
+
+    const { migration, from, to } = plan;
+    const partitions: Record<string, string> = {};
+    for (const name of this.#store.partitionNames()) {
+      const stored = await this.#readPartition(
+        name,
+        `Migrating this world needs partition "${name}", which its store does not have.`,
+      );
+      partitions[name] = await this.#world.runner.migratePartition(name, stored, (element) => {
+        migration.partition?.(element, { name, from, to });
+      });
+    }
+    // THE QUEUED EVENTS TOO. Their frozen arguments are as opaque to a host as
+    // a partition's bytes, and mean exactly as much to the new handler.
+    const events = this.#store
+      .pendingEvents()
+      .map((event) => ({
+        ...event,
+        args: migratedArgs(migration, { action: event.action, args: event.args }),
+      }));
+
+    this.#store.migrate({ partitions, events, toStateVersion: to });
+    // THE RESIDENT TREE GOES WITH THE OLD BYTES. It was hydrated from them one
+    // partition at a time to be transformed, which is not the state any command
+    // should run against; the next one rebuilds from what was just written.
+    this.#discardResident();
+    // ANSWERED RATHER THAN BROADCAST: a migration runs before the first socket
+    // exists, so there is nobody in the world to tell. The CLI says it in the
+    // terminal, where the person who published the new rules is standing.
+    return { from, to, partitions: Object.keys(partitions).length, events: events.length };
   }
 
   async handleMessage(clientId: string, message: WorldDevRequest): Promise<void> {

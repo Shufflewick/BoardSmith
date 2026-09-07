@@ -386,6 +386,22 @@ export class BoardSmithWorldEngine implements WorldEngine {
     };
   }
 
+  /**
+   * TRANSFORM ONE RESIDENT PARTITION IN PLACE (#200).
+   *
+   * The migration hook's one reach into a world: the partition's own element,
+   * live and mutable, exactly as a command handler sees it. Nothing else is
+   * offered -- no clock, no schedule, no seat -- because a migration is not a
+   * command and must not be able to act like one.
+   *
+   * The partition must already be resident; the caller hydrates. Serializing
+   * it afterwards is the caller's too, so one write can carry every partition
+   * the migration touched.
+   */
+  migratePartition(name: string, transform: (element: GameElement) => void): void {
+    transform(this.rootOf(name));
+  }
+
   async hydrate(names: readonly string[]): Promise<void> {
     // ADOPTION, AND ONLY ADOPTION. Nothing is run and nothing is written; what
     // changes is what is LOADED, which is the one thing a second round of

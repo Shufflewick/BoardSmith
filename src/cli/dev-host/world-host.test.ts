@@ -686,3 +686,155 @@ describe('#201: rules that moved under a running world', () => {
     await host.close();
   });
 });
+
+/**
+ * #200: A WORLD ANYBODY IS IN CAN STILL GAIN A FEATURE.
+ *
+ * `stateVersion` was a veto and nothing else, so a season somebody was playing
+ * could never move onto rules that read its state differently -- however
+ * plainly the author could say how. These drive the whole of the answer
+ * through the REAL host over a REAL store: a world launched under one version,
+ * reopened by a bundle that declares the next, with its partitions and its
+ * queued events transformed and made durable together.
+ */
+describe('#200: a world moving onto rules that read it differently', () => {
+  /** A village that has been played: one log cut, one banked on a slow burn,
+   *  so the world has both stored bytes and a queued event to migrate. */
+  async function aPlayedVillage(worldDefinition: WorldDefinition = worldBlock()) {
+    const opened = await attached({ dir, definition: bundle({ world: worldDefinition }) });
+    await opened.host.handleMessage('c1', {
+      type: 'action',
+      order: nextOrder(),
+      requestId: 'r1',
+      action: 'chop',
+      args: {},
+    });
+    await opened.host.handleMessage('c1', {
+      type: 'action',
+      order: nextOrder(),
+      requestId: 'r2',
+      action: 'bank',
+      args: {},
+    });
+    await opened.host.close();
+  }
+
+  /** The world as it is ON DISK, read by a store nobody has been playing
+   *  through -- which is the only honest way to ask what a migration wrote. */
+  function onDisk(): LocalWorldStore {
+    return openWorldStore(worldStorePath(dir), worldBudgets());
+  }
+
+  it('records the version genesis wrote under, so a world is never asked to migrate to itself', async () => {
+    await aPlayedVillage(worldBlock({ stateVersion: 2 }));
+    const store = onDisk();
+    expect(store.stateVersion()).toBe(2);
+    store.close();
+  });
+
+  it('transforms every partition and every queued event, in one durable step', async () => {
+    await aPlayedVillage();
+
+    const migrated = worldBlock({
+      stateVersion: 1,
+      migration: {
+        from: 0,
+        // The world gains a second hearth number, and every log already cut
+        // counts as one that was seasoned.
+        partition: (element) => {
+          (element as unknown as Hearth).burns += 10;
+        },
+        event: (event) => ({ ...event.args, seasoned: true }),
+      },
+    });
+    const { host, store, sent } = await attached({ dir, definition: bundle({ world: migrated }) });
+
+    expect(store.stateVersion()).toBe(1);
+    expect(JSON.stringify(await store.read(HEARTH))).toContain('"burns":10');
+    expect(store.pendingEvents()[0]?.args).toEqual({ seasoned: true });
+    // AND THE WORLD IS PLAYABLE ON THE NEW RULES, from the migrated bytes.
+    await host.handleMessage('c1', {
+      type: 'action',
+      order: nextOrder(),
+      requestId: 'r3',
+      action: 'chop',
+      args: {},
+    });
+    // Two logs were cut before the migration (`chop` and `bank` each cut one),
+    // so this is the third -- read out of the MIGRATED bytes.
+    expect(JSON.stringify(last(sent, 'c1', 'world_state')?.view)).toContain('"logs":3');
+    await host.close();
+  });
+
+  it('answers what it moved, because a migration runs before anybody is in the world', async () => {
+    // Nobody is attached when a world starts, so there is no socket to tell.
+    // `start` answers instead, and the CLI says it in the terminal -- where
+    // the person who published the new rules is standing.
+    await aPlayedVillage();
+    const migrated = worldBlock({ stateVersion: 1, migration: { from: 0, partition: () => {} } });
+    const opened = openHost({ dir, definition: bundle({ world: migrated }) });
+    expect(await opened.host.start()).toEqual({
+      migrated: { from: 0, to: 1, partitions: 1, events: 1 },
+    });
+    await opened.host.close();
+  });
+
+  /**
+   * Start a played village under `world` and expect the start to refuse, with
+   * every byte of the world -- and its recorded version -- exactly as it was.
+   *
+   * One helper because "nothing happened" is the same assertion whichever way
+   * the start refused, and a second copy of it is a second chance for one of
+   * them to stop checking that the world survived.
+   */
+  async function refusedStart(world: WorldDefinition, saying: RegExp): Promise<void> {
+    const first = onDisk();
+    const before = JSON.stringify(await first.read(HEARTH));
+    first.close();
+
+    const opened = openHost({ dir, definition: bundle({ world }) });
+    await expect(opened.host.start()).rejects.toThrow(saying);
+    await opened.host.close();
+
+    const after = onDisk();
+    expect(after.stateVersion()).toBe(0);
+    expect(JSON.stringify(await after.read(HEARTH))).toBe(before);
+    after.close();
+  }
+
+  it('REFUSES to start over a world it cannot read, leaving every byte alone', async () => {
+    // A bumped version with no migration: the author's veto, still a veto.
+    await aPlayedVillage();
+    await refusedStart(worldBlock({ stateVersion: 3 }), /declare no migration/);
+  });
+
+  it('REFUSES a migration written for a different version rather than running it', async () => {
+    await aPlayedVillage();
+    const opened = openHost({
+      dir,
+      definition: bundle({
+        world: worldBlock({ stateVersion: 2, migration: { from: 1, partition: () => {} } }),
+      }),
+    });
+    await expect(opened.host.start()).rejects.toThrow(/one step/);
+    await opened.host.close();
+  });
+
+  it('leaves the world untouched when the migration itself throws', async () => {
+    // The author's own hook is the likeliest thing to fail, and a world half
+    // through one is the state this contract exists to make unreachable.
+    await aPlayedVillage();
+    await refusedStart(
+      worldBlock({
+        stateVersion: 1,
+        migration: {
+          from: 0,
+          partition: () => {
+            throw new Error('the hearth is not what I thought it was');
+          },
+        },
+      }),
+      /not what I thought/,
+    );
+  });
+});

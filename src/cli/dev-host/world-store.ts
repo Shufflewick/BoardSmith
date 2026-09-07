@@ -239,6 +239,37 @@ export interface LocalWorldStore extends WorldPartitionStore, WorldPartitionWrit
   seat(player: string, seat: number): void;
 
   /**
+   * THE STATE VERSION THIS WORLD'S BYTES WERE LAST WRITTEN UNDER (#200).
+   *
+   * Zero for a world that has never recorded one, which is the same default
+   * `boardsmith build` writes into a manifest -- so a world launched before
+   * versions existed and one whose author declared 0 are the same world, and
+   * neither is asked to migrate to reach 0.
+   */
+  stateVersion(): number;
+
+  /** Every partition this world holds, by name. A migration is the one caller:
+   *  it transforms all of them, and nothing else in this host ever wants the
+   *  whole list (that would be the O(world) read residency exists to delete). */
+  partitionNames(): readonly string[];
+
+  /**
+   * A MIGRATION, WRITTEN WHOLE OR NOT AT ALL (#200).
+   *
+   * Every transformed partition, every queued event's new arguments, and the
+   * version they are now written under, in ONE transaction. A migration that
+   * landed halfway would be a world whose rooms disagree about which rules
+   * wrote them -- and unlike a checkpoint there is no retry that could finish
+   * it, because the second attempt would read bytes the first had already
+   * moved.
+   */
+  migrate(migrated: {
+    partitions: Record<string, string>;
+    events: readonly PlannedEvent[];
+    toStateVersion: number;
+  }): void;
+
+  /**
    * WHAT THIS SEAT'S ORDER COMMITTED, if this store still holds its receipt
    * (#195).
    *
@@ -323,6 +354,7 @@ export function openWorldStore(path: string, budgets: WorldBudgets): LocalWorldS
     ),
     knownParent: db.prepare('SELECT parent_id FROM partitions WHERE name = ?'),
     listDirty: db.prepare('SELECT name FROM dirty ORDER BY name'),
+    listPartitions: db.prepare('SELECT name FROM partitions ORDER BY name'),
     readReceipt: db.prepare(
       'SELECT player, order_id, at, message FROM receipts WHERE player = ? AND order_id = ?',
     ),
@@ -399,7 +431,10 @@ export function openWorldStore(path: string, budgets: WorldBudgets): LocalWorldS
      * already launched, and refuses for a missing partition whose absence
      * nothing explains.
      */
-    async createAll(records: Record<string, StoredPartition>): Promise<void> {
+    async createAll(
+      records: Record<string, StoredPartition>,
+      stateVersion = 0,
+    ): Promise<void> {
       const rows = Object.entries(records).map(([name, record]) => {
         assertStorablePartitionName(name);
         const json = JSON.stringify(record.json);
@@ -408,6 +443,10 @@ export function openWorldStore(path: string, budgets: WorldBudgets): LocalWorldS
       });
       transact(() => {
         for (const row of rows) stmt.writePartition.run(row.name, row.parentId, row.json);
+        // THE VERSION GENESIS WROTE THESE BYTES UNDER (#200), with the bytes.
+        // A world born on stateVersion 2 that recorded 0 would be asked, on its
+        // very next start, to migrate from a version it was never written in.
+        stmt.writeMeta.run(STATE_VERSION_KEY, String(stateVersion));
         stmt.writeMeta.run(LAUNCHED_KEY, '1');
       });
     },
@@ -445,26 +484,11 @@ export function openWorldStore(path: string, budgets: WorldBudgets): LocalWorldS
       const highestSeq = schedule.reduce((high, event) => Math.max(high, event.seq), -1);
 
       transact(() => {
-        for (const row of rows) {
-          stmt.writePartition.run(row.name, row.parentId, row.json);
-          stmt.clearDirty.run(row.name);
-        }
+        writePartitions(rows);
         // SETTLED BEFORE ARMED, so a recurrence that re-arms under the id it
         // just ran is not deleted by its own settlement.
         for (const id of settle) stmt.deleteEvent.run(id);
-        for (const event of schedule) {
-          stmt.writeEvent.run(
-            event.id,
-            event.due,
-            event.seq,
-            event.key ?? null,
-            event.owner,
-            event.action,
-            JSON.stringify(event.args),
-            event.everyMs ?? null,
-            event.attempts,
-          );
-        }
+        writeEvents(schedule);
         // The sequence advances with the events that used it, never beside
         // them: a counter that outran a rolled-back checkpoint would leave a
         // hole in an ordering whose only job is to break ties the same way
@@ -540,6 +564,31 @@ export function openWorldStore(path: string, budgets: WorldBudgets): LocalWorldS
       return readReceiptFloor();
     },
 
+    partitionNames(): readonly string[] {
+      return (stmt.listPartitions.all() as Array<{ name: string }>).map((row) => row.name);
+    },
+
+    stateVersion(): number {
+      const stored = meta(STATE_VERSION_KEY);
+      return stored === undefined ? 0 : Number(stored);
+    },
+
+    migrate({ partitions, events, toStateVersion }): void {
+      const rows = Object.entries(partitions).map(([name, json]) => {
+        const known = stmt.knownParent.get(name) as { parent_id: number } | undefined;
+        if (!known) throw unknownPartition(name);
+        return { name, parentId: known.parent_id, json };
+      });
+      transact(() => {
+        writePartitions(rows);
+        writeEvents(events);
+        // LAST, and inside the same transaction: the version is the claim that
+        // everything above is written, so it must not become true before they
+        // are.
+        stmt.writeMeta.run(STATE_VERSION_KEY, String(toStateVersion));
+      });
+    },
+
     close(): void {
       // CLOSING TWICE IS CLOSING ONCE (#197). Shutdown runs from a signal
       // handler, and a signal can arrive twice.
@@ -567,6 +616,36 @@ export function openWorldStore(path: string, budgets: WorldBudgets): LocalWorldS
     if (extras.receiptFloorAt !== undefined && extras.receiptFloorAt > readReceiptFloor()) {
       stmt.sweepReceipts.run(extras.receiptFloorAt);
       stmt.writeMeta.run(RECEIPT_FLOOR_KEY, String(extras.receiptFloorAt));
+    }
+  }
+
+  /** The partition rows of a write, and the dirty marks they satisfy. Shared by
+   *  the checkpoint and the migration, which write the same rows for different
+   *  reasons. */
+  function writePartitions(
+    rows: readonly { name: string; parentId: number; json: string }[],
+  ): void {
+    for (const row of rows) {
+      stmt.writePartition.run(row.name, row.parentId, row.json);
+      stmt.clearDirty.run(row.name);
+    }
+  }
+
+  /** The event rows of a write. Insert-or-replace, so an event re-armed under
+   *  its own id and one whose arguments a migration rewrote take the same path. */
+  function writeEvents(events: readonly PlannedEvent[]): void {
+    for (const event of events) {
+      stmt.writeEvent.run(
+        event.id,
+        event.due,
+        event.seq,
+        event.key ?? null,
+        event.owner,
+        event.action,
+        JSON.stringify(event.args),
+        event.everyMs ?? null,
+        event.attempts,
+      );
     }
   }
 
@@ -605,6 +684,7 @@ interface EventRow {
 const LAUNCHED_KEY = 'launched';
 const SEQ_KEY = 'seq';
 const RECEIPT_FLOOR_KEY = 'receiptFloor';
+const STATE_VERSION_KEY = 'stateVersion';
 const SCHEMA_VERSION_KEY = 'schemaVersion';
 
 /**

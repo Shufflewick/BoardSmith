@@ -180,6 +180,10 @@ export const WORLD_REFUSALS = {
     owner: "game",
     why: "a bundle reached a world isolate without `world.actions`, or asked to require a module the child does not have -- the manifest declared a world and the compiled rules do not implement one, which upload validation cannot see",
   },
+  "world-migration-unavailable": {
+    owner: "game",
+    why: "#200: a world's recorded stateVersion and its offered bundle's differ, and no migration in that bundle can cross the gap -- none declared, one declared from a different version, or a bundle older than the world. GAME-owned because the declaration is the bundle's own and the same bundle offers the same gap next time; the world is not changed and plays on the rules it has, so nothing about it is unhealthy",
+  },
   "invalid-world-action": {
     owner: "game",
     why: "a bundle registered a world action the platform cannot offer or cannot bound (#169) -- an unbounded `from`/`filter` element form, a candidate outside what the step declared, a selection past `budgets.ts:WorldBudgets.maxCandidatesPerSelection`, a seatless action that asks a question, or two declarations for one step. Every one of them would produce an offer whose size is a function of the RESIDENT tree rather than of the declaration, which is the O(world) read the partitioned model exists to delete -- so it is refused once when the world is built rather than on whichever player first asked what they could do here",
