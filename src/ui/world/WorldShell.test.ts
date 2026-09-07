@@ -622,3 +622,54 @@ describe('WorldShell — the shell owns the modal host a board teleports into (#
     wrapper.unmount();
   });
 });
+
+/**
+ * #212: A WORLD NEVER STARTS AN ACTION THE PLAYER DID NOT.
+ *
+ * The board bridge auto-starts a seat's SOLE available action, which is right
+ * for a table -- one obvious move, pressed twice for no reason -- and wrong for
+ * a world. A world's offer is enumerated over what one seat can SEE, so "the
+ * only action" is a fact about a moment; a player who had just paid for a
+ * building was put straight back into choosing another plot, and the surface
+ * read as an order they never placed.
+ */
+describe('WorldShell — the panel does not choose for the player (#212)', () => {
+  beforeEach(() => localStorage.clear());
+
+  const soleAction = {
+    name: 'construct',
+    prompt: 'Construct building',
+    selections: [
+      {
+        name: 'plot',
+        type: 'choice',
+        prompt: 'Empty plot',
+        choices: [{ value: 'plot-1', display: 'Plot 1' }],
+      },
+    ],
+  };
+
+  it('leaves a sole offered action unstarted until it is pressed', async () => {
+    const wrapper = mountShell();
+    await drawn(wrapper, stateFrame({ actions: [soleAction] }));
+
+    // The panel OFFERS it and has not ENTERED it: the controller holds no
+    // action, which is what "the player has not started one" means.
+    await flushPromises();
+    expect(wrapper.find('[data-testid="bs-action-panel"]').text()).toContain('Construct building');
+    expect((wrapper.vm as any).actionController.currentAction.value).toBeNull();
+    wrapper.unmount();
+  });
+
+  it('does not re-enter it when the world moves under the player', async () => {
+    // The shape of the report: a paid order lands, the world pushes a frame,
+    // and the panel must not read that as the player asking to go again.
+    const wrapper = mountShell();
+    await drawn(wrapper, stateFrame({ actions: [soleAction] }));
+    tell(wrapper, stateFrame({ actions: [soleAction], view: { player: 4, state: { moved: 1 } } }));
+    await flushPromises();
+
+    expect((wrapper.vm as any).actionController.currentAction.value).toBeNull();
+    wrapper.unmount();
+  });
+});

@@ -1193,6 +1193,19 @@ element once a partition is absent, and a game's subclass constructor builds its
 furniture before any later switch could run. `createWorld` passes
 `worldMode: true` for you.
 
+## The panel never starts an action for the player (#212)
+
+A table's board bridge auto-starts a seat's SOLE available action -- one obvious
+move should not need two presses. A world does not do this, and the difference
+is not a preference: a world's offer is enumerated over what one seat can SEE,
+so "the only action" is a fact about a moment rather than an obvious next move.
+A player who had just paid for a building was put straight back into choosing
+another plot, and the surface read as an order they had never placed.
+
+Entering an action in a world is always deliberate: the action panel's own
+button, or a candidate on the board. A world has no turn to end either, so
+nothing auto-executes at the end of one.
+
 ## Editing rules while a world is running (#201)
 
 `boardsmith dev` loads your Node runtime once, before Vite starts, so your UI
