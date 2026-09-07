@@ -948,30 +948,6 @@ export async function devCommand(options: DevOptions): Promise<void> {
   const optimizeDepsExclude = ['boardsmith', 'boardsmith/ui', 'boardsmith/client', 'boardsmith/session'];
 
   try {
-    const vite = await createViteServer({
-      root: uiPath,
-      // `appType` is NOT set here: boardsmithDevHostPlugin sets 'custom' from
-      // its own `config` hook, so no call site can reintroduce the SPA
-      // fallback that turned a missing asset into a 200 of HTML (issue 134).
-      server: {
-        port,
-        host,
-        strictPort: true,
-        open: false,
-        fs: {
-          // Allow serving the dev-host source + boardsmith source (via /@fs/) and
-          // the game project (rules/ui) outside the Vite root.
-          allow: [uiPath, cwd, boardsmithRoot],
-        },
-      },
-      plugins: vitePlugins,
-      optimizeDeps: {
-        exclude: optimizeDepsExclude,
-      },
-    });
-
-    await vite.listen();
-
     // ── Always-on multiplayer host ────────────────────────────────────────
     // The engine is inherently multiplayer, so dev is too: the CLI process owns
     // the authoritative SnapshotSessionHost (the local stand-in for the
@@ -1039,12 +1015,12 @@ export async function devCommand(options: DevOptions): Promise<void> {
       },
     });
 
-    if (!vite.httpServer) throw new Error('Vite dev server has no HTTP server to attach the WS host to.');
     // The `noServer` upgrade routing that leaves Vite's HMR socket alone lives
     // in `dev-server.ts`, shared with the world run: two copies of it is how
-    // one road quietly reacquires the collision the other fixed.
-    const wss = claimWebSocketPath(
-      vite.httpServer,
+    // one road quietly reacquires the collision the other fixed. It is claimed
+    // BEFORE the server is made, and as a plugin, because a `vite.config.ts`
+    // restart replaces the HTTP server a one-time registration was on (#214).
+    const hostSocket = claimWebSocketPath(
       '/__boardsmith/ws',
       // Per-connection WS handling (hello routing + DEF-C stale-close guard)
       // lives in one shared, unit-tested factory so the dev server and the
@@ -1057,6 +1033,31 @@ export async function devCommand(options: DevOptions): Promise<void> {
           console.error(chalk.red(`[boardsmith dev] message '${msgType}' failed:`), err),
       }),
     );
+    vitePlugins.push(hostSocket.plugin);
+
+    const vite = await createViteServer({
+      root: uiPath,
+      // `appType` is NOT set here: boardsmithDevHostPlugin sets 'custom' from
+      // its own `config` hook, so no call site can reintroduce the SPA
+      // fallback that turned a missing asset into a 200 of HTML (issue 134).
+      server: {
+        port,
+        host,
+        strictPort: true,
+        open: false,
+        fs: {
+          // Allow serving the dev-host source + boardsmith source (via /@fs/) and
+          // the game project (rules/ui) outside the Vite root.
+          allow: [uiPath, cwd, boardsmithRoot],
+        },
+      },
+      plugins: vitePlugins,
+      optimizeDeps: {
+        exclude: optimizeDepsExclude,
+      },
+    });
+
+    await vite.listen();
 
     const resolvedUrl = vite.resolvedUrls?.local[0];
     const uiPort = resolvedUrl ? parseInt(new URL(resolvedUrl).port || '5173', 10) : port;
@@ -1103,7 +1104,7 @@ export async function devCommand(options: DevOptions): Promise<void> {
 
     onShutdown(async () => {
       console.log(chalk.dim('\n  Shutting down...'));
-      wss.close();
+      hostSocket.close();
       clients.clear();
       await vite.close();
       try {
