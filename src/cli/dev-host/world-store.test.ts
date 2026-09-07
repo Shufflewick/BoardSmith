@@ -323,6 +323,34 @@ describe('the local world store', () => {
     });
   });
 
+  describe("the world's clock advance (#216)", () => {
+    it('starts level with the wall clock', () => {
+      expect(store.clockSkewMs()).toBe(0);
+    });
+
+    it('accumulates every advance and answers the running total', () => {
+      expect(store.advanceClock(600_000)).toBe(600_000);
+      expect(store.advanceClock(14_000)).toBe(614_000);
+      expect(store.clockSkewMs()).toBe(614_000);
+    });
+
+    it('is still there for the next host to open this world', () => {
+      // The point of the whole thing: a rule reload and a cold restart both
+      // build a new host over this store, and neither may start the world's
+      // clock behind the state a fired event already settled.
+      store.advanceClock(600_000);
+      store.close();
+      const reopened = openWorldStore(worldStorePath(root), BUDGETS);
+      expect(reopened.clockSkewMs()).toBe(600_000);
+      reopened.close();
+    });
+
+    it('refuses to move a world\'s clock backwards', () => {
+      expect(() => store.advanceClock(-1)).toThrow(/only ever moves forward/);
+      expect(store.clockSkewMs()).toBe(0);
+    });
+  });
+
   describe('reset', () => {
     it('removes the whole store, sidecars included', () => {
       store.recordDirty(['room/a']);

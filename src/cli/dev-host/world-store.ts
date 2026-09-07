@@ -282,6 +282,32 @@ export interface LocalWorldStore extends WorldPartitionStore, WorldPartitionWrit
    *  that ever committed is still on file. */
   receiptFloorAt(): number;
 
+  /**
+   * HOW FAR AHEAD OF THE WALL CLOCK THIS WORLD RUNS (#216).
+   *
+   * "Fire due events now" moves a world's clock to the instant an event was
+   * due, and the partitions that firing settled are durable at that future
+   * time. The advance has to be durable with them: a host that started again
+   * at the wall -- after a rule reload replaced the runtime, or after the CLI
+   * was restarted -- would stamp its next command EARLIER than state already on
+   * disk, and a world that checks its own monotonicity refuses that order until
+   * real time catches up.
+   *
+   * So it lives here rather than in the host that advanced it, for the same
+   * reason the roster does: it outlives every host that ever ran this world.
+   */
+  clockSkewMs(): number;
+
+  /**
+   * Move this world's clock forward and remember it, answering the new total.
+   *
+   * The ONLY way the skew changes, and it answers rather than returning void so
+   * a host's cached copy comes back FROM the store instead of being computed
+   * alongside it -- two additions that could disagree is exactly the drift this
+   * is here to prevent.
+   */
+  advanceClock(byMs: number): number;
+
   /** Close the database. Never deletes anything -- see `resetWorldStore`. */
   close(): void;
 }
@@ -564,6 +590,23 @@ export function openWorldStore(path: string, budgets: WorldBudgets): LocalWorldS
       return readReceiptFloor();
     },
 
+    clockSkewMs(): number {
+      return readClockSkew();
+    },
+
+    advanceClock(byMs: number): number {
+      if (!Number.isFinite(byMs) || byMs < 0) {
+        throw new Error(
+          `A world's clock only ever moves forward, so it cannot be advanced by ${byMs}ms.`,
+        );
+      }
+      const total = readClockSkew() + byMs;
+      transact(() => {
+        stmt.writeMeta.run(CLOCK_SKEW_KEY, String(total));
+      });
+      return total;
+    },
+
     partitionNames(): readonly string[] {
       return (stmt.listPartitions.all() as Array<{ name: string }>).map((row) => row.name);
     },
@@ -654,6 +697,11 @@ export function openWorldStore(path: string, budgets: WorldBudgets): LocalWorldS
     return stored === undefined ? 0 : Number(stored);
   }
 
+  function readClockSkew(): number {
+    const stored = meta(CLOCK_SKEW_KEY);
+    return stored === undefined ? 0 : Number(stored);
+  }
+
   function readSeq(): number {
     const stored = meta(SEQ_KEY);
     return stored === undefined ? 0 : Number(stored);
@@ -684,6 +732,7 @@ interface EventRow {
 const LAUNCHED_KEY = 'launched';
 const SEQ_KEY = 'seq';
 const RECEIPT_FLOOR_KEY = 'receiptFloor';
+const CLOCK_SKEW_KEY = 'clockSkew';
 const STATE_VERSION_KEY = 'stateVersion';
 const SCHEMA_VERSION_KEY = 'schemaVersion';
 
