@@ -20,6 +20,7 @@
 // adoption worked without ever running it (docs/TEST-FIXTURES.md).
 import { describe, expect, it } from "vitest";
 import { Game, Piece, Player, Space } from "../engine/index.js";
+import { PlayerFacingError } from "../engine/errors.js";
 import type { ActionDefinition, ElementJSON, GameOptions } from "../engine/index.js";
 import { assertWorldEngineConformance } from "./engine-conformance.test-helper.js";
 import { BoardSmithWorldEngine } from "./engine.js";
@@ -332,6 +333,38 @@ const misroute = worldAction<WorldFixtureGame>("misroute")
   });
 
 /**
+ * REFUSES IN THE GAME'S OWN WORDS, through the channel whose whole purpose is
+ * carrying them (#191).
+ *
+ * A refusal a player can only discover by TRYING -- a bank that overflows on
+ * the amount they chose -- is the one class `.disabled()` cannot grey out in
+ * advance, and so the one class where a generic sentence is least useful. It
+ * travels because `PlayerFacingError` says "my message was written to be read";
+ * `refuseUnreadably` below is the same refusal thrown as a plain `Error`, and
+ * that one is sanitized. The pair is the point.
+ */
+const refuseInWords = worldAction<WorldFixtureGame>("refuseInWords")
+  .needs(() => [ROOM_ONE])
+  .execute(() => {
+    throw new PlayerFacingError("The hearth is full: it holds 3 logs and you offered 14.");
+  });
+
+/** Writes, and THEN refuses in words -- the #68 rollback's own shape. */
+const refuseInWordsAfterWriting = worldAction<WorldFixtureGame>("refuseInWordsAfterWriting")
+  .needs(() => [ROOM_ONE])
+  .execute((_args, ctx) => {
+    ctx.game.room("room-one").visits += 100;
+    throw new PlayerFacingError("The hearth is full: it holds 3 logs and you offered 14.");
+  });
+
+/** The same refusal an author wrote as a plain `Error`, which is sanitized. */
+const refuseUnreadably = worldAction<WorldFixtureGame>("refuseUnreadably")
+  .needs(() => [ROOM_ONE])
+  .execute(() => {
+    throw new Error("The hearth is full: it holds 3 logs and you offered 14.");
+  });
+
+/**
  * MUTATES, RETURNS, and fails the OTHER post-run check: it moves a token into a
  * partition root the engine never loaded and cannot name, so dirty-set
  * resolution refuses after the handler already succeeded (#151).
@@ -468,6 +501,12 @@ const ACTIONS: readonly ActionDefinition[] = [
   clockStamp,
   clockWho,
   clockTear,
+  // #191's pair, appended: the refusal-naming assertion above quotes this list
+  // verbatim and in order, so a name inserted mid-list breaks a test that is
+  // about something else entirely.
+  refuseInWords,
+  refuseInWordsAfterWriting,
+  refuseUnreadably,
 ];
 
 function newEngine(store: WorldPartitionSource = new CountingStore(genesis())) {
@@ -1552,5 +1591,74 @@ describe("#186 — a world can say something a player reads", () => {
 
     expect(result.events[0]).not.toHaveProperty("text");
     expect(result.events[0]).not.toHaveProperty("type");
+  });
+});
+
+/**
+ * #191 -- A GAME'S OWN REFUSAL KEEPS ITS SENTENCE, AND A BUG STILL DOES NOT.
+ *
+ * The failure this closes: `kindle {logs: 14}` in example-rts came back as
+ * "could not be completed because of an error in the game's rules". The game
+ * had a real sentence and the player never saw it.
+ *
+ * #169 deliberately left a game's own refusal travelling unclassified, and that
+ * stands -- a code out of `WORLD_REFUSALS` would relabel every bug in a game's
+ * rules as one of the platform's words. What was missing was not a code but the
+ * channel the engine already has for "this text was written to be read", and
+ * these two cases are the whole of it: `PlayerFacingError` travels VERBATIM,
+ * and anything else is replaced, because an accidental `TypeError` must not
+ * reach a player.
+ *
+ * A world dispatch is the path being asserted, not `executeAction` -- which
+ * `action.test.ts` already covers. The world re-throws a failed result so the
+ * rollback runs, and the sentence has to survive that re-throw to be worth
+ * anything.
+ */
+describe("#191 — a refusal written for a player reaches one", () => {
+  const SENTENCE = "The hearth is full: it holds 3 logs and you offered 14.";
+
+  it("carries a PlayerFacingError's sentence out of a world dispatch, verbatim", async () => {
+    const engine = newEngine();
+
+    const refusal = await engine
+      .applyCommand("player-a", { name: "refuseInWords", args: {} }, STAMP)
+      .then(() => null, (error: unknown) => (error as Error).message);
+
+    // EXACTLY the game's own words, with nothing of the platform's wrapped
+    // around them. `toContain` would pass on the generic sentence in a dev
+    // environment, where the raw text rides along in parentheses.
+    expect(refusal).toBe(SENTENCE);
+  });
+
+  it("replaces a plain Error's, which may be an accident rather than a refusal", async () => {
+    const engine = newEngine();
+
+    const refusal = await engine
+      .applyCommand("player-a", { name: "refuseUnreadably", args: {} }, STAMP)
+      .then(() => null, (error: unknown) => (error as Error).message);
+
+    // The player is given the platform's sentence and not the game's. In THIS
+    // environment -- positively labelled `test` -- the raw text also rides
+    // along in parentheses for the author's benefit, which is why the claim is
+    // about what the message IS rather than about what it contains: a deployed
+    // isolate is not labelled dev or test, drops that parenthesis, and this
+    // assertion holds either way.
+    expect(refusal).not.toBe(SENTENCE);
+    expect(refusal).toContain("error in the game's rules");
+  });
+
+  it("leaves the world unchanged either way, because a refusal is still a refusal", async () => {
+    // The sentence is the only thing #191 changes. A `PlayerFacingError` is
+    // thrown out of `execute` exactly as a plain one is, so it must ride the
+    // same #68 rollback -- otherwise the readable refusals would be the ones
+    // that quietly kept half their changes.
+    const engine = newEngine();
+    await engine.applyCommand("player-a", { name: "touch", args: {} }, STAMP);
+
+    await expect(
+      engine.applyCommand("player-a", { name: "refuseInWordsAfterWriting", args: {} }, STAMP),
+    ).rejects.toThrow(SENTENCE);
+
+    expect(visitsIn(await engine.serializePartitions([ROOM_ONE]))).toBe(1);
   });
 });
