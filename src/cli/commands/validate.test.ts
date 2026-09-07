@@ -410,6 +410,10 @@ describe('platform-consumed blocks', () => {
     expect(message).toContain("Unknown key 'world'");
     expect(message).toContain('"backend": "world"');
     expect(message).toContain('maxPlayers');
+    // #194: an author who read the platform's upgrade docs puts `stateVersion`
+    // here too, so the refusal has to say where that one lives as well --
+    // otherwise it is rejected with no destination named.
+    expect(message).toContain('stateVersion');
   });
 
   it('rejects `bot`, which is now derived from the compiled rules', () => {

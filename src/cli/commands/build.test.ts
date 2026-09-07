@@ -268,8 +268,49 @@ describe('deriveManifest — a world-only bundle', () => {
     // enforced at run time.
     expect(deriveWorld(worldConfig, makeWorldDefinition(200)).world).toEqual({
       maxPlayers: 200,
+      stateVersion: 0,
     });
   });
+
+  // ── #194: the compatibility promise only the author can make ──────────────
+  //
+  // The platform refuses an upgrade between two versions whose `stateVersion`
+  // differs, and reads it off the MANIFEST. A world author declares it beside
+  // the seat count, in the compiled rules, and the build derives it -- the
+  // same single-source rule #171 applied to capacity, for the same reason.
+
+  it('derives world.stateVersion from the compiled rules', () => {
+    const definition = { ...makeWorldDefinition(12), world: { ...makeWorldDefinition(12).world!, stateVersion: 3 } };
+    expect(deriveWorld(worldConfig, definition as GameDefinition).world).toEqual({
+      maxPlayers: 12,
+      stateVersion: 3,
+    });
+  });
+
+  it('a world that declares none is version 0, written down rather than implied', () => {
+    // An absent declaration and an explicit zero produce the SAME manifest, so
+    // "absent means 0" is a fact of the bytes and not a convention each reader
+    // has to re-implement.
+    const explicit = { ...makeWorldDefinition(12), world: { ...makeWorldDefinition(12).world!, stateVersion: 0 } };
+    expect(deriveWorld(worldConfig, makeWorldDefinition(12)).world).toEqual(
+      deriveWorld(worldConfig, explicit as GameDefinition).world,
+    );
+    expect(deriveWorld(worldConfig, makeWorldDefinition(12)).world).toEqual({
+      maxPlayers: 12,
+      stateVersion: 0,
+    });
+  });
+
+  it.each([-1, 1.5, Number.NaN, '1', null])(
+    'refuses %p as a stateVersion, naming what a usable one is',
+    (bad) => {
+      const definition = {
+        ...makeWorldDefinition(12),
+        world: { ...makeWorldDefinition(12).world!, stateVersion: bad as number },
+      };
+      expect(() => deriveWorld(worldConfig, definition as GameDefinition)).toThrow(/stateVersion/);
+    },
+  );
 
   it('refuses a world whose rules still declare a table roster', () => {
     const withRoster = { ...makeWorldDefinition(), minPlayers: 2, maxPlayers: 40 };
@@ -404,7 +445,7 @@ describe('deriveManifest — the world surface', () => {
   it('emits the world block with its seat count and NO ui flag', () => {
     // The flag would be constant-true, and a constant-true flag invites a
     // branch on a question with one answer.
-    expect(derive(true).world).toEqual({ maxPlayers: 40 });
+    expect(derive(true).world).toEqual({ maxPlayers: 40, stateVersion: 0 });
   });
 
   it('refuses a world backend that built no world surface, rather than recording its absence', () => {

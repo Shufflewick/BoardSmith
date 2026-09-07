@@ -62,6 +62,32 @@ export interface WorldDefinition {
    */
   readonly maxPlayers: number;
   /**
+   * WHAT THIS WORLD'S STORED STATE MEANS, AS A WHOLE NUMBER (#194).
+   *
+   * A live world is never rewritten when its bundle is replaced: its partition
+   * bytes and its queued schedule rows were written by the old rules and are
+   * read by the new ones. A host can compare what it can SEE -- element
+   * classes, clock actions, seat count -- and refuse a version that dropped
+   * one. What no host can see is a version that keeps every one of them and
+   * reads an existing attribute, or an existing schedule row's frozen
+   * arguments, to MEAN something new.
+   *
+   * Only the author knows that, so only the author can say it: bump this
+   * number and the platform refuses to upgrade a running world onto the new
+   * version, and its season plays out on the rules it started under. Leave it
+   * alone and an upgrade is judged on what the platform can check.
+   *
+   * ABSENT MEANS 0, and `boardsmith build` writes the 0 down: an absent
+   * declaration and an explicit `stateVersion: 0` produce the same manifest, so
+   * the default is a fact of the bytes rather than a convention every reader
+   * re-implements.
+   *
+   * DECLARED HERE, beside the seat count, because this is a statement about the
+   * state the RULES define -- and because a second copy in `boardsmith.json`
+   * is exactly the split #171 closed for capacity.
+   */
+  readonly stateVersion?: number;
+  /**
    * THIS WORLD'S VERBS, built with `worldAction()` (#169).
    *
    * A LIST OF `ActionDefinition`s and not a table keyed by name, because that
@@ -155,6 +181,17 @@ export function readWorldDefinition(definition: {
         "has no seats for anybody to play. Declare the largest roster this world holds, e.g. " +
         "`world: { maxPlayers: 40, actions, view }`. It is the ONE seat count a world has -- a " +
         "world does not start, so it has no minimum to reach, and its seats are never handed on.",
+    );
+  }
+  if (world.stateVersion !== undefined && (!Number.isInteger(world.stateVersion) || world.stateVersion < 0)) {
+    throw worldRefusal(
+      "bundle-not-a-world",
+      `This bundle's \`gameDefinition.world\` declares stateVersion ${String(world.stateVersion)}, ` +
+        "which is not a version a world can have. A stateVersion is a whole number from 0 up, " +
+        "and it means \"what this world's stored partitions and queued events MEAN to these " +
+        "rules\" -- bump it when a new version reads existing stored state differently, and the " +
+        "platform will refuse to move a running world onto it. Leave it out entirely and this " +
+        "world is version 0.",
     );
   }
   if (typeof world.view !== "function") {

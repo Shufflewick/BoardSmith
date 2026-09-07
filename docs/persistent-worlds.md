@@ -129,13 +129,14 @@ import type { GameDefinition } from 'boardsmith/session';
 export const gameDefinition: GameDefinition = {
   gameClass: GloamhallGame,
   gameType: 'gloamhall',
-  world: { maxPlayers: 200, actions, view, genesis, presence },
+  world: { maxPlayers: 200, stateVersion: 1, actions, view, genesis, presence },
 };
 ```
 
 `GameDefinition.world` is typed by `WorldDefinition` from `boardsmith/world`, so
 you get the shape checked without importing anything extra. `maxPlayers`,
-`actions` and `view` are required; `genesis` and `presence` are optional.
+`actions` and `view` are required; `stateVersion`, `genesis` and `presence` are
+optional.
 
 **No `minPlayers`/`maxPlayers` on the definition.** Those are a *table's*
 roster, and a world has none: it does not start, so there is no minimum to
@@ -164,6 +165,41 @@ at run time.
 A host also caps you: `budgets.maxPlayers` is the largest world that host is
 prepared to keep resident, and a bundle declaring more is refused with
 `bundle-not-a-world`.
+
+### `world.stateVersion`: what your stored state MEANS
+
+A live world is never rewritten when its bundle is replaced. Its partition bytes
+and its queued schedule rows were written by the rules it launched under, and
+the next version reads them as they are. A host compares what it can see —
+element classes, clock actions, seat count — and refuses a version that dropped
+one. What no host can see is a version that keeps every one of them and reads an
+existing attribute, or an existing schedule row's frozen arguments, to *mean*
+something new.
+
+Only you know that, so only you can say it:
+
+```ts
+world: { maxPlayers: 200, stateVersion: 1, actions, view },
+```
+
+A whole number from 0 up. **Absent means 0**, and `boardsmith build` writes the
+0 down — an absent declaration and an explicit `stateVersion: 0` produce exactly
+the same manifest, so the default is a fact of the published bytes rather than a
+convention each reader re-implements. A negative, fractional or non-numeric one
+is refused with `bundle-not-a-world` at build.
+
+Bump it when a new version reads a live world's stored state differently, and a
+hosting platform will refuse to move a running world onto it: that world plays
+its season out on the rules it started under. Leave it alone and an upgrade is
+judged on what the platform can check for itself. The declaration can only ever
+refuse *more* than the platform would, never permit more, because the platform's
+own comparison runs anyway.
+
+**It is declared in your compiled rules and nowhere else**, exactly like
+`maxPlayers`, and for the same reason: `boardsmith build` derives the manifest's
+copy, so the number a platform checks and the number your rules state cannot
+disagree. `boardsmith.json` has no `world` block at all, and putting one there
+is refused by `boardsmith validate`.
 
 ## What the backend implies, and what you still declare
 

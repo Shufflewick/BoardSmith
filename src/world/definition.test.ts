@@ -111,6 +111,29 @@ describe("readWorldDefinition — what a bundle must export", () => {
     expect(() => readWorldDefinition(noView)).toThrow(/declares no `view`/);
   });
 
+  // ── #194: the compatibility promise only the author can make ─────────────
+
+  it("keeps a declared stateVersion, which is what the manifest is derived from", () => {
+    const versioned = bundle({
+      world: { maxPlayers: 2, actions: [poke], view: () => [], stateVersion: 3 },
+    });
+    expect(readWorldDefinition(versioned).stateVersion).toBe(3);
+  });
+
+  it("leaves an undeclared stateVersion undeclared, and the build writes the 0", () => {
+    expect(readWorldDefinition(bundle()).stateVersion).toBeUndefined();
+  });
+
+  it.each([-1, 1.5, Number.NaN])(
+    "REFUSES stateVersion %p, naming what a usable one is",
+    (bad) => {
+      const versioned = bundle({
+        world: { maxPlayers: 2, actions: [poke], view: () => [], stateVersion: bad },
+      });
+      expect(() => readWorldDefinition(versioned)).toThrow(/whole number from 0 up/);
+    },
+  );
+
   it("classifies both refusals as the GAME's", () => {
     try {
       readWorldDefinition({});

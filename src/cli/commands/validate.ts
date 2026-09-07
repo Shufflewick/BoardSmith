@@ -216,9 +216,11 @@ export function checkMetadataIssues(config: Record<string, unknown>): string[] {
     } else if (key === 'world') {
       issues.push(
         "Unknown key 'world' — a project says it is a persistent world with \"backend\": \"world\", "
-        + 'and the world\'s capacity is declared in your gameDefinition\'s `world: { maxPlayers }` '
-        + '(compiled rules), which is the number the runtime actually enforces. The manifest\'s copy '
-        + 'is derived from it at build. Remove this key from boardsmith.json.',
+        + 'and everything else about the world is declared in your gameDefinition\'s `world` block '
+        + '(compiled rules): `maxPlayers`, the number the runtime actually enforces, and '
+        + '`stateVersion`, your statement about what this version makes of a live world\'s stored '
+        + 'state. The manifest\'s copies of both are derived from it at build. Remove this key from '
+        + 'boardsmith.json.',
       );
     } else if (key === 'bot') {
       issues.push(

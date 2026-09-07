@@ -9,6 +9,7 @@ import { getProjectContext, loadGameDefinition } from './game-runtime.js';
 import { buildCli, CLI_ENTRY, CLI_OUTFILE } from '../lib/build-cli.js';
 import { requireGameProjectManifests } from '../lib/game-project.js';
 import { ensureWorldEntry, WORLD_ENTRY_HTML } from '../lib/world-entry.js';
+import { readWorldDefinition, type WorldDefinition } from '../../world/index.js';
 import type { GameBackend, GameDefinition } from '../../session/index.js';
 import {
   GAME_BACKENDS,
@@ -117,6 +118,28 @@ function readBackend(config: Record<string, unknown>): GameBackend {
  * The version comes from `package.json` and is likewise never copied from the
  * config spread; `resolveGameVersion` above is the whole rule.
  */
+/**
+ * THE MANIFEST'S WORLD BLOCK, DERIVED WHOLE FROM THE COMPILED RULES (#194).
+ *
+ * Both numbers in it come from `gameDefinition.world` and neither may be
+ * hand-written in `boardsmith.json`, which is #171's rule for capacity applied
+ * to the compatibility promise for the same reason: the manifest's copy is what
+ * the platform checks, the rules' copy is what the world actually is, and two
+ * places to write one number is how they come to disagree.
+ *
+ * `readWorldDefinition` is the library's own reading of that block, so an
+ * unusable one is refused HERE, at build, in the same sentence the dev host
+ * would have used -- rather than passing validation and failing on somebody's
+ * first command.
+ *
+ * `stateVersion` is written down even when it is 0, so an author who declares
+ * nothing and one who declares zero publish the same bytes.
+ */
+function deriveWorldBlock(world: WorldDefinition): { maxPlayers: number; stateVersion: number } {
+  const declared = readWorldDefinition({ world });
+  return { maxPlayers: declared.maxPlayers, stateVersion: declared.stateVersion ?? 0 };
+}
+
 export function deriveManifest(
   config: Record<string, unknown>,
   pkg: Record<string, unknown>,
@@ -200,11 +223,9 @@ export function deriveManifest(
       definition: gameDefinition,
       declared: config,
     }),
-    // A world's seat count, and nothing else: the surface is guaranteed above
-    // rather than described here (#170).
-    ...(backend === 'world'
-      ? { world: { maxPlayers: gameDefinition.world!.maxPlayers } }
-      : {}),
+    // A world's seat count and its state version, and nothing else: the surface
+    // is guaranteed above rather than described here (#170).
+    ...(backend === 'world' ? { world: deriveWorldBlock(gameDefinition.world!) } : {}),
     buildTime: new Date().toISOString(),
     version,
     // Stamp the engine ABI version so the executor can reject a bundle built
