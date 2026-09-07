@@ -1,7 +1,7 @@
 {
-  "revision": 45,
+  "revision": 46,
   "bundleProtocol": 2,
-  "surfaceHash": "35beccf9c0e3cf5b",
+  "surfaceHash": "6a7db7a4e757880f",
   "payloadHash": "67a7a5d320b9ce2b",
   "history": [
     {
@@ -363,6 +363,14 @@
       "surfaceHash": "35beccf9c0e3cf5b",
       "payloadHash": "67a7a5d320b9ce2b",
       "summary": "worlds and tables agree on choice identity: the engine's choice matcher moved to src/engine/action/choice-matching.ts, which the browser action controller now imports instead of reimplementing, and it resolves a string id shorthand and an identifying-subset object everywhere the engine already did (#219)"
+    },
+    {
+      "revision": 46,
+      "date": "2026-09-07",
+      "bundleProtocol": 2,
+      "surfaceHash": "6a7db7a4e757880f",
+      "payloadHash": "67a7a5d320b9ce2b",
+      "summary": "worlds can grow: world.migration.create adds durable partition roots in the same durable step as an upgrade, world.createPartition builds a root the first time a declaration names it, and a world's own elements are minted above a reserved id floor so world.maxPlayers can change on a live world (#218)"
     }
   ]
 }

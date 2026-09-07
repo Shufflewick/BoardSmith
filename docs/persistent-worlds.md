@@ -249,6 +249,34 @@ before it writes any of them (`WorldPartitionWriter.createAll`), so a world
 whose genesis names one partition it may not hold is refused outright rather
 than left half-created and wedged forever.
 
+### `world.createPartition`: a root built the first time somebody reaches for it
+
+```ts
+createPartition?: (game: Game, name: string) => GameElement | undefined;
+```
+
+Genesis runs once, at a world's first instant and never again, so without this
+every root a world would ever need had to exist from the start: a 500-seat world
+paid for 500 empires on the day it opened, and a world whose rooms are
+discovered rather than laid out could not be written at all.
+
+A host that looks for a declared partition and finds no stored row asks this
+before refusing. Answer the **element** for a name this world creates on demand,
+built on the game exactly as genesis builds one, and `undefined` for anything
+else -- which keeps a mistyped partition name the loud `partition-missing`
+refusal it has always been.
+
+```ts
+createPartition: (game, name) =>
+  name.startsWith('empire:') ? game.create(Empire, name) : undefined,
+```
+
+It is idempotent without any effort on your part: it is reached only when the
+store holds nothing for that name, and once built the root is resident and then
+stored, so the second reach finds the first one's work. The row is written at
+the moment the root is built rather than at the next checkpoint, so a command
+that then refuses leaves an empty root rather than a root nothing recorded.
+
 ## An action: declare, then execute
 
 Every world verb is an action built with `worldAction()`, and every one of them
@@ -971,6 +999,47 @@ place. `event` is handed a queued event and answers the arguments the new
 handler should see -- a frozen argument is as opaque to a host as a partition's
 bytes, and means exactly as much to the new rules.
 
+**And `create`, for the roots a version ADDS.** `partition` transforms a root
+that exists; it cannot answer more roots and has nowhere to say what a new one
+hangs from, so a world that outgrew its genesis -- twelve empires becoming five
+hundred, one shared timeline becoming a region apiece -- had no expressible
+upgrade at all.
+
+```ts
+migration: {
+  from: 1,
+  create: (game, { existing }) =>
+    Object.fromEntries(
+      range(1, 500)
+        .map((n) => `empire:${n}`)
+        .filter((name) => !existing.includes(name))
+        .map((name) => [name, game.create(Empire, name)]),
+    ),
+}
+```
+
+`ctx.existing` is every partition name the world already holds, so being
+idempotent is a filter rather than a convention -- and a name that is already
+taken is refused by name rather than silently replacing a live partition's
+stored bytes with a fresh element. The new roots land in the **same** write as
+the transformed ones, so the whole upgrade is still one durable step.
+
+A migration may not REMOVE a root. Deleting a season's stored bytes on a hook
+whose failure mode is a typo is not something anything gives back.
+
+**Changing `world.maxPlayers` across an upgrade needs no separate roster
+migration.** The roster is the host's, not the bundle's: `maxPlayers` is read
+from the compiled rules at construction and bounds who may sit down, so raising
+it keeps every seated player exactly where they were and opens the seats above
+them. What made that unsafe until #218 was ids rather than seats -- a player is
+an element, so a world built for four seats and the same world built for forty
+spent the id counter differently, and the wider construction minted ids the
+world's stored partitions already held. A world's own elements are now minted
+above a reserved floor (`Game#reserveConstructionIdSpace`), so construction and
+storage cannot collide however the seat count moves. Lowering `maxPlayers` below a seat
+somebody already holds is still refused, because a seat is where a player's
+holdings are.
+
 **It is not a command.** No clock, no schedule, no seat: a migration that could
 schedule would be arming timers against a world whose own timers are mid-
 transformation, and one that could act would be a command no seat sent.
@@ -1058,15 +1127,15 @@ thing next time.
 
 | Code | What happened |
 | --- | --- |
-| `bundle-not-a-world` | The manifest declares `"backend": "world"` and the compiled rules export no `world.actions`, no `world.view`, no `world.maxPlayers`, a `world.maxPlayers` the host will not seat, a `world.stateVersion` that is not a whole number from 0 up, or a `world.migration` that is not usable (no `from`, a `from` at or past this version, or a hook that is not a function). |
-| `world-migration-unavailable` | A world's recorded `stateVersion` and its bundle's differ, and no migration in that bundle can cross the gap: none declared, one declared from a different version, or a bundle older than the world. The world is not changed. |
+| `bundle-not-a-world` | The manifest declares `"backend": "world"` and the compiled rules export no `world.actions`, no `world.view`, no `world.maxPlayers`, a `world.maxPlayers` the host will not seat, a `world.stateVersion` that is not a whole number from 0 up, or a `world.migration` that is not usable (no `from`, a `from` at or past this version, or a hook -- `partition`, `event` or `create` -- that is not a function). |
+| `world-migration-unavailable` | A world's recorded `stateVersion` and its bundle's differ, and no migration in that bundle can cross the gap: none declared, one declared from a different version, or a bundle older than the world. Also a `create` hook whose answer is not `name -> element`, or that names a partition the world already holds. The world is not changed. |
 | `invalid-world-action` | A world action the platform cannot offer or cannot bound: an action not built with `worldAction()`, an unbounded `from`/`filter`/`elementClass` element form, an element selection with no `elements:`, a candidate outside what the step declared, a selection past `maxCandidatesPerSelection`, a dependent or repeating selection, a seatless action that asks a question, or a round declared before a step the action does not have. |
 | `not-in-a-world` | An action built with `worldAction()` reached `ctx.world` with no world running it -- registered on a table, or reached after the dispatch that bound its facilities finished. |
 | `undeclared-partition` | `execute` read a partition the action's own walk did not declare. |
 | `declaration-unsettled` | A `world.view` named something new on every round. **A view only**, since an action's walk has no ceiling to trip. |
 | `declaration-write` | A declaration tried to write through the read-only projection. Do it in `execute`. |
 | `unknown-scope` | An event was addressed to something that is neither `"world"` nor a loaded partition. |
-| `partition-missing` | A declaration named a partition this world's store does not have. Usually a typo, or a partition nothing has created yet. |
+| `partition-missing` | A declaration named a partition this world's store does not have, and `world.createPartition` did not build one for that name either. Usually a typo, or a partition nothing has created yet. |
 | `invalid-partition-name` | A partition name a store may not hold: empty, over 128 characters, outside `A-Za-z0-9._:@/-`, or one of `__proto__`, `constructor`, `prototype`. |
 | `partition-too-large` | A partition serialized past `partitionMaxBytes`. The fix is to split it. See the next section. |
 | `schedule-cap` | This owner's unkeyed pending events are at the cap. Use a key. |

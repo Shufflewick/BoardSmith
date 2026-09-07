@@ -138,6 +138,13 @@ export const WORLD_FIXTURE_COVERAGE: Record<(typeof WORLD_ENGINE_METHODS)[number
     + 'produces is ordinary partition bytes: `serializePartitions` is what writes them, and that '
     + 'is fingerprinted.',
 
+  createMigratedPartitions: 'The other half of a world MOVING BETWEEN state versions (#218), '
+    + 'which happens once, at startup, before any player is in it. What it produces is an '
+    + 'ordinary partition record, exactly as `genesis` does.',
+  createPartition: 'A root built the first time a declaration reaches for a name the store has '
+    + 'never held (#218). The fixture\'s world starts with every partition it names, so nothing '
+    + 'here ever misses -- and what it produces is an ordinary partition record.',
+
   applyCommand: 'A world\'s write path. The fixture dispatches nothing, so the dirty set, '
     + 'rollback and the checkpoint bytes are unfingerprinted.',
   commandPartitions: 'The declaration walk a DISPATCH drives, and the fixture drives none. '

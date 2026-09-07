@@ -529,6 +529,17 @@ export interface FormattedMessage {
  * The restore paths skip these same keys in their attribute loops — see
  * `loadSerializedState` and `restoreDevState`, which both import this constant.
  */
+/**
+ * WHERE A WORLD'S OWN ELEMENTS START (#218).
+ *
+ * A game's construction spends the id counter -- a player is an element -- so
+ * the same world built for four seats and for forty hands out different ids for
+ * the same furniture. Everything a world STORES is minted above this floor, so
+ * a seat count can change without a single stored id colliding with one the
+ * wider construction just minted. See `Game#reserveConstructionIdSpace`.
+ */
+const WORLD_PARTITION_ID_FLOOR = 1_000_000;
+
 export const GAME_SELF_SERIALIZED_FIELDS = ['phase', 'messages', 'settings'] as const;
 
 /**
@@ -1241,6 +1252,41 @@ export class Game<
   }
 
   /**
+   * PART THE ID SPACE: construction below, the durable world above (#218).
+   *
+   * Element ids come from one bare counter, and a game's CONSTRUCTION spends
+   * it: a player is an element, so a world built for four seats and the same
+   * world built for forty hand out different ids for the same furniture. Every
+   * partition a world stores was minted after that, so raising
+   * `world.maxPlayers` on a live world made the wider game's own construction
+   * mint ids its stored partitions already held -- and the world came back as
+   * "element id 6 is already resident", with no statement anywhere that a seat
+   * count is a thing you cannot change.
+   *
+   * So the two are separated by construction rather than by luck. Everything
+   * built before this call is below the floor; everything a world stores is
+   * above it. A seat count can then move without touching a single stored id.
+   *
+   * Called ONCE, by `createWorld`, after the subclass constructor body has
+   * built the game's furniture and before genesis builds any partition.
+   */
+  reserveConstructionIdSpace(): void {
+    this._requireWorldMode('reserveConstructionIdSpace');
+    if (this._ctx.sequence === undefined) this._ctx.sequence = 0;
+    if (this._ctx.sequence >= WORLD_PARTITION_ID_FLOOR) {
+      throw new Error(
+        `This world's id counter already stands at ${this._ctx.sequence}, at or past the ` +
+          `${WORLD_PARTITION_ID_FLOOR} ids reserved for construction. Either the space has ` +
+          `already been reserved -- \`createWorld\` does it once, and doing it again would drop ` +
+          `the counter back onto ids the world has since minted -- or the game's constructor ` +
+          `built that many elements, which takes the separation away. Build the world's contents ` +
+          `in \`world.genesis\` rather than in the game's constructor.`,
+      );
+    }
+    this._ctx.sequence = WORLD_PARTITION_ID_FLOOR;
+  }
+
+  /**
    * Declare a resident element a PARTITION ROOT: a subtree the platform loads,
    * checkpoints and evicts as one unit.
    *
@@ -1666,7 +1712,12 @@ export class Game<
       throw new Error(
         `Cannot adopt partition "${json.name ?? json.className}": element id ${clash} is already ` +
           `resident in this game. A partition may only be adopted once — evict the resident copy ` +
-          `(Game#evictSubtree) before adopting it again.`
+          `(Game#evictSubtree) before adopting it again.` +
+          (clash < WORLD_PARTITION_ID_FLOOR
+            ? ` This id is below the ${WORLD_PARTITION_ID_FLOOR} reserved for a world's own ` +
+              `construction, so these bytes were written before that floor existed: the world ` +
+              `predates it and cannot be run on rules that have it. Start the world again.`
+            : '')
       );
     }
 

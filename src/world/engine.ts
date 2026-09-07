@@ -97,6 +97,7 @@ import type {
   WorldOfferStamp,
   WorldPartitionSource,
   RoutedEvent,
+  StoredPartition,
 } from "./contract.js";
 import {
   scheduleBudget,
@@ -109,6 +110,7 @@ import {
 import { worldRefusal, WorldRefusal } from "./refusals.js";
 import { evaluateCondition } from "../engine/index.js";
 import { readOnlyProjection } from "./readonly.js";
+import { assertCreatedRoots } from "./migration.js";
 import { worldBudgets, type WorldBudgets } from "./budgets.js";
 
 /**
@@ -270,6 +272,23 @@ export interface BoardSmithWorldEngineOptions {
    * Left out, a world runs the library's defaults.
    */
   readonly budgets?: WorldBudgets;
+  /**
+   * BUILD A PARTITION ROOT THE STORE DOES NOT HAVE YET (#218).
+   *
+   * The bundle's `world.createPartition`. A declaration that names a partition
+   * the store has never held is refused -- that is what catches a typo -- and
+   * until this there was no way to say "this one is supposed to be absent until
+   * somebody arrives". Genesis runs once, so every root a world would ever need
+   * had to exist from its first instant: a 500-seat world paid for 500 empires
+   * on the day it opened, and a world whose rooms are discovered could not be
+   * written at all.
+   *
+   * Answer `undefined` for a name this world does not create, and the command
+   * meets the same refusal it does today.
+   *
+   * Left out, no partition is ever created on first use.
+   */
+  readonly createPartition?: (game: Game, name: string) => GameElement | undefined;
 }
 
 export class BoardSmithWorldEngine implements WorldEngine {
@@ -289,6 +308,8 @@ export class BoardSmithWorldEngine implements WorldEngine {
   private readonly residentNames = new Map<number, string>();
   /** Partition name to the value `useClock` held when a command last NAMED it. */
   private readonly lastUsed = new Map<string, number>();
+  /** The bundle's first-use root builder, or undefined for a world with none. */
+  private readonly buildOnFirstUse: ((game: Game, name: string) => GameElement | undefined) | undefined;
   /**
    * A monotonic counter, raised once per command.
    *
@@ -314,6 +335,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
     this.store = options.store;
     this.view = options.view;
     this.budgets = options.budgets ?? worldBudgets();
+    this.buildOnFirstUse = options.createPartition;
     // AT CONSTRUCTION, NOT AT THE FIRST OFFER. A bundle whose declaration is
     // wrong is wrong for every player who will ever attach, so it is refused
     // once, before the world is built, rather than on whichever player first
@@ -400,6 +422,81 @@ export class BoardSmithWorldEngine implements WorldEngine {
    */
   migratePartition(name: string, transform: (element: GameElement) => void): void {
     transform(this.rootOf(name));
+  }
+
+  /**
+   * BUILD A PARTITION ROOT THE STORE HAS NEVER HELD (#218).
+   *
+   * Genesis runs once. Every root a world would ever need therefore had to
+   * exist from its first instant, which is why a 500-seat world paid for 500
+   * empires on the day it opened and a world whose rooms are discovered could
+   * not be written at all. This is the other door: a host that looks for a
+   * declared partition and finds no row asks here, and the bundle answers
+   * either an element -- which becomes that partition -- or nothing, in which
+   * case the name is the typo the refusal has always said it was.
+   *
+   * IDEMPOTENT BY CONSTRUCTION. It is reached only when the store holds no row
+   * for the name, and a name already resident is answered from residency
+   * without building anything, so a second reach finds the first one's work
+   * rather than replacing it.
+   *
+   * The host owns the WRITE, as it owns every other write: this answers the
+   * bytes and the parent, and a partition that was built and not yet stored is
+   * simply a partition the next checkpoint writes.
+   */
+  createPartition(name: string): StoredPartition | undefined {
+    const resident = this.residentIds.get(name);
+    if (resident !== undefined) {
+      const root = this.game.partitionRoot(resident);
+      if (root) return { parentId: this.game.id, json: root.toJSON() };
+    }
+    const built = this.buildOnFirstUse?.(this.game, name);
+    if (built === undefined) return undefined;
+    // The hook CREATED this in the live game, so it is already in the tree --
+    // the same case genesis is in, and the same reason telling the engine
+    // matters: adoption and creation are different events, and a later command
+    // must not try to adopt from the store what was invented here.
+    this.registerResident(name, built);
+    return {
+      // The ROOT is the parent, because a partition hangs from the game tree
+      // and the subtree's own bytes cannot say where.
+      parentId: this.game.id,
+      json: built.toJSON() as StoredPartition["json"],
+    };
+  }
+
+  /**
+   * DURABLE PARTITION ROOTS AN UPGRADE ADDS (#218).
+   *
+   * The migration hook's other reach, beside `migratePartition`: that one
+   * transforms a root that exists and has nowhere to answer more, so a world
+   * that outgrew its genesis had no expressible upgrade at all.
+   *
+   * `existing` is every name the world already holds -- the host's knowledge,
+   * because only the host has read the store's whole key set -- and it is both
+   * what the hook filters against and what a duplicate is refused by. Nothing
+   * is written here: the caller collects these and lands them in the SAME write
+   * as the transformed partitions, so a migration is still all or nothing.
+   */
+  createMigratedPartitions(
+    build: (game: Game) => Record<string, GameElement>,
+    existing: readonly string[],
+  ): Record<string, StoredPartition> {
+    const built = build(this.game);
+    assertCreatedRoots(built, existing);
+    // NULL PROTOTYPE: the names are the bundle's, and `created["__proto__"] =
+    // record` on a plain object replaces this record's prototype instead of
+    // adding an entry -- so the host would never receive the partition while
+    // `registerResident` had already run.
+    const created: Record<string, StoredPartition> = Object.create(null) as Record<
+      string,
+      StoredPartition
+    >;
+    for (const [name, element] of Object.entries(built)) {
+      this.registerResident(name, element);
+      created[name] = { parentId: this.game.id, json: element.toJSON() as StoredPartition["json"] };
+    }
+    return created;
   }
 
   async hydrate(names: readonly string[]): Promise<void> {
@@ -1601,7 +1698,9 @@ export class BoardSmithWorldEngine implements WorldEngine {
       throw worldRefusal(
         "partition-missing",
         `This world has no partition named "${name}" in its store, so the command that needs it ` +
-          `cannot run. Check the name, or write the partition before a command names it.`,
+          `cannot run. Check the name, or write the partition before a command names it. A world ` +
+          `that builds a root the first time somebody reaches for it declares ` +
+          `\`world.createPartition(game, name)\` and answers an element for the names it creates.`,
       );
     }
 

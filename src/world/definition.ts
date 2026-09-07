@@ -144,6 +144,27 @@ export interface WorldDefinition {
    */
   readonly genesis?: (game: Game) => Record<string, GameElement>;
   /**
+   * A PARTITION ROOT BUILT THE FIRST TIME SOMEBODY REACHES FOR IT (#218).
+   *
+   * `genesis` runs once, at the world's first instant and never again, so
+   * without this every root a world would ever need had to exist from the
+   * start: a 500-seat world paid for 500 empires on the day it opened, and a
+   * world whose rooms are discovered rather than laid out could not be written.
+   *
+   * A host that looks for a declared partition and finds no stored row asks
+   * this before refusing. Answer the ELEMENT for a name this world creates on
+   * demand -- built on the game exactly as `genesis` builds one -- and
+   * `undefined` for anything else, which keeps a mistyped partition name the
+   * loud refusal it has always been.
+   *
+   * IDEMPOTENT WITHOUT EFFORT: it is reached only when the store holds nothing
+   * for that name, and once built the root is resident and then stored, so the
+   * second reach finds the first one's work.
+   *
+   * Optional, and absent for most worlds.
+   */
+  readonly createPartition?: (game: Game, name: string) => GameElement | undefined;
+  /**
    * WHAT HAPPENS WHEN A SEAT ARRIVES OR LEAVES.
    *
    * Each hook names a SEATLESS action from this world's own list, so a
@@ -460,6 +481,12 @@ export function createWorld(options: WorldRunnerOptions): WorldRunner {
     colors: worldColorPalette(seatCount),
     worldMode: true,
   });
+  // CONSTRUCTION BELOW, THE DURABLE WORLD ABOVE (#218). Everything the game
+  // class built for itself -- players most of all -- has an id below the floor;
+  // everything genesis and every command build has one above it. That is what
+  // lets `world.maxPlayers` change on a live world without the wider
+  // construction minting ids its stored partitions already hold.
+  game.reserveConstructionIdSpace();
 
   const store = createInlinedPartitionStore();
   const engine = new BoardSmithWorldEngine({
@@ -469,8 +496,19 @@ export function createWorld(options: WorldRunnerOptions): WorldRunner {
     actions: world.actions,
     view: world.view,
     budgets,
+    // A world that builds a root the first time somebody reaches for it (#218).
+    // Absent for a world whose every root came from genesis, which is most.
+    ...(world.createPartition === undefined ? {} : { createPartition: world.createPartition }),
   });
-  const runner = createWorldRunner(engine, store, () => buildGenesis(game, world, engine));
+  const runner = createWorldRunner(
+    engine,
+    store,
+    () => buildGenesis(game, world, engine),
+    // The bundle's own hook, or a world that adds no roots. The engine refuses
+    // a duplicate name and an unusable answer; what is decided here is only
+    // whether there is a hook at all.
+    (hookGame, ctx) => world.migration?.create?.(hookGame, ctx) ?? {},
+  );
   return { runner, store, seatCount };
 }
 

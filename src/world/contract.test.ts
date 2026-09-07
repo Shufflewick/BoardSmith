@@ -146,6 +146,18 @@ class ReferenceWorldEngine implements WorldEngine {
     throw new Error("the reference world holds no elements to migrate");
   }
 
+  /**
+   * Nor is there a tree to build a root in (#218). A conformance engine is
+   * asked to have the METHOD; a world with no elements creates none.
+   */
+  createPartition(): undefined {
+    return undefined;
+  }
+
+  createMigratedPartitions(): Record<string, never> {
+    throw new Error("the reference world holds no tree to create partitions in");
+  }
+
   async hydrate(names: readonly string[]): Promise<void> {
     // ADOPTION AND NOTHING ELSE (#122). The reference world has no tree, so
     // residency IS the resident set -- and a declaration asked a second time

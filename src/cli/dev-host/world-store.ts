@@ -265,9 +265,29 @@ export interface LocalWorldStore extends WorldPartitionStore, WorldPartitionWrit
    */
   migrate(migrated: {
     partitions: Record<string, string>;
+    /**
+     * NEW partition roots this migration adds (#218), each with the parent it
+     * hangs from -- which a transformed partition does not need, because its
+     * row already records one.
+     */
+    created: Record<string, StoredPartition>;
     events: readonly PlannedEvent[];
     toStateVersion: number;
   }): void;
+
+  /**
+   * RECORD A PARTITION ROOT BUILT ON FIRST USE (#218).
+   *
+   * Its own write, and deliberately not part of a checkpoint: it happens while
+   * a declaration is still settling, before anything has decided whether the
+   * command will run at all. An empty root written for a command that then
+   * refuses is the correct outcome -- the partition exists, the command did
+   * not, and the next reach finds the root rather than building a second one.
+   *
+   * Writing a name the store already holds is a no-op, so a race between two
+   * declarations reaching for the same absent root leaves one partition.
+   */
+  createOne(name: string, record: StoredPartition): void;
 
   /**
    * WHAT THIS SEAT'S ORDER COMMITTED, if this store still holds its receipt
@@ -457,6 +477,19 @@ export function openWorldStore(path: string, budgets: WorldBudgets): LocalWorldS
      * already launched, and refuses for a missing partition whose absence
      * nothing explains.
      */
+    createOne(name: string, record: StoredPartition): void {
+      // ALREADY THERE IS ALREADY DONE. Two declarations can reach for the same
+      // absent root; the first writes it and the second must find that one
+      // rather than replacing it with a fresh empty element.
+      if (stmt.knownParent.get(name) !== undefined) return;
+      assertStorablePartitionName(name);
+      const json = JSON.stringify(record.json);
+      assertPartitionWithinBudget(name, json, budgets);
+      transact(() => {
+        stmt.writePartition.run(name, record.parentId, json);
+      });
+    },
+
     async createAll(
       records: Record<string, StoredPartition>,
       stateVersion = 0,
@@ -616,12 +649,22 @@ export function openWorldStore(path: string, budgets: WorldBudgets): LocalWorldS
       return stored === undefined ? 0 : Number(stored);
     },
 
-    migrate({ partitions, events, toStateVersion }): void {
+    migrate({ partitions, created, events, toStateVersion }): void {
       const rows = Object.entries(partitions).map(([name, json]) => {
         const known = stmt.knownParent.get(name) as { parent_id: number } | undefined;
         if (!known) throw unknownPartition(name);
         return { name, parentId: known.parent_id, json };
       });
+      // NEW ROOTS CARRY THEIR OWN PARENT, because there is no row to read one
+      // from -- and they are checked here, before the transaction opens, for
+      // the reason `createAll` checks its own: a migration refused halfway is
+      // the one failure this whole method exists to make impossible.
+      for (const [name, record] of Object.entries(created)) {
+        assertStorablePartitionName(name);
+        const json = JSON.stringify(record.json);
+        assertPartitionWithinBudget(name, json, budgets);
+        rows.push({ name, parentId: record.parentId, json });
+      }
       transact(() => {
         writePartitions(rows);
         writeEvents(events);

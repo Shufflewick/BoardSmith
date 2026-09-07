@@ -191,6 +191,37 @@ async function attached(options: Parameters<typeof openHost>[0], clientId = 'c1'
   return opened;
 }
 
+/**
+ * A LAUNCHED, PLAYED WORLD, CLOSED AGAIN.
+ *
+ * The starting state of every upgrade case below: stored bytes in the hearth,
+ * a queued event on the clock and a seated player -- all three of which an
+ * upgrade has to leave standing. `verbs` says what was played, because a case
+ * about partitions wants a log cut and one about timers wants one banked.
+ */
+async function aPlayedVillage(
+  worldDefinition: WorldDefinition = worldBlock(),
+  verbs: readonly string[] = ['chop', 'bank'],
+): Promise<void> {
+  const opened = await attached({ dir, definition: bundle({ world: worldDefinition }) });
+  for (const action of verbs) {
+    await opened.host.handleMessage('c1', {
+      type: 'action',
+      order: nextOrder(),
+      requestId: `r-${action}`,
+      action,
+      args: {},
+    });
+  }
+  await opened.host.close();
+}
+
+/** The world as it is ON DISK, read by a store nobody has been playing
+ *  through -- which is the only honest way to ask what an upgrade wrote. */
+function onDisk(): LocalWorldStore {
+  return openWorldStore(worldStorePath(dir), worldBudgets());
+}
+
 /** The last frame of a type this client was sent. */
 function last(sent: Sent[], clientId: string, type: string): Record<string, unknown> | undefined {
   return [...sent].reverse().find((s) => s.clientId === clientId && s.message.type === type)?.message;
@@ -714,33 +745,6 @@ describe('#195: an uncertain order is answered from its receipt, never spent twi
  * queued events transformed and made durable together.
  */
 describe('#200: a world moving onto rules that read it differently', () => {
-  /** A village that has been played: one log cut, one banked on a slow burn,
-   *  so the world has both stored bytes and a queued event to migrate. */
-  async function aPlayedVillage(worldDefinition: WorldDefinition = worldBlock()) {
-    const opened = await attached({ dir, definition: bundle({ world: worldDefinition }) });
-    await opened.host.handleMessage('c1', {
-      type: 'action',
-      order: nextOrder(),
-      requestId: 'r1',
-      action: 'chop',
-      args: {},
-    });
-    await opened.host.handleMessage('c1', {
-      type: 'action',
-      order: nextOrder(),
-      requestId: 'r2',
-      action: 'bank',
-      args: {},
-    });
-    await opened.host.close();
-  }
-
-  /** The world as it is ON DISK, read by a store nobody has been playing
-   *  through -- which is the only honest way to ask what a migration wrote. */
-  function onDisk(): LocalWorldStore {
-    return openWorldStore(worldStorePath(dir), worldBudgets());
-  }
-
   it('records the version genesis wrote under, so a world is never asked to migrate to itself', async () => {
     await aPlayedVillage(worldBlock({ stateVersion: 2 }));
     const store = onDisk();
@@ -790,7 +794,7 @@ describe('#200: a world moving onto rules that read it differently', () => {
     const migrated = worldBlock({ stateVersion: 1, migration: { from: 0, partition: () => {} } });
     const opened = openHost({ dir, definition: bundle({ world: migrated }) });
     expect(await opened.host.start()).toEqual({
-      migrated: { from: 0, to: 1, partitions: 1, events: 1 },
+      migrated: { from: 0, to: 1, partitions: 1, created: 0, events: 1 },
     });
     await opened.host.close();
   });
@@ -852,5 +856,287 @@ describe('#200: a world moving onto rules that read it differently', () => {
       }),
       /not what I thought/,
     );
+  });
+});
+
+/**
+ * #218: A WORLD THAT OUTGREW ITS GENESIS.
+ *
+ * `genesis` runs once, at a world's first instant, and `migration.partition`
+ * transforms a root that already exists -- it cannot answer more roots and has
+ * nowhere to say what a new one hangs from. So an occupied world could gain a
+ * feature (#200) but could never gain a ROOM: twelve empires could not become
+ * five hundred, and one shared timeline could not become a region apiece,
+ * without resetting everybody's saved colonies.
+ *
+ * Everything below runs through the real `LocalWorldHost` over a real SQLite
+ * store, because the whole claim is about what is durable afterwards.
+ */
+describe('#218: adding durable partition roots to a world anybody is in', () => {
+  /** One log banked on a slow burn: stored bytes and a queued event, both of
+   *  which the upgrade has to leave standing. */
+  const aBankedVillage = (world?: WorldDefinition) => aPlayedVillage(world, ['bank']);
+
+  /** The upgrade Lacuna needs, in miniature: the hearth stays, and the world
+   *  gains a root per region that genesis never built. */
+  function withRegions(overrides: Partial<WorldDefinition> = {}): WorldDefinition {
+    return worldBlock({
+      stateVersion: 1,
+      migration: {
+        from: 0,
+        create: (game, ctx) =>
+          Object.fromEntries(
+            ['region:1', 'region:2']
+              .filter((name) => !ctx.existing.includes(name))
+              .map((name) => [name, game.create(Hearth, name) as GameElement]),
+          ),
+      },
+      ...overrides,
+    });
+  }
+
+  it('creates the new roots in the same durable step, with everything that was there', async () => {
+    await aBankedVillage();
+    const { host, store } = await attached({ dir, definition: bundle({ world: withRegions() }) });
+
+    expect(store.stateVersion()).toBe(1);
+    expect([...store.partitionNames()].sort()).toEqual([HEARTH, 'region:1', 'region:2']);
+    // THE OLD WORLD SURVIVED IT: the log banked before the upgrade is still
+    // banked, and the timer it armed is still queued.
+    expect(JSON.stringify(await store.read(HEARTH))).toContain('"logs":1');
+    expect(store.pendingEvents()).toHaveLength(1);
+    await host.close();
+  });
+
+  it('reports how many roots it added, beside what it transformed', async () => {
+    await aBankedVillage();
+    const opened = openHost({ dir, definition: bundle({ world: withRegions() }) });
+    expect(await opened.host.start()).toEqual({
+      migrated: { from: 0, to: 1, partitions: 1, created: 2, events: 1 },
+    });
+    await opened.host.close();
+  });
+
+  it('is idempotent across a second start, because the hook filters ctx.existing', async () => {
+    await aBankedVillage();
+    const first = await attached({ dir, definition: bundle({ world: withRegions() }) });
+    await first.host.close();
+
+    // The same bundle again: the world is already on version 1, so no migration
+    // runs at all -- and a THIRD version whose hook would build the same names
+    // filters them out rather than replacing live partitions.
+    const again = openHost({
+      dir,
+      definition: bundle({ world: withRegions({ stateVersion: 2, migration: {
+        from: 1,
+        create: (game, ctx) =>
+          Object.fromEntries(
+            ['region:1', 'region:2', 'region:3']
+              .filter((name) => !ctx.existing.includes(name))
+              .map((name) => [name, game.create(Hearth, name) as GameElement]),
+          ),
+      } }) }),
+    });
+    expect(await again.host.start()).toEqual({
+      migrated: { from: 1, to: 2, partitions: 3, created: 1, events: 1 },
+    });
+    const store = onDisk();
+    expect([...store.partitionNames()].sort()).toEqual([
+      HEARTH, 'region:1', 'region:2', 'region:3',
+    ]);
+    store.close();
+    await again.host.close();
+  });
+
+  it('refuses a root whose name the world already holds, and writes nothing', async () => {
+    await aBankedVillage();
+    const collides = worldBlock({
+      stateVersion: 1,
+      migration: {
+        from: 0,
+        create: (game) => ({ [HEARTH]: game.create(Hearth, 'a second hearth') as GameElement }),
+      },
+    });
+    const opened = openHost({ dir, definition: bundle({ world: collides }) });
+    await expect(opened.host.start()).rejects.toThrow(/already holds/);
+    await opened.host.close();
+
+    const store = onDisk();
+    // THE WORLD IS EXACTLY AS IT WAS, on its old rules, playable.
+    expect(store.stateVersion()).toBe(0);
+    expect([...store.partitionNames()]).toEqual([HEARTH]);
+    expect(JSON.stringify(await store.read(HEARTH))).toContain('"logs":1');
+    store.close();
+  });
+
+  it('leaves the old roots and the old bytes when the create hook throws', async () => {
+    await aBankedVillage();
+    const broken = worldBlock({
+      stateVersion: 1,
+      migration: {
+        from: 0,
+        partition: (element) => {
+          (element as unknown as Hearth).burns += 10;
+        },
+        create: () => {
+          throw new Error('the region table is not ready');
+        },
+      },
+    });
+    const opened = openHost({ dir, definition: bundle({ world: broken }) });
+    await expect(opened.host.start()).rejects.toThrow(/region table is not ready/);
+    await opened.host.close();
+
+    const store = onDisk();
+    expect(store.stateVersion()).toBe(0);
+    expect([...store.partitionNames()]).toEqual([HEARTH]);
+    // NOT EVEN THE TRANSFORM LANDED: the migration is all or nothing, and the
+    // hook that threw ran after every partition had been transformed in memory.
+    expect(JSON.stringify(await store.read(HEARTH))).toContain('"burns":0');
+    store.close();
+  });
+
+  /**
+   * The ticket's own question: does widening the world need a second, separate
+   * roster migration? It does not. The roster is the STORE's, not the bundle's;
+   * `maxPlayers` is read from the compiled rules at construction and bounds who
+   * may sit down, so raising it across an upgrade keeps every seated player
+   * where they were and opens the seats above them.
+   */
+  it('a wider world keeps its seated players and opens the new seats', async () => {
+    await aBankedVillage();
+    const wider = withRegions({ maxPlayers: 40 });
+    const { host, sent } = await attached({ dir, definition: bundle({ world: wider }) });
+
+    // The player who was seated before the upgrade is still in their seat, and
+    // the bytes they left are still in front of them.
+    expect(JSON.stringify(last(sent, 'c1', 'world_state')?.view)).toContain('"logs":1');
+    // AND A SEAT THE OLD WORLD DID NOT HAVE can be taken and can act.
+    await host.handleMessage('c2', { type: 'hello' });
+    await host.handleMessage('c2', { type: 'attach', seat: 13 });
+    await host.handleMessage('c2', {
+      type: 'action',
+      order: nextOrder(),
+      requestId: 'r13',
+      action: 'chop',
+      args: {},
+    });
+    expect(last(sent, 'c2', 'world_response')).toMatchObject({ ok: true });
+    await host.close();
+  });
+
+  it('makes a new root reachable to an ordinary command afterwards', async () => {
+    await aBankedVillage();
+    const regionChop = worldAction<Village>('chopRegion')
+      .prompt('Cut a log in a region')
+      .needs(() => ['region:1'])
+      .execute((_args, ctx) => {
+        (ctx.world.partition('region:1') as Hearth).logs += 1;
+        ctx.world.emit('region:1', { chopped: true });
+      });
+    const upgraded = withRegions({
+      actions: [...VILLAGE_ACTIONS, regionChop],
+      view: () => [HEARTH, 'region:1'],
+    });
+    const { host, store } = await attached({ dir, definition: bundle({ world: upgraded }) });
+    await host.handleMessage('c1', {
+      type: 'action',
+      order: nextOrder(),
+      requestId: 'r2',
+      action: 'chopRegion',
+      args: {},
+    });
+    expect(JSON.stringify(await store.read('region:1'))).toContain('"logs":1');
+    await host.close();
+  });
+});
+
+/**
+ * #218: A ROOT BUILT THE FIRST TIME SOMEBODY REACHES FOR IT.
+ *
+ * The other half. Genesis running once means a 500-seat world had to pay for
+ * 500 empires on the day it opened; `world.createPartition` lets a root come
+ * into existence when a declaration first names it, and a mistyped name stays
+ * the loud refusal it has always been.
+ */
+describe('#218: partitions created on first use', () => {
+  const holdingOf = (seat: number) => `holding:${seat}`;
+
+  const settle = worldAction<Village>('settle')
+    .prompt('Found a holding')
+    .needs(({ player }) => [holdingOf((player as { seat: number }).seat)])
+    .execute((_args, ctx) => {
+      const holding = ctx.world.partition(holdingOf(ctx.player.seat)) as Hearth;
+      holding.logs += 1;
+      ctx.world.emit(holdingOf(ctx.player.seat), { settled: ctx.player.seat });
+    });
+
+  const missing = worldAction<Village>('reachForNothing')
+    .prompt('Name a partition that does not exist')
+    .needs(() => ['nosuchroom'])
+    .execute(() => {});
+
+  function lazyWorld(): WorldDefinition {
+    return worldBlock({
+      actions: [...VILLAGE_ACTIONS, settle, missing],
+      view: (seat) => [HEARTH, holdingOf(seat)],
+      createPartition: (game, name) =>
+        name.startsWith('holding:') ? (game.create(Hearth, name) as GameElement) : undefined,
+    });
+  }
+
+  it('builds the root, stores it, and lets the command run', async () => {
+    const { host, store } = await attached({ dir, definition: bundle({ world: lazyWorld() }) });
+    await host.handleMessage('c1', {
+      type: 'action',
+      order: nextOrder(),
+      requestId: 'r1',
+      action: 'settle',
+      args: {},
+    });
+    expect([...store.partitionNames()].sort()).toEqual([HEARTH, holdingOf(1)]);
+    expect(JSON.stringify(await store.read(holdingOf(1)))).toContain('"logs":1');
+    await host.close();
+  });
+
+  it('reaches the SAME root a second time rather than building another', async () => {
+    const first = await attached({ dir, definition: bundle({ world: lazyWorld() }) });
+    await first.host.handleMessage('c1', {
+      type: 'action',
+      order: nextOrder(),
+      requestId: 'r1',
+      action: 'settle',
+      args: {},
+    });
+    await first.host.close();
+
+    // A fresh host over the same store: the root is read back rather than
+    // rebuilt, so the log cut into it is still there and gains a second.
+    const again = await attached({ dir, definition: bundle({ world: lazyWorld() }) });
+    await again.host.handleMessage('c1', {
+      type: 'action',
+      order: nextOrder(),
+      requestId: 'r2',
+      action: 'settle',
+      args: {},
+    });
+    expect([...again.store.partitionNames()].sort()).toEqual([HEARTH, holdingOf(1)]);
+    expect(JSON.stringify(await again.store.read(holdingOf(1)))).toContain('"logs":2');
+    await again.host.close();
+  });
+
+  it('still refuses a name the world does not create, so a typo stays loud', async () => {
+    const { host, sent } = await attached({ dir, definition: bundle({ world: lazyWorld() }) });
+    await host.handleMessage('c1', {
+      type: 'action',
+      order: nextOrder(),
+      requestId: 'r1',
+      action: 'reachForNothing',
+      args: {},
+    });
+    const answer = last(sent, 'c1', 'world_response');
+    expect(answer).toMatchObject({ ok: false, code: 'partition-missing' });
+    expect(answer?.message).toContain('nosuchroom');
+    await host.close();
   });
 });

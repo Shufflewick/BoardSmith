@@ -124,12 +124,17 @@ interface LocalWorldHostOptions {
  * world this host may serve.
  */
 interface WorldStartOutcome {
-  readonly migrated?: {
-    readonly from: number;
-    readonly to: number;
-    readonly partitions: number;
-    readonly events: number;
-  };
+  readonly migrated?: WorldMigrationOutcome;
+}
+
+/** What one upgrade moved, for whoever says it out loud. */
+export interface WorldMigrationOutcome {
+  readonly from: number;
+  readonly to: number;
+  readonly partitions: number;
+  /** How many NEW partition roots the upgrade added (#218). */
+  readonly created: number;
+  readonly events: number;
 }
 
 /** Everything a browser may ask this host to do. */
@@ -290,8 +295,9 @@ export class LocalWorldHost {
     if (plan.kind === 'refuse') throw plan.refusal;
 
     const { migration, from, to } = plan;
+    const existing = this.#store.partitionNames();
     const partitions: Record<string, string> = {};
-    for (const name of this.#store.partitionNames()) {
+    for (const name of existing) {
       const stored = await this.#readPartition(
         name,
         `Migrating this world needs partition "${name}", which its store does not have.`,
@@ -309,7 +315,14 @@ export class LocalWorldHost {
         args: migratedArgs(migration, { action: event.action, args: event.args }),
       }));
 
-    this.#store.migrate({ partitions, events, toStateVersion: to });
+    // AND THE ROOTS THIS VERSION ADDS (#218). Genesis runs once, so a world
+    // that outgrew it -- twelve empires becoming five hundred -- has only this
+    // door. Built AFTER every existing partition is transformed and BEFORE
+    // anything is written, so a hook that throws leaves the world on its old
+    // rules with its old roots, playable.
+    const created = await this.#world.runner.migrateCreate(existing, { from, to });
+
+    this.#store.migrate({ partitions, created, events, toStateVersion: to });
     // THE RESIDENT TREE GOES WITH THE OLD BYTES. It was hydrated from them one
     // partition at a time to be transformed, which is not the state any command
     // should run against; the next one rebuilds from what was just written.
@@ -317,7 +330,13 @@ export class LocalWorldHost {
     // ANSWERED RATHER THAN BROADCAST: a migration runs before the first socket
     // exists, so there is nobody in the world to tell. The CLI says it in the
     // terminal, where the person who published the new rules is standing.
-    return { from, to, partitions: Object.keys(partitions).length, events: events.length };
+    return {
+      from,
+      to,
+      partitions: Object.keys(partitions).length,
+      created: Object.keys(created).length,
+      events: events.length,
+    };
   }
 
   async handleMessage(clientId: string, message: WorldDevRequest): Promise<void> {
@@ -721,7 +740,16 @@ export class LocalWorldHost {
   async #readPartition(name: string, message: string): Promise<StoredPartition> {
     const partition = await this.#store.read(name);
     if (partition !== undefined) return partition;
-    throw worldRefusal('partition-missing', message);
+    // NO ROW IS NOT YET NO PARTITION (#218). A world may build a root the first
+    // time somebody reaches for it -- `world.createPartition` -- and only the
+    // bundle can tell that name from a typo, so it is asked before the refusal.
+    // The row is written here rather than at the next checkpoint: the partition
+    // exists from the instant it is built, and a command that then refuses
+    // leaves an empty root rather than a root nothing recorded.
+    const built = await this.#world.runner.createPartition(name);
+    if (built === undefined) throw worldRefusal('partition-missing', message);
+    this.#store.createOne(name, built);
+    return built;
   }
 
   #allowanceFor(owner: string): ScheduleAllowance {
