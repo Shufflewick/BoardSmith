@@ -521,21 +521,19 @@ export class BoardSmithWorldEngine implements WorldEngine {
    * batching them keeps an offer to one storage round trip per LEVEL rather
    * than one per action.
    *
-   * A CONDITION THAT IS FALSE STOPS THAT ACTION'S WALK. A verb that is
-   * irrelevant here should not make the world load the partitions it would have
-   * acted on, which is the difference between an offer costing what the seat
-   * can do and an offer costing what the bundle declared.
+   * Conditions run only in the stamped offer context. Declaration has no clock
+   * or presence snapshot, so it cannot decide availability. It declares the
+   * bounded read rounds; offerOf evaluates conditions after those reads arrive.
    *
    * The EXECUTE round is deliberately not walked: it names what `execute`
    * writes, and an offer executes nothing.
    */
   offerPartitions(player: string): readonly string[] {
     const seat = this.seatFor(player);
-    const acting = this.playerFor(seat);
     const missing: string[] = [];
     for (const definition of this.actions.values()) {
       if (definition.world?.seatless === true) continue;
-      missing.push(...this.offerPartitionsOf(definition, seat, acting));
+      missing.push(...this.offerPartitionsOf(definition, seat));
     }
     return declaredOnce(missing);
   }
@@ -545,7 +543,6 @@ export class BoardSmithWorldEngine implements WorldEngine {
   private offerPartitionsOf(
     definition: ActionDefinition,
     seat: number,
-    acting: Player,
   ): readonly string[] {
     for (let step = 0; step < definition.selections.length || step === 0; step++) {
       for (const round of definition.world!.needs) {
@@ -557,22 +554,6 @@ export class BoardSmithWorldEngine implements WorldEngine {
         // loaded, so there is nothing to say about it until the host has
         // supplied this one.
         if (unmet.length > 0) return unmet;
-      }
-      // A CONDITION THAT IS FALSE STOPS THE WALK, once round one is resident.
-      // A verb that is irrelevant here should not make the world load the
-      // partitions it would have acted on, which is the difference between an
-      // offer costing what the seat can do and an offer costing what the bundle
-      // declared.
-      if (
-        step === 0 &&
-        definition.condition &&
-        !evaluateCondition(
-          definition.condition,
-          { game: this.game, player: acting, args: {} },
-          `action '${definition.name}'`,
-        )
-      ) {
-        return [];
       }
     }
     return [];
