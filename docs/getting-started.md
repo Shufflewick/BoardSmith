@@ -157,7 +157,12 @@ This runs:
   `include` cannot run in one gate while being invisible to the other
 - Security scan for forbidden APIs (network, timers, non-determinism, eval)
 - Asset path check (absolute paths break on the publishing platform)
-- Bundle size limits (rules.js 1MB; compressed bundle zip 50MB)
+- Bundle size limits, in the units the server measures them in: a table game's
+  `rules.js` against the executor's 1 MiB request cap **as JSON-encoded**, not as
+  it sits on disk (quotes, backslashes and newlines each cost an extra byte); a
+  world's `rules.js` against the upload gate only, since a world loads rules from
+  the bundle store rather than a request; and every bundle against the publish
+  server's 200 MB compressed-zip gate and its uncompressed ceilings
 - Required files check
 
 To detect infinite loops or game-ending bugs, run `boardsmith simulate` (seeded

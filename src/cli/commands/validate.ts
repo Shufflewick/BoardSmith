@@ -11,7 +11,15 @@ import {
   ALLOWED_NAMED_ACTION_KEYS,
   ASSET_PATH_KEYS,
 } from '../lib/config-schema.js';
-import { MAX_BUNDLE_SIZE, describeZipSizeViolation } from '../lib/bundle-limits.js';
+import {
+  MAX_TABLE_RULES_ENCODED_BYTES,
+  MAX_UPLOAD_ZIP_BYTES,
+  describeTableRulesViolation,
+  describeTableRulesWarning,
+  describeUncompressedViolations,
+  describeZipSizeViolation,
+  encodedRulesBytes,
+} from '../lib/bundle-limits.js';
 import { readDistDir, createZip } from '../lib/zip.js';
 import { requireGameProject } from '../lib/game-project.js';
 import { resolveWorldMode, WORLD_AUTHORING_DOC } from '../lib/world-project.js';
@@ -81,7 +89,7 @@ export async function validateCommand(): Promise<void> {
   results.push(await validateAssetPaths(cwd));
 
   // 5. Bundle size check
-  results.push(await validateBundleSize(cwd));
+  results.push(await validateBundleSize(cwd, worldMode));
 
   // 6. Required files check
   results.push(await validateRequiredFiles(cwd, worldMode));
@@ -703,12 +711,16 @@ async function validateSecurity(cwd: string): Promise<ValidationResult> {
   };
 }
 
-export async function validateBundleSize(cwd: string): Promise<ValidationResult> {
-  // Limits match server-side enforcement:
-  //   rules.js: 1MB (executor MAX_BUNDLE_SIZE)
-  //   total bundle zip: 50MB (games worker MAX_BUNDLE_SIZE, see bundle-limits.ts)
-  const maxRulesJs = 1 * 1024 * 1024; // 1MB - executor limit
-
+/**
+ * Bundle sizes, measured in the units the SERVER measures them in — and only
+ * the gates that actually apply to this game's backend.
+ *
+ * Every bundle passes the games worker's upload gates. Only a table bundle
+ * passes the executor's request gate, because only a table session ships
+ * `rules.js` inside a JSON body; a world's rules are fetched from the bundle
+ * store, so the executor's 1 MiB request cap is not a world's cap (#220).
+ */
+export async function validateBundleSize(cwd: string, worldMode: boolean): Promise<ValidationResult> {
   const distDir = join(cwd, 'dist');
   const rulesJsPath = join(distDir, 'rules', 'rules.js');
 
@@ -722,40 +734,57 @@ export async function validateBundleSize(cwd: string): Promise<ValidationResult>
     };
   }
 
-  const rulesJsSize = statSync(rulesJsPath).size;
   const issues: string[] = [];
+  const notes: string[] = [];
 
-  if (rulesJsSize > maxRulesJs) {
-    issues.push(`rules.js (${formatBytes(rulesJsSize)}) exceeds executor limit (${formatBytes(maxRulesJs)})`);
-  }
-
-  // WR-05: the server enforces the 50MB limit on the uploaded ZIP, so measure
-  // the exact zip `boardsmith publish` would upload — comparing the raw
-  // (uncompressed) dist size against a compressed-size limit falsely rejects
-  // compressible bundles.
-  let zipDetail: string;
-  try {
-    const zip = createZip(readDistDir(distDir));
-    const violation = describeZipSizeViolation(zip.length);
+  const rulesSource = readFileSync(rulesJsPath, 'utf-8');
+  const rulesRawBytes = Buffer.byteLength(rulesSource, 'utf-8');
+  if (worldMode) {
+    // A world's rule module is read from the bundle store by the world session,
+    // never encoded into a request, so the only ceiling it meets is the upload
+    // gate's per-file one, checked with every other file below.
+    notes.push(
+      `rules.js: ${formatBytes(rulesRawBytes)} (a world loads rules from the bundle store, so the table executor's request limit does not apply)`,
+    );
+  } else {
+    const encoded = encodedRulesBytes(rulesSource);
+    const violation = describeTableRulesViolation(rulesRawBytes, encoded);
     if (violation) {
       issues.push(violation);
+    } else {
+      const warning = describeTableRulesWarning(rulesRawBytes, encoded);
+      if (warning) notes.push(`Warning: ${warning}`);
+      notes.push(
+        `rules.js: ${formatBytes(encoded)} encoded / ${formatBytes(MAX_TABLE_RULES_ENCODED_BYTES)} executor limit `
+        + `(${formatBytes(rulesRawBytes)} on disk)`,
+      );
     }
-    zipDetail = `Compressed bundle (publish zip): ${formatBytes(zip.length)} / ${formatBytes(MAX_BUNDLE_SIZE)}`;
+  }
+
+  // WR-05: the server enforces the upload limit on the uploaded ZIP, so measure
+  // the exact zip `boardsmith publish` would upload — comparing the raw
+  // (uncompressed) dist size against a compressed-size limit falsely rejects
+  // compressible bundles. The three zip-bomb ceilings apply to the INFLATED
+  // tree, so those are measured on the files themselves.
+  try {
+    const files = readDistDir(distDir);
+    issues.push(...describeUncompressedViolations(files));
+    const zip = createZip(files);
+    const zipViolation = describeZipSizeViolation(zip.length);
+    if (zipViolation) issues.push(zipViolation);
+    notes.push(`Compressed bundle (publish zip): ${formatBytes(zip.length)} / ${formatBytes(MAX_UPLOAD_ZIP_BYTES)}`);
   } catch (error) {
     // dist/ is incomplete (e.g. missing manifest.json) so the real publish zip
     // cannot be assembled — publish rebuilds and gates the zip itself.
     const reason = (error as Error).message.split('\n')[0];
-    zipDetail = `Compressed bundle: not measurable (${reason}) — checked again during publish`;
+    notes.push(`Compressed bundle: not measurable (${reason}) — checked again during publish`);
   }
 
   return {
     name: 'Bundle Size',
     passed: issues.length === 0,
     message: issues.length > 0 ? 'Bundle size limits exceeded' : '',
-    details: issues.length > 0 ? issues : [
-      `rules.js: ${formatBytes(rulesJsSize)} / ${formatBytes(maxRulesJs)}`,
-      zipDetail,
-    ],
+    details: issues.length > 0 ? issues : notes,
   };
 }
 
