@@ -19,6 +19,7 @@ import {
   hasBlockingFailure,
   buildChoiceCardinalityResult,
   validateRequiredFiles,
+  successGuidance,
 } from './validate.js';
 import { MAX_BUNDLE_SIZE, describeZipSizeViolation } from '../lib/bundle-limits.js';
 
@@ -716,5 +717,42 @@ describe('validateRequiredFiles — a world has a different entry point (#168)',
     const result = await validateRequiredFiles(dir, false);
     expect(result.passed).toBe(false);
     expect(result.details).toContain('src/ui/uis.ts');
+  });
+});
+
+describe("#196: what validation tells an author to do next", () => {
+  /** Chalk may or may not colour, depending on where the suite runs. */
+  const plain = (isWorld: boolean): string =>
+    // eslint-disable-next-line no-control-regex
+    successGuidance(isWorld).join('\n').replace(/\u001B\[[0-9;]*m/g, '');
+
+  it('a world project is told `boardsmith dev` runs the world, not a table half', () => {
+    const text = plain(true);
+    expect(text).toContain('`boardsmith dev` runs it');
+    expect(text).toContain('durable local store');
+    expect(text).toContain('boardsmith dev --reset');
+    expect(text).toContain('docs/persistent-worlds.md');
+  });
+
+  it('a world project is never told about a table half or a flow it does not have', () => {
+    const text = plain(true);
+    expect(text).not.toContain('table half');
+    expect(text).not.toContain('Flow steps');
+    expect(text).not.toContain('play through your game');
+  });
+
+  it('a table project keeps the table guidance, and is told nothing about worlds', () => {
+    const text = plain(false);
+    expect(text).toContain('play through your game');
+    expect(text).toContain('Flow steps referencing non-existent actions');
+    expect(text).not.toContain('persistent world');
+  });
+
+  it('both backends still name build and publish', () => {
+    for (const isWorld of [true, false]) {
+      expect(plain(isWorld)).toContain('All validation checks passed!');
+      expect(plain(isWorld)).toContain('boardsmith build');
+      expect(plain(isWorld)).toContain('boardsmith publish');
+    }
   });
 });

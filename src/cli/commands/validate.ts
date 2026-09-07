@@ -95,7 +95,7 @@ export async function validateCommand(): Promise<void> {
     process.exit(1);
   }
 
-  printSuccessGuidance(worldMode);
+  for (const line of successGuidance(worldMode)) console.log(line);
 }
 
 /** One check's icon and status word: pass, advisory warning, or failure. */
@@ -125,28 +125,53 @@ function printResults(results: ValidationResult[]): void {
   console.log('');
 }
 
-function printSuccessGuidance(isWorld: boolean): void {
-  console.log(chalk.green('All validation checks passed!\n'));
-  console.log(chalk.cyan('Next steps:'));
-  console.log(chalk.dim('  boardsmith dev      - Test gameplay and check for runtime warnings'));
-  console.log(chalk.dim('  boardsmith build    - Build for production'));
-  console.log(chalk.dim('  boardsmith publish  - Publish to boardsmith.io\n'));
-  // #304: this tip and getting-started.md are the two places an author is sent
-  // from, and `boardsmith dev` plays a world project's TABLE game. A world
-  // author who is not told that here has nowhere else to find it out.
+/**
+ * WHAT TO DO NEXT, IN THE VOCABULARY OF THE BACKEND THAT WAS JUST VALIDATED
+ * (#196).
+ *
+ * Two backends, two different next commands, and the difference is not a
+ * footnote: `boardsmith dev` on a world project opens a durable store and runs
+ * genesis, and a world-only bundle has no table half, no flow and no turn -- so
+ * the table's "play through your game, watch for flow-step warnings" advice
+ * names diagnostics that world can never produce.
+ *
+ * Returned as lines rather than printed so the two backends' guidance is
+ * assertable without capturing stdout.
+ */
+export function successGuidance(isWorld: boolean): string[] {
+  const lines = [
+    chalk.green('All validation checks passed!\n'),
+    chalk.cyan('Next steps:'),
+  ];
   if (isWorld) {
-    console.log(
+    lines.push(
+      chalk.dim('  boardsmith dev      - Run this world: genesis, its durable store, and its seats'),
+      chalk.dim('  boardsmith build    - Build for production'),
+      chalk.dim('  boardsmith publish  - Publish to boardsmith.io\n'),
       chalk.yellow('World:') +
         chalk.dim(
-          ` this game declares a persistent world. \`boardsmith dev\` plays its table half;\n` +
-            `       BoardSmith ${WORLD_AUTHORING_DOC} says where the world half runs.\n`,
+          ' this game declares a persistent world, and `boardsmith dev` runs it: the\n' +
+            '       project\'s durable local store, genesis once, a seat per browser, and scheduled\n' +
+            '       events firing on their due time. `boardsmith dev --reset` deletes the world and\n' +
+            `       runs genesis again. BoardSmith ${WORLD_AUTHORING_DOC} is the authoring guide.\n`,
         ),
+      chalk.yellow('Tip:') + chalk.dim(' Run `boardsmith dev`, take a seat, and issue your world\'s commands.'),
+      chalk.dim('     The host says every refusal out loud, including:'),
+      chalk.dim('     - A handler reading a partition its partitions() did not declare'),
+      chalk.dim('     - A schedule past this world\'s caps, or at an invalid delay\n'),
     );
+    return lines;
   }
-  console.log(chalk.yellow('Tip:') + chalk.dim(' Run `boardsmith dev` and play through your game.'));
-  console.log(chalk.dim('     The engine will warn about issues like:'));
-  console.log(chalk.dim('     - Flow steps referencing non-existent actions'));
-  console.log(chalk.dim('     - Element reference comparisons instead of ID comparisons\n'));
+  lines.push(
+    chalk.dim('  boardsmith dev      - Test gameplay and check for runtime warnings'),
+    chalk.dim('  boardsmith build    - Build for production'),
+    chalk.dim('  boardsmith publish  - Publish to boardsmith.io\n'),
+    chalk.yellow('Tip:') + chalk.dim(' Run `boardsmith dev` and play through your game.'),
+    chalk.dim('     The engine will warn about issues like:'),
+    chalk.dim('     - Flow steps referencing non-existent actions'),
+    chalk.dim('     - Element reference comparisons instead of ID comparisons\n'),
+  );
+  return lines;
 }
 
 /**

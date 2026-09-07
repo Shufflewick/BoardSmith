@@ -113,6 +113,14 @@ describe('#167: no CLI surface still tells an author a world cannot run locally'
       why: "It does not, for a world project: #167 branches to `dev-world.ts`, which serves the world. A world project need not have a table half at all.",
     },
     {
+      // #196: the first pattern was written around one phrasing, and the
+      // success guidance `boardsmith validate` prints used another -- so a
+      // world author was told for three months that dev plays a half their
+      // project does not have.
+      pattern: /`?boardsmith dev`? plays (its|the|this project's|a world project's) table half/i,
+      why: "It does not, as of #167: a world project's `boardsmith dev` runs the world, and a world project need not have a table half at all.",
+    },
+    {
       pattern: /nothing here dispatches a world command/i,
       why: '`cli/dev-host/world-host.ts` dispatches one, through `settleDeclaration` and `runner.apply`, exactly as the platform does.',
     },
