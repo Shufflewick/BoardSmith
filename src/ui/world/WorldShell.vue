@@ -75,9 +75,14 @@
       </template>
 
       <template #board>
+        <!-- `boardHostReady` gate (#204): a board mounts one tick after
+             the chrome is in the document, so a game's documented
+             `<Teleport to="#bs-game-modal">` always finds the host `PlayShell`
+             renders. `GameShell` holds a table's board back for exactly this
+             reason; the guarantee is the SHELL's, so both give it. -->
         <component
+          v-if="boardHostReady && boardComponent"
           :is="boardComponent"
-          v-if="boardComponent"
           :game-view="play.gameView.value"
           :players="play.players.value"
           :my-player="play.myPlayer.value"
@@ -95,8 +100,10 @@
           :phase="host.phase.value"
         />
         <!-- Only reachable if the registry's default entry resolved to no
-             component — a broken uis.ts. Name the fix, don't render blank. -->
-        <div v-else class="empty-game-area">
+             component — a broken uis.ts. Name the fix, don't render blank.
+             It waits for the same tick, so a shell that has not finished
+             mounting never accuses a game's uis.ts of being broken. -->
+        <div v-else-if="boardHostReady" class="empty-game-area">
           <p>No board to render. Mark one UI with defaultUI() in src/ui/uis.ts.</p>
         </div>
       </template>
@@ -105,7 +112,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
+import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useWorldHost } from './useWorldHost.js';
 import { useWorldPlay } from './useWorldPlay.js';
 import { WORLD_CONTEXT_KEY } from './useWorld.js';
@@ -351,6 +358,35 @@ function trackCompact(event: MediaQueryListEvent | MediaQueryList): void {
   isCompact.value = event.matches;
   if (!event.matches) mobileExpanded.value = false;
 }
+
+/**
+ * WHETHER THE MODAL HOST A BOARD TELEPORTS INTO IS IN THE DOCUMENT YET (#204).
+ *
+ * A game's board is told to open a modal with the documented plain
+ * `<Teleport to="#bs-game-modal">`, and the host that selector names is
+ * `PlayShell`'s. Vue resolves a Teleport's target at MOUNT, against the real
+ * document -- so a board that mounts in the same pass as the host it aims at
+ * gets a null target, two warnings, and a modal that is simply absent when the
+ * player opens it.
+ *
+ * `GameShell` holds a table's board back one tick for exactly this reason, and
+ * a world needs the same guarantee for a different arrival: this shell draws
+ * FOUR states before `PlayShell` exists at all (nobody has spoken, refused, no
+ * view yet), so the chrome -- and the host inside it -- arrives with the first
+ * view rather than with this component. The wait is therefore for the CHROME,
+ * not for this shell: a tick after `PlayShell` renders, the host is in the
+ * document and the documented pattern works.
+ */
+const boardHostReady = ref(false);
+watch(
+  () => host.view.value !== null && host.phase.value !== 'refused',
+  async (chromeDrawn) => {
+    if (!chromeDrawn) return;
+    await nextTick();
+    boardHostReady.value = true;
+  },
+  { immediate: true },
+);
 
 onMounted(() => {
   // THE CHROME HAS TO HAVE TOKENS TO BE DRAWN IN. `PlayShell` is written in
