@@ -63,6 +63,14 @@ describe('the layout', () => {
     expect(wrapper.find('.game-shell__zoom-container .my-board').exists()).toBe(true);
   });
 
+  it('keeps the modal host outside the board scroller and zoom container', () => {
+    const wrapper = mountShell();
+    const modal = wrapper.get('#bs-game-modal').element;
+    const board = wrapper.get('[data-testid="bs-board"]').element;
+    expect(board.contains(modal)).toBe(false);
+    expect(modal.parentElement).toBe(board.parentElement);
+  });
+
   it('always hosts the modal target a game teleports into', () => {
     expect(mountShell().find('#bs-game-modal').exists()).toBe(true);
   });

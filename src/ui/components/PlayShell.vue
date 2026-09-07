@@ -323,34 +323,49 @@ const mobileToggleLabel = computed(() => {
            Its padding-bottom reserves the Action Panel's CONSTANT footprint
            (--bsg-panel-reserved), so the board is fitted above the panel without
            anything measuring the panel. -->
-      <main
-        class="boardregion"
-        id="main"
-        role="main"
-        tabindex="-1"
-        ref="boardRegionEl"
-        data-testid="bs-board"
-      >
-        <!-- Connection indicator: one dot, two sources. Surfaced only when the
-             adapter has something to say — a persistent healthy dot over the
-             board reads as a mystery speck (IA-01). The adapter names the tone
-             and writes the sentence, because a table's socket health and a
-             world's attachment lifecycle are different axes and merging the two
-             state machines would lose states neither has an analogue for. -->
-        <span
-          v-if="connection"
-          class="conn-dot"
-          :class="connection.tone"
-          :title="connection.title"
-          data-testid="bs-connection"
-          aria-hidden="true"
-        ></span>
+      <div class="board-viewport">
+        <main
+          class="boardregion"
+          id="main"
+          role="main"
+          tabindex="-1"
+          ref="boardRegionEl"
+          data-testid="bs-board"
+        >
+          <!-- Connection indicator: one dot, two sources. Surfaced only when the
+               adapter has something to say — a persistent healthy dot over the
+               board reads as a mystery speck (IA-01). The adapter names the tone
+               and writes the sentence, because a table's socket health and a
+               world's attachment lifecycle are different axes and merging the two
+               state machines would lose states neither has an analogue for. -->
+          <span
+            v-if="connection"
+            class="conn-dot"
+            :class="connection.tone"
+            :title="connection.title"
+            data-testid="bs-connection"
+            aria-hidden="true"
+          ></span>
 
-        <!-- The adapter's own overlays. A direct child of .boardregion, so like
-             every overlay here they can cover the board but NEVER the action bar
-             or the header (those are siblings outside .boardregion). -->
-        <slot name="board-overlays"></slot>
+          <!-- The adapter's own overlays. A direct child of .boardregion, so like
+               every overlay here they can cover the board but NEVER the action bar
+               or the header (those are siblings outside .boardregion). -->
+          <slot name="board-overlays"></slot>
 
+
+          <div
+            class="game-shell__zoom-container"
+            ref="zoomContainerEl"
+            :style="{ '--zoom-level': zoomLevel }"
+          >
+            <!-- ONE render path for the board: the registry's default UI, or the
+                 dev switcher's selection. There is no second slot for naming a
+                 default board — a second way would be a second thing to disagree
+                 with `src/ui/uis.ts`, and props drifted between the two paths for
+                 real while both existed. -->
+            <slot name="board"></slot>
+          </div>
+        </main>
         <!-- Game modal host: the sanctioned full-board-region overlay layer for
              custom UIs. A game Teleports a blocking modal here
              (`<Teleport to="#bs-game-modal">`) to cover the board area.
@@ -361,19 +376,7 @@ const mobileToggleLabel = computed(() => {
              pointer-events are none on the host and auto on its children. -->
         <div class="game-shell__game-modal-host" id="bs-game-modal"></div>
 
-        <div
-          class="game-shell__zoom-container"
-          ref="zoomContainerEl"
-          :style="{ '--zoom-level': zoomLevel }"
-        >
-          <!-- ONE render path for the board: the registry's default UI, or the
-               dev switcher's selection. There is no second slot for naming a
-               default board — a second way would be a second thing to disagree
-               with `src/ui/uis.ts`, and props drifted between the two paths for
-               real while both existed. -->
-          <slot name="board"></slot>
-        </div>
-      </main>
+      </div>
 
       <!-- Scrim: active only on mobile when the player strip is expanded into the
            full overlay. Tapping it collapses back to the strip. Sibling of the
@@ -639,6 +642,15 @@ const mobileToggleLabel = computed(() => {
    board — grown mid-game, clamped, or manually zoomed — is larger than the
    region, this region scrolls (both axes): scroll is the contract after
    startup, never clipping and never auto-rescaling. */
+/* Keep game modals anchored to the visible board, outside its scrolling content. */
+.board-viewport {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  position: relative;
+  display: flex;
+}
+
 .boardregion {
   flex: 1;
   min-width: 0;
@@ -924,8 +936,8 @@ const mobileToggleLabel = computed(() => {
 }
 
 /* Sanctioned full-board-region overlay layer for custom-UI modals (see the
-   #bs-game-modal host in the template). Fills .boardregion exactly (like the
-   GameOverCard scrim) so a game modal covers the board but not the chrome, and
+   #bs-game-modal host in the template). Anchored to the visible board viewport,
+   independently of the board scroll position. Covers the board but not the chrome;
    `contain: layout` keeps a teleported position:fixed overlay confined to this
    box — the board cannot be escaped. */
 .game-shell__game-modal-host {
