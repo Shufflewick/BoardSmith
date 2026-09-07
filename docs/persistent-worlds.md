@@ -1195,21 +1195,30 @@ furniture before any later switch could run. `createWorld` passes
 
 ## Editing rules while a world is running (#201)
 
-`boardsmith dev` loads your Node runtime ONCE, before Vite starts. Your UI edits
-hot-reload; your **rule** edits do not. The world keeps running the rules this
-process loaded, and the page in front of you is drawn by the ones you just
-saved.
+`boardsmith dev` loads your Node runtime once, before Vite starts, so your UI
+edits hot-reload and your **rule** edits used to reach only the browser -- the
+new surface acting on the rules the process loaded at startup, and the world
+committing the result.
 
-So a rule edit **stops the world** rather than being half-applied: the host
-watches `src/rules`, says so in the terminal and in the page, and refuses every
-command until you restart. Nothing is lost -- the store is durable, and the next
-`boardsmith dev` comes back to the same world on the new rules, with everything
-in it.
+A rule edit is now a **coordinated reload**, and the order is the whole of the
+safety:
 
-The alternative would be a world committing the new UI's intent against the old
-rules: a verb the rules no longer have, or the new shape of one they do, made
-durable. A world made of two versions is the one thing it must never be, and a
-world you have to restart is a far smaller cost than one you cannot trust.
+1. **The new rules are loaded first.** A syntax error or a bundle that will not
+   build fails here, and your world is still running, still playable, on the
+   rules it had.
+2. **The old world is stopped**, which checkpoints whatever its resident tree
+   held -- nothing a command left in memory is lost with the isolate.
+3. **The same world is opened again on the new rules.** Genesis does not re-run;
+   a `stateVersion` bump is migrated or refused exactly as it is on a fresh
+   start (see above). Your world, its seats, its holdings and its queue are the
+   ones you were just playing.
+4. **Every page reloads**, because Vite has hot-reloaded the UI in the same
+   moment and a page that kept its socket would be new UI holding a seat in a
+   world that has just been rebuilt.
+
+If the new rules cannot run the world -- they declare a `stateVersion` with no
+migration, or they are not a world at all -- the refusal is printed and
+**nothing on disk changed**: the world is where the old host checkpointed it.
 
 ## Running a world today
 
