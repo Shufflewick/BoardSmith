@@ -265,7 +265,20 @@ useBoardActionBridge({
   controller: actionController,
   boardInteraction,
   isMyTurn: play.mayAct,
-  autoEndTurn: computed(() => true),
+  // A WORLD HAS NO TURN TO END, AND NOTHING TO AUTO-START (#212).
+  //
+  // `autoEndTurn` gates two behaviours a TABLE wants: auto-executing a sole
+  // no-selection `endTurn`, and auto-starting a sole available action so a
+  // player whose only move is obvious does not have to press twice. A world
+  // has neither. It has no turn, so there is no end to reach; and its offer is
+  // enumerated over what one seat can SEE, so "the only action" is a fact
+  // about a moment rather than an obvious next move -- a seat that has just
+  // paid for a building was put straight back into choosing another plot,
+  // which reads as an order they never placed.
+  //
+  // Entering an action stays entirely deliberate here: the action panel's own
+  // buttons and the board's candidates, which is what a world's player uses.
+  autoEndTurn: computed(() => false),
   actionMetadata: play.actionMetadata,
   availableActions: play.availableActions,
   disabledActions: play.disabledActions,
