@@ -90,8 +90,17 @@ export const MAX_ORDER_ID_LENGTH = 128;
  * downstream, so it is refused at the door rather than run without the
  * guarantee it was supposed to carry.
  */
-export function assertWorldOrder(order: WorldOrder): void {
-  if (typeof order.id !== "string" || order.id.length === 0 || order.id.length > MAX_ORDER_ID_LENGTH) {
+export function assertWorldOrder(order: unknown): asserts order is WorldOrder {
+  // `unknown`, because the caller is a HOST reading a frame off a wire: a
+  // command that arrived with no order at all is the commonest way for one to
+  // be unusable, and a signature that could not be handed it would push that
+  // check out to every host to write again -- differently.
+  const candidate = (typeof order === "object" && order !== null ? order : {}) as Partial<WorldOrder>;
+  if (
+    typeof candidate.id !== "string" ||
+    candidate.id.length === 0 ||
+    candidate.id.length > MAX_ORDER_ID_LENGTH
+  ) {
     throw worldRefusal(
       "invalid-order",
       `This command's order id is not usable: an order id is a non-empty string of at most ` +
@@ -100,7 +109,7 @@ export function assertWorldOrder(order: WorldOrder): void {
         "receipt instead of spending twice.",
     );
   }
-  if (typeof order.at !== "number" || !Number.isFinite(order.at)) {
+  if (typeof candidate.at !== "number" || !Number.isFinite(candidate.at)) {
     throw worldRefusal(
       "invalid-order",
       "This command's order carries no usable timestamp. `at` is the instant the page minted " +

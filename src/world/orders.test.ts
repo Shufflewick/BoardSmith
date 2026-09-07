@@ -42,6 +42,13 @@ describe("an order's identity", () => {
     expect(() => assertWorldOrder({ id: "order-1", at: Number.NaN })).toThrow(/timestamp/);
   });
 
+  it.each([undefined, null, "order-1", 7, []])(
+    "refuses %p, because a command that named no order at all is the commonest unusable one",
+    (bad) => {
+      expect(() => assertWorldOrder(bad)).toThrow(/order id/);
+    },
+  );
+
   it("classifies both as the CALLER's, so one bad request cannot park a world", () => {
     try {
       assertWorldOrder({ id: "", at: 1 });
