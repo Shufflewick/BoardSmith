@@ -19,6 +19,9 @@ import { nextTick, defineComponent, h } from 'vue';
 import GameShell from './GameShell.vue';
 import { defineGameUIs, defaultUI } from '../game-uis.js';
 
+// The shell observes panel size for its modal viewport; jsdom has no layout observer.
+vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
+
 const StubBoard = defineComponent({ name: 'StubBoard', setup: () => () => h('div', 'board') });
 const uis = defineGameUIs({ Stub: defaultUI(StubBoard) });
 

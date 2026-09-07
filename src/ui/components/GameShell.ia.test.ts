@@ -190,12 +190,11 @@ describe('GameShell actionbar — IA-04 constant panel footprint (#13)', () => {
     );
   });
 
-  it('observes nothing on the actionbar in the shared chrome either', () => {
-    expect(shellSource).not.toContain('actionbarEl');
+  it('keeps measured modal clearance out of the board footprint', () => {
     expect(shellSource).not.toContain('--action-panel-h');
   });
 
-  it('observes nothing on the actionbar — no ref, no ResizeObserver, no custom property', () => {
+  it('keeps panel measurement out of the table adapter', () => {
     expect(gameShellSource).not.toContain('actionbarEl');
     expect(gameShellSource).not.toContain('actionPanelHeight');
     expect(gameShellSource).not.toContain('--action-panel-h');

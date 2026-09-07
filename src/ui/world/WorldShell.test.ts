@@ -28,6 +28,9 @@ import { useToast } from '../composables/useToast.js';
  * is the shell's now, which is the whole point of the ticket. What it still
  * gets are the world-only props no table has.
  */
+// The shell observes panel size for its modal viewport; jsdom has no layout observer.
+vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
+
 const Rooms = defineComponent({
   props: {
     gameView: { type: null, required: true },

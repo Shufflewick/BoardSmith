@@ -14,15 +14,26 @@
  * included, since #357 re-points the platform's e2e specs at them and must not
  * be left selecting on classes.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mount } from '@vue/test-utils';
-import { h } from 'vue';
+import { h, nextTick } from 'vue';
 import PlayShell from './PlayShell.vue';
 import Toast from './Toast.vue';
 import DisabledReasonTooltip from './helpers/DisabledReasonTooltip.vue';
 import { GAME_CONTEXT_KEYS } from '../composables/useGameContext.js';
 import { useActionController } from '../composables/useActionController.js';
 import { ref, computed } from 'vue';
+
+class PanelResizeObserver {
+  static instances: PanelResizeObserver[] = [];
+  callback: () => void;
+  observed?: Element;
+  disconnect = vi.fn();
+  constructor(callback: () => void) { this.callback = callback; PanelResizeObserver.instances.push(this); }
+  observe(el: Element) { this.observed = el; }
+}
+beforeEach(() => { PanelResizeObserver.instances = []; vi.stubGlobal('ResizeObserver', PanelResizeObserver); });
+afterEach(() => vi.unstubAllGlobals());
 
 function controller() {
   return useActionController({
@@ -61,6 +72,30 @@ describe('the layout', () => {
   it('puts the game\'s board in the board slot, inside the zoom container', () => {
     const wrapper = mountShell();
     expect(wrapper.find('.game-shell__zoom-container .my-board').exists()).toBe(true);
+  });
+
+  it('keeps the modal host outside the board scroller and zoom container', () => {
+    const wrapper = mountShell();
+    const modal = wrapper.get('#bs-game-modal').element;
+    const board = wrapper.get('[data-testid="bs-board"]').element;
+    expect(board.contains(modal)).toBe(false);
+    expect(modal.parentElement).toBe(board.parentElement);
+  });
+
+  it('keeps modal controls above the action panel as it grows without resizing the board', async () => {
+    const wrapper = mountShell();
+    await nextTick();
+    const bar = wrapper.get('[data-testid="bs-actionbar"]').element;
+    const observer = PanelResizeObserver.instances.find(o => o.observed === bar);
+    expect(observer).toBeDefined();
+    vi.spyOn(bar, 'getBoundingClientRect').mockReturnValue({height:260} as DOMRect);
+    observer!.callback(); await nextTick();
+    expect(wrapper.get('#bs-game-modal').attributes('style')).toContain('bottom: 260px');
+    expect(wrapper.get('[data-testid="bs-board"]').attributes('style')).toBeUndefined();
+    vi.spyOn(bar, 'getBoundingClientRect').mockReturnValue({height:80} as DOMRect);
+    observer!.callback(); await nextTick();
+    expect(wrapper.get('#bs-game-modal').attributes('style')).toContain('bottom: 80px');
+    wrapper.unmount(); expect(observer!.disconnect).toHaveBeenCalled();
   });
 
   it('always hosts the modal target a game teleports into', () => {

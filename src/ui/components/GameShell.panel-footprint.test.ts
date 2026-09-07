@@ -179,7 +179,7 @@ describe('#13: the Action Panel reserves a constant, token-derived footprint', (
       .toBe(5 * row + 4 * gap + 2 * pad);
   });
 
-  it('nothing in the shell measures the Action Panel', () => {
+  it('does not feed action-panel measurements into board fitting', () => {
     expect(source).not.toContain('actionPanelHeight');
     expect(source).not.toContain('attachActionPanelObserver');
     // The suite has to catch this class of leftover on its own: `vue-tsc --noEmit`
