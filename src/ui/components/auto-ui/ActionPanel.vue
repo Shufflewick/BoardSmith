@@ -13,7 +13,7 @@
  * Requires: ActionPanel must be used inside a GameShell context where the
  * action controller is provided via inject('actionController').
  */
-import { ref, computed, watch, inject, nextTick } from 'vue';
+import { ref, computed, watch, inject, nextTick, useId } from 'vue';
 import { tryUseBoardInteraction } from '../../composables/useBoardInteraction';
 import { useAnimationEvents } from '../../composables/useAnimationEvents.js';
 import { resolveMultiSelectConfig } from '../../composables/actionControllerHelpers.js';
@@ -150,6 +150,17 @@ const multiSelectValues = computed<unknown[]>(
 );
 
 // Track current input values for number/text inputs (so Done button can submit them)
+/**
+ * THE ID A NUMBER OR TEXT EDITOR'S LABEL POINTS AT (#199).
+ *
+ * One per mounted panel, not per pick: the panel draws at most one editor at a
+ * time, so one id is enough -- and a stable one keeps a `for`/`id` pair from
+ * being rebuilt on every step of an action's walk. `useId` because a page may
+ * hold more than one panel (the dev host's seat frames), and two labels
+ * pointing at one id would send both to the same field.
+ */
+const editorInputId = `bs-editor-${useId()}`;
+
 const numberInputValue = ref<number | null>(null);
 const textInputValue = ref<string>('');
 
@@ -1324,14 +1335,23 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
           </span>
         </div>
 
-        <!-- Number input -->
+        <!-- Number input. #199: it says what it is ASKING FOR, like every other
+             pick, and the prompt is a real <label> bound to the field -- a line
+             of text above an input is a label to a sighted player and nothing
+             at all to a screen reader. The range hint stays, below the prompt
+             and above the row, because it is the rule and not the question. -->
         <div v-else-if="currentPick.type === 'number'" class="number-input">
+          <label class="selection-prompt" :for="editorInputId">
+            {{ currentPick.prompt || `Enter ${currentPick.name}` }}
+            <span v-if="currentPick.optional" class="optional-label">(optional)</span>
+          </label>
           <span v-if="currentPick.min !== undefined || currentPick.max !== undefined" class="input-hint">
             ({{ currentPick.min ?? '?' }}-{{ currentPick.max ?? '?' }}{{ currentPick.integer ? ', integer' : '' }})
           </span>
           <div class="input-row">
             <input
               type="number"
+              :id="editorInputId"
               v-model.number="numberInputValue"
               :min="currentPick.min"
               :max="currentPick.max"
@@ -1342,14 +1362,19 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
           </div>
         </div>
 
-        <!-- Text input -->
+        <!-- Text input. The same three lines, for the same reason (#199). -->
         <div v-else-if="currentPick.type === 'text'" class="text-input">
+          <label class="selection-prompt" :for="editorInputId">
+            {{ currentPick.prompt || `Enter ${currentPick.name}` }}
+            <span v-if="currentPick.optional" class="optional-label">(optional)</span>
+          </label>
           <span v-if="currentPick.minLength !== undefined || currentPick.maxLength !== undefined" class="input-hint">
             ({{ currentPick.minLength ?? '?' }}-{{ currentPick.maxLength ?? '?' }} chars)
           </span>
           <div class="input-row">
             <input
               type="text"
+              :id="editorInputId"
               v-model="textInputValue"
               :minlength="currentPick.minLength"
               :maxlength="currentPick.maxLength"
@@ -1700,6 +1725,28 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
   font-size: 0.9rem;
 }
 
+/* ISSUE 199: THE EDITORS ARE A COLUMN, AND THEY SAY SO.
+   Three rows -- the prompt, the range, the field and its Done -- and the gap is
+   what clears the focus ring. The ring is a `box-shadow` (see GameShell's
+   `:focus-visible`), so it is painted OUTSIDE the border box and no margin on a
+   sibling can be relied on to make room for it; `.input-hint` used to be an
+   inline span with a `margin-bottom` that did not apply to it at all, and the
+   ring crossed the hint the moment the field took focus. */
+.number-input,
+.text-input {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  align-items: flex-start;
+}
+
+.number-input .selection-prompt,
+.text-input .selection-prompt {
+  /* The panel's prompts do not wrap elsewhere, but an editor's is a full
+     sentence in a column rather than a word on a row of buttons. */
+  white-space: normal;
+}
+
 .number-input input,
 .text-input input {
   padding: 8px 12px;
@@ -1719,7 +1766,6 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
 .input-hint {
   color: var(--bsg-ink-2);
   font-size: 0.8rem;
-  margin-bottom: 6px;
 }
 
 .input-row {

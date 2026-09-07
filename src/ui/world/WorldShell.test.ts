@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
-import { defineComponent, h, nextTick } from 'vue';
+import { defineComponent, h, nextTick, Teleport } from 'vue';
 import { mount, flushPromises } from '@vue/test-utils';
 import WorldShell from './WorldShell.vue';
 import { useWorld, type WorldContext } from './useWorld.js';
@@ -87,6 +87,20 @@ function tell(wrapper: ReturnType<typeof mount>, data: unknown) {
 }
 
 /**
+ * Tell the shell what the world is, and wait for the BOARD.
+ *
+ * Two ticks, and the second is #204: the chrome arrives with the first view,
+ * and a board mounts one tick after it so a game's documented
+ * `<Teleport to="#bs-game-modal">` finds a host that is already in the
+ * document. A case that only wants the chrome (a seat list, a notice) still
+ * uses `tell` and one tick.
+ */
+async function drawn(wrapper: ReturnType<typeof mount>, data: unknown): Promise<void> {
+  tell(wrapper, data);
+  await flushPromises();
+}
+
+/**
  * A shell whose UI is a component NESTED inside another, reading the world
  * through `useWorld()` rather than through its props.
  *
@@ -152,8 +166,7 @@ describe('WorldShell', () => {
 
   it('renders the game\'s own UI with the world in its props', async () => {
     const wrapper = mountShell();
-    tell(wrapper, stateFrame());
-    await nextTick();
+    await drawn(wrapper, stateFrame());
     expect(wrapper.find('.rooms').exists()).toBe(true);
     expect(wrapper.find('.seat').text()).toBe('4');
     expect(wrapper.find('.title').text()).toBe('Gloamhall Rooms');
@@ -169,8 +182,7 @@ describe('WorldShell', () => {
 
   it('hands presence to a nested component through useWorld()', async () => {
     const wrapper = mountNested('nested-awake', (world) => (world.presence.value ?? []).join(','));
-    tell(wrapper, stateFrame());
-    await nextTick();
+    await drawn(wrapper, stateFrame());
     expect(wrapper.find('.nested-awake').text()).toBe('2,4');
     wrapper.unmount();
   });
@@ -215,8 +227,7 @@ describe('WorldShell', () => {
 
   it('hands the same world to a nested component through useWorld()', async () => {
     const wrapper = mountNested('nested-seat', (world) => String(world.seat.value));
-    tell(wrapper, stateFrame());
-    await nextTick();
+    await drawn(wrapper, stateFrame());
     expect(wrapper.find('.nested-seat').text()).toBe('4');
     wrapper.unmount();
   });
@@ -251,7 +262,7 @@ describe('WorldShell — narration (#331)', () => {
     tell(wrapper, stateFrame());
     narrate(wrapper, [{ scope: 'room:hall', payload: { said: 'hello' } }]);
     narrate(wrapper, [{ scope: 'world', payload: { dawn: true } }]);
-    await nextTick();
+    await flushPromises();
 
     expect(wrapper.find('.narration').text()).toBe(
       'room:hall:{"said":"hello"}|world:{"dawn":true}',
@@ -268,7 +279,7 @@ describe('WorldShell — narration (#331)', () => {
       { scope: 'room:hall', payload: {} },
       { scope: 'world', payload: {} },
     ]);
-    await nextTick();
+    await flushPromises();
 
     expect(wrapper.find('.nested-narration').text()).toBe('room:hall,world');
     wrapper.unmount();
@@ -303,8 +314,7 @@ describe('WorldShell — the shared chrome (#170)', () => {
 
   it('draws the seat list, the log and the action bar the table draws', async () => {
     const wrapper = mountShell();
-    tell(wrapper, stateFrame());
-    await nextTick();
+    await drawn(wrapper, stateFrame());
     expect(wrapper.find('[data-testid="bs-seats"]').exists()).toBe(true);
     expect(wrapper.find('[data-testid="bs-log"]').exists()).toBe(true);
     expect(wrapper.find('[data-testid="bs-action-panel"]').exists()).toBe(true);
@@ -459,8 +469,7 @@ describe('WorldShell — the shared chrome (#170)', () => {
         displayName: 'Gloamhall',
       },
     });
-    tell(wrapper, stateFrame());
-    await nextTick();
+    await drawn(wrapper, stateFrame());
     expect(wrapper.text()).toContain('defaultUI()');
     wrapper.unmount();
   });
@@ -548,6 +557,65 @@ describe('WorldShell — recovering an order left over from the last page (#195)
     await flushPromises();
     expect(toasts.value.slice(before)).toEqual([]);
     expect(wrapper.text()).not.toContain('Checking what became of something you sent');
+    wrapper.unmount();
+  });
+});
+
+/**
+ * #204: A WORLD'S CUSTOM BOARD MAY USE THE DOCUMENTED PLAIN TELEPORT.
+ *
+ * `<Teleport to="#bs-game-modal">` is what a game is told to write, and the
+ * HOST is the shell's (`PlayShell` renders it). A board that mounts in the same
+ * pass as the shell resolves that selector against a document the shell's own
+ * DOM is not in yet: Vue mounts the Teleport with a null target, warns twice,
+ * and the modal is simply absent when the player opens it.
+ *
+ * `GameShell` has held the board back one tick for exactly this since it was
+ * written. This is the same guarantee, in the shell a world gets -- asserted
+ * with a REAL Teleport rather than a stub, and with no target pre-created by
+ * the test, because a pre-created one is the bug wearing a fixture's clothes.
+ */
+describe('WorldShell — the shell owns the modal host a board teleports into (#204)', () => {
+  const Board = defineComponent({
+    setup() {
+      return () =>
+        h('div', { class: 'rooms' }, [
+          h(Teleport, { to: '#bs-game-modal' }, [h('p', { class: 'modal-line' }, 'A door.')]),
+        ]);
+    },
+  });
+
+  it('mounts a board whose Teleport finds the shell\'s host, with no Vue warning', async () => {
+    const warnings: string[] = [];
+    const warn = vi.spyOn(console, 'warn').mockImplementation((...args: unknown[]) => {
+      warnings.push(args.map(String).join(' '));
+    });
+    const errors: string[] = [];
+    const error = vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
+      errors.push(args.map(String).join(' '));
+    });
+
+    const wrapper = mount(WorldShell, {
+      props: {
+        uis: defineGameUIs({ Board: defaultUI(Board) }),
+        displayName: 'Gloamhall',
+      },
+      attachTo: document.body,
+    });
+    tell(wrapper, stateFrame());
+    await flushPromises();
+
+    const said = [...warnings, ...errors].join('\n');
+    expect(said).not.toContain('Failed to locate Teleport target');
+    expect(said).not.toContain('Invalid Teleport target');
+
+    // AND IT LANDED IN THE HOST, which is the half a silent warning would hide.
+    const host = document.querySelector('#bs-game-modal');
+    expect(host, 'the shell renders the modal host').not.toBeNull();
+    expect(host?.querySelector('.modal-line')?.textContent).toBe('A door.');
+
+    warn.mockRestore();
+    error.mockRestore();
     wrapper.unmount();
   });
 });
