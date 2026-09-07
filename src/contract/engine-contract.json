@@ -1,7 +1,7 @@
 {
-  "revision": 42,
+  "revision": 43,
   "bundleProtocol": 2,
-  "surfaceHash": "cea0ff4b43a08441",
+  "surfaceHash": "50aca0e8b24c7afd",
   "payloadHash": "67a7a5d320b9ce2b",
   "history": [
     {
@@ -339,6 +339,14 @@
       "surfaceHash": "cea0ff4b43a08441",
       "payloadHash": "67a7a5d320b9ce2b",
       "summary": "A world's OFFER is fingerprinted alongside its view. offersFor has decided which verbs every seat is given since #169 and no fixture reached it, so #187's fix (a disabled action whose every candidate is greyed is offered with its reason, while an enabled one with no answerable question is still dropped) changed what every seat in every world sees and moved neither hash. The payload fixture now projects one seat's offer over four verbs covering every decision the enumerator makes, and a coverage table plus test makes any platform-facing world verb the fixture does not drive fail the suite instead of being described in a comment."
+    },
+    {
+      "revision": 43,
+      "date": "2026-09-07",
+      "bundleProtocol": 2,
+      "surfaceHash": "50aca0e8b24c7afd",
+      "payloadHash": "67a7a5d320b9ce2b",
+      "summary": "worlds: player commands carry a durable order identity and hosts answer a repeat from its receipt (#195); world.stateVersion is declared in the rules and derived into the manifest (#194)"
     }
   ]
 }

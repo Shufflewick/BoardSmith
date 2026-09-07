@@ -193,6 +193,73 @@ describe('the local world store', () => {
     });
   });
 
+  describe('the receipt ledger (#195)', () => {
+    beforeEach(async () => {
+      await store.createAll({ 'room/a': { parentId: 1, json: { n: 0 } } });
+    });
+
+    it('writes a receipt in the same transaction as the effects it belongs to', async () => {
+      await store.writeCheckpoint(
+        { 'room/a': '{"n":1}' },
+        { receipt: { orderId: 'o1', player: 'seat-3', at: 500, message: 'Colony founded.' } },
+      );
+      expect(store.receipt('seat-3', 'o1')).toEqual({
+        orderId: 'o1',
+        player: 'seat-3',
+        at: 500,
+        message: 'Colony founded.',
+      });
+    });
+
+    it('writes no receipt when the checkpoint is refused, so an order nothing changed has none', async () => {
+      await expect(
+        store.writeCheckpoint(
+          { 'room/ghost': '{}' },
+          { receipt: { orderId: 'o1', player: 'seat-3', at: 500 } },
+        ),
+      ).rejects.toThrow();
+      expect(store.receipt('seat-3', 'o1')).toBeUndefined();
+    });
+
+    it('keeps one seat out of another seat\'s ledger', async () => {
+      await store.writeCheckpoint({}, { receipt: { orderId: 'o1', player: 'seat-3', at: 500 } });
+      expect(store.receipt('seat-4', 'o1')).toBeUndefined();
+    });
+
+    it('keeps a receipt with no message, which is still an answer', async () => {
+      await store.writeCheckpoint({}, { receipt: { orderId: 'o1', player: 'seat-3', at: 500 } });
+      expect(store.receipt('seat-3', 'o1')).toEqual({ orderId: 'o1', player: 'seat-3', at: 500 });
+    });
+
+    it('survives a reopen, which is the whole point of a durable receipt', async () => {
+      await store.writeCheckpoint({}, { receipt: { orderId: 'o1', player: 'seat-3', at: 500 } });
+      store.close();
+      store = openWorldStore(worldStorePath(root), BUDGETS);
+      expect(store.receipt('seat-3', 'o1')?.orderId).toBe('o1');
+    });
+
+    it('starts with a floor of zero: a new world has swept nothing', () => {
+      expect(store.receiptFloorAt()).toBe(0);
+    });
+
+    it('sweeps to the floor it is given and remembers where it swept to', async () => {
+      await store.writeCheckpoint({}, { receipt: { orderId: 'old', player: 'seat-3', at: 100 } });
+      await store.writeCheckpoint(
+        {},
+        { receipt: { orderId: 'new', player: 'seat-3', at: 900 }, receiptFloorAt: 500 },
+      );
+      expect(store.receipt('seat-3', 'old')).toBeUndefined();
+      expect(store.receipt('seat-3', 'new')?.orderId).toBe('new');
+      expect(store.receiptFloorAt()).toBe(500);
+    });
+
+    it('keeps a receipt written exactly at the floor', async () => {
+      await store.writeCheckpoint({}, { receipt: { orderId: 'edge', player: 'seat-3', at: 500 } });
+      await store.writeCheckpoint({}, { receiptFloorAt: 500 });
+      expect(store.receipt('seat-3', 'edge')?.orderId).toBe('edge');
+    });
+  });
+
   describe('the schedule', () => {
     it('orders by (due, seq), so two events in one millisecond keep their insertion order', async () => {
       await store.writeCheckpoint(
@@ -315,6 +382,14 @@ describe('the local world store', () => {
     it('is refused on a project that declares no world, rather than quietly doing nothing', () => {
       expect(() => assertWorldProjectForReset(true)).not.toThrow();
       expect(() => assertWorldProjectForReset(false)).toThrow(/does not declare "backend": "world"/);
+    });
+  });
+
+  describe('shutting down', () => {
+    it('#197: closes idempotently, because a signal can arrive twice', () => {
+      const other = openWorldStore(join(root, 'twice', 'world.db'), BUDGETS);
+      other.close();
+      expect(() => other.close()).not.toThrow();
     });
   });
 

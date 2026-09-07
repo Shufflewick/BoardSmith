@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi, afterEach } from 'vitest';
+import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest';
 import { defineComponent, h, nextTick } from 'vue';
 import { mount, flushPromises } from '@vue/test-utils';
 import WorldShell from './WorldShell.vue';
 import { useWorld, type WorldContext } from './useWorld.js';
 import { WORLD_HOST_SOURCE, WORLD_UI_SOURCE } from './worldProtocol.js';
+import { orderBookKey } from './orderBook.js';
 import { defineGameUIs, defaultUI } from '../game-uis.js';
 import { useToast } from '../composables/useToast.js';
 
@@ -107,6 +108,34 @@ function mountNested(className: string, read: (world: WorldContext) => string) {
   });
 }
 
+/**
+ * A MOUNTED SHELL THAT HAS BEEN TOLD WHAT THE WORLD IS, with everything it
+ * posts to the host recorded.
+ *
+ * Four cases need exactly this and differ only in what they do next, so it is
+ * written once: a second copy is a copy free to drift into proving something
+ * the first does not.
+ */
+async function watching(): Promise<{
+  wrapper: ReturnType<typeof mountShell>;
+  posted: any[];
+  done(): void;
+}> {
+  const posted: any[] = [];
+  const spy = vi.spyOn(window.parent, 'postMessage').mockImplementation((m) => posted.push(m));
+  const wrapper = mountShell();
+  tell(wrapper, stateFrame());
+  await flushPromises();
+  return {
+    wrapper,
+    posted,
+    done() {
+      spy.mockRestore();
+      wrapper.unmount();
+    },
+  };
+}
+
 describe('WorldShell', () => {
   afterEach(() => {
     vi.useRealTimers();
@@ -147,16 +176,11 @@ describe('WorldShell', () => {
   });
 
   it('sends an action the game\'s UI emitted', async () => {
-    const posted: any[] = [];
-    const spy = vi.spyOn(window.parent, 'postMessage').mockImplementation((m) => posted.push(m));
-    const wrapper = mountShell();
-    tell(wrapper, stateFrame());
-    await nextTick();
+    const { wrapper, posted, done } = await watching();
     await wrapper.find('.go').trigger('click');
     const command = posted.find((m) => m.type === 'world_command');
     expect(command).toMatchObject({ source: WORLD_UI_SOURCE, action: 'move', args: { to: 'cellar' } });
-    spy.mockRestore();
-    wrapper.unmount();
+    done();
   });
 
   it('shows the refusal the host worded, and no board', async () => {
@@ -272,6 +296,11 @@ describe('WorldShell — narration (#331)', () => {
  * that did not even match. These are the surfaces they no longer have to.
  */
 describe('WorldShell — the shared chrome (#170)', () => {
+  // A page finds the orders the LAST page left unanswered (#195), and these
+  // cases are about the press, not about recovery -- so each starts with a
+  // book nothing is outstanding in.
+  beforeEach(() => localStorage.clear());
+
   it('draws the seat list, the log and the action bar the table draws', async () => {
     const wrapper = mountShell();
     tell(wrapper, stateFrame());
@@ -362,13 +391,9 @@ describe('WorldShell — the shared chrome (#170)', () => {
     press: (wrapper: ReturnType<typeof mountShell>) => Promise<void>,
     sentence: string,
   ): Promise<{ messages: unknown[]; types: unknown[] }> {
-    const posted: any[] = [];
-    const spy = vi.spyOn(window.parent, 'postMessage').mockImplementation((m) => posted.push(m));
     const { toasts } = useToast();
     const before = toasts.value.length;
-    const wrapper = mountShell();
-    tell(wrapper, stateFrame());
-    await nextTick();
+    const { wrapper, posted, done } = await watching();
 
     await press(wrapper);
     await nextTick();
@@ -388,8 +413,7 @@ describe('WorldShell — the shared chrome (#170)', () => {
     await flushPromises();
 
     const said = toasts.value.slice(before);
-    spy.mockRestore();
-    wrapper.unmount();
+    done();
     return { messages: said.map((t) => t.message), types: said.map((t) => t.type) };
   }
 
@@ -457,6 +481,73 @@ describe('WorldShell — the chrome has tokens to be drawn in', () => {
     const style = document.getElementById('bsg-tokens');
     expect(style, 'no --bsg-* tokens: the shared chrome would render unstyled').not.toBeNull();
     expect(style!.textContent).toContain('--bsg-bg');
+    wrapper.unmount();
+  });
+});
+
+/**
+ * #195: A PAGE THAT RELOADED MID-ORDER FINISHES THE SENTENCE.
+ *
+ * The shell's own half of it: what the player SEES while an uncertain order is
+ * being asked about again, and what they are told when the world answers. What
+ * they are never shown is the order itself -- no sequence number, no retry
+ * button, no question in the middle of a game.
+ */
+describe('WorldShell — recovering an order left over from the last page (#195)', () => {
+  beforeEach(() => localStorage.clear());
+  afterEach(() => localStorage.clear());
+
+  /** The book the shipped order book keeps, as the last page left it. */
+  function leaveUnanswered(action: string, args: Record<string, unknown>): void {
+    localStorage.setItem(
+      orderBookKey(location.pathname),
+      JSON.stringify([{ id: 'o-left-over', at: 1, action, args }]),
+    );
+  }
+
+  it('asks the world again, with the same order and the same arguments', async () => {
+    leaveUnanswered('found', { name: 'Ceres' });
+    const { wrapper, posted, done } = await watching();
+
+    const command = posted.find((m) => m.type === 'world_command');
+    expect(command).toMatchObject({
+      order: { id: 'o-left-over', at: 1 },
+      action: 'found',
+      args: { name: 'Ceres' },
+    });
+    expect(wrapper.text()).toContain('Checking what became of something you sent');
+    done();
+  });
+
+  it('says an order had already gone through, rather than letting it be pressed again', async () => {
+    leaveUnanswered('found', {});
+    const { toasts } = useToast();
+    const before = toasts.value.length;
+    const { wrapper, posted, done } = await watching();
+    const command = posted.find((m) => m.type === 'world_command');
+    tell(wrapper, {
+      source: WORLD_HOST_SOURCE,
+      type: 'world_response',
+      requestId: command.requestId,
+      ok: true,
+      replayed: true,
+    });
+    await flushPromises();
+
+    const said = toasts.value.slice(before).map((t) => t.message);
+    expect(said.join(' ')).toContain('had already gone through');
+    expect(wrapper.text()).not.toContain('Checking what became of something you sent');
+    done();
+  });
+
+  it('says nothing at all when there is nothing to recover', async () => {
+    const { toasts } = useToast();
+    const before = toasts.value.length;
+    const wrapper = mountShell();
+    tell(wrapper, stateFrame());
+    await flushPromises();
+    expect(toasts.value.slice(before)).toEqual([]);
+    expect(wrapper.text()).not.toContain('Checking what became of something you sent');
     wrapper.unmount();
   });
 });

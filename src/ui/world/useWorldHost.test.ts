@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { useWorldHost } from './useWorldHost.js';
+import { createOrderBook, type OrderBook, type OrderStorage } from './orderBook.js';
 import {
   WORLD_HOST_SOURCE,
   WORLD_NARRATION_KEPT,
@@ -43,6 +44,16 @@ function stateFrame(over: Partial<WorldStateMessage> = {}): WorldStateMessage {
   };
 }
 
+/** A browser's storage, as a Map. */
+function memoryStorage(): OrderStorage {
+  const store = new Map<string, string>();
+  return {
+    getItem: (key) => store.get(key) ?? null,
+    setItem: (key, value) => void store.set(key, value),
+    removeItem: (key) => void store.delete(key),
+  };
+}
+
 function deliver(host: ReturnType<typeof useWorldHost>, data: unknown, origin = HOST_ORIGIN) {
   host.handleMessage({ origin, data } as MessageEvent);
 }
@@ -58,10 +69,14 @@ describe('useWorldHost', () => {
     vi.useRealTimers();
   });
 
-  function make(trustedOrigins?: string[]) {
+  function make(trustedOrigins?: string[], orders?: OrderBook) {
     return useWorldHost({
       post: (message) => posted.push(message),
       trustedOrigins,
+      // A book per host unless a case is ABOUT what the last page left behind:
+      // the shipped one is the browser's own storage, which two tests in one
+      // jsdom would share.
+      orders: orders ?? createOrderBook({ storage: memoryStorage() }),
     });
   }
 
@@ -355,5 +370,173 @@ describe('narration can carry a sentence', () => {
       text: 'The fire gutters.',
       type: 'ambient',
     });
+  });
+});
+
+/**
+ * #195: THE PAGE'S HALF OF AN ORDER THAT SURVIVES A LOST REPLY.
+ *
+ * The host's half -- answer a repeat from the order's receipt -- is asserted in
+ * `cli/dev-host/world-host.test.ts` against a real store. This is what the page
+ * has to do for that to be reachable: name every order durably, keep the ones
+ * it heard no answer to, and ask about them again the moment the world is
+ * listening. Nothing here asks the player anything.
+ */
+describe('useWorldHost — an order that outlives the page (#195)', () => {
+  let posted: any[];
+  let storage: OrderStorage;
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    posted = [];
+    storage = memoryStorage();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  /** A page. A SECOND call is the same browser after a reload: same storage,
+   *  new everything else. */
+  function page() {
+    return useWorldHost({
+      post: (message) => posted.push(message),
+      orders: createOrderBook({ storage, key: BOOK_KEY }),
+    });
+  }
+
+  const BOOK_KEY = 'orders';
+  const commands = () => posted.filter((message) => message.type === 'world_command');
+
+  function answer(host: ReturnType<typeof useWorldHost>, over: Record<string, unknown> = {}) {
+    const command = commands()[commands().length - 1];
+    deliver(host, {
+      source: WORLD_HOST_SOURCE,
+      type: 'world_response',
+      requestId: command.requestId,
+      ok: true,
+      ...over,
+    });
+  }
+
+  it('names every command with a durable order id, written down before it is sent', () => {
+    const host = page();
+    void host.act('found', { name: 'Ceres' });
+    const [command] = commands();
+    expect(typeof command.order.id).toBe('string');
+    expect(command.order.id.length).toBeGreaterThan(0);
+    expect(typeof command.order.at).toBe('number');
+    // In the book before the answer, because that is the window it exists for.
+    expect(JSON.parse(storage.getItem(BOOK_KEY) ?? '[]')).toHaveLength(1);
+  });
+
+  it('forgets an order the world answered, taken or refused', async () => {
+    const host = page();
+    const taken = host.act('found', {});
+    answer(host);
+    await taken;
+    const refused = host.act('build', {});
+    answer(host, { ok: false, message: 'Your holding is bare.' });
+    await refused;
+
+    // A NEW PAGE OVER THE SAME STORAGE has nothing to ask about.
+    const reloaded = page();
+    reloaded.start();
+    deliver(reloaded, stateFrame());
+    expect(commands()).toHaveLength(2);
+  });
+
+  it('keeps an order the world never answered, and asks about it again after a reload', async () => {
+    const host = page();
+    const uncertain = host.act('found', { name: 'Ceres' });
+    const sent = commands()[0];
+    // Silence: the reply was lost. The command times out with nobody to hear.
+    vi.advanceTimersByTime(60_000);
+    expect((await uncertain).ok).toBe(false);
+
+    const reloaded = page();
+    reloaded.start();
+    deliver(reloaded, stateFrame());
+    await vi.advanceTimersByTimeAsync(0);
+
+    const retry = commands()[commands().length - 1];
+    expect(retry.order).toEqual(sent.order);
+    expect(retry.action).toBe('found');
+    // AND THE PLAYER CHOSE NOTHING AGAIN: the arguments came out of the book.
+    expect(retry.args).toEqual({ name: 'Ceres' });
+    expect(reloaded.recovering.value).toBe(true);
+  });
+
+  /**
+   * A page that sent an order and heard nothing, then reloaded. Every case
+   * below starts here; what they differ about is what the world says next.
+   */
+  async function reloadedHoldingAnOrder() {
+    page().act('found', {});
+    vi.advanceTimersByTime(60_000);
+    const before = commands().length;
+    const reloaded = page();
+    reloaded.start();
+    deliver(reloaded, stateFrame());
+    await vi.advanceTimersByTimeAsync(0);
+    return { reloaded, before };
+  }
+
+  it('says what became of a recovered order, and stops recovering', async () => {
+    const { reloaded } = await reloadedHoldingAnOrder();
+    answer(reloaded, { ok: true, replayed: true });
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(reloaded.recovering.value).toBe(false);
+    expect(reloaded.recoveryNotice.value).toContain('had already gone through');
+  });
+
+  it('asks once, not on every frame the world sends', async () => {
+    const { reloaded, before } = await reloadedHoldingAnOrder();
+    deliver(reloaded, stateFrame());
+    deliver(reloaded, stateFrame());
+    await vi.advanceTimersByTimeAsync(0);
+    expect(commands().length).toBe(before + 1);
+  });
+
+  it('waits for a seat: a command needs one, so an unseated frame recovers nothing', async () => {
+    page().act('found', {});
+    vi.advanceTimersByTime(60_000);
+    const before = commands().length;
+
+    const reloaded = page();
+    reloaded.start();
+    deliver(reloaded, stateFrame({ phase: 'attaching', seat: null }));
+    await vi.advanceTimersByTimeAsync(0);
+    expect(commands().length).toBe(before);
+
+    deliver(reloaded, stateFrame());
+    await vi.advanceTimersByTimeAsync(0);
+    expect(commands().length).toBe(before + 1);
+  });
+
+  it('gives up on an order nothing can answer, rather than asking forever', async () => {
+    const { reloaded } = await reloadedHoldingAnOrder();
+    answer(reloaded, {
+      ok: false,
+      code: 'order-outcome-unknown',
+      message: 'This world can no longer say whether that order went through.',
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(reloaded.recoveryNotice.value).toContain('can no longer say');
+
+    // A third page asks about nothing: the question has been answered, even
+    // though the answer is "nobody knows".
+    const third = page();
+    const before = commands().length;
+    third.start();
+    deliver(third, stateFrame());
+    await vi.advanceTimersByTimeAsync(0);
+    expect(commands().length).toBe(before);
+  });
+
+  it('reports a browser that cannot keep a book, rather than implying recovery it cannot do', () => {
+    const blind = useWorldHost({ post: () => {}, orders: createOrderBook({ storage: null }) });
+    expect(blind.ordersDurable).toBe(false);
+    expect(page().ordersDurable).toBe(true);
   });
 });

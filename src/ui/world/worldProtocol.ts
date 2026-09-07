@@ -28,6 +28,7 @@
  */
 
 import type { ActionMetadata } from '../../session/types.js';
+import type { WorldOrder } from '../../world/orders.js';
 
 /** What the HOST page stamps on everything it sends into the world frame. */
 export const WORLD_HOST_SOURCE = 'shufflewick-world';
@@ -218,6 +219,17 @@ interface WorldResponseMessage {
   readonly requestId: string;
   readonly ok: boolean;
   readonly message?: string;
+  /** The refusal's code, when the world refused. `WorldRefusalCode` in
+   *  `boardsmith/world`; a string here because a UI switches on it and must not
+   *  fail to parse an answer from a host that knows a code it does not. */
+  readonly code?: string;
+  /**
+   * TRUE WHEN THIS ANSWER CAME FROM AN ORDER'S RECEIPT rather than from running
+   * it (#195): the world had already committed this order, so the handler did
+   * not run again. A UI reports a recovered order differently from a fresh one
+   * -- "that had already gone through" is not "done".
+   */
+  readonly replayed?: boolean;
 }
 
 /**
@@ -239,6 +251,16 @@ interface WorldCommandMessage {
   readonly source: typeof WORLD_UI_SOURCE;
   readonly type: 'world_command';
   readonly requestId: string;
+  /**
+   * THE ORDER'S DURABLE IDENTITY (#195).
+   *
+   * Minted by the page and written down BEFORE the command is sent, so a repeat
+   * after a lost reply or a reload carries the same one -- and the host answers
+   * it from the order's receipt instead of running it a second time.
+   * `requestId` beside it is not a substitute: it correlates one answer to one
+   * promise inside one page load, and is gone the moment the page is.
+   */
+  readonly order: WorldOrder;
   /** The action's name, from the offer this seat was given. */
   readonly action: string;
   /** Every selection's resolved value, by selection name. An element selection
@@ -261,4 +283,8 @@ export type WorldUiMessage = WorldCommandMessage | WorldReadyMessage;
 export interface WorldActionOutcome {
   readonly ok: boolean;
   readonly message?: string;
+  readonly code?: string;
+  /** True when the world answered from this order's receipt rather than by
+   *  running it again (#195). */
+  readonly replayed?: boolean;
 }

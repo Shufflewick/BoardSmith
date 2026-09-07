@@ -27,10 +27,12 @@ import {
   worldAction,
   worldBudgets,
   worldClockAction,
+  type WorldBudgets,
   type WorldDefinition,
 } from '../../world/index.js';
 import { openWorldStore, worldStorePath, type LocalWorldStore } from './world-store.js';
-import { LocalWorldHost, devWorldPlayer, type WorldDevClock } from './world-host.js';
+import type { WorldDevClock } from './node-world-clock.js';
+import { LocalWorldHost, devWorldPlayer } from './world-host.js';
 
 // ── A world bundle, in the shape a real one exports ─────────────────────────
 
@@ -138,6 +140,19 @@ function testClock(): WorldDevClock & { advance(ms: number): void; fireArmed(): 
   };
 }
 
+/**
+ * A FRESH ORDER IDENTITY, one per send (#195).
+ *
+ * Every player command carries one, and two presses of the same button are two
+ * orders -- so a test that sends twice and expects two effects mints twice,
+ * exactly as the page does. The cases that are ABOUT a repeat name their own id.
+ */
+let orderCounter = 0;
+function nextOrder(): { id: string; at: number } {
+  orderCounter += 1;
+  return { id: `order-${orderCounter}`, at: 0 };
+}
+
 interface Sent {
   clientId: string;
   message: Record<string, unknown>;
@@ -147,8 +162,9 @@ function openHost(options: {
   dir: string;
   definition?: ConstructorParameters<typeof LocalWorldHost>[0]['definition'];
   clock?: WorldDevClock;
+  budgets?: WorldBudgets;
 }): { host: LocalWorldHost; store: LocalWorldStore; sent: Sent[] } {
-  const budgets = worldBudgets();
+  const budgets = options.budgets ?? worldBudgets();
   const store = openWorldStore(worldStorePath(options.dir), budgets);
   const sent: Sent[] = [];
   const host = new LocalWorldHost({
@@ -203,7 +219,7 @@ describe('#167: genesis runs once, into the local store', () => {
     const second = openHost({ dir });
     await second.host.start();
     await second.host.handleMessage('c1', { type: 'hello' });
-    await second.host.handleMessage('c1', { type: 'action', requestId: 'r1', action: 'chop', args: {} });
+    await second.host.handleMessage('c1', { type: 'action', order: nextOrder(), requestId: 'r1', action: 'chop', args: {} });
     const state = last(second.sent, 'c1', 'world_state');
     expect(JSON.stringify(state?.view)).toContain('"logs":1');
     await second.host.close();
@@ -214,7 +230,7 @@ describe('#167: an action is dispatched through its ordered declaration, then ru
   it('changes the world, pushes the acting seat a new view, and narrates', async () => {
     const { host, sent } = await attached({ dir });
 
-    await host.handleMessage('c1', { type: 'action', requestId: 'r1', action: 'chop', args: {} });
+    await host.handleMessage('c1', { type: 'action', order: nextOrder(), requestId: 'r1', action: 'chop', args: {} });
 
     expect(last(sent, 'c1', 'world_response')).toMatchObject({ requestId: 'r1', ok: true });
     expect(JSON.stringify(last(sent, 'c1', 'world_state')?.view)).toContain('"logs":1');
@@ -287,18 +303,30 @@ describe('#167: presence is the seats this host has open', () => {
     });
     const { host } = await attached({ dir, definition });
     await host.handleMessage('c2', { type: 'hello' });
-    await host.handleMessage('c1', { type: 'action', requestId: 'r1', action: 'roll', args: {} });
+    await host.handleMessage('c1', { type: 'action', order: nextOrder(), requestId: 'r1', action: 'roll', args: {} });
     expect(seen).toEqual([[1, 2]]);
     await host.close();
   });
 });
 
 describe('#167: scheduled events fire on their due time', () => {
-  it('arms a timer for the event a command scheduled, and runs it when it comes due', async () => {
+  /** A world with one log banked on a slow burn: the state both cases below
+   *  start from, and the one thing they differ about is what happens next. */
+  async function banked() {
     const clock = testClock();
-    const { host, sent } = await attached({ dir, clock });
+    const opened = await attached({ dir, clock });
+    await opened.host.handleMessage('c1', {
+      type: 'action',
+      order: nextOrder(),
+      requestId: 'r1',
+      action: 'bank',
+      args: {},
+    });
+    return { ...opened, clock };
+  }
 
-    await host.handleMessage('c1', { type: 'action', requestId: 'r1', action: 'bank', args: {} });
+  it('arms a timer for the event a command scheduled, and runs it when it comes due', async () => {
+    const { host, sent, clock } = await banked();
     expect(clock.armedDelay).toBe(600_000);
     expect(JSON.stringify(last(sent, 'c1', 'world_state')?.view)).toContain('"burns":0');
 
@@ -310,9 +338,7 @@ describe('#167: scheduled events fire on their due time', () => {
   });
 
   it('"fire due events now" moves the world\'s clock to the due instant instead of waiting', async () => {
-    const clock = testClock();
-    const { host, sent } = await attached({ dir, clock });
-    await host.handleMessage('c1', { type: 'action', requestId: 'r1', action: 'bank', args: {} });
+    const { host, sent } = await banked();
 
     // NOT A FABRICATED TICK. The world's clock jumps to the moment the event
     // was due, so the handler receives its own `due` and the world computes
@@ -334,7 +360,7 @@ describe('#167: scheduled events fire on their due time', () => {
 describe('#167: wake from parked really drops residency', () => {
   it('rehydrates the world from the store and answers the same view', async () => {
     const { host, sent } = await attached({ dir });
-    await host.handleMessage('c1', { type: 'action', requestId: 'r1', action: 'chop', args: {} });
+    await host.handleMessage('c1', { type: 'action', order: nextOrder(), requestId: 'r1', action: 'chop', args: {} });
     expect(host.residency().length).toBeGreaterThan(0);
 
     await host.handleMessage('c1', { type: 'wake' });
@@ -344,7 +370,7 @@ describe('#167: wake from parked really drops residency', () => {
     // that finds an `{ __elementId }` that never adopted.
     expect(host.residencyBeforeLastWake()).toBeGreaterThan(0);
     expect(JSON.stringify(last(sent, 'c1', 'world_state')?.view)).toContain('"logs":1');
-    await host.handleMessage('c1', { type: 'action', requestId: 'r2', action: 'chop', args: {} });
+    await host.handleMessage('c1', { type: 'action', order: nextOrder(), requestId: 'r2', action: 'chop', args: {} });
     expect(JSON.stringify(last(sent, 'c1', 'world_state')?.view)).toContain('"logs":2');
     await host.close();
   });
@@ -355,8 +381,8 @@ describe('#167: the world is where it was left after a restart', () => {
     const first = openHost({ dir });
     await first.host.start();
     await first.host.handleMessage('c1', { type: 'hello' });
-    await first.host.handleMessage('c1', { type: 'action', requestId: 'r1', action: 'chop', args: {} });
-    await first.host.handleMessage('c1', { type: 'action', requestId: 'r2', action: 'bank', args: {} });
+    await first.host.handleMessage('c1', { type: 'action', order: nextOrder(), requestId: 'r1', action: 'chop', args: {} });
+    await first.host.handleMessage('c1', { type: 'action', order: nextOrder(), requestId: 'r2', action: 'bank', args: {} });
     await first.host.close();
 
     const second = openHost({ dir });
@@ -388,7 +414,7 @@ describe('#167: the refusals a bundle hits on the platform are hit locally, in t
 
   it('clock-only-command: a seat reaching for the clock\'s own verb', async () => {
     const { host, sent } = await attached({ dir });
-    await host.handleMessage('c1', { type: 'action', requestId: 'r1', action: 'burn', args: {} });
+    await host.handleMessage('c1', { type: 'action', order: nextOrder(), requestId: 'r1', action: 'burn', args: {} });
     const answer = last(sent, 'c1', 'world_response');
     expect(answer).toMatchObject({ ok: false });
     expect(answer?.message).toBe(
@@ -410,7 +436,7 @@ describe('#167: the refusals a bundle hits on the platform are hit locally, in t
       world: worldBlock({ actions: [...VILLAGE_ACTIONS, hoard] }),
     });
     const { host, sent, store } = await attached({ dir, definition });
-    await host.handleMessage('c1', { type: 'action', requestId: 'r1', action: 'hoard', args: {} });
+    await host.handleMessage('c1', { type: 'action', order: nextOrder(), requestId: 'r1', action: 'hoard', args: {} });
     const answer = last(sent, 'c1', 'world_response');
     expect(answer).toMatchObject({ ok: false });
     expect(answer?.message).toContain(
@@ -430,7 +456,7 @@ describe('#167: the refusals a bundle hits on the platform are hit locally, in t
 
   it('unknown-command: the world says what it does answer to', async () => {
     const { host, sent } = await attached({ dir });
-    await host.handleMessage('c1', { type: 'action', requestId: 'r1', action: 'yodel', args: {} });
+    await host.handleMessage('c1', { type: 'action', order: nextOrder(), requestId: 'r1', action: 'yodel', args: {} });
     expect(last(sent, 'c1', 'world_response')?.message).toBe(
       'This world has no action named "yodel". It answers to: chop, bank, burn.',
     );
@@ -439,14 +465,23 @@ describe('#167: the refusals a bundle hits on the platform are hit locally, in t
 
   it('a refusal leaves the world unchanged and the store clean', async () => {
     const { host, store } = await attached({ dir });
-    await host.handleMessage('c1', { type: 'action', requestId: 'r1', action: 'yodel', args: {} });
+    await host.handleMessage('c1', { type: 'action', order: nextOrder(), requestId: 'r1', action: 'yodel', args: {} });
     expect(store.dirtyPartitions()).toEqual([]);
     await host.close();
   });
 
+  it('#197: closing twice is closing once, and the second caller waits for the first', async () => {
+    const { host } = await attached({ dir });
+    await host.handleMessage('c1', { type: 'action', order: nextOrder(), requestId: 'r1', action: 'chop', args: {} });
+    // Ctrl-C through a package script signals the whole process group, so both
+    // handlers run: the second must not reach a finalised statement.
+    await Promise.all([host.close(), host.close()]);
+    await expect(host.close()).resolves.toBeUndefined();
+  });
+
   it('classifies every refusal it surfaces with the library\'s own code', async () => {
     const { host, sent } = await attached({ dir });
-    await host.handleMessage('c1', { type: 'action', requestId: 'r1', action: 'burn', args: {} });
+    await host.handleMessage('c1', { type: 'action', order: nextOrder(), requestId: 'r1', action: 'burn', args: {} });
     expect(last(sent, 'c1', 'world_response')?.code).toBe('clock-only-command');
     await host.close();
   });
@@ -456,5 +491,149 @@ describe('#167: WorldRefusal is what the host raises, not a bare Error', () => {
   it('keeps the code so a UI can tell a game refusal from a host failure', () => {
     const error = new WorldRefusal('clock-only-command', 'x');
     expect(error.code).toBe('clock-only-command');
+  });
+});
+
+/**
+ * #195: A PAID ORDER SURVIVES A LOST REPLY.
+ *
+ * The village's `chop` stands in for every paid order there is: it changes the
+ * world exactly once per press, and the hearth's log count is what says how
+ * many times the handler actually ran. Every case below is one sentence of the
+ * ticket, asserted against the real host over a real store.
+ */
+describe('#195: an uncertain order is answered from its receipt, never spent twice', () => {
+  const order = (id: string, at = 0) => ({ id, at });
+
+  async function chop(
+    host: LocalWorldHost,
+    requestId: string,
+    id: string,
+    at = 0,
+    clientId = 'c1',
+  ): Promise<void> {
+    await host.handleMessage(clientId, {
+      type: 'action',
+      order: order(id, at),
+      requestId,
+      action: 'chop',
+      args: {},
+    });
+  }
+
+  const logsIn = (sent: Sent[], clientId = 'c1'): string =>
+    JSON.stringify(last(sent, clientId, 'world_state')?.view);
+
+  it('runs the handler once and answers the repeat from the receipt', async () => {
+    const { host, sent } = await attached({ dir });
+    await chop(host, 'r1', 'o1');
+    expect(logsIn(sent)).toContain('"logs":1');
+
+    // THE LOST REPLY, AFTER COMMIT. The page never heard the answer and sends
+    // the same order again.
+    await chop(host, 'r2', 'o1');
+    expect(last(sent, 'c1', 'world_response')).toMatchObject({
+      requestId: 'r2',
+      ok: true,
+      replayed: true,
+    });
+    expect(logsIn(sent)).toContain('"logs":1');
+    await host.close();
+  });
+
+  it('a deliberate second press is a second order, and does run twice', async () => {
+    const { host, sent } = await attached({ dir });
+    await chop(host, 'r1', 'o1');
+    await chop(host, 'r2', 'o2');
+    expect(logsIn(sent)).toContain('"logs":2');
+    expect(last(sent, 'c1', 'world_response')).toMatchObject({ ok: true });
+    expect(last(sent, 'c1', 'world_response')?.replayed).toBeUndefined();
+    await host.close();
+  });
+
+  it('the receipt outlives the process, so a reload recovers rather than re-spends', async () => {
+    const first = await attached({ dir });
+    await chop(first.host, 'r1', 'o1');
+    await first.host.close();
+
+    // A NEW HOST OVER THE SAME STORE: the page reloaded, the socket is new,
+    // and the order it never heard about is sent again.
+    const second = await attached({ dir });
+    await chop(second.host, 'r1', 'o1');
+    expect(last(second.sent, 'c1', 'world_response')).toMatchObject({ ok: true, replayed: true });
+    expect(logsIn(second.sent)).toContain('"logs":1');
+    await second.host.close();
+  });
+
+  it('two tabs holding the same order spend once between them', async () => {
+    const { host, sent } = await attached({ dir });
+    await host.handleMessage('c2', { type: 'hello' });
+    await host.handleMessage('c2', { type: 'attach', seat: 1 });
+    await chop(host, 'r1', 'o1', 0, 'c1');
+    await chop(host, 'r2', 'o1', 0, 'c2');
+    expect(last(sent, 'c2', 'world_response')).toMatchObject({ ok: true, replayed: true });
+    expect(logsIn(sent, 'c1')).toContain('"logs":1');
+    await host.close();
+  });
+
+  it('one seat cannot replay another seat\'s order', async () => {
+    const { host, sent } = await attached({ dir });
+    await chop(host, 'r1', 'o1');
+    await host.handleMessage('c2', { type: 'hello' });
+    await host.handleMessage('c2', { type: 'attach', seat: 2 });
+    await chop(host, 'r2', 'o1', 0, 'c2');
+    // Seat 2's order ran, because seat 2 has no receipt under that name.
+    expect(last(sent, 'c2', 'world_response')?.replayed).toBeUndefined();
+    expect(logsIn(sent, 'c2')).toContain('"logs":2');
+    await host.close();
+  });
+
+  it('a refused command leaves no receipt, so its repeat is free to run', async () => {
+    const { host, sent, store } = await attached({ dir });
+    await host.handleMessage('c1', {
+      type: 'action',
+      order: order('o1'),
+      requestId: 'r1',
+      action: 'yodel',
+      args: {},
+    });
+    expect(last(sent, 'c1', 'world_response')?.ok).toBe(false);
+    expect(store.receipt(devWorldPlayer(1), 'o1')).toBeUndefined();
+    await host.close();
+  });
+
+  it('refuses an order it cannot identify, before anything is run', async () => {
+    const { host, sent } = await attached({ dir });
+    await host.handleMessage('c1', {
+      type: 'action',
+      order: { id: '', at: 0 },
+      requestId: 'r1',
+      action: 'chop',
+      args: {},
+    });
+    expect(last(sent, 'c1', 'world_response')).toMatchObject({ ok: false, code: 'invalid-order' });
+    expect(logsIn(sent)).toContain('"logs":0');
+    await host.close();
+  });
+
+  it('says out loud when an order is too old to answer, and changes nothing', async () => {
+    // A page that came back from a long time offline holding an unanswered
+    // order. Its receipt, if it ever had one, has been swept.
+    const clock = testClock();
+    const budgets = worldBudgets({ receiptRetentionMs: 1_000 });
+    const { host, sent } = await attached({ dir, clock, budgets });
+    await chop(host, 'r1', 'o1', clock.now());
+    clock.advance(60_000);
+    // Any later command moves the floor past the swept window.
+    await chop(host, 'r2', 'o2', clock.now());
+    const before = logsIn(sent);
+
+    await chop(host, 'r3', 'o1', clock.now() - 50_000);
+    expect(last(sent, 'c1', 'world_response')).toMatchObject({
+      ok: false,
+      code: 'order-outcome-unknown',
+    });
+    expect(logsIn(sent)).toBe(before);
+    await host.close();
   });
 });

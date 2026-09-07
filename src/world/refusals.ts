@@ -91,6 +91,14 @@ export const WORLD_REFUSALS = {
     owner: "caller",
     why: "a command named somebody this world does not seat; the world is unaffected",
   },
+  "invalid-order": {
+    owner: "caller",
+    why: "#195: a command arrived with an order identity that is not one -- no id, an over-long id, or no mint instant. Every player command carries one, and it is what lets a repeat of an uncertain order be answered from its receipt instead of spending a second time, so a command that cannot be identified is refused at the door rather than run without the guarantee it was supposed to carry. The world is unaffected",
+  },
+  "order-outcome-unknown": {
+    owner: "caller",
+    why: "#195: a repeat arrived for an order minted before this world's receipt floor, so its receipt (if it ever had one) has been swept and nothing can say whether it committed. Refused rather than run, because running it is the second spend the order identity exists to prevent. CALLER-owned and not platform-owned: the world is healthy, one request cannot be answered, and a park ladder must not climb because a page came back from a fortnight offline",
+  },
   "clock-only-command": {
     owner: "caller",
     why: "a player sent a verb the bundle built with `worldClockAction()` -- the clock's own, reached by a scheduled event and by nothing else. The world is unaffected: the refusal is issued before the handler is reached, and a client that never offered the command cannot have sent it by accident",

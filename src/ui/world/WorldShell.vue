@@ -62,9 +62,15 @@
       <!-- LOST. The last view stays on screen, marked as no longer live: it is
            the only thing the player has, and taking it away tells them nothing
            the banner does not already say. -->
-      <template v-if="host.phase.value === 'lost'" #board-overlays>
-        <p class="world-shell__lost" role="alert">
+      <template v-if="host.phase.value === 'lost' || host.recovering.value" #board-overlays>
+        <p v-if="host.phase.value === 'lost'" class="world-shell__lost" role="alert">
           {{ host.notice.value ?? 'The connection to this world dropped. This is the last view it sent.' }}
+        </p>
+        <!-- AN ORDER THIS PAGE CAME BACK HOLDING, being asked about (#195). It
+             is said out loud because the world may be about to change under the
+             player without them having pressed anything. -->
+        <p v-else class="world-shell__recovering" role="status">
+          Checking what became of something you sent before this page reloaded…
         </p>
       </template>
 
@@ -221,6 +227,20 @@ watch(actionController.errorTick, () => {
   const refusal = actionController.lastError.value;
   if (!refusal) return;
   toast.show(refusal, { type: 'error', duration: 5000 });
+});
+
+/**
+ * WHAT BECAME OF AN ORDER THIS PAGE CAME BACK HOLDING (#195).
+ *
+ * A page that reloaded mid-order asks the world about it again, with the same
+ * identity, before the player touches anything. They are asked nothing and see
+ * no sequence number -- but they are TOLD, because "the colony you founded was
+ * already founded" and "nobody can say whether it was" are both things a player
+ * is entitled to know before they press the button again.
+ */
+watch(host.recoveryNotice, (notice) => {
+  if (notice === null) return;
+  toast.show(notice, { type: 'info', duration: 8000 });
 });
 
 /**

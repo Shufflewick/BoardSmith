@@ -135,6 +135,22 @@ export interface WorldBudgets {
    * degrades to latency, never refusal.
    */
   readonly drainBatch: number;
+  /**
+   * HOW LONG A COMMITTED ORDER'S RECEIPT IS KEPT (#195).
+   *
+   * Every player command carries an order id, and a host records a receipt for
+   * every order it commits so a repeat is answered from the receipt instead of
+   * being run a second time. A world runs for months and its ledger cannot, so
+   * receipts are swept once they are this old.
+   *
+   * The default is a fortnight: comfortably longer than any interruption a page
+   * recovers from by itself -- a closed laptop, a holiday, a phone that lost
+   * its network in a tunnel -- and short enough that the ledger stays a
+   * recovery window rather than a second copy of the world's history. Past it a
+   * repeat is refused by name (`order-outcome-unknown`) rather than risking the
+   * second spend.
+   */
+  readonly receiptRetentionMs: number;
 }
 
 /**
@@ -155,6 +171,7 @@ const BASE = {
   // place -- a room with 200 exits is not a room -- and narrow enough that a
   // selection over "everything in the world" is refused rather than paid for.
   maxCandidatesPerSelection: 200,
+  receiptRetentionMs: 14 * 24 * 60 * 60 * 1000,
 } as const;
 
 /** What a host may say about its budgets. Everything is optional; the two
@@ -210,6 +227,10 @@ export function worldBudgets(overrides: WorldBudgetOverrides = {}): WorldBudgets
       "catchUpMaxRealIterations",
     ),
     drainBatch: positive(overrides.drainBatch ?? BASE.drainBatch, "drainBatch"),
+    receiptRetentionMs: positive(
+      overrides.receiptRetentionMs ?? BASE.receiptRetentionMs,
+      "receiptRetentionMs",
+    ),
   };
 }
 

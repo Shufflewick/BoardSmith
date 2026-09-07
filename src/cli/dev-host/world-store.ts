@@ -79,6 +79,7 @@ import {
 } from '../../world/partition-store.js';
 import type { PlannedEvent } from '../../world/schedule-api.js';
 import type { WorldBudgets } from '../../world/budgets.js';
+import type { WorldReceipt } from '../../world/orders.js';
 
 /**
  * The lowest Node that has `node:sqlite`.
@@ -237,6 +238,19 @@ export interface LocalWorldStore extends WorldPartitionStore, WorldPartitionWrit
   /** Record that `player` holds `seat`. */
   seat(player: string, seat: number): void;
 
+  /**
+   * WHAT THIS SEAT'S ORDER COMMITTED, if this store still holds its receipt
+   * (#195).
+   *
+   * Keyed by player as well as order id, so one seat can never replay another's
+   * order by guessing its name.
+   */
+  receipt(player: string, orderId: string): WorldReceipt | undefined;
+
+  /** The instant this store's receipts reach back to. Everything at or after it
+   *  that ever committed is still on file. */
+  receiptFloorAt(): number;
+
   /** Close the database. Never deletes anything -- see `resetWorldStore`. */
   close(): void;
 }
@@ -258,6 +272,23 @@ interface WorldCheckpointExtras {
   readonly settle?: readonly string[];
   /** Events to insert or replace, including a recurrence's own re-arm. */
   readonly schedule?: readonly PlannedEvent[];
+  /**
+   * THE RECEIPT FOR THE ORDER THIS CHECKPOINT IS THE EFFECTS OF (#195).
+   *
+   * In the same transaction for the same reason a settled event is: "the world
+   * changed" and "this order changed it" have to become true together, or a
+   * crash between them leaves an order whose effects are durable and whose
+   * receipt is not -- and the page's retry then pays for it twice.
+   */
+  readonly receipt?: WorldReceipt;
+  /**
+   * SWEEP EVERY RECEIPT OLDER THAN THIS, and remember having done so.
+   *
+   * Passed by the host, which owns the clock and the retention budget. The
+   * remembered floor is what lets a later repeat with no receipt be told
+   * honestly that nothing can say what became of it.
+   */
+  readonly receiptFloorAt?: number;
 }
 
 /**
@@ -272,6 +303,7 @@ interface WorldCheckpointExtras {
 export function openWorldStore(path: string, budgets: WorldBudgets): LocalWorldStore {
   mkdirSync(dirname(path), { recursive: true });
   const db = new (loadSqlite().DatabaseSync)(path);
+  let closed = false;
 
   // WAL, because a dev host writes small and often and a rollback journal
   // rewrites the whole page set for each of them. FULL rather than WAL's usual
@@ -291,6 +323,14 @@ export function openWorldStore(path: string, budgets: WorldBudgets): LocalWorldS
     ),
     knownParent: db.prepare('SELECT parent_id FROM partitions WHERE name = ?'),
     listDirty: db.prepare('SELECT name FROM dirty ORDER BY name'),
+    readReceipt: db.prepare(
+      'SELECT player, order_id, at, message FROM receipts WHERE player = ? AND order_id = ?',
+    ),
+    writeReceipt: db.prepare(
+      'INSERT INTO receipts (player, order_id, at, message) VALUES (?, ?, ?, ?) ' +
+        'ON CONFLICT(player, order_id) DO NOTHING',
+    ),
+    sweepReceipts: db.prepare('DELETE FROM receipts WHERE at < ?'),
     addDirty: db.prepare('INSERT INTO dirty (name) VALUES (?) ON CONFLICT(name) DO NOTHING'),
     clearDirty: db.prepare('DELETE FROM dirty WHERE name = ?'),
     listEvents: db.prepare(
@@ -432,6 +472,7 @@ export function openWorldStore(path: string, budgets: WorldBudgets): LocalWorldS
         if (highestSeq >= 0) {
           stmt.writeMeta.run(SEQ_KEY, String(Math.max(readSeq(), highestSeq + 1)));
         }
+        writeLedger(extras);
       });
     },
 
@@ -484,15 +525,68 @@ export function openWorldStore(path: string, budgets: WorldBudgets): LocalWorldS
       stmt.writeSeat.run(player, seat);
     },
 
+    receipt(player: string, orderId: string): WorldReceipt | undefined {
+      const row = stmt.readReceipt.get(player, orderId) as ReceiptRow | undefined;
+      if (row === undefined) return undefined;
+      return {
+        orderId: row.order_id,
+        player: row.player,
+        at: row.at,
+        ...(row.message === null ? {} : { message: row.message }),
+      };
+    },
+
+    receiptFloorAt(): number {
+      return readReceiptFloor();
+    },
+
     close(): void {
+      // CLOSING TWICE IS CLOSING ONCE (#197). Shutdown runs from a signal
+      // handler, and a signal can arrive twice.
+      if (closed) return;
+      closed = true;
       db.close();
     },
   };
+
+  /**
+   * THE ORDER LEDGER'S SHARE OF ONE CHECKPOINT (#195).
+   *
+   * Inside the same transaction as the partitions, because "the world changed"
+   * and "this order changed it" have to become true together -- a refused
+   * checkpoint writes no receipt, which is exactly right: an order that changed
+   * nothing has nothing to replay. The sweep and the remembered floor move
+   * together for the same reason, so the floor is never a claim about receipts
+   * that are still on file.
+   */
+  function writeLedger(extras: WorldCheckpointExtras): void {
+    if (extras.receipt !== undefined) {
+      const { player, orderId, at, message } = extras.receipt;
+      stmt.writeReceipt.run(player, orderId, at, message ?? null);
+    }
+    if (extras.receiptFloorAt !== undefined && extras.receiptFloorAt > readReceiptFloor()) {
+      stmt.sweepReceipts.run(extras.receiptFloorAt);
+      stmt.writeMeta.run(RECEIPT_FLOOR_KEY, String(extras.receiptFloorAt));
+    }
+  }
+
+  function readReceiptFloor(): number {
+    const stored = meta(RECEIPT_FLOOR_KEY);
+    return stored === undefined ? 0 : Number(stored);
+  }
 
   function readSeq(): number {
     const stored = meta(SEQ_KEY);
     return stored === undefined ? 0 : Number(stored);
   }
+}
+
+/** One receipt as SQLite hands it back. */
+interface ReceiptRow {
+  player: string;
+  order_id: string;
+  at: number;
+  message: string | null;
 }
 
 /** One scheduled event as SQLite hands it back. */
@@ -510,6 +604,7 @@ interface EventRow {
 
 const LAUNCHED_KEY = 'launched';
 const SEQ_KEY = 'seq';
+const RECEIPT_FLOOR_KEY = 'receiptFloor';
 const SCHEMA_VERSION_KEY = 'schemaVersion';
 
 /**
@@ -543,6 +638,14 @@ CREATE TABLE IF NOT EXISTS scheduled (
 );
 CREATE INDEX IF NOT EXISTS scheduled_due ON scheduled (due, seq);
 CREATE TABLE IF NOT EXISTS seats (player TEXT PRIMARY KEY, seat INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS receipts (
+  player TEXT NOT NULL,
+  order_id TEXT NOT NULL,
+  at INTEGER NOT NULL,
+  message TEXT,
+  PRIMARY KEY (player, order_id)
+);
+CREATE INDEX IF NOT EXISTS receipts_at ON receipts (at);
 `;
 
 /**
@@ -554,7 +657,7 @@ CREATE TABLE IF NOT EXISTS seats (player TEXT PRIMARY KEY, seat INTEGER NOT NULL
  * answer to a layout change. Silently reading a store this code does not
  * understand is how an author loses a world without being told.
  */
-const SCHEMA_VERSION = '2';
+const SCHEMA_VERSION = '3';
 
 function assertSchemaVersion(db: SqliteDatabase, path: string): void {
   const row = db.prepare('SELECT value FROM meta WHERE key = ?').get(SCHEMA_VERSION_KEY) as

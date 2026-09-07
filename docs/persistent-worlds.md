@@ -939,6 +939,41 @@ Calling it does not stop the action. `execute` runs to its end and its events an
 dirty set are reported normally; what ends is the season, once the dispatch's
 changes are durable.
 
+## An order that survives a lost reply
+
+A player presses "found a colony". The command commits. The reply is lost on the
+way back -- a dropped socket, a closed lid, a reload. The page cannot tell "it
+never arrived" from "it arrived and I did not hear", and both of the things it
+can do are wrong: pressing again founds a second colony, and not pressing again
+loses one already paid for.
+
+**The transport answers this, and your game does nothing.** Every player command
+carries a `WorldOrder`: an id the page minted and wrote down durably *before*
+sending, plus the instant it did so. A host records a **receipt** for every order
+it commits, in the same durable write as that command's own effects. A repeat of
+an order with a receipt is answered from the receipt -- the handler does not run,
+and the offer is not re-enumerated, which matters because the first attempt is
+exactly what consumed the candidates.
+
+A repeat of an order that never committed simply runs. It cannot double-spend: an
+attempt that had spent anything would have left a receipt.
+
+**Recovery is automatic.** `WorldShell` keeps its unanswered orders in the
+browser, scoped to the world's own surface, and re-sends them with the same
+identity and the same arguments as soon as it is attached and seated. The player
+is asked nothing and shown no sequence number; they are told what became of the
+order, because "the colony you founded was already founded" is something they are
+entitled to know before pressing anything.
+
+**So do not build any of this into your game.** A `seq` selection on an action, a
+game-owned receipt ledger, or a rule that keeps a consumed candidate alive so a
+retry can reach it are all the same mistake: transport bookkeeping in a place the
+player can see, on a surface the shared action panel will ask them about.
+
+Receipts are bounded by `budgets.receiptRetentionMs` (a fortnight by default). A
+repeat older than that is refused with `order-outcome-unknown` -- the one honest
+answer, since its receipt may have been swept -- and the world is not changed.
+
 ## The refusals
 
 Every way a world can refuse is in one table, `WORLD_REFUSALS`, and each entry
@@ -958,13 +993,15 @@ your game.
 | `world-full` | A seating would exceed the bundle's own `maxPlayers`. Seats are assigned once and never handed on. |
 | `seat-conflict` | A seating named a player who already holds a different seat. |
 | `rate-limited` | A connection sent frames faster than the host accepts. Well-formed traffic, refused at the door. |
+| `invalid-order` | A player command arrived with no usable order identity: no id, an id past 128 characters, or no mint instant. Every player command carries one -- see [an order that survives a lost reply](#an-order-that-survives-a-lost-reply). |
+| `order-outcome-unknown` | A repeat arrived for an order minted before this world's receipt floor, so nothing can say whether it committed. Refused rather than run, because running it is the second spend the identity exists to prevent. |
 
 **`game`**: your bundle's own doing. Fix these; the same bundle does the same
 thing next time.
 
 | Code | What happened |
 | --- | --- |
-| `bundle-not-a-world` | The manifest declares `"backend": "world"` and the compiled rules export no `world.actions`, no `world.view`, no `world.maxPlayers`, or a `world.maxPlayers` the host will not seat. |
+| `bundle-not-a-world` | The manifest declares `"backend": "world"` and the compiled rules export no `world.actions`, no `world.view`, no `world.maxPlayers`, a `world.maxPlayers` the host will not seat, or a `world.stateVersion` that is not a whole number from 0 up. |
 | `invalid-world-action` | A world action the platform cannot offer or cannot bound: an action not built with `worldAction()`, an unbounded `from`/`filter`/`elementClass` element form, an element selection with no `elements:`, a candidate outside what the step declared, a selection past `maxCandidatesPerSelection`, a dependent or repeating selection, a seatless action that asks a question, or a round declared before a step the action does not have. |
 | `not-in-a-world` | An action built with `worldAction()` reached `ctx.world` with no world running it -- registered on a table, or reached after the dispatch that bound its facilities finished. |
 | `undeclared-partition` | `execute` read a partition the action's own walk did not declare. |
@@ -1024,6 +1061,7 @@ makes local behaviour a poor guide to published behaviour.
 | `catchUpMaxRealIterations` | 4 | Real occurrences a late recurrence runs before the rest are coalesced into one call. |
 | `drainBatch` | 200 | Due events one drain runs. A world still behind re-arms: overload degrades to latency, never refusal. |
 | `maxCandidatesPerSelection` | 200 | Candidates one selection may offer, checked at enumeration. A 500-seat roster is one honest partition and one honest declaration, and enumerating it yields 500 candidates, so this is the guard the declaration itself cannot supply. |
+| `receiptRetentionMs` | 1209600000 (14 days) | How long a committed order's receipt is kept, and so how long a page may be away and still have an uncertain order answered rather than refused. |
 
 Overriding a holding cap recomputes both derived fields, so a host that raises
 `maxPlayers` gets a queue sized for it. Naming a derived field explicitly

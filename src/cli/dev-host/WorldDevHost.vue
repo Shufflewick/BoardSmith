@@ -148,6 +148,9 @@ function onWindowMessage(event: MessageEvent): void {
     wsSend({
       type: 'action',
       requestId: data.requestId as string,
+      // THE ORDER'S DURABLE IDENTITY (#195), relayed untouched: this bridge
+      // carries what the frame sent and invents nothing.
+      order: data.order,
       action: data.action as string,
       args: (data.args as Record<string, unknown>) ?? {},
     });

@@ -58,6 +58,9 @@ import {
   walkDeclaration,
   worldRefusal,
   WorldRefusal,
+  assertWorldOrder,
+  receiptFloor,
+  resolveOrder,
   type PlannedEvent,
   type RoutedEvent,
   type ScheduleAllowance,
@@ -68,8 +71,11 @@ import {
   type WorldRunner,
   type WorldRunnerOptions,
   type WorldActionOffer,
+  type WorldOrder,
+  type WorldReceipt,
   type WorldTiming,
 } from '../../world/index.js';
+import { createNodeWorldClock, type WorldDevClock } from './node-world-clock.js';
 import type { LocalWorldStore } from './world-store.js';
 
 /**
@@ -84,40 +90,6 @@ import type { LocalWorldStore } from './world-store.js';
  */
 export function devWorldPlayer(seat: number): string {
   return `seat-${seat}`;
-}
-
-/**
- * The clock and the timer, injected as one thing.
- *
- * Injected because "fires on its due time" is the one behaviour a test must not
- * prove by waiting for it, and because the "fire due events now" control below
- * moves the world's clock -- which is only expressible if the host reads time
- * through something it can offset.
- */
-export interface WorldDevClock {
-  /** Wall clock, in epoch ms. */
-  now(): number;
-  /** Arm a single timer, replacing any previous one. `null` disarms. */
-  arm(delayMs: number | null, fire: () => void): void;
-}
-
-/** The shipped clock: `Date.now` and one `setTimeout`. Reachable without
- *  being exported: it is what a host gets when it passes none. */
-function realWorldClock(): WorldDevClock & { close(): void } {
-  let timer: ReturnType<typeof setTimeout> | null = null;
-  const disarm = () => {
-    if (timer !== null) clearTimeout(timer);
-    timer = null;
-  };
-  return {
-    now: () => Date.now(),
-    arm(delayMs, fire) {
-      disarm();
-      if (delayMs === null) return;
-      timer = setTimeout(fire, Math.max(0, delayMs));
-    },
-    close: disarm,
-  };
 }
 
 /** Reachable without being exported, the way `runner.ts` keeps `SchedulePlan`
@@ -144,7 +116,15 @@ interface LocalWorldHostOptions {
 export type WorldDevRequest =
   | { type: 'hello' }
   | { type: 'attach'; seat: number }
-  | { type: 'action'; requestId: string; action: string; args?: Record<string, unknown> }
+  | {
+      type: 'action';
+      requestId: string;
+      /** THE ORDER'S DURABLE IDENTITY (#195), minted and written down by the
+       *  page before the command was sent. A repeat carries the same one. */
+      order: WorldOrder;
+      action: string;
+      args?: Record<string, unknown>;
+    }
   | { type: 'fire_due' }
   | { type: 'wake' };
 
@@ -186,6 +166,8 @@ export class LocalWorldHost {
   #droppedOnWake = 0;
   #completed = false;
   #closed = false;
+  /** The one shutdown, once it has been asked for. */
+  #closing: Promise<void> | null = null;
   /** The world lock. Every entry point queues behind it. */
   #lock: Promise<unknown> = Promise.resolve();
 
@@ -201,7 +183,7 @@ export class LocalWorldHost {
     this.#seed = options.seed;
     this.#worldName = options.worldName;
     this.#send = options.send;
-    this.#clock = options.clock ?? realWorldClock();
+    this.#clock = options.clock ?? createNodeWorldClock();
     this.#world = this.#build();
     this.#presenceDeclaration = readWorldDefinition(options.definition).presence;
   }
@@ -254,7 +236,7 @@ export class LocalWorldHost {
           await this.#attach(clientId, message.seat);
           return;
         case 'action':
-          await this.#command(clientId, message.requestId, message.action, message.args ?? {});
+          await this.#command(clientId, message);
           return;
         case 'fire_due':
           await this.#fireDueNow(clientId);
@@ -282,7 +264,22 @@ export class LocalWorldHost {
     });
   }
 
-  async close(): Promise<void> {
+  /**
+   * CLOSING TWICE IS CLOSING ONCE (#197).
+   *
+   * Ctrl-C through a package script delivers the signal to every process in
+   * the group, so a host is routinely asked to stop twice; a second pass used
+   * to reach a finalised statement on a database the first pass had already
+   * closed. The shutdown is therefore one promise, handed to everybody who
+   * asks -- so a second caller waits for the same orderly stop rather than
+   * starting a second one.
+   */
+  close(): Promise<void> {
+    this.#closing ??= this.#close();
+    return this.#closing;
+  }
+
+  async #close(): Promise<void> {
     await this.settled();
     this.#closed = true;
     this.#clock.arm(null, () => {});
@@ -435,10 +432,10 @@ export class LocalWorldHost {
 
   async #command(
     clientId: string,
-    requestId: string,
-    name: string,
-    args: Record<string, unknown>,
+    message: Extract<WorldDevRequest, { type: 'action' }>,
   ): Promise<void> {
+    const { requestId, action: name, order } = message;
+    const args = message.args ?? {};
     const seat = this.#attached.get(clientId);
     if (seat === undefined) {
       this.#send(clientId, {
@@ -449,12 +446,36 @@ export class LocalWorldHost {
       });
       return;
     }
+    const player = devWorldPlayer(seat);
     try {
+      // THE ORDER IS SETTLED BEFORE THE COMMAND IS RUN (#195). A repeat of an
+      // order this world already committed is answered from its receipt: the
+      // handler does not run, and the candidates the FIRST attempt consumed are
+      // never revalidated, because consuming them is what it did.
+      assertWorldOrder(order);
+      const decision = resolveOrder({
+        order,
+        receipt: this.#store.receipt(player, order.id),
+        floorAt: this.#store.receiptFloorAt(),
+      });
+      if (decision.kind === 'unanswerable') throw decision.refusal;
+      if (decision.kind === 'replay') {
+        this.#send(clientId, {
+          type: 'world_response',
+          requestId,
+          ok: true,
+          replayed: true,
+          ...(decision.receipt.message === undefined ? {} : { message: decision.receipt.message }),
+        });
+        await this.#pushViews();
+        return;
+      }
       const events = await this.#dispatch({
-        player: devWorldPlayer(seat),
+        player,
         command: { name, args },
         timing: null,
         arrivedAt: this.#worldNow(),
+        receipt: { orderId: order.id, player, at: this.#worldNow() },
       });
       // ANSWERED AFTER THE CHECKPOINT LANDED, exactly as the platform answers
       // one: a player told "taken" about a command whose effects were not made
@@ -493,6 +514,9 @@ export class LocalWorldHost {
     settle?: readonly string[];
     /** A recurrence's own re-arm, committed with the occurrence it follows. */
     rearm?: readonly PlannedEvent[];
+    /** The receipt for the player order this dispatch is the effects of (#195),
+     *  committed with them or not at all. */
+    receipt?: WorldReceipt;
   }): Promise<readonly RoutedEvent[]> {
     const { player, command, timing, arrivedAt } = request;
     const runner = this.#world.runner;
@@ -562,6 +586,15 @@ export class LocalWorldHost {
         // rolled-back command's timers behind.
         settle: [...(request.settle ?? []), ...plan.replaced],
         schedule: [...(request.rearm ?? []), ...plan.events],
+        // THE ORDER'S RECEIPT LANDS WITH ITS EFFECTS (#195), or neither does.
+        ...(request.receipt === undefined ? {} : { receipt: request.receipt }),
+        // And the ledger is swept on the way past, so a world running for
+        // months does not keep every answer it ever gave.
+        receiptFloorAt: receiptFloor(
+          this.#worldNow(),
+          this.#budgets,
+          this.#store.receiptFloorAt(),
+        ),
       });
     } catch (error) {
       // A COMMAND THAT CANNOT BE MADE DURABLE IS A COMMAND THAT DID NOT HAPPEN.
