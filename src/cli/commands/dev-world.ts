@@ -263,6 +263,43 @@ export async function startWorldDevServer(options: WorldDevServerOptions): Promi
     console.log(chalk.dim(`  Wrote ${file} -- a world project needs an entry, and this one had none.`));
   }
 
+  const worldSocket = claimWebSocketPath(WORLD_WS_PATH, (socket: WebSocket) => {
+    let clientId: string | null = null;
+    socket.on('message', (raw) => {
+      let message: { type?: string; clientId?: unknown; [key: string]: unknown };
+      try {
+        message = JSON.parse(raw.toString());
+      } catch {
+        return;
+      }
+      if (message.type === 'hello') {
+        clientId =
+          typeof message.clientId === 'string'
+            ? message.clientId
+            : `anon-${Math.random().toString(36).slice(2)}`;
+        clients.set(clientId, socket);
+      }
+      if (clientId === null) return; // a client identifies itself first
+      void worldHost
+        .handleMessage(clientId, message as unknown as WorldDevRequest)
+        .catch((error: unknown) =>
+          console.error(
+            chalk.red(`[boardsmith dev] world message '${String(message.type)}' failed:`),
+            error,
+          ),
+        );
+    });
+    socket.on('close', () => {
+      // Only tear down if THIS socket still owns the id: a reload's new socket
+      // may be helloed before the old one's close fires, and a stale close
+      // would drop the seat the reconnected page just took.
+      if (clientId !== null && clients.get(clientId) === socket) {
+        clients.delete(clientId);
+        void worldHost.disconnect(clientId);
+      }
+    });
+  });
+
   const plugins: VitePlugin[] = [
     boardsmithWorldDevPlugin({
       devHostDir,
@@ -270,6 +307,9 @@ export async function startWorldDevServer(options: WorldDevServerOptions): Promi
       surfacePath,
       config,
     }),
+    // The socket is claimed by a PLUGIN so a `vite.config.ts` restart re-claims
+    // it: the HTTP server it was attached to does not survive one (#214).
+    worldSocket.plugin,
   ];
   if (options.context === 'monorepo') plugins.unshift(monorepoBoardsmithResolvePlugin());
 
@@ -369,44 +409,6 @@ export async function startWorldDevServer(options: WorldDevServerOptions): Promi
     console.log(chalk.green('  Reloaded. The world is durable and running the new rules.\n'));
   }
 
-  if (!vite.httpServer) throw new Error('Vite dev server has no HTTP server to attach the world socket to.');
-  const wss = claimWebSocketPath(vite.httpServer, WORLD_WS_PATH, (socket: WebSocket) => {
-    let clientId: string | null = null;
-    socket.on('message', (raw) => {
-      let message: { type?: string; clientId?: unknown; [key: string]: unknown };
-      try {
-        message = JSON.parse(raw.toString());
-      } catch {
-        return;
-      }
-      if (message.type === 'hello') {
-        clientId =
-          typeof message.clientId === 'string'
-            ? message.clientId
-            : `anon-${Math.random().toString(36).slice(2)}`;
-        clients.set(clientId, socket);
-      }
-      if (clientId === null) return; // a client identifies itself first
-      void worldHost
-        .handleMessage(clientId, message as unknown as WorldDevRequest)
-        .catch((error: unknown) =>
-          console.error(
-            chalk.red(`[boardsmith dev] world message '${String(message.type)}' failed:`),
-            error,
-          ),
-        );
-    });
-    socket.on('close', () => {
-      // Only tear down if THIS socket still owns the id: a reload's new socket
-      // may be helloed before the old one's close fires, and a stale close
-      // would drop the seat the reconnected page just took.
-      if (clientId !== null && clients.get(clientId) === socket) {
-        clients.delete(clientId);
-        void worldHost.disconnect(clientId);
-      }
-    });
-  });
-
   const uiPort = vite.resolvedUrls?.local[0]
     ? parseInt(new URL(vite.resolvedUrls.local[0]).port || String(options.port), 10)
     : options.port;
@@ -425,7 +427,7 @@ export async function startWorldDevServer(options: WorldDevServerOptions): Promi
 
   onShutdown(async () => {
     console.log(chalk.dim('\n  Shutting down...'));
-    wss.close();
+    worldSocket.close();
     clients.clear();
     // THE WORLD IS CLOSED, NOT DELETED. A persistent world that erased itself
     // when its host stopped would be a session; `--reset` is the only thing

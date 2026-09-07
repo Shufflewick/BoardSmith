@@ -14,7 +14,11 @@
  *     `appType: 'custom'` and both end in a PLAIN TEXT 404;
  *   - in a monorepo checkout, `boardsmith/*` has to resolve to this repo's own
  *     `src/`, or the dev host runs a different engine from the one being
- *     edited.
+ *     edited;
+ *   - editing `vite.config.ts` makes Vite replace its own HTTP server, so a
+ *     socket registered once at startup is left on a closed object and every
+ *     page afterwards loads but never connects (issue 214) -- which is why the
+ *     claim below is a PLUGIN rather than a call.
  *
  * Two copies of any of those is how they come to disagree, and a disagreement
  * here is invisible until somebody's asset 404s or their HMR dies.
@@ -45,31 +49,69 @@ interface HttpUpgradeServer {
 }
 
 /**
- * Claim ONE upgrade path for our socket and leave every other one alone.
+ * A claimed upgrade path: the plugin that keeps it claimed, and the way to
+ * close it. There is no third thing to remember, and no way to hold the socket
+ * without also holding the plugin that has to be installed for it to work.
+ */
+interface ClaimedWebSocketPath {
+  /** Install in the Vite `plugins` array. Without it nothing is claimed. */
+  readonly plugin: VitePlugin;
+  /** Stop accepting connections; called from the run's shutdown. */
+  close(): void;
+}
+
+/**
+ * Claim ONE upgrade path for our socket, for as long as Vite is serving.
  *
  * `noServer` plus our own routing, rather than `new WebSocketServer({ server })`:
  * a second server attached to the same HTTP server competes with Vite's HMR
  * socket for every upgrade, and the visible symptom is a page that reloads
  * forever with no error that names the cause.
+ *
+ * A PLUGIN, rather than one call against `vite.httpServer` after `listen()`,
+ * because a restart replaces that server (#214). Editing `vite.config.ts`
+ * makes Vite build a second server, close the first, and `Object.assign` the
+ * new one over the old handle -- so a listener registered on the startup
+ * server is on a closed object nobody routes to any more. `configureServer`
+ * runs again on every restart, which is the only moment the new HTTP server
+ * can be reached; the `WebSocketServer` itself is made once and re-bound,
+ * since in `noServer` mode it owns no listener of its own.
  */
 export function claimWebSocketPath(
-  httpServer: HttpUpgradeServer,
   path: string,
   onConnection: (socket: WebSocket) => void,
-): WebSocketServer {
+): ClaimedWebSocketPath {
   const wss = new WebSocketServer({ noServer: true });
-  httpServer.on('upgrade', (req, socket, head) => {
-    let pathname: string;
-    try {
-      pathname = new URL(req.url ?? '/', 'http://localhost').pathname;
-    } catch {
-      return;
-    }
-    if (pathname !== path) return; // not ours — Vite HMR handles it
-    wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req));
-  });
   wss.on('connection', onConnection);
-  return wss;
+
+  const bind = (httpServer: HttpUpgradeServer): void => {
+    httpServer.on('upgrade', (req, socket, head) => {
+      let pathname: string;
+      try {
+        pathname = new URL(req.url ?? '/', 'http://localhost').pathname;
+      } catch {
+        return;
+      }
+      if (pathname !== path) return; // not ours -- Vite HMR handles it
+      wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req));
+    });
+  };
+
+  return {
+    plugin: {
+      name: `boardsmith:websocket-path:${path}`,
+      configureServer(server) {
+        if (!server.httpServer) {
+          throw new Error(
+            `Vite has no HTTP server to attach the dev socket ${path} to. ` +
+              'A dev host cannot run in middleware mode.',
+          );
+        }
+        bind(server.httpServer);
+      },
+    },
+    close: () => wss.close(),
+  };
 }
 
 /** The path part of a request, with any query string dropped. */
