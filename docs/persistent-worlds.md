@@ -1193,6 +1193,24 @@ element once a partition is absent, and a game's subclass constructor builds its
 furniture before any later switch could run. `createWorld` passes
 `worldMode: true` for you.
 
+## Editing rules while a world is running (#201)
+
+`boardsmith dev` loads your Node runtime ONCE, before Vite starts. Your UI edits
+hot-reload; your **rule** edits do not. The world keeps running the rules this
+process loaded, and the page in front of you is drawn by the ones you just
+saved.
+
+So a rule edit **stops the world** rather than being half-applied: the host
+watches `src/rules`, says so in the terminal and in the page, and refuses every
+command until you restart. Nothing is lost -- the store is durable, and the next
+`boardsmith dev` comes back to the same world on the new rules, with everything
+in it.
+
+The alternative would be a world committing the new UI's intent against the old
+rules: a verb the rules no longer have, or the new shape of one they do, made
+durable. A world made of two versions is the one thing it must never be, and a
+world you have to restart is a far smaller cost than one you cannot trust.
+
 ## Running a world today
 
 **Under plain `npm test`, against the real runner.** This is the fastest loop
