@@ -77,7 +77,8 @@ import type {
   WorldEngine,
   WorldOfferStamp,
 } from "./contract.js";
-import type { GameElement } from "../engine/index.js";
+import type { Game, GameElement } from "../engine/index.js";
+import type { WorldMigrationCreateContext } from "./migration.js";
 import type { ScheduleAllowance } from "./schedule-api.js";
 import { WorldRefusal } from "./refusals.js";
 
@@ -290,6 +291,17 @@ export function createWorldRunner(
   engine: WorldEngine,
   store: InlinedPartitionStore,
   buildGenesis: () => Record<string, StoredPartition> = () => ({}),
+  /**
+   * The bundle's `world.migration.create`, or a world that adds no roots (#218).
+   *
+   * Supplied the same way `buildGenesis` is, and for the same reason: the
+   * runner is handed the ENGINE rather than the game, and only `createWorld`
+   * holds both the game and the bundle's declaration.
+   */
+  buildMigrationRoots: (
+    game: Game,
+    ctx: WorldMigrationCreateContext,
+  ) => Record<string, GameElement> = () => ({}),
 ): WorldRunnerHandle {
   return {
     /**
@@ -340,6 +352,20 @@ export function createWorldRunner(
       engine.migratePartition(name, transform);
       const written = await engine.serializePartitions([name]);
       return written[name] as string;
+    },
+
+    async migrateCreate(
+      existing: readonly string[],
+      ctx: { readonly from: number; readonly to: number },
+    ): Promise<Record<string, StoredPartition>> {
+      return engine.createMigratedPartitions(
+        (game) => buildMigrationRoots(game, { ...ctx, existing }),
+        existing,
+      );
+    },
+
+    async createPartition(name: string): Promise<StoredPartition | undefined> {
+      return engine.createPartition(name);
     },
 
     seat(player: string, seat: number): void {
@@ -512,6 +538,40 @@ export interface WorldRunnerHandle {
     stored: StoredPartition,
     transform: (element: GameElement) => void,
   ): Promise<string>;
+
+  /**
+   * THE DURABLE PARTITION ROOTS THIS MIGRATION ADDS (#218).
+   *
+   * `migratePartition` transforms a root that exists; it cannot answer more
+   * roots and has nowhere to say what a new one hangs from, so a world that
+   * outgrew its genesis -- twelve empires becoming five hundred, one shared
+   * timeline becoming a region apiece -- had no expressible upgrade at all,
+   * because genesis runs once and never again.
+   *
+   * `existing` is every name the world already holds; the bundle's hook filters
+   * against it, and a duplicate is refused by name rather than replacing a live
+   * partition's bytes with a fresh element.
+   *
+   * Nothing is written, for the reason `migratePartition` writes nothing: the
+   * caller lands these in the SAME transaction as the transformed partitions.
+   */
+  migrateCreate(
+    existing: readonly string[],
+    ctx: { readonly from: number; readonly to: number },
+  ): Promise<Record<string, StoredPartition>>;
+
+  /**
+   * A PARTITION ROOT THE STORE HAS NEVER HELD, built on demand (#218).
+   *
+   * The host looks for a declared partition, finds no row, and asks here before
+   * refusing: the bundle answers an element for a name it creates on first use,
+   * and nothing for a name that is simply wrong. Idempotent -- a name already
+   * resident is answered from residency rather than rebuilt -- so the host may
+   * ask on every miss.
+   *
+   * The host owns the write, as it owns every other write.
+   */
+  createPartition(name: string): Promise<StoredPartition | undefined>;
   /**
    * Admit a player to a world that is already running (#37 item 2).
    *

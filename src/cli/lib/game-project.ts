@@ -14,6 +14,8 @@ interface GameProjectConfig {
   gameId?: string;
   publisherId?: string;
   publisher?: string;
+  /** The single backend declaration (#171): "table" or "world". */
+  backend?: unknown;
   paths?: {
     rules?: string;
     ui?: string;

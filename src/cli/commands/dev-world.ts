@@ -40,7 +40,11 @@ import { createServer as createViteServer, type Plugin as VitePlugin } from 'vit
 import { WebSocket } from 'ws';
 
 import { worldBudgets } from '../../world/index.js';
-import { LocalWorldHost, type WorldDevRequest } from '../dev-host/world-host.js';
+import {
+  LocalWorldHost,
+  type WorldDevRequest,
+  type WorldMigrationOutcome,
+} from '../dev-host/world-host.js';
 import { openWorldStore, worldStorePath, type LocalWorldStore } from '../dev-host/world-store.js';
 import { announceHost, onShutdown } from '../dev-host/shutdown.js';
 import type { WorldDevConfig } from '../dev-host/world-config-types.js';
@@ -231,18 +235,7 @@ export async function startWorldDevServer(options: WorldDevServerOptions): Promi
   let worldHost: LocalWorldHost = hostOver(options.gameDefinition, store);
 
   const started = await worldHost.start();
-  if (started.migrated !== undefined) {
-    // SAID IN THE TERMINAL, because a migration runs before the first socket
-    // exists: there is nobody in the world to tell, and the person who
-    // published the new rules is standing here (#200).
-    const { from, to, partitions, events } = started.migrated;
-    console.log(
-      chalk.green(
-        `  Migrated this world from state version ${from} to ${to}: ` +
-          `${partitions} partition(s) and ${events} queued event(s), in one durable step.`,
-      ),
-    );
-  }
+  reportMigration(started);
 
   const config: WorldDevConfig = {
     displayName: options.displayName,
@@ -380,16 +373,7 @@ export async function startWorldDevServer(options: WorldDevServerOptions): Promi
     try {
       await worldHost.close();
       worldHost = hostOver(rules, openWorldStore(worldStorePath(options.cwd), budgets));
-      const restarted = await worldHost.start();
-      if (restarted.migrated !== undefined) {
-        const { from, to, partitions, events } = restarted.migrated;
-        console.log(
-          chalk.green(
-            `  Migrated this world from state version ${from} to ${to}: ` +
-              `${partitions} partition(s) and ${events} queued event(s), in one durable step.`,
-          ),
-        );
-      }
+      reportMigration(await worldHost.start());
     } catch (error) {
       console.error(
         chalk.red('  Those rules cannot run this world, so nothing was changed on disk:'),
@@ -441,4 +425,23 @@ export async function startWorldDevServer(options: WorldDevServerOptions): Promi
     }
     process.exit(0);
   });
+}
+
+/**
+ * SAY WHAT AN UPGRADE MOVED, IN THE TERMINAL.
+ *
+ * A migration runs before the first socket exists, so there is nobody in the
+ * world to tell -- and the person who published the new rules is standing here
+ * (#200). Silent for the ordinary start, which moved nothing.
+ */
+function reportMigration(started: { migrated?: WorldMigrationOutcome }): void {
+  if (started.migrated === undefined) return;
+  const { from, to, partitions, created, events } = started.migrated;
+  console.log(
+    chalk.green(
+      `  Migrated this world from state version ${from} to ${to}: ` +
+        `${partitions} partition(s), ${created} new partition root(s) and ` +
+        `${events} queued event(s), in one durable step.`,
+    ),
+  );
 }

@@ -21,7 +21,13 @@ import {
   validateRequiredFiles,
   successGuidance,
 } from './validate.js';
-import { MAX_BUNDLE_SIZE, describeZipSizeViolation } from '../lib/bundle-limits.js';
+import {
+  MAX_TABLE_RULES_ENCODED_BYTES,
+  MAX_UPLOAD_ZIP_BYTES,
+  MAX_ZIP_ENTRIES,
+  describeZipSizeViolation,
+  encodedRulesBytes,
+} from '../lib/bundle-limits.js';
 
 describe('config-schema', () => {
   it('ALLOWED_TOP_LEVEL_KEYS matches boardsmith.schema.json properties (single source, no drift)', async () => {
@@ -322,62 +328,138 @@ describe('validate.ts checkTaxonomyShape', () => {
 });
 
 describe('bundle-limits', () => {
-  it('MAX_BUNDLE_SIZE is 50MB, matching the authoritative games-worker upload gate', () => {
-    // PROC-02: RED against the pre-fix local `maxTotalBundle = 200 * 1024 *
-    // 1024` in validate.ts — this asserts the shared, correct constant.
-    expect(MAX_BUNDLE_SIZE).toBe(50 * 1024 * 1024);
+  it('MAX_UPLOAD_ZIP_BYTES is 200MB, matching the authoritative games-worker upload gate', () => {
+    // #220: the CLI carried 50MB and pointed at a repository that no longer
+    // exists, so it rejected uploads the platform would have accepted.
+    expect(MAX_UPLOAD_ZIP_BYTES).toBe(200 * 1024 * 1024);
   });
 
   it('describeZipSizeViolation returns null at or under the limit (WR-05)', () => {
     expect(describeZipSizeViolation(0)).toBeNull();
-    expect(describeZipSizeViolation(MAX_BUNDLE_SIZE)).toBeNull();
+    expect(describeZipSizeViolation(MAX_UPLOAD_ZIP_BYTES)).toBeNull();
   });
 
   it('describeZipSizeViolation returns an actionable message naming both sizes when over the limit (WR-05)', () => {
-    const message = describeZipSizeViolation(MAX_BUNDLE_SIZE + 1024 * 1024);
+    const message = describeZipSizeViolation(MAX_UPLOAD_ZIP_BYTES + 1024 * 1024);
     expect(message).not.toBeNull();
-    expect(message).toContain('51.0 MB');
-    expect(message).toContain('50.0 MB');
+    expect(message).toContain('201.0 MB');
+    expect(message).toContain('200.0 MB');
     expect(message?.toLowerCase()).toContain('reduce');
+  });
+
+  it('encodedRulesBytes counts the JSON-encoded form the executor measures, not the bytes on disk (#221)', () => {
+    // A quote costs one extra byte, a newline costs one, a control character
+    // costs six -- plus the two enclosing quotes.
+    expect(encodedRulesBytes('ab')).toBe(4);
+    expect(encodedRulesBytes('"')).toBe(4);
+    expect(encodedRulesBytes('\n')).toBe(4);
+    expect(encodedRulesBytes('\u0001')).toBe(8);
   });
 });
 
 describe('validateBundleSize measures the real publish zip, not the raw dist (WR-05)', () => {
-  function makeDist(cwd: string, bigFileBytes: number): void {
+  /**
+   * A dist `readDistDir` can actually package. The manifest must declare its
+   * backend and its seat count and the matching entry point must exist --
+   * without those, every measurement below silently falls into the
+   * "not measurable" branch and the assertions prove nothing.
+   */
+  function makeDist(
+    cwd: string,
+    bigFileBytes: number,
+    rulesJs = 'module.exports = {};\n',
+    worldMode = false,
+  ): void {
     const distDir = join(cwd, 'dist');
     mkdirSync(join(distDir, 'rules'), { recursive: true });
     mkdirSync(join(distDir, 'ui'), { recursive: true });
-    writeFileSync(join(distDir, 'manifest.json'), JSON.stringify({
-      name: 'fixture', playerCount: { min: 2, max: 4 },
-    }));
-    writeFileSync(join(distDir, 'rules', 'rules.js'), 'module.exports = {};\n');
-    writeFileSync(join(distDir, 'ui', 'index.html'), '<!DOCTYPE html><html></html>');
+    writeFileSync(join(distDir, 'manifest.json'), JSON.stringify(
+      worldMode
+        ? { name: 'fixture', backend: 'world', world: { maxPlayers: 40 } }
+        : { name: 'fixture', backend: 'table', playerCount: { min: 2, max: 4 } },
+    ));
+    writeFileSync(join(distDir, 'rules', 'rules.js'), rulesJs);
+    writeFileSync(join(distDir, 'ui', worldMode ? 'world.html' : 'index.html'), '<!DOCTYPE html><html></html>');
     // Highly compressible payload: zeros deflate to well under 1% of raw size.
-    writeFileSync(join(distDir, 'ui', 'big.json'), Buffer.alloc(bigFileBytes, 0x30));
+    // Split across files under the per-file ceiling, so a test about the TOTAL
+    // is not silently answered by the per-file gate instead.
+    const chunk = 32 * 1024 * 1024;
+    let written = 0;
+    for (let i = 0; written < bigFileBytes; i += 1) {
+      const size = Math.min(chunk, bigFileBytes - written);
+      writeFileSync(join(distDir, 'ui', `big${i}.json`), Buffer.alloc(size, 0x30));
+      written += size;
+    }
   }
 
-  it('PASSES a dist whose raw size exceeds 50MB but whose zip is far under it (the server gates the zip)', async () => {
+  /** Build a dist in a throwaway directory, measure it, and take it away again. */
+  async function measure(
+    build: (cwd: string) => void,
+    worldMode = false,
+  ): Promise<{ passed: boolean; details: string }> {
     const cwd = mkdtempSync(join(tmpdir(), 'bs-bundle-size-'));
     try {
-      makeDist(cwd, 55 * 1024 * 1024); // raw > 50MB limit, zip ~ tiny
-      const result = await validateBundleSize(cwd);
-      expect(result.passed).toBe(true);
+      build(cwd);
+      const result = await validateBundleSize(cwd, worldMode);
+      return { passed: result.passed, details: (result.details ?? []).join('\n') };
     } finally {
       rmSync(cwd, { recursive: true, force: true });
     }
+  }
+
+  /** Under 1 MiB as it sits on disk, over 1 MiB once JSON-encoded (#221). */
+  const STRING_HEAVY_RULES = `/*${'"'.repeat(525_000)}*/`;
+
+  it('PASSES a dist whose raw size exceeds the zip limit but whose zip is far under it (the server gates the zip)', async () => {
+    const { passed } = await measure((cwd) => makeDist(cwd, 55 * 1024 * 1024));
+    expect(passed).toBe(true);
   }, 30_000);
 
   it('reports the compressed size in its detail output so the number matches what publish uploads', async () => {
-    const cwd = mkdtempSync(join(tmpdir(), 'bs-bundle-size-'));
-    try {
-      makeDist(cwd, 1024);
-      const result = await validateBundleSize(cwd);
-      expect(result.passed).toBe(true);
-      expect((result.details ?? []).join('\n')).toMatch(/compressed/i);
-    } finally {
-      rmSync(cwd, { recursive: true, force: true });
-    }
+    const { passed, details } = await measure((cwd) => makeDist(cwd, 1024));
+    expect(passed).toBe(true);
+    expect(details).toMatch(/compressed/i);
   });
+
+  it('FAILS a rules.js under 1 MiB raw and over 1 MiB JSON-encoded, and names the encoding overhead (#221)', async () => {
+    // The exact bundle that passed validate, passed publish, and then failed
+    // EVERY start.
+    expect(Buffer.byteLength(STRING_HEAVY_RULES, 'utf-8')).toBeLessThan(MAX_TABLE_RULES_ENCODED_BYTES);
+    expect(encodedRulesBytes(STRING_HEAVY_RULES)).toBeGreaterThan(MAX_TABLE_RULES_ENCODED_BYTES);
+
+    const { passed, details } = await measure((cwd) => makeDist(cwd, 1024, STRING_HEAVY_RULES));
+    expect(passed).toBe(false);
+    expect(details).toMatch(/rules\.js/);
+    expect(details).toMatch(/JSON string/i);
+    expect(details).toMatch(/on disk/i);
+  }, 30_000);
+
+  it('PASSES that same rules.js for a WORLD, whose rules never travel in a request envelope (#220)', async () => {
+    const { passed, details } = await measure(
+      (cwd) => makeDist(cwd, 1024, STRING_HEAVY_RULES, true),
+      true,
+    );
+    expect(passed).toBe(true);
+    expect(details).toMatch(/bundle store/i);
+  }, 30_000);
+
+  it('warns while a table rules.js is still under the limit but past the warning band (#221)', async () => {
+    // ~90% of the encoded limit, all plain characters so raw ~= encoded.
+    const { passed, details } = await measure((cwd) => makeDist(cwd, 1024, `/*${'x'.repeat(950_000)}*/`));
+    expect(passed).toBe(true);
+    expect(details).toMatch(/Warning: rules\.js is at 9\d% of/);
+  }, 30_000);
+
+  it('FAILS a bundle over the games worker file-count ceiling even though it zips small (#220)', async () => {
+    const { passed, details } = await measure((cwd) => {
+      makeDist(cwd, 16);
+      const many = join(cwd, 'dist', 'ui', 'many');
+      mkdirSync(many, { recursive: true });
+      for (let i = 0; i <= MAX_ZIP_ENTRIES; i += 1) writeFileSync(join(many, `f${i}.txt`), 'x');
+    });
+    expect(passed).toBe(false);
+    expect(details).toMatch(/file ceiling/i);
+  }, 60_000);
 });
 
 /**

@@ -34,6 +34,14 @@
  * queued event and answers its new arguments. Nothing else in a world survives
  * a bundle swap, so nothing else is offered.
  *
+ * AND `create`, WHICH IS THE OTHER DIRECTION (#218). `partition` transforms a
+ * root that exists; it cannot answer more roots than it was handed, and it has
+ * nowhere to say what a new root hangs from. So a world that outgrew its
+ * genesis -- twelve empires becoming five hundred, one shared timeline becoming
+ * a region apiece -- had no expressible upgrade at all, because genesis runs
+ * once and never again. `create` is that missing half: it is handed the game
+ * and the names the world ALREADY holds, and answers the roots to add.
+ *
  * ## What it is NOT allowed to be
  *
  * It is not a command. It runs with no player, no clock and no schedule: a
@@ -51,7 +59,7 @@
  * given world may cross a given version gap -- so that both hosts refuse and
  * accept the same worlds for the same stated reasons.
  */
-import type { GameElement } from "../engine/index.js";
+import type { Game, GameElement } from "../engine/index.js";
 import { worldRefusal, type WorldRefusal } from "./refusals.js";
 
 /** What a queued event looks like to a migration: the verb, and the arguments
@@ -90,6 +98,32 @@ export interface WorldMigration {
    * what the new rules should see; answer the same object to leave it alone.
    */
   readonly event?: (event: MigratableEvent) => Record<string, unknown>;
+  /**
+   * DURABLE PARTITION ROOTS THIS VERSION ADDS (#218).
+   *
+   * Genesis runs once, so a world that needs a root it did not start with has
+   * only this. Build the elements on the game exactly as `world.genesis` does
+   * and answer them as `name -> element`; the host records each as a new
+   * partition, in the SAME write that lands the transformed ones.
+   *
+   * `ctx.existing` is every name the world already holds, so being idempotent
+   * is a filter rather than a convention -- and a name that is already taken is
+   * refused by name rather than silently overwriting a live partition.
+   *
+   * It may not REMOVE a root. A migration that could drop partitions would be
+   * deleting a season's stored bytes on a hook whose failure mode is a typo,
+   * and nothing gives them back.
+   */
+  readonly create?: (game: Game, ctx: WorldMigrationCreateContext) => Record<string, GameElement>;
+}
+
+/** What the `create` hook is told about the world it is adding roots to. */
+export interface WorldMigrationCreateContext {
+  /** Every partition name this world already holds, so idempotence is a filter. */
+  readonly existing: readonly string[];
+  /** The version being left, and the one being arrived at. */
+  readonly from: number;
+  readonly to: number;
 }
 
 /** What a migration is told about the thing it is transforming. */
@@ -200,6 +234,14 @@ export function assertWorldMigration(migration: unknown, stateVersion: number): 
         "only in its queued events.",
     );
   }
+  if (candidate.create !== undefined && typeof candidate.create !== "function") {
+    throw worldRefusal(
+      "bundle-not-a-world",
+      "This bundle's `world.migration.create` is not a function. It is handed the game and the " +
+        "names the world already holds, and answers the NEW partition roots to add as " +
+        "`name -> element`; leave it out for a version that adds none.",
+    );
+  }
   if (candidate.event !== undefined && typeof candidate.event !== "function") {
     throw worldRefusal(
       "bundle-not-a-world",
@@ -233,4 +275,55 @@ export function migratedArgs(
     );
   }
   return answered;
+}
+
+/**
+ * WHAT THE `create` HOOK ANSWERED, OR A REFUSAL NAMING WHY IT IS NOT USABLE.
+ *
+ * Checked here rather than at each host's call site so that every host refuses
+ * the same declarations for the same stated reasons -- and checked BEFORE
+ * anything is written, so a migration that trips one of these leaves the world
+ * exactly as it was, on its old rules, playable.
+ */
+export function assertCreatedRoots(
+  built: unknown,
+  existing: readonly string[],
+): asserts built is Record<string, GameElement> {
+  if (typeof built !== "object" || built === null || Array.isArray(built)) {
+    throw worldRefusal(
+      "world-migration-unavailable",
+      `This world's migration answered ${JSON.stringify(built)} from \`create\`. It answers the new ` +
+        "partition roots as an object of `name -> element` -- the same shape `world.genesis` " +
+        "answers -- and `{}` for a version that adds none. The world was not changed.",
+    );
+  }
+  const taken = new Set(existing);
+  for (const [name, element] of Object.entries(built as Record<string, unknown>)) {
+    if (name.length === 0) {
+      throw worldRefusal(
+        "world-migration-unavailable",
+        "This world's migration answered a partition root with an empty name. A partition is " +
+          "addressed by its name -- a command declares it, a view names it, the store keys it -- " +
+          "so a nameless one could never be reached again. The world was not changed.",
+      );
+    }
+    if (taken.has(name)) {
+      throw worldRefusal(
+        "world-migration-unavailable",
+        `This world's migration tried to create a partition named "${name}", which this world ` +
+          "already holds. Creating it would replace a live partition's stored bytes with a fresh " +
+          "element, which is not a migration, it is a deletion. `ctx.existing` lists every name " +
+          "the world holds, so filter against it. The world was not changed.",
+      );
+    }
+    if (typeof element !== "object" || element === null) {
+      throw worldRefusal(
+        "world-migration-unavailable",
+        `This world's migration answered ${JSON.stringify(element)} for the new partition ` +
+          `"${name}". Each entry is the ELEMENT the hook created on the game, exactly as ` +
+          "`world.genesis` answers them. The world was not changed.",
+      );
+    }
+    taken.add(name);
+  }
 }

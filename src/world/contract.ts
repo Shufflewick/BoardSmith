@@ -230,7 +230,7 @@
  * everything" is the case that proves the model.
   */
 
-import type { GameElement } from "../engine/index.js";
+import type { Game, GameElement } from "../engine/index.js";
 import type { ScheduleAllowance, ScheduleRequest } from "./schedule-api.js";
 // TYPE ONLY. A world's offer IS the table's action metadata (#169) -- one
 // shape, so the shared action panel and board bridge read a world's answer
@@ -736,6 +736,39 @@ export interface WorldEngine {
   migratePartition(name: string, transform: (element: GameElement) => void): void;
 
   /**
+   * BUILD A PARTITION ROOT THE STORE HAS NEVER HELD (#218).
+   *
+   * Genesis runs once, so until this every root a world would ever need had to
+   * exist from its first instant. A host that looks for a declared partition
+   * and finds no row asks here; the bundle answers either an element -- which
+   * becomes that partition -- or nothing, in which case the name is the typo
+   * the `partition-missing` refusal has always said it was.
+   *
+   * IDEMPOTENT: a name already resident is answered from residency rather than
+   * rebuilt, so a second reach finds the first one's work. The host owns the
+   * WRITE, as it owns every other write.
+   */
+  createPartition(name: string): StoredPartition | undefined;
+
+  /**
+   * DURABLE PARTITION ROOTS AN UPGRADE ADDS (#218).
+   *
+   * `migratePartition`'s other half: that one transforms a root that exists and
+   * has nowhere to answer more, so a world that outgrew its genesis -- twelve
+   * empires becoming five hundred -- had no expressible upgrade at all.
+   *
+   * `existing` is every name the world already holds. It is the HOST's
+   * knowledge, because only the host has read the store's whole key set, and it
+   * is both what the bundle's hook filters against and what a duplicate name is
+   * refused by. Nothing is written here: the caller lands these in the SAME
+   * write as the transformed partitions, so a migration is still all or nothing.
+   */
+  createMigratedPartitions(
+    build: (game: Game) => Record<string, GameElement>,
+    existing: readonly string[],
+  ): Record<string, StoredPartition>;
+
+  /**
    * One player's view of the world.
    *
    * Per player and computed on demand, so a fan-out costs what each player can
@@ -835,6 +868,8 @@ export interface WorldEngine {
 export const WORLD_ENGINE_METHODS = Object.keys({
   applyCommand: null,
   commandPartitions: null,
+  createMigratedPartitions: null,
+  createPartition: null,
   evict: null,
   hydrate: null,
   offerPartitions: null,

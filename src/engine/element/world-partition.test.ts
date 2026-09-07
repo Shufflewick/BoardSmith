@@ -896,3 +896,47 @@ describe('the dirty-set comparison is scoped to what the command reached', () =>
     );
   });
 });
+
+/**
+ * #218: A SEAT COUNT IS NOT AN ID SPACE.
+ *
+ * Element ids come from one bare counter, and a game's CONSTRUCTION spends it --
+ * a player is an element. So the same world built for four seats and for forty
+ * handed out different ids for the same furniture, and every partition a world
+ * stores was minted after that. Raising `world.maxPlayers` on a live world
+ * therefore made the wider construction mint ids the stored partitions already
+ * held, and the world came back as "element id 6 is already resident" with
+ * nothing anywhere saying a seat count could not change.
+ */
+describe('a world separates construction ids from stored ones', () => {
+  it('mints everything after the reservation above every construction id', () => {
+    const game = new WorldGame({ playerCount: 2, seed: 'floor', worldMode: true });
+    const beforeFloor = game.create(Room, 'built-in-the-constructor');
+    game.reserveConstructionIdSpace();
+    const afterFloor = game.create(Room, 'built-by-genesis');
+
+    expect(beforeFloor.id).toBeLessThan(afterFloor.id);
+    expect(afterFloor.id).toBeGreaterThanOrEqual(1_000_000);
+  });
+
+  it('puts the same partition at the same id however many seats the world has', () => {
+    const ids = [2, 40, 500].map((playerCount) => {
+      const game = new WorldGame({ playerCount, seed: 'floor', worldMode: true });
+      game.reserveConstructionIdSpace();
+      return game.create(Room, 'sector').id;
+    });
+    expect(new Set(ids).size).toBe(1);
+  });
+
+  it('refuses a second reservation, which would drop the counter onto minted ids', () => {
+    const game = new WorldGame({ playerCount: 2, seed: 'floor', worldMode: true });
+    game.reserveConstructionIdSpace();
+    game.create(Room, 'sector');
+    expect(() => game.reserveConstructionIdSpace()).toThrow(/already been reserved/);
+  });
+
+  it('refuses a snapshot-mode game, which has no partitions to separate from', () => {
+    const table = new WorldGame({ playerCount: 2, seed: 'floor' });
+    expect(() => table.reserveConstructionIdSpace()).toThrow(/world mode/i);
+  });
+});

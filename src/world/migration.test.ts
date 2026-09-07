@@ -9,9 +9,11 @@
  */
 import { describe, expect, it } from "vitest";
 
+import type { GameElement } from "../engine/index.js";
 import { WorldRefusal } from "./refusals.js";
 import {
   assertWorldMigration,
+  assertCreatedRoots,
   migratedArgs,
   planMigration,
   type WorldMigration,
@@ -89,6 +91,13 @@ describe("what a migration may declare", () => {
     expect(() => assertWorldMigration({ from: 1, event: 7 }, 2)).toThrow(
       /migration\.event` is not a function/,
     );
+    expect(() => assertWorldMigration({ from: 1, create: 7 }, 2)).toThrow(
+      /migration\.create` is not a function/,
+    );
+  });
+
+  it("accepts a create-only migration, for a version that only adds roots (#218)", () => {
+    expect(() => assertWorldMigration({ from: 1, create: () => ({}) }, 2)).not.toThrow();
   });
 });
 
@@ -115,5 +124,53 @@ describe("a queued event's arguments under new rules", () => {
       const migration = { from: 1, event: () => bad } as unknown as WorldMigration;
       expect(() => migratedArgs(migration, event)).toThrow(/object of named values/);
     }
+  });
+});
+
+/**
+ * #218: the roots an upgrade adds, checked before anything is written.
+ *
+ * Every refusal here leaves the world on its old rules with its old roots,
+ * because the whole check runs before the host opens its transaction.
+ */
+describe("the partition roots a migration creates", () => {
+  const anElement = { name: "region" } as unknown as GameElement;
+
+  it("accepts an empty answer, which is a version that adds no roots", () => {
+    expect(() => assertCreatedRoots({}, ["sector"])).not.toThrow();
+  });
+
+  it("accepts roots whose names the world does not already hold", () => {
+    expect(() =>
+      assertCreatedRoots({ "region:1": anElement, "region:2": anElement }, ["sector"]),
+    ).not.toThrow();
+  });
+
+  it("refuses a name the world already holds, because that is a deletion", () => {
+    expect(() => assertCreatedRoots({ sector: anElement }, ["sector"])).toThrow(
+      /already holds/,
+    );
+  });
+
+  it("refuses two entries under one name inside a single answer", () => {
+    // Object keys cannot repeat, so the only way to collide within one answer
+    // is against `existing` -- which the case above covers. What this pins is
+    // that the running set GROWS, so a later host that batches several hooks
+    // meets the same refusal.
+    expect(() => assertCreatedRoots({ "region:1": anElement }, ["region:1"])).toThrow(
+      /already holds/,
+    );
+  });
+
+  it("refuses a nameless root, which nothing could ever reach again", () => {
+    expect(() => assertCreatedRoots({ "": anElement }, [])).toThrow(/empty name/);
+  });
+
+  it.each([null, 7, "region", []])("refuses %p as the whole answer", (bad) => {
+    expect(() => assertCreatedRoots(bad, [])).toThrow(/name -> element/);
+  });
+
+  it("refuses an entry that is not an element", () => {
+    expect(() => assertCreatedRoots({ "region:1": 7 }, [])).toThrow(/is the ELEMENT/);
   });
 });

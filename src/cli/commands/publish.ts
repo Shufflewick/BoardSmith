@@ -17,8 +17,8 @@ import {
   type PlatformTarget,
 } from '../lib/publish-api.js';
 import { buildCommand } from './build.js';
-import { validateCommand } from './validate.js';
-import { describeZipSizeViolation } from '../lib/bundle-limits.js';
+import { validateCommand, validateBundleSize } from './validate.js';
+import { resolveWorldMode } from '../lib/world-project.js';
 import { requireGameProjectManifests } from '../lib/game-project.js';
 
 /**
@@ -206,13 +206,14 @@ export async function publishCommand(options: PublishOptions): Promise<void> {
 
   const zip = createZip(fileMap);
 
-  // WR-05: gate on the ACTUAL zip size before any upload — the server rejects
-  // zips over the limit, so an oversized bundle must fail here with an
-  // actionable message instead of round-tripping to the server to fail.
-  const sizeViolation = describeZipSizeViolation(zip.length);
-  if (sizeViolation) {
+  // WR-05/#221: gate the FRESHLY BUILT dist in the server's own units before
+  // any upload. `validateCommand` above ran before the build, so it measured
+  // the previous dist — this is the only check that sees what is about to be
+  // uploaded, and it must be the same check, not a subset of it.
+  const sizeCheck = await validateBundleSize(cwd, resolveWorldMode(config));
+  if (!sizeCheck.passed) {
     spinner.fail('Packaging failed');
-    console.error(chalk.red(sizeViolation));
+    for (const issue of sizeCheck.details ?? []) console.error(chalk.red(issue));
     process.exit(1);
   }
 
