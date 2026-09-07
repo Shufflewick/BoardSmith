@@ -646,16 +646,10 @@
       }
     },
     "src/session/pick-handler.ts": {
-      "complexity_critical": {
+      "complexity_high": {
         "count": 1
       },
-      "complexity_moderate": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_moderate": {
+      "crap_high": {
         "count": 1
       }
     },
@@ -1022,35 +1016,33 @@
   "production_coverage_findings": [],
   "target_keys": [
     "src/engine/command/executor.ts:circular dependency",
-    "src/ui/components/debug/debug-format.ts:high impact",
     "src/engine/element/game.ts:complexity",
+    "src/ui/components/debug/debug-format.ts:high impact",
     "src/engine/action/action.ts:circular dependency",
     "src/ui/composables/useActionController.ts:complexity",
     "src/engine/element/game-element.ts:complexity",
-    "src/session/pick-handler.ts:complexity",
+    "src/engine/tutorial/gate.ts:circular dependency",
+    "src/ui/composables/useBoardActionBridge.ts:high impact",
     "src/session/game-session.ts:complexity",
-    "src/engine/tutorial/progress.ts:complexity",
     "src/session/stateless-ops.ts:complexity",
+    "src/engine/tutorial/progress.ts:complexity",
     "src/cli/commands/dev.ts:complexity",
     "src/engine/command/inverse.ts:circular dependency",
-    "src/bot-trainer/benchmark.ts:complexity",
-    "src/contract/fingerprint.ts:dead code",
     "src/cli/commands/publish.ts:complexity",
-    "src/session/snapshot-session-host.ts:complexity",
-    "src/ui/composables/useBoardActionBridge.ts:high impact",
-    "src/cli/commands/drift-check.ts:complexity",
+    "src/bot-trainer/benchmark.ts:complexity",
     "src/bot/mcts-bot.ts:complexity",
+    "src/session/snapshot-session-host.ts:complexity",
     "src/ui/composables/useFlyingElements.ts:complexity",
     "src/cli/commands/chunk-provenance.ts:complexity",
-    "src/cli/commands/verify-example-replay.ts:complexity",
+    "src/cli/commands/drift-check.ts:complexity",
     "src/cli/commands/ingest-archive.ts:complexity",
-    "src/cli/commands/verify-derive-check.ts:circular dependency",
     "src/cli/commands/verify-run.ts:complexity",
+    "src/cli/commands/verify-example-replay.ts:complexity",
     "src/bot-trainer/feature-generator.ts:complexity",
-    "src/cli/commands/verify-classify.ts:complexity",
-    "src/session/pending-action-manager.ts:complexity",
+    "src/cli/commands/verify-derive-check.ts:circular dependency",
     "src/bot-trainer/feature-templates.ts:complexity",
-    "src/engine/tutorial/gate.ts:circular dependency",
+    "src/session/pending-action-manager.ts:complexity",
+    "src/cli/commands/verify-classify.ts:complexity",
     "src/cli/commands/example-test-emit.ts:complexity",
     "src/cli/commands/lint.ts:complexity",
     "src/testing/debug.ts:complexity",
