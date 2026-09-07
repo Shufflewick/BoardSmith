@@ -35,7 +35,7 @@
  * platform does not own. Selecting on classes would make every chrome CSS change
  * a platform test break, so the shell names its own surfaces and keeps the names.
  */
-import { computed, ref } from 'vue';
+import { computed, ref, watch } from 'vue';
 import ActionPanel, { type AwaitingPlayer } from './auto-ui/ActionPanel.vue';
 import GameHistory, { type HistoryMessage } from './GameHistory.vue';
 import PlayersPanel, { type Player } from './PlayersPanel.vue';
@@ -193,6 +193,18 @@ const expanded = computed({
  * copies and clears. All three are chrome this component owns and behaviour the
  * adapter drives, so they are exposed rather than duplicated.
  */
+const actionBarEl = ref<HTMLElement | null>(null);
+const modalClearance = ref(0);
+// Only the modal viewport follows panel height. Board fitting and scroll layout stay constant.
+watch(actionBarEl, (bar, _previous, onCleanup) => {
+  if (!bar) return;
+  const measure = () => { modalClearance.value = bar.getBoundingClientRect().height; };
+  const observer = new ResizeObserver(measure);
+  observer.observe(bar);
+  measure();
+  onCleanup(() => observer.disconnect());
+}, { flush: 'post' });
+
 const boardRegionEl = ref<HTMLElement | null>(null);
 const zoomContainerEl = ref<HTMLElement | null>(null);
 const historyPanel = ref<InstanceType<typeof GameHistory> | null>(null);
@@ -374,7 +386,7 @@ const mobileToggleLabel = computed(() => {
              box instead of escaping to the viewport — the board-area sandbox
              invariant holds no matter what the game designer does.
              pointer-events are none on the host and auto on its children. -->
-        <div class="game-shell__game-modal-host" id="bs-game-modal"></div>
+        <div class="game-shell__game-modal-host" id="bs-game-modal" :style="{ bottom: `${modalClearance}px` }"></div>
 
       </div>
 
@@ -395,7 +407,7 @@ const mobileToggleLabel = computed(() => {
          board. Its options list caps at 5 rows and scrolls; the board reserves
          the panel's measured height as scroll room so anything it floats over
          stays reachable. -->
-    <div class="actionbar" role="region" aria-label="Actions" data-testid="bs-actionbar">
+    <div ref="actionBarEl" class="actionbar" role="region" aria-label="Actions" data-testid="bs-actionbar">
       <!-- ⋯ controls menu: always at the far left of the bar, and in platform
            mode the sole control surface (GameHeader is hidden there). Its
            CONTENTS are the adapter's — a table's carries undo, hints, heatmap
