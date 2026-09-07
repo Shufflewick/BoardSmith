@@ -53,6 +53,23 @@ function failedExecute(actionName: string, error: unknown): ActionResult {
     return { success: false, error: error.message, threw: true, notSimulable: true };
   }
   console.error(`[BoardSmith] Action '${actionName}' execution failed:`, error);
+  // WHERE THE SENTENCE WENT, said once and only where it is news (#191).
+  //
+  // A throw out of `execute` is one of two things and the log cannot tell them
+  // apart, so it names the fork rather than guessing: an accidental `TypeError`
+  // is a bug and its text must not reach a player, while "the hearth holds 3
+  // logs and you offered 14" is a refusal the player can only discover by
+  // trying, and a generic sentence is least useful for exactly that class.
+  //
+  // Not printed for a `PlayerFacingError`, which already did the right thing.
+  if (!(error instanceof PlayerFacingError)) {
+    console.error(
+      `[BoardSmith] The player is told a generic sentence instead of the one above. ` +
+        `If that throw was a REFUSAL you wrote for them to read, throw a PlayerFacingError ` +
+        `(or a subclass) -- its message travels verbatim. Anything else is replaced, so an ` +
+        `accidental error cannot leak implementation detail to a player.`,
+    );
+  }
   // An engine policy refusal was written to be read — its message IS the
   // actionable next step. Anything else is an arbitrary runtime error, and
   // goes no further than this log.

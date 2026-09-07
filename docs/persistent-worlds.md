@@ -471,6 +471,54 @@ afterwards. An action has a channel for this and a world uses it:
   selection resolved. It is the backstop, not the surface: anything `validate`
   can say, a player would rather have been told before they pressed anything.
 
+### The refusal a player can only discover by trying
+
+`.disabled()` covers everything the world can predict. What is left is the class
+it cannot: a bank that overflows on the *amount* you chose, a trade that fails on
+the *pair* you named. Those are refused from inside `execute`, by throwing -- and
+the throw is what triggers the rollback that makes "refused" mean the world is
+unchanged.
+
+**Throw a `PlayerFacingError` and your sentence reaches the player. Throw
+anything else and it does not.**
+
+```ts
+import { PlayerFacingError } from 'boardsmith';
+
+class VillageRefusal extends PlayerFacingError {}
+
+export const kindle = worldAction<VillageGame>('kindle')
+  .needs(({ args }) => [String(args.holding)])
+  .execute((args, ctx) => {
+    const holding = ctx.world.partition(String(args.holding)) as Holding;
+    if (holding.woodpile < Number(args.logs)) {
+      throw new VillageRefusal(
+        `Holding ${holding.seat} has ${holding.woodpile} logs and cannot burn ${args.logs}. Gather first.`,
+      );
+    }
+    // ...
+  });
+```
+
+A plain `Error` is replaced with *"The "kindle" action could not be completed
+because of an error in the game's rules"* before it leaves the isolate, and that
+is deliberate rather than an oversight (#47): a throw out of `execute` is as
+likely to be an accidental `TypeError: Cannot read properties of undefined
+(reading 'woodpile')` as a refusal, and that text leaks implementation detail
+while telling the player nothing they can act on. The engine cannot tell the two
+apart, so it asks you to. `PlayerFacingError` is how you say *this message was
+written to be read*; the log names it whenever a sentence is dropped.
+
+This is deliberately **not** a `WorldRefusal`. That table is the *platform's*
+vocabulary and its codes drive a host's park ladder, so giving a game's own
+refusal one would relabel every bug in a bundle's rules as one of the platform's
+words (#169, #191). A game's refusal travels unclassified, as it always has --
+what changed is only that it travels with its sentence intact.
+
+The bar for the message is the one `PlayerFacingError` itself states: it must
+name what to do next, and must never carry a stack trace, a file path, an
+internal identifier, or the text of an exception you did not write.
+
 ### `worldClockAction()`: the clock's own verbs
 
 ```ts
@@ -908,6 +956,12 @@ deterministic, so a host with a park ladder parks on it:
 **`infrastructure`**: a service the host depends on did not answer.
 `bundle-store-unavailable` is the one code, and it repairs itself when the
 service comes back. It costs the event nothing while it lasts.
+
+**Your game's own refusals are not in this table, and should not be.** A rule
+saying no is not a code a host's lifecycle policy reads; it is a sentence for the
+player. Throw a `PlayerFacingError` and it reaches them verbatim -- see [the
+refusal a player can only discover by
+trying](#the-refusal-a-player-can-only-discover-by-trying).
 
 An unclassified throw from inside your handler is treated as **`game`**. That
 default is the safe one: the cost of being wrong is one dead-lettered event,
