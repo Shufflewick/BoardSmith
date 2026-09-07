@@ -156,7 +156,9 @@ This runs:
   that type-check just compiled, so a test file excluded from `tsconfig.json`'s
   `include` cannot run in one gate while being invisible to the other
 - Security scan for forbidden APIs (network, timers, non-determinism, eval)
-- Asset path check (absolute paths break on the publishing platform)
+- Asset path check: absolute paths break on the publishing platform, and a
+  remote image URL the bundle uses must be covered by `imageSources` or it is
+  blocked once published
 - Bundle size limits, in the units the server measures them in: a table game's
   `rules.js` against the executor's 1 MiB request cap **as JSON-encoded**, not as
   it sits on disk (quotes, backslashes and newlines each cost an extra byte); a
@@ -212,6 +214,26 @@ file the bundle does not carry:
 ```json
   "thumbnail": "./public/thumbnail.png"
 ```
+
+#### Artwork that lives outside the bundle
+
+A published bundle is served under an image allowlist: its own files and
+`data:` URIs, and nothing else. A game whose artwork lives in a separate
+repository therefore shows **no pictures at all** unless it says where they come
+from, and it says so with `imageSources`:
+
+```json
+  "imageSources": ["https://raw.githubusercontent.com/owner/art/abc123/"]
+```
+
+Each entry is an `https://` origin, or an origin and a path **prefix ending in a
+slash** — which is the one to prefer, because it pins one directory at one
+commit rather than opening a whole host. Images only: scripts, styles, fonts,
+connections and form targets are unaffected.
+
+`boardsmith validate` scans the built bundle for remote image URLs and fails on
+any the declaration does not cover, so a picture that renders on your laptop
+cannot be silently blocked once the game is published.
 
 ### Game Class (src/rules/game.ts)
 
