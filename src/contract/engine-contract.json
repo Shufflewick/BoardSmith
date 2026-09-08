@@ -1,7 +1,7 @@
 {
-  "revision": 48,
+  "revision": 49,
   "bundleProtocol": 2,
-  "surfaceHash": "025c0bc463474eb1",
+  "surfaceHash": "b78d133b1a9ffd82",
   "payloadHash": "eb472de70ccc7f01",
   "history": [
     {
@@ -387,6 +387,14 @@
       "surfaceHash": "025c0bc463474eb1",
       "payloadHash": "eb472de70ccc7f01",
       "summary": "A step's needs() context now carries world -- the indexed, read-only WorldResidency that execute and a bundle's view(seat, world) already receive -- so a later round reaches a root an earlier round declared by name instead of searching the resident tree for it; readOnlyProjection also stopped wrapping its own output, which restores the identity a projected element had lost and takes a 500-root finder from 80x the live tree to 17x. The offer fixture now hashes the declaration WALK and not only its answer, which is why this revision exists at all: the walk was claimed as covered from r-#187 onward and was not (ShufflewickPub#374)"
+    },
+    {
+      "revision": 49,
+      "date": "2026-09-08",
+      "bundleProtocol": 2,
+      "surfaceHash": "b78d133b1a9ffd82",
+      "payloadHash": "eb472de70ccc7f01",
+      "summary": "WorldAction gains chooseElements -- the plural of chooseElement, which two of the world's own refusals already told authors to reach for and which was not on the facade -- and chooseFrom now forwards multiSelect, so a world action can ask for a GROUP rather than one of a thing. A world's multiSelect always resolves to an array (the engine's form may return undefined to mean single; this one may not), so the argument type is knowable from the call. dependsOn stays refused: it is a cross-product in a single-shot protocol, and a dynamic BOUND does not need it (ShufflewickPub#376)"
     }
   ]
 }
