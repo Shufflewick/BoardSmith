@@ -1,7 +1,7 @@
 {
-  "revision": 46,
+  "revision": 47,
   "bundleProtocol": 2,
-  "surfaceHash": "6a7db7a4e757880f",
+  "surfaceHash": "025c0bc463474eb1",
   "payloadHash": "67a7a5d320b9ce2b",
   "history": [
     {
@@ -371,6 +371,14 @@
       "surfaceHash": "6a7db7a4e757880f",
       "payloadHash": "67a7a5d320b9ce2b",
       "summary": "worlds can grow: world.migration.create adds durable partition roots in the same durable step as an upgrade, world.createPartition builds a root the first time a declaration names it, and a world's own elements are minted above a reserved id floor so world.maxPlayers can change on a live world (#218)"
+    },
+    {
+      "revision": 47,
+      "date": "2026-09-08",
+      "bundleProtocol": 2,
+      "surfaceHash": "025c0bc463474eb1",
+      "payloadHash": "67a7a5d320b9ce2b",
+      "summary": "a world written before the construction-id floor is lifted onto it once, at its next start: one offset across every partition and every queued event, so a pre-floor world's seat count can change without its stored roots colliding with the wider construction (#223)"
     }
   ]
 }

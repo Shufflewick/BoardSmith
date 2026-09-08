@@ -29,6 +29,7 @@ export {
   ElementCollection,
   PersistentMap,
   DEFAULT_COLOR_PALETTE,
+  WORLD_PARTITION_ID_FLOOR,
   RandomnessForbiddenError,
   GAME_ROOT_FIELD_AUDIENCE,
   GAME_SELF_SERIALIZED_FIELDS,

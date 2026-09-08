@@ -11,6 +11,7 @@ export { HexGrid, HexCell } from './hex-grid.js';
 export {
   Game,
   DEFAULT_COLOR_PALETTE,
+  WORLD_PARTITION_ID_FLOOR,
   RandomnessForbiddenError,
   // The engine's own root-field audience table, and the two accessors a game
   // uses to defer to it rather than hand-keep a mirror (#32).

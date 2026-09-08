@@ -43,6 +43,7 @@ import { worldBudgets } from '../../world/index.js';
 import {
   LocalWorldHost,
   type WorldDevRequest,
+  type WorldLiftOutcome,
   type WorldMigrationOutcome,
 } from '../dev-host/world-host.js';
 import { openWorldStore, worldStorePath, type LocalWorldStore } from '../dev-host/world-store.js';
@@ -434,7 +435,22 @@ export async function startWorldDevServer(options: WorldDevServerOptions): Promi
  * world to tell -- and the person who published the new rules is standing here
  * (#200). Silent for the ordinary start, which moved nothing.
  */
-function reportMigration(started: { migrated?: WorldMigrationOutcome }): void {
+function reportMigration(started: {
+  migrated?: WorldMigrationOutcome;
+  lifted?: WorldLiftOutcome;
+}): void {
+  if (started.lifted !== undefined) {
+    // SAID FIRST, because it happened first and because it is the sentence
+    // that explains why a world written on an older BoardSmith could suddenly
+    // grow (#223).
+    const { offset, partitions, events } = started.lifted;
+    console.log(
+      chalk.green(
+        `  Lifted this world's element ids by ${offset} so its seat count can change: ` +
+          `${partitions} partition(s) and ${events} queued event(s), in one durable step.`,
+      ),
+    );
+  }
   if (started.migrated === undefined) return;
   const { from, to, partitions, created, events } = started.migrated;
   console.log(

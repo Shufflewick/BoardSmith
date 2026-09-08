@@ -1040,6 +1040,18 @@ storage cannot collide however the seat count moves. Lowering `maxPlayers` below
 somebody already holds is still refused, because a seat is where a player's
 holdings are.
 
+**A world written BEFORE that floor is lifted onto it, once, at its next start
+(#223).** Its roots sit at whatever ids the old counter happened to reach, so
+widening it collided on the very first adoption -- before any migration hook
+could run, which is to say at a moment no author could have reached. The host
+now shifts the whole world by ONE offset, chosen to put its lowest id exactly
+on the floor: every partition and every queued event, in one transaction, so
+ids keep meaning the same thing across partitions and every `{ __elementId }`
+reference still points where it did. A seat (`{ __playerRef }`) is not an
+element id and is left exactly alone. You declare nothing for this and there is
+nothing to migrate -- `boardsmith dev` says what it lifted, and a world already
+above the floor pays one comparison.
+
 **It is not a command.** No clock, no schedule, no seat: a migration that could
 schedule would be arming timers against a world whose own timers are mid-
 transformation, and one that could act would be a command no seat sent.
