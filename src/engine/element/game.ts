@@ -2117,9 +2117,20 @@ export class Game<
    * repeat. Reaching the shared evaluator is what stops the world growing a
    * fourth opinion about what "disabled" means.
    */
-  getActionDisabledReason(action: ActionDefinition, player: P): string | null {
+  getActionDisabledReason(
+    action: ActionDefinition,
+    player: P,
+    reading?: Game,
+  ): string | null {
     if (!action.disabled) return null;
-    const reason = action.disabled({ game: this, player, args: {} });
+    // `reading` is the game the RULE sees, and it exists for one caller: a
+    // world's offer hands over a read-only projection, because an offer runs on
+    // a path with no rollback and no checkpoint and a rule that wrote there
+    // would be reverted at the next hibernation with nobody told
+    // (ShufflewickPub #384). Enforcement passes nothing and gets the live game,
+    // so the button a player sees and the gate the server applies are still one
+    // rule evaluated one way.
+    const reason = action.disabled({ game: reading ?? this, player, args: {} });
     return reason === false ? null : reason;
   }
 

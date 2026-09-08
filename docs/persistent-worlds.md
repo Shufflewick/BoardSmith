@@ -887,10 +887,20 @@ costs one round trip per pick AFTER the first, only while somebody is mid-action
 
 **What none of this covers, and there is no guard for it.** A `condition` or a
 `disabled` predicate is ordinary code with the resident tree in front of it, and
-nothing stops one walking it. The four rules bound the *candidates*; they say
-nothing about what a predicate does before returning `false`. Write those against
-the partitions your declaration named and nothing else. This paragraph is the
-whole of the enforcement.
+nothing stops one WALKING it. The four rules bound the *candidates*; they say
+nothing about how far a predicate reads before returning `false`. Write those
+against the partitions your declaration named and nothing else. This paragraph is
+the whole of the enforcement.
+
+**What is guarded: an offer cannot WRITE.** Everything an offer runs -- a
+`condition`, an action's `disabled`, a `choices` or `elements` callback, a
+`prompt`, a `display`, a `multiSelect` -- receives a read-only projection of the
+game and of `world.partition`, so an assignment there is the same
+`declaration-write` refusal a declaration's is (ShufflewickPub #384). It has to
+be: an offer runs once per watcher per refresh, on a path with no rollback and no
+checkpoint, so a write reached every watcher's next frame, was never made
+durable, and was reverted at the next hibernation with nobody told. Do the write
+in `execute()`, which is the one place a world has somewhere to put it.
 
 ## `offersFor(player, { now, presence })`: what a seat can do here
 

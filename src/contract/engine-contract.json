@@ -1,7 +1,7 @@
 {
-  "revision": 52,
+  "revision": 53,
   "bundleProtocol": 2,
-  "surfaceHash": "0a1b5438b6ce23ef",
+  "surfaceHash": "a0391cda70e33b1f",
   "payloadHash": "eb472de70ccc7f01",
   "history": [
     {
@@ -419,6 +419,14 @@
       "surfaceHash": "0a1b5438b6ce23ef",
       "payloadHash": "eb472de70ccc7f01",
       "summary": "A world's panel can re-ask ONE pick with the arguments bound so far (ShufflewickPub #378). New WorldEngine verbs pickPartitions() and resolvePick(), and runner.declarePick()/resolvePick() beside them: a world's offer is enumerated in one frame with nothing bound, so a selection whose multiSelect bounds or choices callback read an earlier selection's value resolved to the unbounded fallback and reached the browser as a cap it could not use. An unbounded multiSelect now OMITS max on a world offer instead of serializing Infinity, which JSON writes as null and the action panel read as a cap of zero. The world wire gains the world_pick request and world_pick_result answer; a host that does not implement them leaves a world's later picks answered from the one-shot offer, as before."
+    },
+    {
+      "revision": 53,
+      "date": "2026-09-08",
+      "bundleProtocol": 2,
+      "surfaceHash": "a0391cda70e33b1f",
+      "payloadHash": "eb472de70ccc7f01",
+      "summary": "A world's OFFER cannot write to the world it is describing (ShufflewickPub #384). Everything the offer path runs -- an action's condition, its disabled rule, a choices/elements callback, a prompt, a display, a multiSelect -- now receives the same read-only projection (world-readonly.ts, #219) that a declaration and world.view already receive, for both ctx.game and ctx.world.partition, and runs with reach-marking suspended (Game#readingOnly) the way viewFor does. Game#getActionDisabledReason and ActionExecutor#getChoices take an optional trailing 'reading' game so the rule stays ONE function evaluated one way: enforcement passes nothing and still sees the live game. An offer-time write was previously accepted, appeared in every watcher's next frame, was never checkpointed, and was reverted at the next hibernation with nobody told."
     }
   ]
 }

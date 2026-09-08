@@ -555,9 +555,22 @@ export class ActionExecutor {
     player: Player,
     args: Record<string, unknown>,
     actionName?: string,
+    /**
+     * The game the CANDIDATE CALLBACKS see, when it must not be the live one.
+     *
+     * One caller: a world's offer, which runs these callbacks to describe what
+     * a seat may do and hands over a read-only projection because an offer sits
+     * on a path with no rollback and no checkpoint -- a `choices` or `elements`
+     * callback that wrote there reached every watcher's frame and was reverted
+     * at the next hibernation with nobody told (ShufflewickPub #384).
+     *
+     * Everything else passes nothing and gets the live game, so enumeration and
+     * enforcement are still one function evaluated one way.
+     */
+    reading?: Game,
   ): AnnotatedChoice<unknown>[] {
     const context: ActionContext = {
-      game: this.game,
+      game: reading ?? this.game,
       player,
       args,
     };

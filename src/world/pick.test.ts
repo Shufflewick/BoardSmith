@@ -217,3 +217,128 @@ describe("#378 — one pick, re-asked with the arguments bound so far", () => {
     expect(engine.pickPartitions("player-a", "deploy", "crew", {}, STAMP.now)).toEqual([]);
   });
 });
+
+/**
+ * ShufflewickPub #384: AN OFFER IS A QUESTION, SO IT MAY NOT WRITE.
+ *
+ * `world.partition` is projected read-only for a DECLARATION (#219) and for
+ * `world.view`, which additionally runs under `game.readingOnly`. The OFFER
+ * path was projected by neither: `readOnlyFacilities` handed over the live root,
+ * so a `choices`, `elements`, `display`, `disabled`, `prompt` or `condition`
+ * callback -- all of which an offer runs -- could write to the world.
+ *
+ * It is the #152/#219 failure class on a surface those tickets did not cover,
+ * and it is the worst-placed instance of it: an offer runs once per watcher per
+ * refresh, on a path with no rollback and no checkpoint. The write showed up in
+ * every watcher's next frame, was never made durable, and was reverted at the
+ * next hibernation with nobody told.
+ */
+describe("#384 — an offer cannot write to the world it is describing", () => {
+  /** Writes through the accessor a declaration is handed, from inside a
+   *  callback the offer path runs. */
+  const meddle = worldAction<FleetGame>("meddle")
+    .needs(() => [FLEET])
+    .chooseFrom("ship", {
+      choices: ({ world }) => {
+        (world.partition(FLEET) as Dock).name = "tampered";
+        return ["dory"];
+      },
+    })
+    .execute(() => {});
+
+  /** The same write from a `disabled` predicate, which runs before any
+   *  selection is reached at all. */
+  const greying = worldAction<FleetGame>("greying")
+    .needs(() => [FLEET])
+    .disabled(({ world }) => {
+      (world.partition(FLEET) as Dock).name = "tampered";
+      return false;
+    })
+    .execute(() => {});
+
+  async function engineFor(action: ReturnType<typeof worldAction>) {
+    const engine = new BoardSmithWorldEngine({
+      game: newGame(),
+      seats: new Map([["player-a", 1]]),
+      store: new Store(genesis()),
+      actions: [action],
+      view: () => [FLEET],
+    });
+    await engine.hydrate([FLEET]);
+    return engine;
+  }
+
+  it("REFUSES a write from a candidate callback, and leaves the world alone", async () => {
+    const engine = await engineFor(meddle);
+
+    await expect(engine.offersFor("player-a", STAMP)).rejects.toThrow(
+      /A declaration tried to write/,
+    );
+    expect(await engine.serializePartitions([FLEET])).toMatchObject({
+      [FLEET]: expect.stringContaining('"dock"') as unknown as string,
+    });
+  });
+
+  it("REFUSES a write from a disabled predicate, which runs before any pick", async () => {
+    const engine = await engineFor(greying);
+
+    await expect(engine.offersFor("player-a", STAMP)).rejects.toThrow(
+      /A declaration tried to write/,
+    );
+  });
+
+  it("REFUSES the same write through a re-asked pick (#378)", async () => {
+    const engine = await engineFor(meddle);
+
+    await expect(
+      engine.resolvePick("player-a", "meddle", "ship", {}, STAMP),
+    ).rejects.toThrow(/A declaration tried to write/);
+  });
+
+  /** Writes through `ctx.game`, which is the OTHER door into the same tree. */
+  const meddleViaGame = worldAction<FleetGame>("meddleViaGame")
+    .needs(() => [FLEET])
+    .chooseFrom("ship", {
+      choices: ({ game }) => {
+        game.ship("dory").hold = 0;
+        return ["dory"];
+      },
+    })
+    .execute(() => {});
+
+  /** And from an action-level `disabled` rule, which is evaluated last and was
+   *  handed the live game by `getActionDisabledReason`. */
+  const meddlingRule = worldAction<FleetGame>("meddlingRule")
+    .needs(() => [FLEET])
+    .disabled(({ game }) => {
+      game.ship("dory").hold = 0;
+      return false;
+    })
+    .execute(() => {});
+
+  it("REFUSES a write through ctx.game, not only through world.partition", async () => {
+    const engine = await engineFor(meddleViaGame);
+
+    await expect(engine.offersFor("player-a", STAMP)).rejects.toThrow(
+      /A declaration tried to write/,
+    );
+  });
+
+  it("REFUSES a write from the action's own disabled rule", async () => {
+    const engine = await engineFor(meddlingRule);
+
+    await expect(engine.offersFor("player-a", STAMP)).rejects.toThrow(
+      /A declaration tried to write/,
+    );
+  });
+
+  it("still lets an offer READ everything its declaration named", async () => {
+    // The half that must not break: an offer's whole job is to read the
+    // resident tree, and a projection that refused reads would refuse offers.
+    const engine = await engineFor(deploy);
+
+    const [offer] = await engine.offersFor("player-a", STAMP);
+
+    expect(offer!.selections.find((pick) => pick.name === "ship")!.choices).toHaveLength(2);
+  });
+});

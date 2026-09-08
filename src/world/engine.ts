@@ -786,10 +786,18 @@ export class BoardSmithWorldEngine implements WorldEngine {
       // round one.
       if (
         definition.condition &&
-        !evaluateCondition(
-          definition.condition,
-          { game: this.game, player: acting, args: {} },
-          `action '${definition.name}'`,
+        // PROJECTED, AND WITH REACH-MARKING OFF (ShufflewickPub #384/#295): a
+        // condition decides whether an action is OFFERED, and an offer changes
+        // nothing -- so a condition that wrote would be writing on the one path
+        // with nowhere to put it. `readingOnly` is not optional beside the
+        // projection: a finder reached through a projected game marks what it
+        // touched, and marking is a write these traps refuse.
+        !this.game.readingOnly(() =>
+          evaluateCondition(
+            definition.condition!,
+            { game: readOnlyProjection(this.game), player: acting, args: {} },
+            `action '${definition.name}'`,
+          ),
         )
       ) {
         return null;
@@ -835,7 +843,12 @@ export class BoardSmithWorldEngine implements WorldEngine {
       // An ENABLED action with no answerable question is still dropped, and
       // that is the half this must not undo: it is a pick that opens on
       // nothing, which is what #187 was first reported as.
-      const disabled = this.game.getActionDisabledReason(definition, acting);
+      // PROJECTED AND READ-ONLY (#384), exactly as the condition above: a
+      // greying rule is answering "may this seat take it", which changes
+      // nothing.
+      const disabled = this.game.readingOnly(() =>
+        this.game.getActionDisabledReason(definition, acting, readOnlyProjection(this.game)),
+      );
       if (disabled === null && !satisfiable) return null;
 
       return offerOf(definition, selections, disabled);
@@ -971,18 +984,47 @@ export class BoardSmithWorldEngine implements WorldEngine {
     named: readonly string[],
     args: Readonly<Record<string, unknown>> = {},
   ): PickMetadata {
+    // READ-ONLY FOR THE WHOLE PICK (#384/#295). Everything below runs the
+    // bundle's own callbacks, and every one of them is answering a question
+    // rather than taking a moment.
+    return this.game.readingOnly(() => this.pickMetadata(definition, index, acting, named, args));
+  }
+
+  private pickMetadata(
+    definition: ActionDefinition,
+    index: number,
+    acting: Player,
+    named: readonly string[],
+    args: Readonly<Record<string, unknown>>,
+  ): PickMetadata {
     const selection = definition.selections[index]!;
-    const pick = wireSafeMultiSelect(buildPickMetadata(this.game, acting, selection, { ...args }));
+    // THE GAME AN OFFER'S OWN CALLBACKS SEE IS PROJECTED (ShufflewickPub #384),
+    // for the reason a declaration's is: an offer runs on a path with no
+    // rollback and no checkpoint, so a `prompt`, a `display` or a `multiSelect`
+    // that wrote would reach every watcher's frame and be reverted at the next
+    // hibernation with nobody told.
+    const reading = readOnlyProjection(this.game);
+    const pick = wireSafeMultiSelect(
+      buildPickMetadata(reading, acting, selection, { ...args }),
+    );
     if (selection.type === "number" || selection.type === "text") return pick;
 
     const candidates = this.game
       .getActionExecutor()
-      .getChoices(selection, acting, { ...args }, definition.name) as AnnotatedCandidate[];
+      // PROJECTED (#384): `choices` and `elements` are the offer's own callbacks
+      // and they must not be able to write the world they are describing.
+      .getChoices(
+        selection,
+        acting,
+        { ...args },
+        definition.name,
+        reading,
+      ) as AnnotatedCandidate[];
 
     // (c) THE PER-SELECTION CAP, this host's own number.
     assertCandidateBudget(definition.name, selection.name, candidates.length, this.budgets);
 
-    const context = { game: this.game, player: acting, args: { ...args } };
+    const context = { game: reading, player: acting, args: { ...args } };
     // Warnings are the SESSION's channel for a soft-failed display callback and
     // a world has no frame to carry them; collected so the formatters have
     // somewhere to put one, and dropped, because the console already has it.
@@ -1215,7 +1257,16 @@ export class BoardSmithWorldEngine implements WorldEngine {
       presence: new Set(stamp.presence),
       partition: (name: string) => {
         assertDeclared(action, name, named);
-        return this.rootOf(name);
+        // READ-ONLY, AND NOT BY PROMISE (ShufflewickPub #384). This accessor
+        // used to hand over the live root, so every callback an offer runs --
+        // `condition`, `disabled`, `choices`, `elements`, `display`, `prompt`
+        // -- could write to the world. It is the worst-placed instance of the
+        // #219 failure class: an offer runs once per watcher per refresh, on a
+        // path with NO rollback and NO checkpoint, so the write reached every
+        // watcher's next frame, was never made durable, and was reverted at the
+        // next hibernation with nobody told. `world-readonly.ts` carries the
+        // whole argument; this is the same projection a declaration is handed.
+        return readOnlyProjection(this.rootOf(name));
       },
       schedule: () => refuse("schedule"),
       cancel: () => refuse("cancel"),
