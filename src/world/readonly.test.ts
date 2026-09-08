@@ -97,4 +97,61 @@ describe("readOnlyProjection", () => {
       expect((error as WorldRefusal).message).toContain("run()");
     }
   });
+
+  it("answers the SAME projection for an element reached THROUGH a method", () => {
+    // #374: the identity guarantee above only held for a direct call. A method
+    // runs with the projection as its receiver, so what it returns was already
+    // projected -- and the `get` trap projected it a SECOND time, handing back
+    // a wrapper that compares unequal to the same element's own projection.
+    // A declaration comparing "the token I found" against "the token in this
+    // room" got false from two reads of one element.
+    const { here } = world();
+    const throughMethod = readOnlyProjection(here).first(Token)!;
+    const direct = readOnlyProjection(here.first(Token)!);
+
+    expect(throughMethod).toBe(direct);
+  });
+
+  it("is IDEMPOTENT: projecting a projection answers that same projection", () => {
+    // #374: `projections` maps original -> wrapper, and nothing recognised a
+    // value that already IS a wrapper. So every layer of re-wrapping added a
+    // trap hop to every subsequent read, which is what made a 500-root finder
+    // cost seconds. A projection is already read-only; wrapping it again buys
+    // no enforcement and charges for the privilege.
+    const { here } = world();
+    const projection = readOnlyProjection(here);
+
+    expect(readOnlyProjection(projection)).toBe(projection);
+  });
+
+  it("answers the SAME wrapper for repeated reads of one method", () => {
+    // #374: each read of a function property built a fresh closure. A tree walk
+    // reads `first`/`all`/`children` once per element visited, so the garbage
+    // was proportional to the tree and not to the question being asked.
+    const { here } = world();
+    const projection = readOnlyProjection(here);
+
+    expect(projection.first).toBe(projection.first);
+  });
+
+  it("mints ONE projection per element however deeply it is reached", () => {
+    // #374 as an invariant rather than a stopwatch. The re-wrapping this closes
+    // was visible as cost -- a finder over 500 roots took seconds -- but the
+    // cost was a symptom: each layer of wrapping added a trap hop to every
+    // later read. What the layers actually broke is identity, and identity is
+    // the thing a test can pin without a clock. Two methods deep, through a
+    // tree big enough that the walk is real, the projection must still be the
+    // one projection that element has.
+    const game = new ProjectionGame({ playerCount: 2, seed: "depth", worldMode: true });
+    for (let i = 0; i < 500; i += 1) {
+      game.create(Room, `room-${i}`).create(Token, `token-${i}`);
+    }
+    const liveRoom = game.first(Room, "room-499")!;
+
+    const room = readOnlyProjection(game).first(Room, "room-499")!;
+    const token = room.first(Token)!;
+
+    expect(room).toBe(readOnlyProjection(liveRoom));
+    expect(token).toBe(readOnlyProjection(liveRoom.first(Token)!));
+  });
 });

@@ -860,6 +860,11 @@ export class BoardSmithWorldEngine implements WorldEngine {
           player: player === null ? null : readOnlyProjection(player),
           seat,
           args: args as Record<string, unknown>,
+          // BY NAME, AND INDEXED (#374). The alternative a declaration is left
+          // with when this is absent is `game.first(Class, name)`, which walks
+          // the resident tree through the projection to rediscover an id
+          // `residentIds` already holds -- the whole of the cost #374 measured.
+          world: this.residentWorld(),
         }),
       ),
     );

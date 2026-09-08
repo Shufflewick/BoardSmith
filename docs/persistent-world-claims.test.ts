@@ -516,6 +516,45 @@ describe('#169: a world action is an Action, and the guide teaches the real one'
     expect(guide).toContain('undeclared-partition');
   });
 
+  it('gives a DECLARATION the same indexed accessor, read-only, as the guide says (#374)', async () => {
+    // The guide now tells an author to reach a declared root by name rather
+    // than to search for it with `game.first`. Both halves of that advice are
+    // claims about the engine: that the accessor is there in a needs context at
+    // all, and that reaching a root through it is still read-only. A guide that
+    // recommended a path the engine did not offer -- or offered as a writable
+    // shortcut past #219 -- would be worse than the search it replaced.
+    let seen: unknown = 'unset';
+    const reader = worldAction<VillageFixture>('reader')
+      .needs(({ player }) => [holdingPartition(player.seat)])
+      .needs(({ world, player }) => {
+        seen = world.partition(holdingPartition(player.seat));
+        return [];
+      })
+      .execute(() => {});
+    const { engine } = newEngine([reader]);
+
+    await apply(engine, 'p1', { name: 'reader', args: {} });
+
+    expect(seen).toBeDefined();
+    expect(guide).toContain('world.partition(name)');
+  });
+
+  it('REFUSES a declaration that writes through that accessor (#374, #219)', async () => {
+    const writer = worldAction<VillageFixture>('nameWriter')
+      .needs(({ player }) => [holdingPartition(player.seat)])
+      .needs(({ world, player }) => {
+        const holding = world.partition(holdingPartition(player.seat)) as Holding;
+        holding.standing = 1;
+        return [];
+      })
+      .execute(() => {});
+    const { engine } = newEngine([writer]);
+
+    await expect(apply(engine, 'p1', { name: 'nameWriter', args: {} })).rejects.toThrow(
+      /A declaration tried to write/,
+    );
+  });
+
   it('emits its narration rather than returning it, routed to the seats that can see it', async () => {
     const { engine, game } = newEngine();
     const result = await apply(engine, 'p2', {

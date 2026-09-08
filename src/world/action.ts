@@ -85,6 +85,9 @@ import type { ConditionConfig } from "../engine/action/types.js";
 import type { WorldBudgets } from "./budgets.js";
 import type { ScheduleArm } from "./schedule-api.js";
 import type { WorldNarrationLine } from "./contract.js";
+// TYPE-ONLY, so the import is erased and the cycle with `engine.ts` is not one
+// at runtime. `WorldResidency` is declared beside the engine that answers it.
+import type { WorldResidency } from "./engine.js";
 import { worldRefusal } from "./refusals.js";
 
 /**
@@ -223,6 +226,21 @@ export interface WorldNeedsContext<G extends Game = Game> {
   readonly game: G;
   readonly player: PlayerOf<G>;
   readonly args: Record<string, unknown>;
+  /**
+   * WHAT AN EARLIER ROUND MADE RESIDENT, BY NAME (#374).
+   *
+   * The same accessor `execute` and a bundle's `view(seat, world)` already
+   * receive, and for the same reason: a name is the thing a declaration has,
+   * and the engine indexes it. Reaching the same root through `game` instead
+   * means a walk of the resident tree -- every seat's roster, through the
+   * read-only projection -- to rediscover an id the engine is already holding.
+   * At 500 seats that walk was the whole of #374's measured cost.
+   *
+   * Read-only, exactly as `game` is: a declaration runs before the platform has
+   * decided what this command may change, so a write here could not be
+   * checkpointed. See `readonly.ts`.
+   */
+  readonly world: WorldResidency;
 }
 
 /** What a seatless step's declaration may read. `seat` is null and there is no
@@ -231,6 +249,9 @@ export interface WorldClockNeedsContext<G extends Game = Game> {
   readonly game: G;
   readonly seat: null;
   readonly args: Record<string, unknown>;
+  /** As `WorldNeedsContext.world` (#374). A clock's declaration reads the same
+   *  resident state a seat's does. */
+  readonly world: WorldResidency;
 }
 
 /**
@@ -254,6 +275,7 @@ export type WorldNeeds = (context: {
   readonly player: Player | null;
   readonly seat: number | null;
   readonly args: Record<string, unknown>;
+  readonly world: WorldResidency;
 }) => readonly string[];
 
 /**
