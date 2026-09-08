@@ -16,6 +16,7 @@ import {
   type GameOptions,
 } from './index.js';
 import { _clearShownWarnings } from '../utils/dev.js';
+import * as ui from '../ui/index.js';
 
 class RoundGame extends Game<RoundGame, Player> {
   constructor(options: GameOptions) {
@@ -126,8 +127,9 @@ describe('the root-field audience table is reachable from outside (#32)', () => 
 });
 
 describe('useBoardActionBridge is on the public UI surface (#30)', () => {
-  it('is exported from boardsmith/ui alongside the pieces it pairs with', async () => {
-    const ui = await import('../ui/index.js');
+  it('is exported from boardsmith/ui alongside the pieces it pairs with', () => {
+    // Statically imported: see the note in `src/ui/utils/color.test.ts`
+    // (ShufflewickPub #385). The barrel's transform is not this test's cost.
     expect(ui.useBoardActionBridge).toBeTypeOf('function');
     // The two it is useless without, already public.
     expect(ui.createBoardInteraction).toBeTypeOf('function');

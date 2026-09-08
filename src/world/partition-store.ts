@@ -44,6 +44,7 @@
  * person's data", so it composes rather than living here.
  */
 import type { StoredPartition } from "./contract.js";
+import type { WorldGenesis } from "./runner.js";
 import { worldRefusal } from "./refusals.js";
 import type { WorldBudgets } from "./budgets.js";
 
@@ -182,13 +183,19 @@ export interface WorldPartitionWriter {
   /**
    * Create every partition a genesis produced, in one write.
    *
+   * `genesis` is the whole of what `WorldRunnerHandle.genesis()` answered --
+   * the partitions AND the world's id allocation stamp -- and it is one object
+   * rather than two arguments for the reason ShufflewickPub #377 exists: a host
+   * that wrote the partitions and dropped the stamp built a world whose next
+   * host mints ids these bytes already own.
+   *
    * A host may widen this -- the local dev store takes the state version
    * genesis wrote under, and the platform's takes the rows that ride the same
    * write (#200, #369) -- because what ELSE lands with a genesis is that
    * host's storage business. What the contract requires is only that the
-   * partitions land together.
+   * partitions and the stamp land together.
    */
-  createAll(records: Record<string, StoredPartition>): Promise<void>;
+  createAll(genesis: WorldGenesis): Promise<void>;
   /**
    * Write exactly what a checkpoint serialized.
    *

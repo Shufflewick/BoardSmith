@@ -1,7 +1,7 @@
 {
-  "revision": 50,
+  "revision": 55,
   "bundleProtocol": 2,
-  "surfaceHash": "d1181c951837fd52",
+  "surfaceHash": "833f0bcefd6e4aef",
   "payloadHash": "eb472de70ccc7f01",
   "history": [
     {
@@ -403,6 +403,46 @@
       "surfaceHash": "d1181c951837fd52",
       "payloadHash": "eb472de70ccc7f01",
       "summary": "A declaration is stamped: commandPartitions and offerPartitions now take the instant the dispatch is happening at -- a command's stamped arrival, a scheduled event's due, an offer's own now -- and a needs() context reaches it as world.now, the same instant execute is about to be given. Without it a world whose partitions are TIMED could not tell a due one from a future one and had to declare every active one, which is O(world) in the mode whose argument is that a command costs O(room). No presence, deliberately: residency that depended on who is connected would differ between two watchers of one world. The runner's declare and declareOffers take the stamp through, so the parent must send it (ShufflewickPub#375)"
+    },
+    {
+      "revision": 51,
+      "date": "2026-09-08",
+      "bundleProtocol": 2,
+      "surfaceHash": "1c64faefb4918717",
+      "payloadHash": "eb472de70ccc7f01",
+      "summary": "A world's element-id allocation is durable state a host persists and hands back (ShufflewickPub #377). Game#worldIdAllocation()/#adoptWorldIdAllocation() expose the counter; WorldEngine#nextElementId() reports it; runner.genesis(), runner.createPartition() and runner.migrateCreate() now answer { ...bytes, nextElementId } so a host cannot write a minted root without the stamp that produced it; createWorld() takes it back as options.nextElementId. A cold world built without one REFUSES to create a partition on demand (new platform refusal allocation-undeclared) instead of minting an id a stored, unloaded root already owns, and adoptSubtree() refuses bytes that prove a declared stamp is stale. worldIdAllocationOf() derives the stamp once from stored bytes as the supported repair. Read-only world.partition(name) now reads the indexed root table instead of walking the resident tree (ShufflewickPub #381)."
+    },
+    {
+      "revision": 52,
+      "date": "2026-09-08",
+      "bundleProtocol": 2,
+      "surfaceHash": "0a1b5438b6ce23ef",
+      "payloadHash": "eb472de70ccc7f01",
+      "summary": "A world's panel can re-ask ONE pick with the arguments bound so far (ShufflewickPub #378). New WorldEngine verbs pickPartitions() and resolvePick(), and runner.declarePick()/resolvePick() beside them: a world's offer is enumerated in one frame with nothing bound, so a selection whose multiSelect bounds or choices callback read an earlier selection's value resolved to the unbounded fallback and reached the browser as a cap it could not use. An unbounded multiSelect now OMITS max on a world offer instead of serializing Infinity, which JSON writes as null and the action panel read as a cap of zero. The world wire gains the world_pick request and world_pick_result answer; a host that does not implement them leaves a world's later picks answered from the one-shot offer, as before."
+    },
+    {
+      "revision": 53,
+      "date": "2026-09-08",
+      "bundleProtocol": 2,
+      "surfaceHash": "a0391cda70e33b1f",
+      "payloadHash": "eb472de70ccc7f01",
+      "summary": "A world's OFFER cannot write to the world it is describing (ShufflewickPub #384). Everything the offer path runs -- an action's condition, its disabled rule, a choices/elements callback, a prompt, a display, a multiSelect -- now receives the same read-only projection (world-readonly.ts, #219) that a declaration and world.view already receive, for both ctx.game and ctx.world.partition, and runs with reach-marking suspended (Game#readingOnly) the way viewFor does. Game#getActionDisabledReason and ActionExecutor#getChoices take an optional trailing 'reading' game so the rule stays ONE function evaluated one way: enforcement passes nothing and still sees the live game. An offer-time write was previously accepted, appeared in every watcher's next frame, was never checkpointed, and was reverted at the next hibernation with nobody told."
+    },
+    {
+      "revision": 54,
+      "date": "2026-09-08",
+      "bundleProtocol": 2,
+      "surfaceHash": "2e223463212e2ce8",
+      "payloadHash": "eb472de70ccc7f01",
+      "summary": "A migration is one atomic step that can read across roots (ShufflewickPub #379). The runner's migratePartition() and migrateCreate() are REPLACED by a single migrateAll(stored, ctx): every stored root is adopted before any hook runs, the per-root partition hook normalizes each one, create() adds this version's new roots, the new world.migration.finalize(game, { partition, names, from, to }) hook reads and writes across every root -- transformed and newly created alike -- and only then is anything serialized. So an existing root whose new value is derived from another existing root is expressible, and the answer does not depend on the order a host listed its keys in. WorldEngine gains migrateFinalize(). Everything still lands in the host's one transaction; a hook that throws leaves every original byte and the stored version untouched."
+    },
+    {
+      "revision": 55,
+      "date": "2026-09-08",
+      "bundleProtocol": 2,
+      "surfaceHash": "833f0bcefd6e4aef",
+      "payloadHash": "eb472de70ccc7f01",
+      "summary": "A world may declare that its player commands are CHRONOLOGICAL (ShufflewickPub #380). New WorldDefinition.ordering: 'arrival' (the default, and what every world did before this) or 'chronological', which gates each player command behind every event already due at that player's arrival instant, run in nominal order. It is for a chain that cannot be predeclared -- an event that creates a contract and schedules the next decision cannot name that decision's partitions until the earlier one commits. Bounded and yielding: one drainBatch at a time, at most the new catchUpRounds budget (default 8), with a turn for the runtime between each; running out, or meeting an event that refuses, applies the command over a world still behind rather than refusing it. The player's arrival instant, order identity and receipt are untouched, and a replayed order is answered from its receipt without running the clock. An unrecognised world.ordering is refused as bundle-not-a-world at construction."
     }
   ]
 }

@@ -11,6 +11,7 @@
 // a real element tree. This exists so that implementation has something to be
 // checked against, and so the check itself is known to work.
 import { describe } from "vitest";
+import { WORLD_PARTITION_ID_FLOOR } from "../engine/index.js";
 import { assertWorldEngineConformance } from "./engine-conformance.test-helper.js";
 import type {
   WorldActionOffer,
@@ -152,6 +153,33 @@ class ReferenceWorldEngine implements WorldEngine {
    */
   createPartition(): undefined {
     return undefined;
+  }
+
+  /**
+   * The reference world holds no elements, so it has no selection to re-ask
+   * (ShufflewickPub #378). A conformance engine is asked to have the METHODS;
+   * what a pick resolves to is a fact about a tree.
+   */
+  /** The reference world holds no tree to derive one root from another in. */
+  migrateFinalize(): void {
+    throw new Error("the reference world holds no elements to finalize a migration over");
+  }
+
+  pickPartitions(): readonly string[] {
+    return [];
+  }
+
+  resolvePick(): Promise<never> {
+    throw new Error("the reference world holds no actions to re-ask a pick of");
+  }
+
+  /**
+   * The reference world mints nothing, so its allocation never moves (#377) --
+   * but it still HAS one, because a host reads this after every write that
+   * could have minted and must not have to branch on which engine it is.
+   */
+  nextElementId(): number {
+    return WORLD_PARTITION_ID_FLOOR;
   }
 
   createMigratedPartitions(): Record<string, never> {

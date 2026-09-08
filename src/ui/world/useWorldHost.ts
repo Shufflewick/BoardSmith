@@ -8,6 +8,7 @@ import {
   WORLD_NARRATION_KEPT,
   WORLD_UI_SOURCE,
   type WorldActionOutcome,
+  type WorldPickOutcome,
   type WorldActionOffer,
   type WorldHostMessage,
   type WorldNarration,
@@ -99,6 +100,21 @@ export interface WorldHost {
    *  than implying a safety net that is not there. */
   ordersDurable: boolean;
   act(command: string, args?: Record<string, unknown>): Promise<WorldActionOutcome>;
+  /**
+   * RE-ASK ONE PICK with the arguments bound so far (ShufflewickPub #378).
+   *
+   * A world's offer arrives whole, with every selection's candidates already
+   * resolved against nothing bound. That is right for a candidate LIST -- a
+   * world action may not declare a dependent selection -- and wrong for a
+   * selection's SHAPE, which may read an earlier selection's value: a crew whose
+   * size is the chosen ship's cargo hold resolved to the unbounded fallback, and
+   * the panel was left holding a limit the game never meant.
+   */
+  resolvePick(
+    action: string,
+    selection: string,
+    args: Record<string, unknown>,
+  ): Promise<WorldPickOutcome>;
   /** Install the listener and say hello. */
   start(): void;
   /** Remove the listener and fail everything still outstanding. */
@@ -170,6 +186,17 @@ export function useWorldHost(options: WorldHostOptions = {}): WorldHost {
       /** The order this request is one attempt at (#195). */
       orderId: string;
     }
+  >();
+  /**
+   * A PICK IN FLIGHT (ShufflewickPub #378), kept apart from a command in flight.
+   *
+   * Deliberately not the same map: a pick carries no order, is never recovered,
+   * and does not raise `acting` -- a panel asking what a selection may be is not
+   * a player mid-press, and a spinner over the board would say it was.
+   */
+  const picks = new Map<
+    string,
+    { resolve: (outcome: WorldPickOutcome) => void; timer: ReturnType<typeof setTimeout> }
   >();
   let sequence = 0;
   let helloTimer: ReturnType<typeof setTimeout> | null = null;
@@ -293,6 +320,28 @@ export function useWorldHost(options: WorldHostOptions = {}): WorldHost {
     };
   }
 
+  /**
+   * ONE RE-ASKED PICK'S ANSWER (ShufflewickPub #378).
+   *
+   * `settle`'s twin, and separate for the same reason the map is: a pick is a
+   * question rather than an order, so there is nothing to strike out of the
+   * book and nothing to stop `acting` spinning over. An answer for a request
+   * nobody is waiting on is dropped -- a timeout already resolved it, and
+   * resolving twice would be a second answer to one question.
+   */
+  function settlePick(data: Extract<WorldHostMessage, { type: 'world_pick_result' }>): void {
+    const waiting = picks.get(data.requestId);
+    if (waiting === undefined) return;
+    clearTimeout(waiting.timer);
+    picks.delete(data.requestId);
+    waiting.resolve({
+      ok: data.ok === true,
+      ...(data.selection === undefined ? {} : { selection: data.selection }),
+      ...(data.message === undefined ? {} : { message: data.message }),
+      ...(data.code === undefined ? {} : { code: data.code }),
+    });
+  }
+
   function handleMessage(event: MessageEvent): void {
     if (!isOriginAllowed(event.origin, options.trustedOrigins)) return;
     const data = event.data as WorldHostMessage | undefined;
@@ -300,6 +349,10 @@ export function useWorldHost(options: WorldHostOptions = {}): WorldHost {
 
     if (data.type === 'world_response') {
       settle(data.requestId, outcomeOf(data), { answered: true });
+      return;
+    }
+    if (data.type === 'world_pick_result') {
+      settlePick(data);
       return;
     }
     if (data.type === 'world_events') {
@@ -349,6 +402,50 @@ export function useWorldHost(options: WorldHostOptions = {}): WorldHost {
     return answered;
   }
 
+  /**
+   * RE-ASK ONE PICK, WITH THE ARGUMENTS BOUND SO FAR (ShufflewickPub #378).
+   *
+   * Its own promise map for the reason `dispatch` has one: two picks in flight
+   * are two answers, and the host echoes each `requestId` onto the one it
+   * belongs to. It carries NO order -- a pick is a question, not a command, so
+   * there is nothing to make idempotent and nothing to recover after a reload.
+   *
+   * A refusal RESOLVES, exactly as a command's does.
+   */
+  function resolvePick(
+    action: string,
+    selection: string,
+    args: Record<string, unknown>,
+  ): Promise<WorldPickOutcome> {
+    sequence += 1;
+    const requestId = `wp-${sequence}`;
+    const answered = new Promise<WorldPickOutcome>((resolve) => {
+      const timer = setTimeout(() => {
+        if (picks.delete(requestId)) {
+          resolve({
+            ok: false,
+            message:
+              `The world did not answer what "${selection}" may be. Nothing has been sent, so ` +
+              'nothing has happened; try the action again.',
+          });
+        }
+      }, commandTimeoutMs);
+      picks.set(requestId, { resolve, timer });
+    });
+    post({
+      source: WORLD_UI_SOURCE,
+      type: 'world_pick',
+      requestId,
+      action,
+      selection,
+      // THE JSON ROUND TRIP the order book takes, and for the same reason:
+      // structured clone cannot carry a Vue proxy, and a panel's args are the
+      // controller's own reactive object.
+      args: JSON.parse(JSON.stringify(args)) as Record<string, unknown>,
+    });
+    return answered;
+  }
+
   async function act(
     command: string,
     args: Record<string, unknown> = {},
@@ -390,6 +487,13 @@ export function useWorldHost(options: WorldHostOptions = {}): WorldHost {
     for (const requestId of [...pending.keys()]) {
       settle(requestId, { ok: false, message: DROPPED_BEFORE_ANSWER }, { answered: false });
     }
+    // A pick is a question, so there is no order to strike out -- but a promise
+    // nobody resolves is still a panel that spins forever.
+    for (const [requestId, waiting] of [...picks]) {
+      clearTimeout(waiting.timer);
+      picks.delete(requestId);
+      waiting.resolve({ ok: false, message: DROPPED_BEFORE_ANSWER });
+    }
   }
 
   return {
@@ -409,6 +513,7 @@ export function useWorldHost(options: WorldHostOptions = {}): WorldHost {
     recoveryNotice,
     ordersDurable: orders.durable,
     act,
+    resolvePick,
     start,
     stop,
     handleMessage,

@@ -29,6 +29,7 @@ function fakeHost(over: Partial<Record<string, unknown>> = {}) {
     hostSilent: ref(false),
     acting: ref(false),
     act: vi.fn(async () => ({ ok: true })),
+    resolvePick: vi.fn(async () => ({ ok: true })),
     start: vi.fn(),
     stop: vi.fn(),
     handleMessage: vi.fn(),
@@ -121,6 +122,68 @@ describe('the local fetchPickChoices (#170 §2.1)', () => {
     const result = await play(host).fetchPickChoices('tend', 'weather', 4, {});
     expect(result.success).toBe(false);
     expect(result.error).toMatch(/weather/);
+  });
+});
+
+describe('re-asking one pick once something is bound (ShufflewickPub #378)', () => {
+  /** A ship, then a crew whose size the ship decides. The offer's own copy is
+   *  what the world could say before any ship existed. */
+  const DEPLOY: WorldActionOffer = {
+    name: 'deploy',
+    selections: [
+      { name: 'ship', type: 'choice', choices: [{ value: 'dory', display: 'Dory' }] },
+      {
+        name: 'crew',
+        type: 'choice',
+        choices: [{ value: 'ash', display: 'Ash' }],
+        multiSelect: { min: 1 },
+      },
+    ],
+  };
+
+  it('asks the world again, with the args bound so far', async () => {
+    const resolvePick = vi.fn(async () => ({
+      ok: true,
+      selection: {
+        name: 'crew',
+        type: 'choice' as const,
+        choices: [{ value: 'ash', display: 'Ash' }, { value: 'vale', display: 'Vale' }],
+        multiSelect: { min: 1, max: 2 },
+      },
+    }));
+    const host = fakeHost({ resolvePick });
+    host.actions.value = [DEPLOY];
+
+    const result = await play(host).fetchPickChoices('deploy', 'crew', 4, { ship: 'dory' });
+
+    expect(resolvePick).toHaveBeenCalledWith('deploy', 'crew', { ship: 'dory' });
+    // THE CAP THE GAME MEANT, which the one-shot offer could not have known.
+    expect(result.multiSelect).toEqual({ min: 1, max: 2 });
+    expect(result.choices).toHaveLength(2);
+  });
+
+  it('costs NO round trip while nothing is bound, which is most picks', async () => {
+    const host = fakeHost();
+    host.actions.value = [DEPLOY];
+
+    const result = await play(host).fetchPickChoices('deploy', 'ship', 4, {});
+
+    expect(host.resolvePick).not.toHaveBeenCalled();
+    expect(result.choices).toEqual(DEPLOY.selections[0]!.choices);
+  });
+
+  it('reports the world\'s own refusal rather than a stale offer', async () => {
+    // Falling back to the offer here would show the player a cap the world has
+    // just said is wrong, which is the divergence the round trip exists to end.
+    const host = fakeHost({
+      resolvePick: vi.fn(async () => ({ ok: false, message: 'That ship has already sailed.' })),
+    });
+    host.actions.value = [DEPLOY];
+
+    const result = await play(host).fetchPickChoices('deploy', 'crew', 4, { ship: 'dory' });
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe('That ship has already sailed.');
   });
 });
 

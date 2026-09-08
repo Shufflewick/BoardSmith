@@ -226,6 +226,10 @@ export const WORLD_REFUSALS = {
     owner: "platform",
     why: "a partition was serialized or read without being adopted, which means the engine and the store disagree about what is loaded",
   },
+  "allocation-undeclared": {
+    owner: "platform",
+    why: "ShufflewickPub #377: a host asked for a partition to be created on demand without handing over the world's durable id allocation stamp, so the engine's counter speaks only for the partitions it happens to hold. Minting from there is how a cold host built a new root on the identity of a stored root it had never loaded, and the world only found out at the later command that declared both -- an unplayable world, from a write that looked fine. PLATFORM-owned and deterministic: a host that does not persist `nextElementId` does not persist it on the next wake either, so parking is right and retrying is not",
+  },
   "partition-vanished": {
     owner: "platform",
     why: "a partition was adopted and is no longer in the tree -- something evicted it behind the engine's back, and its changes since the last checkpoint are gone",

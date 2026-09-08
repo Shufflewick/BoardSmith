@@ -92,6 +92,14 @@ export type ElementContext = {
    */
   _partitionRoots?: Map<number, GameElement>;
   /**
+   * Set once a host has handed over a durable id allocation stamp (#377).
+   *
+   * What it turns on is the REFUSAL in `adoptSubtree`: a world whose allocation
+   * is durable must never quietly raise its counter to meet adopted bytes,
+   * because doing so is how a stale stamp goes unnoticed until a collision.
+   */
+  _worldIdAllocationDeclared?: boolean;
+  /**
    * Internal: partition roots whose subtree has been physically re-parented
    * since the last `Game#takeTouchedPartitions()`, plus marks preserved for
    * partitions that were content-dirty at eviction time. This is part of the

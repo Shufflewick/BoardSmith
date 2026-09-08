@@ -13,6 +13,7 @@ import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { createRequire } from 'node:module';
 
 import {
   Game,
@@ -21,6 +22,7 @@ import {
   type ActionDefinition,
   type GameOptions,
   type GameElement,
+  WORLD_PARTITION_ID_FLOOR,
 } from '../../engine/index.js';
 import {
   WorldRefusal,
@@ -30,10 +32,32 @@ import {
   type WorldBudgets,
   type StoredPartition,
   type WorldDefinition,
+  type WorldActionOffer,
+  type WorldMigration,
 } from '../../world/index.js';
 import { openWorldStore, worldStorePath, type LocalWorldStore } from './world-store.js';
 import type { WorldDevClock } from './node-world-clock.js';
 import { LocalWorldHost, devWorldPlayer } from './world-host.js';
+
+/**
+ * A STORE AS THE OLDER CODE LEFT IT: real partitions, no allocation stamp
+ * (ShufflewickPub #377).
+ *
+ * Reached through SQLite directly rather than through `LocalWorldStore`,
+ * deliberately: every door this store has writes the stamp with the bytes, and
+ * a fixture built through one of them could not be the world the repair is for.
+ */
+function forgetAllocationStamp(path: string): void {
+  const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite') as {
+    DatabaseSync: new (file: string) => { exec(sql: string): void; close(): void };
+  };
+  const db = new DatabaseSync(path);
+  try {
+    db.exec("DELETE FROM meta WHERE key = 'nextElementId'");
+  } finally {
+    db.close();
+  }
+}
 
 // ── A world bundle, in the shape a real one exports ─────────────────────────
 
@@ -337,6 +361,125 @@ describe('#167: presence is the seats this host has open', () => {
     await host.handleMessage('c2', { type: 'hello' });
     await host.handleMessage('c1', { type: 'action', order: nextOrder(), requestId: 'r1', action: 'roll', args: {} });
     expect(seen).toEqual([[1, 2]]);
+    await host.close();
+  });
+});
+
+/**
+ * ShufflewickPub #378: THE PANEL RE-ASKS ONE PICK, AND THE HOST ANSWERS.
+ *
+ * The end-to-end half. A world's offer is enumerated with nothing bound, so a
+ * `multiSelect` that reads `args.size` resolved to the unbounded fallback and
+ * the browser was handed a cap the game never meant. The wire carries a re-ask
+ * now, and this drives it the way a browser does: the same message, the same
+ * host, the same answer.
+ */
+describe('#378: one pick, re-asked with the args bound so far', () => {
+  const stack = worldAction<Village>('stack')
+    .prompt('Stack the hearth')
+    .needs(() => [HEARTH])
+    .chooseFrom('size', { prompt: 'How big a stack?', choices: ['small', 'big'] })
+    .chooseFrom('logs', {
+      prompt: 'Which logs?',
+      choices: ['oak', 'ash', 'elm'],
+      multiSelect: ({ args }) => {
+        const size = args.size as string | undefined;
+        if (size === undefined) return { min: 1 };
+        return { min: 1, max: size === 'big' ? 3 : 1 };
+      },
+    })
+    .execute(() => {});
+
+  const stacking = () => bundle({ world: worldBlock({ actions: [...VILLAGE_ACTIONS, stack] }) });
+
+  it('answers the cap the chosen size decides, which the offer could not know', async () => {
+    const { host, sent } = await attached({ dir, definition: stacking() });
+
+    // WHAT THE OFFER SAID with nothing bound: no upper bound at all, and said
+    // by OMISSION rather than by a number the wire cannot carry.
+    const offered = (last(sent, 'c1', 'world_state')!.actions as WorldActionOffer[])
+      .find((offer) => offer.name === 'stack')!
+      .selections.find((pick) => pick.name === 'logs')!;
+    expect(JSON.parse(JSON.stringify(offered.multiSelect))).toEqual({ min: 1 });
+
+    await host.handleMessage('c1', {
+      type: 'pick',
+      requestId: 'p1',
+      action: 'stack',
+      selection: 'logs',
+      args: { size: 'big' },
+    });
+
+    const answer = last(sent, 'c1', 'world_pick_result')!;
+    expect(answer.ok).toBe(true);
+    expect((answer.selection as { multiSelect: unknown }).multiSelect).toEqual({ min: 1, max: 3 });
+    await host.close();
+  });
+
+  it('answers the OTHER cap for the other size, from the same offer', async () => {
+    const { host, sent } = await attached({ dir, definition: stacking() });
+
+    await host.handleMessage('c1', {
+      type: 'pick',
+      requestId: 'p1',
+      action: 'stack',
+      selection: 'logs',
+      args: { size: 'small' },
+    });
+
+    expect((last(sent, 'c1', 'world_pick_result')!.selection as { multiSelect: unknown })
+      .multiSelect).toEqual({ min: 1, max: 1 });
+    await host.close();
+  });
+
+  it('changes nothing: a pick is a question, and the world is where it was', async () => {
+    const { host, store } = await attached({ dir, definition: stacking() });
+    const before = JSON.stringify(await store.read(HEARTH));
+
+    await host.handleMessage('c1', {
+      type: 'pick',
+      requestId: 'p1',
+      action: 'stack',
+      selection: 'logs',
+      args: { size: 'big' },
+    });
+
+    expect(JSON.stringify(await store.read(HEARTH))).toBe(before);
+    expect(store.dirtyPartitions()).toEqual([]);
+    await host.close();
+  });
+
+  it('refuses a pick from a page holding no seat, without running anything', async () => {
+    const opened = openHost({ dir, definition: stacking() });
+    await opened.host.start();
+
+    await opened.host.handleMessage('c9', {
+      type: 'pick',
+      requestId: 'p1',
+      action: 'stack',
+      selection: 'logs',
+      args: { size: 'big' },
+    });
+
+    expect(last(opened.sent, 'c9', 'world_pick_result')).toMatchObject({ ok: false });
+    await opened.host.close();
+  });
+
+  it('names the selections it DOES have when asked for one it does not', async () => {
+    const { host, sent } = await attached({ dir, definition: stacking() });
+
+    await host.handleMessage('c1', {
+      type: 'pick',
+      requestId: 'p1',
+      action: 'stack',
+      selection: 'kindling',
+      args: { size: 'big' },
+    });
+
+    const answer = last(sent, 'c1', 'world_pick_result')!;
+    expect(answer.ok).toBe(false);
+    expect(answer.message).toMatch(/kindling/);
+    expect(answer.message).toMatch(/"size", "logs"/);
     await host.close();
   });
 });
@@ -1126,6 +1269,116 @@ describe('#218: partitions created on first use', () => {
     await again.host.close();
   });
 
+  /** Every element id inside one stored partition's bytes. */
+  function idsIn(json: unknown): number[] {
+    if (typeof json !== 'object' || json === null) return [];
+    const node = json as { id?: unknown; children?: unknown[] };
+    const here = typeof node.id === 'number' ? [node.id] : [];
+    return [...here, ...(node.children ?? []).flatMap((child) => idsIn(child))];
+  }
+
+  /**
+   * ShufflewickPub #377: A COLD HOST MINTS OUTSIDE EVERY STORED ROOT.
+   *
+   * The case #218 opened and did not close. A host that builds a root on demand
+   * mints its ids from the game's counter, and a COLD host's counter starts at
+   * the construction floor and is only ever raised by what it happens to adopt.
+   * So the second host to create a root built it on top of the identity of a
+   * root the first host had created and this one had never loaded -- and the
+   * world stayed playable until some later command declared both, at which
+   * point adoption refused and the world was finished.
+   *
+   * The stamp is durable state now: written in the same transaction as the
+   * bytes it was minted for, read back at the next build.
+   */
+  it('mints a cold root outside the ids a stored, unloaded root already holds', async () => {
+    const first = await attached({ dir, definition: bundle({ world: lazyWorld() }) });
+    await first.host.handleMessage('c1', {
+      type: 'action',
+      order: nextOrder(),
+      requestId: 'r1',
+      action: 'settle',
+      args: {},
+    });
+    const stamp = first.store.nextElementId()!;
+    await first.host.close();
+
+    // A COLD host. Seat 2 has no holding, so this build mints one -- and seat
+    // 1's holding is on disk, unloaded, invisible to this host's counter.
+    const second = openHost({ dir, definition: bundle({ world: lazyWorld() }) });
+    await second.host.start();
+    await second.host.handleMessage('c2', { type: 'hello' });
+    await second.host.handleMessage('c2', { type: 'attach', seat: 2 });
+    await second.host.handleMessage('c2', {
+      type: 'action',
+      order: nextOrder(),
+      requestId: 'r2',
+      action: 'settle',
+      args: {},
+    });
+
+    const one = idsIn((await second.store.read(holdingOf(1)))?.json);
+    const two = idsIn((await second.store.read(holdingOf(2)))?.json);
+    // MINTED ABOVE THE STORED STAMP, not from whatever this host happened to
+    // adopt -- so the new root cannot land on an id a stored root holds, and
+    // the stamp moves on for the host after this one.
+    expect(one.length).toBeGreaterThan(0);
+    expect(two.length).toBeGreaterThan(0);
+    expect(Math.min(...two)).toBeGreaterThanOrEqual(stamp);
+    expect(second.store.nextElementId()).toBeGreaterThan(Math.max(...two));
+    expect(two.filter((id) => one.includes(id))).toEqual([]);
+
+    // And the world still runs a command that loads BOTH, which is where the
+    // collision used to surface: seat 1 acting on this same host adopts its
+    // stored holding beside the one just minted.
+    await second.host.handleMessage('c1', { type: 'hello' });
+    await second.host.handleMessage('c1', {
+      type: 'action',
+      order: nextOrder(),
+      requestId: 'r3',
+      action: 'settle',
+      args: {},
+    });
+    expect(last(second.sent, 'c1', 'world_response')).toMatchObject({ ok: true });
+    await second.host.close();
+  });
+
+  it('REPAIRS a world that was occupied before the stamp existed', async () => {
+    // The supported repair. The store below is one the older code wrote: real
+    // partitions, real minted ids, and no record of how far the counter got.
+    // `start` derives the stamp from the stored bytes ONCE and writes it, and
+    // the world mints safely from then on.
+    const first = await attached({ dir, definition: bundle({ world: lazyWorld() }) });
+    await first.host.handleMessage('c1', {
+      type: 'action',
+      order: nextOrder(),
+      requestId: 'r1',
+      action: 'settle',
+      args: {},
+    });
+    await first.host.close();
+    forgetAllocationStamp(worldStorePath(dir));
+
+    const second = openHost({ dir, definition: bundle({ world: lazyWorld() }) });
+    expect(second.store.nextElementId()).toBeUndefined();
+    await second.host.start();
+    expect(second.store.nextElementId()).toBeGreaterThan(WORLD_PARTITION_ID_FLOOR);
+
+    await second.host.handleMessage('c2', { type: 'hello' });
+    await second.host.handleMessage('c2', { type: 'attach', seat: 2 });
+    await second.host.handleMessage('c2', {
+      type: 'action',
+      order: nextOrder(),
+      requestId: 'r2',
+      action: 'settle',
+      args: {},
+    });
+    const one = idsIn((await second.store.read(holdingOf(1)))?.json);
+    const two = idsIn((await second.store.read(holdingOf(2)))?.json);
+    expect(two.filter((id) => one.includes(id))).toEqual([]);
+    await second.host.close();
+  });
+
   it('still refuses a name the world does not create, so a typo stays loud', async () => {
     const { host, sent } = await attached({ dir, definition: bundle({ world: lazyWorld() }) });
     await host.handleMessage('c1', {
@@ -1159,6 +1412,515 @@ describe('#218: partitions created on first use', () => {
  * behind. A fixture built through the current one would carry the floor and
  * miss the whole case, which is the mistake #218's own widening test made.
  */
+/**
+ * ShufflewickPub #379: A MIGRATION IS ONE TRANSACTION, NOT A WALK IN KEY ORDER.
+ *
+ * #200 transforms one root at a time and #218 adds new ones afterwards, and
+ * neither can express the shape a real occupied upgrade has: an EXISTING root
+ * whose new value is derived from ANOTHER existing root. The host hydrated,
+ * transformed and serialized each root as it reached it, so a `partition` hook
+ * could only see the one it was handed -- and the `create` hook, which runs
+ * last, may only answer NEW names, so updating an earlier root from there
+ * changed nothing the transaction had already collected.
+ *
+ * Depending on whatever order `partitionNames()` happened to return is not a
+ * migration contract. So every root is resident before ANY callback runs, and
+ * nothing is serialized until every one of them has finished: `finalize` is the
+ * phase that can read the whole world and write across it.
+ *
+ * The cases below are the issue's own acceptance regression, over the real
+ * `LocalWorldHost` and a real SQLite store, because the whole claim is about
+ * what is durable afterwards.
+ */
+/**
+ * ShufflewickPub #380: A WORLD MAY SAY ITS COMMANDS ARE CHRONOLOGICAL.
+ *
+ * The default is stated in ShufflewickPub's own PERSISTENT-WORLDS.md and it is
+ * deliberate: a frame drains on its way in, spends a BUDGET, and applies the
+ * player's command whether or not the queue emptied. Blocking every command on
+ * an arbitrarily long catch-up with the world lock held is the failure that
+ * budget exists to prevent, and most worlds do not care.
+ *
+ * A world with a real clock does. At hour T an NPC market event chooses an
+ * offer, creates its contract and schedules the NEXT decision -- which cannot
+ * declare its partitions until the earlier one has committed, because they are
+ * the contract it has not made yet. A player arriving while that chain is
+ * overdue overtook it, and the world produced a state no punctual one reaches.
+ * Pre-declaring every hypothetical contract is unbounded and wrong; running the
+ * chain inside the player's handler reaches roots the handler never declared;
+ * refusing forces manual retries.
+ *
+ * So the world SAYS SO -- `world.ordering: 'chronological'` -- and the host
+ * gates the command behind a bounded, yielding catch-up. The player's own
+ * arrival instant and order identity are untouched: what changes is what has
+ * happened before their handler runs, not when they arrived.
+ */
+describe('#380: a chronological world catches up before a player acts', () => {
+  /** Records the order handlers actually ran in, which is the whole claim. */
+  let ran: string[] = [];
+
+  beforeEach(() => {
+    ran = [];
+  });
+
+  /** A one-shot chain: each occurrence schedules the next, so the queue can
+   *  only be drained in nominal order and never predeclared. */
+  const tick = worldClockAction<Village>('tick')
+    .needs(() => [HEARTH])
+    .execute((_args, ctx) => {
+      const hearth = ctx.world.partition(HEARTH) as Hearth;
+      hearth.burns += 1;
+      ran.push(`tick@${ctx.world.timing?.due ?? 0}`);
+      if (hearth.burns < 3) ctx.world.schedule({ delayMs: 1_000, action: 'tick', args: {} });
+    });
+
+  /** Starts the chain. A player's verb, because only a command may schedule. */
+  const arm = worldAction<Village>('arm')
+    .needs(() => [HEARTH])
+    .execute((_args, ctx) => {
+      ctx.world.schedule({ delayMs: 1_000, action: 'tick', args: {} });
+    });
+
+  /** The player's verb. It records where in the chain it landed. */
+  const arrive = worldAction<Village>('arrive')
+    .needs(() => [HEARTH])
+    .execute((_args, ctx) => {
+      const hearth = ctx.world.partition(HEARTH) as Hearth;
+      hearth.logs += 1;
+      ran.push(`arrive@burns=${hearth.burns}`);
+    });
+
+  function timedWorld(overrides: Partial<WorldDefinition> = {}): WorldDefinition {
+    return worldBlock({
+      actions: [...VILLAGE_ACTIONS, tick, arm, arrive],
+      ...overrides,
+    });
+  }
+
+  it('runs every overdue event before the command, in nominal order', async () => {
+    const world = timedWorld({ ordering: 'chronological' });
+    const clock = testClock();
+    const opened = await attached({ dir, clock, definition: bundle({ world }) });
+
+    // Arm the chain, then let three beats fall due without draining.
+    await opened.host.handleMessage('c1', {
+      type: 'action',
+      order: nextOrder(),
+      requestId: 'arm',
+      action: 'arm',
+      args: {},
+    });
+    clock.advance(5_000);
+    ran = [];
+
+    await opened.host.handleMessage('c1', {
+      type: 'action',
+      order: nextOrder(),
+      requestId: 'r1',
+      action: 'arrive',
+      args: {},
+    });
+
+    // Every tick ran, in order, and the player's handler saw the world they
+    // left behind rather than the one they overtook.
+    expect(ran).toEqual([
+      expect.stringMatching(/^tick@/),
+      expect.stringMatching(/^tick@/),
+      expect.stringMatching(/^tick@/),
+      'arrive@burns=3',
+    ]);
+    await opened.host.close();
+  });
+
+  it('leaves an ARRIVAL world exactly as it was: the command overtakes', async () => {
+    // The default, unchanged, and pinned here so the gate is visibly opt-in.
+    const world = timedWorld();
+    const clock = testClock();
+    const opened = await attached({ dir, clock, definition: bundle({ world }) });
+    await opened.host.handleMessage('c1', {
+      type: 'action',
+      order: nextOrder(),
+      requestId: 'arm',
+      action: 'arm',
+      args: {},
+    });
+    clock.advance(5_000);
+    ran = [];
+
+    await opened.host.handleMessage('c1', {
+      type: 'action',
+      order: nextOrder(),
+      requestId: 'r1',
+      action: 'arrive',
+      args: {},
+    });
+
+    expect(ran[0]).toBe('arrive@burns=0');
+    await opened.host.close();
+  });
+
+  it('keeps the player\'s own arrival instant, not the catch-up\'s', async () => {
+    let sawNow = 0;
+    const stamped = worldAction<Village>('stamped')
+      .needs(() => [HEARTH])
+      .execute((_args, ctx) => {
+        sawNow = ctx.world.now;
+      });
+    const clock = testClock();
+    const opened = await attached({
+      dir,
+      clock,
+      definition: bundle({
+        world: timedWorld({ ordering: 'chronological', actions: [...VILLAGE_ACTIONS, tick, arm, arrive, stamped] }),
+      }),
+    });
+    await opened.host.handleMessage('c1', {
+      type: 'action',
+      order: nextOrder(),
+      requestId: 'arm',
+      action: 'arm',
+      args: {},
+    });
+    clock.advance(5_000);
+    const arrivedAt = clock.now();
+
+    await opened.host.handleMessage('c1', {
+      type: 'action',
+      order: nextOrder(),
+      requestId: 'r1',
+      action: 'stamped',
+      args: {},
+    });
+
+    // The catch-up ran at the ticks' OWN dues, all of them earlier than this.
+    expect(sawNow).toBe(arrivedAt);
+    await opened.host.close();
+  });
+
+  it('answers a REPLAYED order from its receipt without draining anything', async () => {
+    // An order the world already committed is answered from the receipt, and a
+    // receipt is not a reason to run the clock.
+    const world = timedWorld({ ordering: 'chronological' });
+    const clock = testClock();
+    const opened = await attached({ dir, clock, definition: bundle({ world }) });
+    const order = nextOrder();
+    await opened.host.handleMessage('c1', {
+      type: 'action',
+      order,
+      requestId: 'r1',
+      action: 'arrive',
+      args: {},
+    });
+    await opened.host.handleMessage('c1', {
+      type: 'action',
+      order: nextOrder(),
+      requestId: 'arm',
+      action: 'arm',
+      args: {},
+    });
+    clock.advance(5_000);
+    ran = [];
+
+    await opened.host.handleMessage('c1', { type: 'action', order, requestId: 'r2', action: 'arrive', args: {} });
+
+    expect(last(opened.sent, 'c1', 'world_response')).toMatchObject({ ok: true, replayed: true });
+    expect(ran).toEqual([]);
+    await opened.host.close();
+  });
+
+  it('applies the command anyway when the catch-up runs out of budget', async () => {
+    // Degradation by LATENCY, never refusal -- the same rule the drain has.
+    // A world that cannot be caught up inside its ceiling still answers, and
+    // says so, rather than making the player press the button again.
+    const clock = testClock();
+    const opened = await attached({
+      dir,
+      clock,
+      budgets: worldBudgets({ drainBatch: 1, catchUpRounds: 1 }),
+      definition: bundle({ world: timedWorld({ ordering: 'chronological' }) }),
+    });
+    await opened.host.handleMessage('c1', {
+      type: 'action',
+      order: nextOrder(),
+      requestId: 'arm',
+      action: 'arm',
+      args: {},
+    });
+    clock.advance(5_000);
+    ran = [];
+
+    await opened.host.handleMessage('c1', {
+      type: 'action',
+      order: nextOrder(),
+      requestId: 'r1',
+      action: 'arrive',
+      args: {},
+    });
+
+    expect(last(opened.sent, 'c1', 'world_response')).toMatchObject({ ok: true });
+    // One batch of one ran, and then the command was applied over a world that
+    // is still behind rather than being refused.
+    expect(ran).toEqual([expect.stringMatching(/^tick@/), 'arrive@burns=1']);
+    await opened.host.close();
+  });
+
+  it('stops catching up when a due event refuses, and still applies the command', async () => {
+    // A refused event stays queued and is said out loud; a catch-up that kept
+    // retrying it would spin forever on a world nobody can move.
+    const doomed = worldClockAction<Village>('doomed')
+      .needs(() => [HEARTH])
+      .execute(() => {
+        throw new Error('this event cannot run');
+      });
+    const armDoom = worldAction<Village>('arm-doom')
+      .needs(() => [HEARTH])
+      .execute((_args, ctx) => {
+        ctx.world.schedule({ delayMs: 1_000, action: 'doomed', args: {} });
+      });
+    const clock = testClock();
+    const opened = await attached({
+      dir,
+      clock,
+      definition: bundle({
+        world: timedWorld({
+          ordering: 'chronological',
+          actions: [...VILLAGE_ACTIONS, tick, arm, arrive, doomed, armDoom],
+        }),
+      }),
+    });
+    await opened.host.handleMessage('c1', {
+      type: 'action',
+      order: nextOrder(),
+      requestId: 'arm',
+      action: 'arm-doom',
+      args: {},
+    });
+    clock.advance(5_000);
+    ran = [];
+
+    await opened.host.handleMessage('c1', {
+      type: 'action',
+      order: nextOrder(),
+      requestId: 'r1',
+      action: 'arrive',
+      args: {},
+    });
+
+    expect(last(opened.sent, 'c1', 'world_response')).toMatchObject({ ok: true });
+    expect(ran).toEqual(['arrive@burns=0']);
+    // The event is still queued, and somebody was told.
+    expect(opened.store.pendingEvents()).toHaveLength(1);
+    await opened.host.close();
+  });
+
+  it('REFUSES a bundle whose world.ordering is not one this host runs', () => {
+    // At CONSTRUCTION, which is where every other unusable declaration is
+    // refused: an ordering nobody runs is wrong for every command this world
+    // will ever receive, so it is not a thing to discover on the first one.
+    expect(() =>
+      openHost({
+        dir,
+        definition: bundle({
+          world: timedWorld({ ordering: 'whenever' as unknown as 'arrival' }),
+        }),
+      }),
+    ).toThrow(/world\.ordering/);
+  });
+});
+
+describe('#379: a migration reads across roots, in one atomic step', () => {
+  /**
+   * A world of two rooms whose contents differ, so "read the other one" is a
+   * distinguishable claim. `logs` is the value; `burns` is where a derived one
+   * is written, because it starts at zero everywhere.
+   */
+  function twoRooms(order: readonly string[]): WorldDefinition {
+    return worldBlock({
+      genesis: (game) =>
+        Object.fromEntries(
+          order.map((name, index) => {
+            const room = game.create(Hearth, name) as Hearth;
+            room.logs = index + 1;
+            return [name, room as GameElement];
+          }),
+        ),
+      view: () => [...order],
+    });
+  }
+
+  /**
+   * The upgrade: `north` takes its burn count from what `south` has stored, a
+   * new `tally` root takes the sum of both, and none of it may depend on which
+   * room the store happens to list first.
+   */
+  function derivingUpgrade(overrides: Partial<WorldMigration> = {}): WorldDefinition {
+    return worldBlock({
+      stateVersion: 1,
+      genesis: (game) =>
+        Object.fromEntries(
+          ['north', 'south'].map((name) => [name, game.create(Hearth, name) as GameElement]),
+        ),
+      view: () => ['north', 'south'],
+      migration: {
+        from: 0,
+        create: (game, ctx) =>
+          ctx.existing.includes('tally')
+            ? {}
+            : { tally: game.create(Hearth, 'tally') as GameElement },
+        finalize: (_game, ctx) => {
+          const north = ctx.partition('north') as Hearth;
+          const south = ctx.partition('south') as Hearth;
+          // AN EXISTING ROOT, DERIVED FROM ANOTHER EXISTING ROOT.
+          north.burns = south.logs;
+          // AND A NEW ROOT, derived from both, in the same phase.
+          (ctx.partition('tally') as Hearth).logs = north.logs + south.logs;
+        },
+        ...overrides,
+      },
+    } as Partial<WorldDefinition>);
+  }
+
+  /** A launched, unplayed world holding those two rooms in that order. */
+  async function aWorldOf(order: readonly string[]): Promise<void> {
+    const opened = openHost({ dir, definition: bundle({ world: twoRooms(order) }) });
+    await opened.host.start();
+    await opened.host.close();
+  }
+
+  async function burnsAndTally(): Promise<{ burns: unknown; tally: unknown }> {
+    const store = openWorldStore(worldStorePath(dir), worldBudgets());
+    try {
+      const north = JSON.parse(JSON.stringify(await store.read('north'))) as {
+        json: { attributes: { burns: number } };
+      };
+      const tally = JSON.parse(JSON.stringify(await store.read('tally'))) as {
+        json: { attributes: { logs: number } };
+      };
+      return { burns: north.json.attributes.burns, tally: tally.json.attributes.logs };
+    } finally {
+      store.close();
+    }
+  }
+
+  it('derives an existing root from another existing root, and a new one from both', async () => {
+    await aWorldOf(['north', 'south']);
+
+    const opened = openHost({ dir, definition: bundle({ world: derivingUpgrade() }) });
+    await opened.host.start();
+    await opened.host.close();
+
+    // south.logs is 2, so north.burns is 2; the tally is 1 + 2.
+    expect(await burnsAndTally()).toEqual({ burns: 2, tally: 3 });
+  });
+
+  it('answers the same whichever order the store lists its roots in', async () => {
+    // The whole point: `partitionNames()` order is a storage accident, and a
+    // migration contract may not be a function of one.
+    await aWorldOf(['south', 'north']);
+
+    const opened = openHost({ dir, definition: bundle({ world: derivingUpgrade() }) });
+    await opened.host.start();
+    await opened.host.close();
+
+    // south was created first here, so its logs are 1 and north's are 2.
+    expect(await burnsAndTally()).toEqual({ burns: 1, tally: 3 });
+  });
+
+  it('still runs the per-root hook first, so finalize reads TRANSFORMED bytes', async () => {
+    // The ordering that IS a contract: `partition` normalizes each root, and
+    // `finalize` derives across the results. A finalize that saw pre-transform
+    // values would make the per-root hook useless to it.
+    await aWorldOf(['north', 'south']);
+
+    const opened = openHost({
+      dir,
+      definition: bundle({
+        world: derivingUpgrade({
+          partition: (element) => {
+            (element as Hearth).logs *= 10;
+          },
+        }),
+      }),
+    });
+    await opened.host.start();
+    await opened.host.close();
+
+    expect(await burnsAndTally()).toEqual({ burns: 20, tally: 30 });
+  });
+
+  it('leaves EVERY original byte and the version alone when finalize throws', async () => {
+    await aWorldOf(['north', 'south']);
+    const before = await (async () => {
+      const store = openWorldStore(worldStorePath(dir), worldBudgets());
+      try {
+        return {
+          north: JSON.stringify(await store.read('north')),
+          south: JSON.stringify(await store.read('south')),
+          names: [...store.partitionNames()].sort(),
+          version: store.stateVersion(),
+        };
+      } finally {
+        store.close();
+      }
+    })();
+
+    const opened = openHost({
+      dir,
+      definition: bundle({
+        world: derivingUpgrade({
+          finalize: () => {
+            throw new Error('the region table is not ready');
+          },
+        }),
+      }),
+    });
+    await expect(opened.host.start()).rejects.toThrow(/region table is not ready/);
+    await opened.host.close();
+
+    const store = openWorldStore(worldStorePath(dir), worldBudgets());
+    try {
+      expect(JSON.stringify(await store.read('north'))).toBe(before.north);
+      expect(JSON.stringify(await store.read('south'))).toBe(before.south);
+      // NOT EVEN THE NEW ROOT: `create` ran and its element was built, and none
+      // of it is durable, because nothing is written until finalize returns.
+      expect([...store.partitionNames()].sort()).toEqual(before.names);
+      expect(store.stateVersion()).toBe(before.version);
+    } finally {
+      store.close();
+    }
+  });
+
+  it('is idempotent across a second start, because there is nothing left to do', async () => {
+    await aWorldOf(['north', 'south']);
+    const first = openHost({ dir, definition: bundle({ world: derivingUpgrade() }) });
+    await first.host.start();
+    await first.host.close();
+
+    const again = openHost({ dir, definition: bundle({ world: derivingUpgrade() }) });
+    expect((await again.host.start()).migrated).toBeUndefined();
+    await again.host.close();
+
+    expect(await burnsAndTally()).toEqual({ burns: 2, tally: 3 });
+  });
+
+  it('REFUSES a finalize that reaches for a root this world does not hold', async () => {
+    await aWorldOf(['north', 'south']);
+
+    const opened = openHost({
+      dir,
+      definition: bundle({
+        world: derivingUpgrade({
+          finalize: (_game, ctx) => {
+            ctx.partition('nosuchroom');
+          },
+        }),
+      }),
+    });
+    await expect(opened.host.start()).rejects.toThrow(/nosuchroom/);
+    await opened.host.close();
+  });
+});
+
 describe('#223: lifting a world written before the construction-id floor', () => {
   /** The bytes the OLD SDK left: a hearth at id 14, holding a reference to a
    *  log at 15, exactly as a world serializes one (`{ __elementId }`). */
@@ -1181,7 +1943,10 @@ describe('#223: lifting a world written before the construction-id floor', () =>
    *  arguments name an element by id. */
   async function aPreFloorWorld(): Promise<void> {
     const store = openWorldStore(worldStorePath(dir), worldBudgets());
-    await store.createAll({ [HEARTH]: preFloorHearth() }, 0);
+    // A world written before the allocation stamp existed carries none, so the
+    // fixture writes the rows and then drops the key the way the older code
+    // left it: absent. `start` derives it, once, after the lift (#377).
+    await store.createAll({ partitions: { [HEARTH]: preFloorHearth() }, nextElementId: 1_000_000 }, 0);
     store.close();
   }
 

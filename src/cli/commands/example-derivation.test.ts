@@ -762,13 +762,27 @@ describe('SC-3 — both pipeline sides derive from one module', () => {
         'collectGameApiSurface',
       ];
 
-      for (const symbol of symbols) {
-        const declRe = new RegExp(`export (?:async )?function ${symbol}\\s*\\(`);
-        const sitesFound: string[] = [];
-        for (const file of allSrcFiles) {
-          const source = await readFile(file, 'utf-8');
-          if (declRe.test(source)) sitesFound.push(file);
+      // ONE READ PER FILE, not one per file per symbol (ShufflewickPub #385).
+      // The loop used to re-read every source under `src/` for each of the
+      // three names -- about 2,600 sequential reads -- which under a full-suite
+      // load ran past this test's budget and failed at random. The claim is
+      // unchanged; only the number of times each file is opened is.
+      const sites = new Map(symbols.map((symbol) => [symbol, [] as string[]]));
+      const patterns = symbols.map((symbol) => ({
+        symbol,
+        declRe: new RegExp(`export (?:async )?function ${symbol}\\s*\\(`),
+      }));
+      const sources = await Promise.all(
+        allSrcFiles.map(async (file) => ({ file, source: await readFile(file, 'utf-8') })),
+      );
+      for (const { file, source } of sources) {
+        for (const { symbol, declRe } of patterns) {
+          if (declRe.test(source)) sites.get(symbol)!.push(file);
         }
+      }
+
+      for (const symbol of symbols) {
+        const sitesFound = sites.get(symbol)!;
         expect(sitesFound, `${symbol} must have exactly one export-function declaration site`).toHaveLength(1);
         expect(sitesFound[0]).toContain('example-derivation.ts');
       }

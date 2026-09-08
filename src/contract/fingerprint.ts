@@ -138,12 +138,29 @@ export const WORLD_FIXTURE_COVERAGE: Record<(typeof WORLD_ENGINE_METHODS)[number
     + 'produces is ordinary partition bytes: `serializePartitions` is what writes them, and that '
     + 'is fingerprinted.',
 
+  migrateFinalize: 'The last phase of a world MOVING BETWEEN state versions (ShufflewickPub '
+    + '#379), which happens once, at startup, before any player is in it. It derives one root\'s '
+    + 'value from another\'s and what it produces is ordinary partition bytes: '
+    + '`serializePartitions` is what writes them, and that is fingerprinted.',
+
   createMigratedPartitions: 'The other half of a world MOVING BETWEEN state versions (#218), '
     + 'which happens once, at startup, before any player is in it. What it produces is an '
     + 'ordinary partition record, exactly as `genesis` does.',
   createPartition: 'A root built the first time a declaration reaches for a name the store has '
     + 'never held (#218). The fixture\'s world starts with every partition it names, so nothing '
     + 'here ever misses -- and what it produces is an ordinary partition record.',
+
+  pickPartitions: 'What re-asking ONE pick needs resident (ShufflewickPub #378). The fixture '
+    + 'takes no action and walks no offer, so nothing here re-asks a pick. Its declaration is '
+    + '`offerPartitions` for one selection, and that IS driven.',
+  resolvePick: 'One selection, re-evaluated with the args a player has bound so far (#378). The '
+    + 'fixture binds none -- it enumerates the offer and stops -- and what this produces is an '
+    + 'ordinary `PickMetadata`, which the offer\'s own selections already fingerprint.',
+
+  nextElementId: 'The world\'s durable id allocation stamp (ShufflewickPub #377), which a host '
+    + 'reads after every write that could have minted an id. The fixture mints nothing -- it '
+    + 'neither runs genesis nor creates a root -- so the number never moves here. What it '
+    + 'reports is one integer, and the shape of it is covered by the surface fingerprint.',
 
   applyCommand: 'A world\'s write path. The fixture dispatches nothing, so the dirty set, '
     + 'rollback and the checkpoint bytes are unfingerprinted.',

@@ -277,6 +277,52 @@ stored, so the second reach finds the first one's work. The row is written at
 the moment the root is built rather than at the next checkpoint, so a command
 that then refuses leaves an empty root rather than a root nothing recorded.
 
+#### A created root's identity is durable
+
+Nothing above is your concern as a game author, and it is written down because
+it decides what a HOST must do. Element ids come from one counter per world, and
+a world's ids outlive the process that minted them -- but only a fraction of the
+partitions holding them is ever resident, which is the whole point of this mode.
+So the counter cannot be rebuilt from what happens to be loaded: a host that
+hydrated one room out of five would restart it beneath the other four and mint
+their identities a second time. The world stayed playable until some later
+command declared both roots, and then adoption refused and it was finished
+(ShufflewickPub #377).
+
+The counter is therefore durable state, and it travels with the bytes it was
+minted for. Every operation that mints reports it:
+
+```ts
+const { partitions, nextElementId } = await runner.genesis();
+const built = await runner.createPartition(name);   // { partition, nextElementId }
+const added = await runner.migrateCreate(existing, ctx); // { created, nextElementId }
+```
+
+A host writes `nextElementId` in the SAME transaction as the partitions, and
+hands it back when the world is next built:
+
+```ts
+createWorld({ definition, seed, seats, nextElementId: storedStamp });
+```
+
+A world built without one may still be read, written and played; what it may not
+do is create a root on demand, and asking is the `allocation-undeclared`
+refusal rather than a silent guess. The instance that runs `genesis()` needs no
+stamp, because it minted every id there is.
+
+**Repairing a world that predates this.** Derive the stamp once, from the bytes
+the store already holds, and write it:
+
+```ts
+import { worldIdAllocationOf } from 'boardsmith/world';
+
+store.recordAllocation(worldIdAllocationOf(await readEveryStoredPartition()));
+```
+
+That is the only O(world) read in the scheme, it is paid once, and every later
+wake reads the number back out of storage. `boardsmith dev` does exactly this on
+the first start of a world that has no stamp.
+
 ## An action: declare, then execute
 
 Every world verb is an action built with `worldAction()`, and every one of them
@@ -816,16 +862,45 @@ a permanent law; a step-wise world protocol is #170.
 A **bound** that depends on an earlier answer is a different thing and is
 allowed: `multiSelect: ({ args }) => ({ min: 1, max: holdOf(args.ship) })` reads
 the earlier argument and returns a number. Nothing is enumerated per candidate,
-so nothing is hydrated per candidate. What the single-shot protocol costs you is
-the live redraw -- the count is enforced when the command arrives, not narrowed
-in the panel as the earlier pick changes -- and that is what #170 would buy.
+so nothing is hydrated per candidate.
+
+**And the panel does narrow it live** (ShufflewickPub #378). The offer is
+enumerated once with nothing bound, so a bound like the one above resolves to
+the unbounded fallback in that first frame -- which is the honest answer, and
+which the wire says by leaving `max` out rather than by sending a number JSON
+cannot carry. The moment the player picks the ship, the panel re-asks that one
+selection with the args it has, and the world answers it against the resident
+tree:
+
+```ts
+const answer = await runner.resolvePick('alice', 'deploy', 'crew', { ship: 4 }, stamp);
+answer.multiSelect;   // { min: 1, max: 2 } — from the ship they actually chose
+answer.choices;       // and its candidates, evaluated with the same args
+```
+
+`declarePick` names what that re-ask needs resident, exactly as `declare` does
+for a command, so a selection's own round may name a partition the empty-args
+offer could not. It is a READ: nothing is dispatched, nothing is checkpointed,
+and a partition hydrated for a pick nobody went on to submit is the first thing
+evicted. A game author wires none of this -- `WorldShell` does it -- and it
+costs one round trip per pick AFTER the first, only while somebody is mid-action.
 
 **What none of this covers, and there is no guard for it.** A `condition` or a
 `disabled` predicate is ordinary code with the resident tree in front of it, and
-nothing stops one walking it. The four rules bound the *candidates*; they say
-nothing about what a predicate does before returning `false`. Write those against
-the partitions your declaration named and nothing else. This paragraph is the
-whole of the enforcement.
+nothing stops one WALKING it. The four rules bound the *candidates*; they say
+nothing about how far a predicate reads before returning `false`. Write those
+against the partitions your declaration named and nothing else. This paragraph is
+the whole of the enforcement.
+
+**What is guarded: an offer cannot WRITE.** Everything an offer runs -- a
+`condition`, an action's `disabled`, a `choices` or `elements` callback, a
+`prompt`, a `display`, a `multiSelect` -- receives a read-only projection of the
+game and of `world.partition`, so an assignment there is the same
+`declaration-write` refusal a declaration's is (ShufflewickPub #384). It has to
+be: an offer runs once per watcher per refresh, on a path with no rollback and no
+checkpoint, so a write reached every watcher's next frame, was never made
+durable, and was reverted at the next hibernation with nobody told. Do the write
+in `execute()`, which is the one place a world has somewhere to put it.
 
 ## `offersFor(player, { now, presence })`: what a seat can do here
 
@@ -1005,6 +1080,58 @@ primitive and it is the one you should reach for first.
 offending line, so the whole action unwinds and the player is told no over a
 world that did not change.
 
+### `world.ordering`: whether a command may overtake an overdue event
+
+```ts
+world: {
+  maxPlayers: 500,
+  ordering: 'chronological',   // default: 'arrival'
+  actions, view,
+}
+```
+
+**The default is `'arrival'`, and it is deliberate.** A host drains what it can
+on its way into a frame, spends a budget doing it, and applies the player's
+command whether or not the queue emptied. Blocking every command on an
+arbitrarily long catch-up -- with the world lock held and every other socket
+queued behind it -- is the failure that budget exists to prevent, and most
+worlds do not care what order two unrelated things happened in.
+
+**A world whose clock is part of its rules cannot live with that**
+(ShufflewickPub #380). An event that chooses an offer, creates its contract and
+schedules the NEXT decision cannot say which partitions that next decision needs
+until the earlier one has committed -- the contract does not exist yet. So it
+cannot be predeclared, and a player who arrives while the chain is overdue
+overtakes it and produces a state no punctual world reaches. Declaring
+`ordering: 'chronological'` says so, and the host gates each command behind
+every event already due at that player's arrival instant, run in nominal order.
+
+What the gate does NOT change:
+
+- **The player's own arrival instant.** `ctx.world.now` is still when they
+  arrived, not when the catch-up finished. Each caught-up event still receives
+  its own `due`.
+- **Their order identity or receipt.** A repeat of an order the world already
+  committed is answered from its receipt without running the clock -- a receipt
+  is not a reason to tick.
+- **What an event handler sees.** It gets its scheduled `due` and its
+  `missedCount`, exactly as it does on any other road.
+
+**It is bounded, and it yields.** One `drainBatch` at a time, `catchUpRounds` of
+them at most, with the runtime given a turn between each -- so a handler that
+re-arms itself at zero delay makes a slow world rather than a wedged one, and
+the host's own overload and parking protections still apply. Running out of that
+budget, or meeting an event that refuses, STOPS the catch-up and the command is
+applied over a world that is still behind. Degradation by latency, never
+refusal: a refusal would make the player press the button again, which loses the
+ordering the gate exists to keep.
+
+An `'arrival'` world's correct move is unchanged and is written down under
+[`world.now`](#and-worldnow-the-instant-the-dispatch-is-happening-at): declare
+against the clock -- a `needs()` callback receives `world.now`, so an action
+whose correctness depends on chronology names the partitions that are due at
+that instant and settles them itself.
+
 ### Taking a timer back
 
 ```ts
@@ -1112,6 +1239,43 @@ the transformed ones, so the whole upgrade is still one durable step.
 A migration may not REMOVE a root. Deleting a season's stored bytes on a hook
 whose failure mode is a typo is not something anything gives back.
 
+**And `finalize`, for a root that is derived from ANOTHER root**
+(ShufflewickPub #379). `partition` sees one root at a time and `create` may only
+answer NEW names, so the commonest shape a real occupied upgrade has -- "this
+existing root's new value comes from that existing root" -- had nowhere to live.
+Writing it in `partition` meant hoping the other root had already been
+transformed, which is a bet on whatever order the store happened to list its
+keys in.
+
+```ts
+migration: {
+  from: 1,
+  partition: (element) => { normalize(element); },
+  create: (game, { existing }) => addedRoots(game, existing),
+  finalize: (game, { partition, names }) => {
+    // Every root is resident here -- transformed and newly created alike --
+    // and NONE of them has been serialized yet.
+    const sectors = partition('sectors:public');
+    for (const name of names.filter(isEmpire)) {
+      sectors.record(partition(name));
+    }
+  },
+}
+```
+
+The phases run in that order and the order is the contract: every stored root is
+adopted **before any hook runs**, `partition` normalizes each one, `create`
+builds the roots this version adds, `finalize` reads and writes across all of
+them, and only then is anything serialized. So a derivation is
+order-independent by construction -- there is no key order left to depend on --
+and a `finalize` that writes to a root an earlier phase touched is not a write
+the transaction loses.
+
+`finalize` may not add a root (that is `create`, and one door for it is what
+makes a name-collision refusable) or remove one. `ctx.partition(name)` answers
+the live element for any root the world holds and refuses a name it does not,
+because during a migration every root **is** resident.
+
 **Changing `world.maxPlayers` across an upgrade needs no separate roster
 migration.** The roster is the host's, not the bundle's: `maxPlayers` is read
 from the compiled rules at construction and bounds who may sit down, so raising
@@ -1141,8 +1305,9 @@ above the floor pays one comparison.
 schedule would be arming timers against a world whose own timers are mid-
 transformation, and one that could act would be a command no seat sent.
 
-**All of it, or none of it.** Every transformed partition, every queued event's
-new arguments, and the version they are now written under commit together. A
+**All of it, or none of it.** Every transformed partition, every root the
+upgrade added, every queued event's new arguments, and the version they are now
+written under commit together. A
 migration that landed halfway is a world whose rooms disagree about which rules
 wrote them, and unlike a checkpoint there is no retry that could finish it --
 the second attempt would read bytes the first had already moved. `boardsmith
@@ -1224,7 +1389,7 @@ thing next time.
 
 | Code | What happened |
 | --- | --- |
-| `bundle-not-a-world` | The manifest declares `"backend": "world"` and the compiled rules export no `world.actions`, no `world.view`, no `world.maxPlayers`, a `world.maxPlayers` the host will not seat, a `world.stateVersion` that is not a whole number from 0 up, or a `world.migration` that is not usable (no `from`, a `from` at or past this version, or a hook -- `partition`, `event` or `create` -- that is not a function). |
+| `bundle-not-a-world` | The manifest declares `"backend": "world"` and the compiled rules export no `world.actions`, no `world.view`, no `world.maxPlayers`, a `world.maxPlayers` the host will not seat, a `world.stateVersion` that is not a whole number from 0 up, or a `world.migration` that is not usable (no `from`, a `from` at or past this version, or a hook -- `partition`, `event`, `create` or `finalize` -- that is not a function). |
 | `world-migration-unavailable` | A world's recorded `stateVersion` and its bundle's differ, and no migration in that bundle can cross the gap: none declared, one declared from a different version, or a bundle older than the world. Also a `create` hook whose answer is not `name -> element`, or that names a partition the world already holds. The world is not changed. |
 | `invalid-world-action` | A world action the platform cannot offer or cannot bound: an action not built with `worldAction()`, an unbounded `from`/`filter`/`elementClass` element form, an element selection with no `elements:`, a candidate outside what the step declared, a selection past `maxCandidatesPerSelection`, a dependent or repeating selection, a seatless action that asks a question, or a round declared before a step the action does not have. |
 | `not-in-a-world` | An action built with `worldAction()` reached `ctx.world` with no world running it -- registered on a table, or reached after the dispatch that bound its facilities finished. |
@@ -1244,11 +1409,13 @@ thing next time.
 | `invalid-schedule-command` | A schedule request that names no action, names a seated one, or carries an argument that is not a JSON scalar. |
 | `invalid-schedule-cancel` | A cancel that names no key. A cancel is keyed the way arming is keyed, so a nameless one addresses nothing; cancelling a key nothing holds is a no-op rather than this. |
 | `engine-not-world-mode` | The engine was built over a game that is not in world mode. |
+| `allocation-undeclared` | A host asked for a partition to be created on demand without handing the world its durable id allocation stamp, so any id minted would be a guess. See [a created root's identity is durable](#a-created-roots-identity-is-durable). |
 | `child-timeout` | The bundle did not answer a host's call inside its deadline. |
 **`platform`**: a host's own bookkeeping broke. Not yours to fix, and
 deterministic, so a host with a park ladder parks on it:
 `partition-not-resident`, `partition-vanished`, `checkpoint-unknown-partition`,
-`unknown-child-op`, `child-generations-exhausted`, `world-engine-unavailable`.
+`allocation-undeclared`, `unknown-child-op`, `child-generations-exhausted`,
+`world-engine-unavailable`.
 
 **`infrastructure`**: a service the host depends on did not answer.
 `bundle-store-unavailable` is the one code, and it repairs itself when the
@@ -1284,6 +1451,7 @@ makes local behaviour a poor guide to published behaviour.
 | `maxPendingEvents` | derived: 16000 | The whole world's queue. `maxPlayers` times the unkeyed cap. |
 | `catchUpMaxRealIterations` | 4 | Real occurrences a late recurrence runs before the rest are coalesced into one call. |
 | `drainBatch` | 200 | Due events one drain runs. A world still behind re-arms: overload degrades to latency, never refusal. |
+| `catchUpRounds` | 8 | Drain batches one command may wait behind on a `ordering: 'chronological'` world. Running out applies the command over a world still behind, never refuses it. |
 | `maxCandidatesPerSelection` | 200 | Candidates one selection may offer, checked at enumeration. A 500-seat roster is one honest partition and one honest declaration, and enumerating it yields 500 candidates, so this is the guard the declaration itself cannot supply. |
 | `receiptRetentionMs` | 1209600000 (14 days) | How long a committed order's receipt is kept, and so how long a page may be away and still have an uncertain order answered rather than refused. |
 

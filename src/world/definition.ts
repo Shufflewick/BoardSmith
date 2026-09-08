@@ -21,8 +21,8 @@
  * one of them is written for the game author rather than for whoever is reading
  * the log.
  */
-import { DEFAULT_COLOR_PALETTE } from "../engine/index.js";
-import type { Game, GameElement } from "../engine/index.js";
+import { DEFAULT_COLOR_PALETTE, WORLD_PARTITION_ID_FLOOR } from "../engine/index.js";
+import type { ElementJSON, Game, GameElement } from "../engine/index.js";
 import { BoardSmithWorldEngine } from "./engine.js";
 import type { WorldViewDeclaration } from "./engine.js";
 import type { ActionDefinition } from "../engine/index.js";
@@ -165,6 +165,36 @@ export interface WorldDefinition {
    */
   readonly createPartition?: (game: Game, name: string) => GameElement | undefined;
   /**
+   * WHETHER A PLAYER'S COMMAND MAY OVERTAKE AN OVERDUE EVENT
+   * (ShufflewickPub #380).
+   *
+   * `"arrival"` -- the default, and what every world did before this existed.
+   * A host drains what it can on the way in, spends a BUDGET doing it, and
+   * applies the command whether or not the queue emptied. Blocking every
+   * command on an arbitrarily long catch-up, with the world lock held and every
+   * other socket queued behind it, is the failure that budget exists to
+   * prevent, and most worlds do not care what order two unrelated things
+   * happened in.
+   *
+   * `"chronological"` -- a world whose clock is part of its rules. Before a
+   * player's command runs, every event already due at that player's arrival
+   * instant is drained in nominal order, in bounded batches, and only then does
+   * the command apply. It is the answer for a chain that cannot be predeclared:
+   * an event that chooses an offer, creates its contract and schedules the next
+   * decision cannot say which partitions that next decision needs until the
+   * earlier one has committed, so a player who overtakes it produces a state no
+   * punctual world reaches.
+   *
+   * It costs LATENCY and never correctness in the other direction: a catch-up
+   * that runs out of the host's budget, or meets an event that refuses, stops
+   * and the command is applied over a world that is still behind. A refusal
+   * would make the player press the button again, which loses the ordering this
+   * exists to keep. The player's own arrival instant, order identity and
+   * receipt are untouched -- what changes is what has happened before their
+   * handler runs, not when they arrived.
+   */
+  readonly ordering?: WorldOrdering;
+  /**
    * WHAT HAPPENS WHEN A SEAT ARRIVES OR LEAVES.
    *
    * Each hook names a SEATLESS action from this world's own list, so a
@@ -231,6 +261,18 @@ export function readWorldDefinition(definition: {
   }
   if (world.migration !== undefined) {
     assertWorldMigration(world.migration, world.stateVersion ?? 0);
+  }
+  if (world.ordering !== undefined && !WORLD_ORDERINGS.includes(world.ordering)) {
+    throw worldRefusal(
+      "bundle-not-a-world",
+      `This bundle's \`gameDefinition.world\` declares \`world.ordering: ` +
+        `${JSON.stringify(world.ordering)}\`, which is not an ordering a host runs. It is ` +
+        `${WORLD_ORDERINGS.map((one) => `"${one}"`).join(" or ")}: "arrival" lets a player's ` +
+        `command apply over whatever the host's budgeted drain reached, which is the default and ` +
+        `what every world did before this existed; "chronological" drains every event already ` +
+        `due at that player's arrival instant before their command runs. Leave it out for ` +
+        `"arrival".`,
+    );
   }
   if (typeof world.view !== "function") {
     throw worldRefusal(
@@ -397,6 +439,11 @@ function buildGenesis(
     string,
     StoredPartition
   >;
+  // GENESIS OWNS THE COUNTER (#377). This instance minted every id the world
+  // has, so its counter IS the world's durable allocation -- and saying so here
+  // is what lets a freshly born world create an on-demand root before any host
+  // has had a chance to persist a stamp.
+  engine.adoptAllocation(game.worldIdAllocation());
   for (const [name, element] of Object.entries(built)) {
     // The hook CREATED these in the live game, so they are already in the tree.
     // Telling the engine is what stops the first command trying to adopt them
@@ -412,6 +459,54 @@ function buildGenesis(
   }
   return partitions;
 }
+
+/**
+ * THE ALLOCATION STAMP AN OCCUPIED WORLD SHOULD HAVE (ShufflewickPub #377).
+ *
+ * The supported repair, and the only O(stored) step in the whole scheme: read
+ * every partition the world holds, take the highest element id in any of them,
+ * and the stamp is one above it. Run it ONCE -- when a world that predates the
+ * stamp is first woken, or when a world's roots have already collided and are
+ * being rewritten -- persist what it returns, and the world never pays for it
+ * again.
+ *
+ * It reads BYTES, not a live tree: a host can answer this from storage without
+ * hydrating anything into a game.
+ */
+export function worldIdAllocationOf(
+  stored: Iterable<StoredPartition | ElementJSON>,
+): number {
+  let highest = WORLD_PARTITION_ID_FLOOR - 1;
+  for (const record of stored) {
+    // `StoredPartition.json` is `unknown` to a host on purpose -- it never
+    // parses a partition -- so the shape is asserted here, at the one place
+    // that does read inside the bytes.
+    const json = ("json" in record ? record.json : record) as ElementJSON;
+    highest = Math.max(highest, highestElementId(json));
+  }
+  return highest + 1;
+}
+
+/** Every id in a serialized subtree, which is where a stored root's ids are. */
+function highestElementId(json: ElementJSON): number {
+  let highest = typeof json.id === "number" ? json.id : WORLD_PARTITION_ID_FLOOR - 1;
+  for (const child of json.children ?? []) {
+    highest = Math.max(highest, highestElementId(child));
+  }
+  return highest;
+}
+
+/**
+ * When a player's command runs relative to the events already due (#380).
+ *
+ * A closed pair rather than a boolean, because "chronological" and "arrival"
+ * are both real answers a world can want and neither reads as the negation of
+ * the other.
+ */
+export type WorldOrdering = "arrival" | "chronological";
+
+/** The orderings a host runs, in one place, so the refusal can name them. */
+export const WORLD_ORDERINGS: readonly WorldOrdering[] = ["arrival", "chronological"];
 
 /** What a host must supply to build a world out of a bundle's definition. */
 export interface WorldRunnerOptions {
@@ -438,6 +533,25 @@ export interface WorldRunnerOptions {
   readonly seats: ReadonlyMap<string, number>;
   /** The ceilings this host runs. Omitted, the library's defaults. */
   readonly budgets?: WorldBudgets;
+  /**
+   * THE WORLD'S DURABLE ID ALLOCATION STAMP (ShufflewickPub #377).
+   *
+   * The `nextElementId` this world last reported -- from `genesis()`, from
+   * `createPartition()`, or from `migrateCreate()` -- as the host persisted it.
+   * Element ids outlive the process that minted them and only a fraction of the
+   * partitions holding them is ever resident, so a host that omits this builds
+   * a world whose counter speaks only for what it happens to have loaded.
+   *
+   * Omitted, the world may still be read, written and played; what it may NOT
+   * do is create a partition on demand, because minting from the construction
+   * floor is exactly how a cold host came to build a new root on an unloaded
+   * one's identity. The instance that runs `genesis()` needs no stamp -- it
+   * mints every id there is.
+   *
+   * For a world that was already occupied before this existed, derive the stamp
+   * ONCE with {@link worldIdAllocationOf} over its stored partitions.
+   */
+  readonly nextElementId?: number;
 }
 
 /** A built world: the runner a host drives, and the store it feeds. */
@@ -499,15 +613,24 @@ export function createWorld(options: WorldRunnerOptions): WorldRunner {
     // A world that builds a root the first time somebody reaches for it (#218).
     // Absent for a world whose every root came from genesis, which is most.
     ...(world.createPartition === undefined ? {} : { createPartition: world.createPartition }),
+    // THE HOST'S PERSISTED ALLOCATION (#377), or nothing -- and a world built
+    // with nothing refuses to mint rather than minting a guess.
+    ...(options.nextElementId === undefined ? {} : { nextElementId: options.nextElementId }),
   });
   const runner = createWorldRunner(
     engine,
     store,
     () => buildGenesis(game, world, engine),
-    // The bundle's own hook, or a world that adds no roots. The engine refuses
-    // a duplicate name and an unusable answer; what is decided here is only
-    // whether there is a hook at all.
-    (hookGame, ctx) => world.migration?.create?.(hookGame, ctx) ?? {},
+    // The bundle's own migration hooks, or a world that declares none. The
+    // engine refuses a duplicate name and an unusable answer; what is decided
+    // here is only which hooks exist at all.
+    {
+      ...(world.migration?.partition === undefined
+        ? {}
+        : { partition: world.migration.partition }),
+      ...(world.migration?.create === undefined ? {} : { create: world.migration.create }),
+      ...(world.migration?.finalize === undefined ? {} : { finalize: world.migration.finalize }),
+    },
   );
   return { runner, store, seatCount };
 }

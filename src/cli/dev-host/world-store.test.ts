@@ -16,6 +16,7 @@ import { readDistDir } from '../lib/zip.js';
 import { generateGitignore } from '../lib/project-scaffold.js';
 import { assertWorldProjectForReset } from '../commands/dev.js';
 import type { PlannedEvent } from '../../world/schedule-api.js';
+import type { WorldGenesis } from '../../world/runner.js';
 import {
   assertNodeSupportsSqlite,
   openWorldStore,
@@ -72,12 +73,23 @@ describe('the local world store', () => {
     });
   });
 
+  /**
+   * Genesis as the runner now answers it: the partitions AND the world's id
+   * allocation stamp (ShufflewickPub #377). The two travel together because a
+   * store that wrote one without the other is the collision that issue records.
+   */
+  function born(partitions: Record<string, { parentId: number; json: unknown }>): WorldGenesis {
+    return { partitions: partitions as WorldGenesis['partitions'], nextElementId: 1_000_100 };
+  }
+
   describe('genesis', () => {
     it('writes the partitions and the launched flag together', async () => {
-      await store.createAll({
-        world: { parentId: 0, json: { name: 'world' } },
-        'room/lobby': { parentId: 1, json: { name: 'lobby' } },
-      });
+      await store.createAll(
+        born({
+          world: { parentId: 0, json: { name: 'world' } },
+          'room/lobby': { parentId: 1, json: { name: 'lobby' } },
+        }),
+      );
       expect(store.isLaunched()).toBe(true);
       expect(await store.read('world')).toEqual({ parentId: 0, json: { name: 'world' } });
       expect(await store.read('room/lobby')).toEqual({ parentId: 1, json: { name: 'lobby' } });
@@ -98,7 +110,7 @@ describe('the local world store', () => {
         value: { parentId: 1, json: {} },
         enumerable: true,
       });
-      await expect(store.createAll(records)).rejects.toThrow(/reserved by JavaScript objects/);
+      await expect(store.createAll(born(records))).rejects.toThrow(/reserved by JavaScript objects/);
       expect(store.isLaunched()).toBe(false);
       expect(await store.read('world')).toBeUndefined();
     });
@@ -107,7 +119,7 @@ describe('the local world store', () => {
       const small = openWorldStore(join(root, 'small', 'world.db'), worldBudgets({ partitionMaxBytes: 64 }));
       try {
         await expect(
-          small.createAll({ world: { parentId: 0, json: { pad: 'x'.repeat(200) } } }),
+          small.createAll(born({ world: { parentId: 0, json: { pad: 'x'.repeat(200) } } })),
         ).rejects.toThrow(/over the 64-byte limit/);
       } finally {
         small.close();
@@ -123,10 +135,9 @@ describe('the local world store', () => {
     });
 
     it('is cleared for exactly the partitions a checkpoint wrote', async () => {
-      await store.createAll({
-        'room/a': { parentId: 1, json: {} },
-        'room/b': { parentId: 1, json: {} },
-      });
+      await store.createAll(
+        born({ 'room/a': { parentId: 1, json: {} }, 'room/b': { parentId: 1, json: {} } }),
+      );
       store.recordDirty(['room/a', 'room/b']);
       await store.writeCheckpoint({ 'room/a': '{"n":1}' });
       expect(store.dirtyPartitions()).toEqual(['room/b']);
@@ -147,7 +158,7 @@ describe('the local world store', () => {
 
   describe('a checkpoint', () => {
     beforeEach(async () => {
-      await store.createAll({ 'room/a': { parentId: 1, json: { n: 0 } } });
+      await store.createAll(born({ 'room/a': { parentId: 1, json: { n: 0 } } }));
     });
 
     it('rewrites a partition without re-parenting it', async () => {
@@ -195,7 +206,7 @@ describe('the local world store', () => {
 
   describe('the receipt ledger (#195)', () => {
     beforeEach(async () => {
-      await store.createAll({ 'room/a': { parentId: 1, json: { n: 0 } } });
+      await store.createAll(born({ 'room/a': { parentId: 1, json: { n: 0 } } }));
     });
 
     it('writes a receipt in the same transaction as the effects it belongs to', async () => {

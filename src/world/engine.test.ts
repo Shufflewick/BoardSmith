@@ -20,6 +20,7 @@
 // adoption worked without ever running it (docs/TEST-FIXTURES.md).
 import { describe, expect, it } from "vitest";
 import { Game, Piece, Player, Space } from "../engine/index.js";
+import type { GameElement } from "../engine/index.js";
 import { PlayerFacingError } from "../engine/errors.js";
 import type { ActionDefinition, ElementJSON, GameOptions } from "../engine/index.js";
 import { assertWorldEngineConformance } from "./engine-conformance.test-helper.js";
@@ -1813,5 +1814,177 @@ describe("#375 — a declaration is stamped with the instant it is being made at
     }
 
     expect(seen).toBe(at);
+  });
+});
+
+describe("#381 — a resident-root lookup is asked of the root table, not of the tree", () => {
+  // `residentIds` resolves a declared name to an id in one map read, and then
+  // the accessor spent the saving it had just made: it handed the id to
+  // `getElementById`, a depth-first walk of the whole resident world. So the
+  // read-only door that #374 opened by NAME still cost O(resident) per look,
+  // and a declaration that reads three roots per round paid three walks of
+  // every seat, every token and every card resident at that moment.
+  //
+  // Measured in a 500-seat world with one colony hydrated: 2.4 s to declare
+  // and 2.2 s to evaluate one refresh of nine offers, with 1.8 s of that in
+  // `atId` alone. The engine's own `rootOf` had already stopped doing this in
+  // #316 -- `Game#partitionRoot` is a direct reference the engine holds -- and
+  // the read-only accessor simply never got the same treatment.
+  //
+  // The cases below pin the SHAPE, not a millisecond: no tree search at all,
+  // and every answer the walk used to give unchanged. A timing assertion on a
+  // shared machine is noise.
+
+  /** Counts the tree walks, so "no search" is measurable rather than asserted. */
+  class SearchCountingGame extends WorldFixtureGame {
+    searches = 0;
+    override getElementById(id: number): GameElement | undefined {
+      this.searches += 1;
+      return super.getElementById(id);
+    }
+  }
+
+  function countingGame(): SearchCountingGame {
+    return new SearchCountingGame({
+      playerCount: 4,
+      seed: "world-fixture",
+      worldMode: true,
+    });
+  }
+
+  /** Round two reads a resident root by name, exactly as #374 wired it. */
+  function readerFor(record: (root: Room | undefined) => void) {
+    return worldAction<WorldFixtureGame>("readByName")
+      .needs(() => [ROOM_ONE])
+      .needs(({ world }) => {
+        record(world.partition(ROOM_ONE) as Room | undefined);
+        return [ROOM_ONE];
+      })
+      .execute(() => {});
+  }
+
+  it("finds the declared root without searching the tree", async () => {
+    const game = countingGame();
+    const engine = new BoardSmithWorldEngine({
+      game,
+      seats: new Map([["player-a", 1]]),
+      store: new CountingStore(genesis()),
+      actions: [touch, readerFor(() => {})],
+      view: () => [],
+    });
+
+    await engine.applyCommand("player-a", { name: "readByName", args: {} }, STAMP);
+    const afterHydration = game.searches;
+    game.searches = 0;
+
+    // A second command over the SAME resident root: nothing left to adopt, so
+    // every remaining look is the accessor's own.
+    await engine.applyCommand("player-a", { name: "readByName", args: {} }, STAMP);
+
+    expect(game.searches).toBe(0);
+    // The first command is allowed its adoption bookkeeping; what it must not
+    // be is unbounded in the resident set.
+    expect(afterHydration).toBeLessThanOrEqual(2);
+  });
+
+  it("asks the view path's lookup of the root table too", async () => {
+    const game = countingGame();
+    const engine = new BoardSmithWorldEngine({
+      game,
+      seats: new Map([["player-a", 1]]),
+      store: new CountingStore(genesis()),
+      actions: ACTIONS,
+      view: (_seat, world) => {
+        void (world.partition(ROOM_ONE) as Room | undefined)?.visits;
+        return [ROOM_ONE];
+      },
+    });
+
+    await engine.viewFor("player-a");
+    await engine.viewFor("player-a");
+    game.searches = 0;
+
+    await engine.viewFor("player-a");
+
+    expect(game.searches).toBe(0);
+  });
+
+  it("still answers with the live root, read-only, and undefined when absent", async () => {
+    // The three answers the walk gave. An index that served a different one --
+    // a stale object, a writable root, a throw for an absent name -- would be
+    // a faster wrong answer.
+    let seen: Room | undefined | "unset" = "unset";
+    let absent: Room | undefined | "unset" = "unset";
+    const engine = new BoardSmithWorldEngine({
+      game: countingGame(),
+      seats: new Map([["player-a", 1]]),
+      store: new CountingStore(genesis()),
+      actions: [
+        touch,
+        worldAction<WorldFixtureGame>("readByName")
+          .needs(({ world }) => {
+            absent = world.partition(ROOM_TWO) as Room | undefined;
+            return [ROOM_ONE];
+          })
+          .needs(({ world }) => {
+            seen = world.partition(ROOM_ONE) as Room | undefined;
+            return [ROOM_ONE];
+          })
+          .execute(() => {}),
+      ],
+      view: () => [],
+    });
+
+    await engine.applyCommand("player-a", { name: "readByName", args: {} }, STAMP);
+
+    expect(absent).toBeUndefined();
+    expect(seen).not.toBe("unset");
+    expect((seen as unknown as Room | undefined)?.name).toBe("room-one");
+  });
+
+  it("refuses a declaration's write through the indexed door as well (#219)", async () => {
+    const engine = new BoardSmithWorldEngine({
+      game: countingGame(),
+      seats: new Map([["player-a", 1]]),
+      store: new CountingStore(genesis()),
+      actions: [
+        touch,
+        readerFor((root) => {
+          if (root) root.visits = 500;
+        }),
+      ],
+      view: () => [],
+    });
+
+    await expect(
+      engine.applyCommand("player-a", { name: "readByName", args: {} }, STAMP),
+    ).rejects.toThrow(/A declaration tried to write/);
+    expect(visitsIn(await engine.serializePartitions([ROOM_ONE]))).toBe(0);
+  });
+
+  it("serves the RE-ADOPTED root after an eviction, never the evicted one", async () => {
+    // The index holds object references, so the one failure mode a name-to-id
+    // map does not have is handing back an object the platform has since
+    // dropped. Evict, re-hydrate from the store, and the accessor must answer
+    // with the new tree -- carrying the writes the checkpoint kept.
+    let seen: Room | undefined;
+    const engine = new BoardSmithWorldEngine({
+      game: countingGame(),
+      seats: new Map([["player-a", 1]]),
+      store: new CountingStore(genesis()),
+      actions: [touch, readerFor((root) => (seen = root))],
+      view: () => [],
+    });
+
+    await engine.applyCommand("player-a", { name: "touch", args: {} }, STAMP);
+    await engine.applyCommand("player-a", { name: "readByName", args: {} }, STAMP);
+    const before = seen;
+
+    engine.evict([ROOM_ONE]);
+    await engine.applyCommand("player-a", { name: "readByName", args: {} }, STAMP);
+
+    expect(seen).toBeDefined();
+    expect(seen).not.toBe(before);
+    expect(seen?.name).toBe("room-one");
   });
 });

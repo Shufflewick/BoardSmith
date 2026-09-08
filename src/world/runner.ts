@@ -78,12 +78,71 @@ import type {
   WorldOfferStamp,
 } from "./contract.js";
 import type { Game, GameElement } from "../engine/index.js";
-import type { WorldMigrationCreateContext } from "./migration.js";
+import type {
+  WorldMigrationContext,
+  WorldMigrationCreateContext,
+  WorldMigrationFinalizeContext,
+} from "./migration.js";
 import type { ScheduleAllowance } from "./schedule-api.js";
 import { WorldRefusal } from "./refusals.js";
 
 /** A scheduled event's timing, or `null` for a player's command. */
 export type WorldTiming = { readonly due: number; readonly missedCount: number } | null;
+
+/**
+ * A WORLD'S DURABLE ID ALLOCATION, reported with the bytes it was minted for
+ * (ShufflewickPub #377).
+ *
+ * Element ids outlive the process that minted them and only a fraction of the
+ * partitions holding them is ever resident, so the counter cannot be rebuilt
+ * from residency: a host that hydrated one room out of five would restart the
+ * counter beneath the other four. Every operation that MINTS therefore reports
+ * the next id the world may use, and a host writes that number in the same
+ * transaction as the partitions -- so "stored a new root, lost the stamp" is
+ * not a state that can exist.
+ *
+ * It comes back in as `WorldRunnerOptions.nextElementId` on the next wake.
+ */
+export interface WorldAllocation {
+  /** The next element id this world may mint. Only ever goes up. */
+  readonly nextElementId: number;
+}
+
+/** What genesis produces: the world's first partitions, and its first stamp. */
+export interface WorldGenesis extends WorldAllocation {
+  readonly partitions: Record<string, StoredPartition>;
+}
+
+/** One on-demand root, and the stamp that must be written beside it (#377). */
+export interface WorldCreatedPartition extends WorldAllocation {
+  readonly partition: StoredPartition;
+}
+
+/**
+ * EVERYTHING ONE MIGRATION PRODUCED, for the host's single transaction (#379).
+ *
+ * `partitions` is every root the world already held, serialized after every
+ * hook has run; `created` is the roots this version adds, with the parent each
+ * hangs from; `nextElementId` is the allocation stamp those new roots were
+ * minted from (#377). All three land together or none of them does.
+ */
+export interface WorldMigrated extends WorldAllocation {
+  readonly partitions: Record<string, string>;
+  readonly created: Record<string, StoredPartition>;
+}
+
+/**
+ * The bundle's own migration hooks, handed to the runner (#379).
+ *
+ * Supplied the way `buildGenesis` is, and for the same reason: the runner is
+ * handed the ENGINE rather than the game, and only `createWorld` holds both the
+ * game and the bundle's declaration.
+ */
+export interface WorldMigrationHooks {
+  readonly partition?: (element: GameElement, ctx: WorldMigrationContext) => void;
+  readonly create?: (game: Game, ctx: WorldMigrationCreateContext) => Record<string, GameElement>;
+  readonly finalize?: (game: Game, ctx: WorldMigrationFinalizeContext) => void;
+}
 
 /**
  * ONE COMMAND, AS THE PARENT HANDS IT ACROSS THE BOUNDARY.
@@ -298,10 +357,7 @@ export function createWorldRunner(
    * runner is handed the ENGINE rather than the game, and only `createWorld`
    * holds both the game and the bundle's declaration.
    */
-  buildMigrationRoots: (
-    game: Game,
-    ctx: WorldMigrationCreateContext,
-  ) => Record<string, GameElement> = () => ({}),
+  migrationHooks: WorldMigrationHooks = {},
 ): WorldRunnerHandle {
   return {
     /**
@@ -336,37 +392,117 @@ export function createWorldRunner(
       };
     },
 
-    async genesis(): Promise<Record<string, StoredPartition>> {
-      return buildGenesis();
+    async genesis(): Promise<WorldGenesis> {
+      const partitions = buildGenesis();
+      // THE STAMP RIDES WITH THE BYTES (#377). Genesis minted every id this
+      // world has, so the counter it leaves behind is the world's durable
+      // allocation -- and a host that wrote the partitions without it would
+      // have no way to mint safely on any later wake.
+      return { partitions, nextElementId: engine.nextElementId() };
     },
 
     serialize(dirty: readonly string[]): Promise<Record<string, string>> {
       return engine.serializePartitions(dirty);
     },
 
-    async migratePartition(
-      name: string,
-      stored: StoredPartition,
-      transform: (element: GameElement) => void,
-    ): Promise<string> {
-      await adopt(engine, store, { [name]: stored });
-      engine.migratePartition(name, transform);
-      const written = await engine.serializePartitions([name]);
-      return written[name] as string;
-    },
-
-    async migrateCreate(
-      existing: readonly string[],
+    async migrateAll(
+      stored: Readonly<Record<string, StoredPartition>>,
       ctx: { readonly from: number; readonly to: number },
-    ): Promise<Record<string, StoredPartition>> {
-      return engine.createMigratedPartitions(
-        (game) => buildMigrationRoots(game, { ...ctx, existing }),
+    ): Promise<WorldMigrated> {
+      const existing = Object.keys(stored).sort();
+
+      // EVERY ROOT RESIDENT BEFORE ANY CALLBACK RUNS (ShufflewickPub #379).
+      // The host used to hydrate, transform and serialize each root as it
+      // reached it, so a hook could only ever see the one it was handed and
+      // anything derived across roots was a bet on key order.
+      await adopt(engine, store, stored);
+
+      // (1) PER ROOT. Each one is normalized on its own, and `finalize` below
+      // reads the results rather than the bytes.
+      for (const name of existing) {
+        engine.migratePartition(name, (element) => {
+          migrationHooks.partition?.(element, { name, ...ctx });
+        });
+      }
+
+      // (2) THE ROOTS THIS VERSION ADDS (#218). Their bytes are re-taken in (4);
+      // what this step establishes is the NAMES, their parents, and that none
+      // of them collides with a root the world already holds.
+      const created = engine.createMigratedPartitions(
+        (game) => migrationHooks.create?.(game, { ...ctx, existing }) ?? {},
         existing,
       );
+      const names = [...existing, ...Object.keys(created)].sort();
+
+      // (3) THE WHOLE WORLD, ONCE (#379). Old roots transformed, new roots
+      // built, nothing serialized -- the one phase that can derive an existing
+      // root's value from another root, in either direction.
+      if (migrationHooks.finalize !== undefined) {
+        engine.migrateFinalize((game, partition) => {
+          migrationHooks.finalize!(game, { partition, names, ...ctx });
+        });
+      }
+
+      // (4) AND ONLY THEN, BYTES. Taken after every callback, so a finalize
+      // that wrote to a root step (1) or (2) had already serialized is not a
+      // write the transaction loses.
+      const written = await engine.serializePartitions(names);
+      const partitions: Record<string, string> = Object.create(null) as Record<string, string>;
+      for (const name of existing) partitions[name] = written[name] as string;
+      const createdRecords: Record<string, StoredPartition> = Object.create(null) as Record<
+        string,
+        StoredPartition
+      >;
+      for (const [name, record] of Object.entries(created)) {
+        createdRecords[name] = {
+          parentId: record.parentId,
+          json: JSON.parse(written[name] as string) as StoredPartition["json"],
+        };
+      }
+
+      return {
+        partitions,
+        created: createdRecords,
+        nextElementId: engine.nextElementId(),
+      };
     },
 
-    async createPartition(name: string): Promise<StoredPartition | undefined> {
-      return engine.createPartition(name);
+    /**
+     * ONE PICK, RE-ASKED (ShufflewickPub #378), on the same declare-then-read
+     * split every other read path has: the parent supplies what the LAST round
+     * asked for, and this answers what is still missing.
+     */
+    async declarePick(
+      player: string,
+      action: string,
+      selection: string,
+      args: Readonly<Record<string, unknown>>,
+      now: number,
+      supplied: Readonly<Record<string, StoredPartition>>,
+    ): Promise<WorldDeclaration> {
+      await adopt(engine, store, supplied);
+      const resident = residentNames(engine);
+      return {
+        needs: engine
+          .pickPartitions(player, action, selection, args, now)
+          .filter((name) => !store.holds(name) && !resident.has(name)),
+      };
+    },
+
+    async resolvePick(
+      player: string,
+      action: string,
+      selection: string,
+      args: Readonly<Record<string, unknown>>,
+      stamp: WorldOfferStamp,
+    ): Promise<WorldActionOffer["selections"][number]> {
+      return engine.resolvePick(player, action, selection, args, stamp);
+    },
+
+    async createPartition(name: string): Promise<WorldCreatedPartition | undefined> {
+      const partition = engine.createPartition(name);
+      if (partition === undefined) return undefined;
+      return { partition, nextElementId: engine.nextElementId() };
     },
 
     seat(player: string, seat: number): void {
@@ -511,7 +647,7 @@ export interface WorldRunnerHandle {
    * `DurableObjectPartitionStore.create` takes -- the parent writes them and
    * never looks inside.
    */
-  genesis(): Promise<Record<string, StoredPartition>>;
+  genesis(): Promise<WorldGenesis>;
   /**
    * Serialize exactly the partitions the parent says are dirty (#37 item 4).
    *
@@ -535,32 +671,27 @@ export interface WorldRunnerHandle {
    * together, because a migration that landed halfway is a world whose rooms
    * disagree about which rules wrote them.
    */
-  migratePartition(
-    name: string,
-    stored: StoredPartition,
-    transform: (element: GameElement) => void,
-  ): Promise<string>;
-
   /**
-   * THE DURABLE PARTITION ROOTS THIS MIGRATION ADDS (#218).
+   * A MIGRATION, WHOLE (ShufflewickPub #379).
    *
-   * `migratePartition` transforms a root that exists; it cannot answer more
-   * roots and has nowhere to say what a new one hangs from, so a world that
-   * outgrew its genesis -- twelve empires becoming five hundred, one shared
-   * timeline becoming a region apiece -- had no expressible upgrade at all,
-   * because genesis runs once and never again.
+   * One call, replacing the per-root `migratePartition` and the trailing
+   * `migrateCreate`, and the shape is the point: every stored root is adopted
+   * BEFORE any hook runs, and nothing is serialized until every hook has
+   * finished. So `migration.finalize` can derive one existing root's value from
+   * another existing root's, in either direction, and the answer does not
+   * depend on the order the host happened to list its keys in.
    *
-   * `existing` is every name the world already holds; the bundle's hook filters
-   * against it, and a duplicate is refused by name rather than replacing a live
-   * partition's bytes with a fresh element.
-   *
-   * Nothing is written, for the reason `migratePartition` writes nothing: the
-   * caller lands these in the SAME transaction as the transformed partitions.
+   * `stored` is every partition the world holds, by name, read by the caller --
+   * only the host has the store's whole key set. Nothing is written here: the
+   * caller lands `partitions`, `created` and `nextElementId` in ONE transaction
+   * with the queued events and the new state version, because a migration that
+   * landed halfway is a world whose rooms disagree about which rules wrote them.
    */
-  migrateCreate(
-    existing: readonly string[],
+  migrateAll(
+    stored: Readonly<Record<string, StoredPartition>>,
     ctx: { readonly from: number; readonly to: number },
-  ): Promise<Record<string, StoredPartition>>;
+  ): Promise<WorldMigrated>;
+
 
   /**
    * A PARTITION ROOT THE STORE HAS NEVER HELD, built on demand (#218).
@@ -573,7 +704,41 @@ export interface WorldRunnerHandle {
    *
    * The host owns the write, as it owns every other write.
    */
-  createPartition(name: string): Promise<StoredPartition | undefined>;
+  /**
+   * WHAT RE-ASKING ONE PICK STILL NEEDS RESIDENT (ShufflewickPub #378).
+   *
+   * `declare` for a single selection. A world's offer is enumerated with nothing
+   * bound; a selection whose `multiSelect` or `choices` reads an earlier
+   * selection's value cannot be answered that way, and the panel re-asks with
+   * the args it has. Its rounds are declared with those args, so a round may
+   * name a partition the empty-args offer could not, and the parent supplies it
+   * the way it supplies every other declared read.
+   */
+  declarePick(
+    player: string,
+    action: string,
+    selection: string,
+    args: Readonly<Record<string, unknown>>,
+    now: number,
+    supplied: Readonly<Record<string, StoredPartition>>,
+  ): Promise<WorldDeclaration>;
+
+  /**
+   * THAT PICK, RE-EVALUATED against the args bound so far (#378).
+   *
+   * Everything `declarePick` named is resident by the time this is called. It
+   * is a READ: the same read-only facilities an offer runs under, no clock to
+   * arm and nothing to checkpoint.
+   */
+  resolvePick(
+    player: string,
+    action: string,
+    selection: string,
+    args: Readonly<Record<string, unknown>>,
+    stamp: WorldOfferStamp,
+  ): Promise<WorldActionOffer["selections"][number]>;
+
+  createPartition(name: string): Promise<WorldCreatedPartition | undefined>;
   /**
    * Admit a player to a world that is already running (#37 item 2).
    *

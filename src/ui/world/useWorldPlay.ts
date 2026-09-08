@@ -17,11 +17,20 @@
  *    `choices`/`validElements` already filled in, affordable precisely because a
  *    world action may not declare a dependent selection (#169).
  *
- *    That is why `fetchPickChoices` here is LOCAL. It is a function, not a
- *    network call, and nothing in the controller assumes otherwise. The
- *    alternative -- teaching the controller to seed `pickSnapshots` from static
- *    metadata -- was rejected: it would give a TABLE two sources for one value,
- *    which is the divergence shape `useBoardActionBridge` exists to forbid.
+ *    That is why `fetchPickChoices` here is LOCAL while nothing is bound. It is
+ *    a function, not a network call, and nothing in the controller assumes
+ *    otherwise. The alternative -- teaching the controller to seed
+ *    `pickSnapshots` from static metadata -- was rejected: it would give a TABLE
+ *    two sources for one value, which is the divergence shape
+ *    `useBoardActionBridge` exists to forbid.
+ *
+ *    ONCE SOMETHING IS BOUND IT DOES GO TO THE WORLD (ShufflewickPub #378). A
+ *    selection's candidate LIST cannot depend on another selection -- that is
+ *    what "no dependent selection" means -- but its SHAPE can: a crew whose size
+ *    is the chosen ship's cargo hold. The one-shot offer resolved that against
+ *    empty args, so the panel was handed the unbounded fallback and every
+ *    checkbox was disabled. Re-asking costs one round trip per later pick, and
+ *    only while somebody is actually mid-action.
  *
  *    It is also not optional. `validElements` reads only `pickSnapshots`, and
  *    `useBoardActionBridge` feeds the board off `validElements`, so an offer
@@ -70,7 +79,14 @@ export interface WorldPlay {
   messages: ComputedRef<HistoryMessage[]>;
   /** Take an action. Single-shot: every selection's value at once. */
   sendAction: (actionName: string, args: Record<string, unknown>) => Promise<ActionResult>;
-  /** Resolve one pick's candidates from the offer, off the wire. */
+  /**
+   * Resolve one pick's candidates and its bounds.
+   *
+   * Off the wire while nothing is bound -- the offer already carries them --
+   * and BY re-asking the world once something is (ShufflewickPub #378), because
+   * a selection's shape may read an earlier selection's value and the offer was
+   * enumerated before any of them had one.
+   */
   fetchPickChoices: (
     actionName: string,
     selectionName: string,
@@ -176,6 +192,8 @@ export function useWorldPlay(host: WorldHost): WorldPlay {
   async function fetchPickChoices(
     actionName: string,
     selectionName: string,
+    _player: number,
+    currentArgs: Record<string, unknown> = {},
   ): Promise<PickChoicesResult> {
     const offer = offers.value.find((candidate) => candidate.name === actionName);
     if (offer === undefined) {
@@ -196,13 +214,38 @@ export function useWorldPlay(host: WorldHost): WorldPlay {
           `${offer.selections.map((s) => `"${s.name}"`).join(', ') || '(none)'}.`,
       };
     }
-    // No round trip, by design: a world's offer arrives with its candidates
-    // already resolved, so the answer is already in hand.
+    // NOTHING BOUND YET, SO THE OFFER IS ALREADY THE ANSWER. A world's offer
+    // arrives with every selection's candidates resolved against empty args, so
+    // the first pick of any action -- and every pick of a single-selection one,
+    // which is most of them -- costs no round trip at all.
+    if (Object.keys(currentArgs).length === 0) {
+      return {
+        success: true,
+        choices: selection.choices,
+        validElements: selection.validElements,
+        multiSelect: selection.multiSelect,
+      };
+    }
+
+    // SOMETHING IS BOUND, SO ASK AGAIN (ShufflewickPub #378). A selection's
+    // SHAPE may read an earlier selection's value -- a crew whose size is the
+    // chosen ship's cargo hold -- and the offer was enumerated before any ship
+    // existed. The candidates come back with it, evaluated against the same
+    // args, so the panel and the world can never disagree about either.
+    const answer = await host.resolvePick(actionName, selectionName, currentArgs);
+    if (!answer.ok || answer.selection === undefined) {
+      return {
+        success: false,
+        error:
+          answer.message ??
+          `The world would not say what "${selectionName}" may be, and did not say why.`,
+      };
+    }
     return {
       success: true,
-      choices: selection.choices,
-      validElements: selection.validElements,
-      multiSelect: selection.multiSelect,
+      choices: answer.selection.choices,
+      validElements: answer.selection.validElements,
+      multiSelect: answer.selection.multiSelect,
     };
   }
 

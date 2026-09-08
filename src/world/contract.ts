@@ -236,7 +236,7 @@ import type { ScheduleAllowance, ScheduleRequest } from "./schedule-api.js";
 // shape, so the shared action panel and board bridge read a world's answer
 // with no translation -- and a type import keeps `boardsmith/world` free of a
 // runtime dependency on the session layer.
-import type { ActionMetadata } from "../session/types.js";
+import type { ActionMetadata, PickMetadata } from "../session/types.js";
 
 
 /**
@@ -747,6 +747,18 @@ export interface WorldEngine {
   migratePartition(name: string, transform: (element: GameElement) => void): void;
 
   /**
+   * THE MIGRATION'S LAST PHASE, over every root at once (ShufflewickPub #379).
+   *
+   * `migratePartition` transforms one root and `createMigratedPartitions` only
+   * answers new ones, so an existing root whose new value is derived from
+   * ANOTHER existing root had nowhere to be written -- and doing it in the
+   * per-root hook made the result a function of the order a host happened to
+   * list its keys in. This runs once, with every root resident and nothing yet
+   * serialized, so the derivation is order-independent by construction.
+   */
+  migrateFinalize(run: (game: Game, partition: (name: string) => GameElement) => void): void;
+
+  /**
    * BUILD A PARTITION ROOT THE STORE HAS NEVER HELD (#218).
    *
    * Genesis runs once, so until this every root a world would ever need had to
@@ -760,6 +772,51 @@ export interface WorldEngine {
    * WRITE, as it owns every other write.
    */
   createPartition(name: string): StoredPartition | undefined;
+
+  /**
+   * WHAT RE-ASKING ONE PICK STILL NEEDS RESIDENT (ShufflewickPub #378).
+   *
+   * `commandPartitions` for a single selection, and it loads nothing itself for
+   * the same reason: the platform reads this, loads what it names, and only then
+   * asks. Declared WITH the args bound so far, so a round may name a partition
+   * the empty-args offer could not.
+   */
+  pickPartitions(
+    player: string,
+    action: string,
+    selection: string,
+    args: Readonly<Record<string, unknown>>,
+    now: number,
+  ): readonly string[];
+
+  /**
+   * THAT PICK, RE-EVALUATED with the args bound so far (#378).
+   *
+   * A world's offer is enumerated in one frame with nothing bound -- the whole
+   * cost model -- so a selection whose `multiSelect` bounds or `choices`
+   * callback read an earlier selection's value cannot be answered there. The
+   * panel asks again once it has something to ask with, exactly as a table's
+   * does. A READ, under the same read-only facilities an offer runs under.
+   */
+  resolvePick(
+    player: string,
+    action: string,
+    selection: string,
+    args: Readonly<Record<string, unknown>>,
+    stamp: WorldOfferStamp,
+  ): Promise<PickMetadata>;
+
+  /**
+   * THE NEXT ELEMENT ID THIS WORLD MAY MINT (ShufflewickPub #377).
+   *
+   * A world's ids are durable and only a fraction of the partitions holding
+   * them is ever resident, so the counter cannot be rebuilt from residency: a
+   * host that hydrated one room out of five would restart it beneath the other
+   * four and mint their identities again. The host persists this number in the
+   * same write as the bytes it was minted for, and hands it back when the world
+   * is next built.
+   */
+  nextElementId(): number;
 
   /**
    * DURABLE PARTITION ROOTS AN UPGRADE ADDS (#218).
@@ -889,7 +946,11 @@ export const WORLD_ENGINE_METHODS = Object.keys({
   evict: null,
   hydrate: null,
   offerPartitions: null,
+  migrateFinalize: null,
   migratePartition: null,
+  nextElementId: null,
+  pickPartitions: null,
+  resolvePick: null,
   offersFor: null,
   onEvent: null,
   residency: null,

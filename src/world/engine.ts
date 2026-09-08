@@ -316,6 +316,20 @@ export interface BoardSmithWorldEngineOptions {
    * Left out, no partition is ever created on first use.
    */
   readonly createPartition?: (game: Game, name: string) => GameElement | undefined;
+  /**
+   * THE WORLD'S DURABLE ID ALLOCATION STAMP, as the host last persisted it
+   * (ShufflewickPub #377).
+   *
+   * A world's element ids outlive the process that minted them, and only a
+   * fraction of the partitions holding them is ever resident -- so the counter
+   * cannot be rebuilt from residency. The host persists the `nextElementId`
+   * this engine reports and hands it back here on the next wake.
+   *
+   * Left out, this engine may not CREATE a partition on demand: it has no way
+   * to know which ids the store already owns, and minting from the floor is
+   * exactly the collision #377 records.
+   */
+  readonly nextElementId?: number;
 }
 
 export class BoardSmithWorldEngine implements WorldEngine {
@@ -346,6 +360,15 @@ export class BoardSmithWorldEngine implements WorldEngine {
    * machine was running.
    */
   private useClock = 0;
+  /**
+   * Whether this engine's id counter is authoritative for the WHOLE world
+   * (#377), rather than merely for what it happens to hold.
+   *
+   * True on the instance that ran genesis -- it minted every id there is -- and
+   * on any instance handed a durable stamp. False on a cold instance that was
+   * handed none, which is the one case where a mint would be a guess.
+   */
+  private allocationDeclared = false;
 
   constructor(options: BoardSmithWorldEngineOptions) {
     if (!options.game.worldMode) {
@@ -363,6 +386,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
     this.view = options.view;
     this.budgets = options.budgets ?? worldBudgets();
     this.buildOnFirstUse = options.createPartition;
+    if (options.nextElementId !== undefined) this.adoptAllocation(options.nextElementId);
     // AT CONSTRUCTION, NOT AT THE FIRST OFFER. A bundle whose declaration is
     // wrong is wrong for every player who will ever attach, so it is refused
     // once, before the world is built, rather than on whichever player first
@@ -424,7 +448,16 @@ export class BoardSmithWorldEngine implements WorldEngine {
       partition: (name) => {
         const id = this.residentIds.get(name);
         if (id === undefined) return undefined;
-        const root = this.game.getElementById(id);
+        // ASKED OF THE ROOT TABLE, NOT OF THE TREE (#381). `getElementById` is
+        // a depth-first walk of the whole resident world, so the name-to-id map
+        // above saved a search and then this line spent it again -- once per
+        // declared root per round per offer refresh. `partitionRoot` is the
+        // direct reference the engine already holds, and it is the same reader
+        // `rootOf` has used since #316. It also answers `undefined` for a root
+        // that has been evicted, which is the answer the walk gave, and it is
+        // re-pointed at the new object on re-adoption, so an index can never
+        // serve a dropped tree.
+        const root = this.game.partitionRoot(id);
         // READ-ONLY, AND NOT BY PROMISE (#219). The accessor used to hand over
         // the live element, so the paragraph above was the only thing stopping
         // a declaration writing -- and a declare-time write lands outside both
@@ -465,6 +498,24 @@ export class BoardSmithWorldEngine implements WorldEngine {
   }
 
   /**
+   * THE WHOLE MIGRATION'S LAST PHASE, with every root in front of it (#379).
+   *
+   * `migratePartition` sees one root and `createMigratedPartitions` may only
+   * ANSWER roots, so an upgrade whose shape is "this existing root's new value
+   * comes from that existing root" had nowhere to live -- writing it in the
+   * per-root hook was a bet on whatever order the host listed its keys in.
+   *
+   * By the time this runs every root is resident and none is serialized, so
+   * `partition` answers the live element for any of them, transformed and newly
+   * created alike, and the caller serializes afterwards. A name this engine does
+   * not hold is the `partition-not-resident` refusal `rootOf` already raises,
+   * which is the right sentence: during a migration, every root IS resident.
+   */
+  migrateFinalize(run: (game: Game, partition: (name: string) => GameElement) => void): void {
+    run(this.game, (name) => this.rootOf(name));
+  }
+
+  /**
    * BUILD A PARTITION ROOT THE STORE HAS NEVER HELD (#218).
    *
    * Genesis runs once. Every root a world would ever need therefore had to
@@ -484,7 +535,42 @@ export class BoardSmithWorldEngine implements WorldEngine {
    * bytes and the parent, and a partition that was built and not yet stored is
    * simply a partition the next checkpoint writes.
    */
+  /**
+   * THE NEXT ID THIS WORLD WILL MINT, for the host to persist (#377).
+   *
+   * Read after genesis and after every created partition, and written in the
+   * SAME transaction as the bytes it was minted for -- so a world that stored a
+   * new root and lost its stamp is not a state that can exist.
+   */
+  nextElementId(): number {
+    return this.game.worldIdAllocation();
+  }
+
+  /**
+   * TAKE UP THE HOST'S PERSISTED ALLOCATION STAMP (#377).
+   *
+   * Called at construction with what the host wrote down, and by genesis with
+   * the counter genesis itself left behind. Either way what it establishes is
+   * the same thing: this engine's counter speaks for every partition the world
+   * has, not only for the ones in front of it.
+   */
+  adoptAllocation(nextElementId: number): void {
+    this.game.adoptWorldIdAllocation(nextElementId);
+    this.allocationDeclared = true;
+  }
+
   createPartition(name: string): StoredPartition | undefined {
+    if (!this.allocationDeclared) {
+      throw worldRefusal(
+        "allocation-undeclared",
+        `Cannot create partition "${name}": this world's id allocation stamp was not supplied, ` +
+          `so any id minted here could already belong to a stored partition that is not loaded. ` +
+          `Persist the \`nextElementId\` the runner reports after genesis and after every ` +
+          `partition it creates, and pass it as \`nextElementId\` when the world is next built. ` +
+          `For a world that is already occupied and has no stamp, derive one once with ` +
+          `\`worldIdAllocationOf\` over its stored partitions.`,
+      );
+    }
     const resident = this.residentIds.get(name);
     if (resident !== undefined) {
       const root = this.game.partitionRoot(resident);
@@ -718,10 +804,18 @@ export class BoardSmithWorldEngine implements WorldEngine {
       // round one.
       if (
         definition.condition &&
-        !evaluateCondition(
-          definition.condition,
-          { game: this.game, player: acting, args: {} },
-          `action '${definition.name}'`,
+        // PROJECTED, AND WITH REACH-MARKING OFF (ShufflewickPub #384/#295): a
+        // condition decides whether an action is OFFERED, and an offer changes
+        // nothing -- so a condition that wrote would be writing on the one path
+        // with nowhere to put it. `readingOnly` is not optional beside the
+        // projection: a finder reached through a projected game marks what it
+        // touched, and marking is a write these traps refuse.
+        !this.game.readingOnly(() =>
+          evaluateCondition(
+            definition.condition!,
+            { game: readOnlyProjection(this.game), player: acting, args: {} },
+            `action '${definition.name}'`,
+          ),
         )
       ) {
         return null;
@@ -767,13 +861,128 @@ export class BoardSmithWorldEngine implements WorldEngine {
       // An ENABLED action with no answerable question is still dropped, and
       // that is the half this must not undo: it is a pick that opens on
       // nothing, which is what #187 was first reported as.
-      const disabled = this.game.getActionDisabledReason(definition, acting);
+      // PROJECTED AND READ-ONLY (#384), exactly as the condition above: a
+      // greying rule is answering "may this seat take it", which changes
+      // nothing.
+      const disabled = this.game.readingOnly(() =>
+        this.game.getActionDisabledReason(definition, acting, readOnlyProjection(this.game)),
+      );
       if (disabled === null && !satisfiable) return null;
 
       return offerOf(definition, selections, disabled);
     } finally {
       bindWorldFacilities(this.game, null);
     }
+  }
+
+  /**
+   * ONE PICK, RE-ASKED WITH THE ARGUMENTS BOUND SO FAR (ShufflewickPub #378).
+   *
+   * A world's offer is enumerated in ONE frame with `args: {}`, and that is the
+   * whole cost model rather than an oversight: a world action may not declare a
+   * dependent selection, so every question it asks can be answered before any
+   * of them is. What that does not cover is a selection whose SHAPE -- its
+   * `multiSelect` bounds, its `choices` callback -- reads an argument an earlier
+   * selection binds. Evaluated with nothing bound, a cap that depends on the
+   * chosen ship is the unbounded fallback, and the browser is left holding a
+   * limit the game never meant.
+   *
+   * So the panel re-asks, the same way a table's does: `fetchPickChoices` hands
+   * over the args bound so far and gets this selection back. It is a READ --
+   * the same read-only facilities an offer runs under -- and it is paid only
+   * while somebody is actually mid-action.
+   *
+   * It is NOT `dependsOn`, which stays refused for world actions: that makes one
+   * selection's candidates a function of another's inside the enumeration, which
+   * is the recursion the single-frame offer exists to avoid.
+   */
+  async resolvePick(
+    player: string,
+    action: string,
+    selection: string,
+    args: Readonly<Record<string, unknown>>,
+    stamp: WorldOfferStamp,
+  ): Promise<PickMetadata> {
+    const seat = this.seatFor(player);
+    const acting = this.playerFor(seat);
+    const definition = this.offerableAction(action);
+    const index = this.selectionIndex(definition, selection);
+
+    const named: string[] = [];
+    const facilities = this.readOnlyFacilities(definition.name, named, stamp);
+    bindWorldFacilities(this.game, facilities);
+    try {
+      // EVERY ROUND UP TO AND INCLUDING THIS SELECTION'S, with the args bound.
+      // A later round may read what an earlier one loaded, and with arguments in
+      // hand a round can name a partition the empty-args offer could not.
+      for (let step = 0; step <= index; step++) {
+        await this.hydrateRounds(definition, step, seat, args, named, stamp.now);
+      }
+      return this.pickOf(definition, index, acting, named, args);
+    } finally {
+      bindWorldFacilities(this.game, null);
+    }
+  }
+
+  /**
+   * WHAT RE-ASKING THAT PICK STILL NEEDS RESIDENT (#378).
+   *
+   * `offerPartitions` for one selection, and it exists for the same reason: the
+   * child cannot reach the parent's storage, so it names and is told. Answers
+   * the FIRST unmet round, because a later round may read what an earlier one
+   * loaded and has nothing to say until the host has supplied it.
+   */
+  pickPartitions(
+    player: string,
+    action: string,
+    selection: string,
+    args: Readonly<Record<string, unknown>>,
+    now: number,
+  ): readonly string[] {
+    const seat = this.seatFor(player);
+    const definition = this.offerableAction(action);
+    const index = this.selectionIndex(definition, selection);
+    for (let step = 0; step <= index; step++) {
+      for (const round of definition.world!.needs) {
+        if (round.before !== step) continue;
+        const unmet = this.declareRound(round, seat, args, now).filter(
+          (name) => !this.residentIds.has(name),
+        );
+        if (unmet.length > 0) return declaredOnce(unmet);
+      }
+    }
+    return [];
+  }
+
+  /** The action a seat could be offered under this name, or a refusal naming
+   *  the ones it could. The clock's own verbs are not among them (#120). */
+  private offerableAction(name: string): ActionDefinition {
+    const definition = this.actions.get(name);
+    if (definition === undefined || definition.world?.seatless === true) {
+      throw worldRefusal(
+        "unknown-command",
+        `This world does not offer "${name}" to a seat. It offers: ` +
+          `${[...this.actions.values()]
+            .filter((candidate) => candidate.world?.seatless !== true)
+            .map((candidate) => `"${candidate.name}"`)
+            .join(", ")}.`,
+      );
+    }
+    return definition;
+  }
+
+  /** Where that selection sits in the action, or a refusal naming the ones it
+   *  has -- the same sentence a UI asking for a pick that moved needs. */
+  private selectionIndex(definition: ActionDefinition, selection: string): number {
+    const index = definition.selections.findIndex((pick) => pick.name === selection);
+    if (index === -1) {
+      throw worldRefusal(
+        "unknown-command",
+        `The action "${definition.name}" has no selection called "${selection}". It asks: ` +
+          `${definition.selections.map((pick) => `"${pick.name}"`).join(", ") || "(nothing)"}.`,
+      );
+    }
+    return index;
   }
 
   /**
@@ -791,19 +1000,49 @@ export class BoardSmithWorldEngine implements WorldEngine {
     index: number,
     acting: Player,
     named: readonly string[],
+    args: Readonly<Record<string, unknown>> = {},
+  ): PickMetadata {
+    // READ-ONLY FOR THE WHOLE PICK (#384/#295). Everything below runs the
+    // bundle's own callbacks, and every one of them is answering a question
+    // rather than taking a moment.
+    return this.game.readingOnly(() => this.pickMetadata(definition, index, acting, named, args));
+  }
+
+  private pickMetadata(
+    definition: ActionDefinition,
+    index: number,
+    acting: Player,
+    named: readonly string[],
+    args: Readonly<Record<string, unknown>>,
   ): PickMetadata {
     const selection = definition.selections[index]!;
-    const pick = buildPickMetadata(this.game, acting, selection);
+    // THE GAME AN OFFER'S OWN CALLBACKS SEE IS PROJECTED (ShufflewickPub #384),
+    // for the reason a declaration's is: an offer runs on a path with no
+    // rollback and no checkpoint, so a `prompt`, a `display` or a `multiSelect`
+    // that wrote would reach every watcher's frame and be reverted at the next
+    // hibernation with nobody told.
+    const reading = readOnlyProjection(this.game);
+    const pick = wireSafeMultiSelect(
+      buildPickMetadata(reading, acting, selection, { ...args }),
+    );
     if (selection.type === "number" || selection.type === "text") return pick;
 
     const candidates = this.game
       .getActionExecutor()
-      .getChoices(selection, acting, {}, definition.name) as AnnotatedCandidate[];
+      // PROJECTED (#384): `choices` and `elements` are the offer's own callbacks
+      // and they must not be able to write the world they are describing.
+      .getChoices(
+        selection,
+        acting,
+        { ...args },
+        definition.name,
+        reading,
+      ) as AnnotatedCandidate[];
 
     // (c) THE PER-SELECTION CAP, this host's own number.
     assertCandidateBudget(definition.name, selection.name, candidates.length, this.budgets);
 
-    const context = { game: this.game, player: acting, args: {} };
+    const context = { game: reading, player: acting, args: { ...args } };
     // Warnings are the SESSION's channel for a soft-failed display callback and
     // a world has no frame to carry them; collected so the formatters have
     // somewhere to put one, and dropped, because the console already has it.
@@ -1036,7 +1275,16 @@ export class BoardSmithWorldEngine implements WorldEngine {
       presence: new Set(stamp.presence),
       partition: (name: string) => {
         assertDeclared(action, name, named);
-        return this.rootOf(name);
+        // READ-ONLY, AND NOT BY PROMISE (ShufflewickPub #384). This accessor
+        // used to hand over the live root, so every callback an offer runs --
+        // `condition`, `disabled`, `choices`, `elements`, `display`, `prompt`
+        // -- could write to the world. It is the worst-placed instance of the
+        // #219 failure class: an offer runs once per watcher per refresh, on a
+        // path with NO rollback and NO checkpoint, so the write reached every
+        // watcher's next frame, was never made durable, and was reverted at the
+        // next hibernation with nobody told. `world-readonly.ts` carries the
+        // whole argument; this is the same projection a declaration is handed.
+        return readOnlyProjection(this.rootOf(name));
       },
       schedule: () => refuse("schedule"),
       cancel: () => refuse("cancel"),
@@ -1983,6 +2231,26 @@ function candidateless(pick: PickMetadata): boolean {
  * -- which makes "the bundle said nothing" and "the bundle said nothing about
  * this" indistinguishable on the far side.
  */
+/**
+ * A CAP THE WIRE CAN CARRY (ShufflewickPub #378).
+ *
+ * `resolveMultiSelect` normalizes "no upper bound" to `Infinity`, which is a
+ * perfectly good number in an isolate and is not JSON: `JSON.stringify` writes
+ * `null`, and the panel read that as a cap of nothing and disabled every
+ * checkbox. An unbounded pick says so by OMITTING `max`, which is what
+ * `resolveMultiSelectConfig` and the panel already read as "no upper bound",
+ * and what the same shape means everywhere else in the metadata.
+ *
+ * Only the world path needs this: a table's picks are answered per selection
+ * over a live session rather than serialized into a single offer frame.
+ */
+function wireSafeMultiSelect(pick: PickMetadata): PickMetadata {
+  const bounds = pick.multiSelect;
+  if (bounds === undefined || Number.isFinite(bounds.max)) return pick;
+  const { max: _unbounded, ...rest } = bounds;
+  return { ...pick, multiSelect: rest as PickMetadata["multiSelect"] };
+}
+
 function offerOf(
   definition: ActionDefinition,
   selections: PickMetadata[],

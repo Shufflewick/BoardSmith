@@ -69,8 +69,11 @@ if (mode === 'live') {
   // A world played, checkpointed, and then killed with no clean shutdown --
   // exactly what closing a laptop lid on `boardsmith dev` looks like.
   await store.createAll({
-    world: { parentId: 0, json: { season: 1 } },
-    'room/lobby': { parentId: 1, json: { visitors: 0 } },
+    partitions: {
+      world: { parentId: 0, json: { season: 1 } },
+      'room/lobby': { parentId: 1, json: { visitors: 0 } },
+    },
+    nextElementId: 1_000_100,
   });
   store.seat('player-a', 1);
   store.seat('player-b', 2);
@@ -86,7 +89,7 @@ if (mode === 'live') {
   for (const [index, name] of names.entries()) {
     records[name] = { parentId: 1, json: JSON.parse(body(index, 0)) };
   }
-  await store.createAll(records);
+  await store.createAll({ partitions: records, nextElementId: 1_000_100 });
   store.recordDirty(names);
   await store.writeCheckpoint({}, { schedule: seededEvents() });
   store.close();

@@ -80,6 +80,7 @@ import {
   rekeyOffsetFor,
   rekeyPartition,
   rekeyReferences,
+  worldIdAllocationOf,
 } from '../../world/index.js';
 import { createNodeWorldClock, type WorldDevClock } from './node-world-clock.js';
 import type { LocalWorldStore } from './world-store.js';
@@ -161,6 +162,15 @@ export type WorldDevRequest =
        *  page before the command was sent. A repeat carries the same one. */
       order: WorldOrder;
       action: string;
+      args?: Record<string, unknown>;
+    }
+  | {
+      type: 'pick';
+      requestId: string;
+      /** The action being walked, and which of its selections to re-ask. */
+      action: string;
+      selection: string;
+      /** Every selection's value bound so far (ShufflewickPub #378). */
       args?: Record<string, unknown>;
     }
   | { type: 'fire_due' }
@@ -284,11 +294,49 @@ export class LocalWorldHost {
         // on `stateVersion`: a world whose ids are already above the floor
         // pays one comparison and nothing else.
         lifted = await this.#liftPreFloorIds();
+        // AFTER THE LIFT (#377/#223). A world below the construction floor has
+        // no allocation that means anything -- every id in it is one the wider
+        // game's own construction mints -- so the stamp is derived from the
+        // bytes the lift left behind, not from the ones it read.
+        await this.#repairAllocationStamp();
         migrated = await this.#migrateIfNeeded();
       }
       this.#rearm();
     });
     return lifted === undefined ? { migrated } : { migrated, lifted };
+  }
+
+  /**
+   * GIVE AN OCCUPIED WORLD THE ALLOCATION STAMP IT NEVER HAD (#377).
+   *
+   * A world launched before the stamp existed has partitions full of minted ids
+   * and nothing recording how far the counter got. Deriving it means reading
+   * every stored partition, which is the O(world) cost this whole mode exists
+   * to avoid -- so it is paid ONCE, here, on the first start after the stamp
+   * landed, and never again: the number is written and every later start reads
+   * it out of meta.
+   *
+   * It runs BEFORE the lift and before any migration, because both of those
+   * adopt, and an adoption against a missing stamp is exactly the corruption
+   * the stamp exists to catch.
+   */
+  async #repairAllocationStamp(): Promise<void> {
+    if (this.#store.nextElementId() !== undefined) return;
+    const stored: StoredPartition[] = [];
+    for (const name of this.#store.partitionNames()) {
+      stored.push(
+        await this.#readPartition(
+          name,
+          `Repairing this world's id allocation needs partition "${name}", which its store ` +
+            `does not have.`,
+        ),
+      );
+    }
+    this.#store.recordAllocation(worldIdAllocationOf(stored));
+    // The world was BUILT without a stamp, so the runner it holds still has the
+    // construction floor for a counter. Rebuild it over the number just
+    // written, before anything adopts against the old one.
+    this.#discardResident();
   }
 
   /**
@@ -325,15 +373,22 @@ export class LocalWorldHost {
     if (offset === 0) return undefined;
 
     const partitions: Record<string, string> = {};
+    const lifted: StoredPartition[] = [];
     for (const [name, partition] of stored) {
-      partitions[name] = JSON.stringify(rekeyPartition(partition.json, offset));
+      const moved = rekeyPartition(partition.json, offset) as StoredPartition['json'];
+      partitions[name] = JSON.stringify(moved);
+      lifted.push({ parentId: partition.parentId, json: moved });
     }
     const events = this.#store.pendingEvents().map((event) => ({
       ...event,
       args: rekeyReferences(event.args, offset) as Record<string, unknown>,
     }));
 
-    this.#store.rekey({ partitions, events });
+    // THE STAMP COMES OFF THE LIFTED BYTES (#377). Every id in the world just
+    // moved, so the stamp has to move with them -- and it is read from the
+    // result rather than shifted by `offset`, because the bytes are already in
+    // hand here and a number derived from them cannot drift from them.
+    this.#store.rekey({ partitions, events, nextElementId: worldIdAllocationOf(lifted) });
     // THE RESIDENT TREE GOES WITH THE OLD BYTES, exactly as a migration's
     // does: nothing has been adopted yet on this start, and rebuilding is what
     // makes that true for certain rather than by inspection.
@@ -368,17 +423,23 @@ export class LocalWorldHost {
     if (plan.kind === 'refuse') throw plan.refusal;
 
     const { migration, from, to } = plan;
-    const existing = this.#store.partitionNames();
-    const partitions: Record<string, string> = {};
-    for (const name of existing) {
-      const stored = await this.#readPartition(
+
+    // EVERY STORED ROOT, READ BEFORE ANY OF IT IS TRANSFORMED (#379). Only the
+    // host has the store's whole key set, so the host reads and the runner
+    // adopts -- and it adopts ALL of them before running a single hook, which
+    // is what makes a derivation across roots independent of the order this
+    // list happens to arrive in.
+    const stored: Record<string, StoredPartition> = Object.create(null) as Record<
+      string,
+      StoredPartition
+    >;
+    for (const name of this.#store.partitionNames()) {
+      stored[name] = await this.#readPartition(
         name,
         `Migrating this world needs partition "${name}", which its store does not have.`,
       );
-      partitions[name] = await this.#world.runner.migratePartition(name, stored, (element) => {
-        migration.partition?.(element, { name, from, to });
-      });
     }
+
     // THE QUEUED EVENTS TOO. Their frozen arguments are as opaque to a host as
     // a partition's bytes, and mean exactly as much to the new handler.
     const events = this.#store
@@ -388,14 +449,18 @@ export class LocalWorldHost {
         args: migratedArgs(migration, { action: event.action, args: event.args }),
       }));
 
-    // AND THE ROOTS THIS VERSION ADDS (#218). Genesis runs once, so a world
-    // that outgrew it -- twelve empires becoming five hundred -- has only this
-    // door. Built AFTER every existing partition is transformed and BEFORE
-    // anything is written, so a hook that throws leaves the world on its old
-    // rules with its old roots, playable.
-    const created = await this.#world.runner.migrateCreate(existing, { from, to });
+    // ONE CALL: the per-root hooks, the roots this version adds (#218), the
+    // whole-world `finalize` (#379), and the bytes taken only after all of them
+    // have run. A hook that throws leaves the world on its old rules with its
+    // old roots, playable, because nothing below has happened yet.
+    const migrated = await this.#world.runner.migrateAll(stored, { from, to });
 
-    this.#store.migrate({ partitions, created, events, toStateVersion: to });
+    this.#store.migrate({
+      partitions: migrated.partitions,
+      created: migrated,
+      events,
+      toStateVersion: to,
+    });
     // THE RESIDENT TREE GOES WITH THE OLD BYTES. It was hydrated from them one
     // partition at a time to be transformed, which is not the state any command
     // should run against; the next one rebuilds from what was just written.
@@ -406,8 +471,8 @@ export class LocalWorldHost {
     return {
       from,
       to,
-      partitions: Object.keys(partitions).length,
-      created: Object.keys(created).length,
+      partitions: Object.keys(migrated.partitions).length,
+      created: Object.keys(migrated.created).length,
       events: events.length,
     };
   }
@@ -423,6 +488,9 @@ export class LocalWorldHost {
           return;
         case 'action':
           await this.#command(clientId, message);
+          return;
+        case 'pick':
+          await this.#resolvePick(clientId, message);
           return;
         case 'fire_due':
           await this.#fireDueNow(clientId);
@@ -496,6 +564,13 @@ export class LocalWorldHost {
   // ── construction and residency ─────────────────────────────────────────────
 
   #build(): WorldRunner {
+    // THE DURABLE ALLOCATION (ShufflewickPub #377). A world's element ids
+    // outlive every host that ever ran it and only a fraction of the partitions
+    // holding them is ever resident, so the counter comes out of the store too.
+    // Absent for a world that has not launched yet -- genesis owns its own
+    // counter -- and for one written before the stamp existed, which `start`
+    // repairs before anything is adopted.
+    const nextElementId = this.#store.nextElementId();
     return createWorld({
       definition: this.#definition,
       seed: this.#seed,
@@ -503,6 +578,7 @@ export class LocalWorldHost {
       // it, so they come out of the store rather than out of this process.
       seats: new Map(this.#store.seats().map((row) => [row.player, row.seat] as const)),
       budgets: this.#budgets,
+      ...(nextElementId === undefined ? {} : { nextElementId }),
     });
   }
 
@@ -614,6 +690,74 @@ export class LocalWorldHost {
     }
   }
 
+  // ── one pick, re-asked ─────────────────────────────────────────────────────
+
+  /**
+   * ONE SELECTION, RE-EVALUATED WITH THE ARGS BOUND SO FAR (ShufflewickPub
+   * #378).
+   *
+   * A world's offer is enumerated in one frame with nothing bound, so a
+   * selection whose `multiSelect` bounds or `choices` callback read an earlier
+   * selection's value cannot be answered there: the panel asks again once it has
+   * something to ask with, exactly as a table's does.
+   *
+   * It is a READ. Nothing is dispatched, nothing is checkpointed and no view is
+   * pushed -- what it changes is what is LOADED, which is residency and not
+   * state, and a partition hydrated for a pick nobody went on to submit is cold
+   * by `residency`'s own ordering and the first thing evicted.
+   */
+  async #resolvePick(
+    clientId: string,
+    message: Extract<WorldDevRequest, { type: 'pick' }>,
+  ): Promise<void> {
+    const { requestId, action, selection } = message;
+    const args = message.args ?? {};
+    const seat = this.#attached.get(clientId);
+    if (seat === undefined) {
+      this.#send(clientId, {
+        type: 'world_pick_result',
+        requestId,
+        ok: false,
+        message: 'This page holds no seat in this world yet, so it has no offer to walk.',
+      });
+      return;
+    }
+    const player = devWorldPlayer(seat);
+    const runner = this.#world.runner;
+    const now = this.#worldNow();
+    try {
+      await settleDeclaration(
+        async (supplied) =>
+          (await runner.declarePick(player, action, selection, args, now, supplied)).needs,
+        (name) =>
+          this.#readPartition(
+            name,
+            `Re-asking "${selection}" needs partition "${name}", which this world's store does ` +
+              "not have. The action's own declaration names it; either the name is wrong or the " +
+              'partition was never created.',
+          ),
+        `The "${action}" action's declaration`,
+      );
+      this.#send(clientId, {
+        type: 'world_pick_result',
+        requestId,
+        ok: true,
+        selection: await runner.resolvePick(player, action, selection, args, {
+          now,
+          presence: this.#presence(),
+        }),
+      });
+    } catch (error) {
+      this.#send(clientId, {
+        type: 'world_pick_result',
+        requestId,
+        ok: false,
+        message: messageOf(error),
+        ...(error instanceof WorldRefusal ? { code: error.code } : {}),
+      });
+    }
+  }
+
   // ── a player's command ─────────────────────────────────────────────────────
 
   async #command(
@@ -656,12 +800,21 @@ export class LocalWorldHost {
         await this.#pushViews();
         return;
       }
+      // THE PLAYER'S OWN ARRIVAL INSTANT, taken once and used for everything
+      // below: the catch-up's ceiling, the handler's `world.now`, and the
+      // receipt. Reading the clock twice would let a long catch-up move the
+      // instant the command claims to have arrived at.
+      const arrivedAt = this.#worldNow();
+      // EVERYTHING ALREADY DUE FIRST, for a world that declared it (#380).
+      // After the receipt check above, so a REPLAYED order is answered from its
+      // receipt without running the clock: a receipt is not a reason to tick.
+      await this.#catchUpBefore(arrivedAt);
       const events = await this.#dispatch({
         player,
         command: { name, args },
         timing: null,
-        arrivedAt: this.#worldNow(),
-        receipt: { orderId: order.id, player, at: this.#worldNow() },
+        arrivedAt,
+        receipt: { orderId: order.id, player, at: arrivedAt },
       });
       // ANSWERED AFTER THE CHECKPOINT LANDED, exactly as the platform answers
       // one: a player told "taken" about a command whose effects were not made
@@ -823,8 +976,11 @@ export class LocalWorldHost {
     // leaves an empty root rather than a root nothing recorded.
     const built = await this.#world.runner.createPartition(name);
     if (built === undefined) throw worldRefusal('partition-missing', message);
+    // THE BYTES AND THE STAMP TOGETHER (#377). `createOne` takes the whole
+    // answer rather than the partition alone, so a host cannot write a minted
+    // root and leave the allocation that produced it behind.
     this.#store.createOne(name, built);
-    return built;
+    return built.partition;
   }
 
   #allowanceFor(owner: string): ScheduleAllowance {
@@ -866,7 +1022,20 @@ export class LocalWorldHost {
    * delay produces a busy host rather than a wedged one.
    */
   async #drain(): Promise<void> {
-    const now = this.#worldNow();
+    await this.#drainBatch(this.#worldNow());
+    this.#rearm();
+  }
+
+  /**
+   * ONE BATCH OF EVENTS DUE AT OR BEFORE `now`, run in nominal order.
+   *
+   * Answers how many handler calls it actually made, which is what tells a
+   * catch-up loop that it is making progress (ShufflewickPub #380): a batch
+   * that ran nothing is a batch that will run nothing again, and the loop stops
+   * rather than spinning on an event the world cannot move past.
+   */
+  async #drainBatch(now: number): Promise<number> {
+    let ran = 0;
     const { batch } = nextDueBatch(this.#store.pendingEvents(), now, this.#budgets.drainBatch);
     for (const event of batch) {
       // A ONE-SHOT IS ONE CALL AT ITS OWN DUE. A RECURRENCE THAT FELL BEHIND IS
@@ -895,6 +1064,7 @@ export class LocalWorldHost {
             rearm: last ? advanced : [],
           });
           this.#narrate(events);
+          ran += 1;
         } catch (error) {
           // A DUE EVENT THAT REFUSED IS SAID OUT LOUD AND LEFT QUEUED. Its
           // effects rolled back, so the world is unchanged; dropping it
@@ -906,7 +1076,51 @@ export class LocalWorldHost {
         }
       }
     }
-    this.#rearm();
+    return ran;
+  }
+
+  /**
+   * EVERYTHING ALREADY DUE, BEFORE THIS PLAYER'S COMMAND (#380).
+   *
+   * Reached only by a world that declared `world.ordering: 'chronological'`.
+   * The default is the other one and it is deliberate: a host drains what it
+   * can on the way in and applies the command whether or not the queue emptied,
+   * because blocking every command on an arbitrarily long catch-up is the
+   * failure that budget exists to prevent.
+   *
+   * A world whose clock is part of its rules cannot live with that. An event
+   * that chooses an offer, creates its contract and schedules the next decision
+   * cannot say which partitions that next decision needs until the earlier one
+   * has committed, so it cannot be predeclared and a player who overtakes it
+   * produces a state no punctual world reaches.
+   *
+   * BOUNDED, AND YIELDING. One `drainBatch` at a time, `catchUpRounds` of them
+   * at most, with the event loop given a turn between each -- so a defective
+   * handler that re-arms itself at zero delay makes a slow world rather than a
+   * wedged one, and the host's own overload protections still apply. Running
+   * out, or meeting an event that refuses, STOPS the catch-up and the command
+   * is applied over a world that is still behind: degradation by latency, never
+   * refusal, because a refusal would make the player press the button again and
+   * lose the ordering this exists to keep.
+   *
+   * `arrivedAt` is the player's own stamped instant and is never moved. What
+   * this changes is what has happened before their handler runs.
+   */
+  async #catchUpBefore(arrivedAt: number): Promise<void> {
+    if ((readWorldDefinition(this.#definition).ordering ?? 'arrival') !== 'chronological') return;
+    for (let round = 0; round < this.#budgets.catchUpRounds; round++) {
+      const { batch } = nextDueBatch(
+        this.#store.pendingEvents(),
+        arrivedAt,
+        this.#budgets.drainBatch,
+      );
+      if (batch.length === 0) return;
+      if ((await this.#drainBatch(arrivedAt)) === 0) return;
+      // A TURN FOR EVERYTHING ELSE. The world lock is still held -- the catch-up
+      // and the command it gates are one ordered unit -- but the runtime is not
+      // starved, so a host under load stays answerable while it happens.
+      await new Promise((resolve) => setImmediate(resolve));
+    }
   }
 
   /**

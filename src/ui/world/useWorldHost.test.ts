@@ -241,6 +241,99 @@ describe('useWorldHost', () => {
  * the lines is the thing that saves every world UI from writing the same
  * bounded array.
  */
+describe('useWorldHost — re-asking one pick (ShufflewickPub #378)', () => {
+  let posted: unknown[];
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    posted = [];
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  function make() {
+    return useWorldHost({
+      post: (message) => posted.push(message),
+      orders: createOrderBook({ storage: memoryStorage() }),
+    });
+  }
+
+  const CREW = {
+    name: 'crew',
+    type: 'choice' as const,
+    choices: [{ value: 'ash', display: 'Ash' }],
+    multiSelect: { min: 1, max: 2 },
+  };
+
+  it('sends the args bound so far and resolves with what came back', async () => {
+    const host = make();
+    const answer = host.resolvePick('deploy', 'crew', { ship: 'dory' });
+
+    expect(posted).toEqual([
+      {
+        source: WORLD_UI_SOURCE,
+        type: 'world_pick',
+        requestId: 'wp-1',
+        action: 'deploy',
+        selection: 'crew',
+        args: { ship: 'dory' },
+      },
+    ]);
+
+    deliver(host, {
+      source: WORLD_HOST_SOURCE,
+      type: 'world_pick_result',
+      requestId: 'wp-1',
+      ok: true,
+      selection: CREW,
+    });
+    await expect(answer).resolves.toEqual({ ok: true, selection: CREW });
+  });
+
+  it('carries NO order, because a question is not a command to make idempotent', () => {
+    // The one property that separates this from `act`: an order is written down
+    // before it is sent so a repeat cannot spend twice. A pick spends nothing.
+    const host = make();
+    void host.resolvePick('deploy', 'crew', {});
+    expect(posted[0]).not.toHaveProperty('order');
+    expect(host.acting.value).toBe(false);
+  });
+
+  it('resolves a refusal rather than throwing it', async () => {
+    const host = make();
+    const answer = host.resolvePick('deploy', 'crew', { ship: 'gone' });
+    deliver(host, {
+      source: WORLD_HOST_SOURCE,
+      type: 'world_pick_result',
+      requestId: 'wp-1',
+      ok: false,
+      message: 'That ship has already sailed.',
+      code: 'partition-missing',
+    });
+    await expect(answer).resolves.toEqual({
+      ok: false,
+      message: 'That ship has already sailed.',
+      code: 'partition-missing',
+    });
+  });
+
+  it('answers a pick the host never came back on, rather than spinning forever', async () => {
+    const host = make();
+    const answer = host.resolvePick('deploy', 'crew', { ship: 'dory' });
+    await vi.advanceTimersByTimeAsync(60_000);
+    await expect(answer).resolves.toMatchObject({ ok: false });
+  });
+
+  it('fails an outstanding pick when the frame stops listening', async () => {
+    const host = make();
+    host.start();
+    const answer = host.resolvePick('deploy', 'crew', { ship: 'dory' });
+    host.stop();
+    await expect(answer).resolves.toMatchObject({ ok: false });
+  });
+});
+
 describe('useWorldHost — the world narrating (#331)', () => {
   let posted: unknown[];
 
