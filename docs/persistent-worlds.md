@@ -402,6 +402,33 @@ view has no steps. **A write is not**, because `walkDeclaration` has no ceiling:
 what bounds it is the number of rounds you wrote, and a round that re-answers
 differently every time it is asked is not that number.
 
+### A later round reads a root BY NAME: `world.partition(name)`
+
+A declaration's context carries `world`, the same read-only accessor `execute`
+and a bundle's `view(seat, world)` receive:
+
+```ts
+const theRoomTheIndexNames = ({ world, player }: WorldNeedsContext<HallGame>): readonly string[] => [
+  roomPartition(standingKey(world.partition(WANDERERS_PARTITION) as Register, player.seat)),
+];
+```
+
+**Reach a root you declared through `world.partition(name)`, not through
+`game`.** Both answer the same element and both answer it read-only, so the
+difference is not safety -- it is what the question costs. `world.partition` is
+an index lookup: the engine minted the root's id when it made the partition
+resident and has held the name against it ever since. `game.first(Class, name)`
+is a *search*, and what it searches is every resident element there is. In a
+world of a few rooms those are the same answer at the same price. In a world of
+five hundred seats they are not: the search walks every seat's roster, through
+the read-only projection, once per round -- and a declaration is re-run on every
+offer refresh, not just on the command that finally uses it. That is how a
+one-colony refresh of seven actions came to cost seconds (#374).
+
+`undefined` is the honest answer while a root is still absent, and it is the
+answer round one gets for everything, because nothing is resident yet. A later
+round that names a root an earlier round declared can read it straight.
+
 The same two rounds in a world whose seats are five hundred and whose rooms are
 1,600: `look` in `~/BoardSmithGames/sotf/src/rules/world.ts`. There the first
 round names the acting seat's own `Character`, and the second reads it for the

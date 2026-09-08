@@ -1662,3 +1662,91 @@ describe("#191 — a refusal written for a player reaches one", () => {
     expect(visitsIn(await engine.serializePartitions([ROOM_ONE]))).toBe(1);
   });
 });
+
+describe("#374 — a declaration reaches a partition BY NAME, not by walking the tree", () => {
+  // The offer path re-runs every declaration on every refresh. A declaration
+  // that can only find a resident root by asking the GAME for it -- the
+  // documented `game.first(Class, name)` -- pays a walk of the whole resident
+  // tree, through the read-only projection, once per round per refresh. At 500
+  // seats that is the seconds #374 measured, for a question the engine already
+  // holds the answer to: `residentIds` maps the name straight to the id.
+  //
+  // The accessor is the SAME `WorldResidency` a bundle's `view(seat, world)`
+  // and a command's `execute` already receive. What was missing was the wiring,
+  // not the concept, which is why this reads as an omission rather than a new
+  // surface.
+
+  /** Round two reads what round one made resident, by name. */
+  const named = (record: (root: Room | undefined) => void) =>
+    worldAction<WorldFixtureGame>("readByName")
+      .needs(() => [ROOM_ONE])
+      .needs(({ world }) => {
+        record(world.partition(ROOM_ONE) as Room | undefined);
+        return [ROOM_ONE];
+      })
+      .execute(() => {});
+
+  function engineFor(action: ReturnType<typeof named>) {
+    return new BoardSmithWorldEngine({
+      game: newWorldGame(),
+      seats: new Map([["player-a", 1]]),
+      store: new CountingStore(genesis()),
+      actions: [touch, action],
+      view: () => [],
+    });
+  }
+
+  it("hands a declaration the resident root the game holds under that name", async () => {
+    let seen: Room | undefined;
+    const engine = engineFor(named((root) => (seen = root)));
+
+    await engine.applyCommand(
+      "player-a",
+      { name: "readByName", args: {} },
+      STAMP,
+    );
+
+    expect(seen?.name).toBe("room-one");
+  });
+
+  it("hands it READ-ONLY, exactly as the view path is handed one (#219)", async () => {
+    // The accessor projects, so the write a declaration must not make is
+    // refused here for the same reason it is refused through `game`. An
+    // indexed path that skipped the projection would be a hole with a shortcut
+    // in front of it.
+    const engine = engineFor(
+      named((root) => {
+        if (root) root.visits = 500;
+      }),
+    );
+
+    await expect(
+      engine.applyCommand("player-a", { name: "readByName", args: {} }, STAMP),
+    ).rejects.toThrow(/A declaration tried to write/);
+    expect(visitsIn(await engine.serializePartitions([ROOM_ONE]))).toBe(0);
+  });
+
+  it("answers undefined for a partition that is not resident yet", async () => {
+    // The honest answer while a root is still absent, and the same one
+    // `WorldResidency` gives the view path. A throw here would make the first
+    // round of every declaration a special case for the bundle to branch on.
+    let seen: Room | undefined | "unset" = "unset";
+    const asking = worldAction<WorldFixtureGame>("askEarly")
+      .needs(({ world }) => {
+        seen = world.partition(ROOM_TWO) as Room | undefined;
+        return [ROOM_ONE];
+      })
+      .execute(() => {});
+    const engine = new BoardSmithWorldEngine({
+      game: newWorldGame(),
+      seats: new Map([["player-a", 1]]),
+      store: new CountingStore(genesis()),
+      actions: [touch, asking],
+      view: () => [],
+    });
+
+    await engine.applyCommand("player-a", { name: "askEarly", args: {} }, STAMP);
+
+    expect(seen).toBeUndefined();
+  });
+});
