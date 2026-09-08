@@ -93,6 +93,30 @@ function makeSession() {
 // Task 1: no-serialization invariant
 // ============================================
 
+
+/**
+ * WAIT FOR THE THING, NOT FOR THE CLOCK (ShufflewickPub #385).
+ *
+ * A demo runs bot moves on its own scheduler, and the two cases below used to
+ * sleep 800ms and assume one had landed. On a loaded machine none had, and the
+ * suite failed at random on a claim that was never about elapsed time. This
+ * polls for the condition instead and gives up loudly after a ceiling no
+ * healthy run comes near.
+ */
+async function until(
+  ready: () => boolean,
+  what: string,
+  ceilingMs = 10_000,
+): Promise<void> {
+  const deadline = Date.now() + ceilingMs;
+  while (!ready()) {
+    if (Date.now() > deadline) {
+      throw new Error(`Waited ${ceilingMs}ms for ${what} and it never happened.`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+}
+
 describe('teaching state — no-serialization invariant', () => {
   it('runner snapshot never contains hint, heatmap, or narration fields', () => {
     const session = makeSession();
@@ -443,8 +467,11 @@ describe('demo mode — startDemo / stopDemo / isDemoRunning', () => {
       narrator: (action, player) => `Seat ${player}: ${action}`,
     });
 
-    // Wait for at least one bot move to be announced
-    await new Promise(resolve => setTimeout(resolve, 800));
+    // Wait for at least one bot move to be announced.
+    await until(
+      () => narrationTexts.some((text) => text !== undefined),
+      'the demo to narrate a bot move',
+    );
 
     (session as unknown as DemoSession).stopDemo();
 
@@ -699,14 +726,14 @@ describe('demo mode — default narrator formats object args (WR-06)', () => {
       },
     });
 
-    // Wait for at least one bot move
-    await new Promise(resolve => setTimeout(resolve, 800));
+    // Wait for at least one bot move.
+    await until(() => observedNarration !== undefined, 'the demo to narrate a bot move');
     (session as unknown as DemoSession).stopDemo();
 
-    // If any narration was produced, verify it never contains [object Object]
-    if (observedNarration !== undefined) {
-      expect(observedNarration).not.toContain('[object Object]');
-    }
+    // The wait above is for narration to EXIST, so this is unconditional now
+    // (ShufflewickPub #385): the guard it used to sit behind meant a run where
+    // no move landed asserted nothing and still passed.
+    expect(observedNarration).not.toContain('[object Object]');
     // The test game uses string args ('a'/'b'/'c') so object formatting
     // is exercised by the unit below which tests the formatter directly.
   });

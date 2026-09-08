@@ -7,6 +7,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { lightenColor, darkenColor, isLightColor } from './color.js';
+import * as ui from '../index.js';
 
 describe('lightenColor', () => {
   it('raises every channel by the given fraction of full scale', () => {
@@ -95,8 +96,13 @@ describe('isLightColor', () => {
 });
 
 describe('public surface', () => {
-  it('is exported from boardsmith/ui so games do not paste their own copy', async () => {
-    const ui = await import('../index.js');
+  it('is exported from boardsmith/ui so games do not paste their own copy', () => {
+    // STATICALLY IMPORTED (ShufflewickPub #385). The claim is that these four
+    // are on the barrel, which is a fact about the module, not about how fast
+    // it loads -- and importing it inside the test charged the first transform
+    // of the whole UI surface against a 5s budget, so under a full-suite load
+    // this failed at random. At module scope the transform happens during
+    // collection, where it belongs.
     expect(typeof ui.lightenColor).toBe('function');
     expect(typeof ui.darkenColor).toBe('function');
     expect(typeof ui.isLightColor).toBe('function');

@@ -10,6 +10,7 @@
 import { describe, it, expect } from 'vitest';
 import { defineComponent, h, ref, computed } from 'vue';
 import { mount } from '@vue/test-utils';
+import * as ui from '../index.js';
 import {
   useGameContext,
   tryUseGameContext,
@@ -134,8 +135,9 @@ describe('the keys themselves', () => {
     }
   });
 
-  it('is exported from the UI barrel, which is where a custom UI reaches it', async () => {
-    const ui = await import('../index.js');
+  it('is exported from the UI barrel, which is where a custom UI reaches it', () => {
+    // Statically imported: see the note in `src/ui/utils/color.test.ts`
+    // (ShufflewickPub #385). The barrel's transform is not this test's cost.
     expect(ui.useGameContext).toBeTypeOf('function');
     expect(ui.tryUseGameContext).toBeTypeOf('function');
     expect(ui.GAME_CONTEXT_KEYS).toBeDefined();
