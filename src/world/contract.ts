@@ -701,13 +701,24 @@ export interface WorldEngine {
    * `player` is null for a scheduled event, which is the clock acting rather
    * than a seat.
    *
+   * `now` IS THE PLATFORM'S, exactly as `apply`'s stamp is (#375). A
+   * declaration reaches it as `world.now`, and it is the instant this dispatch
+   * is happening at: a command's stamped arrival, a scheduled event's own
+   * `due`. Without it a world whose partitions are TIMED had to declare every
+   * active one, because it could not tell a due partition from a future one --
+   * O(world) in the mode whose argument is that a command costs O(room).
+   *
    * IT LOADS NOTHING ITSELF, exactly as `viewPartitions` does not: the platform
    * reads this, loads what it names, and only then applies. What it MAY read is
    * what an earlier round of this same declaration already loaded (#122) -- see
    * `hydrate` below, and `world-declaration.ts` for why the loop exists and what
    * bounds it.
    */
-  commandPartitions(player: string | null, command: WorldCommand): readonly string[];
+  commandPartitions(
+    player: string | null,
+    command: WorldCommand,
+    now: number,
+  ): readonly string[];
 
   /**
    * ADOPT THESE PARTITIONS, SO THE NEXT DECLARATION CAN READ THEM (#122).
@@ -833,8 +844,13 @@ export interface WorldEngine {
    * supply, ask again; the loop ends when this answers nothing, and it
    * terminates because every round it names becomes resident before it is asked
    * again.
+   *
+   * `now` is the instant the offer is being made at -- `offersFor`'s own stamp
+   * (#375). The walk and the answer must agree about what time it is, or a
+   * declaration would name the partitions due at one instant and `offersFor`
+   * would enumerate at another.
    */
-  offerPartitions(player: string): readonly string[];
+  offerPartitions(player: string, now: number): readonly string[];
 
   /**
    * Serialize exactly the named partitions.

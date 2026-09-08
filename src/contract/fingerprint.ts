@@ -877,7 +877,9 @@ async function computeWorldFixture(): Promise<{ view: unknown; offer: unknown }>
   // without the contract noticing. Recording each round makes the claim true.
   const rounds: (readonly string[])[] = [];
   for (;;) {
-    const needs = world.offerPartitions(LOOKER);
+    // STAMPED WITH THE OFFER'S OWN INSTANT (#375), which is what `offersFor`
+    // below is given: the walk and the answer must agree about what time it is.
+    const needs = world.offerPartitions(LOOKER, OFFER_STAMP.now);
     rounds.push(needs);
     if (needs.length === 0) break;
     await world.hydrate(needs);

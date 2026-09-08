@@ -197,6 +197,33 @@ export interface WorldResidency {
 }
 
 /**
+ * WHAT A DECLARATION MAY READ: the resident tree, and the clock (#375).
+ *
+ * `execute` has had the authoritative instant since #57, and a declaration had
+ * none -- so a world whose partitions are TIMED could not name the due ones.
+ * Its only correct move was to declare every active one, which is O(world) in
+ * the one mode whose argument is that a command costs O(room).
+ *
+ * NO `presence`, deliberately, though `execute` has that too. What a
+ * declaration names decides what is RESIDENT, and residency that depended on
+ * who happened to be connected would differ between two watchers of one world
+ * and between a command and its own replay. The clock is a fact about the
+ * dispatch; presence is a fact about the moment, and only the second is
+ * unstable.
+ */
+export interface WorldDeclarationFacilities extends WorldResidency {
+  /**
+   * THE INSTANT THIS DISPATCH IS HAPPENING AT, stamped by the platform.
+   *
+   * A command's stamped arrival, and a scheduled event's own `due` -- the same
+   * instant `execute` is about to be given, so a declaration and the handler it
+   * precedes cannot disagree about what time it is. On the offer path it is the
+   * instant the offer is being made at.
+   */
+  readonly now: number;
+}
+
+/**
  * WHICH PARTITIONS ONE SEAT'S VIEW IS ABOUT (#95).
  *
  * The read path's counterpart to a world action's own `needs` walk, and it is
@@ -406,6 +433,19 @@ export class BoardSmithWorldEngine implements WorldEngine {
         return root === undefined ? undefined : readOnlyProjection(root);
       },
     };
+  }
+
+  /**
+   * `residentWorld` with the dispatch's clock on it (#375).
+   *
+   * Built fresh per declaration for the reason `residentWorld` is, and separate
+   * from it because the VIEW path has no stamp: `viewFor(player)` is answered
+   * whenever a watcher asks, so a clock there would be the isolate's own and
+   * therefore the wrong one. A view that wants the time takes it from the
+   * partition it is projecting.
+   */
+  private declaringWorld(now: number): WorldDeclarationFacilities {
+    return { ...this.residentWorld(), now };
   }
 
   /**
@@ -625,12 +665,12 @@ export class BoardSmithWorldEngine implements WorldEngine {
    * The EXECUTE round is deliberately not walked: it names what `execute`
    * writes, and an offer executes nothing.
    */
-  offerPartitions(player: string): readonly string[] {
+  offerPartitions(player: string, now: number): readonly string[] {
     const seat = this.seatFor(player);
     const missing: string[] = [];
     for (const definition of this.actions.values()) {
       if (definition.world?.seatless === true) continue;
-      missing.push(...this.offerPartitionsOf(definition, seat));
+      missing.push(...this.offerPartitionsOf(definition, seat, now));
     }
     return declaredOnce(missing);
   }
@@ -640,11 +680,12 @@ export class BoardSmithWorldEngine implements WorldEngine {
   private offerPartitionsOf(
     definition: ActionDefinition,
     seat: number,
+    now: number,
   ): readonly string[] {
     for (let step = 0; step < definition.selections.length || step === 0; step++) {
       for (const round of definition.world!.needs) {
         if (round.before !== step) continue;
-        const unmet = this.declareRound(round, seat, {}).filter(
+        const unmet = this.declareRound(round, seat, {}, now).filter(
           (name) => !this.residentIds.has(name),
         );
         // ONE ROUND AT A TIME. A later round may read what an earlier one
@@ -669,7 +710,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
     try {
       // ROUND ONE (and any round that shares its place), before anything is
       // asked of the player.
-      await this.hydrateRounds(definition, 0, seat, {}, named);
+      await this.hydrateRounds(definition, 0, seat, {}, named, stamp.now);
 
       // WITH EMPTY ARGS, exactly as a table evaluates availability. An action
       // whose condition is false is not offered and no further round runs, so a
@@ -698,7 +739,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
       const selections: PickMetadata[] = [];
       let satisfiable = true;
       for (let index = 0; index < definition.selections.length; index++) {
-        if (index > 0) await this.hydrateRounds(definition, index, seat, {}, named);
+        if (index > 0) await this.hydrateRounds(definition, index, seat, {}, named, stamp.now);
         const pick = this.pickOf(definition, index, acting, named);
         selections.push(pick);
         // WHAT `hasValidSelectionPath` MEANS FOR A WORLD ACTION. On a table it
@@ -823,11 +864,11 @@ export class BoardSmithWorldEngine implements WorldEngine {
    * `player` is null for a scheduled event, which reaches a seatless action's
    * declaration as a null seat and no player at all.
    */
-  commandPartitions(player: string | null, command: WorldCommand): readonly string[] {
+  commandPartitions(player: string | null, command: WorldCommand, now: number): readonly string[] {
     const seat = player === null ? null : this.seatFor(player);
     const definition = this.actionFor(command.name, seat);
     for (const round of definition.world!.needs) {
-      const missing = this.declareRound(round, seat, command.args).filter(
+      const missing = this.declareRound(round, seat, command.args, now).filter(
         (name) => !this.residentIds.has(name),
       );
       if (missing.length > 0) return declaredOnce(missing);
@@ -851,6 +892,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
     round: WorldNeedsRound,
     seat: number | null,
     args: Readonly<Record<string, unknown>>,
+    now: number,
   ): readonly string[] {
     const player = seat === null ? null : this.playerFor(seat);
     return declaredOnce(
@@ -864,7 +906,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
           // with when this is absent is `game.first(Class, name)`, which walks
           // the resident tree through the projection to rediscover an id
           // `residentIds` already holds -- the whole of the cost #374 measured.
-          world: this.residentWorld(),
+          world: this.declaringWorld(now),
         }),
       ),
     );
@@ -886,10 +928,11 @@ export class BoardSmithWorldEngine implements WorldEngine {
     seat: number | null,
     args: Readonly<Record<string, unknown>>,
     named: string[],
+    now: number,
   ): Promise<void> {
     for (const round of definition.world!.needs) {
       if (round.before !== step) continue;
-      for (const name of this.declareRound(round, seat, args)) {
+      for (const name of this.declareRound(round, seat, args, now)) {
         if (!named.includes(name)) named.push(name);
         await this.ensureResident(name);
       }
@@ -1191,7 +1234,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
     // from and what `assertDeclared` holds the action to.
     const named: string[] = [];
     for (let step = 0; step <= definition.selections.length; step++) {
-      await this.hydrateRounds(definition, step, seat, command.args, named);
+      await this.hydrateRounds(definition, step, seat, command.args, named, charge.now);
     }
 
     // Raised once per command and stamped on everything this one NAMED, so two

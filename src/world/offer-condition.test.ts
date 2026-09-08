@@ -43,7 +43,7 @@ describe("offer declarations and stamped conditions", () => {
       seats: new Map([["p1", 1]]),
     });
     await runner.genesis();
-    expect(await runner.declareOffers("p1", {})).toEqual({ needs: [] });
+    expect(await runner.declareOffers("p1", {}, 41)).toEqual({ needs: [] });
     expect(calls).toBe(0);
     expect(await runner.offersFor("p1", { now: 41, presence: [] })).toEqual([]);
     expect(calls).toBe(1);

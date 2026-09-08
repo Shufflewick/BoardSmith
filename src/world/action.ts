@@ -87,7 +87,7 @@ import type { ScheduleArm } from "./schedule-api.js";
 import type { WorldNarrationLine } from "./contract.js";
 // TYPE-ONLY, so the import is erased and the cycle with `engine.ts` is not one
 // at runtime. `WorldResidency` is declared beside the engine that answers it.
-import type { WorldResidency } from "./engine.js";
+import type { WorldDeclarationFacilities } from "./engine.js";
 import { worldRefusal } from "./refusals.js";
 
 /**
@@ -291,8 +291,10 @@ export interface WorldNeedsContext<G extends Game = Game> {
    * Read-only, exactly as `game` is: a declaration runs before the platform has
    * decided what this command may change, so a write here could not be
    * checkpointed. See `readonly.ts`.
+   *
+   * It also carries `now`, the instant this dispatch is happening at (#375).
    */
-  readonly world: WorldResidency;
+  readonly world: WorldDeclarationFacilities;
 }
 
 /** What a seatless step's declaration may read. `seat` is null and there is no
@@ -301,9 +303,10 @@ export interface WorldClockNeedsContext<G extends Game = Game> {
   readonly game: G;
   readonly seat: null;
   readonly args: Record<string, unknown>;
-  /** As `WorldNeedsContext.world` (#374). A clock's declaration reads the same
-   *  resident state a seat's does. */
-  readonly world: WorldResidency;
+  /** As `WorldNeedsContext.world` (#374, #375). A clock's declaration reads the
+   *  same resident state a seat's does, and its `now` is the event's own
+   *  `due` -- the instant the clock is acting at. */
+  readonly world: WorldDeclarationFacilities;
 }
 
 /**
@@ -327,7 +330,7 @@ export type WorldNeeds = (context: {
   readonly player: Player | null;
   readonly seat: number | null;
   readonly args: Record<string, unknown>;
-  readonly world: WorldResidency;
+  readonly world: WorldDeclarationFacilities;
 }) => readonly string[];
 
 /**

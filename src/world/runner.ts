@@ -21,7 +21,7 @@
  *
  * Two calls, and the child never reaches out:
  *
- *   1. `declare(command, player, supplied)` -- the parent hands over whatever
+ *   1. `declare(command, player, supplied, now)` -- the parent hands over whatever
  *      the LAST round asked for, the child adopts it, and the child's engine
  *      then answers which partitions this command still needs. It runs NO GAME
  *      CODE beyond the bundle's own declaration, so a command refused later has
@@ -322,6 +322,7 @@ export function createWorldRunner(
       command: WorldCommand,
       player: string | null,
       supplied: Readonly<Record<string, StoredPartition>>,
+      now: number,
     ): Promise<WorldDeclaration> {
       // WHAT THE LAST ROUND ASKED FOR, MADE RESIDENT (#122). Adopted rather
       // than merely held, because a declaration reads through the ENGINE's live
@@ -330,7 +331,7 @@ export function createWorldRunner(
       const resident = residentNames(engine);
       return {
         needs: engine
-          .commandPartitions(player, command)
+          .commandPartitions(player, command, now)
           .filter((name) => !store.holds(name) && !resident.has(name)),
       };
     },
@@ -447,6 +448,7 @@ export function createWorldRunner(
     async declareOffers(
       player: string,
       supplied: Readonly<Record<string, StoredPartition>>,
+      now: number,
     ): Promise<WorldDeclaration> {
       // The offer path's half of the same adoption the write path makes: a
       // declaration reads through the ENGINE's live tree, and bytes sitting in
@@ -455,7 +457,7 @@ export function createWorldRunner(
       const resident = residentNames(engine);
       return {
         needs: engine
-          .offerPartitions(player)
+          .offerPartitions(player, now)
           .filter((name) => !store.holds(name) && !resident.has(name)),
       };
     },
@@ -643,6 +645,7 @@ export interface WorldRunnerHandle {
   declareOffers(
     player: string,
     supplied: Readonly<Record<string, StoredPartition>>,
+    now: number,
   ): Promise<WorldDeclaration>;
   /**
    * Which partitions this command needs, and who is asking for them (#121).
@@ -661,6 +664,7 @@ export interface WorldRunnerHandle {
     command: WorldCommand,
     player: string | null,
     supplied: Readonly<Record<string, StoredPartition>>,
+    now: number,
   ): Promise<WorldDeclaration>;
   apply(request: WorldApplyRequest): Promise<WorldCommandResult>;
 }
