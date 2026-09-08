@@ -277,6 +277,52 @@ stored, so the second reach finds the first one's work. The row is written at
 the moment the root is built rather than at the next checkpoint, so a command
 that then refuses leaves an empty root rather than a root nothing recorded.
 
+#### A created root's identity is durable
+
+Nothing above is your concern as a game author, and it is written down because
+it decides what a HOST must do. Element ids come from one counter per world, and
+a world's ids outlive the process that minted them -- but only a fraction of the
+partitions holding them is ever resident, which is the whole point of this mode.
+So the counter cannot be rebuilt from what happens to be loaded: a host that
+hydrated one room out of five would restart it beneath the other four and mint
+their identities a second time. The world stayed playable until some later
+command declared both roots, and then adoption refused and it was finished
+(ShufflewickPub #377).
+
+The counter is therefore durable state, and it travels with the bytes it was
+minted for. Every operation that mints reports it:
+
+```ts
+const { partitions, nextElementId } = await runner.genesis();
+const built = await runner.createPartition(name);   // { partition, nextElementId }
+const added = await runner.migrateCreate(existing, ctx); // { created, nextElementId }
+```
+
+A host writes `nextElementId` in the SAME transaction as the partitions, and
+hands it back when the world is next built:
+
+```ts
+createWorld({ definition, seed, seats, nextElementId: storedStamp });
+```
+
+A world built without one may still be read, written and played; what it may not
+do is create a root on demand, and asking is the `allocation-undeclared`
+refusal rather than a silent guess. The instance that runs `genesis()` needs no
+stamp, because it minted every id there is.
+
+**Repairing a world that predates this.** Derive the stamp once, from the bytes
+the store already holds, and write it:
+
+```ts
+import { worldIdAllocationOf } from 'boardsmith/world';
+
+store.recordAllocation(worldIdAllocationOf(await readEveryStoredPartition()));
+```
+
+That is the only O(world) read in the scheme, it is paid once, and every later
+wake reads the number back out of storage. `boardsmith dev` does exactly this on
+the first start of a world that has no stamp.
+
 ## An action: declare, then execute
 
 Every world verb is an action built with `worldAction()`, and every one of them
@@ -1244,11 +1290,13 @@ thing next time.
 | `invalid-schedule-command` | A schedule request that names no action, names a seated one, or carries an argument that is not a JSON scalar. |
 | `invalid-schedule-cancel` | A cancel that names no key. A cancel is keyed the way arming is keyed, so a nameless one addresses nothing; cancelling a key nothing holds is a no-op rather than this. |
 | `engine-not-world-mode` | The engine was built over a game that is not in world mode. |
+| `allocation-undeclared` | A host asked for a partition to be created on demand without handing the world its durable id allocation stamp, so any id minted would be a guess. See [a created root's identity is durable](#a-created-roots-identity-is-durable). |
 | `child-timeout` | The bundle did not answer a host's call inside its deadline. |
 **`platform`**: a host's own bookkeeping broke. Not yours to fix, and
 deterministic, so a host with a park ladder parks on it:
 `partition-not-resident`, `partition-vanished`, `checkpoint-unknown-partition`,
-`unknown-child-op`, `child-generations-exhausted`, `world-engine-unavailable`.
+`allocation-undeclared`, `unknown-child-op`, `child-generations-exhausted`,
+`world-engine-unavailable`.
 
 **`infrastructure`**: a service the host depends on did not answer.
 `bundle-store-unavailable` is the one code, and it repairs itself when the

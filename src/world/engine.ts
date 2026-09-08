@@ -316,6 +316,20 @@ export interface BoardSmithWorldEngineOptions {
    * Left out, no partition is ever created on first use.
    */
   readonly createPartition?: (game: Game, name: string) => GameElement | undefined;
+  /**
+   * THE WORLD'S DURABLE ID ALLOCATION STAMP, as the host last persisted it
+   * (ShufflewickPub #377).
+   *
+   * A world's element ids outlive the process that minted them, and only a
+   * fraction of the partitions holding them is ever resident -- so the counter
+   * cannot be rebuilt from residency. The host persists the `nextElementId`
+   * this engine reports and hands it back here on the next wake.
+   *
+   * Left out, this engine may not CREATE a partition on demand: it has no way
+   * to know which ids the store already owns, and minting from the floor is
+   * exactly the collision #377 records.
+   */
+  readonly nextElementId?: number;
 }
 
 export class BoardSmithWorldEngine implements WorldEngine {
@@ -346,6 +360,15 @@ export class BoardSmithWorldEngine implements WorldEngine {
    * machine was running.
    */
   private useClock = 0;
+  /**
+   * Whether this engine's id counter is authoritative for the WHOLE world
+   * (#377), rather than merely for what it happens to hold.
+   *
+   * True on the instance that ran genesis -- it minted every id there is -- and
+   * on any instance handed a durable stamp. False on a cold instance that was
+   * handed none, which is the one case where a mint would be a guess.
+   */
+  private allocationDeclared = false;
 
   constructor(options: BoardSmithWorldEngineOptions) {
     if (!options.game.worldMode) {
@@ -363,6 +386,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
     this.view = options.view;
     this.budgets = options.budgets ?? worldBudgets();
     this.buildOnFirstUse = options.createPartition;
+    if (options.nextElementId !== undefined) this.adoptAllocation(options.nextElementId);
     // AT CONSTRUCTION, NOT AT THE FIRST OFFER. A bundle whose declaration is
     // wrong is wrong for every player who will ever attach, so it is refused
     // once, before the world is built, rather than on whichever player first
@@ -424,7 +448,16 @@ export class BoardSmithWorldEngine implements WorldEngine {
       partition: (name) => {
         const id = this.residentIds.get(name);
         if (id === undefined) return undefined;
-        const root = this.game.getElementById(id);
+        // ASKED OF THE ROOT TABLE, NOT OF THE TREE (#381). `getElementById` is
+        // a depth-first walk of the whole resident world, so the name-to-id map
+        // above saved a search and then this line spent it again -- once per
+        // declared root per round per offer refresh. `partitionRoot` is the
+        // direct reference the engine already holds, and it is the same reader
+        // `rootOf` has used since #316. It also answers `undefined` for a root
+        // that has been evicted, which is the answer the walk gave, and it is
+        // re-pointed at the new object on re-adoption, so an index can never
+        // serve a dropped tree.
+        const root = this.game.partitionRoot(id);
         // READ-ONLY, AND NOT BY PROMISE (#219). The accessor used to hand over
         // the live element, so the paragraph above was the only thing stopping
         // a declaration writing -- and a declare-time write lands outside both
@@ -484,7 +517,42 @@ export class BoardSmithWorldEngine implements WorldEngine {
    * bytes and the parent, and a partition that was built and not yet stored is
    * simply a partition the next checkpoint writes.
    */
+  /**
+   * THE NEXT ID THIS WORLD WILL MINT, for the host to persist (#377).
+   *
+   * Read after genesis and after every created partition, and written in the
+   * SAME transaction as the bytes it was minted for -- so a world that stored a
+   * new root and lost its stamp is not a state that can exist.
+   */
+  nextElementId(): number {
+    return this.game.worldIdAllocation();
+  }
+
+  /**
+   * TAKE UP THE HOST'S PERSISTED ALLOCATION STAMP (#377).
+   *
+   * Called at construction with what the host wrote down, and by genesis with
+   * the counter genesis itself left behind. Either way what it establishes is
+   * the same thing: this engine's counter speaks for every partition the world
+   * has, not only for the ones in front of it.
+   */
+  adoptAllocation(nextElementId: number): void {
+    this.game.adoptWorldIdAllocation(nextElementId);
+    this.allocationDeclared = true;
+  }
+
   createPartition(name: string): StoredPartition | undefined {
+    if (!this.allocationDeclared) {
+      throw worldRefusal(
+        "allocation-undeclared",
+        `Cannot create partition "${name}": this world's id allocation stamp was not supplied, ` +
+          `so any id minted here could already belong to a stored partition that is not loaded. ` +
+          `Persist the \`nextElementId\` the runner reports after genesis and after every ` +
+          `partition it creates, and pass it as \`nextElementId\` when the world is next built. ` +
+          `For a world that is already occupied and has no stamp, derive one once with ` +
+          `\`worldIdAllocationOf\` over its stored partitions.`,
+      );
+    }
     const resident = this.residentIds.get(name);
     if (resident !== undefined) {
       const root = this.game.partitionRoot(resident);

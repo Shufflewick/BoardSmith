@@ -21,8 +21,8 @@
  * one of them is written for the game author rather than for whoever is reading
  * the log.
  */
-import { DEFAULT_COLOR_PALETTE } from "../engine/index.js";
-import type { Game, GameElement } from "../engine/index.js";
+import { DEFAULT_COLOR_PALETTE, WORLD_PARTITION_ID_FLOOR } from "../engine/index.js";
+import type { ElementJSON, Game, GameElement } from "../engine/index.js";
 import { BoardSmithWorldEngine } from "./engine.js";
 import type { WorldViewDeclaration } from "./engine.js";
 import type { ActionDefinition } from "../engine/index.js";
@@ -397,6 +397,11 @@ function buildGenesis(
     string,
     StoredPartition
   >;
+  // GENESIS OWNS THE COUNTER (#377). This instance minted every id the world
+  // has, so its counter IS the world's durable allocation -- and saying so here
+  // is what lets a freshly born world create an on-demand root before any host
+  // has had a chance to persist a stamp.
+  engine.adoptAllocation(game.worldIdAllocation());
   for (const [name, element] of Object.entries(built)) {
     // The hook CREATED these in the live game, so they are already in the tree.
     // Telling the engine is what stops the first command trying to adopt them
@@ -411,6 +416,42 @@ function buildGenesis(
     };
   }
   return partitions;
+}
+
+/**
+ * THE ALLOCATION STAMP AN OCCUPIED WORLD SHOULD HAVE (ShufflewickPub #377).
+ *
+ * The supported repair, and the only O(stored) step in the whole scheme: read
+ * every partition the world holds, take the highest element id in any of them,
+ * and the stamp is one above it. Run it ONCE -- when a world that predates the
+ * stamp is first woken, or when a world's roots have already collided and are
+ * being rewritten -- persist what it returns, and the world never pays for it
+ * again.
+ *
+ * It reads BYTES, not a live tree: a host can answer this from storage without
+ * hydrating anything into a game.
+ */
+export function worldIdAllocationOf(
+  stored: Iterable<StoredPartition | ElementJSON>,
+): number {
+  let highest = WORLD_PARTITION_ID_FLOOR - 1;
+  for (const record of stored) {
+    // `StoredPartition.json` is `unknown` to a host on purpose -- it never
+    // parses a partition -- so the shape is asserted here, at the one place
+    // that does read inside the bytes.
+    const json = ("json" in record ? record.json : record) as ElementJSON;
+    highest = Math.max(highest, highestElementId(json));
+  }
+  return highest + 1;
+}
+
+/** Every id in a serialized subtree, which is where a stored root's ids are. */
+function highestElementId(json: ElementJSON): number {
+  let highest = typeof json.id === "number" ? json.id : WORLD_PARTITION_ID_FLOOR - 1;
+  for (const child of json.children ?? []) {
+    highest = Math.max(highest, highestElementId(child));
+  }
+  return highest;
 }
 
 /** What a host must supply to build a world out of a bundle's definition. */
@@ -438,6 +479,25 @@ export interface WorldRunnerOptions {
   readonly seats: ReadonlyMap<string, number>;
   /** The ceilings this host runs. Omitted, the library's defaults. */
   readonly budgets?: WorldBudgets;
+  /**
+   * THE WORLD'S DURABLE ID ALLOCATION STAMP (ShufflewickPub #377).
+   *
+   * The `nextElementId` this world last reported -- from `genesis()`, from
+   * `createPartition()`, or from `migrateCreate()` -- as the host persisted it.
+   * Element ids outlive the process that minted them and only a fraction of the
+   * partitions holding them is ever resident, so a host that omits this builds
+   * a world whose counter speaks only for what it happens to have loaded.
+   *
+   * Omitted, the world may still be read, written and played; what it may NOT
+   * do is create a partition on demand, because minting from the construction
+   * floor is exactly how a cold host came to build a new root on an unloaded
+   * one's identity. The instance that runs `genesis()` needs no stamp -- it
+   * mints every id there is.
+   *
+   * For a world that was already occupied before this existed, derive the stamp
+   * ONCE with {@link worldIdAllocationOf} over its stored partitions.
+   */
+  readonly nextElementId?: number;
 }
 
 /** A built world: the runner a host drives, and the store it feeds. */
@@ -499,6 +559,9 @@ export function createWorld(options: WorldRunnerOptions): WorldRunner {
     // A world that builds a root the first time somebody reaches for it (#218).
     // Absent for a world whose every root came from genesis, which is most.
     ...(world.createPartition === undefined ? {} : { createPartition: world.createPartition }),
+    // THE HOST'S PERSISTED ALLOCATION (#377), or nothing -- and a world built
+    // with nothing refuses to mint rather than minting a guess.
+    ...(options.nextElementId === undefined ? {} : { nextElementId: options.nextElementId }),
   });
   const runner = createWorldRunner(
     engine,

@@ -80,6 +80,7 @@ import {
   rekeyOffsetFor,
   rekeyPartition,
   rekeyReferences,
+  worldIdAllocationOf,
 } from '../../world/index.js';
 import { createNodeWorldClock, type WorldDevClock } from './node-world-clock.js';
 import type { LocalWorldStore } from './world-store.js';
@@ -284,11 +285,49 @@ export class LocalWorldHost {
         // on `stateVersion`: a world whose ids are already above the floor
         // pays one comparison and nothing else.
         lifted = await this.#liftPreFloorIds();
+        // AFTER THE LIFT (#377/#223). A world below the construction floor has
+        // no allocation that means anything -- every id in it is one the wider
+        // game's own construction mints -- so the stamp is derived from the
+        // bytes the lift left behind, not from the ones it read.
+        await this.#repairAllocationStamp();
         migrated = await this.#migrateIfNeeded();
       }
       this.#rearm();
     });
     return lifted === undefined ? { migrated } : { migrated, lifted };
+  }
+
+  /**
+   * GIVE AN OCCUPIED WORLD THE ALLOCATION STAMP IT NEVER HAD (#377).
+   *
+   * A world launched before the stamp existed has partitions full of minted ids
+   * and nothing recording how far the counter got. Deriving it means reading
+   * every stored partition, which is the O(world) cost this whole mode exists
+   * to avoid -- so it is paid ONCE, here, on the first start after the stamp
+   * landed, and never again: the number is written and every later start reads
+   * it out of meta.
+   *
+   * It runs BEFORE the lift and before any migration, because both of those
+   * adopt, and an adoption against a missing stamp is exactly the corruption
+   * the stamp exists to catch.
+   */
+  async #repairAllocationStamp(): Promise<void> {
+    if (this.#store.nextElementId() !== undefined) return;
+    const stored: StoredPartition[] = [];
+    for (const name of this.#store.partitionNames()) {
+      stored.push(
+        await this.#readPartition(
+          name,
+          `Repairing this world's id allocation needs partition "${name}", which its store ` +
+            `does not have.`,
+        ),
+      );
+    }
+    this.#store.recordAllocation(worldIdAllocationOf(stored));
+    // The world was BUILT without a stamp, so the runner it holds still has the
+    // construction floor for a counter. Rebuild it over the number just
+    // written, before anything adopts against the old one.
+    this.#discardResident();
   }
 
   /**
@@ -325,15 +364,22 @@ export class LocalWorldHost {
     if (offset === 0) return undefined;
 
     const partitions: Record<string, string> = {};
+    const lifted: StoredPartition[] = [];
     for (const [name, partition] of stored) {
-      partitions[name] = JSON.stringify(rekeyPartition(partition.json, offset));
+      const moved = rekeyPartition(partition.json, offset) as StoredPartition['json'];
+      partitions[name] = JSON.stringify(moved);
+      lifted.push({ parentId: partition.parentId, json: moved });
     }
     const events = this.#store.pendingEvents().map((event) => ({
       ...event,
       args: rekeyReferences(event.args, offset) as Record<string, unknown>,
     }));
 
-    this.#store.rekey({ partitions, events });
+    // THE STAMP COMES OFF THE LIFTED BYTES (#377). Every id in the world just
+    // moved, so the stamp has to move with them -- and it is read from the
+    // result rather than shifted by `offset`, because the bytes are already in
+    // hand here and a number derived from them cannot drift from them.
+    this.#store.rekey({ partitions, events, nextElementId: worldIdAllocationOf(lifted) });
     // THE RESIDENT TREE GOES WITH THE OLD BYTES, exactly as a migration's
     // does: nothing has been adopted yet on this start, and rebuilding is what
     // makes that true for certain rather than by inspection.
@@ -407,7 +453,7 @@ export class LocalWorldHost {
       from,
       to,
       partitions: Object.keys(partitions).length,
-      created: Object.keys(created).length,
+      created: Object.keys(created.created).length,
       events: events.length,
     };
   }
@@ -496,6 +542,13 @@ export class LocalWorldHost {
   // ── construction and residency ─────────────────────────────────────────────
 
   #build(): WorldRunner {
+    // THE DURABLE ALLOCATION (ShufflewickPub #377). A world's element ids
+    // outlive every host that ever ran it and only a fraction of the partitions
+    // holding them is ever resident, so the counter comes out of the store too.
+    // Absent for a world that has not launched yet -- genesis owns its own
+    // counter -- and for one written before the stamp existed, which `start`
+    // repairs before anything is adopted.
+    const nextElementId = this.#store.nextElementId();
     return createWorld({
       definition: this.#definition,
       seed: this.#seed,
@@ -503,6 +556,7 @@ export class LocalWorldHost {
       // it, so they come out of the store rather than out of this process.
       seats: new Map(this.#store.seats().map((row) => [row.player, row.seat] as const)),
       budgets: this.#budgets,
+      ...(nextElementId === undefined ? {} : { nextElementId }),
     });
   }
 
@@ -823,8 +877,11 @@ export class LocalWorldHost {
     // leaves an empty root rather than a root nothing recorded.
     const built = await this.#world.runner.createPartition(name);
     if (built === undefined) throw worldRefusal('partition-missing', message);
+    // THE BYTES AND THE STAMP TOGETHER (#377). `createOne` takes the whole
+    // answer rather than the partition alone, so a host cannot write a minted
+    // root and leave the allocation that produced it behind.
     this.#store.createOne(name, built);
-    return built;
+    return built.partition;
   }
 
   #allowanceFor(owner: string): ScheduleAllowance {

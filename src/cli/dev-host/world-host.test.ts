@@ -13,6 +13,7 @@ import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { createRequire } from 'node:module';
 
 import {
   Game,
@@ -21,6 +22,7 @@ import {
   type ActionDefinition,
   type GameOptions,
   type GameElement,
+  WORLD_PARTITION_ID_FLOOR,
 } from '../../engine/index.js';
 import {
   WorldRefusal,
@@ -34,6 +36,26 @@ import {
 import { openWorldStore, worldStorePath, type LocalWorldStore } from './world-store.js';
 import type { WorldDevClock } from './node-world-clock.js';
 import { LocalWorldHost, devWorldPlayer } from './world-host.js';
+
+/**
+ * A STORE AS THE OLDER CODE LEFT IT: real partitions, no allocation stamp
+ * (ShufflewickPub #377).
+ *
+ * Reached through SQLite directly rather than through `LocalWorldStore`,
+ * deliberately: every door this store has writes the stamp with the bytes, and
+ * a fixture built through one of them could not be the world the repair is for.
+ */
+function forgetAllocationStamp(path: string): void {
+  const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite') as {
+    DatabaseSync: new (file: string) => { exec(sql: string): void; close(): void };
+  };
+  const db = new DatabaseSync(path);
+  try {
+    db.exec("DELETE FROM meta WHERE key = 'nextElementId'");
+  } finally {
+    db.close();
+  }
+}
 
 // ── A world bundle, in the shape a real one exports ─────────────────────────
 
@@ -1126,6 +1148,116 @@ describe('#218: partitions created on first use', () => {
     await again.host.close();
   });
 
+  /** Every element id inside one stored partition's bytes. */
+  function idsIn(json: unknown): number[] {
+    if (typeof json !== 'object' || json === null) return [];
+    const node = json as { id?: unknown; children?: unknown[] };
+    const here = typeof node.id === 'number' ? [node.id] : [];
+    return [...here, ...(node.children ?? []).flatMap((child) => idsIn(child))];
+  }
+
+  /**
+   * ShufflewickPub #377: A COLD HOST MINTS OUTSIDE EVERY STORED ROOT.
+   *
+   * The case #218 opened and did not close. A host that builds a root on demand
+   * mints its ids from the game's counter, and a COLD host's counter starts at
+   * the construction floor and is only ever raised by what it happens to adopt.
+   * So the second host to create a root built it on top of the identity of a
+   * root the first host had created and this one had never loaded -- and the
+   * world stayed playable until some later command declared both, at which
+   * point adoption refused and the world was finished.
+   *
+   * The stamp is durable state now: written in the same transaction as the
+   * bytes it was minted for, read back at the next build.
+   */
+  it('mints a cold root outside the ids a stored, unloaded root already holds', async () => {
+    const first = await attached({ dir, definition: bundle({ world: lazyWorld() }) });
+    await first.host.handleMessage('c1', {
+      type: 'action',
+      order: nextOrder(),
+      requestId: 'r1',
+      action: 'settle',
+      args: {},
+    });
+    const stamp = first.store.nextElementId()!;
+    await first.host.close();
+
+    // A COLD host. Seat 2 has no holding, so this build mints one -- and seat
+    // 1's holding is on disk, unloaded, invisible to this host's counter.
+    const second = openHost({ dir, definition: bundle({ world: lazyWorld() }) });
+    await second.host.start();
+    await second.host.handleMessage('c2', { type: 'hello' });
+    await second.host.handleMessage('c2', { type: 'attach', seat: 2 });
+    await second.host.handleMessage('c2', {
+      type: 'action',
+      order: nextOrder(),
+      requestId: 'r2',
+      action: 'settle',
+      args: {},
+    });
+
+    const one = idsIn((await second.store.read(holdingOf(1)))?.json);
+    const two = idsIn((await second.store.read(holdingOf(2)))?.json);
+    // MINTED ABOVE THE STORED STAMP, not from whatever this host happened to
+    // adopt -- so the new root cannot land on an id a stored root holds, and
+    // the stamp moves on for the host after this one.
+    expect(one.length).toBeGreaterThan(0);
+    expect(two.length).toBeGreaterThan(0);
+    expect(Math.min(...two)).toBeGreaterThanOrEqual(stamp);
+    expect(second.store.nextElementId()).toBeGreaterThan(Math.max(...two));
+    expect(two.filter((id) => one.includes(id))).toEqual([]);
+
+    // And the world still runs a command that loads BOTH, which is where the
+    // collision used to surface: seat 1 acting on this same host adopts its
+    // stored holding beside the one just minted.
+    await second.host.handleMessage('c1', { type: 'hello' });
+    await second.host.handleMessage('c1', {
+      type: 'action',
+      order: nextOrder(),
+      requestId: 'r3',
+      action: 'settle',
+      args: {},
+    });
+    expect(last(second.sent, 'c1', 'world_response')).toMatchObject({ ok: true });
+    await second.host.close();
+  });
+
+  it('REPAIRS a world that was occupied before the stamp existed', async () => {
+    // The supported repair. The store below is one the older code wrote: real
+    // partitions, real minted ids, and no record of how far the counter got.
+    // `start` derives the stamp from the stored bytes ONCE and writes it, and
+    // the world mints safely from then on.
+    const first = await attached({ dir, definition: bundle({ world: lazyWorld() }) });
+    await first.host.handleMessage('c1', {
+      type: 'action',
+      order: nextOrder(),
+      requestId: 'r1',
+      action: 'settle',
+      args: {},
+    });
+    await first.host.close();
+    forgetAllocationStamp(worldStorePath(dir));
+
+    const second = openHost({ dir, definition: bundle({ world: lazyWorld() }) });
+    expect(second.store.nextElementId()).toBeUndefined();
+    await second.host.start();
+    expect(second.store.nextElementId()).toBeGreaterThan(WORLD_PARTITION_ID_FLOOR);
+
+    await second.host.handleMessage('c2', { type: 'hello' });
+    await second.host.handleMessage('c2', { type: 'attach', seat: 2 });
+    await second.host.handleMessage('c2', {
+      type: 'action',
+      order: nextOrder(),
+      requestId: 'r2',
+      action: 'settle',
+      args: {},
+    });
+    const one = idsIn((await second.store.read(holdingOf(1)))?.json);
+    const two = idsIn((await second.store.read(holdingOf(2)))?.json);
+    expect(two.filter((id) => one.includes(id))).toEqual([]);
+    await second.host.close();
+  });
+
   it('still refuses a name the world does not create, so a typo stays loud', async () => {
     const { host, sent } = await attached({ dir, definition: bundle({ world: lazyWorld() }) });
     await host.handleMessage('c1', {
@@ -1181,7 +1313,10 @@ describe('#223: lifting a world written before the construction-id floor', () =>
    *  arguments name an element by id. */
   async function aPreFloorWorld(): Promise<void> {
     const store = openWorldStore(worldStorePath(dir), worldBudgets());
-    await store.createAll({ [HEARTH]: preFloorHearth() }, 0);
+    // A world written before the allocation stamp existed carries none, so the
+    // fixture writes the rows and then drops the key the way the older code
+    // left it: absent. `start` derives it, once, after the lift (#377).
+    await store.createAll({ partitions: { [HEARTH]: preFloorHearth() }, nextElementId: 1_000_000 }, 0);
     store.close();
   }
 

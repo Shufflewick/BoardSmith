@@ -145,6 +145,11 @@ export const WORLD_FIXTURE_COVERAGE: Record<(typeof WORLD_ENGINE_METHODS)[number
     + 'never held (#218). The fixture\'s world starts with every partition it names, so nothing '
     + 'here ever misses -- and what it produces is an ordinary partition record.',
 
+  nextElementId: 'The world\'s durable id allocation stamp (ShufflewickPub #377), which a host '
+    + 'reads after every write that could have minted an id. The fixture mints nothing -- it '
+    + 'neither runs genesis nor creates a root -- so the number never moves here. What it '
+    + 'reports is one integer, and the shape of it is covered by the surface fingerprint.',
+
   applyCommand: 'A world\'s write path. The fixture dispatches nothing, so the dirty set, '
     + 'rollback and the checkpoint bytes are unfingerprinted.',
   commandPartitions: 'The declaration walk a DISPATCH drives, and the fixture drives none. '

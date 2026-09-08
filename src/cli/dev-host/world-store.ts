@@ -77,6 +77,11 @@ import {
   assertStorablePartitionName,
   type WorldPartitionWriter,
 } from '../../world/partition-store.js';
+import type {
+  WorldCreatedPartition,
+  WorldGenesis,
+  WorldMigrationCreated,
+} from '../../world/runner.js';
 import type { PlannedEvent } from '../../world/schedule-api.js';
 import type { WorldBudgets } from '../../world/budgets.js';
 import type { WorldReceipt } from '../../world/orders.js';
@@ -171,6 +176,16 @@ export interface LocalWorldStore extends WorldPartitionStore, WorldPartitionWrit
   ): Promise<void>;
 
   /**
+   * `WorldPartitionWriter.createAll`, WIDENED to record the state version
+   * genesis wrote under (#200).
+   *
+   * The library's signature is the genesis answer alone; what ELSE lands with a
+   * genesis is each host's own storage business, and for this one it is the
+   * version. Optional, so this is still a `WorldPartitionWriter`.
+   */
+  createAll(genesis: WorldGenesis, stateVersion?: number): Promise<void>;
+
+  /**
    * Has genesis already run?
    *
    * The flag is written IN THE SAME TRANSACTION as the genesis partitions
@@ -248,6 +263,26 @@ export interface LocalWorldStore extends WorldPartitionStore, WorldPartitionWrit
    */
   stateVersion(): number;
 
+  /**
+   * THE WORLD'S DURABLE ID ALLOCATION STAMP (ShufflewickPub #377).
+   *
+   * The next element id this world may mint, as the last write that minted one
+   * left it. `undefined` for a world written before the stamp existed -- the
+   * host derives one from the stored bytes ONCE and writes it, rather than
+   * being handed a number nothing can vouch for.
+   */
+  nextElementId(): number | undefined;
+
+  /**
+   * WRITE THE STAMP A WORLD SHOULD ALWAYS HAVE HAD (ShufflewickPub #377).
+   *
+   * The one repair door, for a world launched before the stamp existed. Every
+   * other write that moves the allocation carries it in the transaction that
+   * minted the ids; this one has no ids to carry, because it is derived from
+   * bytes that are already durable.
+   */
+  recordAllocation(nextElementId: number): void;
+
   /** Every partition this world holds, by name. A migration is the one caller:
    *  it transforms all of them, and nothing else in this host ever wants the
    *  whole list (that would be the O(world) read residency exists to delete). */
@@ -270,7 +305,7 @@ export interface LocalWorldStore extends WorldPartitionStore, WorldPartitionWrit
      * hangs from -- which a transformed partition does not need, because its
      * row already records one.
      */
-    created: Record<string, StoredPartition>;
+    created: WorldMigrationCreated;
     events: readonly PlannedEvent[];
     toStateVersion: number;
   }): void;
@@ -288,6 +323,8 @@ export interface LocalWorldStore extends WorldPartitionStore, WorldPartitionWrit
   rekey(lifted: {
     partitions: Record<string, string>;
     events: readonly PlannedEvent[];
+    /** The stamp, moved by the same offset as the ids (#377). */
+    nextElementId: number;
   }): void;
 
   /**
@@ -302,7 +339,7 @@ export interface LocalWorldStore extends WorldPartitionStore, WorldPartitionWrit
    * Writing a name the store already holds is a no-op, so a race between two
    * declarations reaching for the same absent root leaves one partition.
    */
-  createOne(name: string, record: StoredPartition): void;
+  createOne(name: string, built: WorldCreatedPartition): void;
 
   /**
    * WHAT THIS SEAT'S ORDER COMMITTED, if this store still holds its receipt
@@ -492,24 +529,24 @@ export function openWorldStore(path: string, budgets: WorldBudgets): LocalWorldS
      * already launched, and refuses for a missing partition whose absence
      * nothing explains.
      */
-    createOne(name: string, record: StoredPartition): void {
+    createOne(name: string, built: WorldCreatedPartition): void {
       // ALREADY THERE IS ALREADY DONE. Two declarations can reach for the same
       // absent root; the first writes it and the second must find that one
       // rather than replacing it with a fresh empty element.
       if (stmt.knownParent.get(name) !== undefined) return;
       assertStorablePartitionName(name);
-      const json = JSON.stringify(record.json);
+      const json = JSON.stringify(built.partition.json);
       assertPartitionWithinBudget(name, json, budgets);
       transact(() => {
-        stmt.writePartition.run(name, record.parentId, json);
+        stmt.writePartition.run(name, built.partition.parentId, json);
+        // THE STAMP WITH THE BYTES IT WAS MINTED FOR (#377). A root written
+        // without it is a root the next host would mint over.
+        stmt.writeMeta.run(NEXT_ELEMENT_ID_KEY, String(built.nextElementId));
       });
     },
 
-    async createAll(
-      records: Record<string, StoredPartition>,
-      stateVersion = 0,
-    ): Promise<void> {
-      const rows = Object.entries(records).map(([name, record]) => {
+    async createAll(genesis: WorldGenesis, stateVersion = 0): Promise<void> {
+      const rows = Object.entries(genesis.partitions).map(([name, record]) => {
         assertStorablePartitionName(name);
         const json = JSON.stringify(record.json);
         assertPartitionWithinBudget(name, json, budgets);
@@ -521,6 +558,9 @@ export function openWorldStore(path: string, budgets: WorldBudgets): LocalWorldS
         // A world born on stateVersion 2 that recorded 0 would be asked, on its
         // very next start, to migrate from a version it was never written in.
         stmt.writeMeta.run(STATE_VERSION_KEY, String(stateVersion));
+        // AND THE ALLOCATION GENESIS LEFT BEHIND (#377), for the same reason
+        // and in the same transaction.
+        stmt.writeMeta.run(NEXT_ELEMENT_ID_KEY, String(genesis.nextElementId));
         stmt.writeMeta.run(LAUNCHED_KEY, '1');
       });
     },
@@ -664,7 +704,21 @@ export function openWorldStore(path: string, budgets: WorldBudgets): LocalWorldS
       return stored === undefined ? 0 : Number(stored);
     },
 
-    rekey({ partitions, events }): void {
+    recordAllocation(nextElementId: number): void {
+      transact(() => {
+        stmt.writeMeta.run(NEXT_ELEMENT_ID_KEY, String(nextElementId));
+      });
+    },
+
+    nextElementId(): number | undefined {
+      const stored = meta(NEXT_ELEMENT_ID_KEY);
+      // UNDEFINED IS AN ANSWER (#377), and it is the one a world written before
+      // the stamp existed gives. The host repairs it from the stored bytes
+      // once, rather than this file inventing a number it cannot know.
+      return stored === undefined ? undefined : Number(stored);
+    },
+
+    rekey({ partitions, events, nextElementId }): void {
       const rows = Object.entries(partitions).map(([name, json]) => {
         const known = stmt.knownParent.get(name) as { parent_id: number } | undefined;
         if (!known) throw unknownPartition(name);
@@ -673,6 +727,10 @@ export function openWorldStore(path: string, budgets: WorldBudgets): LocalWorldS
       transact(() => {
         writePartitions(rows);
         writeEvents(events);
+        // THE STAMP MOVES WITH THE IDS (#377). A lift shifts every id in the
+        // world; a stamp left where it was would sit below them and hand the
+        // next mint an identity a lifted root already holds.
+        stmt.writeMeta.run(NEXT_ELEMENT_ID_KEY, String(nextElementId));
       });
     },
 
@@ -686,7 +744,7 @@ export function openWorldStore(path: string, budgets: WorldBudgets): LocalWorldS
       // from -- and they are checked here, before the transaction opens, for
       // the reason `createAll` checks its own: a migration refused halfway is
       // the one failure this whole method exists to make impossible.
-      for (const [name, record] of Object.entries(created)) {
+      for (const [name, record] of Object.entries(created.created)) {
         assertStorablePartitionName(name);
         const json = JSON.stringify(record.json);
         assertPartitionWithinBudget(name, json, budgets);
@@ -695,6 +753,8 @@ export function openWorldStore(path: string, budgets: WorldBudgets): LocalWorldS
       transact(() => {
         writePartitions(rows);
         writeEvents(events);
+        // THE ALLOCATION THE MIGRATION'S NEW ROOTS WERE MINTED FROM (#377).
+        stmt.writeMeta.run(NEXT_ELEMENT_ID_KEY, String(created.nextElementId));
         // LAST, and inside the same transaction: the version is the claim that
         // everything above is written, so it must not become true before they
         // are.
@@ -804,6 +864,16 @@ const SEQ_KEY = 'seq';
 const RECEIPT_FLOOR_KEY = 'receiptFloor';
 const CLOCK_SKEW_KEY = 'clockSkew';
 const STATE_VERSION_KEY = 'stateVersion';
+/**
+ * THE WORLD'S DURABLE ID ALLOCATION (ShufflewickPub #377).
+ *
+ * The next element id the world may mint. It lives in meta rather than being
+ * derived from the partitions because deriving it means reading all of them,
+ * and reading all of them is the cost partitioning exists to avoid. Written in
+ * the SAME transaction as every write that minted ids, so a store holding a new
+ * root and a stale stamp is not a state this file can produce.
+ */
+const NEXT_ELEMENT_ID_KEY = 'nextElementId';
 const SCHEMA_VERSION_KEY = 'schemaVersion';
 
 /**

@@ -254,10 +254,16 @@ describe("createWorld — one construction, every host", () => {
       seats: new Map([["p1", 1]]),
     });
     const genesis = await runner.genesis();
-    expect(Object.keys(genesis)).toEqual(["yard:1"]);
+    expect(Object.keys(genesis.partitions)).toEqual(["yard:1"]);
     // `parentId` is the HOST's to record: it is outside the subtree, so the
     // serialized bytes cannot say where the subtree hangs.
-    expect(genesis["yard:1"]!.parentId).toBeTypeOf("number");
+    expect(genesis.partitions["yard:1"]!.parentId).toBeTypeOf("number");
+    // AND THE ALLOCATION STAMP, in the same answer (ShufflewickPub #377): the
+    // ids genesis minted are durable, and a host that wrote the bytes without
+    // recording how far the counter got would mint over them on its next wake.
+    expect(genesis.nextElementId).toBeGreaterThan(
+      (genesis.partitions["yard:1"]!.json as { id: number }).id,
+    );
   });
 
   it("declares, applies and serializes a command end to end", async () => {

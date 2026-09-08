@@ -1,7 +1,7 @@
 {
-  "revision": 50,
+  "revision": 51,
   "bundleProtocol": 2,
-  "surfaceHash": "d1181c951837fd52",
+  "surfaceHash": "1c64faefb4918717",
   "payloadHash": "eb472de70ccc7f01",
   "history": [
     {
@@ -403,6 +403,14 @@
       "surfaceHash": "d1181c951837fd52",
       "payloadHash": "eb472de70ccc7f01",
       "summary": "A declaration is stamped: commandPartitions and offerPartitions now take the instant the dispatch is happening at -- a command's stamped arrival, a scheduled event's due, an offer's own now -- and a needs() context reaches it as world.now, the same instant execute is about to be given. Without it a world whose partitions are TIMED could not tell a due one from a future one and had to declare every active one, which is O(world) in the mode whose argument is that a command costs O(room). No presence, deliberately: residency that depended on who is connected would differ between two watchers of one world. The runner's declare and declareOffers take the stamp through, so the parent must send it (ShufflewickPub#375)"
+    },
+    {
+      "revision": 51,
+      "date": "2026-09-08",
+      "bundleProtocol": 2,
+      "surfaceHash": "1c64faefb4918717",
+      "payloadHash": "eb472de70ccc7f01",
+      "summary": "A world's element-id allocation is durable state a host persists and hands back (ShufflewickPub #377). Game#worldIdAllocation()/#adoptWorldIdAllocation() expose the counter; WorldEngine#nextElementId() reports it; runner.genesis(), runner.createPartition() and runner.migrateCreate() now answer { ...bytes, nextElementId } so a host cannot write a minted root without the stamp that produced it; createWorld() takes it back as options.nextElementId. A cold world built without one REFUSES to create a partition on demand (new platform refusal allocation-undeclared) instead of minting an id a stored, unloaded root already owns, and adoptSubtree() refuses bytes that prove a declared stamp is stale. worldIdAllocationOf() derives the stamp once from stored bytes as the supported repair. Read-only world.partition(name) now reads the indexed root table instead of walking the resident tree (ShufflewickPub #381)."
     }
   ]
 }

@@ -86,6 +86,40 @@ import { WorldRefusal } from "./refusals.js";
 export type WorldTiming = { readonly due: number; readonly missedCount: number } | null;
 
 /**
+ * A WORLD'S DURABLE ID ALLOCATION, reported with the bytes it was minted for
+ * (ShufflewickPub #377).
+ *
+ * Element ids outlive the process that minted them and only a fraction of the
+ * partitions holding them is ever resident, so the counter cannot be rebuilt
+ * from residency: a host that hydrated one room out of five would restart the
+ * counter beneath the other four. Every operation that MINTS therefore reports
+ * the next id the world may use, and a host writes that number in the same
+ * transaction as the partitions -- so "stored a new root, lost the stamp" is
+ * not a state that can exist.
+ *
+ * It comes back in as `WorldRunnerOptions.nextElementId` on the next wake.
+ */
+export interface WorldAllocation {
+  /** The next element id this world may mint. Only ever goes up. */
+  readonly nextElementId: number;
+}
+
+/** What genesis produces: the world's first partitions, and its first stamp. */
+export interface WorldGenesis extends WorldAllocation {
+  readonly partitions: Record<string, StoredPartition>;
+}
+
+/** One on-demand root, and the stamp that must be written beside it (#377). */
+export interface WorldCreatedPartition extends WorldAllocation {
+  readonly partition: StoredPartition;
+}
+
+/** The roots a migration adds, and the stamp its transaction must carry. */
+export interface WorldMigrationCreated extends WorldAllocation {
+  readonly created: Record<string, StoredPartition>;
+}
+
+/**
  * ONE COMMAND, AS THE PARENT HANDS IT ACROSS THE BOUNDARY.
  *
  * An object rather than five positional arguments, because everything on it is
@@ -336,8 +370,13 @@ export function createWorldRunner(
       };
     },
 
-    async genesis(): Promise<Record<string, StoredPartition>> {
-      return buildGenesis();
+    async genesis(): Promise<WorldGenesis> {
+      const partitions = buildGenesis();
+      // THE STAMP RIDES WITH THE BYTES (#377). Genesis minted every id this
+      // world has, so the counter it leaves behind is the world's durable
+      // allocation -- and a host that wrote the partitions without it would
+      // have no way to mint safely on any later wake.
+      return { partitions, nextElementId: engine.nextElementId() };
     },
 
     serialize(dirty: readonly string[]): Promise<Record<string, string>> {
@@ -358,15 +397,18 @@ export function createWorldRunner(
     async migrateCreate(
       existing: readonly string[],
       ctx: { readonly from: number; readonly to: number },
-    ): Promise<Record<string, StoredPartition>> {
-      return engine.createMigratedPartitions(
+    ): Promise<WorldMigrationCreated> {
+      const created = engine.createMigratedPartitions(
         (game) => buildMigrationRoots(game, { ...ctx, existing }),
         existing,
       );
+      return { created, nextElementId: engine.nextElementId() };
     },
 
-    async createPartition(name: string): Promise<StoredPartition | undefined> {
-      return engine.createPartition(name);
+    async createPartition(name: string): Promise<WorldCreatedPartition | undefined> {
+      const partition = engine.createPartition(name);
+      if (partition === undefined) return undefined;
+      return { partition, nextElementId: engine.nextElementId() };
     },
 
     seat(player: string, seat: number): void {
@@ -511,7 +553,7 @@ export interface WorldRunnerHandle {
    * `DurableObjectPartitionStore.create` takes -- the parent writes them and
    * never looks inside.
    */
-  genesis(): Promise<Record<string, StoredPartition>>;
+  genesis(): Promise<WorldGenesis>;
   /**
    * Serialize exactly the partitions the parent says are dirty (#37 item 4).
    *
@@ -560,7 +602,7 @@ export interface WorldRunnerHandle {
   migrateCreate(
     existing: readonly string[],
     ctx: { readonly from: number; readonly to: number },
-  ): Promise<Record<string, StoredPartition>>;
+  ): Promise<WorldMigrationCreated>;
 
   /**
    * A PARTITION ROOT THE STORE HAS NEVER HELD, built on demand (#218).
@@ -573,7 +615,7 @@ export interface WorldRunnerHandle {
    *
    * The host owns the write, as it owns every other write.
    */
-  createPartition(name: string): Promise<StoredPartition | undefined>;
+  createPartition(name: string): Promise<WorldCreatedPartition | undefined>;
   /**
    * Admit a player to a world that is already running (#37 item 2).
    *

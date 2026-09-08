@@ -762,6 +762,18 @@ export interface WorldEngine {
   createPartition(name: string): StoredPartition | undefined;
 
   /**
+   * THE NEXT ELEMENT ID THIS WORLD MAY MINT (ShufflewickPub #377).
+   *
+   * A world's ids are durable and only a fraction of the partitions holding
+   * them is ever resident, so the counter cannot be rebuilt from residency: a
+   * host that hydrated one room out of five would restart it beneath the other
+   * four and mint their identities again. The host persists this number in the
+   * same write as the bytes it was minted for, and hands it back when the world
+   * is next built.
+   */
+  nextElementId(): number;
+
+  /**
    * DURABLE PARTITION ROOTS AN UPGRADE ADDS (#218).
    *
    * `migratePartition`'s other half: that one transforms a root that exists and
@@ -890,6 +902,7 @@ export const WORLD_ENGINE_METHODS = Object.keys({
   hydrate: null,
   offerPartitions: null,
   migratePartition: null,
+  nextElementId: null,
   offersFor: null,
   onEvent: null,
   residency: null,

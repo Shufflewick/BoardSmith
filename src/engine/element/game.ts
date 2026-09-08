@@ -1287,6 +1287,56 @@ export class Game<
   }
 
   /**
+   * THE NEXT ELEMENT ID THIS WORLD WILL MINT (ShufflewickPub #377).
+   *
+   * A world's ids are DURABLE: every partition it has ever stored holds ones
+   * that were minted from this counter, and the world outlives the process that
+   * minted them. The counter therefore cannot be rebuilt from what happens to
+   * be resident -- a host that hydrated one room out of five would restart the
+   * counter beneath the other four and mint their identities a second time.
+   *
+   * So the host persists this number beside the partitions it was minted for
+   * and hands it back at the next wake ({@link adoptWorldIdAllocation}). It is
+   * the ONE piece of a world's state the engine cannot derive from the
+   * partitions themselves without loading all of them.
+   */
+  worldIdAllocation(): number {
+    this._requireWorldMode('worldIdAllocation');
+    return this._ctx.sequence ?? 0;
+  }
+
+  /**
+   * TAKE UP A DURABLE ALLOCATION STAMP, from a host that persisted one (#377).
+   *
+   * Raises the counter so the next id minted stands above every id this world
+   * has ever stored, whether or not that partition is resident. Raises only:
+   * a stamp beneath where the counter already stands would be a host telling
+   * the engine to re-mint ids the engine can see are taken, so it is refused
+   * rather than quietly ignored.
+   */
+  adoptWorldIdAllocation(next: number): void {
+    this._requireWorldMode('adoptWorldIdAllocation');
+    if (!Number.isSafeInteger(next) || next < WORLD_PARTITION_ID_FLOOR) {
+      throw new Error(
+        `A world's id allocation stamp must be a whole number at or above the ` +
+          `${WORLD_PARTITION_ID_FLOOR} reserved for construction; this host handed over ` +
+          `${String(next)}. Persist the \`nextElementId\` the runner reports after genesis and ` +
+          `after every partition it creates, and hand that number back on the next wake.`
+      );
+    }
+    const standing = this._ctx.sequence ?? 0;
+    if (next < standing) {
+      throw new Error(
+        `This world's id counter already stands at ${standing}, so an allocation stamp of ` +
+          `${next} would mint ids that are already taken. The stamp a host persists must be the ` +
+          `\`nextElementId\` the runner last reported, and it only ever goes up.`
+      );
+    }
+    this._ctx.sequence = next;
+    this._ctx._worldIdAllocationDeclared = true;
+  }
+
+  /**
    * Declare a resident element a PARTITION ROOT: a subtree the platform loads,
    * checkpoints and evicts as one unit.
    *
@@ -1721,8 +1771,24 @@ export class Game<
       );
     }
 
+    // A STORED ID AT OR ABOVE THE COUNTER IS PROOF THE STAMP IS STALE (#377).
+    // Advancing quietly is what let a cold host mint over an unloaded root: the
+    // counter caught up to whatever happened to be hydrated, and the partitions
+    // that were NOT hydrated were the ones it then minted on top of. A world
+    // that declared an allocation stamp is therefore told here, at the bytes
+    // that prove it, rather than at the collision hours later.
     const maxAdoptedId = Math.max(...adoptedIds);
     if (this._ctx.sequence <= maxAdoptedId) {
+      if (this._ctx._worldIdAllocationDeclared) {
+        throw new Error(
+          `Cannot adopt partition "${json.name ?? json.className}": it holds element id ` +
+            `${maxAdoptedId}, at or above this world's id allocation stamp of ` +
+            `${this._ctx.sequence}. The stamp is stale, so the next id this world minted would ` +
+            `collide with one it has already stored. Repair it by writing the stamp that ` +
+            `\`worldIdAllocationOf\` derives from every stored partition, passing it back as ` +
+            `\`nextElementId\`, then wake the world again.`
+        );
+      }
       this._ctx.sequence = maxAdoptedId + 1;
     }
 
