@@ -491,3 +491,123 @@ describe("who may issue what", () => {
     ).rejects.toThrow(/a due event has no player/);
   });
 });
+
+describe("#376 — a world action can ask for a GROUP", () => {
+  // A world action could only ever ask for ONE of a thing. `chooseFrom`
+  // forwarded prompt, choices, display, optional, validate, boardRefs and
+  // disabled and dropped `multiSelect`, which is the option that turns radio
+  // buttons into checkboxes and the resolved value into an array. And
+  // `chooseElements` -- the plural of `chooseElement` -- was not on the facade
+  // at all, which made two of this module's OWN refusals point at a door that
+  // did not exist: "ask for the whole set in one `chooseElements`" is what a
+  // world action is told when it tries to `repeat` a selection.
+  //
+  // `dependsOn` is NOT part of this. It is refused for a world deliberately
+  // (`assertIndependentSelection`) and the refusal is right: a world offers
+  // every selection's candidates at once, so a dependent selection means the
+  // whole cross-product in one shot -- a hydration per candidate. A dynamic
+  // CAP does not need it, which is the case #376 actually described: a
+  // `multiSelect` function reads the earlier argument and returns a number.
+
+  /** A cart of two, and a work party that must fit in it. */
+  const crew = worldAction<VillageFixture>("crew")
+    .prompt("Send a work party")
+    .needs(({ player }) => [holdingPartition(player.seat)])
+    .chooseFrom("size", {
+      prompt: "How big a cart?",
+      choices: [1, 2],
+    })
+    .chooseFrom("hands", {
+      prompt: "Who goes?",
+      needs: ({ player }) => neighbourSeats(player.seat).map(holdingPartition),
+      choices: ({ player }) => neighbourSeats(player.seat),
+      // THE CAP IS A FACT ABOUT THE EARLIER PICK, and a function is how that is
+      // said without asking the engine to enumerate one candidate list per
+      // cart size. This is the half of #376 that a world can honour.
+      multiSelect: ({ args }) => ({ min: 1, max: Number(args.size) }),
+    })
+    .execute(({ hands }, ctx) => {
+      // `hands` is an ARRAY, and that it TYPE-CHECKS as one is half the point:
+      // a forwarded multiSelect whose argument still inferred as a single value
+      // would compile here and break in the game.
+      ctx.game.holdingOf(ctx.player.seat).woodpile -= hands.length;
+    });
+
+  it("resolves a multiSelect choice to an ARRAY of the chosen values", async () => {
+    const { engine, game } = newEngine([crew]);
+    await engine.hydrate([holdingPartition(1)]);
+    const before = game.holdingOf(1).woodpile;
+
+    await apply(engine, "p1", { name: "crew", args: { size: 2, hands: neighbourSeats(1) } });
+
+    expect(game.holdingOf(1).woodpile).toBe(before - 2);
+
+    // AND THE LOWER BOUND HOLDS, which is the half that proves the option was
+    // really forwarded: an unforwarded multiSelect leaves the array to arrive
+    // unchecked, and an empty work party would be accepted.
+    await expect(
+      apply(engine, "p1", { name: "crew", args: { size: 2, hands: [] } }),
+    ).rejects.toThrow(/at least 1 choice/);
+  });
+
+  it("REFUSES a party larger than the cart the earlier pick named", async () => {
+    // The cap is the whole point of a dynamic multiSelect. Forwarding the
+    // option and losing the bound would be worse than not forwarding it.
+    const { engine } = newEngine([crew]);
+    await engine.hydrate([holdingPartition(1)]);
+
+    await expect(
+      apply(engine, "p1", { name: "crew", args: { size: 1, hands: neighbourSeats(1) } }),
+    ).rejects.toThrow(/at most 1 choice/);
+  });
+
+  it("puts multiSelect on the SELECTION the engine reads", () => {
+    // The forwarding itself, at the one place a dropped option is invisible.
+    const selection = crew.selections.find((s) => s.name === "hands");
+
+    expect(selection).toBeDefined();
+    expect((selection as { multiSelect?: unknown }).multiSelect).toBeTypeOf("function");
+  });
+
+  it("offers chooseElements, which the repeat refusal already told authors to use", async () => {
+    const gang = worldAction<VillageFixture>("gang")
+      .needs(({ player }) => [holdingPartition(player.seat)])
+      .chooseElements("holdings", {
+        needs: ({ player }) => neighbourSeats(player.seat).map(holdingPartition),
+        elements: ({ game, player }) => neighbourSeats(player.seat).map((s) => game.holdingOf(s)),
+        multiSelect: { min: 1, max: 2 },
+      })
+      .execute(({ holdings }) => {
+        // An array of ELEMENTS, and it type-checks as one.
+        for (const holding of holdings) holding.standing += 1;
+      });
+    const { engine, game } = newEngine([gang]);
+    const ids = [];
+    for (const seat of neighbourSeats(1)) ids.push(await holdingId(engine, game, seat));
+    const before = neighbourSeats(1).map((s) => game.holdingOf(s).standing);
+
+    await apply(engine, "p1", { name: "gang", args: { holdings: ids } });
+
+    expect(neighbourSeats(1).map((s) => game.holdingOf(s).standing)).toEqual(
+      before.map((standing) => standing + 1),
+    );
+  });
+
+  it("still REFUSES dependsOn, because a world offers every candidate at once", () => {
+    // Not an oversight and not fixed here. #376 asked for this too; the cost
+    // model says no until the protocol is step-wise (#170), and a facade that
+    // quietly forwarded it would have turned one offer into a cross-product.
+    const dependent = worldAction<VillageFixture>("dependent")
+      .needs(({ player }) => [holdingPartition(player.seat)])
+      .chooseFrom("which", { choices: [1, 2] })
+      .chooseElement("holding", {
+        needs: ({ player }) => neighbourSeats(player.seat).map(holdingPartition),
+        elements: ({ game, player }) => neighbourSeats(player.seat).map((s) => game.holdingOf(s)),
+      })
+      .execute(() => {});
+    (dependent.selections.find((s) => s.name === "holding") as { dependsOn?: string }).dependsOn =
+      "which";
+
+    expect(() => newEngine([dependent])).toThrow(/depends on another selection/);
+  });
+});

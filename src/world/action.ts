@@ -81,7 +81,7 @@ import type {
   PlayerOf,
   Selection,
 } from "../engine/index.js";
-import type { ConditionConfig } from "../engine/action/types.js";
+import type { ConditionConfig, MultiSelectConfig } from "../engine/action/types.js";
 import type { WorldBudgets } from "./budgets.js";
 import type { ScheduleArm } from "./schedule-api.js";
 import type { WorldNarrationLine } from "./contract.js";
@@ -218,6 +218,58 @@ export interface WorldClockContext<G extends Game = Game> {
   readonly game: G;
   readonly args: Record<string, unknown>;
   readonly world: WorldFacilities;
+}
+
+/**
+ * HOW MANY OF A THING A WORLD'S CHOICE TAKES (#376).
+ *
+ * The engine's own form also admits `undefined` from the function, meaning
+ * "single-select after all". A world's does not, and that is the one place this
+ * narrows what the engine can express: a `multiSelect` here ALWAYS resolves to
+ * an array, so the argument's type is knowable from the call rather than from
+ * whatever the function decided at render time. An author who wants exactly one
+ * writes `{ min: 1, max: 1 }` and receives an array of one, which is a shape a
+ * handler can write once instead of branching on.
+ */
+export type WorldMultiSelect<G extends Game = Game> =
+  | number
+  | MultiSelectConfig
+  | ((context: WorldActionContext<G>) => number | MultiSelectConfig);
+
+/**
+ * Everything a world's `chooseFrom` takes apart from `multiSelect`, which is
+ * split out because it is what decides whether the argument is a `T` or a
+ * `T[]` and therefore has to live in the overloads.
+ */
+export interface WorldChoiceOptions<G extends Game, T> {
+  prompt?: WorldPrompt<G>;
+  needs?: (context: WorldNeedsContext<G>) => readonly string[];
+  choices: T[] | ((context: WorldActionContext<G>) => T[]);
+  display?: (choice: T) => string;
+  optional?: boolean | string;
+  validate?: (
+    value: T,
+    args: Record<string, unknown>,
+    context: WorldActionContext<G>,
+  ) => boolean | string;
+  boardRefs?: (choice: T, context: WorldActionContext<G>) => ChoiceBoardRefs;
+  disabled?: (choice: T, context: WorldActionContext<G>) => string | false;
+}
+
+/**
+ * Everything both element selections take, apart from `validate` -- whose value
+ * is a `T` on the singular form and a `T[]` on the plural -- and the plural's
+ * `multiSelect`. The same split `WorldChoiceOptions` makes, for the same
+ * reason: what differs is exactly what decides the argument's type.
+ */
+export interface WorldElementOptions<G extends Game, T extends GameElement> {
+  prompt?: WorldPrompt<G>;
+  needs?: (context: WorldNeedsContext<G>) => readonly string[];
+  elements: T[] | ((context: WorldActionContext<G>) => T[]);
+  optional?: boolean | string;
+  display?: (element: T, context: WorldActionContext<G>, all: T[]) => string;
+  boardRef?: (element: T, context: WorldActionContext<G>) => BoardElementRef;
+  disabled?: (element: T, context: WorldActionContext<G>) => string | false;
 }
 
 /** What a seated step's declaration may read: the seat, and whatever earlier
@@ -407,6 +459,48 @@ function forwardPrompt<G extends Game>(
 }
 
 /**
+ * The forwarding `chooseElement` and `chooseElements` share (#376).
+ *
+ * The two differ only in how many elements come back, so every option except
+ * `validate` -- whose value is a `T` on one and a `T[]` on the other -- is
+ * re-typed identically. Written once, because the copy that existed for one
+ * release was already drifting: `chooseElements` is where `multiSelect` had to
+ * be remembered and `chooseElement` is where it must not appear.
+ */
+function forwardElementOptions<G extends Game, T extends GameElement>(
+  options: WorldElementOptions<G, T>,
+) {
+  return {
+    prompt: forwardPrompt<G>(options.prompt),
+    elements:
+      typeof options.elements === "function"
+        ? (context: AnyContext) =>
+            (options.elements as (c: WorldActionContext<G>) => T[])(withWorld<G>(context))
+        : options.elements,
+    optional: options.optional,
+    display: options.display
+      ? (element: T, context: AnyContext, all: T[]) =>
+          options.display!(element, withWorld<G>(context), all)
+      : undefined,
+    boardRef: options.boardRef
+      ? (element: T, context: AnyContext) => options.boardRef!(element, withWorld<G>(context))
+      : undefined,
+    disabled: options.disabled
+      ? (element: T, context: AnyContext) => options.disabled!(element, withWorld<G>(context))
+      : undefined,
+  };
+}
+
+/** A world's `multiSelect`, re-typed onto the engine's. The function form gets
+ *  the WORLD context, like every other callback on this facade (#376). */
+function forwardMultiSelect<G extends Game>(
+  multiSelect: WorldMultiSelect<G> | undefined,
+): number | MultiSelectConfig | ((context: AnyContext) => number | MultiSelectConfig) | undefined {
+  if (typeof multiSelect !== "function") return multiSelect;
+  return (context: AnyContext) => multiSelect(withWorld<G>(context));
+}
+
+/**
  * ONE WORLD ACTION, UNDER CONSTRUCTION.
  *
  * Every method forwards to the core `Action` builder with the callback's
@@ -535,26 +629,30 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
    * enumeration must be bounded by what the declaration named, and the
    * declaration is authored, finite and readable.
    */
+  // TWO OVERLOADS, because `multiSelect` is what decides whether the argument
+  // is a `T` or a `T[]`, and a handler should not have to be told which. Each
+  // signature is a "member" to the dead-code pass and each is reached only by
+  // games, so all three carry the same marker the other verbs do.
   // fallow-ignore-next-line unused-class-member
   chooseFrom<K extends string, T>(
     name: K,
-    options: {
-      prompt?: WorldPrompt<G>;
-      needs?: (context: WorldNeedsContext<G>) => readonly string[];
-      choices: T[] | ((context: WorldActionContext<G>) => T[]);
-      display?: (choice: T) => string;
-      optional?: boolean | string;
-      validate?: (
-        value: T,
-        args: Record<string, unknown>,
-        context: WorldActionContext<G>,
-      ) => boolean | string;
-      boardRefs?: (choice: T, context: WorldActionContext<G>) => ChoiceBoardRefs;
-      disabled?: (choice: T, context: WorldActionContext<G>) => string | false;
-    },
-  ): WorldAction<G, AddArg<A, K, T>> {
+    options: WorldChoiceOptions<G, T> & { multiSelect: WorldMultiSelect<G> },
+  ): WorldAction<G, AddArg<A, K, T[]>>;
+  // fallow-ignore-next-line unused-class-member
+  chooseFrom<K extends string, T>(
+    name: K,
+    options: WorldChoiceOptions<G, T> & { multiSelect?: undefined },
+  ): WorldAction<G, AddArg<A, K, T>>;
+  // fallow-ignore-next-line unused-class-member
+  chooseFrom<K extends string, T>(
+    name: K,
+    options: WorldChoiceOptions<G, T> & { multiSelect?: WorldMultiSelect<G> },
+  ): WorldAction<G, AddArg<A, K, T | T[]>> {
     this.declareSelection(options.needs);
     this.inner.chooseFrom<K, T>(name, {
+      // AN ORDINARY `ChoiceSelection` FIELD the facade had stopped passing on
+      // (#376).
+      multiSelect: forwardMultiSelect<G>(options.multiSelect),
       prompt: forwardPrompt<G>(options.prompt),
       choices:
         typeof options.choices === "function"
@@ -572,7 +670,7 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
         ? (choice, context) => options.disabled!(choice, withWorld<G>(context))
         : undefined,
     });
-    return this as unknown as WorldAction<G, AddArg<A, K, T>>;
+    return this as unknown as WorldAction<G, AddArg<A, K, T | T[]>>;
   }
 
   /**
@@ -587,43 +685,60 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
   // fallow-ignore-next-line unused-class-member
   chooseElement<K extends string, T extends GameElement>(
     name: K,
-    options: {
-      prompt?: WorldPrompt<G>;
-      needs?: (context: WorldNeedsContext<G>) => readonly string[];
-      elements: T[] | ((context: WorldActionContext<G>) => T[]);
-      optional?: boolean | string;
+    options: WorldElementOptions<G, T> & {
       validate?: (
         value: T,
         args: Record<string, unknown>,
         context: WorldActionContext<G>,
       ) => boolean | string;
-      display?: (element: T, context: WorldActionContext<G>, all: T[]) => string;
-      boardRef?: (element: T, context: WorldActionContext<G>) => BoardElementRef;
-      disabled?: (element: T, context: WorldActionContext<G>) => string | false;
     },
   ): WorldAction<G, AddArg<A, K, T>> {
     this.declareSelection(options.needs);
     this.inner.chooseElement<K, T>(name, {
-      prompt: forwardPrompt<G>(options.prompt),
-      elements:
-        typeof options.elements === "function"
-          ? (context) => (options.elements as (c: WorldActionContext<G>) => T[])(withWorld<G>(context))
-          : options.elements,
-      optional: options.optional,
+      ...forwardElementOptions<G, T>(options),
       validate: options.validate
         ? (value, args, context) => options.validate!(value, args, withWorld<G>(context))
         : undefined,
-      display: options.display
-        ? (element, context, all) => options.display!(element, withWorld<G>(context), all)
-        : undefined,
-      boardRef: options.boardRef
-        ? (element, context) => options.boardRef!(element, withWorld<G>(context))
-        : undefined,
-      disabled: options.disabled
-        ? (element, context) => options.disabled!(element, withWorld<G>(context))
-        : undefined,
     });
     return this as unknown as WorldAction<G, AddArg<A, K, T>>;
+  }
+
+  /**
+   * A GROUP of elements off the board, from a list this step's declaration
+   * named (#376).
+   *
+   * The plural of `chooseElement`, and the method two of this module's own
+   * refusals already told authors to reach for -- "ask for the whole set in one
+   * `chooseElements`" is what a world action is told when it tries to `repeat`
+   * a selection. It was not on this facade, so that advice named a door that
+   * did not exist and the only way to pick a crew was to pick one member.
+   *
+   * `elements:` is required for the reason it is on the singular form: a world
+   * holds what its declaration named plus whatever anybody left resident, so a
+   * board SEARCH finds a set whose size is a fact about other players. The
+   * candidates are authored; the count is `multiSelect`.
+   */
+  // fallow-ignore-next-line unused-class-member
+  chooseElements<K extends string, T extends GameElement>(
+    name: K,
+    options: WorldElementOptions<G, T> & {
+      multiSelect?: WorldMultiSelect<G>;
+      validate?: (
+        value: T[],
+        args: Record<string, unknown>,
+        context: WorldActionContext<G>,
+      ) => boolean | string;
+    },
+  ): WorldAction<G, AddArg<A, K, T[]>> {
+    this.declareSelection(options.needs);
+    this.inner.chooseElements<K, T>(name, {
+      ...forwardElementOptions<G, T>(options),
+      multiSelect: forwardMultiSelect<G>(options.multiSelect),
+      validate: options.validate
+        ? (value, args, context) => options.validate!(value, args, withWorld<G>(context))
+        : undefined,
+    });
+    return this as unknown as WorldAction<G, AddArg<A, K, T[]>>;
   }
 
   /** Free text, bounded by the engine's own `maxLength`. */

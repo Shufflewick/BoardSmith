@@ -317,7 +317,7 @@ export const tend = worldAction<VillageGame>('tend')
 The builder is the engine's own with every callback's context re-typed, so what
 you write is a table action with `ctx.world` in scope and one method added:
 `.needs()`. `prompt`, `help`, `condition`, `disabled`, `validate`, `manual`,
-`suppressFromActionPanel`, `chooseFrom`, `chooseElement`, `enterText`,
+`suppressFromActionPanel`, `chooseFrom`, `chooseElement`, `chooseElements`, `enterText`,
 `enterNumber`, `execute` and `build` all mean what they mean on a table. The
 result is an ordinary `ActionDefinition`, which is why it needs no world-only
 registry, panel or board bridge.
@@ -461,7 +461,7 @@ or be reverted at the next hibernation with nobody told. Do the write in
 ### Selections: what an action asks a player for
 
 `WorldCommandArgument` is gone, and what replaces it is the engine's own
-selections. There are four you may write:
+selections. There are five you may write:
 
 - **`chooseElement(name, { elements, ... })`** -- one element off the board, from
   a list you compute. This is the one worlds existed without: a `Holding` *is* a
@@ -470,8 +470,29 @@ selections. There are four you may write:
   declaration named rather than the five hundred a static choice list would.
   `elements:` is **required**, and the searching form (`from`, `filter`,
   `elementClass`) is refused -- see the next section for why.
+- **`chooseElements(name, { elements, multiSelect, ... })`** -- a GROUP of
+  elements, from a list you compute. The plural of the above, and what a crew,
+  a landing party or a set of targets is: one question, one declaration, one
+  offer. `elements:` is required here too.
 - **`chooseFrom(name, { choices, ... })`** -- a choice between values the game
-  names, with `choices` precomputed for the same reason.
+  names, with `choices` precomputed for the same reason. Pass `multiSelect` and
+  the resolved argument is an **array** -- `number` for "up to N",
+  `{ min, max }`, or a function of the context when the bound is itself a fact
+  about an earlier answer:
+
+  ```ts
+  .chooseFrom('ship', { choices: berthedShips })
+  .chooseFrom('crew', {
+    choices: ({ game }) => eligibleSpies(game),
+    // The cap comes from the ship the player already picked.
+    multiSelect: ({ args }) => ({ min: 1, max: holdOf(args.ship) }),
+  })
+  ```
+
+  A world's `multiSelect` always resolves to an array -- the engine's own form
+  lets the function return `undefined` to mean "single after all", and this one
+  does not, so the argument's type is knowable from the call. Want exactly one?
+  `{ min: 1, max: 1 }`, and take an array of one.
 - **`enterNumber(name, { min, max, integer })`** -- a number, bounded where the
   game knows the bound, so a surface draws a stepper and "at least one log" is a
   fact the shell knows before anything is sent.
@@ -761,6 +782,13 @@ product. The fix is **one action per shape** -- if a game wants kind-dependent
 arguments, write an action per kind -- which is also what makes each one's
 declaration honest. This is a consequence of the single-shot protocol rather than
 a permanent law; a step-wise world protocol is #170.
+
+A **bound** that depends on an earlier answer is a different thing and is
+allowed: `multiSelect: ({ args }) => ({ min: 1, max: holdOf(args.ship) })` reads
+the earlier argument and returns a number. Nothing is enumerated per candidate,
+so nothing is hydrated per candidate. What the single-shot protocol costs you is
+the live redraw -- the count is enforced when the command arrives, not narrowed
+in the panel as the earlier pick changes -- and that is what #170 would buy.
 
 **What none of this covers, and there is no guard for it.** A `condition` or a
 `disabled` predicate is ordinary code with the resident tree in front of it, and
