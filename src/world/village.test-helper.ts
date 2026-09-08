@@ -183,7 +183,7 @@ export async function applyThroughWalk(
   command: { name: string; args: Record<string, unknown> },
 ): ReturnType<BoardSmithWorldEngine["applyCommand"]> {
   for (;;) {
-    const needs = engine.commandPartitions(player, command);
+    const needs = engine.commandPartitions(player, command, STAMP.now);
     if (needs.length === 0) break;
     await engine.hydrate(needs);
   }

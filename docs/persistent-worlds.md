@@ -429,6 +429,36 @@ one-colony refresh of seven actions came to cost seconds (#374).
 answer round one gets for everything, because nothing is resident yet. A later
 round that names a root an earlier round declared can read it straight.
 
+### And `world.now`: the instant the dispatch is happening at
+
+The declaration's `world` also carries the clock (#375):
+
+```ts
+.needs(({ world }) =>
+  dueContracts(world.partition(TIMELINE) as Timeline, world.now).map(contractPartition),
+)
+```
+
+`execute` has had the authoritative instant since #57, and a declaration had
+none -- so a world whose partitions are **timed** could not name the due ones.
+Its only correct move was to declare every active one, which is O(world) in the
+one mode whose whole argument is that a command costs O(room).
+
+It is the same instant `execute` is about to be given: a command's stamped
+arrival, a scheduled event's own `due`, and on the offer path the instant the
+offer is being made at. A declaration and the handler it precedes cannot
+disagree about what time it is.
+
+**There is no `presence` here, and that is deliberate** even though `execute`
+has one. What a declaration names decides what is RESIDENT, and residency that
+depended on who happened to be connected would differ between two watchers of
+one world, and between a command and its own replay. The clock is a fact about
+the dispatch; presence is a fact about the moment.
+
+`Date.now()` inside the isolate is the EXECUTION instant, not the arrival one,
+and `args` is the client's own frame -- so as on the handler surface, the
+correct clock is the reachable one and the incorrect ones are unreachable.
+
 The same two rounds in a world whose seats are five hundred and whose rooms are
 1,600: `look` in `~/BoardSmithGames/sotf/src/rules/world.ts`. There the first
 round names the acting seat's own `Character`, and the second reads it for the

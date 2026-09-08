@@ -271,7 +271,7 @@ describe("createWorld — one construction, every host", () => {
     // Genesis CREATED the partition, so the engine already holds it and the
     // host is told to send nothing -- the residency subtraction that keeps a
     // warm world's command free of storage reads.
-    const declared = await runner.declare({ name: "poke", args: {} }, "p1", {});
+    const declared = await runner.declare({ name: "poke", args: {} }, "p1", {}, 0);
     expect(declared.needs).toEqual([]);
 
     const result = await runner.apply({

@@ -1,7 +1,7 @@
 {
-  "revision": 49,
+  "revision": 50,
   "bundleProtocol": 2,
-  "surfaceHash": "b78d133b1a9ffd82",
+  "surfaceHash": "d1181c951837fd52",
   "payloadHash": "eb472de70ccc7f01",
   "history": [
     {
@@ -395,6 +395,14 @@
       "surfaceHash": "b78d133b1a9ffd82",
       "payloadHash": "eb472de70ccc7f01",
       "summary": "WorldAction gains chooseElements -- the plural of chooseElement, which two of the world's own refusals already told authors to reach for and which was not on the facade -- and chooseFrom now forwards multiSelect, so a world action can ask for a GROUP rather than one of a thing. A world's multiSelect always resolves to an array (the engine's form may return undefined to mean single; this one may not), so the argument type is knowable from the call. dependsOn stays refused: it is a cross-product in a single-shot protocol, and a dynamic BOUND does not need it (ShufflewickPub#376)"
+    },
+    {
+      "revision": 50,
+      "date": "2026-09-08",
+      "bundleProtocol": 2,
+      "surfaceHash": "d1181c951837fd52",
+      "payloadHash": "eb472de70ccc7f01",
+      "summary": "A declaration is stamped: commandPartitions and offerPartitions now take the instant the dispatch is happening at -- a command's stamped arrival, a scheduled event's due, an offer's own now -- and a needs() context reaches it as world.now, the same instant execute is about to be given. Without it a world whose partitions are TIMED could not tell a due one from a future one and had to declare every active one, which is O(world) in the mode whose argument is that a command costs O(room). No presence, deliberately: residency that depended on who is connected would differ between two watchers of one world. The runner's declare and declareOffers take the stamp through, so the parent must send it (ShufflewickPub#375)"
     }
   ]
 }

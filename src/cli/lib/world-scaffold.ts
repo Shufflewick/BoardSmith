@@ -406,7 +406,7 @@ function unstored(name: string): Promise<never> {
  *  makes to draw a player's options. */
 async function offersFor(runner: Runner, player: string) {
   await walkDeclaration(
-    async (supplied) => (await runner.declareOffers(player, supplied)).needs,
+    async (supplied) => (await runner.declareOffers(player, supplied, T0)).needs,
     unstored,
   );
   return runner.offersFor(player, { now: T0, presence: [1] });
@@ -428,7 +428,7 @@ async function perform(
   arrivedAt: number = T0,
 ) {
   await walkDeclaration(
-    async (supplied) => (await runner.declare(command, player, supplied)).needs,
+    async (supplied) => (await runner.declare(command, player, supplied, arrivedAt)).needs,
     unstored,
   );
   return runner.apply({
@@ -493,7 +493,7 @@ describe('the world', () => {
     const { runner } = launch();
     await runner.genesis();
     await expect(
-      runner.declare({ name: 'ripen', args: { seat: 1 } }, 'alice', {}),
+      runner.declare({ name: 'ripen', args: { seat: 1 } }, 'alice', {}, T0),
     ).rejects.toThrow();
   });
 

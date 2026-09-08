@@ -718,7 +718,9 @@ export class LocalWorldHost {
     // `walkDeclaration`, and `settleDeclaration` beside it, which is still what
     // a VIEW needs.
     await walkDeclaration(
-      async (supplied) => (await runner.declare(command, player, supplied)).needs,
+      // THE SAME INSTANT THE APPLY BELOW IS STAMPED WITH (#375), so the
+      // declaration and the handler it precedes agree about what time it is.
+      async (supplied) => (await runner.declare(command, player, supplied, arrivedAt)).needs,
       (name) =>
         this.#readPartition(
           name,
@@ -1089,7 +1091,7 @@ export class LocalWorldHost {
     const runner = this.#world.runner;
     const player = devWorldPlayer(seat);
     await walkDeclaration(
-      async (supplied) => (await runner.declareOffers(player, supplied)).needs,
+      async (supplied) => (await runner.declareOffers(player, supplied, this.#worldNow())).needs,
       (name) =>
         this.#readPartition(
           name,

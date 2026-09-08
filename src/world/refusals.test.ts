@@ -194,7 +194,7 @@ describe("#37 item 5 — the world refusal taxonomy", () => {
     const runner = createWorldRunner(engineWith([]), createInlinedPartitionStore());
 
     try {
-      await runner.declare({ name: "nope", args: {} }, "p1", {});
+      await runner.declare({ name: "nope", args: {} }, "p1", {}, 0);
       expect.unreachable("declare accepted an action this world does not have");
     } catch (error) {
       expect(error).toBeInstanceOf(WorldRefusal);
@@ -217,10 +217,10 @@ describe("#37 item 5 — the world refusal taxonomy", () => {
     );
 
     // THE CLOCK MAY. `null` is the clock, and the same declaration answers it.
-    expect(await runner.declare({ name: "settle", args: {} }, null, {})).toEqual({ needs: [] });
+    expect(await runner.declare({ name: "settle", args: {} }, null, {}, 0)).toEqual({ needs: [] });
 
     try {
-      await runner.declare({ name: "settle", args: {} }, "p1", {});
+      await runner.declare({ name: "settle", args: {} }, "p1", {}, 0);
       expect.unreachable("declare accepted the clock's own action from a player");
     } catch (error) {
       expect(error).toBeInstanceOf(WorldRefusal);

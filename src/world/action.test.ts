@@ -210,11 +210,11 @@ describe("the ordered declaration walk", () => {
     const { engine } = newEngine();
     const command = { name: "tend", args: { neighbour: 0 } };
 
-    const first = engine.commandPartitions("p2", command);
+    const first = engine.commandPartitions("p2", command, STAMP.now);
     expect(first).toEqual([holdingPartition(2)]);
 
     await engine.hydrate(first);
-    expect([...engine.commandPartitions("p2", command)].sort()).toEqual([
+    expect([...engine.commandPartitions("p2", command, STAMP.now)].sort()).toEqual([
       holdingPartition(1),
       holdingPartition(3),
     ]);
@@ -224,7 +224,7 @@ describe("the ordered declaration walk", () => {
     const { engine } = newEngine();
     const command = { name: "tend", args: { neighbour: 0 } };
     await engine.hydrate([holdingPartition(1), holdingPartition(2), holdingPartition(3)]);
-    expect(engine.commandPartitions("p2", command)).toEqual([]);
+    expect(engine.commandPartitions("p2", command, STAMP.now)).toEqual([]);
   });
 
   it("refuses a declaration that tries to write", async () => {
@@ -236,7 +236,7 @@ describe("the ordered declaration walk", () => {
       .execute(() => {});
     const { engine } = newEngine([writer]);
     await engine.hydrate([holdingPartition(1)]);
-    expect(() => engine.commandPartitions("p1", { name: "writer", args: {} })).toThrow(
+    expect(() => engine.commandPartitions("p1", { name: "writer", args: {} }, STAMP.now)).toThrow(
       /A declaration tried to write/,
     );
   });
@@ -306,7 +306,7 @@ describe("the clock", () => {
       const needs = engine.commandPartitions(null, {
         name: "settleBurn",
         args: { holding: holdingPartition(1) },
-      });
+      }, STAMP.now);
       if (needs.length === 0) break;
       await engine.hydrate(needs);
     }
@@ -466,11 +466,11 @@ describe("a chain of rounds at one step", () => {
     const { engine } = newEngine([chained]);
     const command = { name: "chained", args: {} };
 
-    expect(engine.commandPartitions("p1", command)).toEqual([INDEX]);
+    expect(engine.commandPartitions("p1", command, STAMP.now)).toEqual([INDEX]);
     await engine.hydrate([INDEX]);
-    expect(engine.commandPartitions("p1", command)).toEqual([holdingPartition(1)]);
+    expect(engine.commandPartitions("p1", command, STAMP.now)).toEqual([holdingPartition(1)]);
     await engine.hydrate([holdingPartition(1)]);
-    expect(engine.commandPartitions("p1", command)).toEqual([]);
+    expect(engine.commandPartitions("p1", command, STAMP.now)).toEqual([]);
 
     const result = await engine.applyCommand("p1", command, STAMP);
     expect([...result.dirty].sort()).toEqual([INDEX, holdingPartition(1)]);

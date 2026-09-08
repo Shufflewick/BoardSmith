@@ -1264,7 +1264,7 @@ describe("#68 — a refused command leaves the world unchanged", () => {
     // boundary twice for one command.
     const engine = newEngine();
     expect(
-      engine.commandPartitions("player-a", { name: "tearOwn", args: { aim: "room-one" } }),
+      engine.commandPartitions("player-a", { name: "tearOwn", args: { aim: "room-one" } }, STAMP.now),
     ).toEqual([ROOM_ONE]);
   });
 
@@ -1748,5 +1748,70 @@ describe("#374 — a declaration reaches a partition BY NAME, not by walking the
     await engine.applyCommand("player-a", { name: "askEarly", args: {} }, STAMP);
 
     expect(seen).toBeUndefined();
+  });
+});
+
+describe("#375 — a declaration is stamped with the instant it is being made at", () => {
+  // `execute` has had the authoritative clock since #57: `ctx.world.now` is the
+  // platform's stamped arrival, because `Date.now()` inside the isolate is the
+  // EXECUTION instant and `args` is the client's own frame. A DECLARATION had
+  // neither. It ran before the clock existed on its context at all.
+  //
+  // That is the same asymmetry #374 closed for `world.partition`, and it costs
+  // the same thing: a game whose partitions are TIMED -- a market of private
+  // contracts, each due at its own instant -- cannot name the due ones. Its
+  // only correct move is to declare every active contract there is, which is
+  // O(world) in the one mode whose whole argument is that a command costs
+  // O(room).
+  //
+  // The instant is the dispatch's own: a command's stamped arrival, and a
+  // scheduled event's `due`. Not `presence`, deliberately -- what a declaration
+  // may name must not depend on who happens to be connected, or two watchers
+  // of one world would disagree about what is resident.
+
+  const stamped = (record: (now: number) => void) =>
+    worldAction<WorldFixtureGame>("stamped")
+      .needs(({ world }) => {
+        record(world.now);
+        return [ROOM_ONE];
+      })
+      .execute(() => {});
+
+  it("hands a command's declaration the arrival the platform stamped", async () => {
+    let seen = -1;
+    const engine = new BoardSmithWorldEngine({
+      game: newWorldGame(),
+      seats: new Map([["player-a", 1]]),
+      store: new CountingStore(genesis()),
+      actions: [touch, stamped((now) => (seen = now))],
+      view: () => [],
+    });
+
+    await engine.applyCommand("player-a", { name: "stamped", args: {} }, STAMP);
+
+    expect(seen).toBe(STAMP.now);
+  });
+
+  it("hands an OFFER's declaration the instant the offer is being made at", async () => {
+    // The offer path re-runs every declaration, so it needs the clock for the
+    // same reason -- and it must be the offer's own stamp, not the last
+    // command's, or a watcher's enumeration would drift behind the world.
+    let seen = -1;
+    const engine = new BoardSmithWorldEngine({
+      game: newWorldGame(),
+      seats: new Map([["player-a", 1]]),
+      store: new CountingStore(genesis()),
+      actions: [stamped((now) => (seen = now))],
+      view: () => [],
+    });
+    const at = STAMP.now + 90_000;
+
+    for (;;) {
+      const needs = engine.offerPartitions("player-a", at);
+      if (needs.length === 0) break;
+      await engine.hydrate(needs);
+    }
+
+    expect(seen).toBe(at);
   });
 });
