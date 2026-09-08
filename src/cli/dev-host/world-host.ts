@@ -800,12 +800,21 @@ export class LocalWorldHost {
         await this.#pushViews();
         return;
       }
+      // THE PLAYER'S OWN ARRIVAL INSTANT, taken once and used for everything
+      // below: the catch-up's ceiling, the handler's `world.now`, and the
+      // receipt. Reading the clock twice would let a long catch-up move the
+      // instant the command claims to have arrived at.
+      const arrivedAt = this.#worldNow();
+      // EVERYTHING ALREADY DUE FIRST, for a world that declared it (#380).
+      // After the receipt check above, so a REPLAYED order is answered from its
+      // receipt without running the clock: a receipt is not a reason to tick.
+      await this.#catchUpBefore(arrivedAt);
       const events = await this.#dispatch({
         player,
         command: { name, args },
         timing: null,
-        arrivedAt: this.#worldNow(),
-        receipt: { orderId: order.id, player, at: this.#worldNow() },
+        arrivedAt,
+        receipt: { orderId: order.id, player, at: arrivedAt },
       });
       // ANSWERED AFTER THE CHECKPOINT LANDED, exactly as the platform answers
       // one: a player told "taken" about a command whose effects were not made
@@ -1013,7 +1022,20 @@ export class LocalWorldHost {
    * delay produces a busy host rather than a wedged one.
    */
   async #drain(): Promise<void> {
-    const now = this.#worldNow();
+    await this.#drainBatch(this.#worldNow());
+    this.#rearm();
+  }
+
+  /**
+   * ONE BATCH OF EVENTS DUE AT OR BEFORE `now`, run in nominal order.
+   *
+   * Answers how many handler calls it actually made, which is what tells a
+   * catch-up loop that it is making progress (ShufflewickPub #380): a batch
+   * that ran nothing is a batch that will run nothing again, and the loop stops
+   * rather than spinning on an event the world cannot move past.
+   */
+  async #drainBatch(now: number): Promise<number> {
+    let ran = 0;
     const { batch } = nextDueBatch(this.#store.pendingEvents(), now, this.#budgets.drainBatch);
     for (const event of batch) {
       // A ONE-SHOT IS ONE CALL AT ITS OWN DUE. A RECURRENCE THAT FELL BEHIND IS
@@ -1042,6 +1064,7 @@ export class LocalWorldHost {
             rearm: last ? advanced : [],
           });
           this.#narrate(events);
+          ran += 1;
         } catch (error) {
           // A DUE EVENT THAT REFUSED IS SAID OUT LOUD AND LEFT QUEUED. Its
           // effects rolled back, so the world is unchanged; dropping it
@@ -1053,7 +1076,51 @@ export class LocalWorldHost {
         }
       }
     }
-    this.#rearm();
+    return ran;
+  }
+
+  /**
+   * EVERYTHING ALREADY DUE, BEFORE THIS PLAYER'S COMMAND (#380).
+   *
+   * Reached only by a world that declared `world.ordering: 'chronological'`.
+   * The default is the other one and it is deliberate: a host drains what it
+   * can on the way in and applies the command whether or not the queue emptied,
+   * because blocking every command on an arbitrarily long catch-up is the
+   * failure that budget exists to prevent.
+   *
+   * A world whose clock is part of its rules cannot live with that. An event
+   * that chooses an offer, creates its contract and schedules the next decision
+   * cannot say which partitions that next decision needs until the earlier one
+   * has committed, so it cannot be predeclared and a player who overtakes it
+   * produces a state no punctual world reaches.
+   *
+   * BOUNDED, AND YIELDING. One `drainBatch` at a time, `catchUpRounds` of them
+   * at most, with the event loop given a turn between each -- so a defective
+   * handler that re-arms itself at zero delay makes a slow world rather than a
+   * wedged one, and the host's own overload protections still apply. Running
+   * out, or meeting an event that refuses, STOPS the catch-up and the command
+   * is applied over a world that is still behind: degradation by latency, never
+   * refusal, because a refusal would make the player press the button again and
+   * lose the ordering this exists to keep.
+   *
+   * `arrivedAt` is the player's own stamped instant and is never moved. What
+   * this changes is what has happened before their handler runs.
+   */
+  async #catchUpBefore(arrivedAt: number): Promise<void> {
+    if ((readWorldDefinition(this.#definition).ordering ?? 'arrival') !== 'chronological') return;
+    for (let round = 0; round < this.#budgets.catchUpRounds; round++) {
+      const { batch } = nextDueBatch(
+        this.#store.pendingEvents(),
+        arrivedAt,
+        this.#budgets.drainBatch,
+      );
+      if (batch.length === 0) return;
+      if ((await this.#drainBatch(arrivedAt)) === 0) return;
+      // A TURN FOR EVERYTHING ELSE. The world lock is still held -- the catch-up
+      // and the command it gates are one ordered unit -- but the runtime is not
+      // starved, so a host under load stays answerable while it happens.
+      await new Promise((resolve) => setImmediate(resolve));
+    }
   }
 
   /**

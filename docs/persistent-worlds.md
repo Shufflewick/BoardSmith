@@ -1080,6 +1080,58 @@ primitive and it is the one you should reach for first.
 offending line, so the whole action unwinds and the player is told no over a
 world that did not change.
 
+### `world.ordering`: whether a command may overtake an overdue event
+
+```ts
+world: {
+  maxPlayers: 500,
+  ordering: 'chronological',   // default: 'arrival'
+  actions, view,
+}
+```
+
+**The default is `'arrival'`, and it is deliberate.** A host drains what it can
+on its way into a frame, spends a budget doing it, and applies the player's
+command whether or not the queue emptied. Blocking every command on an
+arbitrarily long catch-up -- with the world lock held and every other socket
+queued behind it -- is the failure that budget exists to prevent, and most
+worlds do not care what order two unrelated things happened in.
+
+**A world whose clock is part of its rules cannot live with that**
+(ShufflewickPub #380). An event that chooses an offer, creates its contract and
+schedules the NEXT decision cannot say which partitions that next decision needs
+until the earlier one has committed -- the contract does not exist yet. So it
+cannot be predeclared, and a player who arrives while the chain is overdue
+overtakes it and produces a state no punctual world reaches. Declaring
+`ordering: 'chronological'` says so, and the host gates each command behind
+every event already due at that player's arrival instant, run in nominal order.
+
+What the gate does NOT change:
+
+- **The player's own arrival instant.** `ctx.world.now` is still when they
+  arrived, not when the catch-up finished. Each caught-up event still receives
+  its own `due`.
+- **Their order identity or receipt.** A repeat of an order the world already
+  committed is answered from its receipt without running the clock -- a receipt
+  is not a reason to tick.
+- **What an event handler sees.** It gets its scheduled `due` and its
+  `missedCount`, exactly as it does on any other road.
+
+**It is bounded, and it yields.** One `drainBatch` at a time, `catchUpRounds` of
+them at most, with the runtime given a turn between each -- so a handler that
+re-arms itself at zero delay makes a slow world rather than a wedged one, and
+the host's own overload and parking protections still apply. Running out of that
+budget, or meeting an event that refuses, STOPS the catch-up and the command is
+applied over a world that is still behind. Degradation by latency, never
+refusal: a refusal would make the player press the button again, which loses the
+ordering the gate exists to keep.
+
+An `'arrival'` world's correct move is unchanged and is written down under
+[`world.now`](#and-worldnow-the-instant-the-dispatch-is-happening-at): declare
+against the clock -- a `needs()` callback receives `world.now`, so an action
+whose correctness depends on chronology names the partitions that are due at
+that instant and settles them itself.
+
 ### Taking a timer back
 
 ```ts
@@ -1399,6 +1451,7 @@ makes local behaviour a poor guide to published behaviour.
 | `maxPendingEvents` | derived: 16000 | The whole world's queue. `maxPlayers` times the unkeyed cap. |
 | `catchUpMaxRealIterations` | 4 | Real occurrences a late recurrence runs before the rest are coalesced into one call. |
 | `drainBatch` | 200 | Due events one drain runs. A world still behind re-arms: overload degrades to latency, never refusal. |
+| `catchUpRounds` | 8 | Drain batches one command may wait behind on a `ordering: 'chronological'` world. Running out applies the command over a world still behind, never refuses it. |
 | `maxCandidatesPerSelection` | 200 | Candidates one selection may offer, checked at enumeration. A 500-seat roster is one honest partition and one honest declaration, and enumerating it yields 500 candidates, so this is the guard the declaration itself cannot supply. |
 | `receiptRetentionMs` | 1209600000 (14 days) | How long a committed order's receipt is kept, and so how long a page may be away and still have an uncertain order answered rather than refused. |
 

@@ -1,7 +1,7 @@
 {
-  "revision": 54,
+  "revision": 55,
   "bundleProtocol": 2,
-  "surfaceHash": "2e223463212e2ce8",
+  "surfaceHash": "833f0bcefd6e4aef",
   "payloadHash": "eb472de70ccc7f01",
   "history": [
     {
@@ -435,6 +435,14 @@
       "surfaceHash": "2e223463212e2ce8",
       "payloadHash": "eb472de70ccc7f01",
       "summary": "A migration is one atomic step that can read across roots (ShufflewickPub #379). The runner's migratePartition() and migrateCreate() are REPLACED by a single migrateAll(stored, ctx): every stored root is adopted before any hook runs, the per-root partition hook normalizes each one, create() adds this version's new roots, the new world.migration.finalize(game, { partition, names, from, to }) hook reads and writes across every root -- transformed and newly created alike -- and only then is anything serialized. So an existing root whose new value is derived from another existing root is expressible, and the answer does not depend on the order a host listed its keys in. WorldEngine gains migrateFinalize(). Everything still lands in the host's one transaction; a hook that throws leaves every original byte and the stored version untouched."
+    },
+    {
+      "revision": 55,
+      "date": "2026-09-08",
+      "bundleProtocol": 2,
+      "surfaceHash": "833f0bcefd6e4aef",
+      "payloadHash": "eb472de70ccc7f01",
+      "summary": "A world may declare that its player commands are CHRONOLOGICAL (ShufflewickPub #380). New WorldDefinition.ordering: 'arrival' (the default, and what every world did before this) or 'chronological', which gates each player command behind every event already due at that player's arrival instant, run in nominal order. It is for a chain that cannot be predeclared -- an event that creates a contract and schedules the next decision cannot name that decision's partitions until the earlier one commits. Bounded and yielding: one drainBatch at a time, at most the new catchUpRounds budget (default 8), with a turn for the runtime between each; running out, or meeting an event that refuses, applies the command over a world still behind rather than refusing it. The player's arrival instant, order identity and receipt are untouched, and a replayed order is answered from its receipt without running the clock. An unrecognised world.ordering is refused as bundle-not-a-world at construction."
     }
   ]
 }

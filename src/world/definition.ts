@@ -165,6 +165,36 @@ export interface WorldDefinition {
    */
   readonly createPartition?: (game: Game, name: string) => GameElement | undefined;
   /**
+   * WHETHER A PLAYER'S COMMAND MAY OVERTAKE AN OVERDUE EVENT
+   * (ShufflewickPub #380).
+   *
+   * `"arrival"` -- the default, and what every world did before this existed.
+   * A host drains what it can on the way in, spends a BUDGET doing it, and
+   * applies the command whether or not the queue emptied. Blocking every
+   * command on an arbitrarily long catch-up, with the world lock held and every
+   * other socket queued behind it, is the failure that budget exists to
+   * prevent, and most worlds do not care what order two unrelated things
+   * happened in.
+   *
+   * `"chronological"` -- a world whose clock is part of its rules. Before a
+   * player's command runs, every event already due at that player's arrival
+   * instant is drained in nominal order, in bounded batches, and only then does
+   * the command apply. It is the answer for a chain that cannot be predeclared:
+   * an event that chooses an offer, creates its contract and schedules the next
+   * decision cannot say which partitions that next decision needs until the
+   * earlier one has committed, so a player who overtakes it produces a state no
+   * punctual world reaches.
+   *
+   * It costs LATENCY and never correctness in the other direction: a catch-up
+   * that runs out of the host's budget, or meets an event that refuses, stops
+   * and the command is applied over a world that is still behind. A refusal
+   * would make the player press the button again, which loses the ordering this
+   * exists to keep. The player's own arrival instant, order identity and
+   * receipt are untouched -- what changes is what has happened before their
+   * handler runs, not when they arrived.
+   */
+  readonly ordering?: WorldOrdering;
+  /**
    * WHAT HAPPENS WHEN A SEAT ARRIVES OR LEAVES.
    *
    * Each hook names a SEATLESS action from this world's own list, so a
@@ -231,6 +261,18 @@ export function readWorldDefinition(definition: {
   }
   if (world.migration !== undefined) {
     assertWorldMigration(world.migration, world.stateVersion ?? 0);
+  }
+  if (world.ordering !== undefined && !WORLD_ORDERINGS.includes(world.ordering)) {
+    throw worldRefusal(
+      "bundle-not-a-world",
+      `This bundle's \`gameDefinition.world\` declares \`world.ordering: ` +
+        `${JSON.stringify(world.ordering)}\`, which is not an ordering a host runs. It is ` +
+        `${WORLD_ORDERINGS.map((one) => `"${one}"`).join(" or ")}: "arrival" lets a player's ` +
+        `command apply over whatever the host's budgeted drain reached, which is the default and ` +
+        `what every world did before this existed; "chronological" drains every event already ` +
+        `due at that player's arrival instant before their command runs. Leave it out for ` +
+        `"arrival".`,
+    );
   }
   if (typeof world.view !== "function") {
     throw worldRefusal(
@@ -453,6 +495,18 @@ function highestElementId(json: ElementJSON): number {
   }
   return highest;
 }
+
+/**
+ * When a player's command runs relative to the events already due (#380).
+ *
+ * A closed pair rather than a boolean, because "chronological" and "arrival"
+ * are both real answers a world can want and neither reads as the negation of
+ * the other.
+ */
+export type WorldOrdering = "arrival" | "chronological";
+
+/** The orderings a host runs, in one place, so the refusal can name them. */
+export const WORLD_ORDERINGS: readonly WorldOrdering[] = ["arrival", "chronological"];
 
 /** What a host must supply to build a world out of a bundle's definition. */
 export interface WorldRunnerOptions {

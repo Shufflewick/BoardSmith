@@ -1432,6 +1432,302 @@ describe('#218: partitions created on first use', () => {
  * `LocalWorldHost` and a real SQLite store, because the whole claim is about
  * what is durable afterwards.
  */
+/**
+ * ShufflewickPub #380: A WORLD MAY SAY ITS COMMANDS ARE CHRONOLOGICAL.
+ *
+ * The default is stated in ShufflewickPub's own PERSISTENT-WORLDS.md and it is
+ * deliberate: a frame drains on its way in, spends a BUDGET, and applies the
+ * player's command whether or not the queue emptied. Blocking every command on
+ * an arbitrarily long catch-up with the world lock held is the failure that
+ * budget exists to prevent, and most worlds do not care.
+ *
+ * A world with a real clock does. At hour T an NPC market event chooses an
+ * offer, creates its contract and schedules the NEXT decision -- which cannot
+ * declare its partitions until the earlier one has committed, because they are
+ * the contract it has not made yet. A player arriving while that chain is
+ * overdue overtook it, and the world produced a state no punctual one reaches.
+ * Pre-declaring every hypothetical contract is unbounded and wrong; running the
+ * chain inside the player's handler reaches roots the handler never declared;
+ * refusing forces manual retries.
+ *
+ * So the world SAYS SO -- `world.ordering: 'chronological'` -- and the host
+ * gates the command behind a bounded, yielding catch-up. The player's own
+ * arrival instant and order identity are untouched: what changes is what has
+ * happened before their handler runs, not when they arrived.
+ */
+describe('#380: a chronological world catches up before a player acts', () => {
+  /** Records the order handlers actually ran in, which is the whole claim. */
+  let ran: string[] = [];
+
+  beforeEach(() => {
+    ran = [];
+  });
+
+  /** A one-shot chain: each occurrence schedules the next, so the queue can
+   *  only be drained in nominal order and never predeclared. */
+  const tick = worldClockAction<Village>('tick')
+    .needs(() => [HEARTH])
+    .execute((_args, ctx) => {
+      const hearth = ctx.world.partition(HEARTH) as Hearth;
+      hearth.burns += 1;
+      ran.push(`tick@${ctx.world.timing?.due ?? 0}`);
+      if (hearth.burns < 3) ctx.world.schedule({ delayMs: 1_000, action: 'tick', args: {} });
+    });
+
+  /** Starts the chain. A player's verb, because only a command may schedule. */
+  const arm = worldAction<Village>('arm')
+    .needs(() => [HEARTH])
+    .execute((_args, ctx) => {
+      ctx.world.schedule({ delayMs: 1_000, action: 'tick', args: {} });
+    });
+
+  /** The player's verb. It records where in the chain it landed. */
+  const arrive = worldAction<Village>('arrive')
+    .needs(() => [HEARTH])
+    .execute((_args, ctx) => {
+      const hearth = ctx.world.partition(HEARTH) as Hearth;
+      hearth.logs += 1;
+      ran.push(`arrive@burns=${hearth.burns}`);
+    });
+
+  function timedWorld(overrides: Partial<WorldDefinition> = {}): WorldDefinition {
+    return worldBlock({
+      actions: [...VILLAGE_ACTIONS, tick, arm, arrive],
+      ...overrides,
+    });
+  }
+
+  it('runs every overdue event before the command, in nominal order', async () => {
+    const world = timedWorld({ ordering: 'chronological' });
+    const clock = testClock();
+    const opened = await attached({ dir, clock, definition: bundle({ world }) });
+
+    // Arm the chain, then let three beats fall due without draining.
+    await opened.host.handleMessage('c1', {
+      type: 'action',
+      order: nextOrder(),
+      requestId: 'arm',
+      action: 'arm',
+      args: {},
+    });
+    clock.advance(5_000);
+    ran = [];
+
+    await opened.host.handleMessage('c1', {
+      type: 'action',
+      order: nextOrder(),
+      requestId: 'r1',
+      action: 'arrive',
+      args: {},
+    });
+
+    // Every tick ran, in order, and the player's handler saw the world they
+    // left behind rather than the one they overtook.
+    expect(ran).toEqual([
+      expect.stringMatching(/^tick@/),
+      expect.stringMatching(/^tick@/),
+      expect.stringMatching(/^tick@/),
+      'arrive@burns=3',
+    ]);
+    await opened.host.close();
+  });
+
+  it('leaves an ARRIVAL world exactly as it was: the command overtakes', async () => {
+    // The default, unchanged, and pinned here so the gate is visibly opt-in.
+    const world = timedWorld();
+    const clock = testClock();
+    const opened = await attached({ dir, clock, definition: bundle({ world }) });
+    await opened.host.handleMessage('c1', {
+      type: 'action',
+      order: nextOrder(),
+      requestId: 'arm',
+      action: 'arm',
+      args: {},
+    });
+    clock.advance(5_000);
+    ran = [];
+
+    await opened.host.handleMessage('c1', {
+      type: 'action',
+      order: nextOrder(),
+      requestId: 'r1',
+      action: 'arrive',
+      args: {},
+    });
+
+    expect(ran[0]).toBe('arrive@burns=0');
+    await opened.host.close();
+  });
+
+  it('keeps the player\'s own arrival instant, not the catch-up\'s', async () => {
+    let sawNow = 0;
+    const stamped = worldAction<Village>('stamped')
+      .needs(() => [HEARTH])
+      .execute((_args, ctx) => {
+        sawNow = ctx.world.now;
+      });
+    const clock = testClock();
+    const opened = await attached({
+      dir,
+      clock,
+      definition: bundle({
+        world: timedWorld({ ordering: 'chronological', actions: [...VILLAGE_ACTIONS, tick, arm, arrive, stamped] }),
+      }),
+    });
+    await opened.host.handleMessage('c1', {
+      type: 'action',
+      order: nextOrder(),
+      requestId: 'arm',
+      action: 'arm',
+      args: {},
+    });
+    clock.advance(5_000);
+    const arrivedAt = clock.now();
+
+    await opened.host.handleMessage('c1', {
+      type: 'action',
+      order: nextOrder(),
+      requestId: 'r1',
+      action: 'stamped',
+      args: {},
+    });
+
+    // The catch-up ran at the ticks' OWN dues, all of them earlier than this.
+    expect(sawNow).toBe(arrivedAt);
+    await opened.host.close();
+  });
+
+  it('answers a REPLAYED order from its receipt without draining anything', async () => {
+    // An order the world already committed is answered from the receipt, and a
+    // receipt is not a reason to run the clock.
+    const world = timedWorld({ ordering: 'chronological' });
+    const clock = testClock();
+    const opened = await attached({ dir, clock, definition: bundle({ world }) });
+    const order = nextOrder();
+    await opened.host.handleMessage('c1', {
+      type: 'action',
+      order,
+      requestId: 'r1',
+      action: 'arrive',
+      args: {},
+    });
+    await opened.host.handleMessage('c1', {
+      type: 'action',
+      order: nextOrder(),
+      requestId: 'arm',
+      action: 'arm',
+      args: {},
+    });
+    clock.advance(5_000);
+    ran = [];
+
+    await opened.host.handleMessage('c1', { type: 'action', order, requestId: 'r2', action: 'arrive', args: {} });
+
+    expect(last(opened.sent, 'c1', 'world_response')).toMatchObject({ ok: true, replayed: true });
+    expect(ran).toEqual([]);
+    await opened.host.close();
+  });
+
+  it('applies the command anyway when the catch-up runs out of budget', async () => {
+    // Degradation by LATENCY, never refusal -- the same rule the drain has.
+    // A world that cannot be caught up inside its ceiling still answers, and
+    // says so, rather than making the player press the button again.
+    const clock = testClock();
+    const opened = await attached({
+      dir,
+      clock,
+      budgets: worldBudgets({ drainBatch: 1, catchUpRounds: 1 }),
+      definition: bundle({ world: timedWorld({ ordering: 'chronological' }) }),
+    });
+    await opened.host.handleMessage('c1', {
+      type: 'action',
+      order: nextOrder(),
+      requestId: 'arm',
+      action: 'arm',
+      args: {},
+    });
+    clock.advance(5_000);
+    ran = [];
+
+    await opened.host.handleMessage('c1', {
+      type: 'action',
+      order: nextOrder(),
+      requestId: 'r1',
+      action: 'arrive',
+      args: {},
+    });
+
+    expect(last(opened.sent, 'c1', 'world_response')).toMatchObject({ ok: true });
+    // One batch of one ran, and then the command was applied over a world that
+    // is still behind rather than being refused.
+    expect(ran).toEqual([expect.stringMatching(/^tick@/), 'arrive@burns=1']);
+    await opened.host.close();
+  });
+
+  it('stops catching up when a due event refuses, and still applies the command', async () => {
+    // A refused event stays queued and is said out loud; a catch-up that kept
+    // retrying it would spin forever on a world nobody can move.
+    const doomed = worldClockAction<Village>('doomed')
+      .needs(() => [HEARTH])
+      .execute(() => {
+        throw new Error('this event cannot run');
+      });
+    const armDoom = worldAction<Village>('arm-doom')
+      .needs(() => [HEARTH])
+      .execute((_args, ctx) => {
+        ctx.world.schedule({ delayMs: 1_000, action: 'doomed', args: {} });
+      });
+    const clock = testClock();
+    const opened = await attached({
+      dir,
+      clock,
+      definition: bundle({
+        world: timedWorld({
+          ordering: 'chronological',
+          actions: [...VILLAGE_ACTIONS, tick, arm, arrive, doomed, armDoom],
+        }),
+      }),
+    });
+    await opened.host.handleMessage('c1', {
+      type: 'action',
+      order: nextOrder(),
+      requestId: 'arm',
+      action: 'arm-doom',
+      args: {},
+    });
+    clock.advance(5_000);
+    ran = [];
+
+    await opened.host.handleMessage('c1', {
+      type: 'action',
+      order: nextOrder(),
+      requestId: 'r1',
+      action: 'arrive',
+      args: {},
+    });
+
+    expect(last(opened.sent, 'c1', 'world_response')).toMatchObject({ ok: true });
+    expect(ran).toEqual(['arrive@burns=0']);
+    // The event is still queued, and somebody was told.
+    expect(opened.store.pendingEvents()).toHaveLength(1);
+    await opened.host.close();
+  });
+
+  it('REFUSES a bundle whose world.ordering is not one this host runs', () => {
+    // At CONSTRUCTION, which is where every other unusable declaration is
+    // refused: an ordering nobody runs is wrong for every command this world
+    // will ever receive, so it is not a thing to discover on the first one.
+    expect(() =>
+      openHost({
+        dir,
+        definition: bundle({
+          world: timedWorld({ ordering: 'whenever' as unknown as 'arrival' }),
+        }),
+      }),
+    ).toThrow(/world\.ordering/);
+  });
+});
+
 describe('#379: a migration reads across roots, in one atomic step', () => {
   /**
    * A world of two rooms whose contents differ, so "read the other one" is a

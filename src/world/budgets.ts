@@ -136,6 +136,22 @@ export interface WorldBudgets {
    */
   readonly drainBatch: number;
   /**
+   * HOW MANY DRAIN BATCHES ONE PLAYER'S COMMAND MAY WAIT BEHIND
+   * (ShufflewickPub #380).
+   *
+   * Only a `world.ordering: 'chronological'` world reaches this. Its commands
+   * are gated behind the events already due at the player's arrival instant,
+   * and the queue is drained in `drainBatch`-sized batches with a yield between
+   * them -- so the host stays responsive and a defective handler that re-arms
+   * itself at zero delay makes a slow world rather than a wedged one.
+   *
+   * When the ceiling is reached with events still due, the command is applied
+   * ANYWAY, over a world that is still behind. Degradation by latency, never
+   * refusal: a refusal would make the player press the button again, which
+   * loses the ordering the gate exists to keep.
+   */
+  readonly catchUpRounds: number;
+  /**
    * HOW LONG A COMMITTED ORDER'S RECEIPT IS KEPT (#195).
    *
    * Every player command carries an order id, and a host records a receipt for
@@ -167,6 +183,10 @@ const BASE = {
   maxKeyedPendingPerPlayer: 64,
   catchUpMaxRealIterations: 4,
   drainBatch: 200,
+  // Eight batches of `drainBatch` is a long catch-up for one command to sit
+  // behind and a short one for a world that has been asleep for a week, which
+  // is the pair this number has to sit between.
+  catchUpRounds: 8,
   // Wide enough that no hand-written world reaches it by describing a real
   // place -- a room with 200 exits is not a room -- and narrow enough that a
   // selection over "everything in the world" is refused rather than paid for.
@@ -222,6 +242,7 @@ export function worldBudgets(overrides: WorldBudgetOverrides = {}): WorldBudgets
         "maxCandidatesPerSelection",
       ),
     ),
+    catchUpRounds: positive(overrides.catchUpRounds ?? BASE.catchUpRounds, "catchUpRounds"),
     catchUpMaxRealIterations: positive(
       overrides.catchUpMaxRealIterations ?? BASE.catchUpMaxRealIterations,
       "catchUpMaxRealIterations",
