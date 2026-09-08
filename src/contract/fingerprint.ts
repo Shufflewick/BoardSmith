@@ -772,7 +772,18 @@ async function computeWorldFixture(): Promise<{ view: unknown; offer: unknown }>
   // FOUR VERBS, ONE FOR EACH DECISION `offerOf` MAKES. See
   // `assertCoversWorldOffer` for what each is standing in for.
   const look = worldAction<any>('look')
-    .prompt('Look about you')
+    // THE PROMPT READS THE ACTIVITY WATERMARK (ShufflewickPub #383), which is
+    // what puts the field inside the payload hash. A stamp field is a TYPE, and
+    // a type moves neither fingerprint on its own -- see the KNOWN LIMIT above
+    // -- so a host that stopped sending `activity`, or an engine that stopped
+    // deriving `inactiveSince` from it, would change what every world prompt
+    // says with nothing to record it. Rendering it here is also the real use:
+    // "you have been away N days" is a sentence an OFFER has to be able to make.
+    .prompt(({ world }: any) =>
+      world.activity === null
+        ? 'Look about you'
+        : `Look about you (away ${world.now - world.activity.inactiveSince}ms)`,
+    )
     .needs(({ player }: any) => [holdingPartition(player.seat)])
     // ROUND TWO READS WHAT ROUND ONE LOADED, THROUGH THE INDEXED ACCESSOR
     // (ShufflewickPub#374). Before this the fixture's two-round shape was two
@@ -930,7 +941,15 @@ async function computeWorldFixture(): Promise<{ view: unknown; offer: unknown }>
  * the same reason the seed is: a fingerprint that read a clock would drift on
  * its own, and a fingerprint that drifts trains everyone to re-record it.
  */
-const OFFER_STAMP = { now: 1_700_000_000_000, presence: [1] as readonly number[] };
+const OFFER_STAMP = {
+  now: 1_700_000_000_000,
+  presence: [1] as readonly number[],
+  // The watching seat's durable idleness (ShufflewickPub #383). Fixed here so
+  // the fingerprint covers the field: a world's offer may render "you expire
+  // in N days", and a host that stopped sending this would change what every
+  // prompt says without changing any hash.
+  activity: { seat: 1, at: 1_699_000_000_000, since: 1_600_000_000_000 },
+};
 
 /** A cold-storage round trip, which is what a world's engine is really fed. */
 function throughStorage(json: unknown): unknown {

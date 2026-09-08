@@ -83,11 +83,15 @@ const STAMP = {
   // Nobody connected: the platform's presence stamp is derived from attached
   // sockets, and this suite attaches none (#144).
   presence: [],
+  // No history: this suite is not about the watermark, and the cases that are
+  // name their own (ShufflewickPub #383).
+  activity: { seat: 1, at: null, since: 1_700_000_000_000 },
 };
 
 const EVENT_STAMP = {
   allowance: { unkeyed: 0, keys: [], worldPending: 0 },
   presence: [],
+  activity: null,
 };
 
 const ROOM_ONE = "room:1";
@@ -1333,6 +1337,7 @@ describe("#57 — the clock a handler can trust is the platform's", () => {
         now: 1_700_000_000_000,
         allowance: { unkeyed: 0, keys: [], worldPending: 0 },
         presence: [],
+        activity: STAMP.activity,
       },
     );
     expect(result.events[0]!.payload).toEqual({
@@ -1367,6 +1372,7 @@ describe("#57 — the clock a handler can trust is the platform's", () => {
         now: 1_700_000_000_000,
         allowance: { unkeyed: 0, keys: [], worldPending: 0 },
         presence: [2, 1],
+        activity: STAMP.activity,
       },
     );
     expect(result.events[0]!.payload).toEqual({ online: [1, 2] });

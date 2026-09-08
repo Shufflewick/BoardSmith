@@ -69,6 +69,7 @@
  * isolate did not raise it.
  */
 import type {
+  SeatActivityStamp,
   StoredPartition,
   WorldPartitionSource,
   WorldActionOffer,
@@ -168,6 +169,20 @@ export interface WorldApplyRequest {
    *  `WorldCommandStamp.presence` for the full promise. It rides BOTH roads:
    *  a player's command and a due event alike may ask who is here. */
   readonly presence: readonly number[];
+  /**
+   * THE WATERMARK FOR THE SEAT THIS DISPATCH IS ABOUT (ShufflewickPub #383).
+   *
+   * `presence`'s durable counterpart, and it rides both roads too -- but the
+   * seat it names is different on each. On a player's road it is the acting
+   * seat. On the clock's it is the OWNER of the event, which is not the seat
+   * being charged for it: a due event's schedules are billed to the world,
+   * while the deadline it is checking belongs to a person. Null when the
+   * dispatch is about nobody.
+   *
+   * See `SeatActivity` for what a host may count as activity; the parent is
+   * the only thing that may answer, because the child can see no store.
+   */
+  readonly activity: SeatActivityStamp | null;
 }
 
 /**
@@ -624,10 +639,12 @@ export function createWorldRunner(
             now: request.arrivedAt,
             allowance: request.allowance,
             presence: request.presence,
+            activity: request.activity,
           })
         : engine.onEvent(request.command, request.timing, {
             allowance: request.allowance,
             presence: request.presence,
+            activity: request.activity,
           });
     },
   };

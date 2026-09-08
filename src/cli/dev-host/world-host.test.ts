@@ -23,6 +23,7 @@ import {
   type GameOptions,
   type GameElement,
   WORLD_PARTITION_ID_FLOOR,
+  PlayerFacingError,
 } from '../../engine/index.js';
 import {
   WorldRefusal,
@@ -113,7 +114,81 @@ const burn = worldClockAction<Village>('burn')
     ctx.world.emit(HEARTH, { burned: hearth.burns });
   });
 
+/**
+ * WHAT THE HOST STAMPED ON THE LAST DISPATCH (ShufflewickPub #383).
+ *
+ * `world.activity` is only readable from inside a handler, so the two verbs
+ * below copy it out here. A module-level box rather than an emitted payload
+ * because the clock's road narrates to nobody in particular and the assertion
+ * is about the stamp, not about the log.
+ */
+let seenActivity: unknown = 'never ran';
+
+/** A seat looking at its own idleness -- the road a "you expire in N days"
+ *  prompt travels. */
+const look = worldAction<Village>('look')
+  .prompt('Check how long you have been away')
+  .needs(() => [HEARTH])
+  .execute((_args, ctx) => {
+    seenActivity = ctx.world.activity;
+  });
+
+/** A seat's command the world REFUSES, which must not count as activity. */
+const overreach = worldAction<Village>('overreach')
+  .prompt('Ask for something the world will not give')
+  .needs(() => [HEARTH])
+  .execute(() => {
+    throw new PlayerFacingError('The village has nothing for you.');
+  });
+
+/** What both arming verbs do, written once: WHO arms the timer is the whole
+ *  difference between them, and a copy per verb would hide that. */
+const arms = (key: string, action: string, delayMs: number) => (_args: unknown, ctx: any) => {
+  ctx.world.schedule({ delayMs, key, action, args: {} });
+};
+
+/** A seat arming its own deadline: the event's OWNER is the acting seat, which
+ *  is what makes `reap` a recheck rather than a stranger's alarm. */
+const armReap = worldAction<Village>('arm-reap')
+  .prompt('Arm the reaper against yourself')
+  .needs(() => [HEARTH])
+  .execute(arms('reap', 'reap', 600_000));
+
+/** A seat asking the WORLD to set the alarm, so the alarm the reaper answers to
+ *  is owned by the world and not by the seat that started the chain. */
+const armSow = worldAction<Village>('arm-sow')
+  .prompt('Ask the world to set its own alarm')
+  .needs(() => [HEARTH])
+  .execute(arms('sow', 'sow', 300_000));
+
+/** The CLOCK arming the clock: an event scheduled from inside a seatless
+ *  handler is owned by the world, not by any player. */
+const sow = worldClockAction<Village>('sow')
+  .prompt('The world sets its own alarm')
+  .needs(() => [HEARTH])
+  .execute(arms('reap', 'reap', 600_000));
+
+/** The irreversible deadline, rechecking the watermark as it fires. */
+const reap = worldClockAction<Village>('reap')
+  .prompt('Take the empire of whoever stopped playing')
+  .needs(() => [HEARTH])
+  .execute((_args, ctx) => {
+    seenActivity = ctx.world.activity;
+  });
+
 const VILLAGE_ACTIONS: readonly ActionDefinition[] = [chop, bank, burn];
+
+/** The #383 verbs are their own bundle: adding them to the village would change
+ *  what every other case here sees this world answer to. */
+const ACTIVITY_ACTIONS: readonly ActionDefinition[] = [
+  chop,
+  look,
+  overreach,
+  armReap,
+  armSow,
+  sow,
+  reap,
+];
 
 function worldBlock(overrides: Partial<WorldDefinition> = {}): WorldDefinition {
   return {
@@ -2011,6 +2086,177 @@ describe('#223: lifting a world written before the construction-id floor', () =>
 
     const again = openHost({ dir, definition: bundle() });
     expect((await again.host.start()).lifted).toBeUndefined();
+    await again.host.close();
+  });
+});
+
+/**
+ * ShufflewickPub #383: THE HOST IS THE ONLY THING THAT MAY SAY WHEN A SEAT WAS
+ * LAST HERE.
+ *
+ * `world-store.test.ts` proves the watermark is durable and monotonic; this
+ * proves the host puts the right instant in it, hands the right seat's back
+ * down, and does neither of those on the roads that are not a player playing.
+ * Together they are the whole of the contract a gameplay inactivity deadline
+ * is allowed to be built on.
+ */
+describe('#383: a seat\'s activity, stamped by the host', () => {
+  const OPENED = 1_000_000;
+
+  /** The village, plus the verbs that read the stamp. Its own bundle so the
+   *  rest of this file still sees the world it was written against. */
+  function activityBundle() {
+    return bundle({ world: worldBlock({ actions: ACTIVITY_ACTIONS }) });
+  }
+
+  function opened(clock?: WorldDevClock) {
+    return attached({ dir, definition: activityBundle(), ...(clock === undefined ? {} : { clock }) });
+  }
+
+  beforeEach(() => {
+    seenActivity = 'never ran';
+  });
+
+  async function send(host: LocalWorldHost, action: string, clientId = 'c1') {
+    await host.handleMessage(clientId, {
+      type: 'action',
+      order: nextOrder(),
+      requestId: `r-${action}`,
+      action,
+      args: {},
+    });
+  }
+
+  async function look(host: LocalWorldHost, clientId = 'c1') {
+    await send(host, 'look', clientId);
+    return seenActivity as { seat: number; at: number | null; since: number; inactiveSince: number };
+  }
+
+  it('measures a seat nobody has seen from when the world started watching, not from 1970', async () => {
+    const { host } = await opened();
+
+    // The migration guarantee, end to end: an upgraded world reports its seats
+    // as idle since the upgrade, so the self-destruct does not run on everybody
+    // at once the first time the host wakes with this feature in it.
+    expect(await look(host)).toEqual({ seat: 1, at: null, since: OPENED, inactiveSince: OPENED });
+    await host.close();
+  });
+
+  it('hands a seat the watermark from BEFORE this command, so a prompt can say how long they were away', async () => {
+    const clock = testClock();
+    const { host } = await opened(clock);
+
+    await send(host, 'chop');
+    clock.advance(9 * 86_400_000);
+    const seen = await look(host);
+
+    // When they were last here, NOT "now" -- a command that reported its own
+    // arrival could never render "you were away nine days".
+    expect(seen.at).toBe(OPENED);
+    expect(seen.inactiveSince).toBe(OPENED);
+    await host.close();
+  });
+
+  it('does NOT count a command the world refused', async () => {
+    const clock = testClock();
+    const { host } = await opened(clock);
+
+    await send(host, 'chop');
+    clock.advance(5 * 86_400_000);
+    // A refusal is the world saying nothing happened. If it moved the
+    // watermark, any client could hold an empire open forever by sending
+    // garbage on a timer, and the deadline would be unreachable.
+    await send(host, 'overreach');
+
+    expect((await look(host)).at).toBe(OPENED);
+    await host.close();
+  });
+
+  it("keeps one seat's activity out of another's", async () => {
+    const clock = testClock();
+    const world = await opened(clock);
+    await world.host.handleMessage('c2', { type: 'hello' });
+
+    await send(world.host, 'chop', 'c1');
+    clock.advance(3 * 86_400_000);
+
+    expect((await look(world.host, 'c1')).at).toBe(OPENED);
+    expect((await look(world.host, 'c2')).at).toBeNull();
+    await world.host.close();
+  });
+
+  it("hands a seat-owned scheduled event THAT seat's watermark, so an irreversible deadline can be rechecked", async () => {
+    const clock = testClock();
+    const { host } = await opened(clock);
+
+    // Seat 1 arms the reaper against itself, then comes back before it fires.
+    await send(host, 'arm-reap');
+    clock.advance(300_000);
+    await send(host, 'chop');
+    const cameBack = clock.now();
+
+    clock.advance(300_001);
+    await host.handleMessage('c1', { type: 'fire_due' });
+
+    // The event is charged to the world and is ABOUT seat 1 -- so the handler
+    // sees the player returned, and can re-arm instead of reaping.
+    const seen = seenActivity as { seat: number; at: number | null };
+    expect(seen.seat).toBe(1);
+    expect(seen.at).toBe(cameBack);
+    await host.close();
+  });
+
+  it("hands the world's own scheduled event no seat at all", async () => {
+    const clock = testClock();
+    const { host } = await opened(clock);
+
+    // The chain: a seat asks the world to set an alarm, the world's handler
+    // sets it, and THAT event belongs to the world. There is no seat to be
+    // about, and the handler is told so rather than handed a plausible
+    // stranger -- a reaper that defaulted here would reap the wrong empire.
+    await send(host, 'arm-sow');
+    clock.advance(300_001);
+    await host.handleMessage('c1', { type: 'fire_due' });
+    clock.advance(600_001);
+    await host.handleMessage('c1', { type: 'fire_due' });
+
+    expect(seenActivity).toBeNull();
+    await host.close();
+  });
+
+  it('does not let a late drain age a player who is here now', async () => {
+    const clock = testClock();
+    const { host } = await opened(clock);
+
+    // A world that was down for a week drains its overdue events at their
+    // NOMINAL due, which is in the past. None of that is activity, and none of
+    // it may move a watermark backwards either.
+    await send(host, 'arm-reap');
+    clock.advance(20 * 86_400_000);
+    await send(host, 'chop');
+    const cameBack = clock.now();
+    await host.handleMessage('c1', { type: 'fire_due' });
+
+    expect((await look(host)).at).toBe(cameBack);
+    await host.close();
+  });
+
+  it('is still true after the host restarts, because hibernation is not a fresh start', async () => {
+    const clock = testClock();
+    const first = await opened(clock);
+    await send(first.host, 'chop');
+    await first.host.close();
+
+    // A new process over the same store, twenty days later. An idleness clock
+    // that restarted with the host would never reach a deadline at all.
+    const later = testClock();
+    later.advance(20 * 86_400_000);
+    const again = await opened(later);
+    const seen = await look(again.host);
+
+    expect(seen.since).toBe(OPENED);
+    expect(seen.at).toBe(OPENED);
+    expect(later.now() - seen.inactiveSince).toBe(20 * 86_400_000);
     await again.host.close();
   });
 });

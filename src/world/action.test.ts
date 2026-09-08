@@ -313,7 +313,7 @@ describe("the clock", () => {
     const result = await engine.onEvent(
       { name: "settleBurn", args: { holding: holdingPartition(1) } },
       { due: STAMP.now + 1000, missedCount: 0 },
-      { allowance: STAMP.allowance, presence: [] },
+      { allowance: STAMP.allowance, presence: [], activity: null },
     );
 
     expect(game.holdingOf(1).woodpile).toBe(0);
@@ -487,6 +487,7 @@ describe("who may issue what", () => {
       engine.onEvent({ name: "gather", args: {} }, { due: STAMP.now, missedCount: 0 }, {
         allowance: STAMP.allowance,
         presence: [],
+        activity: null,
       }),
     ).rejects.toThrow(/a due event has no player/);
   });

@@ -84,7 +84,7 @@ import type {
 import type { ConditionConfig, MultiSelectConfig } from "../engine/action/types.js";
 import type { WorldBudgets } from "./budgets.js";
 import type { ScheduleArm } from "./schedule-api.js";
-import type { WorldNarrationLine } from "./contract.js";
+import type { SeatActivity, WorldNarrationLine } from "./contract.js";
 // TYPE-ONLY, so the import is erased and the cycle with `engine.ts` is not one
 // at runtime. `WorldResidency` is declared beside the engine that answers it.
 import type { WorldDeclarationFacilities } from "./engine.js";
@@ -123,6 +123,20 @@ export interface WorldFacilities {
    * instant and never stored.
    */
   readonly presence: ReadonlySet<number>;
+  /**
+   * HOW LONG THE SEAT THIS DISPATCH BELONGS TO HAS BEEN SILENT (#383).
+   *
+   * The host's durable per-seat watermark, handed down the way `now` and
+   * `presence` are and for the same reason. Write a deadline against
+   * `world.now - world.activity.inactiveSince`; see `SeatActivity` for what
+   * counts as activity, why the value predates the command carrying it, and
+   * why `inactiveSince` rather than `at` is the field to subtract.
+   *
+   * NULL WHEN THERE IS NO SEAT TO BE ABOUT -- the world's own clock events.
+   * A handler that needs one says so by refusing on null rather than by
+   * defaulting, because a default here is somebody's empire.
+   */
+  readonly activity: SeatActivity | null;
   /** The resident root of a partition this step's declaration named. */
   partition(name: string): GameElement;
   /**
