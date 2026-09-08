@@ -115,6 +115,46 @@ export interface WorldMigration {
    * and nothing gives them back.
    */
   readonly create?: (game: Game, ctx: WorldMigrationCreateContext) => Record<string, GameElement>;
+  /**
+   * THE WHOLE WORLD, ONCE EVERY ROOT IS IN FRONT OF IT (ShufflewickPub #379).
+   *
+   * `partition` sees one root and `create` may only answer NEW names, so an
+   * upgrade whose shape is "this existing root's new value comes from THAT
+   * existing root" had nowhere to live. Writing it in `partition` meant hoping
+   * the other root had already been transformed, which is a bet on whatever
+   * order the store happened to list its keys in -- not a contract anybody can
+   * write against.
+   *
+   * So this runs LAST, with every root resident and none of them serialized
+   * yet: the ones the world already held, transformed by `partition`, and the
+   * ones `create` has just built. Read any of them by name, write to any of
+   * them, and the whole result lands in the one transaction the migration
+   * already was. Order-independent by construction, because there is no order
+   * left to depend on.
+   *
+   * It may not ADD roots -- that is `create`, and having one door for it is
+   * what makes "a name that is already taken" refusable -- and it may not
+   * remove one, for the reason `create` may not.
+   */
+  readonly finalize?: (game: Game, ctx: WorldMigrationFinalizeContext) => void;
+}
+
+/** What the `finalize` hook is given: the whole world, by name (#379). */
+export interface WorldMigrationFinalizeContext {
+  /**
+   * One root, live and mutable, by the name it is stored under.
+   *
+   * Every root this world holds is resident by the time `finalize` runs --
+   * the ones it already had, and the ones `create` just built -- so this
+   * always answers, and a name the world does not hold is a refusal rather
+   * than an `undefined` for the hook to branch on.
+   */
+  readonly partition: (name: string) => GameElement;
+  /** Every root this world holds, existing and newly created, sorted. */
+  readonly names: readonly string[];
+  /** The version being left, and the one being arrived at. */
+  readonly from: number;
+  readonly to: number;
 }
 
 /** What the `create` hook is told about the world it is adding roots to. */
@@ -240,6 +280,14 @@ export function assertWorldMigration(migration: unknown, stateVersion: number): 
       "This bundle's `world.migration.create` is not a function. It is handed the game and the " +
         "names the world already holds, and answers the NEW partition roots to add as " +
         "`name -> element`; leave it out for a version that adds none.",
+    );
+  }
+  if (candidate.finalize !== undefined && typeof candidate.finalize !== "function") {
+    throw worldRefusal(
+      "bundle-not-a-world",
+      "This bundle's `world.migration.finalize` is not a function. It is handed the game and an " +
+        "accessor for every root this world holds -- transformed and newly created alike -- and " +
+        "may write across them; leave it out for a version whose roots do not read one another.",
     );
   }
   if (candidate.event !== undefined && typeof candidate.event !== "function") {

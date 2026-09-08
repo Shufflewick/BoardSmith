@@ -80,7 +80,7 @@ import {
 import type {
   WorldCreatedPartition,
   WorldGenesis,
-  WorldMigrationCreated,
+  WorldMigrated,
 } from '../../world/runner.js';
 import type { PlannedEvent } from '../../world/schedule-api.js';
 import type { WorldBudgets } from '../../world/budgets.js';
@@ -305,7 +305,7 @@ export interface LocalWorldStore extends WorldPartitionStore, WorldPartitionWrit
      * hangs from -- which a transformed partition does not need, because its
      * row already records one.
      */
-    created: WorldMigrationCreated;
+    created: WorldMigrated;
     events: readonly PlannedEvent[];
     toStateVersion: number;
   }): void;

@@ -567,10 +567,16 @@ export function createWorld(options: WorldRunnerOptions): WorldRunner {
     engine,
     store,
     () => buildGenesis(game, world, engine),
-    // The bundle's own hook, or a world that adds no roots. The engine refuses
-    // a duplicate name and an unusable answer; what is decided here is only
-    // whether there is a hook at all.
-    (hookGame, ctx) => world.migration?.create?.(hookGame, ctx) ?? {},
+    // The bundle's own migration hooks, or a world that declares none. The
+    // engine refuses a duplicate name and an unusable answer; what is decided
+    // here is only which hooks exist at all.
+    {
+      ...(world.migration?.partition === undefined
+        ? {}
+        : { partition: world.migration.partition }),
+      ...(world.migration?.create === undefined ? {} : { create: world.migration.create }),
+      ...(world.migration?.finalize === undefined ? {} : { finalize: world.migration.finalize }),
+    },
   );
   return { runner, store, seatCount };
 }

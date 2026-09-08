@@ -138,6 +138,11 @@ export const WORLD_FIXTURE_COVERAGE: Record<(typeof WORLD_ENGINE_METHODS)[number
     + 'produces is ordinary partition bytes: `serializePartitions` is what writes them, and that '
     + 'is fingerprinted.',
 
+  migrateFinalize: 'The last phase of a world MOVING BETWEEN state versions (ShufflewickPub '
+    + '#379), which happens once, at startup, before any player is in it. It derives one root\'s '
+    + 'value from another\'s and what it produces is ordinary partition bytes: '
+    + '`serializePartitions` is what writes them, and that is fingerprinted.',
+
   createMigratedPartitions: 'The other half of a world MOVING BETWEEN state versions (#218), '
     + 'which happens once, at startup, before any player is in it. What it produces is an '
     + 'ordinary partition record, exactly as `genesis` does.',

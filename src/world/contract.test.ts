@@ -160,6 +160,11 @@ class ReferenceWorldEngine implements WorldEngine {
    * (ShufflewickPub #378). A conformance engine is asked to have the METHODS;
    * what a pick resolves to is a fact about a tree.
    */
+  /** The reference world holds no tree to derive one root from another in. */
+  migrateFinalize(): void {
+    throw new Error("the reference world holds no elements to finalize a migration over");
+  }
+
   pickPartitions(): readonly string[] {
     return [];
   }

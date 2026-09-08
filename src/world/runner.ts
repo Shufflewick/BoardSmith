@@ -78,7 +78,11 @@ import type {
   WorldOfferStamp,
 } from "./contract.js";
 import type { Game, GameElement } from "../engine/index.js";
-import type { WorldMigrationCreateContext } from "./migration.js";
+import type {
+  WorldMigrationContext,
+  WorldMigrationCreateContext,
+  WorldMigrationFinalizeContext,
+} from "./migration.js";
 import type { ScheduleAllowance } from "./schedule-api.js";
 import { WorldRefusal } from "./refusals.js";
 
@@ -114,9 +118,30 @@ export interface WorldCreatedPartition extends WorldAllocation {
   readonly partition: StoredPartition;
 }
 
-/** The roots a migration adds, and the stamp its transaction must carry. */
-export interface WorldMigrationCreated extends WorldAllocation {
+/**
+ * EVERYTHING ONE MIGRATION PRODUCED, for the host's single transaction (#379).
+ *
+ * `partitions` is every root the world already held, serialized after every
+ * hook has run; `created` is the roots this version adds, with the parent each
+ * hangs from; `nextElementId` is the allocation stamp those new roots were
+ * minted from (#377). All three land together or none of them does.
+ */
+export interface WorldMigrated extends WorldAllocation {
+  readonly partitions: Record<string, string>;
   readonly created: Record<string, StoredPartition>;
+}
+
+/**
+ * The bundle's own migration hooks, handed to the runner (#379).
+ *
+ * Supplied the way `buildGenesis` is, and for the same reason: the runner is
+ * handed the ENGINE rather than the game, and only `createWorld` holds both the
+ * game and the bundle's declaration.
+ */
+export interface WorldMigrationHooks {
+  readonly partition?: (element: GameElement, ctx: WorldMigrationContext) => void;
+  readonly create?: (game: Game, ctx: WorldMigrationCreateContext) => Record<string, GameElement>;
+  readonly finalize?: (game: Game, ctx: WorldMigrationFinalizeContext) => void;
 }
 
 /**
@@ -332,10 +357,7 @@ export function createWorldRunner(
    * runner is handed the ENGINE rather than the game, and only `createWorld`
    * holds both the game and the bundle's declaration.
    */
-  buildMigrationRoots: (
-    game: Game,
-    ctx: WorldMigrationCreateContext,
-  ) => Record<string, GameElement> = () => ({}),
+  migrationHooks: WorldMigrationHooks = {},
 ): WorldRunnerHandle {
   return {
     /**
@@ -383,26 +405,66 @@ export function createWorldRunner(
       return engine.serializePartitions(dirty);
     },
 
-    async migratePartition(
-      name: string,
-      stored: StoredPartition,
-      transform: (element: GameElement) => void,
-    ): Promise<string> {
-      await adopt(engine, store, { [name]: stored });
-      engine.migratePartition(name, transform);
-      const written = await engine.serializePartitions([name]);
-      return written[name] as string;
-    },
-
-    async migrateCreate(
-      existing: readonly string[],
+    async migrateAll(
+      stored: Readonly<Record<string, StoredPartition>>,
       ctx: { readonly from: number; readonly to: number },
-    ): Promise<WorldMigrationCreated> {
+    ): Promise<WorldMigrated> {
+      const existing = Object.keys(stored).sort();
+
+      // EVERY ROOT RESIDENT BEFORE ANY CALLBACK RUNS (ShufflewickPub #379).
+      // The host used to hydrate, transform and serialize each root as it
+      // reached it, so a hook could only ever see the one it was handed and
+      // anything derived across roots was a bet on key order.
+      await adopt(engine, store, stored);
+
+      // (1) PER ROOT. Each one is normalized on its own, and `finalize` below
+      // reads the results rather than the bytes.
+      for (const name of existing) {
+        engine.migratePartition(name, (element) => {
+          migrationHooks.partition?.(element, { name, ...ctx });
+        });
+      }
+
+      // (2) THE ROOTS THIS VERSION ADDS (#218). Their bytes are re-taken in (4);
+      // what this step establishes is the NAMES, their parents, and that none
+      // of them collides with a root the world already holds.
       const created = engine.createMigratedPartitions(
-        (game) => buildMigrationRoots(game, { ...ctx, existing }),
+        (game) => migrationHooks.create?.(game, { ...ctx, existing }) ?? {},
         existing,
       );
-      return { created, nextElementId: engine.nextElementId() };
+      const names = [...existing, ...Object.keys(created)].sort();
+
+      // (3) THE WHOLE WORLD, ONCE (#379). Old roots transformed, new roots
+      // built, nothing serialized -- the one phase that can derive an existing
+      // root's value from another root, in either direction.
+      if (migrationHooks.finalize !== undefined) {
+        engine.migrateFinalize((game, partition) => {
+          migrationHooks.finalize!(game, { partition, names, ...ctx });
+        });
+      }
+
+      // (4) AND ONLY THEN, BYTES. Taken after every callback, so a finalize
+      // that wrote to a root step (1) or (2) had already serialized is not a
+      // write the transaction loses.
+      const written = await engine.serializePartitions(names);
+      const partitions: Record<string, string> = Object.create(null) as Record<string, string>;
+      for (const name of existing) partitions[name] = written[name] as string;
+      const createdRecords: Record<string, StoredPartition> = Object.create(null) as Record<
+        string,
+        StoredPartition
+      >;
+      for (const [name, record] of Object.entries(created)) {
+        createdRecords[name] = {
+          parentId: record.parentId,
+          json: JSON.parse(written[name] as string) as StoredPartition["json"],
+        };
+      }
+
+      return {
+        partitions,
+        created: createdRecords,
+        nextElementId: engine.nextElementId(),
+      };
     },
 
     /**
@@ -609,32 +671,27 @@ export interface WorldRunnerHandle {
    * together, because a migration that landed halfway is a world whose rooms
    * disagree about which rules wrote them.
    */
-  migratePartition(
-    name: string,
-    stored: StoredPartition,
-    transform: (element: GameElement) => void,
-  ): Promise<string>;
-
   /**
-   * THE DURABLE PARTITION ROOTS THIS MIGRATION ADDS (#218).
+   * A MIGRATION, WHOLE (ShufflewickPub #379).
    *
-   * `migratePartition` transforms a root that exists; it cannot answer more
-   * roots and has nowhere to say what a new one hangs from, so a world that
-   * outgrew its genesis -- twelve empires becoming five hundred, one shared
-   * timeline becoming a region apiece -- had no expressible upgrade at all,
-   * because genesis runs once and never again.
+   * One call, replacing the per-root `migratePartition` and the trailing
+   * `migrateCreate`, and the shape is the point: every stored root is adopted
+   * BEFORE any hook runs, and nothing is serialized until every hook has
+   * finished. So `migration.finalize` can derive one existing root's value from
+   * another existing root's, in either direction, and the answer does not
+   * depend on the order the host happened to list its keys in.
    *
-   * `existing` is every name the world already holds; the bundle's hook filters
-   * against it, and a duplicate is refused by name rather than replacing a live
-   * partition's bytes with a fresh element.
-   *
-   * Nothing is written, for the reason `migratePartition` writes nothing: the
-   * caller lands these in the SAME transaction as the transformed partitions.
+   * `stored` is every partition the world holds, by name, read by the caller --
+   * only the host has the store's whole key set. Nothing is written here: the
+   * caller lands `partitions`, `created` and `nextElementId` in ONE transaction
+   * with the queued events and the new state version, because a migration that
+   * landed halfway is a world whose rooms disagree about which rules wrote them.
    */
-  migrateCreate(
-    existing: readonly string[],
+  migrateAll(
+    stored: Readonly<Record<string, StoredPartition>>,
     ctx: { readonly from: number; readonly to: number },
-  ): Promise<WorldMigrationCreated>;
+  ): Promise<WorldMigrated>;
+
 
   /**
    * A PARTITION ROOT THE STORE HAS NEVER HELD, built on demand (#218).

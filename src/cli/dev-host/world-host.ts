@@ -423,17 +423,23 @@ export class LocalWorldHost {
     if (plan.kind === 'refuse') throw plan.refusal;
 
     const { migration, from, to } = plan;
-    const existing = this.#store.partitionNames();
-    const partitions: Record<string, string> = {};
-    for (const name of existing) {
-      const stored = await this.#readPartition(
+
+    // EVERY STORED ROOT, READ BEFORE ANY OF IT IS TRANSFORMED (#379). Only the
+    // host has the store's whole key set, so the host reads and the runner
+    // adopts -- and it adopts ALL of them before running a single hook, which
+    // is what makes a derivation across roots independent of the order this
+    // list happens to arrive in.
+    const stored: Record<string, StoredPartition> = Object.create(null) as Record<
+      string,
+      StoredPartition
+    >;
+    for (const name of this.#store.partitionNames()) {
+      stored[name] = await this.#readPartition(
         name,
         `Migrating this world needs partition "${name}", which its store does not have.`,
       );
-      partitions[name] = await this.#world.runner.migratePartition(name, stored, (element) => {
-        migration.partition?.(element, { name, from, to });
-      });
     }
+
     // THE QUEUED EVENTS TOO. Their frozen arguments are as opaque to a host as
     // a partition's bytes, and mean exactly as much to the new handler.
     const events = this.#store
@@ -443,14 +449,18 @@ export class LocalWorldHost {
         args: migratedArgs(migration, { action: event.action, args: event.args }),
       }));
 
-    // AND THE ROOTS THIS VERSION ADDS (#218). Genesis runs once, so a world
-    // that outgrew it -- twelve empires becoming five hundred -- has only this
-    // door. Built AFTER every existing partition is transformed and BEFORE
-    // anything is written, so a hook that throws leaves the world on its old
-    // rules with its old roots, playable.
-    const created = await this.#world.runner.migrateCreate(existing, { from, to });
+    // ONE CALL: the per-root hooks, the roots this version adds (#218), the
+    // whole-world `finalize` (#379), and the bytes taken only after all of them
+    // have run. A hook that throws leaves the world on its old rules with its
+    // old roots, playable, because nothing below has happened yet.
+    const migrated = await this.#world.runner.migrateAll(stored, { from, to });
 
-    this.#store.migrate({ partitions, created, events, toStateVersion: to });
+    this.#store.migrate({
+      partitions: migrated.partitions,
+      created: migrated,
+      events,
+      toStateVersion: to,
+    });
     // THE RESIDENT TREE GOES WITH THE OLD BYTES. It was hydrated from them one
     // partition at a time to be transformed, which is not the state any command
     // should run against; the next one rebuilds from what was just written.
@@ -461,8 +471,8 @@ export class LocalWorldHost {
     return {
       from,
       to,
-      partitions: Object.keys(partitions).length,
-      created: Object.keys(created.created).length,
+      partitions: Object.keys(migrated.partitions).length,
+      created: Object.keys(migrated.created).length,
       events: events.length,
     };
   }

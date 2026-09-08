@@ -747,6 +747,18 @@ export interface WorldEngine {
   migratePartition(name: string, transform: (element: GameElement) => void): void;
 
   /**
+   * THE MIGRATION'S LAST PHASE, over every root at once (ShufflewickPub #379).
+   *
+   * `migratePartition` transforms one root and `createMigratedPartitions` only
+   * answers new ones, so an existing root whose new value is derived from
+   * ANOTHER existing root had nowhere to be written -- and doing it in the
+   * per-root hook made the result a function of the order a host happened to
+   * list its keys in. This runs once, with every root resident and nothing yet
+   * serialized, so the derivation is order-independent by construction.
+   */
+  migrateFinalize(run: (game: Game, partition: (name: string) => GameElement) => void): void;
+
+  /**
    * BUILD A PARTITION ROOT THE STORE HAS NEVER HELD (#218).
    *
    * Genesis runs once, so until this every root a world would ever need had to
@@ -934,6 +946,7 @@ export const WORLD_ENGINE_METHODS = Object.keys({
   evict: null,
   hydrate: null,
   offerPartitions: null,
+  migrateFinalize: null,
   migratePartition: null,
   nextElementId: null,
   pickPartitions: null,

@@ -31,7 +31,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { Game, Piece, Player, Space } from "../engine/index.js";
-import type { ElementJSON, GameOptions } from "../engine/index.js";
+import type { ActionDefinition, ElementJSON, GameOptions } from "../engine/index.js";
 import { BoardSmithWorldEngine } from "./engine.js";
 import { worldAction } from "./action.js";
 import type { StoredPartition, WorldPartitionSource } from "./contract.js";
@@ -256,7 +256,7 @@ describe("#384 — an offer cannot write to the world it is describing", () => {
     })
     .execute(() => {});
 
-  async function engineFor(action: ReturnType<typeof worldAction>) {
+  async function engineFor(action: ActionDefinition) {
     const engine = new BoardSmithWorldEngine({
       game: newGame(),
       seats: new Map([["player-a", 1]]),

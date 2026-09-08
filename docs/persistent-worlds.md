@@ -1187,6 +1187,43 @@ the transformed ones, so the whole upgrade is still one durable step.
 A migration may not REMOVE a root. Deleting a season's stored bytes on a hook
 whose failure mode is a typo is not something anything gives back.
 
+**And `finalize`, for a root that is derived from ANOTHER root**
+(ShufflewickPub #379). `partition` sees one root at a time and `create` may only
+answer NEW names, so the commonest shape a real occupied upgrade has -- "this
+existing root's new value comes from that existing root" -- had nowhere to live.
+Writing it in `partition` meant hoping the other root had already been
+transformed, which is a bet on whatever order the store happened to list its
+keys in.
+
+```ts
+migration: {
+  from: 1,
+  partition: (element) => { normalize(element); },
+  create: (game, { existing }) => addedRoots(game, existing),
+  finalize: (game, { partition, names }) => {
+    // Every root is resident here -- transformed and newly created alike --
+    // and NONE of them has been serialized yet.
+    const sectors = partition('sectors:public');
+    for (const name of names.filter(isEmpire)) {
+      sectors.record(partition(name));
+    }
+  },
+}
+```
+
+The phases run in that order and the order is the contract: every stored root is
+adopted **before any hook runs**, `partition` normalizes each one, `create`
+builds the roots this version adds, `finalize` reads and writes across all of
+them, and only then is anything serialized. So a derivation is
+order-independent by construction -- there is no key order left to depend on --
+and a `finalize` that writes to a root an earlier phase touched is not a write
+the transaction loses.
+
+`finalize` may not add a root (that is `create`, and one door for it is what
+makes a name-collision refusable) or remove one. `ctx.partition(name)` answers
+the live element for any root the world holds and refuses a name it does not,
+because during a migration every root **is** resident.
+
 **Changing `world.maxPlayers` across an upgrade needs no separate roster
 migration.** The roster is the host's, not the bundle's: `maxPlayers` is read
 from the compiled rules at construction and bounds who may sit down, so raising
@@ -1216,8 +1253,9 @@ above the floor pays one comparison.
 schedule would be arming timers against a world whose own timers are mid-
 transformation, and one that could act would be a command no seat sent.
 
-**All of it, or none of it.** Every transformed partition, every queued event's
-new arguments, and the version they are now written under commit together. A
+**All of it, or none of it.** Every transformed partition, every root the
+upgrade added, every queued event's new arguments, and the version they are now
+written under commit together. A
 migration that landed halfway is a world whose rooms disagree about which rules
 wrote them, and unlike a checkpoint there is no retry that could finish it --
 the second attempt would read bytes the first had already moved. `boardsmith
@@ -1299,7 +1337,7 @@ thing next time.
 
 | Code | What happened |
 | --- | --- |
-| `bundle-not-a-world` | The manifest declares `"backend": "world"` and the compiled rules export no `world.actions`, no `world.view`, no `world.maxPlayers`, a `world.maxPlayers` the host will not seat, a `world.stateVersion` that is not a whole number from 0 up, or a `world.migration` that is not usable (no `from`, a `from` at or past this version, or a hook -- `partition`, `event` or `create` -- that is not a function). |
+| `bundle-not-a-world` | The manifest declares `"backend": "world"` and the compiled rules export no `world.actions`, no `world.view`, no `world.maxPlayers`, a `world.maxPlayers` the host will not seat, a `world.stateVersion` that is not a whole number from 0 up, or a `world.migration` that is not usable (no `from`, a `from` at or past this version, or a hook -- `partition`, `event`, `create` or `finalize` -- that is not a function). |
 | `world-migration-unavailable` | A world's recorded `stateVersion` and its bundle's differ, and no migration in that bundle can cross the gap: none declared, one declared from a different version, or a bundle older than the world. Also a `create` hook whose answer is not `name -> element`, or that names a partition the world already holds. The world is not changed. |
 | `invalid-world-action` | A world action the platform cannot offer or cannot bound: an action not built with `worldAction()`, an unbounded `from`/`filter`/`elementClass` element form, an element selection with no `elements:`, a candidate outside what the step declared, a selection past `maxCandidatesPerSelection`, a dependent or repeating selection, a seatless action that asks a question, or a round declared before a step the action does not have. |
 | `not-in-a-world` | An action built with `worldAction()` reached `ctx.world` with no world running it -- registered on a table, or reached after the dispatch that bound its facilities finished. |

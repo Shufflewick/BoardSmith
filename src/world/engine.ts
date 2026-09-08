@@ -498,6 +498,24 @@ export class BoardSmithWorldEngine implements WorldEngine {
   }
 
   /**
+   * THE WHOLE MIGRATION'S LAST PHASE, with every root in front of it (#379).
+   *
+   * `migratePartition` sees one root and `createMigratedPartitions` may only
+   * ANSWER roots, so an upgrade whose shape is "this existing root's new value
+   * comes from that existing root" had nowhere to live -- writing it in the
+   * per-root hook was a bet on whatever order the host listed its keys in.
+   *
+   * By the time this runs every root is resident and none is serialized, so
+   * `partition` answers the live element for any of them, transformed and newly
+   * created alike, and the caller serializes afterwards. A name this engine does
+   * not hold is the `partition-not-resident` refusal `rootOf` already raises,
+   * which is the right sentence: during a migration, every root IS resident.
+   */
+  migrateFinalize(run: (game: Game, partition: (name: string) => GameElement) => void): void {
+    run(this.game, (name) => this.rootOf(name));
+  }
+
+  /**
    * BUILD A PARTITION ROOT THE STORE HAS NEVER HELD (#218).
    *
    * Genesis runs once. Every root a world would ever need therefore had to

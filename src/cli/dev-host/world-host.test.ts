@@ -33,6 +33,7 @@ import {
   type StoredPartition,
   type WorldDefinition,
   type WorldActionOffer,
+  type WorldMigration,
 } from '../../world/index.js';
 import { openWorldStore, worldStorePath, type LocalWorldStore } from './world-store.js';
 import type { WorldDevClock } from './node-world-clock.js';
@@ -1411,6 +1412,219 @@ describe('#218: partitions created on first use', () => {
  * behind. A fixture built through the current one would carry the floor and
  * miss the whole case, which is the mistake #218's own widening test made.
  */
+/**
+ * ShufflewickPub #379: A MIGRATION IS ONE TRANSACTION, NOT A WALK IN KEY ORDER.
+ *
+ * #200 transforms one root at a time and #218 adds new ones afterwards, and
+ * neither can express the shape a real occupied upgrade has: an EXISTING root
+ * whose new value is derived from ANOTHER existing root. The host hydrated,
+ * transformed and serialized each root as it reached it, so a `partition` hook
+ * could only see the one it was handed -- and the `create` hook, which runs
+ * last, may only answer NEW names, so updating an earlier root from there
+ * changed nothing the transaction had already collected.
+ *
+ * Depending on whatever order `partitionNames()` happened to return is not a
+ * migration contract. So every root is resident before ANY callback runs, and
+ * nothing is serialized until every one of them has finished: `finalize` is the
+ * phase that can read the whole world and write across it.
+ *
+ * The cases below are the issue's own acceptance regression, over the real
+ * `LocalWorldHost` and a real SQLite store, because the whole claim is about
+ * what is durable afterwards.
+ */
+describe('#379: a migration reads across roots, in one atomic step', () => {
+  /**
+   * A world of two rooms whose contents differ, so "read the other one" is a
+   * distinguishable claim. `logs` is the value; `burns` is where a derived one
+   * is written, because it starts at zero everywhere.
+   */
+  function twoRooms(order: readonly string[]): WorldDefinition {
+    return worldBlock({
+      genesis: (game) =>
+        Object.fromEntries(
+          order.map((name, index) => {
+            const room = game.create(Hearth, name) as Hearth;
+            room.logs = index + 1;
+            return [name, room as GameElement];
+          }),
+        ),
+      view: () => [...order],
+    });
+  }
+
+  /**
+   * The upgrade: `north` takes its burn count from what `south` has stored, a
+   * new `tally` root takes the sum of both, and none of it may depend on which
+   * room the store happens to list first.
+   */
+  function derivingUpgrade(overrides: Partial<WorldMigration> = {}): WorldDefinition {
+    return worldBlock({
+      stateVersion: 1,
+      genesis: (game) =>
+        Object.fromEntries(
+          ['north', 'south'].map((name) => [name, game.create(Hearth, name) as GameElement]),
+        ),
+      view: () => ['north', 'south'],
+      migration: {
+        from: 0,
+        create: (game, ctx) =>
+          ctx.existing.includes('tally')
+            ? {}
+            : { tally: game.create(Hearth, 'tally') as GameElement },
+        finalize: (_game, ctx) => {
+          const north = ctx.partition('north') as Hearth;
+          const south = ctx.partition('south') as Hearth;
+          // AN EXISTING ROOT, DERIVED FROM ANOTHER EXISTING ROOT.
+          north.burns = south.logs;
+          // AND A NEW ROOT, derived from both, in the same phase.
+          (ctx.partition('tally') as Hearth).logs = north.logs + south.logs;
+        },
+        ...overrides,
+      },
+    } as Partial<WorldDefinition>);
+  }
+
+  /** A launched, unplayed world holding those two rooms in that order. */
+  async function aWorldOf(order: readonly string[]): Promise<void> {
+    const opened = openHost({ dir, definition: bundle({ world: twoRooms(order) }) });
+    await opened.host.start();
+    await opened.host.close();
+  }
+
+  async function burnsAndTally(): Promise<{ burns: unknown; tally: unknown }> {
+    const store = openWorldStore(worldStorePath(dir), worldBudgets());
+    try {
+      const north = JSON.parse(JSON.stringify(await store.read('north'))) as {
+        json: { attributes: { burns: number } };
+      };
+      const tally = JSON.parse(JSON.stringify(await store.read('tally'))) as {
+        json: { attributes: { logs: number } };
+      };
+      return { burns: north.json.attributes.burns, tally: tally.json.attributes.logs };
+    } finally {
+      store.close();
+    }
+  }
+
+  it('derives an existing root from another existing root, and a new one from both', async () => {
+    await aWorldOf(['north', 'south']);
+
+    const opened = openHost({ dir, definition: bundle({ world: derivingUpgrade() }) });
+    await opened.host.start();
+    await opened.host.close();
+
+    // south.logs is 2, so north.burns is 2; the tally is 1 + 2.
+    expect(await burnsAndTally()).toEqual({ burns: 2, tally: 3 });
+  });
+
+  it('answers the same whichever order the store lists its roots in', async () => {
+    // The whole point: `partitionNames()` order is a storage accident, and a
+    // migration contract may not be a function of one.
+    await aWorldOf(['south', 'north']);
+
+    const opened = openHost({ dir, definition: bundle({ world: derivingUpgrade() }) });
+    await opened.host.start();
+    await opened.host.close();
+
+    // south was created first here, so its logs are 1 and north's are 2.
+    expect(await burnsAndTally()).toEqual({ burns: 1, tally: 3 });
+  });
+
+  it('still runs the per-root hook first, so finalize reads TRANSFORMED bytes', async () => {
+    // The ordering that IS a contract: `partition` normalizes each root, and
+    // `finalize` derives across the results. A finalize that saw pre-transform
+    // values would make the per-root hook useless to it.
+    await aWorldOf(['north', 'south']);
+
+    const opened = openHost({
+      dir,
+      definition: bundle({
+        world: derivingUpgrade({
+          partition: (element) => {
+            (element as Hearth).logs *= 10;
+          },
+        }),
+      }),
+    });
+    await opened.host.start();
+    await opened.host.close();
+
+    expect(await burnsAndTally()).toEqual({ burns: 20, tally: 30 });
+  });
+
+  it('leaves EVERY original byte and the version alone when finalize throws', async () => {
+    await aWorldOf(['north', 'south']);
+    const before = await (async () => {
+      const store = openWorldStore(worldStorePath(dir), worldBudgets());
+      try {
+        return {
+          north: JSON.stringify(await store.read('north')),
+          south: JSON.stringify(await store.read('south')),
+          names: [...store.partitionNames()].sort(),
+          version: store.stateVersion(),
+        };
+      } finally {
+        store.close();
+      }
+    })();
+
+    const opened = openHost({
+      dir,
+      definition: bundle({
+        world: derivingUpgrade({
+          finalize: () => {
+            throw new Error('the region table is not ready');
+          },
+        }),
+      }),
+    });
+    await expect(opened.host.start()).rejects.toThrow(/region table is not ready/);
+    await opened.host.close();
+
+    const store = openWorldStore(worldStorePath(dir), worldBudgets());
+    try {
+      expect(JSON.stringify(await store.read('north'))).toBe(before.north);
+      expect(JSON.stringify(await store.read('south'))).toBe(before.south);
+      // NOT EVEN THE NEW ROOT: `create` ran and its element was built, and none
+      // of it is durable, because nothing is written until finalize returns.
+      expect([...store.partitionNames()].sort()).toEqual(before.names);
+      expect(store.stateVersion()).toBe(before.version);
+    } finally {
+      store.close();
+    }
+  });
+
+  it('is idempotent across a second start, because there is nothing left to do', async () => {
+    await aWorldOf(['north', 'south']);
+    const first = openHost({ dir, definition: bundle({ world: derivingUpgrade() }) });
+    await first.host.start();
+    await first.host.close();
+
+    const again = openHost({ dir, definition: bundle({ world: derivingUpgrade() }) });
+    expect((await again.host.start()).migrated).toBeUndefined();
+    await again.host.close();
+
+    expect(await burnsAndTally()).toEqual({ burns: 2, tally: 3 });
+  });
+
+  it('REFUSES a finalize that reaches for a root this world does not hold', async () => {
+    await aWorldOf(['north', 'south']);
+
+    const opened = openHost({
+      dir,
+      definition: bundle({
+        world: derivingUpgrade({
+          finalize: (_game, ctx) => {
+            ctx.partition('nosuchroom');
+          },
+        }),
+      }),
+    });
+    await expect(opened.host.start()).rejects.toThrow(/nosuchroom/);
+    await opened.host.close();
+  });
+});
+
 describe('#223: lifting a world written before the construction-id floor', () => {
   /** The bytes the OLD SDK left: a hearth at id 14, holding a reference to a
    *  log at 15, exactly as a world serializes one (`{ __elementId }`). */
