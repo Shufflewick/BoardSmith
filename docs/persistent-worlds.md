@@ -1251,6 +1251,41 @@ An arm and a cancel ride home on **one ordered list**, in the order your handler
 wrote them: cancel-then-arm under one key leaves a timer, arm-then-cancel leaves
 none.
 
+## Platform credits: declared, and not yet implemented
+
+```ts
+ctx.world.convertCredits({ credits: 100 }); // always refuses, today
+```
+
+A game that wants to sell its own currency for platform credits needs a
+**boundary** from the platform, not a helper. Four promises live on the
+platform's side of it and can live nowhere else: the game must not run
+checkout, must not see payment credentials, must not believe a browser about a
+debit, and must not be able to grant a paid reward twice.
+
+**This is not implemented.** ShufflewickPub has no currency system yet, and the
+exchange rate, the amount bounds, the quantum and the reversal policy are all
+undecided. Every call refuses, with `credit-conversion-unavailable`, and the
+message says plainly that nothing was charged and nothing was granted. The
+command unwinds, so the world is exactly as it was.
+
+It ships as a **declared hole** rather than as nothing at all, because those are
+not the same for an author. Reaching for this and finding a named boundary that
+says "the platform is not ready" costs a day. Reaching for it and finding
+nothing means writing a payment system into a board game, which is not
+recoverable by the time anybody notices.
+
+The signature commits to two things and guesses nothing else:
+
+- **Credits are whole numbers.** No game ships arithmetic that assumes
+  fractions, and no rounding rule has to be invented later to rescue one.
+- **Conversion is one-way.** A game buys its currency with credits and never
+  sells it back. There is deliberately no method that could.
+
+The amount of game currency is absent from the request on purpose. It is the
+platform's answer, from a configured rate — a game that named it would be
+setting its own exchange rate from inside the isolate that benefits.
+
 ## Ending a season
 
 `ctx.world.complete()` declares this season over. It takes no argument, so it cannot
