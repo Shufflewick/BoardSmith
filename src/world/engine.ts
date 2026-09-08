@@ -87,6 +87,8 @@ import {
   type WorldNeedsRound,
 } from "./action.js";
 import type {
+  SeatActivity,
+  SeatActivityStamp,
   WorldActionOffer,
   WorldCommand,
   WorldCommandResult,
@@ -330,6 +332,19 @@ export interface BoardSmithWorldEngineOptions {
    * exactly the collision #377 records.
    */
   readonly nextElementId?: number;
+}
+
+/**
+ * THE FALLBACK, APPLIED ONCE (ShufflewickPub #383).
+ *
+ * `SeatActivity.inactiveSince` is `at ?? since`, and this is the only place
+ * that computes it -- so no host can hand down a fourth number inconsistent
+ * with the three it came from, and no game has to remember which field is the
+ * safe one to subtract.
+ */
+function seatActivity(stamp: SeatActivityStamp | null): SeatActivity | null {
+  if (stamp === null) return null;
+  return { ...stamp, inactiveSince: stamp.at ?? stamp.since };
 }
 
 export class BoardSmithWorldEngine implements WorldEngine {
@@ -645,6 +660,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
       owner: player,
       allowance: stamp.allowance,
       presence: stamp.presence,
+      activity: stamp.activity,
     });
   }
 
@@ -670,6 +686,12 @@ export class BoardSmithWorldEngine implements WorldEngine {
       owner: WORLD_OWNER,
       allowance: stamp.allowance,
       presence: stamp.presence,
+      // THE CHARGE OWNER AND THE SUBJECT ARE DIFFERENT SEATS (#383). This
+      // event's schedules are billed to the world, because a due event has no
+      // acting player; the watermark it is handed is the OWNER's, because the
+      // deadline is about them. Collapsing the two would either bill a seat for
+      // the clock's work or hand a reaper somebody else's idleness.
+      activity: stamp.activity,
     });
   }
 
@@ -1273,6 +1295,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
       now: stamp.now,
       timing: null,
       presence: new Set(stamp.presence),
+      activity: seatActivity(stamp.activity),
       partition: (name: string) => {
         assertDeclared(action, name, named);
         // READ-ONLY, AND NOT BY PROMISE (ShufflewickPub #384). This accessor
@@ -1464,6 +1487,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
       owner: string;
       allowance: ScheduleAllowance;
       presence: readonly number[];
+      activity: SeatActivityStamp | null;
     },
   ): Promise<WorldCommandResult> {
     const definition = this.actionFor(command.name, seat);
@@ -1673,7 +1697,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
     action: string,
     named: readonly string[],
     timing: { readonly due: number; readonly missedCount: number } | null,
-    charge: { now: number; presence: readonly number[] },
+    charge: { now: number; presence: readonly number[]; activity: SeatActivityStamp | null },
     budget: ReturnType<typeof scheduleBudget>,
     ledger: DispatchLedger,
   ): WorldFacilities {
@@ -1688,6 +1712,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
       // membership rather than scanning -- and so nothing an action does to it
       // can outlive this dispatch (#144).
       presence: new Set(charge.presence),
+      activity: seatActivity(charge.activity),
       partition: (name: string) => {
         const undeclared = declaredRefusal(action, name, named);
         if (undeclared !== null) raise(undeclared);

@@ -29,6 +29,9 @@ const STAMP = {
   // Nobody connected: the platform's presence stamp is derived from attached
   // sockets, and this suite attaches none (#144).
   presence: [],
+  /** Nobody has acted here before, and this world began watching at `now`
+   *  (#383). The cases that are ABOUT a watermark name their own. */
+  activity: { seat: 1, at: null, since: 1_700_000_000_000 },
 };
 
 const CONFORMANCE_PLAYERS = ["player-a", "player-b"] as const;
@@ -197,7 +200,12 @@ export function assertWorldEngineConformance(makeEngine: WorldEngineFactory): vo
       await engine.hydrate(needs);
     }
 
-    const offers = await engine.offersFor(alice, { now: STAMP.now, presence: [] });
+    const offers = await engine.offersFor(alice, {
+      now: STAMP.now,
+      presence: [],
+      activity: STAMP.activity,
+      activity: STAMP.activity,
+    });
     expect(offers.length).toBeGreaterThan(0);
     // SORTED BY NAME, so a client renders the same list twice: registration
     // order is an implementation detail of whichever list the bundle wrote.
@@ -252,12 +260,12 @@ export function assertWorldEngineConformance(makeEngine: WorldEngineFactory): vo
     const early = await engine.onEvent(
       { name: "tick", args: {} },
       { due: 1_000, missedCount: 0 },
-      { allowance: { unkeyed: 0, keys: [], worldPending: 0 }, presence: [] },
+      { allowance: { unkeyed: 0, keys: [], worldPending: 0 }, presence: [], activity: null },
     );
     const late = await engine.onEvent(
       { name: "tick", args: {} },
       { due: 1_000, missedCount: 0 },
-      { allowance: { unkeyed: 0, keys: [], worldPending: 0 }, presence: [] },
+      { allowance: { unkeyed: 0, keys: [], worldPending: 0 }, presence: [], activity: null },
     );
 
     expect(late.events).toEqual(early.events);
@@ -279,6 +287,7 @@ export function assertWorldEngineConformance(makeEngine: WorldEngineFactory): vo
     const eventStamp = {
       allowance: { unkeyed: 0, keys: [], worldPending: 0 },
       presence: [],
+      activity: STAMP.activity,
     };
     // Two FRESH worlds, so the only difference between the two answers is the
     // catch-up itself and not the order the suite drove them in.

@@ -115,7 +115,12 @@ class Store implements WorldPartitionSource {
   forget(): void {}
 }
 
-const STAMP = { now: 1_700_000_000_000, presence: [1, 2] as readonly number[] };
+const STAMP = {
+  now: 1_700_000_000_000,
+  presence: [1, 2] as readonly number[],
+  // No history; the cases that are about a watermark name their own (#383).
+  activity: { seat: 1, at: null, since: 1_700_000_000_000 },
+};
 
 function newEngine(): BoardSmithWorldEngine {
   return new BoardSmithWorldEngine({

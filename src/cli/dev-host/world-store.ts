@@ -71,7 +71,11 @@ import { existsSync, mkdirSync, rmSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 
-import type { StoredPartition, WorldPartitionStore } from '../../world/contract.js';
+import type {
+  SeatActivityStamp,
+  StoredPartition,
+  WorldPartitionStore,
+} from '../../world/contract.js';
 import {
   assertPartitionWithinBudget,
   assertStorablePartitionName,
@@ -254,6 +258,29 @@ export interface LocalWorldStore extends WorldPartitionStore, WorldPartitionWrit
   seat(player: string, seat: number): void;
 
   /**
+   * WHEN THIS WORLD BEGAN WATCHING (ShufflewickPub #383), fixing it on the
+   * first call and answering the same instant forever after.
+   *
+   * Called once when a host opens the world, BEFORE any command runs, because
+   * a seat's idleness is measured from here and `activityOf` refuses rather
+   * than invent an epoch. Taking `openedAt` rather than reading a clock keeps
+   * the store testable and keeps the host the only thing that knows what time
+   * it is -- the same split `advanceClock` already makes.
+   */
+  activitySince(openedAt: number): number;
+
+  /**
+   * THIS SEAT'S DURABLE ACTIVITY WATERMARK (ShufflewickPub #383).
+   *
+   * A POINT READ, per seat, which is the whole reason it is a table and not a
+   * scan: a five-hundred-seat world answering "is this empire idle" must not
+   * read four hundred and ninety-nine other empires to do it. Answers for any
+   * seat, including one that has never acted -- `at: null` -- so a caller never
+   * has to distinguish "no row" from "no activity".
+   */
+  activityOf(seat: number): SeatActivityStamp;
+
+  /**
    * THE STATE VERSION THIS WORLD'S BYTES WERE LAST WRITTEN UNDER (#200).
    *
    * Zero for a world that has never recorded one, which is the same default
@@ -418,6 +445,21 @@ interface WorldCheckpointExtras {
    * honestly that nothing can say what became of it.
    */
   readonly receiptFloorAt?: number;
+  /**
+   * THIS SEAT WAS HERE, AND THE WORLD ACCEPTED WHAT THEY DID (#383).
+   *
+   * In the same transaction as the effects, for the reason the receipt is:
+   * "the world changed" and "this player is the one who changed it" have to
+   * become true together. A watermark moved outside the checkpoint would keep
+   * a seat alive on the strength of a command that was rolled back -- and,
+   * worse, moved BEFORE it would let any client hold an empire open by sending
+   * refusable garbage on a timer, which is an inactivity deadline that nothing
+   * can ever reach.
+   *
+   * Absent on the roads that are not a seat acting: a drained event, a
+   * presence hook, a migration.
+   */
+  readonly activity?: { readonly seat: number; readonly at: number };
 }
 
 /**
@@ -476,6 +518,14 @@ export function openWorldStore(path: string, budgets: WorldBudgets): LocalWorldS
     ),
     deleteEvent: db.prepare('DELETE FROM scheduled WHERE id = ?'),
     listSeats: db.prepare('SELECT player, seat FROM seats ORDER BY seat'),
+    readActivity: db.prepare('SELECT at FROM seat_activity WHERE seat = ?'),
+    // A HIGH-WATER MARK IN SQL, not in a read-then-write the host could race or
+    // get backwards: a drained event runs at its nominal due, which is in the
+    // past, and replaying one must never age a player who is here now.
+    writeActivity: db.prepare(
+      'INSERT INTO seat_activity (seat, at) VALUES (?, ?) ' +
+        'ON CONFLICT(seat) DO UPDATE SET at = max(at, excluded.at)',
+    ),
     writeSeat: db.prepare(
       'INSERT INTO seats (player, seat) VALUES (?, ?) ON CONFLICT(player) DO UPDATE SET seat = excluded.seat',
     ),
@@ -663,6 +713,27 @@ export function openWorldStore(path: string, budgets: WorldBudgets): LocalWorldS
       stmt.writeSeat.run(player, seat);
     },
 
+    activitySince(openedAt: number): number {
+      const stored = meta(ACTIVITY_SINCE_KEY);
+      if (stored !== undefined) return Number(stored);
+      transact(() => {
+        stmt.writeMeta.run(ACTIVITY_SINCE_KEY, String(openedAt));
+      });
+      return openedAt;
+    },
+
+    activityOf(seat: number): SeatActivityStamp {
+      const row = stmt.readActivity.get(seat) as { at: number } | undefined;
+      return {
+        seat,
+        // NULL IS THE ANSWER for a seat this world has not seen act since it
+        // began recording, and it is a different answer from `since`. The
+        // engine applies the fallback once, so no caller here has to choose.
+        at: row === undefined ? null : row.at,
+        since: recordingSince(),
+      };
+    },
+
     receipt(player: string, orderId: string): WorldReceipt | undefined {
       const row = stmt.readReceipt.get(player, orderId) as ReceiptRow | undefined;
       if (row === undefined) return undefined;
@@ -781,6 +852,27 @@ export function openWorldStore(path: string, budgets: WorldBudgets): LocalWorldS
    * together for the same reason, so the floor is never a claim about receipts
    * that are still on file.
    */
+  /**
+   * The recording epoch, or a loud failure (#383).
+   *
+   * NO ZERO DEFAULT. Falling back to the epoch here is the precise bug
+   * `activitySince` exists to prevent -- every seat reads as fifty-six years
+   * idle and the cleanup deadline that notices is irreversible -- so a store
+   * asked about activity before its epoch was fixed says so instead.
+   */
+  function recordingSince(): number {
+    const stored = meta(ACTIVITY_SINCE_KEY);
+    if (stored === undefined) {
+      throw new Error(
+        'This world was asked for a seat\'s activity before it recorded when it started ' +
+          'watching, so the only idleness it could report would be "since 1970" -- which is ' +
+          'how every seat in an upgraded world gets reaped at once. Call activitySince() when ' +
+          'the world is opened, before any command runs.',
+      );
+    }
+    return Number(stored);
+  }
+
   function writeLedger(extras: WorldCheckpointExtras): void {
     if (extras.receipt !== undefined) {
       const { player, orderId, at, message } = extras.receipt;
@@ -789,6 +881,9 @@ export function openWorldStore(path: string, budgets: WorldBudgets): LocalWorldS
     if (extras.receiptFloorAt !== undefined && extras.receiptFloorAt > readReceiptFloor()) {
       stmt.sweepReceipts.run(extras.receiptFloorAt);
       stmt.writeMeta.run(RECEIPT_FLOOR_KEY, String(extras.receiptFloorAt));
+    }
+    if (extras.activity !== undefined) {
+      stmt.writeActivity.run(extras.activity.seat, extras.activity.at);
     }
   }
 
@@ -874,6 +969,21 @@ const STATE_VERSION_KEY = 'stateVersion';
  * root and a stale stamp is not a state this file can produce.
  */
 const NEXT_ELEMENT_ID_KEY = 'nextElementId';
+/**
+ * WHEN THIS WORLD BEGAN RECORDING PER-SEAT ACTIVITY (ShufflewickPub #383).
+ *
+ * Written once, on the first open under a BoardSmith that has the field, and
+ * never moved again. It is the floor every seat's idleness is measured from,
+ * which is what makes an OCCUPIED world safe to upgrade: a store with no
+ * per-seat history cannot invent one, and the alternative default -- zero --
+ * would make every existing empire fifty-six years idle at the exact moment
+ * the self-destruct feature became available to notice.
+ *
+ * It must not drift forward on later opens either. An epoch that reset with
+ * each restart would reset everybody's idleness on every deploy, and a
+ * deadline nothing can reach is the same bug wearing the opposite sign.
+ */
+const ACTIVITY_SINCE_KEY = 'activitySince';
 const SCHEMA_VERSION_KEY = 'schemaVersion';
 
 /**
@@ -907,6 +1017,10 @@ CREATE TABLE IF NOT EXISTS scheduled (
 );
 CREATE INDEX IF NOT EXISTS scheduled_due ON scheduled (due, seq);
 CREATE TABLE IF NOT EXISTS seats (player TEXT PRIMARY KEY, seat INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS seat_activity (
+  seat INTEGER PRIMARY KEY,
+  at INTEGER NOT NULL
+);
 CREATE TABLE IF NOT EXISTS receipts (
   player TEXT NOT NULL,
   order_id TEXT NOT NULL,
@@ -926,7 +1040,7 @@ CREATE INDEX IF NOT EXISTS receipts_at ON receipts (at);
  * answer to a layout change. Silently reading a store this code does not
  * understand is how an author loses a world without being told.
  */
-const SCHEMA_VERSION = '3';
+const SCHEMA_VERSION = '4';
 
 function assertSchemaVersion(db: SqliteDatabase, path: string): void {
   const row = db.prepare('SELECT value FROM meta WHERE key = ?').get(SCHEMA_VERSION_KEY) as

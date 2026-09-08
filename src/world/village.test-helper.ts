@@ -96,10 +96,17 @@ export const STAMP = {
   /** Nobody connected: presence is derived from attached sockets, and these
    *  suites attach none. */
   presence: [] as readonly number[],
+  /** Nobody has acted here before: the world began watching at `now`, and the
+   *  cases that are ABOUT a watermark name their own (#383). */
+  activity: { seat: 1, at: null, since: 1_700_000_000_000 },
 };
 
 /** The same two facts an offer needs. */
-export const OFFER = { now: STAMP.now, presence: [] as readonly number[] };
+export const OFFER = {
+  now: STAMP.now,
+  presence: [] as readonly number[],
+  activity: STAMP.activity,
+};
 
 function throughStorage(json: ElementJSON): ElementJSON {
   return JSON.parse(JSON.stringify(json)) as ElementJSON;

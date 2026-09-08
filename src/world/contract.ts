@@ -274,6 +274,85 @@ export interface WorldActionOffer extends ActionMetadata {
 }
 
 /**
+ * WHEN THIS SEAT LAST DID SOMETHING HERE (ShufflewickPub #383).
+ *
+ * The platform's durable answer, and the only input a gameplay inactivity
+ * deadline may be built on. It arrives on a stamp for the reason `now` and
+ * `presence` do -- the engine runs in a child isolate that can see neither a
+ * clock nor a socket nor a store -- but unlike either of those it is REMEMBERED
+ * rather than derived, because the question is about the past.
+ *
+ * WHAT COUNTS, EXACTLY: a command SENT BY THIS SEAT, INTO THIS WORLD, THAT THE
+ * WORLD ACCEPTED, stamped with the instant it arrived.
+ *
+ *   - A seat's own command only. Somebody else playing is not this player
+ *     playing, which is the whole point of a per-seat watermark.
+ *   - This world only. A deadline inside a world is about presence in that
+ *     world; a platform-wide "seen somewhere" would keep an abandoned empire
+ *     alive because its owner plays something else.
+ *   - ACCEPTED only. A refusal is the world saying nothing happened, and a
+ *     deadline a refusal could postpone is postponable by any client that
+ *     sends garbage on a timer -- so it moves in the checkpoint transaction,
+ *     with the effects, or not at all.
+ *   - A SCHEDULED EVENT IS NOT ACTIVITY, even one this seat armed. Its clock is
+ *     its nominal `due`, so a world drained a week late would otherwise record
+ *     a week of "activity" nobody performed.
+ *   - A SOCKET IS NOT ACTIVITY. That is `presence`, it is a different question,
+ *     and the two disagree in both directions: an idle open tab is presence
+ *     without activity, and a player who acts and closes the tab is activity
+ *     without presence.
+ */
+export interface SeatActivityStamp {
+  /** WHOSE activity this is -- the seat the dispatch belongs to, which is the
+   *  acting seat on a player's road and the OWNER of a scheduled event on the
+   *  clock's. Present so a handler that reads it into per-seat state cannot
+   *  file it under the wrong empire. */
+  readonly seat: number;
+  /**
+   * The last accepted arrival instant for this seat, or NULL if the world has
+   * recorded none for it since `since`.
+   *
+   * AS OF ARRIVAL, and it does not count the command carrying it. A seat's own
+   * command that reported zero idleness would be answering a question nobody
+   * asked, and would make "your empire expires in 20 days" unrenderable on the
+   * one road that can render it.
+   */
+  readonly at: number | null;
+  /**
+   * WHEN THIS WORLD BEGAN RECORDING ACTIVITY AT ALL.
+   *
+   * The field that makes an occupied world safe to upgrade. A world written
+   * before #383 has no per-seat history and cannot invent one, so every seat
+   * in it reads `at: null` -- and if that meant zero, the first wake after the
+   * upgrade would find every empire fifty-six years idle and the cancelable
+   * self-destruct is exactly the feature that would then run. Recording begins
+   * when the host first opens the world under a BoardSmith that has this
+   * field, and idleness is measured from there.
+   */
+  readonly since: number;
+}
+
+/**
+ * `SeatActivityStamp` AS A HANDLER READS IT, with the fallback already applied.
+ *
+ * The one number a deadline is written against is `at ?? since`, and it is
+ * derived HERE -- by the engine, once, on the way in -- rather than left to
+ * each game or asked of each host. Left to a game, `world.now - activity.at`
+ * is the line somebody writes: it crashes on a seat with no history, or worse
+ * coerces the null to zero and expires them, which is the exact migration
+ * hazard `since` exists to prevent. Asked of a host, it is a fourth number a
+ * host could compute inconsistently with the three it derived it from, and the
+ * platform would have no way to tell.
+ *
+ * So the wire carries the facts and this carries the answer.
+ */
+export interface SeatActivity extends SeatActivityStamp {
+  /** How long this seat has been silent, measured from here: `at ?? since`.
+   *  `world.now - activity.inactiveSince` on every road, for every seat. */
+  readonly inactiveSince: number;
+}
+
+/**
  * WHAT THE HOST KNOWS AT THE MOMENT IT ASKS FOR AN OFFER.
  *
  * The same two facts a command's stamp carries, and for the same reason: time
@@ -285,6 +364,11 @@ export interface WorldActionOffer extends ActionMetadata {
 export interface WorldOfferStamp {
   readonly now: number;
   readonly presence: readonly number[];
+  /** The WATCHING seat's activity (ShufflewickPub #383), so a prompt may say
+   *  how long this player has been away -- "your empire expires in 3 days" is
+   *  a thing an offer has to be able to render. Null only in the offer paths
+   *  that are not about a seat at all. */
+  readonly activity: SeatActivityStamp | null;
 }
 
 /** A command as the platform hands it to the engine: opaque, ~100 bytes. */
@@ -477,6 +561,17 @@ export interface WorldCommandStamp {
    * them as explicit state changed by commands.
    */
   readonly presence: readonly number[];
+  /**
+   * THE ACTING SEAT'S ACTIVITY WATERMARK (ShufflewickPub #383).
+   *
+   * `presence`'s durable counterpart, and the opposite kind of fact: presence
+   * is derived at this instant and never stored, activity is stored and never
+   * derived. See `SeatActivity` for what counts, and for why the value handed
+   * over is the one from BEFORE this command.
+   *
+   * Null when there is no seat behind the command.
+   */
+  readonly activity: SeatActivityStamp | null;
 }
 
 /**
@@ -501,6 +596,18 @@ export interface WorldEventStamp {
    * the world was empty is handed an empty list rather than a memory.
    */
   readonly presence: readonly number[];
+  /**
+   * THE ACTIVITY OF THE SEAT THIS EVENT IS ABOUT (ShufflewickPub #383).
+   *
+   * The event's OWNER's watermark -- not the charge owner, which for a due
+   * event is always the world, but the seat whose timer this is. This is the
+   * road the feature exists for: an irreversible cleanup deadline armed twenty
+   * days ago rechecks the watermark as it fires, so a player who came back on
+   * day nineteen keeps their empire and the handler re-arms instead of
+   * reaping. Null for an event the world armed for itself, which is about
+   * nobody.
+   */
+  readonly activity: SeatActivityStamp | null;
 }
 
 /**

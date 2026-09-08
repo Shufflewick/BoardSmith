@@ -1031,6 +1031,89 @@ socket counts as a departure at all, whether presence is observable in the first
 place. A laptop with one browser tab answers that differently from a platform
 holding 500 sockets, and should.
 
+## Activity: how long this seat has been gone
+
+`ctx.world.presence` answers "is this seat connected right now". It is the wrong
+question for an inactivity rule, and every substitute for the right one is wrong
+in a way that costs somebody their empire:
+
+- `world.now` on a replayed scheduled event is that event's **nominal** due, so
+  a world drained a week late reads a week of silence that never happened.
+- A socket is not a person. A tab left open for a month reports activity nobody
+  performed; a player who plays daily from a phone that sleeps reports none.
+- A timestamp in the command's own args is the player's, and a deadline a player
+  can postpone by typing a number is not a deadline.
+
+So the host stamps it, the same way it stamps `now` and `presence`, and unlike
+either of those it is **remembered** rather than derived:
+
+```ts
+world.activity; // { seat, at, since, inactiveSince } | null
+
+const idleMs = world.now - world.activity.inactiveSince;
+```
+
+**What counts as activity**: a command **sent by this seat**, **into this
+world**, **that the world accepted**, stamped with the instant it arrived.
+
+- A seat's own command only -- somebody else playing is not this player playing.
+- This world only. A deadline inside a world is about presence in that world; a
+  platform-wide "seen somewhere" would keep an abandoned empire alive because
+  its owner plays something else.
+- **Accepted** only. A refusal is the world saying nothing happened, and a
+  deadline a refusal could postpone is postponable by any client that sends
+  garbage on a timer. The watermark moves in the checkpoint transaction, with
+  the effects, or not at all.
+- A **scheduled event is not activity**, even one this seat armed. Its clock is
+  its nominal `due`, so a world drained late would otherwise record a week of
+  activity nobody performed. It never moves backwards either.
+
+**`at` is the value from BEFORE the command carrying it.** A seat's own command
+that reported zero idleness would be answering a question nobody asked -- of
+course the player acting is here -- and "your empire expires in 20 days" would
+be unrenderable on the one road that can render it.
+
+**`inactiveSince` is `at ?? since`, and it is the field to subtract.** `at` is
+`null` for a seat this world has not seen act. Writing `world.now - at` is the
+line that crashes, or coerces the null to zero and expires everybody.
+
+**`since` is why an occupied world is safe to upgrade.** It is the instant this
+world began recording, fixed on its first open and never moved again. A world
+written before this feature has no per-seat history and cannot invent one, so
+its seats read `at: null` and are idle *since the upgrade*, not since 1970 --
+which is the reading that would reap every empire the first time the host woke
+up able to notice.
+
+### Rechecking an irreversible deadline
+
+A seat-owned scheduled event is handed **that seat's** watermark, not the
+world's. That is the whole point: the event is *charged* to the world, and it is
+*about* a person.
+
+```ts
+const reap = worldClockAction<G>('reap')
+  .needs(({ args }) => [`empire:${args.seat}`])
+  .execute((args, ctx) => {
+    if (ctx.world.activity === null) return;          // the world's own alarm
+    const idle = ctx.world.now - ctx.world.activity.inactiveSince;
+    if (idle < TWENTY_DAYS) {
+      // They came back. Re-arm against the new watermark instead of reaping.
+      ctx.world.schedule({ key: `reap:${args.seat}`, delayMs: TWENTY_DAYS - idle, ... });
+      return;
+    }
+    // ... and only now is it safe to do the irreversible thing.
+  });
+```
+
+`world.activity` is `null` when the dispatch is about nobody -- the world's own
+clock events. Refuse or return on it; do not default, because a default here is
+somebody's empire.
+
+This is a **point read per dispatch**. Five hundred seats and it asks about one,
+which is what keeps an inactivity rule from costing what the world costs. There
+is no way to enumerate who is active, deliberately: that is the O(world) scan
+partitioning exists to delete.
+
 ## Scheduling
 
 ```ts

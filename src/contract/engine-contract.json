@@ -1,8 +1,8 @@
 {
-  "revision": 55,
+  "revision": 56,
   "bundleProtocol": 2,
   "surfaceHash": "833f0bcefd6e4aef",
-  "payloadHash": "eb472de70ccc7f01",
+  "payloadHash": "f548bb3ffbfaeec0",
   "history": [
     {
       "revision": 1,
@@ -443,6 +443,14 @@
       "surfaceHash": "833f0bcefd6e4aef",
       "payloadHash": "eb472de70ccc7f01",
       "summary": "A world may declare that its player commands are CHRONOLOGICAL (ShufflewickPub #380). New WorldDefinition.ordering: 'arrival' (the default, and what every world did before this) or 'chronological', which gates each player command behind every event already due at that player's arrival instant, run in nominal order. It is for a chain that cannot be predeclared -- an event that creates a contract and schedules the next decision cannot name that decision's partitions until the earlier one commits. Bounded and yielding: one drainBatch at a time, at most the new catchUpRounds budget (default 8), with a turn for the runtime between each; running out, or meeting an event that refuses, applies the command over a world still behind rather than refusing it. The player's arrival instant, order identity and receipt are untouched, and a replayed order is answered from its receipt without running the clock. An unrecognised world.ordering is refused as bundle-not-a-world at construction."
+    },
+    {
+      "revision": 56,
+      "date": "2026-09-08",
+      "bundleProtocol": 2,
+      "surfaceHash": "833f0bcefd6e4aef",
+      "payloadHash": "f548bb3ffbfaeec0",
+      "summary": "A world's host now stamps every dispatch with the acting seat's DURABLE activity watermark (ShufflewickPub #383). ctx.world.activity carries {seat, at, since, inactiveSince}: at is the arrival instant of this seat's last ACCEPTED command, as of BEFORE the command carrying it, and inactiveSince is at ?? since -- the one number a gameplay inactivity deadline is written against. since is when the world began recording, so an occupied world upgraded into this feature reports its seats as idle since the upgrade rather than since 1970. A seat-owned scheduled event is handed its OWNER's watermark, which is what lets an irreversible cleanup deadline recheck whether the player came back; the world's own events carry null. Refusals, drained events, presence hooks and migrations never move a watermark, and it never moves backwards. WorldCommandStamp, WorldEventStamp and WorldOfferStamp all carry activity and a host must supply it; the local store keeps it per seat and fixes its recording epoch on first open."
     }
   ]
 }

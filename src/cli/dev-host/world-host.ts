@@ -65,6 +65,7 @@ import {
   resolveOrder,
   type PlannedEvent,
   type RoutedEvent,
+  type SeatActivityStamp,
   type ScheduleAllowance,
   type StoredPartition,
   type WorldBudgets,
@@ -276,6 +277,14 @@ export class LocalWorldHost {
     let migrated: WorldStartOutcome['migrated'] = undefined;
     let lifted: WorldStartOutcome['lifted'] = undefined;
     await this.#run(async () => {
+      // BEFORE ANYTHING ASKS (ShufflewickPub #383). A seat's idleness is
+      // measured from the instant this world began watching, and `activityOf`
+      // refuses rather than invent one -- so the epoch is fixed here, on the
+      // first open, ahead of genesis, migration and every command. Fixed once:
+      // a later open is told the original answer, because an epoch that drifted
+      // forward with each restart would reset everybody's idleness on every
+      // deploy and no deadline would ever be reached.
+      this.#store.activitySince(this.#worldNow());
       if (!this.#store.isLaunched()) {
         // GENESIS RECORDS THE VERSION IT WROTE UNDER (#200), with the bytes: a
         // world born on stateVersion 2 that recorded 0 would be asked to
@@ -586,6 +595,47 @@ export class LocalWorldHost {
     return this.#clock.now() + this.#skewMs;
   }
 
+  /**
+   * THE WATERMARK FOR THE SEAT A DISPATCH IS ABOUT (ShufflewickPub #383).
+   *
+   * `player` is who the dispatch is ABOUT, which is not always who is being
+   * charged for it: a due event's schedules are billed to the world while the
+   * deadline it checks belongs to a person, so the drain passes the EVENT's
+   * owner here and the world's own reserved owner resolves to nobody.
+   *
+   * A POINT READ per dispatch. Five hundred empires and this asks about one,
+   * which is what keeps an inactivity rule from costing what the world costs.
+   */
+  #activityFor(player: string | null): SeatActivityStamp | null {
+    const seat = this.#seatOf(player);
+    return seat === undefined ? null : this.#store.activityOf(seat);
+  }
+
+  /**
+   * THE WATERMARK THIS DISPATCH MOVES, if it moves one (ShufflewickPub #383).
+   *
+   * Spread into the checkpoint, so it lands with the effects it produced or
+   * not at all. A PLAYER'S ROAD ONLY: a drained event runs at its NOMINAL due,
+   * so recording one would let a world that came back after a week of downtime
+   * write a week of activity nobody performed. And it is only ever reached on
+   * the way OUT, past every refusal -- a watermark a rejected command could
+   * move is a deadline any client holds open with garbage on a timer.
+   */
+  #activityWrite(
+    player: string | null,
+    arrivedAt: number,
+  ): { activity?: { seat: number; at: number } } {
+    const seat = this.#seatOf(player);
+    return seat === undefined ? {} : { activity: { seat, at: arrivedAt } };
+  }
+
+  /** The seat a player id is filed under, or undefined for the world's own
+   *  reserved owner and for anybody this roster has never seated. */
+  #seatOf(player: string | null): number | undefined {
+    if (player === null || player === WORLD_OWNER) return undefined;
+    return this.#store.seats().find((record) => record.player === player)?.seat;
+  }
+
   #presence(): readonly number[] {
     return [...new Set(this.#attached.values())].sort((a, b) => a - b);
   }
@@ -745,6 +795,7 @@ export class LocalWorldHost {
         selection: await runner.resolvePick(player, action, selection, args, {
           now,
           presence: this.#presence(),
+          activity: this.#activityFor(player),
         }),
       });
     } catch (error) {
@@ -856,6 +907,16 @@ export class LocalWorldHost {
     /** The receipt for the player order this dispatch is the effects of (#195),
      *  committed with them or not at all. */
     receipt?: WorldReceipt;
+    /**
+     * WHOSE IDLENESS THIS DISPATCH IS ABOUT (ShufflewickPub #383).
+     *
+     * `player` on a seat's own road, and the EVENT'S OWNER on the clock's,
+     * where `player` is null because nobody is acting. They are different
+     * questions -- who is charged, and who is being asked about -- and a
+     * deadline handed the charge owner would be checking the world's idleness
+     * instead of the person's.
+     */
+    about?: string;
   }): Promise<readonly RoutedEvent[]> {
     const { player, command, timing, arrivedAt } = request;
     const runner = this.#world.runner;
@@ -896,6 +957,10 @@ export class LocalWorldHost {
       // from its open connections at the instant it asks -- a parked world
       // reports nobody rather than a memory of an audience that went home.
       presence: this.#presence(),
+      // READ BEFORE THE COMMAND RUNS (#383), which is what makes it the
+      // watermark from BEFORE this arrival: the handler is told when this seat
+      // was last here, not that it is here now, which it can see for itself.
+      activity: this.#activityFor(request.about ?? player),
     });
 
     // THE PARENT IS THE ONLY WRITER. `ctx.schedule()` refused inside the
@@ -936,6 +1001,9 @@ export class LocalWorldHost {
           this.#budgets,
           this.#store.receiptFloorAt(),
         ),
+        // THIS SEAT WAS HERE (ShufflewickPub #383), landing with the effects
+        // it produced or not at all.
+        ...this.#activityWrite(player, arrivedAt),
       });
     } catch (error) {
       // A COMMAND THAT CANNOT BE MADE DURABLE IS A COMMAND THAT DID NOT HAPPEN.
@@ -1060,6 +1128,9 @@ export class LocalWorldHost {
             // world that drained late must produce the state a punctual one
             // would.
             arrivedAt: timing.due,
+            // THE EVENT'S OWNER IS WHO IT IS ABOUT (#383), which is not who is
+            // charged for it. A seat's own deadline rechecks that seat.
+            about: event.owner,
             settle: last ? [event.id] : [],
             rearm: last ? advanced : [],
           });
@@ -1314,7 +1385,12 @@ export class LocalWorldHost {
             'the partition was never created.',
         ),
     );
-    return runner.offersFor(player, { now: this.#worldNow(), presence: this.#presence() });
+    return runner.offersFor(player, {
+      now: this.#worldNow(),
+      presence: this.#presence(),
+      // So a prompt may say how long this player has been away (#383).
+      activity: this.#activityFor(player),
+    });
   }
 
   #notices(): string | null {

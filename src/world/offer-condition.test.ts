@@ -45,10 +45,10 @@ describe("offer declarations and stamped conditions", () => {
     await runner.genesis();
     expect(await runner.declareOffers("p1", {}, 41)).toEqual({ needs: [] });
     expect(calls).toBe(0);
-    expect(await runner.offersFor("p1", { now: 41, presence: [] })).toEqual([]);
+    expect(await runner.offersFor("p1", { now: 41, presence: [], activity: null })).toEqual([]);
     expect(calls).toBe(1);
     expect(
-      (await runner.offersFor("p1", { now: 42, presence: [] })).map(
+      (await runner.offersFor("p1", { now: 42, presence: [], activity: null })).map(
         (o) => o.name,
       ),
     ).toEqual(["ready"]);

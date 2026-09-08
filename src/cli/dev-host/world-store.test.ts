@@ -362,6 +362,63 @@ describe('the local world store', () => {
     });
   });
 
+  describe("a seat's activity watermark (ShufflewickPub #383)", () => {
+    it('opens a world by recording WHEN it began recording, so nobody is retroactively idle', () => {
+      // The migration guarantee. A world whose store predates this feature has
+      // no per-seat history, and the honest answer to "how long has seat 3 been
+      // gone" is "no longer than we have been watching" -- never "since 1970",
+      // which is the answer that would reap every empire on the first wake.
+      const opened = store.activitySince(5_000);
+      expect(opened).toBe(5_000);
+      expect(store.activityOf(3)).toEqual({ seat: 3, at: null, since: 5_000 });
+    });
+
+    it('fixes the recording epoch on the FIRST open and never moves it again', () => {
+      store.activitySince(5_000);
+      // A later open of the same world asks with a later clock and is told the
+      // original answer: an epoch that drifted forward with each restart would
+      // reset everybody's idleness on every deploy, which is an inactivity
+      // deadline that can never be reached.
+      expect(store.activitySince(9_000_000)).toBe(5_000);
+      expect(store.activityOf(3).since).toBe(5_000);
+    });
+
+    it('remembers a seat\'s last accepted arrival, per seat', () => {
+      store.activitySince(5_000);
+      store.writeCheckpoint({}, { activity: { seat: 1, at: 10_000 } });
+      store.writeCheckpoint({}, { activity: { seat: 2, at: 12_000 } });
+
+      expect(store.activityOf(1)).toEqual({ seat: 1, at: 10_000, since: 5_000 });
+      expect(store.activityOf(2)).toEqual({ seat: 2, at: 12_000, since: 5_000 });
+      // Somebody else playing is not this player playing.
+      expect(store.activityOf(3).at).toBeNull();
+    });
+
+    it('never moves a watermark backwards', () => {
+      // A drained event runs at its NOMINAL due, which is in the past, and the
+      // host must not be able to age a live player by replaying one. The store
+      // is the last line: the watermark is a high-water mark by construction.
+      store.activitySince(5_000);
+      store.writeCheckpoint({}, { activity: { seat: 1, at: 20_000 } });
+      store.writeCheckpoint({}, { activity: { seat: 1, at: 9_000 } });
+      expect(store.activityOf(1).at).toBe(20_000);
+    });
+
+    it('is still there for the next host to open this world', () => {
+      // The whole point of it being durable: hibernation, a rules reload and a
+      // cold restart all build a new host over this store, and an idleness
+      // clock that restarted with the process would never reach a deadline.
+      store.activitySince(5_000);
+      store.writeCheckpoint({}, { activity: { seat: 1, at: 10_000 } });
+      store.close();
+
+      const reopened = openWorldStore(worldStorePath(root), BUDGETS);
+      expect(reopened.activitySince(90_000)).toBe(5_000);
+      expect(reopened.activityOf(1)).toEqual({ seat: 1, at: 10_000, since: 5_000 });
+      reopened.close();
+    });
+  });
+
   describe('reset', () => {
     it('removes the whole store, sidecars included', () => {
       store.recordDirty(['room/a']);

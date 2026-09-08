@@ -287,6 +287,8 @@ describe("createWorld — one construction, every host", () => {
       arrivedAt: 1_000,
       allowance: { unkeyed: 0, keys: [], worldPending: 0 },
       presence: [1],
+      // Not about the watermark; the cases that are name their own (#383).
+      activity: null,
     });
     expect(result.dirty).toEqual(["yard:1"]);
     expect(result.events).toHaveLength(1);
@@ -334,6 +336,7 @@ describe("createWorld — one construction, every host", () => {
         arrivedAt: 0,
         allowance: { unkeyed: 0, keys: [], worldPending: 0 },
         presence: [],
+        activity: null,
       }),
     ).rejects.toThrow(/already has 1 unkeyed events pending, which is this world's limit/);
   });
@@ -366,6 +369,7 @@ describe("createWorld — one construction, every host", () => {
       arrivedAt: 0,
       allowance: { unkeyed: 0, keys: ["raid"], worldPending: 1 },
       presence: [],
+      activity: null,
     });
 
     expect(result.schedules).toEqual([
@@ -394,6 +398,7 @@ describe("createWorld — one construction, every host", () => {
         arrivedAt: 0,
         allowance: { unkeyed: 0, keys: [], worldPending: 0 },
         presence: [],
+        activity: null,
       }),
     ).rejects.toThrow(/must name the key its timer was armed under/);
   });

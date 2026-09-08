@@ -809,7 +809,9 @@ describe('#169: a schedule names a seatless action and carries scalars', () => {
     const result = await engine.onEvent(
       event,
       { due: STAMP.now + 1000, missedCount: 0 },
-      { allowance: STAMP.allowance, presence: [] },
+      // The world's own clock event is about nobody, so it carries no
+      // watermark (ShufflewickPub #383).
+      { allowance: STAMP.allowance, presence: [], activity: null },
     );
     expect(game.holdingOf(1).woodpile).toBe(0);
     expect(result.events).toEqual([
