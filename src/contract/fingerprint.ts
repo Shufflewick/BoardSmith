@@ -757,6 +757,16 @@ async function computeWorldFixture(): Promise<{ view: unknown; offer: unknown }>
   const look = worldAction<any>('look')
     .prompt('Look about you')
     .needs(({ player }: any) => [holdingPartition(player.seat)])
+    // ROUND TWO READS WHAT ROUND ONE LOADED, THROUGH THE INDEXED ACCESSOR
+    // (ShufflewickPub#374). Before this the fixture's two-round shape was two
+    // rounds of ARITHMETIC -- `neighboursOf(player.seat)` needs nothing
+    // resident -- so a declaration that reads state had no coverage here at
+    // all, and `world` could be added to or removed from a needs context
+    // without moving either hash. Now the second round's ANSWER depends on the
+    // first round's partition, so the offer this fixture hashes does too.
+    .needs(({ world, player }: any) =>
+      isBare(world.partition(holdingPartition(player.seat))) ? [COMMONS] : [],
+    )
     .execute((_args: unknown, ctx: any) => {
       ctx.world.emit(holdingPartition(ctx.player.seat), { looked: true });
     });
@@ -858,8 +868,17 @@ async function computeWorldFixture(): Promise<{ view: unknown; offer: unknown }>
   // against whatever happened to be resident would fingerprint a road no
   // platform travels, and would silently stop covering the neighbours' greying
   // the moment their partitions fell out of residency.
+  // THE WALK ITSELF IS HASHED, not only its answer (ShufflewickPub#374). The
+  // limits above have claimed since #187 that "the declaration walk an offer
+  // performs is fingerprinted along with its answer", and only the answer was:
+  // the rounds were asked, hydrated and thrown away. So a change to what a
+  // declaration can READ moved neither hash as long as the verbs on offer came
+  // out the same -- which is exactly how the needs context gained `world`
+  // without the contract noticing. Recording each round makes the claim true.
+  const rounds: (readonly string[])[] = [];
   for (;;) {
     const needs = world.offerPartitions(LOOKER);
+    rounds.push(needs);
     if (needs.length === 0) break;
     await world.hydrate(needs);
   }
@@ -881,7 +900,7 @@ async function computeWorldFixture(): Promise<{ view: unknown; offer: unknown }>
     ),
   });
 
-  return { view, offer };
+  return { view, rounds, offer };
 }
 
 /**
@@ -1059,18 +1078,33 @@ export async function computePayloadHash(): Promise<string> {
   const flowPosition = game.getFlowState()?.position;
   assertCoversElementBindings(flowPosition);
 
-  // Five parts hashed together: the per-player payload the platform ships, the
+  // Six parts hashed together: the per-player payload the platform ships, the
   // serialized flow position the platform STORES and restores (not reachable
   // from the views — createPlayerView omits `position` — so a
   // flow-serialization regression was previously invisible here), the world
   // wire the platform's host page speaks to a bundle's world UI, ONE SEAT'S
   // PROJECTED WORLD VIEW (#181), which is what every watcher of every world
-  // receives, and ONE SEAT'S OFFER (#187), which is which verbs that watcher is
-  // given — the last two being what nothing here could see until they were
-  // added.
-  const { view: worldView, offer: worldOffer } = await computeWorldFixture();
+  // receives, ONE SEAT'S OFFER (#187), which is which verbs that watcher is
+  // given, and THE DECLARATION WALK THAT PRODUCED IT (ShufflewickPub#374) —
+  // the rounds the host was asked for, in order. The walk was claimed as
+  // covered from #187 onward and was not: only its answer was hashed, so a
+  // change to what a declaration may READ was invisible here as long as the
+  // verbs came out the same. That is how the needs context gained an accessor
+  // without moving this hash.
+  const {
+    view: worldView,
+    rounds: worldRounds,
+    offer: worldOffer,
+  } = await computeWorldFixture();
   return sha256(
-    canonicalize({ views, flowPosition, worldWire: WORLD_WIRE_FIXTURE, worldView, worldOffer }),
+    canonicalize({
+      views,
+      flowPosition,
+      worldWire: WORLD_WIRE_FIXTURE,
+      worldView,
+      worldRounds,
+      worldOffer,
+    }),
   );
 }
 
