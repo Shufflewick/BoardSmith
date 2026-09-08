@@ -862,9 +862,28 @@ a permanent law; a step-wise world protocol is #170.
 A **bound** that depends on an earlier answer is a different thing and is
 allowed: `multiSelect: ({ args }) => ({ min: 1, max: holdOf(args.ship) })` reads
 the earlier argument and returns a number. Nothing is enumerated per candidate,
-so nothing is hydrated per candidate. What the single-shot protocol costs you is
-the live redraw -- the count is enforced when the command arrives, not narrowed
-in the panel as the earlier pick changes -- and that is what #170 would buy.
+so nothing is hydrated per candidate.
+
+**And the panel does narrow it live** (ShufflewickPub #378). The offer is
+enumerated once with nothing bound, so a bound like the one above resolves to
+the unbounded fallback in that first frame -- which is the honest answer, and
+which the wire says by leaving `max` out rather than by sending a number JSON
+cannot carry. The moment the player picks the ship, the panel re-asks that one
+selection with the args it has, and the world answers it against the resident
+tree:
+
+```ts
+const answer = await runner.resolvePick('alice', 'deploy', 'crew', { ship: 4 }, stamp);
+answer.multiSelect;   // { min: 1, max: 2 } — from the ship they actually chose
+answer.choices;       // and its candidates, evaluated with the same args
+```
+
+`declarePick` names what that re-ask needs resident, exactly as `declare` does
+for a command, so a selection's own round may name a partition the empty-args
+offer could not. It is a READ: nothing is dispatched, nothing is checkpointed,
+and a partition hydrated for a pick nobody went on to submit is the first thing
+evicted. A game author wires none of this -- `WorldShell` does it -- and it
+costs one round trip per pick AFTER the first, only while somebody is mid-action.
 
 **What none of this covers, and there is no guard for it.** A `condition` or a
 `disabled` predicate is ordinary code with the resident tree in front of it, and

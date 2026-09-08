@@ -32,6 +32,7 @@ import {
   type WorldBudgets,
   type StoredPartition,
   type WorldDefinition,
+  type WorldActionOffer,
 } from '../../world/index.js';
 import { openWorldStore, worldStorePath, type LocalWorldStore } from './world-store.js';
 import type { WorldDevClock } from './node-world-clock.js';
@@ -359,6 +360,125 @@ describe('#167: presence is the seats this host has open', () => {
     await host.handleMessage('c2', { type: 'hello' });
     await host.handleMessage('c1', { type: 'action', order: nextOrder(), requestId: 'r1', action: 'roll', args: {} });
     expect(seen).toEqual([[1, 2]]);
+    await host.close();
+  });
+});
+
+/**
+ * ShufflewickPub #378: THE PANEL RE-ASKS ONE PICK, AND THE HOST ANSWERS.
+ *
+ * The end-to-end half. A world's offer is enumerated with nothing bound, so a
+ * `multiSelect` that reads `args.size` resolved to the unbounded fallback and
+ * the browser was handed a cap the game never meant. The wire carries a re-ask
+ * now, and this drives it the way a browser does: the same message, the same
+ * host, the same answer.
+ */
+describe('#378: one pick, re-asked with the args bound so far', () => {
+  const stack = worldAction<Village>('stack')
+    .prompt('Stack the hearth')
+    .needs(() => [HEARTH])
+    .chooseFrom('size', { prompt: 'How big a stack?', choices: ['small', 'big'] })
+    .chooseFrom('logs', {
+      prompt: 'Which logs?',
+      choices: ['oak', 'ash', 'elm'],
+      multiSelect: ({ args }) => {
+        const size = args.size as string | undefined;
+        if (size === undefined) return { min: 1 };
+        return { min: 1, max: size === 'big' ? 3 : 1 };
+      },
+    })
+    .execute(() => {});
+
+  const stacking = () => bundle({ world: worldBlock({ actions: [...VILLAGE_ACTIONS, stack] }) });
+
+  it('answers the cap the chosen size decides, which the offer could not know', async () => {
+    const { host, sent } = await attached({ dir, definition: stacking() });
+
+    // WHAT THE OFFER SAID with nothing bound: no upper bound at all, and said
+    // by OMISSION rather than by a number the wire cannot carry.
+    const offered = (last(sent, 'c1', 'world_state')!.actions as WorldActionOffer[])
+      .find((offer) => offer.name === 'stack')!
+      .selections.find((pick) => pick.name === 'logs')!;
+    expect(JSON.parse(JSON.stringify(offered.multiSelect))).toEqual({ min: 1 });
+
+    await host.handleMessage('c1', {
+      type: 'pick',
+      requestId: 'p1',
+      action: 'stack',
+      selection: 'logs',
+      args: { size: 'big' },
+    });
+
+    const answer = last(sent, 'c1', 'world_pick_result')!;
+    expect(answer.ok).toBe(true);
+    expect((answer.selection as { multiSelect: unknown }).multiSelect).toEqual({ min: 1, max: 3 });
+    await host.close();
+  });
+
+  it('answers the OTHER cap for the other size, from the same offer', async () => {
+    const { host, sent } = await attached({ dir, definition: stacking() });
+
+    await host.handleMessage('c1', {
+      type: 'pick',
+      requestId: 'p1',
+      action: 'stack',
+      selection: 'logs',
+      args: { size: 'small' },
+    });
+
+    expect((last(sent, 'c1', 'world_pick_result')!.selection as { multiSelect: unknown })
+      .multiSelect).toEqual({ min: 1, max: 1 });
+    await host.close();
+  });
+
+  it('changes nothing: a pick is a question, and the world is where it was', async () => {
+    const { host, store } = await attached({ dir, definition: stacking() });
+    const before = JSON.stringify(await store.read(HEARTH));
+
+    await host.handleMessage('c1', {
+      type: 'pick',
+      requestId: 'p1',
+      action: 'stack',
+      selection: 'logs',
+      args: { size: 'big' },
+    });
+
+    expect(JSON.stringify(await store.read(HEARTH))).toBe(before);
+    expect(store.dirtyPartitions()).toEqual([]);
+    await host.close();
+  });
+
+  it('refuses a pick from a page holding no seat, without running anything', async () => {
+    const opened = openHost({ dir, definition: stacking() });
+    await opened.host.start();
+
+    await opened.host.handleMessage('c9', {
+      type: 'pick',
+      requestId: 'p1',
+      action: 'stack',
+      selection: 'logs',
+      args: { size: 'big' },
+    });
+
+    expect(last(opened.sent, 'c9', 'world_pick_result')).toMatchObject({ ok: false });
+    await opened.host.close();
+  });
+
+  it('names the selections it DOES have when asked for one it does not', async () => {
+    const { host, sent } = await attached({ dir, definition: stacking() });
+
+    await host.handleMessage('c1', {
+      type: 'pick',
+      requestId: 'p1',
+      action: 'stack',
+      selection: 'kindling',
+      args: { size: 'big' },
+    });
+
+    const answer = last(sent, 'c1', 'world_pick_result')!;
+    expect(answer.ok).toBe(false);
+    expect(answer.message).toMatch(/kindling/);
+    expect(answer.message).toMatch(/"size", "logs"/);
     await host.close();
   });
 });

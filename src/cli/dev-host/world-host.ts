@@ -164,6 +164,15 @@ export type WorldDevRequest =
       action: string;
       args?: Record<string, unknown>;
     }
+  | {
+      type: 'pick';
+      requestId: string;
+      /** The action being walked, and which of its selections to re-ask. */
+      action: string;
+      selection: string;
+      /** Every selection's value bound so far (ShufflewickPub #378). */
+      args?: Record<string, unknown>;
+    }
   | { type: 'fire_due' }
   | { type: 'wake' };
 
@@ -470,6 +479,9 @@ export class LocalWorldHost {
         case 'action':
           await this.#command(clientId, message);
           return;
+        case 'pick':
+          await this.#resolvePick(clientId, message);
+          return;
         case 'fire_due':
           await this.#fireDueNow(clientId);
           return;
@@ -665,6 +677,74 @@ export class LocalWorldHost {
       this.#narrate(events);
     } catch (error) {
       this.#broadcastNotice(messageOf(error));
+    }
+  }
+
+  // ── one pick, re-asked ─────────────────────────────────────────────────────
+
+  /**
+   * ONE SELECTION, RE-EVALUATED WITH THE ARGS BOUND SO FAR (ShufflewickPub
+   * #378).
+   *
+   * A world's offer is enumerated in one frame with nothing bound, so a
+   * selection whose `multiSelect` bounds or `choices` callback read an earlier
+   * selection's value cannot be answered there: the panel asks again once it has
+   * something to ask with, exactly as a table's does.
+   *
+   * It is a READ. Nothing is dispatched, nothing is checkpointed and no view is
+   * pushed -- what it changes is what is LOADED, which is residency and not
+   * state, and a partition hydrated for a pick nobody went on to submit is cold
+   * by `residency`'s own ordering and the first thing evicted.
+   */
+  async #resolvePick(
+    clientId: string,
+    message: Extract<WorldDevRequest, { type: 'pick' }>,
+  ): Promise<void> {
+    const { requestId, action, selection } = message;
+    const args = message.args ?? {};
+    const seat = this.#attached.get(clientId);
+    if (seat === undefined) {
+      this.#send(clientId, {
+        type: 'world_pick_result',
+        requestId,
+        ok: false,
+        message: 'This page holds no seat in this world yet, so it has no offer to walk.',
+      });
+      return;
+    }
+    const player = devWorldPlayer(seat);
+    const runner = this.#world.runner;
+    const now = this.#worldNow();
+    try {
+      await settleDeclaration(
+        async (supplied) =>
+          (await runner.declarePick(player, action, selection, args, now, supplied)).needs,
+        (name) =>
+          this.#readPartition(
+            name,
+            `Re-asking "${selection}" needs partition "${name}", which this world's store does ` +
+              "not have. The action's own declaration names it; either the name is wrong or the " +
+              'partition was never created.',
+          ),
+        `The "${action}" action's declaration`,
+      );
+      this.#send(clientId, {
+        type: 'world_pick_result',
+        requestId,
+        ok: true,
+        selection: await runner.resolvePick(player, action, selection, args, {
+          now,
+          presence: this.#presence(),
+        }),
+      });
+    } catch (error) {
+      this.#send(clientId, {
+        type: 'world_pick_result',
+        requestId,
+        ok: false,
+        message: messageOf(error),
+        ...(error instanceof WorldRefusal ? { code: error.code } : {}),
+      });
     }
   }
 

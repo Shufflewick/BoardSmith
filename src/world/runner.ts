@@ -405,6 +405,38 @@ export function createWorldRunner(
       return { created, nextElementId: engine.nextElementId() };
     },
 
+    /**
+     * ONE PICK, RE-ASKED (ShufflewickPub #378), on the same declare-then-read
+     * split every other read path has: the parent supplies what the LAST round
+     * asked for, and this answers what is still missing.
+     */
+    async declarePick(
+      player: string,
+      action: string,
+      selection: string,
+      args: Readonly<Record<string, unknown>>,
+      now: number,
+      supplied: Readonly<Record<string, StoredPartition>>,
+    ): Promise<WorldDeclaration> {
+      await adopt(engine, store, supplied);
+      const resident = residentNames(engine);
+      return {
+        needs: engine
+          .pickPartitions(player, action, selection, args, now)
+          .filter((name) => !store.holds(name) && !resident.has(name)),
+      };
+    },
+
+    async resolvePick(
+      player: string,
+      action: string,
+      selection: string,
+      args: Readonly<Record<string, unknown>>,
+      stamp: WorldOfferStamp,
+    ): Promise<WorldActionOffer["selections"][number]> {
+      return engine.resolvePick(player, action, selection, args, stamp);
+    },
+
     async createPartition(name: string): Promise<WorldCreatedPartition | undefined> {
       const partition = engine.createPartition(name);
       if (partition === undefined) return undefined;
@@ -615,6 +647,40 @@ export interface WorldRunnerHandle {
    *
    * The host owns the write, as it owns every other write.
    */
+  /**
+   * WHAT RE-ASKING ONE PICK STILL NEEDS RESIDENT (ShufflewickPub #378).
+   *
+   * `declare` for a single selection. A world's offer is enumerated with nothing
+   * bound; a selection whose `multiSelect` or `choices` reads an earlier
+   * selection's value cannot be answered that way, and the panel re-asks with
+   * the args it has. Its rounds are declared with those args, so a round may
+   * name a partition the empty-args offer could not, and the parent supplies it
+   * the way it supplies every other declared read.
+   */
+  declarePick(
+    player: string,
+    action: string,
+    selection: string,
+    args: Readonly<Record<string, unknown>>,
+    now: number,
+    supplied: Readonly<Record<string, StoredPartition>>,
+  ): Promise<WorldDeclaration>;
+
+  /**
+   * THAT PICK, RE-EVALUATED against the args bound so far (#378).
+   *
+   * Everything `declarePick` named is resident by the time this is called. It
+   * is a READ: the same read-only facilities an offer runs under, no clock to
+   * arm and nothing to checkpoint.
+   */
+  resolvePick(
+    player: string,
+    action: string,
+    selection: string,
+    args: Readonly<Record<string, unknown>>,
+    stamp: WorldOfferStamp,
+  ): Promise<WorldActionOffer["selections"][number]>;
+
   createPartition(name: string): Promise<WorldCreatedPartition | undefined>;
   /**
    * Admit a player to a world that is already running (#37 item 2).

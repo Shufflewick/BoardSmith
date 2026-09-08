@@ -236,7 +236,7 @@ import type { ScheduleAllowance, ScheduleRequest } from "./schedule-api.js";
 // shape, so the shared action panel and board bridge read a world's answer
 // with no translation -- and a type import keeps `boardsmith/world` free of a
 // runtime dependency on the session layer.
-import type { ActionMetadata } from "../session/types.js";
+import type { ActionMetadata, PickMetadata } from "../session/types.js";
 
 
 /**
@@ -762,6 +762,39 @@ export interface WorldEngine {
   createPartition(name: string): StoredPartition | undefined;
 
   /**
+   * WHAT RE-ASKING ONE PICK STILL NEEDS RESIDENT (ShufflewickPub #378).
+   *
+   * `commandPartitions` for a single selection, and it loads nothing itself for
+   * the same reason: the platform reads this, loads what it names, and only then
+   * asks. Declared WITH the args bound so far, so a round may name a partition
+   * the empty-args offer could not.
+   */
+  pickPartitions(
+    player: string,
+    action: string,
+    selection: string,
+    args: Readonly<Record<string, unknown>>,
+    now: number,
+  ): readonly string[];
+
+  /**
+   * THAT PICK, RE-EVALUATED with the args bound so far (#378).
+   *
+   * A world's offer is enumerated in one frame with nothing bound -- the whole
+   * cost model -- so a selection whose `multiSelect` bounds or `choices`
+   * callback read an earlier selection's value cannot be answered there. The
+   * panel asks again once it has something to ask with, exactly as a table's
+   * does. A READ, under the same read-only facilities an offer runs under.
+   */
+  resolvePick(
+    player: string,
+    action: string,
+    selection: string,
+    args: Readonly<Record<string, unknown>>,
+    stamp: WorldOfferStamp,
+  ): Promise<PickMetadata>;
+
+  /**
    * THE NEXT ELEMENT ID THIS WORLD MAY MINT (ShufflewickPub #377).
    *
    * A world's ids are durable and only a fraction of the partitions holding
@@ -903,6 +936,8 @@ export const WORLD_ENGINE_METHODS = Object.keys({
   offerPartitions: null,
   migratePartition: null,
   nextElementId: null,
+  pickPartitions: null,
+  resolvePick: null,
   offersFor: null,
   onEvent: null,
   residency: null,

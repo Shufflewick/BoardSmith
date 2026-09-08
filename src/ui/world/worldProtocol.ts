@@ -27,7 +27,7 @@
  * `WORLD_HELLO_TIMEOUT_MS` rather than sitting blank forever.
  */
 
-import type { ActionMetadata } from '../../session/types.js';
+import type { WorldActionOffer } from '../../world/contract.js';
 import type { WorldOrder } from '../../world/orders.js';
 
 /** What the HOST page stamps on everything it sends into the world frame. */
@@ -65,27 +65,14 @@ export const WORLD_COMMAND_TIMEOUT_MS = 20_000;
 export const WORLD_NARRATION_KEPT = 200;
 
 /**
- * ONE ACTION THIS SEAT MAY TAKE, ENUMERATED (BoardSmith #169).
+ * WHAT ONE ACTION LOOKS LIKE TO A SEAT.
  *
- * The TABLE'S OWN `ActionMetadata`, which is the point: a world's verbs are
- * Actions now, so the shell's action panel, the board bridge and the drag-drop
- * targets read a world's answer with no translation at all. It replaces
- * `WorldCommandOffer`, a parallel vocabulary that existed only because a
- * world's verbs were not Actions -- and which could say `tend` wants a holding
- * without being able to say WHICH, because a bundle can state what a world
- * contains and not what is legal this instant.
- *
- * ITS CANDIDATES ARRIVE WITH IT. A table fetches each pick's choices on demand,
- * because a table's protocol is step-wise; a world's is single-shot, so
- * `selections[i].validElements` and `.choices` are filled in. That is
- * affordable because a world action may not declare a dependent selection, so
- * no selection's candidates are a function of another's value.
+ * RE-EXPORTED, not redeclared: `src/world/contract.ts` is where the engine's
+ * own answer is typed, and a second declaration of the same shape on the wire
+ * side is a shape that can drift from the thing producing it. The prose about
+ * why an offer carries its candidates lives with the engine that fills them in.
  */
-export type WorldActionOffer = ActionMetadata & {
-  /** Why this action is offered but cannot be taken right now. Absent when it
-   *  can: a greyed button must always say why. */
-  readonly disabled?: string;
-};
+export type { WorldActionOffer } from '../../world/contract.js';
 
 /**
  * ONE THING THAT HAPPENED, AS THE WORLD ADDRESSED IT (ShufflewickPub #331).
@@ -233,6 +220,30 @@ interface WorldResponseMessage {
 }
 
 /**
+ * ONE PICK, RE-ASKED WITH THE ARGUMENTS BOUND SO FAR (ShufflewickPub #378).
+ *
+ * A world's offer is enumerated in one frame with nothing bound, which is the
+ * cost model and not an oversight. What it cannot carry is a selection whose
+ * SHAPE reads an earlier selection's value -- a crew whose size is the chosen
+ * ship's cargo hold. Evaluated with nothing bound, that cap is the unbounded
+ * fallback, and the panel was left holding a limit the game never meant.
+ *
+ * So the panel asks again once it has something to ask with, exactly as a
+ * table's does. One round trip per pick, and only while somebody is mid-action.
+ */
+interface WorldPickResultMessage {
+  readonly source: typeof WORLD_HOST_SOURCE;
+  readonly type: 'world_pick_result';
+  readonly requestId: string;
+  readonly ok: boolean;
+  /** The selection, re-evaluated. Absent when the world refused. */
+  readonly selection?: WorldActionOffer['selections'][number];
+  readonly message?: string;
+  /** The refusal's code, for a UI that switches on it. */
+  readonly code?: string;
+}
+
+/**
  * EVERYTHING THE HOST SENDS, and the only name the two halves share.
  *
  * The message shapes above are not exported individually on purpose: a reader
@@ -244,7 +255,8 @@ interface WorldResponseMessage {
 export type WorldHostMessage =
   | WorldStateMessage
   | WorldEventsMessage
-  | WorldResponseMessage;
+  | WorldResponseMessage
+  | WorldPickResultMessage;
 
 /** What one command becomes on the wire. */
 interface WorldCommandMessage {
@@ -269,13 +281,40 @@ interface WorldCommandMessage {
   readonly args: Readonly<Record<string, unknown>>;
 }
 
+/** One pick's re-ask, with everything bound so far (#378). */
+interface WorldPickMessage {
+  readonly source: typeof WORLD_UI_SOURCE;
+  readonly type: 'world_pick';
+  readonly requestId: string;
+  /** The action being walked, from the offer this seat was given. */
+  readonly action: string;
+  /** Which of its selections to re-evaluate. */
+  readonly selection: string;
+  /** Every selection's value bound so far, by selection name. */
+  readonly args: Readonly<Record<string, unknown>>;
+}
+
 /** "I am mounted; send me what you have." The host answers with a state frame. */
 interface WorldReadyMessage {
   readonly source: typeof WORLD_UI_SOURCE;
   readonly type: 'world_ready';
 }
 
-export type WorldUiMessage = WorldCommandMessage | WorldReadyMessage;
+export type WorldUiMessage = WorldCommandMessage | WorldReadyMessage | WorldPickMessage;
+
+/**
+ * What re-asking one pick answers (#378).
+ *
+ * A refusal RESOLVES, for the reason `WorldActionOutcome` does: a world refuses
+ * legitimately, and a panel that had to catch one would treat "that ship left"
+ * as an exception.
+ */
+export interface WorldPickOutcome {
+  readonly ok: boolean;
+  readonly selection?: WorldActionOffer['selections'][number];
+  readonly message?: string;
+  readonly code?: string;
+}
 
 /** What acting on a world answers. A refusal RESOLVES: a world refuses commands
  *  constantly and legitimately, and a caller that had to catch one would treat

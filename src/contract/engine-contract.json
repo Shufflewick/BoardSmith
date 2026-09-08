@@ -1,7 +1,7 @@
 {
-  "revision": 51,
+  "revision": 52,
   "bundleProtocol": 2,
-  "surfaceHash": "1c64faefb4918717",
+  "surfaceHash": "0a1b5438b6ce23ef",
   "payloadHash": "eb472de70ccc7f01",
   "history": [
     {
@@ -411,6 +411,14 @@
       "surfaceHash": "1c64faefb4918717",
       "payloadHash": "eb472de70ccc7f01",
       "summary": "A world's element-id allocation is durable state a host persists and hands back (ShufflewickPub #377). Game#worldIdAllocation()/#adoptWorldIdAllocation() expose the counter; WorldEngine#nextElementId() reports it; runner.genesis(), runner.createPartition() and runner.migrateCreate() now answer { ...bytes, nextElementId } so a host cannot write a minted root without the stamp that produced it; createWorld() takes it back as options.nextElementId. A cold world built without one REFUSES to create a partition on demand (new platform refusal allocation-undeclared) instead of minting an id a stored, unloaded root already owns, and adoptSubtree() refuses bytes that prove a declared stamp is stale. worldIdAllocationOf() derives the stamp once from stored bytes as the supported repair. Read-only world.partition(name) now reads the indexed root table instead of walking the resident tree (ShufflewickPub #381)."
+    },
+    {
+      "revision": 52,
+      "date": "2026-09-08",
+      "bundleProtocol": 2,
+      "surfaceHash": "0a1b5438b6ce23ef",
+      "payloadHash": "eb472de70ccc7f01",
+      "summary": "A world's panel can re-ask ONE pick with the arguments bound so far (ShufflewickPub #378). New WorldEngine verbs pickPartitions() and resolvePick(), and runner.declarePick()/resolvePick() beside them: a world's offer is enumerated in one frame with nothing bound, so a selection whose multiSelect bounds or choices callback read an earlier selection's value resolved to the unbounded fallback and reached the browser as a cap it could not use. An unbounded multiSelect now OMITS max on a world offer instead of serializing Infinity, which JSON writes as null and the action panel read as a cap of zero. The world wire gains the world_pick request and world_pick_result answer; a host that does not implement them leaves a world's later picks answered from the one-shot offer, as before."
     }
   ]
 }

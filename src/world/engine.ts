@@ -845,6 +845,116 @@ export class BoardSmithWorldEngine implements WorldEngine {
   }
 
   /**
+   * ONE PICK, RE-ASKED WITH THE ARGUMENTS BOUND SO FAR (ShufflewickPub #378).
+   *
+   * A world's offer is enumerated in ONE frame with `args: {}`, and that is the
+   * whole cost model rather than an oversight: a world action may not declare a
+   * dependent selection, so every question it asks can be answered before any
+   * of them is. What that does not cover is a selection whose SHAPE -- its
+   * `multiSelect` bounds, its `choices` callback -- reads an argument an earlier
+   * selection binds. Evaluated with nothing bound, a cap that depends on the
+   * chosen ship is the unbounded fallback, and the browser is left holding a
+   * limit the game never meant.
+   *
+   * So the panel re-asks, the same way a table's does: `fetchPickChoices` hands
+   * over the args bound so far and gets this selection back. It is a READ --
+   * the same read-only facilities an offer runs under -- and it is paid only
+   * while somebody is actually mid-action.
+   *
+   * It is NOT `dependsOn`, which stays refused for world actions: that makes one
+   * selection's candidates a function of another's inside the enumeration, which
+   * is the recursion the single-frame offer exists to avoid.
+   */
+  async resolvePick(
+    player: string,
+    action: string,
+    selection: string,
+    args: Readonly<Record<string, unknown>>,
+    stamp: WorldOfferStamp,
+  ): Promise<PickMetadata> {
+    const seat = this.seatFor(player);
+    const acting = this.playerFor(seat);
+    const definition = this.offerableAction(action);
+    const index = this.selectionIndex(definition, selection);
+
+    const named: string[] = [];
+    const facilities = this.readOnlyFacilities(definition.name, named, stamp);
+    bindWorldFacilities(this.game, facilities);
+    try {
+      // EVERY ROUND UP TO AND INCLUDING THIS SELECTION'S, with the args bound.
+      // A later round may read what an earlier one loaded, and with arguments in
+      // hand a round can name a partition the empty-args offer could not.
+      for (let step = 0; step <= index; step++) {
+        await this.hydrateRounds(definition, step, seat, args, named, stamp.now);
+      }
+      return this.pickOf(definition, index, acting, named, args);
+    } finally {
+      bindWorldFacilities(this.game, null);
+    }
+  }
+
+  /**
+   * WHAT RE-ASKING THAT PICK STILL NEEDS RESIDENT (#378).
+   *
+   * `offerPartitions` for one selection, and it exists for the same reason: the
+   * child cannot reach the parent's storage, so it names and is told. Answers
+   * the FIRST unmet round, because a later round may read what an earlier one
+   * loaded and has nothing to say until the host has supplied it.
+   */
+  pickPartitions(
+    player: string,
+    action: string,
+    selection: string,
+    args: Readonly<Record<string, unknown>>,
+    now: number,
+  ): readonly string[] {
+    const seat = this.seatFor(player);
+    const definition = this.offerableAction(action);
+    const index = this.selectionIndex(definition, selection);
+    for (let step = 0; step <= index; step++) {
+      for (const round of definition.world!.needs) {
+        if (round.before !== step) continue;
+        const unmet = this.declareRound(round, seat, args, now).filter(
+          (name) => !this.residentIds.has(name),
+        );
+        if (unmet.length > 0) return declaredOnce(unmet);
+      }
+    }
+    return [];
+  }
+
+  /** The action a seat could be offered under this name, or a refusal naming
+   *  the ones it could. The clock's own verbs are not among them (#120). */
+  private offerableAction(name: string): ActionDefinition {
+    const definition = this.actions.get(name);
+    if (definition === undefined || definition.world?.seatless === true) {
+      throw worldRefusal(
+        "unknown-command",
+        `This world does not offer "${name}" to a seat. It offers: ` +
+          `${[...this.actions.values()]
+            .filter((candidate) => candidate.world?.seatless !== true)
+            .map((candidate) => `"${candidate.name}"`)
+            .join(", ")}.`,
+      );
+    }
+    return definition;
+  }
+
+  /** Where that selection sits in the action, or a refusal naming the ones it
+   *  has -- the same sentence a UI asking for a pick that moved needs. */
+  private selectionIndex(definition: ActionDefinition, selection: string): number {
+    const index = definition.selections.findIndex((pick) => pick.name === selection);
+    if (index === -1) {
+      throw worldRefusal(
+        "unknown-command",
+        `The action "${definition.name}" has no selection called "${selection}". It asks: ` +
+          `${definition.selections.map((pick) => `"${pick.name}"`).join(", ") || "(nothing)"}.`,
+      );
+    }
+    return index;
+  }
+
+  /**
    * One selection's metadata WITH ITS CANDIDATES, and both guards applied.
    *
    * The static half is `buildPickMetadata`, the engine's own -- the same
@@ -859,19 +969,20 @@ export class BoardSmithWorldEngine implements WorldEngine {
     index: number,
     acting: Player,
     named: readonly string[],
+    args: Readonly<Record<string, unknown>> = {},
   ): PickMetadata {
     const selection = definition.selections[index]!;
-    const pick = buildPickMetadata(this.game, acting, selection);
+    const pick = wireSafeMultiSelect(buildPickMetadata(this.game, acting, selection, { ...args }));
     if (selection.type === "number" || selection.type === "text") return pick;
 
     const candidates = this.game
       .getActionExecutor()
-      .getChoices(selection, acting, {}, definition.name) as AnnotatedCandidate[];
+      .getChoices(selection, acting, { ...args }, definition.name) as AnnotatedCandidate[];
 
     // (c) THE PER-SELECTION CAP, this host's own number.
     assertCandidateBudget(definition.name, selection.name, candidates.length, this.budgets);
 
-    const context = { game: this.game, player: acting, args: {} };
+    const context = { game: this.game, player: acting, args: { ...args } };
     // Warnings are the SESSION's channel for a soft-failed display callback and
     // a world has no frame to carry them; collected so the formatters have
     // somewhere to put one, and dropped, because the console already has it.
@@ -2051,6 +2162,26 @@ function candidateless(pick: PickMetadata): boolean {
  * -- which makes "the bundle said nothing" and "the bundle said nothing about
  * this" indistinguishable on the far side.
  */
+/**
+ * A CAP THE WIRE CAN CARRY (ShufflewickPub #378).
+ *
+ * `resolveMultiSelect` normalizes "no upper bound" to `Infinity`, which is a
+ * perfectly good number in an isolate and is not JSON: `JSON.stringify` writes
+ * `null`, and the panel read that as a cap of nothing and disabled every
+ * checkbox. An unbounded pick says so by OMITTING `max`, which is what
+ * `resolveMultiSelectConfig` and the panel already read as "no upper bound",
+ * and what the same shape means everywhere else in the metadata.
+ *
+ * Only the world path needs this: a table's picks are answered per selection
+ * over a live session rather than serialized into a single offer frame.
+ */
+function wireSafeMultiSelect(pick: PickMetadata): PickMetadata {
+  const bounds = pick.multiSelect;
+  if (bounds === undefined || Number.isFinite(bounds.max)) return pick;
+  const { max: _unbounded, ...rest } = bounds;
+  return { ...pick, multiSelect: rest as PickMetadata["multiSelect"] };
+}
+
 function offerOf(
   definition: ActionDefinition,
   selections: PickMetadata[],
