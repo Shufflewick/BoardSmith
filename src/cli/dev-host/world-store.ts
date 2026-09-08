@@ -276,6 +276,21 @@ export interface LocalWorldStore extends WorldPartitionStore, WorldPartitionWrit
   }): void;
 
   /**
+   * LIFT THIS WORLD'S ELEMENT IDS ABOVE THE CONSTRUCTION FLOOR (#223).
+   *
+   * Every partition and every queued event, rewritten with one offset, in ONE
+   * transaction -- for the reason `migrate` is one transaction, and one more:
+   * a world half lifted is a world whose partitions disagree about what an id
+   * means, and its references point at nothing. There is no retry that could
+   * finish it, because the second attempt would shift bytes the first had
+   * already shifted.
+   */
+  rekey(lifted: {
+    partitions: Record<string, string>;
+    events: readonly PlannedEvent[];
+  }): void;
+
+  /**
    * RECORD A PARTITION ROOT BUILT ON FIRST USE (#218).
    *
    * Its own write, and deliberately not part of a checkpoint: it happens while
@@ -647,6 +662,18 @@ export function openWorldStore(path: string, budgets: WorldBudgets): LocalWorldS
     stateVersion(): number {
       const stored = meta(STATE_VERSION_KEY);
       return stored === undefined ? 0 : Number(stored);
+    },
+
+    rekey({ partitions, events }): void {
+      const rows = Object.entries(partitions).map(([name, json]) => {
+        const known = stmt.knownParent.get(name) as { parent_id: number } | undefined;
+        if (!known) throw unknownPartition(name);
+        return { name, parentId: known.parent_id, json };
+      });
+      transact(() => {
+        writePartitions(rows);
+        writeEvents(events);
+      });
     },
 
     migrate({ partitions, created, events, toStateVersion }): void {

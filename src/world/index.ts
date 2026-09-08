@@ -52,6 +52,7 @@ export * from './readonly.js';
 export * from './schedule.js';
 export * from './schedule-api.js';
 export * from './engine.js';
+export * from './rekey.js';
 export * from './runner.js';
 export * from './definition.js';
 export * from './orders.js';

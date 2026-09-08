@@ -28,6 +28,7 @@ import {
   worldBudgets,
   worldClockAction,
   type WorldBudgets,
+  type StoredPartition,
   type WorldDefinition,
 } from '../../world/index.js';
 import { openWorldStore, worldStorePath, type LocalWorldStore } from './world-store.js';
@@ -1138,5 +1139,113 @@ describe('#218: partitions created on first use', () => {
     expect(answer).toMatchObject({ ok: false, code: 'partition-missing' });
     expect(answer?.message).toContain('nosuchroom');
     await host.close();
+  });
+});
+
+/**
+ * #223: A WORLD WRITTEN BEFORE THE CONSTRUCTION-ID FLOOR CAN STILL GROW.
+ *
+ * #218 parted the id space so a seat count can change without the wider
+ * construction minting ids the stored partitions already hold -- and that
+ * fixed every world written since, which is not the set of worlds anybody
+ * cares about. A world written BEFORE it holds roots at ids like 14, because
+ * that is where the old counter happened to be, and those are exactly the
+ * worlds with a season in them worth keeping. Widening one still failed on the
+ * FIRST adoption, before any migration hook could run -- at a moment no author
+ * could have reached.
+ *
+ * The world under test is built the only honest way: by writing partitions at
+ * pre-floor ids directly into the store, which is what the previous SDK left
+ * behind. A fixture built through the current one would carry the floor and
+ * miss the whole case, which is the mistake #218's own widening test made.
+ */
+describe('#223: lifting a world written before the construction-id floor', () => {
+  /** The bytes the OLD SDK left: a hearth at id 14, holding a reference to a
+   *  log at 15, exactly as a world serializes one (`{ __elementId }`). */
+  function preFloorHearth(): StoredPartition {
+    return {
+      parentId: 0,
+      json: {
+        className: 'Hearth',
+        id: 14,
+        name: 'hearth',
+        attributes: { logs: 3, burns: 0, marker: { __elementId: 15 }, seat: { __playerRef: 2 } },
+        children: [
+          { className: 'Hearth', id: 15, name: 'marker', attributes: { logs: 0, burns: 0 } },
+        ],
+      },
+    };
+  }
+
+  /** A launched world holding those bytes and one queued event whose frozen
+   *  arguments name an element by id. */
+  async function aPreFloorWorld(): Promise<void> {
+    const store = openWorldStore(worldStorePath(dir), worldBudgets());
+    await store.createAll({ [HEARTH]: preFloorHearth() }, 0);
+    store.close();
+  }
+
+  it('lifts every id and every reference above the floor, in one step', async () => {
+    await aPreFloorWorld();
+    const opened = openHost({ dir, definition: bundle() });
+    const started = await opened.host.start();
+    expect(started.lifted).toEqual({ offset: 1_000_000 - 14, partitions: 1, events: 0 });
+    await opened.host.close();
+
+    const store = openWorldStore(worldStorePath(dir), worldBudgets());
+    const lifted = JSON.stringify(await store.read(HEARTH));
+    // THE IDS MOVED, and by the smallest shift that clears the floor.
+    expect(lifted).toContain('"id":1000000');
+    expect(lifted).toContain('"id":1000001');
+    // AND SO DID THE REFERENCE, or the world would wake up pointing at nothing.
+    expect(lifted).toContain('"__elementId":1000001');
+    // A SEAT IS NOT AN ELEMENT ID. Seat 2 is still seat 2 in a world that just
+    // grew, which is the one number a blanket shift would have ruined.
+    expect(lifted).toContain('"__playerRef":2');
+    // AND THE GAME'S OWN DATA IS UNTOUCHED.
+    expect(lifted).toContain('"logs":3');
+    store.close();
+  });
+
+  it('lets the lifted world WIDEN, which is the case the whole ticket is about', async () => {
+    await aPreFloorWorld();
+    const wider = worldBlock({ maxPlayers: 40 });
+    const { host, sent } = await attached({ dir, definition: bundle({ world: wider }) });
+
+    // The world is playable on the wider rules, from the bytes it already had.
+    expect(JSON.stringify(last(sent, 'c1', 'world_state')?.view)).toContain('"logs":3');
+    // AND A SEAT THE OLD WORLD DID NOT HAVE can be taken and can act.
+    await host.handleMessage('c2', { type: 'hello' });
+    await host.handleMessage('c2', { type: 'attach', seat: 13 });
+    await host.handleMessage('c2', {
+      type: 'action',
+      order: nextOrder(),
+      requestId: 'r13',
+      action: 'chop',
+      args: {},
+    });
+    expect(last(sent, 'c2', 'world_response')).toMatchObject({ ok: true });
+    await host.close();
+  });
+
+  it('is done ONCE: a second start finds a world already above the floor', async () => {
+    await aPreFloorWorld();
+    const first = openHost({ dir, definition: bundle() });
+    expect((await first.host.start()).lifted).toBeDefined();
+    await first.host.close();
+
+    const again = openHost({ dir, definition: bundle() });
+    expect((await again.host.start()).lifted).toBeUndefined();
+    await again.host.close();
+  });
+
+  it('leaves a world written since the floor entirely alone', async () => {
+    // The ordinary start, which must cost one comparison and no write.
+    const opened = await attached({ dir });
+    await opened.host.close();
+
+    const again = openHost({ dir, definition: bundle() });
+    expect((await again.host.start()).lifted).toBeUndefined();
+    await again.host.close();
   });
 });

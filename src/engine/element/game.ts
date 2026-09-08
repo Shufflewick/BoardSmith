@@ -538,7 +538,7 @@ export interface FormattedMessage {
  * a seat count can change without a single stored id colliding with one the
  * wider construction just minted. See `Game#reserveConstructionIdSpace`.
  */
-const WORLD_PARTITION_ID_FLOOR = 1_000_000;
+export const WORLD_PARTITION_ID_FLOOR = 1_000_000;
 
 export const GAME_SELF_SERIALIZED_FIELDS = ['phase', 'messages', 'settings'] as const;
 

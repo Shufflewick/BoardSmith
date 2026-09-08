@@ -76,6 +76,10 @@ import {
   type WorldOrder,
   type WorldReceipt,
   type WorldTiming,
+  lowestElementId,
+  rekeyOffsetFor,
+  rekeyPartition,
+  rekeyReferences,
 } from '../../world/index.js';
 import { createNodeWorldClock, type WorldDevClock } from './node-world-clock.js';
 import type { LocalWorldStore } from './world-store.js';
@@ -125,6 +129,15 @@ interface LocalWorldHostOptions {
  */
 interface WorldStartOutcome {
   readonly migrated?: WorldMigrationOutcome;
+  /** Present when this start lifted a pre-floor world's ids (#223). */
+  readonly lifted?: WorldLiftOutcome;
+}
+
+/** What one id lift moved, for whoever says it out loud. */
+export interface WorldLiftOutcome {
+  readonly offset: number;
+  readonly partitions: number;
+  readonly events: number;
 }
 
 /** What one upgrade moved, for whoever says it out loud. */
@@ -251,6 +264,7 @@ export class LocalWorldHost {
    */
   async start(): Promise<WorldStartOutcome> {
     let migrated: WorldStartOutcome['migrated'] = undefined;
+    let lifted: WorldStartOutcome['lifted'] = undefined;
     await this.#run(async () => {
       if (!this.#store.isLaunched()) {
         // GENESIS RECORDS THE VERSION IT WROTE UNDER (#200), with the bytes: a
@@ -261,11 +275,70 @@ export class LocalWorldHost {
           readWorldDefinition(this.#definition).stateVersion ?? 0,
         );
       } else {
+        // BEFORE ANY MIGRATION, AND BEFORE ANY ADOPTION (#223). A world
+        // written before #218's construction-id floor holds roots at ids the
+        // wider game's own construction now mints, so widening it failed on
+        // the FIRST adoption -- before any migration hook could run, which is
+        // to say at a moment no author could have reached. Lifting is a
+        // storage-format concern rather than a rules one, so it is not gated
+        // on `stateVersion`: a world whose ids are already above the floor
+        // pays one comparison and nothing else.
+        lifted = await this.#liftPreFloorIds();
         migrated = await this.#migrateIfNeeded();
       }
       this.#rearm();
     });
-    return { migrated };
+    return lifted === undefined ? { migrated } : { migrated, lifted };
+  }
+
+  /**
+   * LIFT A WORLD WRITTEN BEFORE THE CONSTRUCTION-ID FLOOR (#223).
+   *
+   * `world/rekey.ts` carries the whole argument for the shape: one offset for
+   * the whole world, chosen to put its lowest id exactly on the floor, applied
+   * to every partition and every queued event so that ids keep meaning the
+   * same thing ACROSS partitions.
+   *
+   * ONE TRANSACTION, and nothing is adopted first: a world half lifted is a
+   * world whose references point at nothing, and unlike a checkpoint there is
+   * no retry that could finish it -- the second attempt would shift bytes the
+   * first had already shifted. It runs before `#migrateIfNeeded` because a
+   * migration ADOPTS, and adoption is the thing that was failing.
+   *
+   * A world already above the floor -- every world written since #218 -- costs
+   * one comparison per partition and writes nothing.
+   */
+  async #liftPreFloorIds(): Promise<WorldStartOutcome['lifted']> {
+    const names = this.#store.partitionNames();
+    const stored = new Map<string, StoredPartition>();
+    let lowest = Number.POSITIVE_INFINITY;
+    for (const name of names) {
+      const partition = await this.#readPartition(
+        name,
+        `Reading this world needs partition "${name}", which its store does not have.`,
+      );
+      stored.set(name, partition);
+      lowest = Math.min(lowest, lowestElementId(partition.json));
+    }
+
+    const offset = rekeyOffsetFor(lowest);
+    if (offset === 0) return undefined;
+
+    const partitions: Record<string, string> = {};
+    for (const [name, partition] of stored) {
+      partitions[name] = JSON.stringify(rekeyPartition(partition.json, offset));
+    }
+    const events = this.#store.pendingEvents().map((event) => ({
+      ...event,
+      args: rekeyReferences(event.args, offset) as Record<string, unknown>,
+    }));
+
+    this.#store.rekey({ partitions, events });
+    // THE RESIDENT TREE GOES WITH THE OLD BYTES, exactly as a migration's
+    // does: nothing has been adopted yet on this start, and rebuilding is what
+    // makes that true for certain rather than by inspection.
+    this.#discardResident();
+    return { offset, partitions: Object.keys(partitions).length, events: events.length };
   }
 
   /**
