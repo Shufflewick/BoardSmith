@@ -1,8 +1,8 @@
 {
-  "revision": 47,
+  "revision": 48,
   "bundleProtocol": 2,
   "surfaceHash": "025c0bc463474eb1",
-  "payloadHash": "67a7a5d320b9ce2b",
+  "payloadHash": "eb472de70ccc7f01",
   "history": [
     {
       "revision": 1,
@@ -379,6 +379,14 @@
       "surfaceHash": "025c0bc463474eb1",
       "payloadHash": "67a7a5d320b9ce2b",
       "summary": "a world written before the construction-id floor is lifted onto it once, at its next start: one offset across every partition and every queued event, so a pre-floor world's seat count can change without its stored roots colliding with the wider construction (#223)"
+    },
+    {
+      "revision": 48,
+      "date": "2026-09-08",
+      "bundleProtocol": 2,
+      "surfaceHash": "025c0bc463474eb1",
+      "payloadHash": "eb472de70ccc7f01",
+      "summary": "A step's needs() context now carries world -- the indexed, read-only WorldResidency that execute and a bundle's view(seat, world) already receive -- so a later round reaches a root an earlier round declared by name instead of searching the resident tree for it; readOnlyProjection also stopped wrapping its own output, which restores the identity a projected element had lost and takes a 500-root finder from 80x the live tree to 17x. The offer fixture now hashes the declaration WALK and not only its answer, which is why this revision exists at all: the walk was claimed as covered from r-#187 onward and was not (ShufflewickPub#374)"
     }
   ]
 }
