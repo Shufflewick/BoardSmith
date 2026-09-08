@@ -1,7 +1,7 @@
 {
-  "revision": 56,
+  "revision": 57,
   "bundleProtocol": 2,
-  "surfaceHash": "833f0bcefd6e4aef",
+  "surfaceHash": "9103e0232966ca04",
   "payloadHash": "f548bb3ffbfaeec0",
   "history": [
     {
@@ -451,6 +451,14 @@
       "surfaceHash": "833f0bcefd6e4aef",
       "payloadHash": "f548bb3ffbfaeec0",
       "summary": "A world's host now stamps every dispatch with the acting seat's DURABLE activity watermark (ShufflewickPub #383). ctx.world.activity carries {seat, at, since, inactiveSince}: at is the arrival instant of this seat's last ACCEPTED command, as of BEFORE the command carrying it, and inactiveSince is at ?? since -- the one number a gameplay inactivity deadline is written against. since is when the world began recording, so an occupied world upgraded into this feature reports its seats as idle since the upgrade rather than since 1970. A seat-owned scheduled event is handed its OWNER's watermark, which is what lets an irreversible cleanup deadline recheck whether the player came back; the world's own events carry null. Refusals, drained events, presence hooks and migrations never move a watermark, and it never moves backwards. WorldCommandStamp, WorldEventStamp and WorldOfferStamp all carry activity and a host must supply it; the local store keeps it per seat and fixes its recording epoch on first open."
+    },
+    {
+      "revision": 57,
+      "date": "2026-09-08",
+      "bundleProtocol": 2,
+      "surfaceHash": "9103e0232966ca04",
+      "payloadHash": "f548bb3ffbfaeec0",
+      "summary": "A world may ask the platform to convert PLATFORM CREDITS into the game's own currency, and is told it cannot yet (ShufflewickPub #382). ctx.world.convertCredits({credits}) is declared and refuses every time with the new caller-owned code credit-conversion-unavailable, whose message states plainly that nothing was charged and nothing was granted and that the command has been unwound. It is shipped as a declared hole on purpose: ShufflewickPub has no currency system yet and the rate, bounds, quantum and reversal policy are undecided, and a game with no boundary to call writes its own payments -- running checkout, holding card details, trusting a browser about a debit and granting a paid reward twice. The signature commits to nothing but whole-number credits and one-way conversion; there is deliberately no method converting game currency back. Separately, the surface fingerprint now covers the WORLD_REFUSALS registry's codes and owners, which it never did: the park ladder branches on them (platform parks after two, game dead-letters, caller does neither), so adding a code or moving one between owners changes what the platform does to a live world and must mint a revision."
     }
   ]
 }

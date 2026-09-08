@@ -98,6 +98,7 @@
 import { createHash } from 'node:crypto';
 import type { WorldHostMessage, WorldUiMessage } from '../ui/world/worldProtocol.js';
 import { WORLD_ENGINE_METHODS } from '../world/contract.js';
+import { WORLD_REFUSALS } from '../world/refusals.js';
 import type { WorldEngine } from '../world/contract.js';
 
 /**
@@ -388,6 +389,23 @@ function describeExport(name: string, value: unknown): string {
  */
 export async function computeSurfaceHash(): Promise<string> {
   const lines: string[] = [];
+
+  // THE REFUSAL REGISTRY IS PART OF THE SURFACE (ShufflewickPub #382).
+  //
+  // `describeExport` opens classes and functions and stops at plain objects, so
+  // `WORLD_REFUSALS` contributed its NAME and nothing else -- and a refusal code
+  // is not an implementation detail. The platform's park ladder branches on the
+  // code and on its owner: `platform` parks a world after two, `game`
+  // dead-letters, `caller` does neither. So adding a code, removing one, or
+  // moving one between owners changes what the platform DOES to a live world,
+  // and until now it moved neither hash.
+  //
+  // Codes and owners only, never the `why` prose, which is written for people
+  // and would make this hash move on every clarification.
+  const refusals = Object.entries(WORLD_REFUSALS)
+    .map(([code, entry]) => `${code}:${entry.owner}`)
+    .sort();
+  lines.push(`world-refusals: ${refusals.join(',')}`);
 
   for (const entry of PLATFORM_ENTRYPOINTS) {
     const module = (await entry.module()) as Record<string, unknown>;

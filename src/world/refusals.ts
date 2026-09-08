@@ -99,6 +99,25 @@ export const WORLD_REFUSALS = {
     owner: "caller",
     why: "#195: a repeat arrived for an order minted before this world's receipt floor, so its receipt (if it ever had one) has been swept and nothing can say whether it committed. Refused rather than run, because running it is the second spend the order identity exists to prevent. CALLER-owned and not platform-owned: the world is healthy, one request cannot be answered, and a park ladder must not climb because a page came back from a fortnight offline",
   },
+  "credit-conversion-unavailable": {
+    owner: "caller",
+    why:
+      "ShufflewickPub #382: a bundle called `ctx.world.convertCredits()`, and " +
+      "this platform cannot yet convert platform credits into a game's own " +
+      "currency. The surface is DECLARED and unimplemented on purpose: a game " +
+      "with no boundary to call builds its own, and a game that builds its own " +
+      "is running checkout, holding payment credentials, believing a browser " +
+      "about a debit and granting a paid reward twice -- the four things this " +
+      "boundary exists to keep out of a bundle. CALLER-owned, and that is about " +
+      "CONSEQUENCE rather than blame: nobody here is at fault, and the two " +
+      "owners that carry a consequence would both be wrong. `platform` parks " +
+      "the world after two, so every player pressing Buy would park a world " +
+      "whose every other command works; `game` dead-letters, which says the " +
+      "bundle is broken when it is written correctly against a surface we " +
+      "published. This is one request that cannot be answered, on a healthy " +
+      "world -- the same reading `order-outcome-unknown` takes. Nothing is " +
+      "charged and nothing is granted, and the command unwinds",
+  },
   "clock-only-command": {
     owner: "caller",
     why: "a player sent a verb the bundle built with `worldClockAction()` -- the clock's own, reached by a scheduled event and by nothing else. The world is unaffected: the refusal is issued before the handler is reached, and a client that never offered the command cannot have sent it by accident",

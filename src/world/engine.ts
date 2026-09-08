@@ -347,6 +347,28 @@ function seatActivity(stamp: SeatActivityStamp | null): SeatActivity | null {
   return { ...stamp, inactiveSince: stamp.at ?? stamp.since };
 }
 
+/**
+ * THE ONE SENTENCE `convertCredits` EVER SAYS (ShufflewickPub #382).
+ *
+ * Written once and thrown from both facility builders, so an offer and a
+ * dispatch cannot come to disagree about whether money moved. It answers the
+ * two questions a designer would otherwise settle by experiment -- was a player
+ * charged, did anybody get anything -- because "not implemented" alone leaves
+ * both open, and the experiment that settles them involves somebody's money.
+ */
+function creditsUnavailable(action: string): WorldRefusal {
+  return worldRefusal(
+    "credit-conversion-unavailable",
+    `The "${action}" action asked to convert platform credits into this game's own currency, ` +
+      "which is NOT YET IMPLEMENTED. ShufflewickPub has no currency system yet, and the " +
+      "exchange rate, the amount bounds and the reversal policy are all still undecided, so " +
+      "there is nothing here that could have debited anybody. NOTHING WAS CHARGED and nothing " +
+      "was granted: this command has been unwound and the world is exactly as it was. The " +
+      "surface exists so that a game has a boundary to call rather than a payment system to " +
+      "write; when the platform can answer, this call is what will start working.",
+  );
+}
+
 export class BoardSmithWorldEngine implements WorldEngine {
   private readonly budgets: WorldBudgets;
   private readonly game: Game;
@@ -1309,6 +1331,9 @@ export class BoardSmithWorldEngine implements WorldEngine {
         // whole argument; this is the same projection a declaration is handed.
         return readOnlyProjection(this.rootOf(name));
       },
+      convertCredits: (): never => {
+        throw creditsUnavailable(action);
+      },
       schedule: () => refuse("schedule"),
       cancel: () => refuse("cancel"),
       complete: () => refuse("complete"),
@@ -1713,6 +1738,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
       // can outlive this dispatch (#144).
       presence: new Set(charge.presence),
       activity: seatActivity(charge.activity),
+      convertCredits: (): never => raise(creditsUnavailable(action)),
       partition: (name: string) => {
         const undeclared = declaredRefusal(action, name, named);
         if (undeclared !== null) raise(undeclared);

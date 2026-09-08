@@ -208,6 +208,52 @@ export interface WorldFacilities {
    * ending. Refused outside a real dispatch, for the reason `schedule` is.
    */
   complete(): void;
+  /**
+   * TURN PLATFORM CREDITS INTO THIS GAME'S OWN CURRENCY (ShufflewickPub #382).
+   *
+   * NOT IMPLEMENTED. It refuses, every time, with
+   * `credit-conversion-unavailable`, and it is here anyway.
+   *
+   * ## Why a surface that only refuses is the right thing to ship
+   *
+   * A game that wants to sell its own currency needs a BOUNDARY from the
+   * platform, not a helper. Four promises live on the platform's side of it and
+   * cannot live anywhere else: the game must not run checkout, must not see
+   * payment credentials, must not believe a browser about a debit, and must not
+   * be able to grant a paid reward twice. A game with nothing to call builds
+   * its own -- and a game that builds its own has broken all four.
+   *
+   * So the hole is DECLARED. An author reaching for this finds a named boundary
+   * and a sentence saying the platform is not ready, which is a day's delay; an
+   * author finding nothing writes a payment system into a board game, which is
+   * not recoverable by the time anybody notices.
+   *
+   * ShufflewickPub has no currency at all yet, and the exchange rate, the
+   * bounds, the quantum and the reversal policy are all undecided. None of them
+   * is guessed here: this signature commits to nothing except that credits are
+   * WHOLE NUMBERS and that conversion is ONE-WAY. A game never converts its own
+   * currency back into credits, and there is deliberately no method that could.
+   */
+  convertCredits(request: CreditConversion): never;
+}
+
+/**
+ * WHAT A GAME WOULD ASK FOR, IF THIS WORKED (ShufflewickPub #382).
+ *
+ * One field, because one field is all that can be committed to before the
+ * platform decides what a credit is worth. `credits` is a WHOLE NUMBER of
+ * platform credits to spend -- integral by contract, so that no game ships
+ * arithmetic that assumes fractions and no rounding rule has to be invented
+ * later to rescue it.
+ *
+ * The AMOUNT of game currency is deliberately absent. It is the platform's
+ * answer, from a configured rate, and a game that named it would be a game
+ * setting its own exchange rate from inside the isolate that benefits.
+ */
+export interface CreditConversion {
+  /** Whole platform credits to spend. One-way: this buys game currency, and
+   *  nothing converts game currency back. */
+  readonly credits: number;
 }
 
 /**
