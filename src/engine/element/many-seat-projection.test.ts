@@ -145,7 +145,8 @@ describe('#408 -- one serialization answers a whole audience', () => {
 });
 
 /**
- * ShufflewickPub #408, second half: WHEN IS A PROJECTION THE SAME FOR EVERYBODY?
+ * ShufflewickPub #408 second half, widened by #411: WHEN IS A PROJECTION THE
+ * SAME FOR EVERYBODY?
  *
  * Sharing a serialization (above) removed the repeated pass. It did not make
  * two seats' answers EQUAL, and equal is what a host needs before it can encode
@@ -153,25 +154,28 @@ describe('#408 -- one serialization answers a whole audience', () => {
  * views and was 500 separate `JSON.stringify` calls, 18.5 MB, because nothing
  * could say they were identical.
  *
- * Measured, a plainly public plaza of 200 stalls at 500 seats collapses to ONE
- * distinct body once the seat number and the viewer's own player element are
- * out of the way; the same plaza scoped with `addVisibleTo` stays 500 distinct,
- * because `redactVisibilityForSeat` collapses the grant roster to the receiving
- * seat and that is per-seat by construction.
+ * #408 collapsed a plainly public plaza to one body. It left the SCOPED plaza
+ * at one body per seat -- a room scoped with `addZoneVisibleTo` to everybody
+ * standing in it, which is how most room-shaped worlds are built -- because the
+ * redaction spelled the reader's own grant as `addPlayers: [yourSeat]`. #411
+ * spells that same bit in the mode instead, so every seat holding the same
+ * grant holds the same bytes and the scoped plaza collapses too.
  *
  * So the question is answered STRUCTURALLY rather than by comparing bytes:
- * comparing 500 encoded bodies costs the 27 ms of encoding this exists to
- * remove. `projectsAlikeForEverySeat` walks the tree once and answers from what
- * the tree DECLARES -- and the cases below hold that answer against actually
- * projecting two seats and comparing, which is the only thing that makes the
- * predicate worth trusting.
+ * comparing 500 encoded bodies costs the encoding this exists to remove.
+ * `projectsAlikeFor` walks the tree once and answers from what the tree
+ * DECLARES about the seats that are asking -- and the cases below hold that
+ * answer against actually projecting those seats and comparing, which is the
+ * only thing that makes the predicate worth trusting.
  */
-describe("#408 -- when every seat's projection is the same projection", () => {
-  /** Two seats' projections, held against what the predicate promised. */
-  function agrees(game: Game): { predicted: boolean; observed: boolean } {
-    const one = JSON.stringify(game.toJSONForPlayer(1));
-    const two = JSON.stringify(game.toJSONForPlayer(2));
-    return { predicted: game.projectsAlikeForEverySeat(), observed: one === two };
+describe("#408/#411 -- when every seat's projection is the same projection", () => {
+  /** An audience's projections, held against what the predicate promised. */
+  function agrees(
+    game: PlazaGame,
+    audience: readonly number[] = [1, 2],
+  ): { predicted: boolean; observed: boolean } {
+    const bodies = new Set(audience.map((seat) => JSON.stringify(game.toJSONForPlayer(seat))));
+    return { predicted: game.projectsAlikeFor(audience), observed: bodies.size === 1 };
   }
 
   /** A public square with nothing declared about who may see it. */
@@ -199,17 +203,74 @@ describe("#408 -- when every seat's projection is the same projection", () => {
     expect(predicted).toBe(false);
   });
 
-  it("says NO for a zone that names who may see its contents, and is right", () => {
-    // The case that matters most, because it is how a world scopes a room and
-    // it looks public: EVERY seat is granted, and every seat still gets
-    // different bytes -- `redactVisibilityForSeat` collapses the roster to the
-    // receiving seat, so the grant list is per-seat output.
+  it("says YES for a zone every seat in the audience may see into, and is right", () => {
+    // THE CASE #411 IS FOR, and how a world scopes a room: every seat is
+    // granted, and every seat now gets the SAME bytes, because the redaction
+    // tells each of them that they may see rather than naming them.
+    const game = newSquare();
+    game.first(Stall, 'square')!.addZoneVisibleTo(...seatsOf(SEATS));
+    const { predicted, observed } = agrees(game, seatsOf(SEATS));
+    expect(observed, "a granted roster is redacted to a grant, not to a seat").toBe(true);
+    expect(predicted).toBe(true);
+  });
+
+  it("says NO when one seat in the audience is outside the grant, and is right", () => {
+    // The honest limit. A room scoped to SOME of the audience is per-seat
+    // output, because the seats outside it are being told something different.
+    const game = newSquare();
+    game.first(Stall, 'square')!.contentsHidden();
+    game.first(Stall, 'square')!.addZoneVisibleTo(1, 2);
+    const { predicted, observed } = agrees(game, [1, 2, 3]);
+    expect(observed).toBe(false);
+    expect(predicted).toBe(false);
+  });
+
+  it("still shares nothing between the granted and the ungranted", () => {
+    // The boundary, stated as its own case: the two groups above are two
+    // bodies, and the granted one is the only one holding the contents.
     const game = newSquare();
     const square = game.first(Stall, 'square')!;
-    square.addZoneVisibleTo(1, 2, 3, 4);
-    const { predicted, observed } = agrees(game);
-    expect(observed, "a granted roster is redacted to the seat reading it").toBe(false);
-    expect(predicted).toBe(false);
+    square.contentsHidden();
+    square.addZoneVisibleTo(1, 2);
+    const inside = JSON.stringify(game.toJSONForPlayer(1));
+    const outside = JSON.stringify(game.toJSONForPlayer(3));
+    expect(inside).toBe(JSON.stringify(game.toJSONForPlayer(2)));
+    expect(inside).not.toBe(outside);
+    expect(inside.includes('baker')).toBe(true);
+    expect(outside.includes('baker'), 'an ungranted seat sees no contents').toBe(false);
+  });
+
+  it("names no other seat in anybody's view of a scoped room", () => {
+    // THE VISIBILITY BOUNDARY (F-09). A seat may learn that it is granted; it
+    // may not learn who else is. Asserted over the whole projected body rather
+    // than over the redaction helper, so a future path that emitted a roster
+    // some other way would be caught here.
+    const game = newSquare();
+    const square = game.first(Stall, 'square')!;
+    square.contentsHidden();
+    square.addZoneVisibleTo(1, 2, 3);
+    for (const seat of seatsOf(SEATS)) {
+      const body = JSON.stringify(game.toJSONForPlayer(seat));
+      expect(body.includes('addPlayers'), `seat ${seat}`).toBe(false);
+      expect(body.includes('exceptPlayers'), `seat ${seat}`).toBe(false);
+    }
+    // ...while the FULL tree, which is what a checkpoint stores, still has it.
+    expect(JSON.stringify(game.toJSON()).includes('addPlayers')).toBe(true);
+  });
+
+  it("collapses a scoped square from one body per seat to one body", () => {
+    // THE MEASUREMENT, in the engine's own units: distinct encoded bodies is
+    // exactly what decides how many times a host encodes a fan-out.
+    const game = newSquare();
+    game.first(Stall, 'square')!.contentsHidden();
+    game.first(Stall, 'square')!.addZoneVisibleTo(...seatsOf(SEATS));
+    const bodies = new Set(
+      game.toJSONForPlayers(seatsOf(SEATS)).map((view) => JSON.stringify(view)),
+    );
+    expect(
+      bodies.size,
+      `${SEATS} seats granted the same room held ${bodies.size} distinct bodies.`,
+    ).toBe(1);
   });
 
   it("says NO for a class that withholds attributes from non-owners, and is right", () => {
@@ -220,6 +281,18 @@ describe("#408 -- when every seat's projection is the same projection", () => {
     game.registerElements([Strongbox]);
     const box = game.create(Strongbox, 'box', { goods: 4 });
     box.player = game.players[0];
+    const { predicted, observed } = agrees(game);
+    expect(observed).toBe(false);
+    expect(predicted).toBe(false);
+  });
+
+  it("says NO for an owner-only zone, and is right", () => {
+    // Ownership is not in the visibility state, so the redacted bytes match and
+    // what the serializer does with them does not.
+    const game = newSquare();
+    const square = game.first(Stall, 'square')!;
+    square.setZoneVisibility('owner');
+    square.player = game.players[0];
     const { predicted, observed } = agrees(game);
     expect(observed).toBe(false);
     expect(predicted).toBe(false);

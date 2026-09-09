@@ -1439,14 +1439,21 @@ export class BoardSmithWorldEngine implements WorldEngine {
    * attachment, answered on the frame that seats you.
    *
    * So this answers DISTINCT BODIES plus, per seat, which one is theirs. Two
-   * seats share a body when the tree projects alike for every seat
-   * (`Game#projectsAlikeForEverySeat`) and their declarations named the same
-   * partitions -- the second half because a view is pruned to what its own
-   * declaration named (#183), so the prune makes the body a function of the
-   * declaration. Measured, a plainly public plaza of 200 stalls at 500 seats is
-   * ONE body; the same plaza scoped with `addVisibleTo` is 500, because
-   * `redactVisibilityForSeat` collapses the grant roster to the receiving seat.
-   * A world that hides anything pays exactly what it paid before.
+   * seats share a body when the tree projects alike for THOSE SEATS
+   * (`Game#projectsAlikeFor`) and their declarations named the same partitions
+   * -- the second half because a view is pruned to what its own declaration
+   * named (#183), so the prune makes the body a function of the declaration.
+   *
+   * THE AUDIENCE IS PART OF THE QUESTION (ShufflewickPub #411), which is why
+   * the seats being asked are handed to the predicate rather than the world's
+   * whole roster. A room scoped with `addVisibleTo`/`addZoneVisibleTo` to
+   * everybody standing in it projects alike for all of them and differently for
+   * anybody outside. Measured on a plaza of 200 stalls at 500 seats: a plainly
+   * public plaza is ONE body, and the same plaza scoped to every seat was 500
+   * bodies and is now ONE -- 324 ms of encode-and-parse and 70 MB across the
+   * host's boundary, down to one body of 136 KB. A room scoped to SOME of the
+   * audience is still one body per group, and a world with genuine per-seat
+   * secrets pays exactly what it paid before.
    *
    * ONE SEAT'S PROJECTION IS STILL ONE SEAT'S FATE (#310). A view can throw for
    * one player while every other view in the batch is perfectly computable, the
@@ -1472,7 +1479,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
       }
     }
 
-    const sharing = shareGroups(this.game.projectsAlikeForEverySeat(), asking);
+    const sharing = shareGroups(this.game.projectsAlikeFor(asking.map((asked) => asked.seat)), asking);
     const keys = [...sharing.groups.keys()];
     const answered = projectGroups(
       keys,

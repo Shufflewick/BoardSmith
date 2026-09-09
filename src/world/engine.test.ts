@@ -2350,3 +2350,100 @@ describe("ShufflewickPub #408 -- one body for every seat that sees the same worl
     ).toBe(alone);
   });
 });
+
+describe("ShufflewickPub #411 -- one body for every seat that holds the same grant", () => {
+  // The case #408 deliberately did not reach, and the one most worlds are in:
+  // a room is scoped with `addZoneVisibleTo` rather than left plainly public,
+  // because scoping a room is how a room-shaped world is built. Every seat was
+  // granted and every seat still got its own body, because the redaction spelled
+  // the reader's grant as `addPlayers: [yourSeat]`.
+  //
+  // It is spelled in the mode now, so two readers holding the same grant hold
+  // the same bytes. Measured through the engine on a plaza of 200 stalls at 500
+  // seats: 500 distinct bodies and 70 MB, down to one body of 136 KB.
+
+  const AUDIENCE = ["p1", "p2", "p3", "p4"];
+
+  /** A world holding one room, stored with whatever visibility is written on it. */
+  function scopedWorld(scope: (room: Room) => void): BoardSmithWorldEngine {
+    // WRITTEN INTO THE STORED BYTES, because that is how a woken world learns
+    // it: a fixture reaching into the live tree would prove nothing about the
+    // world an engine actually adopts.
+    const born = newWorldGame();
+    const roomOne = born.create(Room, "room-one");
+    roomOne.create(Token, "token-one");
+    scope(roomOne);
+    const stored = new Map<string, StoredPartition>([
+      [ROOM_ONE, { parentId: born.id, json: throughStorage(roomOne.toJSON()) }],
+    ]);
+    const roster = new Map<string, number>();
+    for (const [index, player] of AUDIENCE.entries()) roster.set(player, index + 1);
+    return new BoardSmithWorldEngine({
+      game: newWorldGame(),
+      seats: roster,
+      store: new CountingStore(stored),
+      actions: ACTIONS,
+      view: () => [ROOM_ONE],
+    });
+  }
+
+  it("gives a room granted to the whole audience ONE body", async () => {
+    const engine = scopedWorld((room) => {
+      room.contentsHidden();
+      room.addZoneVisibleTo(1, 2, 3, 4);
+    });
+
+    const answered = await engine.viewsFor(AUDIENCE);
+
+    expect(answered.bodies, "one grant, one body").toHaveLength(1);
+    expect(answered.seats.map((seat) => (seat.refused ? -1 : seat.at))).toEqual(
+      Array(AUDIENCE.length).fill(0),
+    );
+    expect(JSON.stringify(answered.bodies[0]), "and the contents are really in it").toContain(
+      "token-one",
+    );
+  });
+
+  it("shares nothing across a room granted to only part of the audience", async () => {
+    // THE HONEST LIMIT, and the boundary. Sharing is decided once for the whole
+    // audience -- a room some of them may see into and some may not is one body
+    // per seat, exactly what it cost before. What must hold either way is that
+    // the ungranted are shown nothing: an audience that does not agree about a
+    // room is an audience the engine refuses to share for, rather than one it
+    // splits into the group that may see and the group that may not.
+    const engine = scopedWorld((room) => {
+      room.contentsHidden();
+      room.addZoneVisibleTo(1, 2);
+    });
+
+    const answered = await engine.viewsFor(AUDIENCE);
+
+    const bodyOf = (player: string): string => {
+      const seat = answered.seats.find((held) => held.player === player)!;
+      if (seat.refused) throw new Error(`${player} was refused`);
+      return JSON.stringify(answered.bodies[seat.at]);
+    };
+    expect(answered.bodies, "one body per seat, as before").toHaveLength(AUDIENCE.length);
+    expect(bodyOf("p1"), "a granted seat is shown the contents").toContain("token-one");
+    expect(bodyOf("p3"), "an ungranted seat is shown no contents").not.toContain("token-one");
+  });
+
+  it("tells no seat who else was granted the room", async () => {
+    // THE VISIBILITY BOUNDARY (F-09), asserted over what actually crosses the
+    // boundary rather than over the redaction helper: no body a seat receives
+    // carries a grant roster at all, whether that seat is inside the grant or
+    // outside it.
+    const engine = scopedWorld((room) => {
+      room.contentsHidden();
+      room.addZoneVisibleTo(1, 2);
+    });
+
+    const answered = await engine.viewsFor(AUDIENCE);
+
+    for (const body of answered.bodies) {
+      const bytes = JSON.stringify(body);
+      expect(bytes.includes("addPlayers")).toBe(false);
+      expect(bytes.includes("exceptPlayers")).toBe(false);
+    }
+  });
+});
