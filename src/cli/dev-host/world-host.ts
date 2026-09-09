@@ -1336,7 +1336,18 @@ export class LocalWorldHost {
       return;
     }
     const projecting = players.filter((player) => declined[player] === undefined);
-    const { views, refused } = await runner.viewsFor(projecting);
+    // EACH DISTINCT VIEW ONCE (ShufflewickPub #408). The runner answers a table
+    // of bodies and which one each seat holds, because seats of a world that
+    // hides nothing between them hold the SAME body and a host that was handed
+    // one copy per seat could not tell. This host has one reader per socket, so
+    // it simply looks its own up; the saving is the platform's, where a body is
+    // encoded once for everybody naming it.
+    const { bodies, of, refused } = await runner.viewsFor(projecting);
+    /** This seat's own body out of the shared table, or null if it has none. */
+    const bodyFor = (player: string): unknown => {
+      const at = of[player];
+      return at === undefined ? null : (bodies[at] ?? null);
+    };
     const failed = { ...declined, ...refused };
     for (const [clientId, seat] of this.#attached) {
       const player = devWorldPlayer(seat);
@@ -1358,7 +1369,7 @@ export class LocalWorldHost {
       }
       this.#send(
         clientId,
-        this.#stateFrame(clientId, views[player] ?? null, this.#notices(), 'watching', actions),
+        this.#stateFrame(clientId, bodyFor(player), this.#notices(), 'watching', actions),
       );
       // SAID OUT LOUD IN THE DEV BAR, because the reader is the AUTHOR. An
       // offer that refuses is a bundle mistake -- a candidate outside its own

@@ -97,6 +97,7 @@ import type {
   WorldEventStamp,
   WorldNarrationLine,
   WorldOfferStamp,
+  WorldAudienceViews,
   WorldPartitionSource,
   WorldSeatView,
   RoutedEvent,
@@ -368,6 +369,18 @@ function creditsUnavailable(action: string): WorldRefusal {
       "surface exists so that a game has a boundary to call rather than a payment system to " +
       "write; when the platform can answer, this call is what will start working.",
   );
+}
+
+/**
+ * One seat waiting to be projected, and everything the projection needs.
+ *
+ * `at` is where the seat sits in the answer being assembled, so a batch can
+ * settle every declaration first and fill the answers in afterwards.
+ */
+interface WorldSeatProjection {
+  readonly at: number;
+  readonly seat: number;
+  readonly named: readonly string[];
 }
 
 export class BoardSmithWorldEngine implements WorldEngine {
@@ -1390,7 +1403,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
   async viewFor(player: string): Promise<unknown> {
     const seat = this.seatFor(player);
     const named = await this.settleView(seat);
-    return this.projectView(this.game.toJSONForPlayer(seat), seat, named);
+    return this.projectView(this.game.toJSONForPlayer(seat), named);
   }
 
   /**
@@ -1416,6 +1429,25 @@ export class BoardSmithWorldEngine implements WorldEngine {
    * the pass -- which is also the last await before the last redaction, and
    * therefore the whole of the claim that nothing moved in between.
    *
+   * AND ONE BODY FOR EVERY SEAT THAT SEES THE SAME WORLD. Sharing the pass
+   * still left each seat holding its own BODY, so a 500-seat announcement in a
+   * public room remained 500 encodings and 18.5 MB across the host's own
+   * boundary. Two things stopped the bodies being equal and neither was about
+   * the world: the seat number in the envelope, and the viewer's own player
+   * element the roster prune kept. Both are gone -- a view is what the WORLD
+   * looks like through a declaration, and who is looking is a fact about the
+   * attachment, answered on the frame that seats you.
+   *
+   * So this answers DISTINCT BODIES plus, per seat, which one is theirs. Two
+   * seats share a body when the tree projects alike for every seat
+   * (`Game#projectsAlikeForEverySeat`) and their declarations named the same
+   * partitions -- the second half because a view is pruned to what its own
+   * declaration named (#183), so the prune makes the body a function of the
+   * declaration. Measured, a plainly public plaza of 200 stalls at 500 seats is
+   * ONE body; the same plaza scoped with `addVisibleTo` is 500, because
+   * `redactVisibilityForSeat` collapses the grant roster to the receiving seat.
+   * A world that hides anything pays exactly what it paid before.
+   *
    * ONE SEAT'S PROJECTION IS STILL ONE SEAT'S FATE (#310). A view can throw for
    * one player while every other view in the batch is perfectly computable, the
    * observed case being a declaration reaching a deliberately absent partition
@@ -1424,31 +1456,40 @@ export class BoardSmithWorldEngine implements WorldEngine {
    * than a refusal, because turning a throw into a platform refusal is the
    * runner's job and doing it here would do it twice.
    */
-  async viewsFor(players: readonly string[]): Promise<readonly WorldSeatView[]> {
-    const answers: WorldSeatView[] = [];
-    const projecting: { readonly at: number; readonly seat: number; readonly named: readonly string[] }[] = [];
+  async viewsFor(players: readonly string[]): Promise<WorldAudienceViews> {
+    const seats: WorldSeatView[] = [];
+    /** One entry per seat that will be projected, in the order asked. */
+    const asking: WorldSeatProjection[] = [];
 
     for (const player of players) {
       try {
         const seat = this.seatFor(player);
-        projecting.push({ at: answers.length, seat, named: await this.settleView(seat) });
-        // Overwritten below, once the shared pass has run.
-        answers.push({ player, refused: true, failure: undefined });
+        asking.push({ at: seats.length, seat, named: await this.settleView(seat) });
+        // Overwritten below, once the projections have run.
+        seats.push({ player, refused: true, failure: undefined });
       } catch (error) {
-        answers.push({ player, refused: true, failure: error });
+        seats.push({ player, refused: true, failure: error });
       }
     }
 
-    const states = this.game.toJSONForPlayers(projecting.map(({ seat }) => seat));
-    for (const [index, { at, seat, named }] of projecting.entries()) {
-      const player = answers[at]!.player;
-      try {
-        answers[at] = { player, refused: false, view: this.projectView(states[index]!, seat, named) };
-      } catch (error) {
-        answers[at] = { player, refused: true, failure: error };
-      }
+    const sharing = shareGroups(this.game.projectsAlikeForEverySeat(), asking);
+    const keys = [...sharing.groups.keys()];
+    const answered = projectGroups(
+      keys,
+      sharing.groups,
+      this.game.toJSONForPlayers(keys.map((key) => sharing.groups.get(key)!.seat)),
+      (state, named) => this.projectView(state, named),
+    );
+
+    for (const [index, { at }] of asking.entries()) {
+      const player = seats[at]!.player;
+      const answer = answered.answerOf.get(sharing.keyOf[index]!)!;
+      seats[at] =
+        "at" in answer
+          ? { player, refused: false, at: answer.at }
+          : { player, refused: true, failure: answer.failure };
     }
-    return answers;
+    return { bodies: answered.bodies, seats };
   }
 
   /**
@@ -1472,12 +1513,18 @@ export class BoardSmithWorldEngine implements WorldEngine {
     return named;
   }
 
-  /** One seat's view, out of the tree already redacted for that seat. */
+  /**
+   * One view, out of a tree already redacted for whoever is reading it.
+   *
+   * NO SEAT IN THE ARGUMENTS, and that is the point (ShufflewickPub #408): what
+   * comes out is a function of the TREE and the DECLARATION, so two seats whose
+   * declarations named the same partitions of a world that projects alike get
+   * the same bytes and a host encodes them once.
+   */
   private projectView(
     state: ElementJSON,
-    seat: number,
     named: readonly string[],
-  ): { player: number; state: ElementJSON; phase: Game["phase"] } {
+  ): { state: ElementJSON; phase: Game["phase"] } {
     // Computed from the live objects on demand. The fog of war is
     // `toJSONForPlayer`'s, already written and tested in the engine, and the
     // cost is what this seat can see rather than what the world contains.
@@ -1537,26 +1584,29 @@ export class BoardSmithWorldEngine implements WorldEngine {
     for (const [name, id] of this.residentIds) {
       (namedNames.has(name) ? namedIds : unnamedIds).add(id);
     }
-    // AND THE ROSTER GOES WITH IT (#181). The game root's player list is in no
-    // partition, so the prune above never reached it: a 500-seat world shipped
-    // 500 serialized `Player` elements to every seat on every look, which is
-    // O(world) per view and the one cost the partitioned model exists to
-    // delete. What survives is the seat doing the looking; see
-    // `pruneRosterToViewer` for why nothing dangles when the rest go.
+    // AND THE ROSTER GOES WITH IT (#181, and ALL of it since ShufflewickPub
+    // #408). The game root's player list is in no partition, so the prune above
+    // never reached it: a 500-seat world shipped 500 serialized `Player`
+    // elements to every seat on every look, which is O(world) per view and the
+    // one cost the partitioned model exists to delete. #181 left the seat doing
+    // the looking, on the ground that it is what a board renders as `mine`;
+    // measured, no client reads it -- `useWorldPlay` takes `state` out of the
+    // view and nothing else, and its `mine` comes from the seat the platform
+    // put on the frame. Keeping it made every body in a fan-out different for
+    // no reader at all. What survives now is only a player a NAMED PARTITION
+    // was adopted underneath; see `pruneRoster` for why nothing dangles.
     return {
-      player: seat,
-      state: pruneRosterToViewer(
+      state: pruneRoster(
         pruneUnnamedPartitions(state, unnamedIds, namedIds),
         new Set(this.game.players.map((player) => player.id)),
-        this.game.players.find((player) => player.seat === seat)?.id,
         namedIds,
       ),
       phase: this.game.phase,
     };
   }
 
-  // (pruneUnnamedPartitions and pruneRosterToViewer, the two module-scope
-  // helpers `projectView` ends with, are defined at the bottom of this file.)
+  // (pruneUnnamedPartitions and pruneRoster, the two module-scope helpers
+  // `projectView` ends with, are defined at the bottom of this file.)
 
   async serializePartitions(
     dirty: readonly string[],
@@ -2330,6 +2380,67 @@ function declaredRefusal(
   );
 }
 
+/**
+ * WHO SHARES A BODY WITH WHOM, decided before anything is projected
+ * (ShufflewickPub #408).
+ *
+ * Two halves, and each is asked at the level it belongs to. Whether the tree
+ * projects alike is about the TREE, so the caller asks it once for the whole
+ * audience and passes the answer in. What a seat DECLARED is the seat's, and it
+ * joins the key because a view is pruned to the partitions its own declaration
+ * named (#183) -- so two seats of the same public world holding different
+ * declarations hold different bodies.
+ */
+function shareGroups(
+  alike: boolean,
+  asking: readonly WorldSeatProjection[],
+): {
+  readonly groups: ReadonlyMap<string, WorldSeatProjection>;
+  readonly keyOf: readonly string[];
+} {
+  const groups = new Map<string, WorldSeatProjection>();
+  const keyOf: string[] = [];
+  for (const asked of asking) {
+    // A NUL between the parts, because a partition name may hold anything a
+    // bundle can spell and two lists must not be able to join into one key.
+    const key = `${alike ? "" : asked.seat}\u0000${asked.named.join("\u0000")}`;
+    if (!groups.has(key)) groups.set(key, asked);
+    keyOf.push(key);
+  }
+  return { groups, keyOf };
+}
+
+/**
+ * One projection per group, and one failure per group that could not be.
+ *
+ * #310's rule is per seat, and a group IS a set of seats: they were put
+ * together because the answer is the same for all of them, so a body that
+ * cannot be built cannot be built for any of them -- and the rest of the
+ * audience is still answered.
+ */
+function projectGroups(
+  keys: readonly string[],
+  groups: ReadonlyMap<string, WorldSeatProjection>,
+  states: readonly ElementJSON[],
+  project: (state: ElementJSON, named: readonly string[]) => unknown,
+): {
+  readonly bodies: readonly unknown[];
+  readonly answerOf: ReadonlyMap<string, { at: number } | { failure: unknown }>;
+} {
+  const bodies: unknown[] = [];
+  const answerOf = new Map<string, { at: number } | { failure: unknown }>();
+  for (const [index, key] of keys.entries()) {
+    try {
+      const body = project(states[index]!, groups.get(key)!.named);
+      answerOf.set(key, { at: bodies.length });
+      bodies.push(body);
+    } catch (error) {
+      answerOf.set(key, { failure: error });
+    }
+  }
+  return { bodies, answerOf };
+}
+
 function pruneUnnamedPartitions(
   json: ElementJSON,
   unnamed: ReadonlySet<number>,
@@ -2369,20 +2480,27 @@ function pruneUnnamedPartitions(
  * `docs/persistent-worlds.md`). A world's Player carries what its constructor
  * gave it and no more, which is exactly what the reference already inlined.
  *
- * TWO SURVIVE, and only two shapes of one.
+ * ONE SHAPE SURVIVES: WHOEVER HOLDS A NAMED PARTITION. The same path rule the
+ * partition prune keeps -- a partition adopted under a player element must
+ * survive wherever the game put it, because dropping the player would drop the
+ * room.
  *
- *   THE VIEWER. The seat doing the looking is the one player a view is
- *   definitionally about -- the envelope says so in `player` -- and it is what
- *   a board renders as `mine`. One element, whatever the world's population.
+ * THE VIEWER USED TO SURVIVE TOO, and no longer does (ShufflewickPub #408).
+ * #181 kept it on the ground that the seat doing the looking is the one player
+ * a view is definitionally about and is what a board renders as `mine`. Neither
+ * half held up when it was measured: `useWorldPlay` takes `state` out of the
+ * view and reads nothing else, and its `mine` is found from the seat the
+ * PLATFORM puts on the frame that seats you, never from the tree. So the
+ * element was one reader-less difference between two otherwise identical
+ * bodies, and it cost a 500-seat public room 500 encodings instead of one.
  *
- *   WHOEVER HOLDS A NAMED PARTITION. The same path rule the partition prune
- *   keeps: a partition adopted under a player element must survive wherever the
- *   game put it, because dropping the player would drop the room.
+ * WHICH MAKES THIS PRUNE SEAT-BLIND, and that is now the load-bearing property:
+ * what comes out is a function of the roster and the declaration, so two seats
+ * that named the same partitions get the same bytes.
  */
-function pruneRosterToViewer(
+function pruneRoster(
   json: ElementJSON,
   roster: ReadonlySet<number>,
-  viewer: number | undefined,
   named: ReadonlySet<number>,
 ): ElementJSON {
   if (roster.size === 0) return json;
@@ -2393,7 +2511,7 @@ function pruneRosterToViewer(
   const prune = (node: ElementJSON): void => {
     if (node.children === undefined) return;
     node.children = node.children.filter(
-      (child) => !roster.has(child.id) || child.id === viewer || holdsNamed(child),
+      (child) => !roster.has(child.id) || holdsNamed(child),
     );
     for (const child of node.children) prune(child);
   };

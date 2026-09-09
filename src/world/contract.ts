@@ -679,8 +679,37 @@ export interface WorldPartitionSource extends WorldPartitionStore {
  * told to ask again.
  */
 export type WorldSeatView =
-  | { readonly player: string; readonly refused: false; readonly view: unknown }
+  | { readonly player: string; readonly refused: false; readonly at: number }
   | { readonly player: string; readonly refused: true; readonly failure: unknown };
+
+/**
+ * WHAT A WHOLE AUDIENCE IS TOLD, WITH EACH DISTINCT ANSWER SAID ONCE
+ * (ShufflewickPub #408).
+ *
+ * A fan-out's remaining cost was never the projecting; it was that every seat
+ * held its OWN BODY, so a 500-seat announcement in a public room crossed the
+ * host's own boundary 500 times and was encoded 500 times -- 18.5 MB and 27 ms
+ * of `JSON.stringify` for 500 copies of one answer.
+ *
+ * They are copies of one answer once nothing about the VIEWER is in them, which
+ * is what #408 took out: the seat number, and the viewer's own player element.
+ * A view is what the world looks like through a declaration; who is looking is
+ * a fact about the attachment, and the platform answers that on the frame that
+ * seats you.
+ *
+ * So `bodies` holds each distinct answer once and a seat says WHICH ONE IS
+ * THEIRS. The host reads that as permission to encode once and send the same
+ * bytes to everybody naming the same index -- which is the whole point, and the
+ * reason this is a table rather than a per-seat map that happens to repeat
+ * itself: a host cannot discover the repetition without doing the encoding it
+ * would be trying to avoid.
+ */
+export interface WorldAudienceViews {
+  /** Each distinct view, once. `WorldSeatView.at` indexes this. */
+  readonly bodies: readonly unknown[];
+  /** One entry per player asked, in the order asked, duplicates included. */
+  readonly seats: readonly WorldSeatView[];
+}
 
 /**
  * A resident world engine.
@@ -1063,9 +1092,17 @@ export interface WorldEngine {
    * turning a throw into a platform refusal belongs to whoever is speaking to
    * the platform, and an engine that did it too would do it twice.
    *
+   * AND EACH DISTINCT ANSWER IS SAID ONCE. Sharing the pass still left every
+   * seat holding its own BODY, so a 500-seat announcement in a public room was
+   * 500 encodings and 18.5 MB across the host's boundary. Nothing about the
+   * VIEWER is in a view any more -- neither the seat number nor the viewer's
+   * own player element -- so seats whose declarations named the same partitions
+   * of a world that hides nothing get the SAME BYTES, and this says so instead
+   * of repeating them. See `WorldAudienceViews`.
+   *
    * Answers are in the order asked, one per entry, duplicates included.
    */
-  viewsFor(players: readonly string[]): Promise<readonly WorldSeatView[]>;
+  viewsFor(players: readonly string[]): Promise<WorldAudienceViews>;
 
   /**
    * WHAT THIS SEAT MAY DO HERE, ENUMERATED (#85, #91, #169).

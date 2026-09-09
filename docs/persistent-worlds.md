@@ -1012,22 +1012,38 @@ round asks for nothing is never asked again, so the steady state costs one round
 It sees the same read-only projection an action's declaration does, and an
 assignment through it is refused with `declaration-write`.
 
-What the seat receives is `{ player, state, phase }`, where `state` is the
+What the seat receives is `{ state, phase }`, where `state` is the
 engine's own per-player projection, with its fog of war already applied, **pruned
 to exactly the partitions this declaration named**. Pruning matters: residency is
 everybody's doing, and a view built from the raw resident tree grew with the
 world's popularity rather than with what the seat asked for. What a seat sees is
 a function of its own declaration.
 
-**The roster is pruned to the viewer too.** The game root's player list is in no
-partition, so a 500-seat world used to ship 500 serialized `Player` elements in
-every seat's view. A view carries the looking seat's own player and nobody
-else's. Nothing dangles: a player-valued attribute serializes as
-`{ __playerRef, seat, color, name }`, which resolves by seat and carries what a
-board reads inline, so `holding.player` says everything it ever said. And there
-was nothing else on those elements to carry -- a player is in no partition, so
-nothing checkpoints a write to one. **Do not keep world state on a `Player`;**
-put it in a partition, exactly as the candidate rule above already requires.
+**The roster is gone from a view entirely.** The game root's player list is in
+no partition, so a 500-seat world used to ship 500 serialized `Player` elements
+in every seat's view. A view now carries none of them -- not even the looking
+seat's own, which it kept until ShufflewickPub #408 measured that no client read
+it and every fan-out paid for it. Nothing dangles: a player-valued attribute
+serializes as `{ __playerRef, seat, color, name }`, which resolves by seat and
+carries what a board reads inline, so `holding.player` says everything it ever
+said. And there was nothing else on those elements to carry -- a player is in no
+partition, so nothing checkpoints a write to one. **Do not keep world state on a
+`Player`;** put it in a partition, exactly as the candidate rule above already
+requires. The one exception is a player a NAMED PARTITION was adopted
+underneath, which survives wherever the game put it, because dropping the player
+would drop the room.
+
+**Which is what lets a whole audience be told in one answer.** Nothing in a view
+says who is looking -- no seat number, no roster -- so two seats whose
+declarations named the same partitions of a world that hides nothing between
+them receive the SAME BYTES. `viewsFor` answers each distinct body once and says
+which seats hold it, and the host encodes a world-scoped announcement once
+instead of once per watcher. A world that hides anything from anybody pays
+exactly what it paid before; **the authoring lever is the visibility you
+declare**, because a room granted seat by seat with `addVisibleTo` is per-seat
+output even when every seat is granted, while a plainly public room is one
+answer for everybody. Your seat reaches you on the frame that seats you, never
+in the view.
 
 There is no turn, no message log and no available-action list inside a world's
 view. A world's flow does not run, its narration is its events, and its verbs

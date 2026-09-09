@@ -308,7 +308,19 @@ export interface WorldViewNeeds extends WorldDeclaration {
  *  refusal for each it could not. Both, because a batch is a set of separate
  *  answers that happen to share a round trip. */
 export interface WorldViews {
-  readonly views: Record<string, unknown>;
+  /**
+   * EACH DISTINCT VIEW, ONCE (ShufflewickPub #408).
+   *
+   * This used to be `views: Record<player, unknown>`, which said the same
+   * answer as many times as there were seats reading it -- 18.5 MB for a
+   * 500-seat announcement in a public room, stringified here and parsed again
+   * in the parent, for 500 copies of one body. Nothing about the viewer is in a
+   * view any more, so the copies are copies; `of` says whose is whose, and the
+   * parent encodes one frame per distinct body instead of one per watcher.
+   */
+  readonly bodies: readonly unknown[];
+  /** Which body each answered player holds, as an index into `bodies`. */
+  readonly of: Record<string, number>;
   readonly refused: Record<string, WorldViewRefusal>;
 }
 
@@ -682,7 +694,7 @@ export function createWorldRunner(
     async viewsFor(players: readonly string[]): Promise<WorldViews> {
       // NOTHING TO SUPPLY. Everything these views are about was adopted while
       // the declaration was settling (#122), so this projects and never fetches.
-      const views: Record<string, unknown> = {};
+      const of: Record<string, number> = {};
       const refused: Record<string, WorldViewRefusal> = {};
       // THE WHOLE AUDIENCE IN ONE ASK (ShufflewickPub #408). This used to loop
       // over `viewFor`, which meant the engine serialized the resident tree in
@@ -698,11 +710,12 @@ export function createWorldRunner(
       // that seat threw, and TRANSLATING IT IS THIS LAYER'S JOB: the engine
       // speaks to no platform, so a refusal minted down there would be minted
       // twice.
-      for (const seat of await engine.viewsFor(players)) {
+      const audience = await engine.viewsFor(players);
+      for (const seat of audience.seats) {
         if (seat.refused) refused[seat.player] = viewRefusalOf(seat.failure);
-        else views[seat.player] = seat.view;
+        else of[seat.player] = seat.at;
       }
-      return { views, refused };
+      return { bodies: audience.bodies, of, refused };
     },
 
     async declareOffers(

@@ -1,8 +1,8 @@
 {
-  "revision": 64,
+  "revision": 65,
   "bundleProtocol": 2,
-  "surfaceHash": "ee424fb06b1c618c",
-  "payloadHash": "d7a2574c8a6571a5",
+  "surfaceHash": "96b88a0be8dac5ec",
+  "payloadHash": "fcb67168b7207856",
   "formatHash": "0058593e7cc80205",
   "history": [
     {
@@ -520,6 +520,15 @@
       "payloadHash": "d7a2574c8a6571a5",
       "formatHash": "0058593e7cc80205",
       "summary": "A world engine gains viewsFor(players): a whole audience projected in one call. A fan-out is the shape a world spends its time in, and asking seat by seat serialized the resident tree in full once per watcher -- only the redaction on top of it is ever about the seat. Measured on a 500-seat plaza of 200 public stalls (37 KB a view), describing the world to everybody cost 213 ms, and 148 ms of that was the shared pass run again for each of them; the batch spends it once, for a 3.3x cut in the projection half of a notice. No view changes: the declaration, the residency it pulls in, the redaction and both prunes stay per seat, and the conformance suite holds the batch's answers against viewFor's. The runner's viewsFor now asks the engine once instead of looping; the platform's child op is unchanged. Stored partition bytes are untouched, so formatHash does not move and a live world crosses onto this revision with no gate."
+    },
+    {
+      "revision": 65,
+      "date": "2026-09-09",
+      "bundleProtocol": 2,
+      "surfaceHash": "96b88a0be8dac5ec",
+      "payloadHash": "fcb67168b7207856",
+      "formatHash": "0058593e7cc80205",
+      "summary": "A world's view no longer says who is looking, so ONE answer can be sent to a whole audience. WIRE CHANGE: the envelope is {state, phase} -- the seat number is gone, and so is the viewer's own serialized Player element that pruneRosterToViewer kept. Measured: no client reads either (useWorldPlay takes state and nothing else; its 'mine' comes from the seat the platform puts on the frame that seats you), while both made every body in a fan-out distinct -- a 500-seat announcement in a public plaza of 200 stalls was 500 encodings and 18.5 MB, 27 ms of JSON.stringify plus 55 ms of parse, for 500 copies of one answer. With them gone the same plaza is ONE body. WorldEngine.viewsFor now answers {bodies, seats}: each distinct view once, plus which one each seat holds, so a host encodes once per body instead of once per watcher; runner.viewsFor answers {bodies, of, refused} in place of a per-player map. Sharing is decided structurally by Game.projectsAlikeForEverySeat (no element declares visibility, no class withholds attributes, no playerView, no tutorial progress, no addressed animation event) and by the seat's declared partitions, never by comparing encoded bodies -- comparing them costs the encoding this removes. A world that hides anything pays exactly what it paid before: a room scoped with addVisibleTo is per-seat output even when every seat is granted, because redactVisibilityForSeat collapses the grant roster to the reader. The conformance case 'viewFor is PER PLAYER' is retired, because two seats of a world with nothing hidden between them SHOULD now receive identical bytes. formatHash is unchanged: stored partition bytes are untouched and a live world crosses this revision with no gate. Platform: read the view as {state, phase} and take the seat from the commands frame."
     }
   ]
 }

@@ -21,6 +21,7 @@ import type {
   WorldEngine,
   WorldEventStamp,
   WorldOfferStamp,
+  WorldAudienceViews,
   WorldSeatView,
 } from "./contract.js";
 
@@ -225,22 +226,26 @@ class ReferenceWorldEngine implements WorldEngine {
     return { you: player, acted: this.seen.get(player) ?? 0 };
   }
 
-  async viewsFor(players: readonly string[]): Promise<readonly WorldSeatView[]> {
+  async viewsFor(players: readonly string[]): Promise<WorldAudienceViews> {
     // THE AUDIENCE, ANSWERED ONE SEAT AT A TIME (ShufflewickPub #408). This
     // reference world holds counters rather than a tree, so it has no shared
-    // pass to save -- and the contract does not ask for one. What it asks is
-    // that the batch answer what `viewFor` answers, and the conformance suite
-    // is what holds the two together; an engine WITH a tree is where the
+    // pass to save and no two seats see the same thing -- its whole job is to
+    // give two players DIFFERENT views. The contract does not ask for sharing;
+    // it asks that the batch answer what `viewFor` answers, and the conformance
+    // suite is what holds the two together. An engine WITH a tree is where the
     // saving lives.
-    const answered: WorldSeatView[] = [];
+    const bodies: unknown[] = [];
+    const seats: WorldSeatView[] = [];
     for (const player of players) {
       try {
-        answered.push({ player, refused: false, view: await this.viewFor(player) });
+        const view = await this.viewFor(player);
+        seats.push({ player, refused: false, at: bodies.length });
+        bodies.push(view);
       } catch (error) {
-        answered.push({ player, refused: true, failure: error });
+        seats.push({ player, refused: true, failure: error });
       }
     }
-    return answered;
+    return { bodies, seats };
   }
 
   offerPartitions(_player: string): readonly string[] {

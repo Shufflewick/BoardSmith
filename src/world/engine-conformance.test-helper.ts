@@ -162,23 +162,35 @@ export function assertWorldEngineConformance(makeEngine: WorldEngineFactory): vo
     expect(() => engine.commandPartitions(null, command, STAMP.now)).toThrow(/no player/);
   });
 
-  it("viewFor is PER PLAYER", async () => {
-    // Fog of war is the default in a world. Two players receiving the same
-    // object means the engine is handing out the world.
-    const engine = await makeEngine();
-    const seen = JSON.stringify(await engine.viewFor(alice));
-    const other = JSON.stringify(await engine.viewFor(bob));
-
-    expect(seen).not.toEqual(other);
-  });
+  // "viewFor is PER PLAYER" USED TO BE ASSERTED HERE, AND IS RETIRED
+  // (ShufflewickPub #408).
+  //
+  // It read: two players receiving the same object means the engine is handing
+  // out the world. That was true while a view carried the viewer -- the seat
+  // number in the envelope, and the viewer's own player element in the tree --
+  // because then two seats could not agree even about an empty room, and an
+  // engine that answered them identically had lost the fog of war.
+  //
+  // A view no longer carries either. It is what the world looks like through
+  // ONE DECLARATION, and who is looking is a fact about the attachment the
+  // platform answers elsewhere. So two seats that declared the same partitions
+  // of a world with nothing hidden between them SHOULD receive the same bytes,
+  // and that is the property the whole change exists to create: it is what lets
+  // a host encode a 500-seat announcement once instead of five hundred times.
+  // A conformance case forbidding it would forbid the contract.
+  //
+  // What it was guarding is asserted where it belongs and more thoroughly: the
+  // fog of war is `toJSONForPlayer`'s and the engine's visibility suites drive
+  // it element by element, and the world contract's own claim -- that a view is
+  // a function of what the seat DECLARED -- is the scoping case below.
 
   it("viewsFor answers a whole audience what viewFor answers each of them (ShufflewickPub #408)", async () => {
     // The batch exists to spend the seat-INDEPENDENT half of a projection once
-    // for a fan-out, and an engine that shared a seat-dependent half as well
-    // would satisfy the type perfectly while showing one watcher another's
-    // world. So the two roads are held against each other on the same world:
-    // whatever an engine saves, the audience's answers are the answers asking
-    // one at a time gives.
+    // for a fan-out, and to say which seats may be told in the same bytes. An
+    // engine that shared a seat-DEPENDENT half as well would satisfy the type
+    // perfectly while showing one watcher another's world. So the two roads are
+    // held against each other on the same world: whatever an engine saves, the
+    // audience's answers are the answers asking one at a time gives.
     const apart = await makeEngine();
     const one = JSON.stringify(await apart.viewFor(alice));
     const two = JSON.stringify(await apart.viewFor(bob));
@@ -186,13 +198,35 @@ export function assertWorldEngineConformance(makeEngine: WorldEngineFactory): vo
     const together = await makeEngine();
     const audience = await together.viewsFor([alice, bob]);
 
-    expect(audience.map((seat) => seat.player)).toEqual([alice, bob]);
-    expect(audience.map((seat) => seat.refused)).toEqual([false, false]);
-    expect(audience.map((seat) => JSON.stringify(seat.refused ? null : seat.view))).toEqual([
-      one,
-      two,
-    ]);
+    expect(audience.seats.map((seat) => seat.player)).toEqual([alice, bob]);
+    expect(audience.seats.map((seat) => seat.refused)).toEqual([false, false]);
+    expect(
+      audience.seats.map((seat) =>
+        JSON.stringify(seat.refused ? null : audience.bodies[seat.at]),
+      ),
+    ).toEqual([one, two]);
   });
+
+  it("says which seats may be told in the same bytes, and says it honestly", async () => {
+    // The table is what a host reads as permission to encode once, so two seats
+    // pointed at one body must really hold one body. Asserted by comparing the
+    // BYTES rather than by trusting the indices: an engine that pointed two
+    // seats at a body only one of them should have would pass any assertion
+    // made about the table alone.
+    const engine = await makeEngine();
+    const audience = await engine.viewsFor([alice, bob]);
+
+    const encoded = audience.bodies.map((body) => JSON.stringify(body));
+    expect(new Set(encoded).size, "no body is repeated in the table").toBe(encoded.length);
+    for (const seat of audience.seats) {
+      if (seat.refused) continue;
+      expect(
+        JSON.stringify(await engine.viewFor(seat.player)),
+        `${seat.player} was pointed at the body they actually hold`,
+      ).toEqual(encoded[seat.at]);
+    }
+  });
+
 
   it("viewsFor refuses the seat that cannot be described and answers the rest", async () => {
     // A view can throw for one player while every other view in the batch is
@@ -203,8 +237,8 @@ export function assertWorldEngineConformance(makeEngine: WorldEngineFactory): vo
 
     const audience = await engine.viewsFor([alice, "nobody-at-all"]);
 
-    expect(audience.map((seat) => seat.player)).toEqual([alice, "nobody-at-all"]);
-    expect(audience.map((seat) => seat.refused)).toEqual([false, true]);
+    expect(audience.seats.map((seat) => seat.player)).toEqual([alice, "nobody-at-all"]);
+    expect(audience.seats.map((seat) => seat.refused)).toEqual([false, true]);
   });
 
   it("OFFERS THIS SEAT'S ACTIONS, candidates and all, without applying anything (#85, #91, #169)", async () => {
