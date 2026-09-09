@@ -39,6 +39,13 @@ const read = worldAction<Demo>("read")
   .needs(() => ["a"])
   .execute(() => {});
 
+/** A command that WRITES, so a world's life after a migration can be driven. */
+const poke = worldAction<Demo>("poke")
+  .needs(() => ["a"])
+  .execute((_args, ctx) => {
+    (ctx.world.partition("a") as Room).tally += 1;
+  });
+
 function bundle(migration: Record<string, unknown> | undefined, stateVersion: number) {
   return {
     gameClass: Demo,
@@ -46,7 +53,7 @@ function bundle(migration: Record<string, unknown> | undefined, stateVersion: nu
     world: {
       maxPlayers: 1,
       stateVersion,
-      actions: [read],
+      actions: [read, poke],
       genesis: (game: Game) =>
         Object.fromEntries(ROOMS.map((name) => [name, game.create(Room, name)])) as Record<
           string,
@@ -188,5 +195,94 @@ describe("#402 — whether a migration may be run a page at a time", () => {
     const answer = await runner.migrateAll(world.rows, { from: 1, to: 2 });
 
     expect(Object.keys(answer.partitions).sort()).toEqual([...ROOMS]);
+  });
+});
+
+/** One migration, run a page at a time and evicted page by page, which is what
+ *  paging exists to make possible (ShufflewickPub #407). */
+async function migrateInPages(
+  runner: ReturnType<typeof createWorld>["runner"],
+  rows: Record<string, StoredPartition>,
+  pages: readonly (readonly string[])[],
+): Promise<Record<string, StoredPartition>> {
+  const after: Record<string, StoredPartition> = {};
+  for (const [index, page] of pages.entries()) {
+    const body: Record<string, StoredPartition> = {};
+    for (const name of page) body[name] = rows[name]!;
+    const answer = await runner.migrateAll(body, {
+      from: 1,
+      to: 2,
+      allNames: [...ROOMS],
+      runCreate: index === pages.length - 1,
+    });
+    for (const [name, json] of Object.entries(answer.partitions)) {
+      after[name] = { parentId: rows[name]!.parentId, json: JSON.parse(json) };
+    }
+    // THE LINE THE PLATFORM COULD NOT WRITE (#407). Without it a child that
+    // serves ten pages holds the whole world resident by the tenth, which is
+    // the exact cost paging exists to remove.
+    runner.evict(page);
+  }
+  return after;
+}
+
+const STAMP = {
+  arrivedAt: 1_000,
+  allowance: { unkeyed: 0, keys: [] as readonly string[], worldPending: 0 },
+  presence: [1] as readonly number[],
+  activity: null,
+};
+
+describe("#407 — a migrated page may be let go of", () => {
+  const migrating = (nextElementId: number) =>
+    createWorld(
+      options(
+        bundle(
+          {
+            from: 1,
+            partition: (element: Room) => {
+              element.tally += 1;
+            },
+          },
+          2,
+        ),
+        nextElementId,
+      ),
+    ).runner;
+
+  it("answers the world's next command after each page was evicted", async () => {
+    const world = await stored();
+    const runner = migrating(world.nextElementId);
+
+    const after = await migrateInPages(runner, world.rows, [
+      ["a", "b"],
+      ["c", "d"],
+    ]);
+    expect(JSON.parse(JSON.stringify(after.d!.json)).attributes.tally).toBe(1);
+
+    const command = { name: "poke", args: {} };
+    await runner.declare(command, "p1", { a: after.a! }, 0);
+    const result = await runner.apply({ player: "p1", command, timing: null, ...STAMP });
+
+    // ONLY the room the command named. A touch-mark left behind by the
+    // migration would either refuse this command outright or checkpoint a
+    // partition nothing wrote.
+    expect(result.dirty).toEqual(["a"]);
+  });
+
+  it("lets a WHOLE-WORLD migration's roots be evicted afterwards too", async () => {
+    // The same mark on the road every migration takes today. Nothing evicts
+    // during that migration, so it has never refused -- but a world that lets
+    // go of a cold room an hour later is refusing on a mark the migration left.
+    const world = await stored();
+    const runner = migrating(world.nextElementId);
+    await runner.migrateAll(world.rows, { from: 1, to: 2 });
+    runner.evict(["c", "d"]);
+
+    const command = { name: "poke", args: {} };
+    await runner.declare(command, "p1", {}, 0);
+    const result = await runner.apply({ player: "p1", command, timing: null, ...STAMP });
+
+    expect(result.dirty).toEqual(["a"]);
   });
 });

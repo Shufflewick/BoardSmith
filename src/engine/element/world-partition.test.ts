@@ -316,6 +316,59 @@ describe('Game.evictSubtree', () => {
   });
 });
 
+/**
+ * ShufflewickPub #407: THE ONE WRITE PATH THAT DOES NOT RUN THROUGH A COMMAND.
+ *
+ * A command's changes leave through `takeTouchedPartitions`, which reports and
+ * re-baselines in one pass. A MIGRATION transforms roots with no dispatch
+ * around it, so nothing took its marks: every transformed root stayed "changed
+ * since storage" forever, `evictSubtree` kept a mark for each one on the way
+ * out, and the world's next command found a touched root id it could no longer
+ * name and refused from then on.
+ */
+describe('Game.rebaselinePartitions', () => {
+  it('leaves nothing outstanding, so a later eviction keeps no mark', () => {
+    const { game, roomB } = worldWithPartitions('rebaseline-evict');
+    // A migration's own write: straight onto the root, through no door.
+    (game.partitionRoot(roomB.id) as Space<WorldGame>).name = 'roomB2';
+
+    game.rebaselinePartitions([roomB.id]);
+    game.evictSubtree(roomB.id);
+
+    expect([...game.takeTouchedPartitions()]).toEqual([]);
+  });
+
+  it('drops the mark a cross-root move left on the roots it names', () => {
+    // A migration hook is free to move an element between roots, and both
+    // endpoints are marked. Both are in the bytes the host is about to write.
+    const { game, roomA, roomB, b0 } = worldWithPartitions('rebaseline-move');
+    b0.putInto(roomA);
+
+    game.rebaselinePartitions([roomA.id, roomB.id]);
+
+    expect([...game.takeTouchedPartitions()]).toEqual([]);
+  });
+
+  it('keeps the mark of a root it was NOT told about', () => {
+    // The negative control: only the roots whose bytes are in the write may be
+    // forgotten, or a page-at-a-time migration would silently drop the pages
+    // it has not reached yet.
+    const { game, roomA, roomB, b0 } = worldWithPartitions('rebaseline-partial');
+    b0.putInto(roomA);
+
+    game.rebaselinePartitions([roomA.id]);
+
+    expect([...game.takeTouchedPartitions()]).toEqual([roomB.id]);
+  });
+
+  it('refuses an id that is not a resident partition root', () => {
+    // Re-baselining a root whose bytes are NOT in the write is how a change is
+    // lost, so this is loud rather than a skip.
+    const { game } = worldWithPartitions('rebaseline-missing');
+    expect(() => game.rebaselinePartitions([4242])).toThrow(/4242/);
+  });
+});
+
 describe('moveToInternal partition marking', () => {
   it('marks BOTH endpoints of a cross-partition move', () => {
     const { game, roomA, roomB, b0 } = worldWithPartitions('cross-move');

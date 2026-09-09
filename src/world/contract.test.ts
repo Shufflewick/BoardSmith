@@ -165,6 +165,12 @@ class ReferenceWorldEngine implements WorldEngine {
     throw new Error("the reference world holds no elements to finalize a migration over");
   }
 
+  /** Nothing to re-baseline either: a migration here transformed no root
+   *  (ShufflewickPub #407). A conformance engine is asked to have the METHOD. */
+  migrateBaseline(): void {
+    throw new Error("the reference world migrated no partitions to re-baseline");
+  }
+
   pickPartitions(): readonly string[] {
     return [];
   }
