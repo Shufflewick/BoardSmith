@@ -121,11 +121,17 @@ export function useWorldPlay(host: WorldHost): WorldPlay {
   });
 
   /**
-   * A world's view is `{player, state, phase}` and `state` is
+   * A world's view is `{state, phase}` and `state` is
    * `game.toJSONForPlayer(seat)` pruned to the seat's partitions -- the SAME
    * call a table's `PlayerState.view` carries. They differ by a key name, which
    * is the whole reason AutoUI can be a world's default board with no new
    * renderer and no new archetype.
+   *
+   * NOTHING IN IT SAYS WHO IS LOOKING (ShufflewickPub #408). It used to carry
+   * the viewer's seat and the viewer's own player element; neither was read
+   * here -- `mine` is found from `host.seat`, which the platform puts on the
+   * frame that seats you -- and both made every body in a 500-seat fan-out
+   * different, so the host encoded one answer five hundred times.
    */
   const gameView = computed<unknown>(() => (host.view.value as WorldView | null)?.state ?? null);
 

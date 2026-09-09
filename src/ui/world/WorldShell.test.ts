@@ -72,10 +72,11 @@ function stateFrame(over: Record<string, unknown> = {}) {
     source: WORLD_HOST_SOURCE,
     type: 'world_state',
     phase: 'watching',
-    // `viewFor` returns `{player, state, phase}` and `state` is the serialized
-    // element tree -- the SAME call a table's `PlayerState.view` carries, which
-    // is what lets AutoUI be a world's default board.
-    view: { player: 4, phase: 'watching', state: { said: 'the fire is low' } },
+    // `viewFor` returns `{state, phase}` and `state` is the serialized element
+    // tree -- the SAME call a table's `PlayerState.view` carries, which is what
+    // lets AutoUI be a world's default board. Who is looking is NOT in it
+    // (ShufflewickPub #408); `seat` beside it is where that lives.
+    view: { phase: 'watching', state: { said: 'the fire is low' } },
     seat: 4,
     actions: [{ name: 'look', selections: [] }, { name: 'move', selections: [] }],
     notice: null,

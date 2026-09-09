@@ -53,7 +53,8 @@
  *   partition it does not name. So the view's two prunes are both
  *   fingerprinted -- unnamed resident partitions (#183) and the game root's
  *   roster (#181) -- along with the shape a player reference takes on the wire
- *   and the world envelope's own `{ player, state, phase }`.
+ *   and the world envelope's own `{ state, phase }` -- including that it
+ *   carries no viewer, which is what lets one body answer a whole audience.
  *
  *   THE OFFER (#187): the same seat's ENUMERATED VERBS, driven the way a host
  *   drives one -- `offerPartitions`, supply, ask again, `offersFor` -- so the
@@ -710,7 +711,11 @@ function assertCoversWorldView(
     state: unknown;
   },
 ): void {
-  const projected = (view ?? {}) as { player?: unknown; state?: { children?: unknown[] } };
+  const projected = (view ?? {}) as {
+    player?: unknown;
+    phase?: unknown;
+    state?: { children?: unknown[] };
+  };
   // A resident partition this seat's declaration does not name is the
   // busy-world state the #183 prune exists for; without one the fixture cannot
   // tell a pruned view from an unpruned one.
@@ -722,7 +727,14 @@ function assertCoversWorldView(
   // one thing this projection covers, and the reader sees the whole list at
   // once instead of reconstructing it from control flow.
   const covers: readonly (readonly [string, boolean])[] = [
-    ['the world envelope (no `player`)', typeof projected.player === 'number'],
+    // THE ENVELOPE, AND WHAT IS NOT IN IT (ShufflewickPub #408). A view is what
+    // the world looks like through one declaration; who is looking is a fact
+    // about the attachment, which the platform answers on the frame that seats
+    // you. The absence is asserted rather than assumed, because a `player` back
+    // in here would silently make every body in a fan-out distinct again and
+    // the hash would move without anybody reading why.
+    ['a world envelope carrying `phase`', 'phase' in projected],
+    ['a world envelope carrying NO viewer (`player` is back)', projected.player === undefined],
     ['a projected tree (the view has no children)', (projected.state?.children ?? []).length > 0],
     // A one-seat world cannot show whether the roster is projected or shipped
     // whole, which is the #181 regression this exists to catch.
@@ -818,7 +830,7 @@ function assertCoversWorldOffer(facts: {
  *
  * A world is not a table with different storage: a table holds its tree
  * resident and ships a `PlayerState.view`, while a world keeps only named
- * partitions resident and answers `{ player, state, phase }` per seat, pruned
+ * partitions resident and answers `{ state, phase }` per seat, pruned
  * to what that seat's declaration named. `games/src/world-session.ts` calls
  * this path for every watcher of every world, so a change to what it produces
  * reaches every seat in production -- and until #181 no fingerprint could see
@@ -1131,15 +1143,23 @@ async function computeWorldFixture(): Promise<{ view: unknown; offer: unknown }>
   // A REFUSAL IS HASHED AS ITS SENTENCE, because the raw throw is what the
   // engine hands over -- the runner is what turns one into a platform refusal
   // -- and an Error object does not canonicalize.
-  const audience = (await world.viewsFor([LOOKER, 'p2', 'nobody'])).map((seat) =>
-    seat.refused
-      ? {
-          player: seat.player,
-          refused: true,
-          message: seat.failure instanceof Error ? seat.failure.message : String(seat.failure),
-        }
-      : { player: seat.player, refused: false, view: seat.view },
-  );
+  const told = await world.viewsFor([LOOKER, 'p2', 'nobody']);
+  const audience = {
+    // EACH DISTINCT ANSWER ONCE, which is the thing a host reads as permission
+    // to encode a fan-out once. The two lookers name different land, so this
+    // fixture's audience is two bodies rather than one -- an engine that
+    // collapsed them would be sharing across declarations and moves this.
+    bodies: told.bodies,
+    seats: told.seats.map((seat) =>
+      seat.refused
+        ? {
+            player: seat.player,
+            refused: true,
+            message: seat.failure instanceof Error ? seat.failure.message : String(seat.failure),
+          }
+        : { player: seat.player, refused: false, at: seat.at },
+    ),
+  };
 
   // THE OFFER, DRIVEN THE WAY A HOST DRIVES IT: ask what the offer still needs,
   // supply it, ask again. The engine names and the host reads, because a child
