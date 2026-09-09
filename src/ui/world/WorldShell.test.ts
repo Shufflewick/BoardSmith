@@ -673,3 +673,117 @@ describe('WorldShell — the panel does not choose for the player (#212)', () =>
     wrapper.unmount();
   });
 });
+
+/**
+ * A CUSTOM UI THAT HANDS OVER EVERY SELECTION AT ONCE (#226).
+ *
+ * Lacuna's construction modal collects the plot and the building itself and
+ * then starts the action with both already chosen. The first prefill landed
+ * and the second was dropped, so the modal's "Construct building" button did
+ * nothing: the panel went back to asking for a building the player had just
+ * picked, and no command reached the world.
+ *
+ * The second selection is the one that goes over the wire. A world's offer is
+ * enumerated with nothing bound, so the building list arrives only when the
+ * panel re-asks with the plot bound (#378), and the prefill was being judged
+ * against the empty offer while that answer was still in flight.
+ */
+describe('WorldShell — a custom UI that prefills every selection (#226)', () => {
+  // The order book outlives a mount, so an unanswered command from one case
+  // would be replayed into the next one's outbox (#195).
+  beforeEach(() => localStorage.clear());
+
+  const buildAction = {
+    name: 'build',
+    prompt: 'Construct building',
+    selections: [
+      {
+        name: 'plot',
+        type: 'choice',
+        prompt: 'Empty plot',
+        choices: [
+          { value: 'home:1@-2,1', display: 'Plot -2,1' },
+          { value: 'home:1@0,0', display: 'Plot 0,0' },
+        ],
+      },
+      // Enumerated with no plot bound, so the world has nothing to offer yet.
+      { name: 'building', type: 'choice', prompt: 'Building', choices: [] },
+    ],
+  };
+
+  /** Answer the panel's re-ask for the building list, the way the host does. */
+  function answerBuildingPick(wrapper: ReturnType<typeof mountShell>, posted: any[]) {
+    const ask = posted.find((m) => m.type === 'world_pick');
+    expect(ask).toMatchObject({ action: 'build', selection: 'building', args: { plot: 'home:1@-2,1' } });
+    tell(wrapper, {
+      source: WORLD_HOST_SOURCE,
+      type: 'world_pick_result',
+      requestId: ask.requestId,
+      ok: true,
+      selection: {
+        name: 'building',
+        type: 'choice',
+        prompt: 'Building',
+        choices: [
+          { value: 'university', display: 'University' },
+          { value: 'mine', display: 'Mine' },
+        ],
+      },
+    });
+    return ask;
+  }
+
+  it('sends one command carrying both prefilled selections', async () => {
+    const posted: any[] = [];
+    const spy = vi.spyOn(window.parent, 'postMessage').mockImplementation((m) => posted.push(m));
+    const wrapper = mountShell();
+    await drawn(wrapper, stateFrame({ actions: [buildAction] }));
+
+    void (wrapper.vm as any).actionController.start('build', {
+      prefill: { plot: 'home:1@-2,1', building: 'university' },
+    });
+    await flushPromises();
+
+    answerBuildingPick(wrapper, posted);
+    await flushPromises();
+
+    const commands = posted.filter((m) => m.type === 'world_command');
+    expect(commands).toHaveLength(1);
+    expect(commands[0]).toMatchObject({
+      action: 'build',
+      args: { plot: 'home:1@-2,1', building: 'university' },
+    });
+    expect((wrapper.vm as any).actionController.currentPick.value).toBeNull();
+
+    spy.mockRestore();
+    wrapper.unmount();
+  });
+
+  it('names the prefill that has to be corrected instead of dropping it in silence', async () => {
+    const posted: any[] = [];
+    const spy = vi.spyOn(window.parent, 'postMessage').mockImplementation((m) => posted.push(m));
+    const { toasts } = useToast();
+    const before = toasts.value.length;
+    const wrapper = mountShell();
+    await drawn(wrapper, stateFrame({ actions: [buildAction] }));
+
+    void (wrapper.vm as any).actionController.start('build', {
+      prefill: { plot: 'home:1@-2,1', building: 'observatory' },
+    });
+    await flushPromises();
+
+    answerBuildingPick(wrapper, posted);
+    await flushPromises();
+
+    // Nothing was sent, the panel is still on the pick that needs correcting,
+    // and the player is told which value it was.
+    expect(posted.filter((m) => m.type === 'world_command')).toHaveLength(0);
+    expect((wrapper.vm as any).actionController.currentPick.value?.name).toBe('building');
+    expect(toasts.value.slice(before).map((t) => t.message)).toContain(
+      'Cannot prefill "Building" with "observatory". Pick one of: University, Mine.'
+    );
+
+    spy.mockRestore();
+    wrapper.unmount();
+  });
+});

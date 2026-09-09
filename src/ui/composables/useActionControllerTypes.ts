@@ -247,8 +247,13 @@ export interface ActionStateSnapshot {
   repeatingState: RepeatingState | null;
   /** Queued fills for future picks - applied when pick becomes active */
   prefills: Map<string, unknown>;
-  /** Set of selection names that have been fetched (prevents double-fetch) */
-  fetchedSelections: Set<string>;
+  /**
+   * In-flight choice fetches, keyed by selection name. An entry exists only
+   * while its request is outstanding, so a second caller joins the same request
+   * instead of issuing a duplicate, and anything that needs the choices can
+   * await the request rather than racing it.
+   */
+  choiceFetches: Map<string, Promise<void>>;
 }
 
 export interface UseActionControllerOptions {
