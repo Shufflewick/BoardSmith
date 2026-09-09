@@ -684,19 +684,23 @@ export function createWorldRunner(
       // the declaration was settling (#122), so this projects and never fetches.
       const views: Record<string, unknown> = {};
       const refused: Record<string, WorldViewRefusal> = {};
-      // ONE SEAT'S PROJECTION IS ONE SEAT'S FATE (#310). `viewFor` runs the
-      // bundle's `world.view` and then `toJSONForPlayer` for that seat alone,
-      // and either can throw for one player while every other view in the
-      // batch is perfectly computable -- the observed case being a view that
-      // reaches a deliberately absent partition after a wake. Captured here,
-      // the failing seat is refused by name and the rest of the audience is
-      // answered.
-      for (const player of players) {
-        try {
-          views[player] = await engine.viewFor(player);
-        } catch (error) {
-          refused[player] = viewRefusalOf(error);
-        }
+      // THE WHOLE AUDIENCE IN ONE ASK (ShufflewickPub #408). This used to loop
+      // over `viewFor`, which meant the engine serialized the resident tree in
+      // full once per watcher and then redacted each copy for one seat -- and
+      // only the redaction was ever about the seat. Handing the audience down
+      // whole lets the engine spend the shared pass once; it still projects,
+      // prunes and refuses per seat, so no view changes.
+      //
+      // ONE SEAT'S PROJECTION IS STILL ONE SEAT'S FATE (#310). A view can throw
+      // for one player while every other view in the batch is perfectly
+      // computable -- the observed case being a view that reaches a
+      // deliberately absent partition after a wake. The engine hands back what
+      // that seat threw, and TRANSLATING IT IS THIS LAYER'S JOB: the engine
+      // speaks to no platform, so a refusal minted down there would be minted
+      // twice.
+      for (const seat of await engine.viewsFor(players)) {
+        if (seat.refused) refused[seat.player] = viewRefusalOf(seat.failure);
+        else views[seat.player] = seat.view;
       }
       return { views, refused };
     },

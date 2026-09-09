@@ -172,6 +172,41 @@ export function assertWorldEngineConformance(makeEngine: WorldEngineFactory): vo
     expect(seen).not.toEqual(other);
   });
 
+  it("viewsFor answers a whole audience what viewFor answers each of them (ShufflewickPub #408)", async () => {
+    // The batch exists to spend the seat-INDEPENDENT half of a projection once
+    // for a fan-out, and an engine that shared a seat-dependent half as well
+    // would satisfy the type perfectly while showing one watcher another's
+    // world. So the two roads are held against each other on the same world:
+    // whatever an engine saves, the audience's answers are the answers asking
+    // one at a time gives.
+    const apart = await makeEngine();
+    const one = JSON.stringify(await apart.viewFor(alice));
+    const two = JSON.stringify(await apart.viewFor(bob));
+
+    const together = await makeEngine();
+    const audience = await together.viewsFor([alice, bob]);
+
+    expect(audience.map((seat) => seat.player)).toEqual([alice, bob]);
+    expect(audience.map((seat) => seat.refused)).toEqual([false, false]);
+    expect(audience.map((seat) => JSON.stringify(seat.refused ? null : seat.view))).toEqual([
+      one,
+      two,
+    ]);
+  });
+
+  it("viewsFor refuses the seat that cannot be described and answers the rest", async () => {
+    // A view can throw for one player while every other view in the batch is
+    // computable, so a batch that failed whole would make one absent partition
+    // everybody's problem. The stranger is the reachable case: an engine seats
+    // who it seats, and every one of them refuses a player it does not hold.
+    const engine = await makeEngine();
+
+    const audience = await engine.viewsFor([alice, "nobody-at-all"]);
+
+    expect(audience.map((seat) => seat.player)).toEqual([alice, "nobody-at-all"]);
+    expect(audience.map((seat) => seat.refused)).toEqual([false, true]);
+  });
+
   it("OFFERS THIS SEAT'S ACTIONS, candidates and all, without applying anything (#85, #91, #169)", async () => {
     // The non-mutating half of the action protocol. Until it existed nothing
     // could present a world's action to a player who did not already know its

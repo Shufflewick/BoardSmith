@@ -4290,6 +4290,66 @@ export class Game<
    *   this comment) keep their real id already, so they need no remap entry.
    */
   toJSONForPlayer(player: P | number | null, idRemap?: Map<number, number>): ReturnType<Game['toJSON']> {
+    return this.redactTreeForSeat(this.toJSON(), player, idRemap);
+  }
+
+  /**
+   * The same view, for a whole audience, over ONE serialization of the tree
+   * (ShufflewickPub #408).
+   *
+   * `toJSONForPlayer` is two passes and only the second is about the seat:
+   * `toJSON()` writes the tree in full fidelity with no viewer anywhere in it,
+   * and `filterElement` then reads that tree and builds one viewer's redacted
+   * copy from it. Asking seat by seat repeated the first pass for every member
+   * of the audience. Measured on a 500-seat plaza of 200 public stalls (37 KB a
+   * view): 213 ms to describe the world to everybody, 181 ms of it in
+   * `toJSONForPlayer`, and 148 ms of THAT in the shared serialization -- seven
+   * tenths of a fan-out spent recomputing one answer.
+   *
+   * A BATCH RATHER THAN A CACHE, deliberately. Reusing a serialization across
+   * separate calls means claiming nothing changed in between, and `world/
+   * contract.ts` retires guessing at mutation as INCORRECT for this engine: a
+   * write through an attribute value (`player.at[HEALTH] = x`) changes the tree
+   * and trips no setter, so a cache keyed on observed writes would serve stale
+   * bytes rather than merely stale-looking ones. One call carrying the whole
+   * audience makes the claim structural instead -- there is no await, no
+   * dispatch and no bundle callback between the serialization and the last
+   * redaction below.
+   *
+   * THE REDACTION IS NOT SHARED, only the pass underneath it: each seat still
+   * gets its own `filterElement` walk, so per-seat secrets stay per-seat and
+   * this is a saving for every game rather than only for one with nothing to
+   * hide.
+   *
+   * A game that declares `static playerView` is projected the old way, seat at
+   * a time. That hook is author code handed the filtered tree and free to
+   * rewrite it in place, and a batch shares every attribute bag it had no
+   * reason to redact -- so one seat's rewrite would reach the next seat's view.
+   * Nothing the engine can read decides whether a hook writes, which is the
+   * same reason `testing/visibility.ts` gates its own fast paths on the hook's
+   * absence.
+   */
+  toJSONForPlayers(players: readonly (P | number | null)[]): ReturnType<Game['toJSON']>[] {
+    const GameClass = this.constructor as typeof Game;
+    if (GameClass.playerView !== undefined) {
+      return players.map((player) => this.toJSONForPlayer(player));
+    }
+    const fullJson = this.toJSON();
+    return players.map((player) => this.redactTreeForSeat(fullJson, player));
+  }
+
+  /**
+   * One seat's redacted copy of an already-serialized tree.
+   *
+   * `fullJson` is read and never written: every branch below either returns a
+   * freshly-built node or spreads into a new object, which is what lets one
+   * serialization answer an audience.
+   */
+  private redactTreeForSeat(
+    fullJson: ReturnType<Game['toJSON']>,
+    player: P | number | null,
+    idRemap?: Map<number, number>,
+  ): ReturnType<Game['toJSON']> {
     const playerSeat = player === null ? null : (typeof player === 'number' ? player : player.seat);
     // For visibility checks, spectators use -1 (no special access)
     const visibilityPosition = playerSeat ?? -1;
@@ -4566,7 +4626,6 @@ export class Game<
       };
     };
 
-    const fullJson = this.toJSON();
     let filteredState = filterElement(fullJson, this) ?? fullJson;
 
     // Apply playerView transformation if defined

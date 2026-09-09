@@ -162,6 +162,15 @@ export const WORLD_FIXTURE_COVERAGE: Record<(typeof WORLD_ENGINE_METHODS)[number
   offersFor: true,
   residency: true,
   viewFor: true,
+  // ShufflewickPub #408. The verb a FAN-OUT travels: every notice a world sends
+  // is answered through this, and the platform never asks for one view where it
+  // can ask for the audience. It is driven with two lookers whose declarations
+  // differ, and the hash carries both answers -- so an engine that started
+  // sharing something a seat decides moves the payload rather than passing a
+  // claim nobody checked. `viewFor` stays driven beside it because the two must
+  // agree, and a fixture that only asked the batch could not notice them
+  // parting.
+  viewsFor: true,
   viewPartitions: true,
 
   migratePartition: 'A world MOVING BETWEEN state versions (#200), which happens once, at '
@@ -1111,6 +1120,27 @@ async function computeWorldFixture(): Promise<{ view: unknown; offer: unknown }>
     state: view.state,
   });
 
+  // THE FAN-OUT, DRIVEN THE WAY A NOTICE DRIVES IT (ShufflewickPub #408). Every
+  // watcher a world-scoped change is addressed to is described in ONE call, so
+  // this is the road a world actually spends its time on and the one whose
+  // answer a platform reads. Two lookers whose declarations differ -- each
+  // names the commons and their OWN land -- plus a stranger the world does not
+  // seat, so the hash carries what a batch answers AND what it refuses. An
+  // engine that started sharing something a seat decides moves this.
+  //
+  // A REFUSAL IS HASHED AS ITS SENTENCE, because the raw throw is what the
+  // engine hands over -- the runner is what turns one into a platform refusal
+  // -- and an Error object does not canonicalize.
+  const audience = (await world.viewsFor([LOOKER, 'p2', 'nobody'])).map((seat) =>
+    seat.refused
+      ? {
+          player: seat.player,
+          refused: true,
+          message: seat.failure instanceof Error ? seat.failure.message : String(seat.failure),
+        }
+      : { player: seat.player, refused: false, view: seat.view },
+  );
+
   // THE OFFER, DRIVEN THE WAY A HOST DRIVES IT: ask what the offer still needs,
   // supply it, ask again. The engine names and the host reads, because a child
   // isolate has no storage binding -- so a fixture that called `offersFor`
@@ -1151,7 +1181,7 @@ async function computeWorldFixture(): Promise<{ view: unknown; offer: unknown }>
     ),
   });
 
-  return { view, rounds, offer };
+  return { view, audience, rounds, offer };
 }
 
 /**
@@ -1356,6 +1386,7 @@ export async function computePayloadHash(): Promise<string> {
   const worldDeclaration = await computeWorldDeclaration();
   const {
     view: worldView,
+    audience: worldAudience,
     rounds: worldRounds,
     offer: worldOffer,
   } = await computeWorldFixture();
@@ -1368,6 +1399,9 @@ export async function computePayloadHash(): Promise<string> {
       // `surfaceHash` is blind to it and `payloadHash` is where it belongs.
       worldDurability: WORLD_DURABILITY_FIXTURE,
       worldView,
+      // The FAN-OUT's answer (ShufflewickPub #408): what a whole audience is
+      // told in one call, and which of them is refused.
+      worldAudience,
       worldRounds,
       worldOffer,
       worldDeclaration,
