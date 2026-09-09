@@ -60,6 +60,29 @@ function forgetAllocationStamp(path: string): void {
   }
 }
 
+/**
+ * THE SAME STORE, AS LAYOUT 3 LEFT IT (#225).
+ *
+ * Layout 4 added `seat_activity` and the epoch a seat's idleness is measured
+ * from, and changed nothing else, so removing both is layout 3 exactly. Reached
+ * through SQLite for the reason `forgetAllocationStamp` is: the store only ever
+ * writes the layout it is on, so a world from an older one cannot be built
+ * through its doors.
+ */
+function rewindStoreToLayout3(path: string): void {
+  const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite') as {
+    DatabaseSync: new (file: string) => { exec(sql: string): void; close(): void };
+  };
+  const db = new DatabaseSync(path);
+  try {
+    db.exec('DROP TABLE seat_activity');
+    db.exec("DELETE FROM meta WHERE key = 'activitySince'");
+    db.exec("UPDATE meta SET value = '3' WHERE key = 'schemaVersion'");
+  } finally {
+    db.close();
+  }
+}
+
 // ── A world bundle, in the shape a real one exports ─────────────────────────
 
 class Hearth extends Space<Village> {
@@ -2347,5 +2370,28 @@ describe('#383: a seat\'s activity, stamped by the host', () => {
     expect(seen.at).toBe(OPENED);
     expect(later.now() - seen.inactiveSince).toBe(20 * 86_400_000);
     await again.host.close();
+  });
+});
+
+describe('#225: a world written under an older store layout', () => {
+  it('upgrades on the ordinary open and finds the world where it was left', async () => {
+    // The ticket's sentence: `boardsmith dev` in a game directory whose world
+    // was played under layout 3 starts, and the colony is still there. Genesis
+    // does not run again -- a world relaunched from genesis is the progress
+    // loss the upgrade exists to prevent, and it would read `"logs":0` rather
+    // than the log this world cut and the one it banked.
+    await aPlayedVillage();
+    rewindStoreToLayout3(worldStorePath(dir));
+
+    const second = openHost({ dir });
+    await second.host.start();
+    await second.host.handleMessage('c9', { type: 'hello' });
+
+    expect(JSON.stringify(last(second.sent, 'c9', 'world_state')?.view)).toContain('"logs":2');
+    expect(second.store.pendingEvents()).toHaveLength(1);
+    expect(second.store.seats()).toEqual([{ player: devWorldPlayer(1), seat: 1 }]);
+    // The upgraded world starts watching now, not in 1970.
+    expect(second.store.activityOf(1)).toEqual({ seat: 1, at: null, since: 1_000_000 });
+    await second.host.close();
   });
 });
