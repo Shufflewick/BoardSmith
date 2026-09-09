@@ -42,8 +42,32 @@
  * so the writes a mutating method performs on its own internals -- splicing a
  * children array, assigning a parent -- reach these same traps and are refused
  * there. Reads need nothing but reads, so they are unaffected.
+ *
+ * ## Except the engine's own read doors, which run on the real element
+ *
+ * ShufflewickPub #409. Binding to the proxy costs the WHOLE method body: a
+ * finder run with the projection as its receiver reaches these traps on every
+ * step of its own walk, so `first(Room, "room-499")` over 500 roots pays a trap
+ * per element visited rather than one for the element it answers with. Measured
+ * at 16x the live tree, and a world's OFFER is a fan-out of finders -- every
+ * action's condition, its greying rule and every selection's candidates, per
+ * seat, for the whole audience of a change. At 500 seats that made an offer
+ * fan-out 2277 ms, 4.55 ms a seat, against a view fan-out's 208 ms -- and 95%
+ * of the difference was here rather than in anything an offer decides, since
+ * the same fan-out with this projection stubbed out entirely costs 125 ms.
+ *
+ * So `ENGINE_READ_DOORS` names the engine's own reads, and one read off a
+ * projection runs against the REAL object with only its answer projected.
+ *
+ * AN ALLOWLIST, WHICH IS THE SAFE SIDE OF THE LEDGER. `BUILTIN_MUTATORS` below
+ * names what must not run, and that shape is only acceptable over a closed
+ * standard API: a method nobody remembered to name is a hole. This names what
+ * MAY skip the traps, over an API that is still growing, so a method nobody
+ * remembers to name is merely slow. That asymmetry is the whole reason this can
+ * exist on `GameElement` where a mutator list could not.
  */
 import { worldRefusal } from "./refusals.js";
+import { ElementCollection, Game, GameElement } from "../engine/index.js";
 
 /**
  * Objects whose methods may run with the projection as their receiver.
@@ -89,9 +113,64 @@ const BUILTIN_MUTATORS = new Set([
   "setUTCSeconds",
 ]);
 
+/**
+ * THE ENGINE'S OWN READS, BY NAME (ShufflewickPub #409).
+ *
+ * Each of these answers a question about the tree and writes nothing, so it may
+ * run against the real element with only its answer projected. See the header
+ * for why an allowlist and not a mutator list.
+ *
+ * Taken off the prototypes by IDENTITY and not by name, so a game class that
+ * overrides `first` is a different function, is not in this set, and takes the
+ * ordinary trapped road. `sortBy` and `shuffle` are deliberately absent: they
+ * reorder the collection in place.
+ */
+const ENGINE_READ_DOOR_NAMES = [
+  "all",
+  "atBranch",
+  "atId",
+  "branch",
+  "contains",
+  "count",
+  "findById",
+  "first",
+  "firstN",
+  "getEffectiveOwner",
+  "getEffectiveVisibility",
+  "getElementById",
+  "has",
+  "hasId",
+  "indexOfElement",
+  "isEmpty",
+  "isMine",
+  "isVisible",
+  "isVisibleTo",
+  "last",
+  "lastN",
+  "max",
+  "min",
+  "sum",
+  "toString",
+  "unique",
+];
+
+const ENGINE_READ_DOORS = new WeakSet<object>();
+for (const prototype of [GameElement.prototype, Game.prototype, ElementCollection.prototype]) {
+  for (const name of ENGINE_READ_DOOR_NAMES) {
+    const held = (prototype as unknown as Record<string, unknown>)[name];
+    if (typeof held === "function") ENGINE_READ_DOORS.add(held);
+  }
+}
+
 /** One projection per object, so repeated reads of the same element answer the
  *  same wrapper and a declaration can compare two of them. */
 const projections = new WeakMap<object, object>();
+
+/** The object a projection was minted FOR, so an argument handed back into a
+ *  read door is the same object the live tree holds. Without it a finder keyed
+ *  on an element read out of the projection would compare a wrapper against the
+ *  element it wraps and answer no. */
+const sources = new WeakMap<object, object>();
 
 /**
  * EVERY PROJECTION THIS MODULE HAS MINTED (#374).
@@ -154,11 +233,113 @@ function takesProjectionAsReceiver(value: object): boolean {
 }
 
 /**
+ * WHAT A READ DOOR IS HANDED, ON THE LIVE TREE'S OWN TERMS (#409).
+ *
+ * A door runs against the real element, so an argument that came out of a
+ * projection has to go back in as the object it wraps -- `contains(token)`,
+ * `indexOfElement(token)`, a finder keyed on a player -- or the door would
+ * compare a wrapper against the element it wraps and answer no.
+ *
+ * A FINDER CALLBACK IS THE OTHER DIRECTION. `all(Room, (room) => ...)` is
+ * bundle code, and it is handed elements off the live tree, so it is wrapped to
+ * project what it receives: the offer path has no rollback and no checkpoint,
+ * and a predicate that wrote would be exactly the #219 hole one argument along.
+ *
+ * A finder OBJECT (`{ player }`) is rebuilt with its values unwrapped for the
+ * same reason its element form is. The caller's own object is never touched.
+ */
+function throughTheDoor(args: unknown[]): unknown[] {
+  for (let index = 0; index < args.length; index++) {
+    args[index] = liveArgument(args[index]);
+  }
+  return args;
+}
+
+function liveArgument(argument: unknown): unknown {
+  if (argument === null || (typeof argument !== "object" && typeof argument !== "function")) {
+    return argument;
+  }
+  const held = sources.get(argument as object);
+  if (held !== undefined) return held;
+  if (typeof argument === "function") return projectingCallback(argument);
+  if (Object.prototype.toString.call(argument) !== "[object Object]") return argument;
+  return liveFinderObject(argument as Record<string, unknown>);
+}
+
+/** A finder's own predicate, handed projected elements. */
+function projectingCallback(argument: object): unknown {
+  // A CLASS IS A FINDER'S SUBJECT AND NOT ITS CALLBACK. Wrapping one would hand
+  // the door an arrow function where it expects a constructor.
+  if (/^class[\s{]/.test(Function.prototype.toString.call(argument))) return argument;
+  const call = argument as (...a: unknown[]) => unknown;
+  return (...inner: unknown[]) => call(...inner.map((one) => readOnlyProjection(one)));
+}
+
+/** A finder written as `{ player }` or `{ name }`, with anything projected in
+ *  it put back as the object it wraps. The caller's own object is never
+ *  touched: it is answered unchanged when nothing in it was projected. */
+function liveFinderObject(argument: Record<string, unknown>): unknown {
+  const unwrapped: Record<string, unknown> = {};
+  let differs = false;
+  for (const [key, value] of Object.entries(argument)) {
+    const live = liveArgument(value);
+    if (live !== value) differs = true;
+    unwrapped[key] = live;
+  }
+  return differs ? unwrapped : argument;
+}
+
+/**
  * The same value, readable and not writable, all the way down.
  *
  * Primitives are returned as they are: a number read off an element is a copy
  * already, and nothing a declaration does to it can reach the world.
  */
+/**
+ * One property, read off a projection: the value made read-only, or the method
+ * wrapped so that what it answers with is.
+ */
+function projectedProperty(
+  target: object,
+  property: string | symbol,
+  receiver: unknown,
+  projection: object,
+): unknown {
+  const held = Reflect.get(target, property, receiver);
+  if (typeof held !== "function") return readOnlyProjection(held);
+  const call = held as (...a: unknown[]) => unknown;
+
+  // THE ENGINE'S OWN READ, ON THE REAL OBJECT (#409). Only its answer is
+  // projected, so the walk it makes to find that answer pays no traps at all --
+  // which is the difference between an offer fan-out costing a multiple of the
+  // live tree and costing the live tree.
+  if (ENGINE_READ_DOORS.has(call)) {
+    const open = () => (...args: unknown[]) =>
+      readOnlyProjection(Reflect.apply(call, target, throughTheDoor(args)));
+    return receiver === projection ? cachedWrapper(target, call, open) : open();
+  }
+
+  // A MUTATOR IS REFUSED BEFORE IT IS CACHED, so the refusal names the property
+  // it was reached by rather than whichever name got there first.
+  const safeReceiver = takesProjectionAsReceiver(target);
+  if (!safeReceiver && BUILTIN_MUTATORS.has(property as string)) refuseWrite(property);
+
+  // ONE WRAPPER PER FUNCTION, not one per read (#374). Only when the receiver is
+  // this projection: reached along a prototype chain from some other object, the
+  // receiver differs and the wrapper below would close over the wrong one.
+  const build = safeReceiver
+    ? // THE RECEIVER IS THE PROJECTION wherever it can be, so a mutating method
+      // -- `putInto` splicing a children array, say -- reaches these same traps
+      // on its own internals and is refused there. Blocking assignment alone
+      // would leave every mutating method open.
+      () =>
+        function (this: unknown, ...args: unknown[]) {
+          return readOnlyProjection(Reflect.apply(call, projection, args));
+        }
+    : () => (...args: unknown[]) => readOnlyProjection(Reflect.apply(call, target, args));
+  return receiver === projection ? cachedWrapper(target, call, build) : build();
+}
+
 export function readOnlyProjection<T>(value: T): T {
   if (value === null || (typeof value !== "object" && typeof value !== "function")) {
     return value;
@@ -170,31 +351,9 @@ export function readOnlyProjection<T>(value: T): T {
   const existing = projections.get(subject);
   if (existing !== undefined) return existing as T;
 
-  const projection = new Proxy(subject, {
+  const projection: object = new Proxy(subject, {
     get(target, property, receiver) {
-      const held = Reflect.get(target, property, receiver);
-      if (typeof held !== "function") return readOnlyProjection(held);
-      const call = held as (...a: unknown[]) => unknown;
-      // A MUTATOR IS REFUSED BEFORE IT IS CACHED, so the refusal names the
-      // property it was reached by rather than whichever name got there first.
-      const safeReceiver = takesProjectionAsReceiver(target);
-      if (!safeReceiver && BUILTIN_MUTATORS.has(property as string)) refuseWrite(property);
-      // ONE WRAPPER PER FUNCTION, not one per read (#374). Only when the
-      // receiver is this projection: reached along a prototype chain from some
-      // other object, the receiver differs and the wrapper below would close
-      // over the wrong one.
-      const build = safeReceiver
-        ? // THE RECEIVER IS THE PROJECTION wherever it can be, so a mutating
-          // method -- `putInto` splicing a children array, say -- reaches these
-          // same traps on its own internals and is refused there. Blocking
-          // assignment alone would leave every mutating method open.
-          () =>
-            function (this: unknown, ...args: unknown[]) {
-              return readOnlyProjection(Reflect.apply(call, projection, args));
-            }
-        : () => (...args: unknown[]) => readOnlyProjection(Reflect.apply(call, target, args));
-      if (receiver !== projection) return build();
-      return cachedWrapper(target, call, build);
+      return projectedProperty(target, property, receiver, projection);
     },
     set(_target, property) {
       refuseWrite(property);
@@ -211,6 +370,7 @@ export function readOnlyProjection<T>(value: T): T {
   });
 
   projections.set(subject, projection);
+  sources.set(projection, subject);
   minted.add(projection);
   return projection as T;
 }

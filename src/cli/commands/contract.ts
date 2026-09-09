@@ -20,6 +20,7 @@ export interface ContractOptions {
   update?: boolean;
   summary?: string;
   breaking?: boolean;
+  adopt?: boolean;
   regenerateFormat?: boolean;
 }
 
@@ -70,6 +71,36 @@ export function diffContract(
     formatChanged,
     drifted: surfaceChanged || payloadChanged || formatChanged,
   };
+}
+
+/**
+ * Whether this run may record a revision, and why.
+ *
+ * A revision that means nothing trains the platform team to stop reading them,
+ * so a bump with nothing behind it is refused. `--adopt` is the one case where
+ * nothing IS behind it and the revision is still owed, and it exists because of
+ * how the platform stores an engine rather than how BoardSmith describes one:
+ * ShufflewickPub archives each engine BUILD under its revision number and
+ * refuses to overwrite one, on the rule that a revision identifies exactly one
+ * engine. A change no fingerprint can see -- a performance fix alters no
+ * surface, no payload and no stored byte -- therefore has no way to reach a
+ * live world at all unless it is given a number of its own.
+ *
+ * It is refused when the contract DID move, so "the platform must adopt this"
+ * cannot become the sentence every revision carries.
+ */
+export function recordable(
+  diff: { drifted: boolean },
+  options: { breaking: boolean; adopt: boolean },
+): { record: boolean; reason: "drift" | "breaking" | "adopt" | "nothing" | "adopt-not-needed" } {
+  if (diff.drifted) {
+    return options.adopt
+      ? { record: false, reason: "adopt-not-needed" }
+      : { record: true, reason: "drift" };
+  }
+  if (options.adopt) return { record: true, reason: "adopt" };
+  if (options.breaking) return { record: true, reason: "breaking" };
+  return { record: false, reason: "nothing" };
 }
 
 /**
@@ -179,13 +210,29 @@ export async function contractCommand(options: ContractOptions): Promise<void> {
     return;
   }
 
-  // Refuse a no-op bump. A revision that means nothing trains the platform team
-  // to stop reading them, which is exactly the failure this system prevents.
-  if (!diff.drifted && !options.breaking) {
+  const verdict = recordable(diff, {
+    breaking: options.breaking === true,
+    adopt: options.adopt === true,
+  });
+  if (verdict.reason === 'nothing') {
     console.error(chalk.yellow('\nNothing to record — the API surface, the player-view payload and the world serialization format are all unchanged.\n'));
     console.error('If your change affects the platform in a way neither fingerprint can see');
     console.error('(an exported TYPE, say — see the KNOWN LIMIT in src/contract/fingerprint.ts),');
     console.error('extend the fixture in fingerprint.ts so it does, then re-run this.\n');
+    console.error('If nothing a fingerprint COULD see changed and the platform still has to run');
+    console.error('this build — a performance fix, which alters no surface, no payload and no');
+    console.error('stored byte — it needs a number of its own, because the platform archives an');
+    console.error('engine build under its revision and will not overwrite one:');
+    console.error(chalk.bold('  boardsmith contract --update --adopt --summary "<why the platform must run this build>"'));
+    console.error('');
+    process.exitCode = 1;
+    return;
+  }
+  if (verdict.reason === 'adopt-not-needed') {
+    console.error(chalk.yellow('\n--adopt is for a change no fingerprint can see, and this one moved the contract.\n'));
+    console.error('Record it as the ordinary revision it is, without the flag:');
+    console.error(chalk.bold('  boardsmith contract --update --summary "<one sentence for the platform team>"'));
+    console.error('');
     process.exitCode = 1;
     return;
   }
@@ -204,6 +251,7 @@ export async function contractCommand(options: ContractOptions): Promise<void> {
     diff.formatChanged && chalk.yellow(
       'world serialization format (a live world may not cross this)',
     ),
+    verdict.reason === 'adopt' && 'nothing a fingerprint can see — recorded so the platform can archive and run this build',
     options.breaking && chalk.red('bundle protocol (BREAKING — every published game must be rebuilt)'),
   ].filter(Boolean);
 

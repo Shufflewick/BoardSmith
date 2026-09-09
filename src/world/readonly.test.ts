@@ -134,6 +134,79 @@ describe("readOnlyProjection", () => {
     expect(projection.first).toBe(projection.first);
   });
 
+  it("hands a finder's own PREDICATE a read-only element", () => {
+    // The engine's finders are answered against the live tree, so the elements
+    // a `(element) => boolean` finder is handed come from the live tree too.
+    // A predicate is bundle code on the offer path, which is the one path with
+    // no rollback and no checkpoint, so it must reach the same refusal every
+    // other read on that path reaches.
+    const { game } = world();
+    const projection = readOnlyProjection(game);
+
+    expect(() =>
+      projection.all(Room, (room: Room) => {
+        room.visits = 1;
+        return true;
+      }),
+    ).toThrow(WorldRefusal);
+    expect(game.first(Room, "here")!.visits).toBe(0);
+  });
+
+  it("answers a finder given a PROJECTED element exactly as a live one does", () => {
+    // A declaration reads an element out of the projection and hands it
+    // straight back to another read -- `contains`, `indexOfElement`, a finder
+    // keyed on a player. Both sides have to be talking about the same object,
+    // or a projection would quietly answer "no" to a question the live tree
+    // answers "yes".
+    const { game, here } = world();
+    const projection = readOnlyProjection(game);
+    const token = projection.first(Token)!;
+
+    expect(projection.all(Token).contains(token)).toBe(true);
+    expect(here.all(Token).contains(token)).toBe(true);
+  });
+
+  it("costs about what the live tree costs, because an offer is a fan-out of finders",
+    () => {
+    // ShufflewickPub #409. A world's OFFER runs every action's condition, its
+    // greying rule and every selection's candidate callback for one seat, and
+    // a world-scoped change runs that for every seat at once. All of it reads
+    // through this projection, so a projection that charges a multiple of the
+    // live tree charges it once per seat: measured at 500 seats, an offer
+    // fan-out cost 2277 ms against a view fan-out's 208 ms, and 95% of the
+    // difference was here rather than in anything an offer decides.
+    //
+    // A RATIO AND NOT A DURATION, so the number means the same thing on a
+    // loaded machine as on an idle one: the same finder, over the same tree,
+    // reached the two ways.
+    const game = new ProjectionGame({ playerCount: 2, seed: "cost", worldMode: true });
+    for (let i = 0; i < 500; i += 1) game.create(Room, `room-${i}`);
+    const projection = readOnlyProjection(game);
+    const ROUNDS = 200;
+
+    const walk = (subject: ProjectionGame): void => {
+      for (let round = 0; round < ROUNDS; round += 1) subject.first(Room, `room-${round % 500}`);
+    };
+    // Warm both roads before either is timed.
+    walk(game);
+    walk(projection);
+
+    const startedLive = performance.now();
+    walk(game);
+    const live = performance.now() - startedLive;
+    const startedRead = performance.now();
+    walk(projection);
+    const read = performance.now() - startedRead;
+
+    expect(
+      read / Math.max(live, 0.001),
+      `A finder over 500 roots took ${read.toFixed(1)}ms through the projection against ` +
+        `${live.toFixed(1)}ms live. A read the engine owns runs on the real element and only ` +
+        "its ANSWER is projected; a ratio in the double figures means the method body is " +
+        "running with the projection as its receiver, so every step of the walk pays a trap.",
+    ).toBeLessThan(4);
+  });
+
   it("mints ONE projection per element however deeply it is reached", () => {
     // #374 as an invariant rather than a stopwatch. The re-wrapping this closes
     // was visible as cost -- a finder over 500 roots took seconds -- but the

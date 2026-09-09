@@ -1,5 +1,5 @@
 {
-  "revision": 65,
+  "revision": 66,
   "bundleProtocol": 2,
   "surfaceHash": "96b88a0be8dac5ec",
   "payloadHash": "fcb67168b7207856",
@@ -529,6 +529,15 @@
       "payloadHash": "fcb67168b7207856",
       "formatHash": "0058593e7cc80205",
       "summary": "A world's view no longer says who is looking, so ONE answer can be sent to a whole audience. WIRE CHANGE: the envelope is {state, phase} -- the seat number is gone, and so is the viewer's own serialized Player element that pruneRosterToViewer kept. Measured: no client reads either (useWorldPlay takes state and nothing else; its 'mine' comes from the seat the platform puts on the frame that seats you), while both made every body in a fan-out distinct -- a 500-seat announcement in a public plaza of 200 stalls was 500 encodings and 18.5 MB, 27 ms of JSON.stringify plus 55 ms of parse, for 500 copies of one answer. With them gone the same plaza is ONE body. WorldEngine.viewsFor now answers {bodies, seats}: each distinct view once, plus which one each seat holds, so a host encodes once per body instead of once per watcher; runner.viewsFor answers {bodies, of, refused} in place of a per-player map. Sharing is decided structurally by Game.projectsAlikeForEverySeat (no element declares visibility, no class withholds attributes, no playerView, no tutorial progress, no addressed animation event) and by the seat's declared partitions, never by comparing encoded bodies -- comparing them costs the encoding this removes. A world that hides anything pays exactly what it paid before: a room scoped with addVisibleTo is per-seat output even when every seat is granted, because redactVisibilityForSeat collapses the grant roster to the reader. The conformance case 'viewFor is PER PLAYER' is retired, because two seats of a world with nothing hidden between them SHOULD now receive identical bytes. formatHash is unchanged: stored partition bytes are untouched and a live world crosses this revision with no gate. Platform: read the view as {state, phase} and take the seat from the commands frame."
+    },
+    {
+      "revision": 66,
+      "date": "2026-09-09",
+      "bundleProtocol": 2,
+      "surfaceHash": "96b88a0be8dac5ec",
+      "payloadHash": "fcb67168b7207856",
+      "formatHash": "0058593e7cc80205",
+      "summary": "A read the engine owns runs on the real element behind a read-only projection, and only its answer is projected (ShufflewickPub #409). Binding every method to the proxy charged a trap per step of its own walk, so a finder over 500 roots cost 16x the live tree -- and a world's OFFER is a fan-out of finders, run for every seat a change reaches. Measured on a 500-seat village: an offer fan-out fell from 2277 ms to 125 ms, 4.55 ms a seat to 0.25 ms, which takes the offer half of a per-command fan-out from 11x the view half to below it. ENGINE_READ_DOORS is an allowlist, so a method nobody names is slow and never unsafe; a finder's own predicate is handed projected elements and an element read out of a projection goes back through a door as the element it wraps. Nothing a fingerprint can see changes: no surface, no player-view payload, no stored byte, so all three hashes stand where r65 left them and every live world crosses onto this revision with no gate. Recorded with --adopt so the platform can archive and run the build."
     }
   ]
 }
