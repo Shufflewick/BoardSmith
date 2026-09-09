@@ -119,9 +119,9 @@ describe('ActionPanel interaction tests', () => {
     // yet when we mount the panel.
     void controller.start('twoStepMove', { args: { piece: 77 } });
 
-    // Flush Vue's scheduler: watcher(currentPick) fires, sees destination already
-    // marked as fetched (fetchedSelections set before the await in fetchAndAutoFill),
-    // skips double-fetch. currentPick.value is now 'destination'.
+    // Flush Vue's scheduler: watcher(currentPick) fires, joins the destination
+    // fetch that is already in flight rather than issuing a second one, and
+    // stays suspended on it. currentPick.value is now 'destination'.
     await nextTick();
 
     // Mount with destination as the active pick but NO choices in the snapshot yet.

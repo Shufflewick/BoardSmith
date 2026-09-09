@@ -397,6 +397,31 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   }
 
   /**
+   * Message for a prefill that no available choice matches. Names the pick and
+   * the rejected value so the caller can correct it, and lists what would have
+   * been accepted (capped, because an element pick can offer hundreds).
+   */
+  function describeRejectedPrefill(
+    selection: PickMetadata,
+    value: unknown,
+    choices: Array<{ value: unknown; display: string; disabled?: string }>
+  ): string {
+    const label = selection.prompt || selection.name;
+    const shown = getDisplayFromValue(value);
+
+    if (choices.length === 0) {
+      return `Cannot prefill "${label}" with "${shown}": it has no available choices.`;
+    }
+
+    const MAX_LISTED = 5;
+    const displays = choices.map(c => c.display);
+    const listed = displays.slice(0, MAX_LISTED).join(', ');
+    const remainder = displays.length - MAX_LISTED;
+    const suffix = remainder > 0 ? `, and ${remainder} more` : '';
+    return `Cannot prefill "${label}" with "${shown}". Pick one of: ${listed}${suffix}.`;
+  }
+
+  /**
    * Get available choices for a pick.
    * Priority: pickSnapshots > static metadata (for execute() and tests)
    */
@@ -591,6 +616,46 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   }
 
   /**
+   * Apply the queued prefill for a selection, if it has one.
+   *
+   * Returns true when the selection is settled and the caller must not auto-fill:
+   * either the prefill was applied, or it matched nothing and the player has been
+   * told which value to correct. Substituting some other choice for a value the
+   * caller explicitly asked for is the silent drop #226 reported.
+   *
+   * The choices must already be loaded when this runs. Judging a prefill against
+   * a snapshot a fetch has not written yet discards it.
+   */
+  function consumePrefill(selection: PickMetadata): boolean {
+    const prefillValue = actionSnapshot.value?.prefills.get(selection.name);
+    if (prefillValue === undefined) return false;
+
+    const choices = getChoices(selection);
+    const validChoice = choices.find(c => {
+      if (c.value === prefillValue) return true;
+      if (typeof c.value === 'object' && c.value !== null) {
+        return (c.value as Record<string, unknown>).id === prefillValue;
+      }
+      return false;
+    });
+
+    actionSnapshot.value?.prefills.delete(selection.name);
+
+    if (!validChoice) {
+      setError(describeRejectedPrefill(selection, prefillValue, choices));
+      return true;
+    }
+
+    currentArgs.value[selection.name] = validChoice.value;
+    actionSnapshot.value?.collectedPicks.set(selection.name, {
+      value: validChoice.value,
+      display: validChoice.display,
+      skipped: false,
+    });
+    return true;
+  }
+
+  /**
    * Attempt to auto-fill a selection if it has exactly one non-optional choice.
    * Updates both currentArgs and collectedPicks in actionSnapshot.
    *
@@ -646,8 +711,6 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       return;
     }
 
-    // Mark as fetched BEFORE the await to prevent the watcher from racing ahead
-    actionSnapshot.value?.fetchedSelections.add(selection.name);
     await fetchChoicesForPick(selection.name);
 
     if (tryAutoFillSelection(selection)) {
@@ -661,8 +724,35 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
   /**
    * Fetch choices for a pick from the server.
+   *
+   * De-duplicates concurrent requests for the same pick: while one is in flight
+   * every other caller gets that same promise back. This is the single place
+   * that knows a fetch is outstanding, so callers never have to mark a pick as
+   * fetched themselves. Awaiting this function is always enough to have the
+   * choices in hand (#226: the prefill watcher used to skip an in-flight fetch
+   * and then judged the player's prefill against an empty choice list).
    */
-  async function fetchChoicesForPick(selectionName: string): Promise<void> {
+  function fetchChoicesForPick(selectionName: string): Promise<void> {
+    const fetches = actionSnapshot.value?.choiceFetches;
+    const inFlight = fetches?.get(selectionName);
+    if (inFlight) return inFlight;
+
+    const request = requestChoicesForPick(selectionName);
+    if (!fetches) return request;
+
+    // The entry is cleared as soon as the request settles, so a pick whose
+    // choices are refetched after a dependent value changes really refetches.
+    // Cleanup is registered on the side rather than chained onto what callers
+    // await, so joining a fetch costs a caller no extra microtask.
+    const forget = () => {
+      if (fetches.get(selectionName) === request) fetches.delete(selectionName);
+    };
+    fetches.set(selectionName, request);
+    void request.then(forget, forget);
+    return request;
+  }
+
+  async function requestChoicesForPick(selectionName: string): Promise<void> {
     const fetchFn = options.fetchPickChoices;
     if (!fetchFn) {
       return;
@@ -826,55 +916,28 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   watch(currentPick, async (sel) => {
     if (!sel || isExecuting.value) return;
 
-    // Check if this selection was already fetched (by start/startFollowUp/fetchAndAutoFill)
-    const alreadyFetched = actionSnapshot.value?.fetchedSelections.has(sel.name) ?? false;
-
-    // Fetch choices if not already fetched and not in snapshot yet
-    if (!alreadyFetched) {
-      const snapshot = actionSnapshot.value?.pickSnapshots.get(sel.name);
-      if (!snapshot && (sel.type === 'choice' || sel.type === 'element' || sel.type === 'elements')) {
-        // Mark as fetched BEFORE the await to prevent duplicate fetches
-        actionSnapshot.value?.fetchedSelections.add(sel.name);
-        await fetchChoicesForPick(sel.name);
-      }
+    // Nothing below may run against a half-loaded choice list: a prefill judged
+    // against an empty snapshot is discarded, and an auto-fill judged against
+    // one choice that is really two picks for the player (#226). A fetch
+    // started by start()/fill() is normally still in flight when this watcher
+    // first runs, so join it; otherwise start one for a pick that has no
+    // choices yet.
+    const inFlight = actionSnapshot.value?.choiceFetches.get(sel.name);
+    if (inFlight) {
+      await inFlight;
+    } else if (
+      !actionSnapshot.value?.pickSnapshots.has(sel.name) &&
+      (sel.type === 'choice' || sel.type === 'element' || sel.type === 'elements')
+    ) {
+      await fetchChoicesForPick(sel.name);
     }
 
-    // Check for prefill first - takes priority over auto-fill
-    const prefillValue = actionSnapshot.value?.prefills.get(sel.name);
-    if (prefillValue !== undefined) {
-      // Validate prefill value against available choices
-      const choices = getChoices(sel);
-      const validChoice = choices.find(c => {
-        if (c.value === prefillValue) return true;
-        if (typeof c.value === 'object' && c.value !== null) {
-          return (c.value as Record<string, unknown>).id === prefillValue;
-        }
-        // For element selections, compare IDs directly
-        if (sel.type === 'element' || sel.type === 'elements') {
-          return c.value === prefillValue;
-        }
-        return false;
-      });
+    // The action can be cancelled, replaced or advanced while choices load.
+    // The watcher refires for whatever pick is current now, so drop this run.
+    if (isExecuting.value || currentPick.value?.name !== sel.name) return;
 
-      if (validChoice) {
-        // Apply prefill
-        currentArgs.value[sel.name] = validChoice.value;
-
-        // Update collectedPicks
-        if (actionSnapshot.value) {
-          actionSnapshot.value.collectedPicks.set(sel.name, {
-            value: validChoice.value,
-            display: validChoice.display,
-            skipped: false,
-          });
-          // Remove from prefills - it's been applied
-          actionSnapshot.value.prefills.delete(sel.name);
-        }
-        return; // Don't do auto-fill, prefill was applied
-      }
-      // Prefill value not valid - remove it and continue to auto-fill
-      actionSnapshot.value?.prefills.delete(sel.name);
-    }
+    // A prefill takes priority over auto-fill, and settles the pick either way.
+    if (consumePrefill(sel)) return;
 
     // Now attempt auto-fill if enabled
     // Don't auto-fill optional selections - user must consciously choose or skip
@@ -1261,7 +1324,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       collectedPicks: new Map(),
       repeatingState: null,
       prefills: new Map(),
-      fetchedSelections: new Set(),
+      choiceFetches: new Map(),
     };
 
     // Store display values for any initialArgs
@@ -1403,7 +1466,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       collectedPicks: new Map(),
       repeatingState: null,
       prefills: new Map(Object.entries(prefillArgs)),
-      fetchedSelections: new Set(),
+      choiceFetches: new Map(),
     };
 
     // Store display values for any initialArgs
