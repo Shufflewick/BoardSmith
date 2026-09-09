@@ -158,6 +158,10 @@ program
   .option('--update', 'Record a new contract revision from the current engine')
   .option('--summary <text>', 'One sentence describing the change, for the platform team (required with --update)')
   .option('--breaking', 'Also bump bundleProtocol — invalidates every published bundle')
+  .option(
+    '--regenerate-format',
+    'Rewrite the committed world-format corpus — a deliberate format break that ends every live world holding the old bytes',
+  )
   .action(contractCommand);
 
 // Analysis

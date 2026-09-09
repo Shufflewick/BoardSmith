@@ -18,6 +18,12 @@
  *   game. Catches SEMANTIC changes that leave the API identical but alter what
  *   the platform ships to clients (the `Deck` case: same exports, different
  *   payload).
+ * - `formatHash` — a round trip over a COMMITTED CORPUS of world partition
+ *   bytes. Catches changes to the stored form of a world, in either direction:
+ *   what this engine writes, and what it can still read. It is the one
+ *   fingerprint a LIVE WORLD's durability turns on, and the reason
+ *   ShufflewickPub can move a world onto a newer runner at all
+ *   (ShufflewickPub #390).
  *
  * Neither is a guess about intent, and neither can be forgotten:
  * `engine-contract.test.ts` recomputes both on every test run and fails when
@@ -68,8 +74,10 @@
  *   NOT COVERED, WORLD SIDE: everything a world DOES rather than shows.
  *   Nothing here dispatches, so `applyCommand` and `onEvent` and everything
  *   downstream of them -- the dirty set, rollback, event routing by scope,
- *   scheduling and recurrence, keyed cancellation, refusals, and the bytes
- *   `serializePartitions` writes -- move neither hash. Nor does eviction, nor a
+ *   scheduling and recurrence, keyed cancellation and refusals -- move neither
+ *   hash. The BYTES `serializePartitions` writes are the exception, and they
+ *   are not this fixture's to cover: `formatHash` is the third fingerprint and
+ *   its only subject. Nor does eviction, nor a
  *   seat taken or left. Those are not a guess: `WORLD_FIXTURE_COVERAGE` below
  *   states one of exactly two things about every verb of `WorldEngine`, and
  *   `engine-contract.test.ts` instruments the engine and proves both directions
@@ -96,6 +104,8 @@
  */
 
 import { createHash } from 'node:crypto';
+
+import formatFixtureGolden from './format-fixture.json' with { type: 'json' };
 import type { WorldHostMessage, WorldUiMessage } from '../ui/world/worldProtocol.js';
 import { WORLD_ENGINE_METHODS } from '../world/contract.js';
 import { WORLD_REFUSALS } from '../world/refusals.js';
@@ -107,6 +117,11 @@ import type {
   WorldMigrateContext,
   WorldSerialized,
 } from '../world/runner.js';
+
+/**
+ * The committed corpus of world partition bytes. See `computeFormatHash`.
+ */
+const FORMAT_FIXTURE_GOLDEN = formatFixtureGolden as unknown as FormatFixture;
 
 /**
  * WHICH OF THE WORLD ENGINE'S PLATFORM-FACING VERBS THE PAYLOAD FIXTURE
@@ -143,8 +158,8 @@ export const WORLD_FIXTURE_COVERAGE: Record<(typeof WORLD_ENGINE_METHODS)[number
 
   migratePartition: 'A world MOVING BETWEEN state versions (#200), which happens once, at '
     + 'startup, before any player is in it -- never on the path this fixture drives. What it '
-    + 'produces is ordinary partition bytes: `serializePartitions` is what writes them, and that '
-    + 'is fingerprinted.',
+    + 'produces is ordinary partition bytes, whose STORED FORM is `formatHash`\'s subject; what '
+    + 'this verb decides is which transformation runs, and that is unfingerprinted.',
 
   migrateBaseline: 'What a world MOVING BETWEEN state versions says once its bytes are in the '
     + "host's hands (ShufflewickPub #407): the roots it just serialized are what storage now "
@@ -154,8 +169,8 @@ export const WORLD_FIXTURE_COVERAGE: Record<(typeof WORLD_ENGINE_METHODS)[number
 
   migrateFinalize: 'The last phase of a world MOVING BETWEEN state versions (ShufflewickPub '
     + '#379), which happens once, at startup, before any player is in it. It derives one root\'s '
-    + 'value from another\'s and what it produces is ordinary partition bytes: '
-    + '`serializePartitions` is what writes them, and that is fingerprinted.',
+    + 'value from another\'s, and like `migratePartition` its ANSWER is ordinary partition bytes '
+    + 'while the deriving itself is unfingerprinted.',
 
   createMigratedPartitions: 'The other half of a world MOVING BETWEEN state versions (#218), '
     + 'which happens once, at startup, before any player is in it. What it produces is an '
@@ -185,8 +200,10 @@ export const WORLD_FIXTURE_COVERAGE: Record<(typeof WORLD_ENGINE_METHODS)[number
   onEvent: 'The clock\'s road: scheduling, recurrence, keyed cancellation and event routing '
     + 'by scope. Nothing here schedules and nothing here is due.',
   seat: 'Seats are handed to the constructor. Nobody sits down or stands up mid-fixture.',
-  serializePartitions: 'What a checkpoint WRITES. Nothing here writes, so the stored form of '
-    + 'a dirtied partition moves neither hash.',
+  serializePartitions: 'What a checkpoint WRITES. Nothing in THIS fixture writes, so a '
+    + 'dirtied partition\'s stored form moves neither of the two hashes this table is about. It '
+    + 'is not unfingerprinted, though: `formatHash` drives it over a committed corpus, which is '
+    + 'the whole of that hash (ShufflewickPub #390).',
 };
 
 /** The verbs above that the fixture claims to drive, in a fixed order. */
@@ -1238,14 +1255,367 @@ export async function computePayloadHash(): Promise<string> {
   );
 }
 
+/**
+ * THE STORED FORM OF A WORLD'S PARTITIONS (ShufflewickPub #390).
+ *
+ * `surfaceHash` and `payloadHash` answer "what can the platform CALL" and
+ * "what does a seat RECEIVE". Neither answers the question a live world's
+ * durability actually turns on: CAN THIS ENGINE READ THE BYTES THAT ENGINE
+ * WROTE. So ShufflewickPub pinned each world to the exact engine revision it
+ * launched on, for life, because the one property it needed to compare was the
+ * one property nothing here measured -- and a pin over everything means no
+ * engine fix ever reaches a live world, and the runner archive grows one engine
+ * per revision with nothing ever retirable.
+ *
+ * `formatHash` is that missing measurement. Two revisions declaring the same
+ * `formatHash` can be swapped under a live world; two that differ cannot.
+ *
+ * ## It is a ROUND TRIP over COMMITTED GOLDEN BYTES, not a hash of an output
+ *
+ * The obvious design -- serialize a fixture and hash the bytes -- covers only
+ * the WRITER, and the one format break already in ShufflewickPub's archive was
+ * reader-only. `WORLD_PARTITION_ID_FLOOR` entered `adoptSubtree` in r46: the
+ * bytes an r44 world wrote are byte-identical to what r46 writes, and r46
+ * refuses to adopt them anyway ("element id 14 is already resident"). A
+ * writer-side hash calls those two revisions one format and licenses exactly
+ * the swap that corrupts the world.
+ *
+ * So `format-fixture.json` is a COMMITTED CORPUS -- real bytes this engine
+ * once produced, kept forever -- and the hash covers three answers about it:
+ *
+ * - `golden`: the corpus itself, so the thing being compared is fixed.
+ * - `fresh`: what the engine WRITES today, from the same fixture world, through
+ *   `WorldEngine.createPartition`.
+ * - `alone` / `both`: what the engine WRITES AFTER READING the corpus back,
+ *   once with only the ledger resident and once with the vault too. A reader
+ *   that drops a field, decodes a Map differently, or resolves a reference it
+ *   used to leave alone moves these even though `fresh` never stirs.
+ *
+ * A reader that REFUSES the corpus cannot produce a hash at all, and that is
+ * the correct answer rather than a missing one: it is a deliberate format
+ * break, it is stated by name, and it ends every world holding those bytes.
+ *
+ * ## The two-partition shape is the point
+ *
+ * `alone` hydrates the ledger WITHOUT the vault, so the ledger's reference into
+ * the vault is a reference into a partition that is not resident. That
+ * survives adoption as a bare `{ __elementId }` and must survive
+ * re-serialization unchanged (`Game#adoptSubtree`, `GameElement.deserializeValue`).
+ * A reader that resolved it to `undefined` would silently delete a live world's
+ * cross-room links, and no single-partition fixture can see that.
+ *
+ * ## What is deliberately NOT in here
+ *
+ * The parent-to-child CHECKPOINT ANSWER SHAPE. That is host protocol, not
+ * stored bytes: the platform's parent speaks to many child revisions at once
+ * and changing that shape strands nothing durable. Folding it in would make
+ * two revisions different FORMATS over a change that touched no stored byte,
+ * which licenses refusing a swap that is perfectly safe. It stays in
+ * `payloadHash`, where `WORLD_DURABILITY_FIXTURE` already holds it.
+ *
+ * Views, offers, the declaration walk, flow position, refusals, `applyCommand`,
+ * `onEvent`, scheduling, budgets and the game ROOT's own `toJSON` fields are
+ * all out for the same reason: none of them is a byte a partition holds. The
+ * root is rebuilt by the bundle on every wake and is never a partition.
+ */
+
+/** The stored bytes of one partition, as `WorldPartitionStore` answers them. */
+interface FormatFixturePartition {
+  readonly parentId: number;
+  readonly json: unknown;
+}
+
+/**
+ * THE COMMITTED CORPUS: partitions this engine wrote once, kept forever.
+ *
+ * Regenerated only by `boardsmith contract --regenerate-format`, and only for
+ * a deliberate format break -- regenerating it is what makes every world
+ * holding the old bytes unreadable, so it is not a step in an ordinary
+ * revision.
+ */
+interface FormatFixture {
+  readonly nextElementId: number;
+  readonly partitions: Readonly<Record<string, FormatFixturePartition>>;
+}
+
+const FORMAT_FIXTURE_SEATS = 3;
+const FORMAT_FIXTURE_LEDGER = 'ledger';
+const FORMAT_FIXTURE_VAULT = 'vault';
+
+/** Vault first: the ledger holds a reference INTO it, so it has to exist. */
+const FORMAT_FIXTURE_ORDER: readonly string[] = [FORMAT_FIXTURE_VAULT, FORMAT_FIXTURE_LEDGER];
+
+/**
+ * The fixture world, its classes, and the hook that builds its partitions.
+ *
+ * Defined here rather than borrowed from `src/world/village.test-helper.ts` or
+ * from an example game, for the reason the other two fixtures give: a shared
+ * helper is reshaped by whoever is writing tests and an example game by its
+ * designer, and this hash must move for engine reasons alone.
+ *
+ * Every encoding `GameElement.serializeValue` has a branch for is present, and
+ * `assertCoversFormat` proves it rather than trusting this comment.
+ */
+async function formatFixtureWorld(options: {
+  nextElementId: number;
+  store: { read(name: string): Promise<FormatFixturePartition | undefined>; forget(): void };
+}): Promise<any> {
+  const engineModule = await import('../engine/index.js');
+  const { BoardSmithWorldEngine } = await import('../world/index.js');
+  const { Game, Player, Space, Piece } = engineModule as any;
+
+  class FormatFixturePlayer extends Player<any, any> {}
+
+  class FormatFixtureCoin extends Piece<any> {
+    denomination = 0;
+  }
+
+  class FormatFixtureChest extends Space<any> {
+    sealed = false;
+  }
+
+  class FormatFixtureVault extends Space<any> {
+    depth = 0;
+  }
+
+  class FormatFixtureLedger extends Space<any> {
+    /** A player, which serializes as `__playerRef` rather than as an element. */
+    owner: any = undefined;
+    /** An element in ANOTHER partition, which is `__elementId` and stays one. */
+    reserve: any = undefined;
+    tallies: Map<string, number> = new Map();
+    marks: Set<string> = new Set();
+    terrain: Uint8Array = new Uint8Array();
+    audit: unknown[] = [];
+    header: Record<string, unknown> = {};
+  }
+
+  class FormatFixtureWorld extends Game<any, any> {
+    static PlayerClass = FormatFixturePlayer;
+
+    constructor(gameOptions: any) {
+      super(gameOptions);
+      // Registered in the CLASS constructor: world mode has no handler re-bind
+      // pass on adoption, so anything a grafted element needs must come from
+      // its own class.
+      this.registerElements([
+        FormatFixtureCoin,
+        FormatFixtureChest,
+        FormatFixtureVault,
+        FormatFixtureLedger,
+      ]);
+    }
+  }
+
+  const game = new FormatFixtureWorld({
+    playerCount: FORMAT_FIXTURE_SEATS,
+    seed: 'engine-contract-format-fixture',
+    worldMode: true,
+  });
+
+  const build = (built: any, name: string): any => {
+    if (name === FORMAT_FIXTURE_VAULT) {
+      const vault = built.create(FormatFixtureVault, 'vault', { depth: 2 });
+      const strongbox = vault.create(FormatFixtureChest, 'strongbox', { sealed: true });
+      // Zone visibility, which only `Space#toJSON` emits and only when explicit.
+      strongbox.contentsHidden();
+      const ingot = strongbox.create(FormatFixtureCoin, 'ingot', { denomination: 50 });
+      // Explicit element visibility, which is a COPY in the bytes.
+      ingot.showOnlyTo(1);
+      return vault;
+    }
+    if (name === FORMAT_FIXTURE_LEDGER) {
+      const ledger = built.create(FormatFixtureLedger, 'ledger');
+      ledger.owner = built.players[0];
+      ledger.reserve = built.first(FormatFixtureCoin, 'ingot');
+      ledger.tallies = new Map([
+        ['grain', 12],
+        ['timber', 7],
+      ]);
+      ledger.marks = new Set(['sealed', 'audited']);
+      ledger.terrain = new Uint8Array([0, 1, 2, 253, 254, 255]);
+      ledger.audit = [1, 'two', null, true, [3, 4], { note: 'nested' }];
+      ledger.header = { season: 3, deep: { deeper: [5, { deepest: true }] } };
+      // Nesting, so a subtree is more than one level.
+      const page = ledger.create(FormatFixtureChest, 'page-1', { sealed: false });
+      page.create(FormatFixtureCoin, 'penny', { denomination: 1 });
+      return ledger;
+    }
+    return undefined;
+  };
+
+  return new BoardSmithWorldEngine({
+    game,
+    seats: new Map<string, number>(
+      Array.from({ length: FORMAT_FIXTURE_SEATS }, (_unused, index) => [
+        `p${index + 1}`,
+        index + 1,
+      ]),
+    ),
+    store: options.store,
+    actions: [],
+    view: () => FORMAT_FIXTURE_ORDER,
+    createPartition: build,
+    nextElementId: options.nextElementId,
+  });
+}
+
+/** A store that holds nothing, for the WRITE side, which reads no bytes. */
+const EMPTY_FORMAT_STORE = {
+  async read(): Promise<FormatFixturePartition | undefined> {
+    return undefined;
+  },
+  forget(): void {},
+};
+
+/**
+ * WRITE the fixture's partitions with today's engine, through the engine's own
+ * creation path rather than by calling `toJSON` behind its back.
+ *
+ * The ids start at `WORLD_PARTITION_ID_FLOOR` because that is where a real
+ * world's own elements start, and starting there makes the corpus independent
+ * of how many seats the fixture's construction happened to spend.
+ */
+export async function buildFormatFixture(): Promise<FormatFixture> {
+  const { WORLD_PARTITION_ID_FLOOR } = (await import('../engine/index.js')) as any;
+  const engine = await formatFixtureWorld({
+    nextElementId: WORLD_PARTITION_ID_FLOOR,
+    store: EMPTY_FORMAT_STORE,
+  });
+
+  const partitions: Record<string, FormatFixturePartition> = {};
+  for (const name of FORMAT_FIXTURE_ORDER) {
+    const created = engine.createPartition(name) as FormatFixturePartition | undefined;
+    if (created === undefined) {
+      throw new Error(
+        `The format fixture's builder answered nothing for partition "${name}". Every name in `
+        + 'FORMAT_FIXTURE_ORDER must be built by the hook in formatFixtureWorld.',
+      );
+    }
+    partitions[name] = { parentId: created.parentId, json: throughStorage(created.json) };
+  }
+
+  return { nextElementId: engine.nextElementId(), partitions };
+}
+
+/**
+ * READ the committed corpus back and write it out again.
+ *
+ * `names` is which partitions are made resident, and that choice is the whole
+ * reason this takes an argument: hydrating the ledger alone leaves its
+ * reference into the vault pointing at an element no tree holds, which is the
+ * state a real world spends most of its life in.
+ */
+async function reserializeFormatFixture(
+  golden: FormatFixture,
+  names: readonly string[],
+): Promise<{ nextElementId: number; partitions: Record<string, unknown> }> {
+  const engine = await formatFixtureWorld({
+    nextElementId: golden.nextElementId,
+    store: {
+      async read(name: string) {
+        return golden.partitions[name];
+      },
+      forget(): void {},
+    },
+  });
+
+  await engine.hydrate(names);
+  const written = (await engine.serializePartitions(names)) as Record<string, string>;
+  const partitions: Record<string, unknown> = {};
+  for (const name of names) partitions[name] = JSON.parse(written[name] as string);
+  return { nextElementId: engine.nextElementId(), partitions };
+}
+
+/**
+ * Fail loudly if the fixture stopped exercising an encoding a world's bytes use.
+ *
+ * The same guard the view and offer fixtures carry, for the same reason: a
+ * fixture that quietly narrows turns "unverified" into "verified", and the hash
+ * goes on moving for other reasons while covering the dropped encoding not at
+ * all. Here that would license swapping the runner under a live world across a
+ * change to whatever fell out.
+ */
+function assertCoversFormat(what: string, bytes: unknown): void {
+  const text = JSON.stringify(bytes) ?? '';
+  assertCovers(
+    `${what} of a world's stored bytes`,
+    [
+      ['a player reference (__playerRef)', text.includes('"__playerRef"')],
+      ['a cross-partition element reference (__elementId)', text.includes('"__elementId"')],
+      ['a Map (__map)', text.includes('"__map"')],
+      ['a Set (__set)', text.includes('"__set"')],
+      ['a typed array (__typedArray)', text.includes('"__typedArray"')],
+      ['explicit element visibility', text.includes('"visibility"')],
+      ['explicit zone visibility', text.includes('"zoneVisibility"')],
+      ['a named element', text.includes('"name"')],
+      ['nested children', text.includes('"children"')],
+      [
+        "ids above the world's construction floor",
+        /"id":\s*1\d{6}/.test(text),
+      ],
+    ],
+    'formatHash would go on moving for other reasons while saying nothing about the encoding '
+    + 'that fell out -- and two revisions that disagree about it would then be declared the same '
+    + "format, which is a licence to swap the engine under a live world's bytes.",
+  );
+}
+
+/**
+ * The serialization format of a world's durable partitions, as one hash.
+ *
+ * See the block comment above `FormatFixturePartition` for what is in it and
+ * what is deliberately not.
+ */
+export async function computeFormatHash(): Promise<string> {
+  const golden = FORMAT_FIXTURE_GOLDEN;
+  assertCoversFormat('the committed corpus', golden);
+
+  const fresh = await buildFormatFixture();
+  assertCoversFormat('what the engine writes today', fresh);
+
+  const read = async (names: readonly string[]): Promise<unknown> => {
+    try {
+      return await reserializeFormatFixture(golden, names);
+    } catch (error) {
+      // A DELIBERATE FORMAT BREAK, SAID BY NAME. There is no hash to answer
+      // here: the engine cannot read bytes of its own lineage, so every world
+      // holding them is unreadable and no swap can be licensed. Regenerating
+      // the corpus is the acknowledgement of that, not a way around it.
+      throw new Error(
+        'THIS ENGINE CAN NO LONGER READ THE COMMITTED WORLD FORMAT FIXTURE '
+        + `(${names.join(', ')}): ${error instanceof Error ? error.message : String(error)}\n\n`
+        + 'src/contract/format-fixture.json holds partition bytes this engine once wrote, and a '
+        + 'reader that refuses them refuses every live world written under them. On '
+        + 'ShufflewickPub that means those worlds end -- they cannot be migrated, because nothing '
+        + 'can read them.\n\n'
+        + 'If the break is deliberate and that cost is accepted:\n'
+        + '  boardsmith contract --regenerate-format\n'
+        + '  boardsmith contract --update --summary "<what stored bytes now look like>"\n\n'
+        + 'If it is not, the reader change is a bug: fix it rather than the corpus.',
+      );
+    }
+  };
+
+  // The ledger alone, so its reference into the vault points at an element no
+  // tree holds; then both, so the same reference resolves to a live element.
+  // A reader that changed its mind about either moves this hash.
+  const alone = await read([FORMAT_FIXTURE_LEDGER]);
+  const both = await read(FORMAT_FIXTURE_ORDER);
+
+  return sha256(canonicalize({ golden, fresh, alone, both }));
+}
+
 export interface ComputedFingerprints {
   surfaceHash: string;
   payloadHash: string;
+  formatHash: string;
 }
 
 export async function computeFingerprints(): Promise<ComputedFingerprints> {
   return {
     surfaceHash: await computeSurfaceHash(),
     payloadHash: await computePayloadHash(),
+    formatHash: await computeFormatHash(),
   };
 }

@@ -1,8 +1,9 @@
 {
   "revision": 61,
   "bundleProtocol": 2,
-  "surfaceHash": "0702a98066cae1b6",
+  "surfaceHash": "d8b77fe9472c61e3",
   "payloadHash": "bf527d30019ee1ba",
+  "formatHash": "0058593e7cc80205",
   "history": [
     {
       "revision": 1,
@@ -488,9 +489,10 @@
       "revision": 61,
       "date": "2026-09-09",
       "bundleProtocol": 2,
-      "surfaceHash": "0702a98066cae1b6",
+      "surfaceHash": "d8b77fe9472c61e3",
       "payloadHash": "bf527d30019ee1ba",
-      "summary": "A migration re-baselines the roots it serialized, so a migrated partition may be evicted (ShufflewickPub #407). A migration is the one write path that does not run through a dispatch, so nothing consumed the engine's touch-marks afterwards: the engine went on believing every transformed root differed from storage, Game#evictSubtree keeps the mark of a change it believes was never checkpointed, and the world's next command found a touched root id it could no longer name and refused with partition-not-resident -- for good. So evicting a migrated partition, which is the entire saving paged migration exists for (#402), produced a correct migration and an unplayable world. WorldEngine gains migrateBaseline(names) and Game gains rebaselinePartitions(ids): the current bytes of exactly these roots are what the host now holds, so the baseline moves and any mark on them is dropped. runner.migrateAll calls it over exactly the names it just serialized, after it has taken them, since those bytes and the host's transaction are one thing. Nothing a host must call: platforms should now delete the comment in their paged migrate op and evict each page."
+      "formatHash": "0058593e7cc80205",
+      "summary": "The engine declares formatHash: the serialization format of a world's durable partitions, measured as a round trip over a committed corpus of partition bytes. It is what lets the platform move a live world onto a newer runner instead of pinning it to its launch engine for life."
     }
   ]
 }
