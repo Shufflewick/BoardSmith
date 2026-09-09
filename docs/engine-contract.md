@@ -153,6 +153,24 @@ over-trust is worse than one they understand.
 The command refuses to bump when nothing actually moved, so revisions stay
 meaningful.
 
+### When nothing moved and the platform still has to run it
+
+A performance fix alters no surface, no payload and no stored byte, so no
+fingerprint can see it — and the platform archives each engine BUILD under its
+revision number and refuses to overwrite one, because a revision must identify
+exactly one engine. A build with no number of its own therefore cannot reach a
+live world at all.
+
+`--adopt` records a revision for exactly that: a change the platform must
+archive and run, that nothing here can detect.
+
+```
+boardsmith contract --update --adopt --summary "<why the platform must run this build>"
+```
+
+It is refused when the contract DID move, so "the platform must adopt this"
+cannot become the sentence every revision carries.
+
 ## Protocol: updating the platform
 
 On ShufflewickPub:

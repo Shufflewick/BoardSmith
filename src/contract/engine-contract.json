@@ -1,5 +1,5 @@
 {
-  "revision": 64,
+  "revision": 65,
   "bundleProtocol": 2,
   "surfaceHash": "ee424fb06b1c618c",
   "payloadHash": "d7a2574c8a6571a5",
@@ -520,6 +520,15 @@
       "payloadHash": "d7a2574c8a6571a5",
       "formatHash": "0058593e7cc80205",
       "summary": "A world engine gains viewsFor(players): a whole audience projected in one call. A fan-out is the shape a world spends its time in, and asking seat by seat serialized the resident tree in full once per watcher -- only the redaction on top of it is ever about the seat. Measured on a 500-seat plaza of 200 public stalls (37 KB a view), describing the world to everybody cost 213 ms, and 148 ms of that was the shared pass run again for each of them; the batch spends it once, for a 3.3x cut in the projection half of a notice. No view changes: the declaration, the residency it pulls in, the redaction and both prunes stay per seat, and the conformance suite holds the batch's answers against viewFor's. The runner's viewsFor now asks the engine once instead of looping; the platform's child op is unchanged. Stored partition bytes are untouched, so formatHash does not move and a live world crosses onto this revision with no gate."
+    },
+    {
+      "revision": 65,
+      "date": "2026-09-09",
+      "bundleProtocol": 2,
+      "surfaceHash": "ee424fb06b1c618c",
+      "payloadHash": "d7a2574c8a6571a5",
+      "formatHash": "0058593e7cc80205",
+      "summary": "A read the engine owns runs on the real element behind a read-only projection, and only its answer is projected (ShufflewickPub #409). Binding every method to the proxy charged a trap per step of its own walk, so a finder over 500 roots cost 16x the live tree -- and a world's OFFER is a fan-out of finders, run for every seat a change reaches. Measured on a 500-seat village: an offer fan-out fell from 2747 ms to 140 ms, 5.49 ms a seat to 0.28 ms, which takes the offer half of a per-command fan-out from 13x the view half to below it. Nothing a fingerprint can see changes: no surface, no player-view payload, no stored byte, so formatHash is unchanged and every live world crosses onto this revision with no gate. Recorded with --adopt so the platform can archive and run the build."
     }
   ]
 }

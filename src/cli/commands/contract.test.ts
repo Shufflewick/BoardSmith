@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 
-import { diffContract, nextContract } from './contract.js';
+import { diffContract, nextContract, recordable } from './contract.js';
 import type { EngineContract } from '../../contract/index.js';
 
 const BASE: EngineContract = {
@@ -126,5 +126,53 @@ describe('nextContract', () => {
     });
 
     expect(next.history[0]).toEqual(BASE.history[0]);
+  });
+});
+
+describe('recordable', () => {
+  const still = { surfaceChanged: false, payloadChanged: false, formatChanged: false, drifted: false };
+  const moved = { surfaceChanged: true, payloadChanged: false, formatChanged: false, drifted: true };
+
+  it('records a revision whenever a fingerprint moved', () => {
+    expect(recordable(moved, { breaking: false, adopt: false })).toEqual({ record: true, reason: 'drift' });
+  });
+
+  it('refuses a revision that would mean nothing', () => {
+    // A revision nobody can read a change out of trains the platform team to
+    // stop reading them, which is the whole system defeated.
+    expect(recordable(still, { breaking: false, adopt: false })).toEqual({
+      record: false,
+      reason: 'nothing',
+    });
+  });
+
+  it('records a revision the platform must ADOPT though no fingerprint can see it', () => {
+    // ShufflewickPub #409. The platform archives an engine BUILD under its
+    // revision number and refuses to overwrite one, on the rule that a revision
+    // identifies exactly one engine. So a change no fingerprint can see -- a
+    // performance fix, which by definition alters no surface, no payload and no
+    // stored byte -- cannot reach a live world at all unless it can be given a
+    // number of its own.
+    expect(recordable(still, { breaking: false, adopt: true })).toEqual({
+      record: true,
+      reason: 'adopt',
+    });
+  });
+
+  it('refuses --adopt when the contract moved on its own', () => {
+    // Then it is an ordinary revision and says so in its hashes. Accepting the
+    // flag anyway would let "the platform must adopt this" become the sentence
+    // every revision carries, which is how it would come to mean nothing.
+    expect(recordable(moved, { breaking: false, adopt: true })).toEqual({
+      record: false,
+      reason: 'adopt-not-needed',
+    });
+  });
+
+  it('records a breaking bump with no drift, because the protocol IS the change', () => {
+    expect(recordable(still, { breaking: true, adopt: false })).toEqual({
+      record: true,
+      reason: 'breaking',
+    });
   });
 });
