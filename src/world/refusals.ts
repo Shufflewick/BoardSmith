@@ -137,6 +137,19 @@ export const WORLD_REFUSALS = {
       "`definition.ts:assertSeatWithinWorld` carries the sentence that says so " +
       "to the player",
   },
+  "world-catching-up": {
+    owner: "caller",
+    why:
+      "ShufflewickPub #395: this world declared `ordering: \"chronological\"` -- its clock is " +
+      "part of its rules -- and it is still behind the instant this command arrived at. The " +
+      "command is NOT applied, because applying it would produce exactly the overtaken state " +
+      "the declaration exists to prevent. CALLER-owned, like `rate-limited` and for the same " +
+      "reason: the traffic is well-formed, the world is untouched, and a park ladder must never " +
+      "read a world that is merely behind as a world in trouble. Sending it again is safe and is " +
+      "the right response -- an order carries a durable identity (#368), so a repeat that " +
+      "arrives after the catch-up finishes runs exactly once. The platform re-arms before " +
+      "answering, so the catch-up is already continuing when the player reads this",
+  },
   "rate-limited": {
     owner: "caller",
     why:

@@ -185,12 +185,28 @@ export interface WorldDefinition {
    * earlier one has committed, so a player who overtakes it produces a state no
    * punctual world reaches.
    *
-   * It costs LATENCY and never correctness in the other direction: a catch-up
-   * that runs out of the host's budget, or meets an event that refuses, stops
-   * and the command is applied over a world that is still behind. A refusal
-   * would make the player press the button again, which loses the ordering this
-   * exists to keep. The player's own arrival instant, order identity and
-   * receipt are untouched -- what changes is what has happened before their
+   * IT COSTS LATENCY, AND WHEN IT RUNS OUT OF LATENCY IT COSTS THE COMMAND --
+   * never the ordering (ShufflewickPub #395).
+   *
+   * A catch-up that runs out of the host's budget, or meets an event that
+   * refuses, stops. The command is then NOT APPLIED: it is refused
+   * `world-catching-up`, which is caller-owned, and the world is left exactly
+   * as it was. This is the one place the guarantee could have been quietly
+   * dropped and was: applying anyway made the declaration a larger budget
+   * rather than an ordering, and it held only while a world was less than one
+   * budget behind -- past that a player overtook 38,000 due events with nothing
+   * anywhere saying so.
+   *
+   * The old reasoning against refusing was that it "would make the player press
+   * the button again, which loses the ordering this exists to keep". Pressing
+   * again is now exactly the right thing to do and loses nothing: an order
+   * carries a durable identity and receipt (#368), so a repeat that arrives
+   * after the catch-up has finished runs once and in order, and a host re-arms
+   * before it answers, so the catch-up is already continuing while the player
+   * reads the refusal.
+   *
+   * The player's own arrival instant, order identity and receipt are untouched
+   * either way -- what a catch-up changes is what has happened before their
    * handler runs, not when they arrived.
    */
   readonly ordering?: WorldOrdering;

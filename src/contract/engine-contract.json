@@ -1,7 +1,7 @@
 {
-  "revision": 58,
+  "revision": 59,
   "bundleProtocol": 2,
-  "surfaceHash": "d8a046d3f4de8b4c",
+  "surfaceHash": "d8b77fe9472c61e3",
   "payloadHash": "cfc73cbe2a62c55b",
   "history": [
     {
@@ -467,6 +467,14 @@
       "surfaceHash": "d8a046d3f4de8b4c",
       "payloadHash": "cfc73cbe2a62c55b",
       "summary": "A checkpoint carries the allocation stamp its command minted under (#224). runner.serialize() answers { partitions, nextElementId } and WorldPartitionWriter.writeCheckpoint takes that whole checkpoint, so a host cannot store a grown partition without its stamp. #377 made the stamp durable and named three roads that move it -- genesis, on-demand creation, migration -- and left out the one every game takes: room.create() inside an action advances the same counter, so the next fresh runner was built below its own store and adoptSubtree refused the bytes that host had itself just written. A stale stamp is now the coded, platform-owned refusal allocation-stale instead of a bare Error charged to the game, so a park ladder can act on it; boardsmith dev repairs such a world off that refusal with worldIdAllocationOf. New WORLD_DURABILITY_FIXTURE puts the four shapes a host must persist into payloadHash, because they are types and surfaceHash cannot see them."
+    },
+    {
+      "revision": 59,
+      "date": "2026-09-09",
+      "bundleProtocol": 2,
+      "surfaceHash": "d8b77fe9472c61e3",
+      "payloadHash": "cfc73cbe2a62c55b",
+      "summary": "A new caller-owned refusal, world-catching-up (ShufflewickPub #395). A world declaring ordering: chronological asked not to be overtaken, and the platform implemented that as a four-times-larger drain budget -- which is an ordering guarantee only while the world is less than one budget behind. Past that the command was applied over a world still behind, silently, which is exactly the overtaken state the declaration exists to prevent, and no signal reached the handler, the client or the log. The command is now refused instead, and the refusal is CALLER-owned like rate-limited and for the same reason: well-formed traffic, world untouched, and a park ladder must never read a world that is merely behind as a world in trouble. Sending it again is safe -- an order's durable identity (#368) makes the repeat run exactly once -- and the platform re-arms before answering, so the catch-up is already continuing."
     }
   ]
 }

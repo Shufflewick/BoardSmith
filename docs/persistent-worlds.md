@@ -1517,6 +1517,7 @@ your game.
 | `clock-only-command` | A player sent a seatless action -- one built with `worldClockAction()`, which the clock reaches and nobody else does. |
 | `world-full` | A seating would exceed the bundle's own `maxPlayers`. Seats are assigned once and never handed on. |
 | `seat-conflict` | A seating named a player who already holds a different seat. |
+| `world-catching-up` | A world declaring `ordering: "chronological"` was still behind the instant this command arrived at, so it was not applied. Sending it again is safe and is the intended response: an order's durable identity makes the repeat run exactly once, and the world is already catching up. |
 | `rate-limited` | A connection sent frames faster than the host accepts. Well-formed traffic, refused at the door. |
 | `invalid-order` | A player command arrived with no usable order identity: no id, an id past 128 characters, or no mint instant. Every player command carries one -- see [an order that survives a lost reply](#an-order-that-survives-a-lost-reply). |
 | `order-outcome-unknown` | A repeat arrived for an order minted before this world's receipt floor, so nothing can say whether it committed. Refused rather than run, because running it is the second spend the identity exists to prevent. |
