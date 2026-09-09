@@ -19,6 +19,14 @@ export interface EngineContractRevision {
   bundleProtocol: number;
   surfaceHash: string;
   payloadHash: string;
+  /**
+   * The stored form of a world's partitions. Optional ONLY on history entries
+   * recorded before this fingerprint existed (r1 to r60): their engines cannot
+   * be rebuilt, so nothing can compute one for them. A revision with no
+   * `formatHash` declares no format, and ShufflewickPub therefore cannot move a
+   * world onto it or off it.
+   */
+  formatHash?: string;
   summary: string;
 }
 
@@ -38,6 +46,13 @@ export interface EngineContract {
   bundleProtocol: number;
   surfaceHash: string;
   payloadHash: string;
+  /**
+   * The serialization format of a world's durable partitions
+   * (ShufflewickPub #390). Two revisions declaring the same value write and
+   * read the same bytes, which is the one condition under which the platform
+   * may run a live world on a different engine than it launched on.
+   */
+  formatHash: string;
   history: EngineContractRevision[];
 }
 
