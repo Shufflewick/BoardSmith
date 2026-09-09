@@ -12,11 +12,13 @@ import { describe, it, expect } from 'vitest';
 import { ENGINE_CONTRACT } from './index.js';
 import {
   computeFingerprints,
+  computeFormatHash,
   computePayloadHash,
   PLATFORM_ENTRYPOINTS,
   WORLD_FIXTURE_COVERAGE,
   WORLD_VERBS_THE_FIXTURE_DRIVES,
 } from './fingerprint.js';
+import { Game, GameElement } from '../engine/index.js';
 import { BoardSmithWorldEngine, WORLD_ENGINE_METHODS } from '../world/index.js';
 
 const UPDATE_HINT = (dimension: string) =>
@@ -37,6 +39,11 @@ describe('engine contract', () => {
   it('matches the committed player-view payload fingerprint', async () => {
     const { payloadHash } = await computeFingerprints();
     expect(payloadHash, UPDATE_HINT('player-view payload')).toBe(ENGINE_CONTRACT.payloadHash);
+  });
+
+  it('matches the committed world serialization-format fingerprint', async () => {
+    const { formatHash } = await computeFingerprints();
+    expect(formatHash, UPDATE_HINT('world serialization format')).toBe(ENGINE_CONTRACT.formatHash);
   });
 
   it('is deterministic across runs', async () => {
@@ -136,11 +143,89 @@ describe('engine contract', () => {
     expect({
       surfaceHash: head.surfaceHash,
       payloadHash: head.payloadHash,
+      formatHash: head.formatHash,
       bundleProtocol: head.bundleProtocol,
     }).toEqual({
       surfaceHash: ENGINE_CONTRACT.surfaceHash,
       payloadHash: ENGINE_CONTRACT.payloadHash,
+      formatHash: ENGINE_CONTRACT.formatHash,
       bundleProtocol: ENGINE_CONTRACT.bundleProtocol,
+    });
+  });
+
+  // WHAT `formatHash` IS FOR, PROVED IN BOTH DIRECTIONS.
+  //
+  // ShufflewickPub pins every live world to the exact engine revision it
+  // launched on because it has no way to ask whether a newer engine can read
+  // that world's bytes. This hash is that question, and it is only worth
+  // anything if it moves for reader-side changes and stands still for changes
+  // that touch no stored byte. Both halves are asserted here, because a hash
+  // that only covered the WRITER would call the r46 id-floor change -- which
+  // altered no byte and refused every older world -- a compatible one.
+  describe('the world serialization format fingerprint', () => {
+    it('refuses by name when the engine can no longer READ the committed corpus', async () => {
+      const original = Game.prototype.adoptSubtree;
+      // The r46 shape exactly: the bytes are unchanged and the READER stops
+      // accepting them. A raised floor is how that happened the first time.
+      Game.prototype.adoptSubtree = function refusing(this: Game, parentId: number, json: never) {
+        throw new Error('element id 14 is already resident (simulated floor change)');
+      } as typeof Game.prototype.adoptSubtree;
+      try {
+        await expect(computeFormatHash()).rejects.toThrow(
+          /CAN NO LONGER READ THE COMMITTED WORLD FORMAT FIXTURE/,
+        );
+      } finally {
+        Game.prototype.adoptSubtree = original;
+      }
+    });
+
+    it('moves when the reader gives back something different', async () => {
+      const before = await computeFormatHash();
+      const original = GameElement.fromJSON;
+      // A reader that stops restoring explicit visibility writes different
+      // bytes on the way back out while writing identical bytes for anything it
+      // created itself -- so only a ROUND TRIP over committed bytes can see it.
+      // Visibility is the right field to drop precisely because it is NOT an
+      // attribute: an attribute would be re-derived on the way out and the
+      // read-side loss would be invisible again.
+      (GameElement as { fromJSON: typeof GameElement.fromJSON }).fromJSON = function dropping(
+        json: Parameters<typeof original>[0],
+        ...rest: unknown[]
+      ) {
+        const { visibility: _dropped, ...withoutVisibility } = json as Record<string, unknown>;
+        return (original as (...args: unknown[]) => unknown).call(
+          GameElement,
+          withoutVisibility,
+          ...rest,
+        ) as ReturnType<typeof original>;
+      } as typeof GameElement.fromJSON;
+      try {
+        expect(await computeFormatHash()).not.toBe(before);
+      } finally {
+        (GameElement as { fromJSON: typeof GameElement.fromJSON }).fromJSON = original;
+      }
+    });
+
+    it('stands still for a change that touches no stored byte', async () => {
+      const before = await computeFormatHash();
+      const prototype = BoardSmithWorldEngine.prototype as unknown as Record<string, unknown>;
+      const offers = prototype.offersFor;
+      const apply = prototype.applyCommand;
+      // What a seat is OFFERED and what a command DOES are covered by
+      // payloadHash and by nothing, respectively. Neither is a byte a partition
+      // holds, and a format hash that moved for them would refuse runner swaps
+      // that are perfectly safe -- which is the pin this whole mechanism exists
+      // to loosen.
+      prototype.offersFor = async () => [];
+      prototype.applyCommand = async () => {
+        throw new Error('not a stored byte');
+      };
+      try {
+        expect(await computeFormatHash()).toBe(before);
+      } finally {
+        prototype.offersFor = offers;
+        prototype.applyCommand = apply;
+      }
     });
   });
 });

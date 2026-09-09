@@ -8,6 +8,7 @@ const BASE: EngineContract = {
   bundleProtocol: 2,
   surfaceHash: 'aaaa',
   payloadHash: 'bbbb',
+  formatHash: 'ffff',
   history: [
     {
       revision: 4,
@@ -15,6 +16,7 @@ const BASE: EngineContract = {
       bundleProtocol: 2,
       surfaceHash: 'aaaa',
       payloadHash: 'bbbb',
+      formatHash: 'ffff',
       summary: 'the previous revision, long enough to be useful to a reader',
     },
   ],
@@ -22,26 +24,48 @@ const BASE: EngineContract = {
 
 describe('diffContract', () => {
   it('reports no drift when both fingerprints match', () => {
-    expect(diffContract(BASE, { surfaceHash: 'aaaa', payloadHash: 'bbbb' })).toEqual({
-      surfaceChanged: false,
-      payloadChanged: false,
-      drifted: false,
-    });
+    expect(diffContract(BASE, { surfaceHash: 'aaaa', payloadHash: 'bbbb', formatHash: 'ffff' }))
+      .toEqual({
+        surfaceChanged: false,
+        payloadChanged: false,
+        formatChanged: false,
+        drifted: false,
+      });
+  });
+
+  it('reports drift when the committed contract declares no format at all', () => {
+    // Every revision before r61 is in this state and cannot leave it: their
+    // engines cannot be rebuilt, so nothing can compute a format for them. A
+    // contract being recorded NOW has one, and reading absence as "unchanged"
+    // is how it would go on being absent.
+    const undeclared = { ...BASE, formatHash: undefined } as unknown as EngineContract;
+    expect(diffContract(undeclared, { surfaceHash: 'aaaa', payloadHash: 'bbbb', formatHash: 'ffff' }))
+      .toMatchObject({ formatChanged: true, drifted: true });
+  });
+
+  it('separates a format change from a payload change', () => {
+    // A world's STORED BYTES and what a seat SEES are different promises. The
+    // platform may run a live world on another engine when the format matches
+    // and the payload does not; the reverse is corruption.
+    expect(diffContract(BASE, { surfaceHash: 'aaaa', payloadHash: 'zzzz', formatHash: 'ffff' }))
+      .toMatchObject({ formatChanged: false, payloadChanged: true, drifted: true });
+    expect(diffContract(BASE, { surfaceHash: 'aaaa', payloadHash: 'bbbb', formatHash: 'zzzz' }))
+      .toMatchObject({ formatChanged: true, payloadChanged: false, drifted: true });
   });
 
   it('distinguishes a surface change from a payload change', () => {
     // The two dimensions mean different things to the platform — an API change
     // can break a game outright, a payload change alters what players see — so
     // collapsing them into one boolean would lose the part worth reading.
-    expect(diffContract(BASE, { surfaceHash: 'zzzz', payloadHash: 'bbbb' }))
+    expect(diffContract(BASE, { surfaceHash: 'zzzz', payloadHash: 'bbbb', formatHash: 'ffff' }))
       .toMatchObject({ surfaceChanged: true, payloadChanged: false, drifted: true });
-    expect(diffContract(BASE, { surfaceHash: 'aaaa', payloadHash: 'zzzz' }))
+    expect(diffContract(BASE, { surfaceHash: 'aaaa', payloadHash: 'zzzz', formatHash: 'ffff' }))
       .toMatchObject({ surfaceChanged: false, payloadChanged: true, drifted: true });
   });
 });
 
 describe('nextContract', () => {
-  const computed = { surfaceHash: 'cccc', payloadHash: 'dddd' };
+  const computed = { surfaceHash: 'cccc', payloadHash: 'dddd', formatHash: 'eeee' };
 
   it('bumps the revision and appends history without touching bundleProtocol', () => {
     const next = nextContract(BASE, computed, {
@@ -84,11 +108,13 @@ describe('nextContract', () => {
       bundleProtocol: head.bundleProtocol,
       surfaceHash: head.surfaceHash,
       payloadHash: head.payloadHash,
+      formatHash: head.formatHash,
     }).toEqual({
       revision: next.revision,
       bundleProtocol: next.bundleProtocol,
       surfaceHash: next.surfaceHash,
       payloadHash: next.payloadHash,
+      formatHash: next.formatHash,
     });
   });
 

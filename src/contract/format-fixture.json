@@ -1,0 +1,140 @@
+{
+  "nextElementId": 1000006,
+  "partitions": {
+    "vault": {
+      "parentId": 0,
+      "json": {
+        "className": "FormatFixtureVault",
+        "id": 1000000,
+        "attributes": {
+          "name": "vault",
+          "sealed": false,
+          "depth": 2
+        },
+        "name": "vault",
+        "children": [
+          {
+            "className": "FormatFixtureChest",
+            "id": 1000001,
+            "attributes": {
+              "name": "strongbox",
+              "sealed": true
+            },
+            "name": "strongbox",
+            "children": [
+              {
+                "className": "FormatFixtureCoin",
+                "id": 1000002,
+                "attributes": {
+                  "name": "ingot",
+                  "denomination": 50
+                },
+                "name": "ingot",
+                "visibility": {
+                  "mode": "hidden",
+                  "addPlayers": [
+                    1
+                  ],
+                  "explicit": true
+                }
+              }
+            ],
+            "zoneVisibility": {
+              "mode": "hidden",
+              "explicit": true
+            }
+          }
+        ]
+      }
+    },
+    "ledger": {
+      "parentId": 0,
+      "json": {
+        "className": "FormatFixtureLedger",
+        "id": 1000003,
+        "attributes": {
+          "name": "ledger",
+          "sealed": false,
+          "owner": {
+            "__playerRef": 1,
+            "seat": 1,
+            "color": "#e74c3c",
+            "name": "Player 1"
+          },
+          "reserve": {
+            "__elementId": 1000002
+          },
+          "tallies": {
+            "__map": [
+              [
+                "grain",
+                12
+              ],
+              [
+                "timber",
+                7
+              ]
+            ]
+          },
+          "marks": {
+            "__set": [
+              "sealed",
+              "audited"
+            ]
+          },
+          "terrain": {
+            "__typedArray": "Uint8Array",
+            "data": "AAEC/f7/"
+          },
+          "audit": [
+            1,
+            "two",
+            null,
+            true,
+            [
+              3,
+              4
+            ],
+            {
+              "note": "nested"
+            }
+          ],
+          "header": {
+            "season": 3,
+            "deep": {
+              "deeper": [
+                5,
+                {
+                  "deepest": true
+                }
+              ]
+            }
+          }
+        },
+        "name": "ledger",
+        "children": [
+          {
+            "className": "FormatFixtureChest",
+            "id": 1000004,
+            "attributes": {
+              "name": "page-1",
+              "sealed": false
+            },
+            "name": "page-1",
+            "children": [
+              {
+                "className": "FormatFixtureCoin",
+                "id": 1000005,
+                "attributes": {
+                  "name": "penny",
+                  "denomination": 1
+                },
+                "name": "penny"
+              }
+            ]
+          }
+        ]
+      }
+    }
+  }
+}
