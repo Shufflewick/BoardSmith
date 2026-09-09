@@ -13,19 +13,26 @@ import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import chalk from 'chalk';
 
-import { computeFingerprints } from '../../contract/fingerprint.js';
+import { buildFormatFixture, computeFingerprints } from '../../contract/fingerprint.js';
 import type { EngineContract } from '../../contract/index.js';
 
 export interface ContractOptions {
   update?: boolean;
   summary?: string;
   breaking?: boolean;
+  regenerateFormat?: boolean;
 }
 
 // This file lives at src/cli/commands/contract.ts — repo root is three levels up.
 const CONTRACT_PATH = resolve(
   dirname(fileURLToPath(import.meta.url)),
   '../../contract/engine-contract.json',
+);
+
+/** The committed corpus of world partition bytes `formatHash` round-trips. */
+const FORMAT_FIXTURE_PATH = resolve(
+  dirname(fileURLToPath(import.meta.url)),
+  '../../contract/format-fixture.json',
 );
 
 function readContract(): EngineContract | null {
@@ -43,11 +50,26 @@ function readContract(): EngineContract | null {
  */
 export function diffContract(
   contract: EngineContract,
-  computed: { surfaceHash: string; payloadHash: string },
-): { surfaceChanged: boolean; payloadChanged: boolean; drifted: boolean } {
+  computed: { surfaceHash: string; payloadHash: string; formatHash: string },
+): {
+  surfaceChanged: boolean;
+  payloadChanged: boolean;
+  formatChanged: boolean;
+  drifted: boolean;
+} {
   const surfaceChanged = computed.surfaceHash !== contract.surfaceHash;
   const payloadChanged = computed.payloadHash !== contract.payloadHash;
-  return { surfaceChanged, payloadChanged, drifted: surfaceChanged || payloadChanged };
+  // A committed contract with NO `formatHash` is drift, not a pass. Declaring
+  // no format is a real state -- every revision before r61 is in it -- but a
+  // contract this repo is recording now has one, and treating absence as
+  // "unchanged" is how it would go on being absent.
+  const formatChanged = computed.formatHash !== contract.formatHash;
+  return {
+    surfaceChanged,
+    payloadChanged,
+    formatChanged,
+    drifted: surfaceChanged || payloadChanged || formatChanged,
+  };
 }
 
 /**
@@ -56,7 +78,7 @@ export function diffContract(
  */
 export function nextContract(
   current: EngineContract,
-  computed: { surfaceHash: string; payloadHash: string },
+  computed: { surfaceHash: string; payloadHash: string; formatHash: string },
   options: { summary: string; breaking: boolean; date: string },
 ): EngineContract {
   const revision = current.revision + 1;
@@ -67,6 +89,7 @@ export function nextContract(
     bundleProtocol,
     surfaceHash: computed.surfaceHash,
     payloadHash: computed.payloadHash,
+    formatHash: computed.formatHash,
     history: [
       ...current.history,
       {
@@ -75,6 +98,7 @@ export function nextContract(
         bundleProtocol,
         surfaceHash: computed.surfaceHash,
         payloadHash: computed.payloadHash,
+        formatHash: computed.formatHash,
         summary: options.summary,
       },
     ],
@@ -87,6 +111,7 @@ function reportCheck(contract: EngineContract, diff: ReturnType<typeof diffContr
   console.log(`  bundleProtocol  ${contract.bundleProtocol}`);
   console.log(`  surfaceHash     ${contract.surfaceHash}`);
   console.log(`  payloadHash     ${contract.payloadHash}`);
+  console.log(`  formatHash      ${contract.formatHash ?? chalk.red('none declared')}`);
 
   const head = contract.history[contract.history.length - 1];
   if (head) console.log(chalk.dim(`\n  r${head.revision} (${head.date}) — ${head.summary}`));
@@ -99,6 +124,7 @@ function reportCheck(contract: EngineContract, diff: ReturnType<typeof diffContr
   const moved = [
     diff.surfaceChanged && 'exported API surface',
     diff.payloadChanged && 'player-view payload',
+    diff.formatChanged && 'world serialization format',
   ].filter(Boolean).join(' and ');
 
   console.error(chalk.red(`\n✗ Contract drift: the ${moved} changed.\n`));
@@ -118,6 +144,21 @@ export async function contractCommand(options: ContractOptions): Promise<void> {
     process.exitCode = 1;
     return;
   }
+  // REGENERATING THE CORPUS IS A DELIBERATE FORMAT BREAK, and it happens
+  // before the fingerprints are computed because computing them is what refuses
+  // while the old corpus is unreadable. Every world holding the old bytes is
+  // ended by this, so it is its own flag and never a side effect of `--update`.
+  if (options.regenerateFormat === true) {
+    const fixture = await buildFormatFixture();
+    writeFileSync(FORMAT_FIXTURE_PATH, `${JSON.stringify(fixture, null, 2)}\n`);
+    console.log(chalk.yellow('\n! Regenerated src/contract/format-fixture.json.\n'));
+    console.log('Every world whose partitions were written under the OLD corpus can no longer');
+    console.log('be read by this engine. On ShufflewickPub those worlds end: there is no');
+    console.log('migration, because nothing can read them.');
+    console.log(chalk.dim('\nRecord the new format:'));
+    console.log(chalk.dim('  boardsmith contract --update --summary "<what stored bytes now look like>"\n'));
+  }
+
   const computed = await computeFingerprints();
   const diff = diffContract(contract, computed);
 
@@ -141,7 +182,7 @@ export async function contractCommand(options: ContractOptions): Promise<void> {
   // Refuse a no-op bump. A revision that means nothing trains the platform team
   // to stop reading them, which is exactly the failure this system prevents.
   if (!diff.drifted && !options.breaking) {
-    console.error(chalk.yellow('\nNothing to record — the API surface and player-view payload are both unchanged.\n'));
+    console.error(chalk.yellow('\nNothing to record — the API surface, the player-view payload and the world serialization format are all unchanged.\n'));
     console.error('If your change affects the platform in a way neither fingerprint can see');
     console.error('(an exported TYPE, say — see the KNOWN LIMIT in src/contract/fingerprint.ts),');
     console.error('extend the fixture in fingerprint.ts so it does, then re-run this.\n');
@@ -160,6 +201,9 @@ export async function contractCommand(options: ContractOptions): Promise<void> {
   const changed = [
     diff.surfaceChanged && 'exported API surface',
     diff.payloadChanged && 'player-view payload',
+    diff.formatChanged && chalk.yellow(
+      'world serialization format (a live world may not cross this)',
+    ),
     options.breaking && chalk.red('bundle protocol (BREAKING — every published game must be rebuilt)'),
   ].filter(Boolean);
 

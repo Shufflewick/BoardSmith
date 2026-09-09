@@ -39,7 +39,7 @@ and is a different question from "should the platform re-vendor?"
 
 | Number | Lives in | Bumped when | Who reads it |
 |---|---|---|---|
-| `revision` | `src/contract/engine-contract.json` | the platform-reachable API surface or the player-view payload changes | the platform's `vendor:check`; stamped into every manifest as `engineRevision` |
+| `revision` | `src/contract/engine-contract.json` | the platform-reachable API surface, the player-view payload, or the world serialization format changes | the platform's `vendor:check`; stamped into every manifest as `engineRevision` |
 | `bundleProtocol` | same file | an already-built `rules.js` would stop working — a true ABI break | the games worker, which rejects mismatched bundles outright |
 | package `version` | `package.json` | never, in practice | nobody; it is not a release channel |
 
@@ -56,7 +56,7 @@ platform's tooling reads cannot drift apart.
 
 ## How a change gets noticed
 
-Two fingerprints, both recomputed by `src/contract/engine-contract.test.ts` on
+Three fingerprints, all recomputed by `src/contract/engine-contract.test.ts` on
 every test run:
 
 - **`surfaceHash`** — the sorted runtime export names of the three entrypoints
@@ -87,9 +87,39 @@ every test run:
   shape — including an event's narration `text`/`type` — is covered by
   `WORLD_WIRE_FIXTURE`, but as a hand-written literal rather than something the
   engine produced.
+- **`formatHash`** — the stored form of a **world's durable partitions**: a
+  round trip over `src/contract/format-fixture.json`, a committed corpus of
+  partition bytes this engine once wrote. The hash covers the corpus, what the
+  engine writes today, and what it writes after *reading the corpus back* —
+  once with a single partition resident and once with both, so a reference into
+  a partition that is not resident is exercised.
 
-If either moves and the contract was not updated, the test fails with the
-command to run. **That is the whole enforcement story** — you cannot land a
+  It is deliberately a round trip and not a hash of an output. The one format
+  break already in ShufflewickPub's world archive was **reader-only**: the
+  `WORLD_PARTITION_ID_FLOOR` check entered `adoptSubtree` in r46, no byte
+  changed, and every world written before it stopped being adoptable. A
+  writer-side hash calls r44 and r46 the same format and licenses exactly the
+  swap that corrupts the world.
+
+  This is the fingerprint a **live world's durability** turns on. Two revisions
+  declaring the same `formatHash` can be swapped under a running world;
+  ShufflewickPub reads it to decide which archived runner a world gets, instead
+  of pinning the world to its launch engine for life (ShufflewickPub #390).
+
+  What it does NOT cover: the parent-to-child checkpoint answer *shape*, views,
+  offers, flow position, refusals, `applyCommand`, `onEvent`, scheduling and
+  the game root's own `toJSON` fields. None of those is a byte a partition
+  holds, and a format hash that moved for them would refuse runner swaps that
+  are safe.
+
+  An engine that can no longer read the corpus **cannot produce this hash at
+  all**, and says so by name. That is a deliberate format break: it ends every
+  live world holding the old bytes, there is no migration because nothing can
+  read them, and `boardsmith contract --regenerate-format` is how someone
+  accepts that cost rather than a way around it.
+
+If any of the three moves and the contract was not updated, the test fails with
+the command to run. **That is the whole enforcement story** — you cannot land a
 platform-visible engine change without either recording it or deleting a test.
 
 ### The known limit

@@ -1,8 +1,9 @@
 {
-  "revision": 60,
+  "revision": 61,
   "bundleProtocol": 2,
   "surfaceHash": "d8b77fe9472c61e3",
   "payloadHash": "bf527d30019ee1ba",
+  "formatHash": "0058593e7cc80205",
   "history": [
     {
       "revision": 1,
@@ -483,6 +484,15 @@
       "surfaceHash": "d8b77fe9472c61e3",
       "payloadHash": "bf527d30019ee1ba",
       "summary": "A migration may be run a page at a time when it need not see every root (ShufflewickPub #402). runner.migrationNeedsEveryRoot() answers whether the bundle declares finalize -- the hook #379 added so a migration can derive one root's value from another in either direction -- and the presence of it is the whole declaration of whether paging is safe, so no new authoring surface exists. migrateAll's context gains allNames (every root the WORLD holds, since create must know which names are taken and a refusal is about the world rather than the page) and runCreate (which single page adds this version's new roots). A page transforms and answers only the roots it was handed; paging a migration that declares finalize is refused by name rather than run against a half-migrated world. WORLD_DURABILITY_FIXTURE gains both context shapes, because they are types and surfaceHash cannot see one."
+    },
+    {
+      "revision": 61,
+      "date": "2026-09-09",
+      "bundleProtocol": 2,
+      "surfaceHash": "d8b77fe9472c61e3",
+      "payloadHash": "bf527d30019ee1ba",
+      "formatHash": "0058593e7cc80205",
+      "summary": "The engine declares formatHash: the serialization format of a world's durable partitions, measured as a round trip over a committed corpus of partition bytes. It is what lets the platform move a live world onto a newer runner instead of pinning it to its launch engine for life."
     }
   ]
 }
