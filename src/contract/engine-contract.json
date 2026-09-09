@@ -1,8 +1,8 @@
 {
-  "revision": 62,
+  "revision": 63,
   "bundleProtocol": 2,
-  "surfaceHash": "0702a98066cae1b6",
-  "payloadHash": "bf527d30019ee1ba",
+  "surfaceHash": "301dfc035f11b3dc",
+  "payloadHash": "26c59f1f8449446d",
   "formatHash": "0058593e7cc80205",
   "history": [
     {
@@ -502,6 +502,15 @@
       "payloadHash": "bf527d30019ee1ba",
       "formatHash": "0058593e7cc80205",
       "summary": "A migration re-baselines the roots it serialized, so a migrated partition may be evicted (ShufflewickPub #407). A migration is the one write path that does not run through a dispatch, so nothing consumed the engine's touch-marks afterwards: the engine went on believing every transformed root differed from storage, Game#evictSubtree keeps the mark of a change it believes was never checkpointed, and the world's next command found a touched root id it could no longer name and refused with partition-not-resident -- for good. So evicting a migrated partition, which is the entire saving paged migration exists for (#402), produced a correct migration and an unplayable world. WorldEngine gains migrateBaseline(names) and Game gains rebaselinePartitions(ids): the current bytes of exactly these roots are what the host now holds, so the baseline moves and any mark on them is dropped. runner.migrateAll calls it over exactly the names it just serialized, after it has taken them, since those bytes and the host's transaction are one thing. Nothing a host must call: platforms should now delete the comment in their paged migrate op and evict each page."
+    },
+    {
+      "revision": 63,
+      "date": "2026-09-09",
+      "bundleProtocol": 2,
+      "surfaceHash": "301dfc035f11b3dc",
+      "payloadHash": "26c59f1f8449446d",
+      "formatHash": "0058593e7cc80205",
+      "summary": "A world may declare world.vacate: the name of one of its own seated verbs, which a host runs for a seat that is leaving so the game can give that player's ground back. createWorld now answers it beside seatCount, and readWorldDefinition refuses a name that answers to no verb, a seatless one, or one that asks a question. A bundle that declares nothing is unchanged and its chairs stay held for life. Re-vendor if you want a world's seats to be reclaimable rather than a lifetime allocation (ShufflewickPub #399); nothing else in r63 changes what an existing bundle does."
     }
   ]
 }
