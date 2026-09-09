@@ -1,8 +1,8 @@
 {
-  "revision": 67,
+  "revision": 68,
   "bundleProtocol": 2,
   "surfaceHash": "9468fac6c565014b",
-  "payloadHash": "fcb67168b7207856",
+  "payloadHash": "a809d36d1341bd7a",
   "formatHash": "0058593e7cc80205",
   "history": [
     {
@@ -547,6 +547,15 @@
       "payloadHash": "fcb67168b7207856",
       "formatHash": "0058593e7cc80205",
       "summary": "A room scoped with addVisibleTo/addZoneVisibleTo is ONE view for every seat that holds the same grant (ShufflewickPub #411). WIRE CHANGE on the per-seat view only: redactVisibilityForSeat no longer spells the reader's own grant as addPlayers:[yourSeat], it spells it in the MODE and drops the roster entirely -- a granted reader is told 'all', a denied reader the mode that denies everybody (a count-only zone stays count-only, because the serializer shows its count), and a reader named in neither keeps the base mode. That is exactly canPlayerSee's precedence, so every reader is given the answer it was given before, held exhaustively over every mode and roster rather than by sample. The reader learns strictly LESS than the roster told it: nothing in a per-seat view can name another seat any more, and a seat can no longer tell a room it was let into from a room that was public all along. The full roster still round-trips through the checkpoint/restore path (full toJSON), which is what stores a partition. Measured through the engine on a plaza of 200 stalls at 500 seats: the same plaza scoped to every seat was 500 distinct bodies, 70 MB and 324 ms of encode-and-parse, and is now ONE body of 136 KB -- the collapse #408 reached only for a plainly public room, which matters because scoping a room is how most room-shaped worlds are built. Game#projectsAlikeForEverySeat becomes Game#projectsAlikeFor(seats): a grant is about seats, so the audience being asked is part of the question, and visibilityRedactsAlikeFor decides each declared state the way the redaction writes it. Sharing is still decided STRUCTURALLY and is still all-or-nothing for an audience: a room granted to only PART of the audience is one body per seat exactly as before, and a world with genuine per-seat secrets pays what it always paid. formatHash is unchanged: stored partition bytes are untouched and a live world crosses onto this revision with no gate."
+    },
+    {
+      "revision": 68,
+      "date": "2026-09-09",
+      "bundleProtocol": 2,
+      "surfaceHash": "9468fac6c565014b",
+      "payloadHash": "a809d36d1341bd7a",
+      "formatHash": "0058593e7cc80205",
+      "summary": "The contract's payload fixture now DECLARES who may see what, so a per-seat view's redaction is fingerprinted (ShufflewickPub #414). No engine behaviour changes: this is a fixture and a guard. Until now the fixture's world declared no element or zone visibility anywhere, so redactVisibilityForSeat never ran over anything in it and no visibility/zoneVisibility field reached a fingerprinted view -- r67 rewrote exactly those bytes and payloadHash did not move, and the platform heard about the revision only because an unrelated rename moved the surface. A redaction change on its own would have shipped silently to the vendored clone, which is the one thing this file exists to prevent, and it is the same class of gap as boardsmith/world shipping before it was in PLATFORM_ENTRYPOINTS. The commons now holds two rooms: a wellhouse whose contents are hidden and granted to the first looker, and a noticeboard whose contents are hidden from the second, so ONE fan-out carries a granted reader, an ungranted one and a denied one. assertCoversWorldRedaction fails the fixture if that stops being true -- it asserts that the redaction is load-bearing (one looker holds a room's contents and another does not) and that no body names a seat, because a grant is deliberately spelled so that a granted reader cannot tell a room it was let into from a room that was public all along, and no guard can read the grant back out of the bytes. Also records, where the redaction happens, that a redacted tree restored into a live game (the MCTS search sandbox does this) now reads a granted room as plainly public: neither that nor the old hidden-with-a-grant-to-me was ever true about the other seats, and the checkpoint path that must be exact reads the full toJSON. payloadHash moves and nothing else does: surfaceHash is unchanged because no export moved, and formatHash is unchanged because stored partition bytes are untouched, so a live world crosses onto this revision with no gate."
     }
   ]
 }
