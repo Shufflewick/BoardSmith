@@ -173,8 +173,8 @@ describe("readOnlyProjection", () => {
     // a world-scoped change runs that for every seat at once. All of it reads
     // through this projection, so a projection that charges a multiple of the
     // live tree charges it once per seat: measured at 500 seats, an offer
-    // fan-out cost 5.49 ms a seat against a view fan-out's 0.42 ms, and 95% of
-    // the difference was here rather than in anything an offer decides.
+    // fan-out cost 2277 ms against a view fan-out's 208 ms, and 95% of the
+    // difference was here rather than in anything an offer decides.
     //
     // A RATIO AND NOT A DURATION, so the number means the same thing on a
     // loaded machine as on an idle one: the same finder, over the same tree,

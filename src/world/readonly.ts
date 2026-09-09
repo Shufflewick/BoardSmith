@@ -52,8 +52,9 @@
  * at 16x the live tree, and a world's OFFER is a fan-out of finders -- every
  * action's condition, its greying rule and every selection's candidates, per
  * seat, for the whole audience of a change. At 500 seats that made an offer
- * fan-out 5.49 ms a seat against a view fan-out's 0.42 ms, with 95% of the
- * difference here rather than in anything an offer decides.
+ * fan-out 2277 ms, 4.55 ms a seat, against a view fan-out's 208 ms -- and 95%
+ * of the difference was here rather than in anything an offer decides, since
+ * the same fan-out with this projection stubbed out entirely costs 125 ms.
  *
  * So `ENGINE_READ_DOORS` names the engine's own reads, and one read off a
  * projection runs against the REAL object with only its answer projected.
