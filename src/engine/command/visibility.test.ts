@@ -5,7 +5,7 @@ import {
   resolveVisibility,
   copyVisibilityState,
   redactVisibilityForSeat,
-  visibilityRedactsAlikeFor,
+  redactedVisibilityFor,
   DEFAULT_VISIBILITY,
   type VisibilityState,
   type VisibilityMode,
@@ -306,63 +306,141 @@ describe('redactVisibilityForSeat', () => {
 });
 
 /**
- * The question a host has to answer BEFORE it encodes anything (#411): will
- * these seats hold the same bytes? Answered from what the state declares,
- * because finding out by comparing encoded bodies costs the encoding this
- * exists to remove.
+ * The question a host has to answer BEFORE it encodes anything (#411, regrouped
+ * by ShufflewickPub #413): which seats will hold the same bytes?
+ *
+ * Answered from what the state DECLARES, because finding out by comparing
+ * encoded bodies costs the encoding this exists to remove -- and answered as
+ * the very thing the redaction writes, which is a MODE and nothing else. Two
+ * seats given the same mode are handed the same spelling and were given the
+ * same answer by `canPlayerSee`.
+ *
+ * `null` IS THE REFUSAL, and it is what keeps the answer complete. An 'owner'
+ * mode is decided against the reader's OWNERSHIP of the element, which is not
+ * in the state at all: two seats can be spelled the same way by an owner-mode
+ * state and still be shown different things, so it refuses to answer for them
+ * rather than claim they match.
  */
-describe('visibilityRedactsAlikeFor', () => {
-  /** The predicate, held against actually redacting and comparing. */
-  function alike(full: VisibilityState, seats: readonly number[]): boolean {
-    return new Set(seats.map((seat) => JSON.stringify(redactVisibilityForSeat(full, seat)))).size === 1;
+describe('redactedVisibilityFor', () => {
+  const MODES_HERE: VisibilityMode[] = ['all', 'owner', 'hidden', 'count-only'];
+  const ROSTERS = [undefined, [1], [1, 2], [1, 2, 3]];
+  const SEATS_HERE = [0, 1, 2, 3, 4];
+  const OWNERS = [undefined, 0, 1, 2, 3, 4];
+
+  /** Every state there is to spell: every mode against every pair of rosters. */
+  const EVERY_STATE: VisibilityState[] = MODES_HERE.flatMap((mode) =>
+    ROSTERS.flatMap((addPlayers) =>
+      ROSTERS.map((exceptPlayers) => state({ mode, addPlayers, exceptPlayers })),
+    ),
+  );
+
+  /** Every pair of seats, including a seat against itself. */
+  const EVERY_PAIR: [number, number][] = SEATS_HERE.flatMap((first) =>
+    SEATS_HERE.map((second): [number, number] => [first, second]),
+  );
+
+  const shown = (full: VisibilityState): string =>
+    `mode ${full.mode} add ${full.addPlayers} except ${full.exceptPlayers}`;
+
+  it('answers exactly the mode the redaction writes, over every mode and roster', () => {
+    // The tie that makes this a signature rather than a second opinion: where
+    // it answers at all, it answers what the bytes will actually say.
+    for (const full of EVERY_STATE) {
+      for (const seat of SEATS_HERE) {
+        const spelled = redactedVisibilityFor(full, seat);
+        if (spelled === null) continue;
+        expect(spelled, `${shown(full)} seat ${seat}`).toBe(
+          redactVisibilityForSeat(full, seat).mode,
+        );
+      }
+    }
+  });
+
+  it('refuses an owner-mode state for every seat it does not grant outright', () => {
+    // Ownership is a fact about the ELEMENT, so the state cannot say what a
+    // reader left to the base mode -- or denied while owning the thing -- will
+    // be shown. A seat granted past the mode never reaches it.
+    const owned = state({ mode: 'owner', addPlayers: [1], exceptPlayers: [2] });
+    expect(redactedVisibilityFor(owned, 1)).toBe('all');
+    expect(redactedVisibilityFor(owned, 2), 'a denied owner is still shown its own').toBe(null);
+    expect(redactedVisibilityFor(owned, 3)).toBe(null);
+  });
+
+  it('answers every seat of every mode ownership does not enter', () => {
+    // The complement, so the refusal cannot quietly widen into "never group
+    // anything": 'owner' is the ONLY mode ownership enters, and every seat of
+    // every other mode is answered whatever the rosters say.
+    for (const full of EVERY_STATE) {
+      for (const seat of SEATS_HERE) {
+        const grantedOutright =
+          full.exceptPlayers?.includes(seat) !== true && full.addPlayers?.includes(seat) === true;
+        expect(
+          redactedVisibilityFor(full, seat) === null,
+          `${shown(full)} seat ${seat}: only an owner-only state it does not grant may refuse`,
+        ).toBe(full.mode === 'owner' && !grantedOutright);
+      }
+    }
+  });
+
+  it('gives two seats spelled alike the same bytes and the same answer', () => {
+    // THE NON-COLLISION ARGUMENT, exhaustively rather than by sample: over
+    // every mode, every roster and every owner, two seats given the same mode
+    // here are handed identical redacted bytes AND were given identical answers
+    // by `canPlayerSee`. A signature that could group two seats owed different
+    // views would fail here.
+    for (const full of EVERY_STATE) {
+      for (const [first, second] of EVERY_PAIR) {
+        const spelled = redactedVisibilityFor(full, first);
+        if (spelled === null || spelled !== redactedVisibilityFor(full, second)) continue;
+        expectSpelledAlike(full, first, second, spelled);
+      }
+    }
+  });
+
+  /** What two seats spelled the same way are owed: the same bytes, the same answer. */
+  function expectSpelledAlike(
+    full: VisibilityState,
+    first: number,
+    second: number,
+    spelled: VisibilityMode,
+  ): void {
+    const where = `${shown(full)} seats ${first}/${second} spelled ${spelled}`;
+    expect(
+      JSON.stringify(redactVisibilityForSeat(full, first)),
+      `${where}: spelled alike, different bytes`,
+    ).toBe(JSON.stringify(redactVisibilityForSeat(full, second)));
+    for (const owner of OWNERS) {
+      expect(
+        canPlayerSee(full, first, owner),
+        `${where} owner ${owner}: spelled alike, different answer`,
+      ).toBe(canPlayerSee(full, second, owner));
+    }
   }
 
-  it('says yes when every seat holds the same grant', () => {
-    const full = state({ mode: 'hidden', addPlayers: [1, 2, 3] });
-    expect(visibilityRedactsAlikeFor(full, [1, 2, 3])).toBe(true);
-    expect(alike(full, [1, 2, 3])).toBe(true);
+  it('merges a grant into a room that was public all along', () => {
+    // There is nothing to tell a granted reader of a public room that a reader
+    // who was never named is not already told, so they are one group.
+    const full = state({ mode: 'all', addPlayers: [1] });
+    expect(redactedVisibilityFor(full, 1)).toBe('all');
+    expect(redactedVisibilityFor(full, 2)).toBe('all');
   });
 
-  it('says no when one seat in the audience is outside the grant', () => {
+  it('splits a partly-granted room into the two groups it really has', () => {
+    // What #413 is for. The whole audience does not agree, and it does not have
+    // to: the granted are spelled one way and the ungranted another.
     const full = state({ mode: 'hidden', addPlayers: [1, 2] });
-    expect(visibilityRedactsAlikeFor(full, [1, 2, 3])).toBe(false);
-    expect(alike(full, [1, 2, 3])).toBe(false);
+    expect([1, 2, 3, 4].map((seat) => redactedVisibilityFor(full, seat))).toEqual([
+      'all',
+      'all',
+      'hidden',
+      'hidden',
+    ]);
   });
 
-  it('says no when one seat in the audience is denied', () => {
-    const full = state({ mode: 'all', exceptPlayers: [3] });
-    expect(visibilityRedactsAlikeFor(full, [1, 2, 3])).toBe(false);
-    expect(alike(full, [1, 2, 3])).toBe(false);
-  });
-
-  it('says yes when every seat in the audience is denied', () => {
-    const full = state({ mode: 'all', exceptPlayers: [1, 2, 3] });
-    expect(visibilityRedactsAlikeFor(full, [1, 2, 3])).toBe(true);
-    expect(alike(full, [1, 2, 3])).toBe(true);
-  });
-
-  it('says yes for a plain mode nobody is named in', () => {
-    expect(visibilityRedactsAlikeFor(state({ mode: 'hidden' }), [1, 2, 3])).toBe(true);
-    expect(visibilityRedactsAlikeFor(state({ mode: 'all' }), [1, 2, 3])).toBe(true);
-  });
-
-  it('says NO for an owner-only mode, whose bytes are alike but whose answer is not', () => {
-    // Ownership is not in the state, so the bytes cannot show the difference
-    // and comparing them would be the wrong question. What differs is what the
-    // serializer DOES with them: the owner sees the contents and nobody else
-    // does.
-    const full = state({ mode: 'owner' });
-    expect(alike(full, [1, 2, 3]), 'the bytes match').toBe(true);
-    expect(visibilityRedactsAlikeFor(full, [1, 2, 3])).toBe(false);
-  });
-
-  it('says yes for an owner-only mode every seat has been granted past', () => {
-    const full = state({ mode: 'owner', addPlayers: [1, 2, 3] });
-    expect(visibilityRedactsAlikeFor(full, [1, 2, 3])).toBe(true);
-    expect(alike(full, [1, 2, 3])).toBe(true);
-  });
-
-  it('says yes for an empty audience, which has nothing to disagree about', () => {
-    expect(visibilityRedactsAlikeFor(state({ mode: 'owner' }), [])).toBe(true);
+  it('keeps a denied reader of a count-only zone apart from a granted one', () => {
+    const full = state({ mode: 'count-only', addPlayers: [1], exceptPlayers: [2] });
+    expect(redactedVisibilityFor(full, 1)).toBe('all');
+    expect(redactedVisibilityFor(full, 2)).toBe('count-only');
+    expect(redactedVisibilityFor(full, 3)).toBe('count-only');
   });
 });

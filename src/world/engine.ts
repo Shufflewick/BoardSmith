@@ -1439,21 +1439,29 @@ export class BoardSmithWorldEngine implements WorldEngine {
    * attachment, answered on the frame that seats you.
    *
    * So this answers DISTINCT BODIES plus, per seat, which one is theirs. Two
-   * seats share a body when the tree projects alike for THOSE SEATS
-   * (`Game#projectsAlikeFor`) and their declarations named the same partitions
-   * -- the second half because a view is pruned to what its own declaration
-   * named (#183), so the prune makes the body a function of the declaration.
+   * seats share a body when the tree gives them the same projection signature
+   * (`Game#projectionSignaturesFor`) and their declarations named the same
+   * partitions -- the second half because a view is pruned to what its own
+   * declaration named (#183), so the prune makes the body a function of the
+   * declaration.
    *
    * THE AUDIENCE IS PART OF THE QUESTION (ShufflewickPub #411), which is why
-   * the seats being asked are handed to the predicate rather than the world's
+   * the seats being asked are handed to the engine rather than the world's
    * whole roster. A room scoped with `addVisibleTo`/`addZoneVisibleTo` to
    * everybody standing in it projects alike for all of them and differently for
    * anybody outside. Measured on a plaza of 200 stalls at 500 seats: a plainly
    * public plaza is ONE body, and the same plaza scoped to every seat was 500
    * bodies and is now ONE -- 324 ms of encode-and-parse and 70 MB across the
-   * host's boundary, down to one body of 136 KB. A room scoped to SOME of the
-   * audience is still one body per group, and a world with genuine per-seat
-   * secrets pays exactly what it paid before.
+   * host's boundary, down to one body of 136 KB.
+   *
+   * AND AN AUDIENCE THAT DOES NOT AGREE IS THE GROUPS IT REALLY HAS (#413).
+   * #411 answered one boolean for a whole audience, so a room granted to only
+   * PART of one fell all the way back to a body per seat: the same plaza
+   * granted to half of its 500 seats is TWO answers, and was 500 encodings and
+   * 53 MB of them. A signature per seat groups them into the two. A world with
+   * genuine per-seat secrets still pays exactly what it paid before, and so
+   * does one whose rooms are owner-only, which is decided against a reader's
+   * ownership rather than by anything in the visibility state.
    *
    * ONE SEAT'S PROJECTION IS STILL ONE SEAT'S FATE (#310). A view can throw for
    * one player while every other view in the batch is perfectly computable, the
@@ -1479,7 +1487,10 @@ export class BoardSmithWorldEngine implements WorldEngine {
       }
     }
 
-    const sharing = shareGroups(this.game.projectsAlikeFor(asking.map((asked) => asked.seat)), asking);
+    const sharing = shareGroups(
+      this.game.projectionSignaturesFor(asking.map((asked) => asked.seat)),
+      asking,
+    );
     const keys = [...sharing.groups.keys()];
     const answered = projectGroups(
       keys,
@@ -2389,17 +2400,22 @@ function declaredRefusal(
 
 /**
  * WHO SHARES A BODY WITH WHOM, decided before anything is projected
- * (ShufflewickPub #408).
+ * (ShufflewickPub #408, regrouped by #413).
  *
- * Two halves, and each is asked at the level it belongs to. Whether the tree
- * projects alike is about the TREE, so the caller asks it once for the whole
- * audience and passes the answer in. What a seat DECLARED is the seat's, and it
- * joins the key because a view is pruned to the partitions its own declaration
- * named (#183) -- so two seats of the same public world holding different
- * declarations hold different bodies.
+ * Two halves, and each is asked at the level it belongs to. What the TREE shows
+ * a seat is the engine's, so the caller asks it once for the whole audience and
+ * passes the answer in: one signature per seat, in the order asked, or `null`
+ * when the tree consults something about a seat it cannot summarise. What a
+ * seat DECLARED is the seat's, and it joins the key because a view is pruned to
+ * the partitions its own declaration named (#183) -- so two seats of the same
+ * public world holding different declarations hold different bodies.
+ *
+ * A REFUSAL IS EVERY SEAT ON ITS OWN, spelled by keying on the seat number:
+ * `null` means the engine will not say two seats match, and the only safe way
+ * to not say it is to share nothing.
  */
 function shareGroups(
-  alike: boolean,
+  signatures: readonly string[] | null,
   asking: readonly WorldSeatProjection[],
 ): {
   readonly groups: ReadonlyMap<string, WorldSeatProjection>;
@@ -2407,10 +2423,11 @@ function shareGroups(
 } {
   const groups = new Map<string, WorldSeatProjection>();
   const keyOf: string[] = [];
-  for (const asked of asking) {
+  for (const [index, asked] of asking.entries()) {
     // A NUL between the parts, because a partition name may hold anything a
     // bundle can spell and two lists must not be able to join into one key.
-    const key = `${alike ? "" : asked.seat}\u0000${asked.named.join("\u0000")}`;
+    const shows = signatures === null ? `${asked.seat}` : signatures[index]!;
+    const key = `${shows}\u0000${asked.named.join("\u0000")}`;
     if (!groups.has(key)) groups.set(key, asked);
     keyOf.push(key);
   }
