@@ -104,6 +104,16 @@ export function copyVisibilityState(state: VisibilityState): VisibilityState {
  * bytes. The reader also learns strictly LESS than the roster told it: it can
  * no longer tell a room it was let into from a room that was public all along.
  *
+ * WHAT A RESTORE OF A REDACTED TREE READS. A redacted view can be loaded back
+ * into a live game -- the MCTS search sandbox does exactly that -- and such a
+ * game now reads a granted room as plainly public where it used to read it as
+ * hidden-with-a-grant-to-the-reader. NEITHER WAS EVER TRUE about the other
+ * seats: the roster the truth lives in was redacted away before the tree left,
+ * and a searcher reasoning from `addPlayers: [me]` was reasoning from a fact
+ * the engine had invented for it just as much. Accepted deliberately (#411);
+ * the checkpoint/restore path, which is the one that must be exact, reads the
+ * full `toJSON()` and never comes through here.
+ *
  * A COUNT-ONLY ZONE STAYS COUNT-ONLY WHEN IT DENIES. `canPlayerSee` refuses
  * 'hidden' and 'count-only' alike, but the serializer shows a count for one and
  * nothing at all for the other, and the children were already written from the

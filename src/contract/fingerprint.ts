@@ -171,6 +171,13 @@ export const WORLD_FIXTURE_COVERAGE: Record<(typeof WORLD_ENGINE_METHODS)[number
   // claim nobody checked. `viewFor` stays driven beside it because the two must
   // agree, and a fixture that only asked the batch could not notice them
   // parting.
+  //
+  // AND IT IS DRIVEN OVER A WORLD THAT DECLARES WHO MAY SEE WHAT (#414): the
+  // commons holds a room granted to one looker and not the other, and a room
+  // denied to one of them, so all three branches of the per-seat redaction are
+  // in the payload. Before that the fixture's world declared no visibility
+  // anywhere, and a change to how a grant is spelled on the wire moved neither
+  // hash -- #411 rewrote the redaction and payloadHash did not notice.
   viewsFor: true,
   viewPartitions: true,
 
@@ -766,6 +773,56 @@ function hasPlayerReference(value: unknown): boolean {
 }
 
 /**
+ * Fail loudly if the fixture's FAN-OUT stopped covering the per-seat redaction
+ * (ShufflewickPub #414).
+ *
+ * The same guard as the two beside it, closing the same class of gap and for
+ * the third time in this file's history. Until #414 the fixture's world
+ * declared no element or zone visibility anywhere, so `redactVisibilityForSeat`
+ * never ran over it and the redaction was a road nobody drove: #411 rewrote how
+ * a grant is spelled on the wire and `payloadHash` did not move, and the
+ * platform heard about the revision only because an unrelated rename moved the
+ * SURFACE.
+ *
+ * WHAT CAN BE ASSERTED, AND WHAT CANNOT. A grant is deliberately spelled so
+ * that a granted reader cannot tell a room it was let into from a room that was
+ * public all along, so no guard can read "this reader was granted" back out of
+ * the bytes. What it CAN read is that the redaction is load-bearing -- one
+ * looker holds a room's contents and another does not -- and that no body names
+ * a seat. Those two together fail the moment the fixture's world goes back to
+ * declaring nothing.
+ *
+ * COVERAGE, NOT CORRECTNESS, like its neighbours: WHICH bytes each reader gets
+ * is what `payloadHash` records.
+ */
+function assertCoversWorldRedaction(bodies: readonly unknown[]): void {
+  const encoded = bodies.map((body) => JSON.stringify(body));
+  const covers: readonly (readonly [string, boolean])[] = [
+    [
+      'a reader shown the contents of a room whose visibility is DECLARED',
+      encoded.some((body) => body.includes('"well"')),
+    ],
+    [
+      'a reader shown NOTHING of that same room',
+      encoded.some((body) => !body.includes('"well"')),
+    ],
+    [
+      'a redaction that names NO seat (a grant roster is on the wire)',
+      encoded.every(
+        (body) => !body.includes('addPlayers') && !body.includes('exceptPlayers'),
+      ),
+    ],
+  ];
+
+  assertCovers(
+    "a world's per-seat redaction",
+    covers,
+    'payloadHash would still change and still look healthy while covering the visibility '
+    + 'boundary every seat in every scoped world is held behind not at all.',
+  );
+}
+
+/**
  * Fail loudly if the world fixture stopped exercising a seat's OFFER.
  *
  * The fourth instance of the same guard, and the third time the gap it closes
@@ -1087,6 +1144,31 @@ async function computeWorldFixture(): Promise<{ view: unknown; offer: unknown }>
   const born = newWorld();
   const stored = new Map<string, { parentId: number; json: unknown }>();
   const commons = born.create(WorldFixtureCommons, 'commons', { embers: 3 });
+
+  // WHAT A SEAT MAY SEE, PUT WHERE THE FAN-OUT WILL HASH IT (ShufflewickPub
+  // #414). Until this, the fixture's world declared no element or zone
+  // visibility ANYWHERE, so `redactVisibilityForSeat` never ran over anything
+  // in it and no `visibility`/`zoneVisibility` field reached a fingerprinted
+  // view. #411 rewrote exactly those bytes -- what a scoped room says to a
+  // granted seat and to a denied one -- and payloadHash did not move; the
+  // platform was told only because an unrelated rename moved the SURFACE. A
+  // redaction change on its own would have shipped silently to the vendored
+  // clone, which is the one thing this file exists to prevent.
+  //
+  // TWO ROOMS ON THE COMMONS, because the redaction has three branches and the
+  // commons is the partition BOTH lookers declare. The wellhouse is granted to
+  // seat one and not to seat two; the noticeboard is denied to seat two and
+  // left to its base mode for seat one. So one fan-out carries a granted
+  // reader, an ungranted one and a denied one, and each is hashed as the bytes
+  // that reader actually receives.
+  const wellhouse = commons.create(WorldFixtureCommons, 'wellhouse', { embers: 1 });
+  wellhouse.create(WorldFixtureHolding, 'well', { seat: 0, standing: 1 });
+  wellhouse.contentsHidden();
+  wellhouse.addZoneVisibleTo(LOOKER_SEAT);
+  const noticeboard = commons.create(WorldFixtureCommons, 'noticeboard', { embers: 0 });
+  noticeboard.create(WorldFixtureHolding, 'notice', { seat: 0, standing: 1 });
+  noticeboard.hideContentsFrom(2);
+
   stored.set(COMMONS, { parentId: born.id, json: throughStorage(commons.toJSON()) });
   for (let seat = 1; seat <= SEATS; seat += 1) {
     const holding = born.create(WorldFixtureHolding, `holding-${seat}`, { seat, standing: seat });
@@ -1144,6 +1226,7 @@ async function computeWorldFixture(): Promise<{ view: unknown; offer: unknown }>
   // engine hands over -- the runner is what turns one into a platform refusal
   // -- and an Error object does not canonicalize.
   const told = await world.viewsFor([LOOKER, 'p2', 'nobody']);
+  assertCoversWorldRedaction(told.bodies);
   const audience = {
     // EACH DISTINCT ANSWER ONCE, which is the thing a host reads as permission
     // to encode a fan-out once. The two lookers name different land, so this
