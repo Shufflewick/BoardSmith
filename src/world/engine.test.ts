@@ -967,7 +967,7 @@ describe("#163 — a world has no message-log surface", () => {
     return { game, engine };
   }
 
-  it("a view ships player, state and phase -- and NO messages", async () => {
+  it("a view ships state and phase -- and NO messages", async () => {
     // The log lives on the game root, outside every partition, so a checkpoint
     // never persists it and every wake silently reset it to empty. A surface
     // that means "messages since the last hibernation" while looking like "all
@@ -977,7 +977,9 @@ describe("#163 — a world has no message-log surface", () => {
     await engine.applyCommand("player-a", { name: "gossip", args: {} }, STAMP);
 
     const view = (await engine.viewFor("player-a")) as Record<string, unknown>;
-    expect(Object.keys(view).sort()).toEqual(["phase", "player", "state"]);
+    // `player` left with ShufflewickPub #408: a view is what the world looks
+    // like through a declaration, and who is looking is the attachment's fact.
+    expect(Object.keys(view).sort()).toEqual(["phase", "state"]);
   });
 
   it("the resident log is bounded by ONE command, not by the world's age", async () => {
@@ -1487,9 +1489,12 @@ describe("#181 — a view carries the seat it is for, not the world's roster", (
 
   it("a 500-seat village's view root does not grow with the village", async () => {
     const state = await villageView(1);
-    // The commons, this seat's holding, and this seat. Before the fix: 502.
-    expect(state.children).toHaveLength(3);
-    expect(playersIn(state).map((player) => player.attributes.seat)).toEqual([1]);
+    // The commons and this seat's holding. Before #181: 502. The looker's own
+    // element went with ShufflewickPub #408, which found no client reading it
+    // and every fan-out paying for it -- one reader-less difference between
+    // bodies that were otherwise identical.
+    expect(state.children).toHaveLength(2);
+    expect(playersIn(state)).toEqual([]);
   });
 
   it("a view's size is the same at 500 seats as at 6", async () => {
@@ -2128,7 +2133,7 @@ describe("ShufflewickPub #408 -- a whole audience, one serialization", () => {
     players: readonly string[],
   ): Promise<unknown[]> {
     const answered = await engine.viewsFor(players);
-    return answered.map((seat) => (seat.refused ? null : seat.view));
+    return answered.seats.map((seat) => (seat.refused ? null : answered.bodies[seat.at]));
   }
 
   it("answers each seat exactly what asking that seat alone answers", async () => {
@@ -2172,7 +2177,7 @@ describe("ShufflewickPub #408 -- a whole audience, one serialization", () => {
     // -- while every other view in the batch is perfectly computable.
     const engine = watchedWorld();
 
-    const answered = await engine.viewsFor([...WATCHERS, "player-z"]);
+    const { seats: answered } = await engine.viewsFor([...WATCHERS, "player-z"]);
 
     expect(answered.map((seat) => seat.player)).toEqual([...WATCHERS, "player-z"]);
     expect(answered.slice(0, WATCHERS.length).map((seat) => seat.refused)).toEqual([
@@ -2197,13 +2202,151 @@ describe("ShufflewickPub #408 -- a whole audience, one serialization", () => {
 
     const answered = await engine.viewsFor(settlers);
 
-    for (const [index, seat] of answered.entries()) {
+    for (const [index, seat] of answered.seats.entries()) {
       expect(seat.refused, `${settlers[index]!} was answered`).toBe(false);
-      const view = seat.refused ? null : (seat.view as { state: ElementJSON });
+      const view = seat.refused ? null : (answered.bodies[seat.at] as { state: ElementJSON });
       expect(
         JSON.stringify(view),
         `${settlers[index]!} sees the holding their own declaration named`,
       ).toContain(`holding-${index + 1}`);
     }
+  });
+});
+
+describe("ShufflewickPub #408 -- one body for every seat that sees the same world", () => {
+  // The half `viewsFor` could not do when it landed. Sharing the serialization
+  // removed the repeated full-fidelity pass; it left every seat holding its own
+  // BODY, so a 500-seat announcement in a public room was still 500 encodings
+  // and 18.5 MB across the child/parent boundary. Two things stopped the bodies
+  // being equal, and both were about the viewer rather than about the world:
+  // the seat number in the envelope, and the viewer's own player element that
+  // `pruneRosterToViewer` kept.
+  //
+  // Both are gone. A view is what the WORLD looks like from a declaration; who
+  // is looking is a fact about the attachment, which the platform answers on
+  // the frame that seats you. So an audience standing in a public room is ONE
+  // body, and the host encodes it once.
+
+  /** The four seats this fixture's world holds, all watching one public room. */
+  const AUDIENCE = ["p1", "p2", "p3", "p4"];
+
+  /** A world whose only partition is plainly public. */
+  function publicWorld(): BoardSmithWorldEngine {
+    const roster = new Map<string, number>();
+    for (const [index, player] of AUDIENCE.entries()) roster.set(player, index + 1);
+    return new BoardSmithWorldEngine({
+      game: newWorldGame(),
+      seats: roster,
+      store: new CountingStore(genesis()),
+      actions: ACTIONS,
+      view: () => [ROOM_ONE],
+    });
+  }
+
+  it("gives a whole audience ONE body, byte for byte", async () => {
+    const engine = publicWorld();
+
+    const answered = await engine.viewsFor(AUDIENCE);
+
+    // THE MEASUREMENT: distinct bodies, counted by their bytes rather than by
+    // what the engine says about them. One is what a public room costs.
+    expect(answered.bodies).toHaveLength(1);
+    expect(answered.seats.map((seat) => (seat.refused ? -1 : seat.at))).toEqual(
+      Array(AUDIENCE.length).fill(0),
+    );
+    const distinct = new Set(answered.bodies.map((body) => JSON.stringify(body)));
+    expect(distinct.size, "the four seats hold the same bytes").toBe(1);
+  });
+
+  it("still gives each seat its own body when the world hides anything", async () => {
+    // The other half, and the one that must not be optimised away: a room one
+    // seat can see into is a room whose projection is that seat's. The
+    // visibility is written into the STORED bytes, because that is how a woken
+    // world learns it -- a fixture that reached into the live tree would prove
+    // nothing about the world an engine actually adopts.
+    const born = newWorldGame();
+    const roomOne = born.create(Room, "room-one");
+    roomOne.create(Token, "token-one");
+    roomOne.showOnlyTo(1);
+    const stored = new Map<string, StoredPartition>([
+      [ROOM_ONE, { parentId: born.id, json: throughStorage(roomOne.toJSON()) }],
+    ]);
+    const roster = new Map<string, number>();
+    for (const [index, player] of AUDIENCE.entries()) roster.set(player, index + 1);
+    const engine = new BoardSmithWorldEngine({
+      game: newWorldGame(),
+      seats: roster,
+      store: new CountingStore(stored),
+      actions: ACTIONS,
+      view: () => [ROOM_ONE],
+    });
+
+    const answered = await engine.viewsFor(["p1", "p2", "p3"]);
+
+    expect(answered.bodies.length).toBeGreaterThan(1);
+    const bodies = answered.seats.map((seat) => (seat.refused ? "" : JSON.stringify(answered.bodies[seat.at])));
+    expect(bodies[0], "the seat the room was shown to sees it").not.toEqual(bodies[1]);
+  });
+
+  it("carries neither the viewer's seat nor the viewer's own player element", async () => {
+    // A view is about the WORLD. Who is looking is a fact about the
+    // attachment, and the platform answers it on the frame that seats you --
+    // so repeating it here made every body different for no reader at all.
+    const engine = publicWorld();
+
+    const answered = await engine.viewsFor(["p2"]);
+    const body = answered.bodies[0] as { state: ElementJSON; phase: unknown };
+
+    expect(Object.keys(body).sort()).toEqual(["phase", "state"]);
+    expect(
+      (body.state.children ?? []).filter((child) => child.className === "Player"),
+      "no roster at all, not even the seat doing the looking",
+    ).toEqual([]);
+  });
+
+  it("groups by what each seat DECLARED, not only by what it may see", async () => {
+    // Two seats looking at the same public world through different
+    // declarations do not hold the same body, because a view is pruned to what
+    // its own declaration named (#183). The prune is what makes the body a
+    // function of the declaration, so the declaration is part of the group.
+    const game = newWorldGame();
+    const engine = new BoardSmithWorldEngine({
+      game,
+      seats: new Map([
+        ["player-a", 1],
+        ["player-b", 2],
+      ]),
+      store: new CountingStore(genesis()),
+      actions: ACTIONS,
+      view: (seat) => (seat === 1 ? [ROOM_ONE] : [ROOM_ONE, ROOM_TWO]),
+    });
+
+    const answered = await engine.viewsFor(["player-a", "player-b"]);
+
+    expect(answered.bodies).toHaveLength(2);
+    expect(answered.seats.map((seat) => (seat.refused ? -1 : seat.at))).toEqual([0, 1]);
+  });
+
+  it("projects once for the audience it shares a body with", async () => {
+    // The cost, measured the way the first half was: `Room.toJSON` counts every
+    // full-fidelity pass, and a shared body is one projection rather than one
+    // per seat. Two rooms resident, so one pass is two calls.
+    const engine = publicWorld();
+    await engine.viewsFor(["p1"]);
+
+    Room.serializations = 0;
+    await engine.viewsFor(["p1"]);
+    const alone = Room.serializations;
+
+    Room.serializations = 0;
+    await engine.viewsFor(AUDIENCE);
+    const together = Room.serializations;
+
+    expect(
+      together,
+      `Describing this world to ${AUDIENCE.length} seats that share one body cost ${together} ` +
+        `passes; describing it to one cost ${alone}. Seats holding the same bytes are one ` +
+        "projection, so the audience does not enter the number at all.",
+    ).toBe(alone);
   });
 });

@@ -542,7 +542,9 @@ describe('the world', () => {
     );
     expect(refused).toEqual({});
 
-    const { views } = await runner.viewsFor(['alice']);
+    const { bodies, of } = await runner.viewsFor(['alice']);
+    const views: Record<string, unknown> = {};
+    for (const [player, at] of Object.entries(of)) views[player] = bodies[at];
     expect(JSON.stringify(views.alice)).toContain('plot-1');
     expect(JSON.stringify(views.alice)).not.toContain('plot-2');
   });
