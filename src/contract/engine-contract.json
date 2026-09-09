@@ -1,8 +1,8 @@
 {
   "revision": 63,
   "bundleProtocol": 2,
-  "surfaceHash": "301dfc035f11b3dc",
-  "payloadHash": "26c59f1f8449446d",
+  "surfaceHash": "0e5f2a70c23f96b2",
+  "payloadHash": "851ea625b2e514b8",
   "formatHash": "0058593e7cc80205",
   "history": [
     {
@@ -507,10 +507,10 @@
       "revision": 63,
       "date": "2026-09-09",
       "bundleProtocol": 2,
-      "surfaceHash": "301dfc035f11b3dc",
-      "payloadHash": "26c59f1f8449446d",
+      "surfaceHash": "0e5f2a70c23f96b2",
+      "payloadHash": "851ea625b2e514b8",
       "formatHash": "0058593e7cc80205",
-      "summary": "A world may declare world.vacate: the name of one of its own seated verbs, which a host runs for a seat that is leaving so the game can give that player's ground back. createWorld now answers it beside seatCount, and readWorldDefinition refuses a name that answers to no verb, a seatless one, or one that asks a question. A bundle that declares nothing is unchanged and its chairs stay held for life. Re-vendor if you want a world's seats to be reclaimable rather than a lifetime allocation (ShufflewickPub #399); nothing else in r63 changes what an existing bundle does."
+      "summary": "A world's roster can now SHRINK. Two changes, both for ShufflewickPub #399. (1) `WorldEngine.unseat(player)` retires a seat's holder, so a departed player's chair can be given to somebody else; before this the roster was add-only and the only way to reclaim a chair was to throw the isolate away and rebuild it, which on a host that caps a world's lifetime isolates means ordinary churn kills the world. It forgets a mapping and moves nothing in the world. (2) A bundle may declare `world.vacate`, the name of one of its own seated verbs, which a host runs for a seat that is leaving so the game can give that player's ground back; `createWorld` answers it beside `seatCount`, and `readWorldDefinition` refuses a name that answers to no verb, a seatless one, or one that asks a question. Returning the ground before reissuing the chair is the HOST's ordering to keep -- the engine cannot check it. A bundle that declares nothing behaves exactly as it did and its chairs stay held for life. formatHash is unchanged, so a live world may cross this revision."
     }
   ]
 }

@@ -2137,7 +2137,8 @@ export class BoardSmithWorldEngine implements WorldEngine {
    * IDEMPOTENT for the same seat, and a REFUSAL for a different one. Re-seating
    * is what a reconnect looks like from here and must be free; moving a seated
    * player to another seat is not a reconnect, and silently accepting it would
-   * hand one person another person's holdings.
+   * hand one person another person's holdings. A player who has genuinely left
+   * is retired with `unseat` first, and may then be seated anywhere.
    */
   seat(player: string, seat: number): void {
     const held = this.seats.get(player);
@@ -2152,6 +2153,30 @@ export class BoardSmithWorldEngine implements WorldEngine {
       );
     }
     this.seats.set(player, seat);
+  }
+
+  /**
+   * RETIRE A SEAT'S HOLDER (ShufflewickPub #399).
+   *
+   * The map loses the entry and NOTHING ELSE CHANGES: the Player element, its
+   * colour, the holdings behind it and every `{__playerRef, seat}` pointing at
+   * it stand exactly as they were. That is what makes the chair reusable and
+   * also what makes it dangerous -- a seat handed on before the game has given
+   * that ground back would hand a newcomer somebody else's castle -- so the
+   * ORDERING is the host's to keep and `WorldDefinition.vacate` is where it is
+   * written down.
+   *
+   * Forgetting the mapping is the whole of the job here, and both halves
+   * matter: `seatFor` must stop resolving this player, so a command arriving
+   * for somebody this world no longer seats is `unknown-player` rather than a
+   * command run against whoever holds the chair now; and `audienceOf` must stop
+   * enumerating their seat, so a world-scoped event is addressed to the seats
+   * this world actually has.
+   *
+   * IDEMPOTENT, for a retried departure's sake.
+   */
+  unseat(player: string): void {
+    this.seats.delete(player);
   }
 
   private seatFor(player: string): number {

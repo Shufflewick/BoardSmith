@@ -66,6 +66,10 @@ class ReferenceWorldEngine implements WorldEngine {
     this.seats.set(player, seat);
   }
 
+  unseat(player: string): void {
+    this.seats.delete(player);
+  }
+
   async applyCommand(
     player: string,
     command: WorldCommand,
