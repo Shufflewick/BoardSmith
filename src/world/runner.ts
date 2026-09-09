@@ -85,7 +85,7 @@ import type {
   WorldMigrationFinalizeContext,
 } from "./migration.js";
 import type { ScheduleAllowance } from "./schedule-api.js";
-import { WorldRefusal } from "./refusals.js";
+import { WorldRefusal, worldRefusal } from "./refusals.js";
 
 /** A scheduled event's timing, or `null` for a player's command. */
 export type WorldTiming = { readonly due: number; readonly missedCount: number } | null;
@@ -131,6 +131,67 @@ export interface WorldCreatedPartition extends WorldAllocation {
  * So a checkpoint cannot answer bytes without its stamp. The two land in the
  * same transaction for the same reason genesis's do.
  */
+/** The serialized bytes for exactly these names, as a null-prototype record. */
+function bytesFor(names: readonly string[], written: Record<string, string>): Record<string, string> {
+  const partitions: Record<string, string> = Object.create(null) as Record<string, string>;
+  for (const name of names) partitions[name] = written[name] as string;
+  return partitions;
+}
+
+/** The roots a migration ADDED, as the host stores them: a parent and a parsed
+ *  subtree, taken from the same serialization pass as everything else. */
+function createdFrom(
+  created: Record<string, { parentId: number }>,
+  written: Record<string, string>,
+): Record<string, StoredPartition> {
+  const records: Record<string, StoredPartition> = Object.create(null) as Record<
+    string,
+    StoredPartition
+  >;
+  for (const [name, record] of Object.entries(created)) {
+    records[name] = {
+      parentId: record.parentId,
+      json: JSON.parse(written[name] as string) as StoredPartition["json"],
+    };
+  }
+  return records;
+}
+
+/** Paging a migration whose `finalize` needs the whole world, refused by name
+ *  rather than run against a world that is half migrated (#402, #379). */
+function pagingRefused(): WorldRefusal {
+  return worldRefusal(
+    "world-migration-unavailable",
+    "This migration declares `finalize`, which is handed the WHOLE world once every root is " +
+      "resident, so it cannot be run a page at a time. A host that must page has to send every " +
+      "root in one call, or the migration has to stop deriving one root's value from another.",
+  );
+}
+
+/**
+ * WHAT ONE `migrateAll` CALL IS (ShufflewickPub #402).
+ *
+ * `from`/`to` are the version gap, and are all a whole-world migration needs.
+ *
+ * A PAGE adds the other two. `allNames` is every root the WORLD holds, not the
+ * page: `create` must know which names are taken, and a refusal has to be about
+ * the world. `runCreate` says whether this is the call that adds the version's
+ * new roots -- exactly one page may, or a migration that adds a root would add
+ * it once per page.
+ *
+ * Paging is refused outright when the migration declares `finalize`, which is
+ * handed the whole world once every root is resident (#379). That hook is the
+ * reason a migration cannot always page, and the presence of it is the whole
+ * declaration -- an author who does not derive one root's value from another
+ * writes no `finalize`, and their migration pages without saying anything.
+ */
+export interface WorldMigrateContext {
+  readonly from: number;
+  readonly to: number;
+  readonly allNames?: readonly string[];
+  readonly runCreate?: boolean;
+}
+
 export interface WorldSerialized extends WorldAllocation {
   readonly partitions: Record<string, string>;
 }
@@ -439,11 +500,24 @@ export function createWorldRunner(
       return { partitions, nextElementId: engine.nextElementId() };
     },
 
+    migrationNeedsEveryRoot(): boolean {
+      return migrationHooks.finalize !== undefined;
+    },
+
     async migrateAll(
       stored: Readonly<Record<string, StoredPartition>>,
-      ctx: { readonly from: number; readonly to: number },
+      ctx: WorldMigrateContext,
     ): Promise<WorldMigrated> {
-      const existing = Object.keys(stored).sort();
+      // WHAT THE WORLD HOLDS vs WHAT THIS CALL WAS HANDED (ShufflewickPub
+      // #402). They are the same thing for a whole-world migration and they
+      // are not for a PAGE: a host migrating a world too large for one call
+      // sends a slice of the bytes and the whole name list, because `create`
+      // has to know every name that is taken and a refusal has to name the
+      // world rather than the page.
+      const paged = ctx.allNames !== undefined;
+      if (paged && migrationHooks.finalize !== undefined) throw pagingRefused();
+      const existing = [...(ctx.allNames ?? Object.keys(stored))].sort();
+      const page = Object.keys(stored).sort();
 
       // EVERY ROOT RESIDENT BEFORE ANY CALLBACK RUNS (ShufflewickPub #379).
       // The host used to hydrate, transform and serialize each root as it
@@ -451,9 +525,9 @@ export function createWorldRunner(
       // anything derived across roots was a bet on key order.
       await adopt(engine, store, stored);
 
-      // (1) PER ROOT. Each one is normalized on its own, and `finalize` below
+      // (1) PER ROOT, and only the ones this call was handed. `finalize` below
       // reads the results rather than the bytes.
-      for (const name of existing) {
+      for (const name of page) {
         engine.migratePartition(name, (element) => {
           migrationHooks.partition?.(element, { name, ...ctx });
         });
@@ -462,10 +536,15 @@ export function createWorldRunner(
       // (2) THE ROOTS THIS VERSION ADDS (#218). Their bytes are re-taken in (4);
       // what this step establishes is the NAMES, their parents, and that none
       // of them collides with a root the world already holds.
-      const created = engine.createMigratedPartitions(
-        (game) => migrationHooks.create?.(game, { ...ctx, existing }) ?? {},
-        existing,
-      );
+      // RUN ONCE PER MIGRATION, NOT ONCE PER PAGE. A paged host says which call
+      // is the one that creates; a whole-world migration is always that call.
+      const creates = !paged || ctx.runCreate === true;
+      const created = creates
+        ? engine.createMigratedPartitions(
+            (game) => migrationHooks.create?.(game, { ...ctx, existing }) ?? {},
+            existing,
+          )
+        : {};
       const names = [...existing, ...Object.keys(created)].sort();
 
       // (3) THE WHOLE WORLD, ONCE (#379). Old roots transformed, new roots
@@ -480,19 +559,11 @@ export function createWorldRunner(
       // (4) AND ONLY THEN, BYTES. Taken after every callback, so a finalize
       // that wrote to a root step (1) or (2) had already serialized is not a
       // write the transaction loses.
-      const written = await engine.serializePartitions(names);
-      const partitions: Record<string, string> = Object.create(null) as Record<string, string>;
-      for (const name of existing) partitions[name] = written[name] as string;
-      const createdRecords: Record<string, StoredPartition> = Object.create(null) as Record<
-        string,
-        StoredPartition
-      >;
-      for (const [name, record] of Object.entries(created)) {
-        createdRecords[name] = {
-          parentId: record.parentId,
-          json: JSON.parse(written[name] as string) as StoredPartition["json"],
-        };
-      }
+      const written = await engine.serializePartitions(
+        paged ? [...page, ...Object.keys(created)] : names,
+      );
+      const partitions = bytesFor(page, written);
+      const createdRecords = createdFrom(created, written);
 
       return {
         partitions,
@@ -727,8 +798,18 @@ export interface WorldRunnerHandle {
    */
   migrateAll(
     stored: Readonly<Record<string, StoredPartition>>,
-    ctx: { readonly from: number; readonly to: number },
+    ctx: WorldMigrateContext,
   ): Promise<WorldMigrated>;
+
+  /**
+   * MUST THIS MIGRATION SEE EVERY ROOT AT ONCE (ShufflewickPub #402)?
+   *
+   * True when the bundle declares `finalize`. A host asks BEFORE it decides how
+   * to run the migration: `false` means it may page a world too large for one
+   * call, `true` means it may not and the world's size is a limit the host has
+   * to state rather than discover at a deadline.
+   */
+  migrationNeedsEveryRoot(): boolean;
 
 
   /**

@@ -1,8 +1,8 @@
 {
-  "revision": 59,
+  "revision": 60,
   "bundleProtocol": 2,
   "surfaceHash": "d8b77fe9472c61e3",
-  "payloadHash": "cfc73cbe2a62c55b",
+  "payloadHash": "bf527d30019ee1ba",
   "history": [
     {
       "revision": 1,
@@ -475,6 +475,14 @@
       "surfaceHash": "d8b77fe9472c61e3",
       "payloadHash": "cfc73cbe2a62c55b",
       "summary": "A new caller-owned refusal, world-catching-up (ShufflewickPub #395). A world declaring ordering: chronological asked not to be overtaken, and the platform implemented that as a four-times-larger drain budget -- which is an ordering guarantee only while the world is less than one budget behind. Past that the command was applied over a world still behind, silently, which is exactly the overtaken state the declaration exists to prevent, and no signal reached the handler, the client or the log. The command is now refused instead, and the refusal is CALLER-owned like rate-limited and for the same reason: well-formed traffic, world untouched, and a park ladder must never read a world that is merely behind as a world in trouble. Sending it again is safe -- an order's durable identity (#368) makes the repeat run exactly once -- and the platform re-arms before answering, so the catch-up is already continuing."
+    },
+    {
+      "revision": 60,
+      "date": "2026-09-09",
+      "bundleProtocol": 2,
+      "surfaceHash": "d8b77fe9472c61e3",
+      "payloadHash": "bf527d30019ee1ba",
+      "summary": "A migration may be run a page at a time when it need not see every root (ShufflewickPub #402). runner.migrationNeedsEveryRoot() answers whether the bundle declares finalize -- the hook #379 added so a migration can derive one root's value from another in either direction -- and the presence of it is the whole declaration of whether paging is safe, so no new authoring surface exists. migrateAll's context gains allNames (every root the WORLD holds, since create must know which names are taken and a refusal is about the world rather than the page) and runCreate (which single page adds this version's new roots). A page transforms and answers only the roots it was handed; paging a migration that declares finalize is refused by name rather than run against a half-migrated world. WORLD_DURABILITY_FIXTURE gains both context shapes, because they are types and surfaceHash cannot see one."
     }
   ]
 }

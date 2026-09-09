@@ -104,6 +104,7 @@ import type {
   WorldCreatedPartition,
   WorldGenesis,
   WorldMigrated,
+  WorldMigrateContext,
   WorldSerialized,
 } from '../world/runner.js';
 
@@ -374,11 +375,19 @@ const WORLD_DURABILITY_FIXTURE = {
     created: { 'room:attic': { parentId: 1_000_000, json: { id: 1_000_010, className: 'Room' } } },
     nextElementId: 1_000_011,
   },
+  // ONE MIGRATION CALL'S CONTEXT (ShufflewickPub #402). A page is a real
+  // difference in what the platform sends and what comes back, and it is all
+  // types -- `surfaceHash` cannot see one, exactly as it could not see #224's
+  // checkpoint shape.
+  migrateWhole: { from: 1, to: 2 },
+  migratePage: { from: 1, to: 2, allNames: ["room:a", "room:b"], runCreate: true },
 } satisfies {
   genesis: WorldGenesis;
   checkpoint: WorldSerialized;
   created: WorldCreatedPartition;
   migrated: WorldMigrated;
+  migrateWhole: WorldMigrateContext;
+  migratePage: WorldMigrateContext;
 };
 
 /**
