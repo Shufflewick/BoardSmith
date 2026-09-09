@@ -1,8 +1,8 @@
 {
-  "revision": 57,
+  "revision": 58,
   "bundleProtocol": 2,
-  "surfaceHash": "9103e0232966ca04",
-  "payloadHash": "f548bb3ffbfaeec0",
+  "surfaceHash": "d8a046d3f4de8b4c",
+  "payloadHash": "cfc73cbe2a62c55b",
   "history": [
     {
       "revision": 1,
@@ -459,6 +459,14 @@
       "surfaceHash": "9103e0232966ca04",
       "payloadHash": "f548bb3ffbfaeec0",
       "summary": "A world may ask the platform to convert PLATFORM CREDITS into the game's own currency, and is told it cannot yet (ShufflewickPub #382). ctx.world.convertCredits({credits}) is declared and refuses every time with the new caller-owned code credit-conversion-unavailable, whose message states plainly that nothing was charged and nothing was granted and that the command has been unwound. It is shipped as a declared hole on purpose: ShufflewickPub has no currency system yet and the rate, bounds, quantum and reversal policy are undecided, and a game with no boundary to call writes its own payments -- running checkout, holding card details, trusting a browser about a debit and granting a paid reward twice. The signature commits to nothing but whole-number credits and one-way conversion; there is deliberately no method converting game currency back. Separately, the surface fingerprint now covers the WORLD_REFUSALS registry's codes and owners, which it never did: the park ladder branches on them (platform parks after two, game dead-letters, caller does neither), so adding a code or moving one between owners changes what the platform does to a live world and must mint a revision."
+    },
+    {
+      "revision": 58,
+      "date": "2026-09-09",
+      "bundleProtocol": 2,
+      "surfaceHash": "d8a046d3f4de8b4c",
+      "payloadHash": "cfc73cbe2a62c55b",
+      "summary": "A checkpoint carries the allocation stamp its command minted under (#224). runner.serialize() answers { partitions, nextElementId } and WorldPartitionWriter.writeCheckpoint takes that whole checkpoint, so a host cannot store a grown partition without its stamp. #377 made the stamp durable and named three roads that move it -- genesis, on-demand creation, migration -- and left out the one every game takes: room.create() inside an action advances the same counter, so the next fresh runner was built below its own store and adoptSubtree refused the bytes that host had itself just written. A stale stamp is now the coded, platform-owned refusal allocation-stale instead of a bare Error charged to the game, so a park ladder can act on it; boardsmith dev repairs such a world off that refusal with worldIdAllocationOf. New WORLD_DURABILITY_FIXTURE puts the four shapes a host must persist into payloadHash, because they are types and surfaceHash cannot see them."
     }
   ]
 }

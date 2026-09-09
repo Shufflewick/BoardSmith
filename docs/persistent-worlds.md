@@ -296,7 +296,16 @@ minted for. Every operation that mints reports it:
 const { partitions, nextElementId } = await runner.genesis();
 const built = await runner.createPartition(name);   // { partition, nextElementId }
 const added = await runner.migrateCreate(existing, ctx); // { created, nextElementId }
+const checkpoint = await runner.serialize(dirty);   // { partitions, nextElementId }
 ```
+
+That last line is the road that is easy to forget, and forgetting it is #224.
+Genesis, on-demand creation and migration are not the only things that mint:
+`room.create(Line, ...)` inside an action's `execute` advances the same counter,
+so an ORDINARY COMMAND moves the stamp. A checkpoint therefore answers bytes and
+stamp together, and `WorldPartitionWriter.writeCheckpoint` takes both, because a
+host that stored the grown bytes and kept its older number was refused on the
+next wake by the very partition it had just written.
 
 A host writes `nextElementId` in the SAME transaction as the partitions, and
 hands it back when the world is next built:
@@ -310,6 +319,14 @@ do is create a root on demand, and asking is the `allocation-undeclared`
 refusal rather than a silent guess. The instance that runs `genesis()` needs no
 stamp, because it minted every id there is.
 
+A world built with a stamp that stands BELOW an id its own stored bytes hold is
+a different failure and has its own code, `allocation-stale`. It is raised at the
+adoption that proves it, from the bytes, rather than at the collision it would
+otherwise cause hours later. It is platform-owned: a host that hands back a stale
+number hands back the same number on the next wake, so a park ladder should park
+on it rather than retry, and a publisher's health score should not be debited for
+it. The repair is the one below.
+
 **Repairing a world that predates this.** Derive the stamp once, from the bytes
 the store already holds, and write it:
 
@@ -321,7 +338,9 @@ store.recordAllocation(worldIdAllocationOf(await readEveryStoredPartition()));
 
 That is the only O(world) read in the scheme, it is paid once, and every later
 wake reads the number back out of storage. `boardsmith dev` does exactly this on
-the first start of a world that has no stamp.
+the first start of a world that has no stamp, and again -- driven by the
+`allocation-stale` refusal, so a healthy world never pays for the scan -- on a
+world whose stamp is present and wrong.
 
 ## An action: declare, then execute
 
@@ -1528,12 +1547,13 @@ thing next time.
 | `invalid-schedule-cancel` | A cancel that names no key. A cancel is keyed the way arming is keyed, so a nameless one addresses nothing; cancelling a key nothing holds is a no-op rather than this. |
 | `engine-not-world-mode` | The engine was built over a game that is not in world mode. |
 | `allocation-undeclared` | A host asked for a partition to be created on demand without handing the world its durable id allocation stamp, so any id minted would be a guess. See [a created root's identity is durable](#a-created-roots-identity-is-durable). |
+| `allocation-stale` | A host handed back a stamp standing below an id its own stored bytes hold, so the next id minted would collide with one already written. Raised at the adoption that proves it. Repair by deriving the stamp with `worldIdAllocationOf` over every stored partition. |
 | `child-timeout` | The bundle did not answer a host's call inside its deadline. |
 **`platform`**: a host's own bookkeeping broke. Not yours to fix, and
 deterministic, so a host with a park ladder parks on it:
 `partition-not-resident`, `partition-vanished`, `checkpoint-unknown-partition`,
-`allocation-undeclared`, `unknown-child-op`, `child-generations-exhausted`,
-`world-engine-unavailable`.
+`allocation-undeclared`, `allocation-stale`, `unknown-child-op`,
+`child-generations-exhausted`, `world-engine-unavailable`.
 
 **`infrastructure`**: a service the host depends on did not answer.
 `bundle-store-unavailable` is the one code, and it repairs itself when the

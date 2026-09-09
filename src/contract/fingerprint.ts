@@ -100,6 +100,12 @@ import type { WorldHostMessage, WorldUiMessage } from '../ui/world/worldProtocol
 import { WORLD_ENGINE_METHODS } from '../world/contract.js';
 import { WORLD_REFUSALS } from '../world/refusals.js';
 import type { WorldEngine } from '../world/contract.js';
+import type {
+  WorldCreatedPartition,
+  WorldGenesis,
+  WorldMigrated,
+  WorldSerialized,
+} from '../world/runner.js';
 
 /**
  * WHICH OF THE WORLD ENGINE'S PLATFORM-FACING VERBS THE PAYLOAD FIXTURE
@@ -323,6 +329,56 @@ const WORLD_WIRE_FIXTURE = {
   world_response: Extract<WorldHostMessage, { type: 'world_response' }>;
   world_command: Extract<WorldUiMessage, { type: 'world_command' }>;
   world_ready: Extract<WorldUiMessage, { type: 'world_ready' }>;
+};
+
+/**
+ * WHAT A HOST MUST PERSIST, one canonical literal per shape (#224).
+ *
+ * The same known limit `WORLD_WIRE_FIXTURE` exists for, on the other side of
+ * the world: these are the answers `runner.genesis`, `runner.serialize`,
+ * `runner.createPartition` and `runner.migrateAll` hand a host, and they are
+ * ALL TYPES, which `surfaceHash` cannot see. A field added to or removed from
+ * any of them changes what ShufflewickPub and `boardsmith dev` must write in a
+ * transaction, and before this fixture existed it moved neither hash.
+ *
+ * That is not hypothetical. #377 made the allocation stamp durable and named
+ * three of the four roads that move it; #224 was the fourth -- an ordinary
+ * command that creates an element -- and the shape change that closed it, a
+ * checkpoint answering `{ partitions, nextElementId }` instead of bare bytes,
+ * minted no revision here until this literal did it.
+ *
+ * `satisfies` is the mechanism, exactly as it is for the wire: adding a
+ * required field refuses to compile until the fixture carries it, and the
+ * moment it does, `payloadHash` moves and `boardsmith contract --update` is
+ * demanded. The values are arbitrary but fixed; only their shape and their
+ * canonical serialization matter.
+ */
+const WORLD_DURABILITY_FIXTURE = {
+  genesis: {
+    partitions: {
+      world: { parentId: 0, json: { id: 1_000_000, className: 'World' } },
+      'room:cellar': { parentId: 1_000_000, json: { id: 1_000_001, className: 'Room' } },
+    },
+    nextElementId: 1_000_002,
+  },
+  checkpoint: {
+    partitions: { 'room:cellar': '{"id":1000001,"className":"Room"}' },
+    nextElementId: 1_000_009,
+  },
+  created: {
+    partition: { parentId: 1_000_000, json: { id: 1_000_009, className: 'Room' } },
+    nextElementId: 1_000_010,
+  },
+  migrated: {
+    partitions: { 'room:cellar': '{"id":1000001,"className":"Room"}' },
+    created: { 'room:attic': { parentId: 1_000_000, json: { id: 1_000_010, className: 'Room' } } },
+    nextElementId: 1_000_011,
+  },
+} satisfies {
+  genesis: WorldGenesis;
+  checkpoint: WorldSerialized;
+  created: WorldCreatedPartition;
+  migrated: WorldMigrated;
 };
 
 /**
@@ -1157,6 +1213,9 @@ export async function computePayloadHash(): Promise<string> {
       views,
       flowPosition,
       worldWire: WORLD_WIRE_FIXTURE,
+      // What a host must land in one transaction (#224). Types only, so
+      // `surfaceHash` is blind to it and `payloadHash` is where it belongs.
+      worldDurability: WORLD_DURABILITY_FIXTURE,
       worldView,
       worldRounds,
       worldOffer,

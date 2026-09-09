@@ -44,7 +44,7 @@
  * person's data", so it composes rather than living here.
  */
 import type { StoredPartition } from "./contract.js";
-import type { WorldGenesis } from "./runner.js";
+import type { WorldGenesis, WorldSerialized } from "./runner.js";
 import { worldRefusal } from "./refusals.js";
 import type { WorldBudgets } from "./budgets.js";
 
@@ -197,16 +197,20 @@ export interface WorldPartitionWriter {
    */
   createAll(genesis: WorldGenesis): Promise<void>;
   /**
-   * Write exactly what a checkpoint serialized.
+   * Write exactly what a checkpoint serialized, AND THE STAMP IT MINTED UNDER.
    *
-   * `serialized` is `name -> json`, straight from `WorldEngine.serializePartitions`
-   * over the accumulated dirty set. An implementation refuses a name it has
-   * neither read nor created (`checkpoint-unknown-partition`), because it does
-   * not know where that subtree hangs.
+   * `checkpoint` is `runner.serialize(dirty)` whole: `partitions` is
+   * `name -> json` over the accumulated dirty set, and `nextElementId` is the
+   * world's id allocation as of those bytes (#224). An implementation refuses a
+   * name it has neither read nor created (`checkpoint-unknown-partition`),
+   * because it does not know where that subtree hangs.
    *
-   * ONE COMMIT, however many keys it takes. A checkpoint that landed a prefix
-   * of the dirty set leaves a world whose rooms disagree about which command
-   * last ran, which is a corruption nothing downstream can detect.
+   * ONE COMMIT, however many keys it takes, and the stamp is IN it. A
+   * checkpoint that landed a prefix of the dirty set leaves a world whose rooms
+   * disagree about which command last ran; a checkpoint that landed the bytes
+   * without the stamp leaves a world the next fresh runner cannot adopt at all,
+   * because a command that created an element moved the counter the same way
+   * genesis does. Both are corruptions nothing downstream can detect.
    */
-  writeCheckpoint(serialized: Record<string, string>): Promise<void>;
+  writeCheckpoint(checkpoint: WorldSerialized): Promise<void>;
 }

@@ -120,6 +120,22 @@ export interface WorldCreatedPartition extends WorldAllocation {
 }
 
 /**
+ * ONE CHECKPOINT'S BYTES, AND THE STAMP THAT PRODUCED THEM (#224).
+ *
+ * #377 named three roads that mint -- genesis, on-demand creation, migration --
+ * and left out the one every game takes: `room.create(...)` inside an action
+ * advances the same counter. A host that wrote a grown partition and kept its
+ * older stamp handed the next fresh runner a number below ids the store already
+ * held, and `adoptSubtree` refused the bytes that host had itself just written.
+ *
+ * So a checkpoint cannot answer bytes without its stamp. The two land in the
+ * same transaction for the same reason genesis's do.
+ */
+export interface WorldSerialized extends WorldAllocation {
+  readonly partitions: Record<string, string>;
+}
+
+/**
  * EVERYTHING ONE MIGRATION PRODUCED, for the host's single transaction (#379).
  *
  * `partitions` is every root the world already held, serialized after every
@@ -416,8 +432,11 @@ export function createWorldRunner(
       return { partitions, nextElementId: engine.nextElementId() };
     },
 
-    serialize(dirty: readonly string[]): Promise<Record<string, string>> {
-      return engine.serializePartitions(dirty);
+    async serialize(dirty: readonly string[]): Promise<WorldSerialized> {
+      // THE STAMP RIDES WITH THE BYTES (#224), exactly as it does for genesis:
+      // the command that dirtied these roots may also have minted into them.
+      const partitions = await engine.serializePartitions(dirty);
+      return { partitions, nextElementId: engine.nextElementId() };
     },
 
     async migrateAll(
@@ -672,9 +691,11 @@ export interface WorldRunnerHandle {
    * however many commands one checkpoint covers -- `WorldCommandResult.dirty`
    * is per command, and `BoardSmithWorldEngine` says outright that unioning
    * them is the caller's job. Nothing here decides what changed; the parent
-   * hands back what it accumulated and gets bytes.
+   * hands back what it accumulated and gets bytes -- and the allocation stamp
+   * those bytes were minted under (#224), which the host writes in the same
+   * transaction.
    */
-  serialize(dirty: readonly string[]): Promise<Record<string, string>>;
+  serialize(dirty: readonly string[]): Promise<WorldSerialized>;
 
   /**
    * MIGRATE ONE PARTITION, from bytes to bytes (#200).

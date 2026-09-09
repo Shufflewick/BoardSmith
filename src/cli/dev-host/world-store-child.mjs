@@ -79,7 +79,7 @@ if (mode === 'live') {
   store.seat('player-b', 2);
   store.recordDirty(['room/lobby', 'room/unwritten']);
   await store.writeCheckpoint(
-    { 'room/lobby': JSON.stringify({ visitors: 3 }) },
+    { partitions: { 'room/lobby': JSON.stringify({ visitors: 3 }) }, nextElementId: 1_000_100 },
     { schedule: seededEvents() },
   );
   mark('committed');
@@ -91,7 +91,10 @@ if (mode === 'live') {
   }
   await store.createAll({ partitions: records, nextElementId: 1_000_100 });
   store.recordDirty(names);
-  await store.writeCheckpoint({}, { schedule: seededEvents() });
+  await store.writeCheckpoint(
+    { partitions: {}, nextElementId: 1_000_100 },
+    { schedule: seededEvents() },
+  );
   store.close();
   mark('seeded');
 } else if (mode === 'checkpoint') {
@@ -102,7 +105,10 @@ if (mode === 'live') {
     .map((planned) => planned.id);
   mark('started');
   const began = Date.now();
-  await store.writeCheckpoint(serialized, { settle, schedule: armedEvents() });
+  await store.writeCheckpoint(
+    { partitions: serialized, nextElementId: 1_000_100 },
+    { settle, schedule: armedEvents() },
+  );
   writeFileSync(join(markerDir, 'elapsed'), String(Date.now() - began));
   store.close();
   mark('done');

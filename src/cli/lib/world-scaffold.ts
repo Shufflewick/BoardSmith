@@ -485,8 +485,13 @@ describe('the world', () => {
       { scope: plotPartition(1), payload: { tended: 1, row: PLOT_ROWS[0], growth: 1 }, seats: [1] },
     ]);
 
-    const bytes = await runner.serialize([...result.dirty]);
-    expect(JSON.parse(bytes[plotPartition(1)]!)).toMatchObject({ attributes: { seat: 1 } });
+    // A checkpoint is bytes AND the stamp they were minted under, because a
+    // command that creates an element moves the world's id counter too.
+    const checkpoint = await runner.serialize([...result.dirty]);
+    expect(JSON.parse(checkpoint.partitions[plotPartition(1)]!)).toMatchObject({
+      attributes: { seat: 1 },
+    });
+    expect(checkpoint.nextElementId).toBeGreaterThan(0);
   });
 
   it('REFUSES a player who reaches for the clock\\'s own action', async () => {

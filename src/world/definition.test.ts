@@ -293,8 +293,8 @@ describe("createWorld — one construction, every host", () => {
     expect(result.dirty).toEqual(["yard:1"]);
     expect(result.events).toHaveLength(1);
 
-    const bytes = await runner.serialize([...result.dirty]);
-    expect(JSON.parse(bytes["yard:1"]!)).toMatchObject({
+    const checkpoint = await runner.serialize([...result.dirty]);
+    expect(JSON.parse(checkpoint.partitions["yard:1"]!)).toMatchObject({
       className: "Yard",
       attributes: { pokes: 1 },
     });

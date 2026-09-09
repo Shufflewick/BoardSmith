@@ -85,6 +85,7 @@ import type {
   WorldCreatedPartition,
   WorldGenesis,
   WorldMigrated,
+  WorldSerialized,
 } from '../../world/runner.js';
 import type { PlannedEvent } from '../../world/schedule-api.js';
 import type { WorldBudgets } from '../../world/budgets.js';
@@ -175,7 +176,7 @@ export interface LocalWorldStore extends WorldPartitionStore, WorldPartitionWrit
    * everywhere one is asked for.
    */
   writeCheckpoint(
-    serialized: Record<string, string>,
+    checkpoint: WorldSerialized,
     extras?: WorldCheckpointExtras,
   ): Promise<void>;
 
@@ -633,10 +634,10 @@ export function openWorldStore(path: string, budgets: WorldBudgets): LocalWorldS
      * the transaction opens.
      */
     async writeCheckpoint(
-      serialized: Record<string, string>,
+      checkpoint: WorldSerialized,
       extras: WorldCheckpointExtras = {},
     ): Promise<void> {
-      const rows = Object.entries(serialized).map(([name, json]) => {
+      const rows = Object.entries(checkpoint.partitions).map(([name, json]) => {
         assertStorablePartitionName(name);
         assertPartitionWithinBudget(name, json, budgets);
         const known = stmt.knownParent.get(name) as { parent_id: number } | undefined;
@@ -649,6 +650,10 @@ export function openWorldStore(path: string, budgets: WorldBudgets): LocalWorldS
 
       transact(() => {
         writePartitions(rows);
+        // THE STAMP LANDS WITH THE BYTES IT MINTED (#224). A command that
+        // created an element moved this counter; a restart built from the older
+        // number would be refused by the very partitions this write is storing.
+        stmt.writeMeta.run(NEXT_ELEMENT_ID_KEY, String(checkpoint.nextElementId));
         // SETTLED BEFORE ARMED, so a recurrence that re-arms under the id it
         // just ran is not deleted by its own settlement.
         for (const id of settle) stmt.deleteEvent.run(id);
