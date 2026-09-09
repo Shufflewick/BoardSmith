@@ -27,7 +27,7 @@ import { describe, expect, it } from "vitest";
 import { Game, Space, type GameElement, type GameOptions } from "../engine/index.js";
 import { createWorld, worldIdAllocationOf, type WorldRunnerOptions } from "./definition.js";
 import { worldAction } from "./action.js";
-import { WorldRefusal } from "./refusals.js";
+import { WorldRefusal, ownerOf } from "./refusals.js";
 import type { StoredPartition } from "./contract.js";
 
 class Room extends Space<Demo> {}
@@ -177,6 +177,27 @@ describe("#377 — a world's id allocation is durable, not derived from what is 
     ).rejects.toThrow(/nextElementId/);
   });
 
+  it("calls a stale stamp the PLATFORM's fault, so the ladder can park on it (#224)", async () => {
+    // `adoptSubtree` proves staleness from the bytes and throws a bare Error,
+    // and an uncoded throw is charged to the GAME. A world whose host lost the
+    // stamp its own command minted under would therefore refuse every
+    // room-touching verb while the park ladder sat still and the publisher's
+    // health score paid for a platform defect.
+    const genesis = await storedWorld();
+    const stale = createWorld(options({ nextElementId: 1_000_001 })).runner;
+    await stale.declare({ name: "read-a", args: {} }, "p1", {}, 1_000);
+
+    const refusal = await stale
+      .declare({ name: "read-a", args: {} }, "p1", { c: genesis.partitions.c! }, 1_000)
+      .catch((error: unknown) => error);
+
+    expect(refusal).toBeInstanceOf(WorldRefusal);
+    expect((refusal as WorldRefusal).code).toBe("allocation-stale");
+    expect(ownerOf(refusal)).toBe("platform");
+    // And it still names the repair, which is the only thing a host can act on.
+    expect((refusal as WorldRefusal).message).toMatch(/worldIdAllocationOf/);
+  });
+
   it("derives the repair stamp from stored bytes, for a world that has none", async () => {
     // The supported repair for a world that was already occupied when this
     // landed, and for one whose roots have already collided: read what is
@@ -193,5 +214,104 @@ describe("#377 — a world's id allocation is durable, not derived from what is 
     expect(ROOMS.map((name) => idOf(genesis.partitions[name]!))).not.toContain(
       idOf(made!.partition),
     );
+  });
+});
+
+/**
+ * #224: A COMMAND MINTS IDS TOO, SO THE STAMP BELONGS TO THE CHECKPOINT.
+ *
+ * #377 made the counter durable and named the three roads a host must write it
+ * on: genesis, on-demand creation, migration. It left out the road every game
+ * takes on every command that creates anything -- `room.create(Line, ...)`
+ * inside an action's `execute` advances the same counter.
+ *
+ * So a host wrote the bytes of a grown partition and kept the stamp it had
+ * before the growth. The next fresh runner -- a hibernation wake, a discarded
+ * child, a deploy, a dev restart -- was built with that stale stamp, and
+ * `adoptSubtree` refused the partition it had itself just written.
+ *
+ * The fix is the shape: `serialize` cannot answer bytes WITHOUT the stamp that
+ * produced them, so "checkpointed the growth, lost the stamp" stops being a
+ * state a host can reach.
+ */
+describe("#224 — a checkpoint carries the stamp of the ids its command minted", () => {
+  const fill = worldAction<Demo>("fill")
+    .needs(() => ["a"])
+    .execute((_a, ctx) => {
+      const room = ctx.game.first(Room, "a")!;
+      for (let i = 0; i < 5; i += 1) room.create(Room, `thing-${i}`);
+    });
+
+  const grownDefinition = {
+    ...definition,
+    world: { ...definition.world, actions: [readA, readBoth, fill] },
+  } as WorldRunnerOptions["definition"];
+
+  const grown = (overrides: Partial<WorldRunnerOptions> = {}): WorldRunnerOptions => ({
+    ...options(overrides),
+    definition: grownDefinition,
+  });
+
+  /** Genesis, then one command that creates five elements inside room `a`. */
+  async function afterGrowth() {
+    const born = createWorld(grown()).runner;
+    const genesis = await born.genesis();
+
+    const host = createWorld(grown({ nextElementId: genesis.nextElementId })).runner;
+    await host.declare({ name: "fill", args: {} }, "p1", {}, 1_000);
+    await host.declare({ name: "fill", args: {} }, "p1", { a: genesis.partitions.a! }, 1_000);
+    const result = await host.apply({
+      player: "p1",
+      command: { name: "fill", args: {} },
+      timing: null,
+      arrivedAt: 1_000,
+      allowance: { unkeyed: 0, keys: [], worldPending: 0 },
+      presence: [1],
+      activity: null,
+    });
+
+    return { genesis, checkpoint: await host.serialize([...result.dirty]) };
+  }
+
+  it("reports a stamp above every id the command minted", async () => {
+    const { genesis, checkpoint } = await afterGrowth();
+
+    expect(checkpoint.partitions.a).toBeDefined();
+    expect(checkpoint.nextElementId).toBeGreaterThan(genesis.nextElementId);
+  });
+
+  it("lets a fresh runner adopt the partition the checkpoint wrote", async () => {
+    // The whole defect in one line: the bytes a host stored, handed back to a
+    // host built from the stamp stored beside them.
+    const { genesis, checkpoint } = await afterGrowth();
+    const stored: StoredPartition = {
+      parentId: genesis.partitions.a!.parentId,
+      json: JSON.parse(checkpoint.partitions.a!),
+    };
+
+    const fresh = createWorld(grown({ nextElementId: checkpoint.nextElementId })).runner;
+    await fresh.declare({ name: "read-a", args: {} }, "p1", {}, 2_000);
+
+    await expect(
+      fresh.declare({ name: "read-a", args: {} }, "p1", { a: stored }, 2_000),
+    ).resolves.toBeDefined();
+  });
+
+  it("mints an on-demand root outside the ids that command minted", async () => {
+    // The other half of #377's collision, reached through a command rather than
+    // through `createPartition`: a cold host that mints from the pre-growth
+    // stamp lands inside the range the stored, unloaded root already uses.
+    const { checkpoint } = await afterGrowth();
+    const storedIds = new Set<number>();
+    const walk = (node: { id?: number; children?: unknown[] }) => {
+      if (typeof node.id === "number") storedIds.add(node.id);
+      for (const child of node.children ?? []) walk(child as { id?: number; children?: unknown[] });
+    };
+    walk(JSON.parse(checkpoint.partitions.a!));
+
+    const cold = createWorld(grown({ nextElementId: checkpoint.nextElementId })).runner;
+    const made = await cold.createPartition("dynamic");
+
+    expect(storedIds.has(idOf(made!.partition))).toBe(false);
   });
 });

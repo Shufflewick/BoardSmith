@@ -249,6 +249,10 @@ export const WORLD_REFUSALS = {
     owner: "platform",
     why: "ShufflewickPub #377: a host asked for a partition to be created on demand without handing over the world's durable id allocation stamp, so the engine's counter speaks only for the partitions it happens to hold. Minting from there is how a cold host built a new root on the identity of a stored root it had never loaded, and the world only found out at the later command that declared both -- an unplayable world, from a write that looked fine. PLATFORM-owned and deterministic: a host that does not persist `nextElementId` does not persist it on the next wake either, so parking is right and retrying is not",
   },
+  "allocation-stale": {
+    owner: "platform",
+    why: "#224: a host handed back an id allocation stamp that stands BELOW an id its own stored bytes already hold, so the next id this world minted would collide with one it has already written. #377 made the stamp durable and named three roads that move it -- genesis, on-demand creation, migration -- and left out the road every game takes: `room.create()` inside an action advances the same counter, so a host that checkpointed a grown partition and kept its older stamp was refused by the very bytes it had just stored. PLATFORM-owned, and that is the whole reason this code exists: `adoptSubtree` threw a bare Error, `ownerOf` calls an uncoded throw the GAME's, and a world in this state limped with every room-touching verb refused, the park ladder never climbing and nothing telling an operator. Deterministic -- the same stale number is handed back on the next wake too -- so parking is right and retrying is not. The repair is named in the message: derive the stamp with `worldIdAllocationOf` over every stored partition and write it back",
+  },
   "partition-vanished": {
     owner: "platform",
     why: "a partition was adopted and is no longer in the tree -- something evicted it behind the engine's back, and its changes since the last checkpoint are gone",

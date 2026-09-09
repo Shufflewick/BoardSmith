@@ -602,8 +602,10 @@ export class BoardSmithWorldEngine implements WorldEngine {
         "allocation-undeclared",
         `Cannot create partition "${name}": this world's id allocation stamp was not supplied, ` +
           `so any id minted here could already belong to a stored partition that is not loaded. ` +
-          `Persist the \`nextElementId\` the runner reports after genesis and after every ` +
-          `partition it creates, and pass it as \`nextElementId\` when the world is next built. ` +
+          `Persist the \`nextElementId\` the runner reports after genesis, after every ` +
+          `partition it creates, and after EVERY CHECKPOINT (#224) -- an ordinary command ` +
+          `that creates an element mints from this same counter -- and pass it as ` +
+          `\`nextElementId\` when the world is next built. ` +
           `For a world that is already occupied and has no stamp, derive one once with ` +
           `\`worldIdAllocationOf\` over its stored partitions.`,
       );
@@ -2057,7 +2059,22 @@ export class BoardSmithWorldEngine implements WorldEngine {
     // through JSON and the parent ships it to the child, neither knowing what
     // an element is. This engine does: what it is handed is what its own
     // `serializePartitions` wrote, and `adoptSubtree` is the reader.
-    const root = this.game.adoptSubtree(stored.parentId, stored.json as ElementJSON);
+    let root: GameElement;
+    try {
+      root = this.game.adoptSubtree(stored.parentId, stored.json as ElementJSON);
+    } catch (error) {
+      // A STALE STAMP IS THE PLATFORM'S FAULT, AND MUST SAY SO (#224).
+      // `adoptSubtree` proves it from the bytes and throws a bare Error, and an
+      // uncoded throw is charged to the GAME -- so a world whose host lost the
+      // stamp its own command minted under refused every room-touching verb
+      // while the park ladder sat still and the publisher's health score paid
+      // for it. Coded here, at the seam that knows the throw is about
+      // allocation rather than about the game's rules.
+      if (error instanceof Error && /id allocation stamp/.test(error.message)) {
+        throw worldRefusal("allocation-stale", error.message);
+      }
+      throw error;
+    }
     this.residentIds.set(name, root.id);
     this.residentNames.set(root.id, name);
   }

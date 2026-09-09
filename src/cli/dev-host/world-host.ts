@@ -329,8 +329,8 @@ export class LocalWorldHost {
    * adopt, and an adoption against a missing stamp is exactly the corruption
    * the stamp exists to catch.
    */
-  async #repairAllocationStamp(): Promise<void> {
-    if (this.#store.nextElementId() !== undefined) return;
+  async #repairAllocationStamp({ force = false }: { force?: boolean } = {}): Promise<void> {
+    if (!force && this.#store.nextElementId() !== undefined) return;
     const stored: StoredPartition[] = [];
     for (const name of this.#store.partitionNames()) {
       stored.push(
@@ -562,12 +562,39 @@ export class LocalWorldHost {
   // ── the world lock ─────────────────────────────────────────────────────────
 
   #run<T>(body: () => Promise<T>): Promise<T> {
-    const next = this.#lock.then(body, body);
+    const next = this.#lock.then(() => this.#runRepairing(body), () => this.#runRepairing(body));
     // Swallowed HERE and nowhere else: the chain must survive a rejection, or
     // one refused command would strand every later one behind a dead promise.
     // The caller still gets the rejection through `next`.
     this.#lock = next.catch(() => {});
     return next;
+  }
+
+  /**
+   * THE REPAIR ROAD FOR A WORLD WHOSE STAMP IS ALREADY STALE (#224).
+   *
+   * `#repairAllocationStamp` covers the world that never had a stamp. This
+   * covers the one whose stamp is present and WRONG -- written by a host that
+   * checkpointed a partition an ordinary command had grown and kept the number
+   * it had before the growth. Such a world refuses every verb that touches the
+   * grown room, forever, with a message that names the repair and no way to run
+   * it.
+   *
+   * Driven by the refusal rather than by a check on every wake, because the
+   * check is O(every stored partition) and the refusal is proof. A world that
+   * is not broken pays nothing.
+   */
+  async #runRepairing<T>(body: () => Promise<T>): Promise<T> {
+    try {
+      return await body();
+    } catch (error) {
+      if (!(error instanceof WorldRefusal) || error.code !== 'allocation-stale') throw error;
+      // The refusal is raised at ADOPT, before any command has written
+      // anything, and the repair throws the resident tree away -- so the retry
+      // starts from stored bytes rather than from a half-run command.
+      await this.#repairAllocationStamp({ force: true });
+      return await body();
+    }
   }
 
   // ── construction and residency ─────────────────────────────────────────────

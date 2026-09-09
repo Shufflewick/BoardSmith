@@ -16,7 +16,7 @@ import { readDistDir } from '../lib/zip.js';
 import { generateGitignore } from '../lib/project-scaffold.js';
 import { assertWorldProjectForReset } from '../commands/dev.js';
 import type { PlannedEvent } from '../../world/schedule-api.js';
-import type { WorldGenesis } from '../../world/runner.js';
+import type { WorldGenesis, WorldSerialized } from '../../world/runner.js';
 import {
   assertNodeSupportsSqlite,
   openWorldStore,
@@ -27,6 +27,19 @@ import {
   REQUIRED_NODE_VERSION,
   type LocalWorldStore,
 } from './world-store.js';
+
+/**
+ * ONE CHECKPOINT, the shape `runner.serialize` answers (#224).
+ *
+ * A checkpoint is bytes AND the allocation stamp those bytes were minted under,
+ * because an ordinary command that creates an element moves the same counter
+ * genesis does. The tests below care about the bytes, so the stamp has a
+ * default; the ones that are ABOUT the stamp pass their own.
+ */
+const cp = (
+  partitions: Record<string, string>,
+  nextElementId = 1_000_100,
+): WorldSerialized => ({ partitions, nextElementId });
 
 const BUDGETS = worldBudgets();
 
@@ -139,7 +152,7 @@ describe('the local world store', () => {
         born({ 'room/a': { parentId: 1, json: {} }, 'room/b': { parentId: 1, json: {} } }),
       );
       store.recordDirty(['room/a', 'room/b']);
-      await store.writeCheckpoint({ 'room/a': '{"n":1}' });
+      await store.writeCheckpoint(cp({ 'room/a': '{"n":1}' }));
       expect(store.dirtyPartitions()).toEqual(['room/b']);
     });
 
@@ -161,28 +174,43 @@ describe('the local world store', () => {
       await store.createAll(born({ 'room/a': { parentId: 1, json: { n: 0 } } }));
     });
 
+    it('records the allocation stamp its bytes were minted under (#224)', async () => {
+      // The dev host's half of #224: a command that created an element moved
+      // the counter, so the checkpoint that stores those bytes must store the
+      // number too, or the next `boardsmith dev` is built below its own store.
+      await store.writeCheckpoint(cp({ 'room/a': '{"n":7}' }, 1_000_250));
+      expect(store.nextElementId()).toBe(1_000_250);
+    });
+
+    it('leaves the stamp where it was when the checkpoint is refused', async () => {
+      await store.writeCheckpoint(cp({ 'room/a': '{"n":7}' }, 1_000_250));
+      await expect(store.writeCheckpoint(cp({ 'room/ghost': '{}' }, 1_000_900))).rejects.toThrow(
+        /neither read nor created/,
+      );
+      expect(store.nextElementId()).toBe(1_000_250);
+    });
+
     it('rewrites a partition without re-parenting it', async () => {
-      await store.writeCheckpoint({ 'room/a': '{"n":7}' });
+      await store.writeCheckpoint(cp({ 'room/a': '{"n":7}' }));
       expect(await store.read('room/a')).toEqual({ parentId: 1, json: { n: 7 } });
     });
 
     it('refuses a partition the store has never seen, because it cannot know where it hangs', async () => {
-      await expect(store.writeCheckpoint({ 'room/ghost': '{}' })).rejects.toThrow(
+      await expect(store.writeCheckpoint(cp({ 'room/ghost': '{}' }))).rejects.toThrow(
         /neither read nor created/,
       );
     });
 
     it('writes nothing at all when one named partition is unknown', async () => {
       await expect(
-        store.writeCheckpoint({ 'room/a': '{"n":7}', 'room/ghost': '{}' }),
+        store.writeCheckpoint(cp({ 'room/a': '{"n":7}', 'room/ghost': '{}' })),
       ).rejects.toThrow(/neither read nor created/);
       expect(await store.read('room/a')).toEqual({ parentId: 1, json: { n: 0 } });
     });
 
     it('settles the events it ran and arms the ones it scheduled', async () => {
-      await store.writeCheckpoint({}, { schedule: [event({ id: 'e1', due: 100, seq: 0 })] });
-      await store.writeCheckpoint(
-        { 'room/a': '{"n":1}' },
+      await store.writeCheckpoint(cp({}), { schedule: [event({ id: 'e1', due: 100, seq: 0 })] });
+      await store.writeCheckpoint(cp({ 'room/a': '{"n":1}' }),
         { settle: ['e1'], schedule: [event({ id: 'e2', due: 200, seq: 1 })] },
       );
       expect(store.pendingEvents().map((e) => e.id)).toEqual(['e2']);
@@ -190,14 +218,14 @@ describe('the local world store', () => {
 
     it('advances the sequence with the events that used it', async () => {
       expect(store.nextSeq()).toBe(0);
-      await store.writeCheckpoint({}, { schedule: [event({ id: 'e1', seq: 4 })] });
+      await store.writeCheckpoint(cp({}), { schedule: [event({ id: 'e1', seq: 4 })] });
       expect(store.nextSeq()).toBe(5);
     });
 
     it('leaves the sequence where it was when the checkpoint is refused', async () => {
-      await store.writeCheckpoint({}, { schedule: [event({ id: 'e1', seq: 4 })] });
+      await store.writeCheckpoint(cp({}), { schedule: [event({ id: 'e1', seq: 4 })] });
       await expect(
-        store.writeCheckpoint({ 'room/ghost': '{}' }, { schedule: [event({ id: 'e2', seq: 9 })] }),
+        store.writeCheckpoint(cp({ 'room/ghost': '{}' }), { schedule: [event({ id: 'e2', seq: 9 })] }),
       ).rejects.toThrow();
       expect(store.nextSeq()).toBe(5);
       expect(store.pendingEvents().map((e) => e.id)).toEqual(['e1']);
@@ -210,8 +238,7 @@ describe('the local world store', () => {
     });
 
     it('writes a receipt in the same transaction as the effects it belongs to', async () => {
-      await store.writeCheckpoint(
-        { 'room/a': '{"n":1}' },
+      await store.writeCheckpoint(cp({ 'room/a': '{"n":1}' }),
         { receipt: { orderId: 'o1', player: 'seat-3', at: 500, message: 'Colony founded.' } },
       );
       expect(store.receipt('seat-3', 'o1')).toEqual({
@@ -224,8 +251,7 @@ describe('the local world store', () => {
 
     it('writes no receipt when the checkpoint is refused, so an order nothing changed has none', async () => {
       await expect(
-        store.writeCheckpoint(
-          { 'room/ghost': '{}' },
+        store.writeCheckpoint(cp({ 'room/ghost': '{}' }),
           { receipt: { orderId: 'o1', player: 'seat-3', at: 500 } },
         ),
       ).rejects.toThrow();
@@ -233,17 +259,17 @@ describe('the local world store', () => {
     });
 
     it('keeps one seat out of another seat\'s ledger', async () => {
-      await store.writeCheckpoint({}, { receipt: { orderId: 'o1', player: 'seat-3', at: 500 } });
+      await store.writeCheckpoint(cp({}), { receipt: { orderId: 'o1', player: 'seat-3', at: 500 } });
       expect(store.receipt('seat-4', 'o1')).toBeUndefined();
     });
 
     it('keeps a receipt with no message, which is still an answer', async () => {
-      await store.writeCheckpoint({}, { receipt: { orderId: 'o1', player: 'seat-3', at: 500 } });
+      await store.writeCheckpoint(cp({}), { receipt: { orderId: 'o1', player: 'seat-3', at: 500 } });
       expect(store.receipt('seat-3', 'o1')).toEqual({ orderId: 'o1', player: 'seat-3', at: 500 });
     });
 
     it('survives a reopen, which is the whole point of a durable receipt', async () => {
-      await store.writeCheckpoint({}, { receipt: { orderId: 'o1', player: 'seat-3', at: 500 } });
+      await store.writeCheckpoint(cp({}), { receipt: { orderId: 'o1', player: 'seat-3', at: 500 } });
       store.close();
       store = openWorldStore(worldStorePath(root), BUDGETS);
       expect(store.receipt('seat-3', 'o1')?.orderId).toBe('o1');
@@ -254,9 +280,8 @@ describe('the local world store', () => {
     });
 
     it('sweeps to the floor it is given and remembers where it swept to', async () => {
-      await store.writeCheckpoint({}, { receipt: { orderId: 'old', player: 'seat-3', at: 100 } });
-      await store.writeCheckpoint(
-        {},
+      await store.writeCheckpoint(cp({}), { receipt: { orderId: 'old', player: 'seat-3', at: 100 } });
+      await store.writeCheckpoint(cp({}),
         { receipt: { orderId: 'new', player: 'seat-3', at: 900 }, receiptFloorAt: 500 },
       );
       expect(store.receipt('seat-3', 'old')).toBeUndefined();
@@ -265,16 +290,15 @@ describe('the local world store', () => {
     });
 
     it('keeps a receipt written exactly at the floor', async () => {
-      await store.writeCheckpoint({}, { receipt: { orderId: 'edge', player: 'seat-3', at: 500 } });
-      await store.writeCheckpoint({}, { receiptFloorAt: 500 });
+      await store.writeCheckpoint(cp({}), { receipt: { orderId: 'edge', player: 'seat-3', at: 500 } });
+      await store.writeCheckpoint(cp({}), { receiptFloorAt: 500 });
       expect(store.receipt('seat-3', 'edge')?.orderId).toBe('edge');
     });
   });
 
   describe('the schedule', () => {
     it('orders by (due, seq), so two events in one millisecond keep their insertion order', async () => {
-      await store.writeCheckpoint(
-        {},
+      await store.writeCheckpoint(cp({}),
         {
           schedule: [
             event({ id: 'late', due: 200, seq: 0 }),
@@ -298,20 +322,20 @@ describe('the local world store', () => {
         everyMs: 60_000,
         attempts: 2,
       });
-      await store.writeCheckpoint({}, { schedule: [planned] });
+      await store.writeCheckpoint(cp({}), { schedule: [planned] });
       expect(store.pendingEvents()).toEqual([planned]);
     });
 
     it('leaves a one-shot with no key and no interval, rather than nulls a drain would have to read past', async () => {
-      await store.writeCheckpoint({}, { schedule: [event({ id: 'once' })] });
+      await store.writeCheckpoint(cp({}), { schedule: [event({ id: 'once' })] });
       const [pending] = store.pendingEvents();
       expect('key' in pending).toBe(false);
       expect('everyMs' in pending).toBe(false);
     });
 
     it('replaces an event written again under the same id, which is how a recurrence re-arms', async () => {
-      await store.writeCheckpoint({}, { schedule: [event({ id: 'tick', due: 100, everyMs: 50 })] });
-      await store.writeCheckpoint({}, { schedule: [event({ id: 'tick', due: 150, everyMs: 50 })] });
+      await store.writeCheckpoint(cp({}), { schedule: [event({ id: 'tick', due: 100, everyMs: 50 })] });
+      await store.writeCheckpoint(cp({}), { schedule: [event({ id: 'tick', due: 150, everyMs: 50 })] });
       expect(store.pendingEvents()).toHaveLength(1);
       expect(store.pendingEvents()[0].due).toBe(150);
     });
@@ -385,8 +409,8 @@ describe('the local world store', () => {
 
     it('remembers a seat\'s last accepted arrival, per seat', () => {
       store.activitySince(5_000);
-      store.writeCheckpoint({}, { activity: { seat: 1, at: 10_000 } });
-      store.writeCheckpoint({}, { activity: { seat: 2, at: 12_000 } });
+      store.writeCheckpoint(cp({}), { activity: { seat: 1, at: 10_000 } });
+      store.writeCheckpoint(cp({}), { activity: { seat: 2, at: 12_000 } });
 
       expect(store.activityOf(1)).toEqual({ seat: 1, at: 10_000, since: 5_000 });
       expect(store.activityOf(2)).toEqual({ seat: 2, at: 12_000, since: 5_000 });
@@ -399,8 +423,8 @@ describe('the local world store', () => {
       // host must not be able to age a live player by replaying one. The store
       // is the last line: the watermark is a high-water mark by construction.
       store.activitySince(5_000);
-      store.writeCheckpoint({}, { activity: { seat: 1, at: 20_000 } });
-      store.writeCheckpoint({}, { activity: { seat: 1, at: 9_000 } });
+      store.writeCheckpoint(cp({}), { activity: { seat: 1, at: 20_000 } });
+      store.writeCheckpoint(cp({}), { activity: { seat: 1, at: 9_000 } });
       expect(store.activityOf(1).at).toBe(20_000);
     });
 
@@ -409,7 +433,7 @@ describe('the local world store', () => {
       // cold restart all build a new host over this store, and an idleness
       // clock that restarted with the process would never reach a deadline.
       store.activitySince(5_000);
-      store.writeCheckpoint({}, { activity: { seat: 1, at: 10_000 } });
+      store.writeCheckpoint(cp({}), { activity: { seat: 1, at: 10_000 } });
       store.close();
 
       const reopened = openWorldStore(worldStorePath(root), BUDGETS);
@@ -513,6 +537,8 @@ describe('the local world store', () => {
   it('never prints Node\'s SQLite experimental warning at an author', () => {
     // Opening a store is the one call that provokes it, and the swallow is
     // scoped to exactly that import -- so a warning raised around it still
+
+
     // reaches whoever asked for it.
     const seen: string[] = [];
     const original = process.emitWarning;

@@ -176,7 +176,23 @@ const reap = worldClockAction<Village>('reap')
     seenActivity = ctx.world.activity;
   });
 
-const VILLAGE_ACTIONS: readonly ActionDefinition[] = [chop, bank, burn];
+/**
+ * A verb that CREATES, which is the road #224 was about.
+ *
+ * `chop` mutates an attribute and mints nothing. Every case below was built out
+ * of verbs like it, which is why no test grew a partition, checkpointed, and
+ * rebuilt the runner -- the one sequence that proved the stamp was being lost.
+ */
+const stack = worldAction<Village>('stack')
+  .prompt('Stack the logs where they fell')
+  .needs(() => [HEARTH])
+  .execute((_args, ctx) => {
+    const hearth = ctx.world.partition(HEARTH) as Hearth;
+    hearth.create(Hearth, `pile-${hearth.logs}`);
+    hearth.logs += 1;
+  });
+
+const VILLAGE_ACTIONS: readonly ActionDefinition[] = [chop, bank, burn, stack];
 
 /** The #383 verbs are their own bundle: adding them to the village would change
  *  what every other case here sees this world answer to. */
@@ -382,7 +398,7 @@ describe('#167: an action is dispatched through its ordered declaration, then ru
     // the client, which is not a place a rule can live.
     const { host, sent } = await attached({ dir });
     const offers = last(sent, 'c1', 'world_state')?.actions as Array<{ name: string }>;
-    expect(offers.map((o) => o.name)).toEqual(['bank', 'chop']);
+    expect(offers.map((o) => o.name)).toEqual(['bank', 'chop', 'stack']);
     await host.close();
   });
 });
@@ -773,7 +789,7 @@ describe('#167: the refusals a bundle hits on the platform are hit locally, in t
     const { host, sent } = await attached({ dir });
     await host.handleMessage('c1', { type: 'action', order: nextOrder(), requestId: 'r1', action: 'yodel', args: {} });
     expect(last(sent, 'c1', 'world_response')?.message).toBe(
-      'This world has no action named "yodel". It answers to: chop, bank, burn.',
+      'This world has no action named "yodel". It answers to: chop, bank, burn, stack.',
     );
     await host.close();
   });
@@ -1366,6 +1382,79 @@ describe('#218: partitions created on first use', () => {
    * The stamp is durable state now: written in the same transaction as the
    * bytes it was minted for, read back at the next build.
    */
+  /**
+   * #224: A COMMAND MINTS TOO, SO A CHECKPOINT CARRIES THE STAMP.
+   *
+   * #377 wrote the stamp on three roads and left out the fourth: an ordinary
+   * `create()` inside an action's `execute` advances the same counter. A host
+   * that stored the grown bytes and kept its older number was then refused, on
+   * the next restart, by the very partition it had itself just written.
+   */
+  it('restarts on a world an ordinary command grew', async () => {
+    const first = await attached({ dir, definition: bundle() });
+    await first.host.handleMessage('c1', {
+      type: 'action',
+      order: nextOrder(),
+      requestId: 'r1',
+      action: 'stack',
+      args: {},
+    });
+    expect(last(first.sent, 'c1', 'world_response')).toMatchObject({ ok: true });
+    const grown = first.store.nextElementId()!;
+    await first.host.close();
+
+    // The stamp moved with the bytes, so the next host is built ABOVE what its
+    // own store holds rather than below it.
+    const second = await attached({ dir, definition: bundle() });
+    expect(second.store.nextElementId()).toBe(grown);
+    await second.host.handleMessage('c1', {
+      type: 'action',
+      order: nextOrder(),
+      requestId: 'r2',
+      action: 'stack',
+      args: {},
+    });
+
+    expect(last(second.sent, 'c1', 'world_response')).toMatchObject({ ok: true });
+    await second.host.close();
+  });
+
+  it('repairs a stamp an older host left standing below its own bytes (#224)', async () => {
+    // The road for a world that is ALREADY broken: written by a host that grew
+    // a partition and kept the number it had before the growth. The refusal is
+    // proof, so the repair runs off the refusal rather than off a scan every
+    // wake.
+    const first = await attached({ dir, definition: bundle() });
+    await first.host.handleMessage('c1', {
+      type: 'action',
+      order: nextOrder(),
+      requestId: 'r1',
+      action: 'stack',
+      args: {},
+    });
+    const honest = first.store.nextElementId()!;
+    await first.host.close();
+
+    // Exactly what the old host stored: the grown bytes, the pre-growth stamp.
+    const damaged = openHost({ dir, definition: bundle() });
+    damaged.store.recordAllocation(WORLD_PARTITION_ID_FLOOR + 1);
+    await damaged.host.start();
+    await damaged.host.handleMessage('c1', { type: 'hello' });
+    await damaged.host.handleMessage('c1', { type: 'attach', seat: 1 });
+    await damaged.host.handleMessage('c1', {
+      type: 'action',
+      order: nextOrder(),
+      requestId: 'r2',
+      action: 'stack',
+      args: {},
+    });
+
+    expect(last(damaged.sent, 'c1', 'world_response')).toMatchObject({ ok: true });
+    // Repaired from the bytes themselves, not from the number that was wrong.
+    expect(damaged.store.nextElementId()).toBeGreaterThanOrEqual(honest);
+    await damaged.host.close();
+  });
+
   it('mints a cold root outside the ids a stored, unloaded root already holds', async () => {
     const first = await attached({ dir, definition: bundle({ world: lazyWorld() }) });
     await first.host.handleMessage('c1', {
