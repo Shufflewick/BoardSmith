@@ -1618,6 +1618,58 @@ export class Game<
   }
 
   /**
+   * SAY THAT THESE PARTITIONS' CURRENT BYTES ARE THE ONES THE HOST HOLDS
+   * (ShufflewickPub #407).
+   *
+   * A partition's baseline is "what is durable", and every ordinary write path
+   * re-baselines on its own: a command's changes go out through
+   * {@link takeTouchedPartitions}, which reports and re-baselines in one pass.
+   * A MIGRATION does not: it transforms roots outside any dispatch, and
+   * nothing takes the marks afterwards. The change is real and it is written,
+   * but the engine goes on believing those roots differ from what storage
+   * holds -- so {@link evictSubtree} keeps a touch-mark for each one, and the
+   * world's next command finds a mark it cannot name and refuses every command
+   * from then on.
+   *
+   * So the caller says it, at the line where it has just taken the bytes the
+   * host will write. Both halves are needed and neither is enough alone: the
+   * baseline moves so a later eviction sees nothing outstanding, and the mark
+   * this migration itself left -- a hook that moved an element between roots
+   * marks both endpoints -- is dropped, because those bytes are in the answer
+   * too.
+   *
+   * A LIST, and every id must be a resident partition root: re-baselining a
+   * root whose bytes are NOT in the write is how a change gets lost, so a name
+   * the engine cannot answer for is a throw rather than a skip.
+   */
+  rebaselinePartitions(ids: readonly number[]): void {
+    this._requireWorldMode('rebaselinePartitions');
+    const roots = this._ctx._partitionRoots ?? new Map<number, GameElement>();
+    if (!this._ctx._partitionBaselines) this._ctx._partitionBaselines = new Map<number, string>();
+    if (!this._ctx._partitionReferences) {
+      this._ctx._partitionReferences = new Map<number, ReadonlySet<number>>();
+    }
+    const seenIds = new Map<number, number | undefined>();
+    for (const id of ids) {
+      const root = roots.get(id);
+      if (!root) {
+        throw new Error(
+          `Cannot re-baseline partition ${id}: no element with that id is a resident partition ` +
+            `root. Only a partition whose current bytes have just been written may be ` +
+            `re-baselined: doing it for one that was not is how a change is lost.`
+        );
+      }
+      const json = root.toJSON();
+      this._ctx._partitionBaselines.set(id, JSON.stringify(json));
+      // The reference set the next comparison seeds its candidates from, kept
+      // in step with the baseline exactly as `takeTouchedPartitions` keeps it:
+      // a migration is free to point one root at another.
+      this._ctx._partitionReferences.set(id, this._referencedPartitions(json, roots, seenIds));
+      this._ctx._touchedPartitions?.delete(id);
+    }
+  }
+
+  /**
    * SAY THAT A PARTITION HAS BEEN HANDED TO GAME CODE (ShufflewickPub #295).
    *
    * `takeTouchedPartitions` compares only the partitions a command could have

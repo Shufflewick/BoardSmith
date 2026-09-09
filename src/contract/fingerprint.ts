@@ -146,6 +146,12 @@ export const WORLD_FIXTURE_COVERAGE: Record<(typeof WORLD_ENGINE_METHODS)[number
     + 'produces is ordinary partition bytes: `serializePartitions` is what writes them, and that '
     + 'is fingerprinted.',
 
+  migrateBaseline: 'What a world MOVING BETWEEN state versions says once its bytes are in the '
+    + "host's hands (ShufflewickPub #407): the roots it just serialized are what storage now "
+    + 'holds, so nothing is outstanding on them. It happens once, at startup, before any player '
+    + 'is in the world, and it produces NOTHING -- it moves the engine\'s own baselines, which '
+    + 'no payload carries.',
+
   migrateFinalize: 'The last phase of a world MOVING BETWEEN state versions (ShufflewickPub '
     + '#379), which happens once, at startup, before any player is in it. It derives one root\'s '
     + 'value from another\'s and what it produces is ordinary partition bytes: '

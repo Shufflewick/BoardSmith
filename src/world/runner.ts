@@ -565,6 +565,17 @@ export function createWorldRunner(
       const partitions = bytesFor(page, written);
       const createdRecords = createdFrom(created, written);
 
+      // (5) AND THE ENGINE STOPS CALLING THEM CHANGED (ShufflewickPub #407).
+      // A migration is the one write that does not run through a dispatch, so
+      // nothing takes the touch-marks it leaves: the engine went on believing
+      // these roots differed from storage, `evictSubtree` kept a mark for each
+      // one, and the world's next command found a mark it could not name and
+      // refused -- for good. That is what made "migrate a page, then let go of
+      // it" impossible, and letting go of the page is the whole saving paging
+      // exists for. Said over exactly the names just serialized, and after
+      // them, because these bytes go into the host's transaction as one.
+      engine.migrateBaseline(Object.keys(written));
+
       return {
         partitions,
         created: createdRecords,

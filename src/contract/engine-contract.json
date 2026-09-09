@@ -1,7 +1,7 @@
 {
-  "revision": 60,
+  "revision": 61,
   "bundleProtocol": 2,
-  "surfaceHash": "d8b77fe9472c61e3",
+  "surfaceHash": "0702a98066cae1b6",
   "payloadHash": "bf527d30019ee1ba",
   "history": [
     {
@@ -483,6 +483,14 @@
       "surfaceHash": "d8b77fe9472c61e3",
       "payloadHash": "bf527d30019ee1ba",
       "summary": "A migration may be run a page at a time when it need not see every root (ShufflewickPub #402). runner.migrationNeedsEveryRoot() answers whether the bundle declares finalize -- the hook #379 added so a migration can derive one root's value from another in either direction -- and the presence of it is the whole declaration of whether paging is safe, so no new authoring surface exists. migrateAll's context gains allNames (every root the WORLD holds, since create must know which names are taken and a refusal is about the world rather than the page) and runCreate (which single page adds this version's new roots). A page transforms and answers only the roots it was handed; paging a migration that declares finalize is refused by name rather than run against a half-migrated world. WORLD_DURABILITY_FIXTURE gains both context shapes, because they are types and surfaceHash cannot see one."
+    },
+    {
+      "revision": 61,
+      "date": "2026-09-09",
+      "bundleProtocol": 2,
+      "surfaceHash": "0702a98066cae1b6",
+      "payloadHash": "bf527d30019ee1ba",
+      "summary": "A migration re-baselines the roots it serialized, so a migrated partition may be evicted (ShufflewickPub #407). A migration is the one write path that does not run through a dispatch, so nothing consumed the engine's touch-marks afterwards: the engine went on believing every transformed root differed from storage, Game#evictSubtree keeps the mark of a change it believes was never checkpointed, and the world's next command found a touched root id it could no longer name and refused with partition-not-resident -- for good. So evicting a migrated partition, which is the entire saving paged migration exists for (#402), produced a correct migration and an unplayable world. WorldEngine gains migrateBaseline(names) and Game gains rebaselinePartitions(ids): the current bytes of exactly these roots are what the host now holds, so the baseline moves and any mark on them is dropped. runner.migrateAll calls it over exactly the names it just serialized, after it has taken them, since those bytes and the host's transaction are one thing. Nothing a host must call: platforms should now delete the comment in their paged migrate op and evict each page."
     }
   ]
 }

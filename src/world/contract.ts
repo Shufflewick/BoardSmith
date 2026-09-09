@@ -866,6 +866,23 @@ export interface WorldEngine {
   migrateFinalize(run: (game: Game, partition: (name: string) => GameElement) => void): void;
 
   /**
+   * THE MIGRATION'S BYTES ARE NOW THE HOST'S (ShufflewickPub #407).
+   *
+   * A migration is the one write path that does not run through a dispatch, so
+   * nothing takes the touch-marks it leaves. The engine goes on believing the
+   * roots it transformed differ from what storage holds, and eviction KEEPS a
+   * mark for a partition whose change it thinks was never checkpointed -- so
+   * the first command after a migrated root is evicted finds a mark it cannot
+   * name and refuses, and every command after it refuses too. That is what made
+   * "migrate a page, then let go of it" impossible, which is the whole saving
+   * paging exists for.
+   *
+   * Called with exactly the names whose serialized bytes are in the answer the
+   * host is about to write, and only ever after they have been taken.
+   */
+  migrateBaseline(names: readonly string[]): void;
+
+  /**
    * BUILD A PARTITION ROOT THE STORE HAS NEVER HELD (#218).
    *
    * Genesis runs once, so until this every root a world would ever need had to
@@ -1053,6 +1070,7 @@ export const WORLD_ENGINE_METHODS = Object.keys({
   evict: null,
   hydrate: null,
   offerPartitions: null,
+  migrateBaseline: null,
   migrateFinalize: null,
   migratePartition: null,
   nextElementId: null,

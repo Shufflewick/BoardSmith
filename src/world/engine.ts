@@ -553,6 +553,26 @@ export class BoardSmithWorldEngine implements WorldEngine {
   }
 
   /**
+   * THE MIGRATION'S BYTES ARE NOW THE HOST'S (ShufflewickPub #407).
+   *
+   * Every other write path re-baselines as it reports: a command's changes
+   * leave through `takeTouchedPartitions`, which reports and re-baselines in
+   * one pass. A migration runs outside any dispatch and nothing takes its
+   * marks, so the roots it transformed stayed "changed since storage" forever
+   * -- and `evictSubtree` keeps the mark of a change it believes was never
+   * checkpointed. The next command then found a touched root id this engine no
+   * longer holds a name for and refused, permanently.
+   *
+   * The caller says it once, over exactly the names it has just serialized into
+   * the answer the host writes. `rootOf` is what makes a name it cannot answer
+   * for a refusal rather than a silent skip: re-baselining a root whose bytes
+   * are not in that write would lose the change instead.
+   */
+  migrateBaseline(names: readonly string[]): void {
+    this.game.rebaselinePartitions(names.map((name) => this.rootOf(name).id));
+  }
+
+  /**
    * BUILD A PARTITION ROOT THE STORE HAS NEVER HELD (#218).
    *
    * Genesis runs once. Every root a world would ever need therefore had to
