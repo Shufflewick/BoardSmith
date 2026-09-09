@@ -1,8 +1,8 @@
 {
-  "revision": 63,
+  "revision": 64,
   "bundleProtocol": 2,
-  "surfaceHash": "0e5f2a70c23f96b2",
-  "payloadHash": "851ea625b2e514b8",
+  "surfaceHash": "ee424fb06b1c618c",
+  "payloadHash": "d7a2574c8a6571a5",
   "formatHash": "0058593e7cc80205",
   "history": [
     {
@@ -511,6 +511,15 @@
       "payloadHash": "851ea625b2e514b8",
       "formatHash": "0058593e7cc80205",
       "summary": "A world's roster can now SHRINK. Two changes, both for ShufflewickPub #399. (1) `WorldEngine.unseat(player)` retires a seat's holder, so a departed player's chair can be given to somebody else; before this the roster was add-only and the only way to reclaim a chair was to throw the isolate away and rebuild it, which on a host that caps a world's lifetime isolates means ordinary churn kills the world. It forgets a mapping and moves nothing in the world. (2) A bundle may declare `world.vacate`, the name of one of its own seated verbs, which a host runs for a seat that is leaving so the game can give that player's ground back; `createWorld` answers it beside `seatCount`, and `readWorldDefinition` refuses a name that answers to no verb, a seatless one, or one that asks a question. Returning the ground before reissuing the chair is the HOST's ordering to keep -- the engine cannot check it. A bundle that declares nothing behaves exactly as it did and its chairs stay held for life. formatHash is unchanged, so a live world may cross this revision."
+    },
+    {
+      "revision": 64,
+      "date": "2026-09-09",
+      "bundleProtocol": 2,
+      "surfaceHash": "ee424fb06b1c618c",
+      "payloadHash": "d7a2574c8a6571a5",
+      "formatHash": "0058593e7cc80205",
+      "summary": "A world engine gains viewsFor(players): a whole audience projected in one call. A fan-out is the shape a world spends its time in, and asking seat by seat serialized the resident tree in full once per watcher -- only the redaction on top of it is ever about the seat. Measured on a 500-seat plaza of 200 public stalls (37 KB a view), describing the world to everybody cost 213 ms, and 148 ms of that was the shared pass run again for each of them; the batch spends it once, for a 3.3x cut in the projection half of a notice. No view changes: the declaration, the residency it pulls in, the redaction and both prunes stay per seat, and the conformance suite holds the batch's answers against viewFor's. The runner's viewsFor now asks the engine once instead of looping; the platform's child op is unchanged. Stored partition bytes are untouched, so formatHash does not move and a live world crosses onto this revision with no gate."
     }
   ]
 }

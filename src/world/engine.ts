@@ -98,6 +98,7 @@ import type {
   WorldNarrationLine,
   WorldOfferStamp,
   WorldPartitionSource,
+  WorldSeatView,
   RoutedEvent,
   StoredPartition,
 } from "./contract.js";
@@ -1388,11 +1389,78 @@ export class BoardSmithWorldEngine implements WorldEngine {
 
   async viewFor(player: string): Promise<unknown> {
     const seat = this.seatFor(player);
-    // WHAT THIS SEAT'S VIEW IS ABOUT, MADE RESIDENT (#95). The platform has
-    // already put the bytes in the store -- it asked `viewPartitions` and read
-    // them -- so this is an adoption from memory and never a fetch. Before it,
-    // a woken world projected the root alone and a settler who had only looked
-    // saw an empty world for as long as they refrained from acting.
+    const named = await this.settleView(seat);
+    return this.projectView(this.game.toJSONForPlayer(seat), seat, named);
+  }
+
+  /**
+   * A WHOLE AUDIENCE, OVER ONE SERIALIZATION (ShufflewickPub #408).
+   *
+   * A world-scoped change is described to everybody who can see it, and asking
+   * seat by seat made that one FULL serialization of the resident tree per
+   * watcher. Only the redaction on top of it is ever about the seat:
+   * `toJSONForPlayer` writes the tree in full fidelity first, with no viewer
+   * anywhere in it, and filters that. Measured on a 500-seat plaza of 200
+   * public stalls (37 KB a view), the fan-out cost 213 ms, 181 ms of it in
+   * `toJSONForPlayer` and 148 ms of THAT in the repeated shared pass.
+   *
+   * `Game#toJSONForPlayers` runs the shared pass once, so a batch spends it
+   * once. WHAT IT DOES NOT SHARE is anything a seat decides: the declaration,
+   * the residency that declaration pulls in, the redaction, the partition prune
+   * and the roster prune are all still per seat. So this is a saving for every
+   * world rather than only for one with no secrets, and it changes no view.
+   *
+   * THE DECLARATIONS ALL SETTLE FIRST. One serialization can only answer the
+   * audience if the tree it writes already holds everything the audience named,
+   * so every seat's `view` runs and every partition it names is adopted before
+   * the pass -- which is also the last await before the last redaction, and
+   * therefore the whole of the claim that nothing moved in between.
+   *
+   * ONE SEAT'S PROJECTION IS STILL ONE SEAT'S FATE (#310). A view can throw for
+   * one player while every other view in the batch is perfectly computable, the
+   * observed case being a declaration reaching a deliberately absent partition
+   * after a wake. That seat is returned as `refused` carrying what it threw,
+   * and the rest of the audience is answered. The THROWN VALUE travels rather
+   * than a refusal, because turning a throw into a platform refusal is the
+   * runner's job and doing it here would do it twice.
+   */
+  async viewsFor(players: readonly string[]): Promise<readonly WorldSeatView[]> {
+    const answers: WorldSeatView[] = [];
+    const projecting: { readonly at: number; readonly seat: number; readonly named: readonly string[] }[] = [];
+
+    for (const player of players) {
+      try {
+        const seat = this.seatFor(player);
+        projecting.push({ at: answers.length, seat, named: await this.settleView(seat) });
+        // Overwritten below, once the shared pass has run.
+        answers.push({ player, refused: true, failure: undefined });
+      } catch (error) {
+        answers.push({ player, refused: true, failure: error });
+      }
+    }
+
+    const states = this.game.toJSONForPlayers(projecting.map(({ seat }) => seat));
+    for (const [index, { at, seat, named }] of projecting.entries()) {
+      const player = answers[at]!.player;
+      try {
+        answers[at] = { player, refused: false, view: this.projectView(states[index]!, seat, named) };
+      } catch (error) {
+        answers[at] = { player, refused: true, failure: error };
+      }
+    }
+    return answers;
+  }
+
+  /**
+   * WHAT THIS SEAT'S VIEW IS ABOUT, MADE RESIDENT (#95).
+   *
+   * The platform has already put the bytes in the store -- it asked
+   * `viewPartitions` and read them -- so this is an adoption from memory and
+   * never a fetch. Before it, a woken world projected the root alone and a
+   * settler who had only looked saw an empty world for as long as they
+   * refrained from acting.
+   */
+  private async settleView(seat: number): Promise<readonly string[]> {
     const named = this.viewDeclaredFor(seat);
     for (const name of named) await this.ensureResident(name);
 
@@ -1401,7 +1469,15 @@ export class BoardSmithWorldEngine implements WorldEngine {
     // watching is the last room a world should drop.
     this.useClock += 1;
     for (const name of named) this.lastUsed.set(name, this.useClock);
+    return named;
+  }
 
+  /** One seat's view, out of the tree already redacted for that seat. */
+  private projectView(
+    state: ElementJSON,
+    seat: number,
+    named: readonly string[],
+  ): { player: number; state: ElementJSON; phase: Game["phase"] } {
     // Computed from the live objects on demand. The fog of war is
     // `toJSONForPlayer`'s, already written and tested in the engine, and the
     // cost is what this seat can see rather than what the world contains.
@@ -1450,7 +1526,11 @@ export class BoardSmithWorldEngine implements WorldEngine {
     // instance with only the named partitions resident would project. The fog
     // of war stays `toJSONForPlayer`'s: pruning only ever REMOVES subtrees,
     // after the engine's own redaction has run.
-    const state = this.game.toJSONForPlayer(seat);
+    //
+    // BOTH PRUNES WRITE INTO `state`, which is why the caller hands one in
+    // rather than this reaching for it: a batched fan-out (#408) shares the
+    // seat-independent SERIALIZATION underneath these copies, never a redacted
+    // tree, so every seat still gets its own to cut down.
     const namedNames = new Set(named);
     const unnamedIds = new Set<number>();
     const namedIds = new Set<number>();
@@ -1476,7 +1556,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
   }
 
   // (pruneUnnamedPartitions and pruneRosterToViewer, the two module-scope
-  // helpers `viewFor` ends with, are defined at the bottom of this file.)
+  // helpers `projectView` ends with, are defined at the bottom of this file.)
 
   async serializePartitions(
     dirty: readonly string[],

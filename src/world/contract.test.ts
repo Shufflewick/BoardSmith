@@ -21,6 +21,7 @@ import type {
   WorldEngine,
   WorldEventStamp,
   WorldOfferStamp,
+  WorldSeatView,
 } from "./contract.js";
 
 /** Two partitions, so "only what was asked for" is a distinguishable claim. */
@@ -213,9 +214,33 @@ class ReferenceWorldEngine implements WorldEngine {
   }
 
   async viewFor(player: string): Promise<unknown> {
+    // A stranger is refused rather than described, exactly as `applyCommand`
+    // refuses one: a view is a seat's, and an engine that answered a player it
+    // does not hold would be inventing the seat it answered for.
+    if (!this.seats.has(player)) {
+      throw new Error(`"${player}" is not in this world.`);
+    }
     // Per player, and it must genuinely differ -- a view keyed only on world
     // state would pass the type and fail the contract.
     return { you: player, acted: this.seen.get(player) ?? 0 };
+  }
+
+  async viewsFor(players: readonly string[]): Promise<readonly WorldSeatView[]> {
+    // THE AUDIENCE, ANSWERED ONE SEAT AT A TIME (ShufflewickPub #408). This
+    // reference world holds counters rather than a tree, so it has no shared
+    // pass to save -- and the contract does not ask for one. What it asks is
+    // that the batch answer what `viewFor` answers, and the conformance suite
+    // is what holds the two together; an engine WITH a tree is where the
+    // saving lives.
+    const answered: WorldSeatView[] = [];
+    for (const player of players) {
+      try {
+        answered.push({ player, refused: false, view: await this.viewFor(player) });
+      } catch (error) {
+        answered.push({ player, refused: true, failure: error });
+      }
+    }
+    return answered;
   }
 
   offerPartitions(_player: string): readonly string[] {

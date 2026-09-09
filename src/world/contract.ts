@@ -670,6 +670,19 @@ export interface WorldPartitionSource extends WorldPartitionStore {
 }
 
 /**
+ * One seat's answer out of a batched projection (ShufflewickPub #408).
+ *
+ * A union rather than a view beside an optional error, because "this seat was
+ * not answered" and "this seat was answered with nothing" are different facts
+ * about a world and a shape that spells them the same way loses one of them --
+ * which on the read path means a watcher shown an empty world instead of being
+ * told to ask again.
+ */
+export type WorldSeatView =
+  | { readonly player: string; readonly refused: false; readonly view: unknown }
+  | { readonly player: string; readonly refused: true; readonly failure: unknown };
+
+/**
  * A resident world engine.
  *
  * LONG-LIVED. One instance per world per Durable Object lifetime, holding the
@@ -1015,6 +1028,46 @@ export interface WorldEngine {
   viewFor(player: string): Promise<unknown>;
 
   /**
+   * THE SAME QUESTION, ASKED FOR A WHOLE AUDIENCE AT ONCE (ShufflewickPub
+   * #408).
+   *
+   * A world-scoped change is described to everybody who can see it, so a fan-
+   * out is the shape a world spends its time in: 500 seats is 500 views, and
+   * the platform has no way to make that fewer. Asking seat by seat made it 500
+   * FULL SERIALIZATIONS of the resident tree as well, because only the second
+   * half of a projection is about the seat -- the tree is written once in full
+   * fidelity, with no viewer anywhere in it, and then redacted. Measured on a
+   * 500-seat plaza of 200 public stalls, 37 KB a view: 213 ms to describe the
+   * world to everybody, and 148 ms of that was the shared pass, run again for
+   * every watcher.
+   *
+   * So the audience arrives in ONE CALL. What an engine may share across it is
+   * exactly the part with no seat in it; the declaration, the residency it
+   * pulls in and the redaction stay per seat, and this returns the same view
+   * `viewFor` would have -- `engine-conformance.test-helper.ts` holds the two
+   * against each other, because a batch that answered a cheaper question would
+   * satisfy this type perfectly.
+   *
+   * A BATCH RATHER THAN A CACHE, and the difference is the whole of why this
+   * verb exists. Reusing work between separate calls means claiming nothing
+   * changed in between, and this contract has already retired guessing at
+   * mutation as INCORRECT (see the write-barrier section above): a write
+   * through an attribute value trips no setter. One call carrying the audience
+   * makes the claim structural instead.
+   *
+   * ONE SEAT'S PROJECTION IS ONE SEAT'S FATE (#310). A view can throw for one
+   * player while every other view in the batch is computable -- a declaration
+   * reaching a deliberately absent partition after a wake is the observed case
+   * -- so a failing seat comes back `refused` carrying what it threw and the
+   * rest of the audience is answered. The THROWN VALUE travels, not a refusal:
+   * turning a throw into a platform refusal belongs to whoever is speaking to
+   * the platform, and an engine that did it too would do it twice.
+   *
+   * Answers are in the order asked, one per entry, duplicates included.
+   */
+  viewsFor(players: readonly string[]): Promise<readonly WorldSeatView[]>;
+
+  /**
    * WHAT THIS SEAT MAY DO HERE, ENUMERATED (#85, #91, #169).
    *
    * The NON-MUTATING half of the action protocol, and the reason a world had
@@ -1109,5 +1162,6 @@ export const WORLD_ENGINE_METHODS = Object.keys({
   unseat: null,
   serializePartitions: null,
   viewFor: null,
+  viewsFor: null,
   viewPartitions: null,
 } satisfies Record<keyof WorldEngine, null>) as readonly (keyof WorldEngine)[];

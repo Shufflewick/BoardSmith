@@ -2089,3 +2089,121 @@ describe("retiring a seat's holder (ShufflewickPub #399)", () => {
     ]);
   });
 });
+
+describe("ShufflewickPub #408 -- a whole audience, one serialization", () => {
+  // A world-scoped change is described to everybody who can see it, and until
+  // now that cost one FULL serialization of the resident tree per watcher: the
+  // seat-independent half of `toJSONForPlayer` ran once per seat, and only the
+  // redaction on top of it was ever about the seat. Measured on a 500-seat
+  // plaza of 200 public stalls, seven tenths of the fan-out was that repeated
+  // pass.
+  //
+  // `viewsFor` takes the audience in one call, so the pass runs once. What it
+  // may NOT share is anything a seat decides: the declaration, the residency it
+  // pulls in, the redaction, the partition prune and the roster prune all stay
+  // per seat, and the first case below is the whole audience's answer held
+  // against what asking one at a time gives.
+
+  /** Every seat looks at both rooms, so the audience is a real fan-out. */
+  function watchedWorld(): BoardSmithWorldEngine {
+    return new BoardSmithWorldEngine({
+      game: newWorldGame(),
+      seats: new Map([
+        ["player-a", 1],
+        ["player-b", 2],
+        ["player-c", 3],
+        ["player-d", 4],
+      ]),
+      store: new CountingStore(genesis()),
+      actions: ACTIONS,
+      view: () => [ROOM_ONE, ROOM_TWO],
+    });
+  }
+
+  const WATCHERS = ["player-a", "player-b", "player-c", "player-d"];
+
+  /** The views out of a batch, in order, with a refusal left as `null`. */
+  async function batched(
+    engine: BoardSmithWorldEngine,
+    players: readonly string[],
+  ): Promise<unknown[]> {
+    const answered = await engine.viewsFor(players);
+    return answered.map((seat) => (seat.refused ? null : seat.view));
+  }
+
+  it("answers each seat exactly what asking that seat alone answers", async () => {
+    const apart = watchedWorld();
+    const one: unknown[] = [];
+    for (const player of WATCHERS) one.push(await apart.viewFor(player));
+
+    expect(await batched(watchedWorld(), WATCHERS)).toEqual(one);
+  });
+
+  it("serializes the resident tree once for the audience, not once per watcher", async () => {
+    // THE MEASUREMENT, and it is the engine's own serializer counting itself:
+    // `Room.toJSON` increments on every full-fidelity pass, so this is what the
+    // world actually spent rather than a restatement of the new code. Two rooms
+    // in the tree, so one pass over a warm world is two calls whatever the
+    // audience is.
+    const apart = watchedWorld();
+    await apart.viewFor("player-a");
+    Room.serializations = 0;
+    for (const player of WATCHERS) await apart.viewFor(player);
+    const seatAtATime = Room.serializations;
+
+    const together = watchedWorld();
+    await together.viewFor("player-a");
+    Room.serializations = 0;
+    await together.viewsFor(WATCHERS);
+    const audienceAtOnce = Room.serializations;
+
+    expect(seatAtATime, "one call per watcher is one pass per watcher").toBe(2 * WATCHERS.length);
+    expect(
+      audienceAtOnce,
+      `Describing this world to ${WATCHERS.length} watchers in one call serialized it ` +
+        `${audienceAtOnce / 2} times. The full-fidelity pass has no seat in it, so an ` +
+        "audience of any size is one pass and the redaction on top of it is the rest.",
+    ).toBe(2);
+  });
+
+  it("refuses one seat by name and still answers the rest", async () => {
+    // #310's rule, kept: one seat's view can throw -- a declaration reaching a
+    // partition that is deliberately absent after a wake is the observed case
+    // -- while every other view in the batch is perfectly computable.
+    const engine = watchedWorld();
+
+    const answered = await engine.viewsFor([...WATCHERS, "player-z"]);
+
+    expect(answered.map((seat) => seat.player)).toEqual([...WATCHERS, "player-z"]);
+    expect(answered.slice(0, WATCHERS.length).map((seat) => seat.refused)).toEqual([
+      false,
+      false,
+      false,
+      false,
+    ]);
+    const stranger = answered[WATCHERS.length]!;
+    expect(stranger.refused).toBe(true);
+    expect(String(stranger.refused ? stranger.failure : "")).toMatch(/not in this world/);
+  });
+
+  it("makes every watcher's declaration resident before any of them is projected", async () => {
+    // The ordering the batch depends on: one serialization can only answer the
+    // audience if the tree it serializes already holds everything the audience
+    // named. A world where each seat looks at its OWN land is the case that
+    // catches an implementation that serialized first and hydrated after --
+    // seat one's view would be missing every other seat's holding.
+    const { engine } = newVillageEngine([]);
+    const settlers = ["p1", "p2", "p3", "p4", "p5", "p6"];
+
+    const answered = await engine.viewsFor(settlers);
+
+    for (const [index, seat] of answered.entries()) {
+      expect(seat.refused, `${settlers[index]!} was answered`).toBe(false);
+      const view = seat.refused ? null : (seat.view as { state: ElementJSON });
+      expect(
+        JSON.stringify(view),
+        `${settlers[index]!} sees the holding their own declaration named`,
+      ).toContain(`holding-${index + 1}`);
+    }
+  });
+});
