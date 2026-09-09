@@ -23,7 +23,7 @@ import {
   worldSeatCount,
   type WorldDefinition,
 } from "./definition.js";
-import { worldAction } from "./action.js";
+import { worldAction, worldClockAction } from "./action.js";
 import { worldBudgets } from "./budgets.js";
 import { WorldRefusal } from "./refusals.js";
 
@@ -44,6 +44,18 @@ class TinyWorld extends Game<TinyWorld, Player> {
  * REGISTERS what `world.actions` names on the game it builds -- so the array is
  * the bundle's declaration and not a thing to rebuild per call.
  */
+/** A CLOCK verb and a verb that ASKS, so the vacate rules have something real
+ *  to refuse. Neither is registered in the bundle's default action list -- each
+ *  case that needs one names it. */
+const sweep = worldClockAction<TinyWorld>("sweep")
+  .needs(() => [])
+  .execute(() => {});
+
+const bequeath = worldAction<TinyWorld>("bequeath")
+  .chooseFrom("heir", { choices: () => ["north", "south"] })
+  .needs(() => [])
+  .execute(() => {});
+
 const poke = worldAction<TinyWorld>("poke")
   .needs(() => ["yard:1"])
   .execute((_args, ctx) => {
@@ -122,6 +134,70 @@ describe("readWorldDefinition — what a bundle must export", () => {
 
   it("leaves an undeclared stateVersion undeclared, and the build writes the 0", () => {
     expect(readWorldDefinition(bundle()).stateVersion).toBeUndefined();
+  });
+
+  // ── ShufflewickPub #399: which verb hands a departed seat's ground back ───
+
+  it("keeps a declared vacate, which is the verb a host runs on a departure", () => {
+    const vacating = bundle({
+      world: { maxPlayers: 2, actions: [poke], view: () => [], vacate: "poke" },
+    });
+    expect(readWorldDefinition(vacating).vacate).toBe("poke");
+  });
+
+  it("leaves an undeclared vacate undeclared, so a host frees no chair", () => {
+    // ABSENCE IS THE ANSWER, not a gap to be filled in later. A world that
+    // never says how a departed player's ground comes back is a world whose
+    // chairs are held for life, and that is a shape a host must be able to
+    // read off the declaration rather than guess.
+    expect(readWorldDefinition(bundle()).vacate).toBeUndefined();
+  });
+
+  it("REFUSES a vacate no verb answers to, rather than holding chairs in silence", () => {
+    // The failure with no symptom: a typo would mean the host ran nothing on
+    // every departure and every chair stayed held, with nothing anywhere saying
+    // why. Refused on the world's first wake instead.
+    const typo = bundle({
+      world: { maxPlayers: 2, actions: [poke], view: () => [], vacate: "pokr" },
+    });
+    expect(() => readWorldDefinition(typo)).toThrow(/not an action in `world.actions`/);
+  });
+
+  it("REFUSES a SEATLESS vacate, which could not name the ground it must return", () => {
+    // The opposite rule to a presence hook's. A presence transition is a
+    // platform fact, so a seat that could send one could forge it; a vacating
+    // is about the sender's own ground, and the worst they can do with it is
+    // give up their own chair, which is leaving.
+    const clock = bundle({
+      world: { maxPlayers: 2, actions: [poke, sweep], view: () => [], vacate: "sweep" },
+    });
+    expect(() => readWorldDefinition(clock)).toThrow(/seatless/);
+  });
+
+  it("REFUSES a vacate that asks a question, because the player has already gone", () => {
+    const asks = bundle({
+      world: { maxPlayers: 2, actions: [poke, bequeath], view: () => [], vacate: "bequeath" },
+    });
+    expect(() => readWorldDefinition(asks)).toThrow(/nobody left to answer one/);
+  });
+
+  it("reports the verb from createWorld, which is where a host reads it", () => {
+    // A HOST READS THE ENGINE'S ANSWER, not the declaration. That is what keeps
+    // the three rules above checked once: no host can be holding a name this
+    // world would refuse to dispatch.
+    const vacating = bundle({
+      world: {
+        maxPlayers: 2,
+        genesis: (game) => ({ "yard:1": game.create(Yard, "yard") as GameElement }),
+        view: () => ["yard:1"],
+        actions: [poke],
+        vacate: "poke",
+      },
+    });
+    expect(createWorld({ definition: vacating, seed: "s", seats: new Map() }).vacate).toBe("poke");
+    expect(
+      createWorld({ definition: bundle(), seed: "s", seats: new Map() }).vacate,
+    ).toBeNull();
   });
 
   it.each([-1, 1.5, Number.NaN])(

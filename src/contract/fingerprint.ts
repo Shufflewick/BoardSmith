@@ -151,6 +151,14 @@ const FORMAT_FIXTURE_GOLDEN = formatFixtureGolden as unknown as FormatFixture;
 export const WORLD_FIXTURE_COVERAGE: Record<(typeof WORLD_ENGINE_METHODS)[number], true | string> = {
   hydrate: true,
   offerPartitions: true,
+  // ShufflewickPub #399. Driven by `computeWorldDeclaration`, which seats two
+  // players, retires one and hashes what the engine then answers about each --
+  // so a rule dropped from `unseat` shows up as a moved payload rather than as
+  // a claim nobody checked. It has to be DRIVEN rather than excused: what it
+  // decides is who a world's next arrival may be, and a host that cannot retire
+  // a seat has to throw its isolate away instead, which is a cost this engine
+  // used to impose without recording that it did.
+  unseat: true,
   offersFor: true,
   residency: true,
   viewFor: true,
@@ -199,7 +207,9 @@ export const WORLD_FIXTURE_COVERAGE: Record<(typeof WORLD_ENGINE_METHODS)[number
     + 'partition, so what eviction leaves behind is unfingerprinted.',
   onEvent: 'The clock\'s road: scheduling, recurrence, keyed cancellation and event routing '
     + 'by scope. Nothing here schedules and nothing here is due.',
-  seat: 'Seats are handed to the constructor. Nobody sits down or stands up mid-fixture.',
+  seat: 'Seats are handed to the constructor, so nobody sits DOWN mid-fixture. Standing up is '
+    + 'driven -- see `unseat` -- because a retirement has no constructor form: it is the one '
+    + 'roster change a host makes to a world that is already built.',
   serializePartitions: 'What a checkpoint WRITES. Nothing in THIS fixture writes, so a '
     + 'dirtied partition\'s stored form moves neither of the two hashes this table is about. It '
     + 'is not unfingerprinted, though: `formatHash` drives it over a committed corpus, which is '
@@ -824,6 +834,111 @@ function assertCoversWorldOffer(facts: {
  * change. What they must be is exhaustive over the DECISIONS `offerOf` makes,
  * which `assertCoversWorldOffer` is what pins.
  */
+/**
+ * WHAT A HOST LEARNS FROM A BUNDLE BEFORE IT RUNS ANYTHING (ShufflewickPub #399).
+ *
+ * `createWorld`'s answer beside the runner: how many chairs this world has, and
+ * which of its verbs gives a departed seat's ground back. Both are facts a host
+ * must have BEFORE it can decide anything -- the first to refuse a seating
+ * before it writes one, the second to know whether a chair can ever come back
+ * at all and what to run when one is leaving.
+ *
+ * IT IS HERE FOR THE REASON `WORLD_DURABILITY_FIXTURE` IS. `world.vacate` is a
+ * declaration: adding it changed what a host may read off a bundle and what it
+ * may then do with a seat, and `verbatimModuleSyntax` erases a type, so it
+ * moved neither hash on its own. That is the KNOWN LIMIT at the top of this
+ * file, and the limit's own prescribed answer is to extend the fixture until
+ * the change is visible rather than to accept an unrecorded one.
+ *
+ * The stakes moved with ShufflewickPub #390: a live world now derives its
+ * runner as the newest archived revision declaring its serialization format,
+ * with no per-world gate, so a platform-reachable surface that records no
+ * revision is something a running world can be moved onto silently.
+ *
+ * ENGINE-PRODUCED rather than a literal, unlike the durability fixture: this
+ * one CAN be produced, because `createWorld` is the call a host makes and its
+ * answer canonicalizes. So the hash covers the validation too -- a rule dropped
+ * from `worldVacateAction` lets a declaration through that this fixture would
+ * then report differently.
+ */
+async function computeWorldDeclaration(): Promise<unknown> {
+  const engine = await import('../engine/index.js');
+  const { createWorld, worldAction } = await import('../world/index.js');
+  const { Game, Space } = engine as any;
+
+  class DeclarationHolding extends Space<any> {}
+  class DeclarationWorld extends Game<any, any> {
+    constructor(options: any) {
+      super(options);
+      this.registerElements([DeclarationHolding]);
+    }
+  }
+
+  const abandon = worldAction<any>('abandon')
+    .needs(({ player }: any) => [`holding:${player.seat}`])
+    .execute((_args: any, ctx: any) => {
+      ctx.world.partition(`holding:${ctx.player.seat}`);
+    });
+
+  const built = createWorld({
+    definition: {
+      // `as any` for the reason every other class in this file carries one: the
+      // fixture's game is declared with `any` generics so it needs none of the
+      // engine's own type plumbing, and its construct signature is then not the
+      // nominal one `createWorld` names.
+      gameClass: DeclarationWorld as any,
+      world: {
+        maxPlayers: 3,
+        actions: [abandon],
+        view: (seat: number) => [`holding:${seat}`],
+        // DECLARED, so the field is exercised rather than merely typed. A world
+        // that named nothing would hash the same as one built by an engine that
+        // had never heard of the field.
+        vacate: 'abandon',
+      },
+    },
+    seed: 'engine-contract-declaration',
+    // HANDED TO THE CONSTRUCTOR, as every other seat in this file is, so the
+    // `seat` verb's stated limit stays true and only the retirement is driven.
+    seats: new Map([['stays', 1], ['leaves', 2]]),
+  });
+
+  // AND THE OTHER HALF OF A WORLD'S ROSTER (#399): the chair a departure gives
+  // back. Two seats, one retired, and what the engine answers about each
+  // afterwards -- which is the only observable a retirement HAS, because it
+  // moves nothing in the world and forgets a mapping.
+  built.runner.unseat("leaves");
+  const seatedAfterUnseat = {
+    stays: await declarationRefusal(built, "stays"),
+    leaves: await declarationRefusal(built, "leaves"),
+    // IDEMPOTENT, so a host retrying a departure it may already have applied is
+    // the ordinary case rather than a refusal.
+    leavesAgain: (() => {
+      built.runner.unseat("leaves");
+      return "no refusal";
+    })(),
+  };
+
+  return { seatCount: built.seatCount, vacate: built.vacate, seatedAfterUnseat };
+}
+
+/**
+ * What this world says when asked what one player's command would need.
+ *
+ * The narrowest road that resolves a seat, so a retired holder answers
+ * `unknown-player` and a seated one answers its declaration. The CODE is
+ * hashed rather than the message: a sentence is prose and would move this hash
+ * for a wording change, where the code is what a host branches on.
+ */
+async function declarationRefusal(built: any, player: string): Promise<string> {
+  try {
+    await built.runner.commandPartitions(player, { name: "abandon", args: {} }, 0);
+    return "declared";
+  } catch (error: any) {
+    return typeof error?.code === "string" ? error.code : "threw without a code";
+  }
+}
+
 async function computeWorldFixture(): Promise<{ view: unknown; offer: unknown }> {
   const engine = await import('../engine/index.js');
   const { BoardSmithWorldEngine, worldAction } = await import('../world/index.js');
@@ -1222,7 +1337,7 @@ export async function computePayloadHash(): Promise<string> {
   const flowPosition = game.getFlowState()?.position;
   assertCoversElementBindings(flowPosition);
 
-  // Six parts hashed together: the per-player payload the platform ships, the
+  // Seven parts hashed together: the per-player payload the platform ships, the
   // serialized flow position the platform STORES and restores (not reachable
   // from the views — createPlayerView omits `position` — so a
   // flow-serialization regression was previously invisible here), the world
@@ -1234,7 +1349,11 @@ export async function computePayloadHash(): Promise<string> {
   // covered from #187 onward and was not: only its answer was hashed, so a
   // change to what a declaration may READ was invisible here as long as the
   // verbs came out the same. That is how the needs context gained an accessor
-  // without moving this hash.
+  // without moving this hash. The seventh is WHAT A HOST LEARNS FROM THE
+  // BUNDLE BEFORE IT RUNS ANYTHING (ShufflewickPub #399) — the chair count and
+  // the vacate verb `createWorld` answers with — which is a declaration and so
+  // was invisible here for the KNOWN LIMIT's reason until it was produced.
+  const worldDeclaration = await computeWorldDeclaration();
   const {
     view: worldView,
     rounds: worldRounds,
@@ -1251,6 +1370,7 @@ export async function computePayloadHash(): Promise<string> {
       worldView,
       worldRounds,
       worldOffer,
+      worldDeclaration,
     }),
   );
 }

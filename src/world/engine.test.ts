@@ -28,7 +28,12 @@ import { BoardSmithWorldEngine } from "./engine.js";
 import { worldAction, worldClockAction } from "./action.js";
 import type { StoredPartition, WorldPartitionSource } from "./contract.js";
 import { worldBudgets } from "./budgets.js";
-import { newVillageEngine } from "./village.test-helper.js";
+import {
+  Holding,
+  VillageFixture,
+  holdingPartition,
+  newVillageEngine,
+} from "./village.test-helper.js";
 
 class Token extends Piece<WorldFixtureGame> {}
 
@@ -1992,5 +1997,95 @@ describe("#381 — a resident-root lookup is asked of the root table, not of the
     expect(seen).toBeDefined();
     expect(seen).not.toBe(before);
     expect(seen?.name).toBe("room-one");
+  });
+});
+
+// ShufflewickPub #399: A CHAIR CAN BE GIVEN BACK.
+//
+// The roster used to be add-only, which made a departed player's chair
+// unreclaimable from here: a host that wanted one back had to throw the whole
+// isolate away and rebuild it from a roster that omitted them. On a platform
+// that caps a world's LIFETIME isolates that is not an implementation, it is a
+// world that stops working after a handful of departures -- so the roster
+// shrinks now, and these are the two halves of what shrinking has to mean.
+describe("retiring a seat's holder (ShufflewickPub #399)", () => {
+  const tend = worldAction<VillageFixture>("tend")
+    .needs(({ player }) => [holdingPartition(player.seat)])
+    .execute((_args, ctx) => {
+      (ctx.world.partition(holdingPartition(ctx.player.seat)) as Holding).standing += 1;
+    });
+
+  it("forgets the mapping, so a command for a retired holder is unknown-player", async () => {
+    // NOT "runs against whoever holds the chair now", which is the failure this
+    // exists to prevent: the seat number is about to be handed on, and a
+    // command still resolving through the old holder would reach the new one's
+    // ground.
+    const { engine } = newVillageEngine([tend]);
+    engine.unseat("p2");
+
+    // Thrown where the seat is resolved, which is before the declaration walk
+    // begins, so it arrives synchronously rather than as a rejected promise.
+    let refused: unknown;
+    try {
+      await engine.commandPartitions("p2", { name: "tend", args: {} }, 0);
+    } catch (error) {
+      refused = error;
+    }
+    expect(refused).toMatchObject({ code: "unknown-player" });
+  });
+
+  it("frees the chair for somebody else, which a live roster could not do before", async () => {
+    // THE WHOLE POINT. `seat` refuses to MOVE a seated player, so seat 2 could
+    // not be reissued while p2 still held it -- and the only way out was a
+    // rebuilt engine.
+    const { engine } = newVillageEngine([tend]);
+    engine.unseat("p2");
+    engine.seat("newcomer", 2);
+
+    expect(await engine.commandPartitions("newcomer", { name: "tend", args: {} }, 0)).toEqual([
+      holdingPartition(2),
+    ]);
+  });
+
+  it("lets a retired holder come back to a DIFFERENT chair", async () => {
+    // The case a stale mapping breaks and nothing else would catch: `seat`
+    // answers `seat-conflict` for a player it still knows, so a returning
+    // leaver given a fresh chair would have been refused at the door by an
+    // engine that had merely been told to forget them badly.
+    const { engine } = newVillageEngine([tend]);
+
+    // WHILE THEY ARE STILL SEATED this is a refusal, and rightly: moving a
+    // seated player would hand them somebody else's holdings.
+    expect(() => engine.seat("p2", 3)).toThrow(/already plays seat/);
+
+    engine.unseat("p2");
+    expect(() => engine.seat("p2", 3)).not.toThrow();
+  });
+
+  it("is idempotent, so a host retrying a departure is not the failure", () => {
+    const { engine } = newVillageEngine([tend]);
+    engine.unseat("p2");
+    expect(() => engine.unseat("p2")).not.toThrow();
+    expect(() => engine.unseat("never-sat-here")).not.toThrow();
+  });
+
+  it("moves NOTHING in the world: the ground behind the chair stands", async () => {
+    // A seat is a chair and a chair is not a castle. Returning the ground is
+    // the GAME's, through the verb it declares as `world.vacate`, and this
+    // engine deliberately cannot tell whether that has happened -- which is
+    // exactly why the ordering is the host's to keep.
+    const { engine, store } = newVillageEngine([tend]);
+    const before = await store.read(holdingPartition(2));
+    expect(before).toBeDefined();
+
+    engine.unseat("p2");
+
+    expect(await store.read(holdingPartition(2))).toEqual(before);
+    // And the chair's next holder reaches that same standing ground, which is
+    // the danger stated as an assertion: retiring a seat is not a cleanup.
+    engine.seat("newcomer", 2);
+    expect(await engine.commandPartitions("newcomer", { name: "tend", args: {} }, 0)).toEqual([
+      holdingPartition(2),
+    ]);
   });
 });

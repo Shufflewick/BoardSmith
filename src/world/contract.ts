@@ -714,6 +714,32 @@ export interface WorldEngine {
   seat(player: string, seat: number): void;
 
   /**
+   * RETIRE A SEAT'S HOLDER, so the chair can be given to somebody else
+   * (ShufflewickPub #399).
+   *
+   * `seat`'s inverse, and the reason it has to exist: this engine's roster was
+   * ADD-ONLY, so a host that wanted a departed player's chair back had no way
+   * to say so and had to throw the whole isolate away and rebuild it. On
+   * ShufflewickPub that meant one of a world's EIGHT lifetime isolates per
+   * departing player, which turns ordinary churn into a world that stops
+   * working -- so "rebuild it" is not an implementation of this and never was.
+   *
+   * WHAT IT DOES NOT DO IS TOUCH THE WORLD'S CONTENTS. The seat's holdings,
+   * its Player element and every reference to it are exactly as they were: a
+   * seat is a chair and a chair is not a castle. Returning the ground behind it
+   * is the GAME's, through the verb it declares as `world.vacate`, and a host
+   * that called this without running that verb first would hand a newcomer a
+   * seat whose ground somebody else still holds. The engine cannot check that
+   * and does not try; it is the host's ordering to keep, and
+   * `WorldDefinition.vacate` is where the rule is written down.
+   *
+   * IDEMPOTENT. Retiring a seat nobody holds does nothing, because a host
+   * retrying a departure it may already have applied is the ordinary case and
+   * a refusal there would make the retry the failure.
+   */
+  unseat(player: string): void;
+
+  /**
    * Which partitions are resident, and when each was last NAMED by a command.
    *
    * What `world-eviction.ts:planEviction` reads. `lastUsed` is a monotonic
@@ -1080,6 +1106,7 @@ export const WORLD_ENGINE_METHODS = Object.keys({
   onEvent: null,
   residency: null,
   seat: null,
+  unseat: null,
   serializePartitions: null,
   viewFor: null,
   viewPartitions: null,

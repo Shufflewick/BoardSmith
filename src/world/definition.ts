@@ -42,11 +42,12 @@ import { worldBudgets, type WorldBudgets } from "./budgets.js";
  */
 export interface WorldDefinition {
   /**
-   * HOW MANY SEATS THIS WORLD HAS, FOR ITS WHOLE LIFETIME.
+   * HOW MANY SEATS THIS WORLD HAS AT ONCE.
    *
-   * THE ONE SEAT COUNT A WORLD HAS. A world does not start, so there is no
-   * minimum to reach; a seat is assigned once and never handed on, because a
-   * departed player's holdings are still standing in the world. So this is not
+   * THE ONE SEAT COUNT A WORLD HAS, AT ANY ONE MOMENT. A world does not start,
+   * so there is no minimum to reach. A seat is handed on only after this
+   * world's own `vacate` verb has given the departed player's ground back, and
+   * a world that declares none holds every chair for life. So this is not
    * a table's roster and it does not live where a table's roster lives: a world
    * game that declared `gameDefinition.minPlayers/maxPlayers` shipped a
    * vestigial table half beside its world, and a person opened one and started
@@ -225,6 +226,34 @@ export interface WorldDefinition {
    * differently from a platform holding 500 sockets.
    */
   readonly presence?: WorldPresenceDeclaration;
+  /**
+   * WHICH VERB HANDS A DEPARTED SEAT'S GROUND BACK (ShufflewickPub #399).
+   *
+   * The name of one of this world's own SEATED actions. A host runs it for the
+   * seat that is leaving, and only the game can write it: what a departed
+   * empire's planets, fields or fleets become is a rules decision, and a host
+   * that guessed would be inventing game design in the wrong place.
+   *
+   * DECLARING IT IS WHAT MAKES A SEAT REUSABLE. A world that leaves this out
+   * holds every chair it has ever given for as long as the world lasts, which
+   * is what every world did before this existed and is still a legitimate
+   * design -- a short season fills once and never churns. What is NOT
+   * legitimate is a host handing a newcomer a chair whose ground is still
+   * occupied, so absence here means the chair is never handed on.
+   *
+   * VALIDATED HERE, unlike `presence`'s hooks, and the difference is what each
+   * question needs. Whether a hook's grace is within bounds is the HOST's
+   * answer and no library can give it. Whether this names one of this world's
+   * own seated, question-free verbs is answerable from the declaration alone,
+   * is the same for every host, and is a bundle that is broken in the ENGINE's
+   * terms if it is wrong -- so `readWorldDefinition` refuses it, on the world's
+   * first wake, rather than leaving every host to discover it as chairs that
+   * silently never come back. What a host does with the ANSWER -- which
+   * departures reach the verb, what becomes of the chair, who is told -- is
+   * still that host's policy, and `createWorld` reports it as `seatCount` is
+   * reported, because a host needs it before it can decide anything.
+   */
+  readonly vacate?: string;
 }
 
 /** Each hook names a SEATLESS action from the world's own list. */
@@ -241,6 +270,9 @@ export interface WorldPresenceDeclaration {
  * own grace bounds and its own answer to what a departure is, so the host
  * checks it; what cannot be left to the host is the SHAPE, which is why the
  * field is typed here.
+ *
+ * `vacate` IS validated here, because what makes it usable is answerable from
+ * the declaration alone and is the same for every host -- see the field.
  */
 export function readWorldDefinition(definition: {
   world?: WorldDefinition;
@@ -260,8 +292,9 @@ export function readWorldDefinition(definition: {
       "bundle-not-a-world",
       "This bundle's `gameDefinition.world` declares no usable `world.maxPlayers`, so its world " +
         "has no seats for anybody to play. Declare the largest roster this world holds, e.g. " +
-        "`world: { maxPlayers: 40, actions, view }`. It is the ONE seat count a world has -- a " +
-        "world does not start, so it has no minimum to reach, and its seats are never handed on.",
+        "`world: { maxPlayers: 40, actions, view }`. It is the ONE seat count a world has at " +
+        "once -- a world does not start, so it has no minimum to reach, and a seat is handed on " +
+        "only once this world's own `vacate` verb has given the departed player's ground back.",
     );
   }
   if (world.stateVersion !== undefined && (!Number.isInteger(world.stateVersion) || world.stateVersion < 0)) {
@@ -278,6 +311,7 @@ export function readWorldDefinition(definition: {
   if (world.migration !== undefined) {
     assertWorldMigration(world.migration, world.stateVersion ?? 0);
   }
+  assertWorldVacate(world);
   if (world.ordering !== undefined && !WORLD_ORDERINGS.includes(world.ordering)) {
     throw worldRefusal(
       "bundle-not-a-world",
@@ -303,6 +337,74 @@ export function readWorldDefinition(definition: {
     );
   }
   return world;
+}
+
+/**
+ * WHICH VERB GIVES A DEPARTED SEAT'S GROUND BACK, or null (ShufflewickPub #399).
+ *
+ * The bundle's `world.vacate`, checked and handed back as a name a host may
+ * dispatch. Null for a world that declares none, which is an ANSWER and not a
+ * gap: that world holds every chair it has given for as long as it lasts, which
+ * is what every world did before this existed and is still right for a season
+ * that fills once and never churns.
+ *
+ * THREE RULES, and each has a failure with no symptom behind it.
+ *
+ * A NAME NO VERB ANSWERS TO is refused, because a typo would otherwise mean the
+ * host ran nothing on every departure and every chair stayed held, with nothing
+ * anywhere saying why.
+ *
+ * A SEATLESS VERB is refused. This is the opposite rule to a presence hook's
+ * and for the opposite reason: a presence transition is a platform fact, so a
+ * seat that could send one could forge it, while a vacating is about the
+ * sender's OWN ground and the worst a player does by sending it is give up
+ * their own chair, which is leaving and is already theirs to do at any moment.
+ * A seatless verb is the world's clock acting with nobody to be about, so it
+ * could not name the holding it is meant to return.
+ *
+ * A VERB THAT ASKS QUESTIONS is refused. It is run for a player who has already
+ * gone, so there is nobody left to answer one and a host could only dispatch it
+ * with no arguments and watch it refuse.
+ */
+export function worldVacateAction(world: WorldDefinition): string | null {
+  return world.vacate ?? null;
+}
+
+/** `worldVacateAction`'s three rules, raised as refusals at read time. */
+function assertWorldVacate(world: WorldDefinition): void {
+  if (world.vacate === undefined) return;
+
+  const action = typeof world.vacate === "string"
+    ? world.actions.find((one) => one.name === world.vacate)
+    : undefined;
+  if (action === undefined) {
+    throw worldRefusal(
+      "bundle-not-a-world",
+      `This bundle's \`world.vacate\` names ${JSON.stringify(world.vacate)}, which is not an ` +
+        "action in `world.actions`. It is the verb a host runs for a seat that is leaving, so it " +
+        "has to name one of this world's own verbs -- the one that gives that player's ground " +
+        "back to the world. A name nothing answers to would mean every chair stayed held with " +
+        "nothing anywhere saying why.",
+    );
+  }
+  if (action.world?.seatless === true) {
+    throw worldRefusal(
+      "bundle-not-a-world",
+      `This bundle's \`world.vacate\` names "${action.name}", which is a seatless action. A ` +
+        "vacating is about ONE seat's own ground, and a seatless action is the world's clock " +
+        "acting with nobody to be about -- it could not name the holding it is meant to return. " +
+        "Build it with `worldAction()` and read the seat from `ctx.player.seat`.",
+    );
+  }
+  if (action.selections.length > 0) {
+    throw worldRefusal(
+      "bundle-not-a-world",
+      `This bundle's \`world.vacate\` names "${action.name}", which asks ` +
+        `${action.selections.length} question(s). This verb is run for a player who has already ` +
+        "gone, so there is nobody left to answer one. Take everything it needs from the seat it " +
+        "runs for.",
+    );
+  }
 }
 
 /**
@@ -349,9 +451,9 @@ export function worldSeatCount(
  *
  * The engine is constructed with exactly `seatCount` Game players, so a seat
  * past that number is a chair that does not exist -- every later view or
- * command for its holder fails deep inside game code, and the seat is burned
- * forever because seats are never reused. A host must call this BEFORE it
- * writes a seating durably, so a refusal burns nothing.
+ * command for its holder fails deep inside game code, and nothing can give the
+ * chair back because there was never one there. A host must call this BEFORE
+ * it writes a seating durably, so a refusal burns nothing.
  */
 export function assertSeatWithinWorld(player: string, seat: number, seatCount: number): void {
   if (Number.isInteger(seat) && seat >= 1 && seat <= seatCount) return;
@@ -359,10 +461,10 @@ export function assertSeatWithinWorld(player: string, seat: number, seatCount: n
     "world-full",
     `Cannot seat "${player}" at seat ${seat}: this world's game declares maxPlayers: ` +
       `${seatCount}, so it holds seats 1 through ${seatCount} and no layer may mint another. ` +
-      "A seat is assigned once and never handed on -- a player who leaves keeps theirs, " +
-      "because their holdings are still standing in the world -- so these are all the seats " +
-      "this world will ever have. A host that admits players before seating them counts those " +
-      "same lifetime seats, so a joiner should have been refused before reaching this door: " +
+      "These are all the seats this world will ever have at once: a departed player's chair " +
+      "comes back only once this world's own `vacate` verb has given their ground back, and a " +
+      "world that declares none holds every chair for life. A host that admits players before " +
+      "seating them counts the same chairs, so a joiner should have been refused at that door: " +
       "what puts the two out of step is a stored player count declaring more players than the " +
       "compiled rules build. Rebuild so the declared player count matches " +
       "gameDefinition.world.maxPlayers, or raise gameDefinition.world.maxPlayers and rebuild.",
@@ -577,6 +679,18 @@ export interface WorldRunner {
   /** How many seats this world has, from the bundle's own declaration. A host
    *  needs it to refuse a seating before it writes one. */
   readonly seatCount: number;
+  /**
+   * WHICH VERB GIVES A DEPARTED SEAT'S GROUND BACK, or null (ShufflewickPub
+   * #399).
+   *
+   * Reported for `seatCount`'s reason: it is a fact about the bundle that a
+   * host has to know BEFORE it can decide anything -- whether a chair can ever
+   * come back at all, and what to run when one is leaving. Answered by the
+   * engine rather than read off the declaration by each host, so that the three
+   * rules that make it usable are checked once, in `worldVacateAction`, and no
+   * host can hold a name this world would refuse to dispatch.
+   */
+  readonly vacate: string | null;
 }
 
 /**
@@ -648,6 +762,6 @@ export function createWorld(options: WorldRunnerOptions): WorldRunner {
       ...(world.migration?.finalize === undefined ? {} : { finalize: world.migration.finalize }),
     },
   );
-  return { runner, store, seatCount };
+  return { runner, store, seatCount, vacate: worldVacateAction(world) };
 }
 
