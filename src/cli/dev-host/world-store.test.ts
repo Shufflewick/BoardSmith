@@ -8,6 +8,7 @@
  */
 import { describe, expect, it, beforeEach, afterEach } from 'vitest';
 import { mkdirSync, mkdtempSync, rmSync, existsSync, readdirSync, writeFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -54,6 +55,73 @@ function event(over: Partial<PlannedEvent> = {}): PlannedEvent {
     attempts: 0,
     ...over,
   };
+}
+
+/**
+ * SQLITE DIRECTLY, which every fixture below needs and nothing else may want.
+ *
+ * A store written under an older layout cannot be produced through
+ * `LocalWorldStore`, because `LocalWorldStore` only ever writes the current
+ * one. So the older world is a real one, written through the real doors, wound
+ * back through this door to exactly what the older layout held.
+ */
+function rawExec(path: string, ...statements: readonly string[]): void {
+  const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite') as {
+    DatabaseSync: new (file: string) => {
+      exec(sql: string): void;
+      prepare(sql: string): { all(): unknown[] };
+      close(): void;
+    };
+  };
+  const db = new DatabaseSync(path);
+  try {
+    for (const statement of statements) db.exec(statement);
+  } finally {
+    db.close();
+  }
+}
+
+function rawRows(path: string, sql: string): Record<string, unknown>[] {
+  const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite') as {
+    DatabaseSync: new (file: string) => {
+      prepare(sql: string): { all(): unknown[] };
+      close(): void;
+    };
+  };
+  const db = new DatabaseSync(path);
+  try {
+    return db.prepare(sql).all() as Record<string, unknown>[];
+  } finally {
+    db.close();
+  }
+}
+
+/** The layout stamp on disk, read without opening the store -- which is the
+ *  only way to ask what a REFUSED open left behind. */
+function layoutOf(path: string): string | undefined {
+  const [row] = rawRows(path, "SELECT value FROM meta WHERE key = 'schemaVersion'");
+  return row?.value as string | undefined;
+}
+
+function tablesOf(path: string): string[] {
+  return rawRows(path, "SELECT name FROM sqlite_master WHERE type = 'table'").map(
+    (row) => row.name as string,
+  );
+}
+
+/**
+ * THE SAME WORLD, AS LAYOUT 3 LEFT IT (#225).
+ *
+ * Layout 4 added `seat_activity` and the recording epoch it is measured from
+ * (`36d723d6`) and changed nothing else, so removing both is layout 3 exactly.
+ */
+function rewindToLayout3(path: string): void {
+  rawExec(
+    path,
+    'DROP TABLE seat_activity',
+    "DELETE FROM meta WHERE key = 'activitySince'",
+    "UPDATE meta SET value = '3' WHERE key = 'schemaVersion'",
+  );
 }
 
 describe('the local world store', () => {
@@ -440,6 +508,169 @@ describe('the local world store', () => {
       expect(reopened.activitySince(90_000)).toBe(5_000);
       expect(reopened.activityOf(1)).toEqual({ seat: 1, at: 10_000, since: 5_000 });
       reopened.close();
+    });
+  });
+
+  /**
+   * #225: A WORLD SOMEBODY IS PLAYING, WRITTEN UNDER AN OLDER LAYOUT.
+   *
+   * The fixture is a layout-4 store written through the real doors and then
+   * wound back to exactly what layout 3 held, because layout 3 is a layout this
+   * code no longer writes and a hand-built one would be a fixture asserting
+   * against a shape production never produced. The whole of the difference is
+   * the seat activity table and the recording epoch (`36d723d6`); every other
+   * table was already what it is now.
+   */
+  describe('a world written under an older store layout (#225)', () => {
+    /** The store as an occupied world leaves it: bytes, a dirty mark, a seated
+     *  player, a queued event, a receipt, an advanced clock and both stamps. */
+    async function anOccupiedWorld(): Promise<void> {
+      await store.createAll(
+        born({
+          world: { parentId: 0, json: { name: 'world' } },
+          'room/aster': { parentId: 1, json: { colony: 'Aster' } },
+        }),
+        2,
+      );
+      store.seat('player-a', 7);
+      store.advanceClock(600_000);
+      await store.writeCheckpoint(cp({ 'room/aster': '{"colony":"Aster","pop":9}' }, 1_000_500), {
+        schedule: [event({ id: 'raid', due: 5_000, key: 'raid:north' })],
+        receipt: { orderId: 'o1', player: 'player-a', at: 500, message: 'Colony founded.' },
+      });
+      store.recordDirty(['room/aster']);
+      store.close();
+    }
+
+    /** Everything the occupied world above holds, asserted through the store's
+     *  own doors, so a case only has to say WHEN it expects to find it. */
+    async function expectNothingLost(reopened: LocalWorldStore): Promise<void> {
+      expect(reopened.isLaunched()).toBe(true);
+      expect(await reopened.read('world')).toEqual({ parentId: 0, json: { name: 'world' } });
+      expect(await reopened.read('room/aster')).toEqual({
+        parentId: 1,
+        json: { colony: 'Aster', pop: 9 },
+      });
+      expect(reopened.dirtyPartitions()).toEqual(['room/aster']);
+      expect(reopened.seats()).toEqual([{ player: 'player-a', seat: 7 }]);
+      expect(reopened.pendingEvents()).toEqual([event({ id: 'raid', due: 5_000, key: 'raid:north' })]);
+      expect(reopened.receipt('player-a', 'o1')?.message).toBe('Colony founded.');
+      expect(reopened.stateVersion()).toBe(2);
+      expect(reopened.nextElementId()).toBe(1_000_500);
+      expect(reopened.clockSkewMs()).toBe(600_000);
+      expect(reopened.partitionNames()).toEqual(['room/aster', 'world']);
+    }
+
+    it('upgrades layout 3 to layout 4 on open, losing nothing the world held', async () => {
+      await anOccupiedWorld();
+      rewindToLayout3(worldStorePath(root));
+
+      const reopened = openWorldStore(worldStorePath(root), BUDGETS);
+      try {
+        await expectNothingLost(reopened);
+        expect(layoutOf(worldStorePath(root))).toBe('4');
+        // The table the upgrade exists to add, in use rather than merely
+        // present: an upgraded world can record activity from here on.
+        reopened.activitySince(5_000);
+        await reopened.writeCheckpoint(cp({}), { activity: { seat: 7, at: 10_000 } });
+        expect(reopened.activityOf(7)).toEqual({ seat: 7, at: 10_000, since: 5_000 });
+      } finally {
+        reopened.close();
+      }
+    });
+
+    it('finishes an upgrade whose table an earlier refused open already left behind', async () => {
+      // The BoardSmith this issue was filed against created the new table
+      // BEFORE it checked the layout, so a world that was refused once is
+      // sitting on layout 3 with an empty `seat_activity` already in it. That
+      // is a store this upgrade still has to be able to finish.
+      await anOccupiedWorld();
+      rewindToLayout3(worldStorePath(root));
+      rawExec(worldStorePath(root), 'CREATE TABLE seat_activity (seat INTEGER PRIMARY KEY, at INTEGER NOT NULL)');
+
+      const reopened = openWorldStore(worldStorePath(root), BUDGETS);
+      try {
+        await expectNothingLost(reopened);
+        expect(layoutOf(worldStorePath(root))).toBe('4');
+      } finally {
+        reopened.close();
+      }
+    });
+
+    it('begins the missing activity history at the first open after the upgrade, and never moves it', async () => {
+      // The reading that would reap every empire in an upgraded world is
+      // "idle since 1970". The epoch is fixed at the first open that can
+      // record one, and a later restart is told the original answer.
+      await anOccupiedWorld();
+      rewindToLayout3(worldStorePath(root));
+
+      const upgraded = openWorldStore(worldStorePath(root), BUDGETS);
+      expect(upgraded.activitySince(5_000)).toBe(5_000);
+      expect(upgraded.activityOf(7)).toEqual({ seat: 7, at: null, since: 5_000 });
+      upgraded.close();
+
+      const later = openWorldStore(worldStorePath(root), BUDGETS);
+      expect(later.activitySince(9_000_000)).toBe(5_000);
+      later.close();
+    });
+
+    it('rolls the whole upgrade back when it cannot finish, and lets a retry do it', async () => {
+      await anOccupiedWorld();
+      rewindToLayout3(worldStorePath(root));
+      // An index wearing the name the new table needs. SQLite refuses the
+      // CREATE, which is a mid-upgrade failure without a fake in it.
+      rawExec(worldStorePath(root), 'CREATE INDEX seat_activity ON seats (seat)');
+
+      expect(() => openWorldStore(worldStorePath(root), BUDGETS)).toThrow();
+      // The layout stamp moved with the table or not at all: a store left
+      // claiming layout 4 with no table is one every later open reads wrong.
+      expect(layoutOf(worldStorePath(root))).toBe('3');
+
+      rawExec(worldStorePath(root), 'DROP INDEX seat_activity');
+      const retried = openWorldStore(worldStorePath(root), BUDGETS);
+      try {
+        await expectNothingLost(retried);
+        expect(layoutOf(worldStorePath(root))).toBe('4');
+      } finally {
+        retried.close();
+      }
+    });
+
+    it('refuses a layout it has no upgrade for, without writing anything into it', async () => {
+      await anOccupiedWorld();
+      rewindToLayout3(worldStorePath(root));
+      rawExec(worldStorePath(root), "UPDATE meta SET value = '2' WHERE key = 'schemaVersion'");
+
+      expect(() => openWorldStore(worldStorePath(root), BUDGETS)).toThrow(
+        /layout 2, and this BoardSmith reads layout 4.*no upgrade/s,
+      );
+      expect(layoutOf(worldStorePath(root))).toBe('2');
+      // The bug that made a refusal destructive: the schema was created before
+      // the layout was read, so being told no still changed the store.
+      expect(tablesOf(worldStorePath(root))).not.toContain('seat_activity');
+    });
+
+    it('refuses a store written by a NEWER BoardSmith, and says which way to move', async () => {
+      store.close();
+      rawExec(worldStorePath(root), "UPDATE meta SET value = '5' WHERE key = 'schemaVersion'");
+
+      expect(() => openWorldStore(worldStorePath(root), BUDGETS)).toThrow(
+        /layout 5, and this BoardSmith reads layout 4.*newer BoardSmith/s,
+      );
+      expect(layoutOf(worldStorePath(root))).toBe('5');
+    });
+
+    it('closes the database when it refuses to open one', async () => {
+      // A leaked handle keeps SQLite's WAL sidecars alive; the last connection
+      // to close is what removes them. So their absence is the observable
+      // proof that a refused open did not leave a connection behind.
+      await anOccupiedWorld();
+      rewindToLayout3(worldStorePath(root));
+      rawExec(worldStorePath(root), "UPDATE meta SET value = '2' WHERE key = 'schemaVersion'");
+
+      expect(() => openWorldStore(worldStorePath(root), BUDGETS)).toThrow();
+      expect(existsSync(`${worldStorePath(root)}-shm`)).toBe(false);
+      expect(existsSync(`${worldStorePath(root)}-wal`)).toBe(false);
     });
   });
 

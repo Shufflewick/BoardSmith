@@ -484,8 +484,16 @@ export function openWorldStore(path: string, budgets: WorldBudgets): LocalWorldS
   // laptop and open it again" is the acceptance sentence for this store.
   db.exec('PRAGMA journal_mode = WAL');
   db.exec('PRAGMA synchronous = FULL');
-  db.exec(SCHEMA);
-  assertSchemaVersion(db, path);
+  // CLOSED IF IT REFUSES TO OPEN. A store this code cannot read is a startup
+  // failure the host reports and exits on, and a connection left behind holds
+  // SQLite's WAL sidecars open against a database the author is about to move
+  // aside or hand to a `boardsmith dev` that CAN read it.
+  try {
+    prepareSchema(db, path);
+  } catch (error) {
+    db.close();
+    throw error;
+  }
 
   const stmt = {
     readPartition: db.prepare('SELECT parent_id, json FROM partitions WHERE name = ?'),
@@ -541,23 +549,9 @@ export function openWorldStore(path: string, budgets: WorldBudgets): LocalWorldS
     return row?.value;
   }
 
-  /**
-   * Run `body` as one transaction.
-   *
-   * `IMMEDIATE` so the write lock is taken at `BEGIN` rather than at the first
-   * write: a deferred transaction that meets a busy database halfway through
-   * cannot upgrade and fails after some of its statements have run, which is
-   * the torn checkpoint wearing a different hat.
-   */
+  /** Every write below is one transaction on THIS store's handle. */
   function transact(body: () => void): void {
-    db.exec('BEGIN IMMEDIATE');
-    try {
-      body();
-      db.exec('COMMIT');
-    } catch (error) {
-      db.exec('ROLLBACK');
-      throw error;
-    }
+    transactOn(db, body);
   }
 
   return {
@@ -992,6 +986,16 @@ const ACTIVITY_SINCE_KEY = 'activitySince';
 const SCHEMA_VERSION_KEY = 'schemaVersion';
 
 /**
+ * The one table layout 4 added, named apart because the upgrade from layout 3
+ * writes exactly this and nothing else (#225). One definition, so a store this
+ * code creates and a store it upgrades cannot end up with two shapes.
+ */
+const SEAT_ACTIVITY_TABLE = `CREATE TABLE IF NOT EXISTS seat_activity (
+  seat INTEGER PRIMARY KEY,
+  at INTEGER NOT NULL
+);`;
+
+/**
  * The layout this file owns.
  *
  * ONE ROW PER PARTITION, and that IS the cost argument rather than a tidiness
@@ -1022,10 +1026,7 @@ CREATE TABLE IF NOT EXISTS scheduled (
 );
 CREATE INDEX IF NOT EXISTS scheduled_due ON scheduled (due, seq);
 CREATE TABLE IF NOT EXISTS seats (player TEXT PRIMARY KEY, seat INTEGER NOT NULL);
-CREATE TABLE IF NOT EXISTS seat_activity (
-  seat INTEGER PRIMARY KEY,
-  at INTEGER NOT NULL
-);
+${SEAT_ACTIVITY_TABLE}
 CREATE TABLE IF NOT EXISTS receipts (
   player TEXT NOT NULL,
   order_id TEXT NOT NULL,
@@ -1040,28 +1041,133 @@ CREATE INDEX IF NOT EXISTS receipts_at ON receipts (at);
  * What this file's layout is called, so a store written by a different one is
  * refused rather than half-read.
  *
- * There is no migration and there must not be one yet: a local dev store holds
- * a world one author is playing, and `boardsmith dev --reset` is the honest
- * answer to a layout change. Silently reading a store this code does not
- * understand is how an author loses a world without being told.
+ * A LOCAL WORLD IS SOMEBODY'S SAVE, so a layout this code understands how to
+ * upgrade is upgraded rather than refused (#225): `boardsmith dev --reset` is
+ * an honest answer only when there is nothing else to offer, and offering it to
+ * an author whose world is five hundred seats deep is offering to delete it.
+ * Silently READING a store this code does not understand stays forbidden -- an
+ * upgrade is a deliberate, atomic rewrite, never a hopeful reinterpretation.
  */
 const SCHEMA_VERSION = '4';
 
-function assertSchemaVersion(db: SqliteDatabase, path: string): void {
+/**
+ * The layout the seat activity table arrived in (`36d723d6`), and the only
+ * layout this code can carry a world forward FROM.
+ *
+ * Layouts 1 and 2 are not upgradable, and are not pretended to be: nothing here
+ * knows what their tables held, and a store opened on a guess is worse than one
+ * refused.
+ */
+const UPGRADABLE_LAYOUT = '3';
+
+/**
+ * Bring the store at `db` to this file's layout, or refuse it whole.
+ *
+ * READ THE LAYOUT BEFORE WRITING ANY OF IT. The order matters more than it
+ * looks: a gate that created the current schema first and asked afterwards left
+ * its new tables inside a store it then refused, so being told "no" had already
+ * changed the world it was protecting.
+ */
+function prepareSchema(db: SqliteDatabase, path: string): void {
+  const stored = storedLayout(db);
+  if (stored === undefined) {
+    // A world this open is creating. The tables and the layout stamp commit
+    // together, so a process killed here leaves a file with nothing in it
+    // rather than one whose tables no stamp accounts for.
+    transactOn(db, () => {
+      db.exec(SCHEMA);
+      db.prepare('INSERT INTO meta (key, value) VALUES (?, ?)').run(
+        SCHEMA_VERSION_KEY,
+        SCHEMA_VERSION,
+      );
+    });
+    return;
+  }
+  if (stored === SCHEMA_VERSION) return;
+  if (stored === UPGRADABLE_LAYOUT) {
+    upgradeToLayout4(db);
+    return;
+  }
+  throw unreadableLayout(stored, path);
+}
+
+/**
+ * The layout stamp, or `undefined` for a database with nothing in it yet.
+ *
+ * Asked of `sqlite_master` rather than of `meta`, because reading `meta` is
+ * itself a claim that the table exists -- and the one state that must be told
+ * apart from every other here is "this file is new".
+ */
+function storedLayout(db: SqliteDatabase): string | undefined {
+  const table = db
+    .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'meta'")
+    .get();
+  if (table === undefined) return undefined;
   const row = db.prepare('SELECT value FROM meta WHERE key = ?').get(SCHEMA_VERSION_KEY) as
     | { value: string }
     | undefined;
-  if (row === undefined) {
-    db.prepare('INSERT INTO meta (key, value) VALUES (?, ?)').run(SCHEMA_VERSION_KEY, SCHEMA_VERSION);
-    return;
-  }
-  if (row.value === SCHEMA_VERSION) return;
-  throw new Error(
+  return row?.value;
+}
+
+/**
+ * LAYOUT 3 TO LAYOUT 4: the seat activity table, and the stamp that says so.
+ *
+ * The whole of the difference between the two (`36d723d6`) is this one table.
+ * Nothing else is touched, so every partition, dirty mark, seat, queued event,
+ * receipt and meta row is carried forward by not being written at all -- which
+ * is the strongest form the guarantee can take.
+ *
+ * IN ONE TRANSACTION with the stamp, and SQLite makes that real for DDL too. A
+ * store stamped 4 with no table would be read wrong by every later open, and a
+ * table with no stamp would be upgraded again on the next one.
+ *
+ * `IF NOT EXISTS` because the BoardSmith this issue was filed against created
+ * the table BEFORE it read the layout: a world that was refused once is already
+ * sitting on layout 3 with an empty one, and that store still has to be able to
+ * finish its upgrade. The seat history it is short is not invented here -- the
+ * epoch `activitySince` fixes on this open is what an upgraded world measures
+ * its seats from, so they are idle since the upgrade rather than since 1970.
+ */
+function upgradeToLayout4(db: SqliteDatabase): void {
+  transactOn(db, () => {
+    db.exec(SEAT_ACTIVITY_TABLE);
+    db.prepare('UPDATE meta SET value = ? WHERE key = ?').run(SCHEMA_VERSION, SCHEMA_VERSION_KEY);
+  });
+}
+
+/** A store this BoardSmith cannot read, said in the direction the author has to
+ *  move: forward to a newer BoardSmith, or aside because nothing here can carry
+ *  that layout's world across. */
+function unreadableLayout(stored: string, path: string): Error {
+  const ahead = Number(stored) > Number(SCHEMA_VERSION);
+  return new Error(
     `The local world store at ${path} was written by BoardSmith's world store layout ` +
-      `${row.value}, and this BoardSmith reads layout ${SCHEMA_VERSION}. There is no migration ` +
-      `for a local dev world: run \`boardsmith dev --reset\` to start this world again from ` +
-      `genesis, or move the directory aside if you want to keep it.`,
+      `${stored}, and this BoardSmith reads layout ${SCHEMA_VERSION}. ` +
+      (ahead
+        ? `It was written by a newer BoardSmith than this one: update BoardSmith to open this ` +
+          `world, rather than moving it backwards onto rules that would read it wrong.`
+        : `There is no upgrade from layout ${stored}: run \`boardsmith dev --reset\` to start ` +
+          `this world again from genesis, or move the directory aside if you want to keep it.`),
   );
+}
+
+/**
+ * Run `body` as one transaction on `db`.
+ *
+ * `IMMEDIATE` so the write lock is taken at `BEGIN` rather than at the first
+ * write: a deferred transaction that meets a busy database halfway through
+ * cannot upgrade and fails after some of its statements have run, which is
+ * the torn checkpoint wearing a different hat.
+ */
+function transactOn(db: SqliteDatabase, body: () => void): void {
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    body();
+    db.exec('COMMIT');
+  } catch (error) {
+    db.exec('ROLLBACK');
+    throw error;
+  }
 }
 
 function unknownPartition(name: string): Error {

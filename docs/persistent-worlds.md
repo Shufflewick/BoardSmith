@@ -69,6 +69,12 @@ else does: a persistent world that erased itself when its host stopped would be
 a session, and closing the laptop is the one thing an author has to be able to
 do.
 
+Updating BoardSmith does not erase it either. The local store stamps the layout
+it was written under, and an open that finds an older layout this BoardSmith
+knows how to carry forward upgrades it in place, in one transaction, before the
+world is read (#225). A layout nothing here can carry forward is refused whole
+rather than half-read, and says which way to move.
+
 ## A world action is an Action
 
 A world's verbs used to be a flat **command table**: a name, a prompt, and typed
