@@ -1,7 +1,7 @@
 {
-  "revision": 68,
+  "revision": 69,
   "bundleProtocol": 2,
-  "surfaceHash": "9468fac6c565014b",
+  "surfaceHash": "f41ef69743af086b",
   "payloadHash": "a809d36d1341bd7a",
   "formatHash": "0058593e7cc80205",
   "history": [
@@ -556,6 +556,15 @@
       "payloadHash": "a809d36d1341bd7a",
       "formatHash": "0058593e7cc80205",
       "summary": "The contract's payload fixture now DECLARES who may see what, so a per-seat view's redaction is fingerprinted (ShufflewickPub #414). No engine behaviour changes: this is a fixture and a guard. Until now the fixture's world declared no element or zone visibility anywhere, so redactVisibilityForSeat never ran over anything in it and no visibility/zoneVisibility field reached a fingerprinted view -- r67 rewrote exactly those bytes and payloadHash did not move, and the platform heard about the revision only because an unrelated rename moved the surface. A redaction change on its own would have shipped silently to the vendored clone, which is the one thing this file exists to prevent, and it is the same class of gap as boardsmith/world shipping before it was in PLATFORM_ENTRYPOINTS. The commons now holds two rooms: a wellhouse whose contents are hidden and granted to the first looker, and a noticeboard whose contents are hidden from the second, so ONE fan-out carries a granted reader, an ungranted one and a denied one. assertCoversWorldRedaction fails the fixture if that stops being true -- it asserts that the redaction is load-bearing (one looker holds a room's contents and another does not) and that no body names a seat, because a grant is deliberately spelled so that a granted reader cannot tell a room it was let into from a room that was public all along, and no guard can read the grant back out of the bytes. Also records, where the redaction happens, that a redacted tree restored into a live game (the MCTS search sandbox does this) now reads a granted room as plainly public: neither that nor the old hidden-with-a-grant-to-me was ever true about the other seats, and the checkpoint path that must be exact reads the full toJSON. payloadHash moves and nothing else does: surfaceHash is unchanged because no export moved, and formatHash is unchanged because stored partition bytes are untouched, so a live world crosses onto this revision with no gate."
+    },
+    {
+      "revision": 69,
+      "date": "2026-09-09",
+      "bundleProtocol": 2,
+      "surfaceHash": "f41ef69743af086b",
+      "payloadHash": "a809d36d1341bd7a",
+      "formatHash": "0058593e7cc80205",
+      "summary": "A room granted to only PART of an audience is one view body per GROUP rather than one per seat (ShufflewickPub #413). Game#projectsAlikeFor(seats) becomes Game#projectionSignaturesFor(seats): one string per seat, in the order asked, where equal strings mean byte-identical projections, and null for the whole audience means the tree consults something about a seat that cannot be summarised so no two seats may be assumed alike. #408 and #411 answered ONE BOOLEAN for a whole audience, so an audience that did not agree about a room fell all the way back to a body per seat -- measured on a plaza of 200 stalls at 500 seats with the plaza granted to half of them, that was TWO distinct answers sent as 500 encodings, 53 MB and 274 ms of encode-and-parse, and is now two bodies of 125 KB. THE SIGNATURE IS THE REDACTION'S OWN OUTPUT, not a hash of a projected body: for each state the tree declares, in one fixed walk order, the MODE redactVisibilityForSeat writes for that seat. That mode is the entirety of what the redaction writes (the roster is dropped and the seat is never named, #411) and it also decides what canPlayerSee answered, since 'all' is written exactly where the answer was yes -- so two seats spelled alike everywhere hold the same bytes, held exhaustively over every mode x every roster x every seat x every owner rather than by sample. An element declaring nothing inherits the nearest declaring ancestor's state, which is already in the signature, so the walk stays local. WHAT REFUSES, and it is refusal rather than approximation: an 'owner' element or zone for every seat it does not grant OUTRIGHT (ownership is a fact about the element, not about the state, and an owner-only zone that denies everybody still shows its children to its owner under their real ids while giving everybody else synthetic ones -- #411's predicate grouped those, which this closes), a class with static visibleAttributes, static playerView, any tutorial progress, and any addressed animation event. WorldEngine.viewsFor is unchanged in shape: it still answers {bodies, seats}, with more sharing behind it. formatHash is unchanged: stored partition bytes are untouched and a live world crosses onto this revision with no gate."
     }
   ]
 }

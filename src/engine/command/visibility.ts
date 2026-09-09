@@ -128,49 +128,66 @@ export function redactVisibilityForSeat(
   state: VisibilityState,
   seat: number
 ): VisibilityState {
-  if (state.exceptPlayers?.includes(seat)) {
-    return {
-      mode: state.mode === 'count-only' ? 'count-only' : 'hidden',
-      explicit: state.explicit,
-    };
-  }
-  if (state.addPlayers?.includes(seat)) {
-    return { mode: 'all', explicit: state.explicit };
-  }
-  return { mode: state.mode, explicit: state.explicit };
+  return { mode: redactedModeForSeat(state, seat), explicit: state.explicit };
 }
 
 /**
- * True when `redactVisibilityForSeat` writes the same state for every seat in
- * `seats`, AND the serializer does the same thing with it (#411).
+ * The mode the redaction writes for one seat: denial, then grant, then the base
+ * mode, which is `canPlayerSee`'s own order.
  *
- * A host has to know whether an audience shares a body BEFORE it encodes one,
- * because finding out by comparing encoded bodies costs the encoding the
- * sharing exists to remove. So this is answered from what the state DECLARES:
- * which of the three branches above each seat falls down.
- *
- * 'owner' IS THE CASE THE BYTES CANNOT SHOW. An owner-only state redacts to the
- * same bytes for everybody, and the serializer still shows the contents to the
- * owner alone -- ownership is a fact about the element, not about the state.
- * So a reader left to the base mode is only alike when that mode is not
- * 'owner'. A seat granted or denied outright never reaches the mode at all.
+ * The ONE place that order is spelled out. `redactedVisibilityFor` below has to
+ * answer exactly what this writes -- a second copy of the precedence is how a
+ * grouping key comes to disagree with the bytes it is grouping.
  */
-export function visibilityRedactsAlikeFor(
-  state: VisibilityState,
-  seats: readonly number[]
-): boolean {
-  let first: 'denied' | 'granted' | 'base' | undefined;
-  for (const seat of seats) {
-    const branch = state.exceptPlayers?.includes(seat)
-      ? 'denied'
-      : state.addPlayers?.includes(seat)
-        ? 'granted'
-        : 'base';
-    if (branch === 'base' && state.mode === 'owner') return false;
-    if (first === undefined) first = branch;
-    else if (branch !== first) return false;
+function redactedModeForSeat(state: VisibilityState, seat: number): VisibilityMode {
+  if (state.exceptPlayers?.includes(seat)) {
+    return state.mode === 'count-only' ? 'count-only' : 'hidden';
   }
-  return true;
+  if (state.addPlayers?.includes(seat)) return 'all';
+  return state.mode;
+}
+
+/**
+ * THE MODE `redactVisibilityForSeat` WRITES FOR THIS SEAT, or `null` when this
+ * state does not decide what the seat is shown (#411, regrouped by
+ * ShufflewickPub #413).
+ *
+ * A host has to know which seats of a fan-out will hold the same bytes BEFORE
+ * it encodes any of them, because finding out by comparing encoded bodies costs
+ * the encoding the sharing exists to remove. So it is answered from what the
+ * state DECLARES, and it is answered as the very thing the redaction writes.
+ *
+ * THE REDACTED MODE IS THE SEAT'S WHOLE CONTRIBUTION. What leaves the redaction
+ * is `{ mode, explicit }` and nothing else -- no roster, and never the seat
+ * number -- and `explicit` is a fact about the state rather than about the
+ * reader. So two seats given the same mode here are handed identical bytes.
+ * They were also given the same ANSWER: across all four modes, 'all' is written
+ * exactly where `canPlayerSee` said yes and 'hidden'/'count-only' exactly where
+ * it said no, which `visibility.test.ts` holds over every mode and roster.
+ *
+ * IT MERGES BRANCHES THAT SPELL ALIKE, which is why it is the mode rather than
+ * the branch. A seat granted into a plainly public room and a seat that was
+ * never named in it are told the same thing, because there is nothing else to
+ * tell them.
+ *
+ * 'owner' IS THE MODE THE STATE CANNOT ANSWER FOR, and it is refused for every
+ * seat it does not grant OUTRIGHT. Ownership is a fact about the ELEMENT rather
+ * than about the state, and the serializer consults it twice: `canPlayerSee`
+ * shows an owner-only zone to its owner alone, and an owner-only zone that
+ * denies everybody still shows its children to its owner under their real ids
+ * while giving everybody else synthetic ones. So a seat left to the mode and a
+ * seat denied by the roster are both answered `null`; only a seat granted past
+ * the mode, which never reaches ownership at all, gets an answer.
+ */
+export function redactedVisibilityFor(
+  state: VisibilityState,
+  seat: number
+): VisibilityMode | null {
+  const mode = redactedModeForSeat(state, seat);
+  // 'all' out of an owner-only state is a seat granted PAST the mode, which is
+  // the one reader of one whose answer ownership plays no part in.
+  if (state.mode === 'owner' && mode !== 'all') return null;
+  return mode;
 }
 
 /**

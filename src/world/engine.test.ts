@@ -2351,7 +2351,7 @@ describe("ShufflewickPub #408 -- one body for every seat that sees the same worl
   });
 });
 
-describe("ShufflewickPub #411 -- one body for every seat that holds the same grant", () => {
+describe("ShufflewickPub #411/#413 -- one body for every seat that holds the same grant", () => {
   // The case #408 deliberately did not reach, and the one most worlds are in:
   // a room is scoped with `addZoneVisibleTo` rather than left plainly public,
   // because scoping a room is how a room-shaped world is built. Every seat was
@@ -2361,6 +2361,11 @@ describe("ShufflewickPub #411 -- one body for every seat that holds the same gra
   // It is spelled in the mode now, so two readers holding the same grant hold
   // the same bytes. Measured through the engine on a plaza of 200 stalls at 500
   // seats: 500 distinct bodies and 70 MB, down to one body of 136 KB.
+  //
+  // #411 decided sharing once for the whole audience, so a room granted to only
+  // PART of one fell all the way back to a body per seat: two answers sent as
+  // 500 encodings and 53 MB. #413 groups by a per-seat signature instead, so an
+  // audience that does not agree is the groups it really has.
 
   const AUDIENCE = ["p1", "p2", "p3", "p4"];
 
@@ -2404,13 +2409,12 @@ describe("ShufflewickPub #411 -- one body for every seat that holds the same gra
     );
   });
 
-  it("shares nothing across a room granted to only part of the audience", async () => {
-    // THE HONEST LIMIT, and the boundary. Sharing is decided once for the whole
-    // audience -- a room some of them may see into and some may not is one body
-    // per seat, exactly what it cost before. What must hold either way is that
-    // the ungranted are shown nothing: an audience that does not agree about a
-    // room is an audience the engine refuses to share for, rather than one it
-    // splits into the group that may see and the group that may not.
+  it("gives a room granted to part of the audience one body per GROUP", async () => {
+    // WHAT #413 IS FOR, and the boundary it must not cross. An audience that
+    // does not agree about a room is two answers, not four: the seats inside
+    // the grant hold one body and the seats outside hold another. What must
+    // hold either way is that no body reaches a seat it was not built for --
+    // the ungranted are shown nothing, whoever else is watching.
     const engine = scopedWorld((room) => {
       room.contentsHidden();
       room.addZoneVisibleTo(1, 2);
@@ -2418,14 +2422,62 @@ describe("ShufflewickPub #411 -- one body for every seat that holds the same gra
 
     const answered = await engine.viewsFor(AUDIENCE);
 
-    const bodyOf = (player: string): string => {
+    const heldBy = (player: string): number => {
       const seat = answered.seats.find((held) => held.player === player)!;
       if (seat.refused) throw new Error(`${player} was refused`);
-      return JSON.stringify(answered.bodies[seat.at]);
+      return seat.at;
     };
-    expect(answered.bodies, "one body per seat, as before").toHaveLength(AUDIENCE.length);
-    expect(bodyOf("p1"), "a granted seat is shown the contents").toContain("token-one");
-    expect(bodyOf("p3"), "an ungranted seat is shown no contents").not.toContain("token-one");
+    expect(
+      answered.bodies,
+      `Two seats are granted this room and two are not, and the audience held ` +
+        `${answered.bodies.length} distinct bodies. A count that follows the audience means ` +
+        "each watcher is being told in bytes of its own.",
+    ).toHaveLength(2);
+    expect(heldBy("p1"), "the two granted seats hold one body").toBe(heldBy("p2"));
+    expect(heldBy("p3"), "and the two ungranted seats hold another").toBe(heldBy("p4"));
+    expect(heldBy("p1"), "which is not the same body").not.toBe(heldBy("p3"));
+    expect(JSON.stringify(answered.bodies[heldBy("p1")]), "granted seats hold the contents")
+      .toContain("token-one");
+    expect(JSON.stringify(answered.bodies[heldBy("p3")]), "ungranted seats hold none")
+      .not.toContain("token-one");
+  });
+
+  it("projects once per group rather than once per seat", async () => {
+    // The cost, in the engine's own units: `Room.toJSON` counts every
+    // full-fidelity pass, and the pass is shared across the whole audience
+    // whatever the grouping -- what the grouping decides is how many REDACTIONS
+    // and how many encodings the host pays after it.
+    const engine = scopedWorld((room) => {
+      room.contentsHidden();
+      room.addZoneVisibleTo(1, 2);
+    });
+    await engine.viewsFor(["p1"]);
+
+    Room.serializations = 0;
+    await engine.viewsFor(["p1"]);
+    const alone = Room.serializations;
+
+    Room.serializations = 0;
+    const answered = await engine.viewsFor(AUDIENCE);
+    const together = Room.serializations;
+
+    expect(together, "one pass answers the whole audience").toBe(alone);
+    expect(answered.seats.every((seat) => !seat.refused)).toBe(true);
+  });
+
+  it("refuses to group at all around an owner-only room", async () => {
+    // The limit that is still a limit, and the one the signature may never
+    // guess at: an owner-only room is decided against the reader's OWNERSHIP,
+    // which is nowhere in the visibility state. So every seat is answered on
+    // its own, which is exactly what it cost before.
+    const engine = scopedWorld((room) => {
+      room.setZoneVisibility("owner");
+    });
+
+    const answered = await engine.viewsFor(AUDIENCE);
+
+    expect(answered.bodies, "one body per seat, because ownership is not in the state")
+      .toHaveLength(AUDIENCE.length);
   });
 
   it("tells no seat who else was granted the room", async () => {

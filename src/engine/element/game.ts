@@ -27,7 +27,13 @@ import { Player } from '../player/player.js';
 import type { GameCommand, CommandResult } from '../command/types.js';
 import { executeCommand, undoCommand } from '../command/executor.js';
 import { createInverseCommand } from '../command/inverse.js';
-import { canPlayerSee, redactVisibilityForSeat, visibilityRedactsAlikeFor } from '../command/visibility.js';
+import {
+  canPlayerSee,
+  redactVisibilityForSeat,
+  redactedVisibilityFor,
+  type VisibilityMode,
+  type VisibilityState,
+} from '../command/visibility.js';
 import type { ActionDefinition, ActionResult, SerializedAction, ActionTrace, ActionDebugInfo, PickDebugInfo, AnnotatedChoice } from '../action/types.js';
 import { ActionExecutor } from '../action/action.js';
 import type { FlowDefinition, FlowState, FlowPosition, FlowDebugInfo } from '../flow/types.js';
@@ -4294,8 +4300,13 @@ export class Game<
   }
 
   /**
-   * True when `toJSONForPlayer` returns the SAME TREE for every seat in
-   * `seats` (ShufflewickPub #408, widened by #411).
+   * WHICH SEATS OF THIS AUDIENCE HOLD THE SAME `toJSONForPlayer` TREE
+   * (ShufflewickPub #408, widened by #411, regrouped by #413).
+   *
+   * One string per seat, in the order asked. Seats whose strings are equal are
+   * given byte-identical projections; `null` for the whole audience means the
+   * tree consults something about a seat that this cannot summarise, so no two
+   * seats may be assumed alike.
    *
    * Sharing one serialization under a fan-out removed the repeated pass. It did
    * not make two seats' answers equal, and equal is what a host needs before it
@@ -4305,47 +4316,71 @@ export class Game<
    *
    * ANSWERED FROM WHAT THE TREE DECLARES, NOT BY COMPARING BYTES. Encoding 500
    * bodies to find out they match costs the encoding this exists to remove, so
-   * this is one walk over the tree asking each element what it has DECLARED
-   * about who may see it. An element that has declared nothing resolves to
-   * `DEFAULT_VISIBILITY` -- `mode: 'all'`, no rosters -- and so does every
-   * descendant of one, which makes the walk local: no ancestor resolution, no
-   * `getEffectiveVisibility` per node.
+   * this is one walk over the tree collecting what each element has DECLARED
+   * about who may see it, and then one mode per seat per declaration. An
+   * element that has declared nothing resolves to `DEFAULT_VISIBILITY` --
+   * `mode: 'all'`, no rosters -- and so does every descendant of one, which
+   * makes the walk local: no ancestor resolution, no `getEffectiveVisibility`
+   * per node.
    *
-   * ASKED OF AN AUDIENCE, because a grant is about seats (#411). A room scoped
-   * with `addVisibleTo`/`addZoneVisibleTo` to everybody standing in it projects
-   * alike for all of them and differently for anybody outside, so the answer is
-   * a property of the tree AND of who is asking. `visibilityRedactsAlikeFor`
-   * decides each declared state, and it decides it the way
-   * `redactVisibilityForSeat` writes it.
+   * A SIGNATURE RATHER THAN ONE BOOLEAN (#413). #411 answered "does this whole
+   * audience agree?", so an audience that did NOT agree fell all the way back
+   * to one body per seat -- a room granted to half of 500 seats was two answers
+   * sent as 500 encodings and 53 MB. The seats that agree are exactly the seats
+   * `redactVisibilityForSeat` writes the same mode for at every declared state,
+   * so those modes ARE the key, and a partly granted room is the two bodies it
+   * really has.
    *
-   * CONSERVATIVE, AND ON PURPOSE. A world may be answered `false` and still
-   * project alike. What must never happen is the other error, so every
-   * remaining input the per-seat serializer consults against the seat is a
-   * `false` here:
+   * WHY THE SIGNATURE IS COMPLETE, which is the whole of its safety. The mode
+   * is the ENTIRETY of what the redaction writes for a seat -- the roster is
+   * dropped and the seat is never named (#411) -- and it also decides what
+   * `canPlayerSee` answered that seat, since 'all' is written exactly where the
+   * answer was yes. An element that declares nothing inherits the nearest
+   * declaring ancestor's state, which is already in the signature. So every
+   * remaining input the per-seat serializer consults against the seat is
+   * refused outright, and refusing is what `null` is for:
    *
+   *   an element or zone whose mode is 'owner' unless every asking seat is
+   *     granted past it, since ownership is a fact about the element and not
+   *     about the state (`redactedVisibilityFor`);
    *   a class withholding attributes from non-owners (`visibleAttributes`,
-   *     which is decided against the viewer's ownership);
+   *     likewise decided against the viewer's ownership);
    *   `static playerView`, which is author code handed the seat;
    *   any tutorial progress, which is scoped to the receiving seat (SEC-05);
    *   any animation event addressed to an audience (#23).
    */
-  projectsAlikeFor(seats: readonly number[]): boolean {
+  projectionSignaturesFor(seats: readonly number[]): readonly string[] | null {
     const GameClass = this.constructor as typeof Game;
-    if (GameClass.playerView !== undefined) return false;
-    if (this.tutorialProgress.size > 0) return false;
-    if (this._animationEvents.some((event) => event.to !== undefined)) return false;
+    if (GameClass.playerView !== undefined) return null;
+    if (this.tutorialProgress.size > 0) return null;
+    if (this._animationEvents.some((event) => event.to !== undefined)) return null;
 
-    const blind = (element: GameElement): boolean => {
-      if (element._visibility !== undefined
-        && !visibilityRedactsAlikeFor(element._visibility, seats)) return false;
+    /** Every state the tree declares, in one fixed order for every seat. */
+    const declared: VisibilityState[] = [];
+    const collect = (element: GameElement): boolean => {
       if ((element.constructor as typeof GameElement).visibleAttributes !== undefined) return false;
+      if (element._visibility !== undefined) declared.push(element._visibility);
       if (hasZoneVisibility(element)) {
         const zone = element.getZoneVisibility();
-        if (zone !== undefined && !visibilityRedactsAlikeFor(zone, seats)) return false;
+        if (zone !== undefined) declared.push(zone);
       }
-      return element._t.children.every(blind);
+      return element._t.children.every(collect);
     };
-    return blind(this);
+    if (!collect(this)) return null;
+
+    const signatures: string[] = [];
+    for (const seat of seats) {
+      const spelled: VisibilityMode[] = [];
+      for (const state of declared) {
+        const mode = redactedVisibilityFor(state, seat);
+        if (mode === null) return null;
+        spelled.push(mode);
+      }
+      // A comma between the modes, because they are four fixed words and a
+      // separator is what makes one seat's list unreadable as another's.
+      signatures.push(spelled.join(','));
+    }
+    return signatures;
   }
 
   /**

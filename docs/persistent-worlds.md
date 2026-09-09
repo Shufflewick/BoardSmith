@@ -1035,15 +1035,33 @@ would drop the room.
 
 **Which is what lets a whole audience be told in one answer.** Nothing in a view
 says who is looking -- no seat number, no roster -- so two seats whose
-declarations named the same partitions of a world that hides nothing between
-them receive the SAME BYTES. `viewsFor` answers each distinct body once and says
-which seats hold it, and the host encodes a world-scoped announcement once
-instead of once per watcher. A world that hides anything from anybody pays
-exactly what it paid before; **the authoring lever is the visibility you
-declare**, because a room granted seat by seat with `addVisibleTo` is per-seat
-output even when every seat is granted, while a plainly public room is one
-answer for everybody. Your seat reaches you on the frame that seats you, never
-in the view.
+declarations named the same partitions and are shown the same world receive the
+SAME BYTES. `viewsFor` answers each distinct body once and says which seats hold
+it, and the host encodes a world-scoped announcement once per body instead of
+once per watcher. Your seat reaches you on the frame that seats you, never in
+the view.
+
+**A scoped room shares too, and a partly scoped one shares within each group.** A
+view of a room granted with `addVisibleTo`/`addZoneVisibleTo` carries no grant
+roster at all: a granted reader is told the room is visible, a denied reader that
+it is hidden, and neither is told anything about anybody else. So the seats
+granted a room hold one body between them and the seats outside it hold another,
+and a room everybody is granted is a single body for the whole audience. The
+engine decides that STRUCTURALLY, from the visibility each element declares,
+because deciding it by comparing encoded bodies would cost the encoding the
+sharing removes.
+
+**The authoring lever is still the visibility you declare.** Two kinds of
+declaration are per-seat output whatever the audience, because neither is decided
+by anything in the visibility state:
+
+- an **owner-only** element or zone (`contentsVisibleToOwner()`,
+  `setVisibility('owner')`), decided against the reader's ownership;
+- a class with **`static visibleAttributes`**, likewise decided against ownership.
+
+So is a game with `static playerView`, a live tutorial, or an animation event
+addressed to particular seats. Anything else -- public, hidden, count-only, and
+any grant or denial roster over them -- groups.
 
 There is no turn, no message log and no available-action list inside a world's
 view. A world's flow does not run, its narration is its events, and its verbs
