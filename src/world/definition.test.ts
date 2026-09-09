@@ -124,6 +124,23 @@ describe("readWorldDefinition — what a bundle must export", () => {
     expect(readWorldDefinition(bundle()).stateVersion).toBeUndefined();
   });
 
+  // ── ShufflewickPub #399: which verb hands a departed seat's ground back ───
+
+  it("keeps a declared vacate, which is the verb a host runs on a departure", () => {
+    const vacating = bundle({
+      world: { maxPlayers: 2, actions: [poke], view: () => [], vacate: "poke" },
+    });
+    expect(readWorldDefinition(vacating).vacate).toBe("poke");
+  });
+
+  it("leaves an undeclared vacate undeclared, so a host frees no chair", () => {
+    // ABSENCE IS THE ANSWER, not a gap to be filled in later. A world that
+    // never says how a departed player's ground comes back is a world whose
+    // chairs are held for life, and that is a shape a host must be able to
+    // read off the declaration rather than guess.
+    expect(readWorldDefinition(bundle()).vacate).toBeUndefined();
+  });
+
   it.each([-1, 1.5, Number.NaN])(
     "REFUSES stateVersion %p, naming what a usable one is",
     (bad) => {

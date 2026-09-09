@@ -42,11 +42,12 @@ import { worldBudgets, type WorldBudgets } from "./budgets.js";
  */
 export interface WorldDefinition {
   /**
-   * HOW MANY SEATS THIS WORLD HAS, FOR ITS WHOLE LIFETIME.
+   * HOW MANY SEATS THIS WORLD HAS AT ONCE.
    *
-   * THE ONE SEAT COUNT A WORLD HAS. A world does not start, so there is no
-   * minimum to reach; a seat is assigned once and never handed on, because a
-   * departed player's holdings are still standing in the world. So this is not
+   * THE ONE SEAT COUNT A WORLD HAS, AT ANY ONE MOMENT. A world does not start,
+   * so there is no minimum to reach. A seat is handed on only after this
+   * world's own `vacate` verb has given the departed player's ground back, and
+   * a world that declares none holds every chair for life. So this is not
    * a table's roster and it does not live where a table's roster lives: a world
    * game that declared `gameDefinition.minPlayers/maxPlayers` shipped a
    * vestigial table half beside its world, and a person opened one and started
@@ -225,6 +226,28 @@ export interface WorldDefinition {
    * differently from a platform holding 500 sockets.
    */
   readonly presence?: WorldPresenceDeclaration;
+  /**
+   * WHICH VERB HANDS A DEPARTED SEAT'S GROUND BACK (ShufflewickPub #399).
+   *
+   * The name of one of this world's own SEATED actions. A host runs it for the
+   * seat that is leaving, and only the game can write it: what a departed
+   * empire's planets, fields or fleets become is a rules decision, and a host
+   * that guessed would be inventing game design in the wrong place.
+   *
+   * DECLARING IT IS WHAT MAKES A SEAT REUSABLE. A world that leaves this out
+   * holds every chair it has ever given for as long as the world lasts, which
+   * is what every world did before this existed and is still a legitimate
+   * design -- a short season fills once and never churns. What is NOT
+   * legitimate is a host handing a newcomer a chair whose ground is still
+   * occupied, so absence here means the chair is never handed on.
+   *
+   * The library types the declaration and hands it back as written. WHAT A
+   * HOST DOES WITH IT is that host's policy, exactly as it is for `presence`:
+   * which departures reach it, what happens to the chair afterwards and who is
+   * told are answered differently by a laptop with one browser tab and by a
+   * platform holding five hundred seats.
+   */
+  readonly vacate?: string;
 }
 
 /** Each hook names a SEATLESS action from the world's own list. */
@@ -237,10 +260,11 @@ export interface WorldPresenceDeclaration {
 /**
  * The world half of a bundle's definition, or a refusal naming what is missing.
  *
- * `presence` is returned as the bundle wrote it. Validating it needs the host's
- * own grace bounds and its own answer to what a departure is, so the host
- * checks it; what cannot be left to the host is the SHAPE, which is why the
- * field is typed here.
+ * `presence` and `vacate` are returned as the bundle wrote them. Validating
+ * either needs the host's own answers -- what a departure is, how long a grace
+ * runs, what becomes of a chair once its ground is back -- so the host checks
+ * them; what cannot be left to the host is the SHAPE, which is why both fields
+ * are typed here.
  */
 export function readWorldDefinition(definition: {
   world?: WorldDefinition;
@@ -260,8 +284,9 @@ export function readWorldDefinition(definition: {
       "bundle-not-a-world",
       "This bundle's `gameDefinition.world` declares no usable `world.maxPlayers`, so its world " +
         "has no seats for anybody to play. Declare the largest roster this world holds, e.g. " +
-        "`world: { maxPlayers: 40, actions, view }`. It is the ONE seat count a world has -- a " +
-        "world does not start, so it has no minimum to reach, and its seats are never handed on.",
+        "`world: { maxPlayers: 40, actions, view }`. It is the ONE seat count a world has at " +
+        "once -- a world does not start, so it has no minimum to reach, and a seat is handed on " +
+        "only once this world's own `vacate` verb has given the departed player's ground back.",
     );
   }
   if (world.stateVersion !== undefined && (!Number.isInteger(world.stateVersion) || world.stateVersion < 0)) {
@@ -349,9 +374,9 @@ export function worldSeatCount(
  *
  * The engine is constructed with exactly `seatCount` Game players, so a seat
  * past that number is a chair that does not exist -- every later view or
- * command for its holder fails deep inside game code, and the seat is burned
- * forever because seats are never reused. A host must call this BEFORE it
- * writes a seating durably, so a refusal burns nothing.
+ * command for its holder fails deep inside game code, and nothing can give the
+ * chair back because there was never one there. A host must call this BEFORE
+ * it writes a seating durably, so a refusal burns nothing.
  */
 export function assertSeatWithinWorld(player: string, seat: number, seatCount: number): void {
   if (Number.isInteger(seat) && seat >= 1 && seat <= seatCount) return;
@@ -359,10 +384,10 @@ export function assertSeatWithinWorld(player: string, seat: number, seatCount: n
     "world-full",
     `Cannot seat "${player}" at seat ${seat}: this world's game declares maxPlayers: ` +
       `${seatCount}, so it holds seats 1 through ${seatCount} and no layer may mint another. ` +
-      "A seat is assigned once and never handed on -- a player who leaves keeps theirs, " +
-      "because their holdings are still standing in the world -- so these are all the seats " +
-      "this world will ever have. A host that admits players before seating them counts those " +
-      "same lifetime seats, so a joiner should have been refused before reaching this door: " +
+      "These are all the seats this world will ever have at once: a departed player's chair " +
+      "comes back only once this world's own `vacate` verb has given their ground back, and a " +
+      "world that declares none holds every chair for life. A host that admits players before " +
+      "seating them counts the same chairs, so a joiner should have been refused at that door: " +
       "what puts the two out of step is a stored player count declaring more players than the " +
       "compiled rules build. Rebuild so the declared player count matches " +
       "gameDefinition.world.maxPlayers, or raise gameDefinition.world.maxPlayers and rebuild.",
