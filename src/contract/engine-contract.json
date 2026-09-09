@@ -1,7 +1,7 @@
 {
-  "revision": 66,
+  "revision": 67,
   "bundleProtocol": 2,
-  "surfaceHash": "96b88a0be8dac5ec",
+  "surfaceHash": "9468fac6c565014b",
   "payloadHash": "fcb67168b7207856",
   "formatHash": "0058593e7cc80205",
   "history": [
@@ -538,6 +538,15 @@
       "payloadHash": "fcb67168b7207856",
       "formatHash": "0058593e7cc80205",
       "summary": "A read the engine owns runs on the real element behind a read-only projection, and only its answer is projected (ShufflewickPub #409). Binding every method to the proxy charged a trap per step of its own walk, so a finder over 500 roots cost 16x the live tree -- and a world's OFFER is a fan-out of finders, run for every seat a change reaches. Measured on a 500-seat village: an offer fan-out fell from 2277 ms to 125 ms, 4.55 ms a seat to 0.25 ms, which takes the offer half of a per-command fan-out from 11x the view half to below it. ENGINE_READ_DOORS is an allowlist, so a method nobody names is slow and never unsafe; a finder's own predicate is handed projected elements and an element read out of a projection goes back through a door as the element it wraps. Nothing a fingerprint can see changes: no surface, no player-view payload, no stored byte, so all three hashes stand where r65 left them and every live world crosses onto this revision with no gate. Recorded with --adopt so the platform can archive and run the build."
+    },
+    {
+      "revision": 67,
+      "date": "2026-09-09",
+      "bundleProtocol": 2,
+      "surfaceHash": "9468fac6c565014b",
+      "payloadHash": "fcb67168b7207856",
+      "formatHash": "0058593e7cc80205",
+      "summary": "A room scoped with addVisibleTo/addZoneVisibleTo is ONE view for every seat that holds the same grant (ShufflewickPub #411). WIRE CHANGE on the per-seat view only: redactVisibilityForSeat no longer spells the reader's own grant as addPlayers:[yourSeat], it spells it in the MODE and drops the roster entirely -- a granted reader is told 'all', a denied reader the mode that denies everybody (a count-only zone stays count-only, because the serializer shows its count), and a reader named in neither keeps the base mode. That is exactly canPlayerSee's precedence, so every reader is given the answer it was given before, held exhaustively over every mode and roster rather than by sample. The reader learns strictly LESS than the roster told it: nothing in a per-seat view can name another seat any more, and a seat can no longer tell a room it was let into from a room that was public all along. The full roster still round-trips through the checkpoint/restore path (full toJSON), which is what stores a partition. Measured through the engine on a plaza of 200 stalls at 500 seats: the same plaza scoped to every seat was 500 distinct bodies, 70 MB and 324 ms of encode-and-parse, and is now ONE body of 136 KB -- the collapse #408 reached only for a plainly public room, which matters because scoping a room is how most room-shaped worlds are built. Game#projectsAlikeForEverySeat becomes Game#projectsAlikeFor(seats): a grant is about seats, so the audience being asked is part of the question, and visibilityRedactsAlikeFor decides each declared state the way the redaction writes it. Sharing is still decided STRUCTURALLY and is still all-or-nothing for an audience: a room granted to only PART of the audience is one body per seat exactly as before, and a world with genuine per-seat secrets pays what it always paid. formatHash is unchanged: stored partition bytes are untouched and a live world crosses onto this revision with no gate."
     }
   ]
 }

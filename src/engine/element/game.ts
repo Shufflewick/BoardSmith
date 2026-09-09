@@ -27,7 +27,7 @@ import { Player } from '../player/player.js';
 import type { GameCommand, CommandResult } from '../command/types.js';
 import { executeCommand, undoCommand } from '../command/executor.js';
 import { createInverseCommand } from '../command/inverse.js';
-import { canPlayerSee, redactVisibilityForSeat } from '../command/visibility.js';
+import { canPlayerSee, redactVisibilityForSeat, visibilityRedactsAlikeFor } from '../command/visibility.js';
 import type { ActionDefinition, ActionResult, SerializedAction, ActionTrace, ActionDebugInfo, PickDebugInfo, AnnotatedChoice } from '../action/types.js';
 import { ActionExecutor } from '../action/action.js';
 import type { FlowDefinition, FlowState, FlowPosition, FlowDebugInfo } from '../flow/types.js';
@@ -4294,8 +4294,8 @@ export class Game<
   }
 
   /**
-   * True when `toJSONForPlayer` returns the SAME TREE for every seat
-   * (ShufflewickPub #408).
+   * True when `toJSONForPlayer` returns the SAME TREE for every seat in
+   * `seats` (ShufflewickPub #408, widened by #411).
    *
    * Sharing one serialization under a fan-out removed the repeated pass. It did
    * not make two seats' answers equal, and equal is what a host needs before it
@@ -4304,39 +4304,45 @@ export class Game<
    * 18.5 MB, because nothing could say they were identical.
    *
    * ANSWERED FROM WHAT THE TREE DECLARES, NOT BY COMPARING BYTES. Encoding 500
-   * bodies to find out they match costs the 27 ms of encoding this exists to
-   * remove, so this is one walk over the tree asking each element what it has
-   * DECLARED about who may see it. An element that has declared nothing
-   * resolves to `DEFAULT_VISIBILITY` -- `mode: 'all'`, no rosters -- and so does
-   * every descendant of one, so a tree in which nothing anywhere declares
-   * visibility is a tree whose redaction has nothing to do. That makes the walk
-   * local: no ancestor resolution, no `getEffectiveVisibility` per node.
+   * bodies to find out they match costs the encoding this exists to remove, so
+   * this is one walk over the tree asking each element what it has DECLARED
+   * about who may see it. An element that has declared nothing resolves to
+   * `DEFAULT_VISIBILITY` -- `mode: 'all'`, no rosters -- and so does every
+   * descendant of one, which makes the walk local: no ancestor resolution, no
+   * `getEffectiveVisibility` per node.
+   *
+   * ASKED OF AN AUDIENCE, because a grant is about seats (#411). A room scoped
+   * with `addVisibleTo`/`addZoneVisibleTo` to everybody standing in it projects
+   * alike for all of them and differently for anybody outside, so the answer is
+   * a property of the tree AND of who is asking. `visibilityRedactsAlikeFor`
+   * decides each declared state, and it decides it the way
+   * `redactVisibilityForSeat` writes it.
    *
    * CONSERVATIVE, AND ON PURPOSE. A world may be answered `false` and still
-   * project alike -- a zone granted to every seat is the common case, and it
-   * does NOT project alike anyway, because `redactVisibilityForSeat` collapses
-   * the grant roster to the receiving seat and that is per-seat output. What
-   * must never happen is the other error, so every input the per-seat
-   * serializer consults is a `false` here:
+   * project alike. What must never happen is the other error, so every
+   * remaining input the per-seat serializer consults against the seat is a
+   * `false` here:
    *
-   *   an element's own declared visibility, and a Space's declared zone
-   *     visibility (`isVisibleTo`, `canPlayerSee`, `redactVisibilityForSeat`);
    *   a class withholding attributes from non-owners (`visibleAttributes`,
    *     which is decided against the viewer's ownership);
    *   `static playerView`, which is author code handed the seat;
    *   any tutorial progress, which is scoped to the receiving seat (SEC-05);
    *   any animation event addressed to an audience (#23).
    */
-  projectsAlikeForEverySeat(): boolean {
+  projectsAlikeFor(seats: readonly number[]): boolean {
     const GameClass = this.constructor as typeof Game;
     if (GameClass.playerView !== undefined) return false;
     if (this.tutorialProgress.size > 0) return false;
     if (this._animationEvents.some((event) => event.to !== undefined)) return false;
 
     const blind = (element: GameElement): boolean => {
-      if (element._visibility !== undefined) return false;
+      if (element._visibility !== undefined
+        && !visibilityRedactsAlikeFor(element._visibility, seats)) return false;
       if ((element.constructor as typeof GameElement).visibleAttributes !== undefined) return false;
-      if (hasZoneVisibility(element) && element.getZoneVisibility() !== undefined) return false;
+      if (hasZoneVisibility(element)) {
+        const zone = element.getZoneVisibility();
+        if (zone !== undefined && !visibilityRedactsAlikeFor(zone, seats)) return false;
+      }
       return element._t.children.every(blind);
     };
     return blind(this);
