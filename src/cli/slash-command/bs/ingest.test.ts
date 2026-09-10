@@ -911,9 +911,18 @@ describe('return-shape field names — pinned across the file set (WR-07)', () =
 describe('CLI string claims in scaffold.md match the CLI source (WR-07)', () => {
   it('init.ts still emits the already-exists error scaffold.md quotes', () => {
     const initSrc = read('../../commands/init.ts');
-    expect(initSrc).toContain('Error: Directory "${name}" already exists');
+    expect(initSrc).toContain('Directory "${name}" already exists');
     const scaffold = read('ingest/scaffold.md');
     expect(scaffold).toContain('already exists');
+  });
+
+  it('scaffold.md states the <name> rule the CLI actually enforces (#240)', () => {
+    // The skill text is what a live session reads before typing the command, and #240 was
+    // reported by a session typing a path. `init` refuses one now, so the file that tells it
+    // what to type has to say the same thing the refusal does.
+    const scaffold = read('ingest/scaffold.md');
+    expect(scaffold).toContain('kebab-case');
+    expect(scaffold).toContain('`<name>` is a NAME and never a path');
   });
 
   it('dev.ts still emits the --no-open skip message scaffold.md quotes', () => {

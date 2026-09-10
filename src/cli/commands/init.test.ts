@@ -13,7 +13,7 @@
  * pin that pattern so the template can't regress to the crashing shape.
  */
 import { describe, it, expect, afterEach } from 'vitest';
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -435,5 +435,41 @@ describe('initCommand --world — a persistent world project (#168)', () => {
     expect(JSON.parse(read('boardsmith.json')).world).toBeUndefined();
     expect(has('src/rules/world.ts')).toBe(false);
     expect(has('index.html')).toBe(true);
+  });
+});
+
+/**
+ * #240: `init` treated `<name>` as an identity and as a location at once -- `join(process.cwd(),
+ * name)` made it a location, `scaffold.config(name)` made the same string a package name.
+ *
+ * Driven through `initCommand` itself rather than through the validator, because what the issue
+ * reported is what the command DID: it created a directory at a path nobody asked for.
+ */
+describe('init command — <name> is a name, not a path (#240)', () => {
+  const originalCwd = process.cwd();
+
+  afterEach(() => {
+    process.chdir(originalCwd);
+  });
+
+  it('refuses a path-shaped name and creates nothing', async () => {
+    const parentDir = tempTree('bs-init-240-path-');
+    process.chdir(parentDir);
+
+    await expect(initCommand('/private/tmp/scratch/mygame', { withoutRulebook: true }))
+      .rejects.toThrow(/path, not a name/);
+
+    // The reported behaviour: `join(process.cwd(), name)` appended the absolute
+    // path to the invocation directory, so a `private/` tree appeared here.
+    expect(existsSync(join(parentDir, 'private'))).toBe(false);
+    expect(readdirSync(parentDir)).toEqual([]);
+  });
+
+  it('refuses a name that would scaffold TypeScript that cannot parse', async () => {
+    const parentDir = tempTree('bs-init-240-invalid-');
+    process.chdir(parentDir);
+
+    await expect(initCommand('My Game', { withoutRulebook: true })).rejects.toThrow(/kebab-case/);
+    expect(readdirSync(parentDir)).toEqual([]);
   });
 });

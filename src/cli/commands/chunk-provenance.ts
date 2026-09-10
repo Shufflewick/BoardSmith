@@ -5,6 +5,7 @@ import {
   designRulebookDir,
   relChunkMdPath,
 } from '../lib/project-paths.js';
+import { assertBareName } from '../lib/user-name.js';
 import { createHash } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -629,6 +630,18 @@ export async function chunkCheckCommand(
     reverifiedNoCodeChange?: string;
   } = {},
 ): Promise<void> {
+  // `<slug>` NAMES a chunk, it does not LOCATE one (#240). Refused before it is
+  // joined into a path, so a path-shaped slug cannot write a provenance block
+  // into another project's CHUNK.md under a slug that is a path.
+  assertBareName(
+    '<slug>',
+    slug,
+    'Pass the slug of a chunk in this project, which is the name of a directory under ' +
+      'design/chunks/ holding a CHUNK.md.\n' +
+      '`boardsmith chunk-provenance-status` lists them; `--project <dir>` picks a different ' +
+      'project.',
+  );
+
   const relChunkPath = relChunkMdPath(slug);
 
   const {

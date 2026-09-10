@@ -28,6 +28,7 @@ import {
 import { ensureWorldEntry } from '../lib/world-entry.js';
 import { ingestArchiveCommand } from './ingest-archive.js';
 import { installIngestHook } from '../lib/ingest-hook.js';
+import { assertGameName } from '../lib/user-name.js';
 
 export interface InitOptions {
   /**
@@ -247,6 +248,13 @@ async function initVersionControl(projectPath: string): Promise<void> {
 }
 
 export async function initCommand(name: string, options: InitOptions = {}): Promise<void> {
+  // BEFORE ANYTHING IS CREATED, and before `name` is interpolated into the
+  // messages below. `<name>` is this project's directory AND its package name
+  // AND its identifier in boardsmith.json AND the prefix of every generated
+  // class, and `assertGameName` is the one place that decides what can be all
+  // four (#240).
+  assertGameName(name);
+
   // REQUIRE an explicit rulebook decision. This is the twelfth mechanism tried for the ingest
   // archive and the first that does not depend on the session reading anything.
   //

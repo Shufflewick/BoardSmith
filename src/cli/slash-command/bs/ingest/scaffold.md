@@ -41,8 +41,14 @@ as `<name>` in every command below.
 ## Directory Framing — `init` Always Creates a New Subdirectory
 
 `npx boardsmith init <name> --rulebook <path>` **unconditionally creates `<cwd>/<name>`** and
-**errors** if that path already exists (`Error: Directory "<name>" already exists` —
-`src/cli/commands/init.ts`). It also errors if neither `--rulebook` nor `--without-rulebook` is
+**errors** if that path already exists (`Directory "<name>" already exists` —
+`src/cli/commands/init.ts`).
+
+`<name>` is a NAME and never a path. It is simultaneously the new directory, the package name in
+package.json, the game's identifier in boardsmith.json and the prefix of every generated class, so
+it must be kebab-case: lowercase letters, digits and single hyphens, starting with a letter. A
+path-shaped `<name>` (`../thing`, `/tmp/thing`, `@me/thing`) is refused outright — `cd` to the
+parent directory first, as the command line below already does. It also errors if neither `--rulebook` nor `--without-rulebook` is
 given; there is no bare `init`. The flag is written into every occurrence of this command line in
 this file on purpose — two live runs (2026-07-27 and 2026-07-28) reported the bare form as "what
 the doc says" while later paragraphs specified the flag, so the first occurrence is the one that
