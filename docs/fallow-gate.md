@@ -234,14 +234,45 @@ the group reports as new. Editing the duplicated code changes its text, so it
 reports as new too -- which is the honest answer, and it is the check this
 document used to ask a human to do by eye before re-keying anything.
 
-It is not absolute, and it is worth knowing why. Fallow decides where a clone
-group starts and ends, so a large enough edit elsewhere in the same file can
-make it cut the same debt a line or two differently, which is a new key for
-what a reader would call the same clone. That was seen once, when extracting a
-stub controller out of four ActionPanel test files moved the boundary of an
-unrelated accepted group in one of them. It is a re-record rather than an
-ambush, and it is orders of magnitude rarer than an address that moves whenever
-anything above it does.
+### The key DID move once, and fallow was not why (#241)
+
+This section used to carry a caveat: fallow decides where a clone group starts
+and ends, so a large enough edit elsewhere in the same file might cut the same
+debt a line or two differently and change its key. Two sightings were put down
+to that. Neither was that, and the caveat was wrong.
+
+`fallow dupes --format json` prints several megabytes, and `boardsmith audit`
+read it through `runToolCapturingStdout`, which decoded **each arriving chunk of
+the stream on its own**. A chunk boundary can fall inside a multi-byte UTF-8
+character, and decoding the two halves separately replaces them with U+FFFD. So
+the fragment being hashed was not the source text. Where a boundary lands
+depends on the byte offsets of everything printed before it, which is exactly
+why the symptom looked like fallow re-cutting groups:
+
+- inserting ~25 lines in the MIDDLE of one test file renumbers every group
+  reported after it, shifting all later byte offsets, and moved the keys of two
+  accepted groups in four unrelated, byte-identical files;
+- appending the same lines at the END of that file renumbers nothing and moved
+  no keys at all.
+
+Measured on the tree that reported it, 1085 groups either way: with the
+per-chunk decode, the insertion produced six U+FFFD characters and key set
+`e113ef05ac8add6c`, and reverting it produced zero and `f3e15d025a1935ad`. With
+the stream decoded once at the end, both trees produce zero U+FFFD and
+`f3e15d025a1935ad`. The group addresses were byte-identical across the
+insertion on both sides, so no boundary had ever moved.
+
+The fix is in `src/cli/lib/run-tool.ts`, the single point every `boardsmith`
+command spawns a tool from: stdout is buffered whole and decoded once. The
+content key was always a pure function of the clone group's own text; what it
+now also gets is that text.
+
+Normalising the fragments before hashing would have hidden this rather than
+fixed it, and would have cost the gate the property it exists for -- an edit to
+duplicated code must change its key. Keying on the file pair instead would have
+put back the address dependence the content key removed. Treating a re-key as
+routine would have left the record unable to tell new duplication from a
+mangled character, which is the whole point of it.
 
 ### The line-keyed file is now derived
 
