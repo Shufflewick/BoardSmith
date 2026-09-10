@@ -1286,6 +1286,15 @@ durable cursor**, sweeping one empire per occurrence:
   recurrence. A world whose queue is completely empty is the one case that still
   needs a first push from a player's command or a republished genesis, because
   there is no clock road at all until something arms one.
+  **That push PRODUCES a world-owned event, and this is the part worth saying
+  out loud**: the player's command arms a keyed seat-owned one-shot, and when
+  that comes due the thing running is the CLOCK. A due event has no acting
+  player, so its seatless handler's own schedules are charged to `world:self`
+  (`WORLD_OWNER`) rather than to the seat that started it. One player command,
+  one throwaway seat-owned row, and a recurrence that outlives every player in
+  the world -- including the one who pushed it. The push is a BOOTSTRAP, not a
+  dependency: nothing about the recurrence afterwards is owned by, capped
+  against, or cancelable by any seat.
 - **Separate cadences are separate keys.** An hourly inactivity check and a
   daily five-day warning are two recurrences with two keys, each costing one
   queue row forever. A once-per-24-hours charge is not a third timer at all: it
