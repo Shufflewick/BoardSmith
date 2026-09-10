@@ -1,5 +1,5 @@
 import { mkdir, writeFile } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
+import { existsSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { execSync } from 'node:child_process';
 import chalk from 'chalk';
@@ -294,9 +294,17 @@ export async function initCommand(name: string, options: InitOptions = {}): Prom
 
   const spinner = ora(`Creating ${name}...`).start();
 
+  // The topmost directory this run had to create, or undefined when the path
+  // already existed. It is what the cleanup below is allowed to remove, and
+  // the only way to tell a directory this run made from one that was already
+  // the user's -- the same distinction `packAll` draws (#239). The
+  // `existsSync` refusal above answers that too, but only until two inits race
+  // each other for the same name.
+  let createdRoot: string | undefined;
+
   try {
     // Create directory structure
-    await mkdir(projectPath);
+    createdRoot = await mkdir(projectPath, { recursive: true });
     for (const dir of getRequiredDirectories()) {
       await mkdir(join(projectPath, dir), { recursive: true });
     }
@@ -319,17 +327,24 @@ export async function initCommand(name: string, options: InitOptions = {}): Prom
 
     await initVersionControl(projectPath);
 
-    spinner.succeed(chalk.green(`Created ${name} successfully!`));
-
     if (options.rulebook) {
       // Archive inside init so it cannot be a step the session skips. A failure here is loud:
       // a scaffolded project whose provenance header describes an archive that does not exist
       // is worse than a failed init, because the gap only surfaces at a later verify pass.
+      //
+      // The spinner stops first because the archive prints a report of its own,
+      // and it is not succeeded until AFTER the archive: the success line used
+      // to be printed here and was immediately followed by `Failed to create
+      // project` on an unreadable rulebook (#242). A command that says both is
+      // worse than one that says neither.
+      spinner.stop();
       await ingestArchiveCommand(options.rulebook, {
         project: projectPath,
         edition: options.edition,
       });
     }
+
+    spinner.succeed(chalk.green(`Created ${name} successfully!`));
 
     scaffold.printNextSteps(name);
   } catch (error) {
@@ -339,6 +354,16 @@ export async function initCommand(name: string, options: InitOptions = {}): Prom
     // outright, and then exited before `cli.ts`'s top-level handler could
     // render it as the one clean line every other command's failures get.
     spinner.fail(chalk.red('Failed to create project'));
+
+    // A half-scaffolded project is worse than no project (#242). The archive is
+    // the last step, so an unreadable `--rulebook` left a complete tree whose
+    // `rulebook/INDEX.md` provenance describes an archive that does not exist,
+    // and that gap only surfaces at a later verify pass. It is also exactly the
+    // shape the `existsSync` refusal above rejects, so the retry the user
+    // reaches for failed on a second, different error. Only what this run
+    // created is removed.
+    if (createdRoot !== undefined) rmSync(createdRoot, { recursive: true, force: true });
+
     throw new Error(
       `Could not create the project "${name}": ${error instanceof Error ? error.message : String(error)}`,
     );
