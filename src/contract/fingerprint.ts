@@ -840,7 +840,8 @@ function assertCoversWorldRedaction(bodies: readonly unknown[]): void {
  * regression in the engine must move the hash and be minted, not trip a guard
  * that tells the reader to go fix the fixture.
  *
- * The four states, and why each is here:
+ * The states, and why each is here. The first four are about what a pick
+ * looks like; the last three are about where the panel puts the verb's button.
  *
  *  - NO SELECTION AT ALL. The offer's floor. An action with nothing to ask can
  *    never be candidateless, so it is the control against which the other three
@@ -856,18 +857,42 @@ function assertCoversWorldRedaction(bodies: readonly unknown[]): void {
  *    which the fix must not undo: a pick that opens on nothing is still
  *    dropped. Fingerprinted by its ABSENCE from the offer, which is a payload
  *    difference like any other.
+ *  - A NESTED MENU GROUP, AN ORDER STANDING ALONE, AND NEITHER (#228). The
+ *    action panel's hierarchy is metadata on the offer, and the fixture has to
+ *    STAND IN each of its three states before the hash can see any of them: a
+ *    two-level path, an order with no group, and the absence a game that
+ *    declares no hierarchy sends. Absence counts because the wire distinguishes
+ *    "no placement" from "a placement of nothing", and an engine that began
+ *    emitting `group: []` would be flattening every world's panel.
  */
 function assertCoversWorldOffer(facts: {
   selectionShapes: readonly (readonly string[])[];
+  menuPlacements: readonly { group?: readonly string[]; order?: number }[];
   ownLandIsBare: boolean;
   everyNeighbourIsGreyed: boolean;
 }): void {
   const shapes = facts.selectionShapes;
+  const placements = facts.menuPlacements;
 
   const covers: readonly (readonly [string, boolean])[] = [
     ['an action with no selection at all', shapes.some((shape) => shape.length === 0)],
     ['an action whose selection is a number', shapes.some((shape) => shape.join() === 'number')],
     ['an action whose selection is an element', shapes.some((shape) => shape.join() === 'element')],
+    // The action panel's hierarchy (#228). All three states, because all three
+    // are bytes on the offer: a nested path, an order standing alone, and the
+    // absence that a game declaring no hierarchy sends.
+    [
+      'an action placed in a nested menu group',
+      placements.some((placement) => (placement.group?.length ?? 0) > 1),
+    ],
+    [
+      'an action ordered but not grouped',
+      placements.some((placement) => placement.order !== undefined && placement.group === undefined),
+    ],
+    [
+      'an action with no menu placement at all',
+      placements.some((placement) => placement.group === undefined && placement.order === undefined),
+    ],
     // The two element verbs share one predicate with the actions themselves, so
     // this asks the world the same question `tend`'s and `raze`'s own
     // `disabled` callbacks ask it rather than restating their rule.
@@ -1103,6 +1128,9 @@ async function computeWorldFixture(): Promise<{ view: unknown; offer: unknown }>
 
   const kindle = worldAction<any>('kindle')
     .prompt('Put logs on the common fire')
+    // AN ORDER WITHOUT A GROUP (#228), which is the placement a game declares
+    // to promote a common verb without nesting anything.
+    .order(10)
     .needs(() => [COMMONS])
     .enterNumber('logs', { prompt: 'How many?', min: 1, max: 9 })
     .execute((args: any, ctx: any) => {
@@ -1130,6 +1158,15 @@ async function computeWorldFixture(): Promise<{ view: unknown; offer: unknown }>
 
   const raze = worldAction<any>('raze')
     .prompt("Clear a neighbour's land")
+    // A NESTED MENU PATH (#228). The action panel's hierarchy is metadata on
+    // the offer, and a TYPE moves neither fingerprint on its own -- the KNOWN
+    // LIMIT at the top of this file, and the lesson ShufflewickPub #414
+    // recorded. So the fixture DECLARES a placement, two levels deep, and the
+    // bytes a host relays carry it. An engine that stopped emitting `group`
+    // would give every world a flat panel again, and this is what makes that
+    // move the payload rather than pass unrecorded.
+    .group('Land', 'Clearing')
+    .order(30)
     .needs(({ player }: any) => [holdingPartition(player.seat)])
     .chooseElement('neighbour', neighbourPick)
     .execute((args: any) => {
@@ -1281,6 +1318,10 @@ async function computeWorldFixture(): Promise<{ view: unknown; offer: unknown }>
     selectionShapes: [look, kindle, tend, raze].map((definition) =>
       definition.selections.map((selection) => selection.type),
     ),
+    menuPlacements: [look, kindle, tend, raze].map((definition) => ({
+      group: definition.group,
+      order: definition.order,
+    })),
     ownLandIsBare: isBare(holdingOf(live, LOOKER_SEAT)),
     everyNeighbourIsGreyed: neighboursOf(LOOKER_SEAT).every((seat) =>
       isAtFullGrowth(holdingOf(live, seat)),
