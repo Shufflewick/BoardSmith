@@ -1,6 +1,13 @@
 #!/usr/bin/env node
 /**
- * THE BROWSER REGRESSION FOR A MULTILINE TEXT SELECTION (#229).
+ * THE BROWSER REGRESSION FOR THE PANEL'S TYPED EDITORS (#229, #237).
+ *
+ * Both of them, in one script and by the same assertions. It began as the
+ * multiline text check and grew the number editor when #237 found that editor
+ * still carrying two defects this file had already proved fixed on the other
+ * one -- a hint bound to nothing and a submit that refused in silence. Checking
+ * them apart is how they diverged; checking them together is what makes the
+ * next divergence loud.
  *
  * The complaint in the ticket is a MEASUREMENT: a 1,000 character empire
  * description drawn in a 120px single-line input cannot be written or reviewed.
@@ -55,6 +62,8 @@ class Noticeboard extends Space<Colony> {
   nickname = '';
   /** A long field with a floor, so a refusal has a rule to break. */
   creed = '';
+  /** The NUMBER editor's field, so both typed editors are reachable here (#237). */
+  recycled = 0;
 }
 
 export class Colony extends Game<Colony, Player> {
@@ -111,6 +120,22 @@ const setNickname = worldAction<Colony>('setNickname')
     ctx.world.emit(COLONY, { renamed: true }, 'The colony was renamed.');
   });
 
+/**
+ * THE NUMBER EDITOR, with both bounds and an integer rule (#237).
+ *
+ * The other typed editor the panel draws. It is here because its hint and its
+ * refusal were the text editor's fixed defects still standing, and a check that
+ * runs beside the text one is what makes the next divergence loud.
+ */
+const recycle = worldAction<Colony>('recycle')
+  .prompt('Recycle waste')
+  .needs(() => [COLONY])
+  .enterNumber('waste', { prompt: 'Waste to recycle', min: 3, max: 9, integer: true })
+  .execute(({ waste }, ctx) => {
+    ctx.game.board().recycled = waste;
+    ctx.world.emit(COLONY, { recycled: true }, 'The waste was recycled.');
+  });
+
 export const gameDefinition: GameDefinition = {
   gameClass: Colony,
   gameType: 'multiline-colony',
@@ -123,7 +148,7 @@ export const gameDefinition: GameDefinition = {
       return { [COLONY]: board as GameElement };
     },
     view: () => [COLONY],
-    actions: [setDescription, setCreed, setNickname],
+    actions: [setDescription, setCreed, setNickname, recycle],
   },
 };
 `;
@@ -165,6 +190,7 @@ export default defineComponent({
       h('div', { class: 'colony-board' }, [
         h('pre', { 'data-fixture': 'stored-description' }, description.value),
         h('span', { 'data-fixture': 'stored-nickname' }, nickname.value),
+        h('span', { 'data-fixture': 'stored-recycled' }, read('recycled')),
       ]);
   },
 });
@@ -177,10 +203,10 @@ async function seated(page) {
     .waitFor({ timeout: 30_000 });
 }
 
-async function startAction(page, name) {
+async function startAction(page, name, editor = '.text-input') {
   const surface = surfaceOf(page);
   await surface.locator(`[data-bs-action="${name}"]`).click();
-  await surface.locator('.text-input').waitFor({ timeout: 15_000 });
+  await surface.locator(editor).waitFor({ timeout: 15_000 });
 }
 
 // THE WHOLE RUN, IN THE HARNESS'S ORDER (#231). It checks the checkout is
@@ -366,6 +392,62 @@ async function driveThrough({ chromium, hostUrl }) {
       await surface.locator('.action-config .cancel-btn').click();
     });
 
+    await check('the NUMBER editor states its rule and reports a refusal too (#237)', async () => {
+      // THE PARITY CHECK. Everything above this line is the text editor, and
+      // for two tickets the number editor beside it had neither of the two
+      // things #229 gave that one: a hint the field actually points at, and a
+      // submit that says why it refused instead of moving and doing nothing.
+      // It runs here rather than in its own script because the point is that
+      // the two editors are checked in one place, by the same assertions.
+      await startAction(page, 'recycle', '.number-input');
+      const field = surface.locator('.number-input input[type="number"]');
+      const hintEl = surface.locator('.number-input .input-hint');
+      const hint = (await hintEl.textContent())?.trim();
+      assert(hint === '(3 to 9, whole numbers)', `the range hint read ${JSON.stringify(hint)}`);
+      const described = (await field.getAttribute('aria-describedby'))?.split(/\s+/) ?? [];
+      assert(
+        described.includes(await hintEl.getAttribute('id')),
+        'the range hint is not among the field descriptions, so a screen reader never reads it',
+      );
+
+      await field.fill('1');
+      await surface.locator('.number-input .done-button').click();
+      const error = surface.locator('.number-input .selection-error');
+      await error.waitFor({ timeout: 10_000 });
+      const said = (await error.textContent())?.trim();
+      assert(said === 'waste must be at least 3', `the panel said ${JSON.stringify(said)}`);
+      assert((await error.getAttribute('role')) === 'alert', 'the message is not an alert');
+      assert(
+        (await field.getAttribute('aria-invalid')) === 'true',
+        'the field is not marked invalid while the message stands',
+      );
+      assert(
+        ((await field.getAttribute('aria-describedby'))?.split(/\s+/) ?? [])
+          .includes(await error.getAttribute('id')),
+        'the message is not among the field descriptions',
+      );
+      assert(await field.isVisible(), 'the refusal took the editor away');
+      assert(
+        (await field.inputValue()) === '1',
+        'the refused number was thrown away, so there is nothing left to correct',
+      );
+
+      // And it goes as soon as the player starts fixing it, then the corrected
+      // value goes all the way into the world's own state.
+      await field.fill('5');
+      assert(
+        (await surface.locator('.number-input .selection-error').count()) === 0,
+        'the message survived the player changing the field',
+      );
+      await surface.locator('.number-input .done-button').click();
+      const stored = surface.locator('[data-fixture="stored-recycled"]');
+      const read = await waitUntil(
+        async () => (await stored.textContent()) ?? '',
+        (seen) => seen === '5',
+      );
+      assert(read === '5', `the world stored ${JSON.stringify(read)} as the recycled waste`);
+    });
+
     await check('collapsing the bar mid-draft, then re-opening it', async () => {
       // NEW SINCE THIS WAS FIRST MEASURED (#230). A collapsed bar renders one
       // row -- token and summary -- and the whole panel branch is `v-else-if`,
@@ -374,12 +456,13 @@ async function driveThrough({ chromium, hostUrl }) {
       //
       // What is asserted is what a player can still do: the action survives
       // the round trip and the box comes back, at a usable size, inside the
-      // bar's restored cap. What the player LOSES is recorded here too, as the
-      // value it comes back with -- see the note below the assertion.
+      // bar's restored cap -- and with the prose still in it, which is #235's
+      // fix and the assertion at the bottom of this check.
       await startAction(page, 'setDescription');
       const box = surface.locator('.text-input textarea');
       await box.click();
-      await page.keyboard.type('A draft nobody meant to throw away.');
+      const typed = 'A draft nobody meant to throw away.';
+      await page.keyboard.type(typed);
 
       const toggle = surface.locator('[data-testid="bs-actionbar-toggle"]');
       await toggle.click();
@@ -408,16 +491,16 @@ async function driveThrough({ chromium, hostUrl }) {
         done.y + done.height <= bar.y + bar.height + 1,
         'after restoring, the submit button laid out below the bottom of the bar',
       );
-      // THE DRAFT DOES NOT SURVIVE, and this records it rather than asserting
-      // it is fine: the collapsed bar is a `v-if` branch and the panel is the
-      // `v-else-if`, so collapsing UNMOUNTS the editor and the typed value goes
-      // with it. Filed as #235 -- it is #230's unmount, and a multiline field is
-      // only where it hurts most, because 800 characters of prose is not a word
-      // of a nickname.
+      // THE DRAFT SURVIVES, and this is the inversion #235 was filed to make.
+      // The collapsed bar is still a `v-if` branch and the panel still the
+      // `v-else-if`, so the editor is still UNMOUNTED -- what changed is that
+      // the value is no longer inside it. It lives in `useActionController`
+      // beside `multiSelectDraft`, which outlives the panel, so the round trip
+      // has nothing to throw away.
       assert(
-        (await restored.inputValue()) === '',
-        'the draft survived a collapse -- if this now fails, #235 has been fixed '
-          + 'and this assertion should be inverted rather than deleted',
+        (await restored.inputValue()) === typed,
+        `the draft came back as ${JSON.stringify(await restored.inputValue())} `
+          + `rather than ${JSON.stringify(typed)}`,
       );
       await surface.locator('.action-config .cancel-btn').click();
     });

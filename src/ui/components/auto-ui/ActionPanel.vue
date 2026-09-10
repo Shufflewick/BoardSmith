@@ -31,6 +31,7 @@ import {
   splitAnchoredChoices,
   shouldDeferElementPickToBoard,
   textLengthHint,
+  numberRangeHint,
 } from './action-panel-helpers.js';
 import {
   buildActionMenu,
@@ -38,10 +39,11 @@ import {
   resolveMenuPath,
   type ActionMenuGroup,
 } from './action-menu.js';
-// The engine's own text validator, reached the way `action-panel-helpers.ts`
+// The engine's own validators, reached the way `action-panel-helpers.ts`
 // reaches for `MAX_FLAT_CHOICE_CANDIDATES`: the panel must apply the SAME
-// length and pattern rules the server applies, and a second copy of them is a
-// second rule set (#229).
+// rules the server applies, and a second copy of them is a second rule set
+// (#229 for text, #237 for number).
+import { numberRuleErrors } from '../../../engine/action/number-rules.js';
 import { textRuleErrors } from '../../../engine/action/text-rules.js';
 import ActionHelpPopover from '../helpers/ActionHelpPopover.vue';
 // Type-only, so the log component's module (and its stylesheet) never enters
@@ -254,10 +256,10 @@ const visibleActions = computed(() => {
 // see action-menu.ts for the model and for why it is a separate, pure module.
 //
 // OPENING A MENU CANNOT BE A GAME COMMAND. The only state a group interaction
-// touches is `openPath`, a ref that lives and dies with this component: no
-// controller call, no transport, no engine, nothing persistent. And a group
-// node carries no action name at all, so `enterGroup` has nothing it could
-// submit even by mistake.
+// touches is `openPath` -- a list of group labels the controller stores and
+// never reads, and cannot interpret, because it does not import the menu model
+// at all: no controller verb, no transport, no engine. And a group node carries
+// no action name, so `enterGroup` has nothing it could submit even by mistake.
 const actionMenu = computed(() => buildActionMenu(visibleActions.value));
 
 /**
@@ -269,8 +271,14 @@ const actionMenu = computed(() => buildActionMenu(visibleActions.value));
  * what is on screen. That is what makes "a group emptied while it was open"
  * land on the deepest ancestor that survived rather than on a level that is not
  * there.
+ *
+ * IT IS THE CONTROLLER'S REF, not this component's (#235). It was local until a
+ * collapse -- which unmounts the panel rather than hiding it -- was found to
+ * take the player back to the top level of a menu they had walked two steps
+ * into. Resolving on every read is what makes remembering it safe: a path is
+ * never trusted, so it does not matter how long the bar was down for.
  */
-const openPath = ref<readonly string[]>([]);
+const openPath = actionController.actionMenuPath;
 
 const menuLevel = computed(() => menuLevelAt(actionMenu.value, openPath.value));
 
@@ -395,63 +403,98 @@ const currentActionMeta = computed(() => {
 // Current pick - delegates to controller (required)
 const currentPick = computed(() => actionController.currentPick.value);
 
-const numberInputValue = ref<number | null>(null);
-const textInputValue = ref<string>('');
 /**
- * Why the text the player has typed will not be accepted, or null.
+ * THE TWO EDITORS' VALUES LIVE IN THE CONTROLLER (#235).
+ *
+ * They were refs here, and the bar's collapse is a `v-if` swap in `PlayShell`:
+ * it UNMOUNTS this component rather than hiding it, so everything the player
+ * had typed went with it, silently, from a control whose own promise is that it
+ * is reversible. `useActionController` outlives the panel and is already where
+ * `multiSelectDraft` lives for the same reason -- and putting it there is also
+ * what lets a custom UI see the in-progress text, which the parity rule wants
+ * and a ref in here could never give it.
+ *
+ * The controller stamps a draft with the question it belongs to and resolves it
+ * on read, so these are plain views onto it: whichever kind of value the pick
+ * being asked for cannot use reads as empty rather than as itself.
+ */
+const numberInputValue = computed<number | null>({
+  get: () => {
+    const draft = actionController.currentPickDraft.value;
+    return typeof draft === 'number' ? draft : null;
+  },
+  // An emptied number field gives back `''` through `v-model.number`, and a
+  // half-typed one can give back `NaN`; neither is a number the player has
+  // entered, so both clear the draft.
+  set: (value) => actionController.setPickDraft(
+    typeof value === 'number' && !Number.isNaN(value) ? value : null,
+  ),
+});
+const textInputValue = computed<string>({
+  get: () => {
+    const draft = actionController.currentPickDraft.value;
+    return typeof draft === 'string' ? draft : '';
+  },
+  set: (value) => actionController.setPickDraft(value === '' ? null : value),
+});
+/**
+ * Why what the player has entered will not be accepted, or null.
  *
  * Set when they try to submit and cleared the moment they change the field, so
  * the message is about what is in front of them rather than what used to be.
  * Before #229 the submit handler simply RETURNED on a value the rules refused:
  * the button moved, nothing happened, and there was no way to find out why.
+ *
+ * ONE ref for both editors, not one each (#237). The panel draws at most one
+ * typed field at a time, and the number editor spent two tickets carrying the
+ * silent-return the text editor had already lost because the repair was written
+ * per-editor. There is no per-editor copy of this left to forget.
  */
-const textInputError = ref<string | null>(null);
+const editorInputError = ref<string | null>(null);
 
-watch(textInputValue, () => {
-  textInputError.value = null;
+watch(() => actionController.currentPickDraft.value, () => {
+  editorInputError.value = null;
 });
 
 /**
- * A NEW PICK OPENS EMPTY.
+ * A NEW PICK IS NOT REFUSING ANYTHING YET.
  *
- * Both editors are one ref each for the whole panel, and nothing used to reset
- * them: `submitTextInput` cleared on a successful submit and every other way out
- * of a pick -- cancelling the action, a refusal, moving to the next selection --
- * left the typed value sitting in the ref. So the next text pick opened
- * PREFILLED with what the player had typed into a different field of a
- * different action, and if that field was shorter it opened already refusing
- * its own contents. Found in a browser (#229), by cancelling a 200 character
- * creed and starting a 20 character nickname.
- *
- * Keyed on the action AND the selection, because the same selection name recurs
- * across actions and across the rounds of a repeating pick, and each of those is
- * a fresh question.
+ * The VALUE opening empty is the controller's business now: a draft is stamped
+ * with the action, the selection and the repeating round it belongs to, and
+ * reads as empty outside them, which is what #229's leak needed (a 200
+ * character creed opening a 20 character nickname already too long). The
+ * refusal is this component's, because it is about the player's last press
+ * rather than about anything they wrote, so it does not follow them to the next
+ * question -- or back from a collapse they have pressed nothing in.
  */
 watch(
   () => `${currentAction.value ?? ''}/${currentPick.value?.name ?? ''}`,
   () => {
-    textInputValue.value = '';
-    textInputError.value = null;
-    numberInputValue.value = null;
+    editorInputError.value = null;
   },
 );
 
 /**
- * The length rule of the current text pick, as a sentence (#229).
+ * The rule of the pick being edited, as a sentence -- whichever editor is open.
  *
- * A multiline field states only its FLOOR here, because its character count
- * already states the ceiling and better: "140 of 1000 characters" carries the
- * maximum and where the player stands in it, so a hint reading "(up to 1000
+ * ONE computed over both kinds (#237). `numberRangeHint` and `textLengthHint`
+ * stay separate because the WORDING differs, which is deliberate and was
+ * decided twice (#229, #234); which sentence a field shows and where it is
+ * rendered does not differ at all, and that half was what kept getting fixed on
+ * one editor and not the other.
+ *
+ * A multiline field states only its FLOOR, because its character count already
+ * states the ceiling and better: "140 of 1000 characters" carries the maximum
+ * and where the player stands in it, so a hint reading "(up to 1000
  * characters)" beside it is the same fact twice -- and it costs a row of an
  * action bar that caps its own height and scrolls, which is how the count ended
  * up scrolled out of sight while the hint it duplicated stayed on screen.
- *
- * One function either way: what changes is which bounds the control still needs
- * words for, not how a bound is worded.
  */
-const textHint = computed(() => {
+const editorHint = computed(() => {
   const pick = currentPick.value;
-  if (!pick || pick.type !== 'text') return undefined;
+  if (!pick) return undefined;
+  if (pick.type === 'number') return numberRangeHint(pick);
+  if (pick.type !== 'text') return undefined;
   return pick.multiline
     ? textLengthHint({ minLength: pick.minLength })
     : textLengthHint(pick);
@@ -484,15 +527,47 @@ const textLimitAnnouncement = computed(() => {
   return `You have reached the ${max} character limit.`;
 });
 
-/** Whichever of hint, count and error the text editor is actually showing. */
-const textDescribedBy = computed(() => {
+/** Whichever of hint, count and error the open editor is actually showing. */
+const editorDescribedBy = computed(() => {
   const pick = currentPick.value;
   const ids: string[] = [];
-  if (textHint.value) ids.push(editorHintId);
-  if (pick?.multiline) ids.push(editorCountId);
-  if (textInputError.value) ids.push(editorErrorId);
+  if (editorHint.value) ids.push(editorHintId);
+  if (pick?.type === 'text' && pick.multiline) ids.push(editorCountId);
+  if (editorInputError.value) ids.push(editorErrorId);
   return ids.length ? ids.join(' ') : undefined;
 });
+
+/**
+ * WHAT MAKES THE FIELD A FIELD, AS ONE OBJECT EVERY CONTROL BINDS (#237).
+ *
+ * The number input, the single-line text input and the textarea are three
+ * different controls for the same job, and the accessible wiring is the same on
+ * all three: the id the prompt's `for` points at, the descriptions the field
+ * carries, and whether it currently stands refused. Written once and `v-bind`ed
+ * three times, so it is not possible to give one control a description list and
+ * leave another with a hint nobody hears -- which is exactly what the number
+ * editor was, for two tickets after the text editor was fixed.
+ */
+/**
+ * The editor's own class, which is what its layout hangs off.
+ *
+ * The two kinds share one block of markup now, but they do not share a width:
+ * a number field is 120px and a multiline box takes a whole row of the action
+ * bar. The stylesheet still addresses them by the classes it always did.
+ */
+const editorWrapperClass = computed(() => {
+  const pick = currentPick.value;
+  if (pick?.type !== 'text') return 'number-input';
+  return pick.multiline ? ['text-input', 'text-input-multiline'] : 'text-input';
+});
+
+const editorFieldAttrs = computed(() => ({
+  id: editorInputId,
+  'aria-describedby': editorDescribedBy.value,
+  // The literal type, not `string`: Vue types `aria-invalid` as a union of the
+  // values it accepts, and a widened `string` is not assignable to it.
+  'aria-invalid': editorInputError.value ? ('true' as const) : undefined,
+}));
 
 // ── Keyboard focus across step transitions (#27) ───────────────────────────
 //
@@ -741,52 +816,81 @@ function skipOptionalSelection() {
   actionController.skip(currentPick.value.name);
 }
 
-// Submit number input value
-function submitNumberInput() {
-  if (!currentPick.value || currentPick.value.type !== 'number') return;
-  if (numberInputValue.value === null) return;
-
-  // Validate against min/max
-  const val = numberInputValue.value;
-  const min = currentPick.value.min;
-  const max = currentPick.value.max;
-  if (min !== undefined && val < min) return;
-  if (max !== undefined && val > max) return;
-
-  setSelectionValue(currentPick.value.name, val);
-  numberInputValue.value = null;
+/**
+ * Why the value in the open editor cannot be submitted, or null.
+ *
+ * The rules come from the engine's OWN validators -- `textRuleErrors` (#229)
+ * and `numberRuleErrors` (#237) -- so what the panel refuses here and what the
+ * server would refuse are the same rule in the same words, rather than two
+ * copies that drift. `validate` is deliberately not among them: a game's custom
+ * validator closes over game state and never reaches a client, so the engine
+ * stays the authority and this is the subset a client can honestly check.
+ *
+ * Returning null for a pick that is not being edited, or an empty editor, is
+ * how "there is nothing to submit" and "this cannot be submitted" stay
+ * different answers to the caller below.
+ */
+function editorValueRefusal(): string | null {
+  const pick = currentPick.value;
+  if (!pick) return null;
+  if (pick.type === 'number') {
+    const val = numberInputValue.value;
+    if (val === null) return null;
+    return numberRuleErrors(pick.name, val, pick)[0] ?? null;
+  }
+  if (pick.type === 'text') {
+    return textRuleErrors(pick.name, textInputValue.value, {
+      minLength: pick.minLength,
+      maxLength: pick.maxLength,
+      // The wire carries a pattern as its source string; compiling it here is
+      // the only form the rule can be applied in.
+      pattern: pick.pattern === undefined ? undefined : new RegExp(pick.pattern),
+    })[0] ?? null;
+  }
+  return null;
 }
 
 /**
- * Submit the text editor's value, or say why it cannot be submitted (#229).
+ * Submit whatever the open editor holds, or say why it cannot be (#229, #237).
  *
- * The rules come from `textRuleErrors`, which is the engine's own text
- * validator -- so what the panel refuses here and what the server would refuse
- * are the same rule with the same wording, rather than two copies of it that
- * drift. `validate` is deliberately not among them: a game's custom validator
- * closes over game state and never reaches a client, so the engine stays the
- * authority and this is the subset a client can honestly check.
+ * ONE handler for the number field, the single-line text field and the box. It
+ * was two, and the second one silently `return`ed on a value outside its
+ * bounds: the button moved, nothing happened, and there was no way to find out
+ * why. That is not a defect worth fixing twice, so there is no longer a second
+ * handler to fix.
+ *
+ * The refused value STAYS in the field. It is still a draft the player wrote,
+ * so `useActionController` keeps it across a collapse (#235) -- while the
+ * message does not, because that is about the press rather than the value.
  */
-function submitTextInput() {
+function submitEditorValue() {
   const pick = currentPick.value;
-  if (!pick || pick.type !== 'text') return;
+  if (!pick) return;
 
-  const val = textInputValue.value;
-  const errors = textRuleErrors(pick.name, val, {
-    minLength: pick.minLength,
-    maxLength: pick.maxLength,
-    // The wire carries a pattern as its source string; compiling it here is the
-    // only form the rule can be applied in.
-    pattern: pick.pattern === undefined ? undefined : new RegExp(pick.pattern),
-  });
-  if (errors.length > 0) {
-    textInputError.value = errors[0]!;
+  const refusal = editorValueRefusal();
+  if (refusal !== null) {
+    editorInputError.value = refusal;
     return;
   }
 
-  textInputError.value = null;
-  setSelectionValue(pick.name, val);
-  textInputValue.value = '';
+  if (pick.type === 'number') {
+    const val = numberInputValue.value;
+    if (val === null) return;
+    editorInputError.value = null;
+    // Consumed, so the draft goes before the value does: `setSelectionValue`
+    // moves the pick on, and clearing after it would be tidying up a question
+    // nobody is being asked any more.
+    numberInputValue.value = null;
+    setSelectionValue(pick.name, val);
+    return;
+  }
+
+  if (pick.type === 'text') {
+    const val = textInputValue.value;
+    editorInputError.value = null;
+    textInputValue.value = '';
+    setSelectionValue(pick.name, val);
+  }
 }
 
 // Select an element (from element selection buttons)
@@ -1312,9 +1416,17 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
       data-bs-menu-announcement
     >{{ menuAnnouncement }}</span>
 
-    <!-- No action being configured -->
-    <!-- Key forces re-render when available actions change -->
-    <div v-if="!currentAction" class="action-buttons" :key="availableActions.join(',')">
+    <!-- No action being configured.
+
+         NO KEY ON THIS LIST (#235). It was keyed on `availableActions.join(',')`
+         to force a re-render, which re-mounted every button whenever the
+         available set changed -- the same unmount-loses-state mechanism as the
+         collapse, and the reason #228 had to extend the focus watcher to put
+         focus back afterwards. The only state that re-render existed to keep
+         honest, the open level, is resolved against the menu on every read and
+         kept outside this component, so the key had nothing left to do and a
+         button that still exists now keeps its DOM node and its focus. -->
+    <div v-if="!currentAction" class="action-buttons">
       <!-- Menu chrome, drawn only inside a group (#228). At the top level there
            is none, so a game that declares no grouping renders exactly the flat
            panel it always did. -->
@@ -1669,77 +1781,61 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
           </span>
         </div>
 
-        <!-- Number input. #199: it says what it is ASKING FOR, like every other
-             pick, and the prompt is a real <label> bound to the field -- a line
-             of text above an input is a label to a sighted player and nothing
-             at all to a screen reader. The range hint stays, below the prompt
-             and above the row, because it is the rule and not the question. -->
-        <div v-else-if="currentPick.type === 'number'" class="number-input">
-          <label class="selection-prompt" :for="editorInputId">
-            {{ currentPick.prompt || `Enter ${currentPick.name}` }}
-            <span v-if="currentPick.optional" class="optional-label">(optional)</span>
-          </label>
-          <span v-if="currentPick.min !== undefined || currentPick.max !== undefined" class="input-hint">
-            ({{ currentPick.min ?? '?' }}-{{ currentPick.max ?? '?' }}{{ currentPick.integer ? ', integer' : '' }})
-          </span>
-          <div class="input-row">
-            <input
-              type="number"
-              :id="editorInputId"
-              v-model.number="numberInputValue"
-              :min="currentPick.min"
-              :max="currentPick.max"
-              :step="currentPick.integer ? 1 : 'any'"
-              @keyup.enter="submitNumberInput"
-            />
-            <DoneButton @click="submitNumberInput" />
-          </div>
-        </div>
+        <!-- THE TYPED EDITOR, FOR BOTH PICKS THAT HAVE ONE (#237).
+             A number field, a single-line text field and a box are three
+             controls for one job, and everything around the control is the
+             same: the prompt is a real <label> bound to the field (#199,
+             because a line of text above an input is a label to a sighted
+             player and nothing at all to a screen reader), the hint below it
+             is the rule and not the question, the descriptions reach the field
+             through `editorFieldAttrs`, and one submit button reports one
+             refusal.
 
-        <!-- Text input. The same three lines, for the same reason (#199), and
-             one control or the other depending on how much the player has to
-             write (#229). ONE BLOCK rather than two branches: the label, the
-             hint, the error and the submit are the same in both, and a second
-             copy of them is where the single-line field and the box would start
-             disagreeing about a pick they share.
-
-             The hint comes from `textLengthHint` because interpolating
-             `minLength ?? '?'` rendered `(?-1000 chars)` for every field with a
-             maximum and no minimum, which is most of them. -->
+             It was two blocks, and three tickets running fixed one of them:
+             #199 the prompt on both, #229 the hint binding and the silent
+             refusal on text only, #234 the number hint's wording on its own.
+             There is one block now, so the next repair cannot land on half the
+             editor -- and the only thing that varies with the kind is which
+             control renders and what the value is. -->
         <div
-          v-else-if="currentPick.type === 'text'"
-          class="text-input"
-          :class="{ 'text-input-multiline': currentPick.multiline }"
+          v-else-if="currentPick.type === 'number' || currentPick.type === 'text'"
+          :class="editorWrapperClass"
         >
           <label class="selection-prompt" :for="editorInputId">
             {{ currentPick.prompt || `Enter ${currentPick.name}` }}
             <span v-if="currentPick.optional" class="optional-label">(optional)</span>
           </label>
-          <span v-if="textHint" :id="editorHintId" class="input-hint">({{ textHint }})</span>
+          <span v-if="editorHint" :id="editorHintId" class="input-hint">({{ editorHint }})</span>
           <div class="input-row">
+            <input
+              v-if="currentPick.type === 'number'"
+              v-bind="editorFieldAttrs"
+              type="number"
+              v-model.number="numberInputValue"
+              :min="currentPick.min"
+              :max="currentPick.max"
+              :step="currentPick.integer ? 1 : 'any'"
+              @keyup.enter="submitEditorValue"
+            />
             <!-- No Enter handler, which is the point: in a box Enter starts a
                  new line and the submit button is the only way out. -->
             <textarea
-              v-if="currentPick.multiline"
-              :id="editorInputId"
+              v-else-if="currentPick.multiline"
+              v-bind="editorFieldAttrs"
               v-model="textInputValue"
               :minlength="currentPick.minLength"
               :maxlength="currentPick.maxLength"
-              :aria-describedby="textDescribedBy"
-              :aria-invalid="textInputError ? 'true' : undefined"
               rows="6"
             ></textarea>
             <input
               v-else
+              v-bind="editorFieldAttrs"
               type="text"
-              :id="editorInputId"
               v-model="textInputValue"
               :minlength="currentPick.minLength"
               :maxlength="currentPick.maxLength"
               :pattern="currentPick.pattern"
-              :aria-describedby="textDescribedBy"
-              :aria-invalid="textInputError ? 'true' : undefined"
-              @keyup.enter="submitTextInput"
+              @keyup.enter="submitEditorValue"
             />
             <!-- Above the submit button, not below it: the bar caps its own
                  height and scrolls, and the count is the line the player needs
@@ -1747,15 +1843,15 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
             <span v-if="currentPick.multiline" :id="editorCountId" class="char-count">
               {{ textCharCount }}
             </span>
-            <DoneButton @click="submitTextInput" />
+            <DoneButton @click="submitEditorValue" />
           </div>
           <!-- Empty at every length but the last one, so it speaks when a
                keystroke stops working and stays quiet while the player types. -->
           <span v-if="currentPick.multiline" class="sr-only" role="status">
             {{ textLimitAnnouncement }}
           </span>
-          <p v-if="textInputError" :id="editorErrorId" class="selection-error" role="alert">
-            {{ textInputError }}
+          <p v-if="editorInputError" :id="editorErrorId" class="selection-error" role="alert">
+            {{ editorInputError }}
           </p>
         </div>
 

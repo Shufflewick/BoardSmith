@@ -310,6 +310,10 @@ const INERT_REF_MEMBERS: Record<string, unknown> = {
   pendingOnServer: false,
   actionCompletedTick: 0,
   multiSelectDraft: null,
+  // The typed value and the open menu level (#235): a board may read either,
+  // and an inert controller must answer both without one.
+  currentPickDraft: null,
+  actionMenuPath: [],
   actionSnapshot: null,
   validElements: [],
   // A computed gate a board consults before offering anything; it was missing.
@@ -328,7 +332,7 @@ const INERT_METHOD_MEMBERS = [
   'toggleMultiSelect', 'confirmMultiSelect', 'isMultiSelectSelected',
   'getChoices', 'getCurrentChoices', 'getValidElements', 'getActionMetadata',
   'clearArgs', 'fetchChoicesForPick', 'getCollectedPick', 'getCollectedPicks',
-  'setBeforeAutoExecute',
+  'setBeforeAutoExecute', 'setPickDraft',
 ] as const;
 
 /**

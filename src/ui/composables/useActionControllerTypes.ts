@@ -532,6 +532,45 @@ export interface UseActionControllerReturn {
    * until confirmMultiSelect() runs the fill() path with the complete array.
    */
   multiSelectDraft: Ref<{ selectionName: string; values: unknown[] } | null>;
+
+  // === Editor draft (shared in-progress typed value) ===
+  /**
+   * What the player has entered into the current number or text editor and not
+   * yet submitted, or `null` when they have entered nothing.
+   *
+   * Shared for the same reason as {@link multiSelectDraft}: the auto ActionPanel
+   * and a custom UI are two representations of one state, and this used to be a
+   * ref inside the panel -- so a custom UI could not see what the player was in
+   * the middle of writing, and anything that unmounted the panel threw it away
+   * (#235: collapsing the action bar unmounts it).
+   *
+   * SEPARATE from `currentArgs`, which receives the value only when the player
+   * submits it. A draft belongs to one action asking one selection in one round
+   * of a repeating pick, and reads as `null` outside that -- so a value typed
+   * into one field can never open another one prefilled.
+   */
+  currentPickDraft: ComputedRef<string | number | null>;
+  /**
+   * Record what the player has entered into the current editor, or `null` to
+   * clear it. `string` for a text pick and `number` for a number pick; anything
+   * else is refused with a devWarn rather than stored, as is a draft written
+   * while no editor is being asked for.
+   */
+  setPickDraft: (value: string | number | null) => void;
+
+  // === The action list's open level ===
+  /**
+   * The group path the player has navigated to in the action hierarchy (#228),
+   * or an empty array at the top level.
+   *
+   * Held here so it survives the panel being unmounted (#235). It is an opaque
+   * list of group labels as far as the controller is concerned: the controller
+   * never reads it, and writing it can start nothing, take no turn and change
+   * no game state. The panel resolves it against the menu on every read, so a
+   * path into a group that has gone away lands on the deepest level that is
+   * still there.
+   */
+  actionMenuPath: Ref<readonly string[]>;
   /**
    * Toggle a value in the in-progress multiSelect draft for a selection.
    * Respects the selection's max; auto-confirms when min === max and the exact count
