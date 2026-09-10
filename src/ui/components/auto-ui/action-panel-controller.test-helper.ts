@@ -36,10 +36,19 @@ export function stubActionController(overrides: Record<string, unknown> = {}) {
     animationsPending: ref(false),
     showActionPanel: ref(true),
     repeatingState: ref(null),
-    multiSelectDraft: ref(null),
     currentArgs: ref<Record<string, unknown>>({}),
     currentPick: ref(null),
     currentChoices: ref([]),
+
+    // The in-progress state the panel shares with a custom UI rather than
+    // holding: the multiSelect draft, the typed editor draft, and the level of
+    // the action hierarchy the player is standing in. The last two are shared
+    // because a collapse UNMOUNTS the panel (#235), so a ref inside it could not
+    // survive one.
+    multiSelectDraft: ref(null),
+    currentPickDraft: ref(null),
+    setPickDraft: vi.fn(),
+    actionMenuPath: ref<readonly string[]>([]),
 
     // Called from computed getters and template handlers, so on first render.
     getCurrentChoices: vi.fn(() => [] as unknown[]),

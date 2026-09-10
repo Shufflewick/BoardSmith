@@ -602,9 +602,9 @@ async function theMenuOnANarrowScreen({ browser, hostUrl }) {
  * a real screen and nothing a component test can answer.
  *
  * The second half is what collapsing does to a menu that is open, which is a
- * question about state and not layout -- and the answer is recorded here rather
- * than asserted as desirable, because it is #235's mechanism and not this
- * feature's to change.
+ * question about state and not layout: the level goes off screen whole and comes
+ * back where the player left it, because #235 moved `openPath` out of the
+ * component the collapse unmounts.
  */
 async function theMenuInsideTheCollapsibleBar({ browser, hostUrl }) {
   const context = await browser.newContext({ viewport: { width: 420, height: 720 } });
@@ -726,18 +726,29 @@ async function theMenuInsideTheCollapsibleBar({ browser, hostUrl }) {
   });
 
   await collapse();
-  await until(() => shownGroups(page), ['Dump', 'More'], 'the level after the bar came back');
+  await until(
+    () => shownActions(page),
+    ['renamePlanet', 'describeEmpire'],
+    'the level after the bar came back',
+  );
 
-  await check('restoring the bar puts the menu at the top level, not in a stale one', async () => {
-    // OBSERVED, NOT DESIRED. Collapsing unmounts the panel, so `openPath` -- a
-    // ref that lives and dies with the component -- goes with it and the player
-    // comes back to the root. That is the same mechanism #235 records for a
-    // half-typed value, and it is coherent rather than wrong: the root is a
-    // level that certainly exists, which is more than a remembered path can
-    // promise after a collapse of any duration.
+  await check('restoring the bar puts the player back in the level they left', async () => {
+    // THE INVERSION #235 WAS FILED TO MAKE. This asserted the root, because
+    // collapsing unmounted the panel and `openPath` was a ref that lived and
+    // died with it. The path is the controller's now, and remembering it is safe
+    // for a collapse of any duration because the panel resolves it against the
+    // menu on every read -- so a level that stopped existing while the bar was
+    // down still lands on the deepest one that did not.
     const restored = await measure();
-    assert(restored.label === null, `the restored bar reopened inside "${restored.label}"`);
-    await until(() => shownActions(page), ['construct', 'closeRegistry'], 'the restored top level');
+    assert(
+      restored.label === 'More / Empire settings',
+      `the restored bar reopened inside "${restored.label}"`,
+    );
+    await until(
+      () => shownActions(page),
+      ['renamePlanet', 'describeEmpire'],
+      'the level the player was standing in',
+    );
   });
 
   await context.close();

@@ -3,6 +3,7 @@ import {
   splitAnchoredChoices,
   shouldDeferElementPickToBoard,
   textLengthHint,
+  numberRangeHint,
 } from './action-panel-helpers.js';
 import type { ChoiceWithRefs, ValidElement } from '../../composables/useActionControllerTypes.js';
 
@@ -145,5 +146,63 @@ describe('textLengthHint', () => {
     // being read out as an abbreviation to the one player who cannot see the
     // field it belongs to.
     expect(textLengthHint({ maxLength: 20 })).toContain('characters');
+  });
+});
+
+/**
+ * #234: THE SAME DEFECT, ON THE PICK TWO LINES ABOVE IT.
+ *
+ * `enterNumber('waste', { min: 1, integer: true })` rendered `(1-?, integer)`,
+ * for the reason `textLengthHint` exists: a range built by interpolating
+ * `min ?? '?'` and `max ?? '?'` says nothing when only one end is declared, and
+ * a one-sided bound is the common case.
+ *
+ * Worded for numbers rather than borrowed from the text helper, and carrying
+ * the `integer` rule in words, because "integer" is a programmer's noun and the
+ * hint is a sentence for a player.
+ */
+describe('numberRangeHint', () => {
+  it('states only the minimum when there is no maximum', () => {
+    // The exact shape of the report.
+    expect(numberRangeHint({ min: 1, integer: true })).toBe('at least 1, whole numbers');
+  });
+
+  it('states only the maximum when there is no minimum', () => {
+    expect(numberRangeHint({ max: 10 })).toBe('up to 10');
+  });
+
+  it('states the range when the pick has both ends', () => {
+    expect(numberRangeHint({ min: 1, max: 10 })).toBe('1 to 10');
+  });
+
+  it('states the integer rule on its own when the pick is unbounded', () => {
+    // A rule the field enforces (`step="1"`) and nothing said it. The bounds
+    // are what is absent here, not the rule.
+    expect(numberRangeHint({ integer: true })).toBe('whole numbers');
+  });
+
+  it('says nothing at all when there is no rule to state', () => {
+    expect(numberRangeHint({})).toBeUndefined();
+  });
+
+  it('never renders a question mark, which is what the report was about', () => {
+    const rules = [
+      { min: 1, integer: true },
+      { max: 10 },
+      { min: 1, max: 10, integer: true },
+      { integer: true },
+    ];
+    for (const one of rules) expect(numberRangeHint(one)).not.toContain('?');
+  });
+
+  it('never says "integer", which is a word for a programmer', () => {
+    expect(numberRangeHint({ min: 1, integer: true })).not.toContain('integer');
+  });
+
+  it('reads 0 as a bound, because 0 is a number and not an absent one', () => {
+    // `min ?? '?'` was at least right about this; a truthiness test would not
+    // have been, and this is the pick that would have caught it.
+    expect(numberRangeHint({ min: 0, max: 5 })).toBe('0 to 5');
+    expect(numberRangeHint({ max: 0 })).toBe('up to 0');
   });
 });
