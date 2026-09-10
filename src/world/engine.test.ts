@@ -1276,7 +1276,7 @@ describe("#68 — a refused command leaves the world unchanged", () => {
     // boundary twice for one command.
     const engine = newEngine();
     expect(
-      engine.commandPartitions("player-a", { name: "tearOwn", args: { aim: "room-one" } }, STAMP.now),
+      engine.commandNeeds("player-a", { name: "tearOwn", args: { aim: "room-one" } }, STAMP.now, []).partitions,
     ).toEqual([ROOM_ONE]);
   });
 
@@ -2032,7 +2032,7 @@ describe("retiring a seat's holder (ShufflewickPub #399)", () => {
     // begins, so it arrives synchronously rather than as a rejected promise.
     let refused: unknown;
     try {
-      await engine.commandPartitions("p2", { name: "tend", args: {} }, 0);
+      engine.commandNeeds("p2", { name: "tend", args: {} }, 0, []);
     } catch (error) {
       refused = error;
     }
@@ -2047,7 +2047,7 @@ describe("retiring a seat's holder (ShufflewickPub #399)", () => {
     engine.unseat("p2");
     engine.seat("newcomer", 2);
 
-    expect(await engine.commandPartitions("newcomer", { name: "tend", args: {} }, 0)).toEqual([
+    expect(engine.commandNeeds("newcomer", { name: "tend", args: {} }, 0, []).partitions).toEqual([
       holdingPartition(2),
     ]);
   });
@@ -2089,7 +2089,7 @@ describe("retiring a seat's holder (ShufflewickPub #399)", () => {
     // And the chair's next holder reaches that same standing ground, which is
     // the danger stated as an assertion: retiring a seat is not a cleanup.
     engine.seat("newcomer", 2);
-    expect(await engine.commandPartitions("newcomer", { name: "tend", args: {} }, 0)).toEqual([
+    expect(engine.commandNeeds("newcomer", { name: "tend", args: {} }, 0, []).partitions).toEqual([
       holdingPartition(2),
     ]);
   });

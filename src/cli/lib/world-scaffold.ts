@@ -402,12 +402,31 @@ function unstored(name: string): Promise<never> {
   return Promise.reject(new Error(\`Nothing in this test holds partition "\${name}".\`));
 }
 
+/**
+ * The other half of a declaration, for a world-owned phase that names a CHAIR.
+ *
+ * A real host answers this out of its own seat table -- one point read for the
+ * seat the phase declared. This test has no host and no table, so it says so by
+ * name: a world action that declares \`.about(seat)\` needs a host to run
+ * against, and a scaffolded test is not one.
+ */
+function unrecorded(seat: number): Promise<never> {
+  return Promise.reject(
+    new Error(\`This test has no seat table, so it cannot answer seat \${seat}'s activity.\`),
+  );
+}
+
 /** What this seat may do, declared and then enumerated -- the two calls a host
  *  makes to draw a player's options. */
 async function offersFor(runner: Runner, player: string) {
   await walkDeclaration(
-    async (supplied) => (await runner.declareOffers(player, supplied, T0)).needs,
+    async (supplied) => ({
+      partitions: (await runner.declareOffers(player, supplied, T0)).needs,
+      // An offer belongs to a seat, and a seated action declares no chair.
+      seats: [],
+    }),
     unstored,
+    unrecorded,
   );
   return runner.offersFor(player, { now: T0, presence: [1] });
 }
@@ -427,9 +446,10 @@ async function perform(
   timing: { due: number; missedCount: number } | null = null,
   arrivedAt: number = T0,
 ) {
-  await walkDeclaration(
-    async (supplied) => (await runner.declare(command, player, supplied, arrivedAt)).needs,
+  const declaredActivity = await walkDeclaration(
+    (supplied, declared) => runner.declare(command, player, supplied, arrivedAt, declared),
     unstored,
+    unrecorded,
   );
   return runner.apply({
     player,
@@ -438,6 +458,9 @@ async function perform(
     arrivedAt,
     allowance: NO_TIMERS,
     presence: player === null ? [] : [1],
+    // WHAT THE WALK COLLECTED, and nothing else: the loop hands back exactly
+    // what this takes, so the two halves cannot come apart.
+    declaredActivity,
   });
 }
 
@@ -498,7 +521,7 @@ describe('the world', () => {
     const { runner } = launch();
     await runner.genesis();
     await expect(
-      runner.declare({ name: 'ripen', args: { seat: 1 } }, 'alice', {}, T0),
+      runner.declare({ name: 'ripen', args: { seat: 1 } }, 'alice', {}, T0, []),
     ).rejects.toThrow();
   });
 

@@ -26,7 +26,11 @@ import { Game, Player, Space, type ElementJSON, type GameOptions } from "../engi
 import { BoardSmithWorldEngine } from "./engine.js";
 import { worldBudgets, type WorldBudgets } from "./budgets.js";
 import type { ActionDefinition } from "../engine/index.js";
-import type { StoredPartition, WorldPartitionSource } from "./contract.js";
+import type {
+  DeclaredSeatActivityStamp,
+  StoredPartition,
+  WorldPartitionSource,
+} from "./contract.js";
 
 /** Small enough to read in a failure message, large enough that a ring is a
  *  ring rather than a pair. */
@@ -99,6 +103,9 @@ export const STAMP = {
   /** Nobody has acted here before: the world began watching at `now`, and the
    *  cases that are ABOUT a watermark name their own (#383). */
   activity: { seat: 1, at: null, since: 1_700_000_000_000 },
+  /** These suites' actions are all seated, and a seated action may declare no
+   *  chair at all (ShufflewickPub #423), so there is nothing to answer. */
+  declaredActivity: [] as readonly DeclaredSeatActivityStamp[],
 };
 
 /** The same two facts an offer needs. */
@@ -190,9 +197,9 @@ export async function applyThroughWalk(
   command: { name: string; args: Record<string, unknown> },
 ): ReturnType<BoardSmithWorldEngine["applyCommand"]> {
   for (;;) {
-    const needs = engine.commandPartitions(player, command, STAMP.now);
-    if (needs.length === 0) break;
-    await engine.hydrate(needs);
+    const needs = engine.commandNeeds(player, command, STAMP.now, STAMP.declaredActivity);
+    if (needs.partitions.length === 0) break;
+    await engine.hydrate(needs.partitions);
   }
   return engine.applyCommand(player, command, STAMP);
 }

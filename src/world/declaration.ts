@@ -66,7 +66,11 @@
  * No new concurrency: the world lock is already held across the whole command,
  * and both loops below run inside it.
  */
-import type { StoredPartition } from "./contract.js";
+import type {
+  DeclaredSeatActivityStamp,
+  StoredPartition,
+  WorldDispatchNeeds,
+} from "./contract.js";
 import { worldRefusal } from "./refusals.js";
 
 /**
@@ -171,11 +175,22 @@ export async function settleDeclaration(
  * to carry the view's ceiling, which for an action would refuse a perfectly
  * ordinary five-selection verb on its fifth honest round -- a limit read off
  * the wrong question.
+ *
+ * IT ALSO ANSWERS CHAIRS NOW (ShufflewickPub #423), and it RETURNS what it
+ * collected rather than leaving the host to keep its own copy. That is the one
+ * thing that makes the two halves impossible to get out of step: a host that
+ * drove the walk and then handed `apply` a list it assembled separately could
+ * hand over a chair the walk never asked about, or forget one it did, and the
+ * refusal would land on the bundle. What this returns IS what `apply` takes.
  */
 export async function walkDeclaration(
-  declare: (supplied: Record<string, StoredPartition>) => Promise<readonly string[]>,
+  declare: (
+    supplied: Record<string, StoredPartition>,
+    declared: readonly DeclaredSeatActivityStamp[],
+  ) => Promise<WorldDispatchNeeds>,
   read: (name: string) => Promise<StoredPartition>,
-): Promise<void> {
+  readActivity: (seat: number) => Promise<DeclaredSeatActivityStamp>,
+): Promise<readonly DeclaredSeatActivityStamp[]> {
   // NULL PROTOTYPE, for the reason `settleDeclaration` gives: a partition name
   // is the bundle's, and `supplied["__proto__"] = partition` on a plain object
   // swaps this record's prototype rather than storing an entry (#190).
@@ -183,10 +198,22 @@ export async function walkDeclaration(
     string,
     StoredPartition
   >;
+  // THE ANSWERS ACCUMULATE, AND THE PARTITIONS DO NOT (ShufflewickPub #423).
+  //
+  // A partition becomes RESIDENT, so the child subtracts it and each round is
+  // handed only what that round asked for. A watermark becomes nothing: it is
+  // handed to the dispatch and forgotten, so the only thing that can remember
+  // which chairs have been answered is this side -- and the child must not be
+  // the thing that remembers, or a stamp left over between two dispatches would
+  // be read by the second as an answer to a question it never asked.
+  const declared: DeclaredSeatActivityStamp[] = [];
   for (;;) {
-    const needs = await declare(supplied);
-    if (needs.length === 0) return;
+    const needs = await declare(supplied, declared);
+    if (needs.partitions.length === 0 && needs.seats.length === 0) return declared;
     supplied = Object.create(null) as Record<string, StoredPartition>;
-    for (const name of needs) supplied[name] = await read(name);
+    for (const name of needs.partitions) supplied[name] = await read(name);
+    // ONE POINT READ PER CHAIR, in the order it was asked for, which is the
+    // order the child matches them back in.
+    for (const seat of needs.seats) declared.push(await readActivity(seat));
   }
 }

@@ -353,6 +353,98 @@ export interface SeatActivity extends SeatActivityStamp {
 }
 
 /**
+ * WHO IS IN THE CHAIR A WATERMARK IS ABOUT (ShufflewickPub #423).
+ *
+ * The one fact about a SEAT NUMBER that a game cannot hold for itself, and it
+ * only arises on the road that asks about a seat rather than about the acting
+ * player: a dispatch's own seat is by definition somebody's, while a phase that
+ * names a chair may be naming one nobody is sitting in.
+ *
+ * IT MATTERS BECAUSE AN EMPTY CHAIR'S WATERMARK IS DELETED WITH IT (#399).
+ * Vacating clears `at` -- it must, or the next holder's first handler would be
+ * told they had been silent since the person before them was -- so an empty
+ * chair reads `at: null` and is indistinguishable, on the numbers alone, from
+ * an established empire that has been quiet since the upgrade. One of those is
+ * a candidate for a successor election and the other is not.
+ *
+ * THREE VALUES, AND THEY ARE THE THREE A HOST CAN ACTUALLY VOUCH FOR. There is
+ * deliberately no "never issued": a host's roster records who holds a chair,
+ * not the history of who ever did, so "nobody holds seat 9" and "seat 9 was
+ * never handed out" are the same row -- absent. A fourth value would be a claim
+ * nothing could check, and the game already knows which empires it built.
+ */
+export type SeatTenancy =
+  /** Somebody holds this chair now, and the watermark is theirs. */
+  | "held"
+  /** Nobody holds it. Either it was never handed out, or it was vacated and its
+   *  watermark went with it (#399), which is why `at` is null here. */
+  | "empty"
+  /**
+   * Its holder's account was ERASED (#410), so the chair is still held and
+   * there is nobody to come back to it.
+   *
+   * A different answer from `empty`, because the chair was NOT released: the
+   * seat is still allocated, the watermark is still the last thing that
+   * happened in it, and the holder is addressable only by the enrolment row id.
+   * A teardown that treated this as an empty chair would leave the world's own
+   * roster claiming a seat nothing can ever act from.
+   */
+  | "erased";
+
+/**
+ * ONE CHAIR'S WATERMARK, AS A DECLARED POINT READ ANSWERS IT (ShufflewickPub
+ * #423).
+ *
+ * `SeatActivityStamp` is about the seat a DISPATCH BELONGS TO. This is about a
+ * seat a world-owned phase NAMED, which is a different question with a
+ * different answer for the same numbers -- so it is a different type rather
+ * than a field bolted onto the first one, and #383's shape is untouched.
+ *
+ * The host answers one of these per declared seat, and it is the same point
+ * read `world.activity` already is: one row, for one seat, against an indexed
+ * key. Five hundred empires and a phase asks about one.
+ */
+export interface DeclaredSeatActivityStamp extends SeatActivityStamp {
+  readonly tenancy: SeatTenancy;
+}
+
+/** `DeclaredSeatActivityStamp` as a handler reads it, with `inactiveSince`
+ *  derived by the engine exactly as `SeatActivity` derives it. */
+export interface DeclaredSeatActivity extends SeatActivity {
+  readonly tenancy: SeatTenancy;
+}
+
+/**
+ * WHAT ONE ROUND OF A DISPATCH'S DECLARATION IS STILL WAITING FOR
+ * (ShufflewickPub #423).
+ *
+ * Two lists rather than one, because they are answered from two different
+ * places and neither can stand in for the other: a partition comes out of the
+ * partition store and becomes resident, a chair's watermark comes out of the
+ * host's own seat table and never becomes anything -- it is handed to the
+ * dispatch and forgotten.
+ *
+ * BOTH EMPTY IS HOW THE WALK ENDS. A round that names only things already
+ * answered leaves both lists empty, which is the steady state and costs no read
+ * at all.
+ */
+export interface WorldDispatchNeeds {
+  /** Partition names the host must make resident before asking again. */
+  readonly partitions: readonly string[];
+  /**
+   * Chairs the host must answer a point read for, at most one per round.
+   *
+   * ONE PER ROUND is the whole cost argument, and it is structural rather than
+   * a budget: a round answers a seat or nothing, so the number of chairs a
+   * dispatch can ask about is the number of activity rounds in the action's own
+   * source. An all-seat read would have to be written out one `.about()` at a
+   * time, in the bundle, where a reviewer can see it -- which is what makes the
+   * O(world) shape this replaced unavailable rather than merely discouraged.
+   */
+  readonly seats: readonly number[];
+}
+
+/**
  * WHAT THE HOST KNOWS AT THE MOMENT IT ASKS FOR AN OFFER.
  *
  * The same two facts a command's stamp carries, and for the same reason: time
@@ -572,6 +664,20 @@ export interface WorldCommandStamp {
    * Null when there is no seat behind the command.
    */
   readonly activity: SeatActivityStamp | null;
+  /**
+   * THE CHAIRS THIS DISPATCH'S WALK NAMED (ShufflewickPub #423).
+   *
+   * One answer per seat the declaration asked about, in the order it asked.
+   * Empty for every dispatch that asked about none, which is every seated
+   * action -- a player's road cannot declare an activity round at all.
+   *
+   * ACCUMULATED BY THE HOST, and handed back whole on every round of the walk
+   * as well as here. The child holds no store, so it must not be the thing that
+   * remembers which chairs have been answered either: a watermark left over in
+   * a child between two dispatches would be read by the second one as an answer
+   * to a question it never asked.
+   */
+  readonly declaredActivity: readonly DeclaredSeatActivityStamp[];
 }
 
 /**
@@ -608,6 +714,16 @@ export interface WorldEventStamp {
    * nobody.
    */
   readonly activity: SeatActivityStamp | null;
+  /**
+   * THE CHAIRS THIS EVENT'S WALK NAMED (ShufflewickPub #423).
+   *
+   * `WorldCommandStamp`'s field, and THE road it exists for: a world-owned
+   * event is handed `activity: null` because it is about nobody, and the whole
+   * of an occupied world's lifecycle -- the hourly sweep, the successor
+   * election, the recheck before the countdown fires -- is world-owned. This is
+   * how such an event learns anything about a person at all.
+   */
+  readonly declaredActivity: readonly DeclaredSeatActivityStamp[];
 }
 
 /**
@@ -862,7 +978,8 @@ export interface WorldEngine {
   viewPartitions(player: string): readonly string[];
 
   /**
-   * WHICH PARTITIONS THIS COMMAND IS ABOUT, BEFORE IT RUNS (#121).
+   * WHAT THIS DISPATCH NEEDS BEFORE IT RUNS: PARTITIONS, AND CHAIRS (#121,
+   * ShufflewickPub #423).
    *
    * `viewPartitions`' counterpart on the write path, and it exists on the
    * engine for the reason that one does: the ROSTER is the engine's. The
@@ -888,12 +1005,22 @@ export interface WorldEngine {
    * what an earlier round of this same declaration already loaded (#122) -- see
    * `hydrate` below, and `world-declaration.ts` for why the loop exists and what
    * bounds it.
+   *
+   * IT ANSWERS TWO KINDS OF THING NOW (ShufflewickPub #423), because a
+   * world-owned phase has to be able to say which SEAT it is about as well as
+   * which rooms: a watermark lives in the host's store, so the only way a
+   * handler can read one is for the walk to have named the chair and the host
+   * to have answered it. `declared` is what the host has answered so far, in
+   * the order it was asked, and this subtracts it exactly as it subtracts a
+   * resident partition -- so the walk ends when nothing on either list is
+   * outstanding.
    */
-  commandPartitions(
+  commandNeeds(
     player: string | null,
     command: WorldCommand,
     now: number,
-  ): readonly string[];
+    declared: readonly DeclaredSeatActivityStamp[],
+  ): WorldDispatchNeeds;
 
   /**
    * ADOPT THESE PARTITIONS, SO THE NEXT DECLARATION CAN READ THEM (#122).
@@ -1180,7 +1307,7 @@ export interface WorldEngine {
  */
 export const WORLD_ENGINE_METHODS = Object.keys({
   applyCommand: null,
-  commandPartitions: null,
+  commandNeeds: null,
   createMigratedPartitions: null,
   createPartition: null,
   evict: null,

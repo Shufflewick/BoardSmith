@@ -353,8 +353,8 @@ describe("createWorld — one construction, every host", () => {
     // Genesis CREATED the partition, so the engine already holds it and the
     // host is told to send nothing -- the residency subtraction that keeps a
     // warm world's command free of storage reads.
-    const declared = await runner.declare({ name: "poke", args: {} }, "p1", {}, 0);
-    expect(declared.needs).toEqual([]);
+    const declared = await runner.declare({ name: "poke", args: {} }, "p1", {}, 0, []);
+    expect(declared).toEqual({ partitions: [], seats: [] });
 
     const result = await runner.apply({
       player: "p1",
@@ -365,6 +365,8 @@ describe("createWorld — one construction, every host", () => {
       presence: [1],
       // Not about the watermark; the cases that are name their own (#383).
       activity: null,
+      // And it declares no chair (ShufflewickPub #423): a seated action cannot.
+      declaredActivity: [],
     });
     expect(result.dirty).toEqual(["yard:1"]);
     expect(result.events).toHaveLength(1);

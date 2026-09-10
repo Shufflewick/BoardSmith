@@ -172,6 +172,24 @@ export const WORLD_REFUSALS = {
     owner: "game",
     why: "a handler read a partition its partitions() did not declare -- a bundle bug, and the same bundle will do it again next time",
   },
+  "undeclared-activity": {
+    owner: "game",
+    why:
+      "ShufflewickPub #423: a handler read a chair's activity watermark that no " +
+      "`.about()` round declared. `undeclared-partition`'s twin, and GAME-owned " +
+      "for the same reason: the declaration is in the bundle's source, so the " +
+      "same phase will read the same undeclared chair on its next occurrence",
+  },
+  "invalid-seat-declaration": {
+    owner: "game",
+    why:
+      "ShufflewickPub #423: an `.about()` round answered something that is not a " +
+      "seat -- a fraction, a zero, a negative. GAME-owned: it is a line in the " +
+      "bundle, and the reason it is refused rather than passed to the host is " +
+      "that a host asked for a chair that cannot exist answers an empty row, " +
+      "which reads to the phase that asked exactly like an established empire " +
+      "nobody has touched since the upgrade",
+  },
   "engine-not-world-mode": {
     owner: "game",
     why: "the bundle built its engine over a game that is not in world mode, so element references would resolve to the wrong element once a partition is not resident",
@@ -254,6 +272,25 @@ export const WORLD_REFUSALS = {
   },
 
   // ---- PLATFORM: a host's own bookkeeping broke; deterministic, so a host with a park ladder parks ----
+  "activity-answered-wrong": {
+    owner: "platform",
+    why:
+      "ShufflewickPub #423: the host answered a declared activity read about a " +
+      "different chair from the one the walk asked for. PLATFORM-owned, unlike " +
+      "the two game-owned activity codes beside it: a declaration walk is driven " +
+      "by the host, in order, and a host whose answers do not line up with its " +
+      "own questions cannot be corrected by a bundle. It is refused rather than " +
+      "tolerated because the alternative is a phase reading somebody else's " +
+      "idleness and destroying the wrong empire",
+  },
+  "activity-unanswered": {
+    owner: "platform",
+    why:
+      "ShufflewickPub #423: a handler reached a chair its walk declared and the " +
+      "host supplied no watermark for it, which means the walk was not driven to " +
+      "the end before `apply`. PLATFORM-owned for the reason " +
+      "`activity-answered-wrong` is: the loop belongs to the host",
+  },
   "partition-not-resident": {
     owner: "platform",
     why: "a partition was serialized or read without being adopted, which means the engine and the store disagree about what is loaded",

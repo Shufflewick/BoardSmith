@@ -75,8 +75,8 @@ if (mode === 'live') {
     },
     nextElementId: 1_000_100,
   });
-  store.seat('player-a', 1);
-  store.seat('player-b', 2);
+  store.seat('player-a', 1, 1_700_000_000_000);
+  store.seat('player-b', 2, 1_700_000_000_000);
   store.recordDirty(['room/lobby', 'room/unwritten']);
   await store.writeCheckpoint(
     { partitions: { 'room/lobby': JSON.stringify({ visitors: 3 }) }, nextElementId: 1_000_100 },

@@ -61,13 +61,14 @@ function forgetAllocationStamp(path: string): void {
 }
 
 /**
- * THE SAME STORE, AS LAYOUT 3 LEFT IT (#225).
+ * THE SAME STORE, AS LAYOUT 3 LEFT IT (#225, ShufflewickPub #423).
  *
  * Layout 4 added `seat_activity` and the epoch a seat's idleness is measured
- * from, and changed nothing else, so removing both is layout 3 exactly. Reached
- * through SQLite for the reason `forgetAllocationStamp` is: the store only ever
- * writes the layout it is on, so a world from an older one cannot be built
- * through its doors.
+ * from; layout 5 added the instant each chair was granted. Neither changed
+ * anything else, so undoing all three is layout 3 exactly. Reached through
+ * SQLite for the reason `forgetAllocationStamp` is: the store only ever writes
+ * the layout it is on, so a world from an older one cannot be built through its
+ * doors.
  */
 function rewindStoreToLayout3(path: string): void {
   const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite') as {
@@ -75,6 +76,12 @@ function rewindStoreToLayout3(path: string): void {
   };
   const db = new DatabaseSync(path);
   try {
+    // REBUILT RATHER THAN ALTERED, so the rewind does not depend on which
+    // SQLite the test host ships a DROP COLUMN in.
+    db.exec('CREATE TABLE seats_old (player TEXT PRIMARY KEY, seat INTEGER NOT NULL)');
+    db.exec('INSERT INTO seats_old (player, seat) SELECT player, seat FROM seats');
+    db.exec('DROP TABLE seats');
+    db.exec('ALTER TABLE seats_old RENAME TO seats');
     db.exec('DROP TABLE seat_activity');
     db.exec("DELETE FROM meta WHERE key = 'activitySince'");
     db.exec("UPDATE meta SET value = '3' WHERE key = 'schemaVersion'");
@@ -2391,7 +2398,14 @@ describe('#225: a world written under an older store layout', () => {
     expect(second.store.pendingEvents()).toHaveLength(1);
     expect(second.store.seats()).toEqual([{ player: devWorldPlayer(1), seat: 1 }]);
     // The upgraded world starts watching now, not in 1970.
-    expect(second.store.activityOf(1)).toEqual({ seat: 1, at: null, since: 1_000_000 });
+    expect(second.store.activityOf(1)).toEqual({
+      seat: 1,
+      at: null,
+      since: 1_000_000,
+      // The chair predates the column that records when a chair was granted,
+      // so the world's own recording epoch is the whole of its baseline.
+      tenancy: 'held',
+    });
     await second.host.close();
   });
 });

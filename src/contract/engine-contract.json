@@ -1,7 +1,7 @@
 {
-  "revision": 69,
+  "revision": 70,
   "bundleProtocol": 2,
-  "surfaceHash": "f41ef69743af086b",
+  "surfaceHash": "9dfde0c4824961cc",
   "payloadHash": "a809d36d1341bd7a",
   "formatHash": "0058593e7cc80205",
   "history": [
@@ -565,6 +565,15 @@
       "payloadHash": "a809d36d1341bd7a",
       "formatHash": "0058593e7cc80205",
       "summary": "A room granted to only PART of an audience is one view body per GROUP rather than one per seat (ShufflewickPub #413). Game#projectsAlikeFor(seats) becomes Game#projectionSignaturesFor(seats): one string per seat, in the order asked, where equal strings mean byte-identical projections, and null for the whole audience means the tree consults something about a seat that cannot be summarised so no two seats may be assumed alike. #408 and #411 answered ONE BOOLEAN for a whole audience, so an audience that did not agree about a room fell all the way back to a body per seat -- measured on a plaza of 200 stalls at 500 seats with the plaza granted to half of them, that was TWO distinct answers sent as 500 encodings, 53 MB and 274 ms of encode-and-parse, and is now two bodies of 125 KB. THE SIGNATURE IS THE REDACTION'S OWN OUTPUT, not a hash of a projected body: for each state the tree declares, in one fixed walk order, the MODE redactVisibilityForSeat writes for that seat. That mode is the entirety of what the redaction writes (the roster is dropped and the seat is never named, #411) and it also decides what canPlayerSee answered, since 'all' is written exactly where the answer was yes -- so two seats spelled alike everywhere hold the same bytes, held exhaustively over every mode x every roster x every seat x every owner rather than by sample. An element declaring nothing inherits the nearest declaring ancestor's state, which is already in the signature, so the walk stays local. WHAT REFUSES, and it is refusal rather than approximation: an 'owner' element or zone for every seat it does not grant OUTRIGHT (ownership is a fact about the element, not about the state, and an owner-only zone that denies everybody still shows its children to its owner under their real ids while giving everybody else synthetic ones -- #411's predicate grouped those, which this closes), a class with static visibleAttributes, static playerView, any tutorial progress, and any addressed animation event. WorldEngine.viewsFor is unchanged in shape: it still answers {bodies, seats}, with more sharing behind it. formatHash is unchanged: stored partition bytes are untouched and a live world crosses onto this revision with no gate."
+    },
+    {
+      "revision": 70,
+      "date": "2026-09-10",
+      "bundleProtocol": 2,
+      "surfaceHash": "9dfde0c4824961cc",
+      "payloadHash": "a809d36d1341bd7a",
+      "formatHash": "0058593e7cc80205",
+      "summary": "A world-owned phase can declare which SEAT it is about, and read that chair's activity watermark as a bounded point read (ShufflewickPub #423). worldClockAction gains .about(), one chair per round of the same ordered declaration walk .needs() already uses, and ctx.world.activityOf(seat) answers { seat, at, since, inactiveSince, tenancy } for a chair the walk named and refuses undeclared-activity for any other. A seated action carrying an activity round is refused when the world is built, so a player has no road to another seat's watermark. commandPartitions becomes commandNeeds and answers two lists -- partitions, and at most one chair per round -- taking what the host has already answered so the walk terminates in order; WorldCommandStamp and WorldEventStamp carry declaredActivity, and walkDeclaration drives both legs and returns what apply takes. A chair's SINCE is now the later of the world's recording epoch and the instant its holder took it, so a newcomer in an old world is not instantly reapable, and tenancy tells an empty or erased chair from a silent empire (#399, #410)."
     }
   ]
 }

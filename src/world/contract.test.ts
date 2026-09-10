@@ -18,6 +18,7 @@ import type {
   WorldCommand,
   WorldCommandResult,
   WorldCommandStamp,
+  WorldDispatchNeeds,
   WorldEngine,
   WorldEventStamp,
   WorldOfferStamp,
@@ -115,7 +116,7 @@ class ReferenceWorldEngine implements WorldEngine {
     };
   }
 
-  commandPartitions(player: string | null, command: WorldCommand): readonly string[] {
+  commandNeeds(player: string | null, command: WorldCommand): WorldDispatchNeeds {
     // WHAT A COMMAND IS ABOUT (#121), answered from the acting seat and the
     // arguments -- never from the world, which is still absent when the
     // platform asks. `touchAll` is the case that names more than one; a
@@ -141,7 +142,15 @@ class ReferenceWorldEngine implements WorldEngine {
       );
     }
     const about = command.name === "touchAll" ? [...PARTITIONS] : [PARTITIONS[0]];
-    return about.filter((name) => !this.resident.has(name));
+    return {
+      partitions: about.filter((name) => !this.resident.has(name)),
+      // NO CHAIR, AND THAT IS AN ANSWER (ShufflewickPub #423). Every verb this
+      // reference world has acts for a seat, and a seated action may declare no
+      // activity round at all -- so the honest thing for a reference engine
+      // with no world-owned phase in it is an empty list rather than an
+      // invented watermark.
+      seats: [],
+    };
   }
 
   /**

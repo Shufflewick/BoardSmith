@@ -132,7 +132,7 @@ export function assertWorldEngineConformance(makeEngine: WorldEngineFactory): vo
     const resident = engine.residency().map(({ name }) => name).sort();
     const command = { name: "touch", args: {} };
 
-    const named = engine.commandPartitions(alice, command, STAMP.now);
+    const named = engine.commandNeeds(alice, command, STAMP.now, []).partitions;
     expect(Array.isArray(named)).toBe(true);
     expect(engine.residency().map(({ name }) => name).sort()).toEqual(resident);
 
@@ -141,7 +141,7 @@ export function assertWorldEngineConformance(makeEngine: WorldEngineFactory): vo
     // than passing quietly, which is the property the ceiling used to buy.
     const walked = new Set<string>(named);
     for (let round = 0; ; round++) {
-      const needs = engine.commandPartitions(alice, command, STAMP.now);
+      const needs = engine.commandNeeds(alice, command, STAMP.now, []).partitions;
       if (needs.length === 0) break;
       expect(round, "a command's declaration walk did not end").toBeLessThan(16);
       for (const name of needs) walked.add(name);
@@ -159,7 +159,7 @@ export function assertWorldEngineConformance(makeEngine: WorldEngineFactory): vo
     // than reaching `player.seat` on nothing and answering with a TypeError out
     // of game code. The clock's own verbs are seatless, and `worldClockAction()` is
     // enforced on BOTH roads` below is where the pair is asserted.
-    expect(() => engine.commandPartitions(null, command, STAMP.now)).toThrow(/no player/);
+    expect(() => engine.commandNeeds(null, command, STAMP.now, []).partitions).toThrow(/no player/);
   });
 
   // "viewFor is PER PLAYER" USED TO BE ASSERTED HERE, AND IS RETIRED

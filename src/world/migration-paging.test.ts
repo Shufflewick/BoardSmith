@@ -261,7 +261,7 @@ describe("#407 — a migrated page may be let go of", () => {
     expect(JSON.parse(JSON.stringify(after.d!.json)).attributes.tally).toBe(1);
 
     const command = { name: "poke", args: {} };
-    await runner.declare(command, "p1", { a: after.a! }, 0);
+    await runner.declare(command, "p1", { a: after.a! }, 0, []);
     const result = await runner.apply({ player: "p1", command, timing: null, ...STAMP });
 
     // ONLY the room the command named. A touch-mark left behind by the
@@ -280,7 +280,7 @@ describe("#407 — a migrated page may be let go of", () => {
     runner.evict(["c", "d"]);
 
     const command = { name: "poke", args: {} };
-    await runner.declare(command, "p1", {}, 0);
+    await runner.declare(command, "p1", {}, 0, []);
     const result = await runner.apply({ player: "p1", command, timing: null, ...STAMP });
 
     expect(result.dirty).toEqual(["a"]);
