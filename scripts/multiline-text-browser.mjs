@@ -379,12 +379,13 @@ async function driveThrough({ chromium, fixture }) {
       //
       // What is asserted is what a player can still do: the action survives
       // the round trip and the box comes back, at a usable size, inside the
-      // bar's restored cap. What the player LOSES is recorded here too, as the
-      // value it comes back with -- see the note below the assertion.
+      // bar's restored cap -- and with the prose still in it, which is #235's
+      // fix and the assertion at the bottom of this check.
       await startAction(page, 'setDescription');
       const box = surface.locator('.text-input textarea');
       await box.click();
-      await page.keyboard.type('A draft nobody meant to throw away.');
+      const typed = 'A draft nobody meant to throw away.';
+      await page.keyboard.type(typed);
 
       const toggle = surface.locator('[data-testid="bs-actionbar-toggle"]');
       await toggle.click();
@@ -413,16 +414,16 @@ async function driveThrough({ chromium, fixture }) {
         done.y + done.height <= bar.y + bar.height + 1,
         'after restoring, the submit button laid out below the bottom of the bar',
       );
-      // THE DRAFT DOES NOT SURVIVE, and this records it rather than asserting
-      // it is fine: the collapsed bar is a `v-if` branch and the panel is the
-      // `v-else-if`, so collapsing UNMOUNTS the editor and the typed value goes
-      // with it. Filed as #235 -- it is #230's unmount, and a multiline field is
-      // only where it hurts most, because 800 characters of prose is not a word
-      // of a nickname.
+      // THE DRAFT SURVIVES, and this is the inversion #235 was filed to make.
+      // The collapsed bar is still a `v-if` branch and the panel still the
+      // `v-else-if`, so the editor is still UNMOUNTED -- what changed is that
+      // the value is no longer inside it. It lives in `useActionController`
+      // beside `multiSelectDraft`, which outlives the panel, so the round trip
+      // has nothing to throw away.
       assert(
-        (await restored.inputValue()) === '',
-        'the draft survived a collapse -- if this now fails, #235 has been fixed '
-          + 'and this assertion should be inverted rather than deleted',
+        (await restored.inputValue()) === typed,
+        `the draft came back as ${JSON.stringify(await restored.inputValue())} `
+          + `rather than ${JSON.stringify(typed)}`,
       );
       await surface.locator('.action-config .cancel-btn').click();
     });

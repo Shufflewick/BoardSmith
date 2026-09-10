@@ -385,6 +385,39 @@ This is not a free-text search box and the rule above is untouched: a text pick
 is a value the ACTION asked for, enumerated by nothing and matched against
 nothing.
 
+#### What the player has entered survives the panel
+
+An editor's value is **not** held in `ActionPanel`. It lives in
+`useActionController` as `currentPickDraft`, written with `setPickDraft`, beside
+`multiSelectDraft` and for the same two reasons.
+
+- **The panel is unmounted more often than it looks.** Collapsing the action bar
+  is a `v-if` swap, not a hidden element, so a ref inside the panel goes with it
+  -- and 1,000 characters of empire description went with it silently, from a
+  control whose whole promise is that it is reversible.
+- **A custom UI can see it.** The two surfaces are two representations of one
+  state, and a value only the panel could read was a piece of that state a custom
+  UI had no way to show.
+
+**The lifetime is exact.** A draft belongs to one action asking one selection in
+one round of a repeating pick, and it is stored with that identity and resolved
+against it on every read. So it survives any number of collapses and re-renders,
+and reads as empty the moment the question changes -- a new action, the next
+selection, the next round, a cancel, a submit. That direction matters as much:
+before the draft was reset at all, cancelling a 200-character creed opened a
+20-character nickname prefilled and already refusing its own contents.
+
+The refusal message is not part of the draft. It is about the player's last
+press rather than anything they wrote, so it does not come back with the value.
+
+**The open level of the action hierarchy is held the same way**, as
+`actionMenuPath`. The controller stores an opaque list of group labels and never
+reads it -- it does not import the menu model and cannot tell a group from an
+action, which is what keeps "opening a menu is not a game command" structurally
+true. The panel resolves that path against the menu on every read, so a collapse
+of any duration is safe: a group that stopped existing while the bar was down
+lands the player on the deepest level that did not.
+
 #### Board keyboard handoff
 
 When the panel hands a choice to the board, the board becomes the only path into

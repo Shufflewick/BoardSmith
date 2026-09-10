@@ -317,6 +317,35 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   // array (a MERC composable relies on currentArgs[name] === undefined mid-selection).
   const multiSelectDraft = ref<{ selectionName: string; values: unknown[] } | null>(null);
 
+  // === Editor draft (shared source of truth) ===
+  // What the player has entered into the current number or text editor and not
+  // yet submitted. It lived in `ActionPanel` until #235, which made it die with
+  // the component: collapsing the action bar (#230) does not hide the panel, it
+  // UNMOUNTS it, and 1,000 characters of empire description went with it.
+  //
+  // The identity is the whole design. A draft belongs to ONE action asking ONE
+  // selection in ONE round of a repeating pick, and it is stored WITH that
+  // identity so `currentPickDraft` can resolve on read -- the same
+  // requested-never-trusted shape the panel's menu path uses. That is what makes
+  // the opposite bug unrepresentable rather than merely fixed: #229 had to
+  // repair typed text leaking from one pick into the next, and a draft that
+  // cannot be read outside its own question cannot leak at all.
+  const pickDraft = ref<{ identity: string; value: string | number } | null>(null);
+
+  // === The action list's open level (shared source of truth) ===
+  // Which level of the game-authored start-button hierarchy (#228) the player
+  // has navigated to. Here for the same reason as the editor draft: it was a
+  // ref inside `ActionPanel`, so a collapse threw the player back to the top
+  // level of a menu they had walked two steps into.
+  //
+  // AN OPAQUE ARRAY OF LABELS, AND THE CONTROLLER KEEPS IT THAT WAY. It does not
+  // import the menu model, cannot tell a group from an action, and never reads
+  // this -- which is what keeps #228's "opening a menu is not a game command"
+  // structurally true rather than merely intended. The panel resolves it against
+  // the menu on every read, so a path whose group has gone away lands on the
+  // deepest level that survived.
+  const actionMenuPath = ref<readonly string[]>([]);
+
   // === Element Enrichment ===
   // Creates functions to enrich validElements with full element data from gameView
   const { enrichElementsList, enrichValidElements } = createEnrichment(gameView, currentArgs);
@@ -335,6 +364,10 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     // start/startFollowUp/executeCurrentAction/cancel, so a stale draft can't leak
     // between actions.
     multiSelectDraft.value = null;
+    // And the editor draft, for the same reason (#235). Its identity would make
+    // it unreadable anyway; dropping it here means the memory goes too, and the
+    // one reset point stays the one reset point.
+    pickDraft.value = null;
   }
 
   /** Clear all selection state */
@@ -894,6 +927,91 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     if (!currentActionMeta.value) return false;
     return currentPick.value === null;
   });
+
+  /**
+   * Which question a draft would belong to, as one opaque string.
+   *
+   * The action, the selection and the round of a repeating pick: each of those
+   * is a fresh question, and the same selection name recurs across all three.
+   */
+  function draftIdentityFor(selectionName: string): string {
+    const round = repeatingState.value?.selectionName === selectionName
+      ? repeatingState.value.accumulated.length
+      : 0;
+    return `${currentAction.value ?? ''}/${selectionName}/${round}`;
+  }
+
+  /** The two pick types the panel draws an editor for, and nothing else. */
+  function editorKindOf(pick: PickMetadata | null): 'text' | 'number' | null {
+    if (pick?.type === 'text') return 'text';
+    if (pick?.type === 'number') return 'number';
+    return null;
+  }
+
+  const currentPickDraft = computed((): string | number | null => {
+    const draft = pickDraft.value;
+    const pick = currentPick.value;
+    if (!draft || !pick || editorKindOf(pick) === null) return null;
+    return draft.identity === draftIdentityFor(pick.name) ? draft.value : null;
+  });
+
+  /**
+   * Why the pick being asked for cannot hold `value` as a draft, as the warning
+   * to show a developer once -- or null when it can.
+   *
+   * Separate from `setPickDraft` because it is the whole of what "a draft only
+   * exists for the question actually being asked" means, and a caller reading
+   * either half should not have to read the other to see it.
+   */
+  function draftRefusal(
+    pick: PickMetadata,
+    value: string | number,
+  ): { key: string; message: string } | null {
+    const kind = editorKindOf(pick);
+    if (kind === null) {
+      return {
+        key: `pickdraft-no-editor:${pick.name}`,
+        message:
+          `setPickDraft(${JSON.stringify(value)}) was ignored: '${pick.name}' is a ${pick.type} ` +
+          `pick, which the player answers by choosing rather than by typing. Only a text or number ` +
+          `pick has an editor to draft into.`,
+      };
+    }
+    const wanted = kind === 'text' ? 'string' : 'number';
+    if (typeof value !== wanted || Number.isNaN(value)) {
+      return {
+        key: `pickdraft-wrong-kind:${pick.name}`,
+        message:
+          `setPickDraft(${JSON.stringify(value)}) was ignored: '${pick.name}' is a ${kind} pick, ` +
+          `so its draft must be a ${wanted} (or null to clear it).`,
+      };
+    }
+    return null;
+  }
+
+  function setPickDraft(value: string | number | null): void {
+    // Clearing comes first and is always allowed: a panel being unmounted or an
+    // action ending should not have to ask what is on screen before tidying up.
+    if (value === null) {
+      pickDraft.value = null;
+      return;
+    }
+    const pick = currentPick.value;
+    if (pick === null) {
+      devWarn(
+        'pickdraft-no-pick',
+        `setPickDraft(${JSON.stringify(value)}) was ignored: no action is currently asking for a ` +
+          `value. Start the action (and reach its text or number pick) before drafting into it.`
+      );
+      return;
+    }
+    const refusal = draftRefusal(pick, value);
+    if (refusal !== null) {
+      devWarn(refusal.key, refusal.message);
+      return;
+    }
+    pickDraft.value = { identity: draftIdentityFor(pick.name), value };
+  }
 
   /**
    * Reactive choices for the current pick. Unlike the bare getCurrentChoices()
@@ -1922,6 +2040,9 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     if (multiSelectDraft.value?.selectionName === selectionName) {
       multiSelectDraft.value = null;
     }
+    if (pickDraft.value?.identity === draftIdentityFor(selectionName)) {
+      pickDraft.value = null;
+    }
   }
 
   function cancel(): void {
@@ -2137,6 +2258,14 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     skip,
     clear,
     cancel,
+
+    // The current editor's draft (shared source of truth for a typed value that
+    // has not been submitted, so it survives the panel being unmounted).
+    currentPickDraft,
+    setPickDraft,
+    // Where the player is standing in the action list's hierarchy, for the same
+    // reason. Opaque to the controller: only the panel knows what a label means.
+    actionMenuPath,
 
     // Multi-select draft (shared source of truth for in-progress multiSelect)
     multiSelectDraft,

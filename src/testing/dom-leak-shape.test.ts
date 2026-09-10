@@ -153,7 +153,8 @@ describe('the inert controller cannot drift behind the real one', () => {
       'isSelecting', 'isExecuting', 'isLoadingChoices', 'error',
       'selectableElementIds', 'validElements', 'repeatingState',
       'pendingFollowUp', 'pendingOnServer', 'actionCompletedTick',
-      'multiSelectDraft', 'actionSnapshot', 'lastActionResult',
+      'multiSelectDraft', 'currentPickDraft', 'actionMenuPath',
+      'actionSnapshot', 'lastActionResult',
       'animationsPending', 'showActionPanel',
       'snapshotVersion',
       'start', 'fill', 'skip', 'clear', 'cancel', 'execute', 'undo',
@@ -161,6 +162,7 @@ describe('the inert controller cannot drift behind the real one', () => {
       'getChoices', 'getCurrentChoices', 'getValidElements',
       'getActionMetadata', 'clearArgs', 'fetchChoicesForPick',
       'getCollectedPick', 'getCollectedPicks', 'setBeforeAutoExecute',
+      'setPickDraft',
     ];
     for (const member of expected) {
       expect(inert[member], member).toBeDefined();

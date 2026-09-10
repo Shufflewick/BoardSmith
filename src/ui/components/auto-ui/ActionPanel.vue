@@ -255,10 +255,10 @@ const visibleActions = computed(() => {
 // see action-menu.ts for the model and for why it is a separate, pure module.
 //
 // OPENING A MENU CANNOT BE A GAME COMMAND. The only state a group interaction
-// touches is `openPath`, a ref that lives and dies with this component: no
-// controller call, no transport, no engine, nothing persistent. And a group
-// node carries no action name at all, so `enterGroup` has nothing it could
-// submit even by mistake.
+// touches is `openPath` -- a list of group labels the controller stores and
+// never reads, and cannot interpret, because it does not import the menu model
+// at all: no controller verb, no transport, no engine. And a group node carries
+// no action name, so `enterGroup` has nothing it could submit even by mistake.
 const actionMenu = computed(() => buildActionMenu(visibleActions.value));
 
 /**
@@ -270,8 +270,14 @@ const actionMenu = computed(() => buildActionMenu(visibleActions.value));
  * what is on screen. That is what makes "a group emptied while it was open"
  * land on the deepest ancestor that survived rather than on a level that is not
  * there.
+ *
+ * IT IS THE CONTROLLER'S REF, not this component's (#235). It was local until a
+ * collapse -- which unmounts the panel rather than hiding it -- was found to
+ * take the player back to the top level of a menu they had walked two steps
+ * into. Resolving on every read is what makes remembering it safe: a path is
+ * never trusted, so it does not matter how long the bar was down for.
  */
-const openPath = ref<readonly string[]>([]);
+const openPath = actionController.actionMenuPath;
 
 const menuLevel = computed(() => menuLevelAt(actionMenu.value, openPath.value));
 
@@ -396,8 +402,40 @@ const currentActionMeta = computed(() => {
 // Current pick - delegates to controller (required)
 const currentPick = computed(() => actionController.currentPick.value);
 
-const numberInputValue = ref<number | null>(null);
-const textInputValue = ref<string>('');
+/**
+ * THE TWO EDITORS' VALUES LIVE IN THE CONTROLLER (#235).
+ *
+ * They were refs here, and the bar's collapse is a `v-if` swap in `PlayShell`:
+ * it UNMOUNTS this component rather than hiding it, so everything the player
+ * had typed went with it, silently, from a control whose own promise is that it
+ * is reversible. `useActionController` outlives the panel and is already where
+ * `multiSelectDraft` lives for the same reason -- and putting it there is also
+ * what lets a custom UI see the in-progress text, which the parity rule wants
+ * and a ref in here could never give it.
+ *
+ * The controller stamps a draft with the question it belongs to and resolves it
+ * on read, so these are plain views onto it: whichever kind of value the pick
+ * being asked for cannot use reads as empty rather than as itself.
+ */
+const numberInputValue = computed<number | null>({
+  get: () => {
+    const draft = actionController.currentPickDraft.value;
+    return typeof draft === 'number' ? draft : null;
+  },
+  // An emptied number field gives back `''` through `v-model.number`, and a
+  // half-typed one can give back `NaN`; neither is a number the player has
+  // entered, so both clear the draft.
+  set: (value) => actionController.setPickDraft(
+    typeof value === 'number' && !Number.isNaN(value) ? value : null,
+  ),
+});
+const textInputValue = computed<string>({
+  get: () => {
+    const draft = actionController.currentPickDraft.value;
+    return typeof draft === 'string' ? draft : '';
+  },
+  set: (value) => actionController.setPickDraft(value === '' ? null : value),
+});
 /**
  * Why the text the player has typed will not be accepted, or null.
  *
@@ -413,27 +451,20 @@ watch(textInputValue, () => {
 });
 
 /**
- * A NEW PICK OPENS EMPTY.
+ * A NEW PICK IS NOT REFUSING ANYTHING YET.
  *
- * Both editors are one ref each for the whole panel, and nothing used to reset
- * them: `submitTextInput` cleared on a successful submit and every other way out
- * of a pick -- cancelling the action, a refusal, moving to the next selection --
- * left the typed value sitting in the ref. So the next text pick opened
- * PREFILLED with what the player had typed into a different field of a
- * different action, and if that field was shorter it opened already refusing
- * its own contents. Found in a browser (#229), by cancelling a 200 character
- * creed and starting a 20 character nickname.
- *
- * Keyed on the action AND the selection, because the same selection name recurs
- * across actions and across the rounds of a repeating pick, and each of those is
- * a fresh question.
+ * The VALUE opening empty is the controller's business now: a draft is stamped
+ * with the action, the selection and the repeating round it belongs to, and
+ * reads as empty outside them, which is what #229's leak needed (a 200
+ * character creed opening a 20 character nickname already too long). The
+ * refusal is this component's, because it is about the player's last press
+ * rather than about anything they wrote, so it does not follow them to the next
+ * question -- or back from a collapse they have pressed nothing in.
  */
 watch(
   () => `${currentAction.value ?? ''}/${currentPick.value?.name ?? ''}`,
   () => {
-    textInputValue.value = '';
     textInputError.value = null;
-    numberInputValue.value = null;
   },
 );
 
@@ -767,8 +798,11 @@ function submitNumberInput() {
   if (min !== undefined && val < min) return;
   if (max !== undefined && val > max) return;
 
-  setSelectionValue(currentPick.value.name, val);
+  // Consumed, so the draft goes before the value does: `setSelectionValue` moves
+  // the pick on, and clearing after it would be tidying up a question nobody is
+  // being asked any more.
   numberInputValue.value = null;
+  setSelectionValue(currentPick.value.name, val);
 }
 
 /**
@@ -799,8 +833,8 @@ function submitTextInput() {
   }
 
   textInputError.value = null;
-  setSelectionValue(pick.name, val);
   textInputValue.value = '';
+  setSelectionValue(pick.name, val);
 }
 
 // Select an element (from element selection buttons)
@@ -1326,9 +1360,17 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
       data-bs-menu-announcement
     >{{ menuAnnouncement }}</span>
 
-    <!-- No action being configured -->
-    <!-- Key forces re-render when available actions change -->
-    <div v-if="!currentAction" class="action-buttons" :key="availableActions.join(',')">
+    <!-- No action being configured.
+
+         NO KEY ON THIS LIST (#235). It was keyed on `availableActions.join(',')`
+         to force a re-render, which re-mounted every button whenever the
+         available set changed -- the same unmount-loses-state mechanism as the
+         collapse, and the reason #228 had to extend the focus watcher to put
+         focus back afterwards. The only state that re-render existed to keep
+         honest, the open level, is resolved against the menu on every read and
+         kept outside this component, so the key had nothing left to do and a
+         button that still exists now keeps its DOM node and its focus. -->
+    <div v-if="!currentAction" class="action-buttons">
       <!-- Menu chrome, drawn only inside a group (#228). At the top level there
            is none, so a game that declares no grouping renders exactly the flat
            panel it always did. -->
