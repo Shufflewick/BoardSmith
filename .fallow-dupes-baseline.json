@@ -117,7 +117,7 @@
     "src/cli/commands/example-test-emit.test.ts:538-544|src/cli/commands/example-test-emit.test.ts:598-604|src/cli/commands/example-test-emit.test.ts:734-743",
     "src/cli/commands/ingest-archive.test.ts:701-706|src/cli/commands/ingest-archive.test.ts:775-780",
     "src/cli/commands/ingest-archive.test.ts:814-822|src/cli/commands/ingest-archive.test.ts:829-837",
-    "src/cli/commands/ingest-archive.ts:802-810|src/cli/commands/ingest-archive.ts:911-932",
+    "src/cli/commands/ingest-archive.ts:803-811|src/cli/commands/ingest-archive.ts:912-933",
     "src/cli/commands/install-claude-command.test.ts:344-364|src/cli/commands/install-claude-command.test.ts:438-457",
     "src/cli/commands/install-claude-command.test.ts:392-396|src/cli/commands/install-claude-command.test.ts:477-479",
     "src/cli/commands/simulate.test.ts:24-86|src/testing/random-simulation.test.ts:20-85",

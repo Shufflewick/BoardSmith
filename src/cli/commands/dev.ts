@@ -20,6 +20,7 @@ import { getProjectContext, boardsmithResolvePlugin, toPosix } from './game-runt
 import { findUnknownKeys } from '../lib/config-schema.js';
 import { requireGameProject, resolveRulesDir, requireRulesIndex } from '../lib/game-project.js';
 import { resolveWorldMode } from '../lib/world-project.js';
+import { resolveUserPath } from '../lib/user-path.js';
 import { startWorldDevServer } from './dev-world.js';
 import {
   claimWebSocketPath,
@@ -709,7 +710,7 @@ export async function devCommand(options: DevOptions): Promise<void> {
   // any server work, mirroring the other flag validators above) and threads
   // the resulting GameStateSnapshot into MultiplayerHost below.
   const seedSnapshot = options.seed !== undefined
-    ? exitOnDevFlagError(() => parseSeedFile(resolve(process.cwd(), options.seed as string)))
+    ? exitOnDevFlagError(() => parseSeedFile(resolveUserPath(process.cwd(), options.seed as string)))
     : undefined;
 
   // #41 item 3. Parsed with the other flag validators so a typo fails before
@@ -764,7 +765,7 @@ export async function devCommand(options: DevOptions): Promise<void> {
     console.log(chalk.dim('  Running in monorepo context (using source resolution)'));
   }
 
-  const uiPath = config.paths?.ui ? resolve(cwd, config.paths.ui) : cwd;
+  const uiPath = config.paths?.ui ? resolveUserPath(cwd, config.paths.ui) : cwd;
   const rulesPath = resolveRulesDir(cwd, config);
 
   if (!existsSync(uiPath)) {

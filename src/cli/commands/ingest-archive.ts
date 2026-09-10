@@ -1,6 +1,7 @@
 import {
   designRulebookDir,
 } from '../lib/project-paths.js';
+import { resolveUserPath } from '../lib/user-path.js';
 import { createHash } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
@@ -612,7 +613,7 @@ export async function ingestArchiveCommand(
   options: IngestArchiveOptions = {},
 ): Promise<void> {
   const projectDir = resolve(options.project ?? process.cwd());
-  const sourcePath = resolve(rulebook.replace(/^~(?=$|\/)/, process.env.HOME ?? '~'));
+  const sourcePath = resolveUserPath(process.cwd(), rulebook);
 
   let sourceBuf: Buffer;
   try {

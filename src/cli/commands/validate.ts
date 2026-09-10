@@ -21,7 +21,7 @@ import {
   encodedRulesBytes,
 } from '../lib/bundle-limits.js';
 import { readDistDir, createZip } from '../lib/zip.js';
-import { requireGameProject } from '../lib/game-project.js';
+import { requireGameProject, resolveRulesDir } from '../lib/game-project.js';
 import { resolveWorldMode, WORLD_AUTHORING_DOC } from '../lib/world-project.js';
 import { GAME_BACKENDS, isGameBackend } from '../../session/index.js';
 import {
@@ -1118,9 +1118,7 @@ async function validateChoiceCardinality(cwd: string): Promise<ValidationResult>
 
   const configPath = join(cwd, 'boardsmith.json');
   const config = JSON.parse(readFileSync(configPath, 'utf-8')) as { paths?: { rules?: string } };
-  const rulesPath = config.paths?.rules
-    ? resolvePath(cwd, config.paths.rules)
-    : join(cwd, 'src', 'rules');
+  const rulesPath = resolveRulesDir(cwd, config);
 
   const tempDir = join(cwd, '.boardsmith');
   try {
