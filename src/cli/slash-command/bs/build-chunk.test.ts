@@ -136,6 +136,9 @@ const SUPPRESS_FROM_ACTION_PANEL = 'suppressFromActionPanel';
 /** SKILLDEF-03: the retired name that must appear nowhere in build.md. */
 const RETIRED_SUPPRESS_ACTION_PANEL = 'suppressActionPanel';
 
+/** #228: how a crowded panel is arranged, as distinct from a redundant button hidden. */
+const ACTION_MENU_GROUPING = ['.group(', '.order('];
+
 describe('BUILD-01 — resume routing', () => {
   it('build-chunk.md contains the full-ceremony step list verbatim', () => {
     const buildChunk = read('build-chunk.md');
@@ -1179,6 +1182,22 @@ describe('SKILLDEF-03 — fenced escape hatch', () => {
   it('build.md never references the retired suppressActionPanel name', () => {
     const build = read('build/build.md');
     expect(build).not.toContain(RETIRED_SUPPRESS_ACTION_PANEL);
+  });
+
+  // A game-authored capability the authoring guide does not mention is a
+  // capability game authors will not find, which was most of the point of #228:
+  // the reported panel had seventeen buttons because nothing told its author
+  // there was another arrangement available.
+  it('build.md names .group()/.order() for a CROWDED panel, beside suppression for a redundant one', () => {
+    const build = read('build/build.md');
+    for (const call of ACTION_MENU_GROUPING) {
+      expect(build, `build.md must name ${call}`).toContain(call);
+    }
+    // And must not confuse the two: grouping is arrangement, suppression is
+    // hiding, and a chunk that reaches for the wrong one either clutters the
+    // panel or takes an action off it.
+    expect(build).toMatch(/CROWDED rather than redundant/i);
+    expect(build).toMatch(/Grouping hides\s+nothing/i);
   });
 });
 

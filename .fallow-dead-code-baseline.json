@@ -320,6 +320,8 @@
     "src/engine/action/action-builder.ts:Action.notUndoable",
     "src/engine/action/action-builder.ts:Action.manual",
     "src/engine/action/action-builder.ts:Action.suppressFromActionPanel",
+    "src/engine/action/action-builder.ts:Action.group",
+    "src/engine/action/action-builder.ts:Action.order",
     "src/engine/action/action-builder.ts:Action.chooseFrom",
     "src/engine/action/action-builder.ts:Action.chooseElement",
     "src/engine/action/action-builder.ts:Action.chooseElements",
@@ -536,6 +538,7 @@
     "Pick|src/ui/components/auto-ui/ActionPanel.vue|src/ui/types.ts",
     "Player|src/engine/player/player.ts|src/ui/components/GameOverCard.vue|src/ui/components/PlayersPanel.vue|src/ui/types.ts",
     "RefWithRole|src/engine/action/types.ts|src/types/protocol.ts|src/ui/composables/useActionControllerTypes.ts",
+    "RefWithRole|src/engine/action/types.ts|src/ui/composables/useActionControllerTypes.ts",
     "UndoPolicy|src/engine/utils/snapshot.ts|src/runtime/runner.ts"
   ],
   "type_only_dependencies": [],

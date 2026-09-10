@@ -20,7 +20,7 @@
  *
  * @module
  */
-import { mkdirSync, mkdtempSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { dirname, join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -28,8 +28,14 @@ import { fileURLToPath } from 'node:url';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
-/** This checkout, which is the library every fixture resolves against. */
-export const REPO = resolve(HERE, '..');
+/**
+ * This checkout, which is the library every fixture resolves against.
+ *
+ * Module-private, like `freePort`: the three things that need it -- the
+ * symlinked install, the dev host's own TypeScript, and the guard that refuses
+ * an uninstalled checkout -- are all in here.
+ */
+const REPO = resolve(HERE, '..');
 
 // ── Playwright, or an actionable refusal ─────────────────────────────────────
 
@@ -105,6 +111,25 @@ function freePort() {
       probe.close(() => done(port));
     });
   });
+}
+
+/**
+ * Refuse before doing anything expensive if this checkout cannot serve a world.
+ *
+ * Here rather than in each script for the reason `playwrightCandidates` is:
+ * every one of them opened with the same seven lines, and a guard that exists
+ * in four copies is a guard whose wording drifts.
+ *
+ * @param script the script's own filename, for the copy-pasteable command line
+ */
+export function requireInstalledCheckout(script) {
+  if (existsSync(join(REPO, 'node_modules', 'vue'))) return;
+  console.error(
+    'This checkout has no node_modules/vue, so the fixture world cannot be served.\n' +
+      '  Run `npm install` in the repository root first, then:\n\n' +
+      `    node scripts/${script}`,
+  );
+  process.exit(1);
 }
 
 // ── The fixture project ──────────────────────────────────────────────────────

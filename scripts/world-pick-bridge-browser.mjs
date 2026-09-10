@@ -40,13 +40,12 @@
  * disposable by design: the point is a world nobody has played, born at genesis,
  * exercised once.
  */
-import { existsSync, rmSync } from 'node:fs';
-import { join } from 'node:path';
+import { rmSync } from 'node:fs';
 import {
-  REPO,
   assert,
   check,
   loadChromium,
+  requireInstalledCheckout,
   startWorldHost,
   summarise,
   surfaceOf,
@@ -415,12 +414,6 @@ async function driveThrough({ chromium, fixture }) {
   return summarise('through the real dev bridge in a real browser.');
 }
 
-if (!existsSync(join(REPO, 'node_modules', 'vue'))) {
-  console.error(
-    'This checkout has no node_modules/vue, so the fixture world cannot be served.\n' +
-      '  Run `npm install` in the repository root first.',
-  );
-  process.exit(1);
-}
+requireInstalledCheckout('world-pick-bridge-browser.mjs');
 
 process.exit(await main());

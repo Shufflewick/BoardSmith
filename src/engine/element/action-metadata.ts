@@ -69,17 +69,41 @@ export function buildActionMetadata(
       pickMetas.push(pickMeta);
     }
 
-    metadata[actionName] = {
-      name: actionName,
-      prompt: actionDef.prompt,
-      help: actionDef.help,
-      ...(actionDef.manual ? { manual: true } : {}),
-      ...(actionDef.suppressFromActionPanel ? { suppressFromActionPanel: true } : {}),
-      selections: pickMetas,
-    };
+    metadata[actionName] = actionMetadataOf(actionName, actionDef, pickMetas);
   }
 
   return metadata;
+}
+
+/**
+ * One action's metadata, assembled from its definition.
+ *
+ * Separate from the loop above because that loop is about WHICH actions are
+ * offered -- the registry lookup and the condition re-check -- while this is
+ * about what one of them says. Every optional field is ABSENT rather than
+ * `undefined` when the game did not declare it: this record is serialized to a
+ * client, and an `undefined` key vanishes in JSON, which makes "the game said
+ * nothing" and "the game said nothing about this" indistinguishable on the far
+ * side.
+ */
+function actionMetadataOf(
+  actionName: string,
+  actionDef: ActionDefinition,
+  selections: PickMetadata[],
+): ActionMetadata {
+  return {
+    name: actionName,
+    prompt: actionDef.prompt,
+    help: actionDef.help,
+    ...(actionDef.manual ? { manual: true } : {}),
+    ...(actionDef.suppressFromActionPanel ? { suppressFromActionPanel: true } : {}),
+    // The Action Panel's menu placement (#228). Absent unless the game declared
+    // it, so a game with no hierarchy sends no hierarchy and the panel stays the
+    // flat list it has always been.
+    ...(actionDef.group === undefined ? {} : { group: actionDef.group }),
+    ...(actionDef.order === undefined ? {} : { order: actionDef.order }),
+    selections,
+  };
 }
 
 /**

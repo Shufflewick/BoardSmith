@@ -2771,6 +2771,11 @@ function offerOf(
     ...(definition.help === undefined ? {} : { help: definition.help }),
     ...(definition.manual ? { manual: true } : {}),
     ...(definition.suppressFromActionPanel ? { suppressFromActionPanel: true } : {}),
+    // The action panel's menu placement (#228), on the same terms as every
+    // other optional field here: absent rather than `undefined`, because this
+    // travels as JSON and an `undefined` key is a key that vanishes on the way.
+    ...(definition.group === undefined ? {} : { group: definition.group }),
+    ...(definition.order === undefined ? {} : { order: definition.order }),
     ...(disabled === null ? {} : { disabled }),
     selections,
   };

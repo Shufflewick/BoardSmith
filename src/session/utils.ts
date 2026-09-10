@@ -127,6 +127,12 @@ export function buildSingleActionMetadata(
     pickMetas.push(pickMeta);
   }
 
+  // NO `group`/`order` HERE, AND THAT IS NOT AN OVERSIGHT (#228). Those place
+  // an action's START BUTTON in the Action Panel's menu, and this function
+  // builds metadata for a `followUp` -- an action the panel is already walking,
+  // reached by chaining rather than by a button. There is no button to place,
+  // so a placement here would be a field nothing could read. It is the same
+  // reason `suppressFromActionPanel` has never been emitted on this path.
   return {
     name: actionName,
     prompt: actionDef.prompt,

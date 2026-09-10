@@ -49,13 +49,12 @@
  * afterwards, for the reason #227 gives: a checked-in game project inside the
  * library would be a second thing to keep compiling.
  */
-import { existsSync, rmSync } from 'node:fs';
-import { join } from 'node:path';
+import { rmSync } from 'node:fs';
 import {
-  REPO,
   assert,
   check,
   loadChromium,
+  requireInstalledCheckout,
   startWorldHost,
   summarise,
   surfaceOf,
@@ -333,12 +332,6 @@ async function main() {
   }
 }
 
-if (!existsSync(join(REPO, 'node_modules', 'vue'))) {
-  console.error(
-    'This checkout has no node_modules/vue, so the fixture world cannot be served.\n' +
-      '  Run `npm install` in the repository root first.',
-  );
-  process.exit(1);
-}
+requireInstalledCheckout('action-bar-collapse-browser.mjs');
 
 process.exit(await main());

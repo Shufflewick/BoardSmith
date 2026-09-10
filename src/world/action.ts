@@ -774,6 +774,28 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
   }
 
   /**
+   * Put this action's start button inside a named action panel menu group
+   * (#228), one label per level, outermost first.
+   *
+   * A world offers every verb that is relevant here at once, so this is where
+   * the hierarchy earns its keep: a resident empire with seventeen available
+   * actions is the case the feature was asked for. Navigation only -- opening a
+   * group sends no command and dirties no partition.
+   */
+  // fallow-ignore-next-line unused-class-member
+  group(...path: string[]): this {
+    this.inner.group(...path);
+    return this;
+  }
+
+  /** Place its button within its menu level; lower sorts earlier (#228). */
+  // fallow-ignore-next-line unused-class-member
+  order(order: number): this {
+    this.inner.order(order);
+    return this;
+  }
+
+  /**
    * A choice between values the game names.
    *
    * `choices` is a precomputed list, for the reason `elements` is: a world's
