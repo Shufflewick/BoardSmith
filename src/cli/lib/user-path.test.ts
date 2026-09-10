@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync, statSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -48,39 +48,31 @@ describe('resolveUserPath', () => {
     expect(() => resolveUserPath('/repo/root', '   ')).toThrow(/empty/i);
   });
 });
+
 /**
  * `resolveUserPath` is not just a convenience: it is meant to be the ONLY way
  * a CLI command turns a path a user typed into an absolute one, because the two
  * defects #239 found were both a `join(cwd, <option value>)` that read as
- * correct. A gate is the only thing that stops the third one.
+ * correct in review. A gate is the only thing that stops the third one.
  */
 describe('the CLI has one way to resolve a user-supplied path', () => {
   const cliDir = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
-  function sourceFiles(dir: string): string[] {
-    const out: string[] = [];
-    for (const entry of readdirSync(dir)) {
-      const full = join(dir, entry);
-      if (statSync(full).isDirectory()) {
-        out.push(...sourceFiles(full));
-        continue;
-      }
-      if (!entry.endsWith('.ts')) continue;
-      if (entry.endsWith('.test.ts') || entry.endsWith('.test-helper.ts')) continue;
-      out.push(full);
-    }
-    return out;
-  }
+  // Tests are excluded: this file and the ones that quote a defect in a comment
+  // are not the surface being gated.
+  const files = readdirSync(cliDir, { recursive: true, encoding: 'utf-8' })
+    .filter((path) => path.endsWith('.ts'))
+    .filter((path) => !path.endsWith('.test.ts') && !path.endsWith('.test-helper.ts'))
+    .filter((path) => !path.includes('__fixtures__'))
+    .map((path) => ({ path, text: readFileSync(join(cliDir, path), 'utf-8') }));
 
-  const files = sourceFiles(cliDir).map((path) => ({ path, text: readFileSync(path, 'utf-8') }));
-
-  it('finds source files to check', () => {
-    expect(files.length).toBeGreaterThan(20);
+  it('reads the CLI tree it thinks it is reading', () => {
+    expect(files.length).toBeGreaterThan(50);
   });
 
   it('never joins an output directory onto the invocation directory', () => {
-    // `join(cwd, outDir)` is the exact shape of #239, and it occurred twice --
-    // once in `pack`, once in `build` -- because it reads as obviously right.
+    // The exact shape of #239, written independently in `pack` and in `build`
+    // because it reads as obviously right.
     const offenders = files
       .filter(({ text }) => /join\(\s*(?:cwd|process\.cwd\(\))\s*,\s*out(?:Dir|putDir)\b/.test(text))
       .map(({ path }) => path);
@@ -88,9 +80,10 @@ describe('the CLI has one way to resolve a user-supplied path', () => {
   });
 
   it('expands a leading ~ in exactly one place', () => {
-    // A second hand-rolled expansion is how the two spellings drift apart.
+    // A second hand-rolled expansion is how two spellings of the same rule
+    // drift apart.
     const offenders = files
-      .filter(({ path }) => !path.endsWith(join('lib', 'user-path.ts')))
+      .filter(({ path }) => path !== 'lib/user-path.ts')
       .filter(({ text }) => /\/\^~/.test(text) || text.includes("startsWith('~')"))
       .map(({ path }) => path);
     expect(offenders).toEqual([]);
