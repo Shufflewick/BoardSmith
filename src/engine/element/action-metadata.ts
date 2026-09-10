@@ -15,7 +15,7 @@ import { devWarn } from '../../utils/dev.js';
 import { resolveMultiSelect } from '../utils/resolve-multiselect.js';
 import type { Game } from './game.js';
 import type { Player } from '../player/player.js';
-import type { Selection, ActionDefinition } from '../action/types.js';
+import type { Selection, ActionDefinition, TextSelection } from '../action/types.js';
 import type { ActionMetadata, PickMetadata } from '../../session/types.js';
 
 /**
@@ -99,6 +99,25 @@ export function buildActionMetadata(
  *
  * @param knownArgs Optional args for evaluating dynamic prompts (for followUp actions with pre-filled args)
  */
+/**
+ * A text pick's bounds, on the metadata a host serializes.
+ *
+ * Its own function rather than another arm of `buildPickMetadata`'s switch: that
+ * switch is already the most complex thing in this file, and `multiline` was the
+ * branch that tipped it past the complexity gate's threshold.
+ *
+ * `multiline` is emitted ONLY WHEN ASKED FOR (#229). A `multiline: false` on
+ * every text pick in every game would be a field the wire carries for no
+ * reader, and it would move the payload of every existing game for a
+ * presentation default nobody chose.
+ */
+function describeTextPick(base: PickMetadata, selection: TextSelection): void {
+  base.pattern = selection.pattern?.source;
+  base.minLength = selection.minLength;
+  base.maxLength = selection.maxLength;
+  if (selection.multiline) base.multiline = true;
+}
+
 export function buildPickMetadata(
   game: Game,
   player: Player,
@@ -218,10 +237,7 @@ export function buildPickMetadata(
     }
 
     case 'text': {
-      const textSel = selection;
-      base.pattern = textSel.pattern?.source;
-      base.minLength = textSel.minLength;
-      base.maxLength = textSel.maxLength;
+      describeTextPick(base, selection);
       break;
     }
   }

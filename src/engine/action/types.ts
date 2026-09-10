@@ -386,6 +386,26 @@ export interface TextSelection extends BaseSelection<string> {
    * on there being a bound to enforce and to surface in the UI.
    */
   maxLength: number;
+  /**
+   * Ask for the text in a resizable box rather than on a single line (#229).
+   *
+   * PRESENTATION ONLY, and deliberately not a separate selection kind. The
+   * value is the same string, bounded by the same `minLength`/`maxLength`,
+   * admitted by the same `pattern` and judged by the same `validate` -- a
+   * `type: 'longText'` would have duplicated every one of those rules in the
+   * engine, in the metadata builder, in the bot's enumeration and in every host
+   * that switches on `type`, which is the fork the ticket asks us to avoid.
+   *
+   * Set it when the field is prose the player has to read back as well as
+   * write: a description, a message, a log entry. Line breaks are ordinary
+   * characters either way -- they count toward the length and nothing strips
+   * them -- but a single-line input gives the player nowhere to put one.
+   *
+   * Omitted from a pick's metadata rather than sent as `false` when unset, so a
+   * declaration that never heard of it adds no field to the payload a host
+   * ships and every existing game's wire bytes stay identical.
+   */
+  multiline?: boolean;
 }
 
 /**

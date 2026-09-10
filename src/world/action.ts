@@ -892,7 +892,15 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
     return this as unknown as WorldAction<G, AddArg<A, K, T[]>>;
   }
 
-  /** Free text, bounded by the engine's own `maxLength`. */
+  /**
+   * Free text, bounded by the engine's own `maxLength`.
+   *
+   * `multiline:` asks for a resizable box rather than a single line (#229) --
+   * presentation only, and forwarded rather than reinterpreted, because a
+   * world's text pick and a table's are the same pick. A world is where the long
+   * fields live (an empire's description outlives any one session), so this is
+   * the facade the option was asked for on.
+   */
   // fallow-ignore-next-line unused-class-member
   enterText<K extends string>(
     name: K,
@@ -901,6 +909,7 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
       needs?: (context: WorldNeedsContext<G>) => readonly string[];
       minLength?: number;
       maxLength?: number;
+      multiline?: boolean;
       pattern?: RegExp;
       optional?: boolean | string;
       validate?: (
@@ -915,6 +924,7 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
       prompt: forwardPrompt<G>(options.prompt),
       minLength: options.minLength,
       maxLength: options.maxLength,
+      multiline: options.multiline,
       pattern: options.pattern,
       optional: options.optional,
       validate: options.validate
