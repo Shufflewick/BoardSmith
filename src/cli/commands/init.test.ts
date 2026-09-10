@@ -12,13 +12,14 @@
  * the game body, after registerElements(), iterating this.players. These tests
  * pin that pattern so the template can't regress to the crashing shape.
  */
-import { describe, it, expect, afterEach } from 'vitest';
-import { readFileSync, writeFileSync, existsSync } from 'node:fs';
+import { describe, it, expect, afterEach, beforeEach, vi, type MockInstance } from 'vitest';
+import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { generateGameTs, generateTestTs, initCommand, type InitOptions } from './init.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
+import { rejectionMessage } from '../../testing/rejection.test-helper.js';
 
 /**
  * Scaffold a real project into a fresh temp directory and chdir into its
@@ -435,5 +436,107 @@ describe('initCommand --world — a persistent world project (#168)', () => {
     expect(JSON.parse(read('boardsmith.json')).world).toBeUndefined();
     expect(has('src/rules/world.ts')).toBe(false);
     expect(has('index.html')).toBe(true);
+  });
+});
+
+/**
+ * #240: `init` treated `<name>` as an identity and as a location at once, and
+ * reported the resulting failure by printing the whole Error object.
+ *
+ * Both halves are driven through `initCommand` itself rather than through the
+ * validator, because what the issue reported is what the command DID: it
+ * created a directory at a path nobody asked for, or dumped a stack trace with
+ * this repository's paths in it.
+ */
+describe('init command — <name> is a name, and a failure is one clean line (#240)', () => {
+  const originalCwd = process.cwd();
+  let exitSpy: MockInstance<typeof process.exit>;
+  let errorSpy: MockInstance<typeof console.error>;
+
+  beforeEach(() => {
+    // `process.exit` would take the test runner with it, so the spy both keeps
+    // the suite alive and records that the command reached for it at all.
+    exitSpy = vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
+      throw new Error(`process.exit(${code ?? 0}) was called instead of throwing`);
+    }) as never);
+    errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    process.chdir(originalCwd);
+  });
+
+  it('refuses a path-shaped name and creates nothing', async () => {
+    const parentDir = tempTree('bs-init-240-path-');
+    process.chdir(parentDir);
+
+    await expect(initCommand('/private/tmp/scratch/mygame', { withoutRulebook: true }))
+      .rejects.toThrow(/path, not a name/);
+
+    // The reported behaviour: `join(process.cwd(), name)` appended the absolute
+    // path to the invocation directory, so a `private/` tree appeared here.
+    expect(existsSync(join(parentDir, 'private'))).toBe(false);
+    expect(readdirSync(parentDir)).toEqual([]);
+    expect(exitSpy).not.toHaveBeenCalled();
+  });
+
+  it('refuses a name that would scaffold TypeScript that cannot parse', async () => {
+    const parentDir = tempTree('bs-init-240-invalid-');
+    process.chdir(parentDir);
+
+    await expect(initCommand('My Game', { withoutRulebook: true })).rejects.toThrow(/kebab-case/);
+    expect(readdirSync(parentDir)).toEqual([]);
+  });
+
+  it('reports a failure as a thrown message, never as a printed Error object', async () => {
+    // A directory that cannot be written into is the issue's own repro reduced
+    // to something a test can cause: `mkdir` fails, and the old `catch` printed
+    // the ENOENT/EACCES object -- `at async Command.initCommand (/Users/.../
+    // src/cli/commands/init.ts:290:5)` and all -- then exited before `cli.ts`'s
+    // top-level handler could render it as one line.
+    const parentDir = tempTree('bs-init-240-unwritable-');
+    process.chdir(parentDir);
+    chmodSync(parentDir, 0o500);
+
+    try {
+      const message = await rejectionMessage(initCommand('mygame', { withoutRulebook: true }));
+
+      // Descriptive and actionable, and about the user's project.
+      expect(message).toContain('mygame');
+      // And nothing about how BoardSmith is built: no stack frames, no source
+      // line references, no path inside the CLI's own installation.
+      expect(message).not.toMatch(/\n\s+at /);
+      expect(message).not.toMatch(/\.ts:\d+/);
+      expect(message).not.toContain('node_modules');
+      expect(message).not.toContain(originalCwd);
+
+      // The guarantee itself: the failure is thrown for `cli.ts` to render,
+      // not printed and exited past it.
+      expect(exitSpy).not.toHaveBeenCalled();
+      for (const call of errorSpy.mock.calls) {
+        expect(call.some((arg) => arg instanceof Error)).toBe(false);
+      }
+    } finally {
+      chmodSync(parentDir, 0o700);
+    }
+  });
+
+  it('refuses an already-existing directory by throwing, like every other failure', async () => {
+    const parentDir = tempTree('bs-init-240-exists-');
+    process.chdir(parentDir);
+    mkdirSync(join(parentDir, 'mygame'));
+
+    await expect(initCommand('mygame', { withoutRulebook: true })).rejects.toThrow(/already exists/);
+    expect(exitSpy).not.toHaveBeenCalled();
+  });
+
+  it('refuses a missing rulebook decision by throwing, so the message survives to the terminal', async () => {
+    const parentDir = tempTree('bs-init-240-rulebook-');
+    process.chdir(parentDir);
+
+    await expect(initCommand('mygame', {})).rejects.toThrow(/--without-rulebook/);
+    expect(readdirSync(parentDir)).toEqual([]);
+    expect(exitSpy).not.toHaveBeenCalled();
   });
 });

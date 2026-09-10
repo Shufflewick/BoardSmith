@@ -794,8 +794,13 @@ export async function devCommand(options: DevOptions): Promise<void> {
     gameDefinition = runtime.gameDefinition;
     runExecuteOp = runtime.executeOp;
   } catch (error) {
-    console.error(chalk.red('Failed to load game rules:'), error);
-    process.exit(1);
+    // THROWN, NOT PRINTED (#240). Handing the error object to `console.error`
+    // printed Node's own formatting of it -- every stack frame, and the
+    // absolute path of both this CLI and the game being loaded -- and exited
+    // before `cli.ts`'s handler could render it as one clean line.
+    throw new Error(
+      `Failed to load this game's rules: ${error instanceof Error ? error.message : String(error)}`,
+    );
   }
 
   // A WORLD IS A DIFFERENT RUN, AND THIS IS WHERE THE ROADS PART (#167).
@@ -884,8 +889,9 @@ export async function devCommand(options: DevOptions): Promise<void> {
 
     console.log(chalk.dim(`  Loaded game: ${gameDefinition.displayName || gameDefinition.gameType}`));
   } catch (error) {
-    console.error(chalk.red('Failed to open a table for this game:'), error);
-    process.exit(1);
+    throw new Error(
+      `Failed to open a table for this game: ${error instanceof Error ? error.message : String(error)}`,
+    );
   }
 
   // D13/DEVHOST-01: --game-option/--preset resolve into the SELECTED gameOptions
@@ -1031,7 +1037,13 @@ export async function devCommand(options: DevOptions): Promise<void> {
         mpHost,
         clients,
         onError: (err, msgType) =>
-          console.error(chalk.red(`[boardsmith dev] message '${msgType}' failed:`), err),
+          // The message, not the error: a running dev server has nothing to
+          // throw to, and a stack trace in its log is the same leak (#240).
+          console.error(
+            chalk.red(
+              `[boardsmith dev] message '${msgType}' failed: ${err instanceof Error ? err.message : String(err)}`,
+            ),
+          ),
       }),
     );
     vitePlugins.push(hostSocket.plugin);
@@ -1117,7 +1129,8 @@ export async function devCommand(options: DevOptions): Promise<void> {
     });
 
   } catch (error) {
-    console.error(chalk.red('Failed to start Vite dev server:'), error);
-    process.exit(1);
+    throw new Error(
+      `Failed to start the Vite dev server: ${error instanceof Error ? error.message : String(error)}`,
+    );
   }
 }

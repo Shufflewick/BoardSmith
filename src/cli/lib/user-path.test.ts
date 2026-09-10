@@ -81,10 +81,14 @@ describe('the CLI has one way to resolve a user-supplied path', () => {
 
   it('expands a leading ~ in exactly one place', () => {
     // A second hand-rolled expansion is how two spellings of the same rule
-    // drift apart.
+    // drift apart. What makes a tilde reference an EXPANSION is that it reaches
+    // for the home directory, and that is the half this looks for as well as
+    // the tilde: `lib/user-name.ts` also tests for a leading `~`, to REFUSE a
+    // name that is really a path (#240), and refusing one is not expanding it.
     const offenders = files
       .filter(({ path }) => path !== 'lib/user-path.ts')
       .filter(({ text }) => /\/\^~/.test(text) || text.includes("startsWith('~')"))
+      .filter(({ text }) => text.includes('homedir()') || text.includes('env.HOME'))
       .map(({ path }) => path);
     expect(offenders).toEqual([]);
   });

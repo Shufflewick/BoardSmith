@@ -627,6 +627,29 @@ describe('chunk-check', () => {
   });
 
   /**
+   * `<slug>` is an IDENTITY: it is recorded into the block this command writes, and it addresses
+   * `design/chunks/<slug>/CHUNK.md`. #240's shape, found in `init`, is one argument being both
+   * at once -- so a path-shaped slug reached `join(chunksDir, slug, 'CHUNK.md')` and this
+   * command would write a provenance block into a CHUNK.md belonging to another project, under
+   * a slug that is a path. `--chunk` on `verify-example-replay` already refuses that; the
+   * positional argument did not.
+   */
+  it('refuses a path-shaped slug rather than writing outside the project (#240)', async () => {
+    const { project } = await makeCheckProject();
+    await makeChunk(project, 'jab', JAB_CITES);
+
+    const neighbour = join(dir, 'other-game');
+    const neighbourChunk = await makeChunk(neighbour, 'jab', JAB_CITES);
+    const before = await fs.readFile(neighbourChunk, 'utf-8');
+
+    await expect(
+      chunkCheckCommand(`../../../other-game/${DESIGN_DIR}/chunks/jab`, { project, json: true }),
+    ).rejects.toThrow(/<slug> .* is a path, not a name/);
+
+    expect(await fs.readFile(neighbourChunk, 'utf-8')).toBe(before);
+  });
+
+  /**
    * `recordVerifiedAgainst` — the reusable fenced writer extracted out of `chunkCheckCommand`
    * (179-03). Behavior pinned here is IN ADDITION to every test above, which already exercises
    * `chunkCheckCommand`'s own command-level contract (unmodified) on top of this same writer.

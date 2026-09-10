@@ -194,13 +194,13 @@ export async function evolveBotWeightsCommand(options: EvolveBotWeightsOptions):
 
   } catch (error) {
     spinner.fail('Weight evolution failed');
-    console.error(chalk.red('\nError:'), error);
-
-    if (options.verbose && error instanceof Error) {
-      console.error(chalk.dim('\nStack trace:'));
-      console.error(chalk.dim(error.stack));
-    }
-
-    process.exit(1);
+    // THROWN, NOT PRINTED (#240): `cli.ts`'s handler renders one clean line.
+    // `--verbose` used to add the stack on top of the printed error object, and
+    // it is gone rather than kept behind a flag: CLAUDE.md's rule that a stack
+    // trace never reaches a user has no opt-out, and a flag that turns the
+    // forbidden output back on is the rule with a hole in it.
+    throw new Error(
+      `Evolving this bot's weights failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
   }
 }
