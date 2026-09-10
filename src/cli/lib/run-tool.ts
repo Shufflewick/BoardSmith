@@ -43,9 +43,15 @@ function spawnTool(
       shell: process.platform === 'win32',
     });
 
-    let stdout = '';
+    // Buffered whole and decoded ONCE at the end. A chunk boundary can fall
+    // inside a multi-byte UTF-8 character, and decoding each chunk on its own
+    // replaces the halves with U+FFFD -- so the captured text stops being what
+    // the tool printed. `boardsmith audit --dupes-baseline` hashes the source
+    // text `fallow dupes` reports, so one mangled character silently changed an
+    // accepted clone group's key (#241).
+    const stdoutChunks: Buffer[] = [];
     child.stdout?.on('data', (chunk: Buffer) => {
-      stdout += chunk.toString();
+      stdoutChunks.push(chunk);
     });
 
     child.on('error', (error) => {
@@ -59,7 +65,11 @@ function spawnTool(
 
     // A tool killed by a signal produced no verdict — treat that as a failure
     // rather than reporting the `null` exit code as success.
-    child.on('close', (code, signal) => resolve({ code: signal ? 1 : code ?? 1, stdout }));
+    child.on('close', (code, signal) =>
+      resolve({
+        code: signal ? 1 : code ?? 1,
+        stdout: Buffer.concat(stdoutChunks).toString('utf-8'),
+      }));
   });
 }
 

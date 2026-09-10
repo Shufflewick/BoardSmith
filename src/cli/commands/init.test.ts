@@ -540,3 +540,78 @@ describe('init command — <name> is a name, and a failure is one clean line (#2
     expect(exitSpy).not.toHaveBeenCalled();
   });
 });
+
+/**
+ * `initCommand` owns the directory it creates, so a failure after that point
+ * must not leave it behind (#242).
+ *
+ * The clearest repro is an unreadable `--rulebook`, because the archive is
+ * `init`'s LAST step: the whole project is already written when it fails. What
+ * was left was a scaffolded project whose `rulebook/INDEX.md` provenance header
+ * describes an archive that does not exist -- the state `init.ts`'s own comment
+ * calls worse than a failed init -- and it is exactly the shape `init` refuses
+ * to overwrite, so the retry the user reaches for failed on a second, different
+ * error. Same shape as `packAll` (#239): remove the tree this run had to
+ * create, keep a directory that was already the user's.
+ */
+describe('initCommand — a failed init leaves nothing behind (#242)', () => {
+  const originalCwd = process.cwd();
+  let written: string[];
+
+  beforeEach(() => {
+    // ora writes the spinner to stderr and the scaffold logs to stdout, so both
+    // are collected: the assertion is about what the USER saw, in order.
+    written = [];
+    const capture = (chunk: unknown): boolean => {
+      written.push(String(chunk));
+      return true;
+    };
+    vi.spyOn(process.stdout, 'write').mockImplementation(capture as never);
+    vi.spyOn(process.stderr, 'write').mockImplementation(capture as never);
+    vi.spyOn(console, 'log').mockImplementation((...args: unknown[]) => capture(args.join(' ')));
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    process.chdir(originalCwd);
+  });
+
+  it('removes the project directory it created when a later step fails', async () => {
+    const parentDir = tempTree('bs-init-242-cleanup-');
+    process.chdir(parentDir);
+
+    await expect(
+      initCommand('mygame', { rulebook: join(parentDir, 'nonexistent', 'rules.pdf') }),
+    ).rejects.toThrow(/Rulebook not found or unreadable/);
+
+    expect(existsSync(join(parentDir, 'mygame'))).toBe(false);
+    expect(readdirSync(parentDir)).toEqual([]);
+  });
+
+  it('never claims success before a step that can still fail', async () => {
+    const parentDir = tempTree('bs-init-242-ordering-');
+    process.chdir(parentDir);
+
+    await expect(
+      initCommand('mygame', { rulebook: join(parentDir, 'nonexistent', 'rules.pdf') }),
+    ).rejects.toThrow(/Rulebook not found or unreadable/);
+
+    // The reported output said both `Created mygame successfully!` and
+    // `Failed to create project`, in that order. A command that says both is
+    // worse than one that says neither.
+    expect(written.join('')).not.toContain('successfully');
+  });
+
+  it('keeps a directory that was already there, because that one is the user\'s', async () => {
+    const parentDir = tempTree('bs-init-242-preexisting-');
+    process.chdir(parentDir);
+    mkdirSync(join(parentDir, 'mygame'));
+    writeFileSync(join(parentDir, 'mygame', 'the-users-file.txt'), 'not ours to delete');
+
+    await expect(
+      initCommand('mygame', { rulebook: join(parentDir, 'nonexistent', 'rules.pdf') }),
+    ).rejects.toThrow(/already exists/);
+
+    expect(existsSync(join(parentDir, 'mygame', 'the-users-file.txt'))).toBe(true);
+  });
+});

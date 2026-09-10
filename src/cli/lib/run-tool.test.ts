@@ -101,6 +101,37 @@ describe('runToolCapturingStdout', () => {
     expect(JSON.parse(result.stdout)).toEqual({ verdict: 'fail' });
   });
 
+  /**
+   * A tool's stdout arrives in chunks whose boundaries the caller does not
+   * choose, and a UTF-8 character can straddle one. Decoding each chunk on its
+   * own turns the split character into U+FFFD, so the captured text is no
+   * longer what the tool printed.
+   *
+   * That is not cosmetic. `boardsmith audit --dupes-baseline` hashes the
+   * duplicated source text `fallow dupes` reports to key an accepted clone
+   * group, so a corrupted character changes the key: issue #241 saw two
+   * accepted groups report as new because an insertion in an unrelated file
+   * moved the byte offsets of everything after it in a 4.6 MB report, and with
+   * them the chunk boundary that landed inside a box-drawing character.
+   *
+   * The payload here is nothing but three-byte characters, so a boundary can
+   * only avoid splitting one by falling on a multiple of three; a pipe's
+   * 65,536-byte read does not.
+   */
+  it('decodes multi-byte UTF-8 that straddles a chunk boundary', async () => {
+    const payload = '\u2500'.repeat(40_000);
+    const payloadPath = join(workspace, 'payload.txt');
+    writeFileSync(payloadPath, payload, 'utf-8');
+    writeLocalBin('made-up-tool', `cat "${payloadPath}"`);
+
+    const result = await runToolCapturingStdout('made-up-tool', [], { cwd: workspace });
+
+    // Asserted before the equality, so a regression reads as the one character
+    // that broke rather than as a 120 kB diff.
+    expect(result.stdout).not.toContain('\uFFFD');
+    expect(result.stdout).toBe(payload);
+  });
+
   it('passes arguments through verbatim', async () => {
     writeLocalBin('made-up-tool', 'echo "$2"');
 
