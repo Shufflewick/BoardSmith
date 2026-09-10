@@ -671,6 +671,12 @@ export class Action<
    * @param options.pattern - Regex pattern the input must match
    * @param options.minLength - Minimum required string length
    * @param options.maxLength - Maximum allowed string length. Default: {@link DEFAULT_TEXT_MAX_LENGTH}
+   * @param options.multiline - Draw the field as a resizable box rather than a
+   *   single line, with a character count and an explicit submit button so
+   *   Enter inserts a newline. Presentation only: the value, the bounds and the
+   *   validation are identical either way. Reach for it when the text is prose
+   *   the player must read back as well as write -- a description a player
+   *   cannot see four words of at a time is one they cannot review.
    * @param options.optional - If true, player can skip this selection. A string skips
    *   too, and is used as the Skip button's label.
    * @param options.validate - Custom validation function
@@ -689,6 +695,19 @@ export class Action<
    *     ctx.player.nickname = nickname;
    *   });
    * ```
+   *
+   * @example
+   * ```typescript
+   * action('setDescription')
+   *   .enterText('description', {
+   *     prompt: 'Empire description',
+   *     maxLength: 1000,
+   *     multiline: true,
+   *   })
+   *   .execute(({ description }, ctx) => {
+   *     ctx.player.description = description;
+   *   });
+   * ```
    */
   enterText<K extends string>(
     name: K,
@@ -697,6 +716,7 @@ export class Action<
       pattern?: RegExp;
       minLength?: number;
       maxLength?: number;
+      multiline?: boolean;
       optional?: boolean | string;
       validate?: (value: string, args: Record<string, unknown>, context: ActionContext<G>) => boolean | string;
       /** Called after this step is resolved. Receives the resolved value and a restricted context. */
@@ -712,6 +732,7 @@ export class Action<
       pattern: options.pattern,
       minLength: options.minLength,
       maxLength: options.maxLength ?? DEFAULT_TEXT_MAX_LENGTH,
+      multiline: options.multiline,
       optional: options.optional,
       validate: options.validate,
       onSelect: options.onSelect,

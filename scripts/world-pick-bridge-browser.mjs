@@ -50,6 +50,7 @@ import {
   startWorldHost,
   summarise,
   surfaceOf,
+  waitUntil,
   writeWorldFixture,
 } from './browser-harness.mjs';
 
@@ -227,12 +228,7 @@ async function crewCount(page) {
  * assertion rather than a coin toss.
  */
 async function expectCrewCount(page, expected) {
-  const deadline = Date.now() + 15_000;
-  let seen = await crewCount(page);
-  while (seen !== expected && Date.now() < deadline) {
-    await new Promise((settle) => setTimeout(settle, 100));
-    seen = await crewCount(page);
-  }
+  const seen = await waitUntil(() => crewCount(page), (read) => read === expected, 15_000);
   assert(seen === expected, `the crew pick read "${seen}" rather than "${expected}"`);
 }
 

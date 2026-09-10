@@ -326,6 +326,43 @@ This is a change of surface, not of content, and three things keep it honest:
 are partitioned by `splitAnchoredChoices` instead, which keeps every choice in
 the panel by design.
 
+#### Text and number picks are editors, not buttons
+
+A `text` or `number` pick is the one pick the panel cannot draw as a list, so it
+draws a labelled editor: the selection's own prompt as a real `<label>` bound to
+the field, the bound as a hint below it, and a submit button.
+
+- **The hint states the bound it has.** `up to 1000 characters` for a field with
+  only a maximum, `at least 10 characters` for one with only a minimum, `10 to
+  1000 characters` for one with both, and nothing at all for one with neither.
+  It is built by `textLengthHint` in `action-panel-helpers.ts` so the single-line
+  field and the multiline box cannot drift into two different sentences. It
+  replaced an interpolated range that rendered `(?-1000 chars)` for the
+  commonest field in the library.
+- **A multiline field states only its floor there**, because its character count
+  already carries the ceiling and where the player stands in it. Two lines saying
+  the maximum would be the same fact twice, and the action bar caps its own
+  height -- the row it costs is the row the count gets scrolled out of.
+- **`multiline: true` on `enterText` draws a resizable box** instead of a single
+  line, sized to six rows and growable by the player, plus a live character count
+  and an explicit submit button so Enter inserts a newline rather than
+  submitting. See
+  [Actions & Flow](./actions-and-flow.md#entertext---enter-text). It is
+  presentation only: the same value, the same bounds, the same validation.
+- **A refused value says why.** The panel applies the engine's own
+  `textRuleErrors` -- imported, not reimplemented -- so the sentence it shows
+  before submitting is the sentence the server would answer with. The message is
+  `role="alert"`, associated with the field through `aria-describedby`, and the
+  field carries `aria-invalid` while it stands.
+- **The count is described, not announced.** It sits in the field's
+  `aria-describedby`, so it is read on arrival rather than after every keystroke.
+  A live region speaks exactly once, at the character limit, which is the one
+  moment a keystroke silently stops working.
+
+This is not a free-text search box and the rule above is untouched: a text pick
+is a value the ACTION asked for, enumerated by nothing and matched against
+nothing.
+
 #### Board keyboard handoff
 
 When the panel hands a choice to the board, the board becomes the only path into

@@ -845,6 +845,10 @@ function assertCoversWorldRedaction(bodies: readonly unknown[]): void {
  *  - NO SELECTION AT ALL. The offer's floor. An action with nothing to ask can
  *    never be candidateless, so it is the control against which the other three
  *    are read.
+ *  - A MULTILINE TEXT FIELD (#229). The pick a host draws a box for rather than
+ *    a line, and the flag that says so is an OPTIONAL FIELD on a text pick --
+ *    which `verbatimModuleSyntax` erases along with the type declaring it. Only
+ *    a fixture that produces one puts it in front of a hash.
  *  - A NUMBER. `candidateless` is defined over `validElements ?? choices`, so a
  *    number selection can never be one -- which is exactly why `kindle` sat
  *    correctly greyed in the field while `tend` vanished. Without a number in
@@ -859,6 +863,7 @@ function assertCoversWorldRedaction(bodies: readonly unknown[]): void {
  */
 function assertCoversWorldOffer(facts: {
   selectionShapes: readonly (readonly string[])[];
+  multilineTextIsOffered: boolean;
   ownLandIsBare: boolean;
   everyNeighbourIsGreyed: boolean;
 }): void {
@@ -868,6 +873,9 @@ function assertCoversWorldOffer(facts: {
     ['an action with no selection at all', shapes.some((shape) => shape.length === 0)],
     ['an action whose selection is a number', shapes.some((shape) => shape.join() === 'number')],
     ['an action whose selection is an element', shapes.some((shape) => shape.join() === 'element')],
+    // #229. `multiline` is an optional field on a text pick, so nothing but a
+    // text pick that sets it can put it in front of a fingerprint.
+    ['an action whose selection is multiline text', facts.multilineTextIsOffered],
     // The two element verbs share one predicate with the actions themselves, so
     // this asks the world the same question `tend`'s and `raze`'s own
     // `disabled` callbacks ask it rather than restating their rule.
@@ -1109,6 +1117,27 @@ async function computeWorldFixture(): Promise<{ view: unknown; offer: unknown }>
       (ctx.world.partition(COMMONS) as any).embers += args.logs;
     });
 
+  // A MULTILINE TEXT PICK, WHICH IS ONLY VISIBLE HERE (#229). `multiline` is an
+  // optional field on a `text` pick's metadata, and `verbatimModuleSyntax`
+  // erases the type that declares it -- so on its own it moved neither hash
+  // while changing the control every host draws for a text selection. That is
+  // the exact shape ShufflewickPub #414 recorded, and the answer is the same
+  // one: put a field the platform can see into something the fixture actually
+  // produces. A world is also where the long fields live, since an empire's
+  // description outlives any one session.
+  const post = worldAction<any>('post')
+    .prompt('Leave word on the common notice board')
+    .needs(() => [COMMONS])
+    .enterText('notice', {
+      prompt: 'What to post',
+      minLength: 2,
+      maxLength: 240,
+      multiline: true,
+    })
+    .execute((args: any, ctx: any) => {
+      (ctx.world.partition(COMMONS) as any).notice = args.notice;
+    });
+
   const neighbourPick = {
     prompt: "Whose land?",
     needs: ({ player }: any) => neighboursOf(player.seat).map(holdingPartition),
@@ -1197,7 +1226,7 @@ async function computeWorldFixture(): Promise<{ view: unknown; offer: unknown }>
       },
       forget() {},
     },
-    actions: [look, kindle, tend, raze],
+    actions: [look, kindle, tend, raze, post],
     // A SUBSET, which is the point: the commons and the looker's own land, and
     // never anybody else's.
     view: (seat: number) => [COMMONS, holdingPartition(seat)],
@@ -1278,8 +1307,17 @@ async function computeWorldFixture(): Promise<{ view: unknown; offer: unknown }>
   await world.hydrate(neighboursOf(LOOKER_SEAT).map(holdingPartition));
 
   assertCoversWorldOffer({
-    selectionShapes: [look, kindle, tend, raze].map((definition) =>
+    selectionShapes: [look, kindle, tend, raze, post].map((definition) =>
       definition.selections.map((selection) => selection.type),
+    ),
+    // READ OFF THE OFFER RATHER THAN THE DECLARATION, because the declaration
+    // is not what a host receives. A `multiline` that survived the builder and
+    // was dropped by `buildPickMetadata` would leave this false while the
+    // fixture looked complete.
+    multilineTextIsOffered: offer.some((verb: { selections?: readonly unknown[] }) =>
+      (verb.selections ?? []).some(
+        (pick) => (pick as { type?: string; multiline?: boolean }).multiline === true,
+      ),
     ),
     ownLandIsBare: isBare(holdingOf(live, LOOKER_SEAT)),
     everyNeighbourIsGreyed: neighboursOf(LOOKER_SEAT).every((seat) =>

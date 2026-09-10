@@ -1,8 +1,8 @@
 {
-  "revision": 70,
+  "revision": 71,
   "bundleProtocol": 2,
   "surfaceHash": "9dfde0c4824961cc",
-  "payloadHash": "a809d36d1341bd7a",
+  "payloadHash": "e7e05e54c3e990f3",
   "formatHash": "0058593e7cc80205",
   "history": [
     {
@@ -574,6 +574,15 @@
       "payloadHash": "a809d36d1341bd7a",
       "formatHash": "0058593e7cc80205",
       "summary": "A world-owned phase can declare which SEAT it is about, and read that chair's activity watermark as a bounded point read (ShufflewickPub #423). worldClockAction gains .about(), one chair per round of the same ordered declaration walk .needs() already uses, and ctx.world.activityOf(seat) answers { seat, at, since, inactiveSince, tenancy } for a chair the walk named and refuses undeclared-activity for any other. A seated action carrying an activity round is refused when the world is built, so a player has no road to another seat's watermark. commandPartitions becomes commandNeeds and answers two lists -- partitions, and at most one chair per round -- taking what the host has already answered so the walk terminates in order; WorldCommandStamp and WorldEventStamp carry declaredActivity, and walkDeclaration drives both legs and returns what apply takes. A chair's SINCE is now the later of the world's recording epoch and the instant its holder took it, so a newcomer in an old world is not instantly reapable, and tenancy tells an empty or erased chair from a silent empire (#399, #410)."
+    },
+    {
+      "revision": 71,
+      "date": "2026-09-10",
+      "bundleProtocol": 2,
+      "surfaceHash": "9dfde0c4824961cc",
+      "payloadHash": "e7e05e54c3e990f3",
+      "formatHash": "0058593e7cc80205",
+      "summary": "A text selection can ask for a multiline field: enterText({ multiline: true }) sets an optional multiline flag on a text pick's metadata, and the shared ActionPanel draws a labelled resizable textarea with a character count and an explicit submit button (so Enter inserts a newline) instead of a single-line input. It is presentation only -- the value, minLength/maxLength/pattern and validate are unchanged, and the flag is absent from every pick that does not ask for it -- so a host needs no change to carry it, but a host that draws its own controls from pick metadata should honour it for prose fields. The panel also now reports a text value the length or pattern rules refuse (using the engine's own wording) rather than silently doing nothing, and its length hint states 'up to N characters' where it previously rendered '(?-N chars)'."
     }
   ]
 }

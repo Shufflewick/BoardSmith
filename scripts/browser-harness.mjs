@@ -236,6 +236,29 @@ export function assert(condition, message) {
 }
 
 /**
+ * Poll `read` until `accept` likes what it returns, then hand that back.
+ *
+ * A single read is a race with a round trip. The surface renders the state it
+ * has and rewrites it when the world answers, so what a check is asserting
+ * about is usually the SECOND state -- and reading once makes the difference
+ * between the two a coin toss rather than an assertion. #227's own crew count
+ * and #229's stored description are both that shape.
+ *
+ * It returns the last value it saw rather than throwing, so the caller's
+ * `assert` is what reports, naming the value actually found. That is the
+ * sentence a reader needs, and it is why this does not take a message.
+ */
+export async function waitUntil(read, accept, timeoutMs = 20_000) {
+  const deadline = Date.now() + timeoutMs;
+  let seen = await read();
+  while (!accept(seen) && Date.now() < deadline) {
+    await new Promise((settle) => setTimeout(settle, 100));
+    seen = await read();
+  }
+  return seen;
+}
+
+/**
  * Report what the run found and answer with the process's exit code.
  *
  * @param what how to finish the sentence "N/M checks passed …"
