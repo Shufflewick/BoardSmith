@@ -267,6 +267,36 @@ The dev-only `debug:flow-state` WS op (alongside `debug:logs`) surfaces the
 same `FlowDebugInfo` shape described above, over the wire, for a connected
 dev-host client.
 
+## The one checked-in browser regression: a world's dependent pick
+
+`scripts/world-pick-bridge-browser.mjs` is a standing regression that drives a
+real Chromium through the **world** dev host: it writes a disposable world
+project to a temp directory, starts the real `boardsmith dev` world server on a
+free port, and walks a dependent selection — a crew whose size is the chosen
+ship's cargo hold — in both entry points, from the action panel and from a
+custom UI that prefills the earlier selection.
+
+It exists because issue #227 was a fully-built, fully-green feature that was
+dead in the field: `WorldDevHost.vue` relayed neither `world_pick` nor
+`world_pick_result`, so the native host's tests, the shell's tests and the
+controller's tests were all green while the browser showed `Selected: 0` where
+five was the answer. Nothing on either side of that bar can see it, so the
+regression has to cross it — including asserting the frames on the WebSocket
+itself, which is how the defect was found.
+
+```sh
+node scripts/world-pick-bridge-browser.mjs
+# or, pointing it at a Playwright you already have installed elsewhere:
+BOARDSMITH_PLAYWRIGHT_MODULE=/abs/path/to/node_modules/playwright \
+  node scripts/world-pick-bridge-browser.mjs
+```
+
+It is **not** part of `npx vitest run`: BoardSmith depends on no browser, and the
+suite stays hermetic. It never skips — with no Playwright reachable it says how
+to give it one and exits non-zero, because a browser regression that silently
+passes when it did not run is the failure it exists to replace. It starts and
+stops its own dev server, on its own port, inside the one process.
+
 ---
 
 **Always kill the dev server before you finish.** Never leave `boardsmith dev`

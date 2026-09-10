@@ -74,6 +74,23 @@ function frames(type: string): Array<Record<string, unknown>> {
   return sent().filter((frame) => frame.type === type);
 }
 
+/**
+ * Everything the bar posts INTO the world frame from here on.
+ *
+ * jsdom gives an iframe a `contentWindow` that no test can read a postMessage
+ * out of, so the frame's own window is replaced by a recorder -- the same shape
+ * the "no longer live" case below installs, kept in one place because #227 is
+ * entirely about which frames reach it.
+ */
+function watchFrame(wrapper: VueWrapper): Array<Record<string, unknown>> {
+  const posted: Array<Record<string, unknown>> = [];
+  Object.defineProperty(wrapper.find('iframe').element, 'contentWindow', {
+    value: { postMessage: (message: Record<string, unknown>) => posted.push(message) },
+    configurable: true,
+  });
+  return posted;
+}
+
 async function open(config: WorldDevConfig = CONFIG): Promise<VueWrapper> {
   const wrapper = mount(WorldDevHost, { props: { config }, attachTo: document.body });
   await wrapper.vm.$nextTick();
@@ -308,6 +325,124 @@ describe('#167: the bar bridges the socket to the world frame and back', () => {
     socket!.deliver(stateFrame());
     await wrapper.vm.$nextTick();
     expect(wrapper.find('.world-dev__name').text()).toBe('The Dusk Hall');
+    wrapper.unmount();
+  });
+});
+
+describe('#227: a dependent pick is re-asked THROUGH this bar, in both directions', () => {
+  /**
+   * The defect this file exists to have caught. `world-host.test.ts` proves the
+   * host answers a `pick`, and `useWorldHost.test.ts` proves a world UI asks
+   * one -- and between the two stood a bar that relayed neither, so a crew whose
+   * cap is the chosen ship's hold kept the unbounded metadata the one-shot offer
+   * carried and then timed out. Nothing on either side could see it.
+   */
+  const askFromFrame = (overrides: Record<string, unknown> = {}): void => {
+    window.dispatchEvent(
+      new MessageEvent('message', {
+        data: {
+          source: WORLD_UI_SOURCE,
+          type: 'world_pick',
+          requestId: 'wp-2',
+          action: 'deploy',
+          selection: 'crew',
+          args: { ship: 'dory' },
+          ...overrides,
+        },
+      }),
+    );
+  };
+
+  it('relays the re-ask onto the socket, keeping its id, action, selection and bound args', async () => {
+    const wrapper = await open();
+    askFromFrame();
+    await wrapper.vm.$nextTick();
+    expect(frames('pick')).toEqual([
+      {
+        type: 'pick',
+        requestId: 'wp-2',
+        action: 'deploy',
+        selection: 'crew',
+        args: { ship: 'dory' },
+      },
+    ]);
+    wrapper.unmount();
+  });
+
+  it('relays the answer back into the frame under the host source', async () => {
+    const wrapper = await open();
+    const posted = watchFrame(wrapper);
+    askFromFrame();
+    await wrapper.vm.$nextTick();
+    socket!.deliver({
+      type: 'world_pick_result',
+      requestId: 'wp-2',
+      ok: true,
+      selection: { name: 'crew', choices: [], multiSelect: { min: 1, max: 5 } },
+    });
+    await wrapper.vm.$nextTick();
+    // THE CAP IS THE POINT: the offer said `{min:1}` with nothing bound, and
+    // this is the frame that carries the five the chosen ship decides.
+    expect(posted.at(-1)).toEqual({
+      source: WORLD_HOST_SOURCE,
+      type: 'world_pick_result',
+      requestId: 'wp-2',
+      ok: true,
+      selection: { name: 'crew', choices: [], multiSelect: { min: 1, max: 5 } },
+    });
+    wrapper.unmount();
+  });
+
+  it("relays a refusal WITH its code, so the frame can say why rather than time out", async () => {
+    const wrapper = await open();
+    const posted = watchFrame(wrapper);
+    askFromFrame({ args: { ship: 'gone' } });
+    await wrapper.vm.$nextTick();
+    socket!.deliver({
+      type: 'world_pick_result',
+      requestId: 'wp-2',
+      ok: false,
+      code: 'GONE',
+      message: 'That ship has already sailed.',
+    });
+    await wrapper.vm.$nextTick();
+    expect(posted.at(-1)).toMatchObject({
+      source: WORLD_HOST_SOURCE,
+      type: 'world_pick_result',
+      ok: false,
+      code: 'GONE',
+      message: 'That ship has already sailed.',
+    });
+    wrapper.unmount();
+  });
+
+  it('relays a second re-ask under its own id, so a changed earlier argument gets its own answer', async () => {
+    // The player clears the ship and picks the other one. Two questions, two
+    // ids: an answer matched by arrival order is the assumption a busy world
+    // breaks, and the bar must not collapse them.
+    const wrapper = await open();
+    askFromFrame({ requestId: 'wp-2', args: { ship: 'dory' } });
+    askFromFrame({ requestId: 'wp-4', args: { ship: 'skiff' } });
+    await wrapper.vm.$nextTick();
+    expect(frames('pick').map((frame) => [frame.requestId, frame.args])).toEqual([
+      ['wp-2', { ship: 'dory' }],
+      ['wp-4', { ship: 'skiff' }],
+    ]);
+    wrapper.unmount();
+  });
+
+  it('invents no answer of its own when the socket has gone', async () => {
+    // Nothing is fabricated on a dead socket: the frame's own timeout is what
+    // tells the player, and a bar that answered here would be answering for a
+    // world it cannot reach.
+    const wrapper = await open();
+    const posted = watchFrame(wrapper);
+    socket!.drop();
+    await wrapper.vm.$nextTick();
+    askFromFrame();
+    await wrapper.vm.$nextTick();
+    expect(frames('pick')).toEqual([]);
+    expect(posted.filter((message) => message.type === 'world_pick_result')).toEqual([]);
     wrapper.unmount();
   });
 });

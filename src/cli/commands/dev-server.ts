@@ -32,7 +32,7 @@ import type { Duplex } from 'node:stream';
 import type { Connect, Plugin as VitePlugin, ViteDevServer } from 'vite';
 import { WebSocketServer, type WebSocket } from 'ws';
 
-import { BOARDSMITH_PACKAGE_DIRS, cliMonorepoRoot } from './game-runtime.js';
+import { boardsmithSourceEntries } from './game-runtime.js';
 
 /**
  * The one thing this module needs of an HTTP server: that it emits `upgrade`.
@@ -200,6 +200,14 @@ export function resolveDevHostDir(fromDir: string, marker: string): string {
  *
  * Without it the dev host loads the PUBLISHED engine while an author edits the
  * local one, so a change appears to have no effect for reasons nothing reports.
+ *
+ * ONE LOOKUP, against the package's own `exports` (`boardsmithSourceEntries`).
+ * This used to rebuild a subpath from a directory name and three guesses at the
+ * layout -- `src/<pkg>/src/<subpath>`, from a layout this repo has not had --
+ * so `boardsmith/ui/auto-ui` and both CSS exports resolved to files that are
+ * not there, and every entry missing from the hand-written map resolved to
+ * nothing at all. An export is a declared fact; guessing at one is how a
+ * loader ends up disagreeing with Node about what a game imports.
  */
 export function monorepoBoardsmithResolvePlugin(): VitePlugin {
   return {
@@ -207,23 +215,7 @@ export function monorepoBoardsmithResolvePlugin(): VitePlugin {
     enforce: 'pre',
     resolveId(source: string) {
       if (!source.startsWith('boardsmith')) return null;
-      const srcDir = BOARDSMITH_PACKAGE_DIRS[source];
-      if (srcDir) return join(cliMonorepoRoot, 'src', srcDir, 'index.ts');
-      if (!source.startsWith('boardsmith/')) return null;
-      const parts = source.replace('boardsmith/', '').split('/');
-      const pkgSrcDir = BOARDSMITH_PACKAGE_DIRS[`boardsmith/${parts[0]}`];
-      const subpath = parts.slice(1).join('/');
-      if (!pkgSrcDir || !subpath) return null;
-      const srcPath = join(cliMonorepoRoot, 'src', pkgSrcDir, 'src');
-      if (subpath.endsWith('.css')) return join(srcPath, subpath);
-      for (const candidate of [
-        join(srcPath, `${subpath}.ts`),
-        join(srcPath, subpath, 'index.ts'),
-        join(srcPath, 'components', subpath, 'index.ts'),
-      ]) {
-        if (existsSync(candidate)) return candidate;
-      }
-      return null;
+      return boardsmithSourceEntries().get(source) ?? null;
     },
   };
 }

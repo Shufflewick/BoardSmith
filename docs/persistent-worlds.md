@@ -910,6 +910,13 @@ and a partition hydrated for a pick nobody went on to submit is the first thing
 evicted. A game author wires none of this -- `WorldShell` does it -- and it
 costs one round trip per pick AFTER the first, only while somebody is mid-action.
 
+The re-ask is two frames on the world wire -- `world_pick` out, `world_pick_result`
+back -- so **every host has to relay both**, `boardsmith dev` included. Its world
+bar does (#227); a host that relays only one leaves the panel holding the
+unbounded fallback until the pick times out, with nothing on screen to say why.
+`scripts/world-pick-bridge-browser.mjs` is the browser regression that holds the
+local bar to it, because no test on either side of a bridge can see the bridge.
+
 **What none of this covers, and there is no guard for it.** A `condition` or a
 `disabled` predicate is ordinary code with the resident tree in front of it, and
 nothing stops one WALKING it. The four rules bound the *candidates*; they say
