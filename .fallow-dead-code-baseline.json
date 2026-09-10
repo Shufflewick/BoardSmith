@@ -1,6 +1,7 @@
 {
   "unused_files": [
     "scripts/ingest-harness/run.mjs",
+    "scripts/world-pick-bridge-browser.mjs",
     "src/cli/dev-host/host-main.ts",
     "src/cli/dev-host/world-fallback-main.ts",
     "src/cli/dev-host/world-host-main.ts",
