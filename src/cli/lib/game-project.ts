@@ -1,6 +1,7 @@
 import { existsSync, readFileSync } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { join } from 'node:path';
 import chalk from 'chalk';
+import { resolveUserPath } from './user-path.js';
 
 /**
  * A game's `boardsmith.json`, as far as the CLI commands that read it care.
@@ -90,7 +91,9 @@ export function requireGameProjectManifests(cwd: string): {
  * so a project cannot be laid out one way for `dev` and another for `simulate`.
  */
 export function resolveRulesDir(cwd: string, config: { paths?: { rules?: string } }): string {
-  return config.paths?.rules ? resolve(cwd, config.paths.rules) : join(cwd, 'src', 'rules');
+  return config.paths?.rules
+    ? resolveUserPath(cwd, config.paths.rules)
+    : join(cwd, 'src', 'rules');
 }
 
 /**

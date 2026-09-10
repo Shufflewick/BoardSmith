@@ -1,5 +1,7 @@
+import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, it, expect } from 'vitest';
 
 import { resolveUserPath } from './user-path.js';
@@ -44,5 +46,53 @@ describe('resolveUserPath', () => {
     // into the invocation directory, which is the failure mode of #239 again.
     expect(() => resolveUserPath('/repo/root', '')).toThrow(/empty/i);
     expect(() => resolveUserPath('/repo/root', '   ')).toThrow(/empty/i);
+  });
+});
+/**
+ * `resolveUserPath` is not just a convenience: it is meant to be the ONLY way
+ * a CLI command turns a path a user typed into an absolute one, because the two
+ * defects #239 found were both a `join(cwd, <option value>)` that read as
+ * correct. A gate is the only thing that stops the third one.
+ */
+describe('the CLI has one way to resolve a user-supplied path', () => {
+  const cliDir = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+
+  function sourceFiles(dir: string): string[] {
+    const out: string[] = [];
+    for (const entry of readdirSync(dir)) {
+      const full = join(dir, entry);
+      if (statSync(full).isDirectory()) {
+        out.push(...sourceFiles(full));
+        continue;
+      }
+      if (!entry.endsWith('.ts')) continue;
+      if (entry.endsWith('.test.ts') || entry.endsWith('.test-helper.ts')) continue;
+      out.push(full);
+    }
+    return out;
+  }
+
+  const files = sourceFiles(cliDir).map((path) => ({ path, text: readFileSync(path, 'utf-8') }));
+
+  it('finds source files to check', () => {
+    expect(files.length).toBeGreaterThan(20);
+  });
+
+  it('never joins an output directory onto the invocation directory', () => {
+    // `join(cwd, outDir)` is the exact shape of #239, and it occurred twice --
+    // once in `pack`, once in `build` -- because it reads as obviously right.
+    const offenders = files
+      .filter(({ text }) => /join\(\s*(?:cwd|process\.cwd\(\))\s*,\s*out(?:Dir|putDir)\b/.test(text))
+      .map(({ path }) => path);
+    expect(offenders).toEqual([]);
+  });
+
+  it('expands a leading ~ in exactly one place', () => {
+    // A second hand-rolled expansion is how the two spellings drift apart.
+    const offenders = files
+      .filter(({ path }) => !path.endsWith(join('lib', 'user-path.ts')))
+      .filter(({ text }) => /\/\^~/.test(text) || text.includes("startsWith('~')"))
+      .map(({ path }) => path);
+    expect(offenders).toEqual([]);
   });
 });

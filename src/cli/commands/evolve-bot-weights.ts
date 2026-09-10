@@ -4,7 +4,7 @@ import { cpus } from 'node:os';
 import chalk from 'chalk';
 import ora from 'ora';
 import type { TrainingProgress } from '../../bot-trainer/index.js';
-import { requireGameProject } from '../lib/game-project.js';
+import { requireGameProject, resolveRulesDir } from '../lib/game-project.js';
 
 interface EvolveBotWeightsOptions {
   generations?: string;
@@ -22,9 +22,10 @@ export async function evolveBotWeightsCommand(options: EvolveBotWeightsOptions):
   const config = JSON.parse(readFileSync(configPath, 'utf-8'));
   const gameName = config.displayName || config.name;
 
-  // Use paths.rules from config, fallback to src/rules
-  const rulesPath = config.paths?.rules || 'src/rules';
-  const botPath = join(cwd, rulesPath, 'bot.ts');
+  // Where the rules live is `resolveRulesDir`'s to decide, so a project cannot
+  // be laid out one way for `dev` and another for weight evolution. Deriving it
+  // here also joined an absolute `paths.rules` onto cwd (#239).
+  const botPath = join(resolveRulesDir(cwd, config), 'bot.ts');
 
   // Require existing bot.ts
   if (!existsSync(botPath)) {
