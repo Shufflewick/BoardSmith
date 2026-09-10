@@ -142,12 +142,17 @@ program
 // Code-quality audits
 program
   .command('audit')
-  .description("Audit what this branch changed (fallow), plus duplication and health-baseline drift")
+  .description("Audit what this branch changed (fallow), plus duplication and baseline drift")
   .option('--changes', 'Run only the changed-files audit (fallow, baseline-aware)')
   .option('--duplication', 'Run only the duplication audit')
   .option('--health-baseline', 'Run only the health-baseline drift check')
+  .option('--dupes-baseline', 'Run only the duplication-baseline check (content, then addresses)')
   .option('--since <ref>', "Diff against this git ref instead of fallow's detected base branch")
   .option('--backlog', "Report the whole repository's dead code instead — informational, never a gate")
+  .option(
+    '--rekey-dupes',
+    'Re-address the accepted clone groups whose content still matches — refuses if any does not',
+  )
   .action(auditCommand);
 
 // The engine contract — what the platform is promised, and how it learns the

@@ -81,6 +81,13 @@ cp .fallow-*.json ~/BoardSmith/
 git worktree remove /tmp/bs-baseline
 ```
 
+The duplication baseline is NOT in that list, and must not be regenerated this
+way: it is derived from `.fallow-dupes-accepted.json` by
+`boardsmith audit --rekey-dupes`, which re-addresses only the debt whose content
+still matches. A raw `fallow dupes --save-baseline` would forgive whatever new
+duplication the tree happened to hold. See "The duplication baseline is keyed by
+CONTENT" below.
+
 Generating from a clean `main` worktree is the point: a baseline taken from a
 dirty tree bakes in the very findings the gate is supposed to catch.
 
@@ -192,20 +199,94 @@ unreachable file elsewhere still fails. Any future browser regression under that
 name is a root the moment it is written, which is the point: the shape that
 makes the gate honest should be the shape that is easiest to reach for.
 
-## Line-keyed baselines drift, and the drift lands on the next editor
+## The duplication baseline is keyed by CONTENT, not by line (#232)
 
-`.fallow-dupes-baseline.json` keys a clone group by `file:start-end`. Those line
-numbers go stale as the files around them grow, and nothing notices, because
-`fallow audit` has nothing in scope on `main`. The staleness is invisible until
-somebody edits one of the named files — and then every clone group in it is
-reported against their change.
+`.fallow-dupes-baseline.json` used to be the record, and it keys a clone group
+by `file:start-end`. That address is not a property of the debt; it is a
+property of everything ABOVE the debt. Insert a line at the top of a file and
+every accepted group in it is mis-addressed, silently, because `fallow audit`
+has nothing in scope on `main` and never looks. The bill arrives for whoever
+next edits one of the named files, as their change being blamed for clone
+groups that predate it.
 
-#230 hit this with a four-line edit to `GameShell.vue`: six baselined groups,
-none of them the change's, all reported because the baseline still pointed 22 to
-31 lines above where the code now sits. The six entries were RE-KEYED to their
-current lines. Same content, same accepted debt, correct addresses.
+#230 measured it: a four-line edit to `GameShell.vue` surfaced six baselined
+groups keyed 22 to 31 lines above where the code actually sat, and `main` had
+already drifted 25 lines before that edit touched anything. #230 re-keyed those
+six by hand. That fixed the instance and left the class.
 
-Re-keying is the honest fix and it is not the same as regenerating: the group's
-content is unchanged and can be checked line by line against the finding. Check
-it that way before re-keying, because a group whose content has actually changed
-is new debt wearing an old key.
+**The record is now `.fallow-dupes-accepted.json`, and its key is a hash of the
+clone group's own text** -- the SHA-256 of the group's instance fragments,
+sorted lexicographically, which is exactly what `fallow dupes --format json`
+already reports per instance.
+
+That key is invariant under every change that is not this debt:
+
+- code moving above it, below it, or in another file does not touch it;
+- renaming the file does not touch it;
+- moving the whole group to another file does not touch it, and should not --
+  relocated duplication is the same duplication;
+- two instances swapping places in one file do not either, because the
+  fragments are sorted by their own text rather than by position.
+
+And it still fails on what should fail. Copy-pasting an accepted clone into one
+more place makes the group's fragment multiset larger, so the key changes and
+the group reports as new. Editing the duplicated code changes its text, so it
+reports as new too -- which is the honest answer, and it is the check this
+document used to ask a human to do by eye before re-keying anything.
+
+### The line-keyed file is now derived
+
+`fallow audit` reads `.fallow-dupes-baseline.json` and the key format is
+fallow's, not ours, so the file stays -- as a generated address book. Both
+committed files come from one scan:
+
+```bash
+boardsmith audit --dupes-baseline   # the check
+boardsmith audit --rekey-dupes      # re-address what still matches
+```
+
+The check asks two questions in order, because they have different answers:
+
+- **Does the accepted CONTENT match?** If not, that is a finding about the
+  code: duplication nothing accepted, or accepted debt that is gone. Named,
+  with its files, and not re-keyable.
+- **Do the addresses match?** If not, nothing about the debt changed and
+  re-keying is provably safe, because the content matched first. The report
+  says exactly that and names `--rekey-dupes`.
+
+`--rekey-dupes` REFUSES to write anything when the content does not match. That
+is what stops it being a button that turns a red board green: new duplication
+has no entry to re-address, and there is no spelling of the command that
+accepts it. Recording a tree wholesale is a separate, deliberate act -- delete
+`.fallow-dupes-accepted.json` and re-key -- and it shows up as a large diff to
+a committed file, which is the point.
+
+### What the migration recorded, honestly
+
+Measured when the content key was introduced, against a baseline that had gone
+untended for some time:
+
+| | count |
+|---|---|
+| clone groups in the tree | 1096 |
+| already accepted at the right address | 953 |
+| accepted, but silently mis-addressed (the #232 class) | 58 |
+| accepted allowances whose duplication is gone | 24 |
+| clone groups no baseline had ever accepted | 85 |
+
+Those 85 were already in the tree and would each have arrived as a blocked
+commit for whoever next edited one of the files holding them; 111 of the 143
+unmatched groups are between test files. Recording them is what a baseline IS,
+and the same thing `.fallow-dead-code-baseline.json` did for dead code at
+`047227c1`: it records the debt, it does not forgive it, and it deserves its
+own work sized on its own merits. What it does mean from here on is that
+nothing NEW joins them without being named.
+
+### Why the other two baselines keep their own keys
+
+Neither carries an address, so neither can be invalidated this way.
+`.fallow-dead-code-baseline.json` keys a finding by symbol name and file;
+`.fallow-health-baseline.json` keys a per-file, per-category COUNT. Both still
+drift, but they drift in what they RECORD rather than in where they POINT --
+which is why #159's answer for the health baseline is the drift report above
+and not a re-key, and why a content key would tell you nothing about either.

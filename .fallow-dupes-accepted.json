@@ -1,0 +1,8035 @@
+{
+  "accepted": [
+    {
+      "content": "00183a246c2e1dd0",
+      "lines": 5,
+      "files": [
+        "src/session/testing/random-scumming.test.ts"
+      ]
+    },
+    {
+      "content": "0089e02f8561ba0f",
+      "lines": 11,
+      "files": [
+        "docs/persistent-world-claims.test.ts",
+        "src/world/action.test.ts"
+      ]
+    },
+    {
+      "content": "00af7e7912e52209",
+      "lines": 12,
+      "files": [
+        "src/engine/utils/serializer.test.ts"
+      ]
+    },
+    {
+      "content": "00bc429b5593b952",
+      "lines": 5,
+      "files": [
+        "src/engine/command/undo.test.ts"
+      ]
+    },
+    {
+      "content": "00f023b4bb893281",
+      "lines": 13,
+      "files": [
+        "src/bot/mcts-stats-checkers.test.ts"
+      ]
+    },
+    {
+      "content": "01910219756dddb5",
+      "lines": 6,
+      "files": [
+        "src/ui/components/GameShell.vue"
+      ]
+    },
+    {
+      "content": "01bfa003dc56421f",
+      "lines": 31,
+      "files": [
+        "src/session/stateless-ops.test.ts"
+      ]
+    },
+    {
+      "content": "021065be73155da2",
+      "lines": 27,
+      "files": [
+        "src/cli/commands/verify-classify.ts",
+        "src/cli/commands/verify-derive-check.ts"
+      ]
+    },
+    {
+      "content": "02328e6ed109a1b5",
+      "lines": 19,
+      "files": [
+        "src/session/testing/stateful-timetravel-authoritative.test.ts",
+        "src/session/testing/stateful-undo-authoritative.test.ts"
+      ]
+    },
+    {
+      "content": "024c846a5915ec51",
+      "lines": 7,
+      "files": [
+        "src/bot-trainer/feature-templates.ts"
+      ]
+    },
+    {
+      "content": "0401b67e4c467f83",
+      "lines": 5,
+      "files": [
+        "src/cli/lib/ingest-hook.test.ts"
+      ]
+    },
+    {
+      "content": "043602c6646f8071",
+      "lines": 12,
+      "files": [
+        "src/ui/composables/useActionController.ts"
+      ]
+    },
+    {
+      "content": "04d1a1b036b18b64",
+      "lines": 14,
+      "files": [
+        "src/ui/components/auto-ui/renderers/CardRenderer.vue",
+        "src/ui/components/auto-ui/renderers/HandRenderer.vue"
+      ]
+    },
+    {
+      "content": "04eab0c82807295d",
+      "lines": 7,
+      "files": [
+        "src/session/snapshot-session-host.test.ts"
+      ]
+    },
+    {
+      "content": "058015dc7fa39e39",
+      "lines": 19,
+      "files": [
+        "src/cli/dev-host/world-host.test.ts"
+      ]
+    },
+    {
+      "content": "05dbcb275a193d45",
+      "lines": 15,
+      "files": [
+        "src/session/snapshot-session-host.test.ts",
+        "src/session/testing/mid-game-bot-takeover.test.ts"
+      ]
+    },
+    {
+      "content": "05dbe4b50e364d96",
+      "lines": 13,
+      "files": [
+        "src/ui/composables/useElementAnimation.test.ts",
+        "src/ui/composables/useFLIP.test.ts"
+      ]
+    },
+    {
+      "content": "05f580832e350ead",
+      "lines": 6,
+      "files": [
+        "src/engine/element/world-partition.test.ts"
+      ]
+    },
+    {
+      "content": "0608b4f4734b5827",
+      "lines": 6,
+      "files": [
+        "src/cli/dev-host/multiplayer-host.gameoptions.test.ts",
+        "src/cli/dev-host/multiplayer-host.palette.test.ts"
+      ]
+    },
+    {
+      "content": "061c6fb6bc69753c",
+      "lines": 13,
+      "files": [
+        "src/cli/commands/verify-run.test.ts"
+      ]
+    },
+    {
+      "content": "062884d0e5dc9d96",
+      "lines": 10,
+      "files": [
+        "src/cli/slash-command/bs/status-tools.test.ts"
+      ]
+    },
+    {
+      "content": "0665ceb1e9926169",
+      "lines": 21,
+      "files": [
+        "src/bot/mcts-redaction.test.ts"
+      ]
+    },
+    {
+      "content": "06781e0c61a6c523",
+      "lines": 17,
+      "files": [
+        "src/cli/slash-command/bs/build-game.test.ts",
+        "src/cli/slash-command/bs/ingest.test.ts",
+        "src/cli/slash-command/bs/templates.test.ts",
+        "src/cli/slash-command/bs/verify.test.ts"
+      ]
+    },
+    {
+      "content": "068953345045c9a5",
+      "lines": 13,
+      "files": [
+        "src/bot-trainer/feature-templates.ts"
+      ]
+    },
+    {
+      "content": "06a6ab40190b445a",
+      "lines": 13,
+      "files": [
+        "src/session/testing/execute-barrier-undo.test.ts"
+      ]
+    },
+    {
+      "content": "06ac0d1bfb0cc5fc",
+      "lines": 17,
+      "files": [
+        "src/client/vue.test.ts"
+      ]
+    },
+    {
+      "content": "06b2630933a3967b",
+      "lines": 19,
+      "files": [
+        "src/cli/commands/verify-source-free.test.ts"
+      ]
+    },
+    {
+      "content": "06bf9f171640bb65",
+      "lines": 12,
+      "files": [
+        "src/ui/composables/useBoardActionBridge.test.ts"
+      ]
+    },
+    {
+      "content": "06cb5b8071ac7ac6",
+      "lines": 11,
+      "files": [
+        "src/session/stateless-ops.test.ts"
+      ]
+    },
+    {
+      "content": "0710a4ef606ee752",
+      "lines": 23,
+      "files": [
+        "src/engine/element/checkpoint-aliasing.test.ts"
+      ]
+    },
+    {
+      "content": "07305ae49df569b5",
+      "lines": 17,
+      "files": [
+        "src/ui/composables/useFlyingElements.test.ts"
+      ]
+    },
+    {
+      "content": "073895d7d01ace54",
+      "lines": 7,
+      "files": [
+        "src/session/stateless-ops.test.ts"
+      ]
+    },
+    {
+      "content": "0765fc96a1af8197",
+      "lines": 5,
+      "files": [
+        "src/cli/dev-host/multiplayer-host.test.ts"
+      ]
+    },
+    {
+      "content": "07bcefc3029f3b48",
+      "lines": 9,
+      "files": [
+        "src/engine/element/deck-hand-visibility.test.ts"
+      ]
+    },
+    {
+      "content": "07fc140add70f357",
+      "lines": 73,
+      "files": [
+        "src/cli/dev-host/DevHost.debug-relay.test.ts",
+        "src/cli/dev-host/DevHost.gameoptions.test.ts"
+      ]
+    },
+    {
+      "content": "085f5da6773c15a1",
+      "lines": 19,
+      "files": [
+        "src/cli/commands/analyze.ts",
+        "src/cli/commands/lint.ts"
+      ]
+    },
+    {
+      "content": "088f783ca67bc1d2",
+      "lines": 24,
+      "files": [
+        "src/testing/dom-leak.test.ts"
+      ]
+    },
+    {
+      "content": "09704c5f123ea56b",
+      "lines": 7,
+      "files": [
+        "src/ui/components/auto-ui/renderers/renderers.candidate-parity.test.ts"
+      ]
+    },
+    {
+      "content": "097606014cca6a20",
+      "lines": 11,
+      "files": [
+        "src/ui/components/GameShell.time-travel-desync.test.ts",
+        "src/ui/composables/useBoardActionBridge.test.ts"
+      ]
+    },
+    {
+      "content": "097da1728fc0d9b3",
+      "lines": 9,
+      "files": [
+        "src/session/snapshot-session-host.test.ts"
+      ]
+    },
+    {
+      "content": "0992bd248caeebc7",
+      "lines": 14,
+      "files": [
+        "src/session/snapshot-session-host.test.ts"
+      ]
+    },
+    {
+      "content": "09c9b40c0db05b9c",
+      "lines": 14,
+      "files": [
+        "src/cli/lib/asset-scan.ts",
+        "src/cli/lib/sandbox-scan.ts"
+      ]
+    },
+    {
+      "content": "09d3b7c2d09a0455",
+      "lines": 6,
+      "files": [
+        "src/cli/commands/verify-repair.test.ts"
+      ]
+    },
+    {
+      "content": "09e96631fa865c6a",
+      "lines": 6,
+      "files": [
+        "src/world/action.ts"
+      ]
+    },
+    {
+      "content": "0aa01dc324bcbaf8",
+      "lines": 13,
+      "files": [
+        "src/ui/composables/useActionController.test.ts"
+      ]
+    },
+    {
+      "content": "0ab6847ef1411ccb",
+      "lines": 6,
+      "files": [
+        "src/cli/dev-host/DevHost.restart.test.ts"
+      ]
+    },
+    {
+      "content": "0ad37056b2ee1fcc",
+      "lines": 13,
+      "files": [
+        "src/engine/action/action.ts"
+      ]
+    },
+    {
+      "content": "0b20853585c6d29d",
+      "lines": 12,
+      "files": [
+        "src/ui/components/auto-ui/renderers/CardRenderer.fluid.test.ts"
+      ]
+    },
+    {
+      "content": "0b58a082a50d1e44",
+      "lines": 11,
+      "files": [
+        "src/cli/commands/drift-check.test.ts"
+      ]
+    },
+    {
+      "content": "0befa27effeb4846",
+      "lines": 16,
+      "files": [
+        "src/engine/flow/engine.ts"
+      ]
+    },
+    {
+      "content": "0c69672ef615f22c",
+      "lines": 17,
+      "files": [
+        "src/world/engine.test.ts"
+      ]
+    },
+    {
+      "content": "0c6bf5359efd9ffc",
+      "lines": 7,
+      "files": [
+        "src/ui/components/GameShell.time-travel-desync.test.ts"
+      ]
+    },
+    {
+      "content": "0c846bab462d5806",
+      "lines": 19,
+      "files": [
+        "src/engine/element/game-element.test.ts",
+        "src/engine/flow/engine.test.ts"
+      ]
+    },
+    {
+      "content": "0c9c267198f74700",
+      "lines": 66,
+      "files": [
+        "src/cli/commands/simulate.test.ts",
+        "src/testing/random-simulation.test.ts"
+      ]
+    },
+    {
+      "content": "0cd1e10a6c28e429",
+      "lines": 9,
+      "files": [
+        "src/engine/action/action.test.ts"
+      ]
+    },
+    {
+      "content": "0d4b4ee25c54fe4f",
+      "lines": 6,
+      "files": [
+        "src/ui/composables/createFLIPSnapshot.test.ts"
+      ]
+    },
+    {
+      "content": "0d78e16053a21b2f",
+      "lines": 9,
+      "files": [
+        "src/cli/commands/verify-classify.ts"
+      ]
+    },
+    {
+      "content": "0dc7caf6f1b9814d",
+      "lines": 9,
+      "files": [
+        "src/session/testing/execute-barrier-undo.test.ts"
+      ]
+    },
+    {
+      "content": "0de70f49e8180fc6",
+      "lines": 12,
+      "files": [
+        "src/ui/composables/useAnimationEvents.test.ts"
+      ]
+    },
+    {
+      "content": "0df12d7bbdcb1af7",
+      "lines": 15,
+      "files": [
+        "src/engine/flow/engine.test.ts"
+      ]
+    },
+    {
+      "content": "0e005a151b294914",
+      "lines": 8,
+      "files": [
+        "src/engine/tutorial/predicates.test.ts"
+      ]
+    },
+    {
+      "content": "0e0286d981a472f1",
+      "lines": 9,
+      "files": [
+        "src/ui/components/HamburgerMenu.test.ts"
+      ]
+    },
+    {
+      "content": "0e44b0dbaddc1526",
+      "lines": 12,
+      "files": [
+        "src/ui/components/auto-ui/renderers/GridBoardRenderer.a11y.test.ts",
+        "src/ui/components/auto-ui/renderers/HexBoardRenderer.a11y.test.ts"
+      ]
+    },
+    {
+      "content": "0ebe577beb251cc7",
+      "lines": 7,
+      "files": [
+        "src/cli/commands/verify-ruling-recheck.test.ts"
+      ]
+    },
+    {
+      "content": "0ee9f92bcb3ae8a8",
+      "lines": 14,
+      "files": [
+        "src/engine/action/action.test.ts"
+      ]
+    },
+    {
+      "content": "0ef20a7dec86d20e",
+      "lines": 7,
+      "files": [
+        "src/cli/dev-host/multiplayer-host.test.ts"
+      ]
+    },
+    {
+      "content": "0f13b24416e62579",
+      "lines": 8,
+      "files": [
+        "src/cli/slash-command/bs/verify.test.ts"
+      ]
+    },
+    {
+      "content": "0f3c420bf604e16c",
+      "lines": 11,
+      "files": [
+        "src/ui/components/auto-ui/ActionPanel.focus.test.ts"
+      ]
+    },
+    {
+      "content": "0f5fd28914dcb89e",
+      "lines": 12,
+      "files": [
+        "src/client/game-connection.test.ts"
+      ]
+    },
+    {
+      "content": "0fc9dc2aace8dfb9",
+      "lines": 13,
+      "files": [
+        "src/cli/commands/verify-source-free.test.ts"
+      ]
+    },
+    {
+      "content": "0fd8e68b236e623b",
+      "lines": 13,
+      "files": [
+        "src/engine/action/action.test.ts"
+      ]
+    },
+    {
+      "content": "103f43d310cad331",
+      "lines": 26,
+      "files": [
+        "src/engine/action/action-builder.ts"
+      ]
+    },
+    {
+      "content": "1053edde4cf26d05",
+      "lines": 15,
+      "files": [
+        "src/bot-trainer/feature-templates.ts"
+      ]
+    },
+    {
+      "content": "1094548a589ae037",
+      "lines": 6,
+      "files": [
+        "src/ui/components/ControlsMenu.tutorial-toggle.test.ts"
+      ]
+    },
+    {
+      "content": "10bc64571f3be5dc",
+      "lines": 9,
+      "files": [
+        "src/bot-trainer/feature-templates.ts"
+      ]
+    },
+    {
+      "content": "110418d8641aa153",
+      "lines": 27,
+      "files": [
+        "src/ui/components/debug/DecksTab.test.ts",
+        "src/ui/components/debug/ElementsTab.test.ts"
+      ]
+    },
+    {
+      "content": "111d5288a1c4ea2b",
+      "lines": 5,
+      "files": [
+        "src/cli/dev-host/dev-host.integration.test.ts",
+        "src/cli/dev-host/multiplayer-host.palette.test.ts",
+        "src/cli/dev-host/multiplayer-host.test.ts",
+        "src/session/seat-activity-canonical.test.ts",
+        "src/session/stateless-ops-debug.test.ts"
+      ]
+    },
+    {
+      "content": "11641fd55ce96441",
+      "lines": 11,
+      "files": [
+        "src/engine/flow/engine.test.ts"
+      ]
+    },
+    {
+      "content": "1168ef3a77a36323",
+      "lines": 13,
+      "files": [
+        "src/session/snapshot-session-host.test.ts"
+      ]
+    },
+    {
+      "content": "119d8fef2c8d48c7",
+      "lines": 11,
+      "files": [
+        "src/engine/flow/engine.test.ts"
+      ]
+    },
+    {
+      "content": "11a18e722a3a1847",
+      "lines": 13,
+      "files": [
+        "src/engine/flow/engine.test.ts"
+      ]
+    },
+    {
+      "content": "11b8d871b6c19e7d",
+      "lines": 7,
+      "files": [
+        "src/bot-trainer/feature-templates.ts"
+      ]
+    },
+    {
+      "content": "11eb64f5c4c0c9d8",
+      "lines": 9,
+      "files": [
+        "src/cli/commands/build-manifest.test.ts",
+        "src/ui/components/dice/die3d-lazy.test.ts"
+      ]
+    },
+    {
+      "content": "1207ddfa1fa44b57",
+      "lines": 8,
+      "files": [
+        "src/cli/commands/verify-enumerate.ts"
+      ]
+    },
+    {
+      "content": "123722f8b2e19c72",
+      "lines": 10,
+      "files": [
+        "src/session/stateless-ops.test.ts"
+      ]
+    },
+    {
+      "content": "1247d982a672bdd9",
+      "lines": 12,
+      "files": [
+        "src/ui/composables/useAutoZoom.test.ts"
+      ]
+    },
+    {
+      "content": "125b5363b61f527f",
+      "lines": 19,
+      "files": [
+        "src/cli/dev-host/multiplayer-host.test.ts",
+        "src/session/seat-activity-canonical.test.ts"
+      ]
+    },
+    {
+      "content": "1291c54808688c53",
+      "lines": 6,
+      "files": [
+        "src/cli/commands/verify-impact.test.ts"
+      ]
+    },
+    {
+      "content": "12f861e807935df3",
+      "lines": 13,
+      "files": [
+        "src/ui/composables/useAnimationEvents.test.ts"
+      ]
+    },
+    {
+      "content": "12f8c496de243273",
+      "lines": 17,
+      "files": [
+        "src/ui/components/helpers/TutorialOverlay.parity.test.ts"
+      ]
+    },
+    {
+      "content": "1303bdcca252d17d",
+      "lines": 21,
+      "files": [
+        "src/ui/components/helpers/HeatmapOverlay.vue",
+        "src/ui/components/helpers/TutorialOverlay.vue"
+      ]
+    },
+    {
+      "content": "130fe7c99fd808ff",
+      "lines": 9,
+      "files": [
+        "src/ui/components/auto-ui/auto-ui-helpers.test.ts"
+      ]
+    },
+    {
+      "content": "1349fe3bee55f9cb",
+      "lines": 10,
+      "files": [
+        "src/bot-trainer/feature-templates.ts"
+      ]
+    },
+    {
+      "content": "13b06b39aa31ecac",
+      "lines": 17,
+      "files": [
+        "src/cli/commands/verify-derive-check.test.ts",
+        "src/cli/commands/verify-example-replay.test.ts"
+      ]
+    },
+    {
+      "content": "13caf37b4727d961",
+      "lines": 10,
+      "files": [
+        "src/ui/components/auto-ui/renderers/GridBoardRenderer.fluid.test.ts"
+      ]
+    },
+    {
+      "content": "13d5a7b0c6b70d4a",
+      "lines": 12,
+      "files": [
+        "src/session/game-session.ts"
+      ]
+    },
+    {
+      "content": "13e87c53103cf029",
+      "lines": 10,
+      "files": [
+        "src/ui/composables/useAutoZoom.test.ts"
+      ]
+    },
+    {
+      "content": "13edf09723b065b7",
+      "lines": 9,
+      "files": [
+        "src/ui/components/auto-ui/ActionPanel.focus.test.ts"
+      ]
+    },
+    {
+      "content": "142c06b6d86f4467",
+      "lines": 5,
+      "files": [
+        "src/testing/view-diff.test.ts"
+      ]
+    },
+    {
+      "content": "1443effc398e3d45",
+      "lines": 6,
+      "files": [
+        "src/session/testing/notundoable-enforcement.test.ts",
+        "src/session/testing/simultaneous-undo.test.ts"
+      ]
+    },
+    {
+      "content": "149235cc171043ec",
+      "lines": 11,
+      "files": [
+        "src/engine/action/action.test.ts"
+      ]
+    },
+    {
+      "content": "1496e9492a455ae0",
+      "lines": 11,
+      "files": [
+        "src/engine/action/action.test.ts"
+      ]
+    },
+    {
+      "content": "14c5e5e5da8f6ecc",
+      "lines": 6,
+      "files": [
+        "src/cli/commands/verify-derive-check.test.ts"
+      ]
+    },
+    {
+      "content": "14d0c412f8b11661",
+      "lines": 17,
+      "files": [
+        "src/bot/mcts-redaction.test.ts",
+        "src/bot/mcts-undo-bookkeeping.test.ts"
+      ]
+    },
+    {
+      "content": "15b4d9ae4b8721e6",
+      "lines": 10,
+      "files": [
+        "docs/persistent-world-claims.test.ts",
+        "src/world/action.test.ts"
+      ]
+    },
+    {
+      "content": "15d9538ca1cf5bca",
+      "lines": 14,
+      "files": [
+        "src/session/snapshot-session-host.test.ts"
+      ]
+    },
+    {
+      "content": "15ee5607b00744f0",
+      "lines": 16,
+      "files": [
+        "src/session/tutorial-serialization.test.ts"
+      ]
+    },
+    {
+      "content": "161501245f94da57",
+      "lines": 18,
+      "files": [
+        "src/testing/dom-leak.test.ts"
+      ]
+    },
+    {
+      "content": "1746fc927b6fc9ba",
+      "lines": 13,
+      "files": [
+        "src/ui/composables/useActionController.test.ts"
+      ]
+    },
+    {
+      "content": "17568af66934c7ae",
+      "lines": 10,
+      "files": [
+        "src/bot/mcts-stats-checkers.test.ts",
+        "src/bot/mcts-stats.test.ts"
+      ]
+    },
+    {
+      "content": "1784dab72184ccca",
+      "lines": 37,
+      "files": [
+        "src/ui/composables/useFlyingElements.ts",
+        "src/ui/composables/usePlayerStatAnimation.ts"
+      ]
+    },
+    {
+      "content": "178dcd405d77fcee",
+      "lines": 18,
+      "files": [
+        "src/engine/element/space.test.ts"
+      ]
+    },
+    {
+      "content": "17a453fda99c6b1c",
+      "lines": 6,
+      "files": [
+        "src/ui/components/auto-ui/auto-ui-helpers.test.ts"
+      ]
+    },
+    {
+      "content": "188b954ab991581c",
+      "lines": 26,
+      "files": [
+        "src/session/restore-snapshot-authoritative.test.ts",
+        "src/session/teaching-disabled-persistence.test.ts"
+      ]
+    },
+    {
+      "content": "189768e7af4b2f31",
+      "lines": 9,
+      "files": [
+        "src/engine/action/action.ts"
+      ]
+    },
+    {
+      "content": "18b1550b132f47e1",
+      "lines": 7,
+      "files": [
+        "src/cli/cli.test.ts"
+      ]
+    },
+    {
+      "content": "19ef00b2bb30be2e",
+      "lines": 6,
+      "files": [
+        "src/bot-trainer/feature-templates.ts"
+      ]
+    },
+    {
+      "content": "1a05964104c2ba13",
+      "lines": 13,
+      "files": [
+        "src/cli/commands/verify-impact.test.ts"
+      ]
+    },
+    {
+      "content": "1a31e6107dfa0d69",
+      "lines": 11,
+      "files": [
+        "src/ui/components/helpers/HintOverlay.test.ts",
+        "src/ui/components/helpers/TutorialOverlay.test.ts"
+      ]
+    },
+    {
+      "content": "1a328afcf6bfae80",
+      "lines": 11,
+      "files": [
+        "src/engine/tutorial/predicates.test.ts"
+      ]
+    },
+    {
+      "content": "1a6e7c689253d24c",
+      "lines": 28,
+      "files": [
+        "src/ui/components/auto-ui/renderers/HexBoardRenderer.vue",
+        "src/ui/components/auto-ui/renderers/PieceRenderer.vue"
+      ]
+    },
+    {
+      "content": "1b22e6143492b9ef",
+      "lines": 11,
+      "files": [
+        "src/engine/element/game-element.ts"
+      ]
+    },
+    {
+      "content": "1b6c7bd3b46629a8",
+      "lines": 10,
+      "files": [
+        "src/session/teaching.test.ts"
+      ]
+    },
+    {
+      "content": "1c7f19f5de9b77bc",
+      "lines": 6,
+      "files": [
+        "src/ui/composables/useActionController.test.ts"
+      ]
+    },
+    {
+      "content": "1cb7378d11016290",
+      "lines": 9,
+      "files": [
+        "src/cli/commands/verify-classify.test.ts"
+      ]
+    },
+    {
+      "content": "1d1430b9a8c002a8",
+      "lines": 18,
+      "files": [
+        "src/eslint-plugin/rules/no-filesystem.ts",
+        "src/eslint-plugin/rules/no-network.ts"
+      ]
+    },
+    {
+      "content": "1d3ab2407c835387",
+      "lines": 25,
+      "files": [
+        "src/ui/composables/useActionAnimations.test.ts"
+      ]
+    },
+    {
+      "content": "1d499da60d301a6e",
+      "lines": 11,
+      "files": [
+        "src/testing/test-game.test.ts"
+      ]
+    },
+    {
+      "content": "1d4d7d3290daa825",
+      "lines": 10,
+      "files": [
+        "src/testing/dom-leak.test.ts",
+        "src/testing/test-game.test.ts"
+      ]
+    },
+    {
+      "content": "1d50d64d8e980b54",
+      "lines": 10,
+      "files": [
+        "src/ui/composables/useBoardActionBridge.test.ts"
+      ]
+    },
+    {
+      "content": "1d9b4d4490603442",
+      "lines": 26,
+      "files": [
+        "src/ui/composables/useActionController.ts"
+      ]
+    },
+    {
+      "content": "1dbca273ccdf7579",
+      "lines": 10,
+      "files": [
+        "src/bot-trainer/feature-templates.ts"
+      ]
+    },
+    {
+      "content": "1dbcc89e4abcfc39",
+      "lines": 8,
+      "files": [
+        "src/testing/dom-leak.test.ts",
+        "src/testing/visibility.ts"
+      ]
+    },
+    {
+      "content": "1e22c50a45bec35a",
+      "lines": 6,
+      "files": [
+        "src/testing/assertions.ts",
+        "src/testing/test-game.ts"
+      ]
+    },
+    {
+      "content": "1e4a2be5ede2f17b",
+      "lines": 9,
+      "files": [
+        "src/ui/components/auto-ui/renderers/PieceRenderer.asset-fallback.test.ts"
+      ]
+    },
+    {
+      "content": "1e76e50bcb27a8cc",
+      "lines": 8,
+      "files": [
+        "src/world/engine.test.ts"
+      ]
+    },
+    {
+      "content": "1e7a2a842e5affcf",
+      "lines": 10,
+      "files": [
+        "src/session/pending-action-manager.test.ts"
+      ]
+    },
+    {
+      "content": "1f1084c228682b75",
+      "lines": 11,
+      "files": [
+        "src/cli/commands/install-claude-command.test.ts",
+        "src/cli/slash-command/bs/verify.test.ts"
+      ]
+    },
+    {
+      "content": "1f213644be266baa",
+      "lines": 6,
+      "files": [
+        "src/session/testing/stateful-timetravel-authoritative.test.ts",
+        "src/session/testing/stateful-undo-authoritative.test.ts"
+      ]
+    },
+    {
+      "content": "1f2165ad015583e7",
+      "lines": 45,
+      "files": [
+        "src/types/protocol.ts",
+        "src/ui/composables/useActionControllerTypes.ts"
+      ]
+    },
+    {
+      "content": "1f46d38162d1bb67",
+      "lines": 10,
+      "files": [
+        "src/session/stateless-ops.test.ts"
+      ]
+    },
+    {
+      "content": "1f4bbfba17faf2e7",
+      "lines": 13,
+      "files": [
+        "src/ui/composables/useFLIP.test.ts"
+      ]
+    },
+    {
+      "content": "1f62ac58ab16832d",
+      "lines": 7,
+      "files": [
+        "src/session/dev-checkpoint-manager.test.ts"
+      ]
+    },
+    {
+      "content": "1f8f08cdd7e9fa24",
+      "lines": 10,
+      "files": [
+        "src/session/pending-action-manager.test.ts"
+      ]
+    },
+    {
+      "content": "1fdc58ed16a1c5aa",
+      "lines": 31,
+      "files": [
+        "src/ui/composables/interaction-integration.test.ts"
+      ]
+    },
+    {
+      "content": "1fe918d9334e1a53",
+      "lines": 17,
+      "files": [
+        "src/cli/commands/example-test-emit.test.ts"
+      ]
+    },
+    {
+      "content": "1ff709ee28f21349",
+      "lines": 5,
+      "files": [
+        "src/cli/dev-host/multiplayer-host.test.ts"
+      ]
+    },
+    {
+      "content": "20a0d9686e6f9c8e",
+      "lines": 5,
+      "files": [
+        "src/cli/commands/chunk-provenance.test.ts"
+      ]
+    },
+    {
+      "content": "20ad7e0721753aac",
+      "lines": 9,
+      "files": [
+        "src/engine/tutorial/annotation.test.ts",
+        "src/session/build-player-state.test.ts",
+        "src/session/restore-snapshot-authoritative.test.ts",
+        "src/session/tutorial-controller.test.ts"
+      ]
+    },
+    {
+      "content": "2109ec0f2f8a2aad",
+      "lines": 20,
+      "files": [
+        "src/cli/commands/verify-classify.test.ts"
+      ]
+    },
+    {
+      "content": "212a32afd21789ea",
+      "lines": 13,
+      "files": [
+        "src/ui/composables/useActionController.test.ts"
+      ]
+    },
+    {
+      "content": "21a8929d81dd262c",
+      "lines": 20,
+      "files": [
+        "src/engine/tutorial/progress.test.ts"
+      ]
+    },
+    {
+      "content": "21b7298160967d54",
+      "lines": 23,
+      "files": [
+        "src/session/snapshot-session-host.test.ts"
+      ]
+    },
+    {
+      "content": "21e5b99b5b18ba08",
+      "lines": 14,
+      "files": [
+        "src/cli/commands/verify-derive-check.test.ts",
+        "src/cli/commands/verify-enumerate.test.ts",
+        "src/cli/commands/verify-example-replay.test.ts",
+        "src/cli/commands/verify-source-free.test.ts"
+      ]
+    },
+    {
+      "content": "2225b58c7d5f0b32",
+      "lines": 9,
+      "files": [
+        "src/ui/composables/useZoomPreview.test.ts"
+      ]
+    },
+    {
+      "content": "224cc3fc559e1eb3",
+      "lines": 8,
+      "files": [
+        "src/engine/flow/turn-scope.test.ts"
+      ]
+    },
+    {
+      "content": "22f354caf22c32d4",
+      "lines": 10,
+      "files": [
+        "src/cli/commands/verify-example-replay.test.ts"
+      ]
+    },
+    {
+      "content": "23436549835cfd89",
+      "lines": 6,
+      "files": [
+        "src/cli/commands/verify-enumerate.test.ts"
+      ]
+    },
+    {
+      "content": "234735cc424e23dc",
+      "lines": 8,
+      "files": [
+        "src/ui/composables/createFLIPSnapshot.test.ts"
+      ]
+    },
+    {
+      "content": "2375f84bcc213aab",
+      "lines": 8,
+      "files": [
+        "src/cli/commands/verify-classify.ts"
+      ]
+    },
+    {
+      "content": "23c0294339c04020",
+      "lines": 9,
+      "files": [
+        "src/session/testing/parity-contract.test.ts"
+      ]
+    },
+    {
+      "content": "23c218d89836c0f7",
+      "lines": 13,
+      "files": [
+        "docs/persistent-world-claims.test.ts",
+        "src/world/action.test.ts"
+      ]
+    },
+    {
+      "content": "24031661cc50c2b4",
+      "lines": 29,
+      "files": [
+        "src/cli/slash-command/bs/build-game.test.ts",
+        "src/cli/slash-command/bs/ingest.test.ts"
+      ]
+    },
+    {
+      "content": "242c3960a9396042",
+      "lines": 11,
+      "files": [
+        "src/bot-trainer/feature-templates.ts"
+      ]
+    },
+    {
+      "content": "247b58f077d785f7",
+      "lines": 11,
+      "files": [
+        "src/ui/composables/useElementAnimation.ts",
+        "src/ui/composables/useFLIP.ts"
+      ]
+    },
+    {
+      "content": "2493b151afb9b7aa",
+      "lines": 7,
+      "files": [
+        "src/world/action.test.ts"
+      ]
+    },
+    {
+      "content": "24c026ff90520e28",
+      "lines": 8,
+      "files": [
+        "src/engine/element/action-metadata.test.ts"
+      ]
+    },
+    {
+      "content": "24edceaff61b2a98",
+      "lines": 24,
+      "files": [
+        "src/ui/components/ControlsMenu.action-help.test.ts",
+        "src/ui/components/ControlsMenu.tutorial-toggle.test.ts"
+      ]
+    },
+    {
+      "content": "2547da0f60a06fec",
+      "lines": 11,
+      "files": [
+        "src/bot/mcts-stats-checkers.test.ts",
+        "src/bot/mcts-stats.test.ts"
+      ]
+    },
+    {
+      "content": "2619c918c05fbed3",
+      "lines": 16,
+      "files": [
+        "src/ui/composables/useActionController.test.ts"
+      ]
+    },
+    {
+      "content": "2678ef20dd406bfa",
+      "lines": 41,
+      "files": [
+        "src/session/snapshot-session-host.test.ts",
+        "src/session/stateless-ops.test.ts"
+      ]
+    },
+    {
+      "content": "274b1957e77b10a2",
+      "lines": 5,
+      "files": [
+        "src/session/testing/random-scumming.test.ts"
+      ]
+    },
+    {
+      "content": "27a8c301b3fceb9b",
+      "lines": 14,
+      "files": [
+        "src/session/action-result-data-propagation.test.ts"
+      ]
+    },
+    {
+      "content": "27ef0ffa5612cb34",
+      "lines": 39,
+      "files": [
+        "src/session/restore-snapshot-authoritative.test.ts",
+        "src/session/tutorial-autoadvance.test.ts"
+      ]
+    },
+    {
+      "content": "27f60e69d7c79cf3",
+      "lines": 12,
+      "files": [
+        "src/ui/components/helpers/ActionHelpPopover.test.ts"
+      ]
+    },
+    {
+      "content": "28338cdd1515723b",
+      "lines": 7,
+      "files": [
+        "src/cli/commands/verify-run.test.ts"
+      ]
+    },
+    {
+      "content": "289ca16670630c9d",
+      "lines": 16,
+      "files": [
+        "src/ui/components/auto-ui/ActionPanel.interaction.test.ts"
+      ]
+    },
+    {
+      "content": "28b644298d8bf0a0",
+      "lines": 20,
+      "files": [
+        "src/cli/commands/verify-example-replay.test.ts"
+      ]
+    },
+    {
+      "content": "28dcec9a49e4775c",
+      "lines": 21,
+      "files": [
+        "src/testing/dom-leak.test.ts",
+        "src/testing/visibility.test.ts"
+      ]
+    },
+    {
+      "content": "28e3299b609547d6",
+      "lines": 14,
+      "files": [
+        "src/session/game-session.test.ts",
+        "src/session/teaching.test.ts"
+      ]
+    },
+    {
+      "content": "28fa1b5f5f96b962",
+      "lines": 5,
+      "files": [
+        "src/cli/dev-host/multiplayer-host.test.ts"
+      ]
+    },
+    {
+      "content": "2ad40abea57383f8",
+      "lines": 9,
+      "files": [
+        "scripts/ingest-harness/check.test.mjs"
+      ]
+    },
+    {
+      "content": "2b540be27d422c1c",
+      "lines": 8,
+      "files": [
+        "src/cli/commands/chunk-provenance.test.ts"
+      ]
+    },
+    {
+      "content": "2b80ab619af9e62a",
+      "lines": 15,
+      "files": [
+        "src/cli/lib/treeshake-bundle.test.ts"
+      ]
+    },
+    {
+      "content": "2b84749d899d3a63",
+      "lines": 10,
+      "files": [
+        "src/cli/commands/example-test-emit.test.ts"
+      ]
+    },
+    {
+      "content": "2c869bec741f5497",
+      "lines": 9,
+      "files": [
+        "src/ui/components/ControlsMenu.action-help.test.ts"
+      ]
+    },
+    {
+      "content": "2cc481e4bab236ba",
+      "lines": 9,
+      "files": [
+        "src/cli/commands/ingest-archive.test.ts"
+      ]
+    },
+    {
+      "content": "2cd5e43f2872b437",
+      "lines": 9,
+      "files": [
+        "src/ui/components/auto-ui/ActionPanel.simultaneous.test.ts"
+      ]
+    },
+    {
+      "content": "2cf31bfa02d984f2",
+      "lines": 9,
+      "files": [
+        "src/engine/action/action.test.ts"
+      ]
+    },
+    {
+      "content": "2cfd5b982e546381",
+      "lines": 22,
+      "files": [
+        "src/ui/components/GameShell.vue"
+      ]
+    },
+    {
+      "content": "2d19bf1aca67279b",
+      "lines": 6,
+      "files": [
+        "src/ui/components/GameShell.announcer.test.ts"
+      ]
+    },
+    {
+      "content": "2d2580dd07d1987a",
+      "lines": 7,
+      "files": [
+        "src/cli/cli-conformance-commands.test.ts",
+        "src/cli/commands/verify-classify.test.ts"
+      ]
+    },
+    {
+      "content": "2d25f44b188ca01d",
+      "lines": 10,
+      "files": [
+        "src/cli/dev-host/DevHost.seats.test.ts"
+      ]
+    },
+    {
+      "content": "2d41e281321aad5f",
+      "lines": 13,
+      "files": [
+        "src/cli/commands/verify-derive-check.test.ts"
+      ]
+    },
+    {
+      "content": "2d99a9c976236817",
+      "lines": 25,
+      "files": [
+        "src/session/snapshot-session-host.test.ts",
+        "src/session/stateless-ops.test.ts"
+      ]
+    },
+    {
+      "content": "2e195b32f2e678f2",
+      "lines": 21,
+      "files": [
+        "src/cli/dev-host/bridge.test.ts",
+        "src/session/snapshot-session-host.test.ts",
+        "src/session/stateless-ops.test.ts"
+      ]
+    },
+    {
+      "content": "2e73b53d54cf47d4",
+      "lines": 7,
+      "files": [
+        "src/bot/mcts-redaction.test.ts",
+        "src/engine/element/hidden-element-restore.test.ts"
+      ]
+    },
+    {
+      "content": "2f0b32078b09e294",
+      "lines": 11,
+      "files": [
+        "src/testing/simulate-tutorial.test.ts"
+      ]
+    },
+    {
+      "content": "2fa337566e054ea8",
+      "lines": 7,
+      "files": [
+        "src/cli/cli-conformance-commands.test.ts"
+      ]
+    },
+    {
+      "content": "2fc4cd6d57a22741",
+      "lines": 10,
+      "files": [
+        "src/engine/action/action.test.ts"
+      ]
+    },
+    {
+      "content": "3009253fece3c85a",
+      "lines": 8,
+      "files": [
+        "src/testing/simulate-tutorial.test.ts"
+      ]
+    },
+    {
+      "content": "3072de1276373b54",
+      "lines": 18,
+      "files": [
+        "src/ui/composables/useBoardActionBridge.test.ts"
+      ]
+    },
+    {
+      "content": "30c85a8623220c35",
+      "lines": 21,
+      "files": [
+        "src/cli/dev-host/multiplayer-host.test.ts",
+        "src/session/stateless-ops-debug.test.ts"
+      ]
+    },
+    {
+      "content": "30fc0deecd9670ca",
+      "lines": 17,
+      "files": [
+        "src/ui/components/helpers/FlyingCardsOverlay.vue",
+        "src/ui/components/helpers/ZoomPreviewOverlay.vue"
+      ]
+    },
+    {
+      "content": "31a0bbdaaaf80996",
+      "lines": 7,
+      "files": [
+        "src/cli/slash-command/bs/verify.test.ts"
+      ]
+    },
+    {
+      "content": "31c87a2e27115f14",
+      "lines": 61,
+      "files": [
+        "src/session/testing/stateful-undo-authoritative.test.ts",
+        "src/session/testing/undo-authoritative.test.ts"
+      ]
+    },
+    {
+      "content": "31e34f5f6a388117",
+      "lines": 8,
+      "files": [
+        "src/engine/command/undo.test.ts"
+      ]
+    },
+    {
+      "content": "31e4640d892df448",
+      "lines": 6,
+      "files": [
+        "src/cli/commands/verify-impact.test.ts"
+      ]
+    },
+    {
+      "content": "3206b97b6be25776",
+      "lines": 7,
+      "files": [
+        "src/cli/commands/verify-enumerate.test.ts"
+      ]
+    },
+    {
+      "content": "325fba7c70dcfda3",
+      "lines": 17,
+      "files": [
+        "src/cli/commands/verify-enumerate.test.ts"
+      ]
+    },
+    {
+      "content": "32e330f491bb4fe3",
+      "lines": 25,
+      "files": [
+        "src/ui/components/helpers/HeatmapOverlay.test.ts"
+      ]
+    },
+    {
+      "content": "32ee2524dc9db951",
+      "lines": 31,
+      "files": [
+        "src/session/restore-snapshot-authoritative.test.ts",
+        "src/session/teaching-disabled-persistence.test.ts"
+      ]
+    },
+    {
+      "content": "330d4fb42797d7c1",
+      "lines": 11,
+      "files": [
+        "src/session/testing/random-scumming.test.ts"
+      ]
+    },
+    {
+      "content": "3333fc654c954431",
+      "lines": 20,
+      "files": [
+        "src/session/game-session.ts"
+      ]
+    },
+    {
+      "content": "3372d78df7df957b",
+      "lines": 5,
+      "files": [
+        "src/cli/commands/verify-classify.test.ts"
+      ]
+    },
+    {
+      "content": "33a3660975655f54",
+      "lines": 33,
+      "files": [
+        "src/ui/composables/useActionController.picks.test.ts"
+      ]
+    },
+    {
+      "content": "33df6ecc562f3079",
+      "lines": 8,
+      "files": [
+        "src/cli/dev-host/DevHost.gameoptions.test.ts"
+      ]
+    },
+    {
+      "content": "34397cc1493e3ce7",
+      "lines": 8,
+      "files": [
+        "src/cli/commands/verify-enumerate.test.ts"
+      ]
+    },
+    {
+      "content": "360918b88dea8966",
+      "lines": 13,
+      "files": [
+        "src/bot/mcts-stats-checkers.test.ts"
+      ]
+    },
+    {
+      "content": "360af77e28130ab5",
+      "lines": 6,
+      "files": [
+        "src/cli/slash-command/bs/build-chunk.test.ts"
+      ]
+    },
+    {
+      "content": "368ed3b607977d75",
+      "lines": 6,
+      "files": [
+        "src/engine/element/animation-events.test.ts"
+      ]
+    },
+    {
+      "content": "36d2577533fc1c12",
+      "lines": 12,
+      "files": [
+        "src/engine/flow/engine.test.ts"
+      ]
+    },
+    {
+      "content": "36d904bdc52a7f6a",
+      "lines": 12,
+      "files": [
+        "src/ui/composables/useActionController.ts"
+      ]
+    },
+    {
+      "content": "36e4a55196371800",
+      "lines": 10,
+      "files": [
+        "src/session/pick-handler.test.ts"
+      ]
+    },
+    {
+      "content": "3759ffb50e7af92a",
+      "lines": 6,
+      "files": [
+        "src/cli/commands/verify-impact.test.ts"
+      ]
+    },
+    {
+      "content": "377ebef49c90bf31",
+      "lines": 11,
+      "files": [
+        "src/bot/mcts-stats.test.ts",
+        "src/session/bot-controller.test.ts",
+        "src/session/teaching.test.ts"
+      ]
+    },
+    {
+      "content": "380c56fbcb132bd6",
+      "lines": 8,
+      "files": [
+        "src/session/testing/rewind-animation-watermark.test.ts"
+      ]
+    },
+    {
+      "content": "3823d445d1bd7dac",
+      "lines": 11,
+      "files": [
+        "src/cli/commands/verify-classify.test.ts"
+      ]
+    },
+    {
+      "content": "3829bdf42fc24dc2",
+      "lines": 5,
+      "files": [
+        "src/cli/commands/verify-classify.test.ts"
+      ]
+    },
+    {
+      "content": "387e1d1e1536e808",
+      "lines": 14,
+      "files": [
+        "src/ui/components/helpers/TutorialOverlay.test.ts"
+      ]
+    },
+    {
+      "content": "38e2024dc2d1974b",
+      "lines": 7,
+      "files": [
+        "src/ui/components/auto-ui/presentation.test.ts"
+      ]
+    },
+    {
+      "content": "38f2625752072b79",
+      "lines": 5,
+      "files": [
+        "src/cli/commands/verify-ruling-recheck.test.ts"
+      ]
+    },
+    {
+      "content": "39330bbf46d4dcac",
+      "lines": 8,
+      "files": [
+        "src/engine/element/game-element.ts"
+      ]
+    },
+    {
+      "content": "39398bdc869b7980",
+      "lines": 40,
+      "files": [
+        "src/ui/components/auto-ui/renderers/DeckRenderer.vue",
+        "src/ui/components/auto-ui/renderers/HandRenderer.vue"
+      ]
+    },
+    {
+      "content": "3953883ecc1b456d",
+      "lines": 5,
+      "files": [
+        "src/ui/components/ControlsMenu.action-help.test.ts"
+      ]
+    },
+    {
+      "content": "399ee7dd48ba3803",
+      "lines": 48,
+      "files": [
+        "src/ui/components/GameShell.time-travel-desync.test.ts",
+        "src/ui/composables/useBoardActionBridge.test.ts"
+      ]
+    },
+    {
+      "content": "39b9c20cb69fe9e8",
+      "lines": 15,
+      "files": [
+        "src/ui/composables/useFLIP.ts"
+      ]
+    },
+    {
+      "content": "39eb4c455e148fe4",
+      "lines": 6,
+      "files": [
+        "src/cli/dev-host/world-host.test.ts"
+      ]
+    },
+    {
+      "content": "3b0f13d80c9ad9a7",
+      "lines": 11,
+      "files": [
+        "src/world/engine.test.ts",
+        "src/world/village.test-helper.ts"
+      ]
+    },
+    {
+      "content": "3b2e12733054cb2d",
+      "lines": 6,
+      "files": [
+        "src/world/engine.test.ts"
+      ]
+    },
+    {
+      "content": "3be1788f85e7a57e",
+      "lines": 7,
+      "files": [
+        "src/bot-trainer/feature-templates.ts"
+      ]
+    },
+    {
+      "content": "3bf4af151ebc20c0",
+      "lines": 20,
+      "files": [
+        "src/session/lobby-host-authorization.test.ts",
+        "src/session/lobby-identity-security.test.ts"
+      ]
+    },
+    {
+      "content": "3bfc9a749d3a9432",
+      "lines": 31,
+      "files": [
+        "src/ui/composables/useActionController.picks.test.ts"
+      ]
+    },
+    {
+      "content": "3c1681bd1caa2e85",
+      "lines": 8,
+      "files": [
+        "src/engine/action/action.test.ts"
+      ]
+    },
+    {
+      "content": "3c2c386e8d4287af",
+      "lines": 9,
+      "files": [
+        "src/session/start-completion-winners.test.ts",
+        "src/session/teaching-disabled-persistence.test.ts"
+      ]
+    },
+    {
+      "content": "3ca55bc4cad7b4d6",
+      "lines": 17,
+      "files": [
+        "src/session/testing/fixtures/collect-fixture.ts",
+        "src/session/testing/fixtures/collect-turns-fixture.ts"
+      ]
+    },
+    {
+      "content": "3cc76f2cd1542c44",
+      "lines": 8,
+      "files": [
+        "src/cli/commands/verify-example-replay.test.ts"
+      ]
+    },
+    {
+      "content": "3cf25a56a37f0d6c",
+      "lines": 8,
+      "files": [
+        "src/ui/composables/useGameContext.test.ts"
+      ]
+    },
+    {
+      "content": "3d117e5d05c556d3",
+      "lines": 6,
+      "files": [
+        "src/cli/commands/ingest-archive.test.ts"
+      ]
+    },
+    {
+      "content": "3d322e2385ca4811",
+      "lines": 10,
+      "files": [
+        "src/engine/action/tutorial-gate.test.ts"
+      ]
+    },
+    {
+      "content": "3d64ae8263d766a4",
+      "lines": 19,
+      "files": [
+        "src/ui/components/helpers/TutorialOverlay.parity.test.ts"
+      ]
+    },
+    {
+      "content": "3d7b09f71cd65736",
+      "lines": 27,
+      "files": [
+        "src/session/stateless-ops.test.ts",
+        "src/session/testing/fixtures/bot-game-fixture.ts"
+      ]
+    },
+    {
+      "content": "3dac4a41564db057",
+      "lines": 16,
+      "files": [
+        "src/ui/components/GameShell.test.ts",
+        "src/ui/components/GameShell.vue"
+      ]
+    },
+    {
+      "content": "3dd09e876a4793cb",
+      "lines": 5,
+      "files": [
+        "docs/persistent-world-claims.test.ts",
+        "src/world/action.test.ts"
+      ]
+    },
+    {
+      "content": "3e0c67ad9ffefb6f",
+      "lines": 6,
+      "files": [
+        "src/ui/components/auto-ui/ActionPanel.simultaneous.test.ts"
+      ]
+    },
+    {
+      "content": "3e383607d77d3b5a",
+      "lines": 9,
+      "files": [
+        "src/ui/components/GameShell.panel-token.test.ts"
+      ]
+    },
+    {
+      "content": "3e486cfad4785753",
+      "lines": 6,
+      "files": [
+        "docs/persistent-world-claims.test.ts",
+        "src/world/action.test.ts"
+      ]
+    },
+    {
+      "content": "3e4d54a26324100d",
+      "lines": 9,
+      "files": [
+        "src/ui/components/auto-ui/renderers/CardRenderer.vue",
+        "src/ui/components/auto-ui/renderers/HandRenderer.vue"
+      ]
+    },
+    {
+      "content": "3e63e9db6c0e6919",
+      "lines": 12,
+      "files": [
+        "src/bot/mcts-bot.test.ts"
+      ]
+    },
+    {
+      "content": "3e63fbc9c29e877e",
+      "lines": 11,
+      "files": [
+        "src/ui/composables/useBoardActionBridge.test.ts"
+      ]
+    },
+    {
+      "content": "3e7bf1e68e63d775",
+      "lines": 14,
+      "files": [
+        "src/engine/element/zone-visibility-grant-leak.test.ts",
+        "src/engine/element/zone-visibility-restore.test.ts"
+      ]
+    },
+    {
+      "content": "3ecbbce20c1d7000",
+      "lines": 11,
+      "files": [
+        "src/cli/dev-host/DevHost.debug-relay.test.ts",
+        "src/cli/dev-host/DevHost.gameoptions.test.ts",
+        "src/cli/dev-host/DevHost.restart.test.ts"
+      ]
+    },
+    {
+      "content": "3f2a2fe264b8cc3e",
+      "lines": 20,
+      "files": [
+        "src/ui/composables/useAnimationEvents.test.ts"
+      ]
+    },
+    {
+      "content": "3f68bfe5df6f535a",
+      "lines": 20,
+      "files": [
+        "src/ui/composables/useActionController.picks.test.ts"
+      ]
+    },
+    {
+      "content": "3fbeb9e19478adaf",
+      "lines": 14,
+      "files": [
+        "src/session/game-session.ts",
+        "src/session/stateless-ops.ts"
+      ]
+    },
+    {
+      "content": "3ff512f36fb7e3e9",
+      "lines": 19,
+      "files": [
+        "src/ui/components/auto-ui/ActionPanel.interaction.test.ts"
+      ]
+    },
+    {
+      "content": "4021ee4965fc3fbf",
+      "lines": 8,
+      "files": [
+        "src/engine/flow/simultaneous-alldone-deadlock-warn.test.ts",
+        "src/engine/flow/simultaneous-alldone-empty.test.ts"
+      ]
+    },
+    {
+      "content": "408491d2cebdba22",
+      "lines": 40,
+      "files": [
+        "src/ui/composables/useGameGrid.ts",
+        "src/ui/composables/useHexGrid.ts"
+      ]
+    },
+    {
+      "content": "40da7028c29db6a6",
+      "lines": 6,
+      "files": [
+        "src/cli/commands/chunk-provenance.test.ts"
+      ]
+    },
+    {
+      "content": "41462f6d71643938",
+      "lines": 5,
+      "files": [
+        "src/ui/components/GameLobby.test.ts"
+      ]
+    },
+    {
+      "content": "4161b90f26f600eb",
+      "lines": 13,
+      "files": [
+        "src/engine/tutorial/progress.test.ts"
+      ]
+    },
+    {
+      "content": "41811261804d23d1",
+      "lines": 13,
+      "files": [
+        "src/session/testing/parity-contract.test.ts"
+      ]
+    },
+    {
+      "content": "421e706b0cf0247f",
+      "lines": 13,
+      "files": [
+        "src/ui/composables/anchorAttrs.test.ts",
+        "src/ui/composables/useActionController.test.ts",
+        "src/ui/composables/useDragDrop.test.ts"
+      ]
+    },
+    {
+      "content": "426df7fa26cdff83",
+      "lines": 5,
+      "files": [
+        "src/engine/flow/turn-scope.test.ts"
+      ]
+    },
+    {
+      "content": "428cfeafad0c6632",
+      "lines": 13,
+      "files": [
+        "src/bot-trainer/feature-templates.ts"
+      ]
+    },
+    {
+      "content": "428d65b62ece8d90",
+      "lines": 16,
+      "files": [
+        "src/session/testing/parity-contract.test.ts"
+      ]
+    },
+    {
+      "content": "429ce6c6e483a902",
+      "lines": 13,
+      "files": [
+        "src/engine/flow/engine.test.ts"
+      ]
+    },
+    {
+      "content": "42beb000df934f2a",
+      "lines": 8,
+      "files": [
+        "src/ui/composables/useAnnouncer.test.ts"
+      ]
+    },
+    {
+      "content": "432bfab658f141a4",
+      "lines": 16,
+      "files": [
+        "src/cli/commands/verify-impact.test.ts"
+      ]
+    },
+    {
+      "content": "435858f31ed10759",
+      "lines": 23,
+      "files": [
+        "src/session/tutorial-serialization.test.ts"
+      ]
+    },
+    {
+      "content": "43cff19c8769490a",
+      "lines": 8,
+      "files": [
+        "src/engine/fail-loud-authoring-errors.test.ts"
+      ]
+    },
+    {
+      "content": "44090da38aa93919",
+      "lines": 27,
+      "files": [
+        "src/ui/composables/useActionController.test.ts"
+      ]
+    },
+    {
+      "content": "44166ff51b2e9a8e",
+      "lines": 12,
+      "files": [
+        "src/engine/flow/engine.test.ts"
+      ]
+    },
+    {
+      "content": "441c71ae14d1a8ac",
+      "lines": 9,
+      "files": [
+        "src/ui/components/HamburgerMenu.test.ts"
+      ]
+    },
+    {
+      "content": "4426f2be13944f28",
+      "lines": 13,
+      "files": [
+        "src/cli/commands/verify-derive-check.ts",
+        "src/cli/commands/verify-example-replay.ts"
+      ]
+    },
+    {
+      "content": "4485a6b49e2e4690",
+      "lines": 18,
+      "files": [
+        "src/ui/components/GameShell.announcer.test.ts",
+        "src/ui/components/GameShell.vue"
+      ]
+    },
+    {
+      "content": "44e735bca9cfb02d",
+      "lines": 13,
+      "files": [
+        "src/ui/composables/useActionAnimations.test.ts"
+      ]
+    },
+    {
+      "content": "4507a55b82b348d8",
+      "lines": 20,
+      "files": [
+        "src/engine/action/action.ts"
+      ]
+    },
+    {
+      "content": "45922544add0487b",
+      "lines": 13,
+      "files": [
+        "src/session/teaching.test.ts"
+      ]
+    },
+    {
+      "content": "4689c6e249f97bf0",
+      "lines": 5,
+      "files": [
+        "src/cli/dev-host/multiplayer-host.gameoptions.test.ts"
+      ]
+    },
+    {
+      "content": "472877741e343bdc",
+      "lines": 10,
+      "files": [
+        "src/ui/composables/useBoardActionBridge.test.ts"
+      ]
+    },
+    {
+      "content": "47582108b71458cc",
+      "lines": 18,
+      "files": [
+        "src/session/action-result-data-propagation.test.ts",
+        "src/ui/composables/useActionController.action-data.test.ts"
+      ]
+    },
+    {
+      "content": "4758a0e9c96430ad",
+      "lines": 10,
+      "files": [
+        "src/world/activity-point-read.test.ts"
+      ]
+    },
+    {
+      "content": "4774846102101c7c",
+      "lines": 5,
+      "files": [
+        "src/cli/lib/select-checks.test.ts"
+      ]
+    },
+    {
+      "content": "481a34d971896e9c",
+      "lines": 31,
+      "files": [
+        "src/session/stateless-ops.test.ts",
+        "src/session/testing/fixtures/bot-game-fixture.ts"
+      ]
+    },
+    {
+      "content": "481b86e2c6cb08b1",
+      "lines": 11,
+      "files": [
+        "src/cli/commands/verify-enumerate.test.ts"
+      ]
+    },
+    {
+      "content": "485177cc120cd99e",
+      "lines": 10,
+      "files": [
+        "src/cli/commands/derived-line-pattern.test.ts",
+        "src/cli/commands/verify-example-replay.test.ts"
+      ]
+    },
+    {
+      "content": "485ea568e20351c2",
+      "lines": 20,
+      "files": [
+        "src/cli/commands/verify-derive-check.test.ts",
+        "src/cli/commands/verify-example-replay.test.ts"
+      ]
+    },
+    {
+      "content": "489ac38066324693",
+      "lines": 7,
+      "files": [
+        "src/testing/play-until-complete.test.ts"
+      ]
+    },
+    {
+      "content": "48c919f0cfe0173c",
+      "lines": 7,
+      "files": [
+        "src/engine/command/inverse.test.ts"
+      ]
+    },
+    {
+      "content": "491ea82910510f29",
+      "lines": 100,
+      "files": [
+        "src/ui/components/helpers/HintOverlay.vue",
+        "src/ui/components/helpers/TutorialOverlay.vue"
+      ]
+    },
+    {
+      "content": "49246dde8542fbe8",
+      "lines": 6,
+      "files": [
+        "src/ui/components/GameShell.time-travel-desync.test.ts",
+        "src/ui/composables/useBoardActionBridge.test.ts"
+      ]
+    },
+    {
+      "content": "49501d7d2c7f9d24",
+      "lines": 9,
+      "files": [
+        "src/session/snapshot-session-host.test.ts"
+      ]
+    },
+    {
+      "content": "49f8087b63071025",
+      "lines": 14,
+      "files": [
+        "src/cli/commands/verify-derive-check.test.ts"
+      ]
+    },
+    {
+      "content": "49fb311e8acad55a",
+      "lines": 9,
+      "files": [
+        "src/session/dev-checkpoint-manager.test.ts"
+      ]
+    },
+    {
+      "content": "4a5045b8c3e72a6d",
+      "lines": 7,
+      "files": [
+        "src/ui/composables/useDebugTimeline.test.ts"
+      ]
+    },
+    {
+      "content": "4ab76af72d4d037b",
+      "lines": 8,
+      "files": [
+        "src/session/pending-action-manager.test.ts"
+      ]
+    },
+    {
+      "content": "4ac3bfc5facbbe34",
+      "lines": 7,
+      "files": [
+        "src/cli/commands/trace-check.test.ts"
+      ]
+    },
+    {
+      "content": "4ae960effc86397c",
+      "lines": 17,
+      "files": [
+        "src/cli/dev-host/world-host.test.ts"
+      ]
+    },
+    {
+      "content": "4af3a0b17c9d437b",
+      "lines": 8,
+      "files": [
+        "src/cli/commands/verify-enumerate.test.ts"
+      ]
+    },
+    {
+      "content": "4b211dc22a06aa08",
+      "lines": 5,
+      "files": [
+        "src/cli/commands/verify-enumerate.test.ts"
+      ]
+    },
+    {
+      "content": "4b5d5bb693209f54",
+      "lines": 14,
+      "files": [
+        "docs/persistent-world-claims.test.ts",
+        "src/world/action.test.ts"
+      ]
+    },
+    {
+      "content": "4bc1dd21c95f3f43",
+      "lines": 16,
+      "files": [
+        "src/bot/mcts-undo-bookkeeping.test.ts"
+      ]
+    },
+    {
+      "content": "4be0c742ad37cdd9",
+      "lines": 10,
+      "files": [
+        "src/engine/action/action.test.ts"
+      ]
+    },
+    {
+      "content": "4be5906683de5885",
+      "lines": 10,
+      "files": [
+        "src/engine/command/executor.ts"
+      ]
+    },
+    {
+      "content": "4c1d6e026922fca4",
+      "lines": 11,
+      "files": [
+        "src/session/game-session.test.ts",
+        "src/session/snapshot-session-host.test.ts",
+        "src/session/stateless-ops.test.ts"
+      ]
+    },
+    {
+      "content": "4c541c479c89e648",
+      "lines": 12,
+      "files": [
+        "src/engine/action/action.ts"
+      ]
+    },
+    {
+      "content": "4cac51efb0d3b83e",
+      "lines": 9,
+      "files": [
+        "src/ui/components/auto-ui/AutoRenderer.loading.test.ts"
+      ]
+    },
+    {
+      "content": "4d0227297b57dc38",
+      "lines": 12,
+      "files": [
+        "src/cli/commands/verify-example-replay.test.ts"
+      ]
+    },
+    {
+      "content": "4d1b34b3a852ac0a",
+      "lines": 7,
+      "files": [
+        "src/session/restore-epoch.test.ts",
+        "src/session/restore-snapshot-authoritative.test.ts"
+      ]
+    },
+    {
+      "content": "4d3555ddf860a81b",
+      "lines": 19,
+      "files": [
+        "src/cli/commands/verify-derive-check.test.ts",
+        "src/cli/commands/verify-example-replay.test.ts"
+      ]
+    },
+    {
+      "content": "4d5df41b3aad4dbd",
+      "lines": 8,
+      "files": [
+        "src/cli/commands/verify-repair.test.ts"
+      ]
+    },
+    {
+      "content": "4d792721808a8447",
+      "lines": 9,
+      "files": [
+        "src/bot/mcts-multiselect.test.ts"
+      ]
+    },
+    {
+      "content": "4d9beb5b67a265a2",
+      "lines": 7,
+      "files": [
+        "src/session/testing/simultaneous-undo.test.ts"
+      ]
+    },
+    {
+      "content": "4dace8fa408e42d2",
+      "lines": 6,
+      "files": [
+        "src/ui/components/auto-ui/ActionPanel.vue",
+        "src/ui/composables/useBoardActionBridge.ts"
+      ]
+    },
+    {
+      "content": "4debed089496564b",
+      "lines": 7,
+      "files": [
+        "src/ui/components/GameShell.player-order.test.ts",
+        "src/ui/components/GameShell.vue"
+      ]
+    },
+    {
+      "content": "4e69841377fc0ec1",
+      "lines": 9,
+      "files": [
+        "src/bot-trainer/feature-templates.ts"
+      ]
+    },
+    {
+      "content": "4e8cba7398fe62bb",
+      "lines": 9,
+      "files": [
+        "src/session/tutorial-autoadvance.test.ts"
+      ]
+    },
+    {
+      "content": "4ea12482c1939d9c",
+      "lines": 21,
+      "files": [
+        "src/cli/commands/install-claude-command.test.ts"
+      ]
+    },
+    {
+      "content": "4f0f7047186ceee9",
+      "lines": 13,
+      "files": [
+        "src/engine/element/image-leak.test.ts"
+      ]
+    },
+    {
+      "content": "4f375ef9f1a0f0a1",
+      "lines": 7,
+      "files": [
+        "src/engine/element/game.ts"
+      ]
+    },
+    {
+      "content": "4fc10e24f3583c6d",
+      "lines": 8,
+      "files": [
+        "src/cli/dev-host/multiplayer-host.startrace.test.ts",
+        "src/cli/dev-host/multiplayer-host.test.ts"
+      ]
+    },
+    {
+      "content": "4feda9284ff89768",
+      "lines": 22,
+      "files": [
+        "src/ui/components/auto-ui/useAutoRendererAnimations.test.ts",
+        "src/ui/composables/useAnimationEvents.test.ts"
+      ]
+    },
+    {
+      "content": "4ff1c86af3d3bb66",
+      "lines": 8,
+      "files": [
+        "docs/persistent-world-claims.test.ts",
+        "src/world/action.test.ts"
+      ]
+    },
+    {
+      "content": "50b1501b0593ac85",
+      "lines": 15,
+      "files": [
+        "src/cli/cli-conformance-commands.test.ts",
+        "src/cli/commands/drift-check.test.ts",
+        "src/cli/commands/trace-check.test.ts"
+      ]
+    },
+    {
+      "content": "51e2bc3ccfaee497",
+      "lines": 30,
+      "files": [
+        "src/cli/commands/verify-derive-check.test.ts"
+      ]
+    },
+    {
+      "content": "51fc536c9e23fb4a",
+      "lines": 12,
+      "files": [
+        "src/ui/composables/useBoardActionBridge.test.ts"
+      ]
+    },
+    {
+      "content": "52bd7692a612c287",
+      "lines": 12,
+      "files": [
+        "src/ui/components/helpers/TutorialOverlay.test.ts"
+      ]
+    },
+    {
+      "content": "533114a0ead14c3b",
+      "lines": 9,
+      "files": [
+        "src/session/restore-snapshot-authoritative.test.ts"
+      ]
+    },
+    {
+      "content": "533f4c2ecf1708c2",
+      "lines": 10,
+      "files": [
+        "src/engine/flow/engine.test.ts"
+      ]
+    },
+    {
+      "content": "535f6eb0e3a856a6",
+      "lines": 7,
+      "files": [
+        "src/engine/fail-loud-authoring-errors.test.ts"
+      ]
+    },
+    {
+      "content": "53c55b699d9c4f8e",
+      "lines": 35,
+      "files": [
+        "src/ui/components/auto-ui/ActionPanel.smoke.test.ts",
+        "src/ui/components/auto-ui/ActionPanel.suppression.test.ts"
+      ]
+    },
+    {
+      "content": "53d76a2142959c2b",
+      "lines": 13,
+      "files": [
+        "src/ui/composables/useActionController.test.ts"
+      ]
+    },
+    {
+      "content": "53e24ee827252376",
+      "lines": 9,
+      "files": [
+        "src/ui/composables/useFocusTrap.test.ts"
+      ]
+    },
+    {
+      "content": "540193f205d4e38e",
+      "lines": 12,
+      "files": [
+        "src/ui/composables/useElementAnimation.test.ts"
+      ]
+    },
+    {
+      "content": "5482d474af483de5",
+      "lines": 13,
+      "files": [
+        "src/bot-trainer/feature-templates.ts"
+      ]
+    },
+    {
+      "content": "548a205f2128e7b9",
+      "lines": 7,
+      "files": [
+        "src/cli/commands/verify-impact.ts"
+      ]
+    },
+    {
+      "content": "54f16d2979cdf7c2",
+      "lines": 10,
+      "files": [
+        "src/session/pick-handler.test.ts"
+      ]
+    },
+    {
+      "content": "55351ecf9cb4acd2",
+      "lines": 16,
+      "files": [
+        "src/cli/dev-host/world-host.test.ts"
+      ]
+    },
+    {
+      "content": "55c172f397b3842a",
+      "lines": 5,
+      "files": [
+        "src/cli/commands/verify-source-free.test.ts"
+      ]
+    },
+    {
+      "content": "55cb1cad9aedb962",
+      "lines": 14,
+      "files": [
+        "src/ui/composables/useAnimationEvents.test.ts"
+      ]
+    },
+    {
+      "content": "5632e82c55b5c43f",
+      "lines": 13,
+      "files": [
+        "src/ui/composables/useAnimationEvents.test.ts"
+      ]
+    },
+    {
+      "content": "563daf86766a5296",
+      "lines": 8,
+      "files": [
+        "src/cli/dev-host/DevHost.restart.test.ts"
+      ]
+    },
+    {
+      "content": "5656dc878050915f",
+      "lines": 5,
+      "files": [
+        "src/cli/dev-host/multiplayer-host.startrace.test.ts"
+      ]
+    },
+    {
+      "content": "568b4893151c2002",
+      "lines": 6,
+      "files": [
+        "src/session/testing/execute-barrier-undo.test.ts"
+      ]
+    },
+    {
+      "content": "5691235e7075732b",
+      "lines": 8,
+      "files": [
+        "src/cli/slash-command/bs/verify.test.ts"
+      ]
+    },
+    {
+      "content": "56b127497a080a3e",
+      "lines": 27,
+      "files": [
+        "src/ui/components/helpers/HintOverlay.test.ts"
+      ]
+    },
+    {
+      "content": "56c6f1f61c4fb940",
+      "lines": 25,
+      "files": [
+        "src/cli/commands/example-test-emit.test.ts"
+      ]
+    },
+    {
+      "content": "56dbec15a80fdfed",
+      "lines": 12,
+      "files": [
+        "src/engine/action/action.test.ts"
+      ]
+    },
+    {
+      "content": "572579b7df5f4eb5",
+      "lines": 47,
+      "files": [
+        "src/ui/components/helpers/HintOverlay.vue",
+        "src/ui/components/helpers/TutorialOverlay.vue"
+      ]
+    },
+    {
+      "content": "57338e738634df91",
+      "lines": 18,
+      "files": [
+        "src/ui/composables/useAnimationEvents.test.ts"
+      ]
+    },
+    {
+      "content": "574e1dd389c18135",
+      "lines": 14,
+      "files": [
+        "src/session/testing/execute-barrier-undo.test.ts"
+      ]
+    },
+    {
+      "content": "574f5b9f74a6bc78",
+      "lines": 21,
+      "files": [
+        "src/session/lobby-manager.ts"
+      ]
+    },
+    {
+      "content": "57706247ed3ae121",
+      "lines": 14,
+      "files": [
+        "src/cli/commands/verify-derive-check.test.ts",
+        "src/cli/commands/verify-enumerate.test.ts",
+        "src/cli/commands/verify-example-replay.test.ts"
+      ]
+    },
+    {
+      "content": "57ca97cda8ce087f",
+      "lines": 16,
+      "files": [
+        "src/engine/element/game-element.test.ts"
+      ]
+    },
+    {
+      "content": "57d88fcfa684451e",
+      "lines": 5,
+      "files": [
+        "src/cli/slash-command/bs/verify.test.ts"
+      ]
+    },
+    {
+      "content": "583a114aae6c6106",
+      "lines": 8,
+      "files": [
+        "src/testing/simulate-action.ts"
+      ]
+    },
+    {
+      "content": "584a993a504f7335",
+      "lines": 22,
+      "files": [
+        "src/ui/composables/useBoardActionBridge.test.ts"
+      ]
+    },
+    {
+      "content": "586fa5532a46a98a",
+      "lines": 6,
+      "files": [
+        "src/session/testing/random-scumming.test.ts"
+      ]
+    },
+    {
+      "content": "587c819dbf096ab7",
+      "lines": 12,
+      "files": [
+        "src/ui/composables/useGameGrid.ts"
+      ]
+    },
+    {
+      "content": "599d137af74df8b8",
+      "lines": 16,
+      "files": [
+        "src/engine/tutorial/annotation.test.ts"
+      ]
+    },
+    {
+      "content": "5a7575d426a0366b",
+      "lines": 5,
+      "files": [
+        "src/session/lobby-host-authorization.test.ts",
+        "src/session/lobby-identity-security.test.ts",
+        "src/testing/test-game.test.ts"
+      ]
+    },
+    {
+      "content": "5a7a85ad855aa187",
+      "lines": 9,
+      "files": [
+        "src/cli/dev-host/DevHost.restart.test.ts"
+      ]
+    },
+    {
+      "content": "5ac8748381c4ccfa",
+      "lines": 5,
+      "files": [
+        "src/ui/composables/useAnimationEvents.test.ts"
+      ]
+    },
+    {
+      "content": "5b1446c29a780586",
+      "lines": 7,
+      "files": [
+        "src/ui/components/GameShell.action-panel-suppression.test.ts"
+      ]
+    },
+    {
+      "content": "5b3df45102ae6392",
+      "lines": 10,
+      "files": [
+        "src/session/testing/solo-undo-authoritative.test.ts"
+      ]
+    },
+    {
+      "content": "5b4d3df27a11a507",
+      "lines": 9,
+      "files": [
+        "src/session/stateless-ops.test.ts"
+      ]
+    },
+    {
+      "content": "5b6a42aca6e675de",
+      "lines": 5,
+      "files": [
+        "src/cli/dev-host/multiplayer-host.test.ts"
+      ]
+    },
+    {
+      "content": "5b6f32e076482545",
+      "lines": 8,
+      "files": [
+        "src/cli/commands/chunk-provenance.test.ts"
+      ]
+    },
+    {
+      "content": "5ba852ab06b5b2df",
+      "lines": 8,
+      "files": [
+        "src/engine/action/action.test.ts"
+      ]
+    },
+    {
+      "content": "5c1083014dcc15f1",
+      "lines": 12,
+      "files": [
+        "src/engine/element/action-metadata.test.ts"
+      ]
+    },
+    {
+      "content": "5c1232601b470054",
+      "lines": 14,
+      "files": [
+        "src/session/game-definition-like-typing.test.ts"
+      ]
+    },
+    {
+      "content": "5c5e58ae2713b4aa",
+      "lines": 11,
+      "files": [
+        "src/cli/commands/chunk-provenance.test.ts"
+      ]
+    },
+    {
+      "content": "5c7182dd92a77096",
+      "lines": 9,
+      "files": [
+        "src/engine/flow/simultaneous-alldone-deadlock-warn.test.ts",
+        "src/engine/flow/simultaneous-alldone-empty.test.ts"
+      ]
+    },
+    {
+      "content": "5c987ddabd402171",
+      "lines": 13,
+      "files": [
+        "src/engine/flow/engine.test.ts"
+      ]
+    },
+    {
+      "content": "5cdf8b03355f47d7",
+      "lines": 10,
+      "files": [
+        "src/session/lobby-manager.ts"
+      ]
+    },
+    {
+      "content": "5cee0e22ab7996c2",
+      "lines": 8,
+      "files": [
+        "src/engine/fail-loud-authoring-errors.test.ts"
+      ]
+    },
+    {
+      "content": "5d29b27cab326773",
+      "lines": 26,
+      "files": [
+        "src/cli/commands/chunk-provenance.test.ts",
+        "src/cli/commands/verify-close-record.test.ts"
+      ]
+    },
+    {
+      "content": "5db3b3e0696ae4cb",
+      "lines": 8,
+      "files": [
+        "src/cli/commands/verify-classify.test.ts"
+      ]
+    },
+    {
+      "content": "5dc103263682f2d8",
+      "lines": 13,
+      "files": [
+        "src/bot-trainer/feature-templates.ts"
+      ]
+    },
+    {
+      "content": "5df5885b1b3437ce",
+      "lines": 8,
+      "files": [
+        "src/cli/commands/verify-derive-check.test.ts",
+        "src/cli/commands/verify-impact.test.ts"
+      ]
+    },
+    {
+      "content": "5dfdc3b3b0298bb2",
+      "lines": 7,
+      "files": [
+        "src/engine/action/action.test.ts"
+      ]
+    },
+    {
+      "content": "5e01949da85df3a3",
+      "lines": 12,
+      "files": [
+        "src/session/stateless-ops.test.ts"
+      ]
+    },
+    {
+      "content": "5e03d9cb2f07c6ba",
+      "lines": 11,
+      "files": [
+        "src/ui/composables/useDebugTimeline.test.ts",
+        "src/ui/composables/useDeckWorkbench.test.ts"
+      ]
+    },
+    {
+      "content": "5e3317414e4d4265",
+      "lines": 9,
+      "files": [
+        "src/eslint-plugin/rules/no-filesystem.ts",
+        "src/eslint-plugin/rules/no-network.ts"
+      ]
+    },
+    {
+      "content": "5e654b9f1803b6ba",
+      "lines": 6,
+      "files": [
+        "src/cli/dev-host/bridge.test.ts"
+      ]
+    },
+    {
+      "content": "5e7e9cb1cbf04bed",
+      "lines": 15,
+      "files": [
+        "src/engine/action/action.test.ts"
+      ]
+    },
+    {
+      "content": "5ea9ad88bdfa5739",
+      "lines": 14,
+      "files": [
+        "src/ui/composables/useActionController.test.ts"
+      ]
+    },
+    {
+      "content": "5eaa1997ee94e3fb",
+      "lines": 10,
+      "files": [
+        "src/cli/commands/verify-derive-check.test.ts"
+      ]
+    },
+    {
+      "content": "5ee1204e8639dc1e",
+      "lines": 8,
+      "files": [
+        "src/cli/commands/verify-run.test.ts"
+      ]
+    },
+    {
+      "content": "5f8f4cd8dbde1c8f",
+      "lines": 10,
+      "files": [
+        "src/ui/components/auto-ui/renderers/GridBoardRenderer.a11y.test.ts",
+        "src/ui/components/auto-ui/renderers/HexBoardRenderer.a11y.test.ts"
+      ]
+    },
+    {
+      "content": "5fd10fd72c9712a8",
+      "lines": 8,
+      "files": [
+        "src/client/vue.test.ts"
+      ]
+    },
+    {
+      "content": "6005011ea958d379",
+      "lines": 6,
+      "files": [
+        "src/cli/commands/verify-run.test.ts"
+      ]
+    },
+    {
+      "content": "60140980bca16c35",
+      "lines": 17,
+      "files": [
+        "src/bot-trainer/feature-templates.ts"
+      ]
+    },
+    {
+      "content": "602c35da18160c94",
+      "lines": 14,
+      "files": [
+        "src/cli/commands/verify-example-replay.test.ts"
+      ]
+    },
+    {
+      "content": "604b12f3bc0441f9",
+      "lines": 9,
+      "files": [
+        "src/engine/action/action.test.ts"
+      ]
+    },
+    {
+      "content": "61061075698e3c9e",
+      "lines": 7,
+      "files": [
+        "src/ui/composables/useFLIP.test.ts"
+      ]
+    },
+    {
+      "content": "615ee5926103ee9f",
+      "lines": 7,
+      "files": [
+        "src/ui/components/GameShell.time-travel-desync.test.ts"
+      ]
+    },
+    {
+      "content": "61767022c362bc0d",
+      "lines": 17,
+      "files": [
+        "src/testing/assertions.test.ts",
+        "src/testing/simulate-action.test.ts"
+      ]
+    },
+    {
+      "content": "619e432ca784523f",
+      "lines": 15,
+      "files": [
+        "src/session/testing/parity-contract.test.ts",
+        "src/session/testing/undo-authoritative.test.ts"
+      ]
+    },
+    {
+      "content": "61d6ddd59183c8b1",
+      "lines": 9,
+      "files": [
+        "src/session/stateless-ops.test.ts"
+      ]
+    },
+    {
+      "content": "61f6ec4cff86f0a0",
+      "lines": 51,
+      "files": [
+        "src/session/types.ts",
+        "src/types/protocol.ts"
+      ]
+    },
+    {
+      "content": "62079ffcc81cd632",
+      "lines": 12,
+      "files": [
+        "src/bot/mcts-redaction.test.ts"
+      ]
+    },
+    {
+      "content": "6210fad98994f281",
+      "lines": 11,
+      "files": [
+        "src/ui/components/auto-ui/renderers/GridBoardRenderer.vue",
+        "src/ui/components/auto-ui/renderers/HexBoardRenderer.vue"
+      ]
+    },
+    {
+      "content": "62126351b37ff69c",
+      "lines": 9,
+      "files": [
+        "src/bot-trainer/feature-templates.ts"
+      ]
+    },
+    {
+      "content": "6299333cb21ea484",
+      "lines": 9,
+      "files": [
+        "src/ui/composables/useAutoZoom.test.ts"
+      ]
+    },
+    {
+      "content": "62d96b897ea01f5a",
+      "lines": 18,
+      "files": [
+        "src/ui/composables/useDragDropTargets.test.ts"
+      ]
+    },
+    {
+      "content": "631644eeea509fbb",
+      "lines": 28,
+      "files": [
+        "src/session/stateless-ops.test.ts"
+      ]
+    },
+    {
+      "content": "634bde72dd6d31f2",
+      "lines": 11,
+      "files": [
+        "src/session/stateless-ops.test.ts"
+      ]
+    },
+    {
+      "content": "63cb64cf04e3bbe5",
+      "lines": 11,
+      "files": [
+        "src/session/snapshot-session-host.test.ts"
+      ]
+    },
+    {
+      "content": "63da1e815595d1eb",
+      "lines": 5,
+      "files": [
+        "src/session/testing/random-scumming.test.ts"
+      ]
+    },
+    {
+      "content": "6481bc6b0560c1c7",
+      "lines": 17,
+      "files": [
+        "src/cli/commands/verify-source-free.test.ts"
+      ]
+    },
+    {
+      "content": "648a8ef2beafaf36",
+      "lines": 19,
+      "files": [
+        "src/testing/assertions.test.ts",
+        "src/testing/view-diff.test.ts",
+        "src/testing/visibility.test.ts"
+      ]
+    },
+    {
+      "content": "64a06ca4f7c41da4",
+      "lines": 13,
+      "files": [
+        "src/engine/flow/engine.test.ts"
+      ]
+    },
+    {
+      "content": "64b65262d5087578",
+      "lines": 9,
+      "files": [
+        "src/ui/components/auto-ui/AutoRenderer.loading.test.ts"
+      ]
+    },
+    {
+      "content": "64ca9e598c739a41",
+      "lines": 13,
+      "files": [
+        "src/cli/dev-host/world-host.test.ts"
+      ]
+    },
+    {
+      "content": "655efd33497d7029",
+      "lines": 14,
+      "files": [
+        "src/cli/commands/verify-classify.test.ts"
+      ]
+    },
+    {
+      "content": "6560452e87a055f6",
+      "lines": 13,
+      "files": [
+        "src/session/pick-handler.ts"
+      ]
+    },
+    {
+      "content": "656adde2c37388fb",
+      "lines": 12,
+      "files": [
+        "src/engine/action/action.test.ts"
+      ]
+    },
+    {
+      "content": "656e2b5ec26e6d6b",
+      "lines": 21,
+      "files": [
+        "src/testing/dom-leak.test.ts"
+      ]
+    },
+    {
+      "content": "661671b17e1b43c2",
+      "lines": 15,
+      "files": [
+        "src/cli/commands/verify-enumerate.test.ts"
+      ]
+    },
+    {
+      "content": "662e4f8cdb2a3e8a",
+      "lines": 10,
+      "files": [
+        "src/engine/action/action.test.ts"
+      ]
+    },
+    {
+      "content": "665e04300f254693",
+      "lines": 14,
+      "files": [
+        "src/ui/composables/useAnimationEvents.test.ts"
+      ]
+    },
+    {
+      "content": "66794bc8749af0bf",
+      "lines": 12,
+      "files": [
+        "src/session/pending-action-manager.test.ts"
+      ]
+    },
+    {
+      "content": "66b3028e04284185",
+      "lines": 9,
+      "files": [
+        "src/cli/cli-conformance-commands.test.ts",
+        "src/cli/commands/verify-classify.test.ts"
+      ]
+    },
+    {
+      "content": "6718fb2e8386f83f",
+      "lines": 6,
+      "files": [
+        "docs/persistent-world-claims.test.ts",
+        "src/world/action.test.ts"
+      ]
+    },
+    {
+      "content": "6719d66c6ddba6f3",
+      "lines": 7,
+      "files": [
+        "src/engine/flow/turn-scope.test.ts"
+      ]
+    },
+    {
+      "content": "67292a0a31c0aa55",
+      "lines": 11,
+      "files": [
+        "src/ui/composables/useAutoZoom.test.ts"
+      ]
+    },
+    {
+      "content": "6752a08f7b7e7344",
+      "lines": 11,
+      "files": [
+        "src/cli/dev-host/multiplayer-host.test.ts"
+      ]
+    },
+    {
+      "content": "67ab41e4396e70ec",
+      "lines": 12,
+      "files": [
+        "src/cli/commands/verify-classify.ts",
+        "src/cli/commands/verify-ruling-recheck.ts"
+      ]
+    },
+    {
+      "content": "67b1587c525abba6",
+      "lines": 10,
+      "files": [
+        "src/session/lobby-manager.test.ts",
+        "src/session/restore-player-configs.test.ts"
+      ]
+    },
+    {
+      "content": "67cb0a7180ba4e89",
+      "lines": 12,
+      "files": [
+        "src/session/stateless-ops.test.ts"
+      ]
+    },
+    {
+      "content": "67e4c7e534cdea20",
+      "lines": 11,
+      "files": [
+        "src/session/lobby-manager.ts"
+      ]
+    },
+    {
+      "content": "6825f639a1d6abf3",
+      "lines": 9,
+      "files": [
+        "src/cli/slash-command/bs/build-chunk.test.ts"
+      ]
+    },
+    {
+      "content": "682d47f5a1e09dbb",
+      "lines": 5,
+      "files": [
+        "src/world/action.test.ts"
+      ]
+    },
+    {
+      "content": "687143b74f6f10b9",
+      "lines": 8,
+      "files": [
+        "src/engine/element/space.test.ts"
+      ]
+    },
+    {
+      "content": "6966a38076b1045c",
+      "lines": 10,
+      "files": [
+        "src/engine/action/action.test.ts"
+      ]
+    },
+    {
+      "content": "696746125b3c75cf",
+      "lines": 9,
+      "files": [
+        "src/ui/components/DebugPanel.shortcut.test.ts"
+      ]
+    },
+    {
+      "content": "6971fdeae388241f",
+      "lines": 6,
+      "files": [
+        "src/cli/cli-conformance-commands.test.ts"
+      ]
+    },
+    {
+      "content": "6a1f4c118fe6c7f3",
+      "lines": 24,
+      "files": [
+        "src/ui/composables/useElementAnimation.test.ts",
+        "src/ui/composables/useFlyingElements.test.ts"
+      ]
+    },
+    {
+      "content": "6a87cf359d22697c",
+      "lines": 7,
+      "files": [
+        "src/cli/commands/verify-enumerate.test.ts"
+      ]
+    },
+    {
+      "content": "6b39be6aef92a7a2",
+      "lines": 12,
+      "files": [
+        "src/session/teaching.test.ts"
+      ]
+    },
+    {
+      "content": "6b6926a402ff72cb",
+      "lines": 11,
+      "files": [
+        "src/ui/components/GameShell.test.ts"
+      ]
+    },
+    {
+      "content": "6bab54dff43814d5",
+      "lines": 7,
+      "files": [
+        "src/ui/composables/useActionAnimations.test.ts"
+      ]
+    },
+    {
+      "content": "6bbd30adb44595cf",
+      "lines": 12,
+      "files": [
+        "src/ui/composables/useAnimationEvents.test.ts"
+      ]
+    },
+    {
+      "content": "6bbe5fdc5ed17565",
+      "lines": 5,
+      "files": [
+        "src/session/action-result-data-propagation.test.ts",
+        "src/ui/composables/useActionController.action-data.test.ts"
+      ]
+    },
+    {
+      "content": "6c11203bb3bcf358",
+      "lines": 9,
+      "files": [
+        "src/bot-trainer/feature-templates.ts"
+      ]
+    },
+    {
+      "content": "6c1ca7a60639b6e2",
+      "lines": 15,
+      "files": [
+        "src/session/game-session.test.ts",
+        "src/session/stateless-ops.test.ts"
+      ]
+    },
+    {
+      "content": "6c26261d3417986c",
+      "lines": 6,
+      "files": [
+        "src/bot-trainer/feature-templates.ts"
+      ]
+    },
+    {
+      "content": "6c7f3ecb536d3200",
+      "lines": 19,
+      "files": [
+        "src/testing/assertions.test.ts",
+        "src/testing/simulate-action.test.ts"
+      ]
+    },
+    {
+      "content": "6c97cbb0b272ce76",
+      "lines": 6,
+      "files": [
+        "src/cli/dev-host/world-host.test.ts"
+      ]
+    },
+    {
+      "content": "6d3ddd88e40326a0",
+      "lines": 10,
+      "files": [
+        "src/cli/commands/example-test-emit.test.ts"
+      ]
+    },
+    {
+      "content": "6d4be827851f8a08",
+      "lines": 16,
+      "files": [
+        "src/cli/dev-host/multiplayer-host.ts"
+      ]
+    },
+    {
+      "content": "6d4d9cc2afeee92b",
+      "lines": 13,
+      "files": [
+        "src/ui/composables/useDragDropTargets.test.ts"
+      ]
+    },
+    {
+      "content": "6dadb036cba06545",
+      "lines": 9,
+      "files": [
+        "src/cli/dev-host/multiplayer-host.test.ts"
+      ]
+    },
+    {
+      "content": "6dca13e955623648",
+      "lines": 6,
+      "files": [
+        "src/cli/cli.test.ts"
+      ]
+    },
+    {
+      "content": "6e2a1f69f135c110",
+      "lines": 6,
+      "files": [
+        "src/cli/commands/verify-derive-check.test.ts"
+      ]
+    },
+    {
+      "content": "6e91ea3ccf423db8",
+      "lines": 8,
+      "files": [
+        "src/cli/commands/verify-source-free.test.ts"
+      ]
+    },
+    {
+      "content": "6e97f60b776124d2",
+      "lines": 15,
+      "files": [
+        "src/ui/components/GameShell.test.ts"
+      ]
+    },
+    {
+      "content": "6e9a826df15d5a46",
+      "lines": 11,
+      "files": [
+        "src/engine/flow/engine.test.ts"
+      ]
+    },
+    {
+      "content": "6eb816760020152f",
+      "lines": 6,
+      "files": [
+        "src/testing/dom-leak.test.ts"
+      ]
+    },
+    {
+      "content": "6ecb4054960a7c7a",
+      "lines": 22,
+      "files": [
+        "src/runtime/runner.test.ts",
+        "src/session/testing/parity-contract.test.ts"
+      ]
+    },
+    {
+      "content": "6ef7098163d38895",
+      "lines": 7,
+      "files": [
+        "src/world/schedule-api.test.ts"
+      ]
+    },
+    {
+      "content": "6f36a5c2d4cf324a",
+      "lines": 7,
+      "files": [
+        "src/bot/mcts-redaction.test.ts",
+        "src/bot/mcts-undo-bookkeeping.test.ts"
+      ]
+    },
+    {
+      "content": "6f64d94f46af551f",
+      "lines": 9,
+      "files": [
+        "src/cli/slash-command/bs/build-chunk.test.ts",
+        "src/cli/slash-command/bs/ingest.test.ts"
+      ]
+    },
+    {
+      "content": "6f6f5e09b5978a63",
+      "lines": 6,
+      "files": [
+        "src/cli/dev-host/world-store.test.ts"
+      ]
+    },
+    {
+      "content": "6f87385898b43182",
+      "lines": 9,
+      "files": [
+        "src/engine/action/action.test.ts"
+      ]
+    },
+    {
+      "content": "707925160b2375da",
+      "lines": 12,
+      "files": [
+        "src/bot/mcts-restore.test.ts",
+        "src/bot/mcts-undo-bookkeeping.test.ts"
+      ]
+    },
+    {
+      "content": "70977528dc4df086",
+      "lines": 5,
+      "files": [
+        "src/cli/slash-command/bs/build-chunk.test.ts",
+        "src/cli/slash-command/bs/verify.test.ts"
+      ]
+    },
+    {
+      "content": "709d6466590b9de0",
+      "lines": 7,
+      "files": [
+        "src/ui/composables/createFLIPSnapshot.test.ts"
+      ]
+    },
+    {
+      "content": "711d0dafb6350f15",
+      "lines": 8,
+      "files": [
+        "src/bot/not-simulable.test.ts"
+      ]
+    },
+    {
+      "content": "71460bf4fd21c3cc",
+      "lines": 5,
+      "files": [
+        "src/engine/element/deck-hand-visibility.test.ts"
+      ]
+    },
+    {
+      "content": "716dd57faf71fdfb",
+      "lines": 12,
+      "files": [
+        "src/world/engine.test.ts"
+      ]
+    },
+    {
+      "content": "7189e2467d0b4842",
+      "lines": 20,
+      "files": [
+        "src/ui/composables/useActionController.picks.test.ts"
+      ]
+    },
+    {
+      "content": "71bd4d5c35c5b088",
+      "lines": 10,
+      "files": [
+        "src/engine/element/space.test.ts",
+        "src/testing/test-game.test.ts"
+      ]
+    },
+    {
+      "content": "724201ba094eee52",
+      "lines": 8,
+      "files": [
+        "src/cli/commands/chunk-provenance.test.ts"
+      ]
+    },
+    {
+      "content": "724afb30813fdf83",
+      "lines": 8,
+      "files": [
+        "src/cli/commands/verify-run.test.ts"
+      ]
+    },
+    {
+      "content": "72822a90a184c73a",
+      "lines": 18,
+      "files": [
+        "src/engine/flow/engine.ts"
+      ]
+    },
+    {
+      "content": "728ca4db53bd29be",
+      "lines": 10,
+      "files": [
+        "src/ui/components/auto-ui/ActionPanel.simultaneous.test.ts"
+      ]
+    },
+    {
+      "content": "728d57be5e74e321",
+      "lines": 6,
+      "files": [
+        "src/world/activity-point-read.test.ts"
+      ]
+    },
+    {
+      "content": "728f81c8b0280c4a",
+      "lines": 10,
+      "files": [
+        "src/client/vue.test.ts"
+      ]
+    },
+    {
+      "content": "729d6cb8e778b610",
+      "lines": 13,
+      "files": [
+        "src/engine/flow/engine.test.ts"
+      ]
+    },
+    {
+      "content": "72ca3126f93e4502",
+      "lines": 7,
+      "files": [
+        "src/cli/commands/verify-run.test.ts"
+      ]
+    },
+    {
+      "content": "72d91cfcf7f114d6",
+      "lines": 16,
+      "files": [
+        "src/testing/assertions.test.ts"
+      ]
+    },
+    {
+      "content": "72df22d80ea7982b",
+      "lines": 8,
+      "files": [
+        "src/ui/components/AssetImage.test.ts"
+      ]
+    },
+    {
+      "content": "72e104459801a464",
+      "lines": 10,
+      "files": [
+        "src/session/build-player-state.test.ts"
+      ]
+    },
+    {
+      "content": "72f93619f6bc9b66",
+      "lines": 6,
+      "files": [
+        "src/engine/element/tree-corruption.test.ts"
+      ]
+    },
+    {
+      "content": "735a3afbc185d1f5",
+      "lines": 13,
+      "files": [
+        "src/ui/components/auto-ui/renderers/drag-keyboard-parity.test.ts",
+        "src/ui/composables/useDragDrop.test.ts"
+      ]
+    },
+    {
+      "content": "7472981bfd7c2ddd",
+      "lines": 6,
+      "files": [
+        "src/ui/composables/useBoardActionBridge.ts"
+      ]
+    },
+    {
+      "content": "753dc1ccfd98af8d",
+      "lines": 9,
+      "files": [
+        "src/engine/flow/builders.ts",
+        "src/engine/flow/types.ts"
+      ]
+    },
+    {
+      "content": "7555e04b37e09fb9",
+      "lines": 19,
+      "files": [
+        "src/cli/commands/verify-example-replay.ts"
+      ]
+    },
+    {
+      "content": "75898332b9d1ca3a",
+      "lines": 13,
+      "files": [
+        "src/ui/composables/useAnimationEvents.test.ts"
+      ]
+    },
+    {
+      "content": "759cbdb3827b5899",
+      "lines": 14,
+      "files": [
+        "src/engine/flow/engine.test.ts"
+      ]
+    },
+    {
+      "content": "75dd47779a5e8492",
+      "lines": 29,
+      "files": [
+        "src/bot/mcts-stats.test.ts",
+        "src/engine/utils/enumerate-moves.test.ts"
+      ]
+    },
+    {
+      "content": "75e6dd5ee3b829a6",
+      "lines": 8,
+      "files": [
+        "src/cli/cli-conformance-commands.test.ts",
+        "src/cli/cli-single-entry-point.test.ts",
+        "src/cli/cli.test.ts"
+      ]
+    },
+    {
+      "content": "762e08811caa704d",
+      "lines": 14,
+      "files": [
+        "src/session/snapshot-session-host.test.ts"
+      ]
+    },
+    {
+      "content": "7630a3b04611ac20",
+      "lines": 30,
+      "files": [
+        "src/ui/composables/interaction-integration.test.ts"
+      ]
+    },
+    {
+      "content": "7667c2ebaec2cb3b",
+      "lines": 13,
+      "files": [
+        "src/cli/commands/verify-impact.ts"
+      ]
+    },
+    {
+      "content": "76e2b44fe8e35ace",
+      "lines": 11,
+      "files": [
+        "src/ui/components/auto-ui/ActionPanel.test.ts"
+      ]
+    },
+    {
+      "content": "779d2c96ff8f6b57",
+      "lines": 37,
+      "files": [
+        "src/ui/components/helpers/HintOverlay.vue",
+        "src/ui/components/helpers/TutorialOverlay.vue"
+      ]
+    },
+    {
+      "content": "77b0a8915755267d",
+      "lines": 8,
+      "files": [
+        "src/cli/commands/chunk-provenance.test.ts"
+      ]
+    },
+    {
+      "content": "77f82fc1680d5c31",
+      "lines": 16,
+      "files": [
+        "src/cli/commands/verify-run.test.ts"
+      ]
+    },
+    {
+      "content": "785d7f0e3df4ffe3",
+      "lines": 6,
+      "files": [
+        "src/cli/dev-host/multiplayer-host.gameoptions.test.ts"
+      ]
+    },
+    {
+      "content": "78c749921159b2ea",
+      "lines": 18,
+      "files": [
+        "src/bot-trainer/feature-templates.ts"
+      ]
+    },
+    {
+      "content": "78c9beb2e8ef089e",
+      "lines": 7,
+      "files": [
+        "src/ui/components/WaitingRoom.test.ts"
+      ]
+    },
+    {
+      "content": "791f1a2968390eab",
+      "lines": 9,
+      "files": [
+        "src/engine/element/image-leak.test.ts"
+      ]
+    },
+    {
+      "content": "796e8957894195ff",
+      "lines": 6,
+      "files": [
+        "src/cli/slash-command/bs/verify.test.ts"
+      ]
+    },
+    {
+      "content": "79d58fc6c2f19d9d",
+      "lines": 9,
+      "files": [
+        "src/ui/components/auto-ui/useAutoRendererAnimations.test.ts"
+      ]
+    },
+    {
+      "content": "7a1d3c1decda3214",
+      "lines": 9,
+      "files": [
+        "src/client/client.ts"
+      ]
+    },
+    {
+      "content": "7a553fa0914b1dfa",
+      "lines": 14,
+      "files": [
+        "src/cli/commands/verify-enumerate.test.ts"
+      ]
+    },
+    {
+      "content": "7a56589acd52b85e",
+      "lines": 5,
+      "files": [
+        "src/session/pending-action-manager.test.ts"
+      ]
+    },
+    {
+      "content": "7aa116227798687d",
+      "lines": 8,
+      "files": [
+        "src/ui/components/auto-ui/renderers/HexBoardRenderer.a11y.test.ts"
+      ]
+    },
+    {
+      "content": "7afa6e65784ca3f4",
+      "lines": 22,
+      "files": [
+        "src/session/testing/fixtures/bookkeeping-execute-fixture.ts",
+        "src/session/testing/fixtures/execute-barrier-fixture.ts"
+      ]
+    },
+    {
+      "content": "7b03371d1c1c7d11",
+      "lines": 7,
+      "files": [
+        "src/cli/commands/verify-repair.test.ts"
+      ]
+    },
+    {
+      "content": "7b23ffb6d7f1d6b4",
+      "lines": 6,
+      "files": [
+        "src/cli/dev-host/DevHost.seats.test.ts"
+      ]
+    },
+    {
+      "content": "7b3c1383e45b2297",
+      "lines": 6,
+      "files": [
+        "src/ui/components/GameShell.time-travel-desync.test.ts",
+        "src/ui/composables/useBoardActionBridge.test.ts"
+      ]
+    },
+    {
+      "content": "7b487d88328c0907",
+      "lines": 9,
+      "files": [
+        "src/world/allocation.test.ts"
+      ]
+    },
+    {
+      "content": "7bae9ac227fe3644",
+      "lines": 28,
+      "files": [
+        "src/ui/components/auto-ui/GoFishAsk.interaction.test.ts"
+      ]
+    },
+    {
+      "content": "7bde4b5b803983c0",
+      "lines": 9,
+      "files": [
+        "src/world/declaration.test.ts"
+      ]
+    },
+    {
+      "content": "7bfa81c9f05584ce",
+      "lines": 17,
+      "files": [
+        "src/ui/composables/useBoardActionBridge.test.ts"
+      ]
+    },
+    {
+      "content": "7c72be1291203a7f",
+      "lines": 9,
+      "files": [
+        "src/engine/action/action.test.ts",
+        "src/engine/flow/engine.test.ts"
+      ]
+    },
+    {
+      "content": "7d91efa895d709fd",
+      "lines": 27,
+      "files": [
+        "src/cli/slash-command/bs/build-game.test.ts",
+        "src/cli/slash-command/bs/templates.test.ts"
+      ]
+    },
+    {
+      "content": "7df75b1087ca3a06",
+      "lines": 7,
+      "files": [
+        "src/ui/composables/useAutoZoom.pinned-board.test.ts",
+        "src/ui/composables/useAutoZoom.reproducible.test.ts"
+      ]
+    },
+    {
+      "content": "7e75ede0a7f01031",
+      "lines": 6,
+      "files": [
+        "src/session/snapshot-session-host.test.ts"
+      ]
+    },
+    {
+      "content": "7e9452279a5d8ddc",
+      "lines": 5,
+      "files": [
+        "src/engine/command/visibility.test.ts"
+      ]
+    },
+    {
+      "content": "7eb2abbc40267f62",
+      "lines": 11,
+      "files": [
+        "src/engine/flow/engine.test.ts"
+      ]
+    },
+    {
+      "content": "7ed129b40a79cb75",
+      "lines": 13,
+      "files": [
+        "src/cli/commands/verify-source-free.test.ts"
+      ]
+    },
+    {
+      "content": "7edd0cf9984c9f59",
+      "lines": 7,
+      "files": [
+        "src/ui/components/auto-ui/renderers/GridBoardRenderer.a11y.test.ts",
+        "src/ui/components/auto-ui/renderers/HexBoardRenderer.a11y.test.ts"
+      ]
+    },
+    {
+      "content": "7ee907947d56341f",
+      "lines": 9,
+      "files": [
+        "src/ui/components/auto-ui/ActionPanel.test.ts"
+      ]
+    },
+    {
+      "content": "7eee101012837155",
+      "lines": 13,
+      "files": [
+        "scripts/ingest-harness/check.test.mjs"
+      ]
+    },
+    {
+      "content": "7f9bd8d9336c2cd6",
+      "lines": 12,
+      "files": [
+        "src/cli/commands/verify-enumerate.test.ts"
+      ]
+    },
+    {
+      "content": "7fac7a1b96876d4c",
+      "lines": 5,
+      "files": [
+        "src/cli/commands/verify-repair.test.ts"
+      ]
+    },
+    {
+      "content": "7fbbf37918e65b4b",
+      "lines": 13,
+      "files": [
+        "src/cli/dev-host/multiplayer-host.palette.test.ts"
+      ]
+    },
+    {
+      "content": "7fea0af75e7d7c50",
+      "lines": 22,
+      "files": [
+        "src/session/stateless-ops-debug.test.ts",
+        "src/session/stateless-ops.test.ts"
+      ]
+    },
+    {
+      "content": "7ffb445d297bf34d",
+      "lines": 24,
+      "files": [
+        "src/session/lobby-manager.ts"
+      ]
+    },
+    {
+      "content": "802566359372ba3b",
+      "lines": 6,
+      "files": [
+        "src/cli/dev-host/multiplayer-host.gameoptions.test.ts",
+        "src/cli/dev-host/multiplayer-host.palette.test.ts"
+      ]
+    },
+    {
+      "content": "803ffb3339f9fa39",
+      "lines": 6,
+      "files": [
+        "src/ui/components/helpers/FlyingCardsOverlay.test.ts"
+      ]
+    },
+    {
+      "content": "806a13393664a96d",
+      "lines": 14,
+      "files": [
+        "src/ui/components/auto-ui/renderers/CardRenderer.vue",
+        "src/ui/components/auto-ui/renderers/HandRenderer.vue",
+        "src/ui/components/auto-ui/renderers/SpaceRenderer.vue"
+      ]
+    },
+    {
+      "content": "807760af5422917e",
+      "lines": 18,
+      "files": [
+        "src/cli/cli-conformance-commands.test.ts",
+        "src/cli/commands/drift-check.test.ts",
+        "src/cli/commands/trace-check.test.ts"
+      ]
+    },
+    {
+      "content": "80a1035510263b42",
+      "lines": 31,
+      "files": [
+        "src/session/stateless-ops.test.ts"
+      ]
+    },
+    {
+      "content": "80a2f8f79703d1ab",
+      "lines": 9,
+      "files": [
+        "src/session/stateless-ops.test.ts"
+      ]
+    },
+    {
+      "content": "8111fa8645c245d6",
+      "lines": 97,
+      "files": [
+        "src/cli/dev-host/DevHost.debug-relay.test.ts",
+        "src/cli/dev-host/DevHost.restart.test.ts"
+      ]
+    },
+    {
+      "content": "812f56af737cf3a1",
+      "lines": 8,
+      "files": [
+        "src/client/game-connection.test.ts",
+        "src/client/vue.test.ts"
+      ]
+    },
+    {
+      "content": "824c5aedf677b4ed",
+      "lines": 18,
+      "files": [
+        "src/cli/commands/verify-source-free.test.ts"
+      ]
+    },
+    {
+      "content": "827a4320ac516792",
+      "lines": 6,
+      "files": [
+        "src/session/testing/parity-contract.test.ts"
+      ]
+    },
+    {
+      "content": "82f336dca88adbcd",
+      "lines": 18,
+      "files": [
+        "src/ui/composables/useDragDropTargets.test.ts"
+      ]
+    },
+    {
+      "content": "83081dbd18224f4e",
+      "lines": 15,
+      "files": [
+        "src/engine/action/action.test.ts"
+      ]
+    },
+    {
+      "content": "831918c2a60cf937",
+      "lines": 14,
+      "files": [
+        "src/ui/composables/useActionController.picks.test.ts",
+        "src/ui/composables/useActionController.test.ts"
+      ]
+    },
+    {
+      "content": "832b7605e5a9e68f",
+      "lines": 11,
+      "files": [
+        "src/cli/commands/verify-impact.test.ts"
+      ]
+    },
+    {
+      "content": "83593c4dcef67578",
+      "lines": 15,
+      "files": [
+        "src/ui/components/auto-ui/ActionPanel.simultaneous.test.ts"
+      ]
+    },
+    {
+      "content": "8384c495de347db0",
+      "lines": 10,
+      "files": [
+        "src/session/stateless-ops.test.ts"
+      ]
+    },
+    {
+      "content": "838879023c760a69",
+      "lines": 5,
+      "files": [
+        "src/ui/components/auto-ui/auto-ui-helpers.test.ts"
+      ]
+    },
+    {
+      "content": "83b7770015e558e7",
+      "lines": 16,
+      "files": [
+        "src/ui/components/auto-ui/renderers/HexBoardRenderer.vue",
+        "src/ui/composables/useHexGrid.ts"
+      ]
+    },
+    {
+      "content": "83efb8c15a4d401d",
+      "lines": 8,
+      "files": [
+        "src/ui/composables/useDragDrop.test.ts"
+      ]
+    },
+    {
+      "content": "83f852a60d923d6d",
+      "lines": 7,
+      "files": [
+        "src/ui/composables/createFLIPSnapshot.test.ts"
+      ]
+    },
+    {
+      "content": "83f94967ee3a004b",
+      "lines": 8,
+      "files": [
+        "src/cli/slash-command/bs/verify.test.ts"
+      ]
+    },
+    {
+      "content": "8402d9b983dd1415",
+      "lines": 11,
+      "files": [
+        "docs/persistent-world-claims.test.ts",
+        "src/world/action.test.ts"
+      ]
+    },
+    {
+      "content": "84071f06ba773914",
+      "lines": 8,
+      "files": [
+        "src/cli/commands/derived-line-pattern.test.ts",
+        "src/cli/commands/verify-example-replay.test.ts"
+      ]
+    },
+    {
+      "content": "840ae7a1d072c782",
+      "lines": 6,
+      "files": [
+        "src/cli/commands/verify-classify.test.ts"
+      ]
+    },
+    {
+      "content": "852c288509a8bd5f",
+      "lines": 8,
+      "files": [
+        "src/cli/commands/verify-classify.test.ts"
+      ]
+    },
+    {
+      "content": "8598ab9cf04ef7ec",
+      "lines": 7,
+      "files": [
+        "src/cli/commands/trace-check.test.ts"
+      ]
+    },
+    {
+      "content": "85bac50fc88d3a6a",
+      "lines": 18,
+      "files": [
+        "src/client/client.test.ts"
+      ]
+    },
+    {
+      "content": "85e75d6a8123fe2e",
+      "lines": 9,
+      "files": [
+        "src/ui/components/auto-ui/renderers/CardRenderer.vue",
+        "src/ui/components/auto-ui/renderers/DeckRenderer.vue",
+        "src/ui/components/auto-ui/renderers/HandRenderer.vue"
+      ]
+    },
+    {
+      "content": "85f239909305b9e3",
+      "lines": 7,
+      "files": [
+        "src/session/build-player-state.test.ts"
+      ]
+    },
+    {
+      "content": "86387c81d5a7a527",
+      "lines": 11,
+      "files": [
+        "src/world/engine.test.ts"
+      ]
+    },
+    {
+      "content": "86780019580694c6",
+      "lines": 11,
+      "files": [
+        "src/engine/element/action-metadata.test.ts"
+      ]
+    },
+    {
+      "content": "86967249972d94e4",
+      "lines": 19,
+      "files": [
+        "src/engine/utils/enumerate-moves.test.ts"
+      ]
+    },
+    {
+      "content": "8700ad64d517ed72",
+      "lines": 7,
+      "files": [
+        "src/engine/element/game-element.ts"
+      ]
+    },
+    {
+      "content": "870241551ba6e40d",
+      "lines": 5,
+      "files": [
+        "src/cli/commands/chunk-provenance.test.ts"
+      ]
+    },
+    {
+      "content": "872298a0d8aca235",
+      "lines": 10,
+      "files": [
+        "src/cli/commands/verify-classify.test.ts"
+      ]
+    },
+    {
+      "content": "879d0000f2bab5a7",
+      "lines": 6,
+      "files": [
+        "src/session/dev-checkpoint-manager.test.ts"
+      ]
+    },
+    {
+      "content": "87a3bee4712f1041",
+      "lines": 31,
+      "files": [
+        "src/cli/commands/verify-impact.ts"
+      ]
+    },
+    {
+      "content": "87ac409dc0f675d3",
+      "lines": 7,
+      "files": [
+        "src/ui/composables/useAutoZoom.test.ts"
+      ]
+    },
+    {
+      "content": "87c690cded469b6c",
+      "lines": 10,
+      "files": [
+        "src/world/engine.test.ts"
+      ]
+    },
+    {
+      "content": "8804e60537a7ea17",
+      "lines": 8,
+      "files": [
+        "src/ui/components/auto-ui/renderers/GridBoardRenderer.a11y.test.ts",
+        "src/ui/components/auto-ui/renderers/HexBoardRenderer.a11y.test.ts"
+      ]
+    },
+    {
+      "content": "88a0a7082e9c1b97",
+      "lines": 7,
+      "files": [
+        "src/cli/commands/verify-run.test.ts"
+      ]
+    },
+    {
+      "content": "88abd03cdb7e58cc",
+      "lines": 10,
+      "files": [
+        "src/world/engine.test.ts"
+      ]
+    },
+    {
+      "content": "88b3a337494f60f6",
+      "lines": 17,
+      "files": [
+        "src/engine/command/executor.ts"
+      ]
+    },
+    {
+      "content": "88ed6d223356ca66",
+      "lines": 11,
+      "files": [
+        "src/session/teaching.test.ts"
+      ]
+    },
+    {
+      "content": "88f0b9dee73550fb",
+      "lines": 11,
+      "files": [
+        "src/ui/components/GameShell.action-panel-suppression.test.ts"
+      ]
+    },
+    {
+      "content": "892515d764956952",
+      "lines": 6,
+      "files": [
+        "src/cli/dev-host/DevHost.restart.test.ts"
+      ]
+    },
+    {
+      "content": "8941acf6ce7a4154",
+      "lines": 12,
+      "files": [
+        "src/session/restore-snapshot-authoritative.test.ts"
+      ]
+    },
+    {
+      "content": "894743d0282cbf20",
+      "lines": 10,
+      "files": [
+        "src/session/tutorial-controller.test.ts"
+      ]
+    },
+    {
+      "content": "89de10f92274403b",
+      "lines": 16,
+      "files": [
+        "src/engine/action/action.test.ts"
+      ]
+    },
+    {
+      "content": "8a0aeec011c4a87f",
+      "lines": 9,
+      "files": [
+        "src/engine/action/action.test.ts"
+      ]
+    },
+    {
+      "content": "8a40c144853e0456",
+      "lines": 21,
+      "files": [
+        "src/ui/composables/useAnimationEvents.test.ts"
+      ]
+    },
+    {
+      "content": "8a6d0bfdfe644736",
+      "lines": 17,
+      "files": [
+        "src/ui/composables/useBoardActionBridge.test.ts"
+      ]
+    },
+    {
+      "content": "8aae67804df0e444",
+      "lines": 10,
+      "files": [
+        "src/client/client.ts"
+      ]
+    },
+    {
+      "content": "8b1ae4360e30a912",
+      "lines": 18,
+      "files": [
+        "src/cli/commands/verify-classify.test.ts"
+      ]
+    },
+    {
+      "content": "8b2a606c50de0089",
+      "lines": 5,
+      "files": [
+        "src/cli/commands/verify-run.test.ts"
+      ]
+    },
+    {
+      "content": "8b2db370e760f91d",
+      "lines": 8,
+      "files": [
+        "src/engine/utils/dev-state.ts",
+        "src/session/game-session.ts"
+      ]
+    },
+    {
+      "content": "8b3d0b10c1277b8b",
+      "lines": 19,
+      "files": [
+        "src/ui/composables/useAnimationEvents.test.ts"
+      ]
+    },
+    {
+      "content": "8b6e180f09540aab",
+      "lines": 12,
+      "files": [
+        "src/cli/dev-host/DevHost.restart.test.ts"
+      ]
+    },
+    {
+      "content": "8ba00a6eedd9db26",
+      "lines": 9,
+      "files": [
+        "src/ui/composables/useAnimationEvents.test.ts"
+      ]
+    },
+    {
+      "content": "8baddec40b08fe25",
+      "lines": 14,
+      "files": [
+        "src/ui/composables/useSelectable.test.ts"
+      ]
+    },
+    {
+      "content": "8c0f117737765014",
+      "lines": 7,
+      "files": [
+        "src/cli/dev-host/multiplayer-host.test.ts",
+        "src/engine/flow/flow-state-clone.test.ts",
+        "src/testing/test-game.test.ts"
+      ]
+    },
+    {
+      "content": "8c559efe41bfbfc4",
+      "lines": 12,
+      "files": [
+        "src/session/stateless-ops.test.ts"
+      ]
+    },
+    {
+      "content": "8c5df45e8e5c36f7",
+      "lines": 17,
+      "files": [
+        "src/ui/components/auto-ui/renderers/CardRenderer.vue",
+        "src/ui/components/auto-ui/renderers/PieceRenderer.vue"
+      ]
+    },
+    {
+      "content": "8c8e9811841e0c52",
+      "lines": 16,
+      "files": [
+        "src/bot-trainer/feature-templates.ts"
+      ]
+    },
+    {
+      "content": "8d0e3454234c807d",
+      "lines": 7,
+      "files": [
+        "src/bot-trainer/feature-templates.ts"
+      ]
+    },
+    {
+      "content": "8de561f0dcd9bd18",
+      "lines": 15,
+      "files": [
+        "src/cli/slash-command/bs/verify.test.ts"
+      ]
+    },
+    {
+      "content": "8e5149b97264d3bd",
+      "lines": 16,
+      "files": [
+        "src/engine/flow/engine.test.ts"
+      ]
+    },
+    {
+      "content": "8e7ce9345a8bceb5",
+      "lines": 21,
+      "files": [
+        "src/ui/composables/useElementAnimation.test.ts"
+      ]
+    },
+    {
+      "content": "8e8adea5259e8e5f",
+      "lines": 10,
+      "files": [
+        "src/cli/cli.test.ts"
+      ]
+    },
+    {
+      "content": "8e92316cc4271fcd",
+      "lines": 30,
+      "files": [
+        "src/testing/dom-leak.test.ts",
+        "src/testing/test-game.test.ts",
+        "src/testing/visibility.test.ts"
+      ]
+    },
+    {
+      "content": "8efae06bc0391114",
+      "lines": 6,
+      "files": [
+        "src/session/teaching.test.ts"
+      ]
+    },
+    {
+      "content": "8efbd575bc8215f9",
+      "lines": 5,
+      "files": [
+        "src/session/testing/parity-contract.test.ts"
+      ]
+    },
+    {
+      "content": "8f08ad4415369fc6",
+      "lines": 6,
+      "files": [
+        "src/cli/dev-host/multiplayer-host.test.ts"
+      ]
+    },
+    {
+      "content": "8f6d7b9c69e9a31a",
+      "lines": 13,
+      "files": [
+        "src/engine/flow/engine.test.ts"
+      ]
+    },
+    {
+      "content": "8fe043d1186cfc90",
+      "lines": 6,
+      "files": [
+        "src/ui/composables/useAutoZoom.test.ts"
+      ]
+    },
+    {
+      "content": "904a35435dd6a4c8",
+      "lines": 10,
+      "files": [
+        "src/session/stateless-ops.test.ts"
+      ]
+    },
+    {
+      "content": "90ad8ef51fc7d2e3",
+      "lines": 10,
+      "files": [
+        "src/ui/composables/useActionAnimations.test.ts",
+        "src/ui/composables/useFlyingElements.test.ts"
+      ]
+    },
+    {
+      "content": "915117a834500cfa",
+      "lines": 7,
+      "files": [
+        "src/session/testing/finished-phase-undo.test.ts",
+        "src/session/testing/notundoable-enforcement.test.ts"
+      ]
+    },
+    {
+      "content": "916f8946ebcd3e8a",
+      "lines": 11,
+      "files": [
+        "src/session/snapshot-session-host.test.ts"
+      ]
+    },
+    {
+      "content": "91b4b8e5da24ec67",
+      "lines": 11,
+      "files": [
+        "src/engine/utils/dev-state.test.ts"
+      ]
+    },
+    {
+      "content": "91c67f18222bd870",
+      "lines": 9,
+      "files": [
+        "src/session/dev-checkpoint-manager.test.ts"
+      ]
+    },
+    {
+      "content": "91c8481f66bd62a4",
+      "lines": 31,
+      "files": [
+        "src/ui/components/auto-ui/archetypes/CardTemplate.vue",
+        "src/ui/components/auto-ui/archetypes/GridBoardTemplate.vue"
+      ]
+    },
+    {
+      "content": "91e082c0d4727e08",
+      "lines": 26,
+      "files": [
+        "src/ui/components/helpers/HeatmapOverlay.vue",
+        "src/ui/components/helpers/HintOverlay.vue",
+        "src/ui/components/helpers/TutorialOverlay.vue"
+      ]
+    },
+    {
+      "content": "9237fab7c8a9745f",
+      "lines": 7,
+      "files": [
+        "src/ui/composables/anchorAttrs.test.ts"
+      ]
+    },
+    {
+      "content": "925ae08ec8336a59",
+      "lines": 9,
+      "files": [
+        "src/cli/dev-host/world-host.test.ts"
+      ]
+    },
+    {
+      "content": "92731e60200765b8",
+      "lines": 43,
+      "files": [
+        "src/ui/composables/useActionController.picks.test.ts"
+      ]
+    },
+    {
+      "content": "92a72a16e93be38d",
+      "lines": 14,
+      "files": [
+        "src/ui/world/useWorldHost.test.ts"
+      ]
+    },
+    {
+      "content": "92deb01945f748f9",
+      "lines": 33,
+      "files": [
+        "src/ui/components/auto-ui/renderers/CardRenderer.vue",
+        "src/ui/components/auto-ui/renderers/HandRenderer.vue"
+      ]
+    },
+    {
+      "content": "934e387a1e51214f",
+      "lines": 11,
+      "files": [
+        "src/session/snapshot-session-host.test.ts"
+      ]
+    },
+    {
+      "content": "936a2d9e1333f080",
+      "lines": 7,
+      "files": [
+        "src/ui/composables/useAnimationEvents.test.ts"
+      ]
+    },
+    {
+      "content": "9375beaca00c8dab",
+      "lines": 10,
+      "files": [
+        "src/ui/components/helpers/ActionHelpPopover.test.ts"
+      ]
+    },
+    {
+      "content": "939e3ba3877b64d7",
+      "lines": 27,
+      "files": [
+        "src/ui/composables/useAnimationEvents.test.ts"
+      ]
+    },
+    {
+      "content": "93e76d3f0c099abb",
+      "lines": 10,
+      "files": [
+        "src/session/lobby-manager.ts"
+      ]
+    },
+    {
+      "content": "9408a28ff9ec50d9",
+      "lines": 9,
+      "files": [
+        "src/cli/dev-host/DevHost.seats.test.ts"
+      ]
+    },
+    {
+      "content": "941e53e77fac6a63",
+      "lines": 9,
+      "files": [
+        "src/cli/dev-host/world-host.test.ts"
+      ]
+    },
+    {
+      "content": "944857e1d8cc0d26",
+      "lines": 6,
+      "files": [
+        "src/ui/components/ControlsMenu.tutorial-toggle.test.ts"
+      ]
+    },
+    {
+      "content": "9465ca5902ebf2ef",
+      "lines": 9,
+      "files": [
+        "src/ui/components/auto-ui/renderers/HandRenderer.a11y.test.ts"
+      ]
+    },
+    {
+      "content": "948a66ae54853dee",
+      "lines": 20,
+      "files": [
+        "src/cli/commands/verify-example-replay.test.ts"
+      ]
+    },
+    {
+      "content": "94c014e9bf02be5e",
+      "lines": 11,
+      "files": [
+        "src/cli/commands/verify-source-free.test.ts"
+      ]
+    },
+    {
+      "content": "94d2217b30b2606a",
+      "lines": 21,
+      "files": [
+        "src/ui/components/auto-ui/renderers/DieRenderer.vue",
+        "src/ui/components/auto-ui/renderers/PieceRenderer.vue",
+        "src/ui/components/auto-ui/renderers/SpaceRenderer.vue"
+      ]
+    },
+    {
+      "content": "94e18f077656ea6a",
+      "lines": 48,
+      "files": [
+        "src/ui/components/auto-ui/renderers/DieRenderer.vue",
+        "src/ui/components/auto-ui/renderers/SpaceRenderer.vue"
+      ]
+    },
+    {
+      "content": "94e314a310fb75a2",
+      "lines": 7,
+      "files": [
+        "src/cli/commands/verify-impact.test.ts"
+      ]
+    },
+    {
+      "content": "950d1dabe636e528",
+      "lines": 24,
+      "files": [
+        "src/ui/components/auto-ui/AutoRenderer.loading.test.ts",
+        "src/ui/components/auto-ui/AutoUI.retry.test.ts"
+      ]
+    },
+    {
+      "content": "9517858db8d5d5d4",
+      "lines": 10,
+      "files": [
+        "src/ui/components/auto-ui/renderers/GridBoardRenderer.a11y.test.ts",
+        "src/ui/components/auto-ui/renderers/HexBoardRenderer.a11y.test.ts"
+      ]
+    },
+    {
+      "content": "952ef60fab100ddd",
+      "lines": 6,
+      "files": [
+        "src/engine/action/action.test.ts"
+      ]
+    },
+    {
+      "content": "95ce603adaf769bf",
+      "lines": 18,
+      "files": [
+        "src/engine/tutorial/predicates.test.ts",
+        "src/session/restore-snapshot-authoritative.test.ts"
+      ]
+    },
+    {
+      "content": "95d93262b044d584",
+      "lines": 9,
+      "files": [
+        "src/ui/directives/vDisabledReason.test.ts"
+      ]
+    },
+    {
+      "content": "96319bcd5b28aa8b",
+      "lines": 9,
+      "files": [
+        "src/ui/composables/useAutoZoom.test.ts"
+      ]
+    },
+    {
+      "content": "965a5b16b05eb543",
+      "lines": 24,
+      "files": [
+        "src/cli/dev-host/world-host.test.ts"
+      ]
+    },
+    {
+      "content": "966f4a3c52a8ce62",
+      "lines": 8,
+      "files": [
+        "src/cli/commands/verify-derive-check.test.ts"
+      ]
+    },
+    {
+      "content": "9675d7aa7796b1a1",
+      "lines": 10,
+      "files": [
+        "src/engine/element/snapshot-game-ref.test.ts"
+      ]
+    },
+    {
+      "content": "9689fca4a02d83b9",
+      "lines": 19,
+      "files": [
+        "src/ui/composables/useActionAnimations.test.ts"
+      ]
+    },
+    {
+      "content": "968a2e0a701272c1",
+      "lines": 8,
+      "files": [
+        "src/cli/dev-host/world-host.test.ts"
+      ]
+    },
+    {
+      "content": "969b36acd6d935d2",
+      "lines": 8,
+      "files": [
+        "src/engine/flow/simultaneous-alldone-unavailable.test.ts"
+      ]
+    },
+    {
+      "content": "96b2ffdd692c4ecb",
+      "lines": 10,
+      "files": [
+        "src/cli/slash-command/bs/verify.test.ts"
+      ]
+    },
+    {
+      "content": "96e2811317b08f99",
+      "lines": 7,
+      "files": [
+        "docs/persistent-world-claims.test.ts",
+        "src/world/action.test.ts"
+      ]
+    },
+    {
+      "content": "96e83ce59fdfcd39",
+      "lines": 12,
+      "files": [
+        "src/ui/composables/useBoardActionBridge.test.ts"
+      ]
+    },
+    {
+      "content": "970ecc553ab030ae",
+      "lines": 7,
+      "files": [
+        "src/session/stateless-ops.test.ts"
+      ]
+    },
+    {
+      "content": "978c5f10c23e73d0",
+      "lines": 26,
+      "files": [
+        "src/ui/composables/interaction-integration.test.ts"
+      ]
+    },
+    {
+      "content": "97b8a0a0ec564c28",
+      "lines": 5,
+      "files": [
+        "src/engine/element/world-partition.test.ts"
+      ]
+    },
+    {
+      "content": "97c3459734ec9c8a",
+      "lines": 11,
+      "files": [
+        "src/engine/tutorial/gate.test.ts"
+      ]
+    },
+    {
+      "content": "97fc2bf19dcca574",
+      "lines": 7,
+      "files": [
+        "src/engine/action/action.test.ts"
+      ]
+    },
+    {
+      "content": "983cc1cba495b8eb",
+      "lines": 11,
+      "files": [
+        "src/ui/composables/useAnimationEvents.test.ts"
+      ]
+    },
+    {
+      "content": "98414987e750cb39",
+      "lines": 9,
+      "files": [
+        "src/engine/element/hidden-element-restore.test.ts",
+        "src/engine/element/redacted-attribute-restore.test.ts"
+      ]
+    },
+    {
+      "content": "98abf9c5208b5ba1",
+      "lines": 14,
+      "files": [
+        "src/ui/composables/useAnimationEvents.test.ts"
+      ]
+    },
+    {
+      "content": "994824ee5220a50d",
+      "lines": 10,
+      "files": [
+        "src/cli/commands/verify-enumerate.test.ts",
+        "src/cli/commands/verify-example-replay.test.ts"
+      ]
+    },
+    {
+      "content": "99deb718c71472de",
+      "lines": 6,
+      "files": [
+        "src/engine/element/game-element.ts",
+        "src/engine/utils/dev-state.ts"
+      ]
+    },
+    {
+      "content": "9a27708244f16705",
+      "lines": 12,
+      "files": [
+        "src/engine/action/action.test.ts"
+      ]
+    },
+    {
+      "content": "9a8edc106c8fb17c",
+      "lines": 24,
+      "files": [
+        "src/ui/composables/useBoardActionBridge.test.ts"
+      ]
+    },
+    {
+      "content": "9aa734fbe4f4d143",
+      "lines": 18,
+      "files": [
+        "src/session/stateless-ops.ts"
+      ]
+    },
+    {
+      "content": "9ab4a4c348d6384a",
+      "lines": 17,
+      "files": [
+        "src/cli/dev-host/multiplayer-host.gameoptions.test.ts",
+        "src/cli/dev-host/multiplayer-host.palette.test.ts"
+      ]
+    },
+    {
+      "content": "9af579faa729c842",
+      "lines": 29,
+      "files": [
+        "src/cli/dev-host/bridge.test.ts",
+        "src/session/snapshot-session-host.test.ts"
+      ]
+    },
+    {
+      "content": "9b120401611db5d4",
+      "lines": 21,
+      "files": [
+        "src/cli/commands/drift-check.ts",
+        "src/cli/commands/trace-check.ts"
+      ]
+    },
+    {
+      "content": "9bf97776780664ab",
+      "lines": 6,
+      "files": [
+        "src/cli/commands/verify-derive-check.test.ts"
+      ]
+    },
+    {
+      "content": "9c14596283785707",
+      "lines": 8,
+      "files": [
+        "src/ui/composables/useAutoZoom.test.ts"
+      ]
+    },
+    {
+      "content": "9c332a43f2ad0929",
+      "lines": 17,
+      "files": [
+        "src/bot/mcts-redaction.test.ts"
+      ]
+    },
+    {
+      "content": "9c928c5022f3b40d",
+      "lines": 22,
+      "files": [
+        "src/ui/composables/useDragDrop.test.ts",
+        "src/ui/composables/useElementAnimation.test.ts"
+      ]
+    },
+    {
+      "content": "9c93bd54aa063b62",
+      "lines": 8,
+      "files": [
+        "src/session/space05-diagnostic.test.ts"
+      ]
+    },
+    {
+      "content": "9caa0eef2a8378de",
+      "lines": 8,
+      "files": [
+        "src/engine/element/zone-visibility-restore.test.ts"
+      ]
+    },
+    {
+      "content": "9d202798e33b7e92",
+      "lines": 17,
+      "files": [
+        "src/ui/composables/useActionController.picks.test.ts",
+        "src/ui/composables/useActionController.test.ts"
+      ]
+    },
+    {
+      "content": "9d5df5af22984e00",
+      "lines": 40,
+      "files": [
+        "src/ui/composables/useElementAnimation.test.ts",
+        "src/ui/composables/useFLIP.test.ts"
+      ]
+    },
+    {
+      "content": "9dce2d886b0d35c5",
+      "lines": 12,
+      "files": [
+        "src/session/teaching.test.ts"
+      ]
+    },
+    {
+      "content": "9ddfdee6f847e6fc",
+      "lines": 8,
+      "files": [
+        "src/session/testing/simultaneous-undo.test.ts"
+      ]
+    },
+    {
+      "content": "9e624bd9dad7a848",
+      "lines": 20,
+      "files": [
+        "src/engine/flow/engine.test.ts"
+      ]
+    },
+    {
+      "content": "9e84afeface92264",
+      "lines": 26,
+      "files": [
+        "src/session/lobby-manager.ts"
+      ]
+    },
+    {
+      "content": "9ecfc000cc14f870",
+      "lines": 16,
+      "files": [
+        "src/session/game-session.test.ts",
+        "src/session/pending-action-manager.test.ts"
+      ]
+    },
+    {
+      "content": "9ee72855f6cbfd43",
+      "lines": 16,
+      "files": [
+        "src/ui/components/GameShell.time-travel-desync.test.ts"
+      ]
+    },
+    {
+      "content": "9f0978857ca71431",
+      "lines": 17,
+      "files": [
+        "src/engine/action/action.ts"
+      ]
+    },
+    {
+      "content": "9fdd935918f84ff4",
+      "lines": 22,
+      "files": [
+        "src/session/lobby-manager.ts"
+      ]
+    },
+    {
+      "content": "a021f38caf4b3cd5",
+      "lines": 7,
+      "files": [
+        "src/cli/commands/verify-classify.ts",
+        "src/cli/commands/verify-run.ts"
+      ]
+    },
+    {
+      "content": "a0831d9751b7ebfa",
+      "lines": 16,
+      "files": [
+        "src/engine/element/game-element.ts",
+        "src/engine/utils/serializer.ts"
+      ]
+    },
+    {
+      "content": "a11989102eb1c8b6",
+      "lines": 26,
+      "files": [
+        "src/ui/composables/createFLIPSnapshot.test.ts",
+        "src/ui/composables/useActionAnimations.test.ts",
+        "src/ui/composables/useFLIP.test.ts",
+        "src/ui/composables/useFlyingElements.test.ts"
+      ]
+    },
+    {
+      "content": "a157261d6150b87c",
+      "lines": 12,
+      "files": [
+        "src/ui/composables/useSelectable.test.ts"
+      ]
+    },
+    {
+      "content": "a16f522dfb75d6c3",
+      "lines": 8,
+      "files": [
+        "src/ui/components/helpers/ActionHelpPopover.test.ts"
+      ]
+    },
+    {
+      "content": "a1f2f7cee5a8e9c4",
+      "lines": 55,
+      "files": [
+        "src/testing/assertions.test.ts",
+        "src/testing/visibility.test.ts"
+      ]
+    },
+    {
+      "content": "a28e24df9f9026fe",
+      "lines": 10,
+      "files": [
+        "docs/persistent-world-claims.test.ts",
+        "src/world/action.test.ts"
+      ]
+    },
+    {
+      "content": "a2c47a4994d4d2a1",
+      "lines": 25,
+      "files": [
+        "src/ui/components/DebugPanel.characterization.test.ts",
+        "src/ui/components/debug/DecksTab.test.ts"
+      ]
+    },
+    {
+      "content": "a2d705ccde1c8b1e",
+      "lines": 5,
+      "files": [
+        "src/cli/commands/verify-classify.test.ts"
+      ]
+    },
+    {
+      "content": "a2e5a2d57e54fa0e",
+      "lines": 13,
+      "files": [
+        "src/ui/composables/useAnimationEvents.test.ts"
+      ]
+    },
+    {
+      "content": "a3040f8e99bec9ca",
+      "lines": 6,
+      "files": [
+        "src/cli/dev-host/multiplayer-host.test.ts"
+      ]
+    },
+    {
+      "content": "a37bc83333938e37",
+      "lines": 19,
+      "files": [
+        "src/bot-trainer/feature-generator.test.ts",
+        "src/bot-trainer/simulator.test.ts"
+      ]
+    },
+    {
+      "content": "a38a697af8c439ea",
+      "lines": 9,
+      "files": [
+        "src/bot-trainer/feature-templates.ts"
+      ]
+    },
+    {
+      "content": "a3ba2a687113f6c6",
+      "lines": 8,
+      "files": [
+        "src/ui/composables/useZoomPreview.test.ts"
+      ]
+    },
+    {
+      "content": "a3bbb026f3472d65",
+      "lines": 17,
+      "files": [
+        "src/ui/composables/useDebugTimeline.test.ts",
+        "src/ui/composables/useDeckWorkbench.test.ts"
+      ]
+    },
+    {
+      "content": "a3bd9f8fc7e6995d",
+      "lines": 18,
+      "files": [
+        "src/cli/commands/verify-derive-check.test.ts"
+      ]
+    },
+    {
+      "content": "a44c2b8cb21f80e2",
+      "lines": 15,
+      "files": [
+        "src/ui/components/helpers/HintOverlay.test.ts",
+        "src/ui/components/helpers/TutorialOverlay.test.ts"
+      ]
+    },
+    {
+      "content": "a46183582016d92f",
+      "lines": 21,
+      "files": [
+        "src/ui/composables/useActionController.ts"
+      ]
+    },
+    {
+      "content": "a476121e7c5d862c",
+      "lines": 6,
+      "files": [
+        "src/cli/commands/audit.test.ts"
+      ]
+    },
+    {
+      "content": "a4da110213abc7ef",
+      "lines": 5,
+      "files": [
+        "src/cli/commands/chunk-provenance.test.ts"
+      ]
+    },
+    {
+      "content": "a4e556bf3dfff8cc",
+      "lines": 10,
+      "files": [
+        "src/engine/flow/simultaneous-alldone-deadlock-warn.test.ts",
+        "src/ui/composables/anchorAttrs.test.ts",
+        "src/ui/composables/useActionController.test.ts",
+        "src/ui/composables/useDragDrop.test.ts"
+      ]
+    },
+    {
+      "content": "a57a1b280940fab8",
+      "lines": 14,
+      "files": [
+        "src/session/lobby-manager.ts"
+      ]
+    },
+    {
+      "content": "a5aff17c3b19c2ba",
+      "lines": 5,
+      "files": [
+        "src/session/tutorial-controller.test.ts"
+      ]
+    },
+    {
+      "content": "a5facd801807c604",
+      "lines": 9,
+      "files": [
+        "src/cli/commands/verify-classify.test.ts"
+      ]
+    },
+    {
+      "content": "a642ee9a2473ebe1",
+      "lines": 14,
+      "files": [
+        "src/engine/tutorial/gate.test.ts"
+      ]
+    },
+    {
+      "content": "a66f6044efb79546",
+      "lines": 10,
+      "files": [
+        "src/bot-trainer/feature-templates.ts"
+      ]
+    },
+    {
+      "content": "a6b383bc56470aa4",
+      "lines": 5,
+      "files": [
+        "src/world/engine.test.ts"
+      ]
+    },
+    {
+      "content": "a6bc93b823e5ca7a",
+      "lines": 16,
+      "files": [
+        "src/session/testing/fixtures/simultaneous-fixture.ts"
+      ]
+    },
+    {
+      "content": "a6bf1b34a7d4ec85",
+      "lines": 6,
+      "files": [
+        "src/cli/dev-host/world-store.ts"
+      ]
+    },
+    {
+      "content": "a6d1f2d1386391e2",
+      "lines": 5,
+      "files": [
+        "src/session/testing/random-scumming.test.ts"
+      ]
+    },
+    {
+      "content": "a6f1ee608eb7a998",
+      "lines": 9,
+      "files": [
+        "src/ui/composables/useActionController.test.ts"
+      ]
+    },
+    {
+      "content": "a76e1675449be473",
+      "lines": 24,
+      "files": [
+        "src/ui/composables/useActionController.test.ts"
+      ]
+    },
+    {
+      "content": "a7a00b0bd25269a5",
+      "lines": 16,
+      "files": [
+        "src/ui/composables/useDragDropTargets.test.ts"
+      ]
+    },
+    {
+      "content": "a7ab40fc6ba0df4f",
+      "lines": 11,
+      "files": [
+        "src/cli/commands/verify-enumerate.test.ts"
+      ]
+    },
+    {
+      "content": "a89247efef28cfd0",
+      "lines": 9,
+      "files": [
+        "src/ui/components/GameShell.test.ts"
+      ]
+    },
+    {
+      "content": "a8c4ed3373d92bdf",
+      "lines": 21,
+      "files": [
+        "src/testing/assertions.test.ts",
+        "src/testing/visibility.test.ts"
+      ]
+    },
+    {
+      "content": "a8f837b9fbfe7d1d",
+      "lines": 27,
+      "files": [
+        "src/ui/composables/interaction-integration.test.ts"
+      ]
+    },
+    {
+      "content": "a9049e5f94c0f5c7",
+      "lines": 19,
+      "files": [
+        "src/engine/tutorial/annotation.test.ts",
+        "src/engine/tutorial/gate.test.ts",
+        "src/session/build-player-state.test.ts",
+        "src/session/tutorial-controller.test.ts"
+      ]
+    },
+    {
+      "content": "a9322d2202ba12b8",
+      "lines": 9,
+      "files": [
+        "src/engine/element/animation-events.test.ts"
+      ]
+    },
+    {
+      "content": "a9c07f897370671c",
+      "lines": 6,
+      "files": [
+        "src/cli/commands/verify-close-record.test.ts"
+      ]
+    },
+    {
+      "content": "a9fa8baab0afc61e",
+      "lines": 11,
+      "files": [
+        "src/cli/commands/verify-example-replay.test.ts"
+      ]
+    },
+    {
+      "content": "aa2b925cd4ec75dc",
+      "lines": 10,
+      "files": [
+        "src/session/snapshot-session-host.test.ts"
+      ]
+    },
+    {
+      "content": "aa379fc2d3e8d224",
+      "lines": 14,
+      "files": [
+        "src/cli/commands/verify-classify.ts"
+      ]
+    },
+    {
+      "content": "aa4ebf9f264651ea",
+      "lines": 8,
+      "files": [
+        "src/engine/fail-loud-authoring-errors.test.ts"
+      ]
+    },
+    {
+      "content": "aac32233caa06d16",
+      "lines": 51,
+      "files": [
+        "src/ui/composables/useActionController.picks.test.ts"
+      ]
+    },
+    {
+      "content": "aaeb0d1eeb47f863",
+      "lines": 11,
+      "files": [
+        "src/ui/components/helpers/HintOverlay.test.ts",
+        "src/ui/components/helpers/TutorialOverlay.test.ts"
+      ]
+    },
+    {
+      "content": "aafbe58c8c7d23e5",
+      "lines": 8,
+      "files": [
+        "src/session/tutorial-controller.test.ts"
+      ]
+    },
+    {
+      "content": "ab40c4e115f5befd",
+      "lines": 9,
+      "files": [
+        "src/world/engine.test.ts"
+      ]
+    },
+    {
+      "content": "ac63a0235499ae80",
+      "lines": 12,
+      "files": [
+        "src/ui/composables/useActionAnimations.test.ts",
+        "src/ui/composables/useElementAnimation.test.ts",
+        "src/ui/composables/useFLIP.test.ts",
+        "src/ui/composables/useFlyingElements.test.ts"
+      ]
+    },
+    {
+      "content": "aca5f9778f895d0a",
+      "lines": 12,
+      "files": [
+        "src/cli/cli.test.ts"
+      ]
+    },
+    {
+      "content": "acb2e8b5b4423ed8",
+      "lines": 26,
+      "files": [
+        "src/ui/components/auto-ui/renderers/GridBoardRenderer.vue",
+        "src/ui/components/auto-ui/renderers/HexBoardRenderer.vue"
+      ]
+    },
+    {
+      "content": "ace519d41471b5e4",
+      "lines": 16,
+      "files": [
+        "src/bot-trainer/feature-generator.test.ts",
+        "src/bot-trainer/introspector.test.ts"
+      ]
+    },
+    {
+      "content": "ad3e58fc48f80dd1",
+      "lines": 10,
+      "files": [
+        "docs/persistent-world-claims.test.ts",
+        "src/world/action.test.ts"
+      ]
+    },
+    {
+      "content": "ad4b174933bc7a72",
+      "lines": 13,
+      "files": [
+        "src/ui/components/GameShell.test.ts"
+      ]
+    },
+    {
+      "content": "ad4d221cd9f79f49",
+      "lines": 8,
+      "files": [
+        "src/cli/commands/verify-classify.test.ts"
+      ]
+    },
+    {
+      "content": "ad6712d6afe879fc",
+      "lines": 7,
+      "files": [
+        "src/ui/components/auto-ui/auto-ui-helpers.test.ts"
+      ]
+    },
+    {
+      "content": "ad81e82fa11ad822",
+      "lines": 9,
+      "files": [
+        "src/cli/slash-command/bs/build-chunk.test.ts",
+        "src/cli/slash-command/bs/build-game.test.ts"
+      ]
+    },
+    {
+      "content": "ad9c10fda3f6404c",
+      "lines": 8,
+      "files": [
+        "src/ui/components/auto-ui/renderers/GridBoardRenderer.a11y.test.ts",
+        "src/ui/components/auto-ui/renderers/HexBoardRenderer.a11y.test.ts"
+      ]
+    },
+    {
+      "content": "adaa46cf7dc271ea",
+      "lines": 29,
+      "files": [
+        "src/ui/components/helpers/TutorialOverlay.parity.test.ts",
+        "src/ui/components/helpers/TutorialOverlay.test.ts"
+      ]
+    },
+    {
+      "content": "adf2bf713db0b602",
+      "lines": 7,
+      "files": [
+        "src/cli/cli-conformance-commands.test.ts",
+        "src/cli/commands/drift-check.test.ts"
+      ]
+    },
+    {
+      "content": "ae444e315d317c82",
+      "lines": 33,
+      "files": [
+        "src/ui/components/auto-ui/AutoRenderer.vue",
+        "src/ui/components/auto-ui/renderers/CardRenderer.vue",
+        "src/ui/components/auto-ui/renderers/HandRenderer.vue"
+      ]
+    },
+    {
+      "content": "ae80ce88f28812de",
+      "lines": 21,
+      "files": [
+        "src/ui/composables/useBoardActionBridge.test.ts"
+      ]
+    },
+    {
+      "content": "aea2e393c3024f99",
+      "lines": 17,
+      "files": [
+        "src/cli/dev-host/world-host.test.ts"
+      ]
+    },
+    {
+      "content": "aedb5d35eca36181",
+      "lines": 15,
+      "files": [
+        "src/cli/commands/verify-impact.ts"
+      ]
+    },
+    {
+      "content": "aef53680c99807e4",
+      "lines": 6,
+      "files": [
+        "src/engine/utils/dev-state.test.ts"
+      ]
+    },
+    {
+      "content": "af204c773aba4778",
+      "lines": 7,
+      "files": [
+        "src/ui/composables/useFocusTrap.test.ts"
+      ]
+    },
+    {
+      "content": "af211eff093545f4",
+      "lines": 9,
+      "files": [
+        "src/bot-trainer/introspector.ts"
+      ]
+    },
+    {
+      "content": "af51f118d29e4826",
+      "lines": 8,
+      "files": [
+        "src/cli/slash-command/bs/ingest.test.ts"
+      ]
+    },
+    {
+      "content": "af61bc817768441c",
+      "lines": 8,
+      "files": [
+        "src/engine/element/world-partition.test.ts"
+      ]
+    },
+    {
+      "content": "af73e5da5c9a0e2b",
+      "lines": 8,
+      "files": [
+        "src/cli/dev-host/multiplayer-host.test.ts"
+      ]
+    },
+    {
+      "content": "af74fcc83d20fdc5",
+      "lines": 11,
+      "files": [
+        "src/session/bot-circuit-breaker.test.ts",
+        "src/session/game-session.test.ts"
+      ]
+    },
+    {
+      "content": "b010d373e0e84751",
+      "lines": 10,
+      "files": [
+        "src/ui/composables/useElementAnimation.test.ts",
+        "src/ui/composables/useFLIP.test.ts"
+      ]
+    },
+    {
+      "content": "b01167e0ac711e94",
+      "lines": 30,
+      "files": [
+        "src/testing/assertions.test.ts",
+        "src/testing/dom-leak-custom-ui.test.ts",
+        "src/testing/test-game.test.ts",
+        "src/testing/visibility.test.ts"
+      ]
+    },
+    {
+      "content": "b0a318f770d64211",
+      "lines": 20,
+      "files": [
+        "src/session/stateless-ops.ts"
+      ]
+    },
+    {
+      "content": "b14716cf02ad66ad",
+      "lines": 26,
+      "files": [
+        "src/session/lobby-manager.ts"
+      ]
+    },
+    {
+      "content": "b19c5070e12313d8",
+      "lines": 6,
+      "files": [
+        "src/ui/composables/useElementAnimation.test.ts",
+        "src/ui/composables/useFLIP.test.ts"
+      ]
+    },
+    {
+      "content": "b1d47a6662bcc2c1",
+      "lines": 6,
+      "files": [
+        "src/engine/action/action.test.ts"
+      ]
+    },
+    {
+      "content": "b1e835fb93444dcd",
+      "lines": 9,
+      "files": [
+        "src/cli/commands/verify-derive-check.test.ts"
+      ]
+    },
+    {
+      "content": "b1fb6874a2db7793",
+      "lines": 6,
+      "files": [
+        "src/cli/commands/verify-classify.ts",
+        "src/cli/commands/verify-repair.ts"
+      ]
+    },
+    {
+      "content": "b22b67d4bb536bfb",
+      "lines": 11,
+      "files": [
+        "src/world/schedule-api.test.ts"
+      ]
+    },
+    {
+      "content": "b2c49eeb8fb34aa2",
+      "lines": 15,
+      "files": [
+        "src/ui/components/auto-ui/renderers/GridBoardRenderer.a11y.test.ts",
+        "src/ui/components/auto-ui/renderers/HexBoardRenderer.a11y.test.ts"
+      ]
+    },
+    {
+      "content": "b2fb15654e5b87cc",
+      "lines": 16,
+      "files": [
+        "src/ui/composables/useBoardActionBridge.test.ts"
+      ]
+    },
+    {
+      "content": "b389a7f04cb9a3e7",
+      "lines": 15,
+      "files": [
+        "src/cli/commands/build-manifest.test.ts"
+      ]
+    },
+    {
+      "content": "b3c9a689f1166110",
+      "lines": 30,
+      "files": [
+        "src/cli/commands/verify-run.test.ts"
+      ]
+    },
+    {
+      "content": "b3f1429abb132697",
+      "lines": 10,
+      "files": [
+        "src/bot/mcts-cache.test.ts"
+      ]
+    },
+    {
+      "content": "b3fcab1b6e774212",
+      "lines": 23,
+      "files": [
+        "src/ui/composables/useActionController.picks.test.ts"
+      ]
+    },
+    {
+      "content": "b465006201ba6f35",
+      "lines": 17,
+      "files": [
+        "src/cli/commands/verify-enumerate.test.ts"
+      ]
+    },
+    {
+      "content": "b476bfa6efa78ba1",
+      "lines": 5,
+      "files": [
+        "src/engine/fail-loud-authoring-errors.test.ts"
+      ]
+    },
+    {
+      "content": "b489451f96bf8446",
+      "lines": 8,
+      "files": [
+        "src/engine/flow/simultaneous-alldone-default-trap.test.ts"
+      ]
+    },
+    {
+      "content": "b4b1b24c0e1bdc99",
+      "lines": 7,
+      "files": [
+        "src/ui/components/auto-ui/renderers/GridBoardRenderer.a11y.test.ts"
+      ]
+    },
+    {
+      "content": "b4e62e419abed712",
+      "lines": 22,
+      "files": [
+        "src/cli/commands/ingest-archive.ts"
+      ]
+    },
+    {
+      "content": "b529b85e9c5a610c",
+      "lines": 9,
+      "files": [
+        "src/session/tutorial-controller.test.ts"
+      ]
+    },
+    {
+      "content": "b54473e8215e9811",
+      "lines": 10,
+      "files": [
+        "src/ui/composables/useElementAnimation.test.ts"
+      ]
+    },
+    {
+      "content": "b550bc3bb27ef530",
+      "lines": 15,
+      "files": [
+        "src/ui/components/auto-ui/renderers/HandRenderer.vue",
+        "src/ui/components/auto-ui/renderers/SpaceRenderer.vue"
+      ]
+    },
+    {
+      "content": "b586af10483becbd",
+      "lines": 6,
+      "files": [
+        "src/world/engine.test.ts"
+      ]
+    },
+    {
+      "content": "b5ae123d2367040d",
+      "lines": 14,
+      "files": [
+        "src/ui/composables/useActionController.test.ts"
+      ]
+    },
+    {
+      "content": "b5ec5165624d96f6",
+      "lines": 23,
+      "files": [
+        "src/ui/composables/useActionController.test.ts"
+      ]
+    },
+    {
+      "content": "b606daba7ebdef13",
+      "lines": 19,
+      "files": [
+        "src/session/snapshot-session-host.test.ts",
+        "src/session/testing/mid-game-bot-takeover.test.ts"
+      ]
+    },
+    {
+      "content": "b62dc0660bb5f9ed",
+      "lines": 5,
+      "files": [
+        "src/ui/composables/useElementChangeTracker.test.ts"
+      ]
+    },
+    {
+      "content": "b64a5b7e00025610",
+      "lines": 7,
+      "files": [
+        "src/session/testing/solo-undo-authoritative.test.ts",
+        "src/session/testing/stateful-undo-authoritative.test.ts"
+      ]
+    },
+    {
+      "content": "b6a2dc0e35901557",
+      "lines": 8,
+      "files": [
+        "src/session/testing/parity-contract.test.ts"
+      ]
+    },
+    {
+      "content": "b6ac172450108368",
+      "lines": 20,
+      "files": [
+        "src/session/testing/rewind-animation-watermark.test.ts"
+      ]
+    },
+    {
+      "content": "b7343d4e78dee796",
+      "lines": 8,
+      "files": [
+        "src/cli/commands/verify-run.test.ts"
+      ]
+    },
+    {
+      "content": "b758feedb3c43391",
+      "lines": 11,
+      "files": [
+        "src/session/testing/stateful-undo-authoritative.test.ts",
+        "src/session/testing/undo-authoritative.test.ts"
+      ]
+    },
+    {
+      "content": "b789a6caf6a6e05e",
+      "lines": 11,
+      "files": [
+        "src/session/lobby-manager.test.ts",
+        "src/session/restore-player-configs.test.ts"
+      ]
+    },
+    {
+      "content": "b7aeb0ebfd4ae4f3",
+      "lines": 42,
+      "files": [
+        "src/testing/tutorial-ci-demo.test.ts"
+      ]
+    },
+    {
+      "content": "b7f3f401e98fe001",
+      "lines": 12,
+      "files": [
+        "src/engine/action/action.test.ts"
+      ]
+    },
+    {
+      "content": "b8589f1565e970b7",
+      "lines": 10,
+      "files": [
+        "src/client/client.ts"
+      ]
+    },
+    {
+      "content": "b862e24a50f50cff",
+      "lines": 41,
+      "files": [
+        "src/engine/command/inverse.ts"
+      ]
+    },
+    {
+      "content": "b8843bcd1232e798",
+      "lines": 29,
+      "files": [
+        "src/ui/components/auto-ui/useAutoRendererAnimations.ts"
+      ]
+    },
+    {
+      "content": "b889f16ef703ff06",
+      "lines": 11,
+      "files": [
+        "src/session/game-definition-like-typing.test.ts",
+        "src/session/testing/fixtures/each-player-fixture.ts"
+      ]
+    },
+    {
+      "content": "b95ea315fe9a3047",
+      "lines": 17,
+      "files": [
+        "src/cli/commands/verify-source-free.test.ts"
+      ]
+    },
+    {
+      "content": "b9925064c8474fa9",
+      "lines": 20,
+      "files": [
+        "src/cli/dev-host/bridge.test.ts"
+      ]
+    },
+    {
+      "content": "b9e9a75d2bb91983",
+      "lines": 22,
+      "files": [
+        "src/engine/action/action.test.ts"
+      ]
+    },
+    {
+      "content": "b9fb28fc8cdd99ea",
+      "lines": 50,
+      "files": [
+        "src/ui/components/auto-ui/ActionPanel.interaction.test.ts"
+      ]
+    },
+    {
+      "content": "b9fbde0b1ebe632f",
+      "lines": 13,
+      "files": [
+        "src/engine/action/action.test.ts"
+      ]
+    },
+    {
+      "content": "ba44d2c0e0d5e182",
+      "lines": 8,
+      "files": [
+        "src/session/testing/parity-contract.test.ts"
+      ]
+    },
+    {
+      "content": "ba9d6d8b3cef8458",
+      "lines": 10,
+      "files": [
+        "src/session/lobby-manager.ts"
+      ]
+    },
+    {
+      "content": "baac3f76c168c35c",
+      "lines": 23,
+      "files": [
+        "src/testing/play-until-complete.test.ts",
+        "src/testing/simulate-action.test.ts"
+      ]
+    },
+    {
+      "content": "baaf7e657f0087ee",
+      "lines": 6,
+      "files": [
+        "src/session/testing/random-scumming.test.ts"
+      ]
+    },
+    {
+      "content": "bada30b4bd1f03a3",
+      "lines": 18,
+      "files": [
+        "src/cli/commands/verify-derive-check.test.ts"
+      ]
+    },
+    {
+      "content": "baf79d23925eeb54",
+      "lines": 11,
+      "files": [
+        "src/ui/composables/useSelectable.test.ts"
+      ]
+    },
+    {
+      "content": "bb3778c1e6291cf3",
+      "lines": 11,
+      "files": [
+        "src/client/client.test.ts",
+        "src/client/game-connection.test.ts"
+      ]
+    },
+    {
+      "content": "bb387f2cd916d184",
+      "lines": 6,
+      "files": [
+        "src/ui/components/auto-ui/ActionPanel.vue"
+      ]
+    },
+    {
+      "content": "bb6f816e2a237d1d",
+      "lines": 9,
+      "files": [
+        "src/world/allocation.test.ts"
+      ]
+    },
+    {
+      "content": "bc00cfc575ac20ac",
+      "lines": 16,
+      "files": [
+        "src/bot/mcts-clone-options.test.ts"
+      ]
+    },
+    {
+      "content": "bc8071775bf8db8e",
+      "lines": 18,
+      "files": [
+        "src/session/tutorial-serialization.test.ts"
+      ]
+    },
+    {
+      "content": "bcba2a5d0cac0f4c",
+      "lines": 43,
+      "files": [
+        "src/engine/flow/builders.ts",
+        "src/engine/flow/types.ts"
+      ]
+    },
+    {
+      "content": "bcd895ac7e9ca4a2",
+      "lines": 6,
+      "files": [
+        "src/world/engine-conformance.test-helper.ts"
+      ]
+    },
+    {
+      "content": "bd046bf15d2ac925",
+      "lines": 12,
+      "files": [
+        "src/session/teaching.test.ts"
+      ]
+    },
+    {
+      "content": "bd085d8a477558da",
+      "lines": 14,
+      "files": [
+        "src/ui/components/auto-ui/renderers/GridBoardRenderer.a11y.test.ts",
+        "src/ui/components/auto-ui/renderers/HexBoardRenderer.a11y.test.ts"
+      ]
+    },
+    {
+      "content": "bd345055ee5b444f",
+      "lines": 17,
+      "files": [
+        "src/cli/commands/verify-example-replay.test.ts"
+      ]
+    },
+    {
+      "content": "bd941497021bc01b",
+      "lines": 18,
+      "files": [
+        "src/ui/components/auto-ui/ActionPanel.simultaneous.test.ts"
+      ]
+    },
+    {
+      "content": "bdf6d4fcda71d81a",
+      "lines": 27,
+      "files": [
+        "src/cli/commands/verify-classify.test.ts"
+      ]
+    },
+    {
+      "content": "be18fb836e75a693",
+      "lines": 6,
+      "files": [
+        "src/cli/commands/verify-repair.test.ts"
+      ]
+    },
+    {
+      "content": "be5bff4e400164f5",
+      "lines": 6,
+      "files": [
+        "src/bot-trainer/feature-generator.test.ts"
+      ]
+    },
+    {
+      "content": "be707097567887b5",
+      "lines": 9,
+      "files": [
+        "src/engine/action/action.test.ts"
+      ]
+    },
+    {
+      "content": "be85daf07ce1525a",
+      "lines": 15,
+      "files": [
+        "src/ui/components/helpers/TutorialOverlay.parity.test.ts"
+      ]
+    },
+    {
+      "content": "bebe146e90b7df0d",
+      "lines": 9,
+      "files": [
+        "src/ui/components/auto-ui/renderers/HandRenderer.a11y.test.ts"
+      ]
+    },
+    {
+      "content": "befd3cb723c0adcc",
+      "lines": 21,
+      "files": [
+        "src/cli/dev-host/multiplayer-host.palette.test.ts",
+        "src/session/seat-activity-canonical.test.ts"
+      ]
+    },
+    {
+      "content": "bf389b69b2308cde",
+      "lines": 18,
+      "files": [
+        "src/cli/commands/verify-example-replay.ts"
+      ]
+    },
+    {
+      "content": "bf52f7b8ca2fe29f",
+      "lines": 23,
+      "files": [
+        "src/ui/composables/useActionController.picks.test.ts"
+      ]
+    },
+    {
+      "content": "bf73457a8ed094cd",
+      "lines": 9,
+      "files": [
+        "src/cli/commands/verify-run.test.ts"
+      ]
+    },
+    {
+      "content": "bfab5db0336275ce",
+      "lines": 27,
+      "files": [
+        "src/ui/components/helpers/HeatmapOverlay.vue",
+        "src/ui/components/helpers/TutorialOverlay.vue"
+      ]
+    },
+    {
+      "content": "c026b7e1b3d2afce",
+      "lines": 7,
+      "files": [
+        "src/cli/commands/verify-derive-check.test.ts"
+      ]
+    },
+    {
+      "content": "c02c7eeb6fd6cc48",
+      "lines": 13,
+      "files": [
+        "src/cli/commands/example-derivation.test.ts"
+      ]
+    },
+    {
+      "content": "c06401b3a86659de",
+      "lines": 9,
+      "files": [
+        "src/bot/create-bot.test.ts",
+        "src/testing/assert-game-finished.test.ts"
+      ]
+    },
+    {
+      "content": "c0c8082c0fdec255",
+      "lines": 5,
+      "files": [
+        "src/cli/dev-host/multiplayer-host.test.ts"
+      ]
+    },
+    {
+      "content": "c14542b25ce377bf",
+      "lines": 23,
+      "files": [
+        "src/session/bot-controller.test.ts",
+        "src/session/teaching.test.ts"
+      ]
+    },
+    {
+      "content": "c17a32777dbb5329",
+      "lines": 11,
+      "files": [
+        "src/cli/dev-host/multiplayer-host.test.ts"
+      ]
+    },
+    {
+      "content": "c1956cf4296ebfa2",
+      "lines": 14,
+      "files": [
+        "src/cli/commands/verify-example-replay.test.ts"
+      ]
+    },
+    {
+      "content": "c291fe0b37816c22",
+      "lines": 16,
+      "files": [
+        "src/engine/action/tutorial-gate.test.ts"
+      ]
+    },
+    {
+      "content": "c2a036c0e1bb8cae",
+      "lines": 8,
+      "files": [
+        "src/cli/commands/verify-classify.test.ts"
+      ]
+    },
+    {
+      "content": "c2bdf7a164183030",
+      "lines": 25,
+      "files": [
+        "src/ui/components/helpers/HeatmapOverlay.test.ts",
+        "src/ui/components/helpers/HintOverlay.test.ts",
+        "src/ui/components/helpers/TutorialOverlay.parity.test.ts",
+        "src/ui/components/helpers/TutorialOverlay.test.ts"
+      ]
+    },
+    {
+      "content": "c2d06270dee35f48",
+      "lines": 6,
+      "files": [
+        "src/session/action-result-data-propagation.test.ts"
+      ]
+    },
+    {
+      "content": "c2e8a81eb2e2d214",
+      "lines": 30,
+      "files": [
+        "src/ui/components/auto-ui/ActionPanel.interaction.test.ts"
+      ]
+    },
+    {
+      "content": "c319441c972e6782",
+      "lines": 6,
+      "files": [
+        "src/cli/commands/chunk-provenance.test.ts"
+      ]
+    },
+    {
+      "content": "c32907b6f54d0e54",
+      "lines": 16,
+      "files": [
+        "src/bot-trainer/feature-templates.ts"
+      ]
+    },
+    {
+      "content": "c35b0edb28029350",
+      "lines": 6,
+      "files": [
+        "src/cli/commands/chunk-provenance.test.ts"
+      ]
+    },
+    {
+      "content": "c3ce706ae9b61683",
+      "lines": 18,
+      "files": [
+        "src/ui/components/auto-ui/renderers/DieRenderer.vue",
+        "src/ui/components/auto-ui/renderers/PieceRenderer.vue"
+      ]
+    },
+    {
+      "content": "c3ff4386e3e593b2",
+      "lines": 5,
+      "files": [
+        "src/cli/dev-host/world-host.test.ts"
+      ]
+    },
+    {
+      "content": "c41ff5b9a1b86bfa",
+      "lines": 5,
+      "files": [
+        "src/session/testing/random-scumming.test.ts"
+      ]
+    },
+    {
+      "content": "c465318f4c4e5c23",
+      "lines": 5,
+      "files": [
+        "src/engine/element/deck-hand-visibility.test.ts"
+      ]
+    },
+    {
+      "content": "c4b99bad013f2672",
+      "lines": 7,
+      "files": [
+        "src/session/testing/finished-phase-undo.test.ts",
+        "src/session/testing/notundoable-enforcement.test.ts"
+      ]
+    },
+    {
+      "content": "c4f4d5041c85bfef",
+      "lines": 24,
+      "files": [
+        "src/ui/components/helpers/HintOverlay.vue",
+        "src/ui/components/helpers/TutorialOverlay.vue"
+      ]
+    },
+    {
+      "content": "c539d984b10b9472",
+      "lines": 20,
+      "files": [
+        "src/session/testing/stateful-timetravel-authoritative.test.ts",
+        "src/session/testing/stateful-undo-authoritative.test.ts"
+      ]
+    },
+    {
+      "content": "c5622089506846a6",
+      "lines": 20,
+      "files": [
+        "src/cli/commands/chunk-provenance.test.ts"
+      ]
+    },
+    {
+      "content": "c5a0dad62bc6ae6b",
+      "lines": 19,
+      "files": [
+        "src/ui/components/auto-ui/renderers/GridBoardRenderer.vue",
+        "src/ui/components/auto-ui/renderers/HexBoardRenderer.vue"
+      ]
+    },
+    {
+      "content": "c5c0b2a4da970eee",
+      "lines": 8,
+      "files": [
+        "src/ui/components/auto-ui/renderers/GridBoardRenderer.a11y.test.ts"
+      ]
+    },
+    {
+      "content": "c5d19fd5b376e1ec",
+      "lines": 16,
+      "files": [
+        "src/session/restore-snapshot-authoritative.test.ts"
+      ]
+    },
+    {
+      "content": "c5daba45ad033301",
+      "lines": 7,
+      "files": [
+        "src/ui/composables/useAnimationEvents.test.ts"
+      ]
+    },
+    {
+      "content": "c5e910312f79de27",
+      "lines": 10,
+      "files": [
+        "src/cli/commands/verify-classify.test.ts"
+      ]
+    },
+    {
+      "content": "c668ba6ef20940c9",
+      "lines": 11,
+      "files": [
+        "src/session/teaching.test.ts"
+      ]
+    },
+    {
+      "content": "c677156f78d65ec6",
+      "lines": 27,
+      "files": [
+        "src/ui/composables/useActionController.picks.test.ts"
+      ]
+    },
+    {
+      "content": "c68e12b4f5c7c72c",
+      "lines": 12,
+      "files": [
+        "src/engine/action/action.test.ts"
+      ]
+    },
+    {
+      "content": "c72e06a4009bc233",
+      "lines": 14,
+      "files": [
+        "src/ui/composables/useBoardActionBridge.test.ts"
+      ]
+    },
+    {
+      "content": "c7d128a5bd41c238",
+      "lines": 27,
+      "files": [
+        "src/engine/tutorial/annotation.test.ts",
+        "src/session/build-player-state.test.ts",
+        "src/session/tutorial-controller.test.ts"
+      ]
+    },
+    {
+      "content": "c815c6bf5ef46833",
+      "lines": 14,
+      "files": [
+        "src/engine/tutorial/gate.test.ts"
+      ]
+    },
+    {
+      "content": "c8462b328b79993a",
+      "lines": 11,
+      "files": [
+        "src/ui/components/auto-ui/renderers/drag-keyboard-parity.test.ts",
+        "src/ui/composables/useDragDrop.test.ts"
+      ]
+    },
+    {
+      "content": "c86615d712c5baf6",
+      "lines": 6,
+      "files": [
+        "src/cli/dev-host/bridge.test.ts"
+      ]
+    },
+    {
+      "content": "c878520b690b6926",
+      "lines": 17,
+      "files": [
+        "src/cli/commands/verify-example-replay.ts",
+        "src/cli/commands/verify-ruling-recheck.ts"
+      ]
+    },
+    {
+      "content": "c922155ef1a83890",
+      "lines": 11,
+      "files": [
+        "src/ui/composables/useGameContext.test.ts"
+      ]
+    },
+    {
+      "content": "c9e392918f618f2f",
+      "lines": 7,
+      "files": [
+        "src/ui/components/auto-ui/renderers/HexBoardRenderer.a11y.test.ts"
+      ]
+    },
+    {
+      "content": "ca36c21e8497253b",
+      "lines": 12,
+      "files": [
+        "src/bot/determinization.test.ts"
+      ]
+    },
+    {
+      "content": "ca704472e0333fde",
+      "lines": 8,
+      "files": [
+        "src/ui/composables/useHexGrid.ts"
+      ]
+    },
+    {
+      "content": "ca7bbdca37e26800",
+      "lines": 28,
+      "files": [
+        "src/session/build-player-state.test.ts"
+      ]
+    },
+    {
+      "content": "cac757f8c8e0b04e",
+      "lines": 6,
+      "files": [
+        "src/engine/flow/engine.test.ts"
+      ]
+    },
+    {
+      "content": "cade6be2f30e9c0f",
+      "lines": 14,
+      "files": [
+        "src/session/testing/fixtures/collect-fixture.ts",
+        "src/session/testing/fixtures/collect-turns-fixture.ts"
+      ]
+    },
+    {
+      "content": "cb46194981b3d26e",
+      "lines": 11,
+      "files": [
+        "src/ui/components/GameShell.action-help.test.ts"
+      ]
+    },
+    {
+      "content": "cbae561ae95f8dd8",
+      "lines": 12,
+      "files": [
+        "src/ui/components/auto-ui/renderers/HandRenderer.vue",
+        "src/ui/components/auto-ui/renderers/SpaceRenderer.vue"
+      ]
+    },
+    {
+      "content": "cc3a7f1f58d35443",
+      "lines": 16,
+      "files": [
+        "src/ui/composables/useBoardActionBridge.test.ts"
+      ]
+    },
+    {
+      "content": "cc4b80e4df3636ec",
+      "lines": 20,
+      "files": [
+        "src/session/pending-action-manager.test.ts"
+      ]
+    },
+    {
+      "content": "cc5789c3c8403b20",
+      "lines": 16,
+      "files": [
+        "src/ui/composables/useBoardActionBridge.test.ts"
+      ]
+    },
+    {
+      "content": "cc79aabe23c6ae59",
+      "lines": 9,
+      "files": [
+        "src/ui/components/auto-ui/renderers/CardRenderer.asset-fallback.test.ts"
+      ]
+    },
+    {
+      "content": "ccc763d68e042425",
+      "lines": 14,
+      "files": [
+        "src/session/debug-data-gating.test.ts",
+        "src/session/restore-snapshot-authoritative.test.ts"
+      ]
+    },
+    {
+      "content": "cd00f5f69b03d37c",
+      "lines": 59,
+      "files": [
+        "src/cli/dev-host/DevHost.debug-relay.test.ts",
+        "src/cli/dev-host/DevHost.gameoptions.test.ts",
+        "src/cli/dev-host/DevHost.seats.test.ts"
+      ]
+    },
+    {
+      "content": "cd579f1df4c96d10",
+      "lines": 6,
+      "files": [
+        "src/world/action.ts"
+      ]
+    },
+    {
+      "content": "cdbb356de42fd27c",
+      "lines": 10,
+      "files": [
+        "src/engine/element/map-set-persistence.test.ts",
+        "src/engine/element/typed-array-persistence.test.ts"
+      ]
+    },
+    {
+      "content": "ce13d23982c417d5",
+      "lines": 9,
+      "files": [
+        "src/ui/components/GameShell.game-over.test.ts"
+      ]
+    },
+    {
+      "content": "ce16ecde793a11dd",
+      "lines": 23,
+      "files": [
+        "src/ui/components/debug/DecksTab.test.ts",
+        "src/ui/components/debug/ElementsTab.test.ts",
+        "src/ui/components/debug/debug-view-tree.test.ts"
+      ]
+    },
+    {
+      "content": "ce3149837e7efc8a",
+      "lines": 5,
+      "files": [
+        "src/cli/dev-host/multiplayer-host.test.ts"
+      ]
+    },
+    {
+      "content": "ce42d1c4d1f62ddd",
+      "lines": 36,
+      "files": [
+        "src/cli/commands/verify-derive-check.ts",
+        "src/cli/commands/verify-example-replay.ts",
+        "src/cli/commands/verify-ruling-recheck.ts"
+      ]
+    },
+    {
+      "content": "ce4e881ef3957275",
+      "lines": 15,
+      "files": [
+        "src/cli/dev-host/multiplayer-host.gameoptions.test.ts",
+        "src/cli/dev-host/multiplayer-host.world.test.ts"
+      ]
+    },
+    {
+      "content": "ce6fa5aabb715ddf",
+      "lines": 13,
+      "files": [
+        "src/ui/components/GameShell.time-travel-desync.test.ts",
+        "src/ui/composables/useBoardActionBridge.test.ts"
+      ]
+    },
+    {
+      "content": "ceadede75d86c131",
+      "lines": 9,
+      "files": [
+        "src/ui/composables/useActionController.test.ts"
+      ]
+    },
+    {
+      "content": "cf1b181c90fd4418",
+      "lines": 16,
+      "files": [
+        "src/cli/commands/verify-classify.test.ts"
+      ]
+    },
+    {
+      "content": "cf3f1b787ef41b99",
+      "lines": 23,
+      "files": [
+        "src/ui/composables/useActionController.devtools.test.ts",
+        "src/ui/composables/useActionController.test.ts"
+      ]
+    },
+    {
+      "content": "cf557d8fc0a81e14",
+      "lines": 12,
+      "files": [
+        "src/ui/composables/useActionController.picks.test.ts"
+      ]
+    },
+    {
+      "content": "cf6fb260e185f660",
+      "lines": 7,
+      "files": [
+        "src/bot-trainer/feature-templates.ts"
+      ]
+    },
+    {
+      "content": "cf8e6f5ee8f33509",
+      "lines": 24,
+      "files": [
+        "src/cli/dev-host/bridge.test.ts",
+        "src/cli/dev-host/multiplayer-host.gameoptions.test.ts",
+        "src/cli/dev-host/multiplayer-host.palette.test.ts",
+        "src/cli/dev-host/multiplayer-host.startrace.test.ts",
+        "src/cli/dev-host/multiplayer-host.test.ts",
+        "src/session/game-definition-like-typing.test.ts",
+        "src/session/seat-activity-canonical.test.ts",
+        "src/session/snapshot-session-host.test.ts",
+        "src/session/stateless-ops-debug.test.ts",
+        "src/session/stateless-ops.test.ts",
+        "src/session/testing/fixtures/each-player-fixture.ts",
+        "src/testing/debug.test.ts"
+      ]
+    },
+    {
+      "content": "cfc2352d4dcee05e",
+      "lines": 29,
+      "files": [
+        "src/ui/components/auto-ui/renderers/CardRenderer.a11y.test.ts",
+        "src/ui/components/auto-ui/renderers/renderers.devtools-attrs.test.ts"
+      ]
+    },
+    {
+      "content": "cfd71e1c138b72b9",
+      "lines": 5,
+      "files": [
+        "src/cli/commands/verify-classify.test.ts",
+        "src/cli/commands/verify-impact.test.ts"
+      ]
+    },
+    {
+      "content": "d039a0602e419385",
+      "lines": 18,
+      "files": [
+        "src/ui/composables/useActionController.devtools.test.ts"
+      ]
+    },
+    {
+      "content": "d046fe4d078dae95",
+      "lines": 28,
+      "files": [
+        "src/eslint-plugin/rules/no-element-array-state.ts",
+        "src/eslint-plugin/rules/no-element-identity-comparison.ts"
+      ]
+    },
+    {
+      "content": "d0b5830c26207e3e",
+      "lines": 6,
+      "files": [
+        "src/session/pick-handler.test.ts"
+      ]
+    },
+    {
+      "content": "d0b73acb9dac7173",
+      "lines": 14,
+      "files": [
+        "src/cli/dev-host/multiplayer-host.startrace.test.ts",
+        "src/cli/dev-host/multiplayer-host.test.ts"
+      ]
+    },
+    {
+      "content": "d11b7d9555b72b89",
+      "lines": 11,
+      "files": [
+        "src/session/teaching.test.ts"
+      ]
+    },
+    {
+      "content": "d11fb1858d740753",
+      "lines": 6,
+      "files": [
+        "src/cli/cli-conformance-commands.test.ts"
+      ]
+    },
+    {
+      "content": "d15c1e7657947d2a",
+      "lines": 8,
+      "files": [
+        "src/engine/fail-loud-authoring-errors.test.ts"
+      ]
+    },
+    {
+      "content": "d1e65376f5e6432b",
+      "lines": 6,
+      "files": [
+        "src/ui/components/auto-ui/renderers/HandRenderer.a11y.test.ts"
+      ]
+    },
+    {
+      "content": "d27f0d5e0c3cc3b2",
+      "lines": 15,
+      "files": [
+        "src/cli/dev-host/DevHost.debug-relay.test.ts",
+        "src/cli/dev-host/DevHost.gameoptions.test.ts"
+      ]
+    },
+    {
+      "content": "d2a695e4a6ddc01e",
+      "lines": 6,
+      "files": [
+        "src/ui/composables/useActionAnimations.test.ts",
+        "src/ui/composables/useFlyingElements.test.ts"
+      ]
+    },
+    {
+      "content": "d2ce1b6dee26df1b",
+      "lines": 22,
+      "files": [
+        "src/engine/flow/engine.test.ts"
+      ]
+    },
+    {
+      "content": "d2d638fe90e51f66",
+      "lines": 14,
+      "files": [
+        "src/engine/tutorial/progress.test.ts"
+      ]
+    },
+    {
+      "content": "d3146cac070ebc97",
+      "lines": 11,
+      "files": [
+        "src/session/tutorial-controller.test.ts"
+      ]
+    },
+    {
+      "content": "d31c849ffe8fc7dc",
+      "lines": 8,
+      "files": [
+        "src/bot-trainer/feature-templates.ts"
+      ]
+    },
+    {
+      "content": "d367cf18c4d98c75",
+      "lines": 11,
+      "files": [
+        "src/ui/components/GameOverCard.test.ts"
+      ]
+    },
+    {
+      "content": "d3686509c621462f",
+      "lines": 5,
+      "files": [
+        "src/ui/components/auto-ui/renderers/GridBoardRenderer.a11y.test.ts",
+        "src/ui/components/auto-ui/renderers/HexBoardRenderer.a11y.test.ts"
+      ]
+    },
+    {
+      "content": "d3bdefffff02a0c5",
+      "lines": 27,
+      "files": [
+        "src/cli/dev-host/multiplayer-host.startrace.test.ts",
+        "src/cli/dev-host/multiplayer-host.test.ts"
+      ]
+    },
+    {
+      "content": "d411969c36a5621e",
+      "lines": 18,
+      "files": [
+        "src/ui/components/auto-ui/ActionPanel.simultaneous.test.ts"
+      ]
+    },
+    {
+      "content": "d419e87a27deb489",
+      "lines": 10,
+      "files": [
+        "src/session/testing/simultaneous-undo.test.ts"
+      ]
+    },
+    {
+      "content": "d490c4cf961186fd",
+      "lines": 19,
+      "files": [
+        "src/cli/commands/verify-source-free.test.ts"
+      ]
+    },
+    {
+      "content": "d4dda2bfc11c5730",
+      "lines": 9,
+      "files": [
+        "src/cli/commands/chunk-provenance.test.ts"
+      ]
+    },
+    {
+      "content": "d4ea736c0be9c5b5",
+      "lines": 6,
+      "files": [
+        "src/cli/commands/audit.test.ts"
+      ]
+    },
+    {
+      "content": "d531960f09d99bbd",
+      "lines": 9,
+      "files": [
+        "src/ui/composables/useActionController.picks.test.ts",
+        "src/ui/composables/useActionController.test.ts"
+      ]
+    },
+    {
+      "content": "d539a16e6bd3feb6",
+      "lines": 15,
+      "files": [
+        "src/ui/components/auto-ui/renderers/HandRenderer.vue",
+        "src/ui/components/auto-ui/renderers/PieceRenderer.vue"
+      ]
+    },
+    {
+      "content": "d55485bf84b72452",
+      "lines": 11,
+      "files": [
+        "src/ui/composables/useDragDrop.test.ts"
+      ]
+    },
+    {
+      "content": "d5ba274dc1f2a2f7",
+      "lines": 18,
+      "files": [
+        "src/ui/components/ControlsMenu.action-help.test.ts",
+        "src/ui/components/ControlsMenu.tutorial-toggle.test.ts",
+        "src/ui/components/helpers/HeatmapOverlay.test.ts",
+        "src/ui/components/helpers/HintOverlay.test.ts",
+        "src/ui/components/helpers/TutorialOverlay.parity.test.ts",
+        "src/ui/components/helpers/TutorialOverlay.test.ts",
+        "src/ui/composables/useFlyingElements.test.ts"
+      ]
+    },
+    {
+      "content": "d5c36811153d3ab1",
+      "lines": 18,
+      "files": [
+        "src/cli/commands/verify-enumerate.test.ts"
+      ]
+    },
+    {
+      "content": "d653290cacd28ed5",
+      "lines": 44,
+      "files": [
+        "src/ui/composables/useActionAnimations.test.ts",
+        "src/ui/composables/useFLIP.test.ts",
+        "src/ui/composables/useFlyingElements.test.ts"
+      ]
+    },
+    {
+      "content": "d71ca9f6e3635ed2",
+      "lines": 7,
+      "files": [
+        "src/world/engine.test.ts"
+      ]
+    },
+    {
+      "content": "d7b1ed65abeaa444",
+      "lines": 7,
+      "files": [
+        "src/engine/utils/dev-state.test.ts",
+        "src/session/dev-checkpoint-manager.test.ts"
+      ]
+    },
+    {
+      "content": "d8033def74738945",
+      "lines": 12,
+      "files": [
+        "src/ui/composables/useSelectable.test.ts"
+      ]
+    },
+    {
+      "content": "d80fddbbb8eee3ae",
+      "lines": 10,
+      "files": [
+        "src/bot-trainer/feature-templates.ts"
+      ]
+    },
+    {
+      "content": "d816fc9d22e3d022",
+      "lines": 8,
+      "files": [
+        "src/cli/commands/chunk-provenance.test.ts"
+      ]
+    },
+    {
+      "content": "d82dae6f36ed3a46",
+      "lines": 13,
+      "files": [
+        "src/session/stateless-ops.test.ts"
+      ]
+    },
+    {
+      "content": "d837e117c770a457",
+      "lines": 23,
+      "files": [
+        "src/ui/composables/useActionController.picks.test.ts"
+      ]
+    },
+    {
+      "content": "d86334123538ec35",
+      "lines": 6,
+      "files": [
+        "src/bot/mcts-bot.ts"
+      ]
+    },
+    {
+      "content": "d86dcf15bec0181d",
+      "lines": 6,
+      "files": [
+        "src/cli/commands/verify-enumerate.test.ts"
+      ]
+    },
+    {
+      "content": "d945084cf025cf5f",
+      "lines": 9,
+      "files": [
+        "src/engine/element/pick-candidates.ts",
+        "src/ui/composables/actionControllerHelpers.ts"
+      ]
+    },
+    {
+      "content": "d9a4b1beb6d0b7d0",
+      "lines": 5,
+      "files": [
+        "src/ui/composables/createFLIPSnapshot.test.ts"
+      ]
+    },
+    {
+      "content": "da6388962a9b71d4",
+      "lines": 5,
+      "files": [
+        "src/cli/commands/verify-impact.test.ts"
+      ]
+    },
+    {
+      "content": "dab687827d0b094f",
+      "lines": 15,
+      "files": [
+        "src/engine/element/animation-events.test.ts"
+      ]
+    },
+    {
+      "content": "dad2dde2fbf165ca",
+      "lines": 8,
+      "files": [
+        "src/engine/tutorial/progress.test.ts",
+        "src/session/player-state-visibility.test.ts"
+      ]
+    },
+    {
+      "content": "db1eb8419dc57e42",
+      "lines": 5,
+      "files": [
+        "src/engine/element/game.ts"
+      ]
+    },
+    {
+      "content": "db391e1f0c4c11bf",
+      "lines": 12,
+      "files": [
+        "src/engine/flow/engine.test.ts"
+      ]
+    },
+    {
+      "content": "db587da676d808a0",
+      "lines": 12,
+      "files": [
+        "src/engine/action/action.test.ts"
+      ]
+    },
+    {
+      "content": "db9e0f90e869c599",
+      "lines": 15,
+      "files": [
+        "src/ui/components/auto-ui/ActionPanel.smoke.test.ts",
+        "src/ui/components/auto-ui/ActionPanel.suppression.test.ts",
+        "src/ui/components/auto-ui/ActionPanel.test.ts"
+      ]
+    },
+    {
+      "content": "dbd76960d27e9466",
+      "lines": 16,
+      "files": [
+        "src/cli/dev-host/bridge.test.ts"
+      ]
+    },
+    {
+      "content": "dbe182bdf821488e",
+      "lines": 9,
+      "files": [
+        "src/session/snapshot-session-host.test.ts"
+      ]
+    },
+    {
+      "content": "dc260f2a8b77eb18",
+      "lines": 10,
+      "files": [
+        "src/cli/commands/verify-classify.ts"
+      ]
+    },
+    {
+      "content": "dc94568380f0d015",
+      "lines": 11,
+      "files": [
+        "src/ui/components/helpers/TutorialOverlay.parity.test.ts"
+      ]
+    },
+    {
+      "content": "dd51ec62374b0dbf",
+      "lines": 5,
+      "files": [
+        "src/cli/commands/verify-derive-check.ts",
+        "src/cli/commands/verify-example-replay.ts",
+        "src/cli/commands/verify-ruling-recheck.ts",
+        "src/cli/commands/verify-run.ts"
+      ]
+    },
+    {
+      "content": "dd6687a88b9a87f3",
+      "lines": 25,
+      "files": [
+        "src/cli/commands/drift-check.test.ts",
+        "src/cli/commands/trace-check.test.ts"
+      ]
+    },
+    {
+      "content": "ddfbb7dc87b3ae6d",
+      "lines": 9,
+      "files": [
+        "src/ui/composables/useAnimationEvents.test.ts"
+      ]
+    },
+    {
+      "content": "ddfdfbca166a4ea5",
+      "lines": 16,
+      "files": [
+        "src/cli/commands/verify-example-replay.test.ts"
+      ]
+    },
+    {
+      "content": "de9ffe0e6711830c",
+      "lines": 10,
+      "files": [
+        "src/runtime/runner.test.ts",
+        "src/testing/state-size.test.ts"
+      ]
+    },
+    {
+      "content": "dfdd7629371fb179",
+      "lines": 13,
+      "files": [
+        "src/engine/action/action.test.ts"
+      ]
+    },
+    {
+      "content": "e009061fb0d25f6f",
+      "lines": 9,
+      "files": [
+        "src/engine/command/executor.test.ts",
+        "src/engine/command/undo.test.ts"
+      ]
+    },
+    {
+      "content": "e077034c16bf4c84",
+      "lines": 18,
+      "files": [
+        "src/cli/commands/verify-derive-check.test.ts",
+        "src/cli/commands/verify-enumerate.test.ts",
+        "src/cli/commands/verify-example-replay.test.ts"
+      ]
+    },
+    {
+      "content": "e08850a9bf72e8bf",
+      "lines": 6,
+      "files": [
+        "src/cli/dev-host/multiplayer-host.test.ts"
+      ]
+    },
+    {
+      "content": "e097e1d3d3276cd9",
+      "lines": 18,
+      "files": [
+        "src/cli/commands/verify-source-free.test.ts"
+      ]
+    },
+    {
+      "content": "e0a93c567c0efc60",
+      "lines": 8,
+      "files": [
+        "src/ui/components/GameShell.game-over.test.ts"
+      ]
+    },
+    {
+      "content": "e0af86e22aac88ee",
+      "lines": 12,
+      "files": [
+        "src/cli/commands/verify-run.test.ts"
+      ]
+    },
+    {
+      "content": "e0d5d09dc2fb2173",
+      "lines": 27,
+      "files": [
+        "src/ui/composables/useActionController.picks.test.ts"
+      ]
+    },
+    {
+      "content": "e11569c90fa0750c",
+      "lines": 13,
+      "files": [
+        "src/cli/commands/verify-enumerate.test.ts"
+      ]
+    },
+    {
+      "content": "e145e75d71ac78f5",
+      "lines": 9,
+      "files": [
+        "src/bot/no-searchable-move.test.ts"
+      ]
+    },
+    {
+      "content": "e155ce64c8e363e5",
+      "lines": 11,
+      "files": [
+        "src/session/lobby-manager.ts"
+      ]
+    },
+    {
+      "content": "e15aa4c7a2afeaa4",
+      "lines": 15,
+      "files": [
+        "src/session/lobby-manager.test.ts",
+        "src/testing/test-game.test.ts"
+      ]
+    },
+    {
+      "content": "e16f210ab8c4433e",
+      "lines": 19,
+      "files": [
+        "src/engine/element/space.test.ts"
+      ]
+    },
+    {
+      "content": "e1a145fa83b29ba1",
+      "lines": 15,
+      "files": [
+        "src/session/testing/turn-boundary.test.ts"
+      ]
+    },
+    {
+      "content": "e1ca1c88e08e3775",
+      "lines": 13,
+      "files": [
+        "src/engine/flow/engine.test.ts"
+      ]
+    },
+    {
+      "content": "e234873d8c4fea5a",
+      "lines": 15,
+      "files": [
+        "src/cli/commands/verify-source-free.test.ts"
+      ]
+    },
+    {
+      "content": "e32b48dcc9b5487a",
+      "lines": 12,
+      "files": [
+        "src/session/game-session.test.ts",
+        "src/session/teaching.test.ts"
+      ]
+    },
+    {
+      "content": "e38bb6e312d96fb3",
+      "lines": 5,
+      "files": [
+        "src/cli/commands/verify-run.test.ts"
+      ]
+    },
+    {
+      "content": "e40ec4fcc9d9cc03",
+      "lines": 22,
+      "files": [
+        "src/session/snapshot-session-host.test.ts"
+      ]
+    },
+    {
+      "content": "e50feb1e1650283e",
+      "lines": 14,
+      "files": [
+        "src/session/action-result-data-propagation.test.ts",
+        "src/ui/composables/useActionController.action-data.test.ts"
+      ]
+    },
+    {
+      "content": "e5294c798af5bf01",
+      "lines": 32,
+      "files": [
+        "src/cli/commands/verify-derive-check.test.ts"
+      ]
+    },
+    {
+      "content": "e53f7667ccfd90d0",
+      "lines": 12,
+      "files": [
+        "src/session/testing/solo-undo-authoritative.test.ts"
+      ]
+    },
+    {
+      "content": "e5553d1e1a0d4728",
+      "lines": 5,
+      "files": [
+        "src/cli/dev-host/multiplayer-host.test.ts"
+      ]
+    },
+    {
+      "content": "e59bfd677c7d5dd3",
+      "lines": 7,
+      "files": [
+        "src/ui/composables/createFLIPSnapshot.test.ts"
+      ]
+    },
+    {
+      "content": "e5e5b9625efcdcb9",
+      "lines": 27,
+      "files": [
+        "src/ui/composables/useBoardActionBridge.test.ts"
+      ]
+    },
+    {
+      "content": "e5ffcb18682f6f37",
+      "lines": 9,
+      "files": [
+        "src/cli/dev-host/world-store.test.ts"
+      ]
+    },
+    {
+      "content": "e6494f9bcaa016d9",
+      "lines": 7,
+      "files": [
+        "src/engine/action/action.test.ts",
+        "src/engine/element/game-element.test.ts"
+      ]
+    },
+    {
+      "content": "e673bdf905f2fcbb",
+      "lines": 33,
+      "files": [
+        "src/engine/element/game.ts"
+      ]
+    },
+    {
+      "content": "e6b117494fbd2405",
+      "lines": 12,
+      "files": [
+        "src/bot/create-bot.test.ts",
+        "src/testing/assert-game-finished.test.ts"
+      ]
+    },
+    {
+      "content": "e6d380f6e80bc87a",
+      "lines": 7,
+      "files": [
+        "src/engine/action/action.test.ts"
+      ]
+    },
+    {
+      "content": "e6e6e6bb445b5620",
+      "lines": 9,
+      "files": [
+        "src/session/testing/random-scumming.test.ts"
+      ]
+    },
+    {
+      "content": "e77155009a77c169",
+      "lines": 13,
+      "files": [
+        "src/session/lobby-manager.ts"
+      ]
+    },
+    {
+      "content": "e7c26cf8e106cac8",
+      "lines": 5,
+      "files": [
+        "src/ui/components/GameLobby.test.ts"
+      ]
+    },
+    {
+      "content": "e7c27cb31c3599e3",
+      "lines": 15,
+      "files": [
+        "src/session/snapshot-session-host.test.ts"
+      ]
+    },
+    {
+      "content": "e84b76d50945e7d9",
+      "lines": 13,
+      "files": [
+        "src/cli/dev-host/DevHost.debug-relay.test.ts"
+      ]
+    },
+    {
+      "content": "e856aa66d3a601c5",
+      "lines": 16,
+      "files": [
+        "src/ui/composables/useActionController.test.ts"
+      ]
+    },
+    {
+      "content": "e88a9041a9c3cc15",
+      "lines": 9,
+      "files": [
+        "src/ui/composables/useAutoZoom.pinned-board.test.ts",
+        "src/ui/composables/useAutoZoom.reproducible.test.ts",
+        "src/ui/composables/useAutoZoom.test.ts",
+        "src/ui/composables/useBoardSize.test.ts"
+      ]
+    },
+    {
+      "content": "e8bb56d86892c11f",
+      "lines": 24,
+      "files": [
+        "src/ui/composables/useActionController.picks.test.ts"
+      ]
+    },
+    {
+      "content": "e8df9a125d06c789",
+      "lines": 6,
+      "files": [
+        "src/cli/dev-host/multiplayer-host.test.ts"
+      ]
+    },
+    {
+      "content": "e9a4cdf76aee7ba2",
+      "lines": 7,
+      "files": [
+        "src/engine/action/action.test.ts"
+      ]
+    },
+    {
+      "content": "ea18858ea8d3da58",
+      "lines": 14,
+      "files": [
+        "src/cli/dev-host/world-host.test.ts"
+      ]
+    },
+    {
+      "content": "ea329d53cdf5f917",
+      "lines": 10,
+      "files": [
+        "src/session/lobby-identity-security.test.ts"
+      ]
+    },
+    {
+      "content": "ea48c813157bda69",
+      "lines": 15,
+      "files": [
+        "src/runtime/runner.test.ts",
+        "src/session/build-player-state.test.ts"
+      ]
+    },
+    {
+      "content": "ea73590ccccaa3ec",
+      "lines": 9,
+      "files": [
+        "src/session/action-result-data-propagation.test.ts"
+      ]
+    },
+    {
+      "content": "ea8042c76ffb4f4d",
+      "lines": 9,
+      "files": [
+        "src/engine/element/tree-corruption.test.ts"
+      ]
+    },
+    {
+      "content": "ea874d9c7eafa066",
+      "lines": 5,
+      "files": [
+        "src/cli/slash-command/bs/verify.test.ts"
+      ]
+    },
+    {
+      "content": "ead2e70801dc0bf6",
+      "lines": 11,
+      "files": [
+        "src/session/restore-snapshot-authoritative.test.ts",
+        "src/session/testing/rewind-animation-watermark.test.ts"
+      ]
+    },
+    {
+      "content": "ead5d13cc139a02a",
+      "lines": 17,
+      "files": [
+        "src/ui/composables/useBoardActionBridge.test.ts"
+      ]
+    },
+    {
+      "content": "eadf31c11ab78ac9",
+      "lines": 6,
+      "files": [
+        "src/cli/slash-command/bs/build-chunk.test.ts"
+      ]
+    },
+    {
+      "content": "eb369b8ce78b82a7",
+      "lines": 12,
+      "files": [
+        "src/engine/action/action.test.ts"
+      ]
+    },
+    {
+      "content": "eb5c7967e6880924",
+      "lines": 10,
+      "files": [
+        "src/session/testing/mid-game-bot-takeover.test.ts"
+      ]
+    },
+    {
+      "content": "eb60b24a35dae860",
+      "lines": 11,
+      "files": [
+        "src/engine/flow/describe-flow-position.ts",
+        "src/engine/flow/engine.ts"
+      ]
+    },
+    {
+      "content": "eb7ff2f5c749cbdf",
+      "lines": 34,
+      "files": [
+        "src/session/game-session.test.ts",
+        "src/session/teaching.test.ts"
+      ]
+    },
+    {
+      "content": "eb9b2e39b267c8ca",
+      "lines": 64,
+      "files": [
+        "src/cli/commands/simulate.test.ts",
+        "src/testing/play-until-complete.test.ts",
+        "src/testing/random-simulation.test.ts"
+      ]
+    },
+    {
+      "content": "ec6c5d94c3e3979c",
+      "lines": 12,
+      "files": [
+        "scripts/check-no-hex.test.mjs"
+      ]
+    },
+    {
+      "content": "ecaf08eb3e9240a7",
+      "lines": 22,
+      "files": [
+        "src/cli/slash-command/bs/status-tools.test.ts"
+      ]
+    },
+    {
+      "content": "ed47f50abcdcc36b",
+      "lines": 14,
+      "files": [
+        "src/ui/composables/useElementAnimation.ts"
+      ]
+    },
+    {
+      "content": "ed50c9807cdf7185",
+      "lines": 8,
+      "files": [
+        "src/engine/tutorial/predicates.test.ts"
+      ]
+    },
+    {
+      "content": "edaf3aee7636ee6d",
+      "lines": 12,
+      "files": [
+        "src/cli/commands/install-claude-command.test.ts",
+        "src/cli/slash-command/bs/verify.test.ts"
+      ]
+    },
+    {
+      "content": "ee18eee2dc50e5f0",
+      "lines": 26,
+      "files": [
+        "src/cli/dev-host/world-host.test.ts"
+      ]
+    },
+    {
+      "content": "ee1d658af2d111df",
+      "lines": 18,
+      "files": [
+        "src/world/engine.test.ts"
+      ]
+    },
+    {
+      "content": "ee1e12ed1559a101",
+      "lines": 12,
+      "files": [
+        "src/ui/composables/useAnimationEvents.test.ts"
+      ]
+    },
+    {
+      "content": "ee3e8425f4fd2952",
+      "lines": 16,
+      "files": [
+        "src/cli/commands/verify-classify.test.ts"
+      ]
+    },
+    {
+      "content": "ee7c7bfda81b1a8d",
+      "lines": 19,
+      "files": [
+        "src/ui/composables/useActionController.test.ts"
+      ]
+    },
+    {
+      "content": "eed4e2c9f6eaa11b",
+      "lines": 20,
+      "files": [
+        "src/ui/components/helpers/FlyingCardsOverlay.vue",
+        "src/ui/components/helpers/ZoomPreviewOverlay.vue"
+      ]
+    },
+    {
+      "content": "ef14fcb4866a7e0e",
+      "lines": 10,
+      "files": [
+        "src/cli/commands/verify-derive-check.ts",
+        "src/cli/commands/verify-example-replay.ts"
+      ]
+    },
+    {
+      "content": "ef92e234f56eddc2",
+      "lines": 8,
+      "files": [
+        "src/ui/composables/useGameGrid.test.ts",
+        "src/ui/composables/useHexGrid.test.ts"
+      ]
+    },
+    {
+      "content": "ef9bb5d12096eaf1",
+      "lines": 24,
+      "files": [
+        "src/ui/components/auto-ui/ActionPanel.board-bridge.test.ts",
+        "src/ui/components/auto-ui/renderers/candidate-hook.test.ts"
+      ]
+    },
+    {
+      "content": "f0061676e7097185",
+      "lines": 11,
+      "files": [
+        "src/cli/cli.test.ts"
+      ]
+    },
+    {
+      "content": "f08fd7c45837979f",
+      "lines": 23,
+      "files": [
+        "src/ui/composables/useActionController.picks.test.ts"
+      ]
+    },
+    {
+      "content": "f0b4b6d31299afe0",
+      "lines": 31,
+      "files": [
+        "src/ui/components/auto-ui/renderers/GridBoardRenderer.vue",
+        "src/ui/components/auto-ui/renderers/HexBoardRenderer.vue"
+      ]
+    },
+    {
+      "content": "f0d59a8a860cd6f1",
+      "lines": 15,
+      "files": [
+        "src/engine/action/action.test.ts"
+      ]
+    },
+    {
+      "content": "f13391ba3aca1a4e",
+      "lines": 54,
+      "files": [
+        "src/cli/cli-conformance-commands.test.ts",
+        "src/cli/cli.test.ts"
+      ]
+    },
+    {
+      "content": "f1410ae70ce0bd7a",
+      "lines": 8,
+      "files": [
+        "src/ui/components/ControlsMenu.tutorial-toggle.test.ts"
+      ]
+    },
+    {
+      "content": "f14f1d0b86afc3fa",
+      "lines": 30,
+      "files": [
+        "src/testing/assertions.test.ts",
+        "src/testing/test-game.test.ts"
+      ]
+    },
+    {
+      "content": "f285274971824216",
+      "lines": 12,
+      "files": [
+        "src/session/pick-handler.test.ts",
+        "src/session/stateless-ops.test.ts"
+      ]
+    },
+    {
+      "content": "f28ceccc25805742",
+      "lines": 11,
+      "files": [
+        "src/session/lobby-manager.ts"
+      ]
+    },
+    {
+      "content": "f2b4bbeaffd8d58d",
+      "lines": 8,
+      "files": [
+        "src/ui/components/auto-ui/ActionPanel.test.ts"
+      ]
+    },
+    {
+      "content": "f2cef2718d1d8499",
+      "lines": 8,
+      "files": [
+        "src/ui/composables/useAnnouncer.test.ts"
+      ]
+    },
+    {
+      "content": "f31da444777431fa",
+      "lines": 13,
+      "files": [
+        "src/ui/composables/useActionController.picks.test.ts",
+        "src/ui/composables/useActionController.test.ts"
+      ]
+    },
+    {
+      "content": "f32cb6c03e788495",
+      "lines": 20,
+      "files": [
+        "src/engine/flow/engine.test.ts"
+      ]
+    },
+    {
+      "content": "f356cba450aaf550",
+      "lines": 7,
+      "files": [
+        "src/cli/commands/verify-derive-check.test.ts",
+        "src/cli/commands/verify-example-replay.test.ts"
+      ]
+    },
+    {
+      "content": "f37715cf3c0e09db",
+      "lines": 5,
+      "files": [
+        "src/cli/commands/verify-source-free.test.ts"
+      ]
+    },
+    {
+      "content": "f3ae3ff0d87cec46",
+      "lines": 12,
+      "files": [
+        "src/session/testing/random-scumming.test.ts"
+      ]
+    },
+    {
+      "content": "f3ceb575c8d3b5fa",
+      "lines": 10,
+      "files": [
+        "src/engine/command/executor.test.ts",
+        "src/engine/command/undo.test.ts"
+      ]
+    },
+    {
+      "content": "f40bf89af877b127",
+      "lines": 14,
+      "files": [
+        "src/engine/flow/engine.test.ts"
+      ]
+    },
+    {
+      "content": "f41264400b5bf8b5",
+      "lines": 12,
+      "files": [
+        "src/client/game-connection.test.ts"
+      ]
+    },
+    {
+      "content": "f448c367f3220ee5",
+      "lines": 13,
+      "files": [
+        "src/engine/flow/engine.test.ts"
+      ]
+    },
+    {
+      "content": "f44c3b194f84a73e",
+      "lines": 13,
+      "files": [
+        "src/ui/composables/useAnimationEvents.test.ts"
+      ]
+    },
+    {
+      "content": "f529ac4c3c49deb1",
+      "lines": 9,
+      "files": [
+        "src/session/testing/rewind-animation-watermark.test.ts"
+      ]
+    },
+    {
+      "content": "f53a8ff1cb552677",
+      "lines": 14,
+      "files": [
+        "src/engine/element/checkpoint-aliasing.test.ts",
+        "src/engine/element/zone-visibility-restore.test.ts"
+      ]
+    },
+    {
+      "content": "f56a3c43e2a1186a",
+      "lines": 12,
+      "files": [
+        "src/engine/action/action.test.ts"
+      ]
+    },
+    {
+      "content": "f5942b220576c2a7",
+      "lines": 17,
+      "files": [
+        "src/bot/mcts-clone-options.test.ts",
+        "src/session/restore-player-configs.test.ts"
+      ]
+    },
+    {
+      "content": "f5cc0106ddec93ad",
+      "lines": 7,
+      "files": [
+        "src/engine/action/action.test.ts"
+      ]
+    },
+    {
+      "content": "f5e6294095529985",
+      "lines": 6,
+      "files": [
+        "src/engine/flow/builders.test.ts"
+      ]
+    },
+    {
+      "content": "f60e0312515d5e56",
+      "lines": 14,
+      "files": [
+        "src/world/engine.test.ts"
+      ]
+    },
+    {
+      "content": "f60fb545f36616f9",
+      "lines": 10,
+      "files": [
+        "src/cli/dev-host/world-host.test.ts"
+      ]
+    },
+    {
+      "content": "f6877c85565b366f",
+      "lines": 11,
+      "files": [
+        "src/bot/mcts-multiselect.test.ts",
+        "src/engine/utils/enumerate-moves.test.ts"
+      ]
+    },
+    {
+      "content": "f6aa6272ae0648c2",
+      "lines": 14,
+      "files": [
+        "src/engine/flow/engine.test.ts"
+      ]
+    },
+    {
+      "content": "f7036a3c62e33e91",
+      "lines": 18,
+      "files": [
+        "src/cli/commands/verify-source-free.test.ts"
+      ]
+    },
+    {
+      "content": "f71480ef0f27ad07",
+      "lines": 8,
+      "files": [
+        "src/ui/composables/useAutoZoom.pinned-board.test.ts",
+        "src/ui/composables/useAutoZoom.reproducible.test.ts"
+      ]
+    },
+    {
+      "content": "f728bce5e183fef7",
+      "lines": 9,
+      "files": [
+        "src/cli/commands/verify-run.test.ts"
+      ]
+    },
+    {
+      "content": "f74c8cd22f7d6020",
+      "lines": 10,
+      "files": [
+        "src/session/game-session.test.ts",
+        "src/session/snapshot-session-host.test.ts",
+        "src/session/stateless-ops.test.ts",
+        "src/testing/test-game.test.ts"
+      ]
+    },
+    {
+      "content": "f77bf78a1d3b7c08",
+      "lines": 11,
+      "files": [
+        "src/ui/composables/useAnimationEvents.test.ts"
+      ]
+    },
+    {
+      "content": "f781f8eb39433b48",
+      "lines": 14,
+      "files": [
+        "src/session/snapshot-session-host.test.ts"
+      ]
+    },
+    {
+      "content": "f7dcd764d323ae80",
+      "lines": 18,
+      "files": [
+        "src/ui/composables/useAnimationEvents.test.ts"
+      ]
+    },
+    {
+      "content": "f86b0f1fac5fe642",
+      "lines": 13,
+      "files": [
+        "src/ui/composables/useAnimationEvents.test.ts"
+      ]
+    },
+    {
+      "content": "f8a7179f102200d0",
+      "lines": 9,
+      "files": [
+        "src/cli/slash-command/bs/verify.test.ts"
+      ]
+    },
+    {
+      "content": "f8c8409b5b9a080e",
+      "lines": 13,
+      "files": [
+        "src/engine/action/action.test.ts"
+      ]
+    },
+    {
+      "content": "f8d882ab698a69c7",
+      "lines": 110,
+      "files": [
+        "src/eslint-plugin/rules/no-element-array-state.ts",
+        "src/eslint-plugin/rules/no-element-identity-comparison.ts"
+      ]
+    },
+    {
+      "content": "f9a6847af8d4d6b6",
+      "lines": 6,
+      "files": [
+        "src/world/engine.test.ts"
+      ]
+    },
+    {
+      "content": "f9bd6039b5dd49eb",
+      "lines": 20,
+      "files": [
+        "src/ui/components/GameShell.test.ts",
+        "src/ui/components/GameShell.vue"
+      ]
+    },
+    {
+      "content": "f9eeeae3b273c5f0",
+      "lines": 9,
+      "files": [
+        "src/ui/composables/useFLIP.ts"
+      ]
+    },
+    {
+      "content": "fa6d10699bb2ff00",
+      "lines": 10,
+      "files": [
+        "src/world/engine.test.ts"
+      ]
+    },
+    {
+      "content": "fae1179326971d3e",
+      "lines": 13,
+      "files": [
+        "src/ui/composables/useAutoZoom.pinned-board.test.ts",
+        "src/ui/composables/useAutoZoom.reproducible.test.ts",
+        "src/ui/composables/useAutoZoom.test.ts"
+      ]
+    },
+    {
+      "content": "fb906bc806168b64",
+      "lines": 24,
+      "files": [
+        "src/ui/components/helpers/HintOverlay.vue",
+        "src/ui/components/helpers/TutorialOverlay.vue"
+      ]
+    },
+    {
+      "content": "fbe8a718d5a45a06",
+      "lines": 9,
+      "files": [
+        "src/session/stateless-ops.test.ts"
+      ]
+    },
+    {
+      "content": "fc32ef1328bbe21a",
+      "lines": 10,
+      "files": [
+        "src/ui/composables/useAutoZoom.test.ts"
+      ]
+    },
+    {
+      "content": "fc95b6b9497b933c",
+      "lines": 19,
+      "files": [
+        "src/ui/components/auto-ui/ActionPanel.interaction.test.ts"
+      ]
+    },
+    {
+      "content": "fcdab90cab36115a",
+      "lines": 7,
+      "files": [
+        "src/ui/components/ControlsMenu.action-help.test.ts"
+      ]
+    },
+    {
+      "content": "fd16c5889c988798",
+      "lines": 13,
+      "files": [
+        "src/ui/composables/useActionController.test.ts"
+      ]
+    },
+    {
+      "content": "fd1779e7efa8b0f0",
+      "lines": 19,
+      "files": [
+        "src/world/migration-paging.test.ts"
+      ]
+    },
+    {
+      "content": "fd58a76e0d9d88ce",
+      "lines": 11,
+      "files": [
+        "src/engine/action/action.test.ts"
+      ]
+    },
+    {
+      "content": "fd6060434bc642e6",
+      "lines": 7,
+      "files": [
+        "src/cli/commands/verify-classify.ts"
+      ]
+    },
+    {
+      "content": "fdbbdd0ef7a968eb",
+      "lines": 14,
+      "files": [
+        "src/ui/components/GameShell.time-travel-desync.test.ts"
+      ]
+    },
+    {
+      "content": "fdbd27510441e979",
+      "lines": 11,
+      "files": [
+        "src/engine/action/action.test.ts"
+      ]
+    },
+    {
+      "content": "feb4f530a052320a",
+      "lines": 12,
+      "files": [
+        "src/bot/mcts-bot.test.ts"
+      ]
+    },
+    {
+      "content": "ff10c8dbbead848f",
+      "lines": 11,
+      "files": [
+        "src/ui/components/auto-ui/ActionPanel.board-bridge.test.ts"
+      ]
+    },
+    {
+      "content": "ff2c0f4b30093042",
+      "lines": 7,
+      "files": [
+        "src/testing/assertions.test.ts",
+        "src/testing/view-diff.test.ts",
+        "src/testing/visibility.test.ts"
+      ]
+    },
+    {
+      "content": "ff740a270b3ea4a5",
+      "lines": 7,
+      "files": [
+        "src/ui/components/auto-ui/renderers/GridBoardRenderer.a11y.test.ts",
+        "src/ui/components/auto-ui/renderers/HexBoardRenderer.a11y.test.ts"
+      ]
+    },
+    {
+      "content": "ff7b14329cc76b6b",
+      "lines": 22,
+      "files": [
+        "src/ui/composables/useAutoZoom.pinned-board.test.ts",
+        "src/ui/composables/useAutoZoom.reproducible.test.ts"
+      ]
+    },
+    {
+      "content": "ff97acc25945fd87",
+      "lines": 20,
+      "files": [
+        "src/ui/composables/useDragDropTargets.test.ts"
+      ]
+    },
+    {
+      "content": "ffa818d2f905ec5d",
+      "lines": 6,
+      "files": [
+        "src/cli/dev-host/multiplayer-host.test.ts"
+      ]
+    },
+    {
+      "content": "ffdba85e91edd702",
+      "lines": 15,
+      "files": [
+        "src/session/pick-handler.test.ts",
+        "src/testing/test-game.test.ts"
+      ]
+    },
+    {
+      "content": "ffe6d0e967cbcc67",
+      "lines": 26,
+      "files": [
+        "src/ui/components/helpers/HintOverlay.test.ts",
+        "src/ui/components/helpers/TutorialOverlay.parity.test.ts",
+        "src/ui/components/helpers/TutorialOverlay.test.ts"
+      ]
+    }
+  ]
+}

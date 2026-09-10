@@ -1,5 +1,5 @@
 import chalk from 'chalk';
-import { existsSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { requireBoardsmithWorkspace } from '../lib/project-context.js';
@@ -10,16 +10,29 @@ import {
   describeBaselineDrift,
   type HealthBaseline,
 } from '../lib/health-baseline.js';
+import {
+  ACCEPTED_DUPES_FILE,
+  DUPES_BASELINE_FILE,
+  acceptedFromScan,
+  compareAcceptedDupes,
+  describeAddressDrift,
+  describeDupesDrift,
+  type AcceptedDupes,
+  type DupesScan,
+} from '../lib/dupes-baseline.js';
 
 export interface AuditOptions {
   /** Selector flags — when any is set, only the selected audits run. */
   changes?: boolean;
   duplication?: boolean;
   healthBaseline?: boolean;
+  dupesBaseline?: boolean;
   /** Git ref the changed-files audit diffs against, overriding fallow's own base detection. */
   since?: string;
   /** Report the whole repository's accepted debt instead of running the gate. */
   backlog?: boolean;
+  /** Re-address the accepted clone groups whose content still matches (#232). */
+  rekeyDupes?: boolean;
 }
 
 /** The committed baseline `fallow audit` subtracts its findings against. */
@@ -85,6 +98,185 @@ export async function runHealthBaselineCheck(
   } finally {
     rmSync(scratch, { recursive: true, force: true });
   }
+}
+
+/**
+ * One duplication scan, and the line-keyed baseline fallow would save from it.
+ *
+ * ONE invocation for both, so the addresses can never describe a different
+ * scan from the content they are addressing. Injected in tests so the check's
+ * logic is provable without running fallow.
+ */
+type ScanDupes = (baselinePath: string, cwd: string) => Promise<{ code: number; stdout: string }>;
+
+const scanDupesWithFallow: ScanDupes = (baselinePath, cwd) =>
+  runToolCapturingStdout(
+    'fallow',
+    ['dupes', '--format', 'json', '--quiet', '--save-baseline', baselinePath],
+    { cwd },
+  );
+
+/** What one scan yields: the accepted record it implies, and fallow's own addresses. */
+interface DupesReading {
+  accepted: AcceptedDupes;
+  baseline: string;
+}
+
+/**
+ * Scan this tree's duplication, or say why nothing could be concluded.
+ *
+ * The scan is the expensive half and both the check and the re-key need
+ * exactly the same one, so it is read once, here.
+ */
+async function readDupes(
+  cwd: string,
+  scan: ScanDupes,
+): Promise<{ reading: DupesReading } | { failure: string }> {
+  const scratch = mkdtempSync(join(tmpdir(), 'boardsmith-dupes-'));
+  const baselinePath = join(scratch, 'fresh-baseline.json');
+  try {
+    // `fallow dupes` exits non-zero once duplication passes a threshold, while
+    // still reporting and still writing the baseline. The OUTPUT is the signal.
+    const { code, stdout } = await scan(baselinePath, cwd);
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(stdout);
+    } catch {
+      parsed = undefined;
+    }
+    const groups = (parsed as DupesScan | undefined)?.clone_groups;
+    if (!Array.isArray(groups) || !existsSync(baselinePath)) {
+      return {
+        failure:
+          `\`fallow dupes\` exited ${code} without a readable report or baseline, so drift in `
+          + `${ACCEPTED_DUPES_FILE} cannot be ruled out.\n`
+          + 'Run `npx fallow dupes` here to see what it says.',
+      };
+    }
+    return {
+      reading: {
+        accepted: acceptedFromScan({ clone_groups: groups }),
+        baseline: readFileSync(baselinePath, 'utf-8'),
+      },
+    };
+  } finally {
+    rmSync(scratch, { recursive: true, force: true });
+  }
+}
+
+/** Pretty-printed with a trailing newline, so the committed files diff sanely. */
+const asJson = (value: unknown): string => `${JSON.stringify(value, null, 2)}\n`;
+
+/**
+ * Is the accepted duplication record still an accurate account of this tree,
+ * and does the derived baseline still point at the right lines (#232)?
+ *
+ * Two questions, in that order, because they have different answers. Content
+ * that does not match is a finding about the code. Content that matches at
+ * moved addresses is not a finding at all -- it is the stale-address case that
+ * used to ambush the next editor, and the report says so and names the re-key.
+ */
+export async function runDupesBaselineCheck(
+  cwd: string,
+  scan: ScanDupes = scanDupesWithFallow,
+): Promise<{ code: number; report: string }> {
+  const acceptedPath = join(cwd, ACCEPTED_DUPES_FILE);
+  if (!existsSync(acceptedPath)) {
+    return {
+      code: 0,
+      report: `Skipped: this project keeps no ${ACCEPTED_DUPES_FILE}, so there is nothing to drift.`,
+    };
+  }
+
+  const read = await readDupes(cwd, scan);
+  if ('failure' in read) return { code: 1, report: read.failure };
+
+  const committed = JSON.parse(readFileSync(acceptedPath, 'utf-8')) as AcceptedDupes;
+  const drift = compareAcceptedDupes(committed, read.reading.accepted);
+  if (drift.length > 0) return { code: 1, report: describeDupesDrift(drift) };
+
+  // The content matched, so every difference left is an address. Both committed
+  // files are derived from the scan, so both are compared: the line-keyed
+  // baseline for where fallow will look, and the accepted record for the files
+  // and sizes it reports to a reader.
+  const baselinePath = join(cwd, DUPES_BASELINE_FILE);
+  const moved = Math.max(
+    misaddressedGroups(existsSync(baselinePath) ? readFileSync(baselinePath, 'utf-8') : '', read.reading.baseline),
+    movedEntries(committed, read.reading.accepted),
+  );
+  if (moved > 0) return { code: 1, report: describeAddressDrift(moved) };
+
+  return {
+    code: 0,
+    report: `${ACCEPTED_DUPES_FILE} and ${DUPES_BASELINE_FILE} still describe this tree.`,
+  };
+}
+
+/** The line-keyed group addresses in one saved baseline. */
+function addressesIn(baseline: string): string[] {
+  if (baseline === '') return [];
+  const parsed = JSON.parse(baseline) as { clone_groups?: unknown };
+  return Array.isArray(parsed.clone_groups) ? (parsed.clone_groups as string[]) : [];
+}
+
+/** How many of the tree's clone groups the committed baseline mis-addresses. */
+function misaddressedGroups(committed: string, fresh: string): number {
+  const known = new Set(addressesIn(committed));
+  return addressesIn(fresh).filter((address) => !known.has(address)).length;
+}
+
+/** How many accepted entries record a `files`/`lines` the tree disagrees with. */
+function movedEntries(committed: AcceptedDupes, fresh: AcceptedDupes): number {
+  const shape = (groups: AcceptedDupes): string[] =>
+    (groups.accepted ?? []).map((group) => `${group.content}|${group.lines}|${group.files.join(',')}`).sort();
+  const was = shape(committed);
+  const is = shape(fresh);
+  return is.filter((entry, index) => entry !== was[index]).length;
+}
+
+/**
+ * RE-ADDRESS THE ACCEPTED CLONE GROUPS (#232).
+ *
+ * It refuses whenever the content does not match, which is what stops it being
+ * a button that turns the board green: new duplication has no entry to
+ * re-address, and there is no spelling of this command that accepts it. Only
+ * deleting the record and running this again does that, deliberately, as a
+ * visible change to a committed file.
+ */
+export async function rekeyDupesBaseline(
+  cwd: string,
+  scan: ScanDupes = scanDupesWithFallow,
+): Promise<{ code: number; report: string }> {
+  const read = await readDupes(cwd, scan);
+  if ('failure' in read) return { code: 1, report: read.failure };
+
+  const acceptedPath = join(cwd, ACCEPTED_DUPES_FILE);
+  const born = !existsSync(acceptedPath);
+  if (!born) {
+    const committed = JSON.parse(readFileSync(acceptedPath, 'utf-8')) as AcceptedDupes;
+    const drift = compareAcceptedDupes(committed, read.reading.accepted);
+    if (drift.length > 0) {
+      return {
+        code: 1,
+        report:
+          'Nothing was written. Re-keying only re-addresses debt whose CONTENT still '
+          + 'matches, and this tree\'s does not:\n\n'
+          + describeDupesDrift(drift),
+      };
+    }
+  }
+
+  writeFileSync(acceptedPath, asJson(read.reading.accepted));
+  writeFileSync(join(cwd, DUPES_BASELINE_FILE), read.reading.baseline);
+  const count = read.reading.accepted.accepted.length;
+  return {
+    code: 0,
+    report: born
+      ? `Recorded ${count} clone ${count === 1 ? 'group' : 'groups'} as this tree's accepted `
+        + `duplication, in ${ACCEPTED_DUPES_FILE} and ${DUPES_BASELINE_FILE}.`
+      : `Re-addressed ${count} accepted clone ${count === 1 ? 'group' : 'groups'}; every one `
+        + 'matched by content, so no debt was forgiven.',
+  };
 }
 
 /**
@@ -206,7 +398,9 @@ const outcomeOf = (code: number): AuditOutcome => (code === 0 ? 'pass' : 'fail')
  * Code-quality audits. Deliberately not part of `boardsmith lint`: these are
  * slow, advisory sweeps you run after a refactor, not a per-commit gate.
  */
-function buildAudits(options: AuditOptions): Record<'changes' | 'duplication' | 'healthBaseline', Audit> {
+function buildAudits(
+  options: AuditOptions,
+): Record<'changes' | 'duplication' | 'healthBaseline' | 'dupesBaseline', Audit> {
   return {
     changes: {
       name: 'changed files',
@@ -225,6 +419,14 @@ function buildAudits(options: AuditOptions): Record<'changes' | 'duplication' | 
       name: 'health baseline',
       run: async (cwd) => {
         const { code, report } = await runHealthBaselineCheck(cwd);
+        console.log(code === 0 ? chalk.dim(report) : chalk.yellow(report));
+        return outcomeOf(code);
+      },
+    },
+    dupesBaseline: {
+      name: 'dupes baseline',
+      run: async (cwd) => {
+        const { code, report } = await runDupesBaselineCheck(cwd);
         console.log(code === 0 ? chalk.dim(report) : chalk.yellow(report));
         return outcomeOf(code);
       },
@@ -253,39 +455,62 @@ async function reportBacklog(cwd: string): Promise<void> {
 }
 
 /**
- * Run BoardSmith's code-quality audits.
+ * `--backlog`: the whole repository's dead code, and never one of the checks.
  *
- * With no flags every audit runs; pass `--changes`, `--duplication` or
- * `--health-baseline` to run just one. Exits non-zero if any audit reports
- * findings, so it can gate a refactor.
+ * Its own command rather than a flag on a gate run, because it always exits 0
+ * and mixing it with a verdict is how a report starts reading as a pass.
  */
-export async function auditCommand(options: AuditOptions): Promise<void> {
-  const cwd = process.cwd();
-
-  requireBoardsmithWorkspace(cwd);
-
-  if (options.backlog) {
-    if (options.changes || options.duplication || options.healthBaseline || options.since) {
-      console.error(chalk.red('Error: --backlog is a whole-repository report, not one of the gate\'s checks.'));
-      console.error(chalk.dim('Run `boardsmith audit --backlog` on its own.'));
-      process.exit(1);
-    }
-    await reportBacklog(cwd);
-    return;
+async function backlogAction(cwd: string, conflicting: boolean): Promise<void> {
+  if (conflicting) {
+    console.error(chalk.red('Error: --backlog is a whole-repository report, not one of the gate\'s checks.'));
+    console.error(chalk.dim('Run `boardsmith audit --backlog` on its own.'));
+    process.exit(1);
   }
+  await reportBacklog(cwd);
+}
 
+/**
+ * `--rekey-dupes`: a WRITE, so it runs alone.
+ *
+ * A run that re-addressed the duplication baseline and then audited against it
+ * would be grading its own homework.
+ */
+async function rekeyAction(cwd: string, conflicting: boolean): Promise<void> {
+  if (conflicting) {
+    console.error(chalk.red('Error: --rekey-dupes rewrites the duplication baseline, it does not audit.'));
+    console.error(chalk.dim('Run `boardsmith audit --rekey-dupes` on its own, then `boardsmith audit`.'));
+    process.exit(1);
+  }
+  const { code, report } = await rekeyDupesBaseline(cwd);
+  console.log(code === 0 ? chalk.green(report) : chalk.yellow(report));
+  if (code !== 0) process.exit(code);
+}
+
+/** The checks this run asked for, in the order they are reported. */
+function selectedAudits(options: AuditOptions): Audit[] {
   const wants = selectChecks({
     changes: options.changes,
     duplication: options.duplication,
     healthBaseline: options.healthBaseline,
+    dupesBaseline: options.dupesBaseline,
   });
-
   const all = buildAudits(options);
-  const audits: Audit[] = [];
-  if (wants('changes')) audits.push(all.changes);
-  if (wants('duplication')) audits.push(all.duplication);
-  if (wants('healthBaseline')) audits.push(all.healthBaseline);
+  return (['changes', 'duplication', 'healthBaseline', 'dupesBaseline'] as const)
+    .filter((key) => wants(key))
+    .map((key) => all[key]);
+}
 
+/**
+ * Run each audit and collect what it concluded.
+ *
+ * `checked` deliberately omits a `nothing-to-check` run: a clean report over
+ * zero files is not a pass, and printing it as one is how a gate stops meaning
+ * anything (#176).
+ */
+async function runAudits(
+  cwd: string,
+  audits: readonly Audit[],
+): Promise<{ failed: string[]; checked: string[] }> {
   const failed: string[] = [];
   const checked: string[] = [];
   for (const audit of audits) {
@@ -294,6 +519,31 @@ export async function auditCommand(options: AuditOptions): Promise<void> {
     if (outcome === 'fail') failed.push(audit.name);
     if (outcome !== 'nothing-to-check') checked.push(audit.name);
   }
+  return { failed, checked };
+}
+
+/**
+ * Run BoardSmith's code-quality audits.
+ *
+ * With no flags every audit runs; pass `--changes`, `--duplication`,
+ * `--health-baseline` or `--dupes-baseline` to run just one. Exits non-zero if
+ * any audit reports findings, so it can gate a refactor.
+ */
+export async function auditCommand(options: AuditOptions): Promise<void> {
+  const cwd = process.cwd();
+
+  requireBoardsmithWorkspace(cwd);
+
+  const selectors = Boolean(
+    options.changes || options.duplication || options.healthBaseline || options.dupesBaseline,
+  );
+
+  if (options.backlog) {
+    return backlogAction(cwd, selectors || Boolean(options.since) || Boolean(options.rekeyDupes));
+  }
+  if (options.rekeyDupes) return rekeyAction(cwd, selectors || Boolean(options.since));
+
+  const { failed, checked } = await runAudits(cwd, selectedAudits(options));
 
   if (failed.length > 0) {
     console.error(chalk.red(`\nAudit reported findings: ${failed.join(', ')}\n`));

@@ -2,7 +2,12 @@ import { describe, it, expect } from 'vitest';
 import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { runChangedFilesAudit, runHealthBaselineCheck } from './audit.js';
+import {
+  rekeyDupesBaseline,
+  runChangedFilesAudit,
+  runDupesBaselineCheck,
+  runHealthBaselineCheck,
+} from './audit.js';
 
 /**
  * Issue #159: a drifted health baseline must report ITSELF as drifted, with
@@ -187,5 +192,107 @@ describe('runChangedFilesAudit', () => {
     expect(result.outcome).toBe('fail');
     expect(result.report).toContain('fallow audit');
     expect(result.report).toContain('127');
+  });
+});
+
+/**
+ * #232: the two questions the duplication baseline answers, and the order.
+ *
+ * Content first, because content that does not match is a finding about the
+ * code. Addresses second, because addresses that moved are not a finding at
+ * all -- that is the stale-key case that used to arrive as somebody else's
+ * clone groups blocking your commit.
+ */
+describe('runDupesBaselineCheck and rekeyDupesBaseline', () => {
+  async function withDir(fn: (dir: string) => Promise<void>) {
+    const dir = mkdtempSync(join(tmpdir(), 'bs-dupes-'));
+    try {
+      await fn(dir);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  }
+
+  const FRAGMENT = 'const seated = () => 1;\nconst other = () => 2;';
+
+  /** A scanner standing in for `fallow dupes`, reporting one group at `at`. */
+  const scanner = (at: readonly number[], fragment = FRAGMENT) =>
+    async (baselinePath: string) => {
+      const instances = at.map((start, index) => ({
+        file: `src/probe-${index}.ts`,
+        start_line: start,
+        end_line: start + 1,
+        fragment,
+      }));
+      writeFileSync(
+        baselinePath,
+        JSON.stringify({
+          clone_groups: [
+            instances.map((i) => `${i.file}:${i.start_line}-${i.end_line}`).sort().join('|'),
+          ],
+        }),
+      );
+      return {
+        code: 0,
+        stdout: JSON.stringify({ clone_groups: [{ instances, line_count: 2 }] }),
+      };
+    };
+
+  it('records the tree when there is no accepted file yet, and then passes', async () => {
+    await withDir(async (dir) => {
+      const written = await rekeyDupesBaseline(dir, scanner([10, 40]));
+      expect(written.code).toBe(0);
+      expect(written.report).toContain('Recorded 1 clone group');
+      expect((await runDupesBaselineCheck(dir, scanner([10, 40]))).code).toBe(0);
+    });
+  });
+
+  it('names moved addresses as a re-key, not as duplication', async () => {
+    await withDir(async (dir) => {
+      await rekeyDupesBaseline(dir, scanner([10, 40]));
+      // The same clone, 25 lines further down both files: #230's own shape.
+      const result = await runDupesBaselineCheck(dir, scanner([35, 65]));
+      expect(result.code).not.toBe(0);
+      expect(result.report).toContain('The duplication itself is unchanged');
+      expect(result.report).toContain('--rekey-dupes');
+      // And re-keying it is allowed, because the content matched.
+      const rekeyed = await rekeyDupesBaseline(dir, scanner([35, 65]));
+      expect(rekeyed.code).toBe(0);
+      expect(rekeyed.report).toContain('no debt was forgiven');
+      expect((await runDupesBaselineCheck(dir, scanner([35, 65]))).code).toBe(0);
+    });
+  });
+
+  it('fails on duplication nothing accepted, and refuses to re-key it away', async () => {
+    await withDir(async (dir) => {
+      await rekeyDupesBaseline(dir, scanner([10, 40]));
+      const changed = scanner([10, 40], `${FRAGMENT}\nconst third = () => 3;`);
+      const result = await runDupesBaselineCheck(dir, changed);
+      expect(result.code).not.toBe(0);
+      expect(result.report).toContain('DUPLICATION NOTHING HAS ACCEPTED');
+
+      const refused = await rekeyDupesBaseline(dir, changed);
+      expect(refused.code).not.toBe(0);
+      expect(refused.report).toContain('Nothing was written');
+      // Still refusing after the attempt: nothing was quietly accepted.
+      expect((await runDupesBaselineCheck(dir, changed)).code).not.toBe(0);
+    });
+  });
+
+  it('skips a project that keeps no accepted record at all', async () => {
+    await withDir(async (dir) => {
+      const result = await runDupesBaselineCheck(dir, scanner([10, 40]));
+      expect(result.code).toBe(0);
+      expect(result.report).toContain('nothing to drift');
+    });
+  });
+
+  it('says so when fallow reported nothing readable', async () => {
+    await withDir(async (dir) => {
+      await rekeyDupesBaseline(dir, scanner([10, 40]));
+      const result = await runDupesBaselineCheck(dir, async () => ({ code: 2, stdout: 'not json' }));
+      expect(result.code).not.toBe(0);
+      expect(result.report).toContain('cannot be ruled out');
+    });
   });
 });
