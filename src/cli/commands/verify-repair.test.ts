@@ -3,7 +3,6 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { execSync } from 'node:child_process';
 import { basename, join } from 'node:path';
-import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import {
   selectStaleChunks,
@@ -25,6 +24,7 @@ import {
   type ClassificationRecord,
 } from './verify-run.js';
 import type { ImpactMapEntry } from './verify-impact.js';
+import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
@@ -107,13 +107,9 @@ describe('staged-slice resolution — resolveStagedSlicePaths, over the real com
   const runId = '2026-07-30T00-00-00Z';
 
   beforeEach(async () => {
-    root = await fs.mkdtemp(join(tmpdir(), 'bs-verify-repair-'));
+    root = tempTree('bs-verify-repair-');
     project = join(root, 'game-project');
     await fs.mkdir(project, { recursive: true });
-  });
-
-  afterEach(async () => {
-    await fs.rm(root, { recursive: true, force: true });
   });
 
   async function copyFixture(game: 'seven' | 'one-two-punch'): Promise<void> {
@@ -365,11 +361,7 @@ describe('episode — writeAppendedAuditRound routes through atomicWriteFile onl
   let root: string;
 
   beforeEach(async () => {
-    root = await fs.mkdtemp(join(tmpdir(), 'bs-verify-repair-write-'));
-  });
-
-  afterEach(async () => {
-    await fs.rm(root, { recursive: true, force: true });
+    root = tempTree('bs-verify-repair-write-');
   });
 
   it('writes the appended heading to disk and returns the same content it wrote', async () => {
@@ -436,12 +428,11 @@ describe('post-repair gate — recomputeRepairGatePostRepair, over a real git fi
   let logSpy: ReturnType<typeof vi.spyOn>;
 
   beforeEach(async () => {
-    root = await fs.mkdtemp(join(tmpdir(), 'bs-verify-repair-gate-'));
+    root = tempTree('bs-verify-repair-gate-');
     logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
   });
 
   afterEach(async () => {
-    await fs.rm(root, { recursive: true, force: true });
     logSpy.mockRestore();
   });
 

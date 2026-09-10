@@ -1,9 +1,8 @@
 import { DESIGN_DIR, resolveDesignRelative } from '../lib/project-paths.js';
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { promises as fs, readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { dirname, join, relative } from 'node:path';
-import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import {
   EXAMPLE_REPLAY_VERDICTS,
@@ -25,6 +24,7 @@ import {
   workedExampleId,
 } from './example-derivation.js';
 import { renderIndex } from './ingest-archive.js';
+import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
 // -------------------------------------------------------------------------------------------
 // Task 1 — verdict set + createExampleReplayRecord (the record choke point)
@@ -228,11 +228,7 @@ describe('exampleReplayLedgerPath / replaceExampleReplayVerdicts / recordExample
   let dir: string;
 
   beforeEach(async () => {
-    dir = await fs.mkdtemp(join(tmpdir(), 'bs-verify-example-replay-ledger-'));
-  });
-
-  afterEach(async () => {
-    await fs.rm(dir, { recursive: true, force: true });
+    dir = tempTree('bs-verify-example-replay-ledger-');
   });
 
   it('exampleReplayLedgerPath resolves to rulebook/.example-replay/EXAMPLE-VERDICTS.md', () => {
@@ -355,11 +351,7 @@ describe('verifyExampleReplayCommand — command', () => {
   let dir: string;
 
   beforeEach(async () => {
-    dir = await fs.mkdtemp(join(tmpdir(), 'bs-verify-example-replay-command-'));
-  });
-
-  afterEach(async () => {
-    await fs.rm(dir, { recursive: true, force: true });
+    dir = tempTree('bs-verify-example-replay-command-');
   });
 
   async function makeProject(files: Record<string, string>): Promise<string> {
@@ -528,11 +520,7 @@ describe('verifyExampleRecordCommand — record', () => {
   let dir: string;
 
   beforeEach(async () => {
-    dir = await fs.mkdtemp(join(tmpdir(), 'bs-verify-example-record-'));
-  });
-
-  afterEach(async () => {
-    await fs.rm(dir, { recursive: true, force: true });
+    dir = tempTree('bs-verify-example-record-');
   });
 
   async function makeProject(files: Record<string, string>): Promise<string> {
@@ -903,11 +891,7 @@ describe('verifyExampleRecordCommand / verifyExampleReplayCommand — provenance
   let dir: string;
 
   beforeEach(async () => {
-    dir = await fs.mkdtemp(join(tmpdir(), 'bs-verify-example-provenance-'));
-  });
-
-  afterEach(async () => {
-    await fs.rm(dir, { recursive: true, force: true });
+    dir = tempTree('bs-verify-example-provenance-');
   });
 
   const SLICE_TEXT =
@@ -1114,11 +1098,7 @@ describe('verifyExampleTranslateCommand — translate', () => {
   let dir: string;
 
   beforeEach(async () => {
-    dir = await fs.mkdtemp(join(tmpdir(), 'bs-verify-example-translate-'));
-  });
-
-  afterEach(async () => {
-    await fs.rm(dir, { recursive: true, force: true });
+    dir = tempTree('bs-verify-example-translate-');
   });
 
   const SLICE_TEXT =

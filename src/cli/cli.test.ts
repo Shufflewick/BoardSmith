@@ -5,7 +5,7 @@ import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { promises as fs } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { tempTree } from '../testing/temp-tree.test-helper.js';
 
 /**
  * `cli.test.ts` — registration-level proof that CHECK-04's dual-enumeration read/report and
@@ -61,29 +61,25 @@ describe('verify-derive-check — registration', () => {
   });
 
   it('runs end-to-end against a real project and emits parseable, non-empty JSON, exit 0', async () => {
-    const dir = await fs.mkdtemp(join(tmpdir(), 'bs-cli-verify-derive-check-'));
-    try {
-      const project = join(dir, 'project');
-      await fs.mkdir(join(project, DESIGN_DIR, 'rulebook'), { recursive: true });
-      await fs.writeFile(
-        join(project, DESIGN_DIR, 'rulebook', '01-x.md'),
-        'Card numbers range from 1 to 7.\n\nDerived (p.1): There are 7 unique numbers.\n',
-      );
+    const dir = tempTree('bs-cli-verify-derive-check-');
+    const project = join(dir, 'project');
+    await fs.mkdir(join(project, DESIGN_DIR, 'rulebook'), { recursive: true });
+    await fs.writeFile(
+      join(project, DESIGN_DIR, 'rulebook', '01-x.md'),
+      'Card numbers range from 1 to 7.\n\nDerived (p.1): There are 7 unique numbers.\n',
+    );
 
-      const result = await spawnCli(['verify-derive-check', '--project', project, '--json']);
+    const result = await spawnCli(['verify-derive-check', '--project', project, '--json']);
 
-      expect(result.code).toBe(0);
-      const parsed = JSON.parse(result.stdout);
-      expect(Array.isArray(parsed.slices)).toBe(true);
-      expect(parsed.slices.length).toBeGreaterThan(0);
-      expect(parsed.models).toEqual({
-        enumeratorA: 'claude-opus-5',
-        enumeratorB: 'claude-haiku-4-5-20251001',
-        reconciler: 'claude-sonnet-5',
-      });
-    } finally {
-      await fs.rm(dir, { recursive: true, force: true });
-    }
+    expect(result.code).toBe(0);
+    const parsed = JSON.parse(result.stdout);
+    expect(Array.isArray(parsed.slices)).toBe(true);
+    expect(parsed.slices.length).toBeGreaterThan(0);
+    expect(parsed.models).toEqual({
+      enumeratorA: 'claude-opus-5',
+      enumeratorB: 'claude-haiku-4-5-20251001',
+      reconciler: 'claude-sonnet-5',
+    });
   });
 });
 
@@ -146,25 +142,21 @@ describe('verify-example-replay — registration (CHECK-06)', () => {
   });
 
   it('runs end-to-end against a real project and emits parseable, non-empty JSON, exit 0', async () => {
-    const dir = await fs.mkdtemp(join(tmpdir(), 'bs-cli-verify-example-replay-'));
-    try {
-      const project = join(dir, 'project');
-      await fs.mkdir(join(project, DESIGN_DIR, 'rulebook'), { recursive: true });
-      await fs.writeFile(
-        join(project, DESIGN_DIR, 'rulebook', '01-x.md'),
-        'p.1, Punch Examples:\n"If you are punched while READY, you become EXHAUSTED."\n',
-      );
+    const dir = tempTree('bs-cli-verify-example-replay-');
+    const project = join(dir, 'project');
+    await fs.mkdir(join(project, DESIGN_DIR, 'rulebook'), { recursive: true });
+    await fs.writeFile(
+      join(project, DESIGN_DIR, 'rulebook', '01-x.md'),
+      'p.1, Punch Examples:\n"If you are punched while READY, you become EXHAUSTED."\n',
+    );
 
-      const result = await spawnCli(['verify-example-replay', '--project', project, '--json']);
+    const result = await spawnCli(['verify-example-replay', '--project', project, '--json']);
 
-      expect(result.code).toBe(0);
-      const parsed = JSON.parse(result.stdout);
-      expect(Array.isArray(parsed.slices)).toBe(true);
-      expect(parsed.slices.length).toBeGreaterThan(0);
-      expect(Array.isArray(parsed.unarchivedSources)).toBe(true);
-    } finally {
-      await fs.rm(dir, { recursive: true, force: true });
-    }
+    expect(result.code).toBe(0);
+    const parsed = JSON.parse(result.stdout);
+    expect(Array.isArray(parsed.slices)).toBe(true);
+    expect(parsed.slices.length).toBeGreaterThan(0);
+    expect(Array.isArray(parsed.unarchivedSources)).toBe(true);
   });
 });
 
@@ -223,57 +215,53 @@ describe('verify-example-translate — registration (CHECK-06, the second dispat
   });
 
   it('runs end-to-end against a real project and emits parseable, non-empty JSON, exit 0', async () => {
-    const dir = await fs.mkdtemp(join(tmpdir(), 'bs-cli-verify-example-translate-'));
-    try {
-      const project = join(dir, 'project');
-      await fs.mkdir(join(project, DESIGN_DIR, 'rulebook'), { recursive: true });
-      await fs.mkdir(join(project, 'src', 'rules'), { recursive: true });
-      await fs.writeFile(
-        join(project, DESIGN_DIR, 'rulebook', '02-punch.md'),
-        'p.2, Punch Examples:\n"If you are punched while READY, you become EXHAUSTED."\n',
-      );
-      await fs.writeFile(
-        join(project, 'src', 'rules', 'index.ts'),
-        'export function checkPunch(input: { ready: boolean }): boolean {\n' +
-          '  return input.ready;\n' +
-          '}\n',
-      );
-      const extraction = [
-        {
-          slicePath: 'rulebook/02-punch.md',
-          lineNumber: 2,
-          pageCitation: 'p.2, Punch Examples',
-          kind: 'transition',
-          sourceText: 'If you are punched while READY, you become EXHAUSTED.',
-          setup: 'Guard is READY.',
-          action: 'Guard is punched.',
-          expected: 'Guard becomes EXHAUSTED.',
-          supportingQuoteLines: ['If you are punched while READY, you become EXHAUSTED.'],
-        },
-      ];
-      const extractionPath = join(dir, 'extraction.json');
-      await fs.writeFile(extractionPath, JSON.stringify(extraction, null, 2));
+    const dir = tempTree('bs-cli-verify-example-translate-');
+    const project = join(dir, 'project');
+    await fs.mkdir(join(project, DESIGN_DIR, 'rulebook'), { recursive: true });
+    await fs.mkdir(join(project, 'src', 'rules'), { recursive: true });
+    await fs.writeFile(
+      join(project, DESIGN_DIR, 'rulebook', '02-punch.md'),
+      'p.2, Punch Examples:\n"If you are punched while READY, you become EXHAUSTED."\n',
+    );
+    await fs.writeFile(
+      join(project, 'src', 'rules', 'index.ts'),
+      'export function checkPunch(input: { ready: boolean }): boolean {\n' +
+        '  return input.ready;\n' +
+        '}\n',
+    );
+    const extraction = [
+      {
+        slicePath: 'rulebook/02-punch.md',
+        lineNumber: 2,
+        pageCitation: 'p.2, Punch Examples',
+        kind: 'transition',
+        sourceText: 'If you are punched while READY, you become EXHAUSTED.',
+        setup: 'Guard is READY.',
+        action: 'Guard is punched.',
+        expected: 'Guard becomes EXHAUSTED.',
+        supportingQuoteLines: ['If you are punched while READY, you become EXHAUSTED.'],
+      },
+    ];
+    const extractionPath = join(dir, 'extraction.json');
+    await fs.writeFile(extractionPath, JSON.stringify(extraction, null, 2));
 
-      const result = await spawnCli([
-        'verify-example-translate',
-        '--project',
-        project,
-        '--slice-path',
-        'rulebook/02-punch.md',
-        '--extraction',
-        extractionPath,
-        '--json',
-      ]);
+    const result = await spawnCli([
+      'verify-example-translate',
+      '--project',
+      project,
+      '--slice-path',
+      'rulebook/02-punch.md',
+      '--extraction',
+      extractionPath,
+      '--json',
+    ]);
 
-      expect(result.code).toBe(0);
-      const parsed = JSON.parse(result.stdout);
-      expect(Array.isArray(parsed.payloads)).toBe(true);
-      expect(parsed.payloads.length).toBe(1);
-      expect(parsed.payloads[0].translationPayload).toContain('BS-EXAMPLE-TRANSLATE-V1');
-      expect(Array.isArray(parsed.notTranslated)).toBe(true);
-    } finally {
-      await fs.rm(dir, { recursive: true, force: true });
-    }
+    expect(result.code).toBe(0);
+    const parsed = JSON.parse(result.stdout);
+    expect(Array.isArray(parsed.payloads)).toBe(true);
+    expect(parsed.payloads.length).toBe(1);
+    expect(parsed.payloads[0].translationPayload).toContain('BS-EXAMPLE-TRANSLATE-V1');
+    expect(Array.isArray(parsed.notTranslated)).toBe(true);
   });
 });
 
@@ -305,37 +293,33 @@ describe('verify-example-emit — registration (TEST-01, the build-side write su
   });
 
   it('runs end-to-end against a real project with zero worked examples, exit 0, and writes a real file', async () => {
-    const dir = await fs.mkdtemp(join(tmpdir(), 'bs-cli-verify-example-emit-'));
-    try {
-      const project = join(dir, 'project');
-      await fs.mkdir(join(project, DESIGN_DIR, 'rulebook'), { recursive: true });
-      await fs.writeFile(join(project, DESIGN_DIR, 'rulebook', '01-x.md'), 'No worked examples here.\n');
-      await fs.mkdir(join(project, DESIGN_DIR, 'chunks', 'chunk-a'), { recursive: true });
-      await fs.writeFile(
-        join(project, DESIGN_DIR, 'chunks', 'chunk-a', 'CHUNK.md'),
-        '# chunk-a\n\n## Verified Against\n\nCites rulebook/01-x.md.\n',
-      );
+    const dir = tempTree('bs-cli-verify-example-emit-');
+    const project = join(dir, 'project');
+    await fs.mkdir(join(project, DESIGN_DIR, 'rulebook'), { recursive: true });
+    await fs.writeFile(join(project, DESIGN_DIR, 'rulebook', '01-x.md'), 'No worked examples here.\n');
+    await fs.mkdir(join(project, DESIGN_DIR, 'chunks', 'chunk-a'), { recursive: true });
+    await fs.writeFile(
+      join(project, DESIGN_DIR, 'chunks', 'chunk-a', 'CHUNK.md'),
+      '# chunk-a\n\n## Verified Against\n\nCites rulebook/01-x.md.\n',
+    );
 
-      const result = await spawnCli([
-        'verify-example-emit',
-        '--project',
-        project,
-        '--chunk',
-        'chunk-a',
-        '--json',
-      ]);
+    const result = await spawnCli([
+      'verify-example-emit',
+      '--project',
+      project,
+      '--chunk',
+      'chunk-a',
+      '--json',
+    ]);
 
-      expect(result.code).toBe(0);
-      const parsed = JSON.parse(result.stdout);
-      expect(parsed.chunkExempt).toBe(true);
-      expect(parsed.emittedCount).toBe(0);
-      const bytes = await fs.readFile(
-        join(project, 'tests', 'examples', 'chunk-a.examples.test.ts'),
-        'utf-8',
-      );
-      expect(bytes).toContain('chunk-a');
-    } finally {
-      await fs.rm(dir, { recursive: true, force: true });
-    }
+    expect(result.code).toBe(0);
+    const parsed = JSON.parse(result.stdout);
+    expect(parsed.chunkExempt).toBe(true);
+    expect(parsed.emittedCount).toBe(0);
+    const bytes = await fs.readFile(
+      join(project, 'tests', 'examples', 'chunk-a.examples.test.ts'),
+      'utf-8',
+    );
+    expect(bytes).toContain('chunk-a');
   });
 });

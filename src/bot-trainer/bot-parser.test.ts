@@ -4,8 +4,7 @@
  * These four functions are that path.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   parseExistingBot,
@@ -15,6 +14,7 @@ import {
   type ParsedObjective,
 } from './bot-parser.js';
 import type { LearnedObjective } from './types.js';
+import { tempTree } from '../testing/temp-tree.test-helper.js';
 
 let dir: string;
 
@@ -41,11 +41,10 @@ export const bot = {
 `;
 
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), 'bs-bot-parser-'));
+  dir = tempTree('bs-bot-parser-');
 });
 
 afterEach(() => {
-  rmSync(dir, { recursive: true, force: true });
   vi.restoreAllMocks();
 });
 

@@ -1,9 +1,8 @@
 import { DESIGN_DIR } from '../lib/project-paths.js';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { promises as fs, readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
-import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import {
   RULING_VERDICTS,
@@ -13,6 +12,7 @@ import {
   recordRulingVerdicts,
   verifyRulingRecheckCommand,
 } from './verify-ruling-recheck.js';
+import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
 /**
  * `verify-ruling-recheck.ts` is CHECK-01's mechanical half (176-CONTEXT.md decision 2). Every
@@ -41,11 +41,7 @@ const FIXTURE_SUPERSEDED_DIR = join(
 let dir: string;
 
 beforeEach(async () => {
-  dir = await fs.mkdtemp(join(tmpdir(), 'bs-verify-ruling-recheck-'));
-});
-
-afterEach(async () => {
-  await fs.rm(dir, { recursive: true, force: true });
+  dir = tempTree('bs-verify-ruling-recheck-');
 });
 
 // A live-shaped, no-dot path segment right after "rulebook/" — the exact convention

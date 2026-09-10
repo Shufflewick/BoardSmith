@@ -16,10 +16,10 @@
  * sibling ingest contract.
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { readFileSync, readdirSync, mkdtempSync, rmSync, existsSync, mkdirSync } from 'node:fs';
+import { readFileSync, readdirSync, rmSync, existsSync, mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { tmpdir } from 'node:os';
+import { tempTree } from '../../../testing/temp-tree.test-helper.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -748,7 +748,7 @@ describe('enumerate-facts.md / reconcile-facts.md — CHECK-04\'s replacement ju
     beforeAll(async () => {
       const { installClaudeCommand } = await import('../../commands/install-claude-command.js');
       origCwd = process.cwd();
-      tempDir = mkdtempSync(join(tmpdir(), 'bs-install-enumerate-'));
+      tempDir = tempTree('bs-install-enumerate-');
       process.chdir(tempDir);
       await installClaudeCommand({ local: true, force: true, skipLink: true });
       skillsRoot = join(tempDir, '.claude', 'skills');
@@ -756,7 +756,6 @@ describe('enumerate-facts.md / reconcile-facts.md — CHECK-04\'s replacement ju
 
     afterAll(() => {
       process.chdir(origCwd);
-      rmSync(tempDir, { recursive: true, force: true });
     });
 
     it('both new contract files land under .claude/skills/bs-shared/verify/', () => {
@@ -914,7 +913,7 @@ describe('extract-example.md / translate-example.md — the two tokens are disti
     beforeAll(async () => {
       const { installClaudeCommand } = await import('../../commands/install-claude-command.js');
       origCwd = process.cwd();
-      tempDir = mkdtempSync(join(tmpdir(), 'bs-install-extract-translate-'));
+      tempDir = tempTree('bs-install-extract-translate-');
       process.chdir(tempDir);
       await installClaudeCommand({ local: true, force: true, skipLink: true });
       skillsRoot = join(tempDir, '.claude', 'skills');
@@ -922,7 +921,6 @@ describe('extract-example.md / translate-example.md — the two tokens are disti
 
     afterAll(() => {
       process.chdir(origCwd);
-      rmSync(tempDir, { recursive: true, force: true });
     });
 
     it('both new contract files land under .claude/skills/bs-shared/verify/, content intact', () => {

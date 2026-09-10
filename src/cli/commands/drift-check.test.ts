@@ -4,8 +4,8 @@ import { promises as fs } from 'node:fs';
 import { execSync, execFile as execFileImport } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
-import { tmpdir } from 'node:os';
 import { diffedFilesSince, driftCheckCommand, UNRESOLVABLE } from './drift-check.js';
+import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
 /**
  * `execFile` is mocked (call-through by default) rather than spied directly — `node:child_process`
@@ -33,14 +33,13 @@ let dir: string;
 let logSpy: ReturnType<typeof vi.spyOn>;
 
 beforeEach(async () => {
-  dir = await fs.mkdtemp(join(tmpdir(), 'bs-drift-check-'));
+  dir = tempTree('bs-drift-check-');
   logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 });
 
 afterEach(async () => {
   logSpy.mockRestore();
   vi.restoreAllMocks();
-  await fs.rm(dir, { recursive: true, force: true });
 });
 
 /**

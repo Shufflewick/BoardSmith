@@ -1,9 +1,8 @@
 import { DESIGN_DIR, resolveDesignRelative } from '../lib/project-paths.js';
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { createHash } from 'node:crypto';
 import { promises as fs, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { renderIndex } from './ingest-archive.js';
 import {
@@ -30,6 +29,7 @@ import {
   type ReconcilerReturn,
 } from './verify-derive-check.js';
 import { PRESENTATION_EXCLUSION_MARKERS } from './verify-classify.js';
+import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
 /**
  * `verify-derive-check.ts` is CHECK-04's mechanical core, MOVED and retargeted onto the closed
@@ -532,11 +532,7 @@ describe('replaceDeriveCheckVerdicts / recordDeriveCheckVerdicts / readDeriveChe
   let dir: string;
 
   beforeEach(async () => {
-    dir = await fs.mkdtemp(join(tmpdir(), 'bs-verify-derive-check-ledger-'));
-  });
-
-  afterEach(async () => {
-    await fs.rm(dir, { recursive: true, force: true });
+    dir = tempTree('bs-verify-derive-check-ledger-');
   });
 
   it('round-trips exactly what was written, including every one of the eight verdicts', async () => {
@@ -708,13 +704,9 @@ describe('readDeriveCheckVerdicts — revalidation through createDeriveCheckReco
   let ledgerFile: string;
 
   beforeEach(async () => {
-    dir = await fs.mkdtemp(join(tmpdir(), 'bs-verify-derive-check-cr02-'));
+    dir = tempTree('bs-verify-derive-check-cr02-');
     await fs.mkdir(join(dir, DESIGN_DIR, 'rulebook', '.derive-check'), { recursive: true });
     ledgerFile = join(dir, DESIGN_DIR, 'rulebook', '.derive-check', 'verdicts.md');
-  });
-
-  afterEach(async () => {
-    await fs.rm(dir, { recursive: true, force: true });
   });
 
   async function writeRawLedger(bodyLines: string[]): Promise<void> {
@@ -781,12 +773,8 @@ describe('readDeriveCheckVerdicts — revalidation through createDeriveCheckReco
   });
 
   it('returns an empty array (never throws) when no ledger file exists', async () => {
-    const empty = await fs.mkdtemp(join(tmpdir(), 'bs-verify-derive-check-cr02-empty-'));
-    try {
-      await expect(readDeriveCheckVerdicts(empty)).resolves.toEqual([]);
-    } finally {
-      await fs.rm(empty, { recursive: true, force: true });
-    }
+    const empty = tempTree('bs-verify-derive-check-cr02-empty-');
+    await expect(readDeriveCheckVerdicts(empty)).resolves.toEqual([]);
   });
 });
 
@@ -1312,11 +1300,7 @@ describe('verifyDeriveRecordCommand', () => {
   let dir: string;
 
   beforeEach(async () => {
-    dir = await fs.mkdtemp(join(tmpdir(), 'bs-verify-derive-record-'));
-  });
-
-  afterEach(async () => {
-    await fs.rm(dir, { recursive: true, force: true });
+    dir = tempTree('bs-verify-derive-record-');
   });
 
   /**
@@ -1732,11 +1716,7 @@ describe('verifyDeriveCheckCommand', () => {
   let dir: string;
 
   beforeEach(async () => {
-    dir = await fs.mkdtemp(join(tmpdir(), 'bs-verify-derive-check-command-'));
-  });
-
-  afterEach(async () => {
-    await fs.rm(dir, { recursive: true, force: true });
+    dir = tempTree('bs-verify-derive-check-command-');
   });
 
   async function makeProject(files: Record<string, string>): Promise<string> {

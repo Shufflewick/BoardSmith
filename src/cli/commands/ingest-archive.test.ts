@@ -3,7 +3,6 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
-import { tmpdir } from 'node:os';
 import {
   ingestArchiveCommand,
   ingestCheckCommand,
@@ -24,6 +23,7 @@ import {
   parseAdditionalSources,
 } from './ingest-archive.js';
 import { computeVerificationScope } from './chunk-provenance.js';
+import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
 /**
  * `ingest-archive` exists because nine successive attempts to get an ingest session to perform
@@ -42,13 +42,9 @@ const SOURCE_BYTES = Buffer.from('%PDF-1.4 fake rulebook bytes for testing\n');
 const SOURCE_HASH = createHash('sha256').update(SOURCE_BYTES).digest('hex');
 
 beforeEach(async () => {
-  dir = await fs.mkdtemp(join(tmpdir(), 'bs-ingest-archive-'));
+  dir = tempTree('bs-ingest-archive-');
   sourcePath = join(dir, 'src-rules.pdf');
   await fs.writeFile(sourcePath, SOURCE_BYTES);
-});
-
-afterEach(async () => {
-  await fs.rm(dir, { recursive: true, force: true });
 });
 
 async function run(opts: Parameters<typeof ingestArchiveCommand>[1] = {}) {
@@ -309,7 +305,7 @@ describe('ingest-archive — INDEX.md contract', () => {
 
 describe('init --rulebook — the archive rides on a command that is never skipped', () => {
   it('initCommand accepts a rulebook path and archives it', async () => {
-    const parent = await fs.mkdtemp(join(tmpdir(), 'bs-init-rulebook-'));
+    const parent = tempTree('bs-init-rulebook-');
     const cwd = process.cwd();
     try {
       process.chdir(parent);
@@ -329,12 +325,11 @@ describe('init --rulebook — the archive rides on a command that is never skipp
       expect(index).toContain('## Open Rules Gaps');
     } finally {
       process.chdir(cwd);
-      await fs.rm(parent, { recursive: true, force: true });
     }
   }, 120_000);
 
   it('scaffolds normally when no rulebook is passed', async () => {
-    const parent = await fs.mkdtemp(join(tmpdir(), 'bs-init-norulebook-'));
+    const parent = tempTree('bs-init-norulebook-');
     const cwd = process.cwd();
     try {
       process.chdir(parent);
@@ -347,7 +342,6 @@ describe('init --rulebook — the archive rides on a command that is never skipp
       await expect(fs.access(join(parent, 'plain-game', 'package.json'))).resolves.toBeUndefined();
     } finally {
       process.chdir(cwd);
-      await fs.rm(parent, { recursive: true, force: true });
     }
   }, 120_000);
 });
@@ -358,7 +352,7 @@ describe('init — an explicit rulebook decision is required', () => {
   // its prior rather than from the file it had just read. An omitted decision is now a hard
   // failure, because failing commands are the one signal these sessions reliably act on.
   it('exits non-zero with an actionable message when neither flag is given', async () => {
-    const parent = await fs.mkdtemp(join(tmpdir(), 'bs-init-required-'));
+    const parent = tempTree('bs-init-required-');
     const cwd = process.cwd();
     const errors: string[] = [];
     const origError = console.error;
@@ -386,7 +380,6 @@ describe('init — an explicit rulebook decision is required', () => {
       console.error = origError;
       process.exit = origExit;
       process.chdir(cwd);
-      await fs.rm(parent, { recursive: true, force: true });
     }
   }, 60_000);
 });

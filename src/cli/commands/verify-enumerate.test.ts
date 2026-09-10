@@ -1,9 +1,8 @@
 import { DESIGN_DIR } from '../lib/project-paths.js';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { dirname, join } from 'node:path';
-import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { renderIndex, ingestArchiveCommand } from './ingest-archive.js';
 import {
@@ -23,6 +22,7 @@ import {
   type ReconcilerDerivedLineClaim,
   type ArithmeticChainStep,
 } from './verify-enumerate.js';
+import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
 /**
  * `verify-enumerate.ts` is CHECK-04's REPLACEMENT mechanical core (177-EXPERIMENTS/README.md
@@ -919,11 +919,7 @@ describe('composeArithmeticChain', () => {
 let dir: string;
 
 beforeEach(async () => {
-  dir = await fs.mkdtemp(join(tmpdir(), 'bs-verify-enumerate-'));
-});
-
-afterEach(async () => {
-  await fs.rm(dir, { recursive: true, force: true });
+  dir = tempTree('bs-verify-enumerate-');
 });
 
 describe('QuoteVerifiedProvenance', () => {

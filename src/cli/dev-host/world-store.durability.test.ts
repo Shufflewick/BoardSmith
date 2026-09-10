@@ -21,13 +21,13 @@
  */
 import { describe, expect, it } from 'vitest';
 import { spawn } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { worldBudgets } from '../../world/budgets.js';
 import { openWorldStore, worldStorePath } from './world-store.js';
+import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
 const CHILD = join(dirname(fileURLToPath(import.meta.url)), 'world-store-child.mjs');
 const BUDGETS = worldBudgets();
@@ -96,7 +96,7 @@ function runChild(
 }
 
 function workspace(): { root: string; markers: string; store: string } {
-  const root = mkdtempSync(join(tmpdir(), 'bs-world-durability-'));
+  const root = tempTree('bs-world-durability-');
   const markers = join(root, 'markers');
   mkdirSync(markers, { recursive: true });
   return { root, markers, store: worldStorePath(root) };
@@ -105,43 +105,39 @@ function workspace(): { root: string; markers: string; store: string } {
 describe('a world that outlives the process that wrote it', () => {
   it('finds its partitions, its pending events and its seats after a SIGKILL and a reopen', async () => {
     const { root, markers, store: path } = workspace();
-    try {
-      const run = await runChild('live', path, markers);
-      // The writer was KILLED, not closed: nothing ran on the way out, so
-      // anything found below was durable at the moment of the last commit.
-      expect(run.signal, run.stderr).toBe('SIGKILL');
-      expect(existsSync(join(markers, 'committed'))).toBe(true);
+    const run = await runChild('live', path, markers);
+    // The writer was KILLED, not closed: nothing ran on the way out, so
+    // anything found below was durable at the moment of the last commit.
+    expect(run.signal, run.stderr).toBe('SIGKILL');
+    expect(existsSync(join(markers, 'committed'))).toBe(true);
 
-      const store = openWorldStore(path, BUDGETS);
-      try {
-        expect(store.isLaunched()).toBe(true);
-        expect(await store.read('world')).toEqual({ parentId: 0, json: { season: 1 } });
-        expect(await store.read('room/lobby')).toEqual({ parentId: 1, json: { visitors: 3 } });
-        expect(store.pendingEvents().map((event) => event.id)).toEqual([
-          'seeded-0',
-          'seeded-1',
-          'seeded-2',
-          'seeded-3',
-          'seeded-4',
-          'seeded-5',
-          'seeded-6',
-          'seeded-7',
-          'seeded-8',
-          'seeded-9',
-        ]);
-        expect(store.pendingEvents()[0].args).toEqual({ index: 0 });
-        expect(store.seats()).toEqual([
-          { player: 'player-a', seat: 1 },
-          { player: 'player-b', seat: 2 },
-        ]);
-        // The checkpoint cleared the room it wrote and left the one it did not,
-        // so a restarted host is told the truth about which bytes are stale.
-        expect(store.dirtyPartitions()).toEqual(['room/unwritten']);
-      } finally {
-        store.close();
-      }
+    const store = openWorldStore(path, BUDGETS);
+    try {
+      expect(store.isLaunched()).toBe(true);
+      expect(await store.read('world')).toEqual({ parentId: 0, json: { season: 1 } });
+      expect(await store.read('room/lobby')).toEqual({ parentId: 1, json: { visitors: 3 } });
+      expect(store.pendingEvents().map((event) => event.id)).toEqual([
+        'seeded-0',
+        'seeded-1',
+        'seeded-2',
+        'seeded-3',
+        'seeded-4',
+        'seeded-5',
+        'seeded-6',
+        'seeded-7',
+        'seeded-8',
+        'seeded-9',
+      ]);
+      expect(store.pendingEvents()[0].args).toEqual({ index: 0 });
+      expect(store.seats()).toEqual([
+        { player: 'player-a', seat: 1 },
+        { player: 'player-b', seat: 2 },
+      ]);
+      // The checkpoint cleared the room it wrote and left the one it did not,
+      // so a restarted host is told the truth about which bytes are stale.
+      expect(store.dirtyPartitions()).toEqual(['room/unwritten']);
     } finally {
-      rmSync(root, { recursive: true, force: true });
+      store.close();
     }
   }, 60_000);
 

@@ -1,12 +1,12 @@
 import { DESIGN_DIR } from './lib/project-paths.js';
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { execSync, execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { tmpdir } from 'node:os';
+import { tempTree } from '../testing/temp-tree.test-helper.js';
 
 /**
  * `cli-conformance-commands.test.ts` — the first test in this repo that exercises a command
@@ -65,11 +65,7 @@ async function spawnCli(args: string[], cwd: string = REPO_ROOT): Promise<SpawnR
 let dir: string;
 
 beforeEach(async () => {
-  dir = await fs.mkdtemp(join(tmpdir(), 'bs-cli-conformance-'));
-});
-
-afterEach(async () => {
-  await fs.rm(dir, { recursive: true, force: true });
+  dir = tempTree('bs-cli-conformance-');
 });
 
 /** Whole-project content hash: every file's relative path + bytes, in sorted order. */

@@ -1,26 +1,22 @@
 import { describe, it, expect } from 'vitest';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { scanAssetReachability } from './asset-scan.js';
+import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const FIXTURES = join(__dirname, '__fixtures__', 'asset-scan');
 
 /** Write a single UI source file into a throwaway project and scan it. */
 function scanWith(files: Record<string, string>): ReturnType<typeof scanAssetReachability> {
-  const root = mkdtempSync(join(tmpdir(), 'asset-scan-'));
-  try {
-    for (const [rel, content] of Object.entries(files)) {
-      const full = join(root, rel);
-      mkdirSync(dirname(full), { recursive: true });
-      writeFileSync(full, content, 'utf-8');
-    }
-    return scanAssetReachability(root);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
+  const root = tempTree('asset-scan-');
+  for (const [rel, content] of Object.entries(files)) {
+    const full = join(root, rel);
+    mkdirSync(dirname(full), { recursive: true });
+    writeFileSync(full, content, 'utf-8');
   }
+  return scanAssetReachability(root);
 }
 
 describe('scanAssetReachability', () => {

@@ -1,9 +1,9 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, writeFileSync, readdirSync, rmSync } from 'node:fs';
+import { describe, it, expect, beforeEach } from 'vitest';
+import { writeFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { tmpdir } from 'node:os';
 
 import { pruneStaleTarballs } from './pack.js';
+import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
 /**
  * `pruneStaleTarballs` DELETES files inside a consumer's repository, so its
@@ -14,11 +14,7 @@ describe('pruneStaleTarballs', () => {
   let vendorDir: string;
 
   beforeEach(() => {
-    vendorDir = mkdtempSync(join(tmpdir(), 'bs-vendor-'));
-  });
-
-  afterEach(() => {
-    rmSync(vendorDir, { recursive: true, force: true });
+    vendorDir = tempTree('bs-vendor-');
   });
 
   const write = (name: string) => writeFileSync(join(vendorDir, name), 'x');

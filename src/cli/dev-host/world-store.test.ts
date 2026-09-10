@@ -7,9 +7,8 @@
  * `world-store.durability.test.ts`, which kills real processes.
  */
 import { describe, expect, it, beforeEach, afterEach } from 'vitest';
-import { mkdirSync, mkdtempSync, rmSync, existsSync, readdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, existsSync, readdirSync, writeFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import { worldBudgets } from '../../world/budgets.js';
@@ -28,6 +27,7 @@ import {
   REQUIRED_NODE_VERSION,
   type LocalWorldStore,
 } from './world-store.js';
+import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
 /**
  * ONE CHECKPOINT, the shape `runner.serialize` answers (#224).
@@ -155,13 +155,12 @@ describe('the local world store', () => {
   let store: LocalWorldStore;
 
   beforeEach(() => {
-    root = mkdtempSync(join(tmpdir(), 'bs-world-store-'));
+    root = tempTree('bs-world-store-');
     store = openWorldStore(worldStorePath(root), BUDGETS);
   });
 
   afterEach(() => {
     store.close();
-    rmSync(root, { recursive: true, force: true });
   });
 
   describe('where it lives', () => {

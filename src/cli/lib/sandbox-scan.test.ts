@@ -1,20 +1,16 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
+import { describe, it, expect, beforeEach } from 'vitest';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { tmpdir } from 'node:os';
 import { scanSandboxViolations, scanSourceForSandboxViolations } from './sandbox-scan.js';
+import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
 describe('scanSandboxViolations', () => {
   let dir: string;
 
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), 'bs-sandbox-'));
+    dir = tempTree('bs-sandbox-');
     mkdirSync(join(dir, 'src', 'rules'), { recursive: true });
     mkdirSync(join(dir, 'src', 'ui', 'components'), { recursive: true });
-  });
-
-  afterEach(() => {
-    rmSync(dir, { recursive: true, force: true });
   });
 
   function write(rel: string, content: string) {

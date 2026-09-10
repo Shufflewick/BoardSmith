@@ -2,9 +2,9 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { execSync } from 'node:child_process';
 import { join } from 'node:path';
-import { tmpdir } from 'node:os';
 import { doctorCommand } from './doctor.js';
 import { DESIGN_DIR, SCRATCH_DIR } from '../lib/project-paths.js';
+import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
 /**
  * `doctor` is issue #6's migration path: design artifacts belong under `design/`, throwaway
@@ -19,7 +19,7 @@ let dir: string;
 let logSpy: ReturnType<typeof vi.spyOn>;
 
 beforeEach(async () => {
-  dir = await fs.mkdtemp(join(tmpdir(), 'bs-doctor-'));
+  dir = tempTree('bs-doctor-');
   logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
   process.exitCode = undefined;
 });
@@ -28,7 +28,6 @@ afterEach(async () => {
   logSpy.mockRestore();
   vi.restoreAllMocks();
   process.exitCode = undefined;
-  await fs.rm(dir, { recursive: true, force: true });
 });
 
 /**

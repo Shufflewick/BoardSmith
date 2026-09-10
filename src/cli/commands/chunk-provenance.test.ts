@@ -3,7 +3,6 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { dirname, join } from 'node:path';
-import { tmpdir } from 'node:os';
 import { renderIndex, EDITION_UNKNOWN } from './ingest-archive.js';
 import {
   computeVerificationScope,
@@ -24,6 +23,7 @@ import {
   chunkProvenanceStatusCommand,
   type VerifiedAgainstRecord,
 } from './chunk-provenance.js';
+import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
 /**
  * `chunk-provenance` exists because PROV-02's whole point is that a partial verification must
@@ -36,11 +36,7 @@ import {
 let dir: string;
 
 beforeEach(async () => {
-  dir = await fs.mkdtemp(join(tmpdir(), 'bs-chunk-provenance-'));
-});
-
-afterEach(async () => {
-  await fs.rm(dir, { recursive: true, force: true });
+  dir = tempTree('bs-chunk-provenance-');
 });
 
 /**

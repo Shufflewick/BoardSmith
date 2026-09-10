@@ -1,10 +1,10 @@
 import { DESIGN_DIR } from '../lib/project-paths.js';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { execSync } from 'node:child_process';
 import { join } from 'node:path';
-import { tmpdir } from 'node:os';
 import { INGEST_PRE_COMMIT_HOOK, installIngestHook } from './ingest-hook.js';
+import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
 /**
  * The hook is the fourteenth mechanism tried for ingest synthesis and the first that the model
@@ -18,11 +18,7 @@ import { INGEST_PRE_COMMIT_HOOK, installIngestHook } from './ingest-hook.js';
 let dir: string;
 
 beforeEach(async () => {
-  dir = await fs.mkdtemp(join(tmpdir(), 'bs-ingest-hook-'));
-});
-
-afterEach(async () => {
-  await fs.rm(dir, { recursive: true, force: true });
+  dir = tempTree('bs-ingest-hook-');
 });
 
 async function gitProject(): Promise<string> {

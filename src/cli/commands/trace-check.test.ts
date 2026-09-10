@@ -3,9 +3,9 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { dirname, join } from 'node:path';
-import { tmpdir } from 'node:os';
 import { FINDING_KINDS } from './build-manifest.js';
 import { scanTestCitations, resolveClaimCitation, traceCheckCommand } from './trace-check.js';
+import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
 /**
  * `trace-check.ts` is CHECK-03: the source-free traceability sweep. This file covers, in task
@@ -148,13 +148,12 @@ let dir: string;
 let logSpy: ReturnType<typeof vi.spyOn>;
 
 beforeEach(async () => {
-  dir = await fs.mkdtemp(join(tmpdir(), 'bs-trace-check-'));
+  dir = tempTree('bs-trace-check-');
   logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
 });
 
 afterEach(async () => {
   logSpy.mockRestore();
-  await fs.rm(dir, { recursive: true, force: true });
 });
 
 async function makeProject(): Promise<string> {

@@ -1,11 +1,10 @@
 import { DESIGN_DIR } from '../lib/project-paths.js';
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { dirname, join } from 'node:path';
-import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import {
   PROVENANCE_KINDS,
@@ -48,6 +47,7 @@ import {
   RUN_LEDGER_BEGIN,
   RUN_LEDGER_END,
 } from './verify-run.js';
+import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
 /**
  * `verify-classify.ts` is the mechanical core of VERIFY-03. Every fixture here is either a real
@@ -77,11 +77,7 @@ async function listFixtureFiles(relDir: string): Promise<string[]> {
 let dir: string;
 
 beforeEach(async () => {
-  dir = await fs.mkdtemp(join(tmpdir(), 'bs-verify-classify-'));
-});
-
-afterEach(async () => {
-  await fs.rm(dir, { recursive: true, force: true });
+  dir = tempTree('bs-verify-classify-');
 });
 
 function sha256(buf: Buffer): string {

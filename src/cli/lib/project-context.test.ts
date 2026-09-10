@@ -1,8 +1,8 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { getProjectContext, requireBoardsmithWorkspace } from './project-context.js';
+import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
 /**
  * `lint` and `audit` both run in the library repo and in a game project, and
@@ -10,17 +10,8 @@ import { getProjectContext, requireBoardsmithWorkspace } from './project-context
  * drift into two different error messages.
  */
 describe('requireBoardsmithWorkspace', () => {
-  const dirs: string[] = [];
-
-  function tempDir(): string {
-    const dir = mkdtempSync(join(tmpdir(), 'bs-context-'));
-    dirs.push(dir);
-    return dir;
-  }
-
   afterEach(() => {
     vi.restoreAllMocks();
-    for (const dir of dirs.splice(0)) rmSync(dir, { recursive: true, force: true });
   });
 
   const workspaces: Array<[label: string, make: (dir: string) => void, context: string]> = [
@@ -29,7 +20,7 @@ describe('requireBoardsmithWorkspace', () => {
   ];
 
   it.each(workspaces)('returns quietly in %s', (_label, make, context) => {
-    const dir = tempDir();
+    const dir = tempTree('bs-context-');
     make(dir);
     const exit = vi.spyOn(process, 'exit').mockImplementation((() => undefined) as never);
 
@@ -40,7 +31,7 @@ describe('requireBoardsmithWorkspace', () => {
   });
 
   it('exits 1 with an actionable message anywhere else', () => {
-    const dir = tempDir();
+    const dir = tempTree('bs-context-');
     const exit = vi.spyOn(process, 'exit').mockImplementation((() => undefined) as never);
     const errors: string[] = [];
     vi.spyOn(console, 'error').mockImplementation((message: unknown) => {

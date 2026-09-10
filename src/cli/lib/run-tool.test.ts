@@ -1,8 +1,8 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, chmodSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { describe, it, expect, beforeEach } from 'vitest';
+import { mkdirSync, writeFileSync, chmodSync } from 'node:fs';
 import { join } from 'node:path';
 import { runTool, runToolCapturingStdout } from './run-tool.js';
+import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
 /**
  * `runTool` is the single spawn point every `boardsmith` command uses to invoke
@@ -26,11 +26,7 @@ function writeLocalBin(name: string, body: string): void {
 }
 
 beforeEach(() => {
-  workspace = mkdtempSync(join(tmpdir(), 'bs-run-tool-'));
-});
-
-afterEach(() => {
-  rmSync(workspace, { recursive: true, force: true });
+  workspace = tempTree('bs-run-tool-');
 });
 
 describe('runTool', () => {

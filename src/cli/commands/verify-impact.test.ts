@@ -4,7 +4,6 @@ import { promises as fs } from 'node:fs';
 import { execSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { dirname, join, relative } from 'node:path';
-import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import {
   RULES_STALENESS_HEADING,
@@ -54,6 +53,7 @@ import {
   type ChunkVerdict,
 } from './verify-classify.js';
 import { verifyRepairStatusCommand } from './verify-repair.js';
+import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const CONTRADICTORY_FIXTURE_ROOT = join(
@@ -369,7 +369,7 @@ describe('marker write-order — writeRulesStalenessMarker', () => {
   let dir: string;
 
   beforeEach(async () => {
-    dir = await fs.mkdtemp(join(tmpdir(), 'bs-verify-impact-'));
+    dir = tempTree('bs-verify-impact-');
     await fs.mkdir(join(dir, DESIGN_DIR, 'chunks', SLUG), { recursive: true });
     await fs.writeFile(join(dir, DESIGN_DIR, 'chunks', SLUG, 'CHUNK.md'), fixtureChunkText());
     await fs.writeFile(join(dir, DESIGN_DIR, 'SKETCH.md'), fixtureSketchText());
@@ -383,7 +383,6 @@ describe('marker write-order — writeRulesStalenessMarker', () => {
   });
 
   afterEach(async () => {
-    await fs.rm(dir, { recursive: true, force: true });
     vi.clearAllMocks();
   });
 
@@ -698,11 +697,7 @@ describe('contradictory — verifyImpactGateCommand: read-only, exit-0, no-bypas
   let gateDir: string;
 
   beforeEach(async () => {
-    gateDir = await fs.mkdtemp(join(tmpdir(), 'bs-verify-impact-gate-'));
-  });
-
-  afterEach(async () => {
-    await fs.rm(gateDir, { recursive: true, force: true });
+    gateDir = tempTree('bs-verify-impact-gate-');
   });
 
   it('contradictory: verifyImpactGateCommand surfaces the recorded contradictory pair, pending, exit 0', async () => {
@@ -792,12 +787,8 @@ describe('contradictory — nextRulingNumber / appendRuling — over a self-cont
   let dir: string;
 
   beforeEach(async () => {
-    dir = await fs.mkdtemp(join(tmpdir(), 'bs-verify-impact-rulings-'));
+    dir = tempTree('bs-verify-impact-rulings-');
     await fs.mkdir(join(dir, DESIGN_DIR), { recursive: true });
-  });
-
-  afterEach(async () => {
-    await fs.rm(dir, { recursive: true, force: true });
   });
 
   it('contradictory: nextRulingNumber returns one past the corpus\'s last entry', async () => {
@@ -885,11 +876,7 @@ describe('unadjudicated — verifyImpactAdjudicateCommand: resolved requires hum
   let adjDir: string;
 
   beforeEach(async () => {
-    adjDir = await fs.mkdtemp(join(tmpdir(), 'bs-verify-impact-adjudicate-'));
-  });
-
-  afterEach(async () => {
-    await fs.rm(adjDir, { recursive: true, force: true });
+    adjDir = tempTree('bs-verify-impact-adjudicate-');
   });
 
   async function contradictoryProjectWithRulings(): Promise<{
@@ -1283,11 +1270,7 @@ describe('line-level-handoff / repair-gate — verifyImpactStatusCommand over a 
   let root: string;
 
   beforeEach(async () => {
-    root = await fs.mkdtemp(join(tmpdir(), 'bs-verify-impact-status-'));
-  });
-
-  afterEach(async () => {
-    await fs.rm(root, { recursive: true, force: true });
+    root = tempTree('bs-verify-impact-status-');
   });
 
   it('no-code-change: a verified chunk whose code did not change reports close-without-replaytest, nextStatus verified, and 1-of-2 staleFraction', async () => {
@@ -1423,11 +1406,7 @@ describe('contradictory / marker — verifyImpactApplyCommand', () => {
   let root: string;
 
   beforeEach(async () => {
-    root = await fs.mkdtemp(join(tmpdir(), 'bs-verify-impact-apply-'));
-  });
-
-  afterEach(async () => {
-    await fs.rm(root, { recursive: true, force: true });
+    root = tempTree('bs-verify-impact-apply-');
   });
 
   it('contradictory: a pending contradiction blocks the write entirely — byte-identical project, message names verify-impact-adjudicate', async () => {

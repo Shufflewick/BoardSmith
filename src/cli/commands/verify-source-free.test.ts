@@ -1,11 +1,10 @@
 import { DESIGN_DIR } from '../lib/project-paths.js';
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { tmpdir } from 'node:os';
 import { renderIndex } from './ingest-archive.js';
 import {
   VERIFY_PIPELINE_STEPS,
@@ -14,6 +13,7 @@ import {
   verifySourceFreeCheckCommand,
 } from './verify-source-free.js';
 import { computeVerificationScope, renderVerifiedAgainst } from './chunk-provenance.js';
+import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
 /**
  * Decision 7 (179-CONTEXT.md): "A test must FAIL when a pipeline step exists with no
@@ -144,11 +144,7 @@ describe('computeSourceFreeReport', () => {
   let dir: string;
 
   beforeEach(async () => {
-    dir = await fs.mkdtemp(join(tmpdir(), 'bs-verify-source-free-'));
-  });
-
-  afterEach(async () => {
-    await fs.rm(dir, { recursive: true, force: true });
+    dir = tempTree('bs-verify-source-free-');
   });
 
   it('project with a Source hash: line but no file at the recorded Source: path -> source-free, code-conformance-only, source-missing', async () => {
@@ -303,11 +299,7 @@ describe('verifySourceFreeCheckCommand', () => {
   let dir: string;
 
   beforeEach(async () => {
-    dir = await fs.mkdtemp(join(tmpdir(), 'bs-verify-source-free-check-command-'));
-  });
-
-  afterEach(async () => {
-    await fs.rm(dir, { recursive: true, force: true });
+    dir = tempTree('bs-verify-source-free-check-command-');
   });
 
   async function makeSourceFreeFixture(name: string): Promise<string> {
@@ -463,11 +455,7 @@ describe('PROV-02 data flow — source-free project', () => {
   let dir: string;
 
   beforeEach(async () => {
-    dir = await fs.mkdtemp(join(tmpdir(), 'bs-verify-source-free-prov02-'));
-  });
-
-  afterEach(async () => {
-    await fs.rm(dir, { recursive: true, force: true });
+    dir = tempTree('bs-verify-source-free-prov02-');
   });
 
   it('source-missing fixture: renderVerifiedAgainst emits code-conformance-only AND a Reason: source-missing line; computeSourceFreeReport and computeVerificationScope agree', async () => {

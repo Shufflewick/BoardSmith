@@ -17,9 +17,10 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { mkdtempSync, rmSync, existsSync, readFileSync, readdirSync, statSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
-import { tmpdir, homedir } from 'node:os';
+import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { installClaudeCommand, uninstallClaudeCommand, SKILL_NAMES } from './install-claude-command.js';
+import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = join(__dirname, '..', '..', '..');
@@ -99,7 +100,7 @@ describe('installClaudeCommand — real install to temp dir (DIST-01, DIST-02)',
 
   beforeAll(async () => {
     origCwd = process.cwd();
-    tempDir = mkdtempSync(join(tmpdir(), 'bs-install-'));
+    tempDir = tempTree('bs-install-');
     process.chdir(tempDir);
     // MANDATORY: skipLink:true — never runs `npm link`, never touches anything outside tempDir.
     await installClaudeCommand({ local: true, force: true, skipLink: true });
@@ -108,7 +109,6 @@ describe('installClaudeCommand — real install to temp dir (DIST-01, DIST-02)',
 
   afterAll(() => {
     process.chdir(origCwd);
-    rmSync(tempDir, { recursive: true, force: true });
   });
 
   describe('DIST-01', () => {
@@ -269,7 +269,7 @@ describe('installClaudeCommand — bs- skill handoff contract (no Skill-tool sel
 
   beforeAll(async () => {
     origCwd = process.cwd();
-    tempDir = mkdtempSync(join(tmpdir(), 'bs-install-handoff-'));
+    tempDir = tempTree('bs-install-handoff-');
     process.chdir(tempDir);
     await installClaudeCommand({ local: true, force: true, skipLink: true });
     skillsRoot = join(tempDir, '.claude', 'skills');
@@ -277,7 +277,6 @@ describe('installClaudeCommand — bs- skill handoff contract (no Skill-tool sel
 
   afterAll(() => {
     process.chdir(origCwd);
-    rmSync(tempDir, { recursive: true, force: true });
   });
 
   it('no bs- skill carries disable-model-invocation (agents must be able to self-invoke)', () => {
@@ -325,7 +324,7 @@ describe('installClaudeCommand — retires bs-generate-bot (issue #16)', () => {
 
   beforeAll(async () => {
     origCwd = process.cwd();
-    tempDir = mkdtempSync(join(tmpdir(), 'bs-install-retired-'));
+    tempDir = tempTree('bs-install-retired-');
     process.chdir(tempDir);
     await installClaudeCommand({ local: true, force: true, skipLink: true });
     skillsRoot = join(tempDir, '.claude', 'skills');
@@ -333,7 +332,6 @@ describe('installClaudeCommand — retires bs-generate-bot (issue #16)', () => {
 
   afterAll(() => {
     process.chdir(origCwd);
-    rmSync(tempDir, { recursive: true, force: true });
   });
 
   it('a plain reinstall (no --force) deletes a leftover bs-generate-bot/ install', async () => {
@@ -376,7 +374,7 @@ describe('installClaudeCommand — clean reinstall removes orphans (WR-01)', () 
 
   beforeAll(async () => {
     origCwd = process.cwd();
-    tempDir = mkdtempSync(join(tmpdir(), 'bs-install-orphan-'));
+    tempDir = tempTree('bs-install-orphan-');
     process.chdir(tempDir);
     await installClaudeCommand({ local: true, force: true, skipLink: true });
     skillsRoot = join(tempDir, '.claude', 'skills');
@@ -384,7 +382,6 @@ describe('installClaudeCommand — clean reinstall removes orphans (WR-01)', () 
 
   afterAll(() => {
     process.chdir(origCwd);
-    rmSync(tempDir, { recursive: true, force: true });
   });
 
   it('a --force reinstall deletes orphaned files left in installer-owned dirs', async () => {
@@ -428,7 +425,7 @@ describe('installClaudeCommand — reinstall never deletes an unrelated user ski
 
   beforeAll(async () => {
     origCwd = process.cwd();
-    tempDir = mkdtempSync(join(tmpdir(), 'bs-install-collision-'));
+    tempDir = tempTree('bs-install-collision-');
     process.chdir(tempDir);
     await installClaudeCommand({ local: true, force: true, skipLink: true });
     skillsRoot = join(tempDir, '.claude', 'skills');
@@ -436,7 +433,6 @@ describe('installClaudeCommand — reinstall never deletes an unrelated user ski
 
   afterAll(() => {
     process.chdir(origCwd);
-    rmSync(tempDir, { recursive: true, force: true });
   });
 
   it('an unrelated ~/.claude/skills/templates/ dir is NOT deleted by a --force reinstall', async () => {
@@ -505,7 +501,7 @@ describe('installClaudeCommand — partial install is not misreported as complet
 
   beforeAll(() => {
     origCwd = process.cwd();
-    tempDir = mkdtempSync(join(tmpdir(), 'bs-install-partial-'));
+    tempDir = tempTree('bs-install-partial-');
     process.chdir(tempDir);
     skillsRoot = join(tempDir, '.claude', 'skills');
     // Simulate an interrupted install: only the first-sentinel SKILL.md exists, nothing else.
@@ -515,7 +511,6 @@ describe('installClaudeCommand — partial install is not misreported as complet
 
   afterAll(() => {
     process.chdir(origCwd);
-    rmSync(tempDir, { recursive: true, force: true });
   });
 
   it('a non-force install over a partial tree completes it instead of short-circuiting', async () => {
@@ -547,7 +542,7 @@ describe('installClaudeCommand — empty shared dir is detected as partial, not 
 
   beforeAll(() => {
     origCwd = process.cwd();
-    tempDir = mkdtempSync(join(tmpdir(), 'bs-install-emptyshared-'));
+    tempDir = tempTree('bs-install-emptyshared-');
     process.chdir(tempDir);
     skillsRoot = join(tempDir, '.claude', 'skills');
     // Simulate an interrupt AFTER all 7 SKILL.md were written and the shared dirs were CREATED
@@ -563,7 +558,6 @@ describe('installClaudeCommand — empty shared dir is detected as partial, not 
 
   afterAll(() => {
     process.chdir(origCwd);
-    rmSync(tempDir, { recursive: true, force: true });
   });
 
   it('a non-force install over empty shared dirs completes them instead of short-circuiting', async () => {
@@ -594,7 +588,7 @@ describe('installClaudeCommand — partial verify/ shared dir is detected and re
 
   beforeAll(async () => {
     origCwd = process.cwd();
-    tempDir = mkdtempSync(join(tmpdir(), 'bs-install-verify-partial-'));
+    tempDir = tempTree('bs-install-verify-partial-');
     process.chdir(tempDir);
     // Fresh, complete install first.
     await installClaudeCommand({ local: true, force: true, skipLink: true });
@@ -608,7 +602,6 @@ describe('installClaudeCommand — partial verify/ shared dir is detected and re
 
   afterAll(() => {
     process.chdir(origCwd);
-    rmSync(tempDir, { recursive: true, force: true });
   });
 
   it('a non-force install repopulates an emptied verify/ shared dir', async () => {
@@ -634,7 +627,7 @@ describe('installClaudeCommand — uninstall removes bs-verify-game with no orph
 
   beforeAll(async () => {
     origCwd = process.cwd();
-    tempDir = mkdtempSync(join(tmpdir(), 'bs-install-uninstall-'));
+    tempDir = tempTree('bs-install-uninstall-');
     process.chdir(tempDir);
     await installClaudeCommand({ local: true, force: true, skipLink: true });
     skillsRoot = join(tempDir, '.claude', 'skills');
@@ -642,7 +635,6 @@ describe('installClaudeCommand — uninstall removes bs-verify-game with no orph
 
   afterAll(() => {
     process.chdir(origCwd);
-    rmSync(tempDir, { recursive: true, force: true });
   });
 
   it('uninstall removes bs-verify-game/ and bs-shared/verify/, leaving no orphan', async () => {

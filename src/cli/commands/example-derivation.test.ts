@@ -1,5 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { tmpdir } from 'node:os';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { join } from 'node:path';
 import {
   WORKED_EXAMPLE_KINDS,
@@ -18,6 +17,7 @@ import { DERIVE_CHECK_LEDGER_BEGIN } from './verify-derive-check.js';
 import { readFile } from 'node:fs/promises';
 import { promises as fs } from 'node:fs';
 import { fileURLToPath } from 'node:url';
+import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
 /**
  * `example-derivation.ts` is the ONE shared module both TEST-01 (build-side) and CHECK-06
@@ -435,13 +435,8 @@ describe('collectGameApiSurface — translation (Task 3)', () => {
   let projectDir: string;
 
   beforeEach(async () => {
-    projectDir = await writeFixtureProject(
-      await fs.mkdtemp(join(tmpdir(), 'bs-example-derivation-api-')),
-    );
-  });
-
-  afterEach(async () => {
-    await fs.rm(projectDir, { recursive: true, force: true });
+    projectDir = tempTree('bs-example-derivation-api-');
+    await writeFixtureProject(projectDir);
   });
 
   it('returns a surface naming both directly-declared and re-exported symbols, with their kinds', async () => {
@@ -555,16 +550,14 @@ describe('buildExampleTranslationPayload — translation (Task 3)', () => {
   it('the payload contains ZERO substrings read from the project testDir — implemented structurally: every symbol module resolves under src/, never testDir', async () => {
     // Uses a real collected surface (not a hand-written literal), so the assertion is about what
     // `collectGameApiSurface` actually produces — built from this file's own fixture project.
-    const fixtureDir = await writeFixtureProject(
-      await fs.mkdtemp(join(tmpdir(), 'bs-example-derivation-payload-')),
-    );
+    const fixtureDir = tempTree('bs-example-derivation-payload-');
+    await writeFixtureProject(fixtureDir);
     const api = await collectGameApiSurface(fixtureDir);
     const payload = buildExampleTranslationPayload(predicateSpec, api);
     for (const symbol of api.exportedSymbols) {
       expect(symbol.module.startsWith('src/')).toBe(true);
     }
     expect(payload).not.toContain('tests/');
-    await fs.rm(fixtureDir, { recursive: true, force: true });
   });
 
   it('states the generated file\'s two-directory depth so a translator can compute a correct relative import prefix (178-11 finding)', () => {

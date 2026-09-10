@@ -9,9 +9,9 @@
  */
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { getApiKey, saveApiKey } from './config.js';
-import { mkdtempSync, rmSync, mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
+import { mkdirSync, writeFileSync, readFileSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { tmpdir } from 'node:os';
+import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
 let home: string;
 let originalHome: string | undefined;
@@ -27,14 +27,13 @@ function writeConfigFile(contents: unknown): void {
 
 beforeEach(() => {
   originalHome = process.env.HOME;
-  home = mkdtempSync(join(tmpdir(), 'boardsmith-config-'));
+  home = tempTree('boardsmith-config-');
   process.env.HOME = home;
 });
 
 afterEach(() => {
   if (originalHome === undefined) delete process.env.HOME;
   else process.env.HOME = originalHome;
-  rmSync(home, { recursive: true, force: true });
 });
 
 describe('readGlobalConfig / getApiKey', () => {

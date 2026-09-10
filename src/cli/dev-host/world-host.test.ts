@@ -9,10 +9,8 @@
  * injected is the clock, because a test that waited ten real minutes to see a
  * tick is the exact problem the "fire due events now" control exists to solve.
  */
-import { describe, expect, it, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { describe, expect, it, beforeEach } from 'vitest';
+
 import { createRequire } from 'node:module';
 
 import {
@@ -39,6 +37,7 @@ import {
 import { openWorldStore, worldStorePath, type LocalWorldStore } from './world-store.js';
 import type { WorldDevClock } from './node-world-clock.js';
 import { LocalWorldHost, devWorldPlayer } from './world-host.js';
+import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
 /**
  * A STORE AS THE OLDER CODE LEFT IT: real partitions, no allocation stamp
@@ -375,10 +374,7 @@ function last(sent: Sent[], clientId: string, type: string): Record<string, unkn
 
 let dir: string;
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), 'bs-world-host-'));
-});
-afterEach(() => {
-  rmSync(dir, { recursive: true, force: true });
+  dir = tempTree('bs-world-host-');
 });
 
 describe('#167: genesis runs once, into the local store', () => {
