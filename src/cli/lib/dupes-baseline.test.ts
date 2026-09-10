@@ -67,6 +67,18 @@ describe('#232: the key survives an edit that is not the debt', () => {
     expect(cloneGroupKey(shifted(accepted, 25))).toBe(cloneGroupKey(accepted));
   });
 
+  it('keys it to the value the committed record was written against (#243)', () => {
+    // A GOLDEN KEY, and the reason it is pinned rather than derived. The
+    // separator between fragments is a NUL, which no source text can hold, and
+    // #243 changed only how that character is SPELLED in the module: from the
+    // byte itself, which made git call the file binary, to the escape. Every
+    // key in `.fallow-dupes-accepted.json` was recorded through the old
+    // spelling, so a spelling that built a different string would re-key the
+    // whole record at once and forgive whatever no longer matched. This value
+    // was measured from the pre-#243 module.
+    expect(cloneGroupKey(accepted)).toBe('cd4dcc206806a522');
+  });
+
   it('reports no drift when every address moved and no content did', () => {
     const committed = acceptedFromScan(scan(accepted));
     const tree = acceptedFromScan(scan(shifted(accepted, 25)));
