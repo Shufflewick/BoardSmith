@@ -40,23 +40,20 @@
  * disposable by design: the point is a world nobody has played, born at genesis,
  * exercised once.
  */
-import {
-  existsSync,
-  mkdirSync,
-  mkdtempSync,
-  realpathSync,
-  rmSync,
-  statSync,
-  symlinkSync,
-  writeFileSync,
-} from 'node:fs';
-import { createServer } from 'node:net';
-import { dirname, join, resolve } from 'node:path';
-import { tmpdir } from 'node:os';
-import { fileURLToPath } from 'node:url';
+import { rmSync } from 'node:fs';
 
-const HERE = dirname(fileURLToPath(import.meta.url));
-const REPO = resolve(HERE, '..');
+import {
+  createChecklist,
+  loadChromium,
+  requireInstalledCheckout,
+  startFixtureWorld,
+  writeFixtureProject,
+} from './lib/browser-harness.mjs';
+
+const SCRIPT = 'scripts/world-pick-bridge-browser.mjs';
+const { assert, check, summarize } = createChecklist(
+  'the real dev bridge in a real browser',
+);
 
 /** How long one pick's own answer is waited for, from `worldProtocol.ts`. */
 const WORLD_COMMAND_TIMEOUT_MS = 20_000;
@@ -209,127 +206,19 @@ import FleetBoard from './FleetBoard.js';
 export default defineGameUIs({ Fleet: defaultUI(FleetBoard) });
 `;
 
-const VITE_CONFIG = `import { defineConfig } from 'vite';
-import vue from '@vitejs/plugin-vue';
-
-export default defineConfig({
-  plugins: [vue()],
-  resolve: { dedupe: ['vue'] },
-});
-`;
-
-/** Write the fixture project, and point it at this checkout for its packages. */
-function writeFixture() {
-  // `realpathSync`: on macOS the temp root is a symlink (`/var` -> `/private/var`),
-  // and Vite resolves a module id to its real path -- so a root given in the
-  // symlinked form puts every one of the project's own files outside it.
-  const dir = realpathSync(mkdtempSync(join(tmpdir(), 'bs-pick-bridge-')));
-  mkdirSync(join(dir, 'src', 'rules'), { recursive: true });
-  mkdirSync(join(dir, 'src', 'ui'), { recursive: true });
-  writeFileSync(join(dir, 'src', 'rules', 'index.ts'), RULES);
-  writeFileSync(join(dir, 'src', 'ui', 'FleetBoard.ts'), BOARD);
-  writeFileSync(join(dir, 'src', 'ui', 'uis.ts'), UIS);
-  writeFileSync(join(dir, 'vite.config.ts'), VITE_CONFIG);
-  writeFileSync(
-    join(dir, 'package.json'),
-    JSON.stringify({ name: 'pick-bridge-fleet', private: true, type: 'module' }, null, 2),
-  );
-  writeFileSync(
-    join(dir, 'boardsmith.json'),
-    JSON.stringify({ name: 'pick-bridge-fleet', backend: 'world', displayName: 'Pick Bridge Fleet' }, null, 2),
-  );
-  // INSTALLED THE WAY A REAL GAME IS. `node_modules/boardsmith` is a symlink to
-  // this checkout, exactly what `"boardsmith": "file:../../BoardSmith"` leaves
-  // behind in `~/BoardSmithGames/*` -- so the fixture runs in STANDALONE context
-  // and resolves the library through its package exports, which is the path an
-  // author's own project takes. Its build-time packages come from here too.
-  mkdirSync(join(dir, 'node_modules'), { recursive: true });
-  symlinkSync(REPO, join(dir, 'node_modules', 'boardsmith'), 'dir');
-  for (const name of ['vue', 'vite', '@vitejs/plugin-vue']) {
-    const at = join(dir, 'node_modules', name);
-    mkdirSync(dirname(at), { recursive: true });
-    symlinkSync(join(REPO, 'node_modules', name), at, 'dir');
-  }
-  return dir;
-}
-
-// ── Playwright, or an actionable refusal ─────────────────────────────────────
-
-/**
- * Every way of naming one Playwright, since what a person has to hand is a
- * DIRECTORY as often as an entry file -- `.../node_modules/playwright` is what
- * the reporter's own harness was pointed at, and Node will not import a folder.
- */
-function playwrightCandidates(named) {
-  if (!named) return ['playwright', 'playwright-core'];
-  if (!statSync(named, { throwIfNoEntry: false })?.isDirectory()) return [named];
-  return [join(named, 'index.mjs'), join(named, 'index.js'), named];
-}
-
-/** One candidate's chromium, or `null` with the reason recorded. */
-async function chromiumFrom(specifier, failures) {
-  try {
-    const module = await import(specifier);
-    const chromium = module.chromium ?? module.default?.chromium;
-    if (chromium) return chromium;
-    failures.push(`${specifier}: loaded, but exports no chromium`);
-  } catch (error) {
-    failures.push(`${specifier}: ${error instanceof Error ? error.message : String(error)}`);
-  }
-  return null;
-}
-
-async function loadChromium() {
-  const failures = [];
-  for (const candidate of playwrightCandidates(process.env.BOARDSMITH_PLAYWRIGHT_MODULE)) {
-    const chromium = await chromiumFrom(candidate, failures);
-    if (chromium) return chromium;
-  }
-  throw new Error(
-    'This regression drives a real browser and found no Playwright to drive it with.\n' +
-      `  Tried: ${failures.join('\n         ')}\n` +
-      '  BoardSmith depends on no browser, so point it at one you already have:\n' +
-      '    BOARDSMITH_PLAYWRIGHT_MODULE=/abs/path/to/node_modules/playwright \\\n' +
-      '      node scripts/world-pick-bridge-browser.mjs\n' +
-      '  A directory or an entry file both work, and any checkout with Playwright\n' +
-      '  installed will do; there is no need to add one here.',
-  );
-}
-
-// ── A port nobody else is on ─────────────────────────────────────────────────
-
-function freePort() {
-  return new Promise((done, fail) => {
-    const probe = createServer();
-    probe.on('error', fail);
-    probe.listen(0, '127.0.0.1', () => {
-      const { port } = probe.address();
-      probe.close(() => done(port));
-    });
+/** The fixture project, written fresh and removed when the run ends. */
+const writeFixture = () =>
+  writeFixtureProject({
+    slug: 'pick-bridge-fleet',
+    displayName: 'Pick Bridge Fleet',
+    files: {
+      'src/rules/index.ts': RULES,
+      'src/ui/FleetBoard.ts': BOARD,
+      'src/ui/uis.ts': UIS,
+    },
   });
-}
 
-// ── The assertions ───────────────────────────────────────────────────────────
-
-const results = [];
-
-function record(name, error) {
-  results.push({ name, error });
-  console.log(error ? `  FAIL  ${name}\n        ${error.message}` : `  ok    ${name}`);
-}
-
-async function check(name, body) {
-  try {
-    await body();
-    record(name, null);
-  } catch (error) {
-    record(name, error instanceof Error ? error : new Error(String(error)));
-  }
-}
-
-function assert(condition, message) {
-  if (!condition) throw new Error(message);
-}
+// ── Reading the surface ──────────────────────────────────────────────────────
 
 /**
  * The world surface inside the dev chrome's iframe.
@@ -384,7 +273,7 @@ async function settledCrewCount(page) {
 }
 
 async function main() {
-  const chromium = await loadChromium();
+  const chromium = await loadChromium(SCRIPT);
   const fixture = writeFixture();
   // THE FIXTURE IS REMOVED WHATEVER HAPPENS, from here on. Its own creation is
   // the only step outside the guard, and a temp world left behind by a crashed
@@ -397,33 +286,7 @@ async function main() {
 }
 
 async function driveThrough({ chromium, fixture }) {
-  const port = await freePort();
-
-  // tsx first, exactly as `bin/boardsmith.js` does it: everything below is the
-  // CLI's own TypeScript, run from source with no build step.
-  await import('tsx');
-  const { startWorldDevServer } = await import(join(REPO, 'src/cli/commands/dev-world.ts'));
-  const { loadGameDefinition } = await import(join(REPO, 'src/cli/commands/game-runtime.ts'));
-
-  const tempDir = join(fixture, '.boardsmith');
-  mkdirSync(tempDir, { recursive: true });
-  const rulesPath = join(fixture, 'src', 'rules');
-  const { gameDefinition } = await loadGameDefinition(rulesPath, tempDir, 'standalone');
-
-  await startWorldDevServer({
-    cwd: fixture,
-    uiPath: fixture,
-    gameDefinition,
-    displayName: 'Pick Bridge Fleet',
-    context: 'standalone',
-    port,
-    host: '127.0.0.1',
-    tempDir,
-    openBrowser: false,
-    reloadRules: async () => (await loadGameDefinition(rulesPath, tempDir, 'standalone')).gameDefinition,
-  });
-
-  const hostUrl = `http://127.0.0.1:${port}/`;
+  const hostUrl = await startFixtureWorld({ fixture, displayName: 'Pick Bridge Fleet' });
   const browser = await chromium.launch();
 
   try {
@@ -576,20 +439,8 @@ async function driveThrough({ chromium, fixture }) {
     await browser.close();
   }
 
-  const failed = results.filter((result) => result.error);
-  console.log(
-    `\n${results.length - failed.length}/${results.length} checks passed through the ` +
-      'real dev bridge in a real browser.',
-  );
-  return failed.length === 0 ? 0 : 1;
+  return summarize();
 }
 
-if (!existsSync(join(REPO, 'node_modules', 'vue'))) {
-  console.error(
-    'This checkout has no node_modules/vue, so the fixture world cannot be served.\n' +
-      '  Run `npm install` in the repository root first.',
-  );
-  process.exit(1);
-}
-
+requireInstalledCheckout(SCRIPT);
 process.exit(await main());
