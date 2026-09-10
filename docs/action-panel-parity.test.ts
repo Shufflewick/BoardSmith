@@ -103,9 +103,10 @@ describe('Action Panel parity doctrine', () => {
  * A hand-written list is the wrong shape for this gate, and #233 is the proof:
  * `ActionPanel.focus.test.ts` kept the retired noun in three comments for as
  * long as it did because nobody remembered to add it, and a retirement gate
- * that does not cover the file where the word survives is not a gate. There
- * are fourteen files under `src/` whose name mentions the surface, one of them
- * had the word, and the next one written is covered on the day it is written.
+ * that does not cover the file where the word survives is not a gate. It finds
+ * every file under `src/` whose name mentions the surface -- fourteen when this
+ * replaced the list, and #228's three new ones the moment they merged, with no
+ * edit here.
  *
  * `docs/action-panel-parity.test.ts` matches the pattern and is excluded: this
  * file has to spell the retired noun to retire it.

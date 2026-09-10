@@ -305,6 +305,94 @@ export class Action<
   }
 
   /**
+   * Put this action's **start button** inside a named Action Panel menu group.
+   *
+   * A game with many simultaneously available verbs gives a rare
+   * administrative one the same prominence as the one the player uses every
+   * turn. A group takes ONE button at its parent level, and its members appear
+   * only after the player opens it:
+   *
+   * ```typescript
+   * Action.create('dumpOre').group('Dump').order(10).execute(...)
+   * Action.create('renamePlanet').group('More', 'Empire settings').execute(...)
+   * ```
+   *
+   * Each argument is one level, outermost first, and intermediate groups are
+   * created by being named. A segment is the group's LABEL and its IDENTITY at
+   * once: there is nothing to register, so there is no id to leave dangling,
+   * and two actions in the same group cannot disagree about what it is called.
+   *
+   * ## A group is navigation, never a command
+   *
+   * Opening or closing one submits no order, consumes no turn and moves no
+   * persistent state. The panel derives the menu from the metadata it already
+   * has and holds the open path in its own local state; nothing about a group
+   * reaches the rules, which is why there is no group callback to write.
+   *
+   * ## What it does NOT change
+   *
+   * - **Availability.** Only actions that are currently available reach the
+   *   menu, so a group whose members all went away is simply not there. It
+   *   never hides an available action: the action is one press further away,
+   *   not gone.
+   * - **Executability.** `.condition()`, `.disabled()` and `.validate()` are
+   *   untouched, the disabled reason and the help popover render inside a group
+   *   exactly as at the top level, and the server validates a grouped action
+   *   identically. A custom board UI is unaffected -- grouping is an
+   *   arrangement of the panel's buttons, not a change to what the game offers,
+   *   so the two surfaces still show the same state.
+   *
+   * Use `.order()` to place buttons within a level. A group sits where its
+   * lowest-ordered member sits.
+   *
+   * @param path - One label per level, outermost first
+   * @returns The builder for chaining
+   */
+  group(...path: string[]): this {
+    if (path.length === 0) {
+      throw new Error(
+        `Action "${this.definition.name}": .group() needs at least one label, e.g. `
+        + `.group('More') or .group('More', 'Empire settings'). Omit the call to leave the `
+        + `action at the top level of the Action Panel.`,
+      );
+    }
+    const blank = path.findIndex((label) => label.trim().length === 0);
+    if (blank !== -1) {
+      throw new Error(
+        `Action "${this.definition.name}": .group() was given a blank label at position `
+        + `${blank + 1}. Every level needs a name a player can read, because the label is `
+        + `both the group's button text and what a screen reader announces on entering it.`,
+      );
+    }
+    this.definition.group = path;
+    return this;
+  }
+
+  /**
+   * Place this action's start button within its Action Panel menu level.
+   *
+   * Lower sorts earlier. An action that declares no order sorts as `0`, so a
+   * negative order means "before everything I did not think about" and a
+   * positive one "after"; ties keep the order the actions became available in.
+   * A GROUP sits where its lowest-ordered member sits, which is why there is no
+   * separate order to declare for a group -- and therefore no way for two of
+   * its members to disagree about where it goes.
+   *
+   * @param order - Sort key; any finite number, so fractions can slot between
+   * @returns The builder for chaining
+   */
+  order(order: number): this {
+    if (!Number.isFinite(order)) {
+      throw new Error(
+        `Action "${this.definition.name}": .order() needs a finite number and was given `
+        + `${order}. Use a plain number such as 10, -5 or 2.5 -- lower sorts earlier.`,
+      );
+    }
+    this.definition.order = order;
+    return this;
+  }
+
+  /**
    * Add a choice selection from a list of values.
    *
    * Use this for string/number choices (e.g., ranks, colors, amounts).

@@ -42,7 +42,13 @@ import { fileURLToPath } from 'node:url';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
-/** This checkout, which is the library every fixture resolves against. */
+/**
+ * This checkout, which is the library every fixture resolves against.
+ *
+ * Module-private, like `freePort`: the three things that need it -- the
+ * symlinked install, the dev host's own TypeScript, and the guard that refuses
+ * an uninstalled checkout -- are all in here.
+ */
 const REPO = resolve(HERE, '..');
 
 // ── Playwright, or an actionable refusal ─────────────────────────────────────
@@ -332,15 +338,20 @@ export function summarise(what) {
 // ── One whole run ────────────────────────────────────────────────────────────
 
 /**
- * The fixture resolves this checkout by symlink, so a checkout with nothing
+ * Refuse before doing anything expensive if this checkout cannot serve a world.
+ *
+ * The fixture resolves the library by symlink, so a checkout with nothing
  * installed cannot serve one. Said before Chromium is looked for, because it is
  * the cheaper answer and the likelier mistake.
+ *
+ * @param script the script's own filename, for the copy-pasteable command line
  */
-function requireInstalledLibrary() {
+function requireInstalledCheckout(script) {
   if (existsSync(join(REPO, 'node_modules', 'vue'))) return;
   console.error(
     'This checkout has no node_modules/vue, so the fixture world cannot be served.\n' +
-      '  Run `npm install` in the repository root first.',
+      '  Run `npm install` in the repository root first, then:\n\n' +
+      `    node scripts/${script}`,
   );
   process.exit(1);
 }
@@ -366,7 +377,7 @@ function requireInstalledLibrary() {
  * @param body        called with `{ chromium, hostUrl }`; returns `summarise`
  */
 export async function runBrowserRegression(run, body) {
-  requireInstalledLibrary();
+  requireInstalledCheckout(run.script);
   const chromium = await loadChromium(run.script);
   process.exit(await withFixtureWorld(run.fixture, ({ hostUrl }) => body({ chromium, hostUrl })));
 }

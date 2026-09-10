@@ -234,6 +234,15 @@ the group reports as new. Editing the duplicated code changes its text, so it
 reports as new too -- which is the honest answer, and it is the check this
 document used to ask a human to do by eye before re-keying anything.
 
+It is not absolute, and it is worth knowing why. Fallow decides where a clone
+group starts and ends, so a large enough edit elsewhere in the same file can
+make it cut the same debt a line or two differently, which is a new key for
+what a reader would call the same clone. That was seen once, when extracting a
+stub controller out of four ActionPanel test files moved the boundary of an
+unrelated accepted group in one of them. It is a re-record rather than an
+ambush, and it is orders of magnitude rarer than an address that moves whenever
+anything above it does.
+
 ### The line-keyed file is now derived
 
 `fallow audit` reads `.fallow-dupes-baseline.json` and the key format is

@@ -588,6 +588,21 @@ export interface ActionDefinition {
    */
   suppressFromActionPanel?: boolean;
   /**
+   * The Action Panel menu path this action's START BUTTON sits at, outermost
+   * first (#228). Absent means the top level. Set via `.group()`.
+   *
+   * Arrangement only: a path decides where a button is drawn and nothing about
+   * whether the action is offered, enabled, or accepted. Each segment is both
+   * the group's label and its identity, so two actions in one group cannot
+   * disagree about what it is called and there is no id to leave dangling.
+   */
+  group?: readonly string[];
+  /**
+   * Sort key for this action's start button within its menu level (#228).
+   * Absent sorts as `0`. Set via `.order()`.
+   */
+  order?: number;
+  /**
    * Help text shown to players on hover/tap. Display-only; never used as a predicate.
    * Set via the `.help(text)` builder method. Propagates into ActionMetadata for both
    * initial and followUp actions.

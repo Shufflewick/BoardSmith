@@ -32,6 +32,12 @@ import {
   shouldDeferElementPickToBoard,
   textLengthHint,
 } from './action-panel-helpers.js';
+import {
+  buildActionMenu,
+  menuLevelAt,
+  resolveMenuPath,
+  type ActionMenuGroup,
+} from './action-menu.js';
 // The engine's own text validator, reached the way `action-panel-helpers.ts`
 // reaches for `MAX_FLAT_CHOICE_CANDIDATES`: the panel must apply the SAME
 // length and pattern rules the server applies, and a second copy of them is a
@@ -227,9 +233,147 @@ const actionsWithMetadata = computed<ActionMetadata[]>(() => {
 // safety net (A11Y C-2) never engages either. Falling back to the full list
 // keeps the API's purpose (remove clutter) and drops its trap (remove the last
 // way to act).
+//
+// SUPPRESSION DECIDES MEMBERSHIP; GROUPING DECIDES ARRANGEMENT (#228). This is
+// the whole of the relationship between the two, and it is why the fallback
+// restores the LIST rather than the FLATNESS: the menu below is built from
+// whatever this returns, so an all-suppressed panel comes back as the game's own
+// hierarchy and not as the flat list the fallback used to imply. Two mechanisms
+// that disagreed about arrangement would have made "grouping remains effective
+// when no ungrouped action is available" false in exactly the case the fallback
+// fires.
 const visibleActions = computed(() => {
   const unsuppressed = actionsWithMetadata.value.filter(a => !a.suppressFromActionPanel);
   return unsuppressed.length > 0 ? unsuppressed : actionsWithMetadata.value;
+});
+
+// ── The start-button hierarchy (#228) ──────────────────────────────────────
+//
+// A game declares where a start button sits with `.group()` and `.order()`, and
+// the menu is DERIVED from the action metadata the panel was already handed --
+// see action-menu.ts for the model and for why it is a separate, pure module.
+//
+// OPENING A MENU CANNOT BE A GAME COMMAND. The only state a group interaction
+// touches is `openPath`, a ref that lives and dies with this component: no
+// controller call, no transport, no engine, nothing persistent. And a group
+// node carries no action name at all, so `enterGroup` has nothing it could
+// submit even by mistake.
+const actionMenu = computed(() => buildActionMenu(visibleActions.value));
+
+/**
+ * The level the player has navigated to -- REQUESTED, never trusted.
+ *
+ * Availability moves underneath a player who is standing in a group, so every
+ * read resolves this against the menu as it is now (`menuLevelAt`), and the
+ * watcher below writes the resolved answer back so the ref cannot drift from
+ * what is on screen. That is what makes "a group emptied while it was open"
+ * land on the deepest ancestor that survived rather than on a level that is not
+ * there.
+ */
+const openPath = ref<readonly string[]>([]);
+
+const menuLevel = computed(() => menuLevelAt(actionMenu.value, openPath.value));
+
+/** The full path, for the current-level label. */
+const menuBreadcrumb = computed(() => menuLevel.value.group?.path.join(' / ') ?? '');
+
+/** Where Back goes, said out loud for a screen reader. */
+const backLabel = computed(() => {
+  const path = menuLevel.value.group?.path ?? [];
+  return path.length > 1 ? `Back to ${path[path.length - 2]}` : 'Back to all actions';
+});
+
+/** What a screen reader is told when a level moved under the player. */
+const menuAnnouncement = ref('');
+
+/** How many things are behind a group's button, for its accessible name. */
+function groupContents(group: ActionMenuGroup<ActionMetadata>): string {
+  const count = group.children.length;
+  return `submenu, ${count} ${count === 1 ? 'action' : 'actions'}`;
+}
+
+const MENU_BUTTONS = '[data-bs-action], [data-bs-action-group]';
+
+/** The group button carrying `label` in the level now rendered. */
+function groupButton(root: HTMLElement, label: string): HTMLElement | null {
+  for (const candidate of root.querySelectorAll<HTMLElement>('[data-bs-action-group]')) {
+    if (candidate.getAttribute('data-bs-action-group') === label) return candidate;
+  }
+  return null;
+}
+
+/**
+ * Enter a group: draw its level and put the keyboard in it.
+ *
+ * Focus moves to the level's first button rather than to Back, for the reason
+ * `focusTargetFor` gives about a selection's own controls: it is where the
+ * player was going, and Back is one keystroke from undoing the navigation they
+ * just performed.
+ */
+function enterGroup(group: ActionMenuGroup<ActionMetadata>): void {
+  menuAnnouncement.value = '';
+  openPath.value = group.path;
+  void focusIntoLevel();
+}
+
+/** Leave the current group, and put the keyboard back on the button that opened it. */
+function leaveGroup(): void {
+  const path = menuLevel.value.group?.path;
+  if (!path || path.length === 0) return;
+  const leaving = path[path.length - 1];
+  menuAnnouncement.value = '';
+  openPath.value = path.slice(0, -1);
+  void restoreFocusToGroup(leaving);
+}
+
+async function focusIntoLevel(): Promise<void> {
+  await nextTick();
+  const root = panelRoot.value;
+  if (!root?.isConnected) return;
+  firstOperableOf(root.querySelectorAll<HTMLElement>(MENU_BUTTONS))?.focus();
+}
+
+async function restoreFocusToGroup(label: string): Promise<void> {
+  await nextTick();
+  const root = panelRoot.value;
+  if (!root?.isConnected) return;
+  const button = groupButton(root, label)
+    ?? firstOperableOf(root.querySelectorAll<HTMLElement>(MENU_BUTTONS));
+  button?.focus();
+}
+
+/**
+ * Escape is Back, one level per press.
+ *
+ * Only while a menu level is open: an action under way owns its own cancel
+ * button, and hijacking Escape there would be a second way to abandon an
+ * action that nothing else in the panel agrees with.
+ */
+function onPanelKeydown(event: KeyboardEvent): void {
+  if (event.key !== 'Escape') return;
+  if (currentAction.value) return;
+  if (!menuLevel.value.group) return;
+  event.preventDefault();
+  leaveGroup();
+}
+
+/**
+ * KEEP `openPath` HONEST, AND SAY SO WHEN IT MOVES.
+ *
+ * `menuLevelAt` already resolves, so the render is correct the instant
+ * availability changes; this exists for the two things a render cannot do --
+ * write the truncated path back so the ref and the screen agree, and tell a
+ * screen-reader user that the level they were standing in went away. Without
+ * the announcement the only signal is a silent change of button list.
+ */
+watch(actionMenu, () => {
+  const resolved = resolveMenuPath(actionMenu.value, openPath.value);
+  if (resolved.length === openPath.value.length) return;
+  const lost = openPath.value[resolved.length];
+  openPath.value = resolved;
+  menuAnnouncement.value = resolved.length === 0
+    ? `${lost} is no longer available. Showing all actions.`
+    : `${lost} is no longer available. Showing ${resolved[resolved.length - 1]}.`;
 });
 
 // Current action metadata
@@ -388,9 +532,8 @@ function focusIsStranded(): boolean {
 const FOCUSABLE =
   'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])';
 
-/** The first control in `scope` a keyboard user can actually operate. */
-function firstOperableIn(scope: HTMLElement): HTMLElement | null {
-  const candidates = scope.querySelectorAll<HTMLElement>(FOCUSABLE);
+/** The first of `candidates` a keyboard user can actually operate. */
+function firstOperableOf(candidates: Iterable<HTMLElement>): HTMLElement | null {
   for (const candidate of candidates) {
     if (candidate.hasAttribute('disabled')) continue;
     // `aria-disabled` controls stay focusable on purpose (see v-disabled-reason:
@@ -408,21 +551,34 @@ function firstOperableIn(scope: HTMLElement): HTMLElement | null {
   return null;
 }
 
+/** Every focusable node in `scope`, in document order. */
+const focusableIn = (scope: HTMLElement): Iterable<HTMLElement> =>
+  scope.querySelectorAll<HTMLElement>(FOCUSABLE);
+
 /**
  * Where focus should land for the step now rendered.
  *
  * The step's OWN controls come first — the choices for this selection, or the
- * action buttons when idle. That is where a mouse user's attention already is,
- * and it is the only landing spot where pressing Enter does what the player
- * came to do. Falling straight to the panel's first focusable node would put
- * them on the cancel button, one keystroke from abandoning the action.
+ * action and group buttons when idle. That is where a mouse user's attention
+ * already is, and it is the only landing spot where pressing Enter does what
+ * the player came to do. Falling straight to the panel's first focusable node
+ * would put them on the cancel button, one keystroke from abandoning the
+ * action, or, inside a menu level, on Back (#228), one keystroke from leaving
+ * the level they were just put back into.
  */
 function focusTargetFor(root: HTMLElement): HTMLElement | null {
-  const step = root.querySelector<HTMLElement>('.selection-input, .action-buttons');
-  return (step && firstOperableIn(step)) ?? firstOperableIn(root);
+  const selection = root.querySelector<HTMLElement>('.selection-input');
+  if (selection) return firstOperableOf(focusableIn(selection)) ?? firstOperableOf(focusableIn(root));
+  const menu = firstOperableOf(root.querySelectorAll<HTMLElement>(MENU_BUTTONS));
+  return menu ?? firstOperableOf(focusableIn(root));
 }
 
-watch(stepIdentity, async () => {
+// AVAILABILITY IS THE SECOND THING THAT STRANDS FOCUS (#228). The idle list is
+// keyed on `availableActions`, so a change re-mounts every button in it and
+// takes the focused one with it -- which is precisely the moment a player
+// standing in a group is most likely to be moved. `stepIdentity` cannot see it:
+// idle to idle is the same step.
+watch([stepIdentity, () => props.availableActions.join(',')], async () => {
   // Wait for the swap to actually land in the DOM before looking for a target.
   await nextTick();
   if (!focusIsStranded()) return;
@@ -1138,39 +1294,85 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
   </div>
 
   <!-- Normal action panel content, gated on showActionPanel -->
-  <div ref="panelRoot" class="action-panel" data-bs-panel v-else-if="showActionPanel">
+  <div
+    ref="panelRoot"
+    class="action-panel"
+    data-bs-panel
+    v-else-if="showActionPanel"
+    @keydown="onPanelKeydown"
+  >
+    <!-- What a screen reader is told when a menu level moved under the player
+         (#228). OUTSIDE the keyed list below on purpose: that list re-mounts
+         whenever availability changes, and a live region created in the same
+         tick as its text is not reliably announced. -->
+    <span
+      class="sr-only"
+      role="status"
+      aria-live="polite"
+      data-bs-menu-announcement
+    >{{ menuAnnouncement }}</span>
+
     <!-- No action being configured -->
     <!-- Key forces re-render when available actions change -->
     <div v-if="!currentAction" class="action-buttons" :key="availableActions.join(',')">
+      <!-- Menu chrome, drawn only inside a group (#228). At the top level there
+           is none, so a game that declares no grouping renders exactly the flat
+           panel it always did. -->
+      <div v-if="menuLevel.group" class="action-menu-header">
+        <button
+          class="action-btn menu-back-btn"
+          data-bs-menu-back
+          :aria-label="backLabel"
+          @click="leaveGroup"
+        >
+          <span aria-hidden="true">&lsaquo;</span> Back
+        </button>
+        <span class="action-menu-label">{{ menuBreadcrumb }}</span>
+      </div>
       <!-- Each action wrapped in .action-btn-group: positioning context for "?" affordance.
            .action-buttons { display: contents } propagates the parent flex context so
            .action-btn-group (inline-flex) becomes a direct action bar flex item — no layout change. -->
       <div
-        v-for="action in visibleActions"
-        :key="action.name"
+        v-for="node in menuLevel.nodes"
+        :key="node.kind === 'group' ? `group:${node.label}` : node.action.name"
         class="action-btn-group"
       >
-        <!-- v-disabled-reason dims the button, shows the reason on hover/focus/tap,
-             and swallows the activation. It uses aria-disabled rather than the
-             native attribute so the control stays focusable — a natively-disabled
-             button cannot be reached by keyboard, taking the reason with it. -->
+        <!-- A GROUP BUTTON IS NAVIGATION AND NOTHING ELSE. `enterGroup` assigns
+             one local ref; the node it is handed has no action name on it, so
+             there is nothing here that could submit an order or take a turn. -->
         <button
-          class="action-btn"
-          :data-bs-action="action.name"
-          v-disabled-reason="actionDisabledReason(action.name)"
-          @click="startAction(action.name)"
+          v-if="node.kind === 'group'"
+          class="action-btn action-group-btn"
+          :data-bs-action-group="node.label"
+          @click="enterGroup(node)"
         >
-          {{ action.prompt || formatActionName(action.name) }}
+          {{ node.label }}
+          <span aria-hidden="true" class="action-group-chevron">&rsaquo;</span>
+          <span class="sr-only">{{ groupContents(node) }}</span>
         </button>
-        <!-- "?" affordance: shown when global toggle is ON and content exists.
-             Disabled-reason-only case also shows the affordance (UI-SPEC Interaction States). -->
-        <ActionHelpPopover
-          v-if="isActionHelpVisible && (action.help || disabledActions?.[action.name])"
-          :action-name="action.name"
-          :help-text="action.help"
-          :disabled-reason="disabledActions?.[action.name]"
-          :trigger-label="action.prompt || formatActionName(action.name)"
-        />
+        <template v-else>
+          <!-- v-disabled-reason dims the button, shows the reason on hover/focus/tap,
+               and swallows the activation. It uses aria-disabled rather than the
+               native attribute so the control stays focusable — a natively-disabled
+               button cannot be reached by keyboard, taking the reason with it. -->
+          <button
+            class="action-btn"
+            :data-bs-action="node.action.name"
+            v-disabled-reason="actionDisabledReason(node.action.name)"
+            @click="startAction(node.action.name)"
+          >
+            {{ node.action.prompt || formatActionName(node.action.name) }}
+          </button>
+          <!-- "?" affordance: shown when global toggle is ON and content exists.
+               Disabled-reason-only case also shows the affordance (UI-SPEC Interaction States). -->
+          <ActionHelpPopover
+            v-if="isActionHelpVisible && (node.action.help || disabledActions?.[node.action.name])"
+            :action-name="node.action.name"
+            :help-text="node.action.help"
+            :disabled-reason="disabledActions?.[node.action.name]"
+            :trigger-label="node.action.prompt || formatActionName(node.action.name)"
+          />
+        </template>
       </div>
       <!-- Undo button — no help affordance (outside the group) -->
       <button
@@ -1667,6 +1869,58 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
 .undo-btn:hover:not([aria-disabled='true']) {
   background: var(--bsg-surface-3);
   box-shadow: var(--bsg-shadow-sm);
+}
+
+/* Menu chrome (issue 228): Back and the current-level label.
+   display:contents for the same reason .config-header uses it: the header's
+   parts become direct items of the action bar's flex flow, so on a narrow
+   screen they wrap with the buttons instead of forcing a fixed-width row. */
+.action-menu-header {
+  display: contents;
+}
+
+.action-menu-label {
+  font-weight: bold;
+  font-size: 1rem;
+  color: var(--bsg-ink-2);
+  align-self: center;
+  /* The one thing that must not wrap mid-word; the flex flow wraps it whole. */
+  white-space: nowrap;
+}
+
+/* Back reads as a way out, not as a move: the neutral plate the Undo button
+   uses, so a group's own actions keep the accent to themselves. */
+.menu-back-btn {
+  background: var(--bsg-surface-2);
+  border: 1px solid var(--bsg-line-2);
+  color: var(--bsg-ink);
+  box-shadow: none;
+}
+
+.menu-back-btn:hover:not([aria-disabled='true']) {
+  background: var(--bsg-surface-3);
+  box-shadow: var(--bsg-shadow-sm);
+}
+
+/* A group button says it leads somewhere. Same plate as an action button so the
+   level reads as one row of choices, with the chevron carrying the difference. */
+.action-group-chevron {
+  margin-left: 6px;
+  opacity: 0.75;
+}
+
+/* Announcements for a screen reader only. The visible half of every one of
+   these is the button list itself. */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 /* Action configuration - horizontal flow layout */

@@ -63,6 +63,23 @@ describe('what the controller is handed', () => {
     expect(play.actionMetadata.value.tend).toEqual(TEND);
   });
 
+  it("hands the shared panel the world's own menu placement, untranslated (#228)", () => {
+    // The hierarchy is action metadata, and a world's offer IS action
+    // metadata -- so there is nothing here to translate and nothing to drop.
+    // Asserted because this is the bar the same feature has to cross in world
+    // mode: an offer whose `group` stopped at this boundary would give the
+    // shared panel a hierarchy at a table and a flat list in a world.
+    const host = fakeHost();
+    host.actions.value = [
+      { name: 'dumpOre', prompt: 'Dump ore', group: ['Dump'], order: 30, selections: [] },
+      { name: 'renamePlanet', group: ['More', 'Empire settings'], selections: [] },
+    ];
+    const play = useWorldPlay(host);
+    expect(play.actionMetadata.value.dumpOre?.group).toEqual(['Dump']);
+    expect(play.actionMetadata.value.dumpOre?.order).toBe(30);
+    expect(play.actionMetadata.value.renamePlanet?.group).toEqual(['More', 'Empire settings']);
+  });
+
   it('carries a predictable refusal as a disabled reason, not a hidden button', () => {
     const host = fakeHost();
     host.actions.value = [{ ...TEND, disabled: 'your holding is bare' }];

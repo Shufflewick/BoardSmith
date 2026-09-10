@@ -2494,14 +2494,6 @@
       ]
     },
     {
-      "content": "53c55b699d9c4f8e",
-      "lines": 35,
-      "files": [
-        "src/ui/components/auto-ui/ActionPanel.smoke.test.ts",
-        "src/ui/components/auto-ui/ActionPanel.suppression.test.ts"
-      ]
-    },
-    {
       "content": "53d76a2142959c2b",
       "lines": 13,
       "files": [
@@ -2958,6 +2950,13 @@
       "lines": 9,
       "files": [
         "src/engine/action/action.test.ts"
+      ]
+    },
+    {
+      "content": "60a113f604703a23",
+      "lines": 9,
+      "files": [
+        "src/ui/components/auto-ui/ActionPanel.menu.test.ts"
       ]
     },
     {
@@ -3792,6 +3791,13 @@
       ]
     },
     {
+      "content": "7a75d44c1e474986",
+      "lines": 9,
+      "files": [
+        "src/ui/components/auto-ui/ActionPanel.test.ts"
+      ]
+    },
+    {
       "content": "7aa116227798687d",
       "lines": 8,
       "files": [
@@ -3914,13 +3920,6 @@
       "files": [
         "src/ui/components/auto-ui/renderers/GridBoardRenderer.a11y.test.ts",
         "src/ui/components/auto-ui/renderers/HexBoardRenderer.a11y.test.ts"
-      ]
-    },
-    {
-      "content": "7ee907947d56341f",
-      "lines": 9,
-      "files": [
-        "src/ui/components/auto-ui/ActionPanel.test.ts"
       ]
     },
     {
@@ -6959,15 +6958,6 @@
       "lines": 12,
       "files": [
         "src/engine/action/action.test.ts"
-      ]
-    },
-    {
-      "content": "db9e0f90e869c599",
-      "lines": 15,
-      "files": [
-        "src/ui/components/auto-ui/ActionPanel.smoke.test.ts",
-        "src/ui/components/auto-ui/ActionPanel.suppression.test.ts",
-        "src/ui/components/auto-ui/ActionPanel.test.ts"
       ]
     },
     {
