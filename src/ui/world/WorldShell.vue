@@ -56,6 +56,7 @@
       :prompt="actionController.currentPick.value?.prompt"
       :connection="connectionIndicator"
       v-model:sidebar-rail="sidebarRail"
+      v-model:action-bar-minimized="actionBarMinimized"
       v-model:mobile-expanded="mobileExpanded"
       :is-compact="isCompact"
     >
@@ -364,6 +365,9 @@ async function act(command: string, args: Record<string, unknown> = {}) {
 
 // ── Chrome layout state, the shell's own ──────────────────────────────────────
 const sidebarRail = ref(false);
+// #230: the player's own action-bar preference, held exactly where the sidebar
+// rail's is, and not persisted for the same reason.
+const actionBarMinimized = ref(false);
 const mobileExpanded = ref(false);
 const isCompact = ref(false);
 let compactQuery: MediaQueryList | null = null;

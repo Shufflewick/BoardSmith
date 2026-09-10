@@ -306,6 +306,10 @@ const autoEndTurn = ref(true); // Auto-end turn after making a move
 // The matchMedia listener ensures the rail collapses automatically when the viewport
 // narrows to compact, but never forces expansion when viewport widens (user preference).
 const sidebarRail = ref<boolean>(false);
+// #230: the player's own action-bar preference, held exactly where the sidebar
+// rail's is. Not persisted, for the same reason the rail is not: two answers to
+// "does a collapse survive a reload" would be two idioms for one idea.
+const actionBarMinimized = ref<boolean>(false);
 // Mobile only: the sidebar defaults to a compact one-line player strip; this opens
 // the full players + log as an overlay over the board (board stays the hero).
 const mobileExpanded = ref<boolean>(false);
@@ -1871,6 +1875,7 @@ if ((import.meta as any).hot) {
       :connection="connectionIndicator"
       :zoom-level="zoomLevel"
       v-model:sidebar-rail="sidebarRail"
+      v-model:action-bar-minimized="actionBarMinimized"
       v-model:mobile-expanded="mobileExpanded"
       :is-compact="isCompact"
       @undo="handleUndo"
