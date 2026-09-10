@@ -116,6 +116,15 @@ export interface ActionMetadata {
    * engine (`engine/element/action-metadata.ts`).
    */
   suppressFromActionPanel?: boolean;
+  /**
+   * The Action Panel menu path this action's START BUTTON sits at, outermost
+   * first (#228); absent means the top level. Set via `ActionBuilder.group()`.
+   * Arrangement only -- it changes neither availability nor executability, and
+   * a game that declares nothing keeps the flat panel.
+   */
+  group?: readonly string[];
+  /** Sort key within the action's menu level (#228); absent sorts as `0`. */
+  order?: number;
   selections: PickMetadata[];
 }
 
