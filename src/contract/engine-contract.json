@@ -1,5 +1,5 @@
 {
-  "revision": 75,
+  "revision": 76,
   "bundleProtocol": 2,
   "surfaceHash": "1feb60c2051e0c9b",
   "payloadHash": "eaab9ade0d133677",
@@ -619,6 +619,15 @@
       "payloadHash": "eaab9ade0d133677",
       "formatHash": "0058593e7cc80205",
       "summary": "r75 is CLI-side only, and it needs a number for the same reason r73 and r74 did: no fingerprint can see it, but the packed tarball's bytes differ from r74's for the same engine. surfaceHash 1feb60c2051e0c9b, payloadHash eaab9ade0d133677 and formatHash 0058593e7cc80205 are all carried forward unmoved. Two fixes. First, every developer tool boardsmith spawns and reads back (#241): runToolCapturingStdout decoded each arriving chunk of the child's stdout on its own, so a multi-byte UTF-8 character split across a chunk boundary became U+FFFD and the captured report was not what the tool printed. stdout is now buffered whole and decoded once. That silently changed an accepted clone group's key in boardsmith audit --dupes-baseline, which hashes the duplicated source text fallow reports, and it was blamed twice on fallow re-cutting group boundaries instead. Second, boardsmith init no longer leaves a half-scaffolded project behind (#242): a failure after the directory was created left a project whose rulebook/INDEX.md provenance describes an archive that does not exist, and that directory is the very shape init refuses to overwrite, so the retry the user reaches for failed too. It now removes only the tree it had to create, keeps a pre-existing directory because that one is the user's, and prints Created <name> successfully! after the last step that can fail rather than before it. NOTHING HERE IS URGENT FOR THE PLATFORM. The hosted runtime never runs init and never spawns fallow or jscpd, and no engine behaviour, protocol or payload shape changed, so r72, r73 and r74 all remain correct engines to run. This is a fix for game authors and bs- build sessions driving the CLI locally, so re-vendor at your convenience."
+    },
+    {
+      "revision": 76,
+      "date": "2026-09-10",
+      "bundleProtocol": 2,
+      "surfaceHash": "1feb60c2051e0c9b",
+      "payloadHash": "eaab9ade0d133677",
+      "formatHash": "0058593e7cc80205",
+      "summary": "r76 is CLI-side only and changes no behaviour at all, but it needs a number for the same reason r73, r74 and r75 did: no fingerprint can see it, and the packed tarball's bytes still differ from r75's for the same engine, because src/ is packed. surfaceHash 1feb60c2051e0c9b, payloadHash eaab9ade0d133677 and formatHash 0058593e7cc80205 are all carried forward unmoved. Two source files, src/cli/lib/dupes-baseline.ts and src/cli/lib/choice-cardinality.ts, each held a literal U+0000 byte as a key separator (#243). NUL is the right separator, since no source text can hold one and so no fragment can forge the delimiter; only its spelling was wrong, and one literal NUL is enough for git to classify a file as binary and leave every change to it undiffable in git diff, git log -p, git show and any review UI. Written as the escape it builds the identical string, which was measured directly against the pre-change module: the same key, and .fallow-dupes-accepted.json is not in the diff at all, with 1085 accepted groups before and after, nothing re-keyed and nothing forgiven. A gate now scans every tracked text file for control bytes other than tab, line feed and carriage return, because this mistake got in twice. THE PLATFORM DOES NOT NEED THIS. shufflewick.pub never spawns fallow or jscpd, never reaches either module, and no engine behaviour, protocol or payload shape changed, so r72 through r75 all remain correct engines to run. Re-vendor whenever it is convenient, or not at all."
     }
   ]
 }
