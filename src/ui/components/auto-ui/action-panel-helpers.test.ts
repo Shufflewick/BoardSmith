@@ -1,5 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { splitAnchoredChoices, shouldDeferElementPickToBoard } from './action-panel-helpers.js';
+import {
+  splitAnchoredChoices,
+  shouldDeferElementPickToBoard,
+  textLengthHint,
+} from './action-panel-helpers.js';
 import type { ChoiceWithRefs, ValidElement } from '../../composables/useActionControllerTypes.js';
 
 describe('splitAnchoredChoices', () => {
@@ -97,5 +101,49 @@ describe('shouldDeferElementPickToBoard', () => {
 
   it('never defers an empty candidate list', () => {
     expect(shouldDeferElementPickToBoard('element', [], 0)).toBe(false);
+  });
+});
+
+/**
+ * #229 reported the hint rendering as `(?-1000 chars)` for a field with a
+ * maximum and no minimum -- which is every field declared the way `enterText`
+ * is normally declared, because `maxLength` always has a value and `minLength`
+ * usually does not. A question mark where a number belongs reads as a bug in
+ * the game, and "?-1000" does not say the thing the player needs to know.
+ *
+ * The fix is one function so the single-line field and the multiline field can
+ * never disagree about the sentence, which was the second half of the report:
+ * one of them being right would have left the other wrong.
+ */
+describe('textLengthHint', () => {
+  it('states only the maximum when there is no minimum', () => {
+    expect(textLengthHint({ maxLength: 1000 })).toBe('up to 1000 characters');
+  });
+
+  it('states only the minimum when there is no maximum', () => {
+    expect(textLengthHint({ minLength: 10 })).toBe('at least 10 characters');
+  });
+
+  it('states the range when the field has both', () => {
+    expect(textLengthHint({ minLength: 10, maxLength: 1000 })).toBe('10 to 1000 characters');
+  });
+
+  it('says nothing at all when the field is bounded by neither', () => {
+    // No hint beats an empty pair of brackets. `enterText` always applies a
+    // maximum, so this is the shape of a pick a host hand-built.
+    expect(textLengthHint({})).toBeUndefined();
+  });
+
+  it('never renders a question mark, which is what the report was about', () => {
+    for (const rules of [{ maxLength: 1000 }, { minLength: 10 }, { minLength: 1, maxLength: 2 }]) {
+      expect(textLengthHint(rules)).not.toContain('?');
+    }
+  });
+
+  it('speaks in whole words, because a screen reader reads it aloud', () => {
+    // The hint is bound to the field through `aria-describedby`, so "chars" was
+    // being read out as an abbreviation to the one player who cannot see the
+    // field it belongs to.
+    expect(textLengthHint({ maxLength: 20 })).toContain('characters');
   });
 });
