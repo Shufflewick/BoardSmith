@@ -15,12 +15,26 @@
  * import a folder) that the copy in the second script had already lost. One
  * definition, so the reason cannot be dropped again.
  *
+ * It also owns the whole RUN rather than just the pieces of it (#231), because
+ * the order those pieces go in is the part a script got wrong every time it
+ * was copied: each one removed its fixture and then exited under a world host
+ * nothing had stopped. `runBrowserRegression` is the one entry point, and the
+ * fixture, the host and the browser are not reachable without it.
+ *
  * What is NOT here is any assertion. Each script owns its own fixture, its own
  * questions, and its own reason for existing.
  *
  * @module
  */
-import { mkdirSync, mkdtempSync, realpathSync, symlinkSync, writeFileSync } from 'node:fs';
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  realpathSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from 'node:fs';
 import { createServer } from 'node:net';
 import { dirname, join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -29,7 +43,7 @@ import { fileURLToPath } from 'node:url';
 const HERE = dirname(fileURLToPath(import.meta.url));
 
 /** This checkout, which is the library every fixture resolves against. */
-export const REPO = resolve(HERE, '..');
+const REPO = resolve(HERE, '..');
 
 // ── Playwright, or an actionable refusal ─────────────────────────────────────
 
@@ -75,7 +89,7 @@ async function chromiumFrom(specifier, failures) {
  *
  * @param script the script's own filename, for the copy-pasteable command line
  */
-export async function loadChromium(script) {
+async function loadChromium(script) {
   const failures = [];
   for (const candidate of playwrightCandidates(process.env.BOARDSMITH_PLAYWRIGHT_MODULE)) {
     const chromium = await chromiumFrom(candidate, failures);
@@ -123,7 +137,11 @@ export default defineConfig({
  *
  * A checked-in game project inside the library would be a second thing to keep
  * compiling; these are disposable by design -- born at genesis, exercised once,
- * removed by the caller.
+ * removed when its host has stopped.
+ *
+ * MODULE-PRIVATE, and `startWorldHost` with it: a fixture and the host serving
+ * it are one lifetime, so `withFixtureWorld` is the only way to have either
+ * (#231).
  *
  * @param spec.slug        the project and game-type name
  * @param spec.displayName what the dev host calls it
@@ -133,7 +151,7 @@ export default defineConfig({
  * @param spec.board       the whole of that component
  * @returns the project directory
  */
-export function writeWorldFixture(spec) {
+function writeWorldFixture(spec) {
   // `realpathSync`: on macOS the temp root is a symlink (`/var` -> `/private/var`),
   // and Vite resolves a module id to its real path -- so a root given in the
   // symlinked form puts every one of the project's own files outside it.
@@ -178,9 +196,9 @@ export function writeWorldFixture(spec) {
  * `tsx` first, exactly as `bin/boardsmith.js` does it: everything reached from
  * here is the CLI's own TypeScript, run from source with no build step.
  *
- * @returns the host URL
+ * @returns the host, whose `stop()` is the only thing that ends it
  */
-export async function startWorldHost({ fixture, displayName }) {
+async function startWorldHost({ fixture, displayName }) {
   const port = await freePort();
   await import('tsx');
   const { startWorldDevServer } = await import(join(REPO, 'src/cli/commands/dev-world.ts'));
@@ -191,7 +209,7 @@ export async function startWorldHost({ fixture, displayName }) {
   const rulesPath = join(fixture, 'src', 'rules');
   const { gameDefinition } = await loadGameDefinition(rulesPath, tempDir, 'standalone');
 
-  await startWorldDevServer({
+  const host = await startWorldDevServer({
     cwd: fixture,
     uiPath: fixture,
     gameDefinition,
@@ -204,7 +222,49 @@ export async function startWorldHost({ fixture, displayName }) {
     reloadRules: async () => (await loadGameDefinition(rulesPath, tempDir, 'standalone')).gameDefinition,
   });
 
-  return `http://127.0.0.1:${port}/`;
+  // The host reports the URL Vite resolved, which is `localhost`; a check has
+  // to reach the interface the port was actually taken on.
+  return { hostUrl: `http://127.0.0.1:${port}/`, stop: host.stop };
+}
+
+/**
+ * A FIXTURE WORLD, SERVED, AND GONE AFTERWARDS -- IN THAT ORDER (#231).
+ *
+ * This is the only way a regression gets either half, because getting the
+ * ORDER wrong is the mistake, and it is not a mistake a script should be able
+ * to make on its own. Both halves used to be a script's business: it wrote the
+ * fixture, started the host, removed the fixture in a `finally`, and then
+ * exited. Nothing ever stopped the host.
+ *
+ * That is a race and it was observed as one. The world's own lock can still be
+ * draining a disconnect the closing browser fired, and Vite's dep optimiser
+ * can still be writing into the project, while `rmSync` is walking the same
+ * tree -- so a run sometimes left the whole fixture world behind, re-created
+ * underneath the removal. `process.exit()` cannot rescue that: the writes are
+ * already in flight, and an exit does not wait for them, it abandons them.
+ *
+ * So the host's `stop()` is awaited in the INNER guard and the fixture is
+ * removed in the OUTER one. When `stop()` resolves the world lock has drained,
+ * the store handle is closed and Vite is down: there is no writer left to race.
+ * Both guards are `finally`, so a body that throws is cleaned up the same way
+ * as one that passes -- and neither guard can be skipped by an exit, because
+ * this function returns before any script exits.
+ *
+ * @param spec the fixture project, as `writeWorldFixture` takes it
+ * @param body called with `{ hostUrl, fixture }`; its return value is passed on
+ */
+async function withFixtureWorld(spec, body) {
+  const fixture = writeWorldFixture(spec);
+  try {
+    const { hostUrl, stop } = await startWorldHost({ fixture, displayName: spec.displayName });
+    try {
+      return await body({ hostUrl, fixture });
+    } finally {
+      await stop();
+    }
+  } finally {
+    rmSync(fixture, { recursive: true, force: true });
+  }
 }
 
 /**
@@ -267,4 +327,46 @@ export function summarise(what) {
   const failed = results.filter((result) => result.error);
   console.log(`\n${results.length - failed.length}/${results.length} checks passed ${what}`);
   return failed.length === 0 ? 0 : 1;
+}
+
+// ── One whole run ────────────────────────────────────────────────────────────
+
+/**
+ * The fixture resolves this checkout by symlink, so a checkout with nothing
+ * installed cannot serve one. Said before Chromium is looked for, because it is
+ * the cheaper answer and the likelier mistake.
+ */
+function requireInstalledLibrary() {
+  if (existsSync(join(REPO, 'node_modules', 'vue'))) return;
+  console.error(
+    'This checkout has no node_modules/vue, so the fixture world cannot be served.\n' +
+      '  Run `npm install` in the repository root first.',
+  );
+  process.exit(1);
+}
+
+/**
+ * RUN ONE BROWSER REGRESSION, END TO END.
+ *
+ * A script's whole job is its checks. Everything around them is the same in
+ * every script, in a fixed order, and every step of that order has a reason a
+ * script should not have to remember: the library has to be installed, a
+ * Chromium has to be found or the run refused, the fixture world has to be
+ * written and served, the HOST has to be stopped before its project is removed
+ * (#231), and the process may exit only after all of that.
+ *
+ * Each of those was a copied paragraph in each script, and each copy was a
+ * chance to get the order wrong. There is one copy now, and the exit is the
+ * last thing that happens rather than the thing that pre-empted the cleanup.
+ *
+ * It does not return: the code the body reports becomes the process's.
+ *
+ * @param run.script  the script's own filename, for the refusal's command line
+ * @param run.fixture the world project, as `writeWorldFixture` takes it
+ * @param body        called with `{ chromium, hostUrl }`; returns `summarise`
+ */
+export async function runBrowserRegression(run, body) {
+  requireInstalledLibrary();
+  const chromium = await loadChromium(run.script);
+  process.exit(await withFixtureWorld(run.fixture, ({ hostUrl }) => body({ chromium, hostUrl })));
 }

@@ -40,18 +40,13 @@
  * disposable by design: the point is a world nobody has played, born at genesis,
  * exercised once.
  */
-import { existsSync, rmSync } from 'node:fs';
-import { join } from 'node:path';
 import {
-  REPO,
   assert,
   check,
-  loadChromium,
-  startWorldHost,
+  runBrowserRegression,
   summarise,
   surfaceOf,
   waitUntil,
-  writeWorldFixture,
 } from './browser-harness.mjs';
 
 /** How long one pick's own answer is waited for, from `worldProtocol.ts`. */
@@ -238,28 +233,26 @@ async function settledCrewCount(page) {
   return crewCount(page);
 }
 
-async function main() {
-  const chromium = await loadChromium('world-pick-bridge-browser.mjs');
-  const fixture = writeWorldFixture({
-    slug: 'pick-bridge-fleet',
-    displayName: 'Pick Bridge Fleet',
-    gameClass: 'Fleet',
-    rules: RULES,
-    boardFile: 'FleetBoard',
-    board: BOARD,
-  });
-  // THE FIXTURE IS REMOVED WHATEVER HAPPENS, from here on. Its own creation is
-  // the only step outside the guard, and a temp world left behind by a crashed
-  // build is exactly the litter this script must not leave.
-  try {
-    return await driveThrough({ chromium, fixture });
-  } finally {
-    rmSync(fixture, { recursive: true, force: true });
-  }
-}
+// THE WHOLE RUN, IN THE HARNESS'S ORDER (#231). It checks the checkout is
+// installed, finds a Chromium or refuses, serves the fixture world, stops the
+// host before removing its project, and exits on what `driveThrough` reports --
+// so a temp world left behind by a crashed run is litter this cannot leave.
+await runBrowserRegression(
+  {
+    script: 'world-pick-bridge-browser.mjs',
+    fixture: {
+      slug: 'pick-bridge-fleet',
+      displayName: 'Pick Bridge Fleet',
+      gameClass: 'Fleet',
+      rules: RULES,
+      boardFile: 'FleetBoard',
+      board: BOARD,
+    },
+  },
+  driveThrough,
+);
 
-async function driveThrough({ chromium, fixture }) {
-  const hostUrl = await startWorldHost({ fixture, displayName: 'Pick Bridge Fleet' });
+async function driveThrough({ chromium, hostUrl }) {
   const browser = await chromium.launch();
 
   try {
@@ -415,12 +408,3 @@ async function driveThrough({ chromium, fixture }) {
   return summarise('through the real dev bridge in a real browser.');
 }
 
-if (!existsSync(join(REPO, 'node_modules', 'vue'))) {
-  console.error(
-    'This checkout has no node_modules/vue, so the fixture world cannot be served.\n' +
-      '  Run `npm install` in the repository root first.',
-  );
-  process.exit(1);
-}
-
-process.exit(await main());

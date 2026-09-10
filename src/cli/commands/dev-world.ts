@@ -185,6 +185,37 @@ interface WorldDevServerOptions {
 }
 
 /**
+ * A RUNNING WORLD HOST, AND THE ONE WAY TO STOP IT (#231).
+ *
+ * `startWorldDevServer` used to hand back nothing, and its only teardown was
+ * the body it gave `onShutdown` -- which ends in `process.exit`. A caller with
+ * no signal to send therefore had no way to stop the host at all, and the
+ * browser regression scripts stopped it by exiting the process under it. That
+ * left their throwaway fixture world racing the host's own writes: the world
+ * lock could still be draining a disconnect, and Vite's dep optimiser still
+ * writing into the project, when the directory was removed.
+ *
+ * So the teardown is a value now. The process-exit decision stays with the
+ * command that owns the process.
+ *
+ * Not exported: nothing names this type, it is only ever the inferred result of
+ * `startWorldDevServer`.
+ */
+interface WorldDevServer {
+  /** Where the dev chrome is served. */
+  readonly hostUrl: string;
+  /**
+   * Stop this host and let go of everything it holds, once.
+   *
+   * When it resolves, nothing this host owns can write again: the world lock
+   * has drained, the resident tree is checkpointed, the store handle is closed
+   * and Vite is down. It is therefore safe to delete the project directory
+   * afterwards, and only afterwards.
+   */
+  stop(): Promise<void>;
+}
+
+/**
  * START THE WORLD.
  *
  * The store is opened and the world launched BEFORE the browser is pointed at
@@ -192,7 +223,9 @@ interface WorldDevServerOptions {
  * no `view`, a `maxPlayers` the host will not hold -- meets the library's own
  * refusal in the terminal instead of a blank frame.
  */
-export async function startWorldDevServer(options: WorldDevServerOptions): Promise<void> {
+export async function startWorldDevServer(
+  options: WorldDevServerOptions,
+): Promise<WorldDevServer> {
   const devHostDir = resolveDevHostDir(__dirname, 'world-host.html');
   const boardsmithRoot = resolve(devHostDir, '..', '..', '..');
   // A world project always has an entry, and this is where a project that did
@@ -410,22 +443,38 @@ export async function startWorldDevServer(options: WorldDevServerOptions): Promi
   if (options.openBrowser) await open(hostUrl);
   console.log(chalk.green('\n  Ready! Press Ctrl+C to stop.\n'));
 
-  onShutdown(async () => {
-    console.log(chalk.dim('\n  Shutting down...'));
+  // ONE ORDERLY STOP, WHOEVER ASKS (#231). A signal and a programmatic caller
+  // reach the same promise, so the two can never run the teardown twice, and
+  // the awaited result is the guarantee that nothing this host owns will write
+  // again.
+  let stopping: Promise<void> | null = null;
+  const teardown = async (): Promise<void> => {
     worldSocket.close();
     clients.clear();
+    // `close` drains the world lock before it touches the store, so an
+    // in-flight disconnect or command is finished rather than abandoned -- and
+    // the checkpoint it writes on the way out is the last write there is.
+    //
     // THE WORLD IS CLOSED, NOT DELETED. A persistent world that erased itself
     // when its host stopped would be a session; `--reset` is the only thing
     // that removes one.
     await worldHost.close();
+    // AFTER the world, because Vite's own watcher and dep optimiser write into
+    // the project too, and a caller about to remove that project needs both
+    // writers stopped before it does.
     await vite.close();
-    try {
-      rmSync(options.tempDir, { recursive: true, force: true });
-    } catch {
-      // best-effort
-    }
+    rmSync(options.tempDir, { recursive: true, force: true });
+    shutdown.cancel();
+  };
+  const stop = (): Promise<void> => (stopping ??= teardown());
+
+  const shutdown = onShutdown(async () => {
+    console.log(chalk.dim('\n  Shutting down...'));
+    await stop();
     process.exit(0);
   });
+
+  return { hostUrl, stop };
 }
 
 /**
