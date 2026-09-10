@@ -28,6 +28,7 @@ import { Action } from './action-builder.js';
 import { PlayerFacingError, NotSimulableError } from '../errors.js';
 import { getActiveStep, getGateReasonForValue } from '../tutorial/gate.js';
 import { findMatchingChoice, trySmartResolveChoice, valuesEqual } from './choice-matching.js';
+import { numberRuleErrors } from './number-rules.js';
 import { textRuleErrors } from './text-rules.js';
 
 // Re-export Action class from action-builder
@@ -1079,15 +1080,11 @@ export class ActionExecutor {
         if (typeof num !== 'number' || isNaN(num)) {
           errors.push(`${selection.name} must be a number`);
         } else {
-          if (numSel.min !== undefined && num < numSel.min) {
-            errors.push(`${selection.name} must be at least ${numSel.min}`);
-          }
-          if (numSel.max !== undefined && num > numSel.max) {
-            errors.push(`${selection.name} must be at most ${numSel.max}`);
-          }
-          if (numSel.integer && !Number.isInteger(num)) {
-            errors.push(`${selection.name} must be an integer`);
-          }
+          // The bounds live in `number-rules.ts` because the Action Panel has to
+          // apply the same ones to tell a player why their number will be
+          // refused before they submit it (#237), exactly as the text case above
+          // does. Two copies of these three checks is two rule sets that drift.
+          errors.push(...numberRuleErrors(selection.name, num, numSel));
         }
         break;
       }
