@@ -9,17 +9,15 @@
  *
  * It does NOT test interaction behaviour (those live in later plans).
  */
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { mount } from '@vue/test-utils';
-import { ref, computed } from 'vue';
 import ActionPanel from './ActionPanel.vue';
 import { GAME_CONTEXT_KEYS } from '../../composables/useGameContext.js';
-import { makeStubController } from './action-panel-controller.test-helper.js';
-
+import { stubActionController } from './action-panel-controller.test-helper.js';
 
 describe('ActionPanel smoke test', () => {
   it('mounts a real SFC in jsdom and produces DOM', () => {
-    const controller = makeStubController();
+    const controller = stubActionController();
 
     const wrapper = mount(ActionPanel, {
       global: {

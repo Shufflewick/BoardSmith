@@ -195,15 +195,25 @@ const groupLabels = (wrapper: ReturnType<typeof mount>): string[] =>
 const leafNames = (wrapper: ReturnType<typeof mount>): string[] =>
   wrapper.findAll('[data-bs-action]').map((b) => b.attributes('data-bs-action')!);
 
+/**
+ * Walk a panel two levels in and take it away again, which is what the player
+ * does before they collapse the bar. Asserts the walk landed, so a test that
+ * fails afterwards is failing about the remount and not about the walk.
+ */
+async function walkedTwoLevelsInThenGone(
+  mountPanel: () => Promise<ReturnType<typeof mount>>,
+): Promise<void> {
+  const wrapper = await mountPanel();
+  await wrapper.find('[data-bs-action-group="More"]').trigger('click');
+  await wrapper.find('[data-bs-action-group="Empire settings"]').trigger('click');
+  expect(leafNames(wrapper)).toEqual(['renamePlanet']);
+  wrapper.unmount();
+}
+
 describe('the open menu level survives the panel being unmounted (#228, #235)', () => {
   it('reopens at the level the player was standing in, not at the top', async () => {
     const { mountPanel } = panelsOver(LACUNA);
-
-    const first = await mountPanel();
-    await first.find('[data-bs-action-group="More"]').trigger('click');
-    await first.find('[data-bs-action-group="Empire settings"]').trigger('click');
-    expect(leafNames(first)).toEqual(['renamePlanet']);
-    first.unmount();
+    await walkedTwoLevelsInThenGone(mountPanel);
 
     const second = await mountPanel();
     expect(leafNames(second)).toEqual(['renamePlanet']);
@@ -232,12 +242,7 @@ describe('the open menu level survives the panel being unmounted (#228, #235)', 
     // truncates it to what the menu now offers, which is what makes remembering
     // it safe across a collapse of any length.
     const { availableActions, mountPanel } = panelsOver(LACUNA);
-
-    const first = await mountPanel();
-    await first.find('[data-bs-action-group="More"]').trigger('click');
-    await first.find('[data-bs-action-group="Empire settings"]').trigger('click');
-    expect(leafNames(first)).toEqual(['renamePlanet']);
-    first.unmount();
+    await walkedTwoLevelsInThenGone(mountPanel);
 
     // The only action inside 'Empire settings' goes away while the bar is down.
     availableActions.value = ['construct', 'dumpOre', 'dumpFood', 'skipMission'];

@@ -31,18 +31,14 @@
  *   BOARDSMITH_PLAYWRIGHT_MODULE=/abs/path/to/node_modules/playwright \
  *     node scripts/multiline-text-browser.mjs
  */
-import { rmSync } from 'node:fs';
 
 import {
   assert,
   check,
-  loadChromium,
-  requireInstalledCheckout,
-  startWorldHost,
+  runBrowserRegression,
   summarise,
   surfaceOf,
   waitUntil,
-  writeWorldFixture,
 } from './browser-harness.mjs';
 
 const USABLE_BOX = { minWidth: 300, minHeight: 80 };
@@ -187,27 +183,26 @@ async function startAction(page, name) {
   await surface.locator('.text-input').waitFor({ timeout: 15_000 });
 }
 
-async function main() {
-  const chromium = await loadChromium('multiline-text-browser.mjs');
-  const fixture = writeWorldFixture({
-    slug: 'multiline-colony',
-    displayName: 'Multiline Colony',
-    gameClass: 'Colony',
-    rules: RULES,
-    boardFile: 'ColonyBoard',
-    board: BOARD,
-  });
-  // THE FIXTURE IS REMOVED WHATEVER HAPPENS, from here on: a temp world left
-  // behind by a crashed run is exactly the litter this script must not leave.
-  try {
-    return await driveThrough({ chromium, fixture });
-  } finally {
-    rmSync(fixture, { recursive: true, force: true });
-  }
-}
+// THE WHOLE RUN, IN THE HARNESS'S ORDER (#231). It checks the checkout is
+// installed, finds a Chromium or refuses, serves the fixture world, stops the
+// host before removing its project, and exits on what `driveThrough` reports --
+// so a temp world left behind by a crashed run is litter this cannot leave.
+await runBrowserRegression(
+  {
+    script: 'multiline-text-browser.mjs',
+    fixture: {
+      slug: 'multiline-colony',
+      displayName: 'Multiline Colony',
+      gameClass: 'Colony',
+      rules: RULES,
+      boardFile: 'ColonyBoard',
+      board: BOARD,
+    },
+  },
+  driveThrough,
+);
 
-async function driveThrough({ chromium, fixture }) {
-  const hostUrl = await startWorldHost({ fixture, displayName: 'Multiline Colony' });
+async function driveThrough({ chromium, hostUrl }) {
   const browser = await chromium.launch();
 
   try {
@@ -460,6 +455,3 @@ async function driveThrough({ chromium, fixture }) {
   return summarise('through the real dev host in a real browser.');
 }
 
-requireInstalledCheckout('multiline-text-browser.mjs');
-
-process.exit(await main());

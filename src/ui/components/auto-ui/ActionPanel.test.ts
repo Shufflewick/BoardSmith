@@ -29,7 +29,7 @@ import { splitAnchoredChoices } from './action-panel-helpers.js';
 import type { ChoiceWithRefs } from '../../composables/useActionControllerTypes.js';
 import { DISABLED_TOOLTIP_ID } from '../../composables/useDisabledReasonTooltip.js';
 import { GAME_CONTEXT_KEYS } from '../../composables/useGameContext.js';
-import { makeStubController } from './action-panel-controller.test-helper.js';
+import { stubActionController } from './action-panel-controller.test-helper.js';
 import {
   createBoardInteraction,
   provideBoardInteraction,
@@ -210,7 +210,6 @@ describe('splitAnchoredChoices (D-03)', () => {
 // ActionPanel QUICK-01 + QUICK-02 component tests
 // ---------------------------------------------------------------------------
 
-
 describe('ActionPanel UIX-01 — no direct toast on rejected actions (GameShell is the sole chokepoint)', () => {
   beforeEach(() => {
     mockToast.error.mockReset();
@@ -218,7 +217,7 @@ describe('ActionPanel UIX-01 — no direct toast on rejected actions (GameShell 
 
   it('does NOT call toast.error on fill() rejection — the controller is invoked and the failure is left to lastError/GameShell', async () => {
     const fillMock = vi.fn().mockResolvedValue({ valid: false, error: 'Selection is invalid.' });
-    const controller = makeStubController({
+    const controller = stubActionController({
       currentAction: ref('testAction'),
       currentPick: ref({ name: 'color', type: 'choice', prompt: 'Pick a color' }),
       currentChoices: ref([{ value: 'red', display: 'Red' }]),
@@ -246,7 +245,7 @@ describe('ActionPanel UIX-01 — no direct toast on rejected actions (GameShell 
 
   it('does NOT call toast.error on execute() rejection — the controller is invoked and the failure is left to lastError/GameShell', async () => {
     const executeMock = vi.fn().mockResolvedValue({ success: false, error: 'Not your turn.' });
-    const controller = makeStubController({
+    const controller = stubActionController({
       execute: executeMock,
     });
 
@@ -270,7 +269,7 @@ describe('ActionPanel UIX-01 — no direct toast on rejected actions (GameShell 
   });
 
   it('executeAction finally still emits cancelSelection on a rejected action (behavior preserved, no boardInteraction provider needed)', async () => {
-    const controller = makeStubController({
+    const controller = stubActionController({
       execute: vi.fn().mockResolvedValue({ success: false, error: 'Not your turn.' }),
     });
 
@@ -298,7 +297,7 @@ describe('ActionPanel UIX-01 — no direct toast on rejected actions (GameShell 
 describe('ActionPanel QUICK-02 — accessible names on icon-only controls', () => {
   it('cancel button has aria-label="Cancel action"', () => {
     // currentAction must be non-null for the action-config view (and cancel button) to render
-    const controller = makeStubController({
+    const controller = stubActionController({
       currentAction: ref('testAction'),
     });
 
@@ -327,7 +326,7 @@ function mountWithHelp(opts: {
   isActionHelpVisible?: boolean;
   disabledActions?: Record<string, string>;
 }) {
-  const controller = makeStubController();
+  const controller = stubActionController();
   return mount(ActionPanel, {
     global: {
       provide: { [GAME_CONTEXT_KEYS.actionController as symbol]: controller },
@@ -398,7 +397,7 @@ describe('ActionPanel 108-02 — ActionHelpPopover affordance visibility', () =>
   it('existing .action-btn still dispatches the action on click (behavior unchanged)', async () => {
     // With selections:[], startAction calls executeAction → actionController.execute.
     const executeSpy = vi.fn().mockResolvedValue({ success: true });
-    const controller = makeStubController({ execute: executeSpy });
+    const controller = stubActionController({ execute: executeSpy });
 
     const wrapper = mount(ActionPanel, {
       global: {
@@ -473,7 +472,7 @@ describe('ActionPanel — disabled action buttons carry their reason', () => {
 
   it('does not start a disabled action when its button is clicked', async () => {
     const startSpy = vi.fn(async () => {});
-    const controller = makeStubController({ start: startSpy });
+    const controller = stubActionController({ start: startSpy });
     const wrapper = mount(ActionPanel, {
       global: { provide: { [GAME_CONTEXT_KEYS.actionController as symbol]: controller }, stubs: { Teleport: true } },
       props: {
@@ -512,7 +511,7 @@ describe('ActionPanel — disabled action buttons carry their reason', () => {
   });
 
   it('explains the in-flight state on every action button while a submission is executing', () => {
-    const controller = makeStubController({ isExecuting: ref(true) });
+    const controller = stubActionController({ isExecuting: ref(true) });
     const wrapper = mount(ActionPanel, {
       global: { provide: { [GAME_CONTEXT_KEYS.actionController as symbol]: controller }, stubs: { Teleport: true } },
       props: {
@@ -535,7 +534,7 @@ describe('ActionPanel — disabled action buttons carry their reason', () => {
   });
 
   it('prefers the action-specific reason over the generic in-flight one', () => {
-    const controller = makeStubController({ isExecuting: ref(true) });
+    const controller = stubActionController({ isExecuting: ref(true) });
     const wrapper = mount(ActionPanel, {
       global: { provide: { [GAME_CONTEXT_KEYS.actionController as symbol]: controller }, stubs: { Teleport: true } },
       props: {
@@ -554,7 +553,7 @@ describe('ActionPanel — disabled action buttons carry their reason', () => {
 
   it('gives a disabled choice button its reason and swallows the click', async () => {
     const fillSpy = vi.fn(async () => ({ valid: true }));
-    const controller = makeStubController({
+    const controller = stubActionController({
       currentAction: ref('paint'),
       currentPick: ref({ name: 'color', type: 'choice', prompt: 'Pick a color' }),
       currentChoices: ref([
@@ -585,7 +584,7 @@ describe('ActionPanel — disabled action buttons carry their reason', () => {
   });
 
   it('explains the multi-select cap on the options it blocks, and not on the ones it does not', () => {
-    const controller = makeStubController({
+    const controller = stubActionController({
       currentAction: ref('discard'),
       currentPick: ref({
         name: 'cards',
@@ -617,7 +616,7 @@ describe('ActionPanel — disabled action buttons carry their reason', () => {
   });
 
   it('tells the player how many more to pick before Done becomes pressable', () => {
-    const controller = makeStubController({
+    const controller = stubActionController({
       currentAction: ref('discard'),
       currentPick: ref({
         name: 'cards',
@@ -659,7 +658,7 @@ describe('ActionPanel large element picks (#172)', () => {
 
   /** The 'placeStone' cell pick, with N board-anchored candidates. */
   function mountCellPick(count: number, bi: BoardInteraction = createBoardInteraction()) {
-    const controller = makeStubController({
+    const controller = stubActionController({
       currentAction: ref('placeStone'),
       currentPick: ref({ name: 'cell', type: 'element', prompt: 'Select a cell' }),
       validElements: ref(anchoredElements(count)),
@@ -714,7 +713,7 @@ describe('ActionPanel large element picks (#172)', () => {
     // Deferring here would make that one candidate reachable from NEITHER
     // surface — the divergence bug this rule exists to forbid.
     const elements = [...anchoredElements(50), { id: 999, display: 'off-board' }];
-    const controller = makeStubController({
+    const controller = stubActionController({
       currentAction: ref('placeStone'),
       currentPick: ref({ name: 'cell', type: 'element', prompt: 'Select a cell' }),
       validElements: ref(elements),

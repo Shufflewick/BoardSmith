@@ -10,17 +10,15 @@
  * (`return actionsWithMetadata.value;`), so the suppressed action's button
  * renders identically to any other action -- this test fails pre-fix.
  */
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { mount } from '@vue/test-utils';
-import { ref } from 'vue';
 import ActionPanel from './ActionPanel.vue';
 import { GAME_CONTEXT_KEYS } from '../../composables/useGameContext.js';
-import { makeStubController } from './action-panel-controller.test-helper.js';
-
+import { stubActionController } from './action-panel-controller.test-helper.js';
 
 describe('ActionPanel Action Panel suppression (LIBX-01)', () => {
   it('hides the Action Panel button for a suppressFromActionPanel action while a sibling un-suppressed action still renders', () => {
-    const controller = makeStubController();
+    const controller = stubActionController();
 
     const wrapper = mount(ActionPanel, {
       global: {
@@ -56,7 +54,7 @@ describe('ActionPanel Action Panel suppression (LIBX-01)', () => {
   });
 
   it('renders the suppressed action when it is the ONLY one, and still passes it through unmodified (executable-elsewhere invariant)', () => {
-    const controller = makeStubController();
+    const controller = stubActionController();
 
     const wrapper = mount(ActionPanel, {
       global: {

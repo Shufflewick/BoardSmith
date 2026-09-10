@@ -14,13 +14,12 @@
  * controller is a spy on every verb it has, and opening, entering, leaving and
  * re-entering groups must leave every one of them uncalled.
  */
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { mount } from '@vue/test-utils';
-import { ref, nextTick } from 'vue';
+import { nextTick } from 'vue';
 import ActionPanel from './ActionPanel.vue';
 import { GAME_CONTEXT_KEYS } from '../../composables/useGameContext.js';
-import { makeStubController } from './action-panel-controller.test-helper.js';
-
+import { stubActionController } from './action-panel-controller.test-helper.js';
 
 type Meta = {
   name: string;
@@ -33,7 +32,7 @@ type Meta = {
 };
 
 function mountPanel(actions: Meta[], extra: Record<string, unknown> = {}) {
-  const controller = makeStubController();
+  const controller = stubActionController();
   const metadata: Record<string, unknown> = {};
   for (const action of actions) metadata[action.name] = { selections: [], ...action };
   const wrapper = mount(ActionPanel, {
