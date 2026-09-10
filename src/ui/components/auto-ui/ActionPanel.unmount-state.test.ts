@@ -16,12 +16,10 @@
  * of a draft is held in `useActionController.pick-draft.test.ts`, and the two
  * cases a PANEL can reach are held here.
  */
-import { describe, it, expect, vi } from 'vitest';
-import { mount } from '@vue/test-utils';
-import { ref, nextTick } from 'vue';
-import ActionPanel from './ActionPanel.vue';
-import { useActionController } from '../../composables/useActionController.js';
-import { GAME_CONTEXT_KEYS } from '../../composables/useGameContext.js';
+import { describe, it, expect } from 'vitest';
+import type { mount } from '@vue/test-utils';
+import { nextTick } from 'vue';
+import { panelsOver } from './action-panel-editor.test-helper.js';
 import type { ActionMetadata } from '../../composables/useActionControllerTypes.js';
 
 const DESCRIBE: ActionMetadata = {
@@ -52,39 +50,6 @@ const LACUNA: ActionMetadata[] = [
   { name: 'renamePlanet', prompt: 'Rename planet', group: ['More', 'Empire settings'], order: 90, selections: [] },
   { name: 'skipMission', prompt: 'Skip mission', group: ['More'], order: 95, selections: [] },
 ];
-
-/** A controller and a way to mount and unmount panels over it. */
-function panelsOver(actions: ActionMetadata[]) {
-  const metadata: Record<string, ActionMetadata> = {};
-  for (const action of actions) metadata[action.name] = action;
-  const availableActions = ref(actions.map((a) => a.name));
-  const controller = useActionController({
-    sendAction: vi.fn().mockResolvedValue({ success: true }),
-    availableActions,
-    actionMetadata: ref(metadata),
-    isMyTurn: ref(true),
-    autoFill: false,
-    autoExecute: false,
-    fetchPickChoices: vi.fn().mockResolvedValue({ success: true, choices: [] }),
-  });
-
-  const mountPanel = async () => {
-    const wrapper = mount(ActionPanel, {
-      global: { provide: { [GAME_CONTEXT_KEYS.actionController as symbol]: controller } },
-      attachTo: document.body,
-      props: {
-        availableActions: availableActions.value,
-        actionMetadata: metadata,
-        playerSeat: 1,
-        isMyTurn: true,
-      },
-    });
-    await nextTick();
-    return wrapper;
-  };
-
-  return { controller, availableActions, mountPanel };
-}
 
 describe('a draft survives the panel being unmounted (#235)', () => {
   it('gives a multiline field back the prose that was in it', async () => {

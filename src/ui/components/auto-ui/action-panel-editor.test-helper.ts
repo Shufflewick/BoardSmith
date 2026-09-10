@@ -26,30 +26,60 @@ import { GAME_CONTEXT_KEYS } from '../../composables/useGameContext.js';
 import type { ActionMetadata } from '../../composables/useActionControllerTypes.js';
 
 /**
- * Mount the panel with one action already started.
+ * ONE CONTROLLER, AND PANELS THAT COME AND GO OVER IT.
  *
- * `autoFill`/`autoExecute` off so the editor stays on screen with its value
- * un-submitted, which is the state every assertion here is about.
+ * Collapsing the action bar UNMOUNTS the panel and mounts a new one over the
+ * same controller (#235), so a test about anything that has to survive a
+ * collapse needs to mount more than once. `availableActions` is returned as the
+ * ref it is, so a test can take an action away while the bar is down.
+ *
+ * `autoFill`/`autoExecute` off so an editor stays on screen with its value
+ * un-submitted, which is the state most assertions about one are about.
  */
-export async function mountPanelAt(action: ActionMetadata) {
+export function panelsOver(actions: ActionMetadata[]) {
+  const metadata: Record<string, ActionMetadata> = {};
+  for (const action of actions) metadata[action.name] = action;
+  const availableActions = ref(actions.map((a) => a.name));
   const sendAction = vi.fn().mockResolvedValue({ success: true });
   const controller = useActionController({
     sendAction,
-    availableActions: ref([action.name]),
-    actionMetadata: ref({ [action.name]: action }),
+    availableActions,
+    actionMetadata: ref(metadata),
     isMyTurn: ref(true),
     autoFill: false,
     autoExecute: false,
     fetchPickChoices: vi.fn().mockResolvedValue({ success: true, choices: [] }),
   });
+
+  const mountPanel = async () => {
+    const wrapper = mount(ActionPanel, {
+      global: { provide: { [GAME_CONTEXT_KEYS.actionController as symbol]: controller } },
+      attachTo: document.body,
+      props: {
+        availableActions: availableActions.value,
+        actionMetadata: metadata,
+        playerSeat: 1,
+        isMyTurn: true,
+      },
+    });
+    await nextTick();
+    return wrapper;
+  };
+
+  return { controller, availableActions, mountPanel, sendAction };
+}
+
+/**
+ * Mount the panel with one action already started.
+ *
+ * The one-shot case of `panelsOver`, which is what a test that never collapses
+ * the bar wants.
+ */
+export async function mountPanelAt(action: ActionMetadata) {
+  const { controller, mountPanel, sendAction } = panelsOver([action]);
   void controller.start(action.name, {});
   await nextTick();
-  const wrapper = mount(ActionPanel, {
-    global: { provide: { [GAME_CONTEXT_KEYS.actionController as symbol]: controller } },
-    props: { availableActions: [action.name], playerSeat: 1, isMyTurn: true },
-  });
-  await nextTick();
-  return { wrapper, controller, sendAction };
+  return { wrapper: await mountPanel(), controller, sendAction };
 }
 
 const PANEL_CSS = readFileSync(
