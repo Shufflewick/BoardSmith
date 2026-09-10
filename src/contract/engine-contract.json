@@ -1,5 +1,5 @@
 {
-  "revision": 72,
+  "revision": 73,
   "bundleProtocol": 2,
   "surfaceHash": "1feb60c2051e0c9b",
   "payloadHash": "eaab9ade0d133677",
@@ -592,6 +592,15 @@
       "payloadHash": "eaab9ade0d133677",
       "formatHash": "0058593e7cc80205",
       "summary": "The Action Panel gains a game-authored hierarchy for its start buttons: an action declares .group('More', 'Empire settings') and .order(n), and a group takes one button at its level and opens onto its members. Both fields ride on ActionMetadata and on a world's offer, so a re-vendor picks them up on the world path with nothing to change host-side; a bundle that declares no grouping sends none and renders the flat panel it always did. Opening a group is UI navigation only and never a command, so no new engine verb, no new frame and no new host obligation. formatHash is unmoved: no stored partition bytes change."
+    },
+    {
+      "revision": 73,
+      "date": "2026-09-10",
+      "bundleProtocol": 2,
+      "surfaceHash": "1feb60c2051e0c9b",
+      "payloadHash": "eaab9ade0d133677",
+      "formatHash": "0058593e7cc80205",
+      "summary": "CLI-side only, and the reason it needs a number is that no fingerprint can see it. `boardsmith pack` and `boardsmith build` now honour an absolute `--out-dir` instead of appending it to the invocation directory: pack wrote its tarball inside the repository and left an untracked directory there, and build was worse, splitting one bundle across two directories so the rules and UI bundles landed at the absolute path while manifest.json and the public/ copy landed inside the project, leaving a bundle that cannot be validated or published. A pack that fails now also leaves nothing behind, neither a stray tarball in the source tree nor an output directory it only created to try. The engine did not change: surfaceHash, payloadHash and formatHash are all carried forward unmoved, and this revision exists solely so the platform can archive a build whose tarball bytes differ from r72's. NOTHING HERE IS URGENT FOR THE PLATFORM. The hosted runtime never runs pack or build, and the vendoring chain packs with --target, which was already correct, so r72 remains a correct engine to run. This is a fix for game authors driving the CLI locally, so re-vendor at your convenience."
     }
   ]
 }
