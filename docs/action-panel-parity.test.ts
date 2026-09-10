@@ -107,6 +107,12 @@ describe('one name for the surface: "Action Panel"', () => {
     'src/engine/action/types.ts',
     'src/ui/components/auto-ui/ActionPanel.vue',
     'src/ui/components/GameShell.vue',
+    // The shared chrome and the world adapter, added when #230 gave the bar a
+    // collapse control: the surface's own container is exactly where "dock"
+    // creeps back in, because the issue that asked for the control called it
+    // one. The bar is `.actionbar`; the panel is the Action Panel.
+    'src/ui/components/PlayShell.vue',
+    'src/ui/world/WorldShell.vue',
   ] as const;
 
   it.each(NAMED_SURFACES)('%s does not call it a "dock"', (path) => {

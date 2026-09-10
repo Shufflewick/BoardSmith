@@ -166,3 +166,46 @@ functions are a genuine maintenance backlog for this repo. Baselining records
 them; it does not forgive them. They deserve their own work, sized and scheduled
 on their own merits — not paid down accidentally by whichever change happens to
 touch a barrel.
+
+## The browser regressions are entry points, not dead files (#230)
+
+`scripts/*-browser.mjs` are deliberate runs: BoardSmith depends on no browser,
+so they are not in `npx vitest run` and nothing imports them. Static analysis is
+right that they are unreachable, and the first one was recorded in
+`.fallow-dead-code-baseline.json` for that reason.
+
+That stopped working the moment there were two of them. #230 added a second, and
+extracting the ~200 lines of plumbing they shared into `browser-harness.mjs`
+turned one accepted unused FILE into nine unused EXPORTS — a module that is
+genuinely used, reported as debt because both of its consumers were themselves
+invisible.
+
+So `.fallowrc.json` now declares them:
+
+```json
+"entry": ["scripts/*-browser.mjs"]
+```
+
+That is a statement of fact rather than an exemption. Both scripts and their
+shared harness came OUT of the dead-code baseline as a result, and a NEW
+unreachable file elsewhere still fails. Any future browser regression under that
+name is a root the moment it is written, which is the point: the shape that
+makes the gate honest should be the shape that is easiest to reach for.
+
+## Line-keyed baselines drift, and the drift lands on the next editor
+
+`.fallow-dupes-baseline.json` keys a clone group by `file:start-end`. Those line
+numbers go stale as the files around them grow, and nothing notices, because
+`fallow audit` has nothing in scope on `main`. The staleness is invisible until
+somebody edits one of the named files — and then every clone group in it is
+reported against their change.
+
+#230 hit this with a four-line edit to `GameShell.vue`: six baselined groups,
+none of them the change's, all reported because the baseline still pointed 22 to
+31 lines above where the code now sits. The six entries were RE-KEYED to their
+current lines. Same content, same accepted debt, correct addresses.
+
+Re-keying is the honest fix and it is not the same as regenerating: the group's
+content is unchanged and can be checked line by line against the finding. Check
+it that way before re-keying, because a group whose content has actually changed
+is new debt wearing an old key.

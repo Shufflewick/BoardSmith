@@ -31,11 +31,6 @@
         "count": 2
       }
     },
-    "scripts/world-pick-bridge-browser.mjs": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
     "src/bot-trainer/analyzer.ts": {
       "complexity_high": {
         "count": 1

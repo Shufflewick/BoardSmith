@@ -35,14 +35,15 @@
  * platform does not own. Selecting on classes would make every chrome CSS change
  * a platform test break, so the shell names its own surfaces and keeps the names.
  */
-import { computed, ref, watch } from 'vue';
+import { computed, inject, nextTick, ref, watch } from 'vue';
 import ActionPanel, { type AwaitingPlayer } from './auto-ui/ActionPanel.vue';
 import GameHistory, { type HistoryMessage } from './GameHistory.vue';
 import PlayersPanel, { type Player } from './PlayersPanel.vue';
 import PlayerToken from './PlayerToken.vue';
 import Toast from './Toast.vue';
 import DisabledReasonTooltip from './helpers/DisabledReasonTooltip.vue';
-import type { ActionMetadata } from '../composables/useActionControllerTypes.js';
+import { GAME_CONTEXT_KEYS } from '../composables/useGameContext.js';
+import type { ActionMetadata, UseActionControllerReturn } from '../composables/useActionControllerTypes.js';
 
 /** What the adapter has to say about its own connection, on whichever axis it
  *  has. A table's is socket health; a world's is an attachment lifecycle. The
@@ -125,6 +126,14 @@ const props = withDefaults(defineProps<{
   zoomLevel?: number;
   /** Whether the sidebar is collapsed to its rail. `v-model`. */
   sidebarRail?: boolean;
+  /**
+   * Whether the player has put the action bar down (#230). `v-model`.
+   *
+   * The PREFERENCE, not the rendered state: the bar opens itself over this
+   * whenever an action is in progress, and comes back down after. So the flag
+   * says what the player asked for and survives every interruption.
+   */
+  actionBarMinimized?: boolean;
   /** Whether the mobile seat strip is expanded into the full overlay. `v-model`. */
   mobileExpanded?: boolean;
   /** Whether the viewport is at the compact tier. */
@@ -135,11 +144,13 @@ const props = withDefaults(defineProps<{
   zoomLevel: 1,
   sidebarRail: false,
   mobileExpanded: false,
+  actionBarMinimized: false,
 });
 
 const emit = defineEmits<{
   'update:sidebarRail': [value: boolean];
   'update:mobileExpanded': [value: boolean];
+  'update:actionBarMinimized': [value: boolean];
   undo: [];
 }>();
 
@@ -185,6 +196,94 @@ const expanded = computed({
 });
 
 /**
+ * PUTTING THE ACTION BAR DOWN (#230), AND WHY IT IS NOT QUITE THE SIDEBAR'S RAIL.
+ *
+ * The gesture is the sidebar's: one chevron on the surface's board-facing edge,
+ * the preference held by the adapter and relayed with `v-model`, and a collapsed
+ * state that keeps an anchor instead of vanishing. What differs is that the
+ * sidebar is never where a question lands and this is. A bar that stayed down
+ * while the game waited on an answer would leave the player looking at a hidden
+ * prompt and a hidden Cancel, so:
+ *
+ * - the bar OPENS ITSELF the moment an action starts, because that is when it
+ *   owns the answer;
+ * - `actionBarMinimized` is remembered through that, so the bar goes back down by
+ *   itself when the action resolves;
+ * - the toggle stays live throughout, so a player may push it down again
+ *   mid-action and the NEXT action start brings it back.
+ *
+ * The controller is the ONE source for "an action is in progress" -- the same
+ * `currentAction` the panel itself renders from -- so the bar's chrome and the
+ * panel's contents cannot disagree about whether anything is being asked.
+ */
+const actionController = inject(GAME_CONTEXT_KEYS.actionController, undefined) as
+  UseActionControllerReturn | undefined;
+if (!actionController) {
+  throw new Error(
+    'PlayShell requires the action controller to be provided. ' +
+    'Mount it inside GameShell or WorldShell, which publish it via provideGameContext/providePlayContext.',
+  );
+}
+
+/** Set while the bar is open over the player's preference, for one action. */
+const barOpenedForAction = ref(false);
+watch(actionController.currentAction, (action) => {
+  barOpenedForAction.value = action !== null;
+});
+
+/** What the player actually sees, as opposed to what they asked for. */
+const actionBarCollapsed = computed(() => props.actionBarMinimized && !barOpenedForAction.value);
+
+/** Whether the game is waiting on THIS seat, for the collapsed bar's mark. */
+const barWaitsOnMe = computed(() => props.mayAct && !props.completed);
+
+/** The toggle's label, carrying the attention state for screen readers too. */
+const barToggleLabel = computed(() => {
+  if (!actionBarCollapsed.value) return 'Collapse action bar';
+  return barWaitsOnMe.value ? 'Expand action bar, your move' : 'Expand action bar';
+});
+
+/**
+ * One expression for all three states, so the control is never dead: a bar the
+ * player is looking at goes down (whether it is down in their preference or
+ * not), and a bar that is down comes up.
+ */
+function toggleActionBar(): void {
+  // Read what the player is looking at BEFORE releasing the override, or the
+  // computed re-answers mid-function and a bar held open over the preference
+  // reports itself as already down.
+  const goingDown = !actionBarCollapsed.value;
+  barOpenedForAction.value = false;
+  emit('update:actionBarMinimized', goingDown);
+}
+
+/**
+ * KEYBOARD FOCUS SURVIVES THE COLLAPSE.
+ *
+ * Collapsing takes the panel's controls out of the DOM, and a focused element
+ * that is removed drops focus to `<body>` -- a keyboard player loses their place
+ * entirely. So focus that was inside the bar lands on the bar's own toggle,
+ * which is the one control that is always there and the control that undoes what
+ * just happened.
+ *
+ * Expanding deliberately does NOT move focus. The bar opens itself when an
+ * action starts, and an action is usually started FROM the board; pulling focus
+ * off the board at that moment would take the keyboard away from the surface the
+ * player is using.
+ */
+const barToggleEl = ref<HTMLElement | null>(null);
+watch(actionBarCollapsed, async (down) => {
+  if (!down) return;
+  // Read the focus BEFORE the re-render: once the panel is gone the browser has
+  // already moved focus to `<body>` and there is nothing left to recognise.
+  const focused = document.activeElement;
+  const wasInDock = focused instanceof HTMLElement && actionBarEl.value?.contains(focused) === true;
+  if (!wasInDock) return;
+  await nextTick();
+  barToggleEl.value?.focus();
+});
+
+/**
  * THE THREE ELEMENTS THE ADAPTER STILL HAS TO REACH.
  *
  * The board region is what the zoom fit measures and what the board focus
@@ -221,7 +320,7 @@ const mobileToggleLabel = computed(() => {
 </script>
 
 <template>
-  <div class="game-shell__game">
+  <div class="game-shell__game" :class="{ 'action-bar-collapsed': actionBarCollapsed }">
     <!-- The adapter's own header band. Dev/standalone only for a table; absent
          in platform mode, where the host draws its own chrome over the top. -->
     <slot name="header"></slot>
@@ -407,64 +506,120 @@ const mobileToggleLabel = computed(() => {
          board. Its options list caps at 5 rows and scrolls; the board reserves
          the panel's measured height as scroll room so anything it floats over
          stays reachable. -->
-    <div ref="actionBarEl" class="actionbar" role="region" aria-label="Actions" data-testid="bs-actionbar">
-      <!-- ⋯ controls menu: always at the far left of the bar, and in platform
-           mode the sole control surface (GameHeader is hidden there). Its
-           CONTENTS are the adapter's — a table's carries undo, hints, heatmap
-           and the tutorial, none of which a world has. -->
-      <slot name="controls"></slot>
+    <!-- The action bar frame: the bar, plus the toggle that puts it down (#230).
+         The toggle is a SIBLING of the bar rather than a child because the bar
+         scrolls its own overflow, and an overflow scroller clips an edge control
+         that half-overhangs it (the same clipping ActionHelpPopover teleports out
+         of). This wrapper is what carries the out-of-flow positioning, so the
+         bar's height is the wrapper's height and the toggle rides its top edge
+         with nothing measuring anything. -->
+    <div class="actionbar-frame">
+      <div ref="actionBarEl" id="bs-actionbar" class="actionbar" :class="{ collapsed: actionBarCollapsed }" role="region" aria-label="Actions" data-testid="bs-actionbar">
+        <!-- ⋯ controls menu: always at the far left of the bar, and in platform
+             mode the sole control surface (GameHeader is hidden there). Its
+             CONTENTS are the adapter's — a table's carries undo, hints, heatmap
+             and the tutorial, none of which a world has.
 
-      <!-- The bar is up when the viewer may act, or when a simultaneous step is
-           still waiting on somebody. -->
-      <template v-if="mayAct || (awaitingPlayers?.length ?? 0) > 0">
-        <!-- Identity token at the head of the bar, so it always carries WHO
-             (IA-02) regardless of whether the panel or the prompt strip renders
-             the WHAT. -->
-        <PlayerToken
-          v-if="panelToken"
-          class="turn-token"
-          :name="panelToken.name"
-          :seat="panelToken.seat"
-          :color="panelToken.color"
-          :size="30"
-        />
-        <!-- Prompt strip: the fallback surface, shown ONLY when the platform
-             takes the panel away entirely (the D-02 escape hatch). The prompt
-             survives even when no panel renders (IA-03) — never a silent board
-             with no indication of what is wanted. -->
-        <span v-if="platformActionPanelEscapeHatch" class="turn">
-          <span class="pr">{{ prompt }}</span>
-        </span>
-        <template v-else>
-          <!-- The panel always carries at least one operable control — including
-               in the all-board-anchored case, where it renders its
-               anchored-choices button list ("Select on board or choose here").
-               That focusable list is the keyboard/SR safety net (A11Y C-2):
-               custom UIs whose board isn't keyboard-operable still expose an
-               operable control. -->
-          <slot name="action-panel">
-            <ActionPanel
-              data-testid="bs-action-panel"
-              :available-actions="availableActions"
-              :action-metadata="actionMetadata"
-              :is-action-help-visible="isActionHelpVisible"
-              :disabled-actions="disabledActions"
-              :players="players"
-              :player-seat="playerSeat"
-              :is-my-turn="mayAct"
-              :completed="completed"
-              :can-undo="canUndo"
-              :auto-end-turn="autoEndTurn"
-              :messages="messages"
-              :current-player-name="currentPlayerName"
-              :current-player-color="currentPlayerColor"
-              :awaiting-players="awaitingPlayers"
-              @undo="emit('undo')"
-            />
-          </slot>
-          <slot name="actionbar-extra"></slot>
+             It is deliberately OUTSIDE the collapsed branch below: a minimized
+             bar that took the player's only control surface with it would be a
+             trap, not a preference. -->
+        <slot name="controls"></slot>
+
+        <!-- Down: one row carrying WHO and WHAT, and nothing operable the panel
+             owns. The same anchor the sidebar's rail keeps when it collapses —
+             tokens and the turn sentence, minus everything that takes room. -->
+        <template v-if="actionBarCollapsed">
+          <PlayerToken
+            v-if="panelToken"
+            class="turn-token"
+            :name="panelToken.name"
+            :seat="panelToken.seat"
+            :color="panelToken.color"
+            :size="30"
+          />
+          <span v-if="prompt" class="actionbar-summary" data-testid="bs-actionbar-summary">{{ prompt }}</span>
         </template>
-      </template>
+
+        <!-- The bar is up when the viewer may act, or when a simultaneous step is
+             still waiting on somebody. -->
+        <template v-else-if="mayAct || (awaitingPlayers?.length ?? 0) > 0">
+          <!-- Identity token at the head of the bar, so it always carries WHO
+               (IA-02) regardless of whether the panel or the prompt strip renders
+               the WHAT. -->
+          <PlayerToken
+            v-if="panelToken"
+            class="turn-token"
+            :name="panelToken.name"
+            :seat="panelToken.seat"
+            :color="panelToken.color"
+            :size="30"
+          />
+          <!-- Prompt strip: the fallback surface, shown ONLY when the platform
+               takes the panel away entirely (the D-02 escape hatch). The prompt
+               survives even when no panel renders (IA-03) — never a silent board
+               with no indication of what is wanted. -->
+          <span v-if="platformActionPanelEscapeHatch" class="turn">
+            <span class="pr">{{ prompt }}</span>
+          </span>
+          <template v-else>
+            <!-- The panel always carries at least one operable control — including
+                 in the all-board-anchored case, where it renders its
+                 anchored-choices button list ("Select on board or choose here").
+                 That focusable list is the keyboard/SR safety net (A11Y C-2):
+                 custom UIs whose board isn't keyboard-operable still expose an
+                 operable control. -->
+            <slot name="action-panel">
+              <ActionPanel
+                data-testid="bs-action-panel"
+                :available-actions="availableActions"
+                :action-metadata="actionMetadata"
+                :is-action-help-visible="isActionHelpVisible"
+                :disabled-actions="disabledActions"
+                :players="players"
+                :player-seat="playerSeat"
+                :is-my-turn="mayAct"
+                :completed="completed"
+                :can-undo="canUndo"
+                :auto-end-turn="autoEndTurn"
+                :messages="messages"
+                :current-player-name="currentPlayerName"
+                :current-player-color="currentPlayerColor"
+                :awaiting-players="awaitingPlayers"
+                @undo="emit('undo')"
+              />
+            </slot>
+            <slot name="actionbar-extra"></slot>
+          </template>
+        </template>
+      </div>
+
+      <!-- The restore affordance, and it CANNOT be lost: it rides the bar's own
+           top edge, and the bar is out of flow against the bottom of the game
+           area at every width. Horizontally it is inset from the right rather
+           than overhanging it, so no viewport can put it off screen. -->
+      <button
+        ref="barToggleEl"
+        class="bar-edge"
+        type="button"
+        :aria-label="barToggleLabel"
+        :aria-expanded="!actionBarCollapsed"
+        aria-controls="bs-actionbar"
+        data-testid="bs-actionbar-toggle"
+        @click="toggleActionBar"
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M6 9l6 6 6-6" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
+        <!-- Attention mark: the game is waiting on this seat and the panel that
+             would say so is down. aria-hidden because the toggle's own label
+             already carries it — announcing it twice is worse than once. -->
+        <span
+          v-if="actionBarCollapsed && barWaitsOnMe"
+          class="bar-edge__attention"
+          data-testid="bs-actionbar-attention"
+          aria-hidden="true"
+        ></span>
+      </button>
     </div>
 
     <!-- The adapter's debug surface: one placement, one keyboard shortcut, one
@@ -530,6 +685,26 @@ const mobileToggleLabel = computed(() => {
          + 2 * var(--bsg-panel-pad) + env(safe-area-inset-bottom)),
     var(--bsg-panel-max)
   );
+
+  /* The bar put down (#230): ONE control row, because the row it keeps carries
+     the ⋯ menu, and in platform mode that menu is the player's only control
+     surface. Derived from the same row and padding tokens as everything above,
+     so the stylesheet still has one definition of a control row. */
+  --bsg-action-bar-collapsed: calc(var(--bsg-panel-row) + 2 * var(--bsg-panel-pad)
+                             + env(safe-area-inset-bottom));
+}
+
+/* Down, the CEILING is one row -- and that is the only override needed, because
+   every declaration of `--bsg-panel-reserved` above is already clamped to the
+   ceiling by its own `min(...)`. So the reservation follows to one row on its
+   own, in every tier, and the two cannot drift apart.
+
+   That equality is what makes minimizing give the board its space back rather
+   than just emptying the box: the region reserves one row, the bar cannot grow
+   past one row, nothing is covered, and there is no clearance left to scroll
+   for. */
+.game-shell__game.action-bar-collapsed {
+  --bsg-panel-max: var(--bsg-action-bar-collapsed);
 }
 
 /* Stage: sidebar + boardregion side by side; fills remaining height */
@@ -692,12 +867,19 @@ const mobileToggleLabel = computed(() => {
    in .boardregion's padding) plus scroll room up to the panel's ceiling, so covered
    content stays reachable however tall the panel grows. Everything inside wraps
    naturally (flex-wrap) — no reserved columns; the options list caps at 5 rows and scrolls. */
-.actionbar {
+/* The frame: the out-of-flow box the bar and its edge toggle share. The bar used
+   to carry this positioning itself; the toggle needs a parent the bar's own
+   overflow scroller cannot clip, and giving the pair a wrapper is what lets the
+   toggle ride the bar's top edge with nothing measuring the bar's height. */
+.actionbar-frame {
   position: absolute;
   bottom: 0;
   left: 0;
   right: 0;
   z-index: 30;
+}
+
+.actionbar {
   background: var(--bsg-surface);
   border-top: 1px solid var(--bsg-line);
   box-shadow: var(--bsg-shadow);
@@ -716,6 +898,76 @@ const mobileToggleLabel = computed(() => {
      to <body>, so overflow is safe. */
   max-height: var(--bsg-panel-max);
   overflow-y: auto;
+}
+
+/* Down: one row that must NOT wrap. A wrapped "collapsed" bar would be taller
+   than the single row the board reserved for it, and would cover the board again
+   while every DOM assertion still passed. */
+.actionbar.collapsed {
+  flex-wrap: nowrap;
+}
+
+/* What is being asked, on the one row: the sentence, ellipsised, never a second
+   row. The parallel is the phone strip's turn-status text — identity plus what
+   is wanted, with everything operable left out. */
+.actionbar-summary {
+  flex: 1;
+  min-width: 0;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: var(--bsg-ink);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The bar's edge toggle: the sidebar rail's control, on the other edge. Same
+   26px circle, same chevron, same half-overhang onto the board. Inset from the
+   right rather than overhanging it, so it is on screen at every width — a
+   restore control that can be scrolled or clipped away is not a restore
+   control. */
+.bar-edge {
+  position: absolute;
+  top: 0;
+  right: 12px;
+  transform: translateY(-50%);
+  z-index: 1;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: var(--bsg-surface);
+  border: 1px solid var(--bsg-line);
+  box-shadow: var(--bsg-shadow-sm);
+  color: var(--bsg-ink-2);
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+.bar-edge svg {
+  width: 15px;
+  height: 15px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 2;
+  transition: transform var(--bsg-dur-fast);
+}
+/* Chevron down while the bar is up (push it away), up while it is down. */
+.action-bar-collapsed .bar-edge svg {
+  transform: rotate(180deg);
+}
+
+/* The game is waiting on this seat and the panel that would say so is down.
+   Accent on the surface, like the phone strip's unread badge. */
+.bar-edge__attention {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--bsg-accent);
+  border: 1px solid var(--bsg-surface);
+  pointer-events: none;
 }
 
 /* ⋯ controls menu — first item in the inline action bar flow. */
