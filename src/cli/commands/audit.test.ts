@@ -1,13 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { tmpdir } from 'node:os';
 import {
   rekeyDupesBaseline,
   runChangedFilesAudit,
   runDupesBaselineCheck,
   runHealthBaselineCheck,
 } from './audit.js';
+import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
 /**
  * Issue #159: a drifted health baseline must report ITSELF as drifted, with
@@ -16,12 +16,8 @@ import {
  */
 describe('runHealthBaselineCheck', () => {
   async function withDir(fn: (dir: string) => Promise<void>) {
-    const dir = mkdtempSync(join(tmpdir(), 'bs-health-'));
-    try {
-      await fn(dir);
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
+    const dir = tempTree('bs-health-');
+    await fn(dir);
   }
 
   const counts = (n: number) => ({
@@ -205,12 +201,8 @@ describe('runChangedFilesAudit', () => {
  */
 describe('runDupesBaselineCheck and rekeyDupesBaseline', () => {
   async function withDir(fn: (dir: string) => Promise<void>) {
-    const dir = mkdtempSync(join(tmpdir(), 'bs-dupes-'));
-    try {
-      await fn(dir);
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
+    const dir = tempTree('bs-dupes-');
+    await fn(dir);
   }
 
   const FRAGMENT = 'const seated = () => 1;\nconst other = () => 2;';

@@ -13,12 +13,12 @@
  * pin that pattern so the template can't regress to the crashing shape.
  */
 import { describe, it, expect, afterEach } from 'vitest';
-import { readFileSync, writeFileSync, mkdtempSync, rmSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, existsSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { tmpdir } from 'node:os';
 import { generateGameTs, generateTestTs, initCommand, type InitOptions } from './init.js';
+import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
 /**
  * Scaffold a real project into a fresh temp directory and chdir into its
@@ -33,7 +33,7 @@ async function scaffoldProject(
   name: string,
   options: InitOptions,
 ): Promise<{ parentDir: string; projectPath: string }> {
-  const parentDir = mkdtempSync(join(tmpdir(), prefix));
+  const parentDir = tempTree(prefix);
   process.chdir(parentDir);
   await initCommand(name, options);
   return { parentDir, projectPath: join(parentDir, name) };
@@ -54,7 +54,6 @@ function scaffoldSuite(prefix: string, defaultName: string, defaultOptions: Init
 
   afterEach(() => {
     process.chdir(originalCwd);
-    if (parentDir) rmSync(parentDir, { recursive: true, force: true });
   });
 
   /** Scaffold the suite's project (or, given arguments, a different one). */
@@ -170,11 +169,10 @@ describe('initCommand — git init on scaffold (Phase 149 Finding 1)', () => {
 
   afterEach(() => {
     process.chdir(originalCwd);
-    if (parentDir) rmSync(parentDir, { recursive: true, force: true });
   });
 
   it('initializes a git repository in the scaffolded project directory', async () => {
-    parentDir = mkdtempSync(join(tmpdir(), 'bs-init-git-'));
+    parentDir = tempTree('bs-init-git-');
     process.chdir(parentDir);
     await initCommand('git-init-test-game', { withoutRulebook: true });
     const projectPath = join(parentDir, 'git-init-test-game');
@@ -190,7 +188,7 @@ describe('initCommand — git init on scaffold (Phase 149 Finding 1)', () => {
     // empty config sources plus empty GIT_AUTHOR_*/GIT_COMMITTER_* means git
     // cannot resolve an identity and the commit fails — while `git init` and
     // `git add` still succeed. initCommand must not throw or exit(1).
-    parentDir = mkdtempSync(join(tmpdir(), 'bs-init-git-noid-'));
+    parentDir = tempTree('bs-init-git-noid-');
     process.chdir(parentDir);
     const prev = { ...process.env };
     process.env.GIT_CONFIG_GLOBAL = '/dev/null';

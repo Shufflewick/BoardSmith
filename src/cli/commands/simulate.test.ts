@@ -1,6 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   Game,
@@ -14,6 +13,7 @@ import {
   type FlowContext,
 } from '../../engine/index.js';
 import { runSimulation, simulateCommand, resolveSimulationGameOptions } from './simulate.js';
+import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
 /**
  * Minimal always-completing game (mirrors the fixture used by
@@ -188,7 +188,7 @@ describe('simulateCommand', () => {
     // A minimal fixture project: valid boardsmith.json + a stub rules/index.ts.
     // simulateCommand's --games/--players validation runs (and returns) before
     // it ever bundles rulesIndexPath, so the stub file's contents don't matter.
-    projectDir = mkdtempSync(join(tmpdir(), 'boardsmith-simulate-cli-'));
+    projectDir = tempTree('boardsmith-simulate-cli-');
     writeFileSync(join(projectDir, 'boardsmith.json'), JSON.stringify({ name: 'fixture' }));
     mkdirSync(join(projectDir, 'src', 'rules'), { recursive: true });
     writeFileSync(join(projectDir, 'src', 'rules', 'index.ts'), 'export const gameDefinition = {};\n');
@@ -198,7 +198,6 @@ describe('simulateCommand', () => {
   afterEach(() => {
     process.chdir(originalCwd);
     process.exitCode = originalExitCode;
-    rmSync(projectDir, { recursive: true, force: true });
   });
 
   it('IN-01: exits non-zero with an actionable message on a non-numeric --games flag', async () => {

@@ -12,13 +12,13 @@
  * These tests drive the REAL plugin on a REAL Vite server over HTTP.
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { join, dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createServer as createViteServer, type ViteDevServer } from 'vite';
 import { boardsmithDevHostPlugin, GAME_IFRAME_PATH } from './dev.js';
 import type { DevHostConfig } from '../dev-host/config-types.js';
+import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const devHostDir = resolve(__dirname, '..', 'dev-host');
@@ -45,7 +45,7 @@ describe('boardsmith dev asset serving (issue 134)', () => {
   let origin: string;
 
   beforeAll(async () => {
-    projectDir = mkdtempSync(join(tmpdir(), 'boardsmith-dev-assets-'));
+    projectDir = tempTree('boardsmith-dev-assets-');
     mkdirSync(join(projectDir, 'public', 'cards'), { recursive: true });
     mkdirSync(join(projectDir, 'src', 'rules'), { recursive: true });
     writeFileSync(join(projectDir, 'public', 'cards', 'doom-core.png'), 'not-really-a-png');
@@ -90,7 +90,6 @@ describe('boardsmith dev asset serving (issue 134)', () => {
 
   afterAll(async () => {
     await server?.close();
-    if (projectDir) rmSync(projectDir, { recursive: true, force: true });
   }, 30_000);
 
   it('never answers a missing asset request with HTML', async () => {

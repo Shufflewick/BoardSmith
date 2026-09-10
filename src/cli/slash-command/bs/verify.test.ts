@@ -15,11 +15,12 @@
  * `173-PROOF.md` — not this file. See `ingest.test.ts:352-356` for the identical caveat on the
  * sibling ingest contract.
  */
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { readFileSync, readdirSync, mkdtempSync, rmSync, existsSync, mkdirSync } from 'node:fs';
+import { describe, it, expect } from 'vitest';
+import { readFileSync, readdirSync, rmSync, existsSync, mkdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { tmpdir } from 'node:os';
+
+import { installedSkillsTree } from '../../commands/installed-skills.test-helper.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -741,34 +742,18 @@ describe('enumerate-facts.md / reconcile-facts.md — CHECK-04\'s replacement ju
   });
 
   describe('installer leaf probes — real install proves both contracts ship (177-15)', () => {
-    let tempDir: string;
-    let origCwd: string;
-    let skillsRoot: string;
-
-    beforeAll(async () => {
-      const { installClaudeCommand } = await import('../../commands/install-claude-command.js');
-      origCwd = process.cwd();
-      tempDir = mkdtempSync(join(tmpdir(), 'bs-install-enumerate-'));
-      process.chdir(tempDir);
-      await installClaudeCommand({ local: true, force: true, skipLink: true });
-      skillsRoot = join(tempDir, '.claude', 'skills');
-    });
-
-    afterAll(() => {
-      process.chdir(origCwd);
-      rmSync(tempDir, { recursive: true, force: true });
-    });
+    const skills = installedSkillsTree('bs-install-enumerate-');
 
     it('both new contract files land under .claude/skills/bs-shared/verify/', () => {
-      expect(existsSync(join(skillsRoot, 'bs-shared', 'verify', 'enumerate-facts.md'))).toBe(true);
-      expect(existsSync(join(skillsRoot, 'bs-shared', 'verify', 'reconcile-facts.md'))).toBe(true);
+      expect(existsSync(join(skills.root, 'bs-shared', 'verify', 'enumerate-facts.md'))).toBe(true);
+      expect(existsSync(join(skills.root, 'bs-shared', 'verify', 'reconcile-facts.md'))).toBe(true);
     });
 
     it('deleting one installed contract file flips the installer to report a partial (not complete) install', async () => {
       const { installClaudeCommand } = await import('../../commands/install-claude-command.js');
-      rmSync(join(skillsRoot, 'bs-shared', 'verify', 'enumerate-facts.md'), { force: true });
+      rmSync(join(skills.root, 'bs-shared', 'verify', 'enumerate-facts.md'), { force: true });
       await installClaudeCommand({ local: true, force: false, skipLink: true });
-      expect(existsSync(join(skillsRoot, 'bs-shared', 'verify', 'enumerate-facts.md'))).toBe(true);
+      expect(existsSync(join(skills.root, 'bs-shared', 'verify', 'enumerate-facts.md'))).toBe(true);
     });
 
     // ABSENCE PROBE (177.1-07): a real install must never ship the two retired contracts — this
@@ -776,8 +761,8 @@ describe('enumerate-facts.md / reconcile-facts.md — CHECK-04\'s replacement ju
     // install-claude-command.ts's SHARED_LEAF_PROBES manifest) actually keeps them off a
     // designer's machine, not merely off disk in this repo.
     it('the two retired contracts (derive-recheck.md, derive-compare.md) do NOT land under .claude/skills/bs-shared/verify/', () => {
-      expect(existsSync(join(skillsRoot, 'bs-shared', 'verify', 'derive-recheck.md'))).toBe(false);
-      expect(existsSync(join(skillsRoot, 'bs-shared', 'verify', 'derive-compare.md'))).toBe(false);
+      expect(existsSync(join(skills.root, 'bs-shared', 'verify', 'derive-recheck.md'))).toBe(false);
+      expect(existsSync(join(skills.root, 'bs-shared', 'verify', 'derive-compare.md'))).toBe(false);
     });
   });
 });
@@ -907,27 +892,11 @@ describe('extract-example.md / translate-example.md — the two tokens are disti
   });
 
   describe('installer leaf probes — real install proves both contracts ship (178-07)', () => {
-    let tempDir: string;
-    let origCwd: string;
-    let skillsRoot: string;
-
-    beforeAll(async () => {
-      const { installClaudeCommand } = await import('../../commands/install-claude-command.js');
-      origCwd = process.cwd();
-      tempDir = mkdtempSync(join(tmpdir(), 'bs-install-extract-translate-'));
-      process.chdir(tempDir);
-      await installClaudeCommand({ local: true, force: true, skipLink: true });
-      skillsRoot = join(tempDir, '.claude', 'skills');
-    });
-
-    afterAll(() => {
-      process.chdir(origCwd);
-      rmSync(tempDir, { recursive: true, force: true });
-    });
+    const skills = installedSkillsTree('bs-install-extract-translate-');
 
     it('both new contract files land under .claude/skills/bs-shared/verify/, content intact', () => {
-      const extractPath = join(skillsRoot, 'bs-shared', 'verify', 'extract-example.md');
-      const translatePath = join(skillsRoot, 'bs-shared', 'verify', 'translate-example.md');
+      const extractPath = join(skills.root, 'bs-shared', 'verify', 'extract-example.md');
+      const translatePath = join(skills.root, 'bs-shared', 'verify', 'translate-example.md');
       expect(existsSync(extractPath)).toBe(true);
       expect(existsSync(translatePath)).toBe(true);
       expect(readFileSync(extractPath, 'utf-8')).toContain('BS-EXAMPLE-EXTRACT-V1');

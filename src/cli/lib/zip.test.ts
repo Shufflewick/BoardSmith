@@ -11,18 +11,17 @@
  * point of the check. These tests hold that BOTH backends can be packaged and
  * that each is still refused for the thing it actually lacks.
  */
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { readDistDir } from './zip.js';
+import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
 let dir: string;
-afterEach(() => dir && rmSync(dir, { recursive: true, force: true }));
 
 /** A dist/ tree in the shape `boardsmith build` really emits. */
 function dist(manifest: Record<string, unknown>, entry: 'index.html' | 'world.html' | null): string {
-  dir = mkdtempSync(join(tmpdir(), 'bs-zip-'));
+  dir = tempTree('bs-zip-');
   mkdirSync(join(dir, 'rules'), { recursive: true });
   mkdirSync(join(dir, 'ui'), { recursive: true });
   writeFileSync(join(dir, 'manifest.json'), JSON.stringify(manifest));

@@ -8,15 +8,14 @@
  * lets #357 delete the platform's generic WorldStage and keep one honest
  * "this world's UI is missing" sentence of its own.
  */
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, rmSync, existsSync, readFileSync, mkdirSync, writeFileSync } from 'fs';
-import { tmpdir } from 'os';
+import { describe, it, expect, beforeEach } from 'vitest';
+import { existsSync, readFileSync, mkdirSync, writeFileSync } from 'fs';
 import { join } from 'path';
 import { ensureWorldEntry, WORLD_ENTRY_HTML, WORLD_ENTRY_MAIN } from './world-entry.js';
+import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
 let cwd: string;
-beforeEach(() => { cwd = mkdtempSync(join(tmpdir(), 'bs-world-entry-')); });
-afterEach(() => { rmSync(cwd, { recursive: true, force: true }); });
+beforeEach(() => { cwd = tempTree('bs-world-entry-'); });
 
 describe('a world project always has an entry', () => {
   it('writes both files when the project has neither', async () => {

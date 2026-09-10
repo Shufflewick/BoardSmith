@@ -677,14 +677,6 @@
       ]
     },
     {
-      "content": "13b06b39aa31ecac",
-      "lines": 17,
-      "files": [
-        "src/cli/commands/verify-derive-check.test.ts",
-        "src/cli/commands/verify-example-replay.test.ts"
-      ]
-    },
-    {
       "content": "13caf37b4727d961",
       "lines": 10,
       "files": [
@@ -838,8 +830,8 @@
       ]
     },
     {
-      "content": "18b1550b132f47e1",
-      "lines": 7,
+      "content": "191e4d23204b5651",
+      "lines": 5,
       "files": [
         "src/cli/cli.test.ts"
       ]
@@ -998,14 +990,6 @@
       ]
     },
     {
-      "content": "1f1084c228682b75",
-      "lines": 11,
-      "files": [
-        "src/cli/commands/install-claude-command.test.ts",
-        "src/cli/slash-command/bs/verify.test.ts"
-      ]
-    },
-    {
       "content": "1f213644be266baa",
       "lines": 6,
       "files": [
@@ -1113,16 +1097,6 @@
       "lines": 23,
       "files": [
         "src/session/snapshot-session-host.test.ts"
-      ]
-    },
-    {
-      "content": "21e5b99b5b18ba08",
-      "lines": 14,
-      "files": [
-        "src/cli/commands/verify-derive-check.test.ts",
-        "src/cli/commands/verify-enumerate.test.ts",
-        "src/cli/commands/verify-example-replay.test.ts",
-        "src/cli/commands/verify-source-free.test.ts"
       ]
     },
     {
@@ -1397,8 +1371,8 @@
       "content": "2d2580dd07d1987a",
       "lines": 7,
       "files": [
-        "src/cli/cli-conformance-commands.test.ts",
-        "src/cli/commands/verify-classify.test.ts"
+        "src/cli/commands/verify-classify.test.ts",
+        "src/cli/spawn-cli.test-helper.ts"
       ]
     },
     {
@@ -1736,6 +1710,21 @@
       ]
     },
     {
+      "content": "39f15bd3976ee84c",
+      "lines": 8,
+      "files": [
+        "src/cli/commands/verify-enumerate.test.ts"
+      ]
+    },
+    {
+      "content": "3b0c538020caf17d",
+      "lines": 10,
+      "files": [
+        "src/ui/components/auto-ui/renderers/GridBoardRenderer.a11y.test.ts",
+        "src/ui/components/auto-ui/renderers/HexBoardRenderer.a11y.test.ts"
+      ]
+    },
+    {
       "content": "3b0f13d80c9ad9a7",
       "lines": 11,
       "files": [
@@ -1748,6 +1737,13 @@
       "lines": 6,
       "files": [
         "src/world/engine.test.ts"
+      ]
+    },
+    {
+      "content": "3bc0cda448c3454d",
+      "lines": 7,
+      "files": [
+        "src/cli/cli.test.ts"
       ]
     },
     {
@@ -2171,14 +2167,6 @@
       ]
     },
     {
-      "content": "485ea568e20351c2",
-      "lines": 20,
-      "files": [
-        "src/cli/commands/verify-derive-check.test.ts",
-        "src/cli/commands/verify-example-replay.test.ts"
-      ]
-    },
-    {
       "content": "489ac38066324693",
       "lines": 7,
       "files": [
@@ -2339,14 +2327,6 @@
       ]
     },
     {
-      "content": "4d3555ddf860a81b",
-      "lines": 19,
-      "files": [
-        "src/cli/commands/verify-derive-check.test.ts",
-        "src/cli/commands/verify-example-replay.test.ts"
-      ]
-    },
-    {
       "content": "4d5df41b3aad4dbd",
       "lines": 8,
       "files": [
@@ -2395,13 +2375,6 @@
       "lines": 9,
       "files": [
         "src/session/tutorial-autoadvance.test.ts"
-      ]
-    },
-    {
-      "content": "4ea12482c1939d9c",
-      "lines": 21,
-      "files": [
-        "src/cli/commands/install-claude-command.test.ts"
       ]
     },
     {
@@ -2642,15 +2615,6 @@
       ]
     },
     {
-      "content": "57706247ed3ae121",
-      "lines": 14,
-      "files": [
-        "src/cli/commands/verify-derive-check.test.ts",
-        "src/cli/commands/verify-enumerate.test.ts",
-        "src/cli/commands/verify-example-replay.test.ts"
-      ]
-    },
-    {
       "content": "57ca97cda8ce087f",
       "lines": 16,
       "files": [
@@ -2823,6 +2787,13 @@
       ]
     },
     {
+      "content": "5d455de2b0f54eec",
+      "lines": 5,
+      "files": [
+        "src/cli/commands/install-claude-command.test.ts"
+      ]
+    },
+    {
       "content": "5db3b3e0696ae4cb",
       "lines": 8,
       "files": [
@@ -2907,14 +2878,6 @@
       "lines": 8,
       "files": [
         "src/cli/commands/verify-run.test.ts"
-      ]
-    },
-    {
-      "content": "5f8f4cd8dbde1c8f",
-      "lines": 10,
-      "files": [
-        "src/ui/components/auto-ui/renderers/GridBoardRenderer.a11y.test.ts",
-        "src/ui/components/auto-ui/renderers/HexBoardRenderer.a11y.test.ts"
       ]
     },
     {
@@ -3387,13 +3350,6 @@
       ]
     },
     {
-      "content": "6dca13e955623648",
-      "lines": 6,
-      "files": [
-        "src/cli/cli.test.ts"
-      ]
-    },
-    {
       "content": "6e2a1f69f135c110",
       "lines": 6,
       "files": [
@@ -3666,15 +3622,6 @@
       "files": [
         "src/bot/mcts-stats.test.ts",
         "src/engine/utils/enumerate-moves.test.ts"
-      ]
-    },
-    {
-      "content": "75e6dd5ee3b829a6",
-      "lines": 8,
-      "files": [
-        "src/cli/cli-conformance-commands.test.ts",
-        "src/cli/cli-single-entry-point.test.ts",
-        "src/cli/cli.test.ts"
       ]
     },
     {
@@ -4252,14 +4199,6 @@
       ]
     },
     {
-      "content": "8804e60537a7ea17",
-      "lines": 8,
-      "files": [
-        "src/ui/components/auto-ui/renderers/GridBoardRenderer.a11y.test.ts",
-        "src/ui/components/auto-ui/renderers/HexBoardRenderer.a11y.test.ts"
-      ]
-    },
-    {
       "content": "88a0a7082e9c1b97",
       "lines": 7,
       "files": [
@@ -4671,13 +4610,6 @@
       ]
     },
     {
-      "content": "948a66ae54853dee",
-      "lines": 20,
-      "files": [
-        "src/cli/commands/verify-example-replay.test.ts"
-      ]
-    },
-    {
       "content": "94c014e9bf02be5e",
       "lines": 11,
       "files": [
@@ -4737,6 +4669,14 @@
       "files": [
         "src/engine/tutorial/predicates.test.ts",
         "src/session/restore-snapshot-authoritative.test.ts"
+      ]
+    },
+    {
+      "content": "95d281d8433682c8",
+      "lines": 14,
+      "files": [
+        "src/cli/commands/verify-enumerate.test.ts",
+        "src/cli/commands/verify-source-free.test.ts"
       ]
     },
     {
@@ -4875,14 +4815,6 @@
       ]
     },
     {
-      "content": "994824ee5220a50d",
-      "lines": 10,
-      "files": [
-        "src/cli/commands/verify-enumerate.test.ts",
-        "src/cli/commands/verify-example-replay.test.ts"
-      ]
-    },
-    {
       "content": "99deb718c71472de",
       "lines": 6,
       "files": [
@@ -4902,6 +4834,14 @@
       "lines": 24,
       "files": [
         "src/ui/composables/useBoardActionBridge.test.ts"
+      ]
+    },
+    {
+      "content": "9a8fd1bf02018b06",
+      "lines": 8,
+      "files": [
+        "src/ui/components/auto-ui/renderers/GridBoardRenderer.a11y.test.ts",
+        "src/ui/components/auto-ui/renderers/HexBoardRenderer.a11y.test.ts"
       ]
     },
     {
@@ -5378,6 +5318,14 @@
       ]
     },
     {
+      "content": "aa671bf34f7131c5",
+      "lines": 8,
+      "files": [
+        "src/ui/components/auto-ui/renderers/GridBoardRenderer.a11y.test.ts",
+        "src/ui/components/auto-ui/renderers/HexBoardRenderer.a11y.test.ts"
+      ]
+    },
+    {
       "content": "aac32233caa06d16",
       "lines": 51,
       "files": [
@@ -5474,14 +5422,6 @@
       "files": [
         "src/cli/slash-command/bs/build-chunk.test.ts",
         "src/cli/slash-command/bs/build-game.test.ts"
-      ]
-    },
-    {
-      "content": "ad9c10fda3f6404c",
-      "lines": 8,
-      "files": [
-        "src/ui/components/auto-ui/renderers/GridBoardRenderer.a11y.test.ts",
-        "src/ui/components/auto-ui/renderers/HexBoardRenderer.a11y.test.ts"
       ]
     },
     {
@@ -5603,6 +5543,13 @@
       "lines": 20,
       "files": [
         "src/session/stateless-ops.ts"
+      ]
+    },
+    {
+      "content": "b1066b227f2986da",
+      "lines": 14,
+      "files": [
+        "src/cli/commands/verify-enumerate.test.ts"
       ]
     },
     {
@@ -6152,13 +6099,6 @@
       "lines": 11,
       "files": [
         "src/cli/dev-host/multiplayer-host.test.ts"
-      ]
-    },
-    {
-      "content": "c1956cf4296ebfa2",
-      "lines": 14,
-      "files": [
-        "src/cli/commands/verify-example-replay.test.ts"
       ]
     },
     {
@@ -6803,6 +6743,13 @@
       ]
     },
     {
+      "content": "d541e7b420b23e70",
+      "lines": 21,
+      "files": [
+        "src/cli/commands/install-claude-command.test.ts"
+      ]
+    },
+    {
       "content": "d55485bf84b72452",
       "lines": 11,
       "files": [
@@ -7041,15 +6988,6 @@
       "files": [
         "src/engine/command/executor.test.ts",
         "src/engine/command/undo.test.ts"
-      ]
-    },
-    {
-      "content": "e077034c16bf4c84",
-      "lines": 18,
-      "files": [
-        "src/cli/commands/verify-derive-check.test.ts",
-        "src/cli/commands/verify-enumerate.test.ts",
-        "src/cli/commands/verify-example-replay.test.ts"
       ]
     },
     {
@@ -7452,14 +7390,6 @@
       ]
     },
     {
-      "content": "edaf3aee7636ee6d",
-      "lines": 12,
-      "files": [
-        "src/cli/commands/install-claude-command.test.ts",
-        "src/cli/slash-command/bs/verify.test.ts"
-      ]
-    },
-    {
       "content": "ee18eee2dc50e5f0",
       "lines": 26,
       "files": [
@@ -7556,14 +7486,6 @@
       ]
     },
     {
-      "content": "f13391ba3aca1a4e",
-      "lines": 54,
-      "files": [
-        "src/cli/cli-conformance-commands.test.ts",
-        "src/cli/cli.test.ts"
-      ]
-    },
-    {
       "content": "f1410ae70ce0bd7a",
       "lines": 8,
       "files": [
@@ -7620,14 +7542,6 @@
       "lines": 20,
       "files": [
         "src/engine/flow/engine.test.ts"
-      ]
-    },
-    {
-      "content": "f356cba450aaf550",
-      "lines": 7,
-      "files": [
-        "src/cli/commands/verify-derive-check.test.ts",
-        "src/cli/commands/verify-example-replay.test.ts"
       ]
     },
     {

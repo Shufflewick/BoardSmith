@@ -11,16 +11,18 @@
  *   2. checkIngestArtifacts() PASSES against a hand-built conforming project tree — proving
  *      the FAILs above are not vacuous (a checker that fails on everything is worthless).
  *
- * No mocks, no temp directories, no agent invocation, no subprocess. Fixtures are read
- * straight off disk as they are checked in.
+ * No mocks, no agent invocation, no subprocess. Most fixtures are read straight off disk as
+ * they are checked in; the two gaps-section cases below need a mutated copy, so they take one
+ * from `tempTree`, which owns its removal (#236 -- this file's two hand-rolled `mkdtempSync`
+ * calls removed nothing, and that claim used to read "no temp directories" here).
  */
 
 import { describe, it, expect } from 'vitest';
 import { fileURLToPath } from 'node:url';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { checkIngestArtifacts, CHECK_IDS } from './check.mjs';
+import { tempTree } from '../../src/testing/temp-tree.test-helper.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -179,7 +181,7 @@ describe('visual-lines (h) — separability, not an inline-line count', () => {
 describe('gaps-machine-owned (e0)', () => {
   /** Clone the conforming fixture into a temp dir, with INDEX.md's gaps section replaced. */
   function withGapsSection(sectionBody) {
-    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'bs-e0-'));
+    const tmp = tempTree('bs-e0-');
     fs.cpSync(CONFORMING_DIR, tmp, { recursive: true });
     const indexPath = path.join(tmp, 'rulebook', 'INDEX.md');
     const text = fs.readFileSync(indexPath, 'utf8');
@@ -260,7 +262,7 @@ describe('gaps-machine-owned (e0)', () => {
  */
 describe('gaps-reconciliation (e2) — partial fills inside intact fences', () => {
   function withGapsBody(fencedBody) {
-    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'bs-e2-'));
+    const tmp = tempTree('bs-e2-');
     fs.cpSync(CONFORMING_DIR, tmp, { recursive: true });
     const indexPath = path.join(tmp, 'rulebook', 'INDEX.md');
     const text = fs.readFileSync(indexPath, 'utf8');

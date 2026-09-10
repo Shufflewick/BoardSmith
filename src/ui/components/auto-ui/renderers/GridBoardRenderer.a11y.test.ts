@@ -12,24 +12,17 @@
  */
 
 import { describe, it, expect, vi } from 'vitest';
-import { mount } from '@vue/test-utils';
-import { defineComponent, nextTick } from 'vue';
+import { nextTick } from 'vue';
 import GridBoardRenderer from './GridBoardRenderer.vue';
 import {
-  createBoardInteraction,
-  provideBoardInteraction,
-} from '../../../composables/useBoardInteraction.js';
+  mountBoardRenderer,
+  type GameElement,
+} from './board-renderer-a11y.test-helper.js';
+import { createBoardInteraction } from '../../../composables/useBoardInteraction.js';
 
-// ---------------------------------------------------------------------------
-// Local GameElement interface — mirrors GridBoardRenderer
-// ---------------------------------------------------------------------------
-interface GameElement {
-  id: number;
-  name?: string;
-  className: string;
-  attributes?: Record<string, unknown>;
-  children?: GameElement[];
-}
+/** This suite's renderer, so every mount below reads the same as the other board's. */
+const mountBoard = (element: GameElement, interaction = createBoardInteraction()) =>
+  mountBoardRenderer(GridBoardRenderer, element, interaction);
 
 /**
  * Build a cols×rows grid board element with full child cells.
@@ -58,50 +51,30 @@ function buildGridElement(cols: number, rows: number): GameElement {
   };
 }
 
-/**
- * Mount GridBoardRenderer inside a wrapper that provides boardInteraction.
- * tryUseBoardInteraction() uses inject(BOARD_INTERACTION_KEY) which is a
- * non-exported Symbol — provideBoardInteraction() is the canonical way to
- * wire it via component setup().
- */
-function mountGrid(element: GameElement, interaction = createBoardInteraction()) {
-  const Wrapper = defineComponent({
-    components: { GridBoardRenderer },
-    setup() {
-      provideBoardInteraction(interaction);
-    },
-    template: '<GridBoardRenderer :element="element" :depth="0" />',
-    props: { element: { type: Object, required: true } },
-  });
-  return {
-    wrapper: mount(Wrapper, { props: { element }, attachTo: document.body }),
-    interaction,
-  };
-}
 
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 describe('GridBoardRenderer a11y — role=grid/gridcell + roving tabindex', () => {
   it('renders a role="grid" container', () => {
-    const { wrapper } = mountGrid(buildGridElement(4, 2));
+    const { wrapper } = mountBoard(buildGridElement(4, 2));
     expect(wrapper.find('[role="grid"]').exists()).toBe(true);
   });
 
   it('aria-label on grid reads "Game board, COLS by ROWS"', () => {
-    const { wrapper } = mountGrid(buildGridElement(4, 2));
+    const { wrapper } = mountBoard(buildGridElement(4, 2));
     const grid = wrapper.find('[role="grid"]');
     expect(grid.attributes('aria-label')).toBe('Game board, 4 by 2');
   });
 
   it('each cell has role="gridcell"', () => {
-    const { wrapper } = mountGrid(buildGridElement(3, 3));
+    const { wrapper } = mountBoard(buildGridElement(3, 3));
     const cells = wrapper.findAll('[role="gridcell"]');
     expect(cells.length).toBe(9);
   });
 
   it('each cell has a non-empty aria-label', () => {
-    const { wrapper } = mountGrid(buildGridElement(2, 2));
+    const { wrapper } = mountBoard(buildGridElement(2, 2));
     const cells = wrapper.findAll('[role="gridcell"]');
     for (const cell of cells) {
       const label = cell.attributes('aria-label') ?? '';
@@ -110,21 +83,21 @@ describe('GridBoardRenderer a11y — role=grid/gridcell + roving tabindex', () =
   });
 
   it('exactly one cell has tabindex="0" initially', () => {
-    const { wrapper } = mountGrid(buildGridElement(3, 3));
+    const { wrapper } = mountBoard(buildGridElement(3, 3));
     const cells = wrapper.findAll('[role="gridcell"]');
     const zeros = cells.filter(c => c.attributes('tabindex') === '0');
     expect(zeros.length).toBe(1);
   });
 
   it('all other cells have tabindex="-1" initially', () => {
-    const { wrapper } = mountGrid(buildGridElement(3, 3));
+    const { wrapper } = mountBoard(buildGridElement(3, 3));
     const cells = wrapper.findAll('[role="gridcell"]');
     const negatives = cells.filter(c => c.attributes('tabindex') === '-1');
     expect(negatives.length).toBe(8); // 9 total - 1 with tabindex=0
   });
 
   it('ArrowRight on the grid moves tabindex="0" from cell 0 to cell 1', async () => {
-    const { wrapper } = mountGrid(buildGridElement(3, 2));
+    const { wrapper } = mountBoard(buildGridElement(3, 2));
     const grid = wrapper.find('[role="grid"]');
     await grid.trigger('keydown', { key: 'ArrowRight' });
     const cells = wrapper.findAll('[role="gridcell"]');
@@ -138,7 +111,7 @@ describe('GridBoardRenderer a11y — role=grid/gridcell + roving tabindex', () =
     const selectSpy = vi.fn();
     // Cell id=100 is the first cell (r=0, c=0) — make it selectable
     interaction.setValidElements([{ id: 100, ref: { id: 100 } }], selectSpy);
-    const { wrapper } = mountGrid(element, interaction);
+    const { wrapper } = mountBoard(element, interaction);
 
     const grid = wrapper.find('[role="grid"]');
     await grid.trigger('keydown', { key: 'Enter' });
@@ -161,7 +134,7 @@ describe('GridBoardRenderer candidate focus (#172)', () => {
       candidateIds.map((id) => ({ id, ref: { id } })),
       () => {},
     );
-    return { ...mountGrid(element, interaction), element };
+    return { ...mountBoard(element, interaction), element };
   }
 
   it('parks the roving tab stop on the first valid target, not on cell 0', async () => {
@@ -209,7 +182,7 @@ describe('GridBoardRenderer keyboard activation follows focus (#190)', () => {
       candidateIds.map((id) => ({ id, ref: { id } })),
       (id) => picked.push(id),
     );
-    return { ...mountGrid(buildGridElement(3, 2), interaction), picked };
+    return { ...mountBoard(buildGridElement(3, 2), interaction), picked };
   }
 
   it('Enter resolves the cell that holds focus, not the one the cursor parked on', async () => {

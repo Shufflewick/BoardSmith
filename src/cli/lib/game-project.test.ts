@@ -1,5 +1,4 @@
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { describe, it, expect, beforeEach, afterEach, vi, type MockInstance } from 'vitest';
 import {
@@ -8,6 +7,7 @@ import {
   resolveRulesDir,
   requireRulesIndex,
 } from './game-project.js';
+import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
 /**
  * Every guard in this module ends in `process.exit(1)`, which is the behaviour
@@ -27,7 +27,7 @@ describe('game-project guards', () => {
   let errorSpy: MockInstance;
 
   beforeEach(() => {
-    projectDir = mkdtempSync(join(tmpdir(), 'bs-game-project-'));
+    projectDir = tempTree('bs-game-project-');
     exitSpy = vi.spyOn(process, 'exit').mockImplementation(((code?: number) => {
       throw new ExitCalled(code);
     }) as never);
@@ -37,7 +37,6 @@ describe('game-project guards', () => {
   afterEach(() => {
     exitSpy.mockRestore();
     errorSpy.mockRestore();
-    rmSync(projectDir, { recursive: true, force: true });
   });
 
   const errors = (): string => errorSpy.mock.calls.map((call) => String(call[0])).join('\n');

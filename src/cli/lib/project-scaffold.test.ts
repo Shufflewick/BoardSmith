@@ -1,5 +1,4 @@
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync, readFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, writeFileSync, readFileSync } from 'node:fs';
 import { join, dirname, basename, isAbsolute, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, it, expect } from 'vitest';
@@ -26,6 +25,7 @@ import {
   generateActionsTs,
   generateFlowTs,
 } from '../commands/init.js';
+import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
 /** Where a scaffolded project would live; the `file:` link is relative to it. */
 const PROJECT_PATH = '/tmp/boardsmith-scaffold-fixture/my-game';
@@ -207,37 +207,33 @@ describe('generateRulesIndexTs', () => {
     // (TS2305) — esbuild silently tolerates missing named re-exports on .ts
     // files (it cannot know they aren't type-only), which is exactly how
     // `boardsmith dev` masked the broken scaffold.
-    const dir = mkdtempSync(join(tmpdir(), 'bs-scaffold-compile-'));
-    try {
-      const rulesDir = join(dir, 'rules');
-      mkdirSync(rulesDir, { recursive: true });
-      writeFileSync(join(rulesDir, 'index.ts'), generateRulesIndexTs(config));
-      writeFileSync(join(rulesDir, 'game.ts'), generateGameTs('MyGame'));
-      writeFileSync(join(rulesDir, 'elements.ts'), generateElementsTs());
-      writeFileSync(join(rulesDir, 'actions.ts'), generateActionsTs('MyGame'));
-      writeFileSync(join(rulesDir, 'flow.ts'), generateFlowTs('MyGame'));
+    const dir = tempTree('bs-scaffold-compile-');
+    const rulesDir = join(dir, 'rules');
+    mkdirSync(rulesDir, { recursive: true });
+    writeFileSync(join(rulesDir, 'index.ts'), generateRulesIndexTs(config));
+    writeFileSync(join(rulesDir, 'game.ts'), generateGameTs('MyGame'));
+    writeFileSync(join(rulesDir, 'elements.ts'), generateElementsTs());
+    writeFileSync(join(rulesDir, 'actions.ts'), generateActionsTs('MyGame'));
+    writeFileSync(join(rulesDir, 'flow.ts'), generateFlowTs('MyGame'));
 
-      // 'boardsmith' resolves to the same entry the package.json "." export
-      // points at (src/engine/index.ts), matching a real scaffolded project.
-      const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
-      const program = ts.createProgram([join(rulesDir, 'index.ts')], {
-        // Mirrors the scaffold's generateTsConfig() compiler options.
-        strict: true,
-        noEmit: true,
-        skipLibCheck: true,
-        target: ts.ScriptTarget.ES2022,
-        module: ts.ModuleKind.ESNext,
-        moduleResolution: ts.ModuleResolutionKind.Bundler,
-        baseUrl: dir,
-        paths: { boardsmith: [join(repoRoot, 'src', 'engine', 'index.ts')] },
-      });
-      const diagnostics = ts.getPreEmitDiagnostics(program)
-        .filter((d) => d.file && d.file.fileName.startsWith(dir))
-        .map((d) => `${d.file!.fileName.replace(dir, '')} TS${d.code}: ${ts.flattenDiagnosticMessageText(d.messageText, ' ')}`);
-      expect(diagnostics).toEqual([]);
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
+    // 'boardsmith' resolves to the same entry the package.json "." export
+    // points at (src/engine/index.ts), matching a real scaffolded project.
+    const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+    const program = ts.createProgram([join(rulesDir, 'index.ts')], {
+      // Mirrors the scaffold's generateTsConfig() compiler options.
+      strict: true,
+      noEmit: true,
+      skipLibCheck: true,
+      target: ts.ScriptTarget.ES2022,
+      module: ts.ModuleKind.ESNext,
+      moduleResolution: ts.ModuleResolutionKind.Bundler,
+      baseUrl: dir,
+      paths: { boardsmith: [join(repoRoot, 'src', 'engine', 'index.ts')] },
+    });
+    const diagnostics = ts.getPreEmitDiagnostics(program)
+      .filter((d) => d.file && d.file.fileName.startsWith(dir))
+      .map((d) => `${d.file!.fileName.replace(dir, '')} TS${d.code}: ${ts.flattenDiagnosticMessageText(d.messageText, ' ')}`);
+    expect(diagnostics).toEqual([]);
   });
 });
 
@@ -264,49 +260,45 @@ describe('generateTsConfig — vite/client types (Phase 149 dry-run Defect 1)', 
     // twice — without and with `types: ['vite/client']` — and assert the
     // ImportMeta.env error appears without it and vanishes with it. Dropping
     // 'vite/client' from generateTsConfig() therefore turns this test RED.
-    const dir = mkdtempSync(join(tmpdir(), 'bs-scaffold-ui-compile-'));
-    try {
-      const uiDir = join(dir, 'ui');
-      mkdirSync(uiDir, { recursive: true });
-      // Same re-export the scaffold's src/ui/index.ts carries (minus the .vue
-      // value import, which is irrelevant to the ImportMeta.env resolution).
-      writeFileSync(
-        join(uiDir, 'index.ts'),
-        "export type { UseActionControllerReturn } from 'boardsmith/ui';\n",
-      );
+    const dir = tempTree('bs-scaffold-ui-compile-');
+    const uiDir = join(dir, 'ui');
+    mkdirSync(uiDir, { recursive: true });
+    // Same re-export the scaffold's src/ui/index.ts carries (minus the .vue
+    // value import, which is irrelevant to the ImportMeta.env resolution).
+    writeFileSync(
+      join(uiDir, 'index.ts'),
+      "export type { UseActionControllerReturn } from 'boardsmith/ui';\n",
+    );
 
-      const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
-      const uiEntry = join(repoRoot, 'src', 'ui', 'index.ts');
+    const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+    const uiEntry = join(repoRoot, 'src', 'ui', 'index.ts');
 
-      const importMetaEnvErrors = (types: string[]): string[] => {
-        const program = ts.createProgram([join(uiDir, 'index.ts')], {
-          strict: true,
-          noEmit: true,
-          skipLibCheck: true,
-          target: ts.ScriptTarget.ES2022,
-          module: ts.ModuleKind.ESNext,
-          moduleResolution: ts.ModuleResolutionKind.Bundler,
-          lib: ['lib.es2022.d.ts', 'lib.dom.d.ts', 'lib.dom.iterable.d.ts'],
-          types,
-          baseUrl: dir,
-          paths: { 'boardsmith/ui': [uiEntry] },
-        });
-        return ts
-          .getPreEmitDiagnostics(program)
-          // TS2339 "Property 'env' does not exist on type 'ImportMeta'" — the
-          // exact diagnostic a fresh scaffold hit before the fix.
-          .filter((d) => d.code === 2339)
-          .map((d) => ts.flattenDiagnosticMessageText(d.messageText, ' '))
-          .filter((m) => m.includes('env'));
-      };
+    const importMetaEnvErrors = (types: string[]): string[] => {
+      const program = ts.createProgram([join(uiDir, 'index.ts')], {
+        strict: true,
+        noEmit: true,
+        skipLibCheck: true,
+        target: ts.ScriptTarget.ES2022,
+        module: ts.ModuleKind.ESNext,
+        moduleResolution: ts.ModuleResolutionKind.Bundler,
+        lib: ['lib.es2022.d.ts', 'lib.dom.d.ts', 'lib.dom.iterable.d.ts'],
+        types,
+        baseUrl: dir,
+        paths: { 'boardsmith/ui': [uiEntry] },
+      });
+      return ts
+        .getPreEmitDiagnostics(program)
+        // TS2339 "Property 'env' does not exist on type 'ImportMeta'" — the
+        // exact diagnostic a fresh scaffold hit before the fix.
+        .filter((d) => d.code === 2339)
+        .map((d) => ts.flattenDiagnosticMessageText(d.messageText, ' '))
+        .filter((m) => m.includes('env'));
+    };
 
-      // Without vite/client: the original bug reproduces.
-      expect(importMetaEnvErrors([]).length).toBeGreaterThan(0);
-      // With vite/client: the ImportMeta.env access resolves cleanly.
-      expect(importMetaEnvErrors(['vite/client'])).toEqual([]);
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
+    // Without vite/client: the original bug reproduces.
+    expect(importMetaEnvErrors([]).length).toBeGreaterThan(0);
+    // With vite/client: the ImportMeta.env access resolves cleanly.
+    expect(importMetaEnvErrors(['vite/client'])).toEqual([]);
   });
 });
 
@@ -447,58 +439,54 @@ describe('single-vue guarantee — the symlinked-boardsmith duplicate-vue trap',
     // and a symlinked-library copy of vue — and resolves `vue` from BOTH sides
     // with and without the pin. Dropping `paths` from generateTsConfig()
     // therefore turns this test RED.
-    const dir = mkdtempSync(join(tmpdir(), 'bs-scaffold-vue-pin-'));
-    try {
-      const game = join(dir, 'game');
-      const library = join(dir, 'library');
+    const dir = tempTree('bs-scaffold-vue-pin-');
+    const game = join(dir, 'game');
+    const library = join(dir, 'library');
 
-      // Two distinct vue packages, exactly as npm lays them out.
-      for (const [root, version] of [[game, '3.5.40'], [library, '3.5.26']] as const) {
-        const vueDir = join(root, 'node_modules', 'vue');
-        mkdirSync(vueDir, { recursive: true });
-        writeFileSync(
-          join(vueDir, 'package.json'),
-          JSON.stringify({ name: 'vue', version, types: './index.d.ts' }),
-        );
-        writeFileSync(join(vueDir, 'index.d.ts'), 'export declare const createApp: unknown;\n');
-      }
-
-      // The game's own entry, and a library source file standing in for
-      // BoardSmith's `src/ui/*` reached through the symlinked export.
-      writeFileSync(join(game, 'main.ts'), "import 'vue';\n");
-      mkdirSync(join(library, 'src'), { recursive: true });
-      writeFileSync(join(library, 'src', 'ui.ts'), "import 'vue';\n");
-
-      const resolveVueFrom = (importer: string, paths?: ts.MapLike<string[]>) =>
-        ts.resolveModuleName(
-          'vue',
-          importer,
-          { moduleResolution: ts.ModuleResolutionKind.Bundler, baseUrl: game, paths },
-          ts.sys,
-        ).resolvedModule?.resolvedFileName;
-
-      const withoutPin = [
-        resolveVueFrom(join(game, 'main.ts')),
-        resolveVueFrom(join(library, 'src', 'ui.ts')),
-      ];
-      // The bug: the two sides land on two different vue packages.
-      expect(withoutPin[0]).toBeDefined();
-      expect(withoutPin[1]).toBeDefined();
-      expect(withoutPin[0]).not.toBe(withoutPin[1]);
-
-      // Read the pin from the GENERATOR, not a literal — otherwise this test
-      // would keep passing after `paths` was dropped from generateTsConfig().
-      const pin = JSON.parse(generateTsConfig()).compilerOptions.paths;
-      const withPin = [
-        resolveVueFrom(join(game, 'main.ts'), pin),
-        resolveVueFrom(join(library, 'src', 'ui.ts'), pin),
-      ];
-      // The fix: both sides land on the GAME's copy, so there is one vue.
-      expect(withPin[0]).toBe(withPin[1]);
-      expect(withPin[0]).toContain(join('game', 'node_modules', 'vue'));
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
+    // Two distinct vue packages, exactly as npm lays them out.
+    for (const [root, version] of [[game, '3.5.40'], [library, '3.5.26']] as const) {
+      const vueDir = join(root, 'node_modules', 'vue');
+      mkdirSync(vueDir, { recursive: true });
+      writeFileSync(
+        join(vueDir, 'package.json'),
+        JSON.stringify({ name: 'vue', version, types: './index.d.ts' }),
+      );
+      writeFileSync(join(vueDir, 'index.d.ts'), 'export declare const createApp: unknown;\n');
     }
+
+    // The game's own entry, and a library source file standing in for
+    // BoardSmith's `src/ui/*` reached through the symlinked export.
+    writeFileSync(join(game, 'main.ts'), "import 'vue';\n");
+    mkdirSync(join(library, 'src'), { recursive: true });
+    writeFileSync(join(library, 'src', 'ui.ts'), "import 'vue';\n");
+
+    const resolveVueFrom = (importer: string, paths?: ts.MapLike<string[]>) =>
+      ts.resolveModuleName(
+        'vue',
+        importer,
+        { moduleResolution: ts.ModuleResolutionKind.Bundler, baseUrl: game, paths },
+        ts.sys,
+      ).resolvedModule?.resolvedFileName;
+
+    const withoutPin = [
+      resolveVueFrom(join(game, 'main.ts')),
+      resolveVueFrom(join(library, 'src', 'ui.ts')),
+    ];
+    // The bug: the two sides land on two different vue packages.
+    expect(withoutPin[0]).toBeDefined();
+    expect(withoutPin[1]).toBeDefined();
+    expect(withoutPin[0]).not.toBe(withoutPin[1]);
+
+    // Read the pin from the GENERATOR, not a literal — otherwise this test
+    // would keep passing after `paths` was dropped from generateTsConfig().
+    const pin = JSON.parse(generateTsConfig()).compilerOptions.paths;
+    const withPin = [
+      resolveVueFrom(join(game, 'main.ts'), pin),
+      resolveVueFrom(join(library, 'src', 'ui.ts'), pin),
+    ];
+    // The fix: both sides land on the GAME's copy, so there is one vue.
+    expect(withPin[0]).toBe(withPin[1]);
+    expect(withPin[0]).toContain(join('game', 'node_modules', 'vue'));
   });
 });
 

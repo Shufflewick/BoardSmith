@@ -1,8 +1,7 @@
 import { DESIGN_DIR } from '../lib/project-paths.js';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { join } from 'node:path';
-import { tmpdir } from 'node:os';
 import {
   RULING_VERDICTS_LEDGER_BEGIN,
   RULING_VERDICTS_LEDGER_END,
@@ -13,6 +12,7 @@ import {
   verifyRulingRecheckCommand,
   verifyRulingRecordCommand,
 } from './verify-ruling-recheck.js';
+import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
 /**
  * CHECK-01's write half. The check was built and unit-tested but never registered on the CLI, so
@@ -26,11 +26,7 @@ import {
 let dir: string;
 
 beforeEach(async () => {
-  dir = await fs.mkdtemp(join(tmpdir(), 'bs-ruling-record-'));
-});
-
-afterEach(async () => {
-  await fs.rm(dir, { recursive: true, force: true });
+  dir = tempTree('bs-ruling-record-');
 });
 
 const RUN_ID = '2026-08-05T16-49-29Z';

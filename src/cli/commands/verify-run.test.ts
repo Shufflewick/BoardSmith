@@ -1,10 +1,9 @@
 import { DESIGN_DIR } from '../lib/project-paths.js';
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { execSync, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { join, relative } from 'node:path';
-import { tmpdir } from 'node:os';
 import {
   verifyRunInitCommand,
   verifyRunRecordCommand,
@@ -29,6 +28,7 @@ import { chunkProvenanceStatusCommand } from './chunk-provenance.js';
 import { traceCheckCommand } from './trace-check.js';
 import { driftCheckCommand } from './drift-check.js';
 import { ingestGapsCommand, renderIndex } from './ingest-archive.js';
+import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
 /**
  * `verify-run.ts` is the mechanical half of VERIFY-02 (non-destructive staging tree) and
@@ -42,11 +42,7 @@ import { ingestGapsCommand, renderIndex } from './ingest-archive.js';
 let dir: string;
 
 beforeEach(async () => {
-  dir = await fs.mkdtemp(join(tmpdir(), 'bs-verify-run-'));
-});
-
-afterEach(async () => {
-  await fs.rm(dir, { recursive: true, force: true });
+  dir = tempTree('bs-verify-run-');
 });
 
 const LIVE_03 = '## 03-setup\n\nLive setup slice content.\n';

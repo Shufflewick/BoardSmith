@@ -1,8 +1,7 @@
 import { DESIGN_DIR } from '../lib/project-paths.js';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { join } from 'node:path';
-import { tmpdir } from 'node:os';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { fileURLToPath } from 'node:url';
@@ -19,6 +18,7 @@ import {
   recordExampleReplayVerdicts,
   exampleReplayLedgerPath,
 } from './verify-example-replay.js';
+import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -132,11 +132,7 @@ describe('verifyExampleEmitCommand', () => {
   let dir: string;
 
   beforeEach(async () => {
-    dir = await fs.mkdtemp(join(tmpdir(), 'bs-example-emit-'));
-  });
-
-  afterEach(async () => {
-    await fs.rm(dir, { recursive: true, force: true });
+    dir = tempTree('bs-example-emit-');
   });
 
   it('throws when --chunk is missing', async () => {

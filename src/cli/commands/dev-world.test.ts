@@ -7,25 +7,22 @@
  * exactly one, and a project that had none is given one), and the fact that a
  * world project no longer needs a table half at all.
  */
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdtempSync, mkdirSync, writeFileSync, rmSync, readFileSync, readdirSync, existsSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { describe, it, expect, beforeEach } from 'vitest';
+import { mkdirSync, writeFileSync, readFileSync, readdirSync, existsSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { WORLD_IFRAME_PATH, WORLD_WS_PATH } from './dev-world.js';
 import { ensureWorldEntry, WORLD_ENTRY_HTML } from '../lib/world-entry.js';
 import { GAME_IFRAME_PATH } from './dev.js';
+import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
 const DEV_HOST_DIR = join(REPO_ROOT, 'src', 'cli', 'dev-host');
 
 let dir: string;
 beforeEach(() => {
-  dir = mkdtempSync(join(tmpdir(), 'bs-dev-world-'));
-});
-afterEach(() => {
-  rmSync(dir, { recursive: true, force: true });
+  dir = tempTree('bs-dev-world-');
 });
 
 describe('which surface a world run serves', () => {

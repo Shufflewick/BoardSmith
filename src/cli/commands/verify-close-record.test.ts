@@ -1,14 +1,14 @@
 import { DESIGN_DIR } from '../lib/project-paths.js';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { execSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
-import { tmpdir } from 'node:os';
 import { renderIndex } from './ingest-archive.js';
 import { computeTouchedChunks, verifyCloseRecordCommand } from './verify-close-record.js';
 import { VERIFIED_AGAINST_BEGIN, VERIFIED_AGAINST_END } from './chunk-provenance.js';
 import { computeSourceFreeReport } from './verify-source-free.js';
+import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
 /**
  * `verify-close-record — the durable Close write (SC-3, PROV-02)`
@@ -27,11 +27,7 @@ import { computeSourceFreeReport } from './verify-source-free.js';
 let dir: string;
 
 beforeEach(async () => {
-  dir = await fs.mkdtemp(join(tmpdir(), 'bs-verify-close-record-'));
-});
-
-afterEach(async () => {
-  await fs.rm(dir, { recursive: true, force: true });
+  dir = tempTree('bs-verify-close-record-');
 });
 
 async function gitCommitAll(repoDir: string, message: string): Promise<string> {

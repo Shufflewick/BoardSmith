@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { join } from 'node:path';
-import { tmpdir } from 'node:os';
 import { hashSkillsTree, resolveSkillsRoot, SKILLS_TREE_ABSENT } from './skills-tree-hash.js';
+import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
 /**
  * `hashSkillsTree()` exists because Phase 170 ran almost entirely on `--local` working-tree
@@ -24,7 +24,7 @@ let dir: string;
 let originalHome: string | undefined;
 
 beforeEach(async () => {
-  dir = await fs.mkdtemp(join(tmpdir(), 'bs-skills-hash-'));
+  dir = tempTree('bs-skills-hash-');
   originalHome = process.env.HOME;
 });
 
@@ -34,7 +34,6 @@ afterEach(async () => {
   } else {
     process.env.HOME = originalHome;
   }
-  await fs.rm(dir, { recursive: true, force: true });
 });
 
 /** Writes a minimal installed skills tree under `<root>/.claude/skills`. */
@@ -64,30 +63,22 @@ describe('resolveSkillsRoot', () => {
   });
 
   it('returns null when neither the project-local nor home skills root has a bs- entry', async () => {
-    const emptyHome = await fs.mkdtemp(join(tmpdir(), 'bs-skills-hash-emptyhome-'));
+    const emptyHome = tempTree('bs-skills-hash-emptyhome-');
     process.env.HOME = emptyHome;
-    try {
-      const emptyProject = join(dir, 'empty-project');
-      await fs.mkdir(emptyProject, { recursive: true });
-      const root = await resolveSkillsRoot(emptyProject);
-      expect(root).toBeNull();
-    } finally {
-      await fs.rm(emptyHome, { recursive: true, force: true });
-    }
+    const emptyProject = join(dir, 'empty-project');
+    await fs.mkdir(emptyProject, { recursive: true });
+    const root = await resolveSkillsRoot(emptyProject);
+    expect(root).toBeNull();
   });
 
   it('falls back to the home skills root when the project has none', async () => {
-    const fakeHome = await fs.mkdtemp(join(tmpdir(), 'bs-skills-hash-home-'));
+    const fakeHome = tempTree('bs-skills-hash-home-');
     process.env.HOME = fakeHome;
-    try {
-      await writeSkillsTree(fakeHome, BASE_TREE);
-      const emptyProject = join(dir, 'empty-project');
-      await fs.mkdir(emptyProject, { recursive: true });
-      const root = await resolveSkillsRoot(emptyProject);
-      expect(root).toBe(join(fakeHome, '.claude', 'skills'));
-    } finally {
-      await fs.rm(fakeHome, { recursive: true, force: true });
-    }
+    await writeSkillsTree(fakeHome, BASE_TREE);
+    const emptyProject = join(dir, 'empty-project');
+    await fs.mkdir(emptyProject, { recursive: true });
+    const root = await resolveSkillsRoot(emptyProject);
+    expect(root).toBe(join(fakeHome, '.claude', 'skills'));
   });
 });
 
@@ -112,24 +103,19 @@ describe('hashSkillsTree', () => {
   });
 
   it('changes when a file is renamed without changing its content (path is hashed too)', async () => {
-    const dirA = await fs.mkdtemp(join(tmpdir(), 'bs-skills-hash-a-'));
-    const dirB = await fs.mkdtemp(join(tmpdir(), 'bs-skills-hash-b-'));
-    try {
-      await writeSkillsTree(dirA, {
-        'bs-build-chunk/SKILL.md': 'identical content\n',
-      });
-      await writeSkillsTree(dirB, {
-        'bs-build-chunk/RENAMED.md': 'identical content\n',
-      });
+    const dirA = tempTree('bs-skills-hash-a-');
+    const dirB = tempTree('bs-skills-hash-b-');
+    await writeSkillsTree(dirA, {
+      'bs-build-chunk/SKILL.md': 'identical content\n',
+    });
+    await writeSkillsTree(dirB, {
+      'bs-build-chunk/RENAMED.md': 'identical content\n',
+    });
 
-      const hashA = await hashSkillsTree(dirA);
-      const hashB = await hashSkillsTree(dirB);
+    const hashA = await hashSkillsTree(dirA);
+    const hashB = await hashSkillsTree(dirB);
 
-      expect(hashA).not.toBe(hashB);
-    } finally {
-      await fs.rm(dirA, { recursive: true, force: true });
-      await fs.rm(dirB, { recursive: true, force: true });
-    }
+    expect(hashA).not.toBe(hashB);
   });
 
   it('does NOT change when a non-bs- sibling directory is added to the skills root', async () => {
@@ -145,40 +131,31 @@ describe('hashSkillsTree', () => {
   });
 
   it('produces the same hash for identical content written in a different order', async () => {
-    const dirA = await fs.mkdtemp(join(tmpdir(), 'bs-skills-hash-order-a-'));
-    const dirB = await fs.mkdtemp(join(tmpdir(), 'bs-skills-hash-order-b-'));
-    try {
-      // Write in one order
-      await writeSkillsTree(dirA, {
-        'bs-build-chunk/SKILL.md': 'alpha\n',
-        'bs-shared/state-machine.md': 'beta\n',
-      });
-      // Write in the reverse order
-      await writeSkillsTree(dirB, {
-        'bs-shared/state-machine.md': 'beta\n',
-        'bs-build-chunk/SKILL.md': 'alpha\n',
-      });
+    const dirA = tempTree('bs-skills-hash-order-a-');
+    const dirB = tempTree('bs-skills-hash-order-b-');
+    // Write in one order
+    await writeSkillsTree(dirA, {
+      'bs-build-chunk/SKILL.md': 'alpha\n',
+      'bs-shared/state-machine.md': 'beta\n',
+    });
+    // Write in the reverse order
+    await writeSkillsTree(dirB, {
+      'bs-shared/state-machine.md': 'beta\n',
+      'bs-build-chunk/SKILL.md': 'alpha\n',
+    });
 
-      const hashA = await hashSkillsTree(dirA);
-      const hashB = await hashSkillsTree(dirB);
-      expect(hashA).toBe(hashB);
-    } finally {
-      await fs.rm(dirA, { recursive: true, force: true });
-      await fs.rm(dirB, { recursive: true, force: true });
-    }
+    const hashA = await hashSkillsTree(dirA);
+    const hashB = await hashSkillsTree(dirB);
+    expect(hashA).toBe(hashB);
   });
 
   it('returns SKILLS_TREE_ABSENT when no skills root can be found', async () => {
-    const emptyHome = await fs.mkdtemp(join(tmpdir(), 'bs-skills-hash-emptyhome2-'));
+    const emptyHome = tempTree('bs-skills-hash-emptyhome2-');
     process.env.HOME = emptyHome;
-    try {
-      const emptyProject = join(dir, 'no-skills-here');
-      await fs.mkdir(emptyProject, { recursive: true });
-      const hash = await hashSkillsTree(emptyProject);
-      expect(hash).toBe(SKILLS_TREE_ABSENT);
-      expect(hash).toBe('not installed');
-    } finally {
-      await fs.rm(emptyHome, { recursive: true, force: true });
-    }
+    const emptyProject = join(dir, 'no-skills-here');
+    await fs.mkdir(emptyProject, { recursive: true });
+    const hash = await hashSkillsTree(emptyProject);
+    expect(hash).toBe(SKILLS_TREE_ABSENT);
+    expect(hash).toBe('not installed');
   });
 });

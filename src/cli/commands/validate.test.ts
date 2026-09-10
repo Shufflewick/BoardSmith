@@ -1,7 +1,6 @@
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import {
   ALLOWED_TOP_LEVEL_KEYS,
   CONVEX_SINK_KEYS,
@@ -28,6 +27,7 @@ import {
   describeZipSizeViolation,
   encodedRulesBytes,
 } from '../lib/bundle-limits.js';
+import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
 describe('config-schema', () => {
   it('ALLOWED_TOP_LEVEL_KEYS matches boardsmith.schema.json properties (single source, no drift)', async () => {
@@ -397,14 +397,10 @@ describe('validateBundleSize measures the real publish zip, not the raw dist (WR
     build: (cwd: string) => void,
     worldMode = false,
   ): Promise<{ passed: boolean; details: string }> {
-    const cwd = mkdtempSync(join(tmpdir(), 'bs-bundle-size-'));
-    try {
-      build(cwd);
-      const result = await validateBundleSize(cwd, worldMode);
-      return { passed: result.passed, details: (result.details ?? []).join('\n') };
-    } finally {
-      rmSync(cwd, { recursive: true, force: true });
-    }
+    const cwd = tempTree('bs-bundle-size-');
+    build(cwd);
+    const result = await validateBundleSize(cwd, worldMode);
+    return { passed: result.passed, details: (result.details ?? []).join('\n') };
   }
 
   /** Under 1 MiB as it sits on disk, over 1 MiB once JSON-encoded (#221). */
@@ -565,11 +561,7 @@ describe('validate.ts validateAssetPaths — declared manifest assets must resol
   let projectDir: string;
 
   beforeEach(() => {
-    projectDir = mkdtempSync(join(tmpdir(), 'boardsmith-asset-paths-'));
-  });
-
-  afterEach(() => {
-    rmSync(projectDir, { recursive: true, force: true });
+    projectDir = tempTree('boardsmith-asset-paths-');
   });
 
   function writeConfig(config: Record<string, unknown>): void {
@@ -757,14 +749,13 @@ describe('validateRequiredFiles — a world has a different entry point (#168)',
   let dir: string;
 
   beforeEach(() => {
-    dir = mkdtempSync(join(tmpdir(), 'bs-required-files-'));
+    dir = tempTree('bs-required-files-');
     mkdirSync(join(dir, 'src', 'rules'), { recursive: true });
     mkdirSync(join(dir, 'src', 'ui'), { recursive: true });
     for (const file of ['boardsmith.json', 'package.json']) writeFileSync(join(dir, file), '{}');
     for (const file of ['index.ts', 'game.ts']) writeFileSync(join(dir, 'src', 'rules', file), '');
   });
 
-  afterEach(() => rmSync(dir, { recursive: true, force: true }));
 
   function writeTableUi(): void {
     writeFileSync(join(dir, 'src', 'ui', 'App.vue'), '');
@@ -854,7 +845,7 @@ describe("#196: what validation tells an author to do next", () => {
  */
 describe('remote image sources must be declared before they are used (#370)', () => {
   function project(files: Record<string, string>): string {
-    const cwd = mkdtempSync(join(tmpdir(), 'bs-image-sources-'));
+    const cwd = tempTree('bs-image-sources-');
     for (const [rel, contents] of Object.entries(files)) {
       const full = join(cwd, rel);
       mkdirSync(join(full, '..'), { recursive: true });
@@ -870,12 +861,8 @@ describe('remote image sources must be declared before they are used (#370)', ()
       'boardsmith.json': JSON.stringify(imageSources === undefined ? {} : { imageSources }),
       'dist/ui/index.html': `<!doctype html><img src="${source}">`,
     });
-    try {
-      const result = await validateAssetPaths(cwd);
-      return { passed: result.passed, details: (result.details ?? []).join('\n'), message: result.message };
-    } finally {
-      rmSync(cwd, { recursive: true, force: true });
-    }
+    const result = await validateAssetPaths(cwd);
+    return { passed: result.passed, details: (result.details ?? []).join('\n'), message: result.message };
   }
 
   it('FAILS a bundle that loads a remote image it never declared', async () => {
@@ -912,13 +899,9 @@ describe('remote image sources must be declared before they are used (#370)', ()
       ['dist/rules/rules.js', `const sprite = "${REMOTE}";`],
     ] as const) {
       const cwd = project({ 'boardsmith.json': '{}', [rel]: contents });
-      try {
-        const result = await validateAssetPaths(cwd);
-        expect(result.passed, `${rel} should have been scanned`).toBe(false);
-        expect((result.details ?? []).join('\n')).toContain(REMOTE);
-      } finally {
-        rmSync(cwd, { recursive: true, force: true });
-      }
+      const result = await validateAssetPaths(cwd);
+      expect(result.passed, `${rel} should have been scanned`).toBe(false);
+      expect((result.details ?? []).join('\n')).toContain(REMOTE);
     }
   });
 
@@ -927,12 +910,8 @@ describe('remote image sources must be declared before they are used (#370)', ()
       'boardsmith.json': '{}',
       'dist/ui/index.html': `<img src="${REMOTE}"><img src="${REMOTE}"><img src="${REMOTE}">`,
     });
-    try {
-      const result = await validateAssetPaths(cwd);
-      const lines = (result.details ?? []).filter((line) => line.includes(REMOTE));
-      expect(lines).toHaveLength(1);
-    } finally {
-      rmSync(cwd, { recursive: true, force: true });
-    }
+    const result = await validateAssetPaths(cwd);
+    const lines = (result.details ?? []).filter((line) => line.includes(REMOTE));
+    expect(lines).toHaveLength(1);
   });
 });

@@ -1,12 +1,11 @@
 import { DESIGN_DIR } from './lib/project-paths.js';
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
-import { execSync, execFile } from 'node:child_process';
-import { promisify } from 'node:util';
+import { execSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
-import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { tempTree } from '../testing/temp-tree.test-helper.js';
+import { REPO_ROOT, spawnCli } from './spawn-cli.test-helper.js';
 
 /**
  * `cli-conformance-commands.test.ts` — the first test in this repo that exercises a command
@@ -25,51 +24,14 @@ import { tmpdir } from 'node:os';
  * the underlying check LOGIC lives in `trace-check.test.ts`/`drift-check.test.ts`.
  */
 
-/**
- * Every test in a file that spawns the real CLI needs more than vitest's 5s default: a spawn
- * boots Node, loads tsx, and type-strips the whole command tree, which under full-suite
- * parallelism can exceed 5s on its own. The default turned that latency into a flaky
- * assertion about nothing — these tests assert what the CLI REGISTERS, never how fast it
- * starts. This ceiling is a hang guard, not a performance budget.
- */
+// A spawn can exceed vitest's 5s default under full-suite parallelism. This is a hang guard,
+// not a performance budget; spawn-cli.test-helper.ts says why.
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
-
-const execFileAsync = promisify(execFile);
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
-// This file lives at src/cli/cli-conformance-commands.test.ts — repo root is two levels up.
-const REPO_ROOT = join(__dirname, '..', '..');
-const CLI_BIN = join(REPO_ROOT, 'bin', 'boardsmith.js');
-
-interface SpawnResult {
-  code: number;
-  stdout: string;
-  stderr: string;
-}
-
-/**
- * Spawns the real CLI entry point and resolves with its exit code, stdout, and stderr — never
- * throws on a non-zero exit, since a non-zero exit is exactly what the tool-failure cases assert
- * on. `execFile`'s promisified rejection carries `code`/`stdout`/`stderr` on the error object.
- */
-async function spawnCli(args: string[], cwd: string = REPO_ROOT): Promise<SpawnResult> {
-  try {
-    const { stdout, stderr } = await execFileAsync(process.execPath, [CLI_BIN, ...args], { cwd });
-    return { code: 0, stdout, stderr };
-  } catch (err) {
-    const e = err as { code?: number; stdout?: string; stderr?: string };
-    return { code: e.code ?? 1, stdout: e.stdout ?? '', stderr: e.stderr ?? '' };
-  }
-}
 
 let dir: string;
 
 beforeEach(async () => {
-  dir = await fs.mkdtemp(join(tmpdir(), 'bs-cli-conformance-'));
-});
-
-afterEach(async () => {
-  await fs.rm(dir, { recursive: true, force: true });
+  dir = tempTree('bs-cli-conformance-');
 });
 
 /** Whole-project content hash: every file's relative path + bytes, in sorted order. */

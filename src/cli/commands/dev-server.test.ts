@@ -13,14 +13,14 @@
  * pass either implementation.
  */
 import { describe, it, expect, afterEach } from 'vitest';
-import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import { writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { createServer as createViteServer, type ViteDevServer } from 'vite';
 import { WebSocket as WsClient } from 'ws';
 
 import { claimWebSocketPath } from './dev-server.js';
+import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
 const TEST_WS_PATH = '/__boardsmith/test-ws';
 
@@ -29,7 +29,6 @@ let vite: ViteDevServer | null = null;
 afterEach(async () => {
   if (vite) await vite.close();
   vite = null;
-  if (dir) rmSync(dir, { recursive: true, force: true });
   dir = null;
 });
 
@@ -62,7 +61,7 @@ function connect(port: number): Promise<string> {
 
 describe('a dev host socket survives what Vite does on restart (#214)', () => {
   it('answers the claimed path before and after a config restart', async () => {
-    dir = mkdtempSync(join(tmpdir(), 'bs-dev-server-'));
+    dir = tempTree('bs-dev-server-');
     writeFileSync(join(dir, 'index.html'), '<!doctype html><title>t</title>');
 
     let greeted = 0;
@@ -91,7 +90,7 @@ describe('a dev host socket survives what Vite does on restart (#214)', () => {
   }, 30000);
 
   it('leaves every other upgrade to Vite, restart or not', async () => {
-    dir = mkdtempSync(join(tmpdir(), 'bs-dev-server-'));
+    dir = tempTree('bs-dev-server-');
     writeFileSync(join(dir, 'index.html'), '<!doctype html><title>t</title>');
 
     const claimed = claimWebSocketPath(TEST_WS_PATH, (socket) => socket.send('ours'));
