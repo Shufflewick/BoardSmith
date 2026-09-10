@@ -422,6 +422,22 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   }
 
   /**
+   * Message for a pick nothing could say the shape of (#227).
+   *
+   * Used when the fetch failed with no sentence of its own -- it threw, or the
+   * answer carried no reason. It names the selection and states that nothing was
+   * sent, because the player's next move is to take the action again and a bare
+   * exception tells them neither.
+   */
+  function describeUndescribablePick(selection: PickMetadata): string {
+    const label = selection.prompt || selection.name;
+    return (
+      `Could not find out what "${label}" may be, so nothing has been sent. ` +
+      'Try the action again.'
+    );
+  }
+
+  /**
    * Get available choices for a pick.
    * Priority: pickSnapshots > static metadata (for execute() and tests)
    */
@@ -817,6 +833,13 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         snapshotVersion.value++;
       } else if (!result.success) {
         console.error(`[BoardSmith] Failed to fetch pick choices for '${selectionName}' after ${fetchDuration}ms:`, result.error);
+        // SAID TO THE PLAYER, not only to the console (#227). A dependent
+        // selection's list and bounds come from a round trip, and a refused one
+        // left the panel quietly holding whatever the one-shot metadata carried
+        // -- a world's unbounded fallback, drawn as a choice the game had just
+        // declined to describe. Both shells watch `errorTick`, so this is the
+        // one place that puts the refusal on screen in a table and in a world.
+        setError(result.error ?? describeUndescribablePick(selection));
       }
     } catch (err) {
       const fetchDuration = Date.now() - fetchStartTime;
@@ -824,6 +847,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         `[BoardSmith] Error fetching pick choices for '${selectionName}' after ${fetchDuration}ms:`,
         err
       );
+      setError(describeUndescribablePick(selection));
     } finally {
       isLoadingChoices.value = false;
     }

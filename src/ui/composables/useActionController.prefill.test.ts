@@ -7,7 +7,7 @@
  * is how world mode works: the frozen metadata carries no choices at all.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ref, nextTick } from 'vue';
 import {
   useActionController,
@@ -149,5 +149,68 @@ describe('useActionController prefill', () => {
     expect(controller.lastError.value).toBe(
       'Cannot prefill "Select a building" with "observatory". Pick one of: University, Mine.'
     );
+  });
+
+  /**
+   * #227: A PICK THE GAME WOULD NOT ANSWER IS SAID OUT LOUD.
+   *
+   * A dependent selection's list and bounds come from a round trip, and a
+   * refused one used to reach `console.error` and nowhere else -- so the panel
+   * quietly kept whatever the one-shot metadata carried and the player was
+   * shown a choice the game had just declined to describe. Both shells watch
+   * `errorTick` and speak, so surfacing it here is what puts the sentence on
+   * screen in a table AND in a world.
+   */
+  describe('a pick the game would not describe (#227)', () => {
+    /** The plot answers; the building's own round trip fails as `fail` says. */
+    function fetchWhereTheBuildingFails(fail: () => PickChoicesResult) {
+      return vi.fn(async (
+        _actionName: string,
+        selectionName: string,
+      ): Promise<PickChoicesResult> => {
+        await Promise.resolve();
+        if (selectionName === 'plot') {
+          return { success: true, validElements: [{ id: 41, display: 'Plot -2,1' }] };
+        }
+        return fail();
+      });
+    }
+
+    /** Walk straight into the dependent selection with the plot prefilled. */
+    async function walkInto(fail: () => PickChoicesResult) {
+      const controller = createController(fetchWhereTheBuildingFails(fail) as never);
+      await controller.start('build', { prefill: { plot: 41 } });
+      await flush();
+      return controller;
+    }
+
+    let consoleError: ReturnType<typeof vi.spyOn>;
+    beforeEach(() => {
+      consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+    });
+    afterEach(() => consoleError.mockRestore());
+
+    it("says the game's own reason, rather than only logging it", async () => {
+      const controller = await walkInto(() => ({
+        success: false,
+        error: 'That plot is under a claim, so nothing may be built on it.',
+      }));
+
+      expect(controller.lastError.value).toBe(
+        'That plot is under a claim, so nothing may be built on it.',
+      );
+      expect(controller.errorTick.value).toBeGreaterThan(0);
+    });
+
+    it('says something a player can act on when the fetch itself throws', async () => {
+      const controller = await walkInto(() => {
+        throw new Error('the socket went');
+      });
+
+      // NAMES THE SELECTION, and says nothing has been sent: the player's next
+      // move is to take the action again, and a bare exception says neither.
+      expect(controller.lastError.value).toContain('Select a building');
+      expect(controller.lastError.value).toContain('nothing has been sent');
+    });
   });
 });
