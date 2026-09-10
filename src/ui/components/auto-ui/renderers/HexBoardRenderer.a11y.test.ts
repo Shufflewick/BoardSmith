@@ -16,24 +16,17 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { mount } from '@vue/test-utils';
-import { defineComponent, nextTick } from 'vue';
+import { nextTick } from 'vue';
 import HexBoardRenderer from './HexBoardRenderer.vue';
 import {
-  createBoardInteraction,
-  provideBoardInteraction,
-} from '../../../composables/useBoardInteraction.js';
+  mountBoardRenderer,
+  type GameElement,
+} from './board-renderer-a11y.test-helper.js';
+import { createBoardInteraction } from '../../../composables/useBoardInteraction.js';
 
-// ---------------------------------------------------------------------------
-// Local GameElement interface — mirrors HexBoardRenderer
-// ---------------------------------------------------------------------------
-interface GameElement {
-  id: number;
-  name?: string;
-  className: string;
-  attributes?: Record<string, unknown>;
-  children?: GameElement[];
-}
+/** This suite's renderer, so every mount below reads the same as the other board's. */
+const mountBoard = (element: GameElement, interaction = createBoardInteraction()) =>
+  mountBoardRenderer(HexBoardRenderer, element, interaction);
 
 /**
  * Build a hex board with `cellCount` cells in a horizontal row (r=0, q=0..N-1).
@@ -59,56 +52,39 @@ function buildHexElement(cellCount: number): GameElement {
   };
 }
 
-/**
- * Mount HexBoardRenderer inside a wrapper that provides boardInteraction.
- */
-function mountHex(element: GameElement, interaction = createBoardInteraction()) {
-  const Wrapper = defineComponent({
-    components: { HexBoardRenderer },
-    setup() {
-      provideBoardInteraction(interaction);
-    },
-    template: '<HexBoardRenderer :element="element" :depth="0" />',
-    props: { element: { type: Object, required: true } },
-  });
-  return {
-    wrapper: mount(Wrapper, { props: { element }, attachTo: document.body }),
-    interaction,
-  };
-}
 
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 describe('HexBoardRenderer a11y — role=gridcell + roving tabindex (partial — SVG focus in Safari/VoiceOver requires manual verification, research Open Q3)', () => {
   it('SVG root has role="grid" (required ancestor for role="gridcell", WR-02)', () => {
-    const { wrapper } = mountHex(buildHexElement(3));
+    const { wrapper } = mountBoard(buildHexElement(3));
     const svg = wrapper.find('svg');
     expect(svg.attributes('role')).toBe('grid');
   });
 
   it('SVG root has aria-colcount matching the column count', () => {
     // 3 cells in a single horizontal row → q=0,1,2 → hexCols = 3
-    const { wrapper } = mountHex(buildHexElement(3));
+    const { wrapper } = mountBoard(buildHexElement(3));
     const svg = wrapper.find('svg');
     expect(svg.attributes('aria-colcount')).toBe('3');
   });
 
   it('SVG root has aria-rowcount', () => {
     // Single-row board → all cells have r=0 → hexRows = 1
-    const { wrapper } = mountHex(buildHexElement(3));
+    const { wrapper } = mountBoard(buildHexElement(3));
     const svg = wrapper.find('svg');
     expect(svg.attributes('aria-rowcount')).toBe('1');
   });
 
   it('each <g> hex cell has role="gridcell"', () => {
-    const { wrapper } = mountHex(buildHexElement(3));
+    const { wrapper } = mountBoard(buildHexElement(3));
     const cells = wrapper.findAll('[role="gridcell"]');
     expect(cells.length).toBe(3);
   });
 
   it('each cell has a non-empty aria-label', () => {
-    const { wrapper } = mountHex(buildHexElement(3));
+    const { wrapper } = mountBoard(buildHexElement(3));
     const cells = wrapper.findAll('[role="gridcell"]');
     for (const cell of cells) {
       const label = cell.attributes('aria-label') ?? '';
@@ -117,21 +93,21 @@ describe('HexBoardRenderer a11y — role=gridcell + roving tabindex (partial —
   });
 
   it('exactly one cell has tabindex="0" initially', () => {
-    const { wrapper } = mountHex(buildHexElement(4));
+    const { wrapper } = mountBoard(buildHexElement(4));
     const cells = wrapper.findAll('[role="gridcell"]');
     const zeros = cells.filter(c => c.attributes('tabindex') === '0');
     expect(zeros.length).toBe(1);
   });
 
   it('all other cells have tabindex="-1" initially', () => {
-    const { wrapper } = mountHex(buildHexElement(4));
+    const { wrapper } = mountBoard(buildHexElement(4));
     const cells = wrapper.findAll('[role="gridcell"]');
     const negatives = cells.filter(c => c.attributes('tabindex') === '-1');
     expect(negatives.length).toBe(3); // 4 total - 1 with tabindex=0
   });
 
   it('ArrowRight on the SVG root advances roving tabindex from cell 0 to cell 1', async () => {
-    const { wrapper } = mountHex(buildHexElement(3));
+    const { wrapper } = mountBoard(buildHexElement(3));
     const svg = wrapper.find('svg');
     expect(svg.exists()).toBe(true);
     await svg.trigger('keydown', { key: 'ArrowRight' });
@@ -152,7 +128,7 @@ describe('HexBoardRenderer candidate focus (#172)', () => {
       candidateIds.map((id) => ({ id, ref: { id } })),
       () => {},
     );
-    return mountHex(buildHexElement(6), interaction);
+    return mountBoard(buildHexElement(6), interaction);
   }
 
   it('parks the roving tab stop on the first valid target, not on cell 0', async () => {
@@ -198,7 +174,7 @@ describe('HexBoardRenderer keyboard activation follows focus (#190)', () => {
       candidateIds.map((id) => ({ id, ref: { id } })),
       (id) => picked.push(id),
     );
-    return { ...mountHex(buildHexElement(6), interaction), picked };
+    return { ...mountBoard(buildHexElement(6), interaction), picked };
   }
 
   it('Enter resolves the cell that holds focus, not the one the cursor parked on', async () => {

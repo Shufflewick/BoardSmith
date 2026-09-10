@@ -1,11 +1,9 @@
 import { DESIGN_DIR } from './lib/project-paths.js';
 import { describe, it, expect, vi } from 'vitest';
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
-import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+import { join } from 'node:path';
 import { promises as fs } from 'node:fs';
 import { tempTree } from '../testing/temp-tree.test-helper.js';
+import { REPO_ROOT, spawnCli } from './spawn-cli.test-helper.js';
 
 /**
  * `cli.test.ts` — registration-level proof that CHECK-04's dual-enumeration read/report and
@@ -19,37 +17,9 @@ import { tempTree } from '../testing/temp-tree.test-helper.js';
  * behaviors this suite needs to observe exactly as a user's shell would.
  */
 
-/**
- * Every test in a file that spawns the real CLI needs more than vitest's 5s default: a spawn
- * boots Node, loads tsx, and type-strips the whole command tree, which under full-suite
- * parallelism can exceed 5s on its own. The default turned that latency into a flaky
- * assertion about nothing — these tests assert what the CLI REGISTERS, never how fast it
- * starts. This ceiling is a hang guard, not a performance budget.
- */
+// A spawn can exceed vitest's 5s default under full-suite parallelism. This is a hang guard,
+// not a performance budget; spawn-cli.test-helper.ts says why.
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
-
-const execFileAsync = promisify(execFile);
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
-// This file lives at src/cli/cli.test.ts — repo root is two levels up.
-const REPO_ROOT = join(__dirname, '..', '..');
-const CLI_BIN = join(REPO_ROOT, 'bin', 'boardsmith.js');
-
-interface SpawnResult {
-  code: number;
-  stdout: string;
-  stderr: string;
-}
-
-async function spawnCli(args: string[], cwd: string = REPO_ROOT): Promise<SpawnResult> {
-  try {
-    const { stdout, stderr } = await execFileAsync(process.execPath, [CLI_BIN, ...args], { cwd });
-    return { code: 0, stdout, stderr };
-  } catch (err) {
-    const e = err as { code?: number; stdout?: string; stderr?: string };
-    return { code: e.code ?? 1, stdout: e.stdout ?? '', stderr: e.stderr ?? '' };
-  }
-}
 
 describe('verify-derive-check — registration', () => {
   it('is registered: --help exits 0 and names --project and --json', async () => {

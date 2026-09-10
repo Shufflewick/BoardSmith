@@ -30,6 +30,7 @@ import {
 } from './verify-derive-check.js';
 import { PRESENTATION_EXCLUSION_MARKERS } from './verify-classify.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
+import { archiveRulebookSource, designProjectFixtures } from './design-project.test-helper.js';
 
 /**
  * `verify-derive-check.ts` is CHECK-04's mechanical core, MOVED and retargeted onto the closed
@@ -1311,33 +1312,13 @@ describe('verifyDeriveRecordCommand', () => {
    */
   async function setupProvenanceProject(slicePath: string, sliceText: string): Promise<string> {
     const project = join(dir, 'project');
-    const rulebookDir = join(project, DESIGN_DIR, 'rulebook');
-    await fs.mkdir(rulebookDir, { recursive: true });
-    const sourceBuf = Buffer.from('%PDF-1.4 fake rulebook bytes\n');
-    const sourceHash = createHash('sha256').update(sourceBuf).digest('hex');
-    const relArchivedPath = 'rulebook/source/rules.pdf';
-    await fs.writeFile(
-      join(rulebookDir, 'INDEX.md'),
-      renderIndex({
-        gameName: 'game',
-        edition: 'First Printing 2020',
-        archivedPath: relArchivedPath,
-        sourceHash,
-        transcribed: '2026-07-28',
-      }),
-    );
-    await fs.mkdir(dirname(join(project, DESIGN_DIR, relArchivedPath)), { recursive: true });
-    await fs.writeFile(join(project, DESIGN_DIR, relArchivedPath), sourceBuf);
+    await archiveRulebookSource(project);
     await fs.mkdir(dirname(join(project, DESIGN_DIR, slicePath)), { recursive: true });
     await fs.writeFile(join(project, DESIGN_DIR, slicePath), sliceText);
     return project;
   }
 
-  async function writeJson(name: string, value: unknown): Promise<string> {
-    const filePath = join(dir, name);
-    await fs.writeFile(filePath, JSON.stringify(value, null, 2));
-    return filePath;
-  }
+  const { writeJson } = designProjectFixtures(() => dir);
 
   it('reads --enumerator-a/--enumerator-b/--reconciler, runs reconcileSlice, and records ALL of the slice\'s classifications in one call', async () => {
     const slicePath = 'rulebook/01-x.md';
@@ -1719,17 +1700,7 @@ describe('verifyDeriveCheckCommand', () => {
     dir = tempTree('bs-verify-derive-check-command-');
   });
 
-  async function makeProject(files: Record<string, string>): Promise<string> {
-    const project = join(dir, 'project');
-    for (const [relPath, text] of Object.entries(files)) {
-      // Keys are written the way a design doc writes them — `rulebook/02-x.md`, not
-      // `design/rulebook/02-x.md` — so the fixture exercises the same resolution the CLI does.
-      const full = resolveDesignRelative(project, relPath);
-      await fs.mkdir(dirname(full), { recursive: true });
-      await fs.writeFile(full, text);
-    }
-    return project;
-  }
+  const { makeProject } = designProjectFixtures(() => dir);
 
   it('reports every Derived line pending, with zero manufactured verdicts, when no ledger has ever been written', async () => {
     const project = await makeProject({

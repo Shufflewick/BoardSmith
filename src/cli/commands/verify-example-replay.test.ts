@@ -25,6 +25,7 @@ import {
 } from './example-derivation.js';
 import { renderIndex } from './ingest-archive.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
+import { archiveRulebookSource, designProjectFixtures } from './design-project.test-helper.js';
 
 // -------------------------------------------------------------------------------------------
 // Task 1 — verdict set + createExampleReplayRecord (the record choke point)
@@ -354,17 +355,7 @@ describe('verifyExampleReplayCommand — command', () => {
     dir = tempTree('bs-verify-example-replay-command-');
   });
 
-  async function makeProject(files: Record<string, string>): Promise<string> {
-    const project = join(dir, 'project');
-    for (const [relPath, text] of Object.entries(files)) {
-      // Keys are written the way a design doc writes them — `rulebook/02-x.md`, not
-      // `design/rulebook/02-x.md` — so the fixture exercises the same resolution the CLI does.
-      const full = resolveDesignRelative(project, relPath);
-      await fs.mkdir(dirname(full), { recursive: true });
-      await fs.writeFile(full, text);
-    }
-    return project;
-  }
+  const { makeProject } = designProjectFixtures(() => dir);
 
   it('never sets process.exitCode, even when every recorded verdict is "disagrees"', async () => {
     const project = await makeProject({
@@ -523,23 +514,7 @@ describe('verifyExampleRecordCommand — record', () => {
     dir = tempTree('bs-verify-example-record-');
   });
 
-  async function makeProject(files: Record<string, string>): Promise<string> {
-    const project = join(dir, 'project');
-    for (const [relPath, text] of Object.entries(files)) {
-      // Keys are written the way a design doc writes them — `rulebook/02-x.md`, not
-      // `design/rulebook/02-x.md` — so the fixture exercises the same resolution the CLI does.
-      const full = resolveDesignRelative(project, relPath);
-      await fs.mkdir(dirname(full), { recursive: true });
-      await fs.writeFile(full, text);
-    }
-    return project;
-  }
-
-  async function writeJson(name: string, value: unknown): Promise<string> {
-    const filePath = join(dir, name);
-    await fs.writeFile(filePath, JSON.stringify(value, null, 2));
-    return filePath;
-  }
+  const { makeProject, writeJson } = designProjectFixtures(() => dir);
 
   const SLICE_TEXT =
     'p.2, Punch Examples:\n' +
@@ -922,11 +897,7 @@ describe('verifyExampleRecordCommand / verifyExampleReplayCommand — provenance
     };
   }
 
-  async function writeJson(name: string, value: unknown): Promise<string> {
-    const filePath = join(dir, name);
-    await fs.writeFile(filePath, JSON.stringify(value, null, 2));
-    return filePath;
-  }
+  const { writeJson } = designProjectFixtures(() => dir);
 
   /** No INDEX.md at all — computeVerificationScope never reaches "full"; provenance is null. */
   async function makeUnverifiedProject(): Promise<string> {
@@ -939,23 +910,7 @@ describe('verifyExampleRecordCommand / verifyExampleReplayCommand — provenance
   /** A genuinely single-source, fully-archived project — provenance covers every slice. */
   async function makeVerifiedProject(): Promise<string> {
     const project = join(dir, 'verified-project');
-    const rulebookDir = join(project, DESIGN_DIR, 'rulebook');
-    await fs.mkdir(rulebookDir, { recursive: true });
-    const sourceBuf = Buffer.from('%PDF-1.4 fake rulebook bytes\n');
-    const sourceHash = createHash('sha256').update(sourceBuf).digest('hex');
-    const relArchivedPath = 'rulebook/source/rules.pdf';
-    await fs.writeFile(
-      join(rulebookDir, 'INDEX.md'),
-      renderIndex({
-        gameName: 'game',
-        edition: 'First Printing 2020',
-        archivedPath: relArchivedPath,
-        sourceHash,
-        transcribed: '2026-07-28',
-      }),
-    );
-    await fs.mkdir(dirname(join(project, DESIGN_DIR, relArchivedPath)), { recursive: true });
-    await fs.writeFile(join(project, DESIGN_DIR, relArchivedPath), sourceBuf);
+    const { bytes: sourceBuf } = await archiveRulebookSource(project);
     await fs.writeFile(join(project, 'rules.pdf'), sourceBuf);
     await fs.writeFile(join(project, DESIGN_DIR, 'rulebook', '02-punch.md'), SLICE_TEXT);
     return project;
@@ -968,26 +923,10 @@ describe('verifyExampleRecordCommand / verifyExampleReplayCommand — provenance
    */
   async function makeUncoveredSliceProject(): Promise<string> {
     const project = join(dir, 'uncovered-project');
-    const rulebookDir = join(project, DESIGN_DIR, 'rulebook');
-    await fs.mkdir(rulebookDir, { recursive: true });
-    const sourceBuf = Buffer.from('%PDF-1.4 fake rulebook bytes\n');
-    const sourceHash = createHash('sha256').update(sourceBuf).digest('hex');
-    const relArchivedPath = 'rulebook/source/rules.pdf';
-    await fs.writeFile(
-      join(rulebookDir, 'INDEX.md'),
-      renderIndex({
-        gameName: 'game',
-        edition: 'First Printing 2020',
-        archivedPath: relArchivedPath,
-        sourceHash,
-        transcribed: '2026-07-28',
-      }),
-    );
-    await fs.mkdir(dirname(join(project, DESIGN_DIR, relArchivedPath)), { recursive: true });
-    await fs.writeFile(join(project, DESIGN_DIR, relArchivedPath), sourceBuf);
+    const { bytes: sourceBuf } = await archiveRulebookSource(project);
     await fs.writeFile(join(project, 'rules.pdf'), sourceBuf);
     await fs.writeFile(join(project, 'cards.pdf'), Buffer.from('fake bytes for cards.pdf\n'));
-    await fs.writeFile(join(rulebookDir, 'CARDS.md'), SLICE_TEXT);
+    await fs.writeFile(join(project, DESIGN_DIR, 'rulebook', 'CARDS.md'), SLICE_TEXT);
     return project;
   }
 
@@ -1126,11 +1065,7 @@ describe('verifyExampleTranslateCommand — translate', () => {
     return project;
   }
 
-  async function writeJson(name: string, value: unknown): Promise<string> {
-    const filePath = join(dir, name);
-    await fs.writeFile(filePath, JSON.stringify(value, null, 2));
-    return filePath;
-  }
+  const { writeJson } = designProjectFixtures(() => dir);
 
   function extractionEntry(overrides: Partial<Record<string, unknown>> = {}) {
     return {
