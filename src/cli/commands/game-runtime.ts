@@ -1,4 +1,4 @@
-import { existsSync, writeFileSync } from 'node:fs';
+import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve, dirname } from 'node:path';
 import { build, type Plugin as EsbuildPlugin } from 'esbuild';
 import { pathToFileURL, fileURLToPath } from 'node:url';
@@ -26,21 +26,77 @@ const __dirname = dirname(__filename);
 export const cliMonorepoRoot = resolve(__dirname, '..', '..', '..');
 
 /**
- * Single source of truth for the `boardsmith` package → monorepo `src/` subdirectory
- * map. Consumed by `boardsmithResolvePlugin` (esbuild, used here and by `simulate.ts`)
- * AND by `dev.ts`'s Vite plugin, so both loaders stay in sync when a new subpath
- * export is added.
+ * WHAT `boardsmith/<x>` MEANS INSIDE THIS CHECKOUT, READ FROM THE PACKAGE'S OWN
+ * `exports`.
+ *
+ * It used to be a hand-written map of specifier → `src/` subdirectory, and a
+ * hand-written copy of a list that already exists is a list that drifts. It
+ * had: eight of the package's nineteen entries, with `boardsmith/world`,
+ * `boardsmith/persistence`, `boardsmith/session-host`, `boardsmith/types`,
+ * `boardsmith/utils`, `boardsmith/asset-scan` and `boardsmith/eslint-plugin`
+ * all missing -- so in monorepo context a world project's rules could not
+ * resolve the module that makes it a world at all, and the person who hit it
+ * would be debugging rules that would not load for a reason nothing named.
+ *
+ * `package.json`'s `exports` is not a second list to keep in step: it is THE
+ * definition of what a game may import, enforced by Node itself for every
+ * standalone project. Deriving from it makes the two contexts agree by
+ * construction -- a new entry needs no edit here, and one that is missing here
+ * cannot exist. It also resolves the subpaths the old map could not express:
+ * `boardsmith/ui/auto-ui` is its own export pointing at
+ * `src/ui/components/auto-ui/`, which the previous code tried to rebuild from
+ * a directory name and a guess at the layout, and could not.
+ *
+ * READ ONCE, ON FIRST USE. Not at module load: every CLI command imports this
+ * file, and only the monorepo-context loaders below need the manifest -- so a
+ * checkout whose `package.json` cannot be read fails where it is used, saying
+ * what it wanted, rather than taking every command down at import time.
  */
-export const BOARDSMITH_PACKAGE_DIRS: Record<string, string> = {
-  'boardsmith': 'engine',
-  'boardsmith/bot': 'bot',
-  'boardsmith/bot-trainer': 'bot-trainer',
-  'boardsmith/client': 'client',
-  'boardsmith/runtime': 'runtime',
-  'boardsmith/session': 'session',
-  'boardsmith/testing': 'testing',
-  'boardsmith/ui': 'ui',
-};
+let sourceEntries: ReadonlyMap<string, string> | null = null;
+
+export function boardsmithSourceEntries(): ReadonlyMap<string, string> {
+  if (sourceEntries !== null) return sourceEntries;
+
+  const manifestPath = join(cliMonorepoRoot, 'package.json');
+  let manifest: { exports?: Record<string, unknown> };
+  try {
+    manifest = JSON.parse(readFileSync(manifestPath, 'utf-8')) as { exports?: Record<string, unknown> };
+  } catch (error) {
+    throw new Error(
+      `Could not read ${manifestPath}, so 'boardsmith/...' imports cannot be resolved from ` +
+        `source. This is the BoardSmith checkout's own manifest and it is where every ` +
+        `entrypoint is declared: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+
+  const declared = Object.entries(manifest.exports ?? {});
+  if (declared.length === 0) {
+    throw new Error(
+      `${manifestPath} declares no "exports", so nothing says what 'boardsmith/...' means. ` +
+        'Every entrypoint a game may import is declared there.',
+    );
+  }
+
+  const entries = new Map<string, string>();
+  for (const [subpath, target] of declared) {
+    // A conditional export names the file under `import`/`types`; a plain one
+    // IS the file. Anything else is an export this loader cannot serve, and it
+    // is left out rather than guessed at -- Node would refuse it too.
+    const file =
+      typeof target === 'string'
+        ? target
+        : ((target as { import?: string; types?: string } | null)?.import ??
+          (target as { types?: string } | null)?.types);
+    if (typeof file !== 'string') continue;
+    entries.set(
+      subpath === '.' ? 'boardsmith' : `boardsmith/${subpath.replace(/^\.\//, '')}`,
+      resolve(cliMonorepoRoot, file),
+    );
+  }
+
+  sourceEntries = entries;
+  return entries;
+}
 
 /**
  * esbuild plugin to resolve boardsmith/* imports to the monorepo source.
@@ -61,12 +117,11 @@ export function boardsmithResolvePlugin(context: 'monorepo' | 'standalone'): Esb
     name: 'boardsmith-resolve',
     setup(esbuildBuild) {
       esbuildBuild.onResolve({ filter: /^boardsmith(\/.*)?$/ }, (args) => {
-        const importPath = args.path;
-        const dirName = BOARDSMITH_PACKAGE_DIRS[importPath];
-        if (dirName) {
-          return { path: join(cliMonorepoRoot, 'src', dirName, 'index.ts') };
-        }
-        return undefined;
+        // A specifier the package does not export is left to esbuild, which
+        // refuses it by name. Inventing a path for it would turn a typo into a
+        // missing file somewhere in the library.
+        const file = boardsmithSourceEntries().get(args.path);
+        return file === undefined ? undefined : { path: file };
       });
     },
   };

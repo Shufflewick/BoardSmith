@@ -101,16 +101,27 @@ function connect(): void {
   });
 }
 
+/**
+ * EVERYTHING THE HOST SAYS THAT IS THE FRAME'S ALONE, relayed untouched.
+ *
+ * A LIST rather than a run of cases, because the list is the whole rule and a
+ * missing entry is invisible: `world_pick_result` was missing from it (#227) and
+ * every layer either side of this bar stayed green while a re-asked pick was
+ * never answered. `useWorldHost` holds a promise keyed on each of these
+ * `requestId`s, so one dropped here is a panel waiting for its own timeout.
+ */
+const RELAYED_TO_FRAME = new Set(['world_events', 'world_response', 'world_pick_result']);
+
 function onHostMessage(message: Record<string, unknown>): void {
+  if (RELAYED_TO_FRAME.has(message.type as string)) {
+    postToWorld(message);
+    return;
+  }
   switch (message.type) {
     case 'world_state':
       mySeat.value = (message.seat as number | null) ?? null;
       worldName.value = (message.worldName as string | null) ?? cfg.displayName;
       lastState.value = message;
-      postToWorld(message);
-      return;
-    case 'world_events':
-    case 'world_response':
       postToWorld(message);
       return;
     case 'world_status':
@@ -161,6 +172,27 @@ function onWindowMessage(event: MessageEvent): void {
       order: data.order,
       action: data.action as string,
       args: (data.args as Record<string, unknown>) ?? {},
+    });
+    return;
+  }
+  if (data.type === 'world_pick') {
+    // ONE PICK, RE-ASKED WITH WHAT IS BOUND SO FAR (#227, ShufflewickPub #378).
+    //
+    // A world's offer is enumerated in one frame with nothing bound, so a
+    // selection whose SHAPE reads an earlier one's value -- a crew whose size is
+    // the chosen ship's hold -- cannot be answered there. The frame asks again;
+    // the host answers it read-only, over the partitions the action declares.
+    //
+    // RELAYED UNTOUCHED, like the command above: the `requestId` is what the
+    // frame matches the answer on, and the args are the panel's own accumulated
+    // selections. `world-host.ts` owns the absent-args default, so there is no
+    // second place deciding what an empty ask means.
+    wsSend({
+      type: 'pick',
+      requestId: data.requestId as string,
+      action: data.action as string,
+      selection: data.selection as string,
+      args: data.args,
     });
   }
 }
