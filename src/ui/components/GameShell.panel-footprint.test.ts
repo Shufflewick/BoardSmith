@@ -215,11 +215,23 @@ describe('#230: minimizing the bar reserves one row and gives the rest back', ()
     expect(collapsed).toContain('env(safe-area-inset-bottom)');
   });
 
-  it('points both footprint tokens at it while the bar is down', () => {
+  it('caps the ceiling at it, and lets the reservation follow', () => {
+    // ONE override, not two. Every declaration of the reservation is already
+    // clamped to the ceiling by its own `min(...)`, so capping the ceiling
+    // brings the reservation with it in every tier and the pair cannot drift.
+    // A second override would be a second place to disagree.
     expect(declaration('.game-shell__game.action-bar-collapsed', '--bsg-panel-max'))
       .toBe('var(--bsg-action-bar-collapsed)');
-    expect(declaration('.game-shell__game.action-bar-collapsed', '--bsg-panel-reserved'))
-      .toBe('var(--bsg-action-bar-collapsed)');
+    for (const tier of ['base', 'landscape-short'] as const) {
+      expect(
+        tokensFor(tier)['--bsg-panel-reserved'],
+        `the ${tier} reservation is not clamped to the ceiling, so collapsing would ` +
+        'reserve more board than the collapsed bar occupies',
+      ).toContain('var(--bsg-panel-max)');
+    }
+    expect(source).not.toMatch(
+      /\.game-shell__game\.action-bar-collapsed \{[^}]*--bsg-panel-reserved/,
+    );
   });
 
   it('keeps the collapsed bar to a single un-wrapping row', () => {
@@ -234,11 +246,13 @@ describe('#230: minimizing the bar reserves one row and gives the rest back', ()
       for (const tier of ['base', 'landscape-short'] as const) {
         for (const zoom of ZOOMS) {
           const open = tokensFor(tier, zoom);
+          // The collapsed state as the browser resolves it: the ceiling is
+          // overridden and the tier's own reservation expression is left alone,
+          // so what this computes is what the clamp actually produces.
           const down: Record<string, string> = {
             ...open,
             '--bsg-action-bar-collapsed': declaration('.game-shell__game', '--bsg-action-bar-collapsed'),
             '--bsg-panel-max': declaration('.game-shell__game.action-bar-collapsed', '--bsg-panel-max'),
-            '--bsg-panel-reserved': declaration('.game-shell__game.action-bar-collapsed', '--bsg-panel-reserved'),
           };
 
           const max = px(declaration('.actionbar', 'max-height'), down, env);

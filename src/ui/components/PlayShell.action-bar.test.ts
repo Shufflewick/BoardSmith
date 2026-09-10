@@ -230,54 +230,53 @@ describe('the bar carries the sidebar rail\'s own gesture', () => {
 });
 
 describe('a minimized bar never strands the player', () => {
-  it('opens itself when an action starts, without forgetting the preference', async () => {
-    const { wrapper, controller, minimized } = mountDock({ actionBarMinimized: true });
+  /**
+   * A minimized bar with `move` open: the state every assertion below starts
+   * from. It ASSERTS the opening, because a helper that quietly left the bar
+   * down would make the rest of these vacuous.
+   */
+  async function asked(): Promise<Mounted> {
+    const shell = mountDock({ actionBarMinimized: true });
     await flush();
-    expect(collapsed(wrapper)).toBe(true);
+    expect(collapsed(shell.wrapper), 'the bar did not start down').toBe(true);
+    await shell.controller.start('move');
+    await flush();
+    expect(collapsed(shell.wrapper), 'the bar stayed down while a question was open').toBe(false);
+    return shell;
+  }
 
-    await controller.start('move');
-    await flush();
-    expect(collapsed(wrapper)).toBe(false);
+  it('opens itself when an action starts, without forgetting the preference', async () => {
+    const { wrapper, minimized } = await asked();
     expect(wrapper.find('[data-testid="bs-action-panel"]').exists()).toBe(true);
     // The player's own choice survives the interruption.
     expect(minimized()).toBe(true);
   });
 
   it('goes back down of its own accord when the action resolves', async () => {
-    const { wrapper, controller } = mountDock({ actionBarMinimized: true });
-    await flush();
-    await controller.start('move');
-    await flush();
-    expect(collapsed(wrapper)).toBe(false);
-
+    const { wrapper, controller } = await asked();
     controller.cancel();
     await flush();
     expect(collapsed(wrapper)).toBe(true);
   });
 
-  it('keeps the toggle live mid-action, so the control is never dead', async () => {
-    const { wrapper, controller } = mountDock({ actionBarMinimized: true });
-    await flush();
-    await controller.start('move');
-    await flush();
-    expect(collapsed(wrapper)).toBe(false);
-
+  /** The player pushing the bar down again with a question still open. */
+  async function pushDownAgain(wrapper: VueWrapper): Promise<void> {
     await toggle(wrapper).trigger('click');
     await flush();
-    expect(collapsed(wrapper)).toBe(true);
+    expect(collapsed(wrapper), 'the toggle was dead while a question was open').toBe(true);
+  }
+
+  it('keeps the toggle live mid-action, so the control is never dead', async () => {
+    const { wrapper, controller } = await asked();
+    await pushDownAgain(wrapper);
     // Still mid-action: the bar went down because the player said so, not
     // because the question went away.
     expect(controller.currentAction.value).toBe('move');
   });
 
   it('opens again for the NEXT question, not just the first', async () => {
-    const { wrapper, controller } = mountDock({ actionBarMinimized: true });
-    await flush();
-    await controller.start('move');
-    await flush();
-    await toggle(wrapper).trigger('click');
-    await flush();
-    expect(collapsed(wrapper)).toBe(true);
+    const { wrapper, controller } = await asked();
+    await pushDownAgain(wrapper);
 
     controller.cancel();
     await flush();

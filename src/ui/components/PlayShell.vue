@@ -694,14 +694,17 @@ const mobileToggleLabel = computed(() => {
                              + env(safe-area-inset-bottom));
 }
 
-/* Down, the reservation IS the ceiling. That is what makes minimizing give the
-   board its space back instead of just emptying the box: the region reserves one
-   row, the bar cannot grow past one row, so nothing is covered and there is no
-   clearance left to scroll for. Both tokens move together or the invariant the
-   footprint test checks would hold by luck. */
+/* Down, the CEILING is one row -- and that is the only override needed, because
+   every declaration of `--bsg-panel-reserved` above is already clamped to the
+   ceiling by its own `min(...)`. So the reservation follows to one row on its
+   own, in every tier, and the two cannot drift apart.
+
+   That equality is what makes minimizing give the board its space back rather
+   than just emptying the box: the region reserves one row, the bar cannot grow
+   past one row, nothing is covered, and there is no clearance left to scroll
+   for. */
 .game-shell__game.action-bar-collapsed {
   --bsg-panel-max: var(--bsg-action-bar-collapsed);
-  --bsg-panel-reserved: var(--bsg-action-bar-collapsed);
 }
 
 /* Stage: sidebar + boardregion side by side; fills remaining height */
