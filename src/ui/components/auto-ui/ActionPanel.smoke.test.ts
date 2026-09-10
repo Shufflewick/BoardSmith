@@ -11,53 +11,13 @@
  */
 import { describe, it, expect } from 'vitest';
 import { mount } from '@vue/test-utils';
-import { ref, computed } from 'vue';
 import ActionPanel from './ActionPanel.vue';
 import { GAME_CONTEXT_KEYS } from '../../composables/useGameContext.js';
-
-/**
- * Build the minimal controller object ActionPanel reads on first render.
- * Every property accessed by ActionPanel's <script setup> must be present.
- * All reactive values are plain refs/computeds that return stable falsy values.
- */
-function makeMinimalController() {
-  const noop = () => undefined;
-  return {
-    // Refs accessed directly (not wrapped in computed by ActionPanel)
-    currentAction: ref<string | null>(null),
-    isExecuting: ref(false),
-    isLoadingChoices: ref(false),
-    actionSnapshot: ref(null),
-
-    // Refs that ActionPanel wraps in computed(() => x.value)
-    animationsPending: ref(false),
-    showActionPanel: ref(true),
-    repeatingState: ref(null),
-    multiSelectDraft: ref(null),
-    currentArgs: ref<Record<string, unknown>>({}),
-    currentPick: ref(null),
-
-    // Functions called in computed getters / template handlers
-    getCurrentChoices: () => [] as unknown[],
-    getValidElements: () => [] as unknown[],
-    getCollectedPick: () => null,
-    isMultiSelectSelected: () => false,
-
-    // Async functions used in event handlers only (not called on render)
-    start: async () => { },
-    fill: async () => ({ valid: false, error: 'smoke test' }),
-    skip: noop,
-    cancel: noop,
-    clear: noop,
-    execute: async () => ({ success: false }),
-    toggleMultiSelect: async () => { },
-    confirmMultiSelect: async () => { },
-  };
-}
+import { stubActionController } from './action-panel-controller.test-helper.js';
 
 describe('ActionPanel smoke test', () => {
   it('mounts a real SFC in jsdom and produces DOM', () => {
-    const controller = makeMinimalController();
+    const controller = stubActionController();
 
     const wrapper = mount(ActionPanel, {
       global: {

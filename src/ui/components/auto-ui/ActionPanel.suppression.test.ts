@@ -12,44 +12,13 @@
  */
 import { describe, it, expect } from 'vitest';
 import { mount } from '@vue/test-utils';
-import { ref } from 'vue';
 import ActionPanel from './ActionPanel.vue';
 import { GAME_CONTEXT_KEYS } from '../../composables/useGameContext.js';
-
-function makeMinimalController() {
-  const noop = () => undefined;
-  return {
-    currentAction: ref<string | null>(null),
-    isExecuting: ref(false),
-    isLoadingChoices: ref(false),
-    actionSnapshot: ref(null),
-
-    animationsPending: ref(false),
-    showActionPanel: ref(true),
-    repeatingState: ref(null),
-    multiSelectDraft: ref(null),
-    currentArgs: ref<Record<string, unknown>>({}),
-    currentPick: ref(null),
-
-    getCurrentChoices: () => [] as unknown[],
-    getValidElements: () => [] as unknown[],
-    getCollectedPick: () => null,
-    isMultiSelectSelected: () => false,
-
-    start: async () => { },
-    fill: async () => ({ valid: false, error: 'test' }),
-    skip: noop,
-    cancel: noop,
-    clear: noop,
-    execute: async () => ({ success: false }),
-    toggleMultiSelect: async () => { },
-    confirmMultiSelect: async () => { },
-  };
-}
+import { stubActionController } from './action-panel-controller.test-helper.js';
 
 describe('ActionPanel Action Panel suppression (LIBX-01)', () => {
   it('hides the Action Panel button for a suppressFromActionPanel action while a sibling un-suppressed action still renders', () => {
-    const controller = makeMinimalController();
+    const controller = stubActionController();
 
     const wrapper = mount(ActionPanel, {
       global: {
@@ -85,7 +54,7 @@ describe('ActionPanel Action Panel suppression (LIBX-01)', () => {
   });
 
   it('renders the suppressed action when it is the ONLY one, and still passes it through unmodified (executable-elsewhere invariant)', () => {
-    const controller = makeMinimalController();
+    const controller = stubActionController();
 
     const wrapper = mount(ActionPanel, {
       global: {

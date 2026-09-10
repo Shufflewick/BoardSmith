@@ -23,9 +23,9 @@
  * editor why the sentence they just removed mattered.
  */
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { dirname, join } from 'node:path';
+import { dirname, join, sep } from 'node:path';
 
 const DOCS = dirname(fileURLToPath(import.meta.url));
 const REPO = dirname(DOCS);
@@ -97,23 +97,56 @@ describe('Action Panel parity doctrine', () => {
   });
 });
 
+/**
+ * Every file NAMED for the surface, found rather than listed (#233).
+ *
+ * A hand-written list is the wrong shape for this gate, and #233 is the proof:
+ * `ActionPanel.focus.test.ts` kept the retired noun in three comments for as
+ * long as it did because nobody remembered to add it, and a retirement gate
+ * that does not cover the file where the word survives is not a gate. It finds
+ * every file under `src/` whose name mentions the surface -- fourteen when this
+ * replaced the list, and #228's three new ones the moment they merged, with no
+ * edit here.
+ *
+ * `docs/action-panel-parity.test.ts` matches the pattern and is excluded: this
+ * file has to spell the retired noun to retire it.
+ */
+const surfaceOwnFiles = (): readonly string[] =>
+  (readdirSync(join(REPO, 'src'), { recursive: true }) as string[])
+    .map((entry) => join('src', entry).split(sep).join('/'))
+    .filter((path) => /(^|\/)[^/]*(ActionPanel|action-panel)[^/]*$/.test(path))
+    .filter((path) => statSync(join(REPO, path)).isFile())
+    .sort();
+
 describe('one name for the surface: "Action Panel"', () => {
-  const NAMED_SURFACES = [
+  /**
+   * The prose surfaces: files that discuss the panel without being named for
+   * it, so no derivation can find them. The shells are here because the
+   * surface's own container is exactly where "dock" creeps back in -- the
+   * issue that asked #230 for a collapse control called it one. The bar is
+   * `.actionbar`; the panel is the Action Panel.
+   */
+  const PROSE_SURFACES = [
     'docs/actions-and-flow.md',
     'docs/custom-ui-guide.md',
     'docs/ui-components.md',
     'src/cli/slash-command/bs/build/build.md',
     'src/engine/action/action-builder.ts',
     'src/engine/action/types.ts',
-    'src/ui/components/auto-ui/ActionPanel.vue',
     'src/ui/components/GameShell.vue',
-    // The shared chrome and the world adapter, added when #230 gave the bar a
-    // collapse control: the surface's own container is exactly where "dock"
-    // creeps back in, because the issue that asked for the control called it
-    // one. The bar is `.actionbar`; the panel is the Action Panel.
     'src/ui/components/PlayShell.vue',
     'src/ui/world/WorldShell.vue',
   ] as const;
+
+  const NAMED_SURFACES = [...surfaceOwnFiles(), ...PROSE_SURFACES];
+
+  it('covers every file named for the surface, so none is covered by memory', () => {
+    // The list this replaced named ActionPanel.vue and nothing else under
+    // auto-ui/, which is how three comments in a sibling test survived (#233).
+    expect(surfaceOwnFiles()).toContain('src/ui/components/auto-ui/ActionPanel.vue');
+    expect(surfaceOwnFiles()).toContain('src/ui/components/auto-ui/ActionPanel.focus.test.ts');
+    expect(surfaceOwnFiles()).toContain('src/ui/components/GameShell.action-panel-suppression.test.ts');
+  });
 
   it.each(NAMED_SURFACES)('%s does not call it a "dock"', (path) => {
     const offenders = read(path)

@@ -49,16 +49,12 @@
  * afterwards, for the reason #227 gives: a checked-in game project inside the
  * library would be a second thing to keep compiling.
  */
-import { rmSync } from 'node:fs';
 import {
   assert,
   check,
-  loadChromium,
-  requireInstalledCheckout,
-  startWorldHost,
+  runBrowserRegression,
   summarise,
   surfaceOf,
-  writeWorldFixture,
 } from './browser-harness.mjs';
 
 // ── The fixture world ────────────────────────────────────────────────────────
@@ -198,8 +194,7 @@ const collapse = async (page) => {
   await page.waitForTimeout(150);
 };
 
-async function drive({ chromium, fixture }) {
-  const hostUrl = await startWorldHost({ fixture, displayName: 'Collapse Garden' });
+async function drive({ chromium, hostUrl }) {
   const browser = await chromium.launch();
 
   // A desktop and a phone. The phone is the width the issue's "get it off the
@@ -315,23 +310,20 @@ async function drive({ chromium, fixture }) {
   return summarise('measured on screen in a real browser at both widths.');
 }
 
-async function main() {
-  const chromium = await loadChromium('action-bar-collapse-browser.mjs');
-  const fixture = writeWorldFixture({
-    slug: 'collapse-garden',
-    displayName: 'Collapse Garden',
-    gameClass: 'Garden',
-    rules: RULES,
-    boardFile: 'GardenBoard',
-    board: BOARD,
-  });
-  try {
-    return await drive({ chromium, fixture });
-  } finally {
-    rmSync(fixture, { recursive: true, force: true });
-  }
-}
-
-requireInstalledCheckout('action-bar-collapse-browser.mjs');
-
-process.exit(await main());
+// THE WHOLE RUN, IN THE HARNESS'S ORDER (#231). It checks the checkout is
+// installed, finds a Chromium or refuses, serves the fixture world, stops the
+// host before removing its project, and exits on what `drive` reports.
+await runBrowserRegression(
+  {
+    script: 'action-bar-collapse-browser.mjs',
+    fixture: {
+      slug: 'collapse-garden',
+      displayName: 'Collapse Garden',
+      gameClass: 'Garden',
+      rules: RULES,
+      boardFile: 'GardenBoard',
+      board: BOARD,
+    },
+  },
+  drive,
+);

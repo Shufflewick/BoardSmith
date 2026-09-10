@@ -14,41 +14,12 @@
  * controller is a spy on every verb it has, and opening, entering, leaving and
  * re-entering groups must leave every one of them uncalled.
  */
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { mount } from '@vue/test-utils';
-import { ref, nextTick } from 'vue';
+import { nextTick } from 'vue';
 import ActionPanel from './ActionPanel.vue';
 import { GAME_CONTEXT_KEYS } from '../../composables/useGameContext.js';
-
-/** Every verb the panel can reach on the controller, spied. */
-function makeSpyController() {
-  return {
-    currentAction: ref<string | null>(null),
-    isExecuting: ref(false),
-    isLoadingChoices: ref(false),
-    actionSnapshot: ref(null),
-    animationsPending: ref(false),
-    showActionPanel: ref(true),
-    repeatingState: ref(null),
-    multiSelectDraft: ref(null),
-    currentArgs: ref<Record<string, unknown>>({}),
-    currentPick: ref(null),
-
-    getCurrentChoices: vi.fn(() => [] as unknown[]),
-    getValidElements: vi.fn(() => [] as unknown[]),
-    getCollectedPick: vi.fn(() => null),
-    isMultiSelectSelected: vi.fn(() => false),
-
-    start: vi.fn(async () => { }),
-    fill: vi.fn(async () => ({ valid: false, error: 'test' })),
-    skip: vi.fn(),
-    cancel: vi.fn(),
-    clear: vi.fn(),
-    execute: vi.fn(async () => ({ success: true })),
-    toggleMultiSelect: vi.fn(async () => { }),
-    confirmMultiSelect: vi.fn(async () => { }),
-  };
-}
+import { stubActionController } from './action-panel-controller.test-helper.js';
 
 type Meta = {
   name: string;
@@ -61,7 +32,7 @@ type Meta = {
 };
 
 function mountPanel(actions: Meta[], extra: Record<string, unknown> = {}) {
-  const controller = makeSpyController();
+  const controller = stubActionController();
   const metadata: Record<string, unknown> = {};
   for (const action of actions) metadata[action.name] = { selections: [], ...action };
   const wrapper = mount(ActionPanel, {

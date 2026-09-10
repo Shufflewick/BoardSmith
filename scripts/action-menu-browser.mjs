@@ -44,18 +44,13 @@
  * The fixture world is written to a temp directory per run and removed
  * afterwards, for the reasons #227's script gives.
  */
-import { rmSync } from 'node:fs';
-
 import {
   assert,
   check,
-  loadChromium,
-  requireInstalledCheckout,
-  startWorldHost,
+  runBrowserRegression,
   summarise,
   surfaceOf,
   waitUntil,
-  writeWorldFixture,
 } from './browser-harness.mjs';
 
 // ── The fixture world ────────────────────────────────────────────────────────
@@ -223,17 +218,6 @@ export default defineComponent({
 });
 `;
 
-/** The fixture project, written fresh and removed when the run ends. */
-const writeFixture = () =>
-  writeWorldFixture({
-    slug: 'action-menu-realm',
-    displayName: 'Action Menu Realm',
-    gameClass: 'Realm',
-    rules: RULES,
-    boardFile: 'RealmBoard',
-    board: BOARD,
-  });
-
 // ── Reading the panel ───────────────────────────────────────────────────────
 
 /** Value equality for the small arrays these assertions compare. */
@@ -355,35 +339,26 @@ async function tabTo(page, target, limit = 25) {
   );
 }
 
-async function main() {
-  const chromium = await loadChromium('action-menu-browser.mjs');
-  const fixture = writeFixture();
-  // THE FIXTURE IS REMOVED WHATEVER HAPPENS, from here on. A temp world left
-  // behind by a crashed build is exactly the litter this must not leave.
+async function drive({ chromium, hostUrl }) {
+  const browser = await chromium.launch();
   try {
-    const hostUrl = await startWorldHost({ fixture, displayName: 'Action Menu Realm' });
-    const browser = await chromium.launch();
-    try {
-      // Four sessions, because each is about something the others cannot be:
-      // the collapsible action bar the menu lives in, one seat walking the menu,
-      // two seats moving each other's availability, and one narrow screen.
-      //
-      // THE ORDER IS LOAD-BEARING, because the world is DURABLE: it is one
-      // world for the whole run, and every session inherits what the previous
-      // one did to it. The bar session goes first because it needs the deepest
-      // nesting and takes no action at all, so it leaves the world pristine for
-      // the walk. The walk spends the ore and the water, which empties `Dump`;
-      // the two-seat session closes the registry, which empties `Empire
-      // settings`; and the narrow screen reads what is left.
-      await theMenuInsideTheCollapsibleBar({ browser, hostUrl });
-      await oneSeatWalksTheMenu({ browser, hostUrl });
-      await anotherSeatMovesTheLevel({ browser, hostUrl });
-      await theMenuOnANarrowScreen({ browser, hostUrl });
-    } finally {
-      await browser.close();
-    }
+    // Four sessions, because each is about something the others cannot be:
+    // the collapsible action bar the menu lives in, one seat walking the menu,
+    // two seats moving each other's availability, and one narrow screen.
+    //
+    // THE ORDER IS LOAD-BEARING, because the world is DURABLE: it is one
+    // world for the whole run, and every session inherits what the previous
+    // one did to it. The bar session goes first because it needs the deepest
+    // nesting and takes no action at all, so it leaves the world pristine for
+    // the walk. The walk spends the ore and the water, which empties `Dump`;
+    // the two-seat session closes the registry, which empties `Empire
+    // settings`; and the narrow screen reads what is left.
+    await theMenuInsideTheCollapsibleBar({ browser, hostUrl });
+    await oneSeatWalksTheMenu({ browser, hostUrl });
+    await anotherSeatMovesTheLevel({ browser, hostUrl });
+    await theMenuOnANarrowScreen({ browser, hostUrl });
   } finally {
-    rmSync(fixture, { recursive: true, force: true });
+    await browser.close();
   }
   return summarise('through the real action panel in a real browser.');
 }
@@ -768,6 +743,20 @@ async function theMenuInsideTheCollapsibleBar({ browser, hostUrl }) {
   await context.close();
 }
 
-requireInstalledCheckout('action-menu-browser.mjs');
-
-process.exit(await main());
+// THE WHOLE RUN, IN THE HARNESS'S ORDER (#231). It checks the checkout is
+// installed, finds a Chromium or refuses, serves the fixture world, stops the
+// host before removing its project, and exits on what `drive` reports.
+await runBrowserRegression(
+  {
+    script: 'action-menu-browser.mjs',
+    fixture: {
+      slug: 'action-menu-realm',
+      displayName: 'Action Menu Realm',
+      gameClass: 'Realm',
+      rules: RULES,
+      boardFile: 'RealmBoard',
+      board: BOARD,
+    },
+  },
+  drive,
+);

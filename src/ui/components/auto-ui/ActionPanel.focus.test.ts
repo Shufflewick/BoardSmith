@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 /**
- * The dock never drops a keyboard user out of the tab order (#27).
+ * The Action Panel never drops a keyboard user out of the tab order (#27).
  *
  * ActionPanel renders the current step's controls and nothing else, and the
  * controller advances a step by changing what the panel renders. A removed node
@@ -100,7 +100,7 @@ describe('focus after each step of a chained action', () => {
     await nextTick();
 
     // Step two offers the region choices, and focus is on one of them — still
-    // connected, still inside the dock, still in the tab order.
+    // connected, still inside the Action Panel, still in the tab order.
     expect(focusDescription()).not.toBe('BODY');
     expect(focusDescription()).not.toBe('DETACHED');
     expect(wrapper.element.contains(document.activeElement)).toBe(true);
@@ -115,7 +115,7 @@ describe('focus after each step of a chained action', () => {
     await nextTick();
     await nextTick();
 
-    // The player tabs to something outside the dock.
+    // The player tabs to something outside the Action Panel.
     const outside = document.createElement('button');
     outside.textContent = 'Elsewhere';
     document.body.appendChild(outside);
