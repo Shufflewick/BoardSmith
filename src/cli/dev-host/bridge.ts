@@ -415,7 +415,9 @@ export function createDevSession(opts: DevSessionOptions): DevSession {
       opts.postServerResponse(seat, requestId, shapeResult(wireOp, result));
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      console.error(`[boardsmith dev] server_request '${wireOp}' failed:`, err);
+      // The message, which is already extracted above for the ring buffer and
+      // the response: the error object printed its stack too (#240).
+      console.error(`[boardsmith dev] server_request '${wireOp}' failed:`, message);
       record('error', message, wireOp);
       opts.postServerResponse(seat, requestId, { success: false, error: message });
     }

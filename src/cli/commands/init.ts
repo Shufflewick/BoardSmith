@@ -270,25 +270,26 @@ export async function initCommand(name: string, options: InitOptions = {}): Prom
   // negation of `--X`, so `--no-rulebook` would set `rulebook: false` and collide with
   // `--rulebook <path>` rather than producing its own field.
   if (!options.rulebook && !options.withoutRulebook) {
-    console.error(
-      chalk.red('Error: init requires an explicit rulebook decision.\n') +
+    throw new Error(
+      'init requires an explicit rulebook decision.\n' +
         '\nPass one of:\n' +
         `  --rulebook <path>   archive that source rulebook into ${name}/ and write\n` +
         '                      rulebook/INDEX.md provenance (edition via --edition)\n' +
         '  --without-rulebook  no rulebook exists; the structured interview will supply\n' +
         '                      the rulebook/ content instead\n' +
         '\nExample:\n' +
-        `  boardsmith init ${name} --rulebook ~/path/to/rules.pdf\n`,
+        `  boardsmith init ${name} --rulebook ~/path/to/rules.pdf`,
     );
-    process.exit(1);
   }
 
   const scaffold: ProjectScaffold = options.world ? WORLD_SCAFFOLD : TABLE_SCAFFOLD;
   const projectPath = join(process.cwd(), name);
 
   if (existsSync(projectPath)) {
-    console.error(chalk.red(`Error: Directory "${name}" already exists`));
-    process.exit(1);
+    throw new Error(
+      `Directory "${name}" already exists in the directory you ran init from.\n` +
+        'Pass a different name, or remove that directory first.',
+    );
   }
 
   const spinner = ora(`Creating ${name}...`).start();
@@ -332,9 +333,15 @@ export async function initCommand(name: string, options: InitOptions = {}): Prom
 
     scaffold.printNextSteps(name);
   } catch (error) {
+    // THROWN, NOT PRINTED (#240). `console.error(error)` here printed the whole
+    // Error object -- stack frames, `src/cli/commands/init.ts:290:5`, the
+    // absolute path of the CLI's own installation -- which CLAUDE.md forbids
+    // outright, and then exited before `cli.ts`'s top-level handler could
+    // render it as the one clean line every other command's failures get.
     spinner.fail(chalk.red('Failed to create project'));
-    console.error(error);
-    process.exit(1);
+    throw new Error(
+      `Could not create the project "${name}": ${error instanceof Error ? error.message : String(error)}`,
+    );
   }
 }
 

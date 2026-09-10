@@ -274,8 +274,11 @@ async function buildLibrary(repoRoot: string): Promise<void> {
     await buildCli(repoRoot);
   } catch (error) {
     spinner.fail('CLI build failed');
-    console.error(chalk.red('\nBuild error:'), error);
-    process.exit(1);
+    // THROWN, NOT PRINTED (#240): `cli.ts`'s handler renders one clean line,
+    // where the error object printed its whole stack and internal paths.
+    throw new Error(
+      `Building the BoardSmith CLI failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
   }
 
   spinner.succeed(`CLI built (${CLI_OUTFILE})`);
@@ -528,7 +531,8 @@ export async function buildCommand(options: BuildOptions): Promise<void> {
 
   } catch (error) {
     spinner.fail('Build failed');
-    console.error(chalk.red('\nBuild error:'), error);
-    process.exit(1);
+    throw new Error(
+      `Building this game failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
   }
 }

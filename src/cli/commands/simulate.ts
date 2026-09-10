@@ -194,14 +194,16 @@ export async function simulateCommand(options: SimulateOptions): Promise<void> {
   try {
     ({ gameDefinition } = await loadGameDefinition(rulesPath, tempDir, context));
   } catch (error) {
-    console.error(chalk.red('Failed to load game rules:'), error);
     try {
       rmSync(tempDir, { recursive: true, force: true });
     } catch {
       // best-effort cleanup; do not mask the original error
     }
-    process.exit(1);
-    return;
+    // THROWN, NOT PRINTED (#240): `cli.ts`'s handler renders it as one line,
+    // where the error object printed its whole stack and internal paths.
+    throw new Error(
+      `Failed to load this game's rules: ${error instanceof Error ? error.message : String(error)}`,
+    );
   }
 
   let gameOptions: Record<string, unknown>;

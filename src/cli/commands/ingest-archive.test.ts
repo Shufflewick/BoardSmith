@@ -24,6 +24,7 @@ import {
 } from './ingest-archive.js';
 import { computeVerificationScope } from './chunk-provenance.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
+import { rejectionMessage } from '../../testing/rejection.test-helper.js';
 
 /**
  * `ingest-archive` exists because nine successive attempts to get an ingest session to perform
@@ -351,34 +352,26 @@ describe('init — an explicit rulebook decision is required', () => {
   // live session still ran the bare `npx boardsmith init seven`, reproducing the command from
   // its prior rather than from the file it had just read. An omitted decision is now a hard
   // failure, because failing commands are the one signal these sessions reliably act on.
-  it('exits non-zero with an actionable message when neither flag is given', async () => {
+  it('fails with an actionable message when neither flag is given', async () => {
     const parent = tempTree('bs-init-required-');
     const cwd = process.cwd();
-    const errors: string[] = [];
-    const origError = console.error;
-    const origExit = process.exit;
     try {
       process.chdir(parent);
-      console.error = (msg?: unknown) => void errors.push(String(msg));
-      // @ts-expect-error — test double for a non-returning function
-      process.exit = (code?: number) => {
-        throw new Error(`EXIT:${code}`);
-      };
       const { initCommand } = await import('./init.js');
-      await expect(initCommand('undeclared')).rejects.toThrow('EXIT:1');
 
-      const combined = errors.join('\n');
+      // THROWN rather than printed-and-exited (#240), so `cli.ts`'s top-level handler renders
+      // it -- which is also what makes the message assertable here at all.
+      const message = await rejectionMessage(initCommand('undeclared'));
+
       // The message must name both options and show a usable example — a bare "invalid
       // arguments" would leave a session guessing, which is how this failed for eleven rounds.
-      expect(combined).toMatch(/--rulebook <path>/);
-      expect(combined).toMatch(/--without-rulebook/);
-      expect(combined).toMatch(/boardsmith init undeclared --rulebook/);
+      expect(message).toMatch(/--rulebook <path>/);
+      expect(message).toMatch(/--without-rulebook/);
+      expect(message).toMatch(/boardsmith init undeclared --rulebook/);
 
       // And it must not have scaffolded a half-project before refusing.
       await expect(fs.access(join(parent, 'undeclared'))).rejects.toThrow();
     } finally {
-      console.error = origError;
-      process.exit = origExit;
       process.chdir(cwd);
     }
   }, 60_000);

@@ -310,9 +310,13 @@ export async function startWorldDevServer(
       void worldHost
         .handleMessage(clientId, message as unknown as WorldDevRequest)
         .catch((error: unknown) =>
+          // The message, not the error object, exactly as `reloadWorld`'s
+          // second catch below already does it (#240).
           console.error(
-            chalk.red(`[boardsmith dev] world message '${String(message.type)}' failed:`),
-            error,
+            chalk.red(
+              `[boardsmith dev] world message '${String(message.type)}' failed: ` +
+                `${error instanceof Error ? error.message : String(error)}`,
+            ),
           ),
         );
     });
@@ -400,7 +404,7 @@ export async function startWorldDevServer(
     } catch (error) {
       console.error(
         chalk.red('  Those rules did not load, so this world is still running the ones it had:'),
-        error,
+        error instanceof Error ? error.message : String(error),
       );
       return;
     }
