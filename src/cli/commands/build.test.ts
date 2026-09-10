@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path';
 import { describe, it, expect } from 'vitest';
 import type { GameDefinition } from '../../session/index.js';
 import { Game, Player } from '../../engine/index.js';
-import { deriveManifest, resolveUiBuild } from './build.js';
+import { buildOutputDir, deriveManifest, resolveUiBuild } from './build.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -541,5 +541,29 @@ describe('resolveUiBuild — which surfaces a project has (#168)', () => {
   it('refuses a project with no surface at all, in a sentence naming both entries', () => {
     expect(() => resolveUiBuild('/game', false, false)).toThrow(/index\.html/);
     expect(() => resolveUiBuild('/game', false, false)).toThrow(/world\.html/);
+  });
+});
+
+/**
+ * Where `--out-dir` points (#239).
+ *
+ * `build` carried the same defect `pack` was reported for: `join(cwd, outDir)`
+ * appends an absolute `--out-dir` to the project root. `build` was the worse
+ * half of the pair, because Vite resolves an absolute `outDir` correctly on its
+ * own -- so `build --out-dir /tmp/out` put the rules and UI bundles in
+ * `/tmp/out` and the manifest and `public/` copy in `<project>/tmp/out`,
+ * splitting one bundle across two directories.
+ */
+describe('buildOutputDir', () => {
+  it('honours an absolute --out-dir', () => {
+    expect(buildOutputDir('/game', '/tmp/out')).toBe('/tmp/out');
+  });
+
+  it('resolves a relative --out-dir against the project root', () => {
+    expect(buildOutputDir('/game', 'build/web')).toBe('/game/build/web');
+  });
+
+  it('defaults to dist under the project root', () => {
+    expect(buildOutputDir('/game', undefined)).toBe('/game/dist');
   });
 });

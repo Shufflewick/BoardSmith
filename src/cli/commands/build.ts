@@ -7,6 +7,7 @@ import { BUNDLE_PROTOCOL_VERSION } from '../../engine/protocol-version.js';
 import { ENGINE_REVISION } from '../../contract/index.js';
 import { getProjectContext, loadGameDefinition } from './game-runtime.js';
 import { buildCli, CLI_ENTRY, CLI_OUTFILE } from '../lib/build-cli.js';
+import { resolveUserPath } from '../lib/user-path.js';
 import { requireGameProjectManifests } from '../lib/game-project.js';
 import { ensureWorldEntry, WORLD_ENTRY_HTML } from '../lib/world-entry.js';
 import { readWorldDefinition, type WorldDefinition } from '../../world/index.js';
@@ -346,9 +347,24 @@ export function resolveUiBuild(
   };
 }
 
+/** Where the bundle goes when `--out-dir` is not given. */
+const DEFAULT_OUT_DIR = 'dist';
+
+/**
+ * Where `--out-dir` points, absolute.
+ *
+ * ONE value for every artifact the build writes. Before this, Vite resolved an
+ * absolute `--out-dir` correctly while the manifest and the `public/` copy were
+ * joined onto the project root instead, so one bundle came out split across two
+ * directories (#239).
+ */
+export function buildOutputDir(cwd: string, outDir: string | undefined): string {
+  return resolveUserPath(cwd, outDir ?? DEFAULT_OUT_DIR);
+}
+
 export async function buildCommand(options: BuildOptions): Promise<void> {
   const cwd = process.cwd();
-  const outDir = options.outDir || 'dist';
+  const outDir = buildOutputDir(cwd, options.outDir);
 
   // `build` means "produce this workspace's distributable artifact". In a game
   // that is the rules/UI bundle below; in the BoardSmith library itself it is
@@ -446,7 +462,7 @@ export async function buildCommand(options: BuildOptions): Promise<void> {
     // Copy public/ assets once to dist root (not into each sub-build)
     const publicDir = join(cwd, 'public');
     if (existsSync(publicDir)) {
-      cpSync(publicDir, join(cwd, outDir), { recursive: true });
+      cpSync(publicDir, outDir, { recursive: true });
     }
 
     // Copy and update config
@@ -486,9 +502,9 @@ export async function buildCommand(options: BuildOptions): Promise<void> {
       { tableUi: hasTableUi, worldUi: hasWorldUi },
     );
 
-    mkdirSync(join(cwd, outDir), { recursive: true });
+    mkdirSync(outDir, { recursive: true });
     writeFileSync(
-      join(cwd, outDir, 'manifest.json'),
+      join(outDir, 'manifest.json'),
       JSON.stringify(manifest, null, 2)
     );
     spinner.succeed('Manifest generated');
