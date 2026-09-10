@@ -597,7 +597,12 @@ selections. There are five you may write:
 - **`enterNumber(name, { min, max, integer })`** -- a number, bounded where the
   game knows the bound, so a surface draws a stepper and "at least one log" is a
   fact the shell knows before anything is sent.
-- **`enterText(name, { minLength, maxLength, pattern })`** -- free text.
+- **`enterText(name, { minLength, maxLength, pattern, multiline })`** -- free
+  text. `multiline: true` asks the shared panel for a resizable box rather than
+  a single line, with a character count and an explicit submit button so Enter
+  inserts a newline; the value, the bounds and the validation are identical
+  either way. A world is where the long fields live -- an empire's description
+  outlives any one session -- so this is usually the facade that wants it.
 
 Each of them takes `needs:` as its own declaration round, `optional:`, and
 `disabled:` -- and `disabled:` is the one to reach for before `validate:`, for
