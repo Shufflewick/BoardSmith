@@ -1,10 +1,11 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, renameSync, rmSync, copyFileSync } from 'node:fs';
-import { join, basename, resolve } from 'node:path';
+import { join, basename } from 'node:path';
 import { execSync } from 'node:child_process';
 import chalk from 'chalk';
 import ora from 'ora';
 import { getProjectContext } from '../lib/project-context.js';
 import { buildCli, CLI_OUTFILE } from '../lib/build-cli.js';
+import { resolveUserPath } from '../lib/user-path.js';
 
 interface PackOptions {
   outDir?: string;
@@ -70,9 +71,19 @@ function generateTimestampVersion(baseVersion: string): string {
   return `${baseVersion}-${timestamp}`;
 }
 
+/** The `.tgz` filenames currently sitting in a directory. */
+function tarballsIn(dir: string): string[] {
+  return readdirSync(dir).filter((f) => f.endsWith('.tgz'));
+}
+
 /**
  * Pack a single package with a timestamp version.
  * Returns the tarball filename.
+ *
+ * `npm pack` writes into the package directory, so this owns getting the
+ * tarball back out of the source tree on every path including the failing one:
+ * `*.tgz` is not gitignored, and a stray one is a dirty checkout that stops
+ * ShufflewickPub's `vendor:boardsmith` cold (#239).
  */
 function packPackage(
   pkgPath: string,
@@ -82,6 +93,9 @@ function packPackage(
   const pkgJsonPath = join(pkgPath, 'package.json');
   const originalContent = readFileSync(pkgJsonPath, 'utf-8');
   const pkgJson = JSON.parse(originalContent);
+  // Tarballs that were already here are the caller's, not ours to move or
+  // remove. Only what this pack produced is in scope either way.
+  const preexisting = new Set(tarballsIn(pkgPath));
 
   try {
     // Write modified package.json with timestamp version
@@ -105,7 +119,7 @@ function packPackage(
       renameSync(generatedTarball, destTarball);
     } else {
       // npm pack might use a different naming scheme, find the .tgz file
-      const files = readdirSync(pkgPath).filter(f => f.endsWith('.tgz'));
+      const files = tarballsIn(pkgPath).filter((f) => !preexisting.has(f));
       if (files.length === 1) {
         renameSync(join(pkgPath, files[0]), destTarball);
       } else {
@@ -114,9 +128,58 @@ function packPackage(
     }
 
     return basename(destTarball);
+  } catch (error) {
+    // A failure after `npm pack` ran leaves its tarball in the package
+    // directory. Take it back out before reporting.
+    for (const file of tarballsIn(pkgPath)) {
+      if (!preexisting.has(file)) rmSync(join(pkgPath, file), { force: true });
+    }
+    throw error;
   } finally {
     // Always restore original package.json
     writeFileSync(pkgJsonPath, originalContent);
+  }
+}
+
+/**
+ * Pack every package into `outputPath`, leaving nothing behind if any of them
+ * fails.
+ *
+ * The output directory is created here rather than by the caller because
+ * creating it is part of what has to be undone: a pack that fails must not
+ * leave a half-filled directory tree that only exists because it was tried.
+ * Only the part of the tree this call had to create is ever removed -- a
+ * directory the user already had is theirs.
+ */
+export function packAll(
+  packages: PackageInfo[],
+  outputPath: string,
+  timestamp: string,
+): PackResult[] {
+  // `recursive` returns the topmost directory it had to create, or undefined
+  // when the whole path already existed.
+  const createdRoot = mkdirSync(outputPath, { recursive: true });
+  const results: PackResult[] = [];
+
+  try {
+    for (const pkg of packages) {
+      const timestampVersion = `${pkg.version}-${timestamp}`;
+      let tarball: string;
+      try {
+        tarball = packPackage(pkg.path, outputPath, timestampVersion);
+      } catch (error) {
+        throw new Error(
+          `npm pack failed for ${pkg.name}: ${error instanceof Error ? error.message : String(error)}`,
+        );
+      }
+      results.push({ name: pkg.name, tarball, timestampVersion });
+    }
+    return results;
+  } catch (error) {
+    if (createdRoot !== undefined) {
+      rmSync(createdRoot, { recursive: true, force: true });
+    }
+    throw error;
   }
 }
 
@@ -166,7 +229,7 @@ async function integrateWithTarget(
   sourceDir: string,
   results: PackResult[]
 ): Promise<void> {
-  const absoluteTarget = resolve(targetPath);
+  const absoluteTarget = resolveUserPath(process.cwd(), targetPath);
   const targetPkgJsonPath = join(absoluteTarget, 'package.json');
 
   // Validate target has package.json
@@ -301,14 +364,27 @@ function validateMonorepoRoot(cwd: string): void {
   }
 }
 
+/** Where tarballs go when `--out-dir` is not given. */
+const DEFAULT_OUT_DIR = '.boardsmith/tarballs';
+
+/**
+ * Where `--out-dir` points, absolute.
+ *
+ * ONE value, used for the tarballs and for every path printed in the summary,
+ * so the "Output:" and "Next steps" lines can never name a directory the file
+ * is not in (#239).
+ */
+export function packOutputDir(cwd: string, outDir: string | undefined): string {
+  return resolveUserPath(cwd, outDir ?? DEFAULT_OUT_DIR);
+}
+
 /**
  * Main pack command: discover packages, pack them with timestamp versions,
  * and collect tarballs in output directory.
  */
 export async function packCommand(options: PackOptions): Promise<void> {
   const cwd = process.cwd();
-  const outDir = options.outDir || '.boardsmith/tarballs';
-  const outputPath = join(cwd, outDir);
+  const outputPath = packOutputDir(cwd, options.outDir);
 
   // Check context - pack is only for the BoardSmith library, not game projects
   if (getProjectContext(cwd) === 'standalone') {
@@ -347,46 +423,24 @@ export async function packCommand(options: PackOptions): Promise<void> {
 
   spinner.succeed(`Found ${packages.length} package to pack`);
 
-  // Create output directory
-  mkdirSync(outputPath, { recursive: true });
-
   // Generate single timestamp for all packages (consistent snapshot)
   const timestamp = generateTimestampVersion('0.0.0').split('-')[1]; // Just get the timestamp part
-  const results: PackResult[] = [];
 
-  // Build tarball map upfront so we can resolve workspace: deps to file: deps
-  // The tarball name is computed from package name and timestamp version
-  const tarballMap = new Map<string, string>();
-  for (const pkg of packages) {
-    const timestampVersion = `${pkg.version}-${timestamp}`;
-    const tarballName = `${pkg.name.replace('@', '').replace('/', '-')}-${timestampVersion}.tgz`;
-    tarballMap.set(pkg.name, tarballName);
+  const packSpinner = ora(`Packing ${packages.map((p) => p.name).join(', ')}...`).start();
+  let results: PackResult[];
+  try {
+    results = packAll(packages, outputPath, timestamp);
+  } catch (error) {
+    packSpinner.fail('Pack failed');
+    // Rethrown rather than exited: cli.ts reports a thrown Error as one clean
+    // line, and packAll has already put everything it touched back.
+    throw error;
   }
-
-  // Pack each package
-  for (const pkg of packages) {
-    const pkgSpinner = ora(`Packing ${pkg.name}...`).start();
-
-    try {
-      const timestampVersion = `${pkg.version}-${timestamp}`;
-      const tarball = packPackage(pkg.path, outputPath, timestampVersion);
-      results.push({
-        name: pkg.name,
-        tarball,
-        timestampVersion,
-      });
-      pkgSpinner.succeed(`Packed ${pkg.name}`);
-    } catch (error) {
-      pkgSpinner.fail(`Failed to pack ${pkg.name}`);
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error(chalk.red(`  npm pack failed for ${pkg.name}: ${errorMessage}`));
-      process.exit(1);
-    }
-  }
+  packSpinner.succeed(`Packed ${results.map((r) => r.name).join(', ')}`);
 
   // Print summary
   console.log(chalk.green('\nPack complete!\n'));
-  console.log(chalk.dim(`Output: ${outDir}/`));
+  console.log(chalk.dim(`Output: ${outputPath}/`));
   console.log(chalk.dim('Tarballs:'));
   for (const result of results) {
     console.log(chalk.dim(`  ${result.tarball}`));
