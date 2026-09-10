@@ -33,7 +33,8 @@
  * Being constant, it never re-triggers the persistent region observer, and the
  * panel can grow over the board without ever resizing it — the old "board shakes
  * under the player's cursor on every click" regression is structurally
- * impossible. The panel is out of flow (`.actionbar` is `position: absolute`) so
+ * impossible. The panel is out of flow (its `.actionbar-frame` wrapper is
+ * `position: absolute`) so
  * it never moves the board by itself, and the region plus the zoom container's
  * bottom margin keep scroll room up to the panel's ceiling (`--bsg-panel-max`),
  * so anything a fully grown panel covers stays scrollable into view.

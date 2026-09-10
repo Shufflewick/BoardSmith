@@ -93,6 +93,16 @@ export interface PickMetadata {
   maxLength?: number;
   /** For text inputs: regex pattern */
   pattern?: string;
+  /**
+   * For text picks: draw a resizable box instead of a single line (#229).
+   *
+   * Presentation only, and absent unless the action asked for it. The value is
+   * the same string and `minLength`/`maxLength`/`pattern` bind it the same way,
+   * which is why this is a field on the `text` pick rather than a sixth pick
+   * type: a new `type` would make every host that switches on it draw nothing
+   * at all for a selection whose rules it already knows.
+   */
+  multiline?: boolean;
   /** For element picks: CSS class name of selectable elements */
   elementClassName?: string;
   /** For choice picks with dependsOn + multiSelect: multiSelect config indexed by dependent value */

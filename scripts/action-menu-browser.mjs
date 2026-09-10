@@ -26,6 +26,11 @@
  * GAME COMMAND. Every frame the page sends is recorded, and walking in, down,
  * out and back in must put nothing on the socket at all.
  *
+ * And one more the merge brought in: THE MENU LIVES INSIDE THE COLLAPSIBLE
+ * ACTION BAR (#230). A level's Back control and its current-group label are two
+ * more things competing for a bar that is capped to one control row while
+ * collapsed, and whether they fit is a question about layout on a screen.
+ *
  * Real Chromium, the real dev chrome, the real `world.html` in the real iframe,
  * a real WebSocket to a real `LocalWorldHost` over a real store, and two seats
  * open at once. The precedent and the mechanics are #227's
@@ -42,15 +47,16 @@
 import { rmSync } from 'node:fs';
 
 import {
-  createChecklist,
+  assert,
+  check,
   loadChromium,
   requireInstalledCheckout,
-  startFixtureWorld,
-  writeFixtureProject,
-} from './lib/browser-harness.mjs';
-
-const SCRIPT = 'scripts/action-menu-browser.mjs';
-const { assert, check, summarize } = createChecklist('the real action panel in a real browser');
+  startWorldHost,
+  summarise,
+  surfaceOf,
+  waitUntil,
+  writeWorldFixture,
+} from './browser-harness.mjs';
 
 // ── The fixture world ────────────────────────────────────────────────────────
 
@@ -200,33 +206,38 @@ export const gameDefinition: GameDefinition = {
 `;
 
 /**
- * The default auto-UI as this world's board.
+ * A BOARD THAT DRAWS NOTHING THE MENU NEEDS.
  *
- * NO CUSTOM BOARD ON PURPOSE. The panel IS the surface under test, and this is
- * what an author's world renders on before they build one -- so the fixture is
- * also the least it can be while still being a real world project.
+ * The panel is the surface under test, so this exists to be a real custom board
+ * rather than to be used: a world with one is the Lacuna case, and it proves the
+ * hierarchy is the panel's own arrangement and not something a default board
+ * arranges for it. It renders the empire's name so the board is not blank.
  */
-const UIS = `import { defineGameUIs, defaultUI } from 'boardsmith/ui';
-import { AutoUI } from 'boardsmith/ui/auto-ui';
+const BOARD = `import { defineComponent, h } from 'vue';
 
-export default defineGameUIs({ 'Auto UI': defaultUI(AutoUI) });
+export default defineComponent({
+  name: 'RealmBoard',
+  setup() {
+    return () => h('div', { class: 'realm-board', 'data-fixture': 'board' }, 'The realm is here.');
+  },
+});
 `;
 
 /** The fixture project, written fresh and removed when the run ends. */
 const writeFixture = () =>
-  writeFixtureProject({
+  writeWorldFixture({
     slug: 'action-menu-realm',
     displayName: 'Action Menu Realm',
-    files: { 'src/rules/index.ts': RULES, 'src/ui/uis.ts': UIS },
+    gameClass: 'Realm',
+    rules: RULES,
+    boardFile: 'RealmBoard',
+    board: BOARD,
   });
 
 // ── Reading the panel ───────────────────────────────────────────────────────
 
 /** Value equality for the small arrays these assertions compare. */
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
-
-/** The world surface inside the dev chrome's iframe, as a locator root. */
-const surfaceOf = (page) => page.frameLocator('.world-dev__frame');
 
 /**
  * The same surface as a Frame, for reading what the browser thinks is focused.
@@ -280,28 +291,49 @@ async function announcement(page) {
   );
 }
 
+/**
+ * WHAT THE PANEL CALLS ONE CONTROL, most specific naming first.
+ *
+ * A table rather than a chain of returns because two readers need the same
+ * answer: what the keyboard is standing on, and what an open level is drawing.
+ * They read the same three attributes, so they name them the same way or the
+ * two halves of one assertion disagree about what they are looking at.
+ */
+const CONTROL_NAMES = [
+  (control) => control.action,
+  (control) => (control.group === null ? null : `group:${control.group}`),
+  (control) => (control.back ? 'back' : null),
+];
+
+/** One control's name, from the attributes the page read off it. */
+const nameOf = (control) =>
+  CONTROL_NAMES.map((name) => name(control)).find((name) => name !== null) ?? control.tag;
+
 /** What the browser says is focused, as the panel's own identity for it. */
 async function focused(page) {
-  return (await frameOf(page)).evaluate(() => {
-    const active = document.activeElement;
-    if (!active || active === document.body) return null;
-    const action = active.getAttribute('data-bs-action');
-    if (action !== null) return action;
-    const group = active.getAttribute('data-bs-action-group');
-    if (group !== null) return `group:${group}`;
-    if (active.hasAttribute('data-bs-menu-back')) return 'back';
-    return active.tagName.toLowerCase();
+  const control = await (await frameOf(page)).evaluate(() => {
+    const el = document.activeElement;
+    if (el === null || el === document.body) return null;
+    return {
+      action: el.getAttribute('data-bs-action'),
+      group: el.getAttribute('data-bs-action-group'),
+      back: el.hasAttribute('data-bs-menu-back'),
+      tag: el.tagName.toLowerCase(),
+    };
   });
+  return control === null ? null : nameOf(control);
 }
 
-/** Poll until `read` answers `want`, so an assertion is not a race with a push. */
-async function until(read, want, what, timeout = 15_000) {
-  const deadline = Date.now() + timeout;
-  let seen = await read();
-  while (!same(seen, want) && Date.now() < deadline) {
-    await new Promise((settle) => setTimeout(settle, 100));
-    seen = await read();
-  }
+/**
+ * Poll until `read` answers `want`, then assert it, so a check is not a race
+ * with a push.
+ *
+ * `waitUntil` hands back the last value it saw rather than throwing, exactly so
+ * the caller's own `assert` is what reports and can name what it actually
+ * found. This is that caller.
+ */
+async function until(read, want, what) {
+  const seen = await waitUntil(read, (value) => same(value, want));
   assert(same(seen, want), `${what}: saw ${JSON.stringify(seen)}, wanted ${JSON.stringify(want)}`);
 }
 
@@ -324,17 +356,26 @@ async function tabTo(page, target, limit = 25) {
 }
 
 async function main() {
-  const chromium = await loadChromium(SCRIPT);
+  const chromium = await loadChromium('action-menu-browser.mjs');
   const fixture = writeFixture();
   // THE FIXTURE IS REMOVED WHATEVER HAPPENS, from here on. A temp world left
   // behind by a crashed build is exactly the litter this must not leave.
   try {
-    const hostUrl = await startFixtureWorld({ fixture, displayName: 'Action Menu Realm' });
+    const hostUrl = await startWorldHost({ fixture, displayName: 'Action Menu Realm' });
     const browser = await chromium.launch();
     try {
-      // Three sessions, because each is about something the previous one
-      // cannot be: one seat walking the menu, two seats moving each other's
-      // availability, and one narrow screen.
+      // Four sessions, because each is about something the others cannot be:
+      // the collapsible action bar the menu lives in, one seat walking the menu,
+      // two seats moving each other's availability, and one narrow screen.
+      //
+      // THE ORDER IS LOAD-BEARING, because the world is DURABLE: it is one
+      // world for the whole run, and every session inherits what the previous
+      // one did to it. The bar session goes first because it needs the deepest
+      // nesting and takes no action at all, so it leaves the world pristine for
+      // the walk. The walk spends the ore and the water, which empties `Dump`;
+      // the two-seat session closes the registry, which empties `Empire
+      // settings`; and the narrow screen reads what is left.
+      await theMenuInsideTheCollapsibleBar({ browser, hostUrl });
       await oneSeatWalksTheMenu({ browser, hostUrl });
       await anotherSeatMovesTheLevel({ browser, hostUrl });
       await theMenuOnANarrowScreen({ browser, hostUrl });
@@ -344,7 +385,7 @@ async function main() {
   } finally {
     rmSync(fixture, { recursive: true, force: true });
   }
-  return summarize();
+  return summarise('through the real action panel in a real browser.');
 }
 
 /** ONE SEAT, WALKING THE MENU, and the socket watched the whole way. */
@@ -577,5 +618,156 @@ async function theMenuOnANarrowScreen({ browser, hostUrl }) {
   await context.close();
 }
 
-requireInstalledCheckout(SCRIPT);
+/**
+ * THE MENU INSIDE THE COLLAPSIBLE ACTION BAR (#230).
+ *
+ * A level adds two controls to a bar that already competes for room: a Back
+ * control and the current-group label. Both share the bar's flex flow through
+ * `display: contents`, so whether they fit is a question about a real layout on
+ * a real screen and nothing a component test can answer.
+ *
+ * The second half is what collapsing does to a menu that is open, which is a
+ * question about state and not layout -- and the answer is recorded here rather
+ * than asserted as desirable, because it is #235's mechanism and not this
+ * feature's to change.
+ */
+async function theMenuInsideTheCollapsibleBar({ browser, hostUrl }) {
+  const context = await browser.newContext({ viewport: { width: 420, height: 720 } });
+  const page = await context.newPage();
+  await page.goto(hostUrl);
+  await seated(page);
+
+  /**
+   * The bar, its ceiling, and every control the open level is drawing.
+   *
+   * The page reads boxes and the three identifying attributes; NAMING them is
+   * done out here, through `nameOf`, so the keyboard's idea of what it is
+   * standing on and the layout's idea of what is drawn cannot diverge.
+   */
+  const measure = async () => {
+    const shot = await (await frameOf(page)).evaluate(() => {
+      const box = (el) => {
+        const { top, bottom, left, right, width, height } = el.getBoundingClientRect();
+        return { top, bottom, left, right, width, height };
+      };
+      const boxOf = (selector) => {
+        const el = document.querySelector(selector);
+        return el === null ? null : box(el);
+      };
+      const bar = document.querySelector('[data-testid="bs-actionbar"]');
+      const label = document.querySelector('.action-menu-label');
+      return {
+        bar: bar === null ? null : box(bar),
+        ceiling: bar === null ? Number.NaN : parseFloat(getComputedStyle(bar).maxHeight),
+        toggle: boxOf('[data-testid="bs-actionbar-toggle"]'),
+        label: label === null ? null : label.textContent.trim(),
+        controls: [
+          ...document.querySelectorAll(
+            '[data-bs-action], [data-bs-action-group], [data-bs-menu-back], .action-menu-label',
+          ),
+        ].map((el) => ({
+          action: el.getAttribute('data-bs-action'),
+          group: el.getAttribute('data-bs-action-group'),
+          back: el.hasAttribute('data-bs-menu-back'),
+          // The label carries none of the three, so it names itself by falling
+          // through to its tag -- which `nameOf` does, and which is why the
+          // wanted list below asks for `span` rather than for `label`.
+          tag: el.tagName.toLowerCase(),
+          ...box(el),
+        })),
+      };
+    });
+    return { ...shot, controls: shot.controls.map((c) => ({ ...c, what: nameOf(c) })) };
+  };
+
+  const collapse = async () => {
+    await surfaceOf(page).locator('[data-testid="bs-actionbar-toggle"]').click();
+    // One frame for the class, one for the transition-free relayout -- the same
+    // settle `action-bar-collapse-browser.mjs` waits for the same reason.
+    await page.waitForTimeout(200);
+  };
+
+  // Two levels deep, which is the most chrome a level can ask the bar for.
+  await surfaceOf(page).locator('[data-bs-action-group="More"]').click();
+  await surfaceOf(page).locator('[data-bs-action-group="Empire settings"]').click();
+  await until(() => shownActions(page), ['renamePlanet', 'describeEmpire'], 'the settings level');
+  await page.waitForTimeout(200);
+  const open = await measure();
+
+  await check('an open level lays out inside the restored bar\'s ceiling', () => {
+    assert(open.bar !== null, 'there is no action bar in the document');
+    assert(
+      open.bar.height <= open.ceiling + 0.5,
+      `the bar is ${open.bar.height}px against a ${open.ceiling}px ceiling`,
+    );
+  });
+
+  await check("Back, the label and the level's actions are all drawn", () => {
+    // `span` is the current-group label: it carries no identifying attribute of
+    // its own, so `nameOf` falls through to its tag. Named that way here rather
+    // than special-cased in the reader, so the one naming rule stays one rule.
+    const drawn = open.controls.map((control) => control.what);
+    const missing = ['back', 'span', 'renamePlanet', 'describeEmpire']
+      .filter((one) => !drawn.includes(one));
+    assert(
+      missing.length === 0,
+      `the level did not draw ${missing.join(', ')} (it drew ${drawn.join(', ')})`,
+    );
+  });
+
+  await check('every control in the level has a box, inside the bar it sits in', () => {
+    // Two failures, one for each way a control can be there without being
+    // usable: no box at all, or a box outside the bar. The bar scrolls
+    // internally past its ceiling, so what must hold is the HORIZONTAL span --
+    // a Back control pushed off the side is what this is for.
+    const boxless = open.controls.filter((one) => one.width <= 0 || one.height <= 0);
+    assert(boxless.length === 0, `no box: ${boxless.map((one) => one.what).join(', ')}`);
+    const spilled = open.controls.filter(
+      (one) => one.left < open.bar.left - 0.5 || one.right > open.bar.right + 0.5,
+    );
+    assert(
+      spilled.length === 0,
+      `outside the bar (${open.bar.left}..${open.bar.right}): `
+        + spilled.map((one) => `${one.what} at ${one.left}..${one.right}`).join(', '),
+    );
+  });
+
+  await collapse();
+  const down = await measure();
+
+  await check('collapsing with a menu open leaves no orphan menu chrome', () => {
+    // #230 unmounts the panel outright, so the level goes with it. What matters
+    // is that it goes WHOLE: a Back control or a current-group label left behind
+    // with no level under it is a control that says the player is somewhere they
+    // are not.
+    const drawn = down.controls.map((control) => control.what);
+    assert(drawn.length === 0, `the collapsed bar still draws ${drawn.join(', ')}`);
+    assert(down.label === null, `the collapsed bar still says the level is "${down.label}"`);
+    assert(down.toggle !== null && down.toggle.height >= 24, 'the restore control is not hittable');
+    assert(
+      down.bar.height < open.bar.height,
+      `the bar measured ${down.bar.height}px down and ${open.bar.height}px up`,
+    );
+  });
+
+  await collapse();
+  await until(() => shownGroups(page), ['Dump', 'More'], 'the level after the bar came back');
+
+  await check('restoring the bar puts the menu at the top level, not in a stale one', async () => {
+    // OBSERVED, NOT DESIRED. Collapsing unmounts the panel, so `openPath` -- a
+    // ref that lives and dies with the component -- goes with it and the player
+    // comes back to the root. That is the same mechanism #235 records for a
+    // half-typed value, and it is coherent rather than wrong: the root is a
+    // level that certainly exists, which is more than a remembered path can
+    // promise after a collapse of any duration.
+    const restored = await measure();
+    assert(restored.label === null, `the restored bar reopened inside "${restored.label}"`);
+    await until(() => shownActions(page), ['construct', 'closeRegistry'], 'the restored top level');
+  });
+
+  await context.close();
+}
+
+requireInstalledCheckout('action-menu-browser.mjs');
+
 process.exit(await main());

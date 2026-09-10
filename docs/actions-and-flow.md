@@ -331,6 +331,35 @@ Action.create('name')
   })
 ```
 
+`maxLength` always has a value: `enterText` applies
+`DEFAULT_TEXT_MAX_LENGTH` (256) when you do not, because player-authored text is
+copied into every retained checkpoint and every per-seat view, so an unbounded
+field is a state-size hazard. Set your own, lower, bound whenever you know it.
+
+**`multiline: true` for prose.** The Action Panel draws a text pick as a
+single-line field, which is right for a name and wrong for a description: a
+thousand characters shown a hundred and twenty pixels at a time cannot be read
+back, let alone written. `multiline` asks for a resizable box instead, with a
+character count (which is where a box states its maximum) and an explicit submit
+button so Enter inserts a newline.
+
+```typescript
+Action.create('setDescription')
+  .enterText('description', {
+    prompt: 'Empire description',
+    maxLength: 1000,
+    multiline: true,
+  })
+```
+
+It is **presentation only**. The value is the same string, `minLength`,
+`maxLength`, `pattern` and `validate` bind it in exactly the same way, and line
+breaks are ordinary characters either way -- they count toward the length and
+nothing strips them. That is why it is an option on `enterText` rather than a
+selection kind of its own: a new `type` would carry a duplicate of every rule
+`text` already has, and every host that switches on `type` would draw nothing at
+all for a selection whose rules it already knew.
+
 ### Chaining Selections with `dependsOn`
 
 When selection B depends on selection A's value, use the `dependsOn` option:

@@ -1,10 +1,5 @@
 {
   "finding_counts": {
-    "scripts/action-menu-browser.mjs": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
     "scripts/ingest-harness/check.mjs": {
       "complexity_critical": {
         "count": 2
@@ -34,11 +29,6 @@
       },
       "crap_moderate": {
         "count": 2
-      }
-    },
-    "scripts/lib/browser-harness.mjs": {
-      "crap_moderate": {
-        "count": 1
       }
     },
     "src/bot-trainer/analyzer.ts": {

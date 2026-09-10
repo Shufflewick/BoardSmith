@@ -28,6 +28,7 @@ import { Action } from './action-builder.js';
 import { PlayerFacingError, NotSimulableError } from '../errors.js';
 import { getActiveStep, getGateReasonForValue } from '../tutorial/gate.js';
 import { findMatchingChoice, trySmartResolveChoice, valuesEqual } from './choice-matching.js';
+import { textRuleErrors } from './text-rules.js';
 
 // Re-export Action class from action-builder
 export { Action };
@@ -1063,15 +1064,11 @@ export class ActionExecutor {
         if (typeof str !== 'string') {
           errors.push(`${selection.name} must be a string`);
         } else {
-          if (textSel.minLength !== undefined && str.length < textSel.minLength) {
-            errors.push(`${selection.name} must be at least ${textSel.minLength} characters`);
-          }
-          if (textSel.maxLength !== undefined && str.length > textSel.maxLength) {
-            errors.push(`${selection.name} must be at most ${textSel.maxLength} characters`);
-          }
-          if (textSel.pattern && !textSel.pattern.test(str)) {
-            errors.push(`${selection.name} does not match required pattern`);
-          }
+          // The bounds live in `text-rules.ts` because the Action Panel has to
+          // apply the same ones to tell a player why their text will be refused
+          // before they submit it (#229). Two copies of these three checks is
+          // two rule sets that drift.
+          errors.push(...textRuleErrors(selection.name, str, textSel));
         }
         break;
       }

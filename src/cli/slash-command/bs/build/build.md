@@ -188,6 +188,20 @@ a game-design call, not a workaround — the ONLY sanctioned mechanism is the pe
 button: the panel still renders that action's full choice list once the action is under way, and
 nothing suppresses a live choice list. It is never a way to suppress the panel wholesale.
 
+If the panel is CROWDED rather than redundant — many verbs available at once, and the rare ones
+sitting as prominently as the ones the player takes every turn — the mechanism is
+`.group()`/`.order()` on the action, NOT suppression. `.group('Dump')` puts that action's start
+button inside a menu group that takes one button at its level and opens onto its members;
+`.group('More', 'Empire settings')` nests one level deeper; `.order(10)` places buttons within a
+level, lower first. Both are chunk-local, per-action calls, exactly like the two above.
+
+Reach for it when a chunk leaves more than about six or seven start buttons available at once, and
+group by what the player is trying to DO, never by which chunk built the action. Grouping hides
+nothing: every action is still offered, still disabled for its own reason, still validated
+identically, and one press further away rather than gone. Opening a group is navigation and submits
+no order, so it is never a game event and there is nothing to wire. A game that declares no groups
+keeps the flat panel it has. Full rule in `docs/actions-and-flow.md`.
+
 ## Downstream Shape (cite, never restate)
 
 Once this chunk's files are all written (every Build Manifest row `written`) and the test script

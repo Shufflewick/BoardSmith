@@ -846,6 +846,10 @@ function assertCoversWorldRedaction(bodies: readonly unknown[]): void {
  *  - NO SELECTION AT ALL. The offer's floor. An action with nothing to ask can
  *    never be candidateless, so it is the control against which the other three
  *    are read.
+ *  - A MULTILINE TEXT FIELD (#229). The pick a host draws a box for rather than
+ *    a line, and the flag that says so is an OPTIONAL FIELD on a text pick --
+ *    which `verbatimModuleSyntax` erases along with the type declaring it. Only
+ *    a fixture that produces one puts it in front of a hash.
  *  - A NUMBER. `candidateless` is defined over `validElements ?? choices`, so a
  *    number selection can never be one -- which is exactly why `kindle` sat
  *    correctly greyed in the field while `tend` vanished. Without a number in
@@ -868,6 +872,7 @@ function assertCoversWorldRedaction(bodies: readonly unknown[]): void {
 function assertCoversWorldOffer(facts: {
   selectionShapes: readonly (readonly string[])[];
   menuPlacements: readonly { group?: readonly string[]; order?: number }[];
+  multilineTextIsOffered: boolean;
   ownLandIsBare: boolean;
   everyNeighbourIsGreyed: boolean;
 }): void {
@@ -878,6 +883,9 @@ function assertCoversWorldOffer(facts: {
     ['an action with no selection at all', shapes.some((shape) => shape.length === 0)],
     ['an action whose selection is a number', shapes.some((shape) => shape.join() === 'number')],
     ['an action whose selection is an element', shapes.some((shape) => shape.join() === 'element')],
+    // #229. `multiline` is an optional field on a text pick, so nothing but a
+    // text pick that sets it can put it in front of a fingerprint.
+    ['an action whose selection is multiline text', facts.multilineTextIsOffered],
     // The action panel's hierarchy (#228). All three states, because all three
     // are bytes on the offer: a nested path, an order standing alone, and the
     // absence that a game declaring no hierarchy sends.
@@ -1137,6 +1145,27 @@ async function computeWorldFixture(): Promise<{ view: unknown; offer: unknown }>
       (ctx.world.partition(COMMONS) as any).embers += args.logs;
     });
 
+  // A MULTILINE TEXT PICK, WHICH IS ONLY VISIBLE HERE (#229). `multiline` is an
+  // optional field on a `text` pick's metadata, and `verbatimModuleSyntax`
+  // erases the type that declares it -- so on its own it moved neither hash
+  // while changing the control every host draws for a text selection. That is
+  // the exact shape ShufflewickPub #414 recorded, and the answer is the same
+  // one: put a field the platform can see into something the fixture actually
+  // produces. A world is also where the long fields live, since an empire's
+  // description outlives any one session.
+  const post = worldAction<any>('post')
+    .prompt('Leave word on the common notice board')
+    .needs(() => [COMMONS])
+    .enterText('notice', {
+      prompt: 'What to post',
+      minLength: 2,
+      maxLength: 240,
+      multiline: true,
+    })
+    .execute((args: any, ctx: any) => {
+      (ctx.world.partition(COMMONS) as any).notice = args.notice;
+    });
+
   const neighbourPick = {
     prompt: "Whose land?",
     needs: ({ player }: any) => neighboursOf(player.seat).map(holdingPartition),
@@ -1147,6 +1176,20 @@ async function computeWorldFixture(): Promise<{ view: unknown; offer: unknown }>
 
   const tend = worldAction<any>('tend')
     .prompt("Put timber back on a neighbour's land")
+    // A NESTED MENU PATH (#228). The action panel's hierarchy is metadata on
+    // the offer, and a TYPE moves neither fingerprint on its own -- the KNOWN
+    // LIMIT at the top of this file, and the lesson ShufflewickPub #414
+    // recorded. So the fixture DECLARES a placement, two levels deep, and the
+    // bytes a host relays carry it. An engine that stopped emitting `group`
+    // would give every world a flat panel again, and this is what makes that
+    // move the payload rather than pass unrecorded.
+    //
+    // ON `tend` RATHER THAN `raze`, because `raze` is deliberately absent from
+    // this fixture's offer and a placement there would reach no wire.
+    // `tend` is offered WITH its disabled reason, so the payload also carries
+    // the combination a player actually meets: a greyed verb inside a group.
+    .group('Land', 'Clearing')
+    .order(30)
     .needs(({ player }: any) => [holdingPartition(player.seat)])
     .disabled(({ game, player }: any) =>
       isBare(holdingOf(game, player.seat)) ? 'Your own land is bare' : false,
@@ -1158,15 +1201,6 @@ async function computeWorldFixture(): Promise<{ view: unknown; offer: unknown }>
 
   const raze = worldAction<any>('raze')
     .prompt("Clear a neighbour's land")
-    // A NESTED MENU PATH (#228). The action panel's hierarchy is metadata on
-    // the offer, and a TYPE moves neither fingerprint on its own -- the KNOWN
-    // LIMIT at the top of this file, and the lesson ShufflewickPub #414
-    // recorded. So the fixture DECLARES a placement, two levels deep, and the
-    // bytes a host relays carry it. An engine that stopped emitting `group`
-    // would give every world a flat panel again, and this is what makes that
-    // move the payload rather than pass unrecorded.
-    .group('Land', 'Clearing')
-    .order(30)
     .needs(({ player }: any) => [holdingPartition(player.seat)])
     .chooseElement('neighbour', neighbourPick)
     .execute((args: any) => {
@@ -1234,7 +1268,7 @@ async function computeWorldFixture(): Promise<{ view: unknown; offer: unknown }>
       },
       forget() {},
     },
-    actions: [look, kindle, tend, raze],
+    actions: [look, kindle, tend, raze, post],
     // A SUBSET, which is the point: the commons and the looker's own land, and
     // never anybody else's.
     view: (seat: number) => [COMMONS, holdingPartition(seat)],
@@ -1315,12 +1349,28 @@ async function computeWorldFixture(): Promise<{ view: unknown; offer: unknown }>
   await world.hydrate(neighboursOf(LOOKER_SEAT).map(holdingPartition));
 
   assertCoversWorldOffer({
-    selectionShapes: [look, kindle, tend, raze].map((definition) =>
+    selectionShapes: [look, kindle, tend, raze, post].map((definition) =>
       definition.selections.map((selection) => selection.type),
     ),
-    menuPlacements: [look, kindle, tend, raze].map((definition) => ({
-      group: definition.group,
-      order: definition.order,
+    // READ OFF THE OFFER RATHER THAN THE DECLARATION, because the declaration
+    // is not what a host receives. A `multiline` that survived the builder and
+    // was dropped by `buildPickMetadata` would leave this false while the
+    // fixture looked complete.
+    multilineTextIsOffered: offer.some((verb: { selections?: readonly unknown[] }) =>
+      (verb.selections ?? []).some(
+        (pick) => (pick as { type?: string; multiline?: boolean }).multiline === true,
+      ),
+    ),
+    // OFF THE OFFER FOR #229's REASON, AND FOR A SHARPER ONE (#228). A
+    // placement dropped by `offerOf` would leave the panel flat with the
+    // declaration still reading correctly -- and reading the DECLARATIONS here
+    // was worse than merely weaker: it counted `raze`, which this fixture
+    // deliberately keeps OUT of the offer (its every candidate is greyed), so
+    // a nested path declared there would have satisfied the guard while
+    // reaching no wire at all.
+    menuPlacements: offer.map((verb: { group?: readonly string[]; order?: number }) => ({
+      group: verb.group,
+      order: verb.order,
     })),
     ownLandIsBare: isBare(holdingOf(live, LOOKER_SEAT)),
     everyNeighbourIsGreyed: neighboursOf(LOOKER_SEAT).every((seat) =>

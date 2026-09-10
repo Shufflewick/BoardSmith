@@ -95,3 +95,37 @@ export function shouldDeferElementPickToBoard(
   if (validElements.length <= threshold) return false;
   return validElements.every((e) => (e.refs ?? []).length > 0);
 }
+
+/**
+ * The length rule of a text pick, as a sentence.
+ *
+ * #229 reported this rendering as `(?-1000 chars)`: the hint was built by
+ * interpolating `minLength ?? '?'` and `maxLength ?? '?'` into a range, and
+ * `enterText` always sets a maximum while most fields set no minimum -- so the
+ * commonest field in the library showed the player a question mark where a
+ * number belongs and never said the one thing it was there to say.
+ *
+ * A range is only a range when there are two ends. With one end this states the
+ * bound it has, and with neither it says nothing at all rather than rendering an
+ * empty pair of brackets.
+ *
+ * It is a function rather than template expressions so the single-line field and
+ * the multiline field cannot drift into two different sentences -- which was the
+ * second half of the report, since fixing one and leaving the other is how the
+ * two representations of one pick start disagreeing.
+ *
+ * Whole words, not "chars": the hint is bound to the field through
+ * `aria-describedby`, so it is read aloud.
+ */
+export function textLengthHint(rules: {
+  minLength?: number;
+  maxLength?: number;
+}): string | undefined {
+  const { minLength, maxLength } = rules;
+  if (minLength !== undefined && maxLength !== undefined) {
+    return `${minLength} to ${maxLength} characters`;
+  }
+  if (maxLength !== undefined) return `up to ${maxLength} characters`;
+  if (minLength !== undefined) return `at least ${minLength} characters`;
+  return undefined;
+}

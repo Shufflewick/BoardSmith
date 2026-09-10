@@ -41,19 +41,17 @@
  * exercised once.
  */
 import { rmSync } from 'node:fs';
-
 import {
-  createChecklist,
+  assert,
+  check,
   loadChromium,
   requireInstalledCheckout,
-  startFixtureWorld,
-  writeFixtureProject,
-} from './lib/browser-harness.mjs';
-
-const SCRIPT = 'scripts/world-pick-bridge-browser.mjs';
-const { assert, check, summarize } = createChecklist(
-  'the real dev bridge in a real browser',
-);
+  startWorldHost,
+  summarise,
+  surfaceOf,
+  waitUntil,
+  writeWorldFixture,
+} from './browser-harness.mjs';
 
 /** How long one pick's own answer is waited for, from `worldProtocol.ts`. */
 const WORLD_COMMAND_TIMEOUT_MS = 20_000;
@@ -200,34 +198,6 @@ export default defineComponent({
 });
 `;
 
-const UIS = `import { defineGameUIs, defaultUI } from 'boardsmith/ui';
-import FleetBoard from './FleetBoard.js';
-
-export default defineGameUIs({ Fleet: defaultUI(FleetBoard) });
-`;
-
-/** The fixture project, written fresh and removed when the run ends. */
-const writeFixture = () =>
-  writeFixtureProject({
-    slug: 'pick-bridge-fleet',
-    displayName: 'Pick Bridge Fleet',
-    files: {
-      'src/rules/index.ts': RULES,
-      'src/ui/FleetBoard.ts': BOARD,
-      'src/ui/uis.ts': UIS,
-    },
-  });
-
-// ── Reading the surface ──────────────────────────────────────────────────────
-
-/**
- * The world surface inside the dev chrome's iframe.
- *
- * Everything a player touches is in there: the outer page is the dev bar, and
- * the bar's whole job is the bridge under test.
- */
-const surfaceOf = (page) => page.frameLocator('.world-dev__frame');
-
 /** Wait for the panel to be offering the world's verbs to a seated player. */
 async function seated(page) {
   await surfaceOf(page).locator('[data-bs-action="deploy"]').waitFor({ timeout: 30_000 });
@@ -257,12 +227,7 @@ async function crewCount(page) {
  * assertion rather than a coin toss.
  */
 async function expectCrewCount(page, expected) {
-  const deadline = Date.now() + 15_000;
-  let seen = await crewCount(page);
-  while (seen !== expected && Date.now() < deadline) {
-    await new Promise((settle) => setTimeout(settle, 100));
-    seen = await crewCount(page);
-  }
+  const seen = await waitUntil(() => crewCount(page), (read) => read === expected, 15_000);
   assert(seen === expected, `the crew pick read "${seen}" rather than "${expected}"`);
 }
 
@@ -273,8 +238,15 @@ async function settledCrewCount(page) {
 }
 
 async function main() {
-  const chromium = await loadChromium(SCRIPT);
-  const fixture = writeFixture();
+  const chromium = await loadChromium('world-pick-bridge-browser.mjs');
+  const fixture = writeWorldFixture({
+    slug: 'pick-bridge-fleet',
+    displayName: 'Pick Bridge Fleet',
+    gameClass: 'Fleet',
+    rules: RULES,
+    boardFile: 'FleetBoard',
+    board: BOARD,
+  });
   // THE FIXTURE IS REMOVED WHATEVER HAPPENS, from here on. Its own creation is
   // the only step outside the guard, and a temp world left behind by a crashed
   // build is exactly the litter this script must not leave.
@@ -286,7 +258,7 @@ async function main() {
 }
 
 async function driveThrough({ chromium, fixture }) {
-  const hostUrl = await startFixtureWorld({ fixture, displayName: 'Pick Bridge Fleet' });
+  const hostUrl = await startWorldHost({ fixture, displayName: 'Pick Bridge Fleet' });
   const browser = await chromium.launch();
 
   try {
@@ -439,8 +411,9 @@ async function driveThrough({ chromium, fixture }) {
     await browser.close();
   }
 
-  return summarize();
+  return summarise('through the real dev bridge in a real browser.');
 }
 
-requireInstalledCheckout(SCRIPT);
+requireInstalledCheckout('world-pick-bridge-browser.mjs');
+
 process.exit(await main());
