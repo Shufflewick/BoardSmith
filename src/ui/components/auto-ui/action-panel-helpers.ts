@@ -129,3 +129,32 @@ export function textLengthHint(rules: {
   if (minLength !== undefined) return `at least ${minLength} characters`;
   return undefined;
 }
+
+/**
+ * The range rule of a number pick, as a sentence.
+ *
+ * #234 reported the same defect `textLengthHint` was written for, on the pick
+ * two lines above it in the panel: the hint interpolated `min ?? '?'` and
+ * `max ?? '?'` into a range unconditionally, so `enterNumber('waste', { min: 1,
+ * integer: true })` rendered `(1-?, integer)`. A range is only a range when it
+ * has two ends; with one end this states the end it has.
+ *
+ * "whole numbers" rather than "integer": the hint is a sentence a player reads,
+ * and it is the only place the `step="1"` on the field is said in words -- so an
+ * unbounded integer pick states the rule alone rather than saying nothing, which
+ * is what the unconditional range did once both bounds were absent.
+ */
+export function numberRangeHint(rules: {
+  min?: number;
+  max?: number;
+  integer?: boolean;
+}): string | undefined {
+  const { min, max, integer } = rules;
+  const range =
+    min !== undefined && max !== undefined ? `${min} to ${max}`
+    : max !== undefined ? `up to ${max}`
+    : min !== undefined ? `at least ${min}`
+    : undefined;
+  if (range === undefined) return integer ? 'whole numbers' : undefined;
+  return integer ? `${range}, whole numbers` : range;
+}

@@ -35,6 +35,14 @@ const recycle: ActionMetadata = {
   ],
 };
 
+const anyNumber: ActionMetadata = {
+  name: 'wager',
+  prompt: 'Place a wager',
+  selections: [
+    { name: 'amount', type: 'number', prompt: 'How much' },
+  ],
+};
+
 const rename: ActionMetadata = {
   name: 'rename',
   prompt: 'Rename the colony',
@@ -64,9 +72,23 @@ describe('the number editor says what it is asking for (#199)', () => {
   });
 
   it('keeps the range hint, which is not a label but is still the rule', async () => {
+    // CHANGED DELIBERATELY BY #234. This pinned `(1-?, integer)`, which is what
+    // the panel really rendered for a pick with a floor and no ceiling -- and
+    // #199 was about the prompt, so it pinned the copy it found rather than
+    // endorsing it. A range with one end is not a range: it now states the
+    // bound it has, in the wording `numberRangeHint` gives every number pick.
     const { wrapper } = await panelAt(recycle);
-    expect(wrapper.find('.number-input .input-hint').text()).toContain('1-?');
-    expect(wrapper.find('.number-input .input-hint').text()).toContain('integer');
+    const hint = wrapper.find('.number-input .input-hint').text();
+    expect(hint).toBe('(at least 1, whole numbers)');
+    expect(hint).not.toContain('?');
+    wrapper.unmount();
+  });
+
+  it('draws no hint at all for a pick with no rule to state', async () => {
+    // The hint is the rule. With no bound and no integer rule there is nothing
+    // to say, and an empty pair of brackets says it worse than silence.
+    const { wrapper } = await panelAt(anyNumber);
+    expect(wrapper.find('.number-input .input-hint').exists()).toBe(false);
     wrapper.unmount();
   });
 

@@ -31,6 +31,7 @@ import {
   splitAnchoredChoices,
   shouldDeferElementPickToBoard,
   textLengthHint,
+  numberRangeHint,
 } from './action-panel-helpers.js';
 import {
   buildActionMenu,
@@ -435,6 +436,19 @@ watch(
     numberInputValue.value = null;
   },
 );
+
+/**
+ * The range rule of the current number pick, as a sentence (#234).
+ *
+ * A computed for the same reason `textHint` is one: the hint is rendered in one
+ * place and derived in one place, so the panel cannot state the rule one way in
+ * the markup and another way anywhere else.
+ */
+const numberHint = computed(() => {
+  const pick = currentPick.value;
+  if (!pick || pick.type !== 'number') return undefined;
+  return numberRangeHint(pick);
+});
 
 /**
  * The length rule of the current text pick, as a sentence (#229).
@@ -1679,9 +1693,7 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
             {{ currentPick.prompt || `Enter ${currentPick.name}` }}
             <span v-if="currentPick.optional" class="optional-label">(optional)</span>
           </label>
-          <span v-if="currentPick.min !== undefined || currentPick.max !== undefined" class="input-hint">
-            ({{ currentPick.min ?? '?' }}-{{ currentPick.max ?? '?' }}{{ currentPick.integer ? ', integer' : '' }})
-          </span>
+          <span v-if="numberHint" class="input-hint">({{ numberHint }})</span>
           <div class="input-row">
             <input
               type="number"

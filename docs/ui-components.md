@@ -356,6 +356,11 @@ the field, the bound as a hint below it, and a submit button.
   field and the multiline box cannot drift into two different sentences. It
   replaced an interpolated range that rendered `(?-1000 chars)` for the
   commonest field in the library.
+- **The number hint does the same, in numbers.** `1 to 10`, `up to 10`, `at
+  least 1`, and `whole numbers` on its own for an unbounded integer pick, from
+  `numberRangeHint` in the same file. It replaced `(1-?, integer)`: the same
+  interpolated range, with the same question mark where a number belongs, and
+  "integer" is a programmer's noun in a sentence a player reads.
 - **A multiline field states only its floor there**, because its character count
   already carries the ceiling and where the player stands in it. Two lines saying
   the maximum would be the same fact twice, and the action bar caps its own
