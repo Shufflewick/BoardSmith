@@ -88,18 +88,22 @@ describe("settleDeclaration — a VIEW, which can only be asked until it settles
 describe("walkDeclaration — an ACTION, whose length is its own source", () => {
   it("stops as soon as a round asks for nothing", async () => {
     const supplied: Record<string, StoredPartition>[] = [];
-    await walkDeclaration(
+    const answered = await walkDeclaration(
       async (given) => {
         supplied.push(given);
-        return [];
+        return { partitions: [], seats: [] };
       },
       async () => {
         throw new Error("nothing was needed, so nothing should have been read");
+      },
+      async () => {
+        throw new Error("no chair was named, so none should have been read");
       },
     );
 
     expect(supplied).toHaveLength(1);
     expect(Object.keys(supplied[0]!)).toEqual([]);
+    expect(answered).toEqual([]);
   });
 
   it("hands the next round a partition named __proto__ as an OWN property (#190)", async () => {
@@ -111,9 +115,12 @@ describe("walkDeclaration — an ACTION, whose length is its own source", () => 
     await walkDeclaration(
       async (given) => {
         rounds.push(given);
-        return rounds.length === 1 ? ["__proto__"] : [];
+        return { partitions: rounds.length === 1 ? ["__proto__"] : [], seats: [] };
       },
       async (name) => partition(name),
+      async () => {
+        throw new Error("no chair was named, so none should have been read");
+      },
     );
 
     const second = rounds[1]!;
@@ -135,9 +142,12 @@ describe("walkDeclaration — an ACTION, whose length is its own source", () => 
         step += 1;
         const needs = step > 6 ? [] : [`room:${step}`];
         asked.push([...needs]);
-        return needs;
+        return { partitions: needs, seats: [] };
       },
       async (name) => partition(name),
+      async () => {
+        throw new Error("no chair was named, so none should have been read");
+      },
     );
 
     expect(asked).toHaveLength(7);
@@ -148,6 +158,47 @@ describe("walkDeclaration — an ACTION, whose length is its own source", () => 
       "room:4",
       "room:5",
       "room:6",
+    ]);
+  });
+
+  /**
+   * ShufflewickPub #423: THE OTHER KIND OF ROUND, AND WHAT THE LOOP HANDS BACK.
+   *
+   * A chair's watermark never becomes resident -- it is handed to the dispatch
+   * and forgotten -- so this loop is the only thing that can remember which
+   * chairs have been answered, and it accumulates them across rounds while it
+   * resets the partitions each time. It RETURNS them for the same reason: a
+   * host that kept its own copy could hand `apply` a set that did not match
+   * what the walk asked for, and the refusal would land on the bundle.
+   */
+  it("accumulates the chairs it was asked about, and answers with them", async () => {
+    const seen: readonly number[][] = [];
+    const asked: number[] = [];
+    let round = 0;
+    const answered = await walkDeclaration(
+      async (_supplied, declared) => {
+        (seen as number[][]).push(declared.map((one) => one.seat));
+        round += 1;
+        if (round === 1) return { partitions: ["roll"], seats: [] };
+        if (round === 2) return { partitions: [], seats: [7] };
+        if (round === 3) return { partitions: [], seats: [9] };
+        return { partitions: [], seats: [] };
+      },
+      async (name) => partition(name),
+      async (seat) => {
+        asked.push(seat);
+        return { seat, at: null, since: 1_000, tenancy: "held" as const };
+      },
+    );
+
+    // One point read per chair, in the order the walk asked.
+    expect(asked).toEqual([7, 9]);
+    // Every round sees every answer so far, which is what lets the child match
+    // them back against its own rounds in order.
+    expect(seen).toEqual([[], [], [7], [7, 9]]);
+    expect(answered).toEqual([
+      { seat: 7, at: null, since: 1_000, tenancy: "held" },
+      { seat: 9, at: null, since: 1_000, tenancy: "held" },
     ]);
   });
 });

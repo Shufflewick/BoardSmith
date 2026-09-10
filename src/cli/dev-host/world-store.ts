@@ -72,7 +72,7 @@ import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 
 import type {
-  SeatActivityStamp,
+  DeclaredSeatActivityStamp,
   StoredPartition,
   WorldPartitionStore,
 } from '../../world/contract.js';
@@ -255,8 +255,18 @@ export interface LocalWorldStore extends WorldPartitionStore, WorldPartitionWrit
    *  granted, because a seat is where a player's holdings are. */
   seats(): readonly WorldSeatRecord[];
 
-  /** Record that `player` holds `seat`. */
-  seat(player: string, seat: number): void;
+  /**
+   * Record that `player` holds `seat`, as of `seatedAt`.
+   *
+   * `seatedAt` IS PART OF THE ROSTER ROW because it is what a new holder's
+   * idleness is measured from (ShufflewickPub #423). Without it, a player who
+   * joins a world that has been recording for four hundred days reads
+   * `at: null` and `since: <four hundred days ago>` -- so the first inactivity
+   * sweep after they arrive finds them four hundred days idle and reaps the
+   * empire they have not finished building. The world's recording epoch is the
+   * floor and this is the other one; a chair's baseline is the later of the two.
+   */
+  seat(player: string, seat: number, seatedAt: number): void;
 
   /**
    * WHEN THIS WORLD BEGAN WATCHING (ShufflewickPub #383), fixing it on the
@@ -271,15 +281,21 @@ export interface LocalWorldStore extends WorldPartitionStore, WorldPartitionWrit
   activitySince(openedAt: number): number;
 
   /**
-   * THIS SEAT'S DURABLE ACTIVITY WATERMARK (ShufflewickPub #383).
+   * THIS SEAT'S DURABLE ACTIVITY WATERMARK (ShufflewickPub #383, #423).
    *
    * A POINT READ, per seat, which is the whole reason it is a table and not a
    * scan: a five-hundred-seat world answering "is this empire idle" must not
    * read four hundred and ninety-nine other empires to do it. Answers for any
    * seat, including one that has never acted -- `at: null` -- so a caller never
    * has to distinguish "no row" from "no activity".
+   *
+   * IT ANSWERS WHO IS IN THE CHAIR TOO (#423), because that is the one thing
+   * the numbers cannot say: a chair nobody holds reads `at: null` exactly as an
+   * established empire that has been quiet since the upgrade does, and only one
+   * of those is somebody's game. This host never erases an account and never
+   * hands a chair on, so it answers `held` or `empty` and never `erased`.
    */
-  activityOf(seat: number): SeatActivityStamp;
+  activityOf(seat: number): DeclaredSeatActivityStamp;
 
   /**
    * THE STATE VERSION THIS WORLD'S BYTES WERE LAST WRITTEN UNDER (#200).
@@ -527,6 +543,12 @@ export function openWorldStore(path: string, budgets: WorldBudgets): LocalWorldS
     ),
     deleteEvent: db.prepare('DELETE FROM scheduled WHERE id = ?'),
     listSeats: db.prepare('SELECT player, seat FROM seats ORDER BY seat'),
+    // WHO HOLDS ONE CHAIR, AND SINCE WHEN (ShufflewickPub #423). A point read
+    // by seat, because that is the question a declared activity read asks: five
+    // hundred empires and it wants one row. `seated_at` is null for a chair
+    // granted before this store recorded grants, which is exactly the case the
+    // world's own recording epoch already answers.
+    readSeatOf: db.prepare('SELECT player, seated_at FROM seats WHERE seat = ?'),
     readActivity: db.prepare('SELECT at FROM seat_activity WHERE seat = ?'),
     // A HIGH-WATER MARK IN SQL, not in a read-then-write the host could race or
     // get backwards: a drained event runs at its nominal due, which is in the
@@ -535,8 +557,16 @@ export function openWorldStore(path: string, budgets: WorldBudgets): LocalWorldS
       'INSERT INTO seat_activity (seat, at) VALUES (?, ?) ' +
         'ON CONFLICT(seat) DO UPDATE SET at = max(at, excluded.at)',
     ),
+    // `seated_at` IS WRITTEN ONCE AND NEVER MOVED (ShufflewickPub #423). It
+    // means "when this holder took this chair", so a reconnect must leave it
+    // alone: a baseline that moved forward every time somebody opened a tab
+    // would reset their idleness on every reconnect, which is an inactivity
+    // deadline that can never be reached. A chair that changes HANDS is a
+    // different row, because the roster is keyed by player and a departing one
+    // is deleted.
     writeSeat: db.prepare(
-      'INSERT INTO seats (player, seat) VALUES (?, ?) ON CONFLICT(player) DO UPDATE SET seat = excluded.seat',
+      'INSERT INTO seats (player, seat, seated_at) VALUES (?, ?, ?) ' +
+        'ON CONFLICT(player) DO UPDATE SET seat = excluded.seat',
     ),
     readMeta: db.prepare('SELECT value FROM meta WHERE key = ?'),
     writeMeta: db.prepare(
@@ -708,8 +738,8 @@ export function openWorldStore(path: string, budgets: WorldBudgets): LocalWorldS
       return stmt.listSeats.all() as WorldSeatRecord[];
     },
 
-    seat(player: string, seat: number): void {
-      stmt.writeSeat.run(player, seat);
+    seat(player: string, seat: number, seatedAt: number): void {
+      stmt.writeSeat.run(player, seat, seatedAt);
     },
 
     activitySince(openedAt: number): number {
@@ -721,15 +751,23 @@ export function openWorldStore(path: string, budgets: WorldBudgets): LocalWorldS
       return openedAt;
     },
 
-    activityOf(seat: number): SeatActivityStamp {
+    activityOf(seat: number): DeclaredSeatActivityStamp {
       const row = stmt.readActivity.get(seat) as { at: number } | undefined;
+      const chair = stmt.readSeatOf.get(seat) as
+        | { player: string; seated_at: number | null }
+        | undefined;
       return {
         seat,
         // NULL IS THE ANSWER for a seat this world has not seen act since it
         // began recording, and it is a different answer from `since`. The
         // engine applies the fallback once, so no caller here has to choose.
         at: row === undefined ? null : row.at,
-        since: recordingSince(),
+        // THE LATER OF THE TWO FLOORS (#423). The world's recording epoch is
+        // when idleness could first be observed at all; this chair's grant is
+        // when there was anybody in it to observe. Measuring a newcomer from
+        // the first would report them idle for the whole life of the world.
+        since: Math.max(recordingSince(), chair?.seated_at ?? 0),
+        tenancy: chair === undefined ? 'empty' : 'held',
       };
     },
 
@@ -1025,7 +1063,11 @@ CREATE TABLE IF NOT EXISTS scheduled (
   attempts INTEGER NOT NULL
 );
 CREATE INDEX IF NOT EXISTS scheduled_due ON scheduled (due, seq);
-CREATE TABLE IF NOT EXISTS seats (player TEXT PRIMARY KEY, seat INTEGER NOT NULL);
+CREATE TABLE IF NOT EXISTS seats (
+  player TEXT PRIMARY KEY,
+  seat INTEGER NOT NULL,
+  seated_at INTEGER
+);
 ${SEAT_ACTIVITY_TABLE}
 CREATE TABLE IF NOT EXISTS receipts (
   player TEXT NOT NULL,
@@ -1048,17 +1090,25 @@ CREATE INDEX IF NOT EXISTS receipts_at ON receipts (at);
  * Silently READING a store this code does not understand stays forbidden -- an
  * upgrade is a deliberate, atomic rewrite, never a hopeful reinterpretation.
  */
-const SCHEMA_VERSION = '4';
+const SCHEMA_VERSION = '5';
 
 /**
- * The layout the seat activity table arrived in (`36d723d6`), and the only
- * layout this code can carry a world forward FROM.
+ * THE LAYOUTS THIS CODE CAN CARRY A WORLD FORWARD FROM, and the step each one
+ * takes.
+ *
+ * A CHAIN AND NOT A SINGLE SOURCE LAYOUT, because a world sitting on 3 has to
+ * be able to reach 5: the alternative is telling an author whose store is two
+ * upgrades old to reset it, which is offering to delete a world five hundred
+ * seats deep. Each step is applied in order until the stamp is current.
  *
  * Layouts 1 and 2 are not upgradable, and are not pretended to be: nothing here
  * knows what their tables held, and a store opened on a guess is worse than one
  * refused.
  */
-const UPGRADABLE_LAYOUT = '3';
+const LAYOUT_UPGRADES: readonly { readonly from: string; readonly apply: (db: SqliteDatabase) => void }[] = [
+  { from: '3', apply: upgradeToLayout4 },
+  { from: '4', apply: upgradeToLayout5 },
+];
 
 /**
  * Bring the store at `db` to this file's layout, or refuse it whole.
@@ -1083,12 +1133,14 @@ function prepareSchema(db: SqliteDatabase, path: string): void {
     });
     return;
   }
-  if (stored === SCHEMA_VERSION) return;
-  if (stored === UPGRADABLE_LAYOUT) {
-    upgradeToLayout4(db);
-    return;
+  let at = stored;
+  for (;;) {
+    if (at === SCHEMA_VERSION) return;
+    const step = LAYOUT_UPGRADES.find((one) => one.from === at);
+    if (step === undefined) throw unreadableLayout(stored, path);
+    step.apply(db);
+    at = storedLayout(db);
   }
-  throw unreadableLayout(stored, path);
 }
 
 /**
@@ -1131,7 +1183,23 @@ function storedLayout(db: SqliteDatabase): string | undefined {
 function upgradeToLayout4(db: SqliteDatabase): void {
   transactOn(db, () => {
     db.exec(SEAT_ACTIVITY_TABLE);
-    db.prepare('UPDATE meta SET value = ? WHERE key = ?').run(SCHEMA_VERSION, SCHEMA_VERSION_KEY);
+    db.prepare('UPDATE meta SET value = ? WHERE key = ?').run('4', SCHEMA_VERSION_KEY);
+  });
+}
+
+/**
+ * LAYOUT 4 TO LAYOUT 5: when each chair was granted (ShufflewickPub #423).
+ *
+ * One nullable column on `seats`, and the null is the honest answer rather than
+ * a backfill: this store does not know when a chair it already held was handed
+ * out, and a guessed instant is a floor somebody's empire is measured against.
+ * A null chair falls back to the world's own recording epoch, which is exactly
+ * where an already-seated player was measured from before this column existed.
+ */
+function upgradeToLayout5(db: SqliteDatabase): void {
+  transactOn(db, () => {
+    db.exec('ALTER TABLE seats ADD COLUMN seated_at INTEGER');
+    db.prepare('UPDATE meta SET value = ? WHERE key = ?').run('5', SCHEMA_VERSION_KEY);
   });
 }
 

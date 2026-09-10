@@ -1173,6 +1173,131 @@ which is what keeps an inactivity rule from costing what the world costs. There
 is no way to enumerate who is active, deliberately: that is the O(world) scan
 partitioning exists to delete.
 
+### A world-owned phase can ask about a chair it NAMES (#423)
+
+`world.activity` is about the seat the dispatch **belongs to**. Three questions
+an occupied world's own lifecycle asks are not that question, and none of them
+can be answered by a seat-owned timer:
+
+- **An empire nobody will ever come back to.** A schedule's owner is stamped
+  from the acting seat, so arming a seat-owned deadline requires the seat to
+  act -- which is exactly what an abandoned empire never does. An audit of the
+  five hundred empires already in an upgraded world has to be the **world's**,
+  and a world-owned event is handed `activity: null`.
+- **A successor, which is a fact about somebody else.** "The most recently
+  active eligible member" is not a question the destroyed leader's own stamp can
+  answer, and `presence` cannot order a set of people who are all offline.
+- **A recheck before something irreversible.** The countdown a world-owned audit
+  armed is charged to the world, so `activity` is null when it fires. A
+  timestamp the game copied into the schedule row is a memory, and what has to
+  be rechecked is whether the memory is still true.
+
+So a phase **says which chair it is about**, on the same declaration walk it
+already uses to say which partitions it will touch:
+
+```ts
+const audit = worldClockAction<G>('audit')
+  // Round one. The seat this occurrence is about is itself world state.
+  .needs(() => ['ledger'])
+  // The activity round: ONE chair, or null for a phase with nobody to ask
+  // about. Answered with round one resident, so it can read the cursor.
+  .about(({ world }) => nextSeat(world.partition('ledger')))
+  // And now the empire's own partition, which nothing could have named before
+  // the cursor was read.
+  .needs(({ world }) => [`empire:${nextSeat(world.partition('ledger'))}`])
+  .execute((_args, ctx) => {
+    const seat = nextSeat(ctx.world.partition('ledger'));
+    const stamp = ctx.world.activityOf(seat);   // { seat, at, since, inactiveSince, tenancy }
+    if (stamp.tenancy !== 'held') return;       // nobody is in this chair
+    const idle = ctx.world.now - stamp.inactiveSince;
+    // ...
+  });
+```
+
+**`.about()` is on `worldClockAction` and nowhere else.** A seated action
+carrying an activity round is refused when the world is BUILT, with
+`invalid-world-action` -- the same two-site enforcement `seatless` itself gets,
+because `ActionDefinition` is structural and a rule the builder merely declines
+to offer is a rule a hand-built definition steps around. A player's command
+therefore has no road to another seat's watermark at all: a client cannot ask
+the platform how idle somebody else is, on its own behalf or anybody's.
+
+**One chair per round**, so the total is the action's own source. `.about()`
+answers a seat or nothing -- it is not a list -- so an all-seat read would have
+to be written out one `.about()` at a time, in the bundle, where a reviewer can
+see it. That is what keeps the O(world) shape unavailable rather than merely
+discouraged.
+
+**A chair the walk did not name is refused**, by name, with
+`undeclared-activity` -- exactly as an undeclared partition is. What a handler
+may read is what its declaration named, so a dispatch's cost is knowable from
+the source rather than from what the handler decided once it was running. Two
+more refusals belong to the HOST rather than the bundle: `activity-unanswered`
+if a handler reaches a chair the walk declared and the host supplied nothing
+for, and `activity-answered-wrong` if the host answers about a different chair
+from the one it was asked about. `.about()` returning something that is not a
+whole positive seat number is `invalid-seat-declaration`, refused rather than
+passed on -- a host asked about seat `1.5` answers an empty row, which reads to
+the phase that asked exactly like an established empire nobody has touched.
+
+**`tenancy` is the field to branch on before anything irreversible.** It is the
+one fact about a seat NUMBER a game cannot hold for itself:
+
+| `tenancy` | what it means |
+| --- | --- |
+| `'held'` | Somebody holds this chair now, and the watermark is theirs. |
+| `'empty'` | Nobody holds it: either it was never handed out, or it was vacated and its watermark went with it. `at` is null. |
+| `'erased'` | Its holder's account was erased. The chair is still allocated and the watermark still stands, and there is nobody who can ever come back to it. |
+
+Vacating a chair **deletes** its watermark -- it must, or the next holder's
+first handler would be told they had been silent since the person before them
+was -- so on the numbers alone an empty chair is indistinguishable from an
+established empire that has been quiet since the upgrade. One of those is a
+candidate for a successor election and the other is not. There is deliberately
+no fourth value for "never issued": a host's roster records who holds a chair,
+not the history of who ever did, and a value nothing could check is worse than
+one the game can answer for itself from its own partitions.
+
+**A chair's baseline is the later of two floors.** `since` is the world's own
+recording epoch OR the instant this holder took the chair, whichever is later.
+Without the second, a player who joins a world that has been recording for a
+year reads as a year idle on their first wake, and the first sweep after they
+arrive reaps an empire nobody had time to build. It only ever raises the floor,
+so no seat is ever reaped earlier than the recording epoch alone would have
+reaped it -- and a chair granted before a host recorded grants at all falls back
+to the epoch, exactly where it was measured from before.
+
+### Writing an occupied world's lifecycle with it
+
+The shape the three paths above share is one **world-owned recurrence with a
+durable cursor**, sweeping one empire per occurrence:
+
+- **Bootstrapping needs no migration and no player command.** A migration may
+  not schedule anything and may not change an existing event's owner, action or
+  deadline, and it does not need to: a fresh schedule from a clock event belongs
+  to the world, so any world-owned event a world already holds can arm the audit
+  recurrence. A world whose queue is completely empty is the one case that still
+  needs a first push from a player's command or a republished genesis, because
+  there is no clock road at all until something arms one.
+- **Separate cadences are separate keys.** An hourly inactivity check and a
+  daily five-day warning are two recurrences with two keys, each costing one
+  queue row forever. A once-per-24-hours charge is not a third timer at all: it
+  is a stamp in the empire's own partition that the hourly pass compares against,
+  which is also what makes it idempotent when a parked world drains a day's
+  occurrences in one wake.
+- **A cancelable countdown is a keyed world-owned timer, and a player cannot
+  clear it.** A cancel is addressed by `(owner, key)` and the owner is stamped
+  from the acting seat, so a seat has no way to write down a world-owned key:
+  logging in cannot silently clear a countdown that is already armed. If the
+  game wants the player to be able to stand it down, that is an explicit verb
+  that writes a flag the countdown's handler reads -- which is the distinction
+  worth keeping, because "they came back" and "they asked us to stop" are
+  different facts.
+- **A continuation resumes across cold wakes because its evidence is durable.**
+  Keep the instant itself -- not a rank, not a boolean -- in the partition the
+  sweep owns. The next occurrence compares against it after an eviction, and a
+  sweep that stored "was better" could not.
+
 ## Scheduling
 
 ```ts

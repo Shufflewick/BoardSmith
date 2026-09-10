@@ -66,8 +66,8 @@ async function attempt() {
   }).runner;
   const genesis = await runner.genesis();
   const command = { name: "buy", args: {} };
-  await runner.declare(command, "p1", {}, STAMP.arrivedAt);
-  await runner.declare(command, "p1", { vault: genesis.partitions.vault! }, STAMP.arrivedAt);
+  await runner.declare(command, "p1", {}, STAMP.arrivedAt, []);
+  await runner.declare(command, "p1", { vault: genesis.partitions.vault! }, STAMP.arrivedAt, []);
   return runner.apply({ player: "p1", command, timing: null, ...STAMP });
 }
 

@@ -84,7 +84,7 @@ import type {
 import type { ConditionConfig, MultiSelectConfig } from "../engine/action/types.js";
 import type { WorldBudgets } from "./budgets.js";
 import type { ScheduleArm } from "./schedule-api.js";
-import type { SeatActivity, WorldNarrationLine } from "./contract.js";
+import type { DeclaredSeatActivity, SeatActivity, WorldNarrationLine } from "./contract.js";
 // TYPE-ONLY, so the import is erased and the cycle with `engine.ts` is not one
 // at runtime. `WorldResidency` is declared beside the engine that answers it.
 import type { WorldDeclarationFacilities } from "./engine.js";
@@ -277,7 +277,34 @@ export interface WorldActionContext<G extends Game = Game> extends ActionContext
 export interface WorldClockContext<G extends Game = Game> {
   readonly game: G;
   readonly args: Record<string, unknown>;
-  readonly world: WorldFacilities;
+  readonly world: WorldClockFacilities;
+}
+
+/**
+ * WHAT THE WORLD'S OWN CLOCK CAN DO THAT A SEAT CANNOT (ShufflewickPub #423).
+ *
+ * Everything a seated action reaches, plus the one reach that only makes sense
+ * without an acting seat: the watermark of a chair this phase NAMED. A seated
+ * action's facilities do not carry it, so an author writing a player's verb
+ * never finds a door to somebody else's idleness and is never told at runtime
+ * that the door is locked.
+ */
+export interface WorldClockFacilities extends WorldFacilities {
+  /**
+   * THE WATERMARK FOR A CHAIR THIS PHASE DECLARED.
+   *
+   * Refused, by name, for a seat no `.about()` round asked about -- exactly as
+   * `partition()` is refused for a room the walk did not name. What a handler
+   * may read is what its declaration named, so a dispatch's cost is knowable
+   * from the source rather than from what the handler decided once it was
+   * already running.
+   *
+   * `tenancy` is the field to branch on before anything irreversible: an empty
+   * chair's watermark was deleted with the chair (#399), so on the numbers
+   * alone it looks exactly like an empire that has been quiet since the
+   * upgrade.
+   */
+  activityOf(seat: number): DeclaredSeatActivity;
 }
 
 /**
@@ -377,13 +404,54 @@ export interface WorldClockNeedsContext<G extends Game = Game> {
  * `player`, a seatless one reads `seat`, and the fields the other kind must not
  * touch are absent from its type rather than merely undocumented.
  */
-/** One round of the walk, and the step it comes before. */
-export interface WorldNeedsRound {
+/**
+ * ONE ROUND OF THE WALK, and the step it comes before.
+ *
+ * TWO KINDS SINCE ShufflewickPub #423, discriminated by `kind` rather than by
+ * which callback happens to be present: a round asks for PARTITIONS or it asks
+ * about ONE CHAIR, and the engine runs both in the single order the author
+ * wrote them. Interleaving is the point -- an audit reads its cursor out of a
+ * partition, names the chair the cursor points at, and then names that seat's
+ * own partition, which nothing could have named before the cursor was read.
+ */
+export type WorldNeedsRound = WorldPartitionsRound | WorldActivityRound;
+
+/** A round that names partitions. The original shape, and the common one. */
+export interface WorldPartitionsRound {
+  readonly kind: "partitions";
   /** The index of the selection this round precedes; `selections.length` for
    *  the round before `execute`. */
   readonly before: number;
   readonly declare: WorldNeeds;
 }
+
+/**
+ * A round that names ONE CHAIR whose watermark this phase will read
+ * (ShufflewickPub #423).
+ *
+ * ONLY ON A SEATLESS ACTION, refused at engine construction for any other --
+ * the same two-site enforcement `seatless` itself gets, because a rule the
+ * builder merely declines to offer is a rule a hand-built definition steps
+ * around. A player's command has no road to another seat's watermark, which is
+ * what makes this the world's own authority rather than something a client can
+ * ask for on somebody else's behalf.
+ */
+export interface WorldActivityRound {
+  readonly kind: "activity";
+  readonly before: number;
+  /** The chair this round is about, or null for a phase that has nobody to ask
+   *  about -- the last occurrence of a sweep that ran off the end of its
+   *  roster. */
+  readonly about: WorldSeatNeeds;
+}
+
+/** A seatless step's activity declaration, with its author's typing erased. */
+export type WorldSeatNeeds = (context: {
+  readonly game: Game;
+  readonly seat: null;
+  readonly args: Record<string, unknown>;
+  readonly world: WorldDeclarationFacilities;
+}) => number | null;
 
 export type WorldNeeds = (context: {
   readonly game: Game;
@@ -463,11 +531,11 @@ export interface WorldActionBlock {
  */
 const FACILITIES_KEY = Symbol.for("boardsmith.world.facilities");
 
-type FacilitiesHolder = { [FACILITIES_KEY]?: WorldFacilities };
+type FacilitiesHolder = { [FACILITIES_KEY]?: WorldClockFacilities };
 
 /** Bind (or, with `null`, release) the facilities this game's actions reach.
  *  The world engine is the only caller. */
-export function bindWorldFacilities(game: Game, facilities: WorldFacilities | null): void {
+export function bindWorldFacilities(game: Game, facilities: WorldClockFacilities | null): void {
   const holder = game as unknown as FacilitiesHolder;
   if (facilities === null) delete holder[FACILITIES_KEY];
   else holder[FACILITIES_KEY] = facilities;
@@ -481,7 +549,7 @@ export function bindWorldFacilities(game: Game, facilities: WorldFacilities | nu
  * callback would read `undefined.partition` and report a TypeError from inside
  * library code.
  */
-export function worldFacilitiesOf(game: Game): WorldFacilities {
+export function worldFacilitiesOf(game: Game): WorldClockFacilities {
   const facilities = (game as unknown as FacilitiesHolder)[FACILITIES_KEY];
   if (facilities === undefined) {
     throw worldRefusal(
@@ -632,7 +700,27 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
   /** Append one round of the walk. `worldClockAction`'s facade reaches it for
    *  a seatless action's rounds, which is why it is not private. */
   declareAt(before: number, declare: WorldNeeds): void {
-    (this.definition.world!.needs as WorldNeedsRound[]).push({ before, declare });
+    (this.definition.world!.needs as WorldNeedsRound[]).push({
+      kind: "partitions",
+      before,
+      declare,
+    });
+  }
+
+  /**
+   * Append one ACTIVITY round of the walk (ShufflewickPub #423).
+   *
+   * Reached only through `worldClockAction`'s `.about()`. There is deliberately
+   * no seated door to it: this class's own builder does not expose one, and
+   * `assertWorldAction` refuses the round on a seated definition however it
+   * got there.
+   */
+  askAbout(before: number, about: WorldSeatNeeds): void {
+    (this.definition.world!.needs as WorldNeedsRound[]).push({
+      kind: "activity",
+      before,
+      about,
+    });
   }
 
   prompt(prompt: string): this {
@@ -947,6 +1035,34 @@ export class WorldClockAction<G extends Game = Game> {
     return this;
   }
 
+  /**
+   * SAY WHICH CHAIR THIS PHASE IS ABOUT (ShufflewickPub #423).
+   *
+   * One round of the same walk `.needs()` appends to, in the same order, and
+   * what it names is answered by the host as a point read: `ctx.world.activityOf(seat)`
+   * inside `execute` then reads the watermark for that chair and refuses for
+   * any other.
+   *
+   * ONE SEAT, or `null` for a phase with nobody to ask about. It is not a list,
+   * and that is the cost model rather than a simplification: an occupied world's
+   * lifecycle sweeps ONE empire per occurrence, so the number of chairs a
+   * dispatch reads is the number of `.about()` calls in this action's source.
+   * A game that wanted the whole roster would have to write the whole roster
+   * out, one call at a time, where a reviewer can see it.
+   *
+   * A LATER ROUND MAY NAME A CHAIR AN EARLIER ONE COULD NOT. Put `.needs()`
+   * first and the cursor, the alliance roll, or whatever else decides who this
+   * occurrence is about is resident by the time this runs -- which is the whole
+   * reason this is a round of the walk rather than an argument on the schedule
+   * row: a schedule row is a memory, and the thing being rechecked is whether
+   * the memory is still true.
+   */
+  // fallow-ignore-next-line unused-class-member
+  about(declare: (context: WorldClockNeedsContext<G>) => number | null): this {
+    this.action.askAbout(0, declare as unknown as WorldSeatNeeds);
+    return this;
+  }
+
   // fallow-ignore-next-line unused-class-member
   execute(
     fn: (args: Record<string, unknown>, context: WorldClockContext<G>) => ActionResult | void,
@@ -1021,6 +1137,23 @@ export function assertWorldAction(definition: ActionDefinition): void {
   }
 
   for (const round of block.needs) {
+    // THE ACTIVITY ROUND IS THE CLOCK'S, AND THIS IS THE SECOND OF ITS TWO
+    // SITES (ShufflewickPub #423). The seated builder offers no `.about()`, and
+    // that is a signpost rather than the enforcement: `ActionDefinition` is
+    // structural, so a bundle can push a round onto the block by hand. A
+    // player's command that could read another seat's watermark would be a
+    // client asking the host a question about somebody else, which is the one
+    // thing this whole road exists to keep unreachable.
+    if (round.kind === "activity" && block.seatless !== true) {
+      throw worldRefusal(
+        "invalid-world-action",
+        `The "${definition.name}" action declares which seat it is about, and it is not the ` +
+          "world's own clock. A chair's activity watermark is the host's answer about a person, " +
+          "and only a seatless action may ask for one: a seat's verb asking about another seat " +
+          "is a player asking the platform how idle somebody else is. Build the phase with " +
+          "`worldClockAction()` and let a scheduled event run it.",
+      );
+    }
     if (round.before >= 0 && round.before <= definition.selections.length) continue;
     throw worldRefusal(
       "invalid-world-action",

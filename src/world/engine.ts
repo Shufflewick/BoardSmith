@@ -83,13 +83,18 @@ import {
   assertCandidateBudget,
   assertWorldAction,
   bindWorldFacilities,
-  type WorldFacilities,
+  type WorldActivityRound,
+  type WorldClockFacilities,
   type WorldNeedsRound,
+  type WorldPartitionsRound,
 } from "./action.js";
 import type {
+  DeclaredSeatActivity,
+  DeclaredSeatActivityStamp,
   SeatActivity,
   SeatActivityStamp,
   WorldActionOffer,
+  WorldDispatchNeeds,
   WorldCommand,
   WorldCommandResult,
   WorldCommandStamp,
@@ -719,6 +724,10 @@ export class BoardSmithWorldEngine implements WorldEngine {
       allowance: stamp.allowance,
       presence: stamp.presence,
       activity: stamp.activity,
+      // EMPTY ON A SEAT'S ROAD, ALWAYS. A seated action may not declare an
+      // activity round (ShufflewickPub #423), so the only honest thing to hand
+      // its handler is nothing to read.
+      declaredActivity: stamp.declaredActivity,
     });
   }
 
@@ -750,6 +759,11 @@ export class BoardSmithWorldEngine implements WorldEngine {
       // deadline is about them. Collapsing the two would either bill a seat for
       // the clock's work or hand a reaper somebody else's idleness.
       activity: stamp.activity,
+      // AND THE CHAIRS THIS PHASE NAMED (ShufflewickPub #423). The road the
+      // point read exists for: a world-owned event is handed `activity: null`
+      // because it is about nobody, and these are how it learns anything about
+      // a person at all.
+      declaredActivity: stamp.declaredActivity,
     });
   }
 
@@ -851,6 +865,10 @@ export class BoardSmithWorldEngine implements WorldEngine {
     for (let step = 0; step < definition.selections.length || step === 0; step++) {
       for (const round of definition.world!.needs) {
         if (round.before !== step) continue;
+        // AN OFFER NAMES NO CHAIR (ShufflewickPub #423): only a seatless action
+        // may declare an activity round, and a seatless action is never
+        // offered. There is nothing here to read and nothing to hydrate.
+        if (round.kind === "activity") continue;
         const unmet = this.declareRound(round, seat, {}, now).filter(
           (name) => !this.residentIds.has(name),
         );
@@ -871,12 +889,16 @@ export class BoardSmithWorldEngine implements WorldEngine {
     stamp: WorldOfferStamp,
   ): Promise<WorldActionOffer | null> {
     const named: string[] = [];
+    // AN OFFER IS A SEAT'S, so nothing accumulates here: a seated action may
+    // not declare an activity round at all (ShufflewickPub #423), which
+    // `assertWorldAction` refuses at construction.
+    const namedSeats: number[] = [];
     const facilities = this.readOnlyFacilities(definition.name, named, stamp);
     bindWorldFacilities(this.game, facilities);
     try {
       // ROUND ONE (and any round that shares its place), before anything is
       // asked of the player.
-      await this.hydrateRounds(definition, 0, seat, {}, named, stamp.now);
+      await this.hydrateRounds(definition, 0, seat, {}, named, namedSeats, stamp.now);
 
       // WITH EMPTY ARGS, exactly as a table evaluates availability. An action
       // whose condition is false is not offered and no further round runs, so a
@@ -913,7 +935,9 @@ export class BoardSmithWorldEngine implements WorldEngine {
       const selections: PickMetadata[] = [];
       let satisfiable = true;
       for (let index = 0; index < definition.selections.length; index++) {
-        if (index > 0) await this.hydrateRounds(definition, index, seat, {}, named, stamp.now);
+        if (index > 0) {
+          await this.hydrateRounds(definition, index, seat, {}, named, namedSeats, stamp.now);
+        }
         const pick = this.pickOf(definition, index, acting, named);
         selections.push(pick);
         // WHAT `hasValidSelectionPath` MEANS FOR A WORLD ACTION. On a table it
@@ -989,6 +1013,8 @@ export class BoardSmithWorldEngine implements WorldEngine {
     const index = this.selectionIndex(definition, selection);
 
     const named: string[] = [];
+    // As `offerOf`: a pick is a seat's, and a seat's verb declares no chair.
+    const namedSeats: number[] = [];
     const facilities = this.readOnlyFacilities(definition.name, named, stamp);
     bindWorldFacilities(this.game, facilities);
     try {
@@ -996,7 +1022,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
       // A later round may read what an earlier one loaded, and with arguments in
       // hand a round can name a partition the empty-args offer could not.
       for (let step = 0; step <= index; step++) {
-        await this.hydrateRounds(definition, step, seat, args, named, stamp.now);
+        await this.hydrateRounds(definition, step, seat, args, named, namedSeats, stamp.now);
       }
       return this.pickOf(definition, index, acting, named, args);
     } finally {
@@ -1025,6 +1051,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
     for (let step = 0; step <= index; step++) {
       for (const round of definition.world!.needs) {
         if (round.before !== step) continue;
+        if (round.kind === "activity") continue;
         const unmet = this.declareRound(round, seat, args, now).filter(
           (name) => !this.residentIds.has(name),
         );
@@ -1183,16 +1210,47 @@ export class BoardSmithWorldEngine implements WorldEngine {
    * `player` is null for a scheduled event, which reaches a seatless action's
    * declaration as a null seat and no player at all.
    */
-  commandPartitions(player: string | null, command: WorldCommand, now: number): readonly string[] {
+  commandNeeds(
+    player: string | null,
+    command: WorldCommand,
+    now: number,
+    declared: readonly DeclaredSeatActivityStamp[],
+  ): WorldDispatchNeeds {
     const seat = player === null ? null : this.seatFor(player);
     const definition = this.actionFor(command.name, seat);
+    // WHICH OF THE HOST'S ANSWERS THIS WALK HAS ACCOUNTED FOR SO FAR.
+    //
+    // IN ORDER, and the order is what makes the walk terminate. A host answers
+    // the chairs in the order it was asked, so the nth activity round's answer
+    // is the nth stamp -- and a stamp that is about a different chair is a host
+    // answering a question nobody asked, which is refused here rather than
+    // discovered as a loop that never ends because the round keeps asking for a
+    // seat the answer never covers.
+    let answered = 0;
     for (const round of definition.world!.needs) {
+      if (round.kind === "activity") {
+        const about = this.declareSeatRound(round, command.args, now, definition.name);
+        if (about === null) continue;
+        const already = declared[answered];
+        if (already === undefined) return { partitions: [], seats: [about] };
+        if (already.seat !== about) {
+          throw worldRefusal(
+            "activity-answered-wrong",
+            `Action "${definition.name}" declared it was about seat ${about}, and the host ` +
+              `answered about seat ${already.seat}. A declared activity read is answered in the ` +
+              "order it was asked, so this host and this world disagree about which chair the " +
+              "phase names.",
+          );
+        }
+        answered += 1;
+        continue;
+      }
       const missing = this.declareRound(round, seat, command.args, now).filter(
         (name) => !this.residentIds.has(name),
       );
-      if (missing.length > 0) return declaredOnce(missing);
+      if (missing.length > 0) return { partitions: declaredOnce(missing), seats: [] };
     }
-    return [];
+    return { partitions: [], seats: [] };
   }
 
   /**
@@ -1208,7 +1266,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
    * O(resident) cost that removed.
    */
   private declareRound(
-    round: WorldNeedsRound,
+    round: WorldPartitionsRound,
     seat: number | null,
     args: Readonly<Record<string, unknown>>,
     now: number,
@@ -1232,6 +1290,45 @@ export class BoardSmithWorldEngine implements WorldEngine {
   }
 
   /**
+   * ONE ACTIVITY ROUND, answered read-only (ShufflewickPub #423).
+   *
+   * The same read-only projection and the same `readingOnly` wrapper a
+   * partition round gets, and for the same two reasons: a declaration runs
+   * before the host has decided what this dispatch may change, and what it
+   * merely LOOKED at must not enter the next dispatch's dirty comparison.
+   *
+   * A SEAT IS A WHOLE POSITIVE NUMBER OR IT IS NOTHING. The refusal is here
+   * rather than at the host because the host would have to answer a point read
+   * for `1.5` to find out, and what it would answer is an empty row -- which
+   * reads, to the phase that asked, exactly like a chair nobody is sitting in.
+   */
+  private declareSeatRound(
+    round: WorldActivityRound,
+    args: Readonly<Record<string, unknown>>,
+    now: number,
+    action: string,
+  ): number | null {
+    const about = this.game.readingOnly(() =>
+      round.about({
+        game: readOnlyProjection(this.game),
+        seat: null,
+        args: args as Record<string, unknown>,
+        world: this.declaringWorld(now),
+      }),
+    );
+    if (about === null) return null;
+    if (!Number.isInteger(about) || about < 1) {
+      throw worldRefusal(
+        "invalid-seat-declaration",
+        `Action "${action}" says it is about "${String(about)}", which is not a whole seat ` +
+          "number. A declared activity read names one chair -- a positive integer -- or `null` " +
+          "for a phase with nobody to ask about.",
+      );
+    }
+    return about;
+  }
+
+  /**
    * Evaluate every round that comes before step `step`, in order, making what
    * each names resident before the next is asked.
    *
@@ -1247,10 +1344,22 @@ export class BoardSmithWorldEngine implements WorldEngine {
     seat: number | null,
     args: Readonly<Record<string, unknown>>,
     named: string[],
+    namedSeats: number[],
     now: number,
   ): Promise<void> {
     for (const round of definition.world!.needs) {
       if (round.before !== step) continue;
+      // AN ACTIVITY ROUND HYDRATES NOTHING (ShufflewickPub #423). Its answer
+      // came down with the stamp, because the store it would have to read is
+      // the host's. What it does here is say which chairs the handler is
+      // allowed to ask about, evaluated in the same order and against the same
+      // resident tree the declaration walk saw -- so what `activityOf` admits
+      // is exactly what the host was asked for and nothing else.
+      if (round.kind === "activity") {
+        const about = this.declareSeatRound(round, args, now, definition.name);
+        if (about !== null && !namedSeats.includes(about)) namedSeats.push(about);
+        continue;
+      }
       for (const name of this.declareRound(round, seat, args, now)) {
         if (!named.includes(name)) named.push(name);
         await this.ensureResident(name);
@@ -1339,7 +1448,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
     action: string,
     named: readonly string[],
     stamp: WorldOfferStamp,
-  ): WorldFacilities {
+  ): WorldClockFacilities {
     const refuse = (what: string): never => {
       throw worldRefusal(
         "not-in-a-world",
@@ -1366,6 +1475,19 @@ export class BoardSmithWorldEngine implements WorldEngine {
         // next hibernation with nobody told. `world-readonly.ts` carries the
         // whole argument; this is the same projection a declaration is handed.
         return readOnlyProjection(this.rootOf(name));
+      },
+      // AN OFFER HAS NAMED NO CHAIR (ShufflewickPub #423), so there is nothing
+      // to answer with. Refused rather than absent for the reason `schedule` is
+      // refused rather than absent: the facilities are one runtime object, and a
+      // rule the type merely declines to offer is a rule a cast steps around.
+      activityOf: (seat: number): never => {
+        throw worldRefusal(
+          "undeclared-activity",
+          `The "${action}" action asked for seat ${seat}'s activity while the world was ` +
+            "deciding what to OFFER a seat. An offer is one seat's own question and declares no " +
+            "chair, so no watermark was read for it. A chair is declared with `.about()` on a " +
+            "world-owned phase, and read inside that phase's execute().",
+        );
       },
       convertCredits: (): never => {
         throw creditsUnavailable(action);
@@ -1683,6 +1805,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
       allowance: ScheduleAllowance;
       presence: readonly number[];
       activity: SeatActivityStamp | null;
+      declaredActivity: readonly DeclaredSeatActivityStamp[];
     },
   ): Promise<WorldCommandResult> {
     const definition = this.actionFor(command.name, seat);
@@ -1700,8 +1823,13 @@ export class BoardSmithWorldEngine implements WorldEngine {
     // `named` is the union of every round, and it is what the dirty set starts
     // from and what `assertDeclared` holds the action to.
     const named: string[] = [];
+    // AND WHICH CHAIRS IT NAMED (ShufflewickPub #423), evaluated in the same
+    // walk and in the same order the host was asked in. It is what `activityOf`
+    // admits, so a handler can read exactly the watermarks its declaration
+    // asked for and no others.
+    const namedSeats: number[] = [];
     for (let step = 0; step <= definition.selections.length; step++) {
-      await this.hydrateRounds(definition, step, seat, command.args, named, charge.now);
+      await this.hydrateRounds(definition, step, seat, command.args, named, namedSeats, charge.now);
     }
 
     // Raised once per command and stamped on everything this one NAMED, so two
@@ -1761,7 +1889,15 @@ export class BoardSmithWorldEngine implements WorldEngine {
     // charged to whoever acted next; a leaked event would narrate one action's
     // news over another's.
     const ledger: DispatchLedger = { completed: false, schedules: [], events: [], refused: null };
-    const facilities = this.dispatchFacilities(command.name, named, timing, charge, budget, ledger);
+    const facilities = this.dispatchFacilities(
+      command.name,
+      named,
+      namedSeats,
+      timing,
+      charge,
+      budget,
+      ledger,
+    );
 
     // EVERYTHING BETWEEN THE SNAPSHOT AND THE RETURN IS UNDER THE ROLLBACK
     // (#68, #151). The catch used to wrap the handler alone, and the two
@@ -1891,11 +2027,17 @@ export class BoardSmithWorldEngine implements WorldEngine {
   private dispatchFacilities(
     action: string,
     named: readonly string[],
+    namedSeats: readonly number[],
     timing: { readonly due: number; readonly missedCount: number } | null,
-    charge: { now: number; presence: readonly number[]; activity: SeatActivityStamp | null },
+    charge: {
+      now: number;
+      presence: readonly number[];
+      activity: SeatActivityStamp | null;
+      declaredActivity: readonly DeclaredSeatActivityStamp[];
+    },
     budget: ReturnType<typeof scheduleBudget>,
     ledger: DispatchLedger,
-  ): WorldFacilities {
+  ): WorldClockFacilities {
     const raise = (refusal: WorldRefusal): never => {
       ledger.refused = refusal;
       throw refusal;
@@ -1908,6 +2050,38 @@ export class BoardSmithWorldEngine implements WorldEngine {
       // can outlive this dispatch (#144).
       presence: new Set(charge.presence),
       activity: seatActivity(charge.activity),
+      // ONE ANSWER PER CHAIR THE WALK NAMED (ShufflewickPub #423), and the
+      // refusal is `partition()`'s: what a handler may read is what its
+      // declaration named. Two refusals and not one, because they are two
+      // different mistakes -- a game reading a chair it never declared, and a
+      // host that did not answer one it was asked for -- and telling them apart
+      // is the difference between fixing a bundle and fixing a host.
+      activityOf: (seat: number): DeclaredSeatActivity => {
+        if (!namedSeats.includes(seat)) {
+          return raise(
+            worldRefusal(
+              "undeclared-activity",
+              `Action "${action}" asked for seat ${seat}'s activity, which it did not declare. ` +
+                "A phase says which chair it is about with `.about()`, before it runs, and the " +
+                "host answers one point read for it -- so a chair nobody named has no answer to " +
+                "give.",
+            ),
+          );
+        }
+        const answered = charge.declaredActivity.find((stamp) => stamp.seat === seat);
+        if (answered === undefined) {
+          return raise(
+            worldRefusal(
+              "activity-unanswered",
+              `Action "${action}" declared it was about seat ${seat}, and this host answered no ` +
+                "watermark for it. The declaration walk asks for a chair and the host supplies " +
+                "it before the handler runs; a handler reaching an unanswered chair means the " +
+                "walk was not driven to the end.",
+            ),
+          );
+        }
+        return { ...answered, inactiveSince: answered.at ?? answered.since };
+      },
       convertCredits: (): never => raise(creditsUnavailable(action)),
       partition: (name: string) => {
         const undeclared = declaredRefusal(action, name, named);

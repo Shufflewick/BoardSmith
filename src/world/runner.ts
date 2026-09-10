@@ -69,6 +69,7 @@
  * isolate did not raise it.
  */
 import type {
+  DeclaredSeatActivityStamp,
   SeatActivityStamp,
   StoredPartition,
   WorldPartitionSource,
@@ -260,6 +261,14 @@ export interface WorldApplyRequest {
    * the only thing that may answer, because the child can see no store.
    */
   readonly activity: SeatActivityStamp | null;
+  /**
+   * EVERY CHAIR THIS DISPATCH'S WALK NAMED, ANSWERED (ShufflewickPub #423).
+   *
+   * What the walk collected, handed over whole. Empty for a seated action,
+   * always: a seat's verb may not declare an activity round, so the only
+   * honest thing to hand its handler is nothing to read.
+   */
+  readonly declaredActivity: readonly DeclaredSeatActivityStamp[];
 }
 
 /**
@@ -271,6 +280,24 @@ export interface WorldApplyRequest {
  */
 export interface WorldDeclaration {
   readonly needs: readonly string[];
+}
+
+/**
+ * What a DISPATCH's `declare` answers (ShufflewickPub #423).
+ *
+ * A shape of its own rather than a field added to `WorldDeclaration`, because
+ * the read paths beside it -- a view's declaration, an offer's, a pick's --
+ * cannot ask about a chair at all: each of them belongs to a seat, and a seat's
+ * road has no activity round. Putting an always-empty list on three surfaces to
+ * serve one is how a field comes to be read as meaning something on a road that
+ * never sets it.
+ */
+export interface WorldDispatchDeclaration {
+  /** Partitions the parent must send before asking again. `WorldDeclaration`'s
+   *  `needs` under the name the two-list shape gives it. */
+  readonly partitions: readonly string[];
+  /** Chairs the parent must answer a point read for, at most one per round. */
+  readonly seats: readonly number[];
 }
 
 /**
@@ -483,16 +510,23 @@ export function createWorldRunner(
       player: string | null,
       supplied: Readonly<Record<string, StoredPartition>>,
       now: number,
-    ): Promise<WorldDeclaration> {
+      declared: readonly DeclaredSeatActivityStamp[],
+    ): Promise<WorldDispatchDeclaration> {
       // WHAT THE LAST ROUND ASKED FOR, MADE RESIDENT (#122). Adopted rather
       // than merely held, because a declaration reads through the ENGINE's live
       // tree and bytes sitting in the store answer nothing.
       await adopt(engine, store, supplied);
       const resident = residentNames(engine);
+      const needs = engine.commandNeeds(player, command, now, declared);
       return {
-        needs: engine
-          .commandPartitions(player, command, now)
-          .filter((name) => !store.holds(name) && !resident.has(name)),
+        partitions: needs.partitions.filter(
+          (name) => !store.holds(name) && !resident.has(name),
+        ),
+        // NOT SUBTRACTED HERE, because there is nothing on this side to
+        // subtract against (ShufflewickPub #423): a watermark never becomes
+        // resident, so the engine's own ordered match against what the host has
+        // already answered is the whole of the bookkeeping.
+        seats: needs.seats,
       };
     },
 
@@ -762,11 +796,13 @@ export function createWorldRunner(
             allowance: request.allowance,
             presence: request.presence,
             activity: request.activity,
+            declaredActivity: request.declaredActivity,
           })
         : engine.onEvent(request.command, request.timing, {
             allowance: request.allowance,
             presence: request.presence,
             activity: request.activity,
+            declaredActivity: request.declaredActivity,
           });
     },
   };
@@ -979,23 +1015,30 @@ export interface WorldRunnerHandle {
     now: number,
   ): Promise<WorldDeclaration>;
   /**
-   * Which partitions this command needs, and who is asking for them (#121).
+   * What this dispatch needs, and who is asking for it (#121, ShufflewickPub
+   * #423).
    *
    * `player` is null for a scheduled event. It is here because the bundle's
-   * `partitions(args, seat, world)` may name the ACTING SEAT's own partition,
-   * and the seat is a fact only the engine's roster holds.
+   * declaration may name the ACTING SEAT's own partition, and the seat is a
+   * fact only the engine's roster holds.
    *
    * `supplied` is WHAT THE LAST ROUND ASKED FOR (#122). The child adopts it
    * before answering, so a declaration that could only be made by reading the
    * world is made on the round after the one that loaded it. Empty on the
    * first round, which is every declaration a world without location state ever
    * makes.
+   *
+   * `declared` is the other half of the same idea, for the other kind of round:
+   * every chair the parent has answered a point read for so far, in the order
+   * it was asked. The child never remembers one between calls, because the
+   * store the answers come out of is the parent's.
    */
   declare(
     command: WorldCommand,
     player: string | null,
     supplied: Readonly<Record<string, StoredPartition>>,
     now: number,
-  ): Promise<WorldDeclaration>;
+    declared: readonly DeclaredSeatActivityStamp[],
+  ): Promise<WorldDispatchDeclaration>;
   apply(request: WorldApplyRequest): Promise<WorldCommandResult>;
 }

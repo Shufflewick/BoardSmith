@@ -635,7 +635,13 @@ export class LocalWorldHost {
    */
   #activityFor(player: string | null): SeatActivityStamp | null {
     const seat = this.#seatOf(player);
-    return seat === undefined ? null : this.#store.activityOf(seat);
+    if (seat === undefined) return null;
+    // #383's SHAPE, AND NOT #423's. `tenancy` answers a question this road
+    // cannot ask: this stamp is resolved from a PLAYER, so the chair is
+    // occupied by definition and a tenancy field on it would be a constant --
+    // and a constant on a surface is a field somebody eventually branches on.
+    const { seat: chair, at, since } = this.#store.activityOf(seat);
+    return { seat: chair, at, since };
   }
 
   /**
@@ -703,7 +709,13 @@ export class LocalWorldHost {
       return;
     }
     const previous = this.#attached.get(clientId);
-    this.#store.seat(player, seat);
+    // WHEN THIS CHAIR WAS GRANTED, in the roster row (ShufflewickPub #423).
+    // A newcomer's idleness is measured from here rather than from the world's
+    // recording epoch, or the first sweep after they arrive would find them as
+    // idle as the world is old. Idempotent on a reconnect only because it is
+    // the same seat and the same instant is written again; a chair handed to a
+    // DIFFERENT player would move it, which is what a reissued chair needs.
+    this.#store.seat(player, seat, this.#worldNow());
     this.#attached.set(clientId, seat);
     const departing = this.#departing.get(seat);
     if (departing !== undefined) {
@@ -958,15 +970,20 @@ export class LocalWorldHost {
     // because the length is the action's own selection count -- see
     // `walkDeclaration`, and `settleDeclaration` beside it, which is still what
     // a VIEW needs.
-    await walkDeclaration(
+    const declaredActivity = await walkDeclaration(
       // THE SAME INSTANT THE APPLY BELOW IS STAMPED WITH (#375), so the
       // declaration and the handler it precedes agree about what time it is.
-      async (supplied) => (await runner.declare(command, player, supplied, arrivedAt)).needs,
+      (supplied, declared) => runner.declare(command, player, supplied, arrivedAt, declared),
       (name) =>
         this.#readPartition(
           name,
           `Action "${command.name}" needs partition "${name}", which this world's store does not have.`,
         ),
+      // ONE POINT READ PER CHAIR THE WALK NAMED (ShufflewickPub #423). The walk
+      // hands back what it collected and `apply` below takes exactly that, so
+      // this host cannot drive the declaration and then hand the handler a
+      // different set of answers.
+      (seat) => Promise.resolve(this.#store.activityOf(seat)),
     );
 
     const owner = player ?? WORLD_OWNER;
@@ -988,6 +1005,7 @@ export class LocalWorldHost {
       // watermark from BEFORE this arrival: the handler is told when this seat
       // was last here, not that it is here now, which it can see for itself.
       activity: this.#activityFor(request.about ?? player),
+      declaredActivity,
     });
 
     // THE PARENT IS THE ONLY WRITER. `ctx.schedule()` refused inside the
@@ -1414,7 +1432,14 @@ export class LocalWorldHost {
     const runner = this.#world.runner;
     const player = devWorldPlayer(seat);
     await walkDeclaration(
-      async (supplied) => (await runner.declareOffers(player, supplied, this.#worldNow())).needs,
+      async (supplied) => ({
+        partitions: (await runner.declareOffers(player, supplied, this.#worldNow())).needs,
+        // NO CHAIRS ON THE OFFER ROAD, EVER (ShufflewickPub #423). An offer
+        // belongs to a seat, and a seated action may not declare an activity
+        // round at all -- `assertWorldAction` refuses one at construction -- so
+        // this list is empty by the engine's own rule rather than by omission.
+        seats: [],
+      }),
       (name) =>
         this.#readPartition(
           name,
@@ -1422,6 +1447,10 @@ export class LocalWorldHost {
             "store does not have. The action's `needs` names it; either the name is wrong or " +
             'the partition was never created.',
         ),
+      // The reader this host has, wired the same way on both roads: what keeps
+      // it out of an offer is the engine's rule above, not a host declining to
+      // answer.
+      (chair) => Promise.resolve(this.#store.activityOf(chair)),
     );
     return runner.offersFor(player, {
       now: this.#worldNow(),

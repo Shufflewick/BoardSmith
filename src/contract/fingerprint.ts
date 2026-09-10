@@ -218,8 +218,11 @@ export const WORLD_FIXTURE_COVERAGE: Record<(typeof WORLD_ENGINE_METHODS)[number
 
   applyCommand: 'A world\'s write path. The fixture dispatches nothing, so the dirty set, '
     + 'rollback and the checkpoint bytes are unfingerprinted.',
-  commandPartitions: 'The declaration walk a DISPATCH drives, and the fixture drives none. '
-    + "The offer's own walk -- the same two-round shape -- is covered.",
+  commandNeeds: 'The declaration walk a DISPATCH drives -- partitions, and the chairs a '
+    + 'world-owned phase declares (ShufflewickPub #423) -- and the fixture drives none. '
+    + "The offer's own walk, the same two-round shape, is covered; an offer belongs to a seat "
+    + 'and a seated action may declare no chair at all, so there is nothing of #423 for the '
+    + 'offer to carry.',
   evict: 'Residency policy is the host\'s, not the world\'s. The fixture never drops a '
     + 'partition, so what eviction leaves behind is unfingerprinted.',
   onEvent: 'The clock\'s road: scheduling, recurrence, keyed cancellation and event routing '
@@ -1010,7 +1013,7 @@ async function computeWorldDeclaration(): Promise<unknown> {
  */
 async function declarationRefusal(built: any, player: string): Promise<string> {
   try {
-    await built.runner.commandPartitions(player, { name: "abandon", args: {} }, 0);
+    built.runner.commandNeeds(player, { name: "abandon", args: {} }, 0, []);
     return "declared";
   } catch (error: any) {
     return typeof error?.code === "string" ? error.code : "threw without a code";

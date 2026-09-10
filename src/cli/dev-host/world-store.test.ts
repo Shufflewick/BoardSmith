@@ -44,6 +44,11 @@ const cp = (
 
 const BUDGETS = worldBudgets();
 
+/** When a chair was handed out, wherever a case needs one (ShufflewickPub
+ *  #423). A fixed instant, because a baseline read off the wall clock is a
+ *  baseline no assertion can name. */
+const SEATED_AT = 1_700_000_000_000;
+
 function event(over: Partial<PlannedEvent> = {}): PlannedEvent {
   return {
     id: 'e1',
@@ -110,12 +115,33 @@ function tablesOf(path: string): string[] {
 }
 
 /**
+ * THE SAME WORLD, AS LAYOUT 4 LEFT IT (#225, ShufflewickPub #423).
+ *
+ * Layout 5 added one nullable column to `seats` -- when each chair was granted
+ * -- and changed nothing else, so a `seats` table without it is layout 4
+ * exactly. Rebuilt rather than dropped with `ALTER`, so the rewind does not
+ * depend on which SQLite the test host happens to ship.
+ */
+function rewindToLayout4(path: string): void {
+  rawExec(
+    path,
+    'CREATE TABLE seats_old (player TEXT PRIMARY KEY, seat INTEGER NOT NULL)',
+    'INSERT INTO seats_old (player, seat) SELECT player, seat FROM seats',
+    'DROP TABLE seats',
+    'ALTER TABLE seats_old RENAME TO seats',
+    "UPDATE meta SET value = '4' WHERE key = 'schemaVersion'",
+  );
+}
+
+/**
  * THE SAME WORLD, AS LAYOUT 3 LEFT IT (#225).
  *
  * Layout 4 added `seat_activity` and the recording epoch it is measured from
- * (`36d723d6`) and changed nothing else, so removing both is layout 3 exactly.
+ * (`36d723d6`) and changed nothing else, so removing both -- on top of the
+ * layout 4 rewind -- is layout 3 exactly.
  */
 function rewindToLayout3(path: string): void {
+  rewindToLayout4(path);
   rawExec(
     path,
     'DROP TABLE seat_activity',
@@ -411,8 +437,8 @@ describe('the local world store', () => {
 
   describe('the roster', () => {
     it('records which player holds which seat', () => {
-      store.seat('player-a', 1);
-      store.seat('player-b', 2);
+      store.seat('player-a', 1, SEATED_AT);
+      store.seat('player-b', 2, SEATED_AT);
       expect(store.seats()).toEqual([
         { player: 'player-a', seat: 1 },
         { player: 'player-b', seat: 2 },
@@ -420,9 +446,42 @@ describe('the local world store', () => {
     });
 
     it('is free to re-seat a player in the seat they already hold, which is what a reconnect looks like', () => {
-      store.seat('player-a', 1);
-      store.seat('player-a', 1);
+      store.seat('player-a', 1, SEATED_AT);
+      store.seat('player-a', 1, SEATED_AT);
       expect(store.seats()).toEqual([{ player: 'player-a', seat: 1 }]);
+    });
+
+    /**
+     * ShufflewickPub #423: WHEN THE CHAIR WAS GRANTED IS PART OF THE ROW.
+     *
+     * A newcomer's idleness is measured from the later of the world's recording
+     * epoch and their own arrival. Without the second floor, a player who joins
+     * a world that has been recording for a year reads as a year idle on their
+     * first wake, and an inactivity sweep reaps an empire nobody had time to
+     * build.
+     */
+    it('measures a newcomer from when they SAT DOWN, not from when the world began recording', () => {
+      store.activitySince(SEATED_AT - 400 * 86_400_000);
+      store.seat('player-a', 1, SEATED_AT);
+
+      const stamp = store.activityOf(1);
+      expect(stamp.at).toBeNull();
+      expect(stamp.since).toBe(SEATED_AT);
+      expect(stamp.tenancy).toBe('held');
+    });
+
+    it('answers an EMPTY chair, which is not the same as a silent one', () => {
+      store.activitySince(SEATED_AT);
+      store.seat('player-a', 1, SEATED_AT);
+
+      // Seat 2 was never handed out. The numbers look exactly like seat 1's,
+      // and only `tenancy` says one of them is somebody's game.
+      expect(store.activityOf(2)).toEqual({
+        seat: 2,
+        at: null,
+        since: SEATED_AT,
+        tenancy: 'empty',
+      });
     });
   });
 
@@ -462,7 +521,14 @@ describe('the local world store', () => {
       // which is the answer that would reap every empire on the first wake.
       const opened = store.activitySince(5_000);
       expect(opened).toBe(5_000);
-      expect(store.activityOf(3)).toEqual({ seat: 3, at: null, since: 5_000 });
+      // `empty`, because nobody was ever seated in this fixture: the numbers
+      // are the migration answer and the tenancy is the #423 one.
+      expect(store.activityOf(3)).toEqual({
+        seat: 3,
+        at: null,
+        since: 5_000,
+        tenancy: 'empty',
+      });
     });
 
     it('fixes the recording epoch on the FIRST open and never moves it again', () => {
@@ -480,8 +546,18 @@ describe('the local world store', () => {
       store.writeCheckpoint(cp({}), { activity: { seat: 1, at: 10_000 } });
       store.writeCheckpoint(cp({}), { activity: { seat: 2, at: 12_000 } });
 
-      expect(store.activityOf(1)).toEqual({ seat: 1, at: 10_000, since: 5_000 });
-      expect(store.activityOf(2)).toEqual({ seat: 2, at: 12_000, since: 5_000 });
+      expect(store.activityOf(1)).toEqual({
+        seat: 1,
+        at: 10_000,
+        since: 5_000,
+        tenancy: 'empty',
+      });
+      expect(store.activityOf(2)).toEqual({
+        seat: 2,
+        at: 12_000,
+        since: 5_000,
+        tenancy: 'empty',
+      });
       // Somebody else playing is not this player playing.
       expect(store.activityOf(3).at).toBeNull();
     });
@@ -506,7 +582,12 @@ describe('the local world store', () => {
 
       const reopened = openWorldStore(worldStorePath(root), BUDGETS);
       expect(reopened.activitySince(90_000)).toBe(5_000);
-      expect(reopened.activityOf(1)).toEqual({ seat: 1, at: 10_000, since: 5_000 });
+      expect(reopened.activityOf(1)).toEqual({
+        seat: 1,
+        at: 10_000,
+        since: 5_000,
+        tenancy: 'empty',
+      });
       reopened.close();
     });
   });
@@ -532,7 +613,7 @@ describe('the local world store', () => {
         }),
         2,
       );
-      store.seat('player-a', 7);
+      store.seat('player-a', 7, SEATED_AT);
       store.advanceClock(600_000);
       await store.writeCheckpoint(cp({ 'room/aster': '{"colony":"Aster","pop":9}' }, 1_000_500), {
         schedule: [event({ id: 'raid', due: 5_000, key: 'raid:north' })],
@@ -561,19 +642,48 @@ describe('the local world store', () => {
       expect(reopened.partitionNames()).toEqual(['room/aster', 'world']);
     }
 
-    it('upgrades layout 3 to layout 4 on open, losing nothing the world held', async () => {
+    it('carries layout 3 all the way to the current layout on open, losing nothing', async () => {
+      // A CHAIN AND NOT ONE STEP (ShufflewickPub #423): a store two upgrades
+      // old has to arrive, or the only thing left to tell an author is to reset
+      // a world five hundred seats deep.
       await anOccupiedWorld();
       rewindToLayout3(worldStorePath(root));
 
       const reopened = openWorldStore(worldStorePath(root), BUDGETS);
       try {
         await expectNothingLost(reopened);
-        expect(layoutOf(worldStorePath(root))).toBe('4');
+        expect(layoutOf(worldStorePath(root))).toBe('5');
         // The table the upgrade exists to add, in use rather than merely
         // present: an upgraded world can record activity from here on.
         reopened.activitySince(5_000);
         await reopened.writeCheckpoint(cp({}), { activity: { seat: 7, at: 10_000 } });
-        expect(reopened.activityOf(7)).toEqual({ seat: 7, at: 10_000, since: 5_000 });
+        expect(reopened.activityOf(7)).toEqual({
+          seat: 7,
+          at: 10_000,
+          since: 5_000,
+          // The chair was granted before this store recorded grants, so the
+          // world's own epoch is the whole of its baseline -- which is exactly
+          // where it was measured from before the column existed.
+          tenancy: 'held',
+        });
+      } finally {
+        reopened.close();
+      }
+    });
+
+    it('upgrades layout 4 to layout 5 without inventing when a chair was granted', async () => {
+      await anOccupiedWorld();
+      rewindToLayout4(worldStorePath(root));
+
+      const reopened = openWorldStore(worldStorePath(root), BUDGETS);
+      try {
+        await expectNothingLost(reopened);
+        expect(layoutOf(worldStorePath(root))).toBe('5');
+        // NOT BACKFILLED. This store does not know when a chair it already held
+        // was handed out, and a guessed instant is a floor somebody's empire
+        // would be measured against.
+        const epoch = reopened.activitySince(1_000);
+        expect(reopened.activityOf(7).since).toBe(epoch);
       } finally {
         reopened.close();
       }
@@ -591,7 +701,7 @@ describe('the local world store', () => {
       const reopened = openWorldStore(worldStorePath(root), BUDGETS);
       try {
         await expectNothingLost(reopened);
-        expect(layoutOf(worldStorePath(root))).toBe('4');
+        expect(layoutOf(worldStorePath(root))).toBe('5');
       } finally {
         reopened.close();
       }
@@ -606,7 +716,12 @@ describe('the local world store', () => {
 
       const upgraded = openWorldStore(worldStorePath(root), BUDGETS);
       expect(upgraded.activitySince(5_000)).toBe(5_000);
-      expect(upgraded.activityOf(7)).toEqual({ seat: 7, at: null, since: 5_000 });
+      expect(upgraded.activityOf(7)).toEqual({
+        seat: 7,
+        at: null,
+        since: 5_000,
+        tenancy: 'held',
+      });
       upgraded.close();
 
       const later = openWorldStore(worldStorePath(root), BUDGETS);
@@ -630,7 +745,7 @@ describe('the local world store', () => {
       const retried = openWorldStore(worldStorePath(root), BUDGETS);
       try {
         await expectNothingLost(retried);
-        expect(layoutOf(worldStorePath(root))).toBe('4');
+        expect(layoutOf(worldStorePath(root))).toBe('5');
       } finally {
         retried.close();
       }
@@ -642,7 +757,7 @@ describe('the local world store', () => {
       rawExec(worldStorePath(root), "UPDATE meta SET value = '2' WHERE key = 'schemaVersion'");
 
       expect(() => openWorldStore(worldStorePath(root), BUDGETS)).toThrow(
-        /layout 2, and this BoardSmith reads layout 4.*no upgrade/s,
+        /layout 2, and this BoardSmith reads layout 5.*no upgrade/s,
       );
       expect(layoutOf(worldStorePath(root))).toBe('2');
       // The bug that made a refusal destructive: the schema was created before
@@ -652,12 +767,12 @@ describe('the local world store', () => {
 
     it('refuses a store written by a NEWER BoardSmith, and says which way to move', async () => {
       store.close();
-      rawExec(worldStorePath(root), "UPDATE meta SET value = '5' WHERE key = 'schemaVersion'");
+      rawExec(worldStorePath(root), "UPDATE meta SET value = '6' WHERE key = 'schemaVersion'");
 
       expect(() => openWorldStore(worldStorePath(root), BUDGETS)).toThrow(
-        /layout 5, and this BoardSmith reads layout 4.*newer BoardSmith/s,
+        /layout 6, and this BoardSmith reads layout 5.*newer BoardSmith/s,
       );
-      expect(layoutOf(worldStorePath(root))).toBe('5');
+      expect(layoutOf(worldStorePath(root))).toBe('6');
     });
 
     it('closes the database when it refuses to open one', async () => {
