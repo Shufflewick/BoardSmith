@@ -1,5 +1,10 @@
 {
   "finding_counts": {
+    "scripts/action-menu-browser.mjs": {
+      "crap_moderate": {
+        "count": 1
+      }
+    },
     "scripts/ingest-harness/check.mjs": {
       "complexity_critical": {
         "count": 2
@@ -31,7 +36,7 @@
         "count": 2
       }
     },
-    "scripts/world-pick-bridge-browser.mjs": {
+    "scripts/lib/browser-harness.mjs": {
       "crap_moderate": {
         "count": 1
       }
