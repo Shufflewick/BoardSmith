@@ -1,5 +1,5 @@
 {
-  "revision": 74,
+  "revision": 75,
   "bundleProtocol": 2,
   "surfaceHash": "1feb60c2051e0c9b",
   "payloadHash": "eaab9ade0d133677",
@@ -610,6 +610,15 @@
       "payloadHash": "eaab9ade0d133677",
       "formatHash": "0058593e7cc80205",
       "summary": "r74 is CLI-side only, and the reason it needs a number is the same as r73's: no fingerprint can see it, but the packed tarball's bytes differ from r73's for the same engine. surfaceHash 1feb60c2051e0c9b, payloadHash eaab9ade0d133677 and formatHash 0058593e7cc80205 are all carried forward unmoved. Two fixes to `boardsmith init` (#240). First, <name> is now validated as a NAME rather than joined onto the invocation directory: it is simultaneously the project directory, the package name in package.json, the game's identifier in boardsmith.json and the prefix of every generated class, so it must be kebab-case, and a path-shaped or npm-scoped name is refused up front with the kebab-case form of what was typed offered for the user to copy. `init /tmp/x/mygame` used to create <cwd>/tmp/x/mygame, or write a path into package.json as the package name. `chunk-check <slug>` had the same identity-as-location conflation and refuses a path-shaped slug too. Second, twelve sites across seven commands handed a raw Error object to console.error, printing stack frames and internal paths that CLAUDE.md forbids; a terminal failure now throws for cli.ts's top-level handler to render as one clean line, and the four failures a running dev server recovers from log the message instead. NOTHING HERE IS URGENT FOR THE PLATFORM. The hosted runtime never runs init, build or pack, and no engine behaviour, protocol or payload shape changed, so r72 and r73 both remain correct engines to run. This is a fix for game authors and bs- build sessions driving the CLI locally, so re-vendor at your convenience."
+    },
+    {
+      "revision": 75,
+      "date": "2026-09-10",
+      "bundleProtocol": 2,
+      "surfaceHash": "1feb60c2051e0c9b",
+      "payloadHash": "eaab9ade0d133677",
+      "formatHash": "0058593e7cc80205",
+      "summary": "r75 is CLI-side only, and it needs a number for the same reason r73 and r74 did: no fingerprint can see it, but the packed tarball's bytes differ from r74's for the same engine. surfaceHash 1feb60c2051e0c9b, payloadHash eaab9ade0d133677 and formatHash 0058593e7cc80205 are all carried forward unmoved. Two fixes. First, every developer tool boardsmith spawns and reads back (#241): runToolCapturingStdout decoded each arriving chunk of the child's stdout on its own, so a multi-byte UTF-8 character split across a chunk boundary became U+FFFD and the captured report was not what the tool printed. stdout is now buffered whole and decoded once. That silently changed an accepted clone group's key in boardsmith audit --dupes-baseline, which hashes the duplicated source text fallow reports, and it was blamed twice on fallow re-cutting group boundaries instead. Second, boardsmith init no longer leaves a half-scaffolded project behind (#242): a failure after the directory was created left a project whose rulebook/INDEX.md provenance describes an archive that does not exist, and that directory is the very shape init refuses to overwrite, so the retry the user reaches for failed too. It now removes only the tree it had to create, keeps a pre-existing directory because that one is the user's, and prints Created <name> successfully! after the last step that can fail rather than before it. NOTHING HERE IS URGENT FOR THE PLATFORM. The hosted runtime never runs init and never spawns fallow or jscpd, and no engine behaviour, protocol or payload shape changed, so r72, r73 and r74 all remain correct engines to run. This is a fix for game authors and bs- build sessions driving the CLI locally, so re-vendor at your convenience."
     }
   ]
 }
