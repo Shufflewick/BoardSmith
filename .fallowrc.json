@@ -1,4 +1,7 @@
 {
+  "entry": [
+    "scripts/*-browser.mjs"
+  ],
   "ignoreDependencies": [
     "postcss-html"
   ],

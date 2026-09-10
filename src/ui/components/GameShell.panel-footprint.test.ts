@@ -190,3 +190,99 @@ describe('#13: the Action Panel reserves a constant, token-derived footprint', (
     expect(source).not.toContain('actionbarEl');
   });
 });
+
+/**
+ * #230: A MINIMIZED ACTION BAR HAS TO ACTUALLY GIVE THE BOARD THE SPACE BACK.
+ *
+ * A collapse that only changed the DOM would leave the board fitted above the
+ * same two reserved rows and the same five-row ceiling -- the panel would be
+ * gone and the hole where it used to be would still be there. That is the exact
+ * failure a component test cannot see, so the arithmetic is asserted here
+ * against the shell's real stylesheet, the same way the expanded footprint is.
+ *
+ * The collapsed state overrides BOTH tokens to the one collapsed-row quantity,
+ * which is what makes the invariant hold by construction: the reservation IS the
+ * ceiling while the bar is down, so nothing can be covered and there is no
+ * clearance left to scroll for.
+ */
+describe('#230: minimizing the bar reserves one row and gives the rest back', () => {
+  it('declares the collapsed row once and derives it from the panel metrics', () => {
+    // Derived from the same row/padding tokens as the expanded footprint, so
+    // there is ONE definition of a control row in the stylesheet.
+    const collapsed = declaration('.game-shell__game', '--bsg-action-bar-collapsed');
+    expect(collapsed).toContain('var(--bsg-panel-row)');
+    expect(collapsed).toContain('var(--bsg-panel-pad)');
+    expect(collapsed).toContain('env(safe-area-inset-bottom)');
+  });
+
+  it('caps the ceiling at it, and lets the reservation follow', () => {
+    // ONE override, not two. Every declaration of the reservation is already
+    // clamped to the ceiling by its own `min(...)`, so capping the ceiling
+    // brings the reservation with it in every tier and the pair cannot drift.
+    // A second override would be a second place to disagree.
+    expect(declaration('.game-shell__game.action-bar-collapsed', '--bsg-panel-max'))
+      .toBe('var(--bsg-action-bar-collapsed)');
+    for (const tier of ['base', 'landscape-short'] as const) {
+      expect(
+        tokensFor(tier)['--bsg-panel-reserved'],
+        `the ${tier} reservation is not clamped to the ceiling, so collapsing would ` +
+        'reserve more board than the collapsed bar occupies',
+      ).toContain('var(--bsg-panel-max)');
+    }
+    expect(source).not.toMatch(
+      /\.game-shell__game\.action-bar-collapsed \{[^}]*--bsg-panel-reserved/,
+    );
+  });
+
+  it('keeps the collapsed bar to a single un-wrapping row', () => {
+    // Without this the one row could wrap into a two-row box taller than the
+    // reservation, and the "minimized" bar would cover the board again.
+    expect(declaration('.actionbar.collapsed', 'flex-wrap')).toBe('nowrap');
+  });
+
+  it.each(ENVIRONMENTS)(
+    'covers nothing and costs less board than the open bar (safe-area $safeArea, $dvh dvh)',
+    (env) => {
+      for (const tier of ['base', 'landscape-short'] as const) {
+        for (const zoom of ZOOMS) {
+          const open = tokensFor(tier, zoom);
+          // The collapsed state as the browser resolves it: the ceiling is
+          // overridden and the tier's own reservation expression is left alone,
+          // so what this computes is what the clamp actually produces.
+          const down: Record<string, string> = {
+            ...open,
+            '--bsg-action-bar-collapsed': declaration('.game-shell__game', '--bsg-action-bar-collapsed'),
+            '--bsg-panel-max': declaration('.game-shell__game.action-bar-collapsed', '--bsg-panel-max'),
+          };
+
+          const max = px(declaration('.actionbar', 'max-height'), down, env);
+          const reserved = px(declaration('.boardregion', 'padding-bottom'), down, env);
+          const margin =
+            px(declaration('.game-shell__zoom-container', 'margin-bottom'), down, env) * zoom;
+
+          // The bar cannot grow past what the board already reserved for it, so
+          // there is nothing to scroll clear of and nothing hidden under it.
+          expect(reserved, `${tier} @ zoom ${zoom}: the collapsed bar covers board`).toBe(max);
+          expect(margin).toBe(0);
+
+          // The CEILING always drops, in every tier: an open bar can grow over
+          // the board up to five rows, and a bar that is down cannot grow at
+          // all. That is the space the player gets back.
+          expect(px(declaration('.actionbar', 'max-height'), open, env),
+            `${tier}: the bar can still grow over the board while minimized`)
+            .toBeGreaterThan(max);
+          // The RESERVATION drops too wherever the open bar reserved more than
+          // one row -- everywhere except the landscape-short tier, which already
+          // budgets a single row because height is the scarce axis there.
+          const openReserved = px(declaration('.boardregion', 'padding-bottom'), open, env);
+          expect(reserved, `${tier}: minimizing cost the board space`)
+            .toBeLessThanOrEqual(openReserved);
+          if (tier === 'base') {
+            expect(reserved, 'minimizing gave the board no space back')
+              .toBeLessThan(openReserved);
+          }
+        }
+      }
+    },
+  );
+});

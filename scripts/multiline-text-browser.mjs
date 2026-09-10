@@ -16,10 +16,9 @@
  * and that the line breaks the player typed survive the whole way into the
  * world's own state.
  *
- * Built on the harness #227 left behind, now shared as
- * `scripts/lib/world-browser-harness.mjs`: real Chromium, the real
- * `boardsmith dev` world chrome, the real `world.html` in the real iframe, a
- * real WebSocket to a real host.
+ * Built on `scripts/browser-harness.mjs`, the plumbing every browser regression
+ * in this repo shares: real Chromium, the real `boardsmith dev` world chrome,
+ * the real `world.html` in the real iframe, a real WebSocket to a real host.
  *
  * ## Why this is not in `npx vitest run`
  *
@@ -32,18 +31,20 @@
  *   BOARDSMITH_PLAYWRIGHT_MODULE=/abs/path/to/node_modules/playwright \
  *     node scripts/multiline-text-browser.mjs
  */
+import { existsSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+
 import {
+  REPO,
   assert,
-  checklist,
-  requireInstalledCheckout,
-  runBrowserRegression,
+  check,
+  loadChromium,
   startWorldHost,
+  summarise,
   surfaceOf,
   waitUntil,
   writeWorldFixture,
-} from './lib/world-browser-harness.mjs';
-
-const { check, report } = checklist();
+} from './browser-harness.mjs';
 
 const USABLE_BOX = { minWidth: 300, minHeight: 80 };
 
@@ -174,25 +175,6 @@ export default defineComponent({
 });
 `;
 
-const UIS = `import { defineGameUIs, defaultUI } from 'boardsmith/ui';
-import ColonyBoard from './ColonyBoard.js';
-
-export default defineGameUIs({ Colony: defaultUI(ColonyBoard) });
-`;
-
-/** Write the disposable colony this script drives. */
-const writeFixture = () =>
-  writeWorldFixture({
-    prefix: 'bs-multiline-',
-    name: 'multiline-colony',
-    displayName: 'Multiline Colony',
-    files: {
-      'src/rules/index.ts': RULES,
-      'src/ui/ColonyBoard.ts': BOARD,
-      'src/ui/uis.ts': UIS,
-    },
-  });
-
 /** Wait for the panel to be offering the world's verbs to a seated player. */
 async function seated(page) {
   await surfaceOf(page)
@@ -204,6 +186,25 @@ async function startAction(page, name) {
   const surface = surfaceOf(page);
   await surface.locator(`[data-bs-action="${name}"]`).click();
   await surface.locator('.text-input').waitFor({ timeout: 15_000 });
+}
+
+async function main() {
+  const chromium = await loadChromium('multiline-text-browser.mjs');
+  const fixture = writeWorldFixture({
+    slug: 'multiline-colony',
+    displayName: 'Multiline Colony',
+    gameClass: 'Colony',
+    rules: RULES,
+    boardFile: 'ColonyBoard',
+    board: BOARD,
+  });
+  // THE FIXTURE IS REMOVED WHATEVER HAPPENS, from here on: a temp world left
+  // behind by a crashed run is exactly the litter this script must not leave.
+  try {
+    return await driveThrough({ chromium, fixture });
+  } finally {
+    rmSync(fixture, { recursive: true, force: true });
+  }
 }
 
 async function driveThrough({ chromium, fixture }) {
@@ -371,6 +372,62 @@ async function driveThrough({ chromium, fixture }) {
       await surface.locator('.action-config .cancel-btn').click();
     });
 
+    await check('collapsing the bar mid-draft, then re-opening it', async () => {
+      // NEW SINCE THIS WAS FIRST MEASURED (#230). A collapsed bar renders one
+      // row -- token and summary -- and the whole panel branch is `v-else-if`,
+      // so the editor is UNMOUNTED rather than hidden, and `--bsg-panel-max`
+      // is overridden to a single row's height while it is down.
+      //
+      // What is asserted is what a player can still do: the action survives
+      // the round trip and the box comes back, at a usable size, inside the
+      // bar's restored cap. What the player LOSES is recorded here too, as the
+      // value it comes back with -- see the note below the assertion.
+      await startAction(page, 'setDescription');
+      const box = surface.locator('.text-input textarea');
+      await box.click();
+      await page.keyboard.type('A draft nobody meant to throw away.');
+
+      const toggle = surface.locator('[data-testid="bs-actionbar-toggle"]');
+      await toggle.click();
+      await waitUntil(
+        () => surface.locator('.text-input textarea').count(),
+        (count) => count === 0,
+        5_000,
+      );
+      assert(
+        (await surface.locator('[data-testid="bs-actionbar-summary"]').count()) === 1,
+        'a collapsed bar drew no summary row',
+      );
+
+      await toggle.click();
+      const restored = surface.locator('.text-input textarea');
+      await restored.waitFor({ timeout: 10_000 });
+      const laid = await restored.boundingBox();
+      assert(laid !== null, 'the restored box has no layout box');
+      assert(
+        laid.width >= USABLE_BOX.minWidth && laid.height >= USABLE_BOX.minHeight,
+        `the restored box laid out ${Math.round(laid.width)}x${Math.round(laid.height)}`,
+      );
+      const bar = await surface.locator('[data-testid="bs-actionbar"]').boundingBox();
+      const done = await surface.locator('.text-input .done-button').boundingBox();
+      assert(
+        done.y + done.height <= bar.y + bar.height + 1,
+        'after restoring, the submit button laid out below the bottom of the bar',
+      );
+      // THE DRAFT DOES NOT SURVIVE, and this records it rather than asserting
+      // it is fine: the collapsed bar is a `v-if` branch and the panel is the
+      // `v-else-if`, so collapsing UNMOUNTS the editor and the typed value goes
+      // with it. Filed as #235 -- it is #230's unmount, and a multiline field is
+      // only where it hurts most, because 800 characters of prose is not a word
+      // of a nickname.
+      assert(
+        (await restored.inputValue()) === '',
+        'the draft survived a collapse -- if this now fails, #235 has been fixed '
+          + 'and this assertion should be inverted rather than deleted',
+      );
+      await surface.locator('.action-config .cancel-btn').click();
+    });
+
     await check('a short field is still one line, and still works', async () => {
       // The flag is opt-in, and the regression to check for is the box arriving
       // everywhere. This one shares every line of the editor except the control.
@@ -400,14 +457,15 @@ async function driveThrough({ chromium, fixture }) {
     await browser.close();
   }
 
-  return report('the real dev host in a real browser');
+  return summarise('through the real dev host in a real browser.');
 }
 
-requireInstalledCheckout();
-process.exit(
-  await runBrowserRegression({
-    script: 'multiline-text-browser.mjs',
-    writeFixture,
-    drive: driveThrough,
-  }),
-);
+if (!existsSync(join(REPO, 'node_modules', 'vue'))) {
+  console.error(
+    'This checkout has no node_modules/vue, so the fixture world cannot be served.\n' +
+      '  Run `npm install` in the repository root first.',
+  );
+  process.exit(1);
+}
+
+process.exit(await main());

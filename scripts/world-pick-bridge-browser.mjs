@@ -31,11 +31,6 @@
  *   BOARDSMITH_PLAYWRIGHT_MODULE=/abs/path/to/node_modules/playwright \
  *     node scripts/world-pick-bridge-browser.mjs
  *
- * The scaffolding below -- writing the fixture, finding a Chromium, starting the
- * host -- is shared with every other browser regression in
- * `scripts/lib/world-browser-harness.mjs`; what stays here is the world and the
- * driving.
- *
  * ## The fixture is written here, not checked in
  *
  * The world it drives is the smallest one with the shape the issue is about -- a
@@ -45,18 +40,19 @@
  * disposable by design: the point is a world nobody has played, born at genesis,
  * exercised once.
  */
+import { existsSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
 import {
+  REPO,
   assert,
-  checklist,
-  requireInstalledCheckout,
-  runBrowserRegression,
+  check,
+  loadChromium,
   startWorldHost,
+  summarise,
   surfaceOf,
   waitUntil,
   writeWorldFixture,
-} from './lib/world-browser-harness.mjs';
-
-const { check, report } = checklist();
+} from './browser-harness.mjs';
 
 /** How long one pick's own answer is waited for, from `worldProtocol.ts`. */
 const WORLD_COMMAND_TIMEOUT_MS = 20_000;
@@ -203,25 +199,6 @@ export default defineComponent({
 });
 `;
 
-const UIS = `import { defineGameUIs, defaultUI } from 'boardsmith/ui';
-import FleetBoard from './FleetBoard.js';
-
-export default defineGameUIs({ Fleet: defaultUI(FleetBoard) });
-`;
-
-/** Write the disposable fleet this script drives. */
-const writeFixture = () =>
-  writeWorldFixture({
-    prefix: 'bs-pick-bridge-',
-    name: 'pick-bridge-fleet',
-    displayName: 'Pick Bridge Fleet',
-    files: {
-      'src/rules/index.ts': RULES,
-      'src/ui/FleetBoard.ts': BOARD,
-      'src/ui/uis.ts': UIS,
-    },
-  });
-
 /** Wait for the panel to be offering the world's verbs to a seated player. */
 async function seated(page) {
   await surfaceOf(page).locator('[data-bs-action="deploy"]').waitFor({ timeout: 30_000 });
@@ -259,6 +236,26 @@ async function expectCrewCount(page, expected) {
 async function settledCrewCount(page) {
   await new Promise((settle) => setTimeout(settle, 1000));
   return crewCount(page);
+}
+
+async function main() {
+  const chromium = await loadChromium('world-pick-bridge-browser.mjs');
+  const fixture = writeWorldFixture({
+    slug: 'pick-bridge-fleet',
+    displayName: 'Pick Bridge Fleet',
+    gameClass: 'Fleet',
+    rules: RULES,
+    boardFile: 'FleetBoard',
+    board: BOARD,
+  });
+  // THE FIXTURE IS REMOVED WHATEVER HAPPENS, from here on. Its own creation is
+  // the only step outside the guard, and a temp world left behind by a crashed
+  // build is exactly the litter this script must not leave.
+  try {
+    return await driveThrough({ chromium, fixture });
+  } finally {
+    rmSync(fixture, { recursive: true, force: true });
+  }
 }
 
 async function driveThrough({ chromium, fixture }) {
@@ -415,14 +412,15 @@ async function driveThrough({ chromium, fixture }) {
     await browser.close();
   }
 
-  return report('the real dev bridge in a real browser');
+  return summarise('through the real dev bridge in a real browser.');
 }
 
-requireInstalledCheckout();
-process.exit(
-  await runBrowserRegression({
-    script: 'world-pick-bridge-browser.mjs',
-    writeFixture,
-    drive: driveThrough,
-  }),
-);
+if (!existsSync(join(REPO, 'node_modules', 'vue'))) {
+  console.error(
+    'This checkout has no node_modules/vue, so the fixture world cannot be served.\n' +
+      '  Run `npm install` in the repository root first.',
+  );
+  process.exit(1);
+}
+
+process.exit(await main());
