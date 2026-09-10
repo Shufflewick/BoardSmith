@@ -27,7 +27,16 @@ import type {
   ElementRef,
 } from '../../composables/useActionController';
 import DoneButton from './DoneButton.vue';
-import { splitAnchoredChoices, shouldDeferElementPickToBoard } from './action-panel-helpers.js';
+import {
+  splitAnchoredChoices,
+  shouldDeferElementPickToBoard,
+  textLengthHint,
+} from './action-panel-helpers.js';
+// The engine's own text validator, reached the way `action-panel-helpers.ts`
+// reaches for `MAX_FLAT_CHOICE_CANDIDATES`: the panel must apply the SAME
+// length and pattern rules the server applies, and a second copy of them is a
+// second rule set (#229).
+import { textRuleErrors } from '../../../engine/action/text-rules.js';
 import ActionHelpPopover from '../helpers/ActionHelpPopover.vue';
 // Type-only, so the log component's module (and its stylesheet) never enters
 // this graph -- `verbatimModuleSyntax` erases the import outright.
@@ -141,7 +150,6 @@ const repeatingState = computed(() => {
   };
 });
 
-
 // Multi-select draft now lives in the shared controller (actionController.multiSelectDraft)
 // so the auto ActionPanel and custom UIs share one source of truth and stay in parity.
 // Convenience accessor for the current draft's selected values.
@@ -149,7 +157,6 @@ const multiSelectValues = computed<unknown[]>(
   () => actionController.multiSelectDraft.value?.values ?? []
 );
 
-// Track current input values for number/text inputs (so Done button can submit them)
 /**
  * THE ID A NUMBER OR TEXT EDITOR'S LABEL POINTS AT (#199).
  *
@@ -160,9 +167,19 @@ const multiSelectValues = computed<unknown[]>(
  * pointing at one id would send both to the same field.
  */
 const editorInputId = `bs-editor-${useId()}`;
-
-const numberInputValue = ref<number | null>(null);
-const textInputValue = ref<string>('');
+/**
+ * The three things that DESCRIBE the editor's field, each with its own id.
+ *
+ * A hint, a character count and an error are all rules about the field rather
+ * than names for it, so they belong in `aria-describedby` and not in the label.
+ * They are separate ids rather than one wrapper because the error comes and
+ * goes: `aria-describedby` naming an element that is not in the document is
+ * read as nothing at all by some screen readers, so the list is assembled from
+ * whichever of them is actually rendered.
+ */
+const editorHintId = `${editorInputId}-hint`;
+const editorCountId = `${editorInputId}-count`;
+const editorErrorId = `${editorInputId}-error`;
 
 const currentArgs = computed(() => actionController.currentArgs.value);
 
@@ -233,6 +250,105 @@ const currentActionMeta = computed(() => {
 
 // Current pick - delegates to controller (required)
 const currentPick = computed(() => actionController.currentPick.value);
+
+const numberInputValue = ref<number | null>(null);
+const textInputValue = ref<string>('');
+/**
+ * Why the text the player has typed will not be accepted, or null.
+ *
+ * Set when they try to submit and cleared the moment they change the field, so
+ * the message is about what is in front of them rather than what used to be.
+ * Before #229 the submit handler simply RETURNED on a value the rules refused:
+ * the button moved, nothing happened, and there was no way to find out why.
+ */
+const textInputError = ref<string | null>(null);
+
+watch(textInputValue, () => {
+  textInputError.value = null;
+});
+
+/**
+ * A NEW PICK OPENS EMPTY.
+ *
+ * Both editors are one ref each for the whole panel, and nothing used to reset
+ * them: `submitTextInput` cleared on a successful submit and every other way out
+ * of a pick -- cancelling the action, a refusal, moving to the next selection --
+ * left the typed value sitting in the ref. So the next text pick opened
+ * PREFILLED with what the player had typed into a different field of a
+ * different action, and if that field was shorter it opened already refusing
+ * its own contents. Found in a browser (#229), by cancelling a 200 character
+ * creed and starting a 20 character nickname.
+ *
+ * Keyed on the action AND the selection, because the same selection name recurs
+ * across actions and across the rounds of a repeating pick, and each of those is
+ * a fresh question.
+ */
+watch(
+  () => `${currentAction.value ?? ''}/${currentPick.value?.name ?? ''}`,
+  () => {
+    textInputValue.value = '';
+    textInputError.value = null;
+    numberInputValue.value = null;
+  },
+);
+
+/**
+ * The length rule of the current text pick, as a sentence (#229).
+ *
+ * A multiline field states only its FLOOR here, because its character count
+ * already states the ceiling and better: "140 of 1000 characters" carries the
+ * maximum and where the player stands in it, so a hint reading "(up to 1000
+ * characters)" beside it is the same fact twice -- and it costs a row of an
+ * action bar that caps its own height and scrolls, which is how the count ended
+ * up scrolled out of sight while the hint it duplicated stayed on screen.
+ *
+ * One function either way: what changes is which bounds the control still needs
+ * words for, not how a bound is worded.
+ */
+const textHint = computed(() => {
+  const pick = currentPick.value;
+  if (!pick || pick.type !== 'text') return undefined;
+  return pick.multiline
+    ? textLengthHint({ minLength: pick.minLength })
+    : textLengthHint(pick);
+});
+
+/**
+ * How much the player has written, against the bound the engine will enforce.
+ *
+ * Read on arrival at the field through `aria-describedby` rather than announced
+ * on every keystroke: a polite live region that changed with each character
+ * would talk over a player for a thousand of them.
+ */
+const textCharCount = computed(() => {
+  const max = currentPick.value?.maxLength;
+  const written = textInputValue.value.length;
+  return max === undefined
+    ? `${written} characters`
+    : `${written} of ${max} characters`;
+});
+
+/**
+ * The one moment the field's behaviour changes without anything being said: a
+ * keystroke that no longer does anything. A sighted player sees the text stop
+ * growing; this is what the other player hears. It is empty at every other
+ * length, so the region speaks once and then goes quiet again.
+ */
+const textLimitAnnouncement = computed(() => {
+  const max = currentPick.value?.maxLength;
+  if (max === undefined || textInputValue.value.length < max) return '';
+  return `You have reached the ${max} character limit.`;
+});
+
+/** Whichever of hint, count and error the text editor is actually showing. */
+const textDescribedBy = computed(() => {
+  const pick = currentPick.value;
+  const ids: string[] = [];
+  if (textHint.value) ids.push(editorHintId);
+  if (pick?.multiline) ids.push(editorCountId);
+  if (textInputError.value) ids.push(editorErrorId);
+  return ids.length ? ids.join(' ') : undefined;
+});
 
 // ── Keyboard focus across step transitions (#27) ───────────────────────────
 //
@@ -485,19 +601,35 @@ function submitNumberInput() {
   numberInputValue.value = null;
 }
 
-// Submit text input value
+/**
+ * Submit the text editor's value, or say why it cannot be submitted (#229).
+ *
+ * The rules come from `textRuleErrors`, which is the engine's own text
+ * validator -- so what the panel refuses here and what the server would refuse
+ * are the same rule with the same wording, rather than two copies of it that
+ * drift. `validate` is deliberately not among them: a game's custom validator
+ * closes over game state and never reaches a client, so the engine stays the
+ * authority and this is the subset a client can honestly check.
+ */
 function submitTextInput() {
-  if (!currentPick.value || currentPick.value.type !== 'text') return;
-  if (!textInputValue.value) return;
+  const pick = currentPick.value;
+  if (!pick || pick.type !== 'text') return;
 
-  // Validate against min/max length
   const val = textInputValue.value;
-  const minLen = currentPick.value.minLength;
-  const maxLen = currentPick.value.maxLength;
-  if (minLen !== undefined && val.length < minLen) return;
-  if (maxLen !== undefined && val.length > maxLen) return;
+  const errors = textRuleErrors(pick.name, val, {
+    minLength: pick.minLength,
+    maxLength: pick.maxLength,
+    // The wire carries a pattern as its source string; compiling it here is the
+    // only form the rule can be applied in.
+    pattern: pick.pattern === undefined ? undefined : new RegExp(pick.pattern),
+  });
+  if (errors.length > 0) {
+    textInputError.value = errors[0]!;
+    return;
+  }
 
-  setSelectionValue(currentPick.value.name, val);
+  textInputError.value = null;
+  setSelectionValue(pick.name, val);
   textInputValue.value = '';
 }
 
@@ -1362,27 +1494,67 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
           </div>
         </div>
 
-        <!-- Text input. The same three lines, for the same reason (#199). -->
-        <div v-else-if="currentPick.type === 'text'" class="text-input">
+        <!-- Text input. The same three lines, for the same reason (#199), and
+             one control or the other depending on how much the player has to
+             write (#229). ONE BLOCK rather than two branches: the label, the
+             hint, the error and the submit are the same in both, and a second
+             copy of them is where the single-line field and the box would start
+             disagreeing about a pick they share.
+
+             The hint comes from `textLengthHint` because interpolating
+             `minLength ?? '?'` rendered `(?-1000 chars)` for every field with a
+             maximum and no minimum, which is most of them. -->
+        <div
+          v-else-if="currentPick.type === 'text'"
+          class="text-input"
+          :class="{ 'text-input-multiline': currentPick.multiline }"
+        >
           <label class="selection-prompt" :for="editorInputId">
             {{ currentPick.prompt || `Enter ${currentPick.name}` }}
             <span v-if="currentPick.optional" class="optional-label">(optional)</span>
           </label>
-          <span v-if="currentPick.minLength !== undefined || currentPick.maxLength !== undefined" class="input-hint">
-            ({{ currentPick.minLength ?? '?' }}-{{ currentPick.maxLength ?? '?' }} chars)
-          </span>
+          <span v-if="textHint" :id="editorHintId" class="input-hint">({{ textHint }})</span>
           <div class="input-row">
+            <!-- No Enter handler, which is the point: in a box Enter starts a
+                 new line and the submit button is the only way out. -->
+            <textarea
+              v-if="currentPick.multiline"
+              :id="editorInputId"
+              v-model="textInputValue"
+              :minlength="currentPick.minLength"
+              :maxlength="currentPick.maxLength"
+              :aria-describedby="textDescribedBy"
+              :aria-invalid="textInputError ? 'true' : undefined"
+              rows="6"
+            ></textarea>
             <input
+              v-else
               type="text"
               :id="editorInputId"
               v-model="textInputValue"
               :minlength="currentPick.minLength"
               :maxlength="currentPick.maxLength"
               :pattern="currentPick.pattern"
+              :aria-describedby="textDescribedBy"
+              :aria-invalid="textInputError ? 'true' : undefined"
               @keyup.enter="submitTextInput"
             />
+            <!-- Above the submit button, not below it: the bar caps its own
+                 height and scrolls, and the count is the line the player needs
+                 while typing. -->
+            <span v-if="currentPick.multiline" :id="editorCountId" class="char-count">
+              {{ textCharCount }}
+            </span>
             <DoneButton @click="submitTextInput" />
           </div>
+          <!-- Empty at every length but the last one, so it speaks when a
+               keystroke stops working and stays quiet while the player types. -->
+          <span v-if="currentPick.multiline" class="sr-only" role="status">
+            {{ textLimitAnnouncement }}
+          </span>
+          <p v-if="textInputError" :id="editorErrorId" class="selection-error" role="alert">
+            {{ textInputError }}
+          </p>
         </div>
 
         <!-- A11Y-02: notation-anchored choices (board squares). Rendered INLINE as
@@ -1759,8 +1931,85 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
 }
 
 .number-input input:focus,
-.text-input input:focus {
+.text-input input:focus,
+.text-input textarea:focus {
   border-color: var(--bsg-accent);
+}
+
+/* ISSUE 229: A BOX, NOT A LINE.
+   The single-line field above is `width: 120px`, which is the whole complaint:
+   a 1,000 character description shown 120px at a time cannot be read back, let
+   alone written. So the multiline editor takes a full row of the action bar
+   (`flex: 1 1 100%` -- the bar is a wrapping flex row and ActionPanel's own
+   wrappers are `display: contents`, so this box IS a bar item and nothing else
+   can give it the width), and the box fills that row.
+
+   `min-height` rather than a fixed height so `rows` sets the resting size and
+   the player's own drag can only make it bigger; `resize: vertical` because
+   horizontal resizing inside a flex row fights the bar's wrapping. */
+.text-input-multiline {
+  flex: 1 1 100%;
+}
+
+.text-input-multiline .input-row {
+  /* STILL A ROW, ALLOWED TO WRAP. The box below takes a whole flex line
+     (`flex-basis: 100%`), so the character count and the submit button land
+     together on the next one -- one row for the two of them rather than one
+     each. That row is what keeps the whole editor inside the bar's own height
+     cap: past it the bar scrolls, and the control scrolled away would be the
+     only way the player has to finish. */
+  flex-wrap: wrap;
+  align-items: center;
+  align-self: stretch;
+}
+
+.text-input textarea {
+  flex: 1 1 100%;
+  width: 100%;
+  /* Four and a half lines at rest, and the player's own drag from there. Chosen
+     against the bar's height cap rather than by eye: the editor has to fit
+     inside it whole, and `resize: vertical` is how somebody who wants more
+     takes it. */
+  min-height: 5.5rem;
+  resize: vertical;
+  padding: 8px 12px;
+  background: var(--bsg-field);
+  border: 1px solid var(--bsg-line);
+  border-radius: 6px;
+  color: var(--bsg-ink);
+  /* A textarea does not inherit the page's font, and a description written in
+     the browser's default monospace looks like a bug report. */
+  font-family: inherit;
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+.char-count {
+  color: var(--bsg-ink-2);
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+}
+
+/* The reason a value was refused, in the panel's own error colour so it does
+   not read as another hint. */
+.selection-error {
+  margin: 0;
+  color: var(--bsg-danger);
+  font-size: 0.85rem;
+  white-space: normal;
+}
+
+/* Screen-reader only (mirrors AutoRenderer's helper; scoped styles don't share). */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
 }
 
 .input-hint {
