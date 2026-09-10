@@ -282,6 +282,23 @@ The auto-generated UI includes:
 - **ActionPanel**: Displays available actions with selection UI
 - Ships as your production UI for simple games — no custom UI required
 
+#### The start buttons can be a game-authored hierarchy
+
+By default every available action is one button in a flat row. A game that
+offers many verbs at once arranges them with `.group()` and `.order()` on the
+action: a group takes ONE button at its parent level and opens onto its members,
+with `Back`, the current level's name, `Escape`, and focus restored to the button
+that opened it. Only available actions contribute, so an emptied group is simply
+not there.
+
+**Opening a group is navigation, not a game command** -- no order submitted, no
+turn consumed, no persistent state moved -- and grouping changes neither
+executability nor server-side validation. A game that declares no grouping keeps
+the flat panel exactly as it is. The same metadata reaches this panel in world
+mode, where it matters most. The full rule, including how it relates to
+`.suppressFromActionPanel()`, is in
+[Actions & Flow](./actions-and-flow.md#group-and-order-arrange-the-start-buttons).
+
 #### The ActionPanel offers hierarchy, never free text
 
 The panel is a hierarchy a person walks with a few buttons. **It has no search

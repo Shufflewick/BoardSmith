@@ -599,6 +599,8 @@ Action.create('move')
   .notUndoable()                    // Cannot undo this action
   .manual()                         // Never auto-execute for the player
   .suppressFromActionPanel()        // Hide the redundant Action Panel button (see below)
+  .group('More', 'Empire settings') // Put its start button inside a menu group (see below)
+  .order(20)                        // Where its button sits in its level
 ```
 
 #### `.disabled()` — offer the action, greyed out, and say why
@@ -778,7 +780,8 @@ routinely mistaken for a way to turn the panel off:
   renders that action's prompt and its full choice list exactly as always —
   by design, per the parity rule above. There is no flag that suppresses a live
   choice list, and there will not be one.
-- **If every available action is suppressed, they are all shown anyway.** A
+- **If every available action is suppressed, they are all shown anyway** --
+  arranged by whatever `.group()` the game declared for them, not flattened. A
   button is only redundant while something else is offered; when nothing is, the
   panel is the player's last control. That guarantee exists because the
   alternative has a dead end in it: an action with **no selections** can never
@@ -787,6 +790,90 @@ routinely mistaken for a way to turn the panel off:
   with no way out.
 
 Design the board affordance as the primary path, not the only one.
+
+#### `.group()` and `.order()` arrange the start buttons
+
+A game with many simultaneously available verbs gives a rare administrative one
+the same prominence as the one the player takes every turn. `.group()` puts an
+action's **start button** inside a named menu group, and `.order()` places
+buttons within a level:
+
+```typescript
+Action.create('construct').prompt('Construct building').order(10).execute(...)
+Action.create('upgrade').prompt('Upgrade building').order(20).execute(...)
+
+Action.create('dumpOre').prompt('Dump ore').group('Dump').order(30).execute(...)
+Action.create('dumpWater').prompt('Dump water').group('Dump').order(31).execute(...)
+
+Action.create('skipMission').group('More').order(80).execute(...)
+Action.create('renamePlanet').group('More', 'Empire settings').order(90).execute(...)
+```
+
+The panel then offers `Construct building`, `Upgrade building`, `Dump` and
+`More` at the top level. `Dump` takes one button; its two members appear when
+the player opens it, with a `Back` button and the current level's name beside
+them. `More` opens onto `Skip mission` and a nested `Empire settings`.
+
+Each argument to `.group()` is one level, outermost first, and intermediate
+groups are created by being named. **A segment is the group's label and its
+identity at once**, which is why there is nothing to register: two actions in
+the same group cannot disagree about what it is called, and there is no id to
+leave dangling. `.order()` takes any finite number, lower first; an action that
+declares none sorts as `0`, ties keep the order the actions became available in,
+and **a group sits where its lowest-ordered member sits** -- so there is no
+separate order to declare for a group, and no way for two of its members to
+disagree about where it goes.
+
+##### A group is navigation, not a game command
+
+**Opening or closing a group submits no order, consumes no turn, and moves no
+persistent state.** The panel derives the menu from the action metadata it
+already has and keeps the open path in its own local state. There is no group
+callback to write and no group event to handle, because there is nothing for the
+rules to be told.
+
+##### What grouping does not change
+
+- **Availability.** Only currently-available actions reach the menu, so a group
+  whose members all went away is simply not there, and a group that gains one
+  shows it. It never hides an available action: the action is one press further
+  away, not gone. If the level a player is standing in empties underneath them
+  they are put on the deepest level that survived, and a screen reader is told
+  why.
+- **Executability.** `.condition()`, `.disabled()` and `.validate()` are
+  untouched. A grouped action's disabled reason and its help popover render
+  inside a group exactly as at the top level, and the server validates it
+  identically.
+- **The board.** Grouping arranges the panel's buttons; it does not change what
+  the game offers, so a custom board UI is unaffected and the two surfaces still
+  show the same state.
+- **A game that declares nothing.** With no `.group()` anywhere the panel is the
+  flat list it has always been, with no menu chrome at all.
+
+##### How it relates to `.suppressFromActionPanel()`
+
+They are one mechanism with two halves, and they are deliberately not allowed to
+disagree: **suppression decides membership** (which actions are drawn) and
+**grouping decides arrangement** (where each drawn button sits). So when the
+all-suppressed fallback above restores the list, it restores it *as the game's
+hierarchy* -- never as a flat list, which would be the fallback overruling the
+arrangement the game declared.
+
+##### Keyboard and screen reader
+
+A group's button is an ordinary button in the tab order; its accessible name
+says it opens a submenu and how many actions are behind it. `Enter` opens a
+level and moves focus to its first action. `Escape` and `Back` each go up
+exactly one level and put focus back on the button that opened it. The current
+level's name is on screen, and a live region says so when a level moves for a
+reason that is not the player's.
+
+##### It is the same metadata in world mode
+
+`.group()` and `.order()` are `WorldAction` verbs too, and a world's offer *is*
+action metadata, so the shared panel gets the same hierarchy in a world as at a
+table with nothing translated in between. This is the case the feature was asked
+for: a resident world offers every verb that is relevant at once.
 
 ---
 
