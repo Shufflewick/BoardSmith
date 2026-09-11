@@ -1,8 +1,8 @@
 {
-  "revision": 76,
+  "revision": 77,
   "bundleProtocol": 2,
   "surfaceHash": "1feb60c2051e0c9b",
-  "payloadHash": "eaab9ade0d133677",
+  "payloadHash": "16d4740f61b838bc",
   "formatHash": "0058593e7cc80205",
   "history": [
     {
@@ -628,6 +628,15 @@
       "payloadHash": "eaab9ade0d133677",
       "formatHash": "0058593e7cc80205",
       "summary": "r76 is CLI-side only and changes no behaviour at all, but it needs a number for the same reason r73, r74 and r75 did: no fingerprint can see it, and the packed tarball's bytes still differ from r75's for the same engine, because src/ is packed. surfaceHash 1feb60c2051e0c9b, payloadHash eaab9ade0d133677 and formatHash 0058593e7cc80205 are all carried forward unmoved. Two source files, src/cli/lib/dupes-baseline.ts and src/cli/lib/choice-cardinality.ts, each held a literal U+0000 byte as a key separator (#243). NUL is the right separator, since no source text can hold one and so no fragment can forge the delimiter; only its spelling was wrong, and one literal NUL is enough for git to classify a file as binary and leave every change to it undiffable in git diff, git log -p, git show and any review UI. Written as the escape it builds the identical string, which was measured directly against the pre-change module: the same key, and .fallow-dupes-accepted.json is not in the diff at all, with 1085 accepted groups before and after, nothing re-keyed and nothing forgiven. A gate now scans every tracked text file for control bytes other than tab, line feed and carriage return, because this mistake got in twice. THE PLATFORM DOES NOT NEED THIS. shufflewick.pub never spawns fallow or jscpd, never reaches either module, and no engine behaviour, protocol or payload shape changed, so r72 through r75 all remain correct engines to run. Re-vendor whenever it is convenient, or not at all."
+    },
+    {
+      "revision": 77,
+      "date": "2026-09-11",
+      "bundleProtocol": 2,
+      "surfaceHash": "1feb60c2051e0c9b",
+      "payloadHash": "16d4740f61b838bc",
+      "formatHash": "0058593e7cc80205",
+      "summary": "World views are published before action-offer enumeration: world_state drops actions and carries a revision, and offers arrive on a new world_offers frame stamped with the state they were enumerated over (#244)."
     }
   ]
 }

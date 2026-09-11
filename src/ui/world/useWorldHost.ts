@@ -50,6 +50,17 @@ export interface WorldHost {
    * REPLACED, never mutated in place.
    */
   actions: ShallowRef<readonly WorldActionOffer[]>;
+  /**
+   * TRUE WHILE THE WORLD ON SCREEN HAS NO OFFERS YET (BoardSmith #244).
+   *
+   * The view and the offers are two frames, so there is a moment after every
+   * committed change where this page knows what the world IS and not yet what
+   * it may do in it. `actions` is empty through that moment, and empty is
+   * otherwise a real answer -- "this seat may do nothing here". This is the
+   * flag that tells the two apart, so a surface can say "working out what you
+   * can do" instead of drawing a world with no verbs in it.
+   */
+  offersPending: Ref<boolean>;
   notice: Ref<string | null>;
   worldName: Ref<string | null>;
   /** Who holds an open connection right now, or `null` when the host has no
@@ -163,6 +174,11 @@ export function useWorldHost(options: WorldHostOptions = {}): WorldHost {
   const view = shallowRef<unknown>(null);
   const seat = ref<number | null>(null);
   const actions = shallowRef<readonly WorldActionOffer[]>([]);
+  const offersPending = ref(false);
+  /** The committed state this page is showing, and the one `actions` is about.
+   *  `null` before the host has said anything. */
+  let stateRevision: number | null = null;
+  let offersRevision: number | null = null;
   const notice = ref<string | null>(null);
   const worldName = ref<string | null>(null);
   const presence = ref<readonly number[] | null>(null);
@@ -241,7 +257,25 @@ export function useWorldHost(options: WorldHostOptions = {}): WorldHost {
     phase.value = data.phase;
     view.value = data.view;
     seat.value = data.seat;
-    actions.value = data.actions ?? [];
+    // A NEW STATE RETIRES THE OFFERS THAT WERE ABOUT THE OLD ONE (#244).
+    //
+    // The offers arrive on their own frame now, after this one, so between the
+    // two there is a moment where the page is showing a world it has not been
+    // told the verbs for. Keeping the previous set on screen through that
+    // moment would be showing buttons enumerated against a world that has
+    // moved; `offersPending` is how the shell says "not yet" rather than
+    // "nothing", which is a different sentence and the only honest one.
+    //
+    // A RE-PUSH OF THE SAME STATE KEEPS THEM. Presence changes, a seat switch
+    // and a notice all re-send this frame without the world having moved, and
+    // clearing there would flicker every panel for no reason.
+    if (data.revision !== stateRevision) {
+      stateRevision = data.revision;
+      if (offersRevision !== data.revision) {
+        actions.value = [];
+        offersPending.value = true;
+      }
+    }
     notice.value = data.notice;
     worldName.value = data.worldName;
     presence.value = data.presence;
@@ -256,6 +290,28 @@ export function useWorldHost(options: WorldHostOptions = {}): WorldHost {
       recovered = true;
       void recover();
     }
+  }
+
+  /**
+   * WHAT THIS SEAT MAY DO, IF IT IS STILL ABOUT THE WORLD ON SCREEN (#244).
+   *
+   * The one rule: an offer set is applied only when the state it was
+   * enumerated over is the state this page is showing. A set stamped with any
+   * other revision is DROPPED -- silently, because it is not an error. It is
+   * simply an answer to a question the world has already moved past, and
+   * another set for the current state is on its way behind it.
+   *
+   * Dropping rather than showing is what keeps a late offer from reading as a
+   * permission. It was never a permission -- every command is validated against
+   * the state it finds when it is submitted, offer or no offer -- but a panel
+   * drawn from a retired set would invite presses the world is bound to refuse,
+   * which is the same lie one layer up.
+   */
+  function takeOffers(data: Extract<WorldHostMessage, { type: 'world_offers' }>): void {
+    if (data.revision !== stateRevision) return;
+    offersRevision = data.revision;
+    actions.value = data.actions;
+    offersPending.value = false;
   }
 
   /**
@@ -357,6 +413,10 @@ export function useWorldHost(options: WorldHostOptions = {}): WorldHost {
     }
     if (data.type === 'world_events') {
       takeNarration(data.events);
+      return;
+    }
+    if (data.type === 'world_offers') {
+      takeOffers(data);
       return;
     }
     if (data.type === 'world_state') takeState(data);
@@ -501,6 +561,7 @@ export function useWorldHost(options: WorldHostOptions = {}): WorldHost {
     view,
     seat,
     actions,
+    offersPending,
     notice,
     worldName,
     presence,

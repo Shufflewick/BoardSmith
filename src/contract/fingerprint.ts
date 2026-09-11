@@ -305,6 +305,29 @@ const WORLD_WIRE_FIXTURE = {
     phase: 'watching',
     view: { player: 2, state: { id: 0, className: 'Game' }, phase: 'started' },
     seat: 2,
+    // WHICH COMMITTED STATE THIS PROJECTION IS OF (#244). In the fixture
+    // because the whole safety of publishing the view before the offers rests
+    // on the two frames naming the same number: a host that sent a state frame
+    // without one would be sending an offer set nothing could be matched
+    // against.
+    revision: 41,
+    notice: 'The fire is low.',
+    worldName: 'Contract Fixture World',
+    presence: [2, 5],
+    // WHO THE SEATS ARE (#170). Host-composed and platform-only: BoardSmith
+    // never derives a name, so this field exists precisely so ShufflewickPub can
+    // fill it. In the fixture because the shared shell renders seat NUMBERS
+    // without it, and a platform that does not know it may send names would
+    // ship a world whose player list is a column of integers.
+    players: [
+      { seat: 2, name: 'Ivy', color: '#3aa06a' },
+      { seat: 5, name: 'Rook' },
+    ],
+  },
+  world_offers: {
+    source: 'shufflewick-world',
+    type: 'world_offers',
+    revision: 41,
     actions: [
       {
         name: 'move',
@@ -328,18 +351,6 @@ const WORLD_WIRE_FIXTURE = {
           { name: 'note', type: 'text', prompt: 'Say why' },
         ],
       },
-    ],
-    notice: 'The fire is low.',
-    worldName: 'Contract Fixture World',
-    presence: [2, 5],
-    // WHO THE SEATS ARE (#170). Host-composed and platform-only: BoardSmith
-    // never derives a name, so this field exists precisely so ShufflewickPub can
-    // fill it. In the fixture because the shared shell renders seat NUMBERS
-    // without it, and a platform that does not know it may send names would
-    // ship a world whose player list is a column of integers.
-    players: [
-      { seat: 2, name: 'Ivy', color: '#3aa06a' },
-      { seat: 5, name: 'Rook' },
     ],
   },
   world_events: {
@@ -379,6 +390,7 @@ const WORLD_WIRE_FIXTURE = {
   },
 } satisfies {
   world_state: Extract<WorldHostMessage, { type: 'world_state' }>;
+  world_offers: Extract<WorldHostMessage, { type: 'world_offers' }>;
   world_events: Extract<WorldHostMessage, { type: 'world_events' }>;
   world_response: Extract<WorldHostMessage, { type: 'world_response' }>;
   world_command: Extract<WorldUiMessage, { type: 'world_command' }>;

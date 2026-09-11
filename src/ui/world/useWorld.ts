@@ -18,6 +18,12 @@ export type WorldContext = Pick<
   | 'view'
   | 'seat'
   | 'actions'
+  // WHETHER THE OFFERS ON SCREEN ARE THE ONES FOR THE WORLD ON SCREEN
+  // (BoardSmith #244). `actions` is empty both while the offers for a newly
+  // committed state are still being enumerated and when a seat genuinely may
+  // do nothing, and a world UI that could not tell the two apart would draw
+  // "nothing to do" over a world it simply has not been told about yet.
+  | 'offersPending'
   | 'notice'
   | 'worldName'
   | 'presence'

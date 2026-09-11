@@ -157,9 +157,20 @@ interface WorldStateMessage {
   readonly view: unknown;
   /** The seat this player holds, or `null` before the world has said. */
   readonly seat: number | null;
-  /** What this seat may do, enumerated over what it can see. Empty until the
-   *  world has said. */
-  readonly actions: readonly WorldActionOffer[];
+  /**
+   * WHICH COMMITTED STATE THIS PROJECTION IS OF (BoardSmith #244).
+   *
+   * A number that moves whenever the host commits a change to the world, and
+   * never otherwise. Its only job is to let a page tell an offer that is about
+   * the world on its screen from one that is about a world that has since
+   * moved: `world_offers` carries the same number, and a page applies an offer
+   * set only when the two agree.
+   *
+   * It is a HOST'S counter and not a world's. Comparable within one host's run
+   * and meaningless across two, which is all the question needs -- a page that
+   * reconnects is sent a fresh state frame before it is sent any offer.
+   */
+  readonly revision: number;
   /** The host's or the world's own sentence about the current state. */
   readonly notice: string | null;
   /** What the world's name is, for a UI that wants to say it. */
@@ -184,6 +195,40 @@ interface WorldStateMessage {
    * never derives a name of its own.
    */
   readonly players?: readonly WorldPlayer[];
+}
+
+/**
+ * WHAT THIS SEAT MAY DO, AND WHICH WORLD IT MAY DO IT IN (BoardSmith #244).
+ *
+ * ITS OWN FRAME, AND AFTER THE STATE, because the two cost different things. A
+ * committed projection is finished the moment the world commits; enumerating a
+ * seat's offers walks every offerable action's declaration, hydrates whatever
+ * those name, and evaluates every candidate of every selection. Carrying the
+ * offers on `world_state` made the finished projection wait on that walk -- and
+ * in a batch it made every LATER watcher wait on the earlier seats' walks too.
+ * A world measured 5,351ms between "taken" and the state reaching the screen
+ * with nothing wrong but the order.
+ *
+ * `revision` IS WHAT KEEPS THAT SAFE. An offer set that arrived after the state
+ * it belongs to would otherwise be indistinguishable from one that is about a
+ * state the world has since left, and a page holding the second would be
+ * holding a permission nobody re-checked. So every offer names the committed
+ * state it was enumerated over, and a page drops one that does not match the
+ * state it is showing.
+ *
+ * AN OFFER IS STILL NOT AUTHORIZATION, matching revision or not. It says what
+ * was legal at that state, to draw a panel with. Whether a command may run is
+ * decided when it is submitted, against the state it finds -- which is the
+ * check that was there before this frame existed and is unchanged by it.
+ */
+interface WorldOffersMessage {
+  readonly source: typeof WORLD_HOST_SOURCE;
+  readonly type: 'world_offers';
+  /** The `world_state.revision` these offers were enumerated over. */
+  readonly revision: number;
+  /** What this seat may do. Empty is an answer: it means this seat may do
+   *  nothing at that state, not that the host has not said yet. */
+  readonly actions: readonly WorldActionOffer[];
 }
 
 /**
@@ -254,6 +299,7 @@ interface WorldPickResultMessage {
  */
 export type WorldHostMessage =
   | WorldStateMessage
+  | WorldOffersMessage
   | WorldEventsMessage
   | WorldResponseMessage
   | WorldPickResultMessage;

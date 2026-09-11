@@ -219,6 +219,25 @@ export class LocalWorldHost {
   /** How many partitions were resident immediately before the last `wake`, so
    *  the control can say what it dropped rather than claim it. */
   #droppedOnWake = 0;
+  /**
+   * WHICH COMMITTED STATE THIS HOST IS PUBLISHING (#244).
+   *
+   * Counted, not derived: it moves when and only when this host commits a
+   * change to the world, and it goes out on every `world_state` and on every
+   * `world_offers` frame so a page can tell whether an offer set is about the
+   * world on its screen.
+   *
+   * Two things move it, and they are the two things an offer is enumerated
+   * against: a checkpoint, which is where a command's or an event's effects
+   * become the world; and the dev clock's advance, because `now` is an input to
+   * `offersFor` and a verb that opens at dawn is a different offer at a
+   * different instant.
+   *
+   * A WAKE DOES NOT MOVE IT. Rebuilding the runner from the store throws away
+   * what was resident and changes nothing about what the world IS, so offers
+   * enumerated before it are still about this state.
+   */
+  #revision = 0;
   #completed = false;
   #closed = false;
   /** The one shutdown, once it has been asked for. */
@@ -1050,6 +1069,10 @@ export class LocalWorldHost {
         // it produced or not at all.
         ...this.#activityWrite(player, arrivedAt),
       });
+      // THE STATE MOVED, AND IT MOVED HERE (#244). After the write and not
+      // before: a checkpoint that refuses is a command that did not happen, and
+      // the discard below leaves the world at the revision it was already at.
+      this.#revision += 1;
     } catch (error) {
       // A COMMAND THAT CANNOT BE MADE DURABLE IS A COMMAND THAT DID NOT HAPPEN.
       //
@@ -1267,6 +1290,10 @@ export class LocalWorldHost {
     // first or a crash between the two leaves a world settled in a future its
     // next host does not know about.
     this.#skewMs = this.#store.advanceClock(jump);
+    // THE CLOCK IS PART OF WHAT AN OFFER IS ENUMERATED AGAINST (#244), so
+    // moving it moves the state an offer can claim to be about -- a verb that
+    // opens at dawn is a different offer at a different instant.
+    if (jump > 0) this.#revision += 1;
     await this.#drain();
     await this.#pushViews();
     this.#broadcastNotice(
@@ -1348,12 +1375,20 @@ export class LocalWorldHost {
       // NOTHING CAN BE PROJECTED, so every watcher is told the same sentence
       // rather than left looking at a board that stopped updating.
       for (const clientId of this.#attached.keys()) {
-        this.#send(clientId, this.#stateFrame(clientId, null, messageOf(error), 'refused'));
+        this.#send(
+          clientId,
+          this.#stateFrame(clientId, null, messageOf(error), 'refused', this.#revision),
+        );
       }
       this.#broadcastStatus();
       return;
     }
     const projecting = players.filter((player) => declined[player] === undefined);
+    // TAKEN ONCE, FOR BOTH PASSES. The world lock holds for the whole of this
+    // method, so nothing can commit between the projection and the offers: the
+    // number that goes out on the state frame is the same one the offers were
+    // enumerated over, and saying so is what makes the two frames one answer.
+    const revision = this.#revision;
     // EACH DISTINCT VIEW ONCE (ShufflewickPub #408). The runner answers a table
     // of bodies and which one each seat holds, because seats of a world that
     // hides nothing between them hold the SAME body and a host that was handed
@@ -1367,13 +1402,37 @@ export class LocalWorldHost {
       return at === undefined ? null : (bodies[at] ?? null);
     };
     const failed = { ...declined, ...refused };
+    // THE PROJECTION GOES OUT FIRST, TO EVERY WATCHER (#244).
+    //
+    // It is finished: the world committed, `viewsFor` has answered, and there
+    // is nothing left for it to wait on. Enumerating a seat's offers is a
+    // separate and unbounded cost -- every offerable action's declaration, the
+    // partitions those name hydrated, every candidate of every selection -- and
+    // holding the finished view behind it made a browser wait on work the view
+    // does not depend on. Worse, the second pass below is sequential, so on one
+    // frame the LAST watcher used to wait on every earlier seat's walk as well.
+    const offering: Array<{ clientId: string; seat: number }> = [];
     for (const [clientId, seat] of this.#attached) {
       const player = devWorldPlayer(seat);
       const refusal = failed[player];
       if (refusal !== undefined) {
-        this.#send(clientId, this.#stateFrame(clientId, null, refusal.message, 'refused'));
+        this.#send(clientId, this.#stateFrame(clientId, null, refusal.message, 'refused', revision));
         continue;
       }
+      this.#send(
+        clientId,
+        this.#stateFrame(clientId, bodyFor(player), this.#notices(), 'watching', revision),
+      );
+      offering.push({ clientId, seat });
+    }
+    this.#broadcastStatus();
+
+    // AND THE OFFERS FOLLOW, one seat at a time and stamped with the state they
+    // were enumerated over. Sequential deliberately: a declaration walk changes
+    // what is resident in the one engine this host has, so two of them at once
+    // would be two dispatches over a tree with a single rollback baseline --
+    // the same reason every entry point goes through `#run`.
+    for (const { clientId, seat } of offering) {
       // ONE SEAT'S OFFER IS ONE SEAT'S FATE, exactly as its view is. An action
       // whose enumeration refuses -- a candidate outside its declaration, a
       // selection past the budget -- is a bundle mistake, and raising it here
@@ -1385,18 +1444,14 @@ export class LocalWorldHost {
       } catch (error) {
         offerRefusal = messageOf(error);
       }
-      this.#send(
-        clientId,
-        this.#stateFrame(clientId, bodyFor(player), this.#notices(), 'watching', actions),
-      );
+      this.#send(clientId, { type: 'world_offers', revision, actions });
       // SAID OUT LOUD IN THE DEV BAR, because the reader is the AUTHOR. An
       // offer that refuses is a bundle mistake -- a candidate outside its own
       // declaration, a selection past the budget -- and the seat it happened to
-      // is simply offered nothing. Left on the state frame alone it would be a
+      // is simply offered nothing. Left on the offer frame alone it would be a
       // world that quietly stopped having verbs.
       if (offerRefusal !== null) this.#send(clientId, { type: 'world_notice', message: offerRefusal });
     }
-    this.#broadcastStatus();
   }
 
   #stateFrame(
@@ -1404,16 +1459,17 @@ export class LocalWorldHost {
     view: unknown,
     notice: string | null,
     phase: 'watching' | 'refused',
-    actions: readonly WorldActionOffer[] = [],
+    revision: number,
   ): Record<string, unknown> {
     return {
       type: 'world_state',
       phase,
       view,
       seat: this.#attached.get(clientId) ?? null,
-      // ENUMERATED FOR THIS SEAT, and never a seatless one: a client that was
-      // never offered the clock's own cannot send it by accident.
-      actions,
+      // WHICH COMMITTED STATE THIS PROJECTION IS OF (#244). The offer frame
+      // that follows carries the same number, which is the whole of what stops
+      // a page reading a late offer as being about the world on its screen.
+      revision,
       notice,
       worldName: this.#worldName,
       presence: this.#presence(),

@@ -110,7 +110,15 @@ function connect(): void {
  * never answered. `useWorldHost` holds a promise keyed on each of these
  * `requestId`s, so one dropped here is a panel waiting for its own timeout.
  */
-const RELAYED_TO_FRAME = new Set(['world_events', 'world_response', 'world_pick_result']);
+const RELAYED_TO_FRAME = new Set([
+  'world_events',
+  'world_response',
+  'world_pick_result',
+  // WHAT THIS SEAT MAY DO, ON ITS OWN FRAME (#244). The Dev chrome has nothing
+  // to say about offers -- it draws the seat switcher and the debug bar -- so
+  // this one passes straight through to the iframe like the other three.
+  'world_offers',
+]);
 
 function onHostMessage(message: Record<string, unknown>): void {
   if (RELAYED_TO_FRAME.has(message.type as string)) {
