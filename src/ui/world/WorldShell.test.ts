@@ -78,7 +78,12 @@ function stateFrame(over: Record<string, unknown> = {}) {
     // (ShufflewickPub #408); `seat` beside it is where that lives.
     view: { phase: 'watching', state: { said: 'the fire is low' } },
     seat: 4,
+    // #244: the offers ride their own frame now, and `tell` below splits this
+    // literal into the two the host actually sends. Composed together here
+    // because a case's subject is "the host said the world is THIS and the
+    // seat may do THAT", which is one fact from a test's point of view.
     actions: [{ name: 'look', selections: [] }, { name: 'move', selections: [] }],
+    revision: 1,
     notice: null,
     worldName: 'Gloamhall Rooms',
     presence: [2, 4],
@@ -87,7 +92,24 @@ function stateFrame(over: Record<string, unknown> = {}) {
 }
 
 function tell(wrapper: ReturnType<typeof mount>, data: unknown) {
-  (wrapper.vm as any).host.handleMessage({ origin: 'https://shufflewick.pub', data });
+  const send = (frame: unknown): void =>
+    (wrapper.vm as any).host.handleMessage({ origin: 'https://shufflewick.pub', data: frame });
+  const frame = data as Record<string, unknown>;
+  if (frame?.type !== 'world_state') {
+    send(frame);
+    return;
+  }
+  // A COMMITTED STATE AND ITS OFFERS, IN THE ORDER THE HOST SENDS THEM (#244):
+  // the projection first, then the verbs enumerated over it, stamped with the
+  // same revision so the page applies them.
+  const { actions, ...state } = frame;
+  send(state);
+  send({
+    source: WORLD_HOST_SOURCE,
+    type: 'world_offers',
+    revision: state.revision,
+    actions: actions ?? [],
+  });
 }
 
 /**

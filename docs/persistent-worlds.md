@@ -1002,6 +1002,42 @@ Hosts drive this the same way they drive the write path:
 `runner.declareOffers(player, supplied)` names what is still missing,
 `runner.offersFor(player, stamp)` answers once everything is resident.
 
+### A host publishes the view first, and the offers behind it (#244)
+
+**The committed projection must not wait on offer enumeration.** They are two
+different costs. A view is finished the moment the world commits; an offer walks
+every offerable action's declaration, hydrates what those name, and evaluates
+every candidate of every selection. A reported world measured **5,351 ms**
+between the host answering "taken" and the state reaching the browser, with
+nothing wrong but the order they were sent in.
+
+So the dev host sends two frames per push, and a platform host should do the
+same:
+
+1. `world_state` — the projection, to **every** watcher, before any offer work
+   starts. It carries a `revision`: the committed state this projection is of.
+2. `world_offers` — one seat's verbs, stamped with the **same `revision`** they
+   were enumerated over.
+
+In a multi-seat push this also stops the last watcher waiting on the earlier
+seats' walks, which is the half that got worse the more people were watching.
+
+**An offer is not authorization, and the revision is what keeps that visible.**
+Because the offers now arrive after the view, an offer frame can outlive the
+state it describes. A page therefore applies an offer set **only** when its
+revision is the state the page is showing, and drops any other — `useWorldHost`
+does exactly that, and exposes `offersPending` so a surface can say "not told
+yet" rather than drawing a world with no verbs in it. None of this is the safety
+argument: **every submitted command is validated against the state it finds**,
+offer or no offer, which is the check that was there before these frames were
+split and is unchanged by it. The revision only stops a retired offer *looking*
+like a live one.
+
+The host's own `revision` moves when, and only when, it commits: a checkpoint,
+and the dev clock's advance (because `now` is an input to `offersFor`). It is a
+host's counter, comparable within one run — a page that reconnects is sent a
+fresh state frame before it is sent any offer.
+
 ## `view(seat, world)`: what one seat sees
 
 ```ts

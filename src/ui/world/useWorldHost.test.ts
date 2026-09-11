@@ -36,7 +36,7 @@ function stateFrame(over: Partial<WorldStateMessage> = {}): WorldStateMessage {
     phase: 'watching',
     view: { player: 3, state: { id: 0, className: 'Game' } },
     seat: 3,
-    actions: [{ name: 'look', prompt: 'Look around', selections: [] }],
+    revision: 1,
     notice: null,
     worldName: 'Gloamhall Rooms',
     presence: [3, 5],
@@ -102,10 +102,85 @@ describe('useWorldHost', () => {
     deliver(host, stateFrame());
     expect(host.phase.value).toBe('watching');
     expect(host.seat.value).toBe(3);
-    expect(host.actions.value).toHaveLength(1);
+    // THE VIEW ARRIVES WITHOUT THE VERBS (#244), and says so: empty `actions`
+    // here means "not told yet", which `offersPending` is what distinguishes
+    // from a seat that may genuinely do nothing.
+    expect(host.actions.value).toEqual([]);
+    expect(host.offersPending.value).toBe(true);
     expect(host.worldName.value).toBe('Gloamhall Rooms');
     expect(host.presence.value).toEqual([3, 5]);
     expect(host.heardFromHost.value).toBe(true);
+  });
+
+  /**
+   * #244: AN OFFER SET IS ABOUT ONE COMMITTED STATE, AND SAYS WHICH.
+   *
+   * The host publishes the view first and the offers behind it, so an offer
+   * frame can outlive the state it was enumerated over. What stops that being a
+   * stale permission on screen is the revision on both frames: the page applies
+   * an offer set only for the state it is showing, and drops anything else.
+   */
+  function offersFrame(revision: number, names: readonly string[]) {
+    return {
+      source: WORLD_HOST_SOURCE,
+      type: 'world_offers' as const,
+      revision,
+      actions: names.map((name) => ({ name, prompt: name, selections: [] })),
+    };
+  }
+
+  /**
+   * WHAT THE PAGE IS OFFERING, AND WHETHER IT IS STILL WAITING TO BE TOLD.
+   *
+   * The two are one fact and asserted as one: no verbs because the page has
+   * not been told yet, and no verbs because this seat may genuinely do nothing,
+   * are the same `actions` and different worlds.
+   */
+  function offered(host: ReturnType<typeof make>) {
+    return {
+      names: host.actions.value.map((offer) => offer.name),
+      pending: host.offersPending.value,
+    };
+  }
+
+  /** A page told one committed state and then the verbs enumerated over it,
+   *  which is the pair the host sends for every change. */
+  function showing(revision: number, names: readonly string[]) {
+    const host = make();
+    deliver(host, stateFrame({ revision }));
+    deliver(host, offersFrame(revision, names));
+    return host;
+  }
+
+  it('applies the offers enumerated over the state it is showing', () => {
+    const host = showing(4, ['look']);
+    expect(offered(host)).toEqual({ names: ['look'], pending: false });
+  });
+
+  it('drops offers enumerated over a state it has already moved past', () => {
+    const host = showing(4, ['look']);
+    // The world committed something, so the page is now showing state 5 -- and
+    // the verbs it was holding were worked out against state 4.
+    deliver(host, stateFrame({ revision: 5 }));
+    expect(offered(host)).toEqual({ names: [], pending: true });
+
+    // A LATE FRAME FOR THE OLD STATE CHANGES NOTHING. This is the one that
+    // would otherwise read as "you may still do this": it is an accurate answer
+    // about a world that no longer exists.
+    deliver(host, offersFrame(4, ['look']));
+    expect(offered(host)).toEqual({ names: [], pending: true });
+
+    deliver(host, offersFrame(5, ['flee']));
+    expect(offered(host)).toEqual({ names: ['flee'], pending: false });
+  });
+
+  it('keeps the offers through a re-push of the same state', () => {
+    // Presence changes, a seat switch and a notice all re-send the state frame
+    // without the world having moved. Clearing there would blank every panel in
+    // the world for a frame, for nothing.
+    const host = showing(4, ['look']);
+    deliver(host, stateFrame({ revision: 4, presence: [3] }));
+    expect(offered(host)).toEqual({ names: ['look'], pending: false });
   });
 
   it('lets the host withdraw the presence claim, because "online now" has no last-known value', () => {

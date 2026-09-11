@@ -423,7 +423,8 @@ describe('#167: an action is dispatched through its ordered declaration, then ru
     // it besides -- filtering alone would leave the rule enforceable only by
     // the client, which is not a place a rule can live.
     const { host, sent } = await attached({ dir });
-    const offers = last(sent, 'c1', 'world_state')?.actions as Array<{ name: string }>;
+    // ON ITS OWN FRAME, BEHIND THE VIEW (#244).
+    const offers = last(sent, 'c1', 'world_offers')?.actions as Array<{ name: string }>;
     expect(offers.map((o) => o.name)).toEqual(['bank', 'chop', 'stack']);
     await host.close();
   });
@@ -514,7 +515,7 @@ describe('#378: one pick, re-asked with the args bound so far', () => {
 
     // WHAT THE OFFER SAID with nothing bound: no upper bound at all, and said
     // by OMISSION rather than by a number the wire cannot carry.
-    const offered = (last(sent, 'c1', 'world_state')!.actions as WorldActionOffer[])
+    const offered = (last(sent, 'c1', 'world_offers')!.actions as WorldActionOffer[])
       .find((offer) => offer.name === 'stack')!
       .selections.find((pick) => pick.name === 'logs')!;
     expect(JSON.parse(JSON.stringify(offered.multiSelect))).toEqual({ min: 1 });

@@ -307,6 +307,7 @@ provide(WORLD_CONTEXT_KEY, {
   view: host.view,
   seat: host.seat,
   actions: host.actions,
+  offersPending: host.offersPending,
   notice: host.notice,
   worldName: host.worldName,
   presence: host.presence,
