@@ -68,6 +68,29 @@ const worldName = ref(cfg.displayName);
  *  the frame on every remount, never walked. */
 const lastState = shallowRef<Record<string, unknown> | null>(null);
 
+/**
+ * THE OFFER SET THAT IS ABOUT THE VIEW ON SCREEN (#245), held for replay.
+ *
+ * The state alone used to be enough, because the actions rode on it. In r77
+ * they left for a frame of their own, and a bar that retained only the state
+ * dropped every set that arrived before the frame's `useWorldHost.start()`
+ * installed its listener -- a routine second, since the socket opens while the
+ * iframe is still loading. A world that has stopped moving never sends a second
+ * set, so the controls stayed disabled for the life of the page.
+ *
+ * STAMPED WITH THE REVISION AND SEAT IT WAS ENUMERATED FOR, because a retained
+ * set outlives the moment it was true: the world commits, or the player takes
+ * another seat, and what was retained is then about a world nobody is looking
+ * at. It is dropped at that point rather than at replay, so what is held is
+ * always exactly what may be replayed.
+ */
+interface RetainedOffers {
+  revision: number;
+  seat: number | null;
+  frame: Record<string, unknown>;
+}
+const lastOffers = shallowRef<RetainedOffers | null>(null);
+
 function note(message: string): void {
   notices.value = [...notices.value.slice(-4), message];
 }
@@ -114,11 +137,46 @@ const RELAYED_TO_FRAME = new Set([
   'world_events',
   'world_response',
   'world_pick_result',
-  // WHAT THIS SEAT MAY DO, ON ITS OWN FRAME (#244). The Dev chrome has nothing
-  // to say about offers -- it draws the seat switcher and the debug bar -- so
-  // this one passes straight through to the iframe like the other three.
-  'world_offers',
 ]);
+
+/**
+ * THE VIEW THIS BAR IS SHOWING, held for replay.
+ *
+ * A NEW STATE, OR THE SAME ONE UNDER ANOTHER SEAT, RETIRES THE OFFERS (#245).
+ * A seat switch re-pushes the state without the world having moved, so the
+ * revision alone does not say the held set is still this player's. Replaying a
+ * retired set would draw a panel of presses the world is bound to refuse.
+ */
+function takeState(message: Record<string, unknown>): void {
+  const seat = (message.seat as number | null) ?? null;
+  const held = lastOffers.value;
+  if (held !== null && (held.revision !== (message.revision as number) || held.seat !== seat)) {
+    lastOffers.value = null;
+  }
+  mySeat.value = seat;
+  worldName.value = (message.worldName as string | null) ?? cfg.displayName;
+  lastState.value = message;
+  postToWorld(message);
+}
+
+/**
+ * WHAT THIS SEAT MAY DO -- RETAINED AS WELL AS RELAYED (#245).
+ *
+ * Retained only when it is about the view this bar is showing: a set stamped
+ * with any other revision is an answer to a question the world has already
+ * moved past. It is still relayed either way -- the frame runs the same
+ * revision check and drops it there -- but there is nothing about it worth
+ * replaying later.
+ */
+function takeOffers(message: Record<string, unknown>): void {
+  const revision = message.revision as number;
+  const state = lastState.value;
+  lastOffers.value =
+    state !== null && revision === (state.revision as number)
+      ? { revision, seat: (state.seat as number | null) ?? null, frame: message }
+      : null;
+  postToWorld(message);
+}
 
 function onHostMessage(message: Record<string, unknown>): void {
   if (RELAYED_TO_FRAME.has(message.type as string)) {
@@ -127,10 +185,10 @@ function onHostMessage(message: Record<string, unknown>): void {
   }
   switch (message.type) {
     case 'world_state':
-      mySeat.value = (message.seat as number | null) ?? null;
-      worldName.value = (message.worldName as string | null) ?? cfg.displayName;
-      lastState.value = message;
-      postToWorld(message);
+      takeState(message);
+      return;
+    case 'world_offers':
+      takeOffers(message);
       return;
     case 'world_status':
       status.value = message as unknown as WorldStatus;
@@ -158,17 +216,30 @@ function postToWorld(message: Record<string, unknown>): void {
   win.postMessage({ ...message, source: WORLD_HOST_SOURCE }, '*');
 }
 
-function onFrameLoad(): void {
+/**
+ * THE VIEW, AND THEN WHAT MAY BE DONE IN IT (#245).
+ *
+ * IN THAT ORDER, because the frame applies an offer set only against the state
+ * it is showing: offers posted first would be dropped by `useWorldHost` for
+ * naming a revision it has not been told about yet.
+ */
+function replayHeld(): void {
   // A frame that mounted after the host already held a view would sit blank
   // until the world next moved, which in a quiet world is never.
-  if (lastState.value !== null) postToWorld(lastState.value);
+  if (lastState.value === null) return;
+  postToWorld(lastState.value);
+  if (lastOffers.value !== null) postToWorld(lastOffers.value.frame);
+}
+
+function onFrameLoad(): void {
+  replayHeld();
 }
 
 function onWindowMessage(event: MessageEvent): void {
   const data = event.data as { source?: string; type?: string; [key: string]: unknown } | undefined;
   if (!data || data.source !== WORLD_UI_SOURCE) return;
   if (data.type === 'world_ready') {
-    if (lastState.value !== null) postToWorld(lastState.value);
+    replayHeld();
     return;
   }
   if (data.type === 'world_command') {
