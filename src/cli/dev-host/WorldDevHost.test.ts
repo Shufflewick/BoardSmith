@@ -99,17 +99,31 @@ async function open(config: WorldDevConfig = CONFIG): Promise<VueWrapper> {
   return wrapper;
 }
 
-/** One state frame, as the host pushes it. */
+/**
+ * One state frame, as the host pushes it — the r77 shape, which carries a
+ * `revision` and NO `actions`. What a seat may do travels on its own
+ * `world_offers` frame now, stamped with the revision it was enumerated over.
+ */
 function stateFrame(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   return {
     type: 'world_state',
     phase: 'watching',
     view: { here: 'hall' },
     seat: 1,
-    actions: [{ name: 'look', prompt: 'Look around', selections: [] }],
+    revision: 1,
     notice: null,
     worldName: 'The Dusk Hall',
     presence: [1],
+    ...overrides,
+  };
+}
+
+/** One offer frame, naming the committed state it was enumerated over. */
+function offersFrame(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  return {
+    type: 'world_offers',
+    revision: 1,
+    actions: [{ name: 'look', prompt: 'Look around', selections: [] }],
     ...overrides,
   };
 }
@@ -456,6 +470,121 @@ describe('#170: one surface, and it is always the bundle\'s own', () => {
     const wrapper = await open();
     expect(wrapper.text()).not.toContain('showing the shell');
     expect(wrapper.find('iframe').attributes('src')).toBe('/__boardsmith-world');
+    wrapper.unmount();
+  });
+});
+
+describe('#245: offers survive the readiness handshake, and retire with their state', () => {
+  /**
+   * The defect this block exists to have caught. In r77 the offers left
+   * `world_state` for a frame of their own, and this bar retained only the
+   * state -- so an offer set delivered in the second between the socket opening
+   * and the frame's `useWorldHost.start()` installing its listener was relayed
+   * into a window that was not listening yet and then forgotten. Every action
+   * control stayed disabled for the life of the page, because a world that has
+   * stopped moving never sends a second set.
+   */
+  const ready = (): void => {
+    window.dispatchEvent(
+      new MessageEvent('message', { data: { source: WORLD_UI_SOURCE, type: 'world_ready' } }),
+    );
+  };
+
+  /**
+   * Push `delivered` down the socket, then do the thing that should make the
+   * bar speak to the frame, and report ONLY what that thing produced -- which
+   * is the whole question here, since every one of these frames was already
+   * relayed once on arrival.
+   */
+  async function whatTheFrameGetsFrom(
+    wrapper: VueWrapper,
+    posted: Array<Record<string, unknown>>,
+    delivered: Array<Record<string, unknown>>,
+    trigger: () => unknown = ready,
+  ): Promise<string[]> {
+    for (const frame of delivered) socket!.deliver(frame);
+    await wrapper.vm.$nextTick();
+    const before = posted.length;
+    await trigger();
+    await wrapper.vm.$nextTick();
+    return posted.slice(before).map((message) => message.type as string);
+  }
+
+  it('replays the state AND THEN the matching offers to a frame that was not listening yet', async () => {
+    const wrapper = await open();
+    const posted = watchFrame(wrapper);
+    // STATE FIRST, OFFERS SECOND: `useWorldHost` applies an offer set only
+    // against the state it is showing, so offers that arrive first are dropped.
+    expect(
+      await whatTheFrameGetsFrom(wrapper, posted, [
+        stateFrame({ revision: 7 }),
+        offersFrame({ revision: 7 }),
+      ]),
+    ).toEqual(['world_state', 'world_offers']);
+    expect(posted.at(-1)).toMatchObject({
+      source: WORLD_HOST_SOURCE,
+      type: 'world_offers',
+      revision: 7,
+      actions: [{ name: 'look', prompt: 'Look around', selections: [] }],
+    });
+    wrapper.unmount();
+  });
+
+  it('replays both again when the frame remounts, in the same order', async () => {
+    const wrapper = await open();
+    const posted = watchFrame(wrapper);
+    socket!.deliver(stateFrame({ revision: 7 }));
+    socket!.deliver(offersFrame({ revision: 7 }));
+    ready();
+    await wrapper.vm.$nextTick();
+
+    expect(
+      await whatTheFrameGetsFrom(wrapper, posted, [], () => wrapper.find('iframe').trigger('load')),
+    ).toEqual(['world_state', 'world_offers']);
+    wrapper.unmount();
+  });
+
+  it('never replays an offer set the world has moved past', async () => {
+    const wrapper = await open();
+    const posted = watchFrame(wrapper);
+    // The world commits, and the state for it arrives before its offers do.
+    // Only the state is replayed: a panel drawn from the retired set would
+    // invite presses the world is bound to refuse, which is the same lie one
+    // layer up.
+    expect(
+      await whatTheFrameGetsFrom(wrapper, posted, [
+        stateFrame({ revision: 7 }),
+        offersFrame({ revision: 7 }),
+        stateFrame({ revision: 8 }),
+      ]),
+    ).toEqual(['world_state']);
+    expect(posted.at(-1)).toMatchObject({ type: 'world_state', revision: 8 });
+    wrapper.unmount();
+  });
+
+  it('retires the offers when the same state comes back under another seat', async () => {
+    // A seat switch re-pushes the state without the world having moved, so the
+    // revision alone does not say the offers are still this player's.
+    const wrapper = await open();
+    expect(
+      await whatTheFrameGetsFrom(wrapper, watchFrame(wrapper), [
+        stateFrame({ revision: 7, seat: 1 }),
+        offersFrame({ revision: 7 }),
+        stateFrame({ revision: 7, seat: 2 }),
+      ]),
+    ).toEqual(['world_state']);
+    wrapper.unmount();
+  });
+
+  it('still relays an offer set that arrives after readiness, exactly once', async () => {
+    const wrapper = await open();
+    const posted = watchFrame(wrapper);
+    expect(
+      await whatTheFrameGetsFrom(wrapper, posted, [stateFrame({ revision: 7 })], () => {
+        ready();
+        socket!.deliver(offersFrame({ revision: 7 }));
+      }),
+    ).toEqual(['world_state', 'world_offers']);
     wrapper.unmount();
   });
 });
