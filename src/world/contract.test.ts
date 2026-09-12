@@ -180,6 +180,12 @@ class ReferenceWorldEngine implements WorldEngine {
     throw new Error("the reference world holds no elements to finalize a migration over");
   }
 
+  /** Nor is there a root to fold into a digest (ShufflewickPub #449). A
+   *  conformance engine is asked to have the METHOD. */
+  surveyPartition(): never {
+    throw new Error("the reference world holds no elements to survey");
+  }
+
   /** Nothing to re-baseline either: a migration here transformed no root
    *  (ShufflewickPub #407). A conformance engine is asked to have the METHOD. */
   migrateBaseline(): void {

@@ -192,6 +192,12 @@ export const WORLD_FIXTURE_COVERAGE: Record<(typeof WORLD_ENGINE_METHODS)[number
     + 'is in the world, and it produces NOTHING -- it moves the engine\'s own baselines, which '
     + 'no payload carries.',
 
+  surveyPartition: 'The FIRST pass of a bounded cross-root migration (ShufflewickPub #449), '
+    + 'which happens once, at startup, before any player is in the world. It reads one root '
+    + 'through the same read-only projection a declaration reads through and produces NO bytes '
+    + 'at all -- what it accumulates is the author\'s own digest, whose shape is the bundle\'s '
+    + 'and not this engine\'s. The fixture drives no migration.',
+
   migrateFinalize: 'The last phase of a world MOVING BETWEEN state versions (ShufflewickPub '
     + '#379), which happens once, at startup, before any player is in it. It derives one root\'s '
     + 'value from another\'s, and like `migratePartition` its ANSWER is ordinary partition bytes '
@@ -446,6 +452,25 @@ const WORLD_DURABILITY_FIXTURE = {
   // checkpoint shape.
   migrateWhole: { from: 1, to: 2 },
   migratePage: { from: 1, to: 2, allNames: ["room:a", "room:b"], runCreate: true },
+  // THE TWO PASSES OF A BOUNDED CROSS-ROOT MIGRATION (ShufflewickPub #449),
+  // here for the reason the page context is: a host persists the digest between
+  // wakes and hands it back, so both the call and the answer are shapes a
+  // platform must write against -- and both are types, which `surfaceHash`
+  // cannot see.
+  migrateSurveyPass: {
+    from: 1,
+    to: 2,
+    allNames: ["room:a", "room:b"],
+    pass: "survey",
+    digest: '{"total":3}',
+    maxDigestBytes: 65_536,
+  },
+  surveyed: {
+    partitions: {},
+    created: {},
+    digest: '{"total":7}',
+    nextElementId: 1_000_011,
+  },
 } satisfies {
   genesis: WorldGenesis;
   checkpoint: WorldSerialized;
@@ -453,6 +478,8 @@ const WORLD_DURABILITY_FIXTURE = {
   migrated: WorldMigrated;
   migrateWhole: WorldMigrateContext;
   migratePage: WorldMigrateContext;
+  migrateSurveyPass: WorldMigrateContext;
+  surveyed: WorldMigrated;
 };
 
 /**

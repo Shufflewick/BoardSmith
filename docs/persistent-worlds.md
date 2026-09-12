@@ -1639,6 +1639,68 @@ makes a name-collision refusable) or remove one. `ctx.partition(name)` answers
 the live element for any root the world holds and refuses a name it does not,
 because during a migration every root **is** resident.
 
+**And `survey`, which is `finalize` for a world too big to hold**
+(ShufflewickPub #449). `finalize` reads across roots by having every root
+resident at once, and a host's call ceiling is a measured memory ceiling rather
+than a preference -- the real occupied target world is 662 roots and 4.49 MB
+against a 2 MiB host ceiling, with no single root above 27 KB. So the one shape
+a real occupied upgrade has was the one shape a real occupied world could not
+run.
+
+A cross-root migration does not actually need every root resident. It needs the
+DERIVED FACTS from every root to be complete before any root is written. So
+declare the fold:
+
+```ts
+migration: worldMigration({
+  from: 1,
+  survey: {
+    initial: () => ({ frontier: 0, empires: 0 }),
+    root: (digest, element, name) => ({
+      frontier: Math.max(digest.frontier, furthestStar(element)),
+      empires: digest.empires + (isEmpire(name) ? 1 : 0),
+    }),
+    maxBytes: 4096,
+  },
+  partition: (element, { digest }) => { element.frontier = digest.frontier; },
+  create: (game, { digest, existing }) => addedRoots(game, digest, existing),
+})
+```
+
+`survey.root` is handed ONE root at a time, read-only, and answers the digest
+with that root folded in; `partition` and `create` are then handed the
+**completed** digest. Every write is a pure function of (that root, that
+digest), so iteration order cannot matter -- the fold finished before the first
+write -- and residency never exceeds one page.
+
+Write it through `worldMigration(...)` so the digest type flows from
+`survey.initial` into every hook with nothing to annotate and nothing to cast.
+
+`maxBytes` is required, and it is the whole difference between a fold and an
+accumulator: a digest with no stated ceiling grows with the world, and the
+migration that was supposed to fit stops fitting on the very world it was
+written for. A digest past it is refused by name, with the size, the bound and
+whose bound it was -- the host enforces its own ceiling too, and a run that hit
+one will hit it again, so the refusal says so.
+
+`survey` and `finalize` are **mutually exclusive**, refused where they are
+declared. They are the same intent at different costs: `survey` is the bounded
+form and runs on a world of any size, `finalize` is the whole-world form and is
+capped by whatever one call can hold. A migration that declares both says
+nothing about which a host should run.
+
+A host asks `runner.migrationShape()` before it runs anything, and gets one of
+three answers: `{ kind: 'independent' }` (page it in one pass, nothing carried
+between calls), `{ kind: 'survey', maxDigestBytes }` (page it in two passes --
+every page with `pass: 'survey'`, carrying the digest forward as bytes, then
+every page again with `pass: 'transform'` and that finished digest), or
+`{ kind: 'whole-world' }` (`finalize`: every root in one call, and a world
+larger than the host's ceiling cannot run it). A paged survey migration that
+names no pass, and a transform pass handed no digest, are both refused rather
+than run against a half-folded world. A survey pass writes nothing at all --
+no partition bytes, no created roots -- which is what makes it safe to run a
+page at a time.
+
 **Changing `world.maxPlayers` across an upgrade needs no separate roster
 migration.** The roster is the host's, not the bundle's: `maxPlayers` is read
 from the compiled rules at construction and bounds who may sit down, so raising
@@ -1753,13 +1815,13 @@ thing next time.
 
 | Code | What happened |
 | --- | --- |
-| `bundle-not-a-world` | The manifest declares `"backend": "world"` and the compiled rules export no `world.actions`, no `world.view`, no `world.maxPlayers`, a `world.maxPlayers` the host will not seat, a `world.stateVersion` that is not a whole number from 0 up, or a `world.migration` that is not usable (no `from`, a `from` at or past this version, or a hook -- `partition`, `event`, `create` or `finalize` -- that is not a function). |
-| `world-migration-unavailable` | A world's recorded `stateVersion` and its bundle's differ, and no migration in that bundle can cross the gap: none declared, one declared from a different version, or a bundle older than the world. Also a `create` hook whose answer is not `name -> element`, or that names a partition the world already holds. The world is not changed. |
+| `bundle-not-a-world` | The manifest declares `"backend": "world"` and the compiled rules export no `world.actions`, no `world.view`, no `world.maxPlayers`, a `world.maxPlayers` the host will not seat, a `world.stateVersion` that is not a whole number from 0 up, or a `world.migration` that is not usable (no `from`, a `from` at or past this version, a hook -- `partition`, `event`, `create` or `finalize` -- that is not a function, a `survey` that is not `{ initial, root, maxBytes }`, or a migration declaring both `survey` and `finalize`). |
+| `world-migration-unavailable` | A world's recorded `stateVersion` and its bundle's differ, and no migration in that bundle can cross the gap: none declared, one declared from a different version, or a bundle older than the world. Also a `create` hook whose answer is not `name -> element`, or that names a partition the world already holds; a survey digest past `survey.maxBytes` or past the host's own ceiling; and a paged survey migration run with no `pass`, or a transform pass handed no digest. The world is not changed. |
 | `invalid-world-action` | A world action the platform cannot offer or cannot bound: an action not built with `worldAction()`, an unbounded `from`/`filter`/`elementClass` element form, an element selection with no `elements:`, a candidate outside what the step declared, a selection past `maxCandidatesPerSelection`, a dependent or repeating selection, a seatless action that asks a question, or a round declared before a step the action does not have. |
 | `not-in-a-world` | An action built with `worldAction()` reached `ctx.world` with no world running it -- registered on a table, or reached after the dispatch that bound its facilities finished. |
 | `undeclared-partition` | `execute` read a partition the action's own walk did not declare. |
 | `declaration-unsettled` | A `world.view` named something new on every round. **A view only**, since an action's walk has no ceiling to trip. |
-| `declaration-write` | A declaration tried to write through the read-only projection. Do it in `execute`. |
+| `declaration-write` | A declaration, a view or a migration's `survey.root` tried to write through the read-only projection. Do it in `execute`, or in the migration's `partition` hook. |
 | `unknown-scope` | An event was addressed to something that is neither `"world"` nor a loaded partition. |
 | `partition-missing` | A declaration named a partition this world's store does not have, and `world.createPartition` did not build one for that name either. Usually a typo, or a partition nothing has created yet. |
 | `invalid-partition-name` | A partition name a store may not hold: empty, over 128 characters, outside `A-Za-z0-9._:@/-`, or one of `__proto__`, `constructor`, `prototype`. |

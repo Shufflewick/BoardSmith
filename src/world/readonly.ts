@@ -220,11 +220,15 @@ function cachedWrapper(target: object, call: object, build: () => unknown): unkn
 function refuseWrite(property: string | symbol): never {
   throw worldRefusal(
     "declaration-write",
-    `A declaration tried to write "${String(property)}". A command's partitions() and a ` +
-      "world's view() say WHICH partitions they are about; they run before the platform has " +
-      "decided what this command may change, so nothing they write could be checkpointed -- it " +
-      "would either ride a rollback the player was told discarded it, or be reverted at the " +
-      "next hibernation with nobody told at all. Move the write into the command's run().",
+    `A read-only view of this world tried to write "${String(property)}". A command's ` +
+      "partitions() and a world's view() say WHICH partitions they are about; they run before " +
+      "the platform has decided what this command may change, so nothing they write could be " +
+      "checkpointed -- it would either ride a rollback the player was told discarded it, or be " +
+      "reverted at the next hibernation with nobody told at all. Move the write into the " +
+      "command's run(). A migration's survey.root() reads through the same projection, for the " +
+      "same reason: it folds the world into a digest before any root is written and a host " +
+      "re-runs it a page at a time, so its writes would be stored by nothing. Move that write " +
+      "into the migration's partition() hook, which is handed the completed digest.",
   );
 }
 

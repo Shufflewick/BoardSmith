@@ -69,8 +69,65 @@ export interface MigratableEvent {
   readonly args: Readonly<Record<string, unknown>>;
 }
 
-/** What the author declares to move a world one version forward. */
-export interface WorldMigration {
+/**
+ * THE BOUNDED FOLD A CROSS-ROOT MIGRATION DERIVES ITS FACTS WITH
+ * (ShufflewickPub #449).
+ *
+ * `finalize` reads across roots by having every root RESIDENT at once, and a
+ * host's call ceiling is a measured memory ceiling rather than a preference --
+ * a 662-root, 4.5 MB world does not fit in one call and never will. So the one
+ * migration shape #379 was opened for was the one shape a real world could not
+ * run.
+ *
+ * The facts a cross-root migration needs are not the roots. They are what the
+ * roots ADD UP TO: a total, a directory, a maximum coordinate, a reconciliation
+ * of who paid for what. A survey says so. It folds the whole world into ONE
+ * BOUNDED VALUE, a page at a time, BEFORE anything is written -- and then every
+ * write is a pure function of (that root, the completed digest). Iteration
+ * order cannot matter, because the fold finished before the first write, and
+ * residency never exceeds one page.
+ *
+ * The digest is the author's own shape and the author's own ceiling. It crosses
+ * calls as JSON, because a host persists it between wakes.
+ */
+export interface WorldMigrationSurvey<TDigest> {
+  /** The digest before any root is folded in. Must be JSON-serializable. */
+  initial(): TDigest;
+  /**
+   * FOLD ONE EXISTING ROOT INTO THE DIGEST.
+   *
+   * Called once per root, in pages, before any transform hook runs. The
+   * element is READ-ONLY -- writing through it is a refusal, not a silent
+   * no-op, because a survey that could write would be a half-migrated world
+   * held across a host's wakes.
+   *
+   * Must be ORDER-INDEPENDENT: a host folds roots in whatever order it reads
+   * them, across however many calls it takes, and the digest that comes out
+   * has to be the same one either way.
+   */
+  root(digest: TDigest, element: GameElement, name: string): TDigest;
+  /**
+   * THE AUTHOR'S OWN CEILING ON THE SERIALIZED DIGEST, IN BYTES.
+   *
+   * Required. An accumulator with no stated bound is `finalize` wearing a
+   * pageable migration's clothes: it grows with the world, and the migration
+   * that was supposed to fit stops fitting on the world it was written for.
+   * Say what "bounded" means for this digest and the host holds you to it.
+   *
+   * The HOST enforces its own ceiling as well, and a refusal says which of the
+   * two it was.
+   */
+  readonly maxBytes: number;
+}
+
+/**
+ * What the author declares to move a world one version forward.
+ *
+ * `TDigest` is the shape of this migration's own `survey` digest, inferred by
+ * `worldMigration()`; a migration that declares no survey has none, and its
+ * hooks are handed `undefined` where the digest would be.
+ */
+export interface WorldMigration<TDigest = unknown> {
   /**
    * THE STATE VERSION THIS MIGRATION READS.
    *
@@ -89,7 +146,7 @@ export interface WorldMigration {
    * Optional, because a version whose change is entirely in its queued events
    * is a real change and should not have to declare an empty function.
    */
-  readonly partition?: (element: GameElement, ctx: WorldMigrationContext) => void;
+  partition?(element: GameElement, ctx: WorldMigrationContext<TDigest>): void;
   /**
    * ONE QUEUED EVENT'S ARGUMENTS, ANSWERED FRESH.
    *
@@ -97,7 +154,7 @@ export interface WorldMigration {
    * a partition's bytes, and mean exactly as much to the new handler. Answer
    * what the new rules should see; answer the same object to leave it alone.
    */
-  readonly event?: (event: MigratableEvent) => Record<string, unknown>;
+  event?(event: MigratableEvent): Record<string, unknown>;
   /**
    * DURABLE PARTITION ROOTS THIS VERSION ADDS (#218).
    *
@@ -114,7 +171,7 @@ export interface WorldMigration {
    * deleting a season's stored bytes on a hook whose failure mode is a typo,
    * and nothing gives them back.
    */
-  readonly create?: (game: Game, ctx: WorldMigrationCreateContext) => Record<string, GameElement>;
+  create?(game: Game, ctx: WorldMigrationCreateContext<TDigest>): Record<string, GameElement>;
   /**
    * THE WHOLE WORLD, ONCE EVERY ROOT IS IN FRONT OF IT (ShufflewickPub #379).
    *
@@ -136,7 +193,43 @@ export interface WorldMigration {
    * what makes "a name that is already taken" refusable -- and it may not
    * remove one, for the reason `create` may not.
    */
-  readonly finalize?: (game: Game, ctx: WorldMigrationFinalizeContext) => void;
+  finalize?(game: Game, ctx: WorldMigrationFinalizeContext): void;
+  /**
+   * THE WHOLE WORLD, FOLDED INTO ONE BOUNDED VALUE FIRST (#449).
+   *
+   * The bounded half of `finalize`. Declaring it makes this migration PAGEABLE
+   * in two passes -- survey every root, then transform every root against the
+   * completed digest -- so a world far past any host's call ceiling can still
+   * derive one root's value from another.
+   *
+   * MUTUALLY EXCLUSIVE WITH `finalize`, refused where it is declared: the two
+   * are the same intent at different costs, and a migration that declares both
+   * says nothing about which one a host should run.
+   */
+  readonly survey?: WorldMigrationSurvey<TDigest>;
+}
+
+/**
+ * A MIGRATION, WITH ITS DIGEST TYPE INFERRED (ShufflewickPub #449).
+ *
+ * `world.migration` is declared beside every other world field, and a bundle's
+ * definition cannot be generic without every reader of it becoming generic too
+ * -- so the slot holds `WorldMigration<unknown>` and an object literal written
+ * straight into it would hand every hook an `unknown` digest to cast.
+ *
+ * Write it through here instead and the digest type flows from `survey.initial`
+ * into `partition` and `create` with nothing to annotate and nothing to cast:
+ *
+ *   migration: worldMigration({
+ *     from: 1,
+ *     survey: { initial: () => ({ total: 0 }), root: (d, e) => ..., maxBytes: 4096 },
+ *     partition: (element, { digest }) => { element.share = digest.total; },
+ *   })
+ */
+export function worldMigration<TDigest>(
+  migration: WorldMigration<TDigest>,
+): WorldMigration<TDigest> {
+  return migration;
 }
 
 /** What the `finalize` hook is given: the whole world, by name (#379). */
@@ -158,18 +251,36 @@ export interface WorldMigrationFinalizeContext {
 }
 
 /** What the `create` hook is told about the world it is adding roots to. */
-export interface WorldMigrationCreateContext {
+export interface WorldMigrationCreateContext<TDigest = unknown> {
   /** Every partition name this world already holds, so idempotence is a filter. */
   readonly existing: readonly string[];
+  /**
+   * THE COMPLETED DIGEST (#449), when this migration declares a `survey`.
+   *
+   * Complete: every root the world holds was folded in before this ran, so a
+   * root derived here is derived from the whole world rather than from
+   * whatever happened to be resident. `undefined` for a migration that
+   * declares no survey.
+   */
+  readonly digest: TDigest;
   /** The version being left, and the one being arrived at. */
   readonly from: number;
   readonly to: number;
 }
 
 /** What a migration is told about the thing it is transforming. */
-export interface WorldMigrationContext {
+export interface WorldMigrationContext<TDigest = unknown> {
   /** The partition's name, so one function can serve a world of many kinds. */
   readonly name: string;
+  /**
+   * THE COMPLETED DIGEST (#449), when this migration declares a `survey`.
+   *
+   * Every root was folded in before this root was transformed, so this root's
+   * new value may be a function of any other root's persisted value and the
+   * answer does not depend on which root a host reached first. `undefined` for
+   * a migration that declares no survey.
+   */
+  readonly digest: TDigest;
   /** The version being left, and the one being arrived at. */
   readonly from: number;
   readonly to: number;
@@ -290,12 +401,77 @@ export function assertWorldMigration(migration: unknown, stateVersion: number): 
         "may write across them; leave it out for a version whose roots do not read one another.",
     );
   }
+  if (candidate.survey !== undefined && candidate.finalize !== undefined) throw surveyAndFinalize();
+  assertSurvey(candidate.survey);
   if (candidate.event !== undefined && typeof candidate.event !== "function") {
     throw worldRefusal(
       "bundle-not-a-world",
       "This bundle's `world.migration.event` is not a function. It is handed one queued event " +
         "and answers the arguments the new rules should see; leave it out to keep every queued " +
         "event's arguments as they are.",
+    );
+  }
+}
+
+/**
+ * REFUSE A `survey` BLOCK THAT IS NOT ONE (ShufflewickPub #449).
+ *
+ * At the door with every other declaration check, because every one of these
+ * is a sentence the author can only get wrong while they are writing it.
+ */
+function surveyAndFinalize(): WorldRefusal {
+  return worldRefusal(
+    "bundle-not-a-world",
+    "This bundle's `world.migration` declares BOTH `survey` and `finalize`, and a host cannot " +
+      "know which one to run. They are the same intent at different costs: `survey` is the " +
+      "bounded form -- it folds every root into one digest a page at a time, so the migration " +
+      "runs on a world of any size -- and `finalize` is the whole-world form, which needs every " +
+      "root resident in one call and is therefore capped by whatever a host can hold. Keep " +
+      "`survey` unless the derivation genuinely cannot be expressed as a fold, and then keep " +
+      "`finalize` alone.",
+  );
+}
+
+function assertSurvey(survey: unknown): void {
+  if (survey === undefined) return;
+  if (typeof survey !== "object" || survey === null || Array.isArray(survey)) {
+    throw worldRefusal(
+      "bundle-not-a-world",
+      `This bundle's \`world.migration.survey\` is not a survey block. It is ` +
+        "`{ initial, root, maxBytes }`: `initial()` answers the digest before any root is folded " +
+        "in, `root(digest, element, name)` folds ONE root into it, and `maxBytes` is your own " +
+        "ceiling on the serialized digest. Leave it out for a migration whose roots do not read " +
+        "one another.",
+    );
+  }
+  const block = survey as Partial<WorldMigrationSurvey<unknown>>;
+  if (typeof block.initial !== "function") {
+    throw worldRefusal(
+      "bundle-not-a-world",
+      "This bundle's `world.migration.survey.initial` is not a function. It takes nothing and " +
+        "answers the digest before any root has been folded in -- `() => ({ total: 0 })` -- and " +
+        "whatever it answers must survive JSON, because a host persists the digest between " +
+        "wakes.",
+    );
+  }
+  if (typeof block.root !== "function") {
+    throw worldRefusal(
+      "bundle-not-a-world",
+      "This bundle's `world.migration.survey.root` is not a function. It is handed the digest so " +
+        "far, ONE root's element and that root's name, and answers the digest with that root " +
+        "folded in. The element is read-only, and the fold must be order-independent: a host " +
+        "reaches the roots in whatever order it reads them.",
+    );
+  }
+  if (!Number.isInteger(block.maxBytes) || (block.maxBytes as number) < 1) {
+    throw worldRefusal(
+      "bundle-not-a-world",
+      `This bundle's \`world.migration.survey.maxBytes\` is ` +
+        `${JSON.stringify(block.maxBytes)}, which is not a ceiling. It is a whole number of ` +
+        "bytes, 1 or more: the largest the SERIALIZED digest may ever get. It is required " +
+        "because an accumulator with no stated bound grows with the world, and the migration " +
+        "that was supposed to fit stops fitting on the very world it was written for. The host " +
+        "enforces its own ceiling as well, and a refusal says which of the two was hit.",
     );
   }
 }

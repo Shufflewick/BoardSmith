@@ -264,7 +264,7 @@ export const WORLD_REFUSALS = {
   },
   "declaration-write": {
     owner: "game",
-    why: "#219: a command's `partitions()` or a bundle's `world.view()` tried to WRITE through the residency it was handed. A declaration runs before the platform has decided what the command may change -- before the rollback snapshot on the write path, and with no snapshot at all on the read path -- so nothing it writes can be checkpointed: it either rides a rollback the player was told discarded it, or is reverted at the next hibernation with nobody told. GAME-owned, like every other bundle mistake, and the refusal names run() as the place the write belongs",
+    why: "#219: a command's `partitions()`, a bundle's `world.view()`, or a migration's `survey.root()` (ShufflewickPub #449) tried to WRITE through the read-only view it was handed. A declaration runs before the platform has decided what the command may change -- before the rollback snapshot on the write path, and with no snapshot at all on the read path -- so nothing it writes can be checkpointed: it either rides a rollback the player was told discarded it, or is reverted at the next hibernation with nobody told. A survey is the same case on the migration road: it folds the world into a digest BEFORE any root is written and a host re-runs it a page at a time, so a write through it is stored by nothing. GAME-owned, like every other bundle mistake, and the refusal names run() -- or the migration's partition() hook -- as the place the write belongs",
   },
   "partition-missing": {
     owner: "game",

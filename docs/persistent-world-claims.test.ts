@@ -481,7 +481,7 @@ describe('#169: a world action is an Action, and the guide teaches the real one'
     const { engine } = newEngine([writer]);
     await engine.hydrate([holdingPartition(1)]);
     expect(() => engine.commandNeeds('p1', { name: 'writer', args: {} }, 0, []).partitions).toThrow(
-      /A declaration tried to write/,
+      /A read-only view of this world tried to write/,
     );
     expect(guide).toContain('declaration-write');
     expect(flatGuide).toContain('Do the write in execute');
@@ -551,7 +551,7 @@ describe('#169: a world action is an Action, and the guide teaches the real one'
     const { engine } = newEngine([writer]);
 
     await expect(apply(engine, 'p1', { name: 'nameWriter', args: {} })).rejects.toThrow(
-      /A declaration tried to write/,
+      /A read-only view of this world tried to write/,
     );
   });
 
