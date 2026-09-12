@@ -554,6 +554,23 @@ export class BoardSmithWorldEngine implements WorldEngine {
   }
 
   /**
+   * READ ONE RESIDENT PARTITION AND WRITE NOTHING (ShufflewickPub #449).
+   *
+   * The survey's one reach into a world. `migratePartition` hands over the LIVE
+   * element because transforming is its whole job; a fold has the opposite job,
+   * and handing it the same live element would make "the element is read-only"
+   * a sentence in a docblock rather than a fact about the object -- which is
+   * the #152 failure class exactly: the wrong way as easy as the right way, and
+   * silently reverted, since a survey's writes are never serialized.
+   *
+   * So the fold is handed `readonly.ts`'s projection, the same one a
+   * declaration reads through, and a write is the refusal it already raises.
+   */
+  surveyPartition<TDigest>(name: string, fold: (element: GameElement) => TDigest): TDigest {
+    return fold(readOnlyProjection(this.rootOf(name)));
+  }
+
+  /**
    * THE WHOLE MIGRATION'S LAST PHASE, with every root in front of it (#379).
    *
    * `migratePartition` sees one root and `createMigratedPartitions` may only

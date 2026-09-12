@@ -16,6 +16,7 @@ import {
   assertCreatedRoots,
   migratedArgs,
   planMigration,
+  worldMigration,
   type WorldMigration,
 } from "./migration.js";
 
@@ -172,5 +173,108 @@ describe("the partition roots a migration creates", () => {
 
   it("refuses an entry that is not an element", () => {
     expect(() => assertCreatedRoots({ "region:1": 7 }, [])).toThrow(/is the ELEMENT/);
+  });
+});
+
+/**
+ * ShufflewickPub #449: THE BOUNDED FORM OF A CROSS-ROOT MIGRATION.
+ *
+ * `finalize` needs every root resident at once, which a host with a measured
+ * memory ceiling cannot grant a world of 662 roots and 4.5 MB. `survey` is the
+ * other way to say the same thing: fold the whole world into a BOUNDED digest
+ * one page at a time, and only then transform, so every write is a pure
+ * function of (that root, the completed digest) and residency stays one page.
+ */
+describe("what a survey may declare (#449)", () => {
+  const survey = { initial: () => ({}), root: (digest: unknown) => digest, maxBytes: 4_096 };
+
+  it("accepts a survey beside `partition` and `create`", () => {
+    expect(() =>
+      assertWorldMigration({ from: 1, survey, partition: () => {}, create: () => ({}) }, 2),
+    ).not.toThrow();
+  });
+
+  it("REFUSES a migration that declares both `survey` and `finalize`", () => {
+    // The two are the same intent at different costs, and declaring both says
+    // nothing about which one the host should run.
+    expect(() => assertWorldMigration({ from: 1, survey, finalize: () => {} }, 2)).toThrow(
+      /`survey` is the bounded form/,
+    );
+    expect(() => assertWorldMigration({ from: 1, survey, finalize: () => {} }, 2)).toThrow(
+      /`finalize` is the whole-world form/,
+    );
+  });
+
+  it.each([7, "survey", null, []])("refuses %p as the whole survey block", (bad) => {
+    expect(() => assertWorldMigration({ from: 1, survey: bad }, 2)).toThrow(
+      /migration\.survey` is not a survey/,
+    );
+  });
+
+  it("refuses a survey whose `initial` or `root` is not a function", () => {
+    expect(() => assertWorldMigration({ from: 1, survey: { ...survey, initial: 7 } }, 2)).toThrow(
+      /survey\.initial` is not a function/,
+    );
+    expect(() => assertWorldMigration({ from: 1, survey: { ...survey, root: 7 } }, 2)).toThrow(
+      /survey\.root` is not a function/,
+    );
+  });
+
+  it.each([undefined, 0, -1, 1.5, "4096"])("refuses %p as `survey.maxBytes`", (bad) => {
+    // REQUIRED, because an unbounded accumulator is exactly what this refuses
+    // to allow: a digest with no stated ceiling is `finalize` wearing a
+    // pageable migration's clothes.
+    expect(() =>
+      assertWorldMigration({ from: 1, survey: { ...survey, maxBytes: bad } }, 2),
+    ).toThrow(/survey\.maxBytes`/);
+  });
+});
+
+/**
+ * The digest type has to REACH the hooks, or every author casts (#449).
+ *
+ * A world's definition cannot be generic without every reader of it becoming
+ * generic too, so the slot holds `WorldMigration<unknown>` -- and a migration
+ * written straight into it would hand `partition` an `unknown` to cast, which
+ * is the pit of failure this helper exists to fill in.
+ */
+describe("worldMigration() (#449)", () => {
+  it("flows the digest type from `survey.initial` into `partition` and `create`", () => {
+    const seen: number[] = [];
+    const declared = worldMigration({
+      from: 1,
+      survey: {
+        initial: () => ({ total: 0 }),
+        root: (digest, _element, name) => ({ total: digest.total + name.length }),
+        maxBytes: 64,
+      },
+      // No annotation and no cast: `digest.total` is a number here because
+      // `initial` said so, and `digest.missing` would not compile.
+      partition: (_element, ctx) => {
+        seen.push(ctx.digest.total);
+      },
+      create: (_game, ctx) => {
+        seen.push(ctx.digest.total);
+        return {};
+      },
+    });
+
+    declared.partition!({} as GameElement, { name: "a", from: 1, to: 2, digest: { total: 7 } });
+    expect(seen).toEqual([7]);
+    expect(() => assertWorldMigration(declared, 2)).not.toThrow();
+  });
+
+  it("is what a world definition's `migration` slot accepts", () => {
+    // The assignment this whole design turns on: a migration carrying a real
+    // digest type goes into the slot that erases it, so `WorldDefinition` stays
+    // the plain interface every host reads.
+    const slot: { readonly migration?: WorldMigration } = {
+      migration: worldMigration({
+        from: 1,
+        survey: { initial: () => ({ total: 0 }), root: (digest) => digest, maxBytes: 64 },
+        partition: (_element, ctx) => void ctx.digest,
+      }),
+    };
+    expect(slot.migration?.from).toBe(1);
   });
 });

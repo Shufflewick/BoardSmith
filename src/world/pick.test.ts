@@ -277,7 +277,7 @@ describe("#384 — an offer cannot write to the world it is describing", () => {
     const engine = await engineFor(meddle);
 
     await expect(engine.offersFor("player-a", STAMP)).rejects.toThrow(
-      /A declaration tried to write/,
+      /A read-only view of this world tried to write/,
     );
     expect(await engine.serializePartitions([FLEET])).toMatchObject({
       [FLEET]: expect.stringContaining('"dock"') as unknown as string,
@@ -288,7 +288,7 @@ describe("#384 — an offer cannot write to the world it is describing", () => {
     const engine = await engineFor(greying);
 
     await expect(engine.offersFor("player-a", STAMP)).rejects.toThrow(
-      /A declaration tried to write/,
+      /A read-only view of this world tried to write/,
     );
   });
 
@@ -297,7 +297,7 @@ describe("#384 — an offer cannot write to the world it is describing", () => {
 
     await expect(
       engine.resolvePick("player-a", "meddle", "ship", {}, STAMP),
-    ).rejects.toThrow(/A declaration tried to write/);
+    ).rejects.toThrow(/A read-only view of this world tried to write/);
   });
 
   /** Writes through `ctx.game`, which is the OTHER door into the same tree. */
@@ -325,7 +325,7 @@ describe("#384 — an offer cannot write to the world it is describing", () => {
     const engine = await engineFor(meddleViaGame);
 
     await expect(engine.offersFor("player-a", STAMP)).rejects.toThrow(
-      /A declaration tried to write/,
+      /A read-only view of this world tried to write/,
     );
   });
 
@@ -333,7 +333,7 @@ describe("#384 — an offer cannot write to the world it is describing", () => {
     const engine = await engineFor(meddlingRule);
 
     await expect(engine.offersFor("player-a", STAMP)).rejects.toThrow(
-      /A declaration tried to write/,
+      /A read-only view of this world tried to write/,
     );
   });
 

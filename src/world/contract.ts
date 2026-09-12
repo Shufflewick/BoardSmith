@@ -1049,6 +1049,16 @@ export interface WorldEngine {
   migratePartition(name: string, transform: (element: GameElement) => void): void;
 
   /**
+   * READ ONE RESIDENT PARTITION AND WRITE NOTHING (ShufflewickPub #449).
+   *
+   * The bounded cross-root migration's first pass. `migratePartition` hands
+   * over the live element because transforming is its job; a fold must not be
+   * able to write at all, so what this hands over is the read-only projection
+   * a declaration reads through and a write is that refusal.
+   */
+  surveyPartition<TDigest>(name: string, fold: (element: GameElement) => TDigest): TDigest;
+
+  /**
    * THE MIGRATION'S LAST PHASE, over every root at once (ShufflewickPub #379).
    *
    * `migratePartition` transforms one root and `createMigratedPartitions` only
@@ -1325,6 +1335,7 @@ export const WORLD_ENGINE_METHODS = Object.keys({
   seat: null,
   unseat: null,
   serializePartitions: null,
+  surveyPartition: null,
   viewFor: null,
   viewsFor: null,
   viewPartitions: null,

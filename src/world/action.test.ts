@@ -237,7 +237,7 @@ describe("the ordered declaration walk", () => {
     const { engine } = newEngine([writer]);
     await engine.hydrate([holdingPartition(1)]);
     expect(() => engine.commandNeeds("p1", { name: "writer", args: {} }, STAMP.now, []).partitions).toThrow(
-      /A declaration tried to write/,
+      /A read-only view of this world tried to write/,
     );
   });
 });

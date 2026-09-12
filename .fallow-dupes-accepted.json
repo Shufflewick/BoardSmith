@@ -4192,13 +4192,6 @@
       ]
     },
     {
-      "content": "87c690cded469b6c",
-      "lines": 10,
-      "files": [
-        "src/world/engine.test.ts"
-      ]
-    },
-    {
       "content": "88a0a7082e9c1b97",
       "lines": 7,
       "files": [
@@ -7828,13 +7821,6 @@
       "lines": 13,
       "files": [
         "src/ui/composables/useActionController.test.ts"
-      ]
-    },
-    {
-      "content": "fd1779e7efa8b0f0",
-      "lines": 19,
-      "files": [
-        "src/world/migration-paging.test.ts"
       ]
     },
     {

@@ -84,6 +84,7 @@ import type {
   WorldMigrationContext,
   WorldMigrationCreateContext,
   WorldMigrationFinalizeContext,
+  WorldMigrationSurvey,
 } from "./migration.js";
 import type { ScheduleAllowance } from "./schedule-api.js";
 import { WorldRefusal, worldRefusal } from "./refusals.js";
@@ -170,6 +171,253 @@ function pagingRefused(): WorldRefusal {
 }
 
 /**
+ * THE DIGEST, MEASURED AND HELD TO A CEILING (ShufflewickPub #449).
+ *
+ * Measured AFTER the pass rather than estimated before it, because the only
+ * honest size of a digest is the bytes the host is about to persist. Refused
+ * past whichever ceiling is lower -- the author's `survey.maxBytes` or the
+ * host's own -- and the refusal names the size, the bound and whose it was, so
+ * nobody tunes the number that was not the one hit.
+ */
+function serializedDigest(
+  digest: unknown,
+  authorBound: number,
+  hostBound: number | undefined,
+): string {
+  const json = JSON.stringify(digest);
+  if (json === undefined) {
+    throw worldRefusal(
+      "world-migration-unavailable",
+      "This world's migration answered a digest that does not survive JSON. A host persists the " +
+        "digest between wakes and hands it back to the next call, so it has to be made of plain " +
+        "values -- objects, arrays, numbers, strings, booleans and null. `undefined`, a " +
+        "function, a Map, a Set and a class instance are not among them. The world was not " +
+        "changed.",
+    );
+  }
+  const size = new TextEncoder().encode(json).length;
+  const hostIsLower = hostBound !== undefined && hostBound < authorBound;
+  const bound = hostIsLower ? (hostBound as number) : authorBound;
+  if (size > bound) {
+    throw worldRefusal(
+      "world-migration-unavailable",
+      `This world's migration accumulated a digest of ${size} bytes, past the ${bound}-byte ` +
+        `ceiling ${
+          hostIsLower
+            ? "THIS HOST puts on a migration digest. It is lower than this migration's own " +
+              `\`survey.maxBytes\` of ${authorBound}, so raising that would change nothing`
+            : "this migration declares in `survey.maxBytes`"
+        }. A survey is a FOLD, not a collection: it exists so a world of any size can be ` +
+        "migrated in bounded memory, and a digest that grows with the world is the unbounded " +
+        "accumulator this design refuses to allow. Fold the roots into the fact you actually " +
+        "need -- a total, a maximum, a count per kind -- rather than a record per root. Running " +
+        "the migration again will not help: the same world folds to the same size. The world " +
+        "was not changed.",
+    );
+  }
+  return json;
+}
+
+/** A paged survey migration whose host did not say which pass this is (#449). */
+function passMissing(): WorldRefusal {
+  return worldRefusal(
+    "world-migration-unavailable",
+    "This migration declares `survey`, so a paged run of it is TWO PASSES and this call named " +
+      "neither. Send every page with `pass: \"survey\"` first, carrying the digest forward, and " +
+      "only once every root has been folded in send the pages again with `pass: \"transform\"` " +
+      "and that digest. Transforming against a half-folded world is the ordering this design " +
+      "exists to remove. The world was not changed.",
+  );
+}
+
+/** A transform pass with no digest behind it (#449). */
+function digestMissing(): WorldRefusal {
+  return worldRefusal(
+    "world-migration-unavailable",
+    "This migration declares `survey`, and this `transform` pass was handed no digest. Every " +
+      "root's new value is a function of the COMPLETED fold, so there is nothing to transform " +
+      "against until the survey pass has seen every root. Run the survey pass over every page " +
+      "and hand its answer back as `digest`. The world was not changed.",
+  );
+}
+
+/** A `pass` named for a migration that has no two passes (#449). */
+function passUnexpected(): WorldRefusal {
+  return worldRefusal(
+    "world-migration-unavailable",
+    "This call names a migration `pass`, and this migration declares no `survey` -- so it has " +
+      "only one pass and there is nothing for the name to select. Ask `migrationShape()` before " +
+      "running a migration: only a `\"survey\"` shape is run in two passes. The world was not " +
+      "changed.",
+  );
+}
+
+/**
+ * A SURVEY PASS THAT WROTE, CAUGHT BEFORE IT LEAVES (ShufflewickPub #449).
+ *
+ * The pass is built to write nothing, so this can only fail if THIS FILE stops
+ * being true -- which is exactly why it is an assertion and not a filter.
+ * Dropping the bytes silently would hand the host a correct-looking answer for
+ * a world that had already been half migrated by a pass the host was told does
+ * not write.
+ */
+function assertSurveyWroteNothing(answer: WorldMigrated): void {
+  const wrote = [...Object.keys(answer.partitions), ...Object.keys(answer.created)];
+  if (wrote.length === 0) return;
+  throw worldRefusal(
+    "world-migration-unavailable",
+    `A survey pass produced bytes for ${wrote.sort().join(", ")}, and a survey pass writes ` +
+      "nothing. This is a fault in the engine rather than in this world's migration: the pass " +
+      "that folds the world into a digest is the one a host runs a page at a time, and it is " +
+      "only safe to re-run because it cannot write. Report it with this world's bundle. The " +
+      "world was not changed.",
+  );
+}
+
+/**
+ * THE ROOTS THIS VERSION ADDS, on the one call that adds them (#218, #402).
+ *
+ * A paged host says which call creates; a whole-world migration is always that
+ * call. Their bytes are taken with everything else afterwards -- what this
+ * establishes is the NAMES, their parents, and that none collides with a root
+ * the world already holds.
+ */
+function createdRoots(
+  engine: WorldEngine,
+  hooks: WorldMigrationHooks,
+  paged: boolean,
+  ctx: WorldMigrateContext,
+  hookCtx: WorldMigrationCreateContext,
+): Record<string, StoredPartition> {
+  if (paged && ctx.runCreate !== true) return {};
+  return engine.createMigratedPartitions(
+    (game) => hooks.create?.(game, hookCtx) ?? {},
+    hookCtx.existing,
+  );
+}
+
+/**
+ * THE WHOLE WORLD, ONCE (ShufflewickPub #379), with nothing serialized yet.
+ *
+ * The unbounded road, untouched by #449: it needs every root resident, which is
+ * why a host that must page is refused before it reaches here.
+ */
+function finalizeAcross(
+  engine: WorldEngine,
+  hooks: WorldMigrationHooks,
+  names: readonly string[],
+  ctx: WorldMigrateContext,
+): void {
+  const finalize = hooks.finalize;
+  if (finalize === undefined) return;
+  engine.migrateFinalize((game, partition) => {
+    finalize(game, { partition, names, from: ctx.from, to: ctx.to });
+  });
+}
+
+/**
+ * FOLD THIS PAGE INTO THE DIGEST (ShufflewickPub #449).
+ *
+ * Read-only, one root at a time, continuing from whatever the host carried
+ * back in -- so however many calls a world takes, the fold is the same fold.
+ */
+function foldPage(
+  engine: WorldEngine,
+  survey: WorldMigrationSurvey<unknown>,
+  page: readonly string[],
+  carried: string | undefined,
+): unknown {
+  let digest = carried === undefined ? survey.initial() : (JSON.parse(carried) as unknown);
+  for (const name of page) {
+    digest = engine.surveyPartition(name, (element) => survey.root(digest, element, name));
+  }
+  return digest;
+}
+
+/**
+ * A SURVEY PASS, WHOLE: fold, measure, answer, write nothing (#449).
+ *
+ * The measurement is here rather than at the ceiling's own declaration because
+ * these are the bytes the HOST is about to persist, and an estimate taken
+ * anywhere else would be a different number.
+ */
+function surveyPass(
+  engine: WorldEngine,
+  survey: WorldMigrationSurvey<unknown>,
+  page: readonly string[],
+  ctx: WorldMigrateContext,
+): WorldMigrated {
+  const answer: WorldMigrated = {
+    partitions: {},
+    created: {},
+    digest: serializedDigest(
+      foldPage(engine, survey, page, ctx.digest),
+      survey.maxBytes,
+      ctx.maxDigestBytes,
+    ),
+    nextElementId: engine.nextElementId(),
+  };
+  assertSurveyWroteNothing(answer);
+  return answer;
+}
+
+/**
+ * THE COMPLETED DIGEST A TRANSFORM WRITES AGAINST (#449).
+ *
+ * A PAGED migration carries it in, because its fold finished on an earlier
+ * call; an UNPAGED one was handed the whole world, so its fold is this call and
+ * it meets the same ceiling before a single root is transformed.
+ */
+function completedDigest(
+  engine: WorldEngine,
+  survey: WorldMigrationSurvey<unknown>,
+  page: readonly string[],
+  ctx: WorldMigrateContext,
+  paged: boolean,
+): unknown {
+  if (!paged) {
+    const digest = foldPage(engine, survey, page, ctx.digest);
+    serializedDigest(digest, survey.maxBytes, ctx.maxDigestBytes);
+    return digest;
+  }
+  if (ctx.digest === undefined) throw digestMissing();
+  return JSON.parse(ctx.digest) as unknown;
+}
+
+/**
+ * WHETHER THIS CALL NAMED THE PASS IT IS (#449), decided before anything runs.
+ *
+ * Every one of these is a host driving a migration the wrong way, and each is
+ * refused rather than guessed at: guessing means transforming against a world
+ * the fold has not finished reading, which is the ordering this whole design
+ * exists to remove.
+ */
+function assertPassNaming(
+  hooks: WorldMigrationHooks,
+  paged: boolean,
+  ctx: WorldMigrateContext,
+): void {
+  if (paged && hooks.finalize !== undefined) throw pagingRefused();
+  if (hooks.survey === undefined) {
+    if (ctx.pass !== undefined) throw passUnexpected();
+    return;
+  }
+  if (paged && ctx.pass === undefined) throw passMissing();
+  if (ctx.pass === "survey" && ctx.runCreate === true) throw createOnSurvey();
+}
+
+/** A survey pass told to create this version's roots (#449). */
+function createOnSurvey(): WorldRefusal {
+  return worldRefusal(
+    "world-migration-unavailable",
+    "This call is a `survey` pass and also asked to create this version's new roots. A survey " +
+      "pass writes nothing at all -- that is what makes it safe to run over a world a page at a " +
+      "time -- and a root created before the fold finished would be built from a partial world. " +
+      "Pass `runCreate: true` on exactly one `transform` page instead. The world was not changed.",
+  );
+}
+
+/**
  * WHAT ONE `migrateAll` CALL IS (ShufflewickPub #402).
  *
  * `from`/`to` are the version gap, and are all a whole-world migration needs.
@@ -191,7 +439,62 @@ export interface WorldMigrateContext {
   readonly to: number;
   readonly allNames?: readonly string[];
   readonly runCreate?: boolean;
+  /**
+   * WHICH OF A BOUNDED MIGRATION'S TWO PASSES THIS CALL IS (#449).
+   *
+   * Required on every PAGED call of a migration that declares `survey`, and
+   * meaningless on any other: `"survey"` folds the roots in this page into the
+   * digest and writes nothing, `"transform"` transforms them against the
+   * COMPLETED digest. A paged survey migration with no pass named is refused
+   * rather than run, because transforming against a half-folded world is the
+   * exact bug the fold exists to remove.
+   *
+   * An UNPAGED call needs none: the whole world is in front of it, so the fold
+   * and the transform are one call.
+   */
+  readonly pass?: WorldMigratePass;
+  /**
+   * THE DIGEST SO FAR, AS THE HOST PERSISTED IT (#449).
+   *
+   * JSON, because it crosses a host's wakes and an isolate boundary and a
+   * ceiling is stated in bytes. Absent on the FIRST survey page, where the
+   * migration's own `survey.initial()` is the starting value; required on
+   * every `"transform"` call, where it is the finished fold.
+   */
+  readonly digest?: string;
+  /**
+   * THE HOST'S OWN CEILING ON THE SERIALIZED DIGEST, IN BYTES (#449).
+   *
+   * The author states one in `survey.maxBytes` and the host may state a lower
+   * one here; whichever is smaller is enforced, and the refusal says which of
+   * the two it was so nobody tunes the wrong number.
+   */
+  readonly maxDigestBytes?: number;
 }
+
+/** Which pass of a bounded cross-root migration a call is (#449). */
+export type WorldMigratePass = "survey" | "transform";
+
+/**
+ * WHAT SHAPE A MIGRATION IS, so a host knows how to run it (#449).
+ *
+ * This used to be `migrationNeedsEveryRoot(): boolean`, which could only tell
+ * two of the three apart -- and the third is the one a large world needs:
+ *
+ *   "independent"  -- every root transforms from itself alone. Page it in any
+ *                     order, one pass, nothing carried between calls.
+ *   "survey"       -- pageable in TWO passes: fold every root into the digest,
+ *                     then transform every root against the completed digest.
+ *                     `maxDigestBytes` is the author's own stated ceiling, so a
+ *                     host can pick the lower of it and its own up front.
+ *   "whole-world"  -- `finalize`, which needs every root resident in ONE call.
+ *                     A world bigger than the host's ceiling cannot run it, and
+ *                     the host has to say so rather than discover it.
+ */
+export type WorldMigrationShape =
+  | { readonly kind: "independent" }
+  | { readonly kind: "survey"; readonly maxDigestBytes: number }
+  | { readonly kind: "whole-world" };
 
 export interface WorldSerialized extends WorldAllocation {
   readonly partitions: Record<string, string>;
@@ -208,6 +511,15 @@ export interface WorldSerialized extends WorldAllocation {
 export interface WorldMigrated extends WorldAllocation {
   readonly partitions: Record<string, string>;
   readonly created: Record<string, StoredPartition>;
+  /**
+   * THE DIGEST THIS SURVEY PASS ACCUMULATED, as JSON (#449).
+   *
+   * Present only on a `"survey"` pass, which writes nothing: `partitions` and
+   * `created` are both empty there, and this is the whole of its answer. The
+   * host persists it and hands it back as `WorldMigrateContext.digest` on the
+   * next page, and on every transform call.
+   */
+  readonly digest?: string;
 }
 
 /**
@@ -221,6 +533,7 @@ export interface WorldMigrationHooks {
   readonly partition?: (element: GameElement, ctx: WorldMigrationContext) => void;
   readonly create?: (game: Game, ctx: WorldMigrationCreateContext) => Record<string, GameElement>;
   readonly finalize?: (game: Game, ctx: WorldMigrationFinalizeContext) => void;
+  readonly survey?: WorldMigrationSurvey<unknown>;
 }
 
 /**
@@ -546,8 +859,12 @@ export function createWorldRunner(
       return { partitions, nextElementId: engine.nextElementId() };
     },
 
-    migrationNeedsEveryRoot(): boolean {
-      return migrationHooks.finalize !== undefined;
+    migrationShape(): WorldMigrationShape {
+      if (migrationHooks.finalize !== undefined) return { kind: "whole-world" };
+      if (migrationHooks.survey !== undefined) {
+        return { kind: "survey", maxDigestBytes: migrationHooks.survey.maxBytes };
+      }
+      return { kind: "independent" };
     },
 
     async migrateAll(
@@ -560,8 +877,13 @@ export function createWorldRunner(
       // sends a slice of the bytes and the whole name list, because `create`
       // has to know every name that is taken and a refusal has to name the
       // world rather than the page.
+      // WHICH PASS OF A BOUNDED MIGRATION THIS IS (ShufflewickPub #449). A
+      // paged survey migration is TWO passes and the host says which; an
+      // unpaged one is handed the whole world, so the fold and the transform
+      // are this one call and there is no pass to name.
       const paged = ctx.allNames !== undefined;
-      if (paged && migrationHooks.finalize !== undefined) throw pagingRefused();
+      assertPassNaming(migrationHooks, paged, ctx);
+      const survey = migrationHooks.survey;
       const existing = [...(ctx.allNames ?? Object.keys(stored))].sort();
       const page = Object.keys(stored).sort();
 
@@ -571,11 +893,27 @@ export function createWorldRunner(
       // anything derived across roots was a bet on key order.
       await adopt(engine, store, stored);
 
+      // (0) THE FOLD, WHICH RUNS BEFORE ANY ROOT IS WRITTEN (#449). A survey
+      // pass folds this page in, answers the digest as bytes and writes
+      // nothing, so the host can carry it to the next page and let this one go;
+      // by the time anything transforms, the fold has seen every root and no
+      // iteration order can change the answer.
+      if (survey !== undefined && ctx.pass === "survey") {
+        return surveyPass(engine, survey, page, ctx);
+      }
+      const digest =
+        survey === undefined ? undefined : completedDigest(engine, survey, page, ctx, paged);
+
+      // WHAT EVERY HOOK IS TOLD, BUILT RATHER THAN SPREAD. `ctx` carries the
+      // host's paging bookkeeping and a SERIALIZED digest; a hook is told the
+      // version gap and the digest as the author's own value, and nothing else.
+      const hookCtx = { from: ctx.from, to: ctx.to, digest };
+
       // (1) PER ROOT, and only the ones this call was handed. `finalize` below
       // reads the results rather than the bytes.
       for (const name of page) {
         engine.migratePartition(name, (element) => {
-          migrationHooks.partition?.(element, { name, ...ctx });
+          migrationHooks.partition?.(element, { name, ...hookCtx });
         });
       }
 
@@ -584,23 +922,13 @@ export function createWorldRunner(
       // of them collides with a root the world already holds.
       // RUN ONCE PER MIGRATION, NOT ONCE PER PAGE. A paged host says which call
       // is the one that creates; a whole-world migration is always that call.
-      const creates = !paged || ctx.runCreate === true;
-      const created = creates
-        ? engine.createMigratedPartitions(
-            (game) => migrationHooks.create?.(game, { ...ctx, existing }) ?? {},
-            existing,
-          )
-        : {};
+      const created = createdRoots(engine, migrationHooks, paged, ctx, { ...hookCtx, existing });
       const names = [...existing, ...Object.keys(created)].sort();
 
       // (3) THE WHOLE WORLD, ONCE (#379). Old roots transformed, new roots
       // built, nothing serialized -- the one phase that can derive an existing
       // root's value from another root, in either direction.
-      if (migrationHooks.finalize !== undefined) {
-        engine.migrateFinalize((game, partition) => {
-          migrationHooks.finalize!(game, { partition, names, ...ctx });
-        });
-      }
+      finalizeAcross(engine, migrationHooks, names, ctx);
 
       // (4) AND ONLY THEN, BYTES. Taken after every callback, so a finalize
       // that wrote to a root step (1) or (2) had already serialized is not a
@@ -870,14 +1198,17 @@ export interface WorldRunnerHandle {
   ): Promise<WorldMigrated>;
 
   /**
-   * MUST THIS MIGRATION SEE EVERY ROOT AT ONCE (ShufflewickPub #402)?
+   * WHAT SHAPE IS THIS MIGRATION (ShufflewickPub #402, #449)?
    *
-   * True when the bundle declares `finalize`. A host asks BEFORE it decides how
-   * to run the migration: `false` means it may page a world too large for one
-   * call, `true` means it may not and the world's size is a limit the host has
-   * to state rather than discover at a deadline.
+   * Asked BEFORE the host decides how to run the migration, and it answers all
+   * three of the ways one can be run rather than the two a boolean could tell
+   * apart: `"independent"` pages in one pass with nothing carried between
+   * calls, `"survey"` pages in two (fold every root, then transform every root
+   * against the completed digest, with the digest carried as bytes), and
+   * `"whole-world"` needs every root resident in ONE call -- which is a limit
+   * the host must state rather than discover at a deadline.
    */
-  migrationNeedsEveryRoot(): boolean;
+  migrationShape(): WorldMigrationShape;
 
 
   /**

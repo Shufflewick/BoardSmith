@@ -1003,6 +1003,16 @@ function visitsIn(written: Record<string, string>): number {
     .attributes.visits;
 }
 
+/** WHAT BOTH READ DOORS OWE A DECLARATION THAT WRITES (#219): the refusal, and
+ *  bytes the write never reached. Said once, because a door that only did half
+ *  of it would pass whichever half its own test happened to assert. */
+async function refusesTheDeclarationsWrite(engine: BoardSmithWorldEngine): Promise<void> {
+  await expect(
+    engine.applyCommand("player-a", { name: "readByName", args: {} }, STAMP),
+  ).rejects.toThrow(/A read-only view of this world tried to write/);
+  expect(visitsIn(await engine.serializePartitions([ROOM_ONE]))).toBe(0);
+}
+
 describe("#190 — a partition name that is also an Object.prototype key", () => {
   it("writes a partition named __proto__ as an OWN property of the checkpoint", async () => {
     // Partition names come from an untrusted bundle. Written into a plain
@@ -1058,7 +1068,7 @@ describe("#219 — a declaration reads, and cannot write", () => {
 
     await expect(
       engine.applyCommand("player-a", { name: "declareAndWrite", args: {} }, STAMP),
-    ).rejects.toThrow(/A declaration tried to write/);
+    ).rejects.toThrow(/A read-only view of this world tried to write/);
 
     expect(visitsIn(await engine.serializePartitions([ROOM_ONE]))).toBe(1);
   });
@@ -1731,16 +1741,13 @@ describe("#374 — a declaration reaches a partition BY NAME, not by walking the
     // refused here for the same reason it is refused through `game`. An
     // indexed path that skipped the projection would be a hole with a shortcut
     // in front of it.
-    const engine = engineFor(
-      named((root) => {
-        if (root) root.visits = 500;
-      }),
+    await refusesTheDeclarationsWrite(
+      engineFor(
+        named((root) => {
+          if (root) root.visits = 500;
+        }),
+      ),
     );
-
-    await expect(
-      engine.applyCommand("player-a", { name: "readByName", args: {} }, STAMP),
-    ).rejects.toThrow(/A declaration tried to write/);
-    expect(visitsIn(await engine.serializePartitions([ROOM_ONE]))).toBe(0);
   });
 
   it("answers undefined for a partition that is not resident yet", async () => {
@@ -1959,23 +1966,20 @@ describe("#381 — a resident-root lookup is asked of the root table, not of the
   });
 
   it("refuses a declaration's write through the indexed door as well (#219)", async () => {
-    const engine = new BoardSmithWorldEngine({
-      game: countingGame(),
-      seats: new Map([["player-a", 1]]),
-      store: new CountingStore(genesis()),
-      actions: [
-        touch,
-        readerFor((root) => {
-          if (root) root.visits = 500;
-        }),
-      ],
-      view: () => [],
-    });
-
-    await expect(
-      engine.applyCommand("player-a", { name: "readByName", args: {} }, STAMP),
-    ).rejects.toThrow(/A declaration tried to write/);
-    expect(visitsIn(await engine.serializePartitions([ROOM_ONE]))).toBe(0);
+    await refusesTheDeclarationsWrite(
+      new BoardSmithWorldEngine({
+        game: countingGame(),
+        seats: new Map([["player-a", 1]]),
+        store: new CountingStore(genesis()),
+        actions: [
+          touch,
+          readerFor((root) => {
+            if (root) root.visits = 500;
+          }),
+        ],
+        view: () => [],
+      }),
+    );
   });
 
   it("serves the RE-ADOPTED root after an eviction, never the evicted one", async () => {

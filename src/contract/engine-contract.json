@@ -1,8 +1,8 @@
 {
-  "revision": 77,
+  "revision": 78,
   "bundleProtocol": 2,
-  "surfaceHash": "1feb60c2051e0c9b",
-  "payloadHash": "16d4740f61b838bc",
+  "surfaceHash": "e0977b9d39c96165",
+  "payloadHash": "b66e751ab92f9508",
   "formatHash": "0058593e7cc80205",
   "history": [
     {
@@ -637,6 +637,15 @@
       "payloadHash": "16d4740f61b838bc",
       "formatHash": "0058593e7cc80205",
       "summary": "World views are published before action-offer enumeration: world_state drops actions and carries a revision, and offers arrive on a new world_offers frame stamped with the state they were enumerated over (#244)."
+    },
+    {
+      "revision": 78,
+      "date": "2026-09-12",
+      "bundleProtocol": 2,
+      "surfaceHash": "e0977b9d39c96165",
+      "payloadHash": "b66e751ab92f9508",
+      "formatHash": "0058593e7cc80205",
+      "summary": "A cross-root migration may be run in BOUNDED memory, a page at a time (ShufflewickPub #449). world.migration gains survey: { initial(), root(digest, element, name), maxBytes } -- a fold of every existing root into ONE bounded, JSON-serializable digest, run BEFORE anything is written, with the element handed over read-only through readonly.ts's projection so a write is the declaration-write refusal rather than a silent no-op. partition() and create() are then handed the COMPLETED digest on their context, so every write is a pure function of (that root, that digest) and iteration order cannot matter. survey and finalize are mutually exclusive, refused at declaration. runner.migrationNeedsEveryRoot() is REPLACED by runner.migrationShape(), which tells all three shapes apart: independent (page in one pass), survey (page in TWO passes, carrying the digest between calls as bytes) and whole-world (finalize, every root in one call). migrateAll's context gains pass, digest and maxDigestBytes; WorldMigrated gains digest, and a survey pass answers NO partition bytes and NO created roots. A digest past survey.maxBytes or past the host's own lower ceiling is refused naming the size, the bound and whose it was. WorldEngine gains surveyPartition(). The declaration-write refusal message now names every read-only surface rather than only a declaration. New worldMigration() helper infers the digest type into every hook."
     }
   ]
 }
