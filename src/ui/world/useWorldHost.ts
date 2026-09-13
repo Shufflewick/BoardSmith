@@ -178,7 +178,20 @@ export function useWorldHost(options: WorldHostOptions = {}): WorldHost {
   /** The committed state this page is showing, and the one `actions` is about.
    *  `null` before the host has said anything. */
   let stateRevision: number | null = null;
-  let offersRevision: number | null = null;
+  /**
+   * THE NEWEST OFFER SET THIS PAGE HAS BEEN SENT, held whether or not it could
+   * be shown when it arrived (#250).
+   *
+   * Not an optimisation: it is what makes the panel a function of what the page
+   * HOLDS rather than of the order two messages happened to land in. A push is
+   * two frames, and nothing in the protocol promises which reaches this
+   * listener first -- a host relays both into a frame that may not be listening
+   * yet, a page can join mid-stream, and a QUIET WORLD NEVER SENDS A SECOND
+   * SET. So a set judged once, at arrival, and thrown away is a world whose
+   * verbs are a coin toss; judged here, against the state on screen, it is the
+   * same question asked again every time either half moves.
+   */
+  let heldOffers: { revision: number; actions: readonly WorldActionOffer[] } | null = null;
   const notice = ref<string | null>(null);
   const worldName = ref<string | null>(null);
   const presence = ref<readonly number[] | null>(null);
@@ -271,7 +284,11 @@ export function useWorldHost(options: WorldHostOptions = {}): WorldHost {
     // clearing there would flicker every panel for no reason.
     if (data.revision !== stateRevision) {
       stateRevision = data.revision;
-      if (offersRevision !== data.revision) {
+      // THE SET THIS PAGE IS HOLDING MAY ALREADY BE ABOUT THIS STATE (#250) --
+      // the offers frame of this very push, arrived first. Asked before the
+      // panel is blanked, so the ordinary case of a state arriving ahead of its
+      // offers is the only one that ever says "not yet".
+      if (!showHeldOffers()) {
         actions.value = [];
         offersPending.value = true;
       }
@@ -293,25 +310,43 @@ export function useWorldHost(options: WorldHostOptions = {}): WorldHost {
   }
 
   /**
-   * WHAT THIS SEAT MAY DO, IF IT IS STILL ABOUT THE WORLD ON SCREEN (#244).
+   * SHOW THE HELD SET IF IT IS ABOUT THE WORLD ON SCREEN (#244, #250).
    *
-   * The one rule: an offer set is applied only when the state it was
-   * enumerated over is the state this page is showing. A set stamped with any
-   * other revision is DROPPED -- silently, because it is not an error. It is
-   * simply an answer to a question the world has already moved past, and
-   * another set for the current state is on its way behind it.
+   * The one rule, and now the only place it is applied: a set is shown only when
+   * the state it was enumerated over is the state this page is showing. A set
+   * stamped with any other revision stays HELD and unshown -- silently, because
+   * it is not an error. It is either an answer to a question the world has moved
+   * past, or one about a state this page has not been told about yet, and it is
+   * shown in the second case the moment that state arrives.
    *
-   * Dropping rather than showing is what keeps a late offer from reading as a
-   * permission. It was never a permission -- every command is validated against
-   * the state it finds when it is submitted, offer or no offer -- but a panel
-   * drawn from a retired set would invite presses the world is bound to refuse,
-   * which is the same lie one layer up.
+   * Not showing it is what keeps an offer from reading as a permission it is
+   * not. It was never a permission -- every command is validated against the
+   * state it finds when it is submitted, offer or no offer -- but a panel drawn
+   * from a set enumerated over another state would invite presses the world is
+   * bound to refuse, which is the same lie one layer up.
+   *
+   * @returns whether the panel is now drawn from it
+   */
+  function showHeldOffers(): boolean {
+    if (heldOffers === null || heldOffers.revision !== stateRevision) return false;
+    actions.value = heldOffers.actions;
+    offersPending.value = false;
+    return true;
+  }
+
+  /**
+   * WHAT THIS SEAT MAY DO, TAKEN WHETHER OR NOT IT CAN BE SHOWN YET (#250).
+   *
+   * The newest set replaces the one held before it and nothing else happens
+   * here: whether it reaches the screen is `showHeldOffers`'s single question,
+   * asked again on every state frame. That is the whole of the #250 fix -- this
+   * used to RETURN on a revision that was not the one on screen, which threw
+   * away the offers frame of a push whose state frame was still behind it in
+   * the queue, and a quiet world sends no second set to recover with.
    */
   function takeOffers(data: Extract<WorldHostMessage, { type: 'world_offers' }>): void {
-    if (data.revision !== stateRevision) return;
-    offersRevision = data.revision;
-    actions.value = data.actions;
-    offersPending.value = false;
+    heldOffers = { revision: data.revision, actions: data.actions };
+    showHeldOffers();
   }
 
   /**

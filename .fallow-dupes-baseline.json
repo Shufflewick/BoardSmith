@@ -1055,7 +1055,7 @@
     "src/ui/composables/useZoomPreview.test.ts:142-150|src/ui/composables/useZoomPreview.test.ts:48-56",
     "src/ui/composables/useZoomPreview.test.ts:349-356|src/ui/composables/useZoomPreview.test.ts:371-378",
     "src/ui/directives/vDisabledReason.test.ts:76-84|src/ui/directives/vDisabledReason.test.ts:88-96",
-    "src/ui/world/useWorldHost.test.ts:319-332|src/ui/world/useWorldHost.test.ts:412-424",
+    "src/ui/world/useWorldHost.test.ts:372-385|src/ui/world/useWorldHost.test.ts:465-477",
     "src/world/action.test.ts:183-187|src/world/action.test.ts:49-55",
     "src/world/action.test.ts:384-388|src/world/action.test.ts:604-608",
     "src/world/action.ts:871-876|src/world/action.ts:909-914",

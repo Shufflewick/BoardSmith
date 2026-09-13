@@ -1024,10 +1024,10 @@ seats' walks, which is the half that got worse the more people were watching.
 
 **An offer is not authorization, and the revision is what keeps that visible.**
 Because the offers now arrive after the view, an offer frame can outlive the
-state it describes. A page therefore applies an offer set **only** when its
-revision is the state the page is showing, and drops any other — `useWorldHost`
-does exactly that, and exposes `offersPending` so a surface can say "not told
-yet" rather than drawing a world with no verbs in it. None of this is the safety
+state it describes. A page therefore shows an offer set **only** when its
+revision is the state the page is showing — `useWorldHost` does exactly that, and
+exposes `offersPending` so a surface can say "not told yet" rather than drawing a
+world with no verbs in it. None of this is the safety
 argument: **every submitted command is validated against the state it finds**,
 offer or no offer, which is the check that was there before these frames were
 split and is unchanged by it. The revision only stops a retired offer *looking*
@@ -1037,6 +1037,18 @@ The host's own `revision` moves when, and only when, it commits: a checkpoint,
 and the dev clock's advance (because `now` is an input to `offersFor`). It is a
 host's counter, comparable within one run — a page that reconnects is sent a
 fresh state frame before it is sent any offer.
+
+**Showing a set is not the same as keeping it (#250).** `useWorldHost` HOLDS the
+newest set it was sent, whether or not it can show it yet, and shows it the
+moment the state it names is on screen. A host should still send the state first
+and the offers behind it, but a page must not depend on that: the two messages of
+one push have no promised arrival order at the page, a page can join mid-stream,
+and **a quiet world never sends a second set** — so a set judged once on arrival
+and thrown away is an action panel that is empty for the life of the page, with
+every layer's own tests green. That is what #250 reported and #245 was the same
+shape one layer down. The rule for a host is therefore: replay the last state
+AND the offers that go with it to a frame that says it is ready, and never assume
+the frame was listening when you first spoke.
 
 ## `view(seat, world)`: what one seat sees
 
