@@ -474,7 +474,7 @@ describe('#170: one surface, and it is always the bundle\'s own', () => {
   });
 });
 
-describe('#245: offers survive the readiness handshake, and retire with their state', () => {
+describe('#245, #250: offers survive the handshake in either order, and retire with their state', () => {
   /**
    * The defect this block exists to have caught. In r77 the offers left
    * `world_state` for a frame of their own, and this bar retained only the
@@ -510,6 +510,26 @@ describe('#245: offers survive the readiness handshake, and retire with their st
     return posted.slice(before).map((message) => message.type as string);
   }
 
+  /**
+   * What a REMOUNTED frame is replayed, after `delivered` and a readiness
+   * handshake the first document already had.
+   *
+   * The remount is what makes a retained set matter: the frame that comes back
+   * has been told nothing, and a quiet world will not tell it either.
+   */
+  async function whatARemountGets(
+    wrapper: VueWrapper,
+    posted: Array<Record<string, unknown>>,
+    delivered: Array<Record<string, unknown>>,
+  ): Promise<string[]> {
+    for (const frame of delivered) socket!.deliver(frame);
+    ready();
+    await wrapper.vm.$nextTick();
+    return await whatTheFrameGetsFrom(wrapper, posted, [], () =>
+      wrapper.find('iframe').trigger('load'),
+    );
+  }
+
   it('replays the state AND THEN the matching offers to a frame that was not listening yet', async () => {
     const wrapper = await open();
     const posted = watchFrame(wrapper);
@@ -532,14 +552,11 @@ describe('#245: offers survive the readiness handshake, and retire with their st
 
   it('replays both again when the frame remounts, in the same order', async () => {
     const wrapper = await open();
-    const posted = watchFrame(wrapper);
-    socket!.deliver(stateFrame({ revision: 7 }));
-    socket!.deliver(offersFrame({ revision: 7 }));
-    ready();
-    await wrapper.vm.$nextTick();
-
     expect(
-      await whatTheFrameGetsFrom(wrapper, posted, [], () => wrapper.find('iframe').trigger('load')),
+      await whatARemountGets(wrapper, watchFrame(wrapper), [
+        stateFrame({ revision: 7 }),
+        offersFrame({ revision: 7 }),
+      ]),
     ).toEqual(['world_state', 'world_offers']);
     wrapper.unmount();
   });
@@ -570,6 +587,54 @@ describe('#245: offers survive the readiness handshake, and retire with their st
       await whatTheFrameGetsFrom(wrapper, watchFrame(wrapper), [
         stateFrame({ revision: 7, seat: 1 }),
         offersFrame({ revision: 7 }),
+        stateFrame({ revision: 7, seat: 2 }),
+      ]),
+    ).toEqual(['world_state']);
+    wrapper.unmount();
+  });
+
+  /**
+   * #250: A SET THAT ARRIVED BEFORE ANY STATE IS STILL THIS WORLD'S OFFERS.
+   *
+   * #245 retained only what the state on screen vouched for, so an offers frame
+   * that reached this bar before the `world_state` of its own push was relayed
+   * once and then forgotten. The frame that remounted afterwards -- a Vite
+   * reload, a reconnect -- was replayed a view with no verbs in it, and a quiet
+   * world never sends a second set.
+   */
+  it('replays a set that arrived before the state of its own push', async () => {
+    const wrapper = await open();
+    // OFFERS FIRST, STATE SECOND -- the ordering #250 is about.
+    expect(
+      await whatARemountGets(wrapper, watchFrame(wrapper), [
+        offersFrame({ revision: 7 }),
+        stateFrame({ revision: 7 }),
+      ]),
+    ).toEqual(['world_state', 'world_offers']);
+    wrapper.unmount();
+  });
+
+  it('retires a set that arrived first once the world moves past it', async () => {
+    // Holding an unvouched-for set is not trusting it: the state that follows
+    // still decides, and a different revision retires it exactly as before.
+    const wrapper = await open();
+    expect(
+      await whatTheFrameGetsFrom(wrapper, watchFrame(wrapper), [
+        offersFrame({ revision: 7 }),
+        stateFrame({ revision: 8 }),
+      ]),
+    ).toEqual(['world_state']);
+    wrapper.unmount();
+  });
+
+  it('retires a set that arrived first when the seat that follows changes again', async () => {
+    // The first state frame at the same revision BINDS the seat; a later one
+    // under another seat retires the set, which is #245's rule unchanged.
+    const wrapper = await open();
+    expect(
+      await whatTheFrameGetsFrom(wrapper, watchFrame(wrapper), [
+        offersFrame({ revision: 7 }),
+        stateFrame({ revision: 7, seat: 1 }),
         stateFrame({ revision: 7, seat: 2 }),
       ]),
     ).toEqual(['world_state']);

@@ -213,8 +213,15 @@ interface WorldStateMessage {
  * it belongs to would otherwise be indistinguishable from one that is about a
  * state the world has since left, and a page holding the second would be
  * holding a permission nobody re-checked. So every offer names the committed
- * state it was enumerated over, and a page drops one that does not match the
+ * state it was enumerated over, and a page SHOWS one only while that is the
  * state it is showing.
+ *
+ * SHOWING IS NOT THE SAME AS KEEPING (#250). A page holds the newest set it was
+ * sent whether or not it can show it yet, and shows it the moment the state it
+ * names is the state on screen -- because the two frames of one push have no
+ * promised arrival order at the page, a page can join mid-stream, and a quiet
+ * world never sends a second set. A set judged once on arrival and thrown away
+ * left worlds whose whole action panel was empty for the life of the page.
  *
  * AN OFFER IS STILL NOT AUTHORIZATION, matching revision or not. It says what
  * was legal at that state, to draw a panel with. Whether a command may run is

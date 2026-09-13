@@ -86,7 +86,19 @@ const lastState = shallowRef<Record<string, unknown> | null>(null);
  */
 interface RetainedOffers {
   revision: number;
-  seat: number | null;
+  /**
+   * The seat the set was enumerated for, or `undefined` when no state frame has
+   * named one yet (#250).
+   *
+   * A set can arrive BEFORE the state frame of its own push -- that is the
+   * ordering #250 is about -- and at that moment this bar has no seat to stamp
+   * it with. Undefined says exactly that, and the first state frame at the same
+   * revision binds it, because that frame is the other half of the push this set
+   * came in. Stamping it with the seat the bar happens to hold instead would be
+   * inventing a fact, and stamping it with `null` would make the next state
+   * frame read as a seat switch and retire a set that is perfectly current.
+   */
+  seat: number | null | undefined;
   frame: Record<string, unknown>;
 }
 const lastOffers = shallowRef<RetainedOffers | null>(null);
@@ -150,8 +162,18 @@ const RELAYED_TO_FRAME = new Set([
 function takeState(message: Record<string, unknown>): void {
   const seat = (message.seat as number | null) ?? null;
   const held = lastOffers.value;
-  if (held !== null && (held.revision !== (message.revision as number) || held.seat !== seat)) {
-    lastOffers.value = null;
+  if (held !== null) {
+    if (held.revision !== (message.revision as number)) {
+      lastOffers.value = null;
+    } else if (held.seat === undefined) {
+      // THE OTHER HALF OF THE PUSH THIS SET CAME IN (#250), which is the frame
+      // that says whose offers they are. Bound rather than retired: a set that
+      // overtook its own state frame is current, and retiring it here is what
+      // left a remounted frame holding a view with no verbs in it.
+      lastOffers.value = { ...held, seat };
+    } else if (held.seat !== seat) {
+      lastOffers.value = null;
+    }
   }
   mySeat.value = seat;
   worldName.value = (message.worldName as string | null) ?? cfg.displayName;
@@ -162,19 +184,25 @@ function takeState(message: Record<string, unknown>): void {
 /**
  * WHAT THIS SEAT MAY DO -- RETAINED AS WELL AS RELAYED (#245).
  *
- * Retained only when it is about the view this bar is showing: a set stamped
- * with any other revision is an answer to a question the world has already
- * moved past. It is still relayed either way -- the frame runs the same
- * revision check and drops it there -- but there is nothing about it worth
- * replaying later.
+ * Retained unless the view this bar is showing already CONTRADICTS it: a set
+ * stamped with another revision is an answer to a question the world has moved
+ * past, and there is nothing about that worth replaying later.
+ *
+ * A SET THAT ARRIVED BEFORE ANY STATE IS NOT CONTRADICTED (#250). It is the
+ * offers frame of a push whose state frame is still on its way, and the old rule
+ * -- retain only what the state on screen vouches for -- threw it away, so a
+ * frame that remounted afterwards was replayed a view with no verbs in it. Held
+ * with no seat stamped; the state frame that follows binds one.
+ *
+ * It is relayed either way, and the frame decides for itself when to draw it.
  */
 function takeOffers(message: Record<string, unknown>): void {
   const revision = message.revision as number;
   const state = lastState.value;
-  lastOffers.value =
-    state !== null && revision === (state.revision as number)
-      ? { revision, seat: (state.seat as number | null) ?? null, frame: message }
-      : null;
+  const current = state === null || revision === (state.revision as number);
+  lastOffers.value = current
+    ? { revision, seat: state === null ? undefined : ((state.seat as number | null) ?? null), frame: message }
+    : null;
   postToWorld(message);
 }
 
@@ -219,9 +247,12 @@ function postToWorld(message: Record<string, unknown>): void {
 /**
  * THE VIEW, AND THEN WHAT MAY BE DONE IN IT (#245).
  *
- * IN THAT ORDER, because the frame applies an offer set only against the state
- * it is showing: offers posted first would be dropped by `useWorldHost` for
- * naming a revision it has not been told about yet.
+ * IN THAT ORDER, because the frame shows an offer set only against the state it
+ * is showing, and a replay should put a panel on screen in one pass rather than
+ * leaving it to say "not told yet" until the second message lands. The frame
+ * survives the other order since #250 -- it holds the set and shows it when its
+ * state arrives -- and that is its guarantee to make, not a reason for the side
+ * that knows the order to send them in the wrong one.
  */
 function replayHeld(): void {
   // A frame that mounted after the host already held a view would sit blank

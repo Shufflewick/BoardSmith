@@ -183,6 +183,59 @@ describe('useWorldHost', () => {
     expect(offered(host)).toEqual({ names: ['look'], pending: false });
   });
 
+  /**
+   * #250: THE PANEL RENDERS FROM THE NEWEST OFFER SET THE PAGE HOLDS, whatever
+   * order the two frames of one push arrived in.
+   *
+   * The #244 guard was written as a one-way test run at ARRIVAL: an offer set
+   * was applied if it named the state on screen at that instant and thrown away
+   * otherwise. That made the panel depend on the order two messages happen to
+   * land in, and nothing in the protocol promises one: a host relays them into a
+   * frame that may not be listening yet, a page joins mid-stream, and a quiet
+   * world never sends a second set -- so a set dropped on arrival left the panel
+   * empty for the life of the page, which is exactly what #250 reports. The
+   * newest set is now HELD and applied the moment the state it is about is the
+   * state on screen, so arrival order cannot decide whether a world has verbs.
+   */
+  it('applies an offer set that arrived BEFORE the state it was enumerated over', () => {
+    const host = make();
+    deliver(host, offersFrame(4, ['look']));
+    // Held, not applied: the page has not been told what state it is showing,
+    // so it cannot yet know these are about it.
+    expect(offered(host)).toEqual({ names: [], pending: false });
+
+    deliver(host, stateFrame({ revision: 4 }));
+    expect(offered(host)).toEqual({ names: ['look'], pending: false });
+  });
+
+  it('holds only the NEWEST set, so a held one cannot answer for an older state', () => {
+    const host = make();
+    deliver(host, offersFrame(4, ['look']));
+    deliver(host, offersFrame(5, ['flee']));
+    deliver(host, stateFrame({ revision: 5 }));
+    expect(offered(host)).toEqual({ names: ['flee'], pending: false });
+  });
+
+  it('never applies a held set to a state it is not about', () => {
+    // The other half of the same rule, and the one that keeps a retired offer
+    // from reading as a permission: holding a set is not showing it.
+    const host = make();
+    deliver(host, offersFrame(4, ['look']));
+    deliver(host, stateFrame({ revision: 5 }));
+    expect(offered(host)).toEqual({ names: [], pending: true });
+  });
+
+  it('applies the set it is holding when the world arrives at the state it names', () => {
+    // The push that overtook itself: the offers for the state the world is
+    // ABOUT to publish landed first. Nothing is shown against state 4, and the
+    // panel fills the moment state 5 is on screen.
+    const host = showing(4, ['look']);
+    deliver(host, offersFrame(5, ['flee']));
+    expect(offered(host)).toEqual({ names: ['look'], pending: false });
+    deliver(host, stateFrame({ revision: 5 }));
+    expect(offered(host)).toEqual({ names: ['flee'], pending: false });
+  });
+
   it('lets the host withdraw the presence claim, because "online now" has no last-known value', () => {
     // The platform nulls its own presence ref the moment the socket closes: a
     // kept view is a true picture of a world that existed, but a kept
