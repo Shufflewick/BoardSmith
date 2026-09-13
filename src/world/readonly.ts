@@ -65,6 +65,39 @@
  * MAY skip the traps, over an API that is still growing, so a method nobody
  * remembers to name is merely slow. That asymmetry is the whole reason this can
  * exist on `GameElement` where a mutator list could not.
+ *
+ * ## And a CLOAKED TARGET, for the values a proxy may not wrap (#247)
+ *
+ * A proxy is not free to answer a `get` with whatever it likes. Where the
+ * target holds a property that can never be replaced -- a data property that is
+ * neither writable nor configurable, which is exactly what `Object.freeze`
+ * makes of every own property -- the language requires the `get` trap to hand
+ * back THAT VALUE, by identity, and throws a TypeError if it does not. A
+ * projection is by definition not that value, so a declaration that read one
+ * property deeper into a frozen object died in the engine before it ran:
+ *
+ *     TypeError: 'get' on proxy: property 'holding' is a read-only and
+ *     non-configurable data property on the proxy target but the proxy did not
+ *     return its actual value
+ *
+ * Frozen values are ordinary game code, not a mistake: a bundle that caches a
+ * detached snapshot freezes it so nothing downstream can edit the cache. So the
+ * invariant is real and the read is legitimate, and the two cannot both be
+ * served over the frozen object itself.
+ *
+ * HANDING THE RAW VALUE BACK IS NOT THE ANSWER. The slot is immutable, but what
+ * it POINTS AT need not be: `Object.freeze({ holding: liveElement })` locks the
+ * reference and locks nothing about the element. Answering with the real value
+ * would hand a declaration the live tree one property along -- #219 exactly,
+ * reached through a freeze -- and a walk deep enough to prove the whole graph
+ * immutable is the O(resident) cost this module exists to avoid.
+ *
+ * So the proxy is built over a CLOAK: an empty object (or array, or function) of
+ * the subject's own shape, which holds no property at all for the invariant to
+ * be about. Every trap answers from the real subject, so the projection reads,
+ * enumerates, calls and refuses writes exactly as it did -- the target is simply
+ * no longer the thing being projected. `cloakFor` says why every subject is
+ * cloaked rather than only the frozen ones.
  */
 import { worldRefusal } from "./refusals.js";
 import { ElementCollection, Game, GameElement } from "../engine/index.js";
@@ -344,6 +377,90 @@ function projectedProperty(
   return receiver === projection ? cachedWrapper(target, call, build) : build();
 }
 
+/** The write traps, which are the same whatever the subject is. Shared rather
+ *  than rebuilt per projection: nothing in them closes over one. */
+const REFUSALS = {
+  set(_target: object, property: string | symbol): never {
+    refuseWrite(property);
+  },
+  defineProperty(_target: object, property: string | symbol): never {
+    refuseWrite(property);
+  },
+  deleteProperty(_target: object, property: string | symbol): never {
+    refuseWrite(property);
+  },
+  setPrototypeOf(): never {
+    refuseWrite("the prototype");
+  },
+  // `Object.freeze` and `Object.seal` come through here, and both are writes:
+  // they would settle over the cloak, leaving a projection whose own keys the
+  // language then refuses to believe.
+  preventExtensions(): never {
+    refuseWrite("extensibility");
+  },
+} as const;
+
+/**
+ * An empty stand-in of the subject's own shape, which the projection is built
+ * over instead of the subject itself.
+ *
+ * UNCONDITIONALLY, AND NOT ONLY FOR A FROZEN SUBJECT. A scan for a locked
+ * property costs one descriptor lookup per own key, which on an
+ * `ElementCollection` of 500 is 500 of them for every finder that answers with
+ * one -- measured at 1.9x the live tree on an `all()` fan-out, against 1.06x
+ * for cloaking everything. Deciding per subject would also be a cliff rather
+ * than a rule: a value frozen AFTER it was first projected would still be
+ * holding a projection built over itself, and would throw the same TypeError
+ * again. Every trap reads the subject either way, so the cloak changes nothing
+ * a declaration can see.
+ *
+ * THE SHAPE IS PART OF THE ANSWER. `Array.isArray` and `typeof` read the target
+ * through no trap at all, so an array must be cloaked by an array and a function
+ * by a function, or a projection would stop being the kind of thing it projects.
+ *
+ * A FUNCTION IS CLOAKED BY ITS OWN KIND for the same reason. A normal
+ * function's `prototype` is non-configurable, and a target may not hold a
+ * non-configurable property the `ownKeys` answer omits -- so an arrow subject,
+ * which has no `prototype`, needs an arrow cloak, and a constructor needs a
+ * constructible one or `new` through the projection would be refused by the
+ * language before any trap ran.
+ */
+function cloakFor(subject: object): object {
+  if (typeof subject === "function") {
+    return Object.hasOwn(subject, "prototype") ? function cloaked() {} : () => undefined;
+  }
+  if (Array.isArray(subject)) return [];
+  return {};
+}
+
+/**
+ * The subject's descriptor, told in terms the cloak can carry.
+ *
+ * A proxy may not report a property as non-configurable unless its target holds
+ * one that is, so the answer is reported configurable -- which is true of the
+ * cloak and a small lie about the subject, and costs nothing a declaration can
+ * use: every road that would act on it (`set`, `defineProperty`,
+ * `deleteProperty`) is refused above.
+ *
+ * THE EXCEPTIONS ARE WHAT THE CLOAK ITSELF LOCKS -- an array's `length` and a
+ * function's `prototype`. Those are answered with the subject's value in the
+ * cloak's own terms, which is a compatible answer because the cloak holds both
+ * of them writable.
+ */
+function cloakedDescriptor(
+  subject: object,
+  cloak: object,
+  property: string | symbol,
+): PropertyDescriptor | undefined {
+  const held = Reflect.getOwnPropertyDescriptor(subject, property);
+  if (held === undefined) return undefined;
+  const onCloak = Reflect.getOwnPropertyDescriptor(cloak, property);
+  if (onCloak !== undefined && !onCloak.configurable) {
+    return { ...held, writable: onCloak.writable, configurable: false };
+  }
+  return { ...held, configurable: true };
+}
+
 export function readOnlyProjection<T>(value: T): T {
   if (value === null || (typeof value !== "object" && typeof value !== "function")) {
     return value;
@@ -355,21 +472,36 @@ export function readOnlyProjection<T>(value: T): T {
   const existing = projections.get(subject);
   if (existing !== undefined) return existing as T;
 
-  const projection: object = new Proxy(subject, {
-    get(target, property, receiver) {
-      return projectedProperty(target, property, receiver, projection);
+  const cloak = cloakFor(subject);
+  // EVERY TRAP READS THE SUBJECT, not the cloak, so the only thing the cloak
+  // changes is which object the language checks its invariants against. The
+  // traps below are the ones whose default would have answered from the empty
+  // stand-in instead.
+  const projection: object = new Proxy(cloak, {
+    ...REFUSALS,
+    get(_target, property, receiver) {
+      return projectedProperty(subject, property, receiver, projection);
     },
-    set(_target, property) {
-      refuseWrite(property);
+    has(_target, property) {
+      return Reflect.has(subject, property);
     },
-    defineProperty(_target, property) {
-      refuseWrite(property);
+    ownKeys() {
+      return Reflect.ownKeys(subject);
     },
-    deleteProperty(_target, property) {
-      refuseWrite(property);
+    getOwnPropertyDescriptor(target, property) {
+      return cloakedDescriptor(subject, target, property);
     },
-    setPrototypeOf() {
-      refuseWrite("the prototype");
+    getPrototypeOf() {
+      return Reflect.getPrototypeOf(subject);
+    },
+    apply(_target, thisArg, args) {
+      return Reflect.apply(subject as (...a: unknown[]) => unknown, thisArg, args);
+    },
+    construct(_target, args) {
+      // A CONSTRUCTOR BUILDS FROM THE SUBJECT, never from the cloak, which
+      // would answer with an instance of nothing. What it builds is projected
+      // for the same reason a method's answer is.
+      return readOnlyProjection(Reflect.construct(subject as new (...a: unknown[]) => object, args));
     },
   });
 
