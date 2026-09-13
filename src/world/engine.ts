@@ -83,6 +83,7 @@ import {
   assertCandidateBudget,
   assertWorldAction,
   bindWorldFacilities,
+  type WorldActionBlock,
   type WorldActivityRound,
   type WorldClockFacilities,
   type WorldNeedsRound,
@@ -1045,6 +1046,100 @@ export class BoardSmithWorldEngine implements WorldEngine {
     } finally {
       bindWorldFacilities(this.game, null);
     }
+  }
+
+  /**
+   * WHAT THE DRAFT IN FRONT OF A PLAYER WOULD COST (#248).
+   *
+   * The pick pair above re-asks a QUESTION; this answers the one thing a
+   * question cannot carry -- what the answers add up to. It runs the action's own
+   * `.quote()` over the args the player has drafted so far, which includes a
+   * number they have typed into the panel's field and not yet submitted.
+   *
+   * EVERY ROUND, INCLUDING THE EXECUTE ROUND. A price is read from the same
+   * state the purchase writes to -- the payer's own balance, the expiry it is
+   * extending -- and that partition is often named by the round AFTER the last
+   * selection, because nothing before execute had a reason to read it. So the
+   * whole walk is hydrated here, with the draft bound.
+   *
+   * AND IT IS A READ, on exactly the terms an offer is: the projection refuses a
+   * write, `readingOnly` refuses a reach-mark, and nothing is checkpointed. A
+   * player drafting a purchase has not bought anything, so nothing about the
+   * world may move while they type.
+   */
+  async resolveQuote(
+    player: string,
+    action: string,
+    args: Readonly<Record<string, unknown>>,
+    stamp: WorldOfferStamp,
+  ): Promise<readonly string[] | null> {
+    const seat = this.seatFor(player);
+    const acting = this.playerFor(seat);
+    const definition = this.offerableAction(action);
+    const quote = this.quoteOf(definition);
+
+    const named: string[] = [];
+    // As `resolvePick`: a quote is a seat's, and a seat's verb declares no chair.
+    const namedSeats: number[] = [];
+    const facilities = this.readOnlyFacilities(definition.name, named, stamp);
+    bindWorldFacilities(this.game, facilities);
+    try {
+      for (let step = 0; step <= definition.selections.length; step++) {
+        await this.hydrateRounds(definition, step, seat, args, named, namedSeats, stamp.now);
+      }
+      return this.game.readingOnly(() =>
+        quote(
+          { ...args },
+          { game: readOnlyProjection(this.game), player: acting, args: { ...args } },
+        ),
+      );
+    } finally {
+      bindWorldFacilities(this.game, null);
+    }
+  }
+
+  /**
+   * WHAT ANSWERING THAT QUOTE STILL NEEDS RESIDENT (#248).
+   *
+   * `pickPartitions` for the whole walk rather than one selection, because a
+   * quote reads what execute reads. Answers the FIRST unmet round, for the
+   * reason every other declare verb does: a later round may read what an earlier
+   * one loaded and has nothing to say until the host has supplied it.
+   */
+  quotePartitions(
+    player: string,
+    action: string,
+    args: Readonly<Record<string, unknown>>,
+    now: number,
+  ): readonly string[] {
+    const seat = this.seatFor(player);
+    const definition = this.offerableAction(action);
+    this.quoteOf(definition);
+    for (const round of definition.world!.needs) {
+      if (round.kind === "activity") continue;
+      const unmet = this.declareRound(round, seat, args, now).filter(
+        (name) => !this.residentIds.has(name),
+      );
+      if (unmet.length > 0) return declaredOnce(unmet);
+    }
+    return [];
+  }
+
+  /** This action's quote, or the refusal that it has none. Asking an action that
+   *  declares no quote for one is a client asking a question the bundle never
+   *  offered to answer -- so it is refused rather than answered with nothing,
+   *  which would read on screen as "this costs nothing". */
+  private quoteOf(definition: ActionDefinition): NonNullable<WorldActionBlock["quote"]> {
+    const quote = definition.world?.quote;
+    if (quote === undefined) {
+      throw worldRefusal(
+        "unknown-command",
+        `The "${definition.name}" action does not quote its draft, so there is no price to show ` +
+          "before it is submitted. Declare one with `.quote()` on the action if its player " +
+          "should see what a draft will cost.",
+      );
+    }
+    return quote;
   }
 
   /**
@@ -2794,6 +2889,12 @@ function offerOf(
     ...(definition.group === undefined ? {} : { group: definition.group }),
     ...(definition.order === undefined ? {} : { order: definition.order }),
     ...(disabled === null ? {} : { disabled }),
+    // THIS ACTION PRICES ITS OWN DRAFT (#248). A flag rather than the lines: the
+    // lines are a function of what the player has drafted, and an offer is
+    // enumerated before they have drafted anything. What the offer carries is
+    // the fact that there is something to ask for -- which is also what tells
+    // the panel and a custom UI to confirm rather than auto-commit.
+    ...(definition.world?.quote === undefined ? {} : { quote: true }),
     selections,
   };
 }

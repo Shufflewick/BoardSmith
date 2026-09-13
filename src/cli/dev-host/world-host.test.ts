@@ -602,6 +602,132 @@ describe('#378: one pick, re-asked with the args bound so far', () => {
   });
 });
 
+/**
+ * #248: THE HOST PRICES A DRAFT, AND CHANGES NOTHING DOING IT.
+ *
+ * The end-to-end half of the quote road. A world action that charges for a typed
+ * number could not tell the player the total before the charge: the offer is
+ * enumerated with nothing bound, and nothing else on this wire carries a value
+ * the player has typed and not submitted. The `quote` message does, and this
+ * drives it the way a browser does -- the same message, the same host, the same
+ * answer -- including the one thing that must remain true throughout: the world
+ * is exactly where it was.
+ */
+describe('#248: the draft in front of the player, priced by the game', () => {
+  /** Logs at five each, with an omitted quantity meaning one. */
+  const buy = worldAction<Village>('buy')
+    .prompt('Buy logs')
+    .needs(() => [HEARTH])
+    .enterNumber('logs', { prompt: 'How many?', min: 0, integer: true, optional: 'just the one' })
+    .quote(({ logs }, { world }) => {
+      const many = logs === undefined ? 1 : logs;
+      const hearth = world.partition(HEARTH) as Hearth;
+      return [`${many * 5} coins`, `the hearth would hold ${hearth.logs + many}`];
+    })
+    .execute(({ logs }, ctx) => {
+      const many = logs === undefined ? 1 : logs;
+      (ctx.world.partition(HEARTH) as Hearth).logs += many;
+    });
+
+  const buying = () => bundle({ world: worldBlock({ actions: [...VILLAGE_ACTIONS, buy] }) });
+
+  it('tells the seat the action quotes, on the offer itself', async () => {
+    const { host, sent } = await attached({ dir, definition: buying() });
+
+    const offers = last(sent, 'c1', 'world_offers')!.actions as WorldActionOffer[];
+    expect(offers.find((offer) => offer.name === 'buy')!.quote).toBe(true);
+    expect(offers.find((offer) => offer.name === 'chop')!.quote).toBeUndefined();
+    await host.close();
+  });
+
+  it('prices a quantity the player has typed and not submitted', async () => {
+    const { host, sent } = await attached({ dir, definition: buying() });
+
+    await host.handleMessage('c1', {
+      type: 'quote',
+      requestId: 'q1',
+      action: 'buy',
+      args: { logs: 3 },
+    });
+
+    const answer = last(sent, 'c1', 'world_quote_result')!;
+    expect(answer.ok).toBe(true);
+    expect(answer.quote).toEqual(['15 coins', 'the hearth would hold 3']);
+    await host.close();
+  });
+
+  it('prices an OMITTED quantity as the game\'s own default', async () => {
+    const { host, sent } = await attached({ dir, definition: buying() });
+
+    await host.handleMessage('c1', { type: 'quote', requestId: 'q1', action: 'buy', args: {} });
+
+    expect(last(sent, 'c1', 'world_quote_result')!.quote).toEqual([
+      '5 coins',
+      'the hearth would hold 1',
+    ]);
+    await host.close();
+  });
+
+  it('prices a ZERO quantity as zero, which is a different answer', async () => {
+    const { host, sent } = await attached({ dir, definition: buying() });
+
+    await host.handleMessage('c1', {
+      type: 'quote',
+      requestId: 'q1',
+      action: 'buy',
+      args: { logs: 0 },
+    });
+
+    expect(last(sent, 'c1', 'world_quote_result')!.quote).toEqual([
+      '0 coins',
+      'the hearth would hold 0',
+    ]);
+    await host.close();
+  });
+
+  it('changes nothing: being quoted is not buying', async () => {
+    const { host, store } = await attached({ dir, definition: buying() });
+    const before = JSON.stringify(await store.read(HEARTH));
+
+    await host.handleMessage('c1', {
+      type: 'quote',
+      requestId: 'q1',
+      action: 'buy',
+      args: { logs: 9 },
+    });
+
+    expect(JSON.stringify(await store.read(HEARTH))).toBe(before);
+    expect(store.dirtyPartitions()).toEqual([]);
+    await host.close();
+  });
+
+  it('refuses a quote from a page holding no seat, without running anything', async () => {
+    const opened = openHost({ dir, definition: buying() });
+    await opened.host.start();
+
+    await opened.host.handleMessage('c9', {
+      type: 'quote',
+      requestId: 'q1',
+      action: 'buy',
+      args: { logs: 1 },
+    });
+
+    expect(last(opened.sent, 'c9', 'world_quote_result')).toMatchObject({ ok: false });
+    await opened.host.close();
+  });
+
+  it('refuses to price an action that declares no quote', async () => {
+    const { host, sent } = await attached({ dir, definition: buying() });
+
+    await host.handleMessage('c1', { type: 'quote', requestId: 'q1', action: 'chop', args: {} });
+
+    const answer = last(sent, 'c1', 'world_quote_result')!;
+    expect(answer.ok).toBe(false);
+    expect(answer.message).toMatch(/chop/);
+    await host.close();
+  });
+});
+
 describe('#167: scheduled events fire on their due time', () => {
   /** A world with one log banked on a slow burn: the state both cases below
    *  start from, and the one thing they differ about is what happens next. */

@@ -1,7 +1,7 @@
 {
-  "revision": 78,
+  "revision": 79,
   "bundleProtocol": 2,
-  "surfaceHash": "e0977b9d39c96165",
+  "surfaceHash": "52965a970e8184de",
   "payloadHash": "b66e751ab92f9508",
   "formatHash": "0058593e7cc80205",
   "history": [
@@ -646,6 +646,15 @@
       "payloadHash": "b66e751ab92f9508",
       "formatHash": "0058593e7cc80205",
       "summary": "A cross-root migration may be run in BOUNDED memory, a page at a time (ShufflewickPub #449). world.migration gains survey: { initial(), root(digest, element, name), maxBytes } -- a fold of every existing root into ONE bounded, JSON-serializable digest, run BEFORE anything is written, with the element handed over read-only through readonly.ts's projection so a write is the declaration-write refusal rather than a silent no-op. partition() and create() are then handed the COMPLETED digest on their context, so every write is a pure function of (that root, that digest) and iteration order cannot matter. survey and finalize are mutually exclusive, refused at declaration. runner.migrationNeedsEveryRoot() is REPLACED by runner.migrationShape(), which tells all three shapes apart: independent (page in one pass), survey (page in TWO passes, carrying the digest between calls as bytes) and whole-world (finalize, every root in one call). migrateAll's context gains pass, digest and maxDigestBytes; WorldMigrated gains digest, and a survey pass answers NO partition bytes and NO created roots. A digest past survey.maxBytes or past the host's own lower ceiling is refused naming the size, the bound and whose it was. WorldEngine gains surveyPartition(). The declaration-write refusal message now names every read-only surface rather than only a declaration. New worldMigration() helper infers the digest type into every hook."
+    },
+    {
+      "revision": 79,
+      "date": "2026-09-13",
+      "bundleProtocol": 2,
+      "surfaceHash": "52965a970e8184de",
+      "payloadHash": "b66e751ab92f9508",
+      "formatHash": "0058593e7cc80205",
+      "summary": "A world action may QUOTE the draft in front of a player before it commits (#248). New .quote(fn) on worldAction: one function of the args the player has drafted so far -- a number typed into the panel's editor and not yet submitted included, an omitted optional selection still absent -- answered as the lines to show them, run under the same read-only facilities and projection an offer's callbacks run under, so a quote that writes is refused. WorldEngine gains quotePartitions() and resolveQuote() (the whole declaration walk, including the execute round, hydrated with the draft bound); the runner gains declareQuote()/resolveQuote(); the wire gains world_quote / world_quote_result, which the platform host must relay for a world's panel to show a price. An offer carries quote: true, and both the shared action panel and a custom UI then CONFIRM rather than auto-committing on the last pick, refusing to submit a draft whose price is not on screen. ActionMetadata gains quote; useActionController gains actionQuote/quotePending/quoteError/awaitingConfirmation/confirmDisabledReason/confirm() as shared state, and the panel's optional number/text editor finally draws the skip control its own '(optional)' label promised."
     }
   ]
 }

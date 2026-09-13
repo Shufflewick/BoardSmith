@@ -9,6 +9,7 @@ import {
   WORLD_UI_SOURCE,
   type WorldActionOutcome,
   type WorldPickOutcome,
+  type WorldQuoteOutcome,
   type WorldActionOffer,
   type WorldHostMessage,
   type WorldNarration,
@@ -16,6 +17,19 @@ import {
   type WorldPlayer,
   type WorldUiMessage,
 } from './worldProtocol.js';
+
+/**
+ * ONE OUTSTANDING QUESTION, whatever it was a question about.
+ *
+ * A pick and a quote are both questions -- no order, nothing spent, an answer
+ * echoed back under the id it was asked with -- so the waiting is one shape and
+ * `askQuestion`/`settleQuestion` are one road. Only a COMMAND needs more than
+ * this, because only a command has an order to strike out.
+ */
+interface Question<T> {
+  resolve: (outcome: T) => void;
+  timer: ReturnType<typeof setTimeout>;
+}
 
 export interface WorldHostOptions {
   /** Where a message goes. Defaults to the parent frame. */
@@ -126,6 +140,22 @@ export interface WorldHost {
     selection: string,
     args: Record<string, unknown>,
   ): Promise<WorldPickOutcome>;
+  /**
+   * WHAT THE DRAFT IN FRONT OF THE PLAYER WOULD COST (#248).
+   *
+   * The action and every argument as the player has it SO FAR -- a number typed
+   * into the panel's field and not yet submitted included -- answered by the
+   * game's own `.quote()` as the lines to show them.
+   *
+   * A QUESTION, like `resolvePick`: no order, nothing to recover, nothing spent.
+   * And advisory: the order that follows is validated against whatever the world
+   * holds when it arrives, so a quote is what the player was told rather than a
+   * price anybody is held to.
+   */
+  quoteDraft(
+    action: string,
+    args: Record<string, unknown>,
+  ): Promise<WorldQuoteOutcome>;
   /** Install the listener and say hello. */
   start(): void;
   /** Remove the listener and fail everything still outstanding. */
@@ -210,10 +240,15 @@ export function useWorldHost(options: WorldHostOptions = {}): WorldHost {
    * and does not raise `acting` -- a panel asking what a selection may be is not
    * a player mid-press, and a spinner over the board would say it was.
    */
-  const picks = new Map<
-    string,
-    { resolve: (outcome: WorldPickOutcome) => void; timer: ReturnType<typeof setTimeout> }
-  >();
+  const picks = new Map<string, Question<WorldPickOutcome>>();
+  /**
+   * A QUOTE IN FLIGHT (#248), on the same terms as a pick and in its own map.
+   *
+   * Separate from the picks for the reason those are separate from the commands:
+   * the two answer different messages, and one map holding both would have to be
+   * keyed on something other than the id the host echoes.
+   */
+  const quotes = new Map<string, Question<WorldQuoteOutcome>>();
   let sequence = 0;
   let helloTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -385,17 +420,47 @@ export function useWorldHost(options: WorldHostOptions = {}): WorldHost {
    * nobody is waiting on is dropped -- a timeout already resolved it, and
    * resolving twice would be a second answer to one question.
    */
-  function settlePick(data: Extract<WorldHostMessage, { type: 'world_pick_result' }>): void {
-    const waiting = picks.get(data.requestId);
-    if (waiting === undefined) return;
-    clearTimeout(waiting.timer);
-    picks.delete(data.requestId);
-    waiting.resolve({
-      ok: data.ok === true,
-      ...(data.selection === undefined ? {} : { selection: data.selection }),
-      ...(data.message === undefined ? {} : { message: data.message }),
-      ...(data.code === undefined ? {} : { code: data.code }),
+  function settleQuestion<T>(
+    waiting: Map<string, Question<T>>,
+    requestId: string,
+    outcome: T,
+  ): void {
+    const asked = waiting.get(requestId);
+    if (asked === undefined) return;
+    clearTimeout(asked.timer);
+    waiting.delete(requestId);
+    asked.resolve(outcome);
+  }
+
+  /**
+   * ONE QUESTION ON THE WIRE, and the promise that waits for its own answer.
+   *
+   * `dispatch`'s counterpart for everything that is NOT a command: it mints the
+   * id, arms the timeout that keeps a panel from spinning forever, and posts
+   * whatever the caller wants asked. No order is written down, `acting` never
+   * rises, and nothing is recovered after a reload -- because nothing has been
+   * spent by asking.
+   *
+   * THE JSON ROUND TRIP is taken on the way in, for the reason the order book
+   * takes it: structured clone cannot carry a Vue proxy, and a panel's args are
+   * the controller's own reactive object.
+   */
+  function askQuestion<T>(
+    waiting: Map<string, Question<T>>,
+    prefix: string,
+    timedOut: T,
+    message: (requestId: string) => WorldUiMessage,
+  ): Promise<T> {
+    sequence += 1;
+    const requestId = `${prefix}-${sequence}`;
+    const answered = new Promise<T>((resolve) => {
+      const timer = setTimeout(() => {
+        if (waiting.delete(requestId)) resolve(timedOut);
+      }, commandTimeoutMs);
+      waiting.set(requestId, { resolve, timer });
     });
+    post(message(requestId));
+    return answered;
   }
 
   function handleMessage(event: MessageEvent): void {
@@ -408,7 +473,21 @@ export function useWorldHost(options: WorldHostOptions = {}): WorldHost {
       return;
     }
     if (data.type === 'world_pick_result') {
-      settlePick(data);
+      settleQuestion(picks, data.requestId, {
+        ok: data.ok === true,
+        ...(data.selection === undefined ? {} : { selection: data.selection }),
+        ...(data.message === undefined ? {} : { message: data.message }),
+        ...(data.code === undefined ? {} : { code: data.code }),
+      });
+      return;
+    }
+    if (data.type === 'world_quote_result') {
+      settleQuestion(quotes, data.requestId, {
+        ok: data.ok === true,
+        ...(data.quote === undefined ? {} : { quote: data.quote }),
+        ...(data.message === undefined ? {} : { message: data.message }),
+        ...(data.code === undefined ? {} : { code: data.code }),
+      });
       return;
     }
     if (data.type === 'world_events') {
@@ -477,33 +556,60 @@ export function useWorldHost(options: WorldHostOptions = {}): WorldHost {
     selection: string,
     args: Record<string, unknown>,
   ): Promise<WorldPickOutcome> {
-    sequence += 1;
-    const requestId = `wp-${sequence}`;
-    const answered = new Promise<WorldPickOutcome>((resolve) => {
-      const timer = setTimeout(() => {
-        if (picks.delete(requestId)) {
-          resolve({
-            ok: false,
-            message:
-              `The world did not answer what "${selection}" may be. Nothing has been sent, so ` +
-              'nothing has happened; try the action again.',
-          });
-        }
-      }, commandTimeoutMs);
-      picks.set(requestId, { resolve, timer });
-    });
-    post({
-      source: WORLD_UI_SOURCE,
-      type: 'world_pick',
-      requestId,
-      action,
-      selection,
-      // THE JSON ROUND TRIP the order book takes, and for the same reason:
-      // structured clone cannot carry a Vue proxy, and a panel's args are the
-      // controller's own reactive object.
-      args: JSON.parse(JSON.stringify(args)) as Record<string, unknown>,
-    });
-    return answered;
+    return askQuestion(
+      picks,
+      'wp',
+      {
+        ok: false,
+        message:
+          `The world did not answer what "${selection}" may be. Nothing has been sent, so ` +
+          'nothing has happened; try the action again.',
+      },
+      (requestId) => ({
+        source: WORLD_UI_SOURCE,
+        type: 'world_pick',
+        requestId,
+        action,
+        selection,
+        args: JSON.parse(JSON.stringify(args)) as Record<string, unknown>,
+      }),
+    );
+  }
+
+  /**
+   * WHAT THE DRAFT WOULD COST, ASKED OF THE GAME (#248).
+   *
+   * `resolvePick`'s twin one step on: a pick asks what one selection may be, and
+   * this asks what the whole draft adds up to. It is on the question road rather
+   * than the command road, so nothing is written down and nothing is spent --
+   * being told a price is not paying one.
+   *
+   * A TIMEOUT LEAVES NO PRICE ON SCREEN. The refusal it resolves with says the
+   * world did not answer; what the panel must never do is show the last price it
+   * heard beside a draft that has moved, which is why the controller stamps every
+   * quote with the draft it was computed for.
+   */
+  function quoteDraft(
+    action: string,
+    args: Record<string, unknown>,
+  ): Promise<WorldQuoteOutcome> {
+    return askQuestion(
+      quotes,
+      'wq',
+      {
+        ok: false,
+        message:
+          `The world did not say what "${action}" would cost. Nothing has been sent, so nothing ` +
+          'has happened.',
+      },
+      (requestId) => ({
+        source: WORLD_UI_SOURCE,
+        type: 'world_quote',
+        requestId,
+        action,
+        args: JSON.parse(JSON.stringify(args)) as Record<string, unknown>,
+      }),
+    );
   }
 
   async function act(
@@ -547,12 +653,15 @@ export function useWorldHost(options: WorldHostOptions = {}): WorldHost {
     for (const requestId of [...pending.keys()]) {
       settle(requestId, { ok: false, message: DROPPED_BEFORE_ANSWER }, { answered: false });
     }
-    // A pick is a question, so there is no order to strike out -- but a promise
-    // nobody resolves is still a panel that spins forever.
-    for (const [requestId, waiting] of [...picks]) {
-      clearTimeout(waiting.timer);
-      picks.delete(requestId);
-      waiting.resolve({ ok: false, message: DROPPED_BEFORE_ANSWER });
+    // A QUESTION HAS NO ORDER TO STRIKE OUT -- but a promise nobody resolves is
+    // still a panel that spins forever, and a quote is as unanswerable as a pick
+    // once this frame has stopped listening.
+    for (const outstanding of [picks, quotes]) {
+      for (const [requestId, waiting] of [...outstanding]) {
+        clearTimeout(waiting.timer);
+        outstanding.delete(requestId);
+        waiting.resolve({ ok: false, message: DROPPED_BEFORE_ANSWER });
+      }
     }
   }
 
@@ -575,6 +684,7 @@ export function useWorldHost(options: WorldHostOptions = {}): WorldHost {
     ordersDurable: orders.durable,
     act,
     resolvePick,
+    quoteDraft,
     start,
     stop,
     handleMessage,

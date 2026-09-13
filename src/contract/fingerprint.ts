@@ -217,6 +217,14 @@ export const WORLD_FIXTURE_COVERAGE: Record<(typeof WORLD_ENGINE_METHODS)[number
     + 'fixture binds none -- it enumerates the offer and stops -- and what this produces is an '
     + 'ordinary `PickMetadata`, which the offer\'s own selections already fingerprint.',
 
+  quotePartitions: 'What quoting a DRAFT needs resident (#248). The fixture drafts nothing -- it '
+    + 'enumerates the offer and stops -- and this is the offer\'s own declaration walk run to the '
+    + 'end with args bound, which `offerPartitions` already drives.',
+  resolveQuote: 'What a draft would cost, according to the game (#248). The fixture drafts '
+    + 'nothing, so no action is mid-answer here. What it produces is the bundle\'s own lines of '
+    + 'text -- the arithmetic is the GAME\'s and not this engine\'s -- and the read-only '
+    + 'facilities it runs them under are the offer\'s, which IS driven.',
+
   nextElementId: 'The world\'s durable id allocation stamp (ShufflewickPub #377), which a host '
     + 'reads after every write that could have minted an id. The fixture mints nothing -- it '
     + 'neither runs genesis nor creates a root -- so the number never moves here. What it '

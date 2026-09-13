@@ -30,6 +30,7 @@ function fakeHost(over: Partial<Record<string, unknown>> = {}) {
     acting: ref(false),
     act: vi.fn(async () => ({ ok: true })),
     resolvePick: vi.fn(async () => ({ ok: true })),
+    quoteDraft: vi.fn(async () => ({ ok: true, quote: null })),
     start: vi.fn(),
     stop: vi.fn(),
     handleMessage: vi.fn(),
@@ -278,5 +279,96 @@ describe('the board', () => {
     const host = fakeHost();
     host.view.value = null;
     expect(play(host).gameView.value).toBeNull();
+  });
+});
+
+/**
+ * #248: PRICING THE DRAFT, WHICH IS THE ONE QUESTION THE OFFER CANNOT ANSWER.
+ *
+ * A pick can sometimes be answered from the offer already in hand -- nothing is
+ * bound, so the one-shot enumeration IS the answer. A quote never can: it is a
+ * function of what the player has drafted, and the offer was enumerated before
+ * they drafted anything. So this always asks, and what it must never do is
+ * answer from something older.
+ */
+describe('quoting a draft (#248)', () => {
+  const BOOST: WorldActionOffer = {
+    name: 'boost',
+    quote: true,
+    selections: [
+      { name: 'weeks', type: 'number', min: 0, integer: true, optional: 'skip for one week' },
+      { name: 'resource', type: 'choice', choices: [{ value: 'storage', display: 'Storage' }] },
+    ],
+  };
+
+  it('asks the world what the drafted args cost, every time', async () => {
+    const quoteDraft = vi.fn(
+      async (_action: string, _args: Record<string, unknown>) =>
+        ({ ok: true, quote: ['10 Essentia', 'until 2026-09-28'] }),
+    );
+    const host = fakeHost({ quoteDraft });
+    host.actions.value = [BOOST];
+
+    const result = await play(host).fetchActionQuote('boost', { resource: 'storage', weeks: 2 }, 4);
+
+    expect(quoteDraft).toHaveBeenCalledWith('boost', { resource: 'storage', weeks: 2 });
+    expect(result).toEqual({ success: true, lines: ['10 Essentia', 'until 2026-09-28'] });
+  });
+
+  it('carries a draft with NO quantity through as a draft with no quantity', async () => {
+    // The omitted-quantity protocol, all the way to the bundle: an absent
+    // `weeks` must stay absent so the game's own default applies, and zero must
+    // stay zero.
+    const quoteDraft = vi.fn(
+      async (_action: string, _args: Record<string, unknown>) => ({ ok: true, quote: ['5 Essentia'] }),
+    );
+    const host = fakeHost({ quoteDraft });
+    host.actions.value = [BOOST];
+    const world = play(host);
+
+    await world.fetchActionQuote('boost', { resource: 'storage' }, 4);
+    await world.fetchActionQuote('boost', { resource: 'storage', weeks: 0 }, 4);
+
+    expect(quoteDraft.mock.calls[0]![1]).toEqual({ resource: 'storage' });
+    expect(quoteDraft.mock.calls[1]![1]).toEqual({ resource: 'storage', weeks: 0 });
+  });
+
+  it('passes a null quote through as "nothing to say yet", not as a failure', async () => {
+    const host = fakeHost({ quoteDraft: vi.fn(async () => ({ ok: true, quote: null })) });
+    host.actions.value = [BOOST];
+
+    const result = await play(host).fetchActionQuote('boost', {}, 4);
+
+    expect(result).toEqual({ success: true, lines: null });
+  });
+
+  it("reports the world's own refusal, and shows no price", async () => {
+    const host = fakeHost({
+      quoteDraft: vi.fn(async () => ({ ok: false, message: 'That empire is no longer yours.' })),
+    });
+    host.actions.value = [BOOST];
+
+    const result = await play(host).fetchActionQuote('boost', { weeks: 2 }, 4);
+
+    expect(result.success).toBe(false);
+    expect(result.error).toBe('That empire is no longer yours.');
+    expect(result.lines).toBeUndefined();
+  });
+
+  it('fails loudly for an action the seat was never offered', async () => {
+    const result = await play(fakeHost()).fetchActionQuote('boost', {}, 4);
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/boost/);
+  });
+
+  it('fails loudly for an action that declares no quote, rather than asking anyway', async () => {
+    const host = fakeHost();
+    host.actions.value = [TEND];
+
+    const result = await play(host).fetchActionQuote('tend', {}, 4);
+
+    expect(result.success).toBe(false);
+    expect(result.error).toMatch(/tend/);
+    expect(host.quoteDraft).not.toHaveBeenCalled();
   });
 });

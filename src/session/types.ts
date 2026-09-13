@@ -521,6 +521,22 @@ export interface ActionMetadata {
   group?: readonly string[];
   /** Sort key within the action's menu level (#228); absent sorts as `0`. */
   order?: number;
+  /**
+   * THIS ACTION PRICES ITS OWN DRAFT, so ask it before submitting (#248).
+   *
+   * Set by a world action's `.quote()`. Two things follow from it, and both are
+   * the panel's and a custom UI's to honour off this one flag:
+   *
+   *   ASK FOR THE LINES as the draft moves -- including a number typed into the
+   *     editor and not yet submitted -- and show what comes back.
+   *   CONFIRM RATHER THAN AUTO-COMMIT. Filling the last selection stops being
+   *     the purchase; the player sees the price and presses again. An action
+   *     without this flag keeps the auto-execute it always had.
+   *
+   * The lines themselves are never here: they are a function of the draft, and
+   * metadata is computed before there is one.
+   */
+  quote?: boolean;
   selections: PickMetadata[];
 }
 

@@ -1136,6 +1136,39 @@ export interface WorldEngine {
   ): Promise<PickMetadata>;
 
   /**
+   * WHAT QUOTING THIS DRAFT STILL NEEDS RESIDENT (#248).
+   *
+   * `pickPartitions` for the action's WHOLE walk, because a quote reads what
+   * execute reads -- the payer's balance, the expiry being extended -- and that
+   * is usually named by the round after the last selection.
+   */
+  quotePartitions(
+    player: string,
+    action: string,
+    args: Readonly<Record<string, unknown>>,
+    now: number,
+  ): readonly string[];
+
+  /**
+   * WHAT THE DRAFT WOULD COST, ACCORDING TO THE GAME (#248).
+   *
+   * The action's own `.quote()`, run over the args a player has drafted so far --
+   * the typed-but-unsubmitted number included -- and answered as the lines to put
+   * in front of them. `null` when the draft has nothing to price yet.
+   *
+   * A READ, under the same read-only facilities an offer runs under: nothing is
+   * dispatched and nothing is checkpointed, because drafting a purchase is not
+   * making one. It is also ADVISORY -- the transaction still validates against
+   * whatever the world holds when the order actually arrives.
+   */
+  resolveQuote(
+    player: string,
+    action: string,
+    args: Readonly<Record<string, unknown>>,
+    stamp: WorldOfferStamp,
+  ): Promise<readonly string[] | null>;
+
+  /**
    * THE NEXT ELEMENT ID THIS WORLD MAY MINT (ShufflewickPub #377).
    *
    * A world's ids are durable and only a fraction of the partitions holding
@@ -1329,6 +1362,8 @@ export const WORLD_ENGINE_METHODS = Object.keys({
   nextElementId: null,
   pickPartitions: null,
   resolvePick: null,
+  quotePartitions: null,
+  resolveQuote: null,
   offersFor: null,
   onEvent: null,
   residency: null,

@@ -135,6 +135,23 @@ export interface ActionMetadata {
   group?: readonly string[];
   /** Sort key within the action's menu level (#228); absent sorts as `0`. */
   order?: number;
+  /**
+   * THIS ACTION PRICES ITS OWN DRAFT, so ask before submitting it (#248).
+   *
+   * Set by a world action's `.quote()` and carried on the offer. It changes two
+   * things for every surface, and both come off this one flag so the panel and a
+   * custom UI cannot diverge about them:
+   *
+   *   THE DRAFT IS QUOTED as it moves -- a number typed into the editor and not
+   *     yet submitted included -- through `fetchActionQuote`.
+   *   THE LAST PICK IS NOT THE PURCHASE. Auto-execute is off; the player sees the
+   *     price and confirms. An action without this flag keeps the auto-execute it
+   *     always had.
+   *
+   * The lines are never here: they are a function of a draft that does not exist
+   * when metadata is computed.
+   */
+  quote?: boolean;
   selections: PickMetadata[];
 }
 
@@ -215,6 +232,20 @@ export interface PickChoicesResult {
   choices?: Array<{ value: unknown; display: string; refs?: RefWithRole[]; disabled?: string }>;
   validElements?: ValidElement[];
   multiSelect?: { min: number; max?: number };
+  error?: string;
+}
+
+/**
+ * WHAT THE GAME SAYS THE DRAFT WOULD COST (#248).
+ *
+ * `lines` is what to put in front of the player, `null` when the game has
+ * nothing to price about this draft yet -- an action just opened, a quantity not
+ * yet typed. A failure carries `error` and NO lines: a price that could not be
+ * obtained is never rendered as a price of nothing.
+ */
+export interface ActionQuoteResult {
+  success: boolean;
+  lines?: readonly string[] | null;
   error?: string;
 }
 
@@ -328,6 +359,24 @@ export interface UseActionControllerOptions {
     player: number,
     currentArgs: Record<string, unknown>
   ) => Promise<PickChoicesResult>;
+  /**
+   * ASK THE GAME WHAT THE DRAFT IN FRONT OF THE PLAYER WOULD COST (#248).
+   *
+   * Supplied by the backend that can answer it -- a world's shell wires it to
+   * the bundle's own `.quote()` -- and called only for an action whose metadata
+   * carries `quote: true`. `draftArgs` is what the player HAS so far, including a
+   * number typed into the editor and not yet submitted; a selection they have not
+   * answered is absent, so an omitted optional quantity reaches the game as
+   * omitted rather than as a zero.
+   *
+   * Not supplied and an action that quotes cannot be walked: the controller
+   * refuses to confirm a draft it could not price, which is the whole point.
+   */
+  fetchActionQuote?: (
+    actionName: string,
+    draftArgs: Record<string, unknown>,
+    player: number,
+  ) => Promise<ActionQuoteResult>;
   /**
    * Function to process a repeating pick step.
    * Required for picks with `repeat` config.
@@ -557,6 +606,47 @@ export interface UseActionControllerReturn {
    * while no editor is being asked for.
    */
   setPickDraft: (value: string | number | null) => void;
+
+  // === The draft's quote (#248) ===
+  /**
+   * WHAT THE GAME SAYS THE DRAFT ON SCREEN WOULD COST, or `null`.
+   *
+   * The shared source of truth for the price: the action panel renders these
+   * lines and a custom UI reads the same ref, so the two surfaces cannot show
+   * different prices for one draft.
+   *
+   * `null` in every case where there is no price that is TRUE RIGHT NOW -- no
+   * quoted action open, the game had nothing to say about this draft, the answer
+   * for the live draft has not arrived yet, or the world refused. A quote is
+   * stamped with the draft it was computed for and withdrawn the instant the
+   * draft moves, so a stale price is not merely avoided here, it is unreachable.
+   */
+  actionQuote: ComputedRef<readonly string[] | null>;
+  /** True while the price of the CURRENT draft is still being worked out. What a
+   *  surface says instead of showing the previous draft's price. */
+  quotePending: ComputedRef<boolean>;
+  /** Why the world could not price this draft, or `null`. Stamped like the quote:
+   *  an error about a draft the player has moved past is not shown. */
+  quoteError: ComputedRef<string | null>;
+  /**
+   * True when the draft is complete and the player has not confirmed it yet
+   * (#248) -- the moment that did not exist before, because filling the last
+   * selection used to be the purchase.
+   *
+   * Only ever true for an action whose metadata carries `quote`.
+   */
+  awaitingConfirmation: ComputedRef<boolean>;
+  /** Why confirming is refused right now, or `null` when it is allowed. A
+   *  surface binds this to its confirm control rather than deciding for itself. */
+  confirmDisabledReason: ComputedRef<string | null>;
+  /**
+   * SUBMIT THE DRAFT THE PLAYER HAS JUST BEEN QUOTED.
+   *
+   * The purchase, for a quoted action. Refused unless the draft is complete AND
+   * the price on screen is the price of that draft -- a confirmation of something
+   * nobody was shown is the defect this whole road exists to close.
+   */
+  confirm: () => Promise<ActionResult>;
 
   // === The action list's open level ===
   /**

@@ -137,6 +137,10 @@ const RELAYED_TO_FRAME = new Set([
   'world_events',
   'world_response',
   'world_pick_result',
+  // The draft's price (#248), on the same terms and for the same reason: the
+  // frame holds a promise keyed on this `requestId`, so one dropped here is a
+  // panel waiting for its own timeout with no price to show.
+  'world_quote_result',
 ]);
 
 /**
@@ -271,6 +275,18 @@ function onWindowMessage(event: MessageEvent): void {
       requestId: data.requestId as string,
       action: data.action as string,
       selection: data.selection as string,
+      args: data.args,
+    });
+  }
+  if (data.type === 'world_quote') {
+    // WHAT THE DRAFT WOULD COST (#248), relayed untouched like everything else
+    // on this bar. The args are the panel's own draft -- including a number
+    // typed and not submitted -- and `world-host.ts` owns what an absent args
+    // object means, so there is no second place deciding it.
+    wsSend({
+      type: 'quote',
+      requestId: data.requestId as string,
+      action: data.action as string,
       args: data.args,
     });
   }

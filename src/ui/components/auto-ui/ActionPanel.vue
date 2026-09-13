@@ -438,6 +438,31 @@ const textInputValue = computed<string>({
   set: (value) => actionController.setPickDraft(value === '' ? null : value),
 });
 /**
+ * THE PRICE OF THE DRAFT, STRAIGHT OFF THE CONTROLLER (#248).
+ *
+ * Plain views, exactly as the editor bindings above are: the controller holds the
+ * quote, stamps it with the draft it was computed for, and withdraws it the moment
+ * the draft moves -- so there is nothing here that could render a stale price, and
+ * a custom UI reading the same refs shows the same one.
+ *
+ * `quotesDraft` is the action's own declaration (`.quote()` on the world action),
+ * arriving as `ActionMetadata.quote`. With it absent this whole region is not
+ * rendered and the panel behaves as it always did.
+ */
+const quotesDraft = computed(() => currentActionMeta.value?.quote === true);
+const quoteLines = computed(() => actionController.actionQuote.value);
+const quoteError = computed(() => actionController.quoteError.value);
+const awaitingConfirmation = computed(() => actionController.awaitingConfirmation.value);
+const confirmDisabledReason = computed(() => actionController.confirmDisabledReason.value);
+
+/** Submit the draft the player has just been quoted. The controller refuses an
+ *  unfinished draft and one whose price is not on screen, so this passes the
+ *  press on rather than deciding anything. */
+function confirmDraft(): void {
+  void actionController.confirm();
+}
+
+/**
  * Why what the player has entered will not be accepted, or null.
  *
  * Set when they try to submit and cleared the moment they change the field, so
@@ -1536,6 +1561,29 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
         <span v-if="repeatingState.awaitingServer" class="loading-indicator">...</span>
       </div>
 
+      <!-- WHAT THIS DRAFT WOULD COST, ACCORDING TO THE GAME (#248).
+           Above the question, so the price is read before the field is answered
+           and stays on screen through the confirmation below. A LIVE REGION,
+           because the price moves while the player types and a sighted player
+           sees that happen: `role="status"` is how the other one hears it.
+           One source of truth with a custom UI -- both read
+           `actionController.actionQuote`, so the two surfaces cannot quote
+           different prices for one draft. -->
+      <div
+        v-if="quotesDraft"
+        class="action-quote"
+        data-bs-quote
+        role="status"
+        aria-live="polite"
+      >
+        <template v-if="quoteLines">
+          <span v-for="(line, i) in quoteLines" :key="i" class="quote-line">{{ line }}</span>
+        </template>
+        <!-- A refusal in place of a price, never beside one. -->
+        <span v-else-if="quoteError" class="quote-refusal">{{ quoteError }}</span>
+        <span v-else class="quote-pending">Working out the price…</span>
+      </div>
+
       <!-- Current selection input -->
       <div v-if="currentPick" class="selection-input">
         <!-- #172: too many candidates to read as a list, and the board draws every
@@ -1844,6 +1892,20 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
               {{ textCharCount }}
             </span>
             <DoneButton @click="submitEditorValue" />
+            <!-- THE SKIP AN OPTIONAL EDITOR PICK NEVER HAD (#248).
+                 Every other optional pick offers one; the editor block rendered
+                 the "(optional)" label and the game's own skip WORDING -- "skip
+                 for one week" -- with no control that could take it, so an
+                 omitted quantity was unreachable from the standard panel and the
+                 game's default was a branch only a custom UI could get to. -->
+            <button
+              v-if="currentPick.optional"
+              class="choice-btn skip-btn"
+              data-bs-skip-editor
+              @click="skipOptionalSelection"
+            >
+              {{ typeof currentPick.optional === 'string' ? currentPick.optional : 'Skip' }}
+            </button>
           </div>
           <!-- Empty at every length but the last one, so it speaks when a
                keystroke stops working and stays quiet while the player types. -->
@@ -1879,6 +1941,28 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
             {{ choice.display }}
           </button>
         </template>
+      </div>
+
+      <!-- THE CONFIRMATION A QUOTED ACTION ENDS ON (#248).
+           Reached only when every selection is answered and the action prices its
+           own draft. Before this, filling the last field WAS the purchase -- the
+           total and the charge landed in the same tick, so there was no moment in
+           which a player could read a price and then decide.
+
+           The reason lives on `v-disabled-reason`, not on a native `disabled`:
+           the control stays focusable, so the player who cannot press it is told
+           why. And the rule behind it is the controller's -- `confirm()` refuses
+           the same cases -- so a surface that forgot to grey the button still
+           cannot submit a draft nobody was quoted. -->
+      <div v-else-if="awaitingConfirmation" class="action-review">
+        <button
+          class="choice-btn confirm-btn"
+          data-bs-confirm
+          v-disabled-reason="confirmDisabledReason ?? undefined"
+          @click="confirmDraft"
+        >
+          Confirm
+        </button>
       </div>
     </div>
   </div>
@@ -2513,5 +2597,43 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
 
 .skip-btn:hover {
   background: var(--bsg-surface-3);
+}
+
+/* THE PRICE OF THE DRAFT (issue 248).
+   `display: contents` like every other region in this bar, so the lines wrap
+   inline with the prompt and the field rather than forcing a row of their own --
+   the bar caps its own height and scrolls, and a block here would push the field
+   the player is typing into out of view on a phone. */
+.action-quote {
+  display: contents;
+}
+
+.quote-line {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: var(--bsg-ink);
+  white-space: nowrap;
+}
+
+.quote-pending {
+  font-size: 0.9rem;
+  color: var(--bsg-ink-2);
+  font-style: italic;
+}
+
+.quote-refusal {
+  font-size: 0.9rem;
+  color: var(--bsg-danger);
+}
+
+.action-review {
+  display: contents;
+}
+
+/* The purchase, so it reads as the primary control of the bar rather than as one
+   more option beside the cancel cross. */
+.confirm-btn {
+  font-weight: 600;
+  border-color: var(--bsg-accent);
 }
 </style>

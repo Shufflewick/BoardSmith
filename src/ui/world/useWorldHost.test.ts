@@ -708,3 +708,99 @@ describe('useWorldHost — an order that outlives the page (#195)', () => {
     expect(page().ordersDurable).toBe(true);
   });
 });
+
+/**
+ * #248: WHAT THE DRAFT IN FRONT OF THE PLAYER WOULD COST.
+ *
+ * The pick road's twin, and deliberately the same shape: one request, one
+ * echoed `requestId`, a refusal that resolves, and NO order -- a quote spends
+ * nothing, so there is nothing to make idempotent and nothing to recover after a
+ * reload. What differs is the subject: a pick asks about one selection, a quote
+ * asks about the whole draft, including a number typed into the panel's field
+ * and never submitted.
+ */
+describe('useWorldHost — quoting a draft (#248)', () => {
+  let posted: unknown[];
+
+  beforeEach(() => {
+    vi.useFakeTimers();
+    posted = [];
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  function make() {
+    return useWorldHost({
+      post: (message) => posted.push(message),
+      orders: createOrderBook({ storage: memoryStorage() }),
+    });
+  }
+
+  it('sends the whole draft and resolves with the lines that came back', async () => {
+    const host = make();
+    const answer = host.quoteDraft('boost', { resource: 'storage', weeks: 2 });
+
+    expect(posted).toEqual([
+      {
+        source: WORLD_UI_SOURCE,
+        type: 'world_quote',
+        requestId: 'wq-1',
+        action: 'boost',
+        args: { resource: 'storage', weeks: 2 },
+      },
+    ]);
+
+    deliver(host, {
+      source: WORLD_HOST_SOURCE,
+      type: 'world_quote_result',
+      requestId: 'wq-1',
+      ok: true,
+      quote: ['10 Essentia', 'storage boosted until 2026-09-28'],
+    });
+    await expect(answer).resolves.toEqual({
+      ok: true,
+      quote: ['10 Essentia', 'storage boosted until 2026-09-28'],
+    });
+  });
+
+  it('carries NO order, because being told a price spends nothing', () => {
+    const host = make();
+    void host.quoteDraft('boost', { weeks: 2 });
+    expect(posted[0]).not.toHaveProperty('order');
+    expect(host.acting.value).toBe(false);
+  });
+
+  it('resolves a refusal rather than throwing it', async () => {
+    const host = make();
+    const answer = host.quoteDraft('boost', { weeks: 2 });
+    deliver(host, {
+      source: WORLD_HOST_SOURCE,
+      type: 'world_quote_result',
+      requestId: 'wq-1',
+      ok: false,
+      message: 'That empire is no longer yours.',
+      code: 'partition-missing',
+    });
+    await expect(answer).resolves.toEqual({
+      ok: false,
+      message: 'That empire is no longer yours.',
+      code: 'partition-missing',
+    });
+  });
+
+  it('answers a quote the host never came back on, rather than spinning forever', async () => {
+    const host = make();
+    const answer = host.quoteDraft('boost', { weeks: 2 });
+    await vi.advanceTimersByTimeAsync(60_000);
+    await expect(answer).resolves.toMatchObject({ ok: false });
+  });
+
+  it('fails an outstanding quote when the frame stops listening', async () => {
+    const host = make();
+    host.start();
+    const answer = host.quoteDraft('boost', { weeks: 2 });
+    host.stop();
+    await expect(answer).resolves.toMatchObject({ ok: false });
+  });
+});

@@ -332,6 +332,27 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   // cannot be read outside its own question cannot leak at all.
   const pickDraft = ref<{ identity: string; value: string | number } | null>(null);
 
+  // === The draft's quote (shared source of truth) (#248) ===
+  //
+  // WHAT THE GAME SAID THE DRAFT WOULD COST, AND WHICH DRAFT IT SAID IT ABOUT.
+  //
+  // The stamp is the load-bearing half. A price for two weeks is a lie beside a
+  // field that says three, so the answer is stored WITH the draft it answers and
+  // resolved on read -- the same requested-never-trusted shape `pickDraft` uses,
+  // and for a sharper reason: there is no way to expose a stale price, because a
+  // quote whose stamp does not match the live draft is not exposed at all.
+  //
+  // `lines: null` is an ANSWER (the game has nothing to price about this draft);
+  // `error` is a refusal. They are held on one object so both are withdrawn
+  // together when the draft moves.
+  const quoteAnswer = ref<{
+    stamp: string;
+    lines: readonly string[] | null;
+    error: string | null;
+  } | null>(null);
+  /** The draft a quote is in flight for, so a second is not opened for it. */
+  let quoteInFlight: string | null = null;
+
   // === The action list's open level (shared source of truth) ===
   // Which level of the game-authored start-button hierarchy (#228) the player
   // has navigated to. Here for the same reason as the editor draft: it was a
@@ -1013,6 +1034,142 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     pickDraft.value = { identity: draftIdentityFor(pick.name), value };
   }
 
+  // === The draft's quote (#248) ===
+
+  /** Whether the action being walked prices its own draft. */
+  const quotesItsDraft = computed((): boolean => currentActionMeta.value?.quote === true);
+
+  /**
+   * THE DRAFT, AS THE GAME WOULD BE ASKED ABOUT IT.
+   *
+   * Everything the player has answered, PLUS what they have typed into the editor
+   * and not submitted -- which is the whole reason this exists rather than
+   * `buildServerArgs()` alone: the number in the field is exactly the thing the
+   * reporter's bar could not price.
+   *
+   * A selection they have not answered is ABSENT, never null, so the game's own
+   * default applies to the preview exactly as it applies to the purchase.
+   */
+  const draftArgs = computed((): Record<string, unknown> => {
+    const args = buildServerArgs();
+    const pick = currentPick.value;
+    const draft = currentPickDraft.value;
+    if (pick !== null && draft !== null && draft !== '') args[pick.name] = draft;
+    return args;
+  });
+
+  /**
+   * ONE STRING THAT IS THE WHOLE OF "WHICH DRAFT THIS IS".
+   *
+   * The action and its drafted args. Two drafts with the same stamp are the same
+   * question, so a quote for one is a quote for the other -- and nothing else is:
+   * a changed digit, a cleared selection or a different action all move it.
+   */
+  const quoteStamp = computed((): string | null => {
+    if (!quotesItsDraft.value || currentAction.value === null) return null;
+    const args = draftArgs.value;
+    // Key order would otherwise make one draft two stamps.
+    const ordered = Object.keys(args).sort().map((key) => [key, args[key]]);
+    return JSON.stringify([currentAction.value, ordered]);
+  });
+
+  /** The answer, if it is an answer about the draft on screen. */
+  const liveQuote = computed(() => {
+    const answer = quoteAnswer.value;
+    if (answer === null || quoteStamp.value === null) return null;
+    return answer.stamp === quoteStamp.value ? answer : null;
+  });
+
+  const actionQuote = computed((): readonly string[] | null => liveQuote.value?.lines ?? null);
+  const quoteError = computed((): string | null => liveQuote.value?.error ?? null);
+  const quotePending = computed((): boolean => quoteStamp.value !== null && liveQuote.value === null);
+
+  /**
+   * THE MOMENT THAT DID NOT EXIST BEFORE (#248): the draft is complete and
+   * nobody has bought anything yet.
+   */
+  const awaitingConfirmation = computed((): boolean =>
+    quotesItsDraft.value
+    && isReady.value
+    && !isExecuting.value
+    && !pendingOnServer.value
+    && !isCommitted()
+    && !isViewingHistoryValue(),
+  );
+
+  /**
+   * WHY CONFIRMING IS REFUSED, IN THE PLAYER'S OWN TERMS.
+   *
+   * The rule with teeth: a price that is not the price of THIS draft means the
+   * button is not pressable. An unanswered quote therefore blocks the purchase
+   * rather than letting it through unpriced, which is the inversion the whole
+   * feature is about -- and the player can still change the draft or cancel.
+   */
+  const confirmDisabledReason = computed((): string | null => {
+    if (!quotesItsDraft.value) return null;
+    const unanswered = currentPick.value;
+    if (unanswered !== null) {
+      return `Answer "${unanswered.prompt || unanswered.name}" first.`;
+    }
+    const answer = liveQuote.value;
+    if (answer === null) {
+      return 'Waiting for the price of this draft.';
+    }
+    if (answer.error !== null) return answer.error;
+    return null;
+  });
+
+  /**
+   * ASK THE GAME WHAT THE DRAFT COSTS, ONE QUESTION AT A TIME.
+   *
+   * At most one quote is outstanding, and a draft that moved while it was
+   * outstanding is asked about as soon as it comes back. That is what keeps a
+   * held-down key from opening a request per keystroke without a timer anybody
+   * has to tune -- the rate is the round trip's own.
+   */
+  async function pursueQuote(): Promise<void> {
+    const fetchFn = options.fetchActionQuote;
+    if (fetchFn === undefined || quoteInFlight !== null) return;
+    const stamp = quoteStamp.value;
+    if (stamp === null || stamp === quoteAnswer.value?.stamp) return;
+
+    const actionName = currentAction.value as string;
+    const asked = draftArgs.value;
+    quoteInFlight = stamp;
+    try {
+      const result = await fetchFn(actionName, asked, playerSeat?.value ?? 0);
+      // The action may have been cancelled or replaced while this was in flight;
+      // an answer stamped for a draft nothing is holding is simply unreadable,
+      // so it can be stored without a guard here and never rendered.
+      quoteAnswer.value = {
+        stamp,
+        lines: result.success ? result.lines ?? null : null,
+        error: result.success ? null : result.error ?? 'The world would not say what this costs.',
+      };
+    } catch (err) {
+      quoteAnswer.value = {
+        stamp,
+        lines: null,
+        error: err instanceof Error ? err.message : 'The world would not say what this costs.',
+      };
+    } finally {
+      quoteInFlight = null;
+    }
+    // The draft may have moved while that was outstanding; this is the ask for
+    // wherever it ended up.
+    if (quoteStamp.value !== stamp) void pursueQuote();
+  }
+
+  watch(quoteStamp, (stamp) => {
+    if (stamp === null) {
+      // No quoted action open any more: a price with nothing to price is not
+      // kept "in case", it is forgotten.
+      quoteAnswer.value = null;
+      return;
+    }
+    void pursueQuote();
+  }, { immediate: true });
+
   /**
    * Reactive choices for the current pick. Unlike the bare getCurrentChoices()
    * function, this reads snapshotVersion so it RE-RUNS when choices arrive from an
@@ -1090,6 +1247,12 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   // When all selections are filled, auto-execute
   // Skip when pendingOnServer — server already handles execution via processSelectionStep
   watch(isReady, async (ready) => {
+    // AN ACTION THAT QUOTES IS CONFIRMED, NEVER AUTO-COMMITTED (#248). Filling
+    // the last selection used to BE the purchase, which left no moment for a
+    // price to be read in -- the panel rendered the total and charged for it in
+    // the same tick. `confirm()` is the purchase for these actions, and the
+    // player reaches it having seen what it costs.
+    if (quotesItsDraft.value) return;
     if (ready && getAutoExecute() && currentAction.value && !isExecuting.value && !pendingOnServer.value
         && !isViewingHistoryValue()) {
       // Call hooks before executing - allows capturing element positions for animations.
@@ -1210,6 +1373,28 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   }
 
   // === Methods ===
+
+  /**
+   * THE PURCHASE, FOR AN ACTION THAT QUOTES ITS DRAFT (#248).
+   *
+   * The one door through which a quoted action reaches the world, and it refuses
+   * anything the player has not been shown: an unfinished draft, and a finished
+   * draft whose price is not on screen. Both refusals are the same sentence
+   * `confirmDisabledReason` gives the button, so a surface that greys its control
+   * and one that does not cannot disagree about what is allowed.
+   *
+   * ADVISORY, STILL. What the player saw is what the game said a moment ago; the
+   * order is validated against the world it finds, and a refusal on arrival is the
+   * ordinary outcome it has always been.
+   */
+  async function confirm(): Promise<ActionResult> {
+    const refusal = confirmDisabledReason.value;
+    if (refusal !== null) {
+      setError(refusal);
+      return { success: false, error: refusal };
+    }
+    return executeCurrentAction();
+  }
 
   async function executeCurrentAction(): Promise<ActionResult> {
     if (!currentAction.value) {
@@ -2263,6 +2448,12 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     // has not been submitted, so it survives the panel being unmounted).
     currentPickDraft,
     setPickDraft,
+    actionQuote,
+    quotePending,
+    quoteError,
+    awaitingConfirmation,
+    confirmDisabledReason,
+    confirm,
     // Where the player is standing in the action list's hierarchy, for the same
     // reason. Opaque to the controller: only the panel knows what a label means.
     actionMenuPath,

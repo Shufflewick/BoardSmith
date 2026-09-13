@@ -989,6 +989,36 @@ export function createWorldRunner(
       return engine.resolvePick(player, action, selection, args, stamp);
     },
 
+    /**
+     * WHAT A DRAFT WOULD COST (#248), on the same declare-then-read split every
+     * other read path has: the parent supplies what the last round asked for,
+     * and this answers what is still missing.
+     */
+    async declareQuote(
+      player: string,
+      action: string,
+      args: Readonly<Record<string, unknown>>,
+      now: number,
+      supplied: Readonly<Record<string, StoredPartition>>,
+    ): Promise<WorldDeclaration> {
+      await adopt(engine, store, supplied);
+      const resident = residentNames(engine);
+      return {
+        needs: engine
+          .quotePartitions(player, action, args, now)
+          .filter((name) => !store.holds(name) && !resident.has(name)),
+      };
+    },
+
+    async resolveQuote(
+      player: string,
+      action: string,
+      args: Readonly<Record<string, unknown>>,
+      stamp: WorldOfferStamp,
+    ): Promise<readonly string[] | null> {
+      return engine.resolveQuote(player, action, args, stamp);
+    },
+
     async createPartition(name: string): Promise<WorldCreatedPartition | undefined> {
       const partition = engine.createPartition(name);
       if (partition === undefined) return undefined;
@@ -1255,6 +1285,36 @@ export interface WorldRunnerHandle {
     args: Readonly<Record<string, unknown>>,
     stamp: WorldOfferStamp,
   ): Promise<WorldActionOffer["selections"][number]>;
+
+  /**
+   * WHAT QUOTING A DRAFT STILL NEEDS RESIDENT (#248).
+   *
+   * `declarePick` for the whole walk rather than one selection: a quote reads
+   * what execute reads, so the round after the last selection counts too. The
+   * parent supplies what it names, exactly as it supplies every other declared
+   * read.
+   */
+  declareQuote(
+    player: string,
+    action: string,
+    args: Readonly<Record<string, unknown>>,
+    now: number,
+    supplied: Readonly<Record<string, StoredPartition>>,
+  ): Promise<WorldDeclaration>;
+
+  /**
+   * THAT DRAFT'S PRICE, from the game (#248).
+   *
+   * Everything `declareQuote` named is resident by the time this is called. It is
+   * a READ -- the same read-only facilities an offer runs under -- and it is
+   * advisory: the order that follows is validated against the world it finds.
+   */
+  resolveQuote(
+    player: string,
+    action: string,
+    args: Readonly<Record<string, unknown>>,
+    stamp: WorldOfferStamp,
+  ): Promise<readonly string[] | null>;
 
   createPartition(name: string): Promise<WorldCreatedPartition | undefined>;
   /**
