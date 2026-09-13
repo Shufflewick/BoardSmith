@@ -119,7 +119,7 @@ import {
 import { worldRefusal, WorldRefusal } from "./refusals.js";
 import { evaluateCondition } from "../engine/index.js";
 import { readOnlyProjection } from "./readonly.js";
-import { assertCreatedRoots } from "./migration.js";
+import { assertAnsweredAllocations, assertCreatedRoots } from "./migration.js";
 import { worldBudgets, type WorldBudgets } from "./budgets.js";
 
 /**
@@ -550,7 +550,46 @@ export class BoardSmithWorldEngine implements WorldEngine {
    * the migration touched.
    */
   migratePartition(name: string, transform: (element: GameElement) => void): void {
-    transform(this.rootOf(name));
+    this.answeringAllocations("partition", () => transform(this.rootOf(name)));
+  }
+
+  /**
+   * WHAT A MIGRATION HOOK ALLOCATED AND NEVER ANSWERED, REFUSED (#246).
+   *
+   * A hook holds the live game, and `game.create(...)` in one leaves an element
+   * hanging from the game ROOT. If nothing answers it as a partition it is a
+   * root by no measure: nothing serializes it, the host never hears of it, and
+   * a header the same hook rewrote to point at it references bytes that were
+   * never written. That silence is #246, so the check is here -- at the one
+   * place each hook is invoked -- rather than in each caller that might forget.
+   *
+   * Compared BEFORE against AFTER rather than read absolutely, because a
+   * world's non-partitioned core legitimately hangs from the game root: what is
+   * refused is what THIS hook added and left unclaimed. An element created and
+   * then moved into a resident root is no longer top-level and is that root's
+   * own bytes, which is the legitimate case and passes untouched.
+   */
+  private answeringAllocations<T>(
+    hook: "partition" | "derive" | "create" | "finalize",
+    run: () => T,
+  ): T {
+    const before = this.unclaimedTopLevel();
+    const answer = run();
+    const discarded: string[] = [];
+    for (const [id, element] of this.unclaimedTopLevel()) {
+      if (!before.has(id)) discarded.push(`"${element.name ?? element.constructor.name}" (id ${id})`);
+    }
+    assertAnsweredAllocations(hook, discarded.sort());
+    return answer;
+  }
+
+  /** Every element hanging from the game root that is not a partition root. */
+  private unclaimedTopLevel(): Map<number, GameElement> {
+    const unclaimed = new Map<number, GameElement>();
+    for (const child of this.game.children) {
+      if (this.game.partitionRoot(child.id) === undefined) unclaimed.set(child.id, child);
+    }
+    return unclaimed;
   }
 
   /**
@@ -585,7 +624,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
    * which is the right sentence: during a migration, every root IS resident.
    */
   migrateFinalize(run: (game: Game, partition: (name: string) => GameElement) => void): void {
-    run(this.game, (name) => this.rootOf(name));
+    this.answeringAllocations("finalize", () => run(this.game, (name) => this.rootOf(name)));
   }
 
   /**
@@ -700,6 +739,38 @@ export class BoardSmithWorldEngine implements WorldEngine {
    * as the transformed partitions, so a migration is still all or nothing.
    */
   createMigratedPartitions(
+    build: (game: Game) => Record<string, GameElement>,
+    existing: readonly string[],
+  ): Record<string, StoredPartition> {
+    return this.answeringAllocations("create", () => this.registerBuilt(build, existing));
+  }
+
+  /**
+   * ONE SOURCE ROOT, SPLIT INTO ITSELF PLUS THE ROOTS IT ANSWERS (#246).
+   *
+   * `migratePartition` hands over the live element and can answer nothing;
+   * `createMigratedPartitions` answers roots and is handed no element. A world
+   * whose upgrade is "this root becomes a header and the pages its payload moves
+   * into" needs both at once, on the page where that root's bytes are resident,
+   * and this is the one call that is both: the live element goes in, the new
+   * roots come out, and they are registered through the same `assertCreatedRoots`
+   * door every created root goes through -- so a name the world already holds is
+   * the same refusal it has always been.
+   *
+   * Nothing is written here, as nothing is written by either half: the caller
+   * serializes afterwards and lands the page and its derived roots in one write.
+   */
+  migrateDerive(
+    name: string,
+    split: (element: GameElement) => Record<string, GameElement>,
+    existing: readonly string[],
+  ): Record<string, StoredPartition> {
+    return this.answeringAllocations("derive", () =>
+      this.registerBuilt(() => split(this.rootOf(name)), existing),
+    );
+  }
+
+  private registerBuilt(
     build: (game: Game) => Record<string, GameElement>,
     existing: readonly string[],
   ): Record<string, StoredPartition> {

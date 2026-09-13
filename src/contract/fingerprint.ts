@@ -203,6 +203,11 @@ export const WORLD_FIXTURE_COVERAGE: Record<(typeof WORLD_ENGINE_METHODS)[number
     + 'value from another\'s, and like `migratePartition` its ANSWER is ordinary partition bytes '
     + 'while the deriving itself is unfingerprinted.',
 
+  migrateDerive: 'One source root SPLIT into itself plus the roots it answers (#246), which '
+    + 'happens once, at startup, before any player is in the world. What it produces is an '
+    + 'ordinary partition record per new root, exactly as `createMigratedPartitions` does; what '
+    + 'it decides is which split runs, and that is the bundle\'s and unfingerprinted.',
+
   createMigratedPartitions: 'The other half of a world MOVING BETWEEN state versions (#218), '
     + 'which happens once, at startup, before any player is in it. What it produces is an '
     + 'ordinary partition record, exactly as `genesis` does.',

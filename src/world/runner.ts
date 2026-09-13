@@ -83,6 +83,7 @@ import type { Game, GameElement } from "../engine/index.js";
 import type {
   WorldMigrationContext,
   WorldMigrationCreateContext,
+  WorldMigrationDeriveContext,
   WorldMigrationFinalizeContext,
   WorldMigrationSurvey,
 } from "./migration.js";
@@ -297,6 +298,63 @@ function createdRoots(
 }
 
 /**
+ * WHAT EACH SOURCE ROOT ON THIS PAGE SPLITS INTO (#246).
+ *
+ * Per root, while that root's own bytes are resident, and BEFORE `partition`:
+ * the payload a new root carries is the STORED payload, and a split that ran
+ * after the in-place transform would be handed whatever that transform had
+ * already rewritten away.
+ *
+ * `existing` grows as the page goes, so two source roots on one page cannot
+ * collide with each other any more than either can collide with a name the
+ * world already holds -- and a host re-sending a page it already committed is
+ * refused by the very same check.
+ */
+function deriveRoots(
+  engine: WorldEngine,
+  hooks: WorldMigrationHooks,
+  page: readonly string[],
+  existing: readonly string[],
+  hookCtx: { readonly from: number; readonly to: number; readonly digest: unknown },
+): Record<string, StoredPartition> {
+  const derived: Record<string, StoredPartition> = Object.create(null) as Record<
+    string,
+    StoredPartition
+  >;
+  const derive = hooks.derive;
+  if (derive === undefined) return derived;
+  const taken = [...existing];
+  for (const name of page) {
+    const built = engine.migrateDerive(
+      name,
+      (element) => derive(element, { name, existing: [...taken].sort(), ...hookCtx }),
+      taken,
+    );
+    for (const [derivedName, record] of Object.entries(built)) {
+      derived[derivedName] = record;
+      taken.push(derivedName);
+    }
+  }
+  return derived;
+}
+
+/** The roots a page derived and the roots the version adds, as one set of new
+ *  roots for the host's single write -- null-prototype for the reason
+ *  `createMigratedPartitions` is. */
+function mergedRoots(
+  derived: Record<string, StoredPartition>,
+  created: Record<string, StoredPartition>,
+): Record<string, StoredPartition> {
+  const all: Record<string, StoredPartition> = Object.create(null) as Record<
+    string,
+    StoredPartition
+  >;
+  for (const [name, record] of Object.entries(derived)) all[name] = record;
+  for (const [name, record] of Object.entries(created)) all[name] = record;
+  return all;
+}
+
+/**
  * THE WHOLE WORLD, ONCE (ShufflewickPub #379), with nothing serialized yet.
  *
  * The unbounded road, untouched by #449: it needs every root resident, which is
@@ -504,8 +562,9 @@ export interface WorldSerialized extends WorldAllocation {
  * EVERYTHING ONE MIGRATION PRODUCED, for the host's single transaction (#379).
  *
  * `partitions` is every root the world already held, serialized after every
- * hook has run; `created` is the roots this version adds, with the parent each
- * hangs from; `nextElementId` is the allocation stamp those new roots were
+ * hook has run; `created` is the NEW roots this call produced -- the ones this
+ * version adds through `create`, and the ones this page's own source roots split
+ * into through `derive` (#246) -- with the parent each hangs from; `nextElementId` is the allocation stamp those new roots were
  * minted from (#377). All three land together or none of them does.
  */
 export interface WorldMigrated extends WorldAllocation {
@@ -531,6 +590,10 @@ export interface WorldMigrated extends WorldAllocation {
  */
 export interface WorldMigrationHooks {
   readonly partition?: (element: GameElement, ctx: WorldMigrationContext) => void;
+  readonly derive?: (
+    element: GameElement,
+    ctx: WorldMigrationDeriveContext,
+  ) => Record<string, GameElement>;
   readonly create?: (game: Game, ctx: WorldMigrationCreateContext) => Record<string, GameElement>;
   readonly finalize?: (game: Game, ctx: WorldMigrationFinalizeContext) => void;
   readonly survey?: WorldMigrationSurvey<unknown>;
@@ -911,6 +974,15 @@ export function createWorldRunner(
 
       // (1) PER ROOT, and only the ones this call was handed. `finalize` below
       // reads the results rather than the bytes.
+      //
+      // THE SPLIT FIRST (#246), ON THE ROOT EXACTLY AS STORED. A source root
+      // that fans out into new durable roots can only do it here: the payload
+      // those roots carry is readable only while this root is resident, and
+      // `create` below runs once, on the last page, with every earlier root
+      // already serialized and let go of. Its answers join `created`, so the
+      // page and the roots it derived land in ONE host transaction.
+      const derived = deriveRoots(engine, migrationHooks, page, existing, hookCtx);
+      const taken = [...existing, ...Object.keys(derived)];
       for (const name of page) {
         engine.migratePartition(name, (element) => {
           migrationHooks.partition?.(element, { name, ...hookCtx });
@@ -919,10 +991,14 @@ export function createWorldRunner(
 
       // (2) THE ROOTS THIS VERSION ADDS (#218). Their bytes are re-taken in (4);
       // what this step establishes is the NAMES, their parents, and that none
-      // of them collides with a root the world already holds.
+      // of them collides with a root the world already holds -- including the
+      // ones this page just derived.
       // RUN ONCE PER MIGRATION, NOT ONCE PER PAGE. A paged host says which call
       // is the one that creates; a whole-world migration is always that call.
-      const created = createdRoots(engine, migrationHooks, paged, ctx, { ...hookCtx, existing });
+      const created = mergedRoots(
+        derived,
+        createdRoots(engine, migrationHooks, paged, ctx, { ...hookCtx, existing: taken.sort() }),
+      );
       const names = [...existing, ...Object.keys(created)].sort();
 
       // (3) THE WHOLE WORLD, ONCE (#379). Old roots transformed, new roots
