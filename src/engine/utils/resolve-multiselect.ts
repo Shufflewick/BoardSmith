@@ -47,6 +47,41 @@ function parseMultiSelect(multiSelect: unknown): { min: number; max: number } {
 }
 
 
+/**
+ * resolveOrderedList — the same single source of truth for a choice selection's
+ * `orderedList` bounds (#249).
+ *
+ * Lives beside `resolveMultiSelect` because the two answer the same question
+ * about the same selection and must never be resolved two different ways. It
+ * differs in exactly one deliberate respect: an unbounded list OMITS `max`
+ * rather than normalizing it to `Infinity`. `Infinity` is not JSON — it
+ * serializes as `null`, which the action panel read as a cap of nothing
+ * (ShufflewickPub #378) — and every consumer of these bounds is the wire or the
+ * panel rather than enumeration's arithmetic.
+ */
+export function resolveOrderedList(
+  selection: Selection,
+  ctx: ActionContext,
+): { min: number; max?: number } | undefined {
+  const orderedList = (selection as { orderedList?: unknown }).orderedList;
+
+  if (orderedList === undefined) return undefined;
+
+  // Function form: evaluated against live state, and NOT wrapped in try/catch —
+  // a thrown error must propagate to the caller (fail loud).
+  const resolved = typeof orderedList === 'function'
+    ? (orderedList as (c: ActionContext) => unknown)(ctx)
+    : orderedList;
+
+  if (resolved === undefined) return undefined;
+  if (typeof resolved === 'number') return { min: 1, max: resolved };
+
+  const config = resolved as { min?: number; max?: number };
+  return config.max === undefined
+    ? { min: config.min ?? 1 }
+    : { min: config.min ?? 1, max: config.max };
+}
+
 export function resolveMultiSelect(
   selection: Selection,
   ctx: ActionContext,

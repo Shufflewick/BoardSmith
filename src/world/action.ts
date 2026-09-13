@@ -81,7 +81,7 @@ import type {
   PlayerOf,
   Selection,
 } from "../engine/index.js";
-import type { ConditionConfig, MultiSelectConfig } from "../engine/action/types.js";
+import type { ConditionConfig, MultiSelectConfig, OrderedListConfig } from "../engine/action/types.js";
 import type { WorldBudgets } from "./budgets.js";
 import type { ScheduleArm } from "./schedule-api.js";
 import type { DeclaredSeatActivity, SeatActivity, WorldNarrationLine } from "./contract.js";
@@ -324,9 +324,23 @@ export type WorldMultiSelect<G extends Game = Game> =
   | ((context: WorldActionContext<G>) => number | MultiSelectConfig);
 
 /**
- * Everything a world's `chooseFrom` takes apart from `multiSelect`, which is
- * split out because it is what decides whether the argument is a `T` or a
- * `T[]` and therefore has to live in the overloads.
+ * HOW MANY ENTRIES A WORLD'S ORDERED LIST TAKES (#249).
+ *
+ * The repeatable sibling of `WorldMultiSelect`, narrowed the same way: it always
+ * resolves to bounds, so the argument is always an array and its type is
+ * knowable from the call. The bounds count ENTRIES, and the same identity may
+ * fill more than one of them -- which is the whole difference from
+ * `multiSelect`, where a repeat is refused.
+ */
+export type WorldOrderedList<G extends Game = Game> =
+  | number
+  | OrderedListConfig
+  | ((context: WorldActionContext<G>) => number | OrderedListConfig);
+
+/**
+ * Everything a world's `chooseFrom` takes apart from `multiSelect` and
+ * `orderedList`, which are split out because they are what decide whether the
+ * argument is a `T` or a `T[]` and therefore have to live in the overloads.
  */
 export interface WorldChoiceOptions<G extends Game, T> {
   prompt?: WorldPrompt<G>;
@@ -622,13 +636,21 @@ function forwardElementOptions<G extends Game, T extends GameElement>(
   };
 }
 
-/** A world's `multiSelect`, re-typed onto the engine's. The function form gets
- *  the WORLD context, like every other callback on this facade (#376). */
-function forwardMultiSelect<G extends Game>(
-  multiSelect: WorldMultiSelect<G> | undefined,
-): number | MultiSelectConfig | ((context: AnyContext) => number | MultiSelectConfig) | undefined {
-  if (typeof multiSelect !== "function") return multiSelect;
-  return (context: AnyContext) => multiSelect(withWorld<G>(context));
+/**
+ * A world's COUNT CONFIG, re-typed onto the engine's -- `multiSelect` and
+ * `orderedList` alike (#376, #249).
+ *
+ * One function for both, because they differ in what they mean and not at all in
+ * how they are forwarded: each is a plain value or a function, and the function
+ * form gets the WORLD context like every other callback on this facade. Two
+ * copies of that is how the second one would come to drop `withWorld`.
+ */
+function forwardCount<G extends Game, C>(
+  config: C | ((context: WorldActionContext<G>) => C) | undefined,
+): C | ((context: AnyContext) => C) | undefined {
+  if (typeof config !== "function") return config;
+  const evaluate = config as (context: WorldActionContext<G>) => C;
+  return (context: AnyContext) => evaluate(withWorld<G>(context));
 }
 
 /**
@@ -809,23 +831,43 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
   // fallow-ignore-next-line unused-class-member
   chooseFrom<K extends string, T>(
     name: K,
-    options: WorldChoiceOptions<G, T> & { multiSelect: WorldMultiSelect<G> },
+    options: WorldChoiceOptions<G, T> & {
+      multiSelect: WorldMultiSelect<G>;
+      orderedList?: never;
+    },
+  ): WorldAction<G, AddArg<A, K, T[]>>;
+  // A LIST IS A THIRD SIGNATURE AND NOT A FLAG (#249). `orderedList?: never` on
+  // the other two is what makes "both" a compile error at the call site rather
+  // than a refusal the author meets at the first submission that repeats.
+  // fallow-ignore-next-line unused-class-member
+  chooseFrom<K extends string, T>(
+    name: K,
+    options: WorldChoiceOptions<G, T> & {
+      orderedList: WorldOrderedList<G>;
+      multiSelect?: never;
+    },
   ): WorldAction<G, AddArg<A, K, T[]>>;
   // fallow-ignore-next-line unused-class-member
   chooseFrom<K extends string, T>(
     name: K,
-    options: WorldChoiceOptions<G, T> & { multiSelect?: undefined },
+    options: WorldChoiceOptions<G, T> & { multiSelect?: undefined; orderedList?: undefined },
   ): WorldAction<G, AddArg<A, K, T>>;
   // fallow-ignore-next-line unused-class-member
   chooseFrom<K extends string, T>(
     name: K,
-    options: WorldChoiceOptions<G, T> & { multiSelect?: WorldMultiSelect<G> },
+    options: WorldChoiceOptions<G, T> & {
+      multiSelect?: WorldMultiSelect<G>;
+      orderedList?: WorldOrderedList<G>;
+    },
   ): WorldAction<G, AddArg<A, K, T | T[]>> {
     this.declareSelection(options.needs);
     this.inner.chooseFrom<K, T>(name, {
       // AN ORDINARY `ChoiceSelection` FIELD the facade had stopped passing on
       // (#376).
-      multiSelect: forwardMultiSelect<G>(options.multiSelect),
+      multiSelect: forwardCount<G, number | MultiSelectConfig>(options.multiSelect),
+      // ITS REPEATABLE SIBLING (#249). The engine's own builder refuses a
+      // selection that carries both.
+      orderedList: forwardCount<G, number | OrderedListConfig>(options.orderedList),
       prompt: forwardPrompt<G>(options.prompt),
       choices:
         typeof options.choices === "function"
@@ -906,7 +948,7 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
     this.declareSelection(options.needs);
     this.inner.chooseElements<K, T>(name, {
       ...forwardElementOptions<G, T>(options),
-      multiSelect: forwardMultiSelect<G>(options.multiSelect),
+      multiSelect: forwardCount<G, number | MultiSelectConfig>(options.multiSelect),
       validate: options.validate
         ? (value, args, context) => options.validate!(value, args, withWorld<G>(context))
         : undefined,

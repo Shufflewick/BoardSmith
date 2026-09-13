@@ -141,6 +141,30 @@ export interface MultiSelectConfig {
 }
 
 /**
+ * Configuration for an ORDERED, REPEATABLE list of choices (#249).
+ *
+ * The bounds count ENTRIES, not distinct identities: `{ min: 0, max: 121 }`
+ * takes up to 121 entries, and the same identity may fill as many of them as
+ * the rules allow. Each occurrence is validated against the same authoritative
+ * choice set, and the handler receives the entries in the order submitted.
+ *
+ * Its own option rather than a flag on {@link MultiSelectConfig}, because the
+ * two differ in what a submission MEANS. A `multiSelect` is a SET — order is
+ * incidental, a repeated identity is a mistake, and the panel draws checkboxes.
+ * An `orderedList` is a SEQUENCE — order is the rule, a repeat is a second
+ * instruction, and the panel draws a list being built. A boolean inside
+ * `multiSelect` would leave both readings behind one name, and every reader of
+ * `multiSelect` (the duplicate check, the checkbox widget, move enumeration)
+ * would have to remember to ask which one it had.
+ */
+export interface OrderedListConfig {
+  /** Fewest entries the list may carry (default: 1) */
+  min?: number;
+  /** Most entries the list may carry (default: unlimited) */
+  max?: number;
+}
+
+/**
  * State for an in-progress repeating selection
  */
 export interface RepeatingSelectionState {
@@ -232,6 +256,26 @@ export interface ChoiceSelection<T = unknown> extends BaseSelection<T> {
    * }
    */
   multiSelect?: number | MultiSelectConfig | ((context: ActionContext) => number | MultiSelectConfig | undefined);
+  /**
+   * Ask for an ORDERED, REPEATABLE list of choices instead of a set (#249).
+   *
+   * The value is an array in the order the player built it, and one identity may
+   * appear more than once — each occurrence is a separate instruction validated
+   * against the same choices. `min`/`max` count ENTRIES.
+   *
+   * Mutually exclusive with `multiSelect`; declaring both is refused by the
+   * builder. See {@link OrderedListConfig} for why they are two options.
+   *
+   * @example
+   * // Repair up to 121 buildings, in the order given, a damaged one twice if
+   * // the resources left after the first pass still allow it.
+   * orderedList: { min: 0, max: 121 }
+   *
+   * @example
+   * // Up to N, where N is a fact about an earlier pick.
+   * orderedList: (ctx) => ({ min: 1, max: Number(ctx.args.budget) })
+   */
+  orderedList?: number | OrderedListConfig | ((context: ActionContext) => number | OrderedListConfig | undefined);
   /**
    * Check if a choice should be disabled (visible but not selectable).
    * Returns a reason string if disabled, or false if selectable.

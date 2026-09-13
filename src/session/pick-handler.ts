@@ -17,6 +17,7 @@ import {
 } from './types.js';
 import { PendingActionManager, type PickStepResult } from './pending-action-manager.js';
 import { buildSingleActionMetadata } from './utils.js';
+import { resolveOrderedList } from '../engine/utils/resolve-multiselect.js';
 import {
   formatChoiceCandidates,
   formatElementCandidates,
@@ -227,8 +228,19 @@ export class PickHandler<G extends Game = Game> {
 
         const choices = formatChoiceCandidates(annotatedChoices, selection, ctx, warnings);
         const multiSelect = resolveMultiSelectConfig(selection.multiSelect, ctx);
+        // The ORDERED-LIST bounds for THIS step (#249), resolved here for the
+        // reason multiSelect is: a bound that reads an earlier selection's value
+        // is only knowable once that value is bound, and the static metadata was
+        // resolved with no arguments at all.
+        const orderedList = resolveOrderedList(selection, ctx);
 
-        return { success: true, choices, multiSelect, warnings: warnings.length > 0 ? warnings : undefined };
+        return {
+          success: true,
+          choices,
+          multiSelect,
+          orderedList,
+          warnings: warnings.length > 0 ? warnings : undefined,
+        };
       }
 
       // ONE BRANCH FOR BOTH ELEMENT PICKS. They differ in exactly one thing --

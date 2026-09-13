@@ -12,7 +12,7 @@
 
 import { evaluateCondition } from '../action/action.js';
 import { devWarn } from '../../utils/dev.js';
-import { resolveMultiSelect } from '../utils/resolve-multiselect.js';
+import { resolveMultiSelect, resolveOrderedList } from '../utils/resolve-multiselect.js';
 import type { Game } from './game.js';
 import type { Player } from '../player/player.js';
 import type { Selection, ActionDefinition, TextSelection } from '../action/types.js';
@@ -198,6 +198,16 @@ export function buildPickMetadata(
       const resolvedChoiceMultiSelect = resolveMultiSelect(selection, ctx);
       if (resolvedChoiceMultiSelect !== undefined) {
         base.multiSelect = resolvedChoiceMultiSelect;
+      }
+
+      // An ORDERED, REPEATABLE list's bounds (#249), resolved through the same
+      // shared helper for the same reason, and emitted with `max` ABSENT when
+      // the list is unbounded: these bounds travel as JSON, where `Infinity`
+      // becomes `null` and the panel reads null as a cap of nothing
+      // (ShufflewickPub #378).
+      const resolvedOrderedList = resolveOrderedList(selection, ctx);
+      if (resolvedOrderedList !== undefined) {
+        base.orderedList = resolvedOrderedList;
       }
       break;
     }

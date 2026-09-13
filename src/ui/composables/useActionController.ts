@@ -94,7 +94,7 @@
  */
 
 import { ref, readonly, computed, watch, inject, nextTick, getCurrentScope, onScopeDispose } from 'vue';
-import { isDevMode, devWarn, getDisplayFromValue, actionNeedsWizardMode, resolveMultiSelectConfig as resolveEffectiveMultiSelect } from './actionControllerHelpers.js';
+import { isDevMode, devWarn, getDisplayFromValue, actionNeedsWizardMode, resolveMultiSelectConfig as resolveEffectiveMultiSelect, resolveOrderedListConfig as resolveEffectiveOrderedList } from './actionControllerHelpers.js';
 import { createEnrichment } from './useGameViewEnrichment.js';
 import { useBoardInteraction, type BoardInteraction } from './useBoardInteraction.js';
 import { findMatchingChoice } from '../../engine/action/choice-matching.js';
@@ -861,6 +861,10 @@ export function useActionController(options: UseActionControllerOptions): UseAct
           choices: result.choices as PickSnapshot['choices'],
           validElements: result.validElements,
           multiSelect: result.multiSelect,
+          // The ordered-list bounds for THIS step (#249), for the reason
+          // multiSelect's are here: a bound that reads an earlier pick is only
+          // knowable once that pick is bound.
+          orderedList: result.orderedList,
         });
         // Increment version to trigger reactive computeds (Maps aren't reactive)
         snapshotVersion.value++;
@@ -1699,6 +1703,19 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       return { valid: false, error };
     }
 
+    // THE SAME GUARD FOR A LIST (#249). A list pick's value is a sequence, and a
+    // bare entry submitted as the whole answer is the mistake most likely to be
+    // made by a custom UI that has just learned the verb.
+    const orderedListCfg = resolveOrderedListConfig(selection);
+    if (orderedListCfg && !Array.isArray(value)) {
+      const error =
+        `fill('${selectionName}', ...) rejected: '${selectionName}' is an ordered list ` +
+        `(min ${orderedListCfg.min}, max ${orderedListCfg.max ?? 'unlimited'}) and requires an array. ` +
+        `Use appendListEntry()/confirmMultiSelect(), or pass the whole array to fill().`;
+      setError(error);
+      return { valid: false, error };
+    }
+
     // Handle repeating selections
     if (selection.repeat) {
       return await handleRepeatingFill(selection, value);
@@ -2077,6 +2094,83 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   }
 
   /**
+   * Resolve the ordered-list bounds for a selection (#249). Delegates to the
+   * shared `resolveOrderedListConfig` helper for the reason the multiSelect one
+   * above does: the panel, a custom board and this composable must agree about
+   * how many entries the list still has room for.
+   */
+  function resolveOrderedListConfig(
+    selection: PickMetadata
+  ): { min: number; max?: number } | undefined {
+    const pickSnapshot = actionSnapshot.value?.pickSnapshots.get(selection.name);
+    return resolveEffectiveOrderedList(selection, pickSnapshot);
+  }
+
+  /** The active selection by name, or `undefined` with a devWarn naming the verb. */
+  function selectionForDraft(selectionName: string, verb: string): PickMetadata | undefined {
+    const selection = currentActionMeta.value?.selections.find(s => s.name === selectionName);
+    if (selection) return selection;
+    devWarn(
+      `draft-no-selection:${verb}:${selectionName}`,
+      `${verb}('${selectionName}', ...) was ignored: no active action exposes a selection named ` +
+        `'${selectionName}'. Start the action (and reach this selection) before writing its draft.`
+    );
+    return undefined;
+  }
+
+  /**
+   * Append one entry to the in-progress ordered-list draft (#249).
+   *
+   * The append, rather than a toggle, IS the capability: a set's second press
+   * means "not that one after all", and a list's means "again". Everything else
+   * -- the shared draft, the max, the confirm path -- is deliberately the same as
+   * multiSelect's, so the panel and a custom board keep reading one draft.
+   */
+  async function appendListEntry(selectionName: string, value: unknown): Promise<void> {
+    const selection = selectionForDraft(selectionName, 'appendListEntry');
+    if (!selection) return;
+
+    const cfg = resolveOrderedListConfig(selection);
+    if (!cfg) {
+      devWarn(
+        `ordered-list-not-list:${selectionName}`,
+        `appendListEntry('${selectionName}', ...) was ignored: '${selectionName}' is not an ` +
+          `orderedList selection. Use toggleMultiSelect() for a multiSelect set, or ` +
+          `fill('${selectionName}', value) for a single-value selection.`
+      );
+      return;
+    }
+
+    const current =
+      multiSelectDraft.value && multiSelectDraft.value.selectionName === selectionName
+        ? multiSelectDraft.value.values
+        : [];
+
+    if (cfg.max !== undefined && current.length >= cfg.max) return;
+
+    multiSelectDraft.value = { selectionName, values: [...current, value] };
+  }
+
+  /** Drop one entry of the ordered-list draft BY INDEX (#249) — with repeats, a
+   *  value does not name an entry. */
+  function removeListEntry(selectionName: string, index: number): void {
+    const draft = multiSelectDraft.value;
+    if (!draft || draft.selectionName !== selectionName) return;
+    if (index < 0 || index >= draft.values.length) {
+      devWarn(
+        `ordered-list-bad-index:${selectionName}`,
+        `removeListEntry('${selectionName}', ${index}) was ignored: the list has ` +
+          `${draft.values.length} entr${draft.values.length === 1 ? 'y' : 'ies'}.`
+      );
+      return;
+    }
+    multiSelectDraft.value = {
+      selectionName,
+      values: draft.values.filter((_, i) => i !== index),
+    };
+  }
+
+  /**
    * Toggle a value in the in-progress multiSelect draft.
    * The draft is shared between the auto ActionPanel and custom UIs so they stay
    * in parity. currentArgs is NOT touched until confirmMultiSelect() (which uses
@@ -2272,6 +2366,11 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     toggleMultiSelect,
     confirmMultiSelect,
     isMultiSelectSelected,
+
+    // Ordered, repeatable lists (#249) — the same shared draft, appended rather
+    // than toggled, and confirmed through confirmMultiSelect above.
+    appendListEntry,
+    removeListEntry,
 
     // Utility
     getChoices,

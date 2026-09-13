@@ -491,6 +491,17 @@ export interface PickMetadata {
     /** Maximum selections allowed (undefined = unlimited) */
     max?: number;
   };
+  /**
+   * For ORDERED, REPEATABLE choice picks: how many ENTRIES the list may carry
+   * (#249).
+   *
+   * Present INSTEAD of `multiSelect`, never alongside it, and that is how a host
+   * knows which control to draw: a set of checkboxes, or a list built up one
+   * entry at a time with repeats allowed and order preserved. An absent `max`
+   * means no upper bound -- said by omission because these bounds travel as
+   * JSON, where `Infinity` becomes `null`.
+   */
+  orderedList?: { min: number; max?: number };
 }
 
 /**
@@ -540,6 +551,12 @@ export interface PickChoicesResponse {
   validElements?: ValidElement[];
   /** Multi-select configuration (evaluated at request time for function-based configs) */
   multiSelect?: { min: number; max?: number };
+  /**
+   * Ordered-list ENTRY bounds (#249), evaluated at request time for the same
+   * reason multiSelect's are: a bound that reads an earlier pick's value is only
+   * knowable once that value is bound.
+   */
+  orderedList?: { min: number; max?: number };
   /**
    * Structured warnings from soft-fail sites (boardRefs()/display()/boardRef()
    * throwing) — the choice/element is still returned with a graceful fallback,

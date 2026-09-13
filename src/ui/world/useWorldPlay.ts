@@ -230,6 +230,10 @@ export function useWorldPlay(host: WorldHost): WorldPlay {
         choices: selection.choices,
         validElements: selection.validElements,
         multiSelect: selection.multiSelect,
+        // An ordered list's ENTRY bounds (#249), carried for the same reason the
+        // set's are: the panel cannot draw the list without knowing how long it
+        // may get.
+        orderedList: selection.orderedList,
       };
     }
 
@@ -252,6 +256,7 @@ export function useWorldPlay(host: WorldHost): WorldPlay {
       choices: answer.selection.choices,
       validElements: answer.selection.validElements,
       multiSelect: answer.selection.multiSelect,
+      orderedList: answer.selection.orderedList,
     };
   }
 

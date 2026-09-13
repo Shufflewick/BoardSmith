@@ -30,6 +30,7 @@ import { getActiveStep, getGateReasonForValue } from '../tutorial/gate.js';
 import { findMatchingChoice, trySmartResolveChoice, valuesEqual } from './choice-matching.js';
 import { numberRuleErrors } from './number-rules.js';
 import { textRuleErrors } from './text-rules.js';
+import { resolveOrderedList } from '../utils/resolve-multiselect.js';
 
 // Re-export Action class from action-builder
 export { Action };
@@ -266,6 +267,30 @@ function describeValidateReturn(result: unknown): string {
     return `an object${keys.length ? ` with keys: ${keys.join(', ')}` : ''}`;
   }
   return `a ${typeof result}`;
+}
+
+/**
+ * How a choice submission's COUNT is out of bounds, or nothing when it is not.
+ *
+ * One function because a `multiSelect` set and an `orderedList` sequence (#249)
+ * bound their count identically and differ only in what they count: distinct
+ * identities for one, entries for the other. Two copies of the sentence is how
+ * the player would end up reading two different ones for the same mistake.
+ */
+function choiceCountErrors(
+  name: string,
+  count: number,
+  min: number,
+  max: number | undefined,
+): string[] {
+  const errors: string[] = [];
+  if (count < min) {
+    errors.push(`Selection "${name}" requires at least ${min} choice${min === 1 ? '' : 's'}, got ${count}`);
+  }
+  if (max !== undefined && count > max) {
+    errors.push(`Selection "${name}" requires at most ${max} choice${max === 1 ? '' : 's'}, got ${count}`);
+  }
+  return errors;
 }
 
 /**
@@ -947,7 +972,28 @@ export class ActionExecutor {
       // configured -- unlike the elements branch, a bare choice is not a valid
       // shorthand for a multiSelect-configured chooseFrom.
       if (selection.type === 'choice') {
-        const multiSelect = (selection as ChoiceSelection).multiSelect;
+        // AN ORDERED LIST IS BOUNDED THE SAME WAY AND DEDUPED NOT AT ALL (#249).
+        // Its bounds count ENTRIES, so a repeat satisfies `min` and fills a slot
+        // under `max`; every occurrence was already checked against `choices` by
+        // the per-item loop above, which is the guarantee that makes repetition
+        // safe to allow. The two configs are mutually exclusive (the builder
+        // refuses both), so the set rules below are skipped when this one
+        // applies -- while everything AFTER this block (the selection's own
+        // `validate`, the type-specific rules) still runs for both.
+        const orderedList = resolveOrderedList(selection, context);
+        if (orderedList !== undefined) {
+          if (!Array.isArray(value)) {
+            errors.push(
+              `Selection "${selection.name}" is an ordered list and expected an array, got ${typeof value}: ${JSON.stringify(value)}`
+            );
+          } else {
+            errors.push(...choiceCountErrors(selection.name, value.length, orderedList.min, orderedList.max));
+          }
+        }
+
+        const multiSelect = orderedList !== undefined
+          ? undefined
+          : (selection as ChoiceSelection).multiSelect;
         const multiSelectConfig = typeof multiSelect === 'function' ? multiSelect(context) : multiSelect;
         if (multiSelectConfig !== undefined) {
           if (!Array.isArray(value)) {
@@ -962,13 +1008,7 @@ export class ActionExecutor {
             }
             const min = typeof multiSelectConfig === 'number' ? 1 : (multiSelectConfig.min ?? 1);
             const max = typeof multiSelectConfig === 'number' ? multiSelectConfig : multiSelectConfig.max;
-            const count = value.length;
-            if (count < min) {
-              errors.push(`Selection "${selection.name}" requires at least ${min} choice${min === 1 ? '' : 's'}, got ${count}`);
-            }
-            if (max !== undefined && count > max) {
-              errors.push(`Selection "${selection.name}" requires at most ${max} choice${max === 1 ? '' : 's'}, got ${count}`);
-            }
+            errors.push(...choiceCountErrors(selection.name, value.length, min, max));
           }
         }
       }

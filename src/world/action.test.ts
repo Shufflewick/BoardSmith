@@ -612,3 +612,148 @@ describe("#376 — a world action can ask for a GROUP", () => {
     expect(() => newEngine([dependent])).toThrow(/depends on another selection/);
   });
 });
+
+describe("#249 — a world action can ask for an ORDERED, REPEATABLE list", () => {
+  // `multiSelect` is a SET: a repeated identity is refused with "contains
+  // duplicate choices", which is right for "choose two of your neighbours" and
+  // wrong for a repair order. Lacuna's repair spends what is left after each
+  // entry, so repairing one building twice in one command is a legal move whose
+  // second entry is computed from the first, and the order is the rule.
+  //
+  // `orderedList` is that list. The cap counts ENTRIES, every occurrence is
+  // checked against the same authoritative candidate set, and the handler
+  // receives the sequence as submitted.
+
+  /** The one selection every verb below asks: an ordered round of neighbours,
+   *  with the bounds the case under test cares about. */
+  const stopsSelection = (bounds: { min?: number; max?: number }) =>
+    ({
+      prompt: "Where to, in what order?",
+      needs: ({ player }: { player: { seat: number } }) =>
+        neighbourSeats(player.seat).map(holdingPartition),
+      choices: ({ player }: { player: { seat: number } }) => neighbourSeats(player.seat),
+      // THE WHOLE POINT: the same neighbour may be visited twice.
+      orderedList: bounds,
+    }) as const;
+
+  /** Spend one log per entry, in the order given, on whoever is named. */
+  const errands = worldAction<VillageFixture>("errands")
+    .prompt("Run errands, in order")
+    .needs(({ player }) => [holdingPartition(player.seat)])
+    .chooseFrom("stops", stopsSelection({ min: 1, max: 3 }))
+    .execute(({ stops }, ctx) => {
+      // `stops` is an ARRAY of the chosen values IN ORDER, and that it
+      // type-checks as one is half the point.
+      const own = ctx.game.holdingOf(ctx.player.seat);
+      for (const seat of stops) {
+        own.woodpile -= 1;
+        ctx.game.holdingOf(seat).standing = Math.min(
+          STANDING_MAX,
+          ctx.game.holdingOf(seat).standing + 1,
+        );
+      }
+      own.standing = stops.length;
+    });
+
+  it("dispatches a REPEATED identity and keeps the order the command carried", async () => {
+    const { engine, game } = newEngine([errands]);
+    const [first, second] = neighbourSeats(1);
+    await engine.hydrate([holdingPartition(1)]);
+    const before = game.holdingOf(1).woodpile;
+
+    const seen: number[] = [];
+    const watched = worldAction<VillageFixture>("watched")
+      .needs(({ player }) => [holdingPartition(player.seat)])
+      .chooseFrom("stops", stopsSelection({ min: 1, max: 3 }))
+      .execute(({ stops }) => {
+        seen.push(...stops);
+      });
+
+    const watcher = newEngine([watched]);
+    await apply(watcher.engine, "p1", {
+      name: "watched",
+      args: { stops: [second, first, second] },
+    });
+    expect(seen).toEqual([second, first, second]);
+
+    // And the same command over the errand verb really spends three logs.
+    await apply(engine, "p1", { name: "errands", args: { stops: [first, first, second] } });
+    expect(game.holdingOf(1).woodpile).toBe(before - 3);
+    expect(game.holdingOf(1).standing).toBe(3);
+  });
+
+  it("REFUSES more ENTRIES than the cap, counting repeats as entries", async () => {
+    const { engine } = newEngine([errands]);
+    const [first] = neighbourSeats(1);
+    await engine.hydrate([holdingPartition(1)]);
+
+    await expect(
+      apply(engine, "p1", { name: "errands", args: { stops: [first, first, first, first] } }),
+    ).rejects.toThrow(/at most 3 choices/);
+  });
+
+  it("checks EVERY occurrence against the world's own candidates", async () => {
+    // The seat opposite is not a neighbour, so it is not a candidate -- and a
+    // list that hides it behind a legal first entry must still be refused.
+    const { engine } = newEngine([errands]);
+    const [first] = neighbourSeats(1);
+    const stranger = neighbourSeats(1).includes(4) ? 5 : 4;
+    await engine.hydrate([holdingPartition(1)]);
+
+    await expect(
+      apply(engine, "p1", { name: "errands", args: { stops: [first, stranger, first] } }),
+    ).rejects.toThrow(/Invalid selection/);
+  });
+
+  it("still REFUSES a repeated identity on an ordinary multiSelect", async () => {
+    const party = worldAction<VillageFixture>("party")
+      .needs(({ player }) => [holdingPartition(player.seat)])
+      .chooseFrom("hands", {
+        needs: ({ player }) => neighbourSeats(player.seat).map(holdingPartition),
+        choices: ({ player }) => neighbourSeats(player.seat),
+        multiSelect: { min: 1, max: 3 },
+      })
+      .execute(() => {});
+    const { engine } = newEngine([party]);
+    const [first] = neighbourSeats(1);
+    await engine.hydrate([holdingPartition(1)]);
+
+    await expect(
+      apply(engine, "p1", { name: "party", args: { hands: [first, first] } }),
+    ).rejects.toThrow(/duplicate choices/);
+  });
+
+  it("carries the ENTRY bounds on the offer, so the panel can build the list", async () => {
+    const { engine } = newEngine([errands]);
+
+    const offers = await engine.offersFor("p1", OFFER);
+    const pick = offers.find((offer) => offer.name === "errands")!.selections[0]!;
+
+    expect(pick.orderedList).toEqual({ min: 1, max: 3 });
+    expect(pick.multiSelect).toBeUndefined();
+    expect(pick.choices?.map((choice) => choice.value)).toEqual(neighbourSeats(1));
+  });
+
+  it("omits max on an UNBOUNDED list rather than serializing Infinity", async () => {
+    const open = worldAction<VillageFixture>("open")
+      .needs(({ player }) => [holdingPartition(player.seat)])
+      .chooseFrom("stops", stopsSelection({ min: 1 }))
+      .execute(() => {});
+    const { engine } = newEngine([open]);
+
+    const offers = await engine.offersFor("p1", OFFER);
+    const pick = offers.find((offer) => offer.name === "open")!.selections[0]!;
+
+    // JSON.stringify writes Infinity as null, and the panel reads null as a cap
+    // of nothing (ShufflewickPub #378).
+    expect(JSON.parse(JSON.stringify(pick)).orderedList).toEqual({ min: 1 });
+  });
+
+  it("puts orderedList on the SELECTION the engine reads", () => {
+    const selection = errands.selections.find((s) => s.name === "stops");
+
+    expect(selection).toBeDefined();
+    expect((selection as { orderedList?: unknown }).orderedList).toEqual({ min: 1, max: 3 });
+    expect((selection as { multiSelect?: unknown }).multiSelect).toBeUndefined();
+  });
+});

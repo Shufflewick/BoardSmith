@@ -22,6 +22,9 @@
  */
 import { vi } from 'vitest';
 import { ref } from 'vue';
+import { mount } from '@vue/test-utils';
+import ActionPanel from './ActionPanel.vue';
+import { GAME_CONTEXT_KEYS } from '../../composables/useGameContext.js';
 
 /** The stub, with every verb spied. Merge in whatever a test needs to differ. */
 export function stubActionController(overrides: Record<string, unknown> = {}) {
@@ -65,7 +68,33 @@ export function stubActionController(overrides: Record<string, unknown> = {}) {
     execute: vi.fn(async () => ({ success: true })),
     toggleMultiSelect: vi.fn(async () => {}),
     confirmMultiSelect: vi.fn(async () => {}),
+    // The ordered-list verbs (#249): the panel reaches for them whenever the
+    // current pick carries `orderedList`, and a missing one is invisible until a
+    // click throws.
+    appendListEntry: vi.fn(async () => {}),
+    removeListEntry: vi.fn(),
 
     ...overrides,
   };
+}
+
+/**
+ * Mount the panel over a stub controller, with the provide/inject wiring and the
+ * Teleport stub every panel test needs.
+ *
+ * Beside the stub for the same reason the stub is here at all: the ten lines below
+ * are the panel's mounting contract, and a copy of them in a test file goes stale
+ * silently the next time the component reads its controller from somewhere else.
+ */
+export function mountPanel(
+  controller: ReturnType<typeof stubActionController>,
+  props: Record<string, unknown> = { availableActions: [], playerSeat: 1, isMyTurn: true },
+) {
+  return mount(ActionPanel, {
+    global: {
+      provide: { [GAME_CONTEXT_KEYS.actionController as symbol]: controller },
+      stubs: { Teleport: true },
+    },
+    props,
+  });
 }

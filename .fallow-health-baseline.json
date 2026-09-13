@@ -534,11 +534,6 @@
         "count": 1
       }
     },
-    "src/engine/utils/enumerate-moves.ts": {
-      "crap_moderate": {
-        "count": 1
-      }
-    },
     "src/engine/utils/snapshot.ts": {
       "complexity_moderate": {
         "count": 1

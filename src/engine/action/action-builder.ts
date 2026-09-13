@@ -15,6 +15,7 @@ import type {
   BoardElementRef,
   RepeatConfig,
   MultiSelectConfig,
+  OrderedListConfig,
   ConditionConfig,
   OnSelectContext,
 } from './types.js';
@@ -470,6 +471,13 @@ export class Action<
        * Can be a static config or dynamic function evaluated per context.
        */
       multiSelect?: number | MultiSelectConfig | ((context: ActionContext<G>) => number | MultiSelectConfig | undefined);
+      /**
+       * Ask for an ORDERED, REPEATABLE list rather than a set (#249): the value
+       * is an array in the order the player built it, one identity may appear
+       * more than once, and `min`/`max` count ENTRIES. Mutually exclusive with
+       * `multiSelect`.
+       */
+      orderedList?: number | OrderedListConfig | ((context: ActionContext<G>) => number | OrderedListConfig | undefined);
       /** Check if choice should be disabled. Returns reason string or false. */
       disabled?: (choice: T, context: ActionContext<G>) => string | false;
       /** Called after this step is resolved. Receives the resolved value and a restricted context. */
@@ -478,6 +486,18 @@ export class Action<
       onCancel?: (context: OnSelectContext) => void;
     }
   ): Action<G, AddArg<A, K, T>> {
+    // A SET AND A SEQUENCE ARE DIFFERENT QUESTIONS (#249), and a selection that
+    // asked both would have to pick one silently: the set refuses the repeat the
+    // list exists to allow. Refused at declaration time, where the author is
+    // standing, rather than at the first submission that happens to repeat.
+    if (options.multiSelect !== undefined && options.orderedList !== undefined) {
+      throw new Error(
+        `chooseFrom('${name}') declares both multiSelect and orderedList. They ask opposite `
+        + `questions: multiSelect is a SET (order incidental, a repeated choice refused), `
+        + `orderedList is a SEQUENCE (order is the rule, a repeat is a second instruction). `
+        + `Keep multiSelect for "choose N of these"; keep orderedList for "do these, in this order".`
+      );
+    }
     const selection = {
       type: 'choice',
       name,
@@ -492,6 +512,7 @@ export class Action<
       repeat: options.repeat,
       repeatUntil: options.repeatUntil,
       multiSelect: options.multiSelect,
+      orderedList: options.orderedList,
       disabled: options.disabled,
       onSelect: options.onSelect,
       onCancel: options.onCancel,
