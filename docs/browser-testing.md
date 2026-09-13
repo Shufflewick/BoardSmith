@@ -267,34 +267,49 @@ The dev-only `debug:flow-state` WS op (alongside `debug:logs`) surfaces the
 same `FlowDebugInfo` shape described above, over the wire, for a connected
 dev-host client.
 
-## The one checked-in browser regression: a world's dependent pick
+## The checked-in browser regressions: `scripts/*-browser.mjs`
 
-`scripts/world-pick-bridge-browser.mjs` is a standing regression that drives a
-real Chromium through the **world** dev host: it writes a disposable world
-project to a temp directory, starts the real `boardsmith dev` world server on a
-free port, and walks a dependent selection — a crew whose size is the chosen
-ship's cargo hold — in both entry points, from the action panel and from a
-custom UI that prefills the earlier selection.
+Each one is a standing regression that drives a real Chromium through the
+**world** dev host, and they all share `scripts/browser-harness.mjs`: it writes a
+disposable world project to a temp directory, installs this checkout into it the
+way a real game does, starts the real `boardsmith dev` world server on a free
+port, stops that host before removing the project, and only then lets the process
+exit (#231). A script's own file is therefore nothing but its fixture world and
+its checks. `scripts/*-browser.mjs` is the set — no list here, because a count in
+a doc goes stale the next time one is added.
 
-It exists because issue #227 was a fully-built, fully-green feature that was
-dead in the field: `WorldDevHost.vue` relayed neither `world_pick` nor
-`world_pick_result`, so the native host's tests, the shell's tests and the
-controller's tests were all green while the browser showed `Selected: 0` where
-five was the answer. Nothing on either side of that bar can see it, so the
-regression has to cross it — including asserting the frames on the WebSocket
-itself, which is how the defect was found.
+Two of them read as the worked examples:
+
+- **`world-pick-bridge-browser.mjs`** walks a dependent selection — a crew whose
+  size is the chosen ship's cargo hold — from the action panel and from a custom
+  UI that prefills the earlier selection. It exists because issue #227 was a
+  fully-built, fully-green feature that was dead in the field:
+  `WorldDevHost.vue` relayed neither `world_pick` nor `world_pick_result`, so the
+  native host's tests, the shell's tests and the controller's tests were all
+  green while the browser showed `Selected: 0` where five was the answer. Nothing
+  on either side of that bar can see it, so the regression has to cross it —
+  including asserting the frames on the WebSocket itself, which is how the defect
+  was found.
+- **`ordered-list-browser.mjs`** builds an ordered, repeatable list (#249, #252):
+  the same building twice, an entry removed from the middle by index, then
+  submitted — and the sequence is asserted on the wire AND in what the resolver
+  stored, which is the only place a handler's own argument can be observed. It
+  drives both surfaces, the panel's Add buttons and a board click through
+  `useBoardInteraction`, because they are two views of one draft; and it checks
+  the Add and remove controls are tabbable, named, and do not strand the keyboard
+  when an entry unmounts.
 
 ```sh
-node scripts/world-pick-bridge-browser.mjs
+node scripts/ordered-list-browser.mjs
 # or, pointing it at a Playwright you already have installed elsewhere:
 BOARDSMITH_PLAYWRIGHT_MODULE=/abs/path/to/node_modules/playwright \
-  node scripts/world-pick-bridge-browser.mjs
+  node scripts/ordered-list-browser.mjs
 ```
 
-It is **not** part of `npx vitest run`: BoardSmith depends on no browser, and the
-suite stays hermetic. It never skips — with no Playwright reachable it says how
-to give it one and exits non-zero, because a browser regression that silently
-passes when it did not run is the failure it exists to replace. It starts and
+They are **not** part of `npx vitest run`: BoardSmith depends on no browser, and
+the suite stays hermetic. They never skip — with no Playwright reachable one says
+how to give it one and exits non-zero, because a browser regression that silently
+passes when it did not run is the failure it exists to replace. Each starts and
 stops its own dev server, on its own port, inside the one process.
 
 ---

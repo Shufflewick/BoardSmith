@@ -45,6 +45,7 @@ import {
   runBrowserRegression,
   summarise,
   surfaceOf,
+  VIEW_FIELD_READER,
   waitUntil,
 } from './browser-harness.mjs';
 
@@ -162,19 +163,7 @@ export const gameDefinition: GameDefinition = {
  */
 const BOARD = `import { computed, defineComponent, h } from 'vue';
 
-type Node = { attributes?: Record<string, unknown>; children?: Node[] };
-
-/** The first node in the projected view that carries the field, or null. */
-const findAttr = (node: Node | undefined, key: string): unknown => {
-  if (!node) return undefined;
-  const own = node.attributes?.[key];
-  if (own !== undefined) return own;
-  for (const child of node.children ?? []) {
-    const found = findAttr(child, key);
-    if (found !== undefined) return found;
-  }
-  return undefined;
-};
+${VIEW_FIELD_READER}
 
 export default defineComponent({
   name: 'ColonyBoard',

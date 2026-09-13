@@ -98,6 +98,12 @@ export function stubActionController(overrides: Record<string, unknown> = {}) {
 export function mountPanel(
   controller: ReturnType<typeof stubActionController>,
   props: Record<string, unknown> = { availableActions: [], playerSeat: 1, isMyTurn: true },
+  /**
+   * `attachTo: document.body` for a test about FOCUS. A detached mount has no
+   * `document.activeElement` to speak of, so `el.focus()` is a no-op and a test
+   * asserting where the keyboard landed would pass whatever the panel did.
+   */
+  mountOptions: { attachTo?: HTMLElement } = {},
 ) {
   return mount(ActionPanel, {
     global: {
@@ -105,5 +111,6 @@ export function mountPanel(
       stubs: { Teleport: true },
     },
     props,
+    ...mountOptions,
   });
 }
