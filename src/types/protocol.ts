@@ -613,6 +613,8 @@ export interface PickMetadata {
   multiSelect?: { min: number; max?: number };
   /** For choice picks with dependsOn + multiSelect: config indexed by dependent value */
   multiSelectByDependentValue?: Record<string, { min: number; max?: number } | undefined>;
+  /** Entry bounds for an ordered, repeatable list pick; absent max is unbounded (#249). */
+  orderedList?: { min: number; max?: number };
   // Element-specific properties
   /** For element picks: CSS class name of selectable elements */
   elementClassName?: string;
@@ -682,4 +684,6 @@ export interface PickChoicesResponse {
   validElements?: ValidElement[];
   /** Multi-select configuration (evaluated at request time) */
   multiSelect?: { min: number; max?: number };
+  /** Ordered-list entry bounds (#249), evaluated at request time */
+  orderedList?: { min: number; max?: number };
 }

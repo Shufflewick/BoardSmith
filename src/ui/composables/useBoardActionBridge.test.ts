@@ -780,3 +780,54 @@ describe('useBoardActionBridge — disabled actions', () => {
     expect(start).not.toHaveBeenCalled();
   });
 });
+
+// ---------------------------------------------------------------------------
+// #249 — a board click on an ordered-list pick APPENDS
+// ---------------------------------------------------------------------------
+
+describe('useBoardActionBridge ordered lists (#249)', () => {
+  /** The repair pick, whose choices are anchored to board elements. */
+  const repairPick: PickMetadata = {
+    name: 'buildings',
+    type: 'choice',
+    prompt: 'Repair, in order',
+    orderedList: { min: 1, max: 3 },
+    choices: [
+      { value: 'university', display: 'University', refs: [{ ref: { id: 11 }, role: 'target' }] },
+      { value: 'shipyard', display: 'Shipyard', refs: [{ ref: { id: 12 }, role: 'target' }] },
+    ],
+  };
+
+  it('APPENDS a repeated board click instead of toggling the first one off', async () => {
+    // The parity half of the panel's Add button: a custom board and the panel
+    // are two views of ONE draft, so clicking the same building twice on the
+    // board must mean the same thing as pressing Add twice.
+    const board = createBoardInteraction();
+    const { controller } = makeController({ pick: repairPick, action: 'repair' });
+    const appendListEntry = vi.fn(async () => {});
+    (controller as unknown as { appendListEntry: unknown }).appendListEntry = appendListEntry;
+
+    useBoardActionBridge({
+      controller,
+      boardInteraction: board,
+      isMyTurn: ref(true),
+      autoEndTurn: ref(false),
+      actionMetadata: ref({ repair: { name: 'repair', selections: [repairPick] } }),
+      availableActions: ref(['repair']),
+      disabledActions: ref(undefined),
+      isViewingHistory: ref(false), restoreEpoch: ref(0),
+    });
+    await nextTick();
+
+    board.triggerElementSelect({ id: 11, name: 'University' });
+    board.triggerElementSelect({ id: 11, name: 'University' });
+    await nextTick();
+
+    expect(appendListEntry.mock.calls).toEqual([
+      ['buildings', 'university'],
+      ['buildings', 'university'],
+    ]);
+    expect((controller as unknown as { toggleMultiSelect: ReturnType<typeof vi.fn> }).toggleMultiSelect)
+      .not.toHaveBeenCalled();
+  });
+});

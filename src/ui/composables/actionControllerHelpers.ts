@@ -59,6 +59,60 @@ export function resolveMultiSelectConfig(
   return selection.multiSelect;
 }
 
+/**
+ * Resolve the EFFECTIVE ordered-list bounds for a selection (#249) — the
+ * repeatable sibling of {@link resolveMultiSelectConfig}, and the one helper
+ * `useActionController`, `ActionPanel.vue` and `useBoardActionBridge.ts` all
+ * call, so the panel and a custom board can never disagree about how many
+ * entries a list still has room for.
+ *
+ * Resolution order is the same as multiSelect's, minus the dependent-value map:
+ * a world action cannot declare `dependsOn` at all, and a table action that
+ * wants a per-dependent-value bound writes the function form, which the server
+ * resolves per step.
+ *
+ * 1. The fetched `pickSnapshot.orderedList` — resolved by
+ *    `PickHandler.getPickChoices()` against the REAL accumulated args for this
+ *    step, which is the only thing that knows a bound reading an earlier pick.
+ * 2. The static `selection.orderedList` from metadata — for before any snapshot
+ *    has been fetched (`execute()`, tests that skip the round-trip).
+ */
+export function resolveOrderedListConfig(
+  selection: PickMetadata,
+  pickSnapshot?: PickSnapshot
+): { min: number; max?: number } | undefined {
+  if (pickSnapshot?.orderedList) return pickSnapshot.orderedList;
+  return selection.orderedList;
+}
+
+/**
+ * BOTH COUNT SHAPES A CHOICE PICK CAN CARRY, resolved for the current step.
+ *
+ * A pick is a set (`multiSelect`) or a sequence (`orderedList`, #249) or neither,
+ * and the two surfaces that have to agree about which -- the Action Panel and a
+ * custom board through `useBoardActionBridge` -- resolved them in two copies of
+ * the same four lines each. One function, so the same click can never mean
+ * "toggle" on one surface and "append" on the other.
+ */
+export function resolvePickCounts(
+  selection: PickMetadata | null | undefined,
+  currentArgs: Record<string, unknown>,
+  pickSnapshots?: Map<string, PickSnapshot>
+): {
+  multiSelect?: { min?: number; max?: number };
+  orderedList?: { min: number; max?: number };
+} {
+  if (!selection) return {};
+  // The snapshot LOOKUP is in here too, and not at the two call sites, because
+  // that lookup is the other half of the same rule: the fetched entry for THIS
+  // selection is what makes a function-valued bound truthful.
+  const pickSnapshot = pickSnapshots?.get(selection.name);
+  return {
+    multiSelect: resolveMultiSelectConfig(selection, currentArgs, pickSnapshot),
+    orderedList: resolveOrderedListConfig(selection, pickSnapshot),
+  };
+}
+
 // ============================================
 // Value Display Extraction
 // ============================================

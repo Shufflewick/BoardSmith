@@ -598,6 +598,28 @@ selections. There are five you may write:
   lets the function return `undefined` to mean "single after all", and this one
   does not, so the argument's type is knowable from the call. Want exactly one?
   `{ min: 1, max: 1 }`, and take an array of one.
+
+  `multiSelect` is a **set**: order is incidental and a repeated identity is
+  refused. When the answer is a **sequence** -- do these, in this order, and the
+  same one twice if the rules allow it -- pass `orderedList` instead, with the
+  same three forms. Its bounds count ENTRIES, every occurrence is checked against
+  the same candidates the offer carried, and the handler receives the sequence as
+  submitted:
+
+  ```ts
+  .chooseFrom('buildings', {
+    needs: ({ player }) => [empirePartition(player.seat)],
+    choices: ({ game, player }) => damagedBuildings(game, player.seat),
+    // Up to 121 repairs, in order. A building whose partial repair leaves it
+    // still damaged may be named again, and the second pass spends what the
+    // first one left.
+    orderedList: { min: 0, max: 121 },
+  })
+  ```
+
+  A selection may declare one or the other, never both; the offer carries
+  `orderedList` in place of `multiSelect`, which is how the shared panel knows to
+  draw a list being built rather than a row of checkboxes.
 - **`enterNumber(name, { min, max, integer })`** -- a number, bounded where the
   game knows the bound, so a surface draws a stepper and "at least one log" is a
   fact the shell knows before anything is sent.

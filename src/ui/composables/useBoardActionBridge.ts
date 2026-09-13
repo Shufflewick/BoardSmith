@@ -33,7 +33,7 @@ import type {
   ChoiceWithRefs,
   ValidElement,
 } from './useActionControllerTypes.js';
-import { devWarn, resolveMultiSelectConfig } from './actionControllerHelpers.js';
+import { devWarn, resolvePickCounts } from './actionControllerHelpers.js';
 
 export interface BoardActionBridgeOptions {
   controller: UseActionControllerReturn;
@@ -185,17 +185,21 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
     return actionsWithMetadata.value.find(a => a.name === currentAction.value) ?? null;
   });
 
-  // Delegates to the shared `resolveMultiSelectConfig` helper — the single
-  // source of truth also used by `useActionController` and `ActionPanel.vue`
-  // — so custom UIs prefer the per-step server-resolved snapshot value (real
-  // accumulated args) over the static metadata baked in at action-start time
-  // (v4.8-WR01).
-  const currentMultiSelect = computed(() => {
-    const sel = currentPick.value;
-    if (!sel) return undefined;
-    const pickSnapshot = controller.actionSnapshot?.value?.pickSnapshots.get(sel.name);
-    return resolveMultiSelectConfig(sel, currentArgs.value, pickSnapshot);
-  });
+  // Delegates to the shared `resolvePickCounts` helper — the single source of
+  // truth also used by `useActionController` and `ActionPanel.vue` — so custom
+  // UIs prefer the per-step server-resolved snapshot value (real accumulated
+  // args) over the static metadata baked in at action-start time (v4.8-WR01),
+  // and a board and the panel can never disagree about whether this pick is a
+  // set or a sequence (#249): the same click would mean two different things.
+  const currentPickCounts = computed(() =>
+    resolvePickCounts(
+      currentPick.value,
+      currentArgs.value,
+      controller.actionSnapshot?.value?.pickSnapshots,
+    )
+  );
+  const currentMultiSelect = computed(() => currentPickCounts.value.multiSelect);
+  const currentOrderedList = computed(() => currentPickCounts.value.orderedList);
 
   // Choices for the current pick, with already-selected choice values removed
   // (mirrors ActionPanel.filteredChoices but WITHOUT the D-03 anchored filter —
@@ -309,6 +313,19 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
   async function toggleMultiSelectValue(selectionName: string, value: unknown) {
     if (isViewingHistory.value) return;
     await controller.toggleMultiSelect(selectionName, value);
+    updateMultiSelectBoardHighlights();
+  }
+
+  /**
+   * A board click on an ORDERED-LIST pick APPENDS (#249).
+   *
+   * The board half of the panel's Add button, and the reason it cannot just reuse
+   * the toggle: clicking the same building twice on a board must mean the same
+   * thing as pressing Add twice, not "never mind".
+   */
+  async function appendListValue(selectionName: string, value: unknown) {
+    if (isViewingHistory.value) return;
+    await controller.appendListEntry(selectionName, value);
     updateMultiSelectBoardHighlights();
   }
 
@@ -585,7 +602,9 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
         onSelect = (elementId: number) => {
           const entry = refToChoice.get(elementId);
           if (entry === undefined || entry.disabled) return;
-          if (currentMultiSelect.value) {
+          if (currentOrderedList.value) {
+            void appendListValue(selection.name, entry.value);
+          } else if (currentMultiSelect.value) {
             void toggleMultiSelectValue(selection.name, entry.value);
           } else {
             void setSelectionValue(selection.name, entry.value);

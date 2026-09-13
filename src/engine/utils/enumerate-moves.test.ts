@@ -297,3 +297,64 @@ describe('enumerateLegalMoves: choices with an undefined value', () => {
     }
   });
 });
+
+// ============================================================================
+// #249 — an ordered, repeatable list is enumerated one ENTRY at a time
+// ============================================================================
+
+describe('enumerateLegalMoves with an orderedList selection (#249)', () => {
+  /** A game whose one action asks for an ordered list with the given bounds. */
+  function repairGame(bounds: { min?: number; max?: number }, choices: string[]): Game {
+    class RepairGame extends Game<RepairGame, Player> {
+      constructor(options: GameOptions) {
+        super(options);
+        this.registerAction(
+          Action.create<RepairGame>('repair')
+            .chooseFrom('buildings', { choices, orderedList: bounds })
+            .execute(() => ({ success: true })),
+        );
+        this.setFlow(
+          defineFlow({
+            root: loop({
+              maxIterations: 10,
+              do: eachPlayer({ do: actionStep({ actions: ['repair'] }) }),
+            }),
+          }),
+        );
+      }
+    }
+    const game = new RepairGame({ playerCount: 2, seed: 'repair' });
+    game.startFlow();
+    return game;
+  }
+
+  it('offers one single-entry list per choice, and every one is a LEGAL move', () => {
+    // Not every possible list, deliberately: with repeats allowed there are
+    // choices^max of them, so there is no cap under which "all of them" is
+    // tractable and no honest truncation either. What it offers must therefore be
+    // real -- an array, not a bare value, or performAction refuses it.
+    const game = repairGame({ min: 1, max: 3 }, ['university', 'shipyard']);
+
+    const moves = enumerateLegalMoves(game, 1);
+
+    expect(moves.map((move) => move.args.buildings)).toEqual([
+      ['university'],
+      ['shipyard'],
+    ]);
+    for (const move of moves) {
+      expect(game.getActionExecutor().validateAction(
+        game.getAction('repair')!,
+        game.getPlayer(1)!,
+        move.args,
+      ).valid).toBe(true);
+    }
+  });
+
+  it('includes the EMPTY list when the rules allow one', () => {
+    const game = repairGame({ min: 0, max: 2 }, ['university']);
+
+    const moves = enumerateLegalMoves(game, 1);
+
+    expect(moves.map((move) => move.args.buildings)).toEqual([[], ['university']]);
+  });
+});

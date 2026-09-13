@@ -654,7 +654,7 @@
       "surfaceHash": "2b839b0904dbd454",
       "payloadHash": "b66e751ab92f9508",
       "formatHash": "0058593e7cc80205",
-      "summary": "A migration may split one source root into a header plus the durable roots it fans out into (derive), and an unanswered top-level allocation in a migration hook is refused (#246)."
+      "summary": "Two additions. (1) A migration may split one source root into a header plus the durable roots it fans out into: WorldMigration.derive(element, ctx) runs per source root on the transform page that holds it, BEFORE partition and on the root exactly as stored, and returns new durable roots that merge into WorldMigrated.created -- so every transform page may now answer created, not only the final creation page. ctx.existing names every root the world holds plus every root already derived on that page, so a re-sent page is refused and forward-only resume stays safe. An unanswered top-level allocation in any migration hook (partition, derive, create, finalize) is now refused naming the element and the hook, rather than silently dropped (#246). (2) A chooseFrom can ask for an ORDERED, REPEATABLE list of choices: orderedList: { min, max } bounds ENTRIES rather than distinct identities, so one identity may appear more than once and the handler receives the sequence as submitted, each occurrence validated against the same authoritative choices. multiSelect is untouched and still refuses a repeated choice. A pick carries orderedList instead of multiSelect on the wire, and the Action Panel draws it as Add buttons over a numbered, removable list; a board click appends through the same shared draft (#249)."
     }
   ]
 }

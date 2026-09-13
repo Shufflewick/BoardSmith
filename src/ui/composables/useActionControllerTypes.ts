@@ -107,6 +107,12 @@ export interface PickMetadata {
   elementClassName?: string;
   /** For choice picks with dependsOn + multiSelect: multiSelect config indexed by dependent value */
   multiSelectByDependentValue?: Record<string, { min: number; max?: number } | undefined>;
+  /**
+   * Entry bounds for an ordered, repeatable list pick (#249). Its presence is
+   * what makes the controller offer `appendListEntry`/`removeListEntry` for this
+   * selection rather than `toggleMultiSelect`.
+   */
+  orderedList?: { min: number; max?: number };
 }
 
 export interface ActionMetadata {
@@ -215,6 +221,8 @@ export interface PickChoicesResult {
   choices?: Array<{ value: unknown; display: string; refs?: RefWithRole[]; disabled?: string }>;
   validElements?: ValidElement[];
   multiSelect?: { min: number; max?: number };
+  /** Ordered-list entry bounds for this step (#249), resolved server-side */
+  orderedList?: { min: number; max?: number };
   error?: string;
 }
 
@@ -233,6 +241,8 @@ export interface PickSnapshot {
   validElements?: ValidElement[];
   /** MultiSelect config (evaluated when fetched) */
   multiSelect?: { min: number; max?: number };
+  /** Ordered-list entry bounds (#249), evaluated when fetched */
+  orderedList?: { min: number; max?: number };
 }
 
 /**
@@ -586,6 +596,29 @@ export interface UseActionControllerReturn {
   confirmMultiSelect: () => Promise<ValidationResult | void>;
   /** Whether a value is currently in the multiSelect draft for the given selection. */
   isMultiSelectSelected: (selectionName: string, value: unknown) => boolean;
+
+  // === Ordered, repeatable lists (#249) ===
+  /**
+   * Append one entry to the in-progress draft for an `orderedList` selection.
+   *
+   * Deliberately NOT `toggleMultiSelect`: a toggle cannot say "again" -- pressing
+   * the same option twice in a set removes it, which is exactly the gesture a
+   * list needs to mean a second entry. Appends past the selection's `max` are
+   * ignored. No-op (with a devWarn) when the selection is not an ordered list,
+   * so a caller reaching for the wrong verb is told rather than silently obeyed.
+   *
+   * The draft it writes is {@link multiSelectDraft} -- the same shared
+   * in-progress list the Action Panel and a custom board both read, which is what
+   * keeps the two in parity. Confirm it with {@link confirmMultiSelect}.
+   */
+  appendListEntry: (selectionName: string, value: unknown) => Promise<void>;
+  /**
+   * Drop the entry at `index` from the in-progress ordered-list draft.
+   *
+   * BY INDEX, because with repeats allowed "remove the university" does not name
+   * one entry. An index outside the draft is ignored with a devWarn.
+   */
+  removeListEntry: (selectionName: string, index: number) => void;
 
   // === Utility ===
   /** Get available choices for a pick (handles filterBy, dependsOn) */

@@ -53,6 +53,57 @@ Action.create('selectRank')
   })
 ```
 
+#### Many from a list: a SET (`multiSelect`) or a LIST (`orderedList`)
+
+`chooseFrom` resolves to a single value unless you say otherwise. There are two
+ways to ask for more than one, and which you want depends on whether the answer
+is a set or a sequence:
+
+| | `multiSelect` | `orderedList` |
+|---|---|---|
+| The answer is | a **set** — "choose 2 of these" | a **sequence** — "do these, in this order" |
+| Order | incidental | part of the instruction, preserved end to end |
+| A repeated choice | **refused** (`contains duplicate choices`) | accepted — each occurrence is a separate instruction |
+| `min`/`max` count | distinct choices | **entries** |
+| The Action Panel draws | checkboxes plus Done | Add buttons over a numbered, removable list, plus Done |
+
+Both take a number (`3` means "up to 3"), a `{ min, max }` config, or a function
+of the context when the bound is itself a fact about an earlier answer. Declaring
+both on one selection is refused by the builder.
+
+```typescript
+// A SET: discard any two cards. Naming one card twice is a mistake.
+.chooseFrom('discards', {
+  choices: (ctx) => ctx.player.hand.all(Card),
+  multiSelect: { min: 2, max: 2 },
+})
+
+// A LIST: repair buildings in order, spending what is left after each one — so
+// the same damaged building may be repaired twice in one command.
+.chooseFrom('buildings', {
+  choices: (ctx) => ctx.player.empire.damagedBuildings(),
+  orderedList: { min: 0, max: 121 },
+})
+.execute((args, ctx) => {
+  // The entries arrive in the order the player built them, repeats intact.
+  for (const building of args.buildings as Building[]) ctx.game.repair(building);
+});
+```
+
+Every occurrence in an ordered list is validated against the same authoritative
+choice set the panel was offered, including its `disabled` reason — a repeat
+cannot smuggle in a choice the rules currently refuse. An absent `max` means no
+upper bound.
+
+A custom UI builds one through the shared controller draft, so it and the Action
+Panel stay in parity: `appendListEntry(name, value)` adds an entry (again for a
+repeat), `removeListEntry(name, index)` drops one **by index** — with repeats, a
+value does not name an entry — and `confirmMultiSelect()` submits the finished
+list. On a board, clicking a choice's element appends. Bots enumerate a list one
+entry at a time: with repeats allowed there is no cap that makes "every possible
+list" tractable, so every move offered is a real one and a longer sequence is
+reached by acting again.
+
 #### On-Demand Choices
 
 Choices are always evaluated on-demand when the player needs to make a selection. This means the `choices` callback runs at the moment the player is presented with the selection, not when the action metadata is built.

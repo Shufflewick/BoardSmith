@@ -196,11 +196,13 @@ function chooseActor(
 }
 
 /**
- * Resolve a selection's multiSelect config into concrete {min, max}, or null
- * if the selection is single-valued.
+ * Resolve a selection's count config -- a `multiSelect` set or an `orderedList`
+ * sequence (#249) -- into concrete {min, max}, or null if the selection is
+ * single-valued. Both are written the same three ways (a number, a config, or a
+ * function of context), which is why one parser answers for both.
  * @internal
  */
-function resolveMultiSelect(
+function resolveBounds(
   raw: unknown,
   ctx: { game: Game; player: Player; args: Record<string, unknown> }
 ): { min: number; max: number } | null {
@@ -290,6 +292,32 @@ function buildRandomArgs(
     const choices = annotated.filter(c => c.disabled === false).map(c => c.value);
     onSelectionChoices?.({ action: actionDef.name, selection: sel, candidateCount: choices.length });
 
+    // AN ORDERED, REPEATABLE LIST (#249) is sampled WITH replacement: the same
+    // identity may fill more than one entry, which is the one thing a set draw
+    // cannot produce and therefore the one thing a random game would never
+    // exercise if this fell through to the multiSelect path.
+    const orderedListRaw =
+      sel.type === 'choice' ? (sel as ChoiceSelection).orderedList : undefined;
+    if (orderedListRaw !== undefined) {
+      const bounds = resolveBounds(orderedListRaw, ctx);
+      if (bounds) {
+        if (choices.length === 0) {
+          if (bounds.min <= 0 || optional) {
+            if (bounds.min <= 0) working[sel.name] = [];
+            continue;
+          }
+          return {
+            ok: false,
+            reason: `action '${actionDef.name}' selection '${sel.name}' needs at least ${bounds.min} entr(y/ies) but no choices are available`,
+          };
+        }
+        const maxEntries = bounds.max === Infinity ? Math.max(bounds.min, choices.length) : bounds.max;
+        const count = bounds.min + rng.nextInt(maxEntries - bounds.min + 1);
+        working[sel.name] = Array.from({ length: count }, () => rng.pick(choices));
+        continue;
+      }
+    }
+
     const multiSelectRaw =
       sel.type === 'choice'
         ? (sel as ChoiceSelection).multiSelect
@@ -298,7 +326,7 @@ function buildRandomArgs(
           : undefined;
     // 'elements' selections always yield an array; default to "any non-empty subset".
     const multi =
-      resolveMultiSelect(multiSelectRaw, ctx) ?? (sel.type === 'elements' ? { min: 1, max: Infinity } : null);
+      resolveBounds(multiSelectRaw, ctx) ?? (sel.type === 'elements' ? { min: 1, max: Infinity } : null);
 
     if (multi) {
       if (choices.length < multi.min) {

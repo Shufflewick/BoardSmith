@@ -16,7 +16,7 @@
 import { ref, computed, watch, inject, nextTick, useId } from 'vue';
 import { tryUseBoardInteraction } from '../../composables/useBoardInteraction';
 import { useAnimationEvents } from '../../composables/useAnimationEvents.js';
-import { resolveMultiSelectConfig } from '../../composables/actionControllerHelpers.js';
+import { resolvePickCounts } from '../../composables/actionControllerHelpers.js';
 import { startActionWithBoardReset } from '../../composables/useBoardActionBridge.js';
 import type {
   UseActionControllerReturn,
@@ -669,19 +669,30 @@ watch([stepIdentity, () => props.availableActions.join(',')], async () => {
 // Note: Auto-fill is handled by the controller's internal watch
 
 /**
- * Get the current multiSelect config. Delegates to the shared
- * `resolveMultiSelectConfig` helper (single source of truth also used by
- * `useActionController` and `useBoardActionBridge`) so the panel prefers the
- * per-step server-resolved snapshot value (real accumulated args) over the
- * static metadata baked in at action-start time (v4.8-WR01).
+ * The current pick's count shapes -- a multiSelect set, an ordered list, or
+ * neither. Delegates to the shared `resolvePickCounts` helper (the single source
+ * of truth also used by `useActionController` and `useBoardActionBridge`) so the
+ * panel prefers the per-step server-resolved snapshot value (real accumulated
+ * args) over the static metadata baked in at action-start time (v4.8-WR01).
  */
-const currentMultiSelect = computed(() => {
-  const sel = currentPick.value;
-  if (!sel) return undefined;
+const currentPickCounts = computed(() =>
+  resolvePickCounts(
+    currentPick.value,
+    currentArgs.value,
+    actionController.actionSnapshot.value?.pickSnapshots,
+  )
+);
 
-  const pickSnapshot = actionController.actionSnapshot.value?.pickSnapshots.get(sel.name);
-  return resolveMultiSelectConfig(sel, currentArgs.value, pickSnapshot);
-});
+/** The pick's multiSelect bounds, or undefined when it is not a set. */
+const currentMultiSelect = computed(() => currentPickCounts.value.multiSelect);
+
+/** The pick's ordered-list bounds, or undefined when it is not a sequence (#249). */
+const currentOrderedList = computed(() => currentPickCounts.value.orderedList);
+
+/** The entries the player has built so far, in order, repeats and all (#249). */
+const orderedListEntries = computed<unknown[]>(() =>
+  currentOrderedList.value ? multiSelectValues.value : []
+);
 
 // Filter args for display - exclude current multiSelect selection
 // (multiSelect shows its state via checkboxes, not chips)
@@ -1091,6 +1102,62 @@ async function toggleMultiSelectValue(selectionName: string, value: unknown, _di
   // Update AutoUI board highlighting for selected items
   updateMultiSelectBoardHighlights();
 }
+
+/**
+ * Add one entry to the ordered list (#249) -- pressed again, it adds another.
+ *
+ * A separate handler from `toggleMultiSelectValue` rather than a mode inside it,
+ * because the two gestures MEAN opposite things on a second press: a set removes
+ * the option, a list repeats it.
+ */
+async function addListEntry(selectionName: string, value: unknown) {
+  await actionController.appendListEntry(selectionName, value);
+  updateMultiSelectBoardHighlights();
+}
+
+/** Drop the entry the player pointed at, BY INDEX (#249). */
+function dropListEntry(selectionName: string, index: number) {
+  actionController.removeListEntry(selectionName, index);
+  updateMultiSelectBoardHighlights();
+}
+
+/** What one built entry reads as: the choice's own label, by preference. */
+function orderedEntryDisplay(value: unknown): string {
+  const choice = filteredChoices.value.find(c => c.value === value);
+  return choice?.display ?? getDisplayLabel(value);
+}
+
+/** "Added: 2/3", or "Added: 2" when the list has no upper bound. */
+const orderedListCountDisplay = computed(() => {
+  if (!currentOrderedList.value) return '';
+  const count = orderedListEntries.value.length;
+  const max = currentOrderedList.value.max;
+  return max === undefined ? `Added: ${count}` : `Added: ${count}/${max}`;
+});
+
+/**
+ * Why an Add button cannot be pressed: the choice's own reason if it has one,
+ * otherwise a FULL list -- which, unlike a full multiSelect, blocks every option
+ * including ones already in the list, because adding is never a deselect here.
+ */
+function orderedListAddDisabledReason(own: DisabledReason): DisabledReason {
+  if (isDisabled(own)) return own;
+  const max = currentOrderedList.value?.max;
+  if (max === undefined) return false;
+  if (orderedListEntries.value.length < max) return false;
+  return max === 1
+    ? 'The list holds one entry. Remove it to choose differently.'
+    : `The list is full at ${max} entries. Remove one to add another.`;
+}
+
+/** Why the ordered list's Done cannot be pressed yet: too few entries. */
+const orderedListDoneDisabledReason = computed<DisabledReason>(() => {
+  const config = currentOrderedList.value;
+  if (!config) return false;
+  const short = (config.min ?? 0) - orderedListEntries.value.length;
+  if (short <= 0) return false;
+  return `Add ${short} more to continue (at least ${config.min} required).`;
+});
 
 /**
  * Update board highlighting to show all selected multiSelect items
@@ -1655,6 +1722,60 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
             >
               {{ element.display || element.id }}
             </button>
+            <button
+              v-if="currentPick.optional"
+              class="choice-btn skip-btn"
+              @click="skipOptionalSelection"
+            >
+              {{ typeof currentPick.optional === 'string' ? currentPick.optional : 'Skip' }}
+            </button>
+          </div>
+        </template>
+
+        <!-- ORDERED, REPEATABLE list of choices (#249): Add buttons over the list
+             being built, each entry removable, then Done. Before the multi-select
+             template because the two are mutually exclusive and this one is the
+             more specific. A checkbox cannot express "again", which is why this
+             pick gets its own control rather than a flag on that one. -->
+        <template v-else-if="currentPick.type === 'choice' && currentOrderedList && filteredChoices.length">
+          <div class="selection-prompt">
+            {{ currentPick.prompt || `Select ${currentPick.name}` }}
+            <span class="multi-select-count">{{ orderedListCountDisplay }}</span>
+          </div>
+          <ol v-if="orderedListEntries.length" class="ordered-list-entries">
+            <li
+              v-for="(entry, index) in orderedListEntries"
+              :key="`${index}-${String(entry)}`"
+              class="ordered-list-entry"
+            >
+              <span class="ordered-list-position">{{ index + 1 }}.</span>
+              <span class="ordered-list-label">{{ orderedEntryDisplay(entry) }}</span>
+              <button
+                class="ordered-list-remove"
+                :aria-label="`Remove entry ${index + 1}, ${orderedEntryDisplay(entry)}`"
+                @click="dropListEntry(currentPick.name, index)"
+              >
+                <span aria-hidden="true">✕</span>
+              </button>
+            </li>
+          </ol>
+          <div class="choice-buttons ordered-list-choices">
+            <button
+              v-for="choice in filteredChoices"
+              :key="String(choice.value)"
+              class="choice-btn ordered-list-add"
+              v-disabled-reason="orderedListAddDisabledReason(choice.disabled)"
+              :aria-disabled="isDisabled(orderedListAddDisabledReason(choice.disabled)) || undefined"
+              @click="addListEntry(currentPick.name, choice.value)"
+              @mouseenter="handleChoiceHover(choice)"
+              @mouseleave="handleChoiceLeave"
+            >
+              {{ choice.display }}
+            </button>
+            <DoneButton
+              :disabled-reason="orderedListDoneDisabledReason"
+              @click="confirmMultiSelect"
+            />
             <button
               v-if="currentPick.optional"
               class="choice-btn skip-btn"
@@ -2391,6 +2512,51 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
 .awaiting-seat {
   font-weight: 700;
   font-size: 0.95rem;
+}
+
+/* Ordered, repeatable list styles (issue 249) */
+.ordered-list-entries {
+  list-style: none;
+  margin: 6px 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ordered-list-entry {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.9rem;
+}
+
+.ordered-list-position {
+  color: var(--bsg-accent);
+  font-weight: bold;
+  min-width: 1.5em;
+  text-align: right;
+}
+
+.ordered-list-label {
+  flex: 1;
+}
+
+.ordered-list-remove {
+  background: none;
+  border: none;
+  color: inherit;
+  cursor: pointer;
+  font-size: 0.85rem;
+  line-height: 1;
+  padding: 2px 4px;
+}
+
+.ordered-list-choices {
+  flex-direction: row;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
 }
 
 /* Multi-select styles */

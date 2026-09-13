@@ -453,7 +453,7 @@ describe('useBoardActionBridge isViewingHistory guard (LIBX-04, 164-04)', () => 
 
 // ── Direct source assertions: confirm useBoardActionBridge.ts carries the fix ─
 
-describe('useBoardActionBridge.ts source: isViewingHistory guard wired at all four mutating functions', () => {
+describe('useBoardActionBridge.ts source: isViewingHistory guard wired at every mutating function', () => {
   const bridgeSource = fs.readFileSync(
     path.join(
       path.dirname(fileURLToPath(import.meta.url)),
@@ -468,9 +468,13 @@ describe('useBoardActionBridge.ts source: isViewingHistory guard wired at all fo
     expect(bridgeSource).toContain('isViewingHistory');
   });
 
-  it('all four mutating functions guard with `if (isViewingHistory.value) return;` (count == 4)', () => {
+  // FIVE since #249 added appendListValue, the board's half of building an
+  // ordered, repeatable list. The count is the point of the assertion: a new
+  // mutating function added without the guard is exactly the regression this
+  // catches, so the number moves only alongside a function that carries one.
+  it('every mutating function guards with `if (isViewingHistory.value) return;` (count == 5)', () => {
     const occurrences = (bridgeSource.match(/if \(isViewingHistory\.value\) return;/g) ?? []).length;
-    expect(occurrences).toBe(4);
+    expect(occurrences).toBe(5);
   });
 });
 

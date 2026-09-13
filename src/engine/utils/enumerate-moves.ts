@@ -22,7 +22,7 @@ import type { Game } from '../element/game.js';
 import type { Player } from '../player/player.js';
 import type { ActionDefinition, Selection } from '../action/types.js';
 import { availableActionsForSeat } from '../flow/seat-activity.js';
-import { resolveMultiSelect } from './resolve-multiselect.js';
+import { resolveMultiSelect, resolveOrderedList } from './resolve-multiselect.js';
 import { NotSimulableError } from '../errors.js';
 import { devWarn } from '../../utils/dev.js';
 
@@ -306,51 +306,94 @@ function _enumerateRecursive(
     return [];
   }
 
+  // ONE LOOP, over whatever this selection's shape says its candidate VALUES
+  // are: a scalar choice, a multiSelect combination, or an ordered list. The
+  // three used to be three copies of this recursion, which is how a fourth shape
+  // would have arrived with its own subtly different one.
   const results: Record<string, unknown>[] = [];
-
-  // Resolve static OR function-valued multiSelect through the single shared
-  // helper (bot-01 / D9). Concrete config -> real combinations; `undefined`
-  // -> single-select below; a thrown error propagates (fail loud, never a
-  // silent skip).
-  const resolved = resolveMultiSelect(selection, { game, player, args: currentArgs });
-
-  if (resolved) {
-    const { min, max } = resolved;
-    const combinations = generateCombinations(choices, min, max, MAX_MULTISELECT_COMBINATIONS);
-
-    // F-08: surface the truncation loudly rather than silently searching a
-    // partial move set. Hitting the cap means the multiSelect's combinatorics
-    // are unbounded/huge relative to the choice set — the game likely wants a
-    // tighter `max` so the bot (and UI) enumerate a tractable space.
-    if (combinations.length >= MAX_MULTISELECT_COMBINATIONS) {
-      devWarn(
-        `multiselect-enumeration-capped:${actionDef.name}:${selection.name}`,
-        `Enumerating multiSelect "${selection.name}" of action "${actionDef.name}" over ` +
-          `${choices.length} choices hit the ${MAX_MULTISELECT_COMBINATIONS}-combination safety cap ` +
-          `and was truncated. An unbounded multiSelect (no max, or a very large one) explodes as ` +
-          `2^N combinations. Set a tighter multiSelect max so enumeration stays tractable.`,
-      );
-    }
-
-    for (const combo of combinations) {
-      const newArgs = { ...currentArgs, [selection.name]: combo };
-      const subResults = _enumerateRecursive(game, actionDef, player, index + 1, newArgs);
-      results.push(...subResults);
-    }
-
-    return results;
+  for (const value of _valuesToTry(game, actionDef, player, selection, choices, currentArgs)) {
+    // Element objects stay in currentArgs so dependent selections receive the
+    // real objects (matching the bot's original behavior).
+    const newArgs = { ...currentArgs, [selection.name]: value };
+    results.push(..._enumerateRecursive(game, actionDef, player, index + 1, newArgs));
   }
-
-  // Single-select: recurse for each choice
-  for (const choice of choices) {
-    // Keep element objects in currentArgs so dependent selections receive the
-    // real objects (matching the bot's original behavior)
-    const newArgs = { ...currentArgs, [selection.name]: choice };
-    const subResults = _enumerateRecursive(game, actionDef, player, index + 1, newArgs);
-    results.push(...subResults);
-  }
-
   return results;
+}
+
+/**
+ * Every value this selection could be given, in enumeration order.
+ *
+ * A single-select yields each choice; a `multiSelect` yields each combination
+ * within its bounds (capped, loudly); an `orderedList` yields the lists
+ * `orderedListsToTry` describes.
+ */
+function _valuesToTry(
+  game: Game,
+  actionDef: ActionDefinition,
+  player: Player,
+  selection: Selection,
+  choices: unknown[],
+  currentArgs: Record<string, unknown>,
+): unknown[] {
+  const ctx = { game, player, args: currentArgs };
+
+  // AN ORDERED, REPEATABLE LIST IS ENUMERATED ONE ENTRY AT A TIME (#249) -- see
+  // `orderedListsToTry` for why that is the honest answer rather than a
+  // truncated walk of an unbounded space.
+  const orderedList = resolveOrderedList(selection, ctx);
+  if (orderedList) return orderedListsToTry(orderedList, choices);
+
+  // Static OR function-valued multiSelect through the single shared helper
+  // (bot-01 / D9). Concrete config -> real combinations; `undefined` ->
+  // single-select; a thrown error propagates (fail loud, never a silent skip).
+  const resolved = resolveMultiSelect(selection, ctx);
+  if (!resolved) return choices;
+
+  const combinations = generateCombinations(
+    choices,
+    resolved.min,
+    resolved.max,
+    MAX_MULTISELECT_COMBINATIONS,
+  );
+
+  // F-08: surface the truncation loudly rather than silently searching a partial
+  // move set. Hitting the cap means the multiSelect's combinatorics are
+  // unbounded/huge relative to the choice set — the game likely wants a tighter
+  // `max` so the bot (and UI) enumerate a tractable space.
+  if (combinations.length >= MAX_MULTISELECT_COMBINATIONS) {
+    devWarn(
+      `multiselect-enumeration-capped:${actionDef.name}:${selection.name}`,
+      `Enumerating multiSelect "${selection.name}" of action "${actionDef.name}" over ` +
+        `${choices.length} choices hit the ${MAX_MULTISELECT_COMBINATIONS}-combination safety cap ` +
+        `and was truncated. An unbounded multiSelect (no max, or a very large one) explodes as ` +
+        `2^N combinations. Set a tighter multiSelect max so enumeration stays tractable.`,
+    );
+  }
+
+  return combinations;
+}
+
+/**
+ * The lists a bot will try for an `orderedList` selection (#249): the empty one
+ * when the rules allow it, then each single-entry list.
+ *
+ * Deliberately not every legal list, and this is the whole reasoning. With
+ * repeats allowed there are choices^max lists of length <= max, so there is no
+ * cap under which "all of them" is tractable -- and no honest truncation of it
+ * either: a bot handed the first 10,000 would be searching whichever corner the
+ * generator happened to walk into. Every list this DOES produce is a real legal
+ * move, and a bot reaches a longer sequence by acting again.
+ */
+function orderedListsToTry(
+  bounds: { min: number; max?: number },
+  choices: unknown[],
+): unknown[][] {
+  const lists: unknown[][] = [];
+  if (bounds.min <= 0) lists.push([]);
+  if (bounds.min <= 1 && (bounds.max === undefined || bounds.max >= 1)) {
+    for (const choice of choices) lists.push([choice]);
+  }
+  return lists;
 }
 
 /**
