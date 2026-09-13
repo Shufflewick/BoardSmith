@@ -694,6 +694,12 @@ const orderedListEntries = computed<unknown[]>(() =>
   currentOrderedList.value ? multiSelectValues.value : []
 );
 
+/** The numbered entries, so a removal can hand the keyboard to a survivor (#252). */
+const orderedEntriesList = ref<HTMLElement | null>(null);
+
+/** The Add/Done row, where focus goes when the last entry is removed (#252). */
+const orderedChoiceRow = ref<HTMLElement | null>(null);
+
 // Filter args for display - exclude current multiSelect selection
 // (multiSelect shows its state via checkboxes, not chips)
 const displayableArgs = computed(() => {
@@ -1116,9 +1122,39 @@ async function addListEntry(selectionName: string, value: unknown) {
 }
 
 /** Drop the entry the player pointed at, BY INDEX (#249). */
-function dropListEntry(selectionName: string, index: number) {
+async function dropListEntry(selectionName: string, index: number) {
   actionController.removeListEntry(selectionName, index);
   updateMultiSelectBoardHighlights();
+  await nextTick();
+  restoreFocusAfterRemoval(index);
+}
+
+/**
+ * PUT THE KEYBOARD BACK AFTER A REMOVAL (#252).
+ *
+ * The button that was pressed is the node that just unmounted, so focus falls to
+ * the body and building a list from the keyboard means tabbing in from the top of
+ * the document once per entry removed. #228's stranding repair cannot catch this
+ * one: it is keyed on `stepIdentity`, and a removal is the same action, the same
+ * pick and the same accumulated answers -- the step did not change, only the
+ * draft did.
+ *
+ * The entry that slid into the removed one's place is the nearest thing to
+ * "where I was", and the likeliest next target; with the list emptied there is no
+ * entry left to stand on, so the Add row is. Narrow in the same way #228's is:
+ * only when focus was ACTUALLY stranded, so a player who tabbed elsewhere on
+ * purpose is never yanked back into the panel.
+ */
+function restoreFocusAfterRemoval(index: number): void {
+  if (!focusIsStranded()) return;
+  const removes = orderedEntriesList.value?.querySelectorAll<HTMLElement>('.ordered-list-remove');
+  if (removes && removes.length > 0) {
+    removes[Math.min(index, removes.length - 1)]?.focus();
+    return;
+  }
+  firstOperableOf(
+    orderedChoiceRow.value?.querySelectorAll<HTMLElement>('.ordered-list-add') ?? [],
+  )?.focus();
 }
 
 /** What one built entry reads as: the choice's own label, by preference. */
@@ -1740,9 +1776,19 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
         <template v-else-if="currentPick.type === 'choice' && currentOrderedList && filteredChoices.length">
           <div class="selection-prompt">
             {{ currentPick.prompt || `Select ${currentPick.name}` }}
-            <span class="multi-select-count">{{ orderedListCountDisplay }}</span>
+            <!-- SPOKEN, because nothing else about an Add is (#252): focus stays
+                 on the button, whose name and state do not change, and the new
+                 entry is drawn where the keyboard is not. -->
+            <span class="multi-select-count ordered-list-count" aria-live="polite">
+              {{ orderedListCountDisplay }}
+            </span>
           </div>
-          <ol v-if="orderedListEntries.length" class="ordered-list-entries">
+          <ol
+            v-if="orderedListEntries.length"
+            ref="orderedEntriesList"
+            class="ordered-list-entries"
+            aria-label="Entries added so far, in order"
+          >
             <li
               v-for="(entry, index) in orderedListEntries"
               :key="`${index}-${String(entry)}`"
@@ -1759,11 +1805,16 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
               </button>
             </li>
           </ol>
-          <div class="choice-buttons ordered-list-choices">
+          <div ref="orderedChoiceRow" class="choice-buttons ordered-list-choices">
+            <!-- The visible label is the choice; the ACCESSIBLE name carries the
+                 gesture (#252). Announced on its own, "University" says neither
+                 what pressing it does nor that pressing it again repeats it, and
+                 a row of buttons all reading "Add University" is unreadable. -->
             <button
               v-for="choice in filteredChoices"
               :key="String(choice.value)"
               class="choice-btn ordered-list-add"
+              :aria-label="`Add ${choice.display}`"
               v-disabled-reason="orderedListAddDisabledReason(choice.disabled)"
               :aria-disabled="isDisabled(orderedListAddDisabledReason(choice.disabled)) || undefined"
               @click="addListEntry(currentPick.name, choice.value)"
