@@ -591,10 +591,38 @@ export interface PickFilter {
 }
 
 /**
+ * A structured, inspectable warning surfaced when a game-authored callback
+ * (e.g. `boardRefs()`, `display()`, `boardRef()`) throws but the pick/op
+ * result still succeeds via a graceful fallback. Never carries `error.stack`
+ * or other implementation details — `message` is a sanitized, human-readable
+ * summary only.
+ */
+export interface WarningEntry {
+  /** Stable machine-readable code (e.g. 'BOARD_REFS_ERROR', 'DISPLAY_ERROR'). */
+  code: string;
+  /** Sanitized, human-readable summary. Never error.stack or a file path. */
+  message: string;
+  /** Where the warning originated (e.g. 'boardRefs(...)', 'display(...)'). */
+  source: string;
+}
+
+/**
  * Pick metadata for auto-UI generation.
  * A "pick" represents a choice the player must make during action resolution.
+ *
+ * THIS IS THE ONLY DECLARATION OF THE PICK SHAPE (#251). The session surface
+ * re-exports it and the UI parameterises it; neither restates a field. It used
+ * to exist here, in `session/types.ts` and in
+ * `ui/composables/useActionControllerTypes.ts`, so every new pick field was
+ * three edits with nothing forcing the third — and #249's `orderedList` landed
+ * as a 79-line unaccepted clone group on whoever touched a pick field next.
+ *
+ * `TElement` is the one thing a layer legitimately varies: the UI enriches each
+ * candidate element with its `gameView` data (see `ValidElement` in
+ * `useActionControllerTypes.ts`), so it binds this to its enriched element type
+ * rather than copying the pick shape to change two field types.
  */
-export interface PickMetadata {
+export interface PickMetadata<TElement extends ValidElement = ValidElement> {
   name: string;
   type: 'choice' | 'element' | 'elements' | 'number' | 'text';
   prompt?: string;
@@ -605,23 +633,52 @@ export interface PickMetadata {
   choices?: ChoiceWithRefs[];
   /** For choice picks: filter choices based on a previous pick */
   filterBy?: PickFilter;
-  /** For choice picks with dependsOn: name of the pick this depends on */
+  /**
+   * For choice picks with dependsOn: name of the pick this depends on.
+   * When present, use choicesByDependentValue to look up choices based on
+   * the current value of the dependent pick.
+   */
   dependsOn?: string;
-  /** For choice picks with dependsOn: choices indexed by dependent value */
+  /**
+   * For choice picks with dependsOn: choices indexed by the dependent pick's value.
+   * Key is the string representation of the dependent value (element ID, player seat, etc.)
+   */
   choicesByDependentValue?: Record<string, ChoiceWithRefs[]>;
   /** For multi-select choice picks: min/max selection configuration */
-  multiSelect?: { min: number; max?: number };
-  /** For choice picks with dependsOn + multiSelect: config indexed by dependent value */
+  multiSelect?: {
+    /** Minimum selections required (default: 1) */
+    min: number;
+    /** Maximum selections allowed (undefined = unlimited) */
+    max?: number;
+  };
+  /**
+   * For choice picks with dependsOn + multiSelect: multiSelect config indexed by dependent value.
+   * Key is the string representation of the dependent value (element ID, player seat, etc.)
+   * Value is the multiSelect config for that dependent value, or undefined if single-select.
+   */
   multiSelectByDependentValue?: Record<string, { min: number; max?: number } | undefined>;
-  /** Entry bounds for an ordered, repeatable list pick; absent max is unbounded (#249). */
+  /**
+   * For ORDERED, REPEATABLE choice picks: how many ENTRIES the list may carry
+   * (#249).
+   *
+   * Present INSTEAD of `multiSelect`, never alongside it, and that is how a host
+   * knows which control to draw: a set of checkboxes, or a list built up one
+   * entry at a time with repeats allowed and order preserved. An absent `max`
+   * means no upper bound -- said by omission because these bounds travel as
+   * JSON, where `Infinity` becomes `null`.
+   */
   orderedList?: { min: number; max?: number };
   // Element-specific properties
   /** For element picks: CSS class name of selectable elements */
   elementClassName?: string;
   /** For element picks: list of valid element IDs the user can select */
-  validElements?: ValidElement[];
-  /** For element picks with dependsOn: elements indexed by dependent value */
-  elementsByDependentValue?: Record<string, ValidElement[]>;
+  validElements?: TElement[];
+  /**
+   * For element picks with dependsOn: elements indexed by the dependent pick's value.
+   * Key is the string representation of the dependent value (element ID, player seat, etc.)
+   * Used when chooseElement()/chooseElements() has the dependsOn option.
+   */
+  elementsByDependentValue?: Record<string, TElement[]>;
   // Number-specific properties
   /** For number inputs: minimum value */
   min?: number;
@@ -654,36 +711,77 @@ export interface PickMetadata {
     /** The terminator value (if using repeatUntil shorthand) */
     terminator?: unknown;
   };
+  /** Whether this selection has an onSelect callback (requires server round-trip per step) */
+  hasOnSelect?: boolean;
 }
 
 /**
  * Action metadata for auto-UI generation.
+ *
+ * The only declaration of the shape (#251), for the same reason as
+ * {@link PickMetadata}: it carries the pick array, so a copy of it is a copy of
+ * the pick shape one level up.
  */
-export interface ActionMetadata {
+export interface ActionMetadata<TElement extends ValidElement = ValidElement> {
   name: string;
   prompt?: string;
+  /** Help text shown to players on hover/tap. Display-only; never a predicate. */
+  help?: string;
   /**
    * When true, a sole no-selection action is auto-started but never auto-executed —
    * see ActionBuilder.manual().
    */
   manual?: boolean;
-  selections: PickMetadata[];
+  /**
+   * When true, the Action Panel button for this action is hidden from the auto-UI
+   * ActionPanel (LIBX-01). The action stays fully executable via the board /
+   * custom UI — see ActionBuilder.suppressFromActionPanel(). Presentation only,
+   * NOT a security control. Emitted by the engine
+   * (`engine/element/action-metadata.ts`).
+   */
+  suppressFromActionPanel?: boolean;
+  /**
+   * The Action Panel menu path this action's START BUTTON sits at, outermost
+   * first (#228); absent means the top level. Set via `ActionBuilder.group()`.
+   * Arrangement only -- it changes neither availability nor executability, and
+   * a game that declares nothing keeps the flat panel.
+   */
+  group?: readonly string[];
+  /** Sort key within the action's menu level (#228); absent sorts as `0`. */
+  order?: number;
+  selections: PickMetadata<TElement>[];
 }
 
 /**
  * Response from getPickChoices endpoint.
+ * Used when fetching choices on-demand for any pick type.
+ * A "pick" represents a choice the player must make during action resolution.
+ *
+ * Declared once, beside the pick shape (#251): its `multiSelect`/`orderedList`
+ * bounds are the same bounds, evaluated at request time, so a second copy is a
+ * second place every new bound has to be added.
  */
 export interface PickChoicesResponse {
   success: boolean;
   error?: string;
-  /** Programmatic error code for switch statements */
-  errorCode?: string;
+  /** Programmatic error code for switch statements. See ErrorCode enum. */
+  errorCode?: ErrorCode;
   /** For choice picks: formatted choices with display strings and board refs */
   choices?: ChoiceWithRefs[];
   /** For element/elements picks: valid elements the user can select */
   validElements?: ValidElement[];
-  /** Multi-select configuration (evaluated at request time) */
+  /** Multi-select configuration (evaluated at request time for function-based configs) */
   multiSelect?: { min: number; max?: number };
-  /** Ordered-list entry bounds (#249), evaluated at request time */
+  /**
+   * Ordered-list ENTRY bounds (#249), evaluated at request time for the same
+   * reason multiSelect's are: a bound that reads an earlier pick's value is only
+   * knowable once that value is bound.
+   */
   orderedList?: { min: number; max?: number };
+  /**
+   * Structured warnings from soft-fail sites (boardRefs()/display()/boardRef()
+   * throwing) — the choice/element is still returned with a graceful fallback,
+   * success stays true. Absent (not an empty array) when there are none.
+   */
+  warnings?: WarningEntry[];
 }

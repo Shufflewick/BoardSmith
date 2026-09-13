@@ -16,9 +16,5 @@ export { default as ActionPanel } from './ActionPanel.vue';
 export { registerRenderer, resolveRenderer } from './renderer-registry.js';
 
 // Re-export types from shared types file
-export type {
-  GameElement,
-  Pick,
-  ActionMetadata,
-  Player,
-} from '../../types.js';
+export type { GameElement, Player } from '../../types.js';
+export type { PickMetadata, ActionMetadata } from '../../composables/useActionControllerTypes.js';

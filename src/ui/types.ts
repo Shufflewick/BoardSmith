@@ -128,55 +128,23 @@ export interface ElementMatchOptions {
   className?: string;
 }
 
-/**
- * Pick type for action parameters.
- * A "pick" is a choice the player must make to complete an action (per nomenclature.md).
- */
-export interface Pick {
-  name: string;
-  type: 'choice' | 'player' | 'element' | 'number' | 'text';
-  prompt?: string;
-  /** If true, shows "Skip" button. If a string, shows that text instead. */
-  optional?: boolean | string;
-  choices?: Array<{ value: unknown; display: string }>;
-  min?: number;
-  max?: number;
-  integer?: boolean;
-  pattern?: string;
-  minLength?: number;
-  maxLength?: number;
-  elementClassName?: string;
-}
-
-/**
- * Metadata for an available action.
- */
-export interface ActionMetadata {
-  name: string;
-  prompt?: string;
-  selections: Pick[];
-  /**
-   * Help text shown to players on hover/tap. Display-only; never a predicate.
-   * Emitted by the engine (`engine/element/action-metadata.ts`).
-   */
-  help?: string;
-  /**
-   * When true this action's Action Panel button is hidden (LIBX-01). Presentation
-   * only — NOT a security control. Set via `ActionBuilder.suppressFromActionPanel()`
-   * and emitted by the engine; declared here because GameShell and ActionPanel
-   * both read it off this metadata.
-   */
-  suppressFromActionPanel?: boolean;
-  /**
-   * The Action Panel menu path this action's START BUTTON sits at, outermost
-   * first (#228); absent means the top level. Set via `ActionBuilder.group()`.
-   * Arrangement only -- it changes neither availability nor executability, and
-   * a game that declares nothing keeps the flat panel.
-   */
-  group?: readonly string[];
-  /** Sort key within the action's menu level (#228); absent sorts as `0`. */
-  order?: number;
-}
+// THE PICK SHAPE IS NOT DECLARED HERE, AND NO LONGER ANYWHERE NEAR HERE (#251).
+//
+// This module used to declare its own `Pick` and `ActionMetadata`, a fourth copy
+// of the shape beside types/protocol.ts, session/types.ts and
+// useActionControllerTypes.ts -- and it had already drifted: its pick `type`
+// union offered a `player` kind the engine never emits and lacked `elements`,
+// `multiSelect`, `validElements` and every pick field added since #228. A game
+// type-checking a board against it could not describe the picks it was actually
+// being sent.
+//
+// The shape is owned by `../types/protocol.js`, and the UI's enriched view of it
+// (`ValidElement` carrying its `gameView` element, and the pick/action types
+// bound to that) lives in `composables/useActionControllerTypes.js`, which is
+// where the rest of the UI already imports it from. It is not re-exported
+// through here: this module declares `GameElement`, so that module imports from
+// this one, and a re-export in this direction would make the two type modules
+// import each other.
 
 /**
  * Player information, as GameShell passes it to a game's board slot.

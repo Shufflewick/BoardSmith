@@ -13,136 +13,50 @@ import type { TutorialStepView } from '../../engine/tutorial/types.js';
 // Re-export GameElement as GameViewElement for external use
 export type { GameElement as GameViewElement };
 
-/** Reference to a board element (for highlighting) */
-export interface ElementRef {
-  id?: number;
-  name?: string;
-  notation?: string;
-  className?: string;
-}
+// THE PICK SHAPE IS OWNED BY ../../types/protocol.js (#251).
+//
+// ElementRef, RefWithRole, ChoiceWithRefs, PickMetadata and ActionMetadata were
+// all restated here (and again in session/types.ts, and again in ui/types.ts), so
+// #249's `orderedList` was three edits with nothing forcing the third and the
+// audit reported the leftovers as a 79-line unaccepted clone group. They are
+// re-exported rather than redeclared.
+//
+// The one thing this layer genuinely adds is `ValidElement.element`, expressed
+// below as an EXTENSION of the wire type and bound into the pick shape through
+// its `TElement` parameter.
+// Imported locally (so the shapes are usable as types in this module) AND
+// re-exported, keeping the protocol layer as the single source of truth.
+import type {
+  ElementRef,
+  RefWithRole,
+  ChoiceWithRefs,
+  ValidElement as WireValidElement,
+  PickMetadata as WirePickMetadata,
+  ActionMetadata as WireActionMetadata,
+} from '../../types/protocol.js';
+export type { ElementRef, RefWithRole, ChoiceWithRefs };
 
 /**
- * A board element reference with a role indicating its highlight purpose.
- * Declared inline (not imported from engine) — this module is dependency-free.
+ * Valid element for element picks, as the UI sees one.
+ *
+ * The wire shape plus the element's own `gameView` data, which
+ * `useGameViewEnrichment` fills in client-side (see docs/element-enrichment.md).
+ * That enrichment is the only thing this layer adds, and binding it through
+ * `TElement` below is what lets it add it without restating a pick field.
  */
-export interface RefWithRole {
-  ref: ElementRef;
-  role: 'source' | 'target' | 'highlight';
-}
-
-/** Choice with optional board element references */
-export interface ChoiceWithRefs {
-  value: unknown;
-  display: string;
-  /** Board element references with roles (source/target/highlight) */
-  refs?: RefWithRole[];
-  /** Disabled reason string, present only when choice is disabled */
-  disabled?: string;
-}
-
-/** Valid element for element selections */
-export interface ValidElement {
-  id: number;
-  display?: string;
-  /** Board element references with roles (typically [{ ref, role: 'highlight' }]) */
-  refs?: RefWithRole[];
+export interface ValidElement extends WireValidElement {
   /** Full element data from gameView (auto-enriched by actionController) */
   element?: GameElement;
-  /** Disabled reason string, present only when element is disabled */
-  disabled?: string;
 }
 
-// Types for action metadata (from server)
 /**
- * Metadata for a pick (choice the player must make).
- * "Pick" = a choice player must make to complete an action (per nomenclature.md).
+ * Metadata for a pick (a choice the player must make to complete an action, per
+ * nomenclature.md), carrying ENRICHED elements.
  */
-export interface PickMetadata {
-  name: string;
-  type: 'choice' | 'element' | 'elements' | 'text' | 'number';
-  prompt?: string;
-  /** If true, shows "Skip" button. If a string, shows that text instead. */
-  optional?: boolean | string;
-  /** For choice picks: available choices */
-  choices?: ChoiceWithRefs[];
-  /** For element picks: list of valid element IDs the user can select */
-  validElements?: ValidElement[];
-  /** For multi-select: min/max selection configuration */
-  multiSelect?: { min: number; max?: number };
-  /** Filter choices based on a previous pick's value */
-  filterBy?: { key: string; selectionName: string };
-  /** Look up choices from choicesByDependentValue based on previous pick */
-  dependsOn?: string;
-  /** Choices indexed by dependent value (used with dependsOn for choice picks) */
-  choicesByDependentValue?: Record<string, ChoiceWithRefs[]>;
-  /** Elements indexed by dependent value (used with dependsOn for element picks) */
-  elementsByDependentValue?: Record<string, ValidElement[]>;
-  /** Pick can repeat until terminator */
-  repeat?: { hasOnEach: boolean; terminator?: unknown };
-  /** Whether this selection has an onSelect callback (requires server round-trip per step) */
-  hasOnSelect?: boolean;
-  /** For number inputs: minimum value */
-  min?: number;
-  /** For number inputs: maximum value */
-  max?: number;
-  /** For number inputs: integer only */
-  integer?: boolean;
-  /** For text inputs: minimum length */
-  minLength?: number;
-  /** For text inputs: maximum length */
-  maxLength?: number;
-  /** For text inputs: regex pattern */
-  pattern?: string;
-  /**
-   * For text picks: draw a resizable box instead of a single line (#229).
-   *
-   * Presentation only, and absent unless the action asked for it. The value is
-   * the same string and `minLength`/`maxLength`/`pattern` bind it the same way,
-   * which is why this is a field on the `text` pick rather than a sixth pick
-   * type: a new `type` would make every host that switches on it draw nothing
-   * at all for a selection whose rules it already knows.
-   */
-  multiline?: boolean;
-  /** For element picks: CSS class name of selectable elements */
-  elementClassName?: string;
-  /** For choice picks with dependsOn + multiSelect: multiSelect config indexed by dependent value */
-  multiSelectByDependentValue?: Record<string, { min: number; max?: number } | undefined>;
-  /**
-   * Entry bounds for an ordered, repeatable list pick (#249). Its presence is
-   * what makes the controller offer `appendListEntry`/`removeListEntry` for this
-   * selection rather than `toggleMultiSelect`.
-   */
-  orderedList?: { min: number; max?: number };
-}
+export type PickMetadata = WirePickMetadata<ValidElement>;
 
-export interface ActionMetadata {
-  name: string;
-  prompt?: string;
-  /** Help text shown to players on hover/tap. Display-only; never a predicate. */
-  help?: string;
-  /**
-   * When true, a sole no-selection action is auto-started but never auto-executed —
-   * see ActionBuilder.manual().
-   */
-  manual?: boolean;
-  /**
-   * When true this action's Action Panel button is hidden (LIBX-01). Presentation only —
-   * NOT a security control; the action stays fully executable from the board
-   * substrate. Set via `ActionBuilder.suppressFromActionPanel()` and emitted by the
-   * engine (`engine/element/action-metadata.ts`).
-   */
-  suppressFromActionPanel?: boolean;
-  /**
-   * The Action Panel menu path this action's START BUTTON sits at, outermost
-   * first (#228); absent means the top level. Set via `ActionBuilder.group()`.
-   * Arrangement only -- it changes neither availability nor executability, and
-   * a game that declares nothing keeps the flat panel.
-   */
-  group?: readonly string[];
-  /** Sort key within the action's menu level (#228); absent sorts as `0`. */
-  order?: number;
-  selections: PickMetadata[];
-}
+/** Metadata for an available action, carrying picks over ENRICHED elements. */
+export type ActionMetadata = WireActionMetadata<ValidElement>;
 
 /** Follow-up action to chain after an action completes */
 export interface FollowUpAction {

@@ -5,9 +5,9 @@
  * Lives in the engine layer (src/engine/element/) so that game.ts can import
  * buildActionMetadata directly without creating an engine<->session runtime cycle.
  *
- * The ActionMetadata / PickMetadata *shapes* are defined in src/session/types.ts
- * and imported here via `import type` (type-only, erased at compile time — no
- * runtime dependency on session).
+ * The ActionMetadata / PickMetadata *shapes* are defined once, in
+ * src/types/protocol.ts (#251), and imported here via `import type` (type-only,
+ * erased at compile time — no runtime dependency at all).
  */
 
 import { evaluateCondition } from '../action/action.js';
@@ -16,7 +16,7 @@ import { resolveMultiSelect, resolveOrderedList } from '../utils/resolve-multise
 import type { Game } from './game.js';
 import type { Player } from '../player/player.js';
 import type { Selection, ActionDefinition, TextSelection } from '../action/types.js';
-import type { ActionMetadata, PickMetadata } from '../../session/types.js';
+import type { ActionMetadata, PickMetadata } from '../../types/protocol.js';
 
 /**
  * Build action metadata for auto-UI generation.
