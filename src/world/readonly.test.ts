@@ -228,3 +228,101 @@ describe("readOnlyProjection", () => {
     expect(token).toBe(readOnlyProjection(liveRoom.first(Token)!));
   });
 });
+
+// #247: A FROZEN VALUE IS STILL A VALUE A DECLARATION MAY READ.
+//
+// A `.needs()` callback is ordinary game code, and game code that hands a
+// cached snapshot around freezes it so nothing downstream can edit the cache.
+// That freeze made the value UNREADABLE through this projection: a JavaScript
+// proxy must hand back the exact value held in a non-writable, non-configurable
+// data property, and a projection is by definition not that value, so the read
+// died in the engine with a TypeError about proxy invariants and no declaration
+// ran at all.
+//
+// The fix cannot be "games stop freezing" -- that trades their immutability for
+// ours -- and it cannot be "hand the raw value over", because a frozen object
+// is free to point AT a live mutable one and that road ends in the #219 hole.
+describe("readOnlyProjection over frozen values (#247)", () => {
+  it("reads a nested object off a frozen value a callback returned", () => {
+    // The reported shape, reduced: a stored array is read through the
+    // projection, its `flatMap` answers a detached deeply frozen row, and the
+    // read that threw is one property deeper than the row.
+    const detached = Object.freeze({ id: "body-1", holding: Object.freeze({ owner: "seat-1" }) });
+    const stored = { planets: [{ id: "body-1" }] };
+
+    const rows = readOnlyProjection(stored).planets.flatMap(() => [detached]);
+
+    expect(rows[0]!.holding.owner).toBe("seat-1");
+  });
+
+  it("reads through a FROZEN ARRAY, whose every index is locked the same way", () => {
+    // `Object.freeze` on an array locks each index, so the invariant bites on
+    // "0" rather than on a named property. Length and iteration have to keep
+    // working too, or the value is readable only one element at a time.
+    const rows = Object.freeze([Object.freeze({ owner: "seat-1" }), Object.freeze({ owner: "s2" })]);
+    const stored = { rows };
+
+    const projected = readOnlyProjection(stored).rows;
+
+    expect(projected).toHaveLength(2);
+    expect(projected[0]!.owner).toBe("seat-1");
+    expect(projected.map((row) => row.owner)).toEqual(["seat-1", "s2"]);
+    expect(Object.keys(projected[1]!)).toEqual(["owner"]);
+  });
+
+  it("reads a property locked on its own, without the whole object being frozen", () => {
+    // `defineProperty` with the defaults locks one slot and leaves the object
+    // extensible, so an object that is not frozen can still carry the property
+    // the invariant is about.
+    const stored: Record<string, unknown> = { open: 1 };
+    Object.defineProperty(stored, "locked", { value: { owner: "seat-1" }, enumerable: true });
+
+    const projection = readOnlyProjection(stored);
+
+    expect((projection.locked as { owner: string }).owner).toBe("seat-1");
+    expect(projection.open).toBe(1);
+  });
+
+  it("still REFUSES a write to the MUTABLE object a frozen value points at", () => {
+    // The reason the raw value cannot simply be handed over. `holding` is
+    // frozen INTO the snapshot, but the object it names is the live one, so a
+    // read that answered with it would hand a declaration a write it could not
+    // be told about -- #219 one property along.
+    const live = { owner: "seat-1" };
+    const snapshot = Object.freeze({ holding: live });
+
+    const projected = readOnlyProjection({ snapshot }).snapshot;
+
+    expect(projected.holding.owner).toBe("seat-1");
+    expect(() => {
+      projected.holding.owner = "seat-2";
+    }).toThrow(WorldRefusal);
+    expect(live.owner).toBe("seat-1");
+  });
+
+  it("still REFUSES a write to a stored object read alongside a frozen one", () => {
+    // The stored tree is not frozen and must not become writable because some
+    // value beside it was: one object, one frozen property and one live one,
+    // read through the same projection.
+    const stored = { snapshot: Object.freeze({ id: "body-1" }), ledger: { owner: "seat-1" } };
+    const projection = readOnlyProjection(stored);
+
+    expect(projection.snapshot.id).toBe("body-1");
+    expect(() => {
+      projection.ledger.owner = "seat-2";
+    }).toThrow(WorldRefusal);
+    expect(() => {
+      projection.ledger = { owner: "seat-2" };
+    }).toThrow(WorldRefusal);
+    expect(stored.ledger.owner).toBe("seat-1");
+  });
+
+  it("mints ONE projection for a frozen value, as it does for a live element", () => {
+    // Identity is what a declaration compares with, and it cannot depend on
+    // whether the value it is holding happens to be frozen.
+    const frozen = Object.freeze({ holding: Object.freeze({ owner: "seat-1" }) });
+
+    expect(readOnlyProjection(frozen)).toBe(readOnlyProjection(frozen));
+    expect(readOnlyProjection(frozen).holding).toBe(readOnlyProjection(frozen.holding));
+  });
+});
