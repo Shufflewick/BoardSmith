@@ -281,25 +281,110 @@ fallow's, not ours, so the file stays -- as a generated address book. Both
 committed files come from one scan:
 
 ```bash
-boardsmith audit --dupes-baseline   # the check
-boardsmith audit --rekey-dupes      # re-address what still matches
+boardsmith audit --dupes-baseline   # the check, which re-addresses as it goes
+boardsmith audit --rekey-dupes      # record a tree from scratch, deliberately
 ```
 
 The check asks two questions in order, because they have different answers:
 
 - **Does the accepted CONTENT match?** If not, that is a finding about the
-  code: duplication nothing accepted, or accepted debt that is gone. Named,
-  with its files, and not re-keyable.
-- **Do the addresses match?** If not, nothing about the debt changed and
-  re-keying is provably safe, because the content matched first. The report
-  says exactly that and names `--rekey-dupes`.
+  code: duplication nothing accepted, or accepted debt that is gone. It FAILS,
+  named with its files, and nothing is written -- so a failing run cannot have
+  laundered anything into the record.
+- **Do the addresses match?** If not, nothing about the debt changed, so the
+  check RE-ADDRESSES them itself and says it did. See "An address move is not a
+  decision" below.
 
 `--rekey-dupes` REFUSES to write anything when the content does not match. That
 is what stops it being a button that turns a red board green: new duplication
 has no entry to re-address, and there is no spelling of the command that
-accepts it. Recording a tree wholesale is a separate, deliberate act -- delete
-`.fallow-dupes-accepted.json` and re-key -- and it shows up as a large diff to
-a committed file, which is the point.
+accepts it. Recording a tree wholesale is a separate, deliberate act -- it
+requires the record to be absent, and it shows up as a large diff to a
+committed file, which is the point.
+
+The failure text for content that does not match deliberately does NOT name a
+command. It used to read "delete `.fallow-dupes-accepted.json` and run
+`--rekey-dupes`", which is the one action that widens the record wholesale: the
+visible remedy was the dangerous one, and it is what a person under time
+pressure reaches for. The text now names the duplication and points here.
+
+### An address move is not a decision, so the audit makes it (#256)
+
+The address drift above used to be reported as a FAILURE naming
+`boardsmith audit --rekey-dupes`. That was wrong in a way worth stating,
+because the measurement is unambiguous. Landing #246, #248, #249, #251, #252
+and #253 in one session produced three separate instances -- 16 groups, then 2,
+then 1079 -- and every single re-address reported *"every one matched by
+content, so no debt was forgiven."*
+
+So the human in the loop had nothing to decide. The step was mechanical, it
+carried no judgement, and its only real property was that someone had to
+remember it. When they did not, the derived file stayed pointed at the wrong
+lines, `main` said nothing (a run with nothing in scope gives no verdict), and
+the bill arrived as a blocked commit for whoever next edited one of the moved
+files -- a person whose own change was clean. The right thing was the thing you
+had to remember and the wrong thing was silent, which is the Pit of Success
+inverted.
+
+`boardsmith audit` now re-addresses those groups itself and reports that it
+did, in the past tense, telling you to commit the two files. It exits 0.
+
+This is a strictly narrower power than `--rekey-dupes`, and the narrowness is
+structural rather than a matter of care: the re-address runs only after the
+content comparison found **no difference at all**, so the set of content keys it
+writes is exactly the set it read. There is no tree in which it accepts a group
+the record did not already accept. What still fails, unchanged and with the same
+clarity:
+
+- a clone group whose CONTENT no longer matches an accepted entry (edited
+  duplication is new debt wearing an old key);
+- any NEW unaccepted duplication;
+- an accepted allowance whose duplication is gone.
+
+None of those is an address move, and none of them writes anything.
+
+#### Where it runs, and why there
+
+Inside `boardsmith audit`, as the FIRST check of the run -- ahead of the
+changed-files audit. `--changes` is the check that shells out to `fallow audit`,
+which is the thing that reads `.fallow-dupes-baseline.json`. Re-addressing
+after it would grade the branch against an address book the same run was about
+to correct: #232's false block, reproduced inside the tool that exists to remove
+it.
+
+That placement is also the answer to "so a merge cannot land drifted". This repo
+has no CI and no merge hook of its own, and the ShufflewickPub commit hook runs
+a raw `fallow audit` with no `boardsmith` in the loop, so it cannot be the place
+either. The audit every task runs before it merges is the one point in reach,
+and putting the re-address there means the addresses a merge publishes are the
+addresses of the tree that was merged. A merge can still shift lines that
+neither parent's audit saw -- but that residue is no longer a trap. It is a
+thing the next audit fixes silently and reports, instead of a block against a
+stranger.
+
+Selector runs stay honest: `boardsmith audit --changes` on its own does not
+scan duplication and so does not re-address anything. A flag asks for one check
+and gets one check. The un-flagged run -- the one this repo tells you to run
+after a refactor and before a merge -- is the one that heals.
+
+#### Why the derived file is still COMMITTED
+
+Generating it on demand would delete this failure mode outright, and it was
+weighed. It is the wrong trade, for one measurable reason: **`.fallowrc.json`
+names the file, and the thing that actually runs automatically is a raw
+`fallow audit`** -- ShufflewickPub's `.claude/hooks/fallow-gate.sh` intercepts
+`git commit`, resolves this repository from the command, and runs fallow
+directly. If the baseline were gitignored, a fresh clone's first commit would be
+audited with no duplication baseline at all, and all ~1100 accepted clone groups
+would report against whatever file that commit happened to touch.
+
+That trades a stale address book for no address book. It replaces drift, which
+is now self-healing and costs nobody a block, with a guaranteed false block on
+every path that does not go through `boardsmith audit` -- a deeper pit, reached
+by a shorter fall. Generating on demand would also make the cheap `--changes`
+path pay for the expensive full-repository dupes scan every time.
+
+So the file stays committed, and the audit keeps it true.
 
 ### What the migration recorded, honestly
 
