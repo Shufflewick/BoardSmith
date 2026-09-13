@@ -348,6 +348,106 @@ describe('the panel returns to a coherent menu state after an action', () => {
   });
 });
 
+describe('the level survives the moment a push has no offers in it yet (#253)', () => {
+  /**
+   * THE INTERSTITIAL IS NOT AN EMPTY MENU.
+   *
+   * A world push is two frames (#244): the state arrives, the offers follow, and
+   * between them the panel is handed NO available actions at all -- "not yet",
+   * which `useWorldHost` keeps distinct from "nothing". A table hands the panel
+   * the same blank whenever a turn passes. Resolving the open path against that
+   * blank answers the root for every path, so writing the answer back destroyed
+   * the level the player was standing in a tick before the real set arrived,
+   * and the announcement told a screen-reader user their group had gone when it
+   * had not. These drive that sequence in the order the browser produces it,
+   * which is the half `scripts/action-menu-browser.mjs` caught and this file
+   * could not: every `setProps` here used to hand over a populated set.
+   */
+  /** What is left after `dumpOre` spent the ore: `dumpWater` survives, so does `Dump`. */
+  const ORE_SPENT = ['construct', 'upgrade', 'dumpWater', 'skipMission'];
+  /** What is left after another seat closed the registry: `Empire settings` is gone, `More` is not. */
+  const REGISTRY_CLOSED = ['construct', 'skipMission'];
+
+  /** A world push, in its two halves: the blank, then the set. */
+  const blankThen = async (
+    wrapper: ReturnType<typeof mount>,
+    available: string[],
+  ): Promise<void> => {
+    await wrapper.setProps({ availableActions: [] });
+    await nextTick();
+    await wrapper.setProps({ availableActions: available });
+    await nextTick();
+  };
+
+  /** A panel with the player standing in the level `path` names, keyboard and all. */
+  const standingIn = async (path: string[]) => {
+    const mounted = mountPanel(LACUNA);
+    for (const label of path) {
+      await mounted.wrapper.find(`[data-bs-action-group="${label}"]`).trigger('click');
+    }
+    await nextTick();
+    return mounted;
+  };
+
+  it('comes back to the level the action was taken from', async () => {
+    const { wrapper } = await standingIn(['Dump']);
+    expect(leafNames(wrapper)).toEqual(['dumpOre', 'dumpWater']);
+
+    await blankThen(wrapper, ORE_SPENT);
+    expect(wrapper.find('.action-menu-label').text()).toBe('Dump');
+    expect(leafNames(wrapper)).toEqual(['dumpWater']);
+  });
+
+  it('tells a screen reader nothing about a group that never went away', async () => {
+    const { wrapper } = await standingIn(['Dump']);
+    await blankThen(wrapper, ORE_SPENT);
+    expect(wrapper.find('[data-bs-menu-announcement]').text()).toBe('');
+  });
+
+  it('still truncates to the surviving parent when the blank is followed by a real loss', async () => {
+    const { wrapper } = await standingIn(['More', 'Empire settings']);
+    expect(leafNames(wrapper)).toEqual(['renamePlanet', 'describeEmpire']);
+
+    await blankThen(wrapper, REGISTRY_CLOSED);
+    expect(wrapper.find('.action-menu-label').text()).toBe('More');
+    expect(leafNames(wrapper)).toEqual(['skipMission']);
+    const said = wrapper.find('[data-bs-menu-announcement]').text();
+    expect(said).toContain('Empire settings');
+    expect(said).toContain('no longer available');
+  });
+
+  it('leaves the keyboard on a control in the level it moved the player to', async () => {
+    const { wrapper } = await standingIn(['More', 'Empire settings']);
+    // Where opening the level put it, and the node the loss is about to remove.
+    expect(document.activeElement?.getAttribute('data-bs-action')).toBe('renamePlanet');
+
+    await blankThen(wrapper, REGISTRY_CLOSED);
+    await nextTick();
+    expect(document.activeElement).not.toBe(document.body);
+    expect(document.activeElement?.getAttribute('data-bs-action')).toBe('skipMission');
+    wrapper.unmount();
+  });
+
+  it('leaves the keyboard in the level it kept the player in', async () => {
+    const { wrapper } = await standingIn(['Dump']);
+    await blankThen(wrapper, ORE_SPENT);
+    await nextTick();
+    expect(document.activeElement).not.toBe(document.body);
+    expect(document.activeElement?.getAttribute('data-bs-action')).toBe('dumpWater');
+    wrapper.unmount();
+  });
+
+  it('remembers a level across a blank that nothing follows for a while', async () => {
+    // The blank can be the last thing that happens for a while: a quiet world
+    // sends no second set until something moves. The path is REQUESTED, never
+    // trusted, so it waits rather than being thrown away.
+    const { wrapper } = await standingIn(['Dump']);
+    await blankThen(wrapper, LACUNA.map((a) => a.name));
+    expect(wrapper.find('.action-menu-label').text()).toBe('Dump');
+    expect(leafNames(wrapper)).toEqual(['dumpOre', 'dumpWater']);
+  });
+});
+
 describe('suppressFromActionPanel and grouping are one mechanism, not two', () => {
   it('keeps the hierarchy when every available action is suppressed', async () => {
     // The restore-everything fallback exists so the panel is never a prompt

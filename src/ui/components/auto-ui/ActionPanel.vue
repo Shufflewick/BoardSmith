@@ -373,8 +373,21 @@ function onPanelKeydown(event: KeyboardEvent): void {
  * write the truncated path back so the ref and the screen agree, and tell a
  * screen-reader user that the level they were standing in went away. Without
  * the announcement the only signal is a silent change of button list.
+ *
+ * A MENU WITH NOTHING IN IT IS NOT EVIDENCE THAT A GROUP WENT AWAY (#253). A
+ * push is two frames: the state arrives, the offers follow, and between them
+ * the panel holds NO actions at all -- "not yet", which the world host keeps
+ * deliberately distinct from "nothing" (#244), and which a table produces too
+ * every time a turn passes. Every path resolves to the root against an empty
+ * tree, so truncating here threw the level away a tick before the real set
+ * arrived, permanently -- the player was dumped at the root after every action
+ * they took, and a screen reader was told a group had gone that had not. The
+ * path is REQUESTED, never trusted, so with nothing to resolve against it
+ * simply waits: the next set with anything in it is what answers the question,
+ * however long it takes to arrive.
  */
 watch(actionMenu, () => {
+  if (actionMenu.value.length === 0) return;
   const resolved = resolveMenuPath(actionMenu.value, openPath.value);
   if (resolved.length === openPath.value.length) return;
   const lost = openPath.value[resolved.length];
