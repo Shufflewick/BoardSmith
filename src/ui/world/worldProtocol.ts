@@ -296,6 +296,31 @@ interface WorldPickResultMessage {
 }
 
 /**
+ * WHAT THE DRAFT IN FRONT OF THE PLAYER WOULD COST (#248).
+ *
+ * The pick road's twin, one step further on: a pick asks what ONE selection may
+ * be, and this asks what the whole draft adds up to -- including a number typed
+ * into the panel's field and never submitted, which is the one input no other
+ * message on this wire carries.
+ *
+ * The lines are the GAME's, computed inside the bundle under the read-only
+ * facilities an offer runs under, and they are ADVISORY: the order that follows
+ * is validated against whatever the world holds when it arrives.
+ */
+interface WorldQuoteResultMessage {
+  readonly source: typeof WORLD_HOST_SOURCE;
+  readonly type: 'world_quote_result';
+  readonly requestId: string;
+  readonly ok: boolean;
+  /** The lines to show, or `null` for a draft the game has nothing to say about
+   *  yet. Absent when the world refused. */
+  readonly quote?: readonly string[] | null;
+  readonly message?: string;
+  /** The refusal's code, for a UI that switches on it. */
+  readonly code?: string;
+}
+
+/**
  * EVERYTHING THE HOST SENDS, and the only name the two halves share.
  *
  * The message shapes above are not exported individually on purpose: a reader
@@ -309,7 +334,8 @@ export type WorldHostMessage =
   | WorldOffersMessage
   | WorldEventsMessage
   | WorldResponseMessage
-  | WorldPickResultMessage;
+  | WorldPickResultMessage
+  | WorldQuoteResultMessage;
 
 /** What one command becomes on the wire. */
 interface WorldCommandMessage {
@@ -347,13 +373,35 @@ interface WorldPickMessage {
   readonly args: Readonly<Record<string, unknown>>;
 }
 
+/** The whole draft, priced by the game before it is submitted (#248). */
+interface WorldQuoteMessage {
+  readonly source: typeof WORLD_UI_SOURCE;
+  readonly type: 'world_quote';
+  readonly requestId: string;
+  /** The action being drafted, from the offer this seat was given. */
+  readonly action: string;
+  /**
+   * EVERY SELECTION AS THE PLAYER HAS IT SO FAR, by selection name.
+   *
+   * Not "bound": DRAFTED. A number the player has typed and not submitted is in
+   * here, because the whole point is to price it before they do, and a selection
+   * they have not reached is absent -- which is exactly how an omitted optional
+   * quantity reaches the game's own default rather than reaching it as a zero.
+   */
+  readonly args: Readonly<Record<string, unknown>>;
+}
+
 /** "I am mounted; send me what you have." The host answers with a state frame. */
 interface WorldReadyMessage {
   readonly source: typeof WORLD_UI_SOURCE;
   readonly type: 'world_ready';
 }
 
-export type WorldUiMessage = WorldCommandMessage | WorldReadyMessage | WorldPickMessage;
+export type WorldUiMessage =
+  | WorldCommandMessage
+  | WorldReadyMessage
+  | WorldPickMessage
+  | WorldQuoteMessage;
 
 /**
  * What re-asking one pick answers (#378).
@@ -365,6 +413,20 @@ export type WorldUiMessage = WorldCommandMessage | WorldReadyMessage | WorldPick
 export interface WorldPickOutcome {
   readonly ok: boolean;
   readonly selection?: WorldActionOffer['selections'][number];
+  readonly message?: string;
+  readonly code?: string;
+}
+
+/**
+ * What quoting a draft answers (#248).
+ *
+ * A refusal RESOLVES, exactly as a pick's does. `quote: null` is not a refusal:
+ * it is the game saying there is nothing to price about this draft yet, which is
+ * the ordinary state of an action a player has only just opened.
+ */
+export interface WorldQuoteOutcome {
+  readonly ok: boolean;
+  readonly quote?: readonly string[] | null;
   readonly message?: string;
   readonly code?: string;
 }

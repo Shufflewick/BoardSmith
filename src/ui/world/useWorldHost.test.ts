@@ -369,23 +369,103 @@ describe('useWorldHost', () => {
  * the lines is the thing that saves every world UI from writing the same
  * bounded array.
  */
-describe('useWorldHost — re-asking one pick (ShufflewickPub #378)', () => {
-  let posted: unknown[];
+/**
+ * A PAGE WHOSE POSTS ARE COLLECTED, ON FAKE TIMERS.
+ *
+ * Both QUESTION roads are driven through this -- a re-asked pick (#378) and a
+ * quoted draft (#248) -- because neither is about how the page was built: each is
+ * about one request going out, one answer coming back under the same id, and a
+ * timeout that resolves rather than spinning. `posted` is cleared in place per
+ * test, so an assertion on it is still an assertion on this test's own traffic.
+ */
+/**
+ * THE FOUR RULES EVERY QUESTION OBEYS, STATED ONCE (#378, #248).
+ *
+ * A pick and a quote are both questions rather than commands, and everything that
+ * follows from that is the same for both:
+ *
+ *   NO ORDER IS WRITTEN DOWN. That is the one property separating a question from
+ *     `act`: an order exists so a repeat cannot spend twice, and a question spends
+ *     nothing. `acting` stays false with it, because a panel asking what something
+ *     costs is not a player mid-press.
+ *   A REFUSAL RESOLVES, message and code intact. A world refuses legitimately, and
+ *     a caller that had to catch one would be treating the rules working as an
+ *     exception.
+ *   SILENCE RESOLVES TOO, rather than spinning forever.
+ *   AND SO DOES THE FRAME GOING. A promise nobody resolves is a panel that waits
+ *     for a page that has stopped listening.
+ *
+ * Written as one helper because they were two copies the day the second road
+ * landed, and a rule with two copies is a rule that will hold on one road.
+ */
+function itIsAQuestion(road: {
+  what: string;
+  posted: unknown[];
+  make: () => ReturnType<typeof useWorldHost>;
+  ask: (host: ReturnType<typeof useWorldHost>) => Promise<{ ok: boolean }>;
+  answers: 'world_pick_result' | 'world_quote_result';
+  requestId: string;
+}) {
+  it(`carries NO order, because asking a ${road.what} spends nothing`, () => {
+    const host = road.make();
+    void road.ask(host);
+    expect(road.posted[0]).not.toHaveProperty('order');
+    expect(host.acting.value).toBe(false);
+  });
 
+  it('resolves a refusal rather than throwing it', async () => {
+    const host = road.make();
+    const answer = road.ask(host);
+    deliver(host, {
+      source: WORLD_HOST_SOURCE,
+      type: road.answers,
+      requestId: road.requestId,
+      ok: false,
+      message: 'That empire is no longer yours.',
+      code: 'partition-missing',
+    });
+    await expect(answer).resolves.toEqual({
+      ok: false,
+      message: 'That empire is no longer yours.',
+      code: 'partition-missing',
+    });
+  });
+
+  it(`answers a ${road.what} the host never came back on, rather than spinning forever`, async () => {
+    const host = road.make();
+    const answer = road.ask(host);
+    await vi.advanceTimersByTimeAsync(60_000);
+    await expect(answer).resolves.toMatchObject({ ok: false });
+  });
+
+  it(`fails an outstanding ${road.what} when the frame stops listening`, async () => {
+    const host = road.make();
+    host.start();
+    const answer = road.ask(host);
+    host.stop();
+    await expect(answer).resolves.toMatchObject({ ok: false });
+  });
+}
+
+function questionPage() {
+  const posted: unknown[] = [];
   beforeEach(() => {
     vi.useFakeTimers();
-    posted = [];
+    posted.length = 0;
   });
   afterEach(() => {
     vi.useRealTimers();
   });
-
-  function make() {
-    return useWorldHost({
+  const make = () =>
+    useWorldHost({
       post: (message) => posted.push(message),
       orders: createOrderBook({ storage: memoryStorage() }),
     });
-  }
+  return { posted, make };
+}
+
+describe('useWorldHost — re-asking one pick (ShufflewickPub #378)', () => {
+  const { posted, make } = questionPage();
 
   const CREW = {
     name: 'crew',
@@ -419,46 +499,13 @@ describe('useWorldHost — re-asking one pick (ShufflewickPub #378)', () => {
     await expect(answer).resolves.toEqual({ ok: true, selection: CREW });
   });
 
-  it('carries NO order, because a question is not a command to make idempotent', () => {
-    // The one property that separates this from `act`: an order is written down
-    // before it is sent so a repeat cannot spend twice. A pick spends nothing.
-    const host = make();
-    void host.resolvePick('deploy', 'crew', {});
-    expect(posted[0]).not.toHaveProperty('order');
-    expect(host.acting.value).toBe(false);
-  });
-
-  it('resolves a refusal rather than throwing it', async () => {
-    const host = make();
-    const answer = host.resolvePick('deploy', 'crew', { ship: 'gone' });
-    deliver(host, {
-      source: WORLD_HOST_SOURCE,
-      type: 'world_pick_result',
-      requestId: 'wp-1',
-      ok: false,
-      message: 'That ship has already sailed.',
-      code: 'partition-missing',
-    });
-    await expect(answer).resolves.toEqual({
-      ok: false,
-      message: 'That ship has already sailed.',
-      code: 'partition-missing',
-    });
-  });
-
-  it('answers a pick the host never came back on, rather than spinning forever', async () => {
-    const host = make();
-    const answer = host.resolvePick('deploy', 'crew', { ship: 'dory' });
-    await vi.advanceTimersByTimeAsync(60_000);
-    await expect(answer).resolves.toMatchObject({ ok: false });
-  });
-
-  it('fails an outstanding pick when the frame stops listening', async () => {
-    const host = make();
-    host.start();
-    const answer = host.resolvePick('deploy', 'crew', { ship: 'dory' });
-    host.stop();
-    await expect(answer).resolves.toMatchObject({ ok: false });
+  itIsAQuestion({
+    what: 'pick',
+    posted,
+    make,
+    ask: (host) => host.resolvePick('deploy', 'crew', { ship: 'dory' }),
+    answers: 'world_pick_result',
+    requestId: 'wp-1',
   });
 });
 
@@ -759,5 +806,55 @@ describe('useWorldHost — an order that outlives the page (#195)', () => {
     const blind = useWorldHost({ post: () => {}, orders: createOrderBook({ storage: null }) });
     expect(blind.ordersDurable).toBe(false);
     expect(page().ordersDurable).toBe(true);
+  });
+});
+
+/**
+ * #248: WHAT THE DRAFT IN FRONT OF THE PLAYER WOULD COST.
+ *
+ * The pick road's twin, and deliberately the same shape: one request, one
+ * echoed `requestId`, a refusal that resolves, and NO order -- a quote spends
+ * nothing, so there is nothing to make idempotent and nothing to recover after a
+ * reload. What differs is the subject: a pick asks about one selection, a quote
+ * asks about the whole draft, including a number typed into the panel's field
+ * and never submitted.
+ */
+describe('useWorldHost — quoting a draft (#248)', () => {
+  const { posted, make } = questionPage();
+
+  it('sends the whole draft and resolves with the lines that came back', async () => {
+    const host = make();
+    const answer = host.quoteDraft('boost', { resource: 'storage', weeks: 2 });
+
+    expect(posted).toEqual([
+      {
+        source: WORLD_UI_SOURCE,
+        type: 'world_quote',
+        requestId: 'wq-1',
+        action: 'boost',
+        args: { resource: 'storage', weeks: 2 },
+      },
+    ]);
+
+    deliver(host, {
+      source: WORLD_HOST_SOURCE,
+      type: 'world_quote_result',
+      requestId: 'wq-1',
+      ok: true,
+      quote: ['10 Essentia', 'storage boosted until 2026-09-28'],
+    });
+    await expect(answer).resolves.toEqual({
+      ok: true,
+      quote: ['10 Essentia', 'storage boosted until 2026-09-28'],
+    });
+  });
+
+  itIsAQuestion({
+    what: 'quote',
+    posted,
+    make,
+    ask: (host) => host.quoteDraft('boost', { weeks: 2 }),
+    answers: 'world_quote_result',
+    requestId: 'wq-1',
   });
 });

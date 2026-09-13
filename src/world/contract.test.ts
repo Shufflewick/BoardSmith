@@ -200,6 +200,16 @@ class ReferenceWorldEngine implements WorldEngine {
     throw new Error("the reference world holds no actions to re-ask a pick of");
   }
 
+  quotePartitions(): readonly string[] {
+    return [];
+  }
+
+  /** Nor an action that prices its own draft (#248). A conformance engine is
+   *  asked to have the METHOD. */
+  resolveQuote(): Promise<never> {
+    throw new Error("the reference world holds no actions that quote a draft");
+  }
+
   /**
    * The reference world mints nothing, so its allocation never moves (#377) --
    * but it still HAS one, because a host reads this after every write that

@@ -52,6 +52,15 @@ export function stubActionController(overrides: Record<string, unknown> = {}) {
     currentPickDraft: ref(null),
     setPickDraft: vi.fn(),
     actionMenuPath: ref<readonly string[]>([]),
+    // The draft's price and the confirmation it is read before (#248), shared for
+    // the same reason: the panel renders what the controller holds, and a custom
+    // UI reads the same refs rather than a second copy.
+    actionQuote: ref<readonly string[] | null>(null),
+    quotePending: ref(false),
+    quoteError: ref<string | null>(null),
+    awaitingConfirmation: ref(false),
+    confirmDisabledReason: ref<string | null>(null),
+    confirm: vi.fn(async () => ({ success: true })),
 
     // Called from computed getters and template handlers, so on first render.
     getCurrentChoices: vi.fn(() => [] as unknown[]),

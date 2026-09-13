@@ -174,6 +174,16 @@ export type WorldDevRequest =
       /** Every selection's value bound so far (ShufflewickPub #378). */
       args?: Record<string, unknown>;
     }
+  | {
+      type: 'quote';
+      requestId: string;
+      /** The action being drafted (#248). */
+      action: string;
+      /** Every selection as the player has it SO FAR -- a number typed into the
+       *  panel's field and not yet submitted included, which is the whole point
+       *  of this message existing. */
+      args?: Record<string, unknown>;
+    }
   | { type: 'fire_due' }
   | { type: 'wake' };
 
@@ -520,6 +530,9 @@ export class LocalWorldHost {
         case 'pick':
           await this.#resolvePick(clientId, message);
           return;
+        case 'quote':
+          await this.#resolveQuote(clientId, message);
+          return;
         case 'fire_due':
           await this.#fireDueNow(clientId);
           return;
@@ -859,6 +872,73 @@ export class LocalWorldHost {
     } catch (error) {
       this.#send(clientId, {
         type: 'world_pick_result',
+        requestId,
+        ok: false,
+        message: messageOf(error),
+        ...(error instanceof WorldRefusal ? { code: error.code } : {}),
+      });
+    }
+  }
+
+  // ── the draft, priced ──────────────────────────────────────────────────────
+
+  /**
+   * WHAT THE DRAFT IN FRONT OF THE PLAYER WOULD COST (#248).
+   *
+   * `#resolvePick`'s twin, one step further on: a pick asks what one selection
+   * may be, and this asks what the whole draft adds up to -- so the args carry a
+   * number the player has typed and never submitted, which no other message on
+   * this socket does.
+   *
+   * IT IS A READ, on exactly the terms the pick is. Nothing is dispatched,
+   * nothing is checkpointed and no view is pushed: a player being told a price
+   * has not paid one, and the world is where it was when they came to it.
+   */
+  async #resolveQuote(
+    clientId: string,
+    message: Extract<WorldDevRequest, { type: 'quote' }>,
+  ): Promise<void> {
+    const { requestId, action } = message;
+    const args = message.args ?? {};
+    const seat = this.#attached.get(clientId);
+    if (seat === undefined) {
+      this.#send(clientId, {
+        type: 'world_quote_result',
+        requestId,
+        ok: false,
+        message: 'This page holds no seat in this world yet, so it has no draft to price.',
+      });
+      return;
+    }
+    const player = devWorldPlayer(seat);
+    const runner = this.#world.runner;
+    const now = this.#worldNow();
+    try {
+      await settleDeclaration(
+        async (supplied) =>
+          (await runner.declareQuote(player, action, args, now, supplied)).needs,
+        (name) =>
+          this.#readPartition(
+            name,
+            `Pricing "${action}" needs partition "${name}", which this world's store does not ` +
+              "have. The action's own declaration names it; either the name is wrong or the " +
+              'partition was never created.',
+          ),
+        `The "${action}" action's declaration`,
+      );
+      this.#send(clientId, {
+        type: 'world_quote_result',
+        requestId,
+        ok: true,
+        quote: await runner.resolveQuote(player, action, args, {
+          now,
+          presence: this.#presence(),
+          activity: this.#activityFor(player),
+        }),
+      });
+    } catch (error) {
+      this.#send(clientId, {
+        type: 'world_quote_result',
         requestId,
         ok: false,
         message: messageOf(error),
