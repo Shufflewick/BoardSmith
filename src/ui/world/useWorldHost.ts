@@ -187,6 +187,32 @@ const DROPPED_BEFORE_ANSWER =
  * contested claim, a door that is not there -- and a caller that had to catch
  * one would be treating the rules working correctly as an exception.
  */
+/**
+ * ONE ANSWER TO A QUESTION, AS ITS CALLER READS IT (#378, #248).
+ *
+ * A pick's answer carries a `selection` and a quote's carries a `quote`, and
+ * everything else about the two is identical: whether the world said yes, what it
+ * said if it said no, and the code it said it with.
+ *
+ * ABSENT RATHER THAN `undefined`, key by key. A caller comparing an outcome with
+ * `toEqual` is comparing what the world answered, and a key holding `undefined`
+ * is a key the world never sent.
+ */
+function answerOf<T extends { readonly ok: boolean }>(
+  message: Extract<WorldHostMessage, { type: 'world_pick_result' | 'world_quote_result' }>,
+  payload: keyof T & string,
+): T {
+  const data = message as unknown as Record<string, unknown>;
+  const answer: Record<string, unknown> = { ok: data.ok === true };
+  for (const key of [payload, 'message', 'code']) {
+    if (data[key] !== undefined) answer[key] = data[key];
+  }
+  // The one cast on this road, and it is the wire's: what arrived is `unknown`
+  // until something says what shape it is, and the message type that named this
+  // payload key is what says so.
+  return answer as T;
+}
+
 export function useWorldHost(options: WorldHostOptions = {}): WorldHost {
   const post =
     options.post ?? ((message: WorldUiMessage) => window.parent.postMessage(message, '*'));
@@ -463,31 +489,46 @@ export function useWorldHost(options: WorldHostOptions = {}): WorldHost {
     return answered;
   }
 
-  function handleMessage(event: MessageEvent): void {
-    if (!isOriginAllowed(event.origin, options.trustedOrigins)) return;
+  /** Hand one answered question to whoever is waiting on it. The payload key is
+   *  the only thing that differs between the two roads. */
+  function settleAnswer(
+    data: Extract<WorldHostMessage, { type: 'world_pick_result' | 'world_quote_result' }>,
+  ): void {
+    if (data.type === 'world_pick_result') {
+      settleQuestion(picks, data.requestId, answerOf<WorldPickOutcome>(data, 'selection'));
+      return;
+    }
+    settleQuestion(quotes, data.requestId, answerOf<WorldQuoteOutcome>(data, 'quote'));
+  }
+
+  /**
+   * THE MESSAGE, IF IT IS ONE OF OURS, or null.
+   *
+   * Two rules and neither is about what arrived: the origin has to be allowed --
+   * a deployed host names its own, `boardsmith dev` allows any -- and the frame
+   * has to be stamped by a world HOST. A wrong pairing with a table shell is
+   * inert here rather than half-consumed, which is why the two protocols stamp
+   * different sources at all.
+   */
+  function fromTheHost(event: MessageEvent): WorldHostMessage | null {
+    if (!isOriginAllowed(event.origin, options.trustedOrigins)) return null;
     const data = event.data as WorldHostMessage | undefined;
-    if (!data || data.source !== WORLD_HOST_SOURCE) return;
+    if (!data || data.source !== WORLD_HOST_SOURCE) return null;
+    return data;
+  }
+
+  function handleMessage(event: MessageEvent): void {
+    const data = fromTheHost(event);
+    if (data === null) return;
 
     if (data.type === 'world_response') {
       settle(data.requestId, outcomeOf(data), { answered: true });
       return;
     }
-    if (data.type === 'world_pick_result') {
-      settleQuestion(picks, data.requestId, {
-        ok: data.ok === true,
-        ...(data.selection === undefined ? {} : { selection: data.selection }),
-        ...(data.message === undefined ? {} : { message: data.message }),
-        ...(data.code === undefined ? {} : { code: data.code }),
-      });
-      return;
-    }
-    if (data.type === 'world_quote_result') {
-      settleQuestion(quotes, data.requestId, {
-        ok: data.ok === true,
-        ...(data.quote === undefined ? {} : { quote: data.quote }),
-        ...(data.message === undefined ? {} : { message: data.message }),
-        ...(data.code === undefined ? {} : { code: data.code }),
-      });
+    // ONE ROAD FOR EVERY QUESTION'S ANSWER (#378, #248), so this switch stays
+    // about which KIND of frame arrived rather than about what each one carries.
+    if (data.type === 'world_pick_result' || data.type === 'world_quote_result') {
+      settleAnswer(data);
       return;
     }
     if (data.type === 'world_events') {

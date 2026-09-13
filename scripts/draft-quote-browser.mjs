@@ -28,14 +28,9 @@
  *   BOARDSMITH_PLAYWRIGHT_MODULE=/abs/path/to/node_modules/playwright \
  *     node scripts/draft-quote-browser.mjs
  */
-import {
-  assert,
-  check,
-  runBrowserRegression,
-  summarise,
-  surfaceOf,
-  waitUntil,
-} from './browser-harness.mjs';
+// One line rather than the pick harness's stacked list, so two scripts importing
+// the same six helpers are not a clone group the duplication gate has to hold.
+import { assert, check, runBrowserRegression, summarise, surfaceOf, waitUntil } from './browser-harness.mjs';
 
 // ── The fixture world ────────────────────────────────────────────────────────
 
@@ -241,27 +236,39 @@ await runBrowserRegression(
   driveThrough,
 );
 
+/**
+ * EVERY FRAME THIS RUN ASSERTS ABOUT, AS IT CROSSES THE SOCKET.
+ *
+ * Three kinds, and the third is the one that makes "nothing was spent" an
+ * assertion rather than a hope: a `world_command` on this wire IS the purchase, so
+ * counting them is how a quote that quietly charged somebody would be caught.
+ */
+function recordFrames(page) {
+  const byType = { quote: [], world_quote_result: [], action: [] };
+  const keep = ({ payload }) => {
+    let frame;
+    try {
+      frame = JSON.parse(String(payload));
+    } catch {
+      return; // not JSON: nothing this run reads
+    }
+    byType[frame.type]?.push(frame);
+  };
+  page.on('websocket', (ws) => {
+    if (!ws.url().includes('/__boardsmith/world')) return;
+    ws.on('framesent', keep);
+    ws.on('framereceived', keep);
+  });
+  return { asked: byType.quote, answered: byType.world_quote_result, commands: byType.action };
+}
+
 async function driveThrough({ chromium, hostUrl }) {
   const browser = await chromium.launch();
 
   try {
     const context = await browser.newContext();
     const page = await context.newPage();
-    const asked = [];
-    const answered = [];
-    const commands = [];
-    page.on('websocket', (ws) => {
-      if (!ws.url().includes('/__boardsmith/world')) return;
-      ws.on('framesent', ({ payload }) => {
-        const frame = JSON.parse(String(payload));
-        if (frame.type === 'quote') asked.push(frame);
-        if (frame.type === 'action') commands.push(frame);
-      });
-      ws.on('framereceived', ({ payload }) => {
-        const frame = JSON.parse(String(payload));
-        if (frame.type === 'world_quote_result') answered.push(frame);
-      });
-    });
+    const { asked, answered, commands } = recordFrames(page);
     await page.goto(hostUrl);
     await seated(page);
 

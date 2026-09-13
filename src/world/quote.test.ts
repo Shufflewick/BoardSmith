@@ -36,7 +36,8 @@ import { Game, Player, Space } from "../engine/index.js";
 import type { ElementJSON, GameOptions } from "../engine/index.js";
 import { BoardSmithWorldEngine } from "./engine.js";
 import { assertWorldAction, worldAction, worldClockAction } from "./action.js";
-import type { StoredPartition, WorldPartitionSource } from "./contract.js";
+import type { StoredPartition } from "./contract.js";
+import { MapStore, offerStamp } from "./stored-world.test-helper.js";
 
 class Empire extends Space<BoostGame> {
   /** Genuinely earned, and the reason a preview may not be a guess. */
@@ -127,28 +128,16 @@ function genesis(boostUntil = 0): Map<string, StoredPartition> {
   ]);
 }
 
-class Store implements WorldPartitionSource {
-  constructor(private readonly stored: Map<string, StoredPartition>) {}
-  async read(name: string): Promise<StoredPartition | undefined> {
-    return this.stored.get(name);
-  }
-  forget(): void {}
-}
-
 /** A Monday, so the quoted dates below are readable rather than derived. */
 const NOW = Date.UTC(2026, 8, 14);
 
-const STAMP = {
-  now: NOW,
-  presence: [1] as readonly number[],
-  activity: { seat: 1, at: null, since: NOW },
-};
+const STAMP = offerStamp(NOW, [1]);
 
 function newEngine(actions = [boost, plainBoost]): BoardSmithWorldEngine {
   return new BoardSmithWorldEngine({
     game: newGame(),
     seats: new Map([["player-a", 1]]),
-    store: new Store(genesis()),
+    store: new MapStore(genesis()),
     actions,
     view: () => [EMPIRE],
   });
@@ -211,7 +200,7 @@ describe("a draft is quoted by the game that will charge for it", () => {
     const warmed = new BoardSmithWorldEngine({
       game: newGame(),
       seats: new Map([["player-a", 1]]),
-      store: new Store(genesis(NOW + 2 * WEEK_MS)),
+      store: new MapStore(genesis(NOW + 2 * WEEK_MS)),
       actions: [boost, plainBoost],
       view: () => [EMPIRE],
     });

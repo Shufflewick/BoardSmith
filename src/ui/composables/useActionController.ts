@@ -126,6 +126,7 @@ import type {
   ChoiceWithRefs,
   ValidElement,
   PickMetadata,
+  ActionQuoteResult,
   PickSnapshot,
   CollectedPick,
   ActionMetadata,
@@ -142,6 +143,30 @@ import type {
  * Create an action controller for handling game actions.
  * This is the shared logic between ActionPanel and custom UIs.
  */
+/** What the world would not say, when it did not say why (#248). */
+const QUOTE_UNANSWERED = 'The world would not say what this costs.';
+
+/**
+ * ONE ANSWER, AS THE CONTROLLER HOLDS IT (#248).
+ *
+ * Three inputs collapse to the same two fields: a price, a refusal the backend
+ * gave, and a throw from the transport. LINES OR AN ERROR, never both -- a price
+ * that could not be obtained must not render as a price of nothing -- and always
+ * stamped, because what makes a quote readable is that the draft it was computed
+ * for is still the draft on screen.
+ */
+function quoteHeld(
+  stamp: string,
+  answer: ActionQuoteResult | unknown,
+): { stamp: string; lines: readonly string[] | null; error: string | null } {
+  if (answer instanceof Error) return { stamp, lines: null, error: answer.message };
+  const result = answer as ActionQuoteResult;
+  if (result?.success !== true) {
+    return { stamp, lines: null, error: result?.error ?? QUOTE_UNANSWERED };
+  }
+  return { stamp, lines: result.lines ?? null, error: null };
+}
+
 export function useActionController(options: UseActionControllerOptions): UseActionControllerReturn {
   const {
     sendAction,
@@ -210,6 +235,14 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     return typeof autoFillOption === 'boolean' ? autoFillOption : autoFillOption.value;
   };
   const getAutoExecute = (): boolean => {
+    // AN ACTION THAT QUOTES IS CONFIRMED, NEVER AUTO-COMMITTED (#248). Filling
+    // the last selection used to BE the purchase, which left no moment for a
+    // price to be read in: the panel would render the total and charge for it in
+    // the same tick. `confirm()` is the purchase for these actions, and the
+    // player reaches it having seen what it costs. Here rather than at the watch
+    // because this is the question "may anything auto-execute right now", and
+    // every caller of it is asking that.
+    if (quotesItsDraft.value) return false;
     return typeof autoExecuteOption === 'boolean' ? autoExecuteOption : autoExecuteOption.value;
   };
 
@@ -1127,31 +1160,37 @@ export function useActionController(options: UseActionControllerOptions): UseAct
    * held-down key from opening a request per keystroke without a timer anybody
    * has to tune -- the rate is the round trip's own.
    */
+  /**
+   * THE DRAFT THAT IS WORTH ASKING ABOUT RIGHT NOW, or null.
+   *
+   * Four reasons there is nothing to ask: no backend can answer one, one is
+   * already outstanding (at most one in flight, which is what rate-limits a
+   * held-down key to the round trip's own pace), no quoted action is open, and
+   * the draft on screen has already been answered.
+   */
+  function quoteWorthAsking(): string | null {
+    if (options.fetchActionQuote === undefined || quoteInFlight !== null) return null;
+    const stamp = quoteStamp.value;
+    if (stamp === null || stamp === quoteAnswer.value?.stamp) return null;
+    return stamp;
+  }
+
   async function pursueQuote(): Promise<void> {
     const fetchFn = options.fetchActionQuote;
-    if (fetchFn === undefined || quoteInFlight !== null) return;
-    const stamp = quoteStamp.value;
-    if (stamp === null || stamp === quoteAnswer.value?.stamp) return;
+    const stamp = quoteWorthAsking();
+    if (fetchFn === undefined || stamp === null) return;
 
-    const actionName = currentAction.value as string;
-    const asked = draftArgs.value;
     quoteInFlight = stamp;
     try {
-      const result = await fetchFn(actionName, asked, playerSeat?.value ?? 0);
-      // The action may have been cancelled or replaced while this was in flight;
-      // an answer stamped for a draft nothing is holding is simply unreadable,
-      // so it can be stored without a guard here and never rendered.
-      quoteAnswer.value = {
+      // The action may have been cancelled or replaced while this is in flight; an
+      // answer stamped for a draft nothing is holding is simply unreadable, so
+      // there is nothing to guard here and nothing that could be rendered.
+      quoteAnswer.value = quoteHeld(
         stamp,
-        lines: result.success ? result.lines ?? null : null,
-        error: result.success ? null : result.error ?? 'The world would not say what this costs.',
-      };
+        await fetchFn(currentAction.value as string, draftArgs.value, playerSeat?.value ?? 0),
+      );
     } catch (err) {
-      quoteAnswer.value = {
-        stamp,
-        lines: null,
-        error: err instanceof Error ? err.message : 'The world would not say what this costs.',
-      };
+      quoteAnswer.value = quoteHeld(stamp, err);
     } finally {
       quoteInFlight = null;
     }
@@ -1247,12 +1286,6 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   // When all selections are filled, auto-execute
   // Skip when pendingOnServer — server already handles execution via processSelectionStep
   watch(isReady, async (ready) => {
-    // AN ACTION THAT QUOTES IS CONFIRMED, NEVER AUTO-COMMITTED (#248). Filling
-    // the last selection used to BE the purchase, which left no moment for a
-    // price to be read in -- the panel rendered the total and charged for it in
-    // the same tick. `confirm()` is the purchase for these actions, and the
-    // player reaches it having seen what it costs.
-    if (quotesItsDraft.value) return;
     if (ready && getAutoExecute() && currentAction.value && !isExecuting.value && !pendingOnServer.value
         && !isViewingHistoryValue()) {
       // Call hooks before executing - allows capturing element positions for animations.

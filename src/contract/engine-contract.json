@@ -1,7 +1,7 @@
 {
   "revision": 79,
   "bundleProtocol": 2,
-  "surfaceHash": "52965a970e8184de",
+  "surfaceHash": "1d8085819a93c43d",
   "payloadHash": "b66e751ab92f9508",
   "formatHash": "0058593e7cc80205",
   "history": [
@@ -651,7 +651,7 @@
       "revision": 79,
       "date": "2026-09-13",
       "bundleProtocol": 2,
-      "surfaceHash": "52965a970e8184de",
+      "surfaceHash": "1d8085819a93c43d",
       "payloadHash": "b66e751ab92f9508",
       "formatHash": "0058593e7cc80205",
       "summary": "A world action may QUOTE the draft in front of a player before it commits (#248). New .quote(fn) on worldAction: one function of the args the player has drafted so far -- a number typed into the panel's editor and not yet submitted included, an omitted optional selection still absent -- answered as the lines to show them, run under the same read-only facilities and projection an offer's callbacks run under, so a quote that writes is refused. WorldEngine gains quotePartitions() and resolveQuote() (the whole declaration walk, including the execute round, hydrated with the draft bound); the runner gains declareQuote()/resolveQuote(); the wire gains world_quote / world_quote_result, which the platform host must relay for a world's panel to show a price. An offer carries quote: true, and both the shared action panel and a custom UI then CONFIRM rather than auto-committing on the last pick, refusing to submit a draft whose price is not on screen. ActionMetadata gains quote; useActionController gains actionQuote/quotePending/quoteError/awaitingConfirmation/confirmDisabledReason/confirm() as shared state, and the panel's optional number/text editor finally draws the skip control its own '(optional)' label promised."

@@ -34,7 +34,8 @@ import { Game, Piece, Player, Space } from "../engine/index.js";
 import type { ActionDefinition, ElementJSON, GameOptions } from "../engine/index.js";
 import { BoardSmithWorldEngine } from "./engine.js";
 import { worldAction } from "./action.js";
-import type { StoredPartition, WorldPartitionSource } from "./contract.js";
+import type { StoredPartition } from "./contract.js";
+import { MapStore, offerStamp } from "./stored-world.test-helper.js";
 
 class Operative extends Piece<FleetGame> {}
 
@@ -107,26 +108,13 @@ function genesis(): Map<string, StoredPartition> {
   ]);
 }
 
-class Store implements WorldPartitionSource {
-  constructor(private readonly stored: Map<string, StoredPartition>) {}
-  async read(name: string): Promise<StoredPartition | undefined> {
-    return this.stored.get(name);
-  }
-  forget(): void {}
-}
-
-const STAMP = {
-  now: 1_700_000_000_000,
-  presence: [1, 2] as readonly number[],
-  // No history; the cases that are about a watermark name their own (#383).
-  activity: { seat: 1, at: null, since: 1_700_000_000_000 },
-};
+const STAMP = offerStamp(1_700_000_000_000);
 
 function newEngine(): BoardSmithWorldEngine {
   return new BoardSmithWorldEngine({
     game: newGame(),
     seats: new Map([["player-a", 1]]),
-    store: new Store(genesis()),
+    store: new MapStore(genesis()),
     actions: [deploy],
     view: () => [FLEET],
   });
@@ -265,7 +253,7 @@ describe("#384 — an offer cannot write to the world it is describing", () => {
     const engine = new BoardSmithWorldEngine({
       game: newGame(),
       seats: new Map([["player-a", 1]]),
-      store: new Store(genesis()),
+      store: new MapStore(genesis()),
       actions: [action],
       view: () => [FLEET],
     });

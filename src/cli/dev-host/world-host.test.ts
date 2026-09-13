@@ -36,7 +36,7 @@ import {
 } from '../../world/index.js';
 import { openWorldStore, worldStorePath, type LocalWorldStore } from './world-store.js';
 import type { WorldDevClock } from './node-world-clock.js';
-import { LocalWorldHost, devWorldPlayer } from './world-host.js';
+import { LocalWorldHost, devWorldPlayer, type WorldDevRequest } from './world-host.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
 /**
@@ -492,6 +492,20 @@ describe('#167: presence is the seats this host has open', () => {
  * now, and this drives it the way a browser does: the same message, the same
  * host, the same answer.
  */
+/**
+ * A READ CHANGES NOTHING, which is the same assertion for every read this host
+ * answers: a re-asked pick (#378) and a quoted draft (#248) both run over the
+ * world and neither may move it. The BYTES are compared rather than a projection,
+ * and the dirty set beside them -- a write the store has not been told about yet
+ * is still a write.
+ */
+async function changesNothing(store: LocalWorldStore, read: () => Promise<void>): Promise<void> {
+  const before = JSON.stringify(await store.read(HEARTH));
+  await read();
+  expect(JSON.stringify(await store.read(HEARTH))).toBe(before);
+  expect(store.dirtyPartitions()).toEqual([]);
+}
+
 describe('#378: one pick, re-asked with the args bound so far', () => {
   const stack = worldAction<Village>('stack')
     .prompt('Stack the hearth')
@@ -552,18 +566,16 @@ describe('#378: one pick, re-asked with the args bound so far', () => {
 
   it('changes nothing: a pick is a question, and the world is where it was', async () => {
     const { host, store } = await attached({ dir, definition: stacking() });
-    const before = JSON.stringify(await store.read(HEARTH));
 
-    await host.handleMessage('c1', {
-      type: 'pick',
-      requestId: 'p1',
-      action: 'stack',
-      selection: 'logs',
-      args: { size: 'big' },
-    });
-
-    expect(JSON.stringify(await store.read(HEARTH))).toBe(before);
-    expect(store.dirtyPartitions()).toEqual([]);
+    await changesNothing(store, () =>
+      host.handleMessage('c1', {
+        type: 'pick',
+        requestId: 'p1',
+        action: 'stack',
+        selection: 'logs',
+        args: { size: 'big' },
+      }),
+    );
     await host.close();
   });
 
@@ -631,6 +643,14 @@ describe('#248: the draft in front of the player, priced by the game', () => {
 
   const buying = () => bundle({ world: worldBlock({ actions: [...VILLAGE_ACTIONS, buy] }) });
 
+  /** Ask what a draft costs, the way a browser does. */
+  const priceOf = (
+    host: { handleMessage: (client: string, message: WorldDevRequest) => Promise<void> },
+    args: Record<string, unknown>,
+    action = 'buy',
+    clientId = 'c1',
+  ) => host.handleMessage(clientId, { type: 'quote', requestId: 'q1', action, args });
+
   it('tells the seat the action quotes, on the offer itself', async () => {
     const { host, sent } = await attached({ dir, definition: buying() });
 
@@ -643,12 +663,7 @@ describe('#248: the draft in front of the player, priced by the game', () => {
   it('prices a quantity the player has typed and not submitted', async () => {
     const { host, sent } = await attached({ dir, definition: buying() });
 
-    await host.handleMessage('c1', {
-      type: 'quote',
-      requestId: 'q1',
-      action: 'buy',
-      args: { logs: 3 },
-    });
+    await priceOf(host, { logs: 3 });
 
     const answer = last(sent, 'c1', 'world_quote_result')!;
     expect(answer.ok).toBe(true);
@@ -659,7 +674,7 @@ describe('#248: the draft in front of the player, priced by the game', () => {
   it('prices an OMITTED quantity as the game\'s own default', async () => {
     const { host, sent } = await attached({ dir, definition: buying() });
 
-    await host.handleMessage('c1', { type: 'quote', requestId: 'q1', action: 'buy', args: {} });
+    await priceOf(host, {});
 
     expect(last(sent, 'c1', 'world_quote_result')!.quote).toEqual([
       '5 coins',
@@ -671,12 +686,7 @@ describe('#248: the draft in front of the player, priced by the game', () => {
   it('prices a ZERO quantity as zero, which is a different answer', async () => {
     const { host, sent } = await attached({ dir, definition: buying() });
 
-    await host.handleMessage('c1', {
-      type: 'quote',
-      requestId: 'q1',
-      action: 'buy',
-      args: { logs: 0 },
-    });
+    await priceOf(host, { logs: 0 });
 
     expect(last(sent, 'c1', 'world_quote_result')!.quote).toEqual([
       '0 coins',
@@ -687,17 +697,8 @@ describe('#248: the draft in front of the player, priced by the game', () => {
 
   it('changes nothing: being quoted is not buying', async () => {
     const { host, store } = await attached({ dir, definition: buying() });
-    const before = JSON.stringify(await store.read(HEARTH));
 
-    await host.handleMessage('c1', {
-      type: 'quote',
-      requestId: 'q1',
-      action: 'buy',
-      args: { logs: 9 },
-    });
-
-    expect(JSON.stringify(await store.read(HEARTH))).toBe(before);
-    expect(store.dirtyPartitions()).toEqual([]);
+    await changesNothing(store, () => priceOf(host, { logs: 9 }));
     await host.close();
   });
 
@@ -705,12 +706,7 @@ describe('#248: the draft in front of the player, priced by the game', () => {
     const opened = openHost({ dir, definition: buying() });
     await opened.host.start();
 
-    await opened.host.handleMessage('c9', {
-      type: 'quote',
-      requestId: 'q1',
-      action: 'buy',
-      args: { logs: 1 },
-    });
+    await priceOf(opened.host, { logs: 1 }, 'buy', 'c9');
 
     expect(last(opened.sent, 'c9', 'world_quote_result')).toMatchObject({ ok: false });
     await opened.host.close();
@@ -719,7 +715,7 @@ describe('#248: the draft in front of the player, priced by the game', () => {
   it('refuses to price an action that declares no quote', async () => {
     const { host, sent } = await attached({ dir, definition: buying() });
 
-    await host.handleMessage('c1', { type: 'quote', requestId: 'q1', action: 'chop', args: {} });
+    await priceOf(host, {}, 'chop');
 
     const answer = last(sent, 'c1', 'world_quote_result')!;
     expect(answer.ok).toBe(false);

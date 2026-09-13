@@ -109,12 +109,33 @@ const settled = async () => {
   for (let i = 0; i < 6; i++) await nextTick();
 };
 
+/**
+ * BOOST, OPEN, WITH THE RESOURCE ANSWERED -- where every case below starts.
+ *
+ * The required pick is asked first however the action was declared, so "storage,
+ * then the quantity" is the arrangement rather than the subject of anything here.
+ */
+async function drafting(quote?: Parameters<typeof controllerOver>[1]) {
+  const over = controllerOver([BOOST], quote);
+  await over.controller.start('boost', {});
+  await over.controller.fill('resource', 'storage');
+  await settled();
+  return over;
+}
+
+/** That, with the quantity answered too, so the draft is complete and waiting to
+ *  be confirmed. */
+async function complete(weeks: number | 'skipped', quote?: Parameters<typeof controllerOver>[1]) {
+  const over = await drafting(quote);
+  if (weeks === 'skipped') over.controller.skip('weeks');
+  else await over.controller.fill('weeks', weeks);
+  await settled();
+  return over;
+}
+
 describe('the draft in front of the player is what gets priced', () => {
   it('prices a number the player has TYPED and not yet submitted', async () => {
-    const { controller, fetchActionQuote } = controllerOver([BOOST]);
-    await controller.start('boost', {});
-    await controller.fill('resource', 'storage');
-    await settled();
+    const { controller, fetchActionQuote } = await drafting();
 
     controller.setPickDraft(2);
     await settled();
@@ -125,9 +146,7 @@ describe('the draft in front of the player is what gets priced', () => {
   });
 
   it('re-prices as the draft moves', async () => {
-    const { controller } = controllerOver([BOOST]);
-    await controller.start('boost', {});
-    await controller.fill('resource', 'storage');
+    const { controller } = await drafting();
     controller.setPickDraft(2);
     await settled();
     expect(controller.actionQuote.value?.[0]).toBe('10 Essentia');
@@ -141,18 +160,13 @@ describe('the draft in front of the player is what gets priced', () => {
   it('prices what is bound before anything is typed at all', async () => {
     // An omitted quantity is the game's own default -- five, not zero -- and the
     // player is shown that before they touch the field.
-    const { controller } = controllerOver([BOOST]);
-    await controller.start('boost', {});
-    await controller.fill('resource', 'storage');
-    await settled();
+    const { controller } = await drafting();
 
     expect(controller.actionQuote.value).toEqual(['5 Essentia', 'storage for 1 week(s)']);
   });
 
   it('prices a ZERO draft as zero, which is not the same as omitting it', async () => {
-    const { controller, fetchActionQuote } = controllerOver([BOOST]);
-    await controller.start('boost', {});
-    await controller.fill('resource', 'storage');
+    const { controller, fetchActionQuote } = await drafting();
     controller.setPickDraft(0);
     await settled();
 
@@ -161,10 +175,7 @@ describe('the draft in front of the player is what gets priced', () => {
   });
 
   it('keeps a SKIPPED quantity out of the draft entirely', async () => {
-    const { controller, fetchActionQuote } = controllerOver([BOOST]);
-    await controller.start('boost', {});
-    await controller.fill('resource', 'storage');
-    await settled();
+    const { controller, fetchActionQuote } = await drafting();
     controller.skip('weeks');
     await settled();
 
@@ -191,15 +202,12 @@ describe('a price is shown only while it is the price of what is on screen', () 
     // dropped rather than rendered beside the 3, because a price for a draft
     // nobody is holding is worse than no price at all.
     let release: ((value: ActionQuoteResult) => void) | null = null;
-    const { controller } = controllerOver([BOOST], (_action, args) => {
+    const { controller } = await drafting((_action, args) => {
       if (args.weeks === 2) {
         return new Promise<ActionQuoteResult>((resolve) => { release = resolve; });
       }
       return Promise.resolve(priceOf(args));
     });
-    await controller.start('boost', {});
-    await controller.fill('resource', 'storage');
-    await settled();
     controller.setPickDraft(2);
     await settled();
     controller.setPickDraft(3);
@@ -214,14 +222,12 @@ describe('a price is shown only while it is the price of what is on screen', () 
 
   it('says a price is being worked out rather than showing the last one', async () => {
     let release: ((value: ActionQuoteResult) => void) | null = null;
-    const { controller } = controllerOver([BOOST], (_action, args) => {
+    const { controller } = await drafting((_action, args) => {
       if (args.weeks === 4) {
         return new Promise<ActionQuoteResult>((resolve) => { release = resolve; });
       }
       return Promise.resolve(priceOf(args));
     });
-    await controller.start('boost', {});
-    await controller.fill('resource', 'storage');
     controller.setPickDraft(2);
     await settled();
     expect(controller.quotePending.value).toBe(false);
@@ -239,13 +245,10 @@ describe('a price is shown only while it is the price of what is on screen', () 
   });
 
   it('reports a refusal as a refusal, and shows no price with it', async () => {
-    const { controller } = controllerOver([BOOST], async () => ({
+    const { controller } = await drafting(async () => ({
       success: false,
       error: 'That empire is no longer yours.',
     }));
-    await controller.start('boost', {});
-    await controller.fill('resource', 'storage');
-    await settled();
 
     expect(controller.quoteError.value).toBe('That empire is no longer yours.');
     expect(controller.actionQuote.value).toBeNull();
@@ -253,14 +256,11 @@ describe('a price is shown only while it is the price of what is on screen', () 
 
   it('keeps ONE quote in flight, and asks again for the draft it ended on', async () => {
     const releases: Array<() => void> = [];
-    const { controller, fetchActionQuote } = controllerOver([BOOST], (_action, args) =>
+    const { controller, fetchActionQuote } = await drafting((_action, args) =>
       new Promise<ActionQuoteResult>((resolve) => {
         releases.push(() => resolve(priceOf(args)));
       }),
     );
-    await controller.start('boost', {});
-    await controller.fill('resource', 'storage');
-    await settled();
     expect(fetchActionQuote).toHaveBeenCalledTimes(1);
 
     // Four keystrokes while the first answer is still outstanding.
@@ -279,10 +279,7 @@ describe('a price is shown only while it is the price of what is on screen', () 
   });
 
   it('forgets the quote when the action is cancelled', async () => {
-    const { controller } = controllerOver([BOOST]);
-    await controller.start('boost', {});
-    await controller.fill('resource', 'storage');
-    await settled();
+    const { controller } = await drafting();
     expect(controller.actionQuote.value).not.toBeNull();
 
     controller.cancel();
@@ -295,11 +292,7 @@ describe('a price is shown only while it is the price of what is on screen', () 
 
 describe('the last pick is not the purchase', () => {
   it('does NOT auto-execute a quoted action when every selection is filled', async () => {
-    const { controller, sendAction } = controllerOver([BOOST]);
-    await controller.start('boost', {});
-    await controller.fill('resource', 'storage');
-    await controller.fill('weeks', 2);
-    await settled();
+    const { controller, sendAction } = await complete(2);
 
     expect(sendAction).not.toHaveBeenCalled();
     expect(controller.isReady.value).toBe(true);
@@ -307,21 +300,13 @@ describe('the last pick is not the purchase', () => {
   });
 
   it('shows the price of the completed draft while it waits to be confirmed', async () => {
-    const { controller } = controllerOver([BOOST]);
-    await controller.start('boost', {});
-    await controller.fill('resource', 'storage');
-    await controller.fill('weeks', 2);
-    await settled();
+    const { controller } = await complete(2);
 
     expect(controller.actionQuote.value).toEqual(['10 Essentia', 'storage for 2 week(s)']);
   });
 
   it('sends the order when the player confirms, with the drafted args', async () => {
-    const { controller, sendAction } = controllerOver([BOOST]);
-    await controller.start('boost', {});
-    await controller.fill('resource', 'storage');
-    await controller.fill('weeks', 2);
-    await settled();
+    const { controller, sendAction } = await complete(2);
 
     const result = await controller.confirm();
 
@@ -331,11 +316,7 @@ describe('the last pick is not the purchase', () => {
   });
 
   it('submits an omitted quantity as omitted, exactly as before', async () => {
-    const { controller, sendAction } = controllerOver([BOOST]);
-    await controller.start('boost', {});
-    await controller.fill('resource', 'storage');
-    controller.skip('weeks');
-    await settled();
+    const { controller, sendAction } = await complete('skipped');
 
     await controller.confirm();
 
@@ -343,11 +324,7 @@ describe('the last pick is not the purchase', () => {
   });
 
   it('submits a zero quantity as zero', async () => {
-    const { controller, sendAction } = controllerOver([BOOST]);
-    await controller.start('boost', {});
-    await controller.fill('resource', 'storage');
-    await controller.fill('weeks', 0);
-    await settled();
+    const { controller, sendAction } = await complete(0);
 
     await controller.confirm();
 
@@ -369,11 +346,7 @@ describe('the last pick is not the purchase', () => {
   it('refuses to confirm while the price of the final draft is still unknown', async () => {
     // The one thing this feature exists to prevent: pressing the button with no
     // price on screen.
-    const { controller, sendAction } = controllerOver([BOOST], () => new Promise(() => {}));
-    await controller.start('boost', {});
-    await controller.fill('resource', 'storage');
-    await controller.fill('weeks', 2);
-    await settled();
+    const { controller, sendAction } = await complete(2, () => new Promise(() => {}));
 
     expect(controller.confirmDisabledReason.value).toMatch(/price/i);
     const result = await controller.confirm();
