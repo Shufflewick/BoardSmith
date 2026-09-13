@@ -280,6 +280,35 @@ async function withFixtureWorld(spec, body) {
  */
 export const surfaceOf = (page) => page.frameLocator('.world-dev__frame');
 
+/**
+ * READING ONE STORED FIELD OUT OF A PROJECTED VIEW -- source, for a fixture board.
+ *
+ * Every regression that submits something has to read back what the world
+ * STORED rather than what the player typed, because the stored value is the only
+ * place a resolver's own argument can be observed. The projection is a tree of
+ * nodes carrying `attributes`, so reading one field is a walk, and the walk was
+ * the same twelve lines in two fixture boards by the time #252 added the second
+ * -- the finding `boardsmith audit --dupes-baseline` reported against it.
+ *
+ * A STRING and not a function, because a fixture board is compiled inside a
+ * throwaway project that resolves only `boardsmith`, `vue` and Vite: it cannot
+ * import from this directory. Interpolate it into the board's source, above the
+ * component, and call `findAttr(props.gameView as Node | undefined, 'field')`.
+ */
+export const VIEW_FIELD_READER = `type Node = { attributes?: Record<string, unknown>; children?: Node[] };
+
+/** The first node in the projected view that carries the field, or undefined. */
+const findAttr = (node: Node | undefined, key: string): unknown => {
+  if (!node) return undefined;
+  const own = node.attributes?.[key];
+  if (own !== undefined) return own;
+  for (const child of node.children ?? []) {
+    const found = findAttr(child, key);
+    if (found !== undefined) return found;
+  }
+  return undefined;
+};`;
+
 // ── The assertions ───────────────────────────────────────────────────────────
 
 const results = [];
