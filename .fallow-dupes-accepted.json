@@ -991,14 +991,6 @@
       ]
     },
     {
-      "content": "1f2165ad015583e7",
-      "lines": 45,
-      "files": [
-        "src/types/protocol.ts",
-        "src/ui/composables/useActionControllerTypes.ts"
-      ]
-    },
-    {
       "content": "1f46d38162d1bb67",
       "lines": 10,
       "files": [
@@ -2950,14 +2942,6 @@
       "lines": 9,
       "files": [
         "src/session/stateless-ops.test.ts"
-      ]
-    },
-    {
-      "content": "61f6ec4cff86f0a0",
-      "lines": 51,
-      "files": [
-        "src/session/types.ts",
-        "src/types/protocol.ts"
       ]
     },
     {

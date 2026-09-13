@@ -43,7 +43,7 @@ import { availableActionsForSeat } from '../flow/index.js';
 import { walkFlowNodes } from '../flow/walk-flow-nodes.js';
 import { describeFlowPosition } from '../flow/describe-flow-position.js';
 import { buildActionMetadata, buildPickMetadata } from './action-metadata.js';
-import type { ActionMetadata, PickMetadata } from '../../session/types.js';
+import type { ActionMetadata, PickMetadata } from '../../types/protocol.js';
 import { devWarn } from '../../utils/dev.js';
 import { PlayerFacingError } from '../errors.js';
 

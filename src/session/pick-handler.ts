@@ -11,10 +11,10 @@ import type { GameRunner } from '../runtime/index.js';
 import {
   ErrorCode,
   type PickChoicesResponse,
-  type ValidElement,
   type StoredGameState,
   type WarningEntry,
 } from './types.js';
+import type { ValidElement } from '../types/protocol.js';
 import { PendingActionManager, type PickStepResult } from './pending-action-manager.js';
 import { buildSingleActionMetadata } from './utils.js';
 import { resolveOrderedList } from '../engine/utils/resolve-multiselect.js';

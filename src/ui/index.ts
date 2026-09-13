@@ -58,7 +58,7 @@ export { default as ActionPanel } from './components/auto-ui/ActionPanel.vue';
 // Game UI registry (src/ui/uis.ts) — single source of truth for a game's UIs.
 export { defineGameUIs, defaultUI, devUI } from './game-uis.js';
 export type { GameUIEntry, DefaultGameUIEntry, GameUIRegistry } from './game-uis.js';
-export type { GameElement, Pick, ActionMetadata, Player } from './types.js';
+export type { GameElement, Player } from './types.js';
 
 // AutoUI/AutoRenderer are deliberately NOT re-exported here — they live behind the
 // `boardsmith/ui/auto-ui` subpath so a game only pays for them when it asks for
@@ -351,13 +351,13 @@ export {
   injectBoardInteraction,
   // Types
   type PickMetadata,
+  type ActionMetadata,
   type PickStepResult,
   type PickChoicesResult,
   type PickSnapshot,
   type CollectedPick,
   type PickStepFn,
   // Other types
-  type ActionMetadata as ControllerActionMetadata,
   type ActionResult as ControllerActionResult,
   type FollowUpAction,
   type ValidationResult,

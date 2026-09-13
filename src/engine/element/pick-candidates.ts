@@ -29,7 +29,7 @@ import type {
 } from '../action/types.js';
 import type { Game } from './game.js';
 import type { Player } from '../player/player.js';
-import type { ChoiceWithRefs, ValidElement, WarningEntry } from '../../session/types.js';
+import type { ChoiceWithRefs, ValidElement, WarningEntry } from '../../types/protocol.js';
 
 /** One candidate as the executor answers it: the value, and why it cannot be
  *  taken if it cannot. */

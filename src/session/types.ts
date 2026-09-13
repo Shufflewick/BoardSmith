@@ -358,228 +358,34 @@ export interface StoredGameState {
   colors?: string[];
 }
 
-/**
- * A structured, inspectable warning surfaced when a game-authored callback
- * (e.g. `boardRefs()`, `display()`, `boardRef()`) throws but the pick/op
- * result still succeeds via a graceful fallback. Never carries `error.stack`
- * or other implementation details — `message` is a sanitized, human-readable
- * summary only.
- */
-export interface WarningEntry {
-  /** Stable machine-readable code (e.g. 'BOARD_REFS_ERROR', 'DISPLAY_ERROR'). */
-  code: string;
-  /** Sanitized, human-readable summary. Never error.stack or a file path. */
-  message: string;
-  /** Where the warning originated (e.g. 'boardRefs(...)', 'display(...)'). */
-  source: string;
-}
-
-/**
- * Reference to a board element for highlighting
- */
-export interface ElementRef {
-  id?: number;
-  name?: string;
-  notation?: string;
-}
-
-/**
- * Choice with optional board references for highlighting
- */
-export interface ChoiceWithRefs {
-  value: unknown;
-  display: string;
-  /** Board element references with roles (source/target/highlight) */
-  refs?: RefWithRole[];
-  /** Disabled reason string, present only when choice is disabled */
-  disabled?: string;
-}
-
-/**
- * Valid element for element selection
- */
-export interface ValidElement {
-  id: number;
-  /** Display label for this element */
-  display?: string;
-  /** Board element references with roles (typically [{ ref, role: 'highlight' }]) */
-  refs?: RefWithRole[];
-  /** Disabled reason string, present only when element is disabled */
-  disabled?: string;
-}
-
-/**
- * Filter configuration for dependent picks.
- * A "pick" represents a choice the player must make during action resolution.
- */
-export interface PickFilter {
-  /** Key in the choice value object to filter by */
-  key: string;
-  /** Name of the previous pick to match against */
-  selectionName: string;
-}
-
-/**
- * Pick metadata for auto-UI generation.
- * A "pick" represents a choice the player must make during action resolution.
- */
-export interface PickMetadata {
-  name: string;
-  type: 'choice' | 'element' | 'elements' | 'number' | 'text';
-  prompt?: string;
-  /** If true, shows "Skip" button. If a string, shows that text instead. */
-  optional?: boolean | string;
-  // Type-specific properties
-  choices?: ChoiceWithRefs[];
-  min?: number;
-  max?: number;
-  integer?: boolean;
-  pattern?: string;
-  minLength?: number;
-  maxLength?: number;
-  /**
-   * For text picks: draw a resizable box instead of a single line (#229).
-   *
-   * Presentation only, and absent unless the action asked for it. The value is
-   * the same string and `minLength`/`maxLength`/`pattern` bind it the same way,
-   * which is why this is a field on the `text` pick rather than a sixth pick
-   * type: a new `type` would make every host that switches on it draw nothing
-   * at all for a selection whose rules it already knows.
-   */
-  multiline?: boolean;
-  elementClassName?: string;
-  /** For element picks: list of valid element IDs the user can select */
-  validElements?: ValidElement[];
-  /** For choice picks: filter choices based on a previous pick */
-  filterBy?: PickFilter;
-  /**
-   * For choice picks with dependsOn: name of the pick this depends on.
-   * When present, use choicesByDependentValue to look up choices based on
-   * the current value of the dependent pick.
-   */
-  dependsOn?: string;
-  /**
-   * For choice picks with dependsOn: choices indexed by the dependent pick's value.
-   * Key is the string representation of the dependent value (element ID, player seat, etc.)
-   */
-  choicesByDependentValue?: Record<string, ChoiceWithRefs[]>;
-  /**
-   * For element picks with dependsOn: elements indexed by the dependent pick's value.
-   * Key is the string representation of the dependent value (element ID, player seat, etc.)
-   * Used when chooseElement()/chooseElements() has the dependsOn option.
-   */
-  elementsByDependentValue?: Record<string, ValidElement[]>;
-  /** For repeating choice picks: configuration for repeat behavior */
-  repeat?: {
-    /** Whether the pick has an onEach callback (requires server round-trip) */
-    hasOnEach: boolean;
-    /** The terminator value (if using repeatUntil shorthand) */
-    terminator?: unknown;
-  };
-  /**
-   * For choice picks with dependsOn + multiSelect: multiSelect config indexed by dependent value.
-   * Key is the string representation of the dependent value (element ID, player seat, etc.)
-   * Value is the multiSelect config for that dependent value, or undefined if single-select.
-   */
-  multiSelectByDependentValue?: Record<string, { min: number; max?: number } | undefined>;
-  /** Whether this selection has an onSelect callback (requires server round-trip per step) */
-  hasOnSelect?: boolean;
-  /** For multi-select choice picks: min/max selection configuration */
-  multiSelect?: {
-    /** Minimum selections required (default: 1) */
-    min: number;
-    /** Maximum selections allowed (undefined = unlimited) */
-    max?: number;
-  };
-  /**
-   * For ORDERED, REPEATABLE choice picks: how many ENTRIES the list may carry
-   * (#249).
-   *
-   * Present INSTEAD of `multiSelect`, never alongside it, and that is how a host
-   * knows which control to draw: a set of checkboxes, or a list built up one
-   * entry at a time with repeats allowed and order preserved. An absent `max`
-   * means no upper bound -- said by omission because these bounds travel as
-   * JSON, where `Infinity` becomes `null`.
-   */
-  orderedList?: { min: number; max?: number };
-}
-
-/**
- * Action metadata for auto-UI generation
- */
-export interface ActionMetadata {
-  name: string;
-  prompt?: string;
-  /** Help text shown to players on hover/tap. Display-only; never a predicate. */
-  help?: string;
-  /**
-   * When true, a sole no-selection action is auto-started but never auto-executed —
-   * see ActionBuilder.manual().
-   */
-  manual?: boolean;
-  /**
-   * When true, the Action Panel button for this action is hidden from the auto-UI
-   * ActionPanel. The action stays fully executable via the board / custom UI —
-   * see ActionBuilder.suppressFromActionPanel(). Not a security control.
-   */
-  suppressFromActionPanel?: boolean;
-  /**
-   * The Action Panel menu path this action's START BUTTON sits at, outermost
-   * first (#228); absent means the top level. Set via `ActionBuilder.group()`.
-   * Arrangement only -- it changes neither availability nor executability, and
-   * a game that declares nothing keeps the flat panel.
-   */
-  group?: readonly string[];
-  /** Sort key within the action's menu level (#228); absent sorts as `0`. */
-  order?: number;
-  /**
-   * THIS ACTION PRICES ITS OWN DRAFT, so ask it before submitting (#248).
-   *
-   * Set by a world action's `.quote()`. Two things follow from it, and both are
-   * the panel's and a custom UI's to honour off this one flag:
-   *
-   *   ASK FOR THE LINES as the draft moves -- including a number typed into the
-   *     editor and not yet submitted -- and show what comes back.
-   *   CONFIRM RATHER THAN AUTO-COMMIT. Filling the last selection stops being
-   *     the purchase; the player sees the price and presses again. An action
-   *     without this flag keeps the auto-execute it always had.
-   *
-   * The lines themselves are never here: they are a function of the draft, and
-   * metadata is computed before there is one.
-   */
-  quote?: boolean;
-  selections: PickMetadata[];
-}
-
-/**
- * Response from getPickChoices endpoint.
- * Used when fetching choices on-demand for any pick type.
- * A "pick" represents a choice the player must make during action resolution.
- */
-export interface PickChoicesResponse {
-  success: boolean;
-  error?: string;
-  /** Programmatic error code for switch statements. See ErrorCode enum. */
-  errorCode?: ErrorCode;
-  /** For choice picks: formatted choices with display strings and board refs */
-  choices?: ChoiceWithRefs[];
-  /** For element/elements picks: valid elements the user can select */
-  validElements?: ValidElement[];
-  /** Multi-select configuration (evaluated at request time for function-based configs) */
-  multiSelect?: { min: number; max?: number };
-  /**
-   * Ordered-list ENTRY bounds (#249), evaluated at request time for the same
-   * reason multiSelect's are: a bound that reads an earlier pick's value is only
-   * knowable once that value is bound.
-   */
-  orderedList?: { min: number; max?: number };
-  /**
-   * Structured warnings from soft-fail sites (boardRefs()/display()/boardRef()
-   * throwing) — the choice/element is still returned with a graceful fallback,
-   * success stays true. Absent (not an empty array) when there are none.
-   */
-  warnings?: WarningEntry[];
-}
+// THE PICK SHAPE IS OWNED BY ../types/protocol.js (#251).
+//
+// It used to be declared here as well, and a third time in
+// ui/composables/useActionControllerTypes.ts, so #249's `orderedList` had to be
+// added in three places and the audit reported the result as a 79-line
+// unaccepted clone group. The wire module is the one place it belongs: the
+// session emits these shapes onto the wire, and the engine now builds them
+// from the same declaration.
+// Imported locally (so the shapes are usable as types in this module) AND
+// re-exported, keeping the protocol layer as the single source of truth.
+import type {
+  ElementRef,
+  ChoiceWithRefs,
+  PickFilter,
+  PickMetadata,
+  ActionMetadata,
+  PickChoicesResponse,
+  WarningEntry,
+} from '../types/protocol.js';
+export type {
+  ElementRef,
+  ChoiceWithRefs,
+  PickFilter,
+  PickMetadata,
+  ActionMetadata,
+  PickChoicesResponse,
+  WarningEntry,
+};
 
 /**
  * A single per-cell entry in the evaluation heatmap.
