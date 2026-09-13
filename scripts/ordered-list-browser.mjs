@@ -55,6 +55,7 @@ import {
   runBrowserRegression,
   summarise,
   surfaceOf,
+  VIEW_FIELD_READER,
   waitUntil,
 } from './browser-harness.mjs';
 
@@ -181,19 +182,7 @@ export const gameDefinition: GameDefinition = {
 const BOARD = `import { computed, defineComponent, h } from 'vue';
 import { useBoardInteraction } from 'boardsmith/ui';
 
-type Node = { attributes?: Record<string, unknown>; children?: Node[] };
-
-/** The first node in the projected view that carries the field, or undefined. */
-const findAttr = (node: Node | undefined, key: string): unknown => {
-  if (!node) return undefined;
-  const own = node.attributes?.[key];
-  if (own !== undefined) return own;
-  for (const child of node.children ?? []) {
-    const found = findAttr(child, key);
-    if (found !== undefined) return found;
-  }
-  return undefined;
-};
+${VIEW_FIELD_READER}
 
 export default defineComponent({
   name: 'YardBoard',
@@ -359,8 +348,11 @@ async function driveThrough({ chromium, hostUrl }) {
   const browser = await chromium.launch();
 
   try {
-    const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
-    const page = await context.newPage();
+    // One page for the whole run, so `browser.newPage` rather than a context of
+    // its own: the world is persistent and every check below builds on the state
+    // the one before it left, which is also why the order they run in is the
+    // order they are written in.
+    const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
     // The command as it leaves for the host: the wire is where a sequence would
     // be silently deduplicated or sorted, and it is not a thing the surface can
     // be asked about afterwards.
@@ -612,7 +604,7 @@ async function driveThrough({ chromium, hostUrl }) {
       );
     });
 
-    await context.close();
+    await page.close();
   } finally {
     await browser.close();
   }
