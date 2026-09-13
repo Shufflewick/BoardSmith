@@ -15,8 +15,8 @@ import {
   DUPES_BASELINE_FILE,
   acceptedFromScan,
   compareAcceptedDupes,
-  describeAddressDrift,
   describeDupesDrift,
+  describeReaddressed,
   type AcceptedDupes,
   type DupesScan,
 } from '../lib/dupes-baseline.js';
@@ -167,14 +167,35 @@ async function readDupes(
 /** Pretty-printed with a trailing newline, so the committed files diff sanely. */
 const asJson = (value: unknown): string => `${JSON.stringify(value, null, 2)}\n`;
 
+/** Write both derived files from one scan, so they can never describe different trees. */
+function writeDerived(cwd: string, reading: DupesReading): void {
+  writeFileSync(join(cwd, ACCEPTED_DUPES_FILE), asJson(reading.accepted));
+  writeFileSync(join(cwd, DUPES_BASELINE_FILE), reading.baseline);
+}
+
 /**
  * Is the accepted duplication record still an accurate account of this tree,
- * and does the derived baseline still point at the right lines (#232)?
+ * and does the derived baseline still point at the right lines (#232, #256)?
  *
- * Two questions, in that order, because they have different answers. Content
- * that does not match is a finding about the code. Content that matches at
- * moved addresses is not a finding at all -- it is the stale-address case that
- * used to ambush the next editor, and the report says so and names the re-key.
+ * Two questions, in that order, because they have different answers.
+ *
+ * Content that does not match is a finding about the code, and it fails: new
+ * duplication, or accepted debt that is gone. NOTHING is written in that case,
+ * so a failing run cannot have laundered anything.
+ *
+ * Content that matches at moved addresses is not a finding at all, and it is
+ * not a decision either. It used to fail and ask for `--rekey-dupes`; measured
+ * three times in one session, every such re-address reported "every one matched
+ * by content, so no debt was forgiven", which is to say the human in the loop
+ * had nothing to decide -- and forgetting the step sent the bill to whoever
+ * next edited a moved file. So the check re-addresses them itself and says it
+ * did (#256).
+ *
+ * That is not the same thing as `--rekey-dupes`' ability to record a tree
+ * wholesale, and it cannot become it: the re-address happens only AFTER the
+ * content comparison found no difference at all, so the set of accepted content
+ * keys it writes is exactly the set it read. There is no tree in which this
+ * path accepts a group the record did not already accept.
  */
 export async function runDupesBaselineCheck(
   cwd: string,
@@ -204,12 +225,15 @@ export async function runDupesBaselineCheck(
     misaddressedGroups(existsSync(baselinePath) ? readFileSync(baselinePath, 'utf-8') : '', read.reading.baseline),
     movedEntries(committed, read.reading.accepted),
   );
-  if (moved > 0) return { code: 1, report: describeAddressDrift(moved) };
+  if (moved === 0) {
+    return {
+      code: 0,
+      report: `${ACCEPTED_DUPES_FILE} and ${DUPES_BASELINE_FILE} still describe this tree.`,
+    };
+  }
 
-  return {
-    code: 0,
-    report: `${ACCEPTED_DUPES_FILE} and ${DUPES_BASELINE_FILE} still describe this tree.`,
-  };
+  writeDerived(cwd, read.reading);
+  return { code: 0, report: describeReaddressed(moved) };
 }
 
 /** The line-keyed group addresses in one saved baseline. */
@@ -266,8 +290,7 @@ export async function rekeyDupesBaseline(
     }
   }
 
-  writeFileSync(acceptedPath, asJson(read.reading.accepted));
-  writeFileSync(join(cwd, DUPES_BASELINE_FILE), read.reading.baseline);
+  writeDerived(cwd, read.reading);
   const count = read.reading.accepted.accepted.length;
   return {
     code: 0,
@@ -486,6 +509,26 @@ async function rekeyAction(cwd: string, conflicting: boolean): Promise<void> {
   if (code !== 0) process.exit(code);
 }
 
+/**
+ * The order the checks run in, and WHY the duplication baseline is first (#256).
+ *
+ * `dupesBaseline` re-addresses `.fallow-dupes-baseline.json` when the accepted
+ * content still matches, and `changes` is the check that shells out to
+ * `fallow audit`, which is the thing that READS that file. Running them the
+ * other way round would grade the branch against an address book this very run
+ * was about to correct -- which is the drifted-baseline false block of #232,
+ * reproduced inside the tool that exists to remove it.
+ *
+ * This is also the answer to "where does the re-address run so a merge cannot
+ * land drifted". BoardSmith has no CI and no merge hook of its own; the audit
+ * every task runs before it merges is the one place in reach, and putting the
+ * re-address there means the addresses a merge publishes are the addresses of
+ * the tree being merged. A later run on `main` corrects whatever the merge
+ * itself shifted, and until it does the drift is no longer a block -- it is a
+ * thing the next audit silently fixes and reports.
+ */
+export const AUDIT_ORDER = ['dupesBaseline', 'changes', 'duplication', 'healthBaseline'] as const;
+
 /** The checks this run asked for, in the order they are reported. */
 function selectedAudits(options: AuditOptions): Audit[] {
   const wants = selectChecks({
@@ -495,9 +538,7 @@ function selectedAudits(options: AuditOptions): Audit[] {
     dupesBaseline: options.dupesBaseline,
   });
   const all = buildAudits(options);
-  return (['changes', 'duplication', 'healthBaseline', 'dupesBaseline'] as const)
-    .filter((key) => wants(key))
-    .map((key) => all[key]);
+  return AUDIT_ORDER.filter((key) => wants(key)).map((key) => all[key]);
 }
 
 /**

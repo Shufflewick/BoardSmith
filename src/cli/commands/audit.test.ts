@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
+  AUDIT_ORDER,
   rekeyDupesBaseline,
   runChangedFilesAudit,
   runDupesBaselineCheck,
@@ -239,19 +240,47 @@ describe('runDupesBaselineCheck and rekeyDupesBaseline', () => {
     });
   });
 
-  it('names moved addresses as a re-key, not as duplication', async () => {
+  /**
+   * #256: A CONTENT-MATCHED ADDRESS MOVE IS NOT A DECISION.
+   *
+   * This used to fail and name `--rekey-dupes`. Measured three times in one
+   * session, every re-address reported "every one matched by content, so no
+   * debt was forgiven" -- so the human in the loop had no judgement to apply,
+   * and the cost of forgetting landed on whoever next edited a moved file. The
+   * audit does it itself now, and says it did.
+   */
+  it('re-addresses a moved clone group itself and passes, with no manual step (#256)', async () => {
     await withDir(async (dir) => {
       await rekeyDupesBaseline(dir, scanner([10, 40]));
       // The same clone, 25 lines further down both files: #230's own shape.
       const result = await runDupesBaselineCheck(dir, scanner([35, 65]));
-      expect(result.code).not.toBe(0);
-      expect(result.report).toContain('The duplication itself is unchanged');
-      expect(result.report).toContain('--rekey-dupes');
-      // And re-keying it is allowed, because the content matched.
-      const rekeyed = await rekeyDupesBaseline(dir, scanner([35, 65]));
-      expect(rekeyed.code).toBe(0);
-      expect(rekeyed.report).toContain('no debt was forgiven');
-      expect((await runDupesBaselineCheck(dir, scanner([35, 65]))).code).toBe(0);
+
+      expect(result.code).toBe(0);
+      expect(result.report).toContain('Re-addressed 1 accepted clone group');
+      expect(result.report).toContain('no debt was forgiven');
+      // The derived address book now points at the moved lines...
+      expect(readFileSync(join(dir, '.fallow-dupes-baseline.json'), 'utf-8')).toContain('35-36');
+      // ...and a second run has nothing left to do, so it is idempotent.
+      const again = await runDupesBaselineCheck(dir, scanner([35, 65]));
+      expect(again.code).toBe(0);
+      expect(again.report).toContain('still describe this tree');
+    });
+  });
+
+  // #256's hard boundary: re-addressing must not be able to widen the record.
+  // The content key set the audit wrote must be exactly the one it read.
+  it('re-addresses without accepting anything new (#256)', async () => {
+    await withDir(async (dir) => {
+      await rekeyDupesBaseline(dir, scanner([10, 40]));
+      const keys = (path: string) =>
+        (JSON.parse(readFileSync(path, 'utf-8')) as { accepted: { content: string }[] }).accepted
+          .map((entry) => entry.content)
+          .sort();
+      const before = keys(join(dir, '.fallow-dupes-accepted.json'));
+
+      await runDupesBaselineCheck(dir, scanner([35, 65]));
+
+      expect(keys(join(dir, '.fallow-dupes-accepted.json'))).toEqual(before);
     });
   });
 
@@ -271,6 +300,55 @@ describe('runDupesBaselineCheck and rekeyDupesBaseline', () => {
     });
   });
 
+  /**
+   * #256: the self-healing half must not become a way to launder new debt.
+   * A clone group whose CONTENT changed, or brand new duplication, still fails
+   * -- and the check writes NOTHING, so the committed record is untouched and
+   * the next run reports the same thing.
+   */
+  it('writes nothing at all when the content does not match (#256)', async () => {
+    await withDir(async (dir) => {
+      await rekeyDupesBaseline(dir, scanner([10, 40]));
+      const acceptedPath = join(dir, '.fallow-dupes-accepted.json');
+      const baselinePath = join(dir, '.fallow-dupes-baseline.json');
+      const before = [readFileSync(acceptedPath, 'utf-8'), readFileSync(baselinePath, 'utf-8')];
+
+      // Edited duplication, AND moved, so an address-only rewrite would be
+      // tempting: the content check has to win.
+      const edited = scanner([35, 65], `${FRAGMENT}\nconst third = () => 3;`);
+      const result = await runDupesBaselineCheck(dir, edited);
+
+      expect(result.code).not.toBe(0);
+      expect(result.report).toContain('DUPLICATION NOTHING HAS ACCEPTED');
+      expect([readFileSync(acceptedPath, 'utf-8'), readFileSync(baselinePath, 'utf-8')]).toEqual(before);
+    });
+  });
+
+  it('still fails on brand new duplication alongside accepted debt (#256)', async () => {
+    await withDir(async (dir) => {
+      await rekeyDupesBaseline(dir, scanner([10, 40]));
+      // Two groups now: the accepted one, moved, plus one nobody accepted.
+      const withExtra = async (baselinePath: string) => {
+        const accepted = await scanner([35, 65])(baselinePath);
+        const scan = JSON.parse(accepted.stdout) as { clone_groups: unknown[] };
+        scan.clone_groups.push({
+          line_count: 2,
+          instances: [
+            { file: 'src/fresh-a.ts', start_line: 1, end_line: 2, fragment: 'const fresh = 1;\nconst copy = 2;' },
+            { file: 'src/fresh-b.ts', start_line: 9, end_line: 10, fragment: 'const fresh = 1;\nconst copy = 2;' },
+          ],
+        });
+        return { code: 0, stdout: JSON.stringify(scan) };
+      };
+
+      const result = await runDupesBaselineCheck(dir, withExtra);
+
+      expect(result.code).not.toBe(0);
+      expect(result.report).toContain('DUPLICATION NOTHING HAS ACCEPTED');
+      expect(result.report).toContain('src/fresh-a.ts');
+    });
+  });
+
   it('skips a project that keeps no accepted record at all', async () => {
     await withDir(async (dir) => {
       const result = await runDupesBaselineCheck(dir, scanner([10, 40]));
@@ -286,5 +364,26 @@ describe('runDupesBaselineCheck and rekeyDupesBaseline', () => {
       expect(result.code).not.toBe(0);
       expect(result.report).toContain('cannot be ruled out');
     });
+  });
+});
+
+/**
+ * #256: WHERE THE RE-ADDRESS RUNS.
+ *
+ * The changed-files audit is the check that delegates to `fallow audit`, which
+ * is the thing that READS `.fallow-dupes-baseline.json`. Re-addressing after
+ * it would grade the branch against an address book the same run already knew
+ * was wrong -- the drifted-baseline false block, inside the tool meant to
+ * remove it. So the duplication-baseline check runs first.
+ */
+describe('AUDIT_ORDER', () => {
+  it('re-addresses the dupes baseline before the audit that reads it (#256)', () => {
+    expect(AUDIT_ORDER.indexOf('dupesBaseline')).toBeLessThan(AUDIT_ORDER.indexOf('changes'));
+  });
+
+  it('still runs all four checks', () => {
+    expect([...AUDIT_ORDER].sort()).toEqual(
+      ['changes', 'dupesBaseline', 'duplication', 'healthBaseline'],
+    );
   });
 });

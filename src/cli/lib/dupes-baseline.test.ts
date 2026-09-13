@@ -21,8 +21,8 @@ import {
   acceptedFromScan,
   cloneGroupKey,
   compareAcceptedDupes,
-  describeAddressDrift,
   describeDupesDrift,
+  describeReaddressed,
   type CloneGroup,
   type DupesScan,
 } from './dupes-baseline.js';
@@ -184,21 +184,38 @@ describe('#232: the key still fails on what should fail', () => {
 });
 
 describe('#232: what the reports tell a person to do', () => {
+  const newDrift = describeDupesDrift([
+    { direction: 'new', content: 'abc123', lines: 12, files: ['src/a.ts', 'src/b.ts'] },
+  ]);
+
   it('never offers a regeneration command for duplication nothing accepted', () => {
     // A full-repository save is exactly what silently forgives new debt, so the
     // message for new duplication must not read as an invitation to run one.
-    const report = describeDupesDrift([
-      { direction: 'new', content: 'abc123', lines: 12, files: ['src/a.ts', 'src/b.ts'] },
-    ]);
-    expect(report).toContain('src/a.ts, src/b.ts');
-    expect(report).toContain('Fix the duplication');
-    expect(report).not.toMatch(/fallow dupes --save-baseline/);
+    expect(newDrift).toContain('src/a.ts, src/b.ts');
+    expect(newDrift).toContain('Fix the duplication');
+    expect(newDrift).not.toMatch(/fallow dupes --save-baseline/);
   });
 
-  it('says plainly that moved addresses are not a finding about the code', () => {
-    const report = describeAddressDrift(6);
-    expect(report).toContain('6 accepted clone groups');
+  // #256: the visible remedy in this text used to be `delete
+  // .fallow-dupes-accepted.json && boardsmith audit --rekey-dupes`, which is
+  // the one action that widens the record wholesale. Under time pressure that
+  // is the thing a person reaches for, so the text must not offer it.
+  it('does not offer discarding the RECORD as the ordinary remedy (#256)', () => {
+    expect(newDrift).not.toMatch(/delete[^\n]*\.fallow-dupes-accepted\.json/i);
+    expect(newDrift).not.toContain('--rekey-dupes');
+    expect(newDrift).toContain('NOT the ordinary remedy');
+  });
+
+  // #256: a content-matched address move is not a decision, so the report for
+  // one is in the PAST tense -- the audit re-addressed them and is saying so,
+  // rather than failing and asking a human to run a command.
+  it('reports moved addresses as work already done, not as an instruction (#256)', () => {
+    const report = describeReaddressed(6);
+    expect(report).toContain('Re-addressed 6 accepted clone groups');
     expect(report).toContain('The duplication itself is unchanged');
-    expect(report).toContain('boardsmith audit --rekey-dupes');
+    expect(report).toContain('no debt was forgiven');
+    expect(report).toContain('.fallow-dupes-baseline.json');
+    // Nothing for a human to run: that was the manual step #256 removes.
+    expect(report).not.toContain('--rekey-dupes');
   });
 });

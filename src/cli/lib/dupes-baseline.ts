@@ -65,8 +65,14 @@
  * `fallow audit` reads it, and the key format is fallow's, not ours. So it
  * becomes a DERIVED file: `.fallow-dupes-accepted.json` records the accepted
  * debt by content, and the addresses are re-derived from a scan whenever they
- * move. Re-addressing is safe precisely because the content matched first;
- * `boardsmith audit --rekey-dupes` refuses to write anything when it did not.
+ * move. Re-addressing is safe precisely because the content matched first, and
+ * it carries no judgement -- three measured instances in one session all
+ * reported "every one matched by content, so no debt was forgiven" -- so
+ * `boardsmith audit` now does it itself and reports that it did (#256). It is
+ * still COMMITTED rather than generated on demand, because the thing that runs
+ * automatically is a raw `fallow audit` from ShufflewickPub's commit hook, with
+ * no `boardsmith` in the loop: an absent baseline would report all ~1100
+ * accepted groups against whatever file the next commit touched.
  *
  * ## Why the other two baselines keep their own keys
  *
@@ -271,33 +277,41 @@ export function describeDupesDrift(drift: DupesDrift[]): string {
   }
 
   lines.push(
-    'Fix the duplication, or record it deliberately: delete',
-    `${ACCEPTED_DUPES_FILE} and run \`boardsmith audit --rekey-dupes\` to accept`,
-    'this tree as it stands. See docs/fallow-gate.md -- that is a deliberate act,',
-    'never a way to turn a red board green.',
+    'Fix the duplication, or accept the named groups deliberately. See',
+    'docs/fallow-gate.md § "The duplication baseline is keyed by CONTENT".',
+    '',
+    'Discarding the whole accepted record and re-recording this tree',
+    'is NOT the ordinary remedy (#256). It forgives every allowance in the record',
+    'at once, along with whatever else the tree happens to hold, and under time',
+    'pressure that is exactly how accepted debt gets widened by accident.',
   );
   return lines.join('\n');
 }
 
 /**
- * An actionable report for accepted debt whose ADDRESSES have moved.
+ * A report for accepted debt whose ADDRESSES the audit has just moved (#256).
  *
  * This is the #232 case, and it is not a finding about the code: the content
- * matched exactly, so nothing about the debt changed and re-keying is provably
- * safe. Saying so plainly matters, because the previous shape of this message
- * was a blocked commit on somebody else's clone groups.
+ * matched exactly, so nothing about the debt changed and re-addressing is
+ * provably safe. It used to be reported as a FAILURE naming `--rekey-dupes`,
+ * which made a mechanical, judgement-free correction into a manual step -- and
+ * the cost of forgetting it landed on whoever next edited a moved file, not on
+ * whoever moved it. So the message is in the past tense: the audit did it.
+ *
+ * What it must still say is what changed and that nothing was forgiven, because
+ * a tool that silently rewrites a committed file is worse than one that asks.
  */
-export function describeAddressDrift(moved: number): string {
+export function describeReaddressed(moved: number): string {
   return [
-    `${DUPES_BASELINE_FILE} points at the wrong lines for ${moved} accepted `
-      + `clone ${moved === 1 ? 'group' : 'groups'}.`,
+    `Re-addressed ${moved} accepted clone ${moved === 1 ? 'group' : 'groups'} in `
+      + `${DUPES_BASELINE_FILE} and ${ACCEPTED_DUPES_FILE}.`,
     '',
     "The duplication itself is unchanged -- every group's content matched the",
-    'accepted record exactly. Only the line numbers moved, because code above',
-    'them did. Left alone, the next edit to one of those files is blocked on',
-    'clone groups that predate it (#232).',
+    'accepted record exactly, so no debt was forgiven. Only the line numbers',
+    'moved, because code above them did. Left as they were, the next edit to one',
+    'of those files would have been blocked on clone groups that predate it',
+    '(#232), which is a bill nobody who caused it ever sees.',
     '',
-    'Re-address them:',
-    '  boardsmith audit --rekey-dupes',
+    'Commit both files with your change.',
   ].join('\n');
 }
