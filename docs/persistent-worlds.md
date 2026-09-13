@@ -1852,6 +1852,14 @@ written for. A digest past it is refused by name, with the size, the bound and
 whose bound it was -- the host enforces its own ceiling too, and a run that hit
 one will hit it again, so the refusal says so.
 
+**Both ceilings are enforced on the digest a host carries IN, not only on the
+one a pass hands back.** A cold transform page folds nothing: its digest arrives
+as bytes the host persisted, so those bytes are measured before `derive`,
+`partition` or `create` runs, by the same measurement the fold answers through.
+The ceiling that binds is the one stated on THIS call -- a host that lowers
+`maxDigestBytes` between wakes refuses the resumed page rather than transforming
+against a digest it can no longer hold.
+
 `survey` and `finalize` are **mutually exclusive**, refused where they are
 declared. They are the same intent at different costs: `survey` is the bounded
 form and runs on a world of any size, `finalize` is the whole-world form and is
@@ -1985,7 +1993,7 @@ thing next time.
 | Code | What happened |
 | --- | --- |
 | `bundle-not-a-world` | The manifest declares `"backend": "world"` and the compiled rules export no `world.actions`, no `world.view`, no `world.maxPlayers`, a `world.maxPlayers` the host will not seat, a `world.stateVersion` that is not a whole number from 0 up, or a `world.migration` that is not usable (no `from`, a `from` at or past this version, a hook -- `partition`, `event`, `derive`, `create` or `finalize` -- that is not a function, a `survey` that is not `{ initial, root, maxBytes }`, or a migration declaring both `survey` and `finalize`). |
-| `world-migration-unavailable` | A world's recorded `stateVersion` and its bundle's differ, and no migration in that bundle can cross the gap: none declared, one declared from a different version, or a bundle older than the world. Also a `create` or `derive` hook whose answer is not `name -> element`, or that names a partition the world already holds; a hook that allocated a top-level element and never answered it as a partition root (#246); a survey digest past `survey.maxBytes` or past the host's own ceiling; and a paged survey migration run with no `pass`, or a transform pass handed no digest. The world is not changed. |
+| `world-migration-unavailable` | A world's recorded `stateVersion` and its bundle's differ, and no migration in that bundle can cross the gap: none declared, one declared from a different version, or a bundle older than the world. Also a `create` or `derive` hook whose answer is not `name -> element`, or that names a partition the world already holds; a hook that allocated a top-level element and never answered it as a partition root (#246); a survey digest past `survey.maxBytes` or past the host's own ceiling, whether it was folded on this call or carried into it as bytes (#255); and a paged survey migration run with no `pass`, or a transform pass handed no digest. The world is not changed. |
 | `invalid-world-action` | A world action the platform cannot offer or cannot bound: an action not built with `worldAction()`, an unbounded `from`/`filter`/`elementClass` element form, an element selection with no `elements:`, a candidate outside what the step declared, a selection past `maxCandidatesPerSelection`, a dependent or repeating selection, a seatless action that asks a question, or a round declared before a step the action does not have. |
 | `not-in-a-world` | An action built with `worldAction()` reached `ctx.world` with no world running it -- registered on a table, or reached after the dispatch that bound its facilities finished. |
 | `undeclared-partition` | `execute` read a partition the action's own walk did not declare. |

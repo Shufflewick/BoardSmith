@@ -1086,3 +1086,132 @@ describe("#246 — an allocation a hook never answered is refused, not discarded
     expect(Object.keys(answer.partitions)).toEqual(["owner-1"]);
   });
 });
+
+/**
+ * BoardSmith #255: THE CARRIED DIGEST IS INPUT, AND INPUT IS CHECKED.
+ *
+ * A survey pass measures the digest it just folded, and an unpaged transform
+ * folds and measures in the same call. A PAGED transform folds neither: its
+ * digest arrives as bytes a host persisted between wakes, and those bytes were
+ * taken on trust -- so a world could be handed a digest larger than the
+ * author's own `survey.maxBytes` AND larger than the host's, and run `derive`,
+ * `partition` and `create` against it. The ceilings are the whole of the
+ * bounded-memory promise, so they are met on the way IN as well as on the way
+ * out, by the one measurement both paths share.
+ */
+describe("#255 — a carried digest past either ceiling is refused before any hook", () => {
+  type Blob = { readonly text: string };
+
+  /** A digest of EXACTLY `bytes` UTF-8 bytes, so a ceiling can be sat on as
+   *  well as passed. `{"text":"…"}` is eleven bytes of frame. */
+  const digestOf = (bytes: number): string => JSON.stringify({ text: "x".repeat(bytes - 11) });
+
+  /** The migration every case runs: it folds nothing of its own, so the only
+   *  digest in play is the one the host carried in, and each hook says it ran. */
+  const carrying = (maxBytes: number, ran: string[]) => ({
+    from: 1,
+    survey: {
+      initial: (): Blob => ({ text: "" }),
+      root: (digest: Blob): Blob => digest,
+      maxBytes,
+    },
+    derive: (): Record<string, GameElement> => {
+      ran.push("derive");
+      return {};
+    },
+    partition: (): void => {
+      ran.push("partition");
+    },
+    create: (): Record<string, GameElement> => {
+      ran.push("create");
+      return {};
+    },
+  });
+
+  /** A cold transform page, the way a host resumes one: a fresh runner, one
+   *  page of bytes, and the digest carried in as bytes of a stated size. */
+  const resume = async (
+    authorMax: number,
+    hostMax: number,
+    bytes: number,
+    ran: string[],
+  ): Promise<WorldMigrated> => {
+    const world = await storedLedger();
+    const digest = digestOf(bytes);
+    expect(new TextEncoder().encode(digest).length, "the carried digest's own size").toBe(bytes);
+    return ledgerRunner(carrying(authorMax, ran), world.nextElementId).migrateAll(
+      { a: world.rows.a! },
+      {
+        from: 1,
+        to: 2,
+        allNames: [...ROOMS],
+        pass: "transform",
+        runCreate: true,
+        digest,
+        maxDigestBytes: hostMax,
+      },
+    );
+  };
+
+  it.each([
+    {
+      label: "the AUTHOR's own stated ceiling",
+      authorMax: 32,
+      hostMax: 1_024,
+      bytes: 139,
+      bound: 32,
+      whose: /this migration declares in `survey\.maxBytes`/,
+    },
+    {
+      // A host that lowered its ceiling since the digest was persisted is the
+      // reason this is checked on the way in at all: the author's number was
+      // met when the fold ran, and THIS wake's number is the one that binds.
+      label: "the HOST's lower ceiling, naming whose it was",
+      authorMax: 1_024,
+      hostMax: 32,
+      bytes: 139,
+      bound: 32,
+      whose: /THIS HOST puts on a migration digest[\s\S]*`survey\.maxBytes` of 1024/,
+    },
+    {
+      label: "the reported 128 KiB author / 256 KiB host bound",
+      authorMax: 131_072,
+      hostMax: 262_144,
+      bytes: 262_156,
+      bound: 131_072,
+      whose: /this migration declares in `survey\.maxBytes`/,
+    },
+  ])("REFUSES a carried digest past $label, and runs no hook", async (each) => {
+    const ran: string[] = [];
+
+    const attempt = resume(each.authorMax, each.hostMax, each.bytes, ran);
+
+    await expect(attempt).rejects.toThrow(
+      new RegExp(`digest of ${each.bytes} bytes, past the ${each.bound}-byte ceiling`),
+    );
+    await expect(attempt).rejects.toThrow(each.whose);
+    expect(ran, "no hook may run against an out-of-bound digest").toEqual([]);
+  });
+
+  it.each([
+    { label: "the author's", authorMax: 64, hostMax: 1_024 },
+    { label: "the host's lower", authorMax: 1_024, hostMax: 64 },
+  ])("ACCEPTS a carried digest exactly AT $label ceiling", async (each) => {
+    const ran: string[] = [];
+
+    const answer = await resume(each.authorMax, each.hostMax, 64, ran);
+
+    expect(Object.keys(answer.partitions)).toEqual(["a"]);
+    expect(ran).toEqual(["derive", "partition", "create"]);
+  });
+
+  it("leaves a normal paged run, and the bytes it carries, exactly as they were", async () => {
+    // The check is on the input, not on the value: the same four-page run still
+    // folds to the same digest and writes the same world.
+    const world = await storedLedger();
+    const run = await migrateBounded(world.rows, world.nextElementId, [["a"], ["b"], ["c"], ["d"]]);
+
+    expect(run.digest).toBe(JSON.stringify({ total: 15, names: [...ROOMS] }));
+    expect(attributesOf(run.after.a!).derived).toBe(115);
+  });
+});

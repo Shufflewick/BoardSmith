@@ -172,30 +172,20 @@ function pagingRefused(): WorldRefusal {
 }
 
 /**
- * THE DIGEST, MEASURED AND HELD TO A CEILING (ShufflewickPub #449).
+ * THE DIGEST'S BYTES, HELD TO A CEILING (ShufflewickPub #449, BoardSmith #255).
  *
- * Measured AFTER the pass rather than estimated before it, because the only
- * honest size of a digest is the bytes the host is about to persist. Refused
- * past whichever ceiling is lower -- the author's `survey.maxBytes` or the
- * host's own -- and the refusal names the size, the bound and whose it was, so
- * nobody tunes the number that was not the one hit.
+ * ONE measurement, for every digest that crosses this boundary in either
+ * direction: the bytes a pass just folded and is about to hand back, and the
+ * bytes a host carried into a cold paged transform. A digest carried in used to
+ * be taken on trust, so a resumed page could run its hooks against a fold no
+ * ceiling had ever held (#255) -- and two measurements, one per direction, is
+ * how those ceilings drift apart again.
+ *
+ * Refused past whichever ceiling is lower -- the author's `survey.maxBytes` or
+ * the host's own -- and the refusal names the size, the bound and whose it was,
+ * so nobody tunes the number that was not the one hit.
  */
-function serializedDigest(
-  digest: unknown,
-  authorBound: number,
-  hostBound: number | undefined,
-): string {
-  const json = JSON.stringify(digest);
-  if (json === undefined) {
-    throw worldRefusal(
-      "world-migration-unavailable",
-      "This world's migration answered a digest that does not survive JSON. A host persists the " +
-        "digest between wakes and hands it back to the next call, so it has to be made of plain " +
-        "values -- objects, arrays, numbers, strings, booleans and null. `undefined`, a " +
-        "function, a Map, a Set and a class instance are not among them. The world was not " +
-        "changed.",
-    );
-  }
+function assertDigestBytes(json: string, authorBound: number, hostBound: number | undefined): void {
   const size = new TextEncoder().encode(json).length;
   const hostIsLower = hostBound !== undefined && hostBound < authorBound;
   const bound = hostIsLower ? (hostBound as number) : authorBound;
@@ -216,6 +206,31 @@ function serializedDigest(
         "was not changed.",
     );
   }
+}
+
+/**
+ * A DIGEST ON ITS WAY OUT: serialized, then measured (#449).
+ *
+ * Measured AFTER the pass rather than estimated before it, because the only
+ * honest size of a digest is the bytes the host is about to persist.
+ */
+function serializedDigest(
+  digest: unknown,
+  authorBound: number,
+  hostBound: number | undefined,
+): string {
+  const json = JSON.stringify(digest);
+  if (json === undefined) {
+    throw worldRefusal(
+      "world-migration-unavailable",
+      "This world's migration answered a digest that does not survive JSON. A host persists the " +
+        "digest between wakes and hands it back to the next call, so it has to be made of plain " +
+        "values -- objects, arrays, numbers, strings, booleans and null. `undefined`, a " +
+        "function, a Map, a Set and a class instance are not among them. The world was not " +
+        "changed.",
+    );
+  }
+  assertDigestBytes(json, authorBound, hostBound);
   return json;
 }
 
@@ -425,6 +440,13 @@ function surveyPass(
  * A PAGED migration carries it in, because its fold finished on an earlier
  * call; an UNPAGED one was handed the whole world, so its fold is this call and
  * it meets the same ceiling before a single root is transformed.
+ *
+ * EITHER WAY IT IS MEASURED FIRST (BoardSmith #255). A digest that arrives as
+ * bytes is still a digest this migration has to fit inside, and the wake that
+ * receives it is the wake whose host ceiling binds -- a host may hand back a
+ * lower one than the fold was measured against. So the carried bytes meet both
+ * ceilings before `derive`, `partition` or `create` sees them, rather than
+ * being trusted for having been measured on some earlier call.
  */
 function completedDigest(
   engine: WorldEngine,
@@ -439,6 +461,7 @@ function completedDigest(
     return digest;
   }
   if (ctx.digest === undefined) throw digestMissing();
+  assertDigestBytes(ctx.digest, survey.maxBytes, ctx.maxDigestBytes);
   return JSON.parse(ctx.digest) as unknown;
 }
 
