@@ -12,6 +12,7 @@ import { describe, expect, it } from "vitest";
 import type { GameElement } from "../engine/index.js";
 import { WorldRefusal } from "./refusals.js";
 import {
+  assertAnsweredAllocations,
   assertWorldMigration,
   assertCreatedRoots,
   migratedArgs,
@@ -99,6 +100,56 @@ describe("what a migration may declare", () => {
 
   it("accepts a create-only migration, for a version that only adds roots (#218)", () => {
     expect(() => assertWorldMigration({ from: 1, create: () => ({}) }, 2)).not.toThrow();
+  });
+
+  it("REFUSES a `derive` that is not a function (#246)", () => {
+    expect(() => assertWorldMigration({ from: 1, derive: 7 }, 2)).toThrow(
+      /migration\.derive` is not a function/,
+    );
+  });
+
+  it("accepts a derive-only migration, for a version whose roots fan out (#246)", () => {
+    expect(() => assertWorldMigration({ from: 1, derive: () => ({}) }, 2)).not.toThrow();
+  });
+});
+
+/**
+ * #246: an allocation a hook made and never answered is a REFUSAL.
+ *
+ * It used to be a dropped element: nothing serialized it, the host never heard
+ * of it, and a header the same hook had rewritten to reference it pointed at
+ * bytes that never reached storage -- and the migration reported success.
+ */
+describe("an allocation a migration hook never answered", () => {
+  it("passes when a hook answered everything it allocated", () => {
+    expect(() => assertAnsweredAllocations("derive", [])).not.toThrow();
+  });
+
+  it("NAMES what would have been discarded, and the hook that discarded it", () => {
+    expect(() => assertAnsweredAllocations("partition", ['"owner-1/page-0" (id 12)'])).toThrow(
+      /"owner-1\/page-0" \(id 12\)/,
+    );
+    expect(() => assertAnsweredAllocations("partition", ['"page" (id 12)'])).toThrow(
+      /`partition` hook/,
+    );
+  });
+
+  it("tells a `partition` hook which hook may answer a root instead", () => {
+    let message = "";
+    try {
+      assertAnsweredAllocations("partition", ['"page" (id 12)']);
+    } catch (refusal) {
+      message = (refusal as WorldRefusal).message;
+    }
+    expect(message).toContain("`derive`");
+    expect(message).toContain("`create`");
+    expect(message).toContain("The world was not changed.");
+  });
+
+  it("counts them, so an author sees how much would have been lost", () => {
+    expect(() =>
+      assertAnsweredAllocations("create", ['"a" (id 1)', '"b" (id 2)']),
+    ).toThrow(/2 top-level elements/);
   });
 });
 

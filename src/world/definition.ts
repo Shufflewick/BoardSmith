@@ -758,6 +758,7 @@ export function createWorld(options: WorldRunnerOptions): WorldRunner {
       ...(world.migration?.partition === undefined
         ? {}
         : { partition: world.migration.partition }),
+      ...(world.migration?.derive === undefined ? {} : { derive: world.migration.derive }),
       ...(world.migration?.create === undefined ? {} : { create: world.migration.create }),
       ...(world.migration?.finalize === undefined ? {} : { finalize: world.migration.finalize }),
       ...(world.migration?.survey === undefined ? {} : { survey: world.migration.survey }),

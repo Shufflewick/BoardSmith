@@ -19,8 +19,9 @@
 import { describe, expect, it } from "vitest";
 import { Game, Space, type GameElement, type GameOptions } from "../engine/index.js";
 import { createWorld, type WorldRunnerOptions } from "./definition.js";
+import type { WorldMigrated } from "./runner.js";
 import { worldAction } from "./action.js";
-import type { StoredPartition } from "./contract.js";
+import type { DeclaredSeatActivityStamp, StoredPartition } from "./contract.js";
 
 class Room extends Space<Demo> {
   tally = 0;
@@ -206,6 +207,9 @@ const STAMP = {
   allowance: { unkeyed: 0, keys: [] as readonly string[], worldPending: 0 },
   presence: [1] as readonly number[],
   activity: null,
+  // EMPTY, ALWAYS, on a seat's road (#423): a seated verb may declare no
+  // activity round, so there is nothing honest to hand its handler.
+  declaredActivity: [] as readonly DeclaredSeatActivityStamp[],
 };
 
 describe("#407 — a migrated page may be let go of", () => {
@@ -583,5 +587,502 @@ describe("#449 — what SHAPE a migration is, so a host knows how to run it", ()
 
   it("reports a `finalize` migration as whole-world only", () => {
     expect(shapeOf({ from: 1, finalize: () => {} })).toEqual({ kind: "whole-world" });
+  });
+});
+
+/**
+ * BoardSmith #246: A PAGE MAY EMIT NEW DURABLE ROOTS OF ITS OWN.
+ *
+ * #449 made the FACTS a cross-root migration reads bounded. What stayed
+ * unbounded was the OUTPUT: `create` is the only hook whose answer becomes a
+ * durable root, it runs once, on the final transform page, and by then every
+ * earlier source root has been serialized and let go of. So the one upgrade a
+ * grown world actually needs -- "every owner in this 500-root world becomes a header
+ * plus five inventory pages" -- had nowhere to be written, because the payload
+ * that has to move into those pages is only resident while its own source root
+ * is.
+ *
+ * `derive` is that missing door: per source root, on the page that holds it,
+ * handed the root exactly as stored and answering the new roots it splits into.
+ * And an allocation made in `partition` and never answered is now a refusal
+ * naming what would have been discarded, rather than a migrated header pointing
+ * at roots that never reached storage.
+ */
+class Vault extends Space<Estate> {
+  /** The payload that must MOVE into the roots this root splits into. */
+  items: number[] = [];
+  /** The header's references to the roots it split into. */
+  pages: string[] = [];
+  /** A charge applied exactly once, so a resumed run can be seen not to repeat it. */
+  charge = 0;
+}
+
+class Estate extends Game<Estate> {
+  constructor(options: GameOptions) {
+    super(options);
+    this.registerElements([Vault]);
+  }
+}
+
+/** Two source roots with DIFFERENT payload sizes, so each splits into a
+ *  different number of pages and "multiple" is more than a coincidence. */
+const HOLDINGS: Record<string, readonly number[]> = {
+  "owner-1": [11, 12, 13, 14],
+  "owner-2": [21, 22, 23, 24, 25, 26],
+  ledgerbook: [],
+};
+const SOURCES = Object.keys(HOLDINGS).sort();
+
+type Fold = { readonly owners: number; readonly items: number };
+
+const settle = worldAction<Estate>("settle")
+  .needs(() => ["owner-1"])
+  .execute(() => {});
+
+function estate(migration: Record<string, unknown> | undefined, stateVersion: number) {
+  return {
+    gameClass: Estate,
+    gameType: "estate",
+    world: {
+      maxPlayers: 1,
+      stateVersion,
+      actions: [settle],
+      genesis: (game: Game) =>
+        Object.fromEntries(
+          Object.entries(HOLDINGS).map(([name, items]) => {
+            const root = game.create(Vault, name);
+            root.items = [...items];
+            return [name, root];
+          }),
+        ) as Record<string, GameElement>,
+      view: () => ["owner-1"],
+      ...(migration === undefined ? {} : { migration }),
+    },
+  } as WorldRunnerOptions["definition"];
+}
+
+/** The split every case below runs: each owner keeps its identity as a HEADER
+ *  and its payload moves into two-item pages it answers, while the digest
+ *  carries counts and no payload at all. */
+const FAN_OUT = {
+  from: 1,
+  survey: {
+    initial: (): Fold => ({ owners: 0, items: 0 }),
+    root: (digest: Fold, element: Vault, name: string): Fold =>
+      name.startsWith("owner")
+        ? { owners: digest.owners + 1, items: digest.items + element.items.length }
+        : digest,
+    maxBytes: 256,
+  },
+  derive: (
+    element: Vault,
+    ctx: { name: string; digest: Fold; existing: readonly string[] },
+  ): Record<string, GameElement> => {
+    if (!ctx.name.startsWith("owner")) return {};
+    const built: Record<string, GameElement> = {};
+    const names: string[] = [];
+    for (let at = 0; at < element.items.length; at += 2) {
+      const pageName = `${ctx.name}/page-${at / 2}`;
+      const page = element.game.create(Vault, pageName);
+      page.items = element.items.slice(at, at + 2);
+      // ONE charge per page, applied where the payload is, so a resumed run
+      // that created a page twice would be visible as a doubled total.
+      page.charge = 1;
+      built[pageName] = page;
+      names.push(pageName);
+    }
+    // THE PAYLOAD LEAVES THE HEADER. This is the whole of the capability: it
+    // can only be written while the source root's own bytes are resident.
+    element.items = [];
+    element.pages = names;
+    element.charge = ctx.digest.owners;
+    return built;
+  },
+};
+
+async function storedEstate(): Promise<StoredEstate> {
+  const born = createWorld(options(estate(undefined, 1))).runner;
+  const genesis = await born.genesis();
+  return { rows: genesis.partitions, nextElementId: genesis.nextElementId };
+}
+
+/** What a host holds after a page's transaction lands: the bytes it wrote, the
+ *  allocation stamp those bytes were minted under, and the names it now knows
+ *  are taken. */
+interface Landed {
+  rows: Record<string, StoredPartition>;
+  nextElementId: number;
+  digest: string;
+}
+
+/** What a host sends the child for one page of one source world. */
+type StoredEstate = { rows: Record<string, StoredPartition>; nextElementId: number };
+
+const bodyOf = (world: StoredEstate, names: readonly string[]): Record<string, StoredPartition> =>
+  Object.fromEntries(names.map((name) => [name, world.rows[name]!]));
+
+/** Every page folded in, on a fresh runner each time, the digest crossing as
+ *  bytes because that is what a host persists between wakes. */
+async function surveyEvery(
+  definition: WorldRunnerOptions["definition"],
+  world: StoredEstate,
+  pages: readonly (readonly string[])[],
+): Promise<string> {
+  let digest: string | undefined;
+  for (const names of pages) {
+    const answer = await createWorld(
+      options(definition, world.nextElementId),
+    ).runner.migrateAll(bodyOf(world, names), {
+      from: 1,
+      to: 2,
+      allNames: [...SOURCES],
+      pass: "survey",
+      ...(digest === undefined ? {} : { digest }),
+    });
+    digest = answer.digest;
+  }
+  return digest!;
+}
+
+/** One page's transaction, landed: the bytes, the roots it derived or created,
+ *  and the allocation stamp they were minted under, all together. */
+function keep(landed: Landed, world: StoredEstate, answer: WorldMigrated): void {
+  for (const [name, json] of Object.entries(answer.partitions)) {
+    landed.rows[name] = { parentId: world.rows[name]!.parentId, json: JSON.parse(json) };
+  }
+  for (const [name, record] of Object.entries(answer.created)) landed.rows[name] = record;
+  landed.nextElementId = answer.nextElementId;
+}
+
+/**
+ * ONE FAN-OUT MIGRATION, DRIVEN THE WAY A HOST MUST DRIVE ONE.
+ *
+ * A FRESH RUNNER per call, the digest carried as bytes, the allocation stamp
+ * carried forward from each answer, and every root a landed page created added
+ * to `allNames` -- because that is the host's own knowledge and it is what a
+ * second attempt at a landed page has to collide with.
+ *
+ * `failAt` is the injected failure: a page whose transaction is thrown out
+ * before anything of it is kept, which is the only rollback a forward-only
+ * resume has. `from` and `firstPage` are the resume itself, and `stopAfter` is
+ * the host that stopped partway with everything before it landed.
+ */
+async function fanOut(
+  world: StoredEstate,
+  pages: readonly (readonly string[])[],
+  opts: {
+    readonly migration?: Record<string, unknown>;
+    readonly failAt?: number;
+    readonly from?: Landed;
+    readonly firstPage?: number;
+    readonly stopAfter?: number;
+  } = {},
+): Promise<Landed> {
+  const definition = estate(opts.migration ?? FAN_OUT, 2);
+  const landed: Landed = opts.from
+    ? { rows: { ...opts.from.rows }, nextElementId: opts.from.nextElementId, digest: opts.from.digest }
+    : {
+        rows: {},
+        nextElementId: world.nextElementId,
+        digest: await surveyEvery(definition, world, pages),
+      };
+
+  const last = opts.stopAfter ?? pages.length - 1;
+  for (let index = opts.firstPage ?? 0; index <= last; index += 1) {
+    const answer = await createWorld(
+      options(definition, landed.nextElementId),
+    ).runner.migrateAll(bodyOf(world, pages[index]!), {
+      from: 1,
+      to: 2,
+      allNames: [...new Set([...SOURCES, ...Object.keys(landed.rows)])].sort(),
+      pass: "transform",
+      runCreate: index === pages.length - 1,
+      digest: landed.digest,
+    });
+    // THE INJECTED FAILURE, exactly where a host's own transaction would fail:
+    // the answer is thrown away whole, so nothing of this page is kept and the
+    // stamp does not advance either.
+    if (index === opts.failAt) throw new Error(`host lost page ${index}`);
+    keep(landed, world, answer);
+  }
+  return landed;
+}
+
+const attrs = (row: StoredPartition) =>
+  (JSON.parse(JSON.stringify(row.json)) as { attributes: Record<string, unknown> }).attributes;
+
+/** Every element id in a stored subtree, so "no duplicate ids" is measurable. */
+function idsIn(row: StoredPartition): number[] {
+  const walk = (node: { _id?: number; children?: unknown[] }): number[] => [
+    ...(node._id === undefined ? [] : [node._id]),
+    ...((node.children ?? []) as { _id?: number; children?: unknown[] }[]).flatMap(walk),
+  ];
+  return walk(JSON.parse(JSON.stringify(row.json)) as { _id?: number });
+}
+
+describe("#246 — a transform page emits the roots its own source root splits into", () => {
+  it("splits TWO source roots into a header plus MULTIPLE new durable pages", async () => {
+    const world = await storedEstate();
+    const landed = await fanOut(world, [["owner-1"], ["owner-2"], ["ledgerbook"]]);
+
+    expect(Object.keys(landed.rows).sort()).toEqual([
+      "ledgerbook",
+      "owner-1",
+      "owner-1/page-0",
+      "owner-1/page-1",
+      "owner-2",
+      "owner-2/page-0",
+      "owner-2/page-1",
+      "owner-2/page-2",
+    ]);
+    // The header kept its identity and lost its payload; the payload is in the
+    // pages, which is the move that could only happen while it was resident.
+    expect(attrs(landed.rows["owner-1"]!).items).toEqual([]);
+    expect(attrs(landed.rows["owner-1"]!).pages).toEqual(["owner-1/page-0", "owner-1/page-1"]);
+    expect(attrs(landed.rows["owner-1/page-1"]!).items).toEqual([13, 14]);
+    expect(attrs(landed.rows["owner-2/page-2"]!).items).toEqual([25, 26]);
+    // The digest carried counts and no payload at all.
+    expect(JSON.parse(landed.digest)).toEqual({ owners: 2, items: 10 });
+    expect(landed.digest).not.toMatch(/13|25/);
+  });
+
+  it("reaches the same world in EITHER source-root order, on a cold runner per page", async () => {
+    const world = await storedEstate();
+    const forwards = await fanOut(world, [["owner-1"], ["owner-2"], ["ledgerbook"]]);
+    const backwards = await fanOut(world, [["ledgerbook"], ["owner-2"], ["owner-1"]]);
+
+    for (const name of Object.keys(forwards.rows)) {
+      expect(attrs(backwards.rows[name]!), `root ${name}`).toEqual(attrs(forwards.rows[name]!));
+    }
+  });
+
+  it("every saved header reference resolves to a stored root", async () => {
+    const world = await storedEstate();
+    const landed = await fanOut(world, [["owner-1", "ledgerbook"], ["owner-2"]]);
+
+    for (const [name, row] of Object.entries(landed.rows)) {
+      for (const reference of attrs(row).pages as string[]) {
+        expect(landed.rows[reference], `${name} references ${reference}`).toBeDefined();
+      }
+    }
+  });
+
+  it("mints no id twice and charges no page twice", async () => {
+    const world = await storedEstate();
+    const landed = await fanOut(world, [["owner-1"], ["owner-2"], ["ledgerbook"]]);
+
+    const ids = Object.values(landed.rows).flatMap(idsIn);
+    expect(new Set(ids).size, "every stored element id is distinct").toBe(ids.length);
+    const charged = Object.values(landed.rows).reduce(
+      (total, row) => total + (attrs(row).charge as number),
+      0,
+    );
+    // Five pages, one charge each, plus two headers stamped with the owner count.
+    expect(charged).toBe(5 + 2 * 2);
+  });
+
+  it("resumes forward-only after a page's transaction is lost, without duplicating anything", async () => {
+    const world = await storedEstate();
+    const pages = [["owner-1"], ["owner-2"], ["ledgerbook"]];
+
+    // The run that loses page 1's transaction: page 0 landed, nothing of page 1
+    // was kept, and the stamp did not advance past it.
+    await expect(fanOut(world, pages, { failAt: 1 })).rejects.toThrow(/host lost page 1/);
+
+    // What the host holds at that point, and the forward-only resume from it.
+    const kept = await fanOut(world, pages, { stopAfter: 0 });
+    const finished = await fanOut(world, pages, { from: kept, firstPage: 1 });
+
+    const whole = await fanOut(world, pages);
+    expect(Object.keys(finished.rows).sort()).toEqual(Object.keys(whole.rows).sort());
+    const ids = Object.values(finished.rows).flatMap(idsIn);
+    expect(new Set(ids).size).toBe(ids.length);
+    const charged = (landed: Landed) =>
+      Object.values(landed.rows).reduce((total, row) => total + (attrs(row).charge as number), 0);
+    expect(charged(finished)).toBe(charged(whole));
+  });
+
+  it("REFUSES a page that would re-derive roots a landed page already stored", async () => {
+    // The forward-only policy's own guard: a host that re-sent a page it had
+    // already committed would mint a second copy of every page that root split
+    // into, so the name it already holds is the refusal.
+    const world = await storedEstate();
+    const pages = [["owner-1"], ["owner-2"], ["ledgerbook"]];
+    const kept = await fanOut(world, pages, { stopAfter: 0 });
+
+    await expect(
+      fanOut(world, pages, { from: kept, firstPage: 0, stopAfter: 0 }),
+    ).rejects.toThrow(/already holds/);
+  });
+
+  it("resumes after the FINAL creation hook failed, adding its root exactly once", async () => {
+    const world = await storedEstate();
+    const pages = [["owner-1"], ["owner-2"], ["ledgerbook"]];
+    let attempts = 0;
+    const withFinalCreate = {
+      ...FAN_OUT,
+      create: (game: Game, ctx: { digest: Fold; existing: readonly string[] }) => {
+        attempts += 1;
+        if (attempts === 1) throw new Error("final creation lost");
+        const index = game.create(Vault, "index");
+        index.charge = ctx.digest.owners;
+        index.pages = ctx.existing.filter((name) => name.includes("/page-"));
+        return { index };
+      },
+    };
+
+    await expect(fanOut(world, pages, { migration: withFinalCreate })).rejects.toThrow(
+      /final creation lost/,
+    );
+
+    const upToLast = await fanOut(world, pages, {
+      migration: withFinalCreate,
+      stopAfter: 1,
+    });
+    const finished = await fanOut(world, pages, {
+      migration: withFinalCreate,
+      from: upToLast,
+      firstPage: 2,
+    });
+
+    expect(Object.keys(finished.rows).filter((name) => name === "index")).toEqual(["index"]);
+    expect(attrs(finished.rows.index!).pages).toEqual([
+      "owner-1/page-0",
+      "owner-1/page-1",
+      "owner-2/page-0",
+      "owner-2/page-1",
+      "owner-2/page-2",
+    ]);
+    const ids = Object.values(finished.rows).flatMap(idsIn);
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+
+  it("keeps the digest ceiling exactly where it was", async () => {
+    const world = await storedEstate();
+    const attempt = createWorld(options(estate({ ...FAN_OUT, survey: { ...FAN_OUT.survey, maxBytes: 8 } }, 2), world.nextElementId)).runner.migrateAll(
+      { "owner-1": world.rows["owner-1"]! },
+      { from: 1, to: 2, allNames: [...SOURCES], pass: "survey" },
+    );
+
+    await expect(attempt).rejects.toThrow(/past the 8-byte ceiling/);
+  });
+
+  it("lets a page AND the roots it derived be evicted, and answers the next command", async () => {
+    // #407 on the fan-out road: the derived roots are partitions the engine
+    // invented, so a baseline it forgot for one of them would leave a mark the
+    // world's next command could not name -- and refuse, for good.
+    const world = await storedEstate();
+    const runner = createWorld(options(estate(FAN_OUT, 2), world.nextElementId)).runner;
+    const survey = await runner.migrateAll(world.rows, { from: 1, to: 2, allNames: [...SOURCES], pass: "survey" });
+    const answer = await runner.migrateAll(world.rows, {
+      from: 1,
+      to: 2,
+      allNames: [...SOURCES],
+      pass: "transform",
+      runCreate: true,
+      digest: survey.digest!,
+    });
+    runner.evict([...SOURCES, ...Object.keys(answer.created)]);
+
+    const command = { name: "settle", args: {} };
+    const stored: Record<string, StoredPartition> = {
+      "owner-1": { parentId: 0, json: JSON.parse(answer.partitions["owner-1"]!) },
+    };
+    await runner.declare(command, "p1", stored, 0, []);
+    const result = await runner.apply({ player: "p1", command, timing: null, ...STAMP });
+
+    expect(result.dirty).toEqual(["owner-1"]);
+  });
+
+  it("writes nothing on the survey pass of a migration that derives", async () => {
+    const world = await storedEstate();
+    const answer = await createWorld(
+      options(estate(FAN_OUT, 2), world.nextElementId),
+    ).runner.migrateAll(
+      { "owner-1": world.rows["owner-1"]! },
+      { from: 1, to: 2, allNames: [...SOURCES], pass: "survey" },
+    );
+
+    expect(answer.partitions).toEqual({});
+    expect(answer.created).toEqual({});
+  });
+});
+
+describe("#246 — an allocation a hook never answered is refused, not discarded", () => {
+  const runnerFor246 = (migration: Record<string, unknown>, nextElementId: number) =>
+    createWorld(options(estate(migration, 2), nextElementId)).runner;
+
+  it("REFUSES a `partition` hook that allocated a top-level root, naming it", async () => {
+    // The whole reason this issue exists: the header was rewritten to point at
+    // roots the answer silently omitted, so a host stored a reference to bytes
+    // that never existed.
+    const world = await storedEstate();
+
+    await expect(
+      runnerFor246(
+        {
+          from: 1,
+          partition: (element: Vault) => {
+            const orphan = element.game.create(Vault, "owner-1/page-0");
+            orphan.items = [...element.items];
+            element.items = [];
+            element.pages = ["owner-1/page-0"];
+          },
+        },
+        world.nextElementId,
+      ).migrateAll({ "owner-1": world.rows["owner-1"]! }, { from: 1, to: 2 }),
+    ).rejects.toThrow(/"owner-1\/page-0"/);
+  });
+
+  it("REFUSES a `derive` hook that allocated a root it did not answer", async () => {
+    const world = await storedEstate();
+
+    await expect(
+      runnerFor246(
+        {
+          from: 1,
+          derive: (element: Vault) => {
+            element.game.create(Vault, "stranded");
+            return {};
+          },
+        },
+        world.nextElementId,
+      ).migrateAll({ "owner-1": world.rows["owner-1"]! }, { from: 1, to: 2 }),
+    ).rejects.toThrow(/"stranded"/);
+  });
+
+  it("REFUSES a `create` hook that allocated a root it did not answer", async () => {
+    const world = await storedEstate();
+
+    await expect(
+      runnerFor246(
+        {
+          from: 1,
+          create: (game: Game) => {
+            const kept = game.create(Vault, "kept");
+            game.create(Vault, "dropped");
+            return { kept };
+          },
+        },
+        world.nextElementId,
+      ).migrateAll({ "owner-1": world.rows["owner-1"]! }, { from: 1, to: 2 }),
+    ).rejects.toThrow(/"dropped"/);
+  });
+
+  it("allows a hook to allocate INTO the root it was handed", async () => {
+    // The legitimate case the refusal must not catch: an element created and
+    // then placed inside the partition's own subtree is that partition's bytes.
+    const world = await storedEstate();
+    const answer = await runnerFor246(
+      {
+        from: 1,
+        partition: (element: Vault) => {
+          element.create(Vault, "slot");
+        },
+      },
+      world.nextElementId,
+    ).migrateAll({ "owner-1": world.rows["owner-1"]! }, { from: 1, to: 2 });
+
+    expect(Object.keys(answer.partitions)).toEqual(["owner-1"]);
   });
 });

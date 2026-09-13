@@ -156,6 +156,45 @@ export interface WorldMigration<TDigest = unknown> {
    */
   event?(event: MigratableEvent): Record<string, unknown>;
   /**
+   * ONE SOURCE ROOT, SPLIT INTO ITSELF PLUS THE ROOTS IT FANS OUT INTO (#246).
+   *
+   * `create` is the world's door for new roots: it runs ONCE, it is told the
+   * names the world holds and nothing else, and on a paged migration it runs on
+   * the final transform page -- by which time every earlier source root has
+   * been serialized and let go of. So the upgrade a grown world actually needs,
+   * "each of these five hundred owners becomes a HEADER plus the inventory
+   * pages its payload moves into", had nowhere to be written: the payload that
+   * has to move is only readable while its own source root is resident, and the
+   * only hook resident with it could not answer a root.
+   *
+   * This is that door, per source root and on the page that holds it. It is
+   * handed the SAME live element `partition` is -- rewriting the source into a
+   * header that references its new pages is half the split, and a hook that
+   * could only answer would have to leave the other half to a second hook that
+   * no longer knew the names -- and it answers `name -> element`, exactly as
+   * `create` does. Those roots land in the SAME answer, and therefore in the
+   * same host transaction, as the page that derived them.
+   *
+   * IT RUNS BEFORE `partition`, on the root exactly as stored. The payload it
+   * must carry into the new roots is the STORED payload, and a hook that ran
+   * after `partition` would be handed whatever `partition` had already rewritten
+   * away -- which is precisely the bytes the split exists to move. A migration
+   * that declares both writes its fan-out here and its remaining in-place work
+   * there; one that declares only this needs no `partition` at all.
+   *
+   * `ctx.existing` is every name the world holds, plus every name derived so far
+   * on this page, so a collision is refused by name rather than overwriting a
+   * live partition -- and a host that re-sends a page it already committed is
+   * refused for the same reason, which is what makes the forward-only resume
+   * safe. Derive the new names from the source root's own name and no two source
+   * roots can collide on any page order.
+   *
+   * Bounded by construction: it sees one root and answers roots derived from
+   * that one root. Nothing is carried between pages, and the survey digest is
+   * untouched -- a global fact still belongs in `survey`.
+   */
+  derive?(element: GameElement, ctx: WorldMigrationDeriveContext<TDigest>): Record<string, GameElement>;
+  /**
    * DURABLE PARTITION ROOTS THIS VERSION ADDS (#218).
    *
    * Genesis runs once, so a world that needs a root it did not start with has
@@ -266,6 +305,19 @@ export interface WorldMigrationCreateContext<TDigest = unknown> {
   /** The version being left, and the one being arrived at. */
   readonly from: number;
   readonly to: number;
+}
+
+/**
+ * What the `derive` hook is told about the source root it is splitting (#246).
+ *
+ * `WorldMigrationContext` plus `existing`, for the one reason `create` is told
+ * it: this hook ANSWERS roots, so it needs to know which names are taken. It is
+ * every name the world holds and every name already derived on this page, which
+ * is what makes idempotence a filter rather than a convention.
+ */
+export interface WorldMigrationDeriveContext<TDigest = unknown>
+  extends WorldMigrationContext<TDigest> {
+  readonly existing: readonly string[];
 }
 
 /** What a migration is told about the thing it is transforming. */
@@ -383,6 +435,15 @@ export function assertWorldMigration(migration: unknown, stateVersion: number): 
       "This bundle's `world.migration.partition` is not a function. It is handed one partition's " +
         "element and mutates it in place; leave it out entirely for a version whose change is " +
         "only in its queued events.",
+    );
+  }
+  if (candidate.derive !== undefined && typeof candidate.derive !== "function") {
+    throw worldRefusal(
+      "bundle-not-a-world",
+      "This bundle's `world.migration.derive` is not a function. It is handed ONE source root, " +
+        "live and mutable, and answers the NEW partition roots that root splits into as " +
+        "`name -> element` -- `{}` for a root that splits into none; leave it out for a version " +
+        "where no existing root fans out into new ones.",
     );
   }
   if (candidate.create !== undefined && typeof candidate.create !== "function") {
@@ -550,4 +611,54 @@ export function assertCreatedRoots(
     }
     taken.add(name);
   }
+}
+
+/**
+ * AN ALLOCATION A MIGRATION HOOK MADE AND NEVER ANSWERED (#246).
+ *
+ * A hook holds the live game, so `game.create(...)` inside one builds a real
+ * element hanging from the game root -- and until this, an element that was
+ * never ANSWERED as a partition root was simply dropped: it was no root, so
+ * nothing serialized it, and the host wrote a rewritten header that referenced
+ * bytes which never existed. The migration reported success. The world lost the
+ * payload.
+ *
+ * Silence was the whole bug, so this is the refusal. It names what would have
+ * been discarded and which hook discarded it, because "your migration allocated
+ * something" is not an instruction and the author's next move is either to
+ * answer the allocation or to put it inside the root they were handed.
+ *
+ * The world is not changed: this runs before a single byte leaves the engine.
+ */
+export function assertAnsweredAllocations(
+  hook: "partition" | "derive" | "create" | "finalize",
+  discarded: readonly string[],
+): void {
+  if (discarded.length === 0) return;
+  const one = discarded.length === 1;
+  const advice =
+    hook === "partition"
+      ? "`partition` transforms the root it was handed IN PLACE and cannot answer a new root. A " +
+        "root an existing root splits into is `derive`'s answer; a root the whole version adds " +
+        "is `create`'s; and an element built INSIDE the root this hook was handed is that root's " +
+        "own bytes and needs no answer at all."
+      : hook === "derive"
+        ? "`derive` registers a new root only by ANSWERING it, as `name -> element`. Put it in " +
+          "that answer, or build it INSIDE the root this hook was handed, where it is that " +
+          "root's own bytes."
+        : hook === "create"
+          ? "`create` registers a new root only by ANSWERING it, as `name -> element`. Put it in " +
+            "that answer, or build it inside a root that is already there."
+          : "`finalize` writes ACROSS the roots that already exist and cannot answer a new one. " +
+            "A root the version adds is `create`'s answer; anything else belongs inside a root " +
+            "that is already there.";
+  throw worldRefusal(
+    "world-migration-unavailable",
+    `This world's migration allocated ${one ? "a top-level element" : `${discarded.length} top-level elements`} ` +
+      `in its \`${hook}\` hook and never answered ${one ? "it as a partition root" : "them as partition roots"}: ` +
+      `${discarded.join(", ")}. ${advice} An element that hangs from the game root and is no ` +
+      "partition is serialized by nothing, so a header rewritten to reference it would point at " +
+      "bytes that never reach storage -- which is why this is a refusal rather than a dropped " +
+      "element. The world was not changed.",
+  );
 }

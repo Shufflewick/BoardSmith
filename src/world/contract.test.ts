@@ -213,6 +213,10 @@ class ReferenceWorldEngine implements WorldEngine {
     throw new Error("the reference world holds no tree to create partitions in");
   }
 
+  migrateDerive(): Record<string, never> {
+    throw new Error("the reference world holds no root to split into new partitions");
+  }
+
   async hydrate(names: readonly string[]): Promise<void> {
     // ADOPTION AND NOTHING ELSE (#122). The reference world has no tree, so
     // residency IS the resident set -- and a declaration asked a second time

@@ -1602,6 +1602,66 @@ the transformed ones, so the whole upgrade is still one durable step.
 A migration may not REMOVE a root. Deleting a season's stored bytes on a hook
 whose failure mode is a typo is not something anything gives back.
 
+**And `derive`, for a root that SPLITS INTO new roots** (#246). `create` is the
+world's door: it runs once, it is told the names the world holds and nothing
+else, and on a paged migration it runs on the LAST transform page -- by which
+time every earlier source root has been serialized and let go of. So the upgrade
+a grown world actually needs -- "each of these five hundred owners becomes a
+HEADER plus the inventory pages its own payload moves into" -- could be written
+by neither hook: the payload that has to move is only readable while its own
+source root is resident, and the hook resident with it could not answer a root.
+
+```ts
+migration: worldMigration({
+  from: 1,
+  derive: (owner, { name, existing }) => {
+    const pages: Record<string, GameElement> = {};
+    for (const [index, batch] of chunk(owner.inventory, 50).entries()) {
+      const pageName = `${name}/inventory-${index}`;
+      if (existing.includes(pageName)) continue;
+      const page = owner.game.create(InventoryPage, pageName);
+      page.items = batch;
+      pages[pageName] = page;
+    }
+    // The payload LEAVES the header, which is the half only this hook can write.
+    owner.inventory = [];
+    owner.pages = Object.keys(pages);
+    return pages;
+  },
+})
+```
+
+It is handed the same live element `partition` is, because rewriting the source
+into a header that references its new pages is half of the split and a hook that
+could only answer roots would have to leave that half to a second hook that no
+longer knew the names. **It runs BEFORE `partition`, on the root exactly as
+stored**: the payload it carries into the new roots is the stored payload, and a
+hook that ran after the in-place transform would be handed whatever that
+transform had already rewritten away. A migration that declares both writes its
+fan-out here and its remaining in-place work there; one that declares only this
+needs no `partition` at all.
+
+The roots it answers land in the **same** answer -- and therefore the same host
+transaction -- as the page that derived them, so `WorldMigrated.created` is no
+longer only the final page's business. `ctx.existing` is every name the world
+holds plus every name already derived on this page, so a collision is refused by
+name exactly as a created root's is; derive the new names from the source root's
+own name and no two source roots can collide on any page order. It is bounded by
+construction -- one root in, the roots derived from that one root out, nothing
+carried between pages -- and it leaves the survey digest alone, because a fact
+about the whole world still belongs in `survey`.
+
+**An allocation a hook never answered is a REFUSAL, not a dropped element**
+(#246). A hook holds the live game, so `game.create(...)` inside one builds a
+real element hanging from the game root -- and an element that is no partition is
+serialized by nothing. Before this it was silently discarded: a `partition` hook
+that packed its payload into new elements and rewrote its header to reference
+them produced a migrated header pointing at bytes that never reached storage, and
+the migration reported success. Now the hook is refused, the refusal names each
+discarded allocation and which hook discarded it, and the world is not changed.
+An element created and then placed INSIDE the root the hook was handed is that
+root's own bytes and passes untouched.
+
 **And `finalize`, for a root that is derived from ANOTHER root**
 (ShufflewickPub #379). `partition` sees one root at a time and `create` may only
 answer NEW names, so the commonest shape a real occupied upgrade has -- "this
@@ -1815,8 +1875,8 @@ thing next time.
 
 | Code | What happened |
 | --- | --- |
-| `bundle-not-a-world` | The manifest declares `"backend": "world"` and the compiled rules export no `world.actions`, no `world.view`, no `world.maxPlayers`, a `world.maxPlayers` the host will not seat, a `world.stateVersion` that is not a whole number from 0 up, or a `world.migration` that is not usable (no `from`, a `from` at or past this version, a hook -- `partition`, `event`, `create` or `finalize` -- that is not a function, a `survey` that is not `{ initial, root, maxBytes }`, or a migration declaring both `survey` and `finalize`). |
-| `world-migration-unavailable` | A world's recorded `stateVersion` and its bundle's differ, and no migration in that bundle can cross the gap: none declared, one declared from a different version, or a bundle older than the world. Also a `create` hook whose answer is not `name -> element`, or that names a partition the world already holds; a survey digest past `survey.maxBytes` or past the host's own ceiling; and a paged survey migration run with no `pass`, or a transform pass handed no digest. The world is not changed. |
+| `bundle-not-a-world` | The manifest declares `"backend": "world"` and the compiled rules export no `world.actions`, no `world.view`, no `world.maxPlayers`, a `world.maxPlayers` the host will not seat, a `world.stateVersion` that is not a whole number from 0 up, or a `world.migration` that is not usable (no `from`, a `from` at or past this version, a hook -- `partition`, `event`, `derive`, `create` or `finalize` -- that is not a function, a `survey` that is not `{ initial, root, maxBytes }`, or a migration declaring both `survey` and `finalize`). |
+| `world-migration-unavailable` | A world's recorded `stateVersion` and its bundle's differ, and no migration in that bundle can cross the gap: none declared, one declared from a different version, or a bundle older than the world. Also a `create` or `derive` hook whose answer is not `name -> element`, or that names a partition the world already holds; a hook that allocated a top-level element and never answered it as a partition root (#246); a survey digest past `survey.maxBytes` or past the host's own ceiling; and a paged survey migration run with no `pass`, or a transform pass handed no digest. The world is not changed. |
 | `invalid-world-action` | A world action the platform cannot offer or cannot bound: an action not built with `worldAction()`, an unbounded `from`/`filter`/`elementClass` element form, an element selection with no `elements:`, a candidate outside what the step declared, a selection past `maxCandidatesPerSelection`, a dependent or repeating selection, a seatless action that asks a question, or a round declared before a step the action does not have. |
 | `not-in-a-world` | An action built with `worldAction()` reached `ctx.world` with no world running it -- registered on a table, or reached after the dispatch that bound its facilities finished. |
 | `undeclared-partition` | `execute` read a partition the action's own walk did not declare. |

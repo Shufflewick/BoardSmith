@@ -1166,6 +1166,28 @@ export interface WorldEngine {
   ): Record<string, StoredPartition>;
 
   /**
+   * ONE SOURCE ROOT, SPLIT INTO ITSELF PLUS THE ROOTS IT ANSWERS (#246).
+   *
+   * `migratePartition` hands over the live element and may answer nothing;
+   * `createMigratedPartitions` answers roots and is handed no element. So the
+   * upgrade a grown world needs -- "each of these five hundred owners becomes a
+   * HEADER plus the pages its payload moves into" -- could be written by
+   * neither: the payload is only readable while its own source root is
+   * resident, and `create` runs once, on the last page, with every earlier root
+   * already let go of.
+   *
+   * This is both halves on one call, per source root and on the page that holds
+   * it. `existing` is every name the world holds plus every name already derived
+   * on this page, and a collision is the same refusal a created root's is --
+   * which is also what refuses a host that re-sends a page it already committed.
+   */
+  migrateDerive(
+    name: string,
+    split: (element: GameElement) => Record<string, GameElement>,
+    existing: readonly string[],
+  ): Record<string, StoredPartition>;
+
+  /**
    * One player's view of the world.
    *
    * Per player and computed on demand, so a fan-out costs what each player can
@@ -1324,6 +1346,7 @@ export const WORLD_ENGINE_METHODS = Object.keys({
   hydrate: null,
   offerPartitions: null,
   migrateBaseline: null,
+  migrateDerive: null,
   migrateFinalize: null,
   migratePartition: null,
   nextElementId: null,
