@@ -83,6 +83,7 @@ import {
   assertCandidateBudget,
   assertWorldAction,
   bindWorldFacilities,
+  type WorldActionBlock,
   type WorldActivityRound,
   type WorldClockFacilities,
   type WorldNeedsRound,
@@ -1095,27 +1096,133 @@ export class BoardSmithWorldEngine implements WorldEngine {
     args: Readonly<Record<string, unknown>>,
     stamp: WorldOfferStamp,
   ): Promise<PickMetadata> {
-    const seat = this.seatFor(player);
-    const acting = this.playerFor(seat);
     const definition = this.offerableAction(action);
     const index = this.selectionIndex(definition, selection);
+    // EVERY ROUND UP TO AND INCLUDING THIS SELECTION'S, with the args bound. A
+    // later round may read what an earlier one loaded, and with arguments in hand
+    // a round can name a partition the empty-args offer could not.
+    return this.answeringRead(player, definition, index, args, stamp, (acting, named) =>
+      this.pickOf(definition, index, acting, named, args),
+    );
+  }
 
+  /**
+   * ONE READ ABOUT ONE ACTION, WITH THE ARGS BOUND (#378, #248).
+   *
+   * `resolvePick` and `resolveQuote` are the same road with different answers at
+   * the end of it: bind the read-only facilities, hydrate the declaration walk as
+   * far as the question reaches with the args in hand, answer, and let the
+   * facilities go however that turned out. Written once, because two copies of
+   * "which facilities a read runs under" is exactly how one of them comes to run
+   * under different ones.
+   *
+   * `through` is the last step to hydrate -- a selection's own index for a pick,
+   * and `selections.length` (the execute round) for a quote, which reads the state
+   * the purchase writes to.
+   */
+  private async answeringRead<T>(
+    player: string,
+    definition: ActionDefinition,
+    through: number,
+    args: Readonly<Record<string, unknown>>,
+    stamp: WorldOfferStamp,
+    answer: (acting: Player, named: readonly string[]) => T,
+  ): Promise<T> {
+    const seat = this.seatFor(player);
+    const acting = this.playerFor(seat);
     const named: string[] = [];
-    // As `offerOf`: a pick is a seat's, and a seat's verb declares no chair.
+    // As `offerOf`: this is a seat's own read, and a seat's verb declares no chair.
     const namedSeats: number[] = [];
-    const facilities = this.readOnlyFacilities(definition.name, named, stamp);
-    bindWorldFacilities(this.game, facilities);
+    bindWorldFacilities(this.game, this.readOnlyFacilities(definition.name, named, stamp));
     try {
-      // EVERY ROUND UP TO AND INCLUDING THIS SELECTION'S, with the args bound.
-      // A later round may read what an earlier one loaded, and with arguments in
-      // hand a round can name a partition the empty-args offer could not.
-      for (let step = 0; step <= index; step++) {
+      for (let step = 0; step <= through; step++) {
         await this.hydrateRounds(definition, step, seat, args, named, namedSeats, stamp.now);
       }
-      return this.pickOf(definition, index, acting, named, args);
+      return answer(acting, named);
     } finally {
       bindWorldFacilities(this.game, null);
     }
+  }
+
+  /**
+   * WHAT THE DRAFT IN FRONT OF A PLAYER WOULD COST (#248).
+   *
+   * The pick pair above re-asks a QUESTION; this answers the one thing a
+   * question cannot carry -- what the answers add up to. It runs the action's own
+   * `.quote()` over the args the player has drafted so far, which includes a
+   * number they have typed into the panel's field and not yet submitted.
+   *
+   * EVERY ROUND, INCLUDING THE EXECUTE ROUND. A price is read from the same
+   * state the purchase writes to -- the payer's own balance, the expiry it is
+   * extending -- and that partition is often named by the round AFTER the last
+   * selection, because nothing before execute had a reason to read it. So the
+   * whole walk is hydrated here, with the draft bound.
+   *
+   * AND IT IS A READ, on exactly the terms an offer is: the projection refuses a
+   * write, `readingOnly` refuses a reach-mark, and nothing is checkpointed. A
+   * player drafting a purchase has not bought anything, so nothing about the
+   * world may move while they type.
+   */
+  async resolveQuote(
+    player: string,
+    action: string,
+    args: Readonly<Record<string, unknown>>,
+    stamp: WorldOfferStamp,
+  ): Promise<readonly string[] | null> {
+    const definition = this.offerableAction(action);
+    const quote = this.quoteOf(definition);
+    // THE WHOLE WALK, INCLUDING THE EXECUTE ROUND, because a price is read from
+    // the state the purchase writes to and that partition is usually named by the
+    // round after the last selection.
+    return this.answeringRead(player, definition, definition.selections.length, args, stamp,
+      (acting) =>
+        // READ-ONLY FOR THE WHOLE CALLBACK, exactly as a pick's own callbacks are
+        // (ShufflewickPub #384/#295): the projection refuses a write and
+        // `readingOnly` refuses a reach-mark, so a quote cannot move the world it
+        // is describing.
+        this.game.readingOnly(() =>
+          quote(
+            { ...args },
+            { game: readOnlyProjection(this.game), player: acting, args: { ...args } },
+          ),
+        ),
+    );
+  }
+
+  /**
+   * WHAT ANSWERING THAT QUOTE STILL NEEDS RESIDENT (#248).
+   *
+   * `pickPartitions` for the whole walk rather than one selection, because a
+   * quote reads what execute reads. Answers the FIRST unmet round, for the
+   * reason every other declare verb does: a later round may read what an earlier
+   * one loaded and has nothing to say until the host has supplied it.
+   */
+  quotePartitions(
+    player: string,
+    action: string,
+    args: Readonly<Record<string, unknown>>,
+    now: number,
+  ): readonly string[] {
+    const definition = this.offerableAction(action);
+    this.quoteOf(definition);
+    return this.unmetThrough(player, definition, definition.selections.length, args, now);
+  }
+
+  /** This action's quote, or the refusal that it has none. Asking an action that
+   *  declares no quote for one is a client asking a question the bundle never
+   *  offered to answer -- so it is refused rather than answered with nothing,
+   *  which would read on screen as "this costs nothing". */
+  private quoteOf(definition: ActionDefinition): NonNullable<WorldActionBlock["quote"]> {
+    const quote = definition.world?.quote;
+    if (quote === undefined) {
+      throw worldRefusal(
+        "unknown-command",
+        `The "${definition.name}" action does not quote its draft, so there is no price to show ` +
+          "before it is submitted. Declare one with `.quote()` on the action if its player " +
+          "should see what a draft will cost.",
+      );
+    }
+    return quote;
   }
 
   /**
@@ -1133,12 +1240,37 @@ export class BoardSmithWorldEngine implements WorldEngine {
     args: Readonly<Record<string, unknown>>,
     now: number,
   ): readonly string[] {
-    const seat = this.seatFor(player);
     const definition = this.offerableAction(action);
-    const index = this.selectionIndex(definition, selection);
-    for (let step = 0; step <= index; step++) {
+    return this.unmetThrough(
+      player,
+      definition,
+      this.selectionIndex(definition, selection),
+      args,
+      now,
+    );
+  }
+
+  /**
+   * THE FIRST ROUND OF THIS WALK THAT IS NOT RESIDENT YET (#378, #248).
+   *
+   * `pickPartitions` and `quotePartitions` differ only in how far the walk
+   * reaches, so the walk itself is here. The FIRST unmet round, because a later
+   * round may read what an earlier one loaded and has nothing to say until the
+   * host has supplied it -- which is what makes this a conversation rather than
+   * one answer.
+   */
+  private unmetThrough(
+    player: string,
+    definition: ActionDefinition,
+    through: number,
+    args: Readonly<Record<string, unknown>>,
+    now: number,
+  ): readonly string[] {
+    const seat = this.seatFor(player);
+    for (let step = 0; step <= through; step++) {
       for (const round of definition.world!.needs) {
         if (round.before !== step) continue;
+        // The activity round is the clock's, and a seat's read never asks one.
         if (round.kind === "activity") continue;
         const unmet = this.declareRound(round, seat, args, now).filter(
           (name) => !this.residentIds.has(name),
@@ -2855,18 +2987,37 @@ function offerOf(
 ): WorldActionOffer {
   return {
     name: definition.name,
-    ...(definition.prompt === undefined ? {} : { prompt: definition.prompt }),
-    ...(definition.help === undefined ? {} : { help: definition.help }),
-    ...(definition.manual ? { manual: true } : {}),
-    ...(definition.suppressFromActionPanel ? { suppressFromActionPanel: true } : {}),
-    // The action panel's menu placement (#228), on the same terms as every
-    // other optional field here: absent rather than `undefined`, because this
-    // travels as JSON and an `undefined` key is a key that vanishes on the way.
-    ...(definition.group === undefined ? {} : { group: definition.group }),
-    ...(definition.order === undefined ? {} : { order: definition.order }),
-    ...(disabled === null ? {} : { disabled }),
     selections,
+    // EVERY OPTIONAL FIELD IS ABSENT RATHER THAN `undefined`, and that is one rule
+    // written once rather than a ternary per field: this travels as JSON, and a key
+    // holding `undefined` is a key that vanishes on the way -- so "absent" and
+    // "sent as nothing" would be indistinguishable to the panel reading it.
+    //
+    //   `manual` / `suppressFromActionPanel` are FLAGS: false is the same as
+    //     absent, so only true is carried.
+    //   `group` / `order` are the action panel's menu placement (#228).
+    //   `quote` says this action prices its own draft (#248) -- a flag and never
+    //     the lines, because the lines are a function of what the player has
+    //     drafted and an offer is enumerated before they have drafted anything.
+    //     It is what tells the panel and a custom UI to confirm rather than
+    //     auto-commit.
+    ...sent({
+      prompt: definition.prompt,
+      help: definition.help,
+      manual: definition.manual === true ? true : undefined,
+      suppressFromActionPanel: definition.suppressFromActionPanel === true ? true : undefined,
+      group: definition.group,
+      order: definition.order,
+      disabled: disabled ?? undefined,
+      quote: definition.world?.quote === undefined ? undefined : true,
+    }),
   };
+}
+
+/** The fields that have a value, as an object to spread. See `offerOf` for why
+ *  an absent key and a key holding `undefined` are not the same thing here. */
+function sent(fields: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(fields).filter(([, value]) => value !== undefined));
 }
 
 /** What one dispatch collects while the rules run. */

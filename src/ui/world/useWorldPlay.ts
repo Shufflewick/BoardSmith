@@ -52,6 +52,7 @@ import type { WorldHost } from './useWorldHost.js';
 import type { WorldActionOffer } from './worldProtocol.js';
 import type {
   ActionMetadata,
+  ActionQuoteResult,
   ActionResult,
   PickChoicesResult,
 } from '../composables/useActionControllerTypes.js';
@@ -93,6 +94,19 @@ export interface WorldPlay {
     player: number,
     currentArgs: Record<string, unknown>,
   ) => Promise<PickChoicesResult>;
+  /**
+   * WHAT THE DRAFT IN FRONT OF THE PLAYER WOULD COST (#248).
+   *
+   * ALWAYS off the wire, unlike a pick: a quote is a function of what the player
+   * has drafted, and the offer was enumerated before they drafted anything. There
+   * is nothing older that could answer it, which is the whole reason the price of
+   * two weeks could not be shown before this existed.
+   */
+  fetchActionQuote: (
+    actionName: string,
+    draftArgs: Record<string, unknown>,
+    player: number,
+  ) => Promise<ActionQuoteResult>;
 }
 
 /** The world's projection, as `viewFor` composes it. `state` is the pruned
@@ -195,6 +209,49 @@ export function useWorldPlay(host: WorldHost): WorldPlay {
     return { success: false, error: outcome.message ?? 'The world refused that, and did not say why.' };
   }
 
+  /**
+   * PRICE THE DRAFT, BY ASKING THE GAME (#248).
+   *
+   * Two refusals of its own before the wire is touched, and both are the panel
+   * asking about something this seat was never given: an action absent from the
+   * offer, and an action that declares no quote. Neither is answered with empty
+   * lines, because empty lines render as "this costs nothing".
+   */
+  async function fetchActionQuote(
+    actionName: string,
+    draftArgs: Record<string, unknown>,
+    _player: number,
+  ): Promise<ActionQuoteResult> {
+    const offer = offers.value.find((candidate) => candidate.name === actionName);
+    if (offer === undefined) {
+      return {
+        success: false,
+        error:
+          `This world did not offer "${actionName}" to this seat, so there is no draft of it to ` +
+          `price. Its offer is enumerated by the world over what the seat can see.`,
+      };
+    }
+    if (offer.quote !== true) {
+      return {
+        success: false,
+        error:
+          `The "${actionName}" action does not quote its draft, so the world has no price to ` +
+          `give before it is submitted. Declare one with \`.quote()\` on the action.`,
+      };
+    }
+    const answer = await host.quoteDraft(actionName, draftArgs);
+    if (!answer.ok) {
+      return {
+        success: false,
+        error:
+          answer.message ??
+          `The world would not say what "${actionName}" would cost, and did not say why.`,
+      };
+    }
+    // `null` IS AN ANSWER: the game has nothing to price about this draft yet.
+    return { success: true, lines: answer.quote ?? null };
+  }
+
   async function fetchPickChoices(
     actionName: string,
     selectionName: string,
@@ -271,5 +328,6 @@ export function useWorldPlay(host: WorldHost): WorldPlay {
     messages,
     sendAction,
     fetchPickChoices,
+    fetchActionQuote,
   };
 }

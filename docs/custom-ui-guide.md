@@ -724,6 +724,30 @@ const actionContextSectorId = computed(() => {
 });
 ```
 
+### Showing the price of a draft (world actions)
+
+A world action can declare [`.quote()`](./persistent-worlds.md#quote-what-the-draft-will-cost-before-the-player-pays-it),
+which prices the draft in front of the player before they commit it. The lines are
+on the controller, so your board reads the same price the Action Panel is showing
+rather than computing a second one:
+
+```typescript
+// The game's own lines for the draft on screen, or null when there is no price
+// that is true right now (nothing drafted yet, still being worked out, refused).
+const price = computed(() => props.actionController.actionQuote.value);
+const working = computed(() => props.actionController.quotePending.value);
+const refusal = computed(() => props.actionController.quoteError.value);
+
+// A quoted action does not auto-commit: the player confirms what they were shown.
+const deciding = computed(() => props.actionController.awaitingConfirmation.value);
+const cannotConfirm = computed(() => props.actionController.confirmDisabledReason.value);
+async function buy() { await props.actionController.confirm(); }
+```
+
+Never cache `actionQuote` into your own ref. A quote is stamped with the draft it
+was computed for and withdrawn the instant the draft moves, which is what makes a
+stale price unreachable — a copy of your own is exactly how one comes back.
+
 ### Example: Auto-Opening a Detail Panel
 
 When a sector-related action starts (either from ActionPanel or via followUp), automatically show the sector's detail panel:

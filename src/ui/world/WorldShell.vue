@@ -214,6 +214,11 @@ const actionController = useActionController({
   gameView: play.gameView as never,
   playerSeat,
   fetchPickChoices: play.fetchPickChoices,
+  // WHAT THE DRAFT WOULD COST (#248). The other piece that has to be a world's
+  // own: the price of a draft is computed by the bundle, inside the world, over
+  // the partitions the action declares -- so there is nothing the controller
+  // could work out for itself and nothing a table's shell has to supply.
+  fetchActionQuote: play.fetchActionQuote,
 });
 
 /**

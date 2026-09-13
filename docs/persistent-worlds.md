@@ -390,7 +390,9 @@ you write is a table action with `ctx.world` in scope and one method added:
 `.needs()`. `prompt`, `help`, `condition`, `disabled`, `validate`, `manual`,
 `suppressFromActionPanel`, `group`, `order`, `chooseFrom`, `chooseElement`,
 `chooseElements`, `enterText`, `enterNumber`, `execute` and `build` all mean what
-they mean on a table. `group`/`order` matter more here than they do at a table:
+they mean on a table. One method is a world's own beside `.needs()`: `.quote()`,
+which prices the draft in front of the player before they commit it -- see
+[Quoting a draft](#quote-what-the-draft-will-cost-before-the-player-pays-it). `group`/`order` matter more here than they do at a table:
 a resident world offers every verb that is relevant at once, and a flat list of
 seventeen buttons is what they exist to arrange. See
 [Actions & Flow](./actions-and-flow.md#group-and-order-arrange-the-start-buttons). The
@@ -622,7 +624,9 @@ selections. There are five you may write:
   draw a list being built rather than a row of checkboxes.
 - **`enterNumber(name, { min, max, integer })`** -- a number, bounded where the
   game knows the bound, so a surface draws a stepper and "at least one log" is a
-  fact the shell knows before anything is sent.
+  fact the shell knows before anything is sent. If the number is a QUANTITY YOU
+  CHARGE FOR, add [`.quote()`](#quote-what-the-draft-will-cost-before-the-player-pays-it)
+  so the player is told the total before they pay it.
 - **`enterText(name, { minLength, maxLength, pattern, multiline })`** -- free
   text. `multiline: true` asks the shared panel for a resizable box rather than
   a single line, with a character count and an explicit submit button so Enter
@@ -715,6 +719,77 @@ afterwards. An action has a channel for this and a world uses it:
 - **`.validate()`** is still the whole-action gate, checked at submit with every
   selection resolved. It is the backstop, not the surface: anything `validate`
   can say, a player would rather have been told before they pressed anything.
+
+### `.quote()`: what the draft will cost, before the player pays it
+
+A verb that charges for a typed number had nowhere to say so. The offer is
+enumerated with nothing bound, so the price of *two weeks* is not in it;
+`validate` runs at submit, which is after the money; and `world.emit` writes a
+receipt, which is a sentence about a purchase that has already happened. A player
+typed a 2 into the panel's field and pressed a button whose total nobody had told
+them (#248).
+
+`.quote()` is that missing answer: one function of the args the player has drafted
+**so far**, run on the read path, and re-run every time the draft moves.
+
+```ts
+worldAction<Empire>('boost')
+  .needs(({ player }) => [empireOf(player.seat)])
+  .chooseFrom('resource', { choices: ['food', 'storage'] })
+  .enterNumber('weeks', { min: 0, integer: true, optional: 'skip for one week' })
+  .quote(({ weeks, resource }, { game, world }) => {
+    if (resource === undefined) return null;      // nothing to price yet
+    const paid = weeks ?? 1;                      // omitted is the game's default
+    return [
+      `${paid * 5} Essentia`,
+      `until ${day(Math.max(world.now, game.empire().boostUntil) + paid * WEEK)}`,
+    ];
+  })
+  .execute(({ weeks, resource }, ctx) => { /* the same arithmetic, for real */ });
+```
+
+**The args are partial, and that is the contract.** A quote is asked while the
+player is still answering, so every selection is `undefined` until they bind it --
+and an omitted optional number reaches both `.quote()` and `execute` as
+`undefined`, which is how "skip for one week" and "zero weeks" stay two different
+answers the whole way down. Return `null` for a draft there is nothing to say
+about yet.
+
+**The number being typed is in there.** That is the point: the panel sends the
+value in its editor before it has been submitted, so the price shown is the price
+of what the player is looking at.
+
+**Declaring it takes the auto-commit away.** Filling the last selection normally
+executes on the spot, which would render the total in the same tick as the charge.
+An action that quotes is *confirmed* instead: the player sees the price, then
+presses Confirm. Both surfaces learn this from the offer's own `quote: true` flag,
+and both refuse to confirm a draft whose price is not on screen -- an unanswered
+or refused quote blocks the purchase rather than letting it through unpriced.
+
+**It is a read, and it is advisory.** It runs under the same read-only facilities
+and the same projection an offer's callbacks run under, so a quote that writes to
+the world is refused rather than silently reverted at the next hibernation; and
+the order that follows is still validated against whatever the world holds when it
+arrives. What the player saw is what the game said a moment ago -- state the time
+basis in the lines if that matters ("at today's price").
+
+**The panel and a custom UI read one quote.** `actionController.actionQuote` is
+the shared source of truth, beside `quotePending`, `quoteError`,
+`awaitingConfirmation`, `confirmDisabledReason` and `confirm()`. The standard
+panel renders the lines in a live region above the pick it is asking for; a custom
+board reads the same refs, so the two cannot show different prices for one draft.
+A quote is stamped with the draft it was computed for and withdrawn the instant
+the draft moves, so a stale price is not merely avoided, it is unreachable.
+
+**What it costs.** One read per draft change, at most one in flight at a time: a
+draft that moves while a quote is outstanding is asked about when that one comes
+back, so holding a key down cannot open a request per keystroke. The read hydrates
+every round the action declares, including the round after the last selection,
+because a price is read from the same state the purchase writes to.
+
+Not on `worldClockAction()`: a quote is what a player is told before they commit,
+and a scheduled event has nobody to tell. The clock's builder offers no `.quote()`
+and the engine refuses one pushed onto the block by hand.
 
 ### The refusal a player can only discover by trying
 

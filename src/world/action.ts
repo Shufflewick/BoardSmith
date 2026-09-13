@@ -518,7 +518,47 @@ export interface WorldActionBlock {
    * delete, and it comes back the moment a position may only be declared once.
    */
   readonly needs: readonly WorldNeedsRound[];
+  /**
+   * WHAT THE DRAFT IN FRONT OF THE PLAYER WILL COST, ANSWERED BY THE GAME (#248).
+   *
+   * A world action that charges for a number had no way to say so before the
+   * charge. Its offer is enumerated with nothing bound, so the price of two
+   * weeks is not in it; `validate` runs at submit, which is after the money; and
+   * a receipt is a sentence about a purchase that already happened. So a player
+   * typed a 2 into the standard panel's number field and pressed a button whose
+   * price they had never been told.
+   *
+   * This is that answer: ONE function of the args drafted so far, run on the
+   * READ path -- the same read-only facilities and the same projection an offer
+   * runs under -- and re-run every time the draft moves.
+   *
+   * ITS ARGS ARE PARTIAL, and that is the contract rather than a caveat. A
+   * quote is asked while the player is still answering, so every selection is
+   * `undefined` until they bind it -- and an OMITTED optional number reaches
+   * both this and `execute` as `undefined`, which is how "skip for one week"
+   * and "zero weeks" stay two different answers all the way down.
+   *
+   * DECLARING IT TAKES THE AUTO-COMMIT AWAY. The panel executes as soon as the
+   * last selection is filled, so a quote computed for a final draft nobody had
+   * seen yet would be a price rendered in the same tick as the purchase. An
+   * action that quotes is therefore confirmed rather than auto-committed --
+   * see `ActionMetadata.quote`, which is how the panel and a custom UI both
+   * learn to ask.
+   */
+  readonly quote?: WorldQuote;
 }
+
+/**
+ * A QUOTE, AS THE ENGINE HOLDS IT.
+ *
+ * The args are whatever the player has drafted, so every value is optional; the
+ * answer is the lines to show them, or `null` for a draft there is nothing to
+ * say about yet.
+ */
+export type WorldQuote = (
+  args: Readonly<Record<string, unknown>>,
+  context: ActionContext<Game>,
+) => readonly string[] | null;
 
 /**
  * WHOSE WORLD THIS GAME IS RUNNING IN, while it is running in one.
@@ -778,6 +818,51 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
   validate(fn: (args: A, context: WorldActionContext<G>) => boolean | string): this {
     this.inner.validate(((args: Record<string, unknown>, context: AnyContext) =>
       fn(args as A, withWorld<G>(context))) as never);
+    return this;
+  }
+
+  /**
+   * WHAT THE DRAFT WILL COST, BEFORE THE PLAYER PAYS IT (#248).
+   *
+   * The lines the standard panel shows beside the pick it is asking for, and the
+   * lines a custom UI reads off the same controller state -- recomputed by THIS
+   * function, inside the bundle, every time the draft moves. One per fact worth
+   * a line: the price, and what the player gets for it.
+   *
+   * ```ts
+   * worldAction<Empire>("boost")
+   *   .needs(({ player }) => [empireOf(player.seat)])
+   *   .enterNumber("weeks", { min: 0, integer: true, optional: "skip for one week" })
+   *   .chooseFrom("resource", { choices: ["food", "storage"] })
+   *   .quote(({ weeks, resource }, { game, world }) => {
+   *     if (resource === undefined) return null;       // nothing to price yet
+   *     const paid = weeks ?? 1;                        // omitted is the default
+   *     return [`${paid * 5} Essentia`, `until ${ends(world.now, paid)}`];
+   *   })
+   *   .execute(({ weeks, resource }, ctx) => { ... });  // the same arithmetic
+   * ```
+   *
+   * THREE THINGS IT IS NOT:
+   *
+   *   NOT A GATE. It decides nothing. `validate` is still the rule and the
+   *     transaction still checks the world it finds at submit -- a quote is what
+   *     the player is told, and between being told and pressing the button the
+   *     price of something else may have changed.
+   *   NOT A WRITE. It runs on the read path, under the projection every offer
+   *     callback runs under, so a quote that assigns to the world is refused
+   *     rather than reverted at the next hibernation.
+   *   NOT A RECEIPT. `world.emit` already covers what happened. This covers what
+   *     WOULD happen, which is the one thing a player cannot be told afterwards.
+   *
+   * AND IT CHANGES THE FLOW: an action that quotes is confirmed, never
+   * auto-committed. Filling the last selection puts the quote in front of the
+   * player and waits, because a price shown in the same tick as the charge is
+   * the defect this method exists for.
+   */
+  // fallow-ignore-next-line unused-class-member
+  quote(fn: (args: Partial<A>, context: WorldActionContext<G>) => readonly string[] | null): this {
+    (this.definition.world as { quote?: WorldQuote }).quote = (args, context) =>
+      fn(args as Partial<A>, withWorld<G>(context as AnyContext));
     return this;
   }
 
@@ -1207,6 +1292,21 @@ export function assertWorldAction(definition: ActionDefinition): void {
         `${definition.selections.length} selection(s). A selection is a question and there is ` +
         "nobody to ask: a clock action runs when the event scheduled for it comes due, whether " +
         "or not anybody is here. Take its arguments from the schedule row instead.",
+    );
+  }
+
+  // A QUOTE IS SHOWN TO SOMEBODY, AND NOBODY IS WATCHING THE CLOCK (#248).
+  // The clock's builder offers no `.quote()`, and that is the signpost rather
+  // than the enforcement: `ActionDefinition` is structural, so a bundle can put
+  // one on the block by hand. What it would price is a draft no player is
+  // holding, on a path with no panel to render it.
+  if (block.quote !== undefined && block.seatless === true) {
+    throw worldRefusal(
+      "invalid-world-action",
+      `The "${definition.name}" action quotes a draft and is the world's own clock. A quote is ` +
+        "what a player is told before they commit, and a scheduled event has nobody to tell: it " +
+        "runs when its event comes due, whether or not anybody is here. Put the quote on the " +
+        "seated action a player actually presses.",
     );
   }
 

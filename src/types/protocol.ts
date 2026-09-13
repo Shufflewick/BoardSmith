@@ -749,6 +749,23 @@ export interface ActionMetadata<TElement extends ValidElement = ValidElement> {
   group?: readonly string[];
   /** Sort key within the action's menu level (#228); absent sorts as `0`. */
   order?: number;
+  /**
+   * THIS ACTION PRICES ITS OWN DRAFT, so ask before submitting it (#248).
+   *
+   * Set by a world action's `.quote()` and carried on the offer. It changes two
+   * things for every surface, and both come off this one flag so the panel and a
+   * custom UI cannot diverge about them:
+   *
+   *   THE DRAFT IS QUOTED as it moves -- a number typed into the editor and not
+   *     yet submitted included -- through the controller's `fetchActionQuote`.
+   *   THE LAST PICK IS NOT THE PURCHASE. Auto-execute is off; the player sees the
+   *     price and confirms. An action without this flag keeps the auto-execute it
+   *     always had.
+   *
+   * The lines themselves are never here: they are a function of a draft that does
+   * not exist when metadata is computed.
+   */
+  quote?: boolean;
   selections: PickMetadata<TElement>[];
 }
 
