@@ -254,6 +254,62 @@ export async function renderAsSeat<C extends Component = typeof AutoUIComponent>
   seat: number,
   options: RenderAsSeatOptions<C> = {},
 ): Promise<VueWrapper<RenderedInstance<C>>> {
+  const { wrapper } = await mountForSeat(subject, seat, options);
+  return wrapper;
+}
+
+/** A mounted board, and everything it has failed with so far. */
+interface MountedForSeat<C extends Component> {
+  readonly wrapper: VueWrapper<RenderedInstance<C>>;
+  readonly raised: unknown[];
+}
+
+/**
+ * Let the mounted tree finish what it deferred, then raise anything it failed
+ * with. A macrotask, because a board's deferred work is a promise chain and a
+ * chain of any length has settled by the time one of those has run.
+ */
+async function raiseWhatTheBoardDeferred(raised: unknown[], seat: number): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const failures = raised.splice(0, raised.length);
+  const first = failures[0];
+  if (first === undefined) return;
+  const detail = first instanceof Error ? first.message : String(first);
+  const others = failures.length > 1 ? ` (and ${failures.length - 1} more after it)` : '';
+  throw new Error(
+    `The board rendered for seat ${seat} failed after it rendered${others}: ${detail}\n` +
+      'It is raised here, as a failed assertion, because a failure that arrives after this ' +
+      'assertion has resolved is reported as an unhandled rejection and leaves the run GREEN -- ' +
+      'so the hidden-information scan would have reported a clean result having checked nothing. ' +
+      "Fix the board's deferred work (an async lifecycle hook, a watcher, or a promise started " +
+      'in setup()), then run this scan again.',
+    { cause: first },
+  );
+}
+
+/**
+ * ONE MOUNT, PLUS WHATEVER IT RAISED AFTER IT RENDERED (#267).
+ *
+ * `mount()` returns as soon as the first paint is done, and a board's work is
+ * not always finished by then: an async lifecycle hook, a watcher, or a promise
+ * started in `setup()` all fail LATER. Vue routes those into the app's own
+ * error handler, and with no handler installed they escape to the process as an
+ * unhandled rejection -- which arrives after this gate's assertion has already
+ * resolved. Vitest then attributes the failure to nothing and the test PASSES,
+ * so a suite whose only hidden-information check is this gate goes green while
+ * checking nothing. That is the defect in #267 and it is the reason this
+ * function exists rather than `renderAsSeat` mounting directly.
+ *
+ * So the app collects instead of escaping, the mount is given a turn to finish
+ * what it deferred, and anything collected is RAISED TO THE CALLER as a failed
+ * assertion. `raised` stays live afterwards because a board can still fail
+ * during unmount, which the scan checks after its own `finally`.
+ */
+async function mountForSeat<C extends Component = typeof AutoUIComponent>(
+  subject: HiddenInfoSubject,
+  seat: number,
+  options: RenderAsSeatOptions<C> = {},
+): Promise<MountedForSeat<C>> {
   if (typeof document === 'undefined') {
     throw new Error(
       'renderAsSeat/assertNoHiddenInfoLeak require a DOM environment. ' +
@@ -308,9 +364,21 @@ export async function renderAsSeat<C extends Component = typeof AutoUIComponent>
     ...options.provide,
   };
 
-  return mount<Component>(component, { props, global: { provide } }) as VueWrapper<
-    RenderedInstance<C>
-  >;
+  // COLLECTED, NEVER ESCAPED. See {@link raiseWhatTheBoardDeferred} -- this
+  // handler is the whole of why a deferred failure can reach the caller at all.
+  const raised: unknown[] = [];
+  const wrapper = mount<Component>(component, {
+    props,
+    global: { provide, config: { errorHandler: (error: unknown) => raised.push(error) } },
+  }) as VueWrapper<RenderedInstance<C>>;
+
+  try {
+    await raiseWhatTheBoardDeferred(raised, seat);
+  } catch (failure) {
+    wrapper.unmount();
+    throw failure;
+  }
+  return { wrapper, raised };
 }
 
 /**
@@ -948,8 +1016,21 @@ export async function assertNoHiddenInfoLeak(
   // THE DIFF, AND BOTH HALVES OF IT COME FROM THE SUBJECT. What it holds
   // against what this seat is sent -- never a hand-written field list, and
   // never a second implementation of the projection (#262).
+  const unredacted = await subject.unredactedElements();
+  // A GATE WITH NOTHING ON THE OTHER SIDE OF THE DIFF CANNOT FAIL (#267). The
+  // same rule as the allowlist check below, one step earlier: a subject holding
+  // no elements makes every marker set empty, so the scan would report a clean
+  // result for any board at all -- including one painting the whole world.
+  if (unredacted.length === 0) {
+    throw new Error(
+      'assertNoHiddenInfoLeak: the subject holds no elements at all, so there is nothing for ' +
+        `seat ${seat}'s frame to be diffed against and this assertion cannot fail. Build the ` +
+        'subject with createTestGame (a table) or createTestWorld (a world, whose genesis must ' +
+        'have run), and check that the one handed here is the one the test drove.',
+    );
+  }
   const { markers, ownValuesById } = deriveLeakDetectionData(
-    await subject.unredactedElements(),
+    unredacted,
     (await subject.getPlayerView(seat)).state as ElementJSON,
   );
   const { allow } = options;
@@ -979,7 +1060,7 @@ export async function assertNoHiddenInfoLeak(
 
   if (activeMarkers.length === 0) return;
 
-  const wrapper = await renderAsSeat(subject, seat, {
+  const { wrapper, raised } = await mountForSeat(subject, seat, {
     gameViewOverride: options.gameViewOverride,
     component: options.component,
     componentProps: options.componentProps,
@@ -1021,4 +1102,9 @@ export async function assertNoHiddenInfoLeak(
   } finally {
     wrapper.unmount();
   }
+  // A BOARD CAN STILL FAIL ON THE WAY OUT -- an unmounted watcher, a teardown
+  // hook -- and that failure is as deferred as any other. Checked after the
+  // scan rather than inside its `finally` so a real leak is still the error the
+  // caller is told about.
+  await raiseWhatTheBoardDeferred(raised, seat);
 }
