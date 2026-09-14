@@ -76,10 +76,11 @@ import {
   assertPartitionWithinBudget,
   assertStorablePartitionName,
 } from '../../world/partition-store.js';
-import type {
-  WorldCheckpointExtras,
-  WorldSeatRecord,
-  WorldStore,
+import {
+  storablePartitionRows,
+  type WorldCheckpointExtras,
+  type WorldSeatRecord,
+  type WorldStore,
 } from '../../world/host/index.js';
 import type {
   WorldCreatedPartition,
@@ -297,12 +298,7 @@ export function openWorldStore(path: string, budgets: WorldBudgets): LocalWorldS
     },
 
     async createAll(genesis: WorldGenesis, stateVersion = 0): Promise<void> {
-      const rows = Object.entries(genesis.partitions).map(([name, record]) => {
-        assertStorablePartitionName(name);
-        const json = JSON.stringify(record.json);
-        assertPartitionWithinBudget(name, json, budgets);
-        return { name, parentId: record.parentId, json };
-      });
+      const rows = storablePartitionRows(genesis.partitions, budgets);
       transact(() => {
         for (const row of rows) stmt.writePartition.run(row.name, row.parentId, row.json);
         // THE VERSION GENESIS WROTE THESE BYTES UNDER (#200), with the bytes.
@@ -528,12 +524,7 @@ export function openWorldStore(path: string, budgets: WorldBudgets): LocalWorldS
       // from -- and they are checked here, before the transaction opens, for
       // the reason `createAll` checks its own: a migration refused halfway is
       // the one failure this whole method exists to make impossible.
-      for (const [name, record] of Object.entries(created.created)) {
-        assertStorablePartitionName(name);
-        const json = JSON.stringify(record.json);
-        assertPartitionWithinBudget(name, json, budgets);
-        rows.push({ name, parentId: record.parentId, json });
-      }
+      rows.push(...storablePartitionRows(created.created, budgets));
       transact(() => {
         writePartitions(rows);
         writeEvents(events);

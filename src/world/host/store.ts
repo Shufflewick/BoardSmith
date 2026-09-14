@@ -14,8 +14,17 @@
  * Map. All three drive {@link ResidentWorld}, which is written against THIS and
  * against no storage engine in particular.
  */
-import type { DeclaredSeatActivityStamp, WorldPartitionStore } from "../contract.js";
-import type { WorldPartitionWriter } from "../partition-store.js";
+import type {
+  DeclaredSeatActivityStamp,
+  StoredPartition,
+  WorldPartitionStore,
+} from "../contract.js";
+import {
+  assertPartitionWithinBudget,
+  assertStorablePartitionName,
+  type WorldPartitionWriter,
+} from "../partition-store.js";
+import type { WorldBudgets } from "../budgets.js";
 import type {
   WorldCreatedPartition,
   WorldGenesis,
@@ -348,4 +357,40 @@ export interface WorldCheckpointExtras {
    * presence hook, a migration.
    */
   readonly activity?: { readonly seat: number; readonly at: number };
+}
+
+/** One partition, ready to be written: checked, and with its bytes already a
+ *  string, because both halves of "may this be stored" are about the string.
+ *  Unexported for the reason `WorldSeatRecord` was: a caller reads the answer
+ *  and TypeScript checks its use structurally. */
+interface StorableRow {
+  readonly name: string;
+  readonly parentId: number;
+  readonly json: string;
+}
+
+/**
+ * CHECK EVERY NAME AND EVERY SIZE BEFORE ANY OF THEM IS WRITTEN.
+ *
+ * The roads that write partitions carrying their OWN parent -- a genesis, and
+ * the new roots a migration adds (#218) -- and the reason it is one function is
+ * that the check has to happen before the transaction opens. A genesis refused
+ * for one bad name must write NOTHING: a world marked launched with one
+ * partition in it is wedged forever, because every later command re-runs
+ * genesis, meets a partition that already exists, and refuses. A migration that
+ * landed halfway is the same failure with no retry that could finish it.
+ *
+ * Shared by every store rather than written per store, because "what may be
+ * stored" is a decision two hosts must not be able to make differently.
+ */
+export function storablePartitionRows(
+  records: Readonly<Record<string, StoredPartition>>,
+  budgets: WorldBudgets,
+): StorableRow[] {
+  return Object.entries(records).map(([name, record]) => {
+    assertStorablePartitionName(name);
+    const json = JSON.stringify(record.json);
+    assertPartitionWithinBudget(name, json, budgets);
+    return { name, parentId: record.parentId, json };
+  });
 }

@@ -26,6 +26,12 @@ import {
 - `createTestGame()` - Convenience function wrapping `TestGame.create()`
 - `ActionExecutionError` - Structured error thrown by `doAction()` on failure; carries `actionName`, `playerSeat`, `args`, and the engine `result` for `instanceof` handling in tests
 
+### Persistent-World Test Harness
+
+- `TestWorld` - `TestGame`'s sibling for a **persistent world** (`backend: "world"`). Constructs and drives a resident world the way a host does, with an in-memory store and a clock you move by hand.
+- `createTestWorld()` - Convenience function wrapping `TestWorld.create()`; genesis has run and every seat is on the roster by the time it resolves
+- `TEST_WORLD_EPOCH` - The fixed instant a test world starts at, unless you name another
+
 ### Action Simulation
 
 - `simulateAction()` - Simulate a single action, returning a result annotated with the action/seat/args attempted
@@ -375,7 +381,7 @@ Classification is judged purely by each node's `__hidden` flag (never by id),
 which sidesteps the engine's zone-hidden-vs-individually-hidden
 id-anonymization asymmetry.
 
-**`renderAsSeat(testGame, seat, options?)` / `assertNoHiddenInfoLeak(testGame,
+**`renderAsSeat(subject, seat, options?)` / `assertNoHiddenInfoLeak(subject,
 seat, options?)`** go one level deeper than JSON-tree checks: they mount a real
 Vue renderer stack in `jsdom` and scan the actual rendered DOM for hidden-info
 leaks — the class of bug a JSON-tree assertion can miss entirely (e.g. a
@@ -390,6 +396,24 @@ test('opponent card rank/suit never appears in the DOM for seat 2', async () => 
   await assertNoHiddenInfoLeak(testGame, 2);
 });
 ```
+
+**`subject` is a `TestGame` or a `TestWorld`.** Both answer the same two
+questions -- what this seat is SENT, and what the game or world HOLDS -- and the
+scan is the difference between them. A persistent world is the case this matters
+most for: its hidden information is per-partition and per-seat on every frame, so
+another seat's room is not redacted in your projection, it is absent from it.
+
+```typescript
+import { createTestWorld, assertNoHiddenInfoLeak } from 'boardsmith/testing';
+import WorldBoard from '../src/ui/WorldBoard.vue';
+
+const world = await createTestWorld({ definition: gameDefinition });
+await world.take(1, 'stash');
+
+await assertNoHiddenInfoLeak(world, 2, { component: WorldBoard });
+```
+
+See `createTestWorld` below for the rest of that harness.
 
 **If your game ships a custom board, pass `component`.** The default renders
 AutoUI, and AutoUI's markup says nothing about markup your game wrote itself —
@@ -573,6 +597,42 @@ availability evaluator per test:
 const spaceWithChoices = testGame.getActionSpaceWithChoices(1);
 // spaceWithChoices.actions[0].selections[0].choices — [{ value, disabled, reason? }, ...]
 ```
+
+### Driving a Persistent World
+
+A world is not a table and `TestGame` cannot drive one: a world keeps only named
+partitions resident, has no turn, and answers a seat with a PRUNED projection
+rather than a redacted whole tree. `createTestWorld` is the harness for it.
+
+```typescript
+import { createTestWorld } from 'boardsmith/testing';
+import { gameDefinition } from '../src/rules/index.js';
+
+const world = await createTestWorld({ definition: gameDefinition });
+
+await world.take(1, 'stash');              // take one of seat 1's offers
+await world.advanceClock(600_000);         // and run whatever falls due, at its own due
+await world.wake();                        // drop everything resident, rebuild from the store
+
+const seen = await world.getPlayerView(2);
+seen.state;              // the pruned per-seat tree a board is handed as `gameView`
+seen.offers;             // every action offered to this seat
+seen.availableActions;   // their names, as the world shell hands them to a board
+seen.disabledActions;    // name -> why it is offered but cannot be taken
+seen.canAct;             // does this seat hold an offer it can actually take?
+seen.revision;           // which committed state this frame is of
+
+await world.unredactedElements();   // the whole world, which no single seat can see
+```
+
+Options: `definition` (required), `seed`, `budgets`, `now`, and `watching` —
+which seats hold a socket, since presence is an input to an offer.
+
+`getPlayerView` is assembled by the same two calls `boardsmith dev` makes to fill
+a `world_state` and a `world_offers` frame, over one world lock, carrying one
+revision between them. It is the host's projection rather than a second
+implementation of it, which is what makes `assertNoHiddenInfoLeak(world, seat,
+…)` above worth running.
 
 ## See Also
 

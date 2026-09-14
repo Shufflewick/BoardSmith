@@ -931,18 +931,28 @@ export class ResidentWorld {
     // receipt. Reading the clock twice would let a long catch-up move the
     // instant the command claims to have arrived at.
     const arrivedAt = this.now();
-    // EVERYTHING ALREADY DUE FIRST, for a world that declared it (#380). After
-    // the receipt check above, so a REPLAYED order is answered from its receipt
-    // without running the clock: a receipt is not a reason to tick.
-    await this.#catchUpBefore(arrivedAt);
-    const events = await this.#dispatch({
-      player,
-      command: { name: action, args },
-      timing: null,
-      arrivedAt,
-      receipt: { orderId: order.id, player, at: arrivedAt },
-    });
-    return { kind: "committed", events };
+    try {
+      // EVERYTHING ALREADY DUE FIRST, for a world that declared it (#380).
+      // After the receipt check above, so a REPLAYED order is answered from its
+      // receipt without running the clock: a receipt is not a reason to tick.
+      await this.#catchUpBefore(arrivedAt);
+      const events = await this.#dispatch({
+        player,
+        command: { name: action, args },
+        timing: null,
+        arrivedAt,
+        receipt: { orderId: order.id, player, at: arrivedAt },
+      });
+      return { kind: "committed", events };
+    } finally {
+      // RE-ARMED HERE AND NOT BY THE CALLER (#262). A command is the one road
+      // that can both mint an event and, through the catch-up above, run one --
+      // so it is the one road after which the armed instant may be wrong. It is
+      // in a `finally` because a REFUSED command may still have drained a
+      // catch-up on the way in, and a host that had to remember to re-arm is a
+      // host that will eventually forget.
+      this.rearm();
+    }
   }
 
   /**

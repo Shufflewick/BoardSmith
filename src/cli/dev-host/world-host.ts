@@ -485,7 +485,6 @@ export class LocalWorldHost {
       });
     }
     await this.#pushViews();
-    this.#world.rearm();
   }
 
   // ── the dev controls ───────────────────────────────────────────────────────
