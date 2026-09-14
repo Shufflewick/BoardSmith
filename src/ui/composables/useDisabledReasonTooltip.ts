@@ -35,6 +35,17 @@ const showCount = ref(0);
 let dismissDoc: Document | null = null;
 
 /**
+ * The window the dismiss listener watches for lost focus, or null.
+ *
+ * A shell runs in an iframe, so a press in the page AROUND it happens in a
+ * document this code cannot listen to — a different document, and in platform
+ * mode potentially a different origin (#266). `blur` on the shell's own window
+ * is the one event that crosses the boundary: it fires when focus leaves the
+ * frame, whoever took it.
+ */
+let dismissView: Window | null = null;
+
+/**
  * Touch has no "moved away" — there is no mouseleave to close on. Without this,
  * a tapped tooltip would stay up until something else happened to open one.
  * Capture phase, so it settles before the newly-tapped control's own handler
@@ -47,16 +58,25 @@ function onDocumentPointerDown(event: Event): void {
   hideDisabledReason();
 }
 
+/** Focus left the shell entirely, so the player is no longer reading anything in it. */
+function onViewBlur(): void {
+  hideDisabledReason();
+}
+
 function attachDismiss(doc: Document): void {
   if (dismissDoc === doc) return;
   detachDismiss();
   doc.addEventListener('pointerdown', onDocumentPointerDown, true);
   dismissDoc = doc;
+  dismissView = doc.defaultView;
+  dismissView?.addEventListener('blur', onViewBlur);
 }
 
 function detachDismiss(): void {
   dismissDoc?.removeEventListener('pointerdown', onDocumentPointerDown, true);
   dismissDoc = null;
+  dismissView?.removeEventListener('blur', onViewBlur);
+  dismissView = null;
 }
 
 /**
