@@ -388,13 +388,16 @@ export const tend = worldAction<VillageGame>('tend')
 The builder is the engine's own with every callback's context re-typed, so what
 you write is a table action with `ctx.world` in scope and one method added:
 `.needs()`. `prompt`, `help`, `condition`, `disabled`, `validate`, `manual`,
-`suppressFromActionPanel`, `group`, `order`, `chooseFrom`, `chooseElement`,
+`suppressFromActionPanel`, `destructive`, `group`, `order`, `chooseFrom`, `chooseElement`,
 `chooseElements`, `enterText`, `enterNumber`, `execute` and `build` all mean what
 they mean on a table. One method is a world's own beside `.needs()`: `.quote()`,
 which prices the draft in front of the player before they commit it -- see
-[Quoting a draft](#quote-what-the-draft-will-cost-before-the-player-pays-it). `group`/`order` matter more here than they do at a table:
+[Quoting a draft](#quote-what-the-draft-will-cost-before-the-player-pays-it). `destructive` and `group`/`order` matter more here than they do at a table:
 a resident world offers every verb that is relevant at once, and a flat list of
-seventeen buttons is what they exist to arrange. See
+seventeen buttons is what they exist to arrange -- and the one among them that
+ends a resident character for good is exactly the button that must not be drawn
+like the one that looks around the room. See
+[`.destructive()`](./actions-and-flow.md#destructive-marks-the-verb-a-player-cannot-take-back). See
 [Actions & Flow](./actions-and-flow.md#group-and-order-arrange-the-start-buttons). The
 result is an ordinary `ActionDefinition`, which is why it needs no world-only
 registry, panel or board bridge.

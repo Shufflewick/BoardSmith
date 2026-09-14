@@ -881,6 +881,17 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
   }
 
   /**
+   * This verb permanently ends something, so the action panel draws it apart
+   * (#268) -- a different plate, an inset ring, a marker glyph and a
+   * screen-reader label. Presentation only; it confirms nothing on its own.
+   */
+  // fallow-ignore-next-line unused-class-member
+  destructive(): this {
+    this.inner.destructive();
+    return this;
+  }
+
+  /**
    * Put this action's start button inside a named action panel menu group
    * (#228), one label per level, outermost first.
    *

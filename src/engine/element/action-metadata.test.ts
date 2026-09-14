@@ -468,3 +468,62 @@ describe('SPACE-05 (D26): availableActions and actionMetadata cannot diverge', (
     expect(controller.currentAction.value).toBeNull();
   });
 });
+
+// ============================================================================
+// #268: per-action emphasis rides the actionMetadata channel exactly like
+// `suppressFromActionPanel`. A verb that permanently ends something says so on
+// its definition, and the panel and a custom board read it from the same place.
+// ============================================================================
+
+class DestructiveEmphasisGame extends Game<DestructiveEmphasisGame, Player> {
+  board!: Space<DestructiveEmphasisGame>;
+
+  constructor(options: GameOptions) {
+    super(options);
+    this.board = this.create(Space<DestructiveEmphasisGame>, 'board');
+
+    this.registerAction(
+      Action.create<DestructiveEmphasisGame>('endSurvivor')
+        .prompt('Careful: end this survivor, scattering everything you carry across the map')
+        .destructive()
+        .execute(() => ({ success: true })),
+    );
+
+    this.registerAction(
+      Action.create<DestructiveEmphasisGame>('lookAround')
+        .prompt('Look around the sector you are standing in')
+        .execute(() => ({ success: true })),
+    );
+
+    this.setFlow(
+      defineFlow({
+        root: loop({
+          maxIterations: 5,
+          do: eachPlayer({
+            name: 'turn',
+            do: actionStep({ actions: ['endSurvivor', 'lookAround'] }),
+          }),
+        }),
+      }),
+    );
+  }
+}
+
+describe('buildActionMetadata: destructive (#268)', () => {
+  it('emits destructive:true for an action built with .destructive(), and omits the key otherwise', () => {
+    const game = new DestructiveEmphasisGame({
+      playerCount: 2,
+      playerNames: ['Alice', 'Bob'],
+      seed: 'destructive-emphasis-test',
+    });
+    game.startFlow();
+    const player = game.getPlayer(1)!;
+
+    const metadata = buildActionMetadata(game, player, ['endSurvivor', 'lookAround']);
+
+    expect(metadata.endSurvivor.destructive).toBe(true);
+    // Absent rather than `undefined`: this record is serialized to a client, and
+    // a key holding `undefined` vanishes in JSON.
+    expect('destructive' in metadata.lookAround).toBe(false);
+  });
+});

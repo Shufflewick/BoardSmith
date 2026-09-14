@@ -657,6 +657,16 @@ export interface ActionDefinition {
    */
   suppressFromActionPanel?: boolean;
   /**
+   * This verb permanently ends something, so the Action Panel draws it apart
+   * from the rest (#268). Set via `.destructive()`.
+   *
+   * Presentation only: it changes nothing about availability, validation or
+   * what the rules do. It is metadata rather than a board concern because the
+   * panel is shipped chrome a game cannot restyle, and the button that kills a
+   * character belongs to the shell.
+   */
+  destructive?: boolean;
+  /**
    * The Action Panel menu path this action's START BUTTON sits at, outermost
    * first (#228). Absent means the top level. Set via `.group()`.
    *

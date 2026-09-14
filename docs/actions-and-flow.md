@@ -711,6 +711,7 @@ Action.create('move')
   .notUndoable()                    // Cannot undo this action
   .manual()                         // Never auto-execute for the player
   .suppressFromActionPanel()        // Hide the redundant Action Panel button (see below)
+  .destructive()                    // This verb permanently ends something (see below)
   .group('More', 'Empire settings') // Put its start button inside a menu group (see below)
   .order(20)                        // Where its button sits in its level
 ```
@@ -877,6 +878,53 @@ goes away, and it never offers less than the board.
 
 `platformActionPanelEscapeHatch` is not an exception a game may reach for — it
 is reserved for the host platform, which substitutes its own equivalent surface.
+
+#### `.destructive()` marks the verb a player cannot take back
+
+```typescript
+Action.create('endSurvivor')
+  .prompt('End this survivor, scattering everything you carry')
+  .destructive()
+  .execute(...)
+```
+
+Without it every verb in the bar is drawn in the same accent, so the action that
+permanently ends a character looks exactly like the one that looks around the
+room -- and because its prompt is usually the longest string, it is often the
+widest button on a narrow screen as well. The most dangerous verb ends up the
+most prominent one, and prominent in the way that reads as *primary*.
+
+`.destructive()` is the game telling the shell which verb that is. The Action
+Panel then draws it apart in four ways, **only one of which is colour**:
+
+- a plate from the dedicated `--bsg-destructive-surface` / `--bsg-destructive-ink`
+  token pair instead of the accent;
+- an inset ring, which gives the button a different *shape* from every other one
+  in the bar, so it still reads as set apart in greyscale;
+- a marker glyph beside the label;
+- the words "Destructive action." for a screen reader.
+
+Use it for a move that cannot be taken back: eliminating a piece of your own,
+conceding, razing something, spending a one-time resource for good. Do not use
+it for merely expensive or merely bad moves. A bar where half the buttons are
+marked warns about nothing.
+
+**It is emphasis, not a gate.** It confirms nothing on its own, changes nothing
+about availability, validation or execution, and is no substitute for a
+confirmation step the action needs anyway.
+
+**Do not remap the destructive tokens to a general status colour.** They are a
+pair of their own precisely so this emphasis cannot be switched off by accident:
+`--bsg-danger` and `--bsg-warn` are remapped freely by game themes (one theme in
+the wild points `--bsg-warn` at its accent-hover colour), and emphasis resolved
+through either would silently do nothing there. Override the destructive pair
+only deliberately, and override **both** -- overriding one alone can strand the
+label on a ground it does not contrast with.
+
+A custom board reads the same flag off the same metadata
+(`actionMetadata[name].destructive`), so the board and the panel cannot disagree
+about which verb is the dangerous one -- the parity rule above applies to
+emphasis exactly as it applies to everything else.
 
 #### `.suppressFromActionPanel()` hides a *redundant* button, never the last one
 

@@ -98,6 +98,7 @@ function actionMetadataOf(
     help: actionDef.help,
     ...(actionDef.manual ? { manual: true } : {}),
     ...(actionDef.suppressFromActionPanel ? { suppressFromActionPanel: true } : {}),
+    ...(actionDef.destructive ? { destructive: true } : {}),
     // The Action Panel's menu placement (#228). Absent unless the game declared
     // it, so a game with no hierarchy sends no hierarchy and the panel stays the
     // flat list it has always been.
