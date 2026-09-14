@@ -95,7 +95,9 @@ withDefaults(defineProps<{
 }
 
 .debug-btn.primary:disabled {
-  opacity: 0.5;
+  background: var(--bsg-disabled-surface);
+  border-color: var(--bsg-line);
+  color: var(--bsg-disabled-ink);
   cursor: not-allowed;
 }
 </style>

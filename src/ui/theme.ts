@@ -162,6 +162,14 @@ const STATIC_TOKENS = `
   --bsg-droptarget: color-mix(in srgb, var(--bsg-accent) 12%, transparent);
   --bsg-droptarget-hover: color-mix(in srgb, var(--bsg-accent) 24%, transparent);
   --bsg-ring: 0 0 0 2px var(--bsg-accent);
+
+  /* Disabled controls — a defined ground/ink PAIR, never an opacity multiplier.
+     An opacity multiplier dims label and ground together, compositing the label
+     against its own ground at a ratio no token names and no checker can measure
+     (#259). A game that overrides the palette overrides these two and keeps a
+     pair whose contrast is still guaranteed. */
+  --bsg-disabled-surface: var(--bsg-surface-2);
+  --bsg-disabled-ink: var(--bsg-ink-2);
   --bsg-elevation: var(--bsg-shadow-sm);
 
   /* Drag / drop tokens — defaults registered here; Phase 99 sweep references them */

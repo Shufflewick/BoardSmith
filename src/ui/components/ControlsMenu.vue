@@ -453,7 +453,8 @@ function handleLeave() {
   background: var(--bsg-surface-2);
 }
 .mi:disabled {
-  opacity: 0.4;
+  background: var(--bsg-disabled-surface);
+  color: var(--bsg-disabled-ink);
   cursor: not-allowed;
 }
 .mi svg {

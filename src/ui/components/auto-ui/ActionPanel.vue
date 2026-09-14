@@ -2218,8 +2218,13 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
   box-shadow: var(--bsg-shadow);
 }
 
+/* Disabled verbs are drawn, not hidden — the Action Panel is the accessibility
+   surface and the label is text a player reads. Dim with the disabled token PAIR so
+   the label keeps a measurable ratio against its own ground under any palette. */
 .action-btn[aria-disabled='true'] {
-  opacity: 0.5;
+  background: var(--bsg-disabled-surface);
+  color: var(--bsg-disabled-ink);
+  box-shadow: none;
   cursor: not-allowed;
 }
 
@@ -2441,11 +2446,10 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
 }
 
 .choice-btn[aria-disabled='true'] {
-  opacity: 0.45;
-  cursor: not-allowed;
-  filter: grayscale(0.5);
+  background: var(--bsg-disabled-surface);
+  color: var(--bsg-disabled-ink);
   border-color: var(--bsg-line);
-  color: var(--bsg-ink-3);
+  cursor: not-allowed;
 }
 
 .choice-btn:hover:not([aria-disabled='true']) {
@@ -2736,11 +2740,10 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
 }
 
 .multi-select-choice[aria-disabled='true'] {
-  opacity: 0.45;
-  cursor: not-allowed;
-  filter: grayscale(0.5);
+  background: var(--bsg-disabled-surface);
+  color: var(--bsg-disabled-ink);
   border-color: var(--bsg-line);
-  color: var(--bsg-ink-3);
+  cursor: not-allowed;
 }
 
 .multi-select-choice:hover:not([aria-disabled='true']) {
@@ -2783,8 +2786,13 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
 }
 
 .multi-select-choice input[type="checkbox"][aria-disabled='true'] {
-  opacity: 0.5;
+  background: var(--bsg-disabled-surface);
+  border-color: var(--bsg-line-2);
   cursor: not-allowed;
+}
+
+.multi-select-choice input[type="checkbox"][aria-disabled='true']:checked::after {
+  color: var(--bsg-disabled-ink);
 }
 
 .checkbox-label {
