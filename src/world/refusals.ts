@@ -330,6 +330,36 @@ export const WORLD_REFUSALS = {
       "the same way on every later wake, and the archive is not something the world can repair, " +
       "so the ladder parks it rather than spending a wake an hour on it forever",
   },
+  "world-state-unreadable": {
+    owner: "platform",
+    why:
+      "#257: a piece of this world's durable state was written in a shape this " +
+      "worker does not read -- a stored version below the one the reader " +
+      "understands, above it on a rolled-back deployment, or no version stamp " +
+      "at all because the state predates the platform versioning it. " +
+      "`world-engine-unavailable`'s sibling one level up: that one is the " +
+      "ENGINE's serialization of a partition, this one is a durable value the " +
+      "host keeps beside it. PLATFORM-owned and emphatically not GAME-owned: " +
+      "the bundle's code never ran, the state is the host's own, and a bundle " +
+      "cannot repair it -- `world-migration-unavailable` is the game-owned code " +
+      "for the version gap that IS the bundle's, and the two must not be " +
+      "confused. Not INFRASTRUCTURE either, which is the distinction an " +
+      "operator acts on: `bundle-store-unavailable` is forgiven on a timer " +
+      "because somebody else's service coming back is the repair, and nothing " +
+      "comes back here. The same bytes meet the same reader on every wake, so " +
+      "retrying is the one response that cannot work; the two that can are " +
+      "deploying code that reads the stored version, or clearing the state at " +
+      "that key. SUCH A WORLD IS STILL DRAINED AND STILL PARKED, and that is " +
+      "settled here rather than left to each host: the condition is only " +
+      "discoverable by reading, so there is no moment at which a ladder could " +
+      "decide not to touch the world in the first place, and every event that " +
+      "does not read the key is the rest of the world's ordinary business. " +
+      "Parking after two is exactly the right end, because it is what stops a " +
+      "world spending a wake an hour on a refusal only a deploy or a clear can " +
+      "lift. `worldStateUnreadable` raises it, and takes the key and the two " +
+      "versions and NOTHING ELSE -- what the state held is player data and a " +
+      "refusal's words travel into logs",
+  },
   "checkpoint-unknown-partition": {
     owner: "platform",
     why: "a checkpoint named a partition the store never read or created, so it does not know where the subtree hangs and would graft it wrongly on the next wake",
@@ -379,6 +409,40 @@ export class WorldRefusal extends Error {
  *  what the park ladder and the operator's logs read. */
 export function worldRefusal(code: WorldRefusalCode, message: string): WorldRefusal {
   return new WorldRefusal(code, message);
+}
+
+/**
+ * Raise `world-state-unreadable` about a named piece of durable state.
+ *
+ * A dedicated raiser rather than a `worldRefusal` call, because the one thing
+ * this refusal must never do is carry what the state CONTAINED. A host reaches
+ * it holding the value it just failed to read, and a free-form message is an
+ * invitation to interpolate it -- player conversation, holdings, whatever the
+ * key happens to hold -- into a sentence that ends up in an operator's log. The
+ * parameters are the key and the two versions, so there is nothing else to
+ * pass.
+ *
+ * `storedVersion` is `null` when the stored state carries no stamp at all,
+ * which is what state written before the platform versioned it looks like.
+ */
+export function worldStateUnreadable(found: {
+  readonly key: string;
+  readonly storedVersion: number | null;
+  readonly readableVersion: number;
+}): WorldRefusal {
+  const stored =
+    found.storedVersion === null
+      ? "carries no version stamp at all"
+      : `is version ${found.storedVersion}`;
+  return new WorldRefusal(
+    "world-state-unreadable",
+    `This world's stored state at "${found.key}" was written in a shape this worker does ` +
+      `not read: it ${stored}, and this worker reads version ${found.readableVersion}. ` +
+      "What it held is not reported here, because it is the players' own data and this " +
+      "sentence travels into logs. Sending the command again will not help -- the same bytes " +
+      "meet the same reader on every wake. Either deploy a worker that reads the stored " +
+      `version, or clear the state at "${found.key}" so this world writes it afresh.`,
+  );
 }
 
 /**
