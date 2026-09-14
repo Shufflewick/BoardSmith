@@ -1083,7 +1083,15 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
     return this as unknown as WorldAction<G, AddArg<A, K, string>>;
   }
 
-  /** A number, bounded where the game knows the bound. */
+  /**
+   * A number, bounded where the game knows the bound.
+   *
+   * `initial:` is the value the field OPENS ON and `display:` says what the
+   * value the player is on MEANS (#258) -- both forwarded to the engine's own
+   * `enterNumber`, which is where they are checked and where the labels are
+   * built. A world offer is enumerated in one frame, so the labels travel with
+   * the pick like every other static fact about it.
+   */
   // fallow-ignore-next-line unused-class-member
   enterNumber<K extends string>(
     name: K,
@@ -1093,6 +1101,8 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
       min?: number;
       max?: number;
       integer?: boolean;
+      initial?: number;
+      display?: (value: number) => string;
       optional?: boolean | string;
       validate?: (
         value: number,
@@ -1107,6 +1117,8 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
       min: options.min,
       max: options.max,
       integer: options.integer,
+      initial: options.initial,
+      display: options.display,
       optional: options.optional,
       validate: options.validate
         ? (value, args, context) => options.validate!(value, args, withWorld<G>(context))

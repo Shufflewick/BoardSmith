@@ -463,6 +463,31 @@ export interface NumberSelection extends BaseSelection<number> {
   max?: number;
   /** Must be integer */
   integer?: boolean;
+  /**
+   * The value the FIELD OPENS ON (#258).
+   *
+   * Not a default for an omitted answer, and deliberately not named one: an
+   * optional pick that the player skips is still absent, and the game's own
+   * fallback for that is a branch in `execute`. This is the number already in
+   * the box when the pick is asked, which the player may change or clear.
+   *
+   * Checked against this pick's own `min`/`max`/`integer` when the action is
+   * declared, because a field that opens on a value the same pick refuses at
+   * submit is a dead end the player cannot reason about.
+   */
+  initial?: number;
+  /**
+   * What the value the player is on MEANS (#258), matching the callback the
+   * choice kinds take.
+   *
+   * Evaluated once per value in the range when the pick's metadata is built, and
+   * shipped as a label per value -- see `number-labels.ts` for why that is the
+   * only honest evaluation point. A pick that declares this must therefore have
+   * an enumerable range (`min`, `max`, `integer: true`) within
+   * `number-labels.ts`'s `MAX_LABELLED_NUMBER_VALUES`, which `enterNumber`
+   * enforces.
+   */
+  display?: (value: number) => string;
 }
 
 /**
