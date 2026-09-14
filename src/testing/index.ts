@@ -96,10 +96,21 @@ export {
   type ViewDiffResult,
 } from './view-diff.js';
 
-// DOM-leak test utility (VIS-03)
+// Persistent-world harness (#262): TestGame's sibling for a resident world.
+export {
+  TestWorld,
+  createTestWorld,
+  TEST_WORLD_EPOCH,
+  type TestWorldOptions,
+  type WorldSeatView,
+} from './test-world.js';
+
+// DOM-leak test utility (VIS-03), which takes either of the two above (#262)
 export {
   renderAsSeat,
   assertNoHiddenInfoLeak,
+  type HiddenInfoSubject,
+  type SeatProjection,
   type HiddenInfoGameView,
   type HiddenInfoLeakAllowPredicate,
   type AssertNoHiddenInfoLeakOptions,

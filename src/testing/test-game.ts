@@ -16,6 +16,7 @@ import {
   type FlowDebugInfo,
   type PendingActionState,
   type AnnotatedChoice,
+  type ElementJSON,
 } from '../engine/index.js';
 import {
   GameRunner,
@@ -505,6 +506,26 @@ export class TestGame<G extends Game = Game> {
    */
   getPlayerView(playerSeat: number): PlayerStateView {
     return this.runner.getPlayerView(playerSeat);
+  }
+
+  /**
+   * EVERY ELEMENT THIS GAME HOLDS, UNREDACTED.
+   *
+   * The other half of `boardsmith/testing`'s hidden-information contract
+   * (`HiddenInfoSubject` in `dom-leak.ts`): the gate diffs what the game HOLDS
+   * against what a seat is SENT, and this is the first of the two. A table's
+   * whole tree is resident, so it is simply read off the live game -- the
+   * world-side answer reads a store instead, which is the only difference
+   * between the two subjects.
+   *
+   * Nothing here names an identity field. It is the full `toJSON()` of every
+   * element, and what counts as identity is decided by the gate.
+   */
+  // Called through the `HiddenInfoSubject` interface rather than by name, which
+  // the dead-code scan does not resolve.
+  // fallow-ignore-next-line unused-class-member
+  unredactedElements(): readonly ElementJSON[] {
+    return this.game.all(GameElement).map((element) => element.toJSON());
   }
 
   /**

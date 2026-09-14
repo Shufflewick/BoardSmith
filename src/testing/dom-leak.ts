@@ -26,8 +26,51 @@ import type { Component } from 'vue';
 import type { VueWrapper } from '@vue/test-utils';
 import type { default as AutoUIComponent } from '../ui/components/auto-ui/AutoUI.vue';
 import type { GameElement as UIGameElement } from '../ui/components/auto-ui/index.js';
-import { GameElement, type ElementJSON, type Game } from '../engine/index.js';
-import type { TestGame } from './test-game.js';
+import type { ElementJSON } from '../engine/index.js';
+
+/**
+ * WHAT THIS GATE CAN BE AIMED AT: a table, or a persistent world.
+ *
+ * `createTestGame` and `createTestWorld` both answer it, and both are the real
+ * thing rather than a stand-in -- a `TestGame`'s projection is the one the
+ * snapshot runner sends a client, and a `TestWorld`'s is the one a world host
+ * sends a browser, assembled by the host core itself (#262).
+ *
+ * The two members are the two halves of the diff this gate performs: what the
+ * game or world HOLDS, against what this seat is actually SENT. Nothing here
+ * names an identity field, which is what keeps the scan honest as a game's
+ * state changes shape.
+ */
+export interface HiddenInfoSubject {
+  /**
+   * What this seat is sent -- the same payload a real client receives.
+   *
+   * `state` is the redacted per-seat tree and is what gets mounted. The other
+   * two are the scaffold props a custom board declares; a table answers them
+   * from its flow state and a world from whether the seat holds an offer it can
+   * take, because a world has no turn.
+   */
+  getPlayerView(seat: number): SeatProjection | Promise<SeatProjection>;
+  /**
+   * EVERY ELEMENT THIS GAME OR WORLD HOLDS, UNREDACTED.
+   *
+   * The ground truth a seat's frame is diffed against. A table reads it off its
+   * live tree; a world reads it out of its store, because a world is resident
+   * one partition at a time and there is no moment at which an engine holds all
+   * of it.
+   */
+  unredactedElements(): readonly ElementJSON[] | Promise<readonly ElementJSON[]>;
+}
+
+/** One seat's frame, in the shape both subjects answer. */
+export interface SeatProjection {
+  /** The redacted per-seat element tree. */
+  readonly state: unknown;
+  /** What this seat may do right now, by name or as offers. */
+  readonly availableActions?: readonly (string | { name: string })[];
+  /** Whether this seat can act at all. */
+  readonly isMyTurn?: boolean;
+}
 
 /**
  * The shape `renderAsSeat`/`assertNoHiddenInfoLeak`'s `gameViewOverride` (and
@@ -206,8 +249,8 @@ export interface RenderAsSeatOptions<C extends Component = Component> {
  *   own `// @vitest-environment jsdom` pragma only applies to tests IN THIS
  *   FILE, not to a caller's test file.
  */
-export async function renderAsSeat<G extends Game, C extends Component = typeof AutoUIComponent>(
-  testGame: TestGame<G>,
+export async function renderAsSeat<C extends Component = typeof AutoUIComponent>(
+  subject: HiddenInfoSubject,
   seat: number,
   options: RenderAsSeatOptions<C> = {},
 ): Promise<VueWrapper<RenderedInstance<C>>> {
@@ -221,10 +264,15 @@ export async function renderAsSeat<G extends Game, C extends Component = typeof 
   const mount = await loadMount();
   const component: Component = options.component ?? (await loadAutoUI());
 
+  // AWAITED, because a world's projection is a read of its store: `viewsFor`
+  // settles the bundle's own `world.view` declaration and hydrates whatever it
+  // names before it can answer. A table's is already in memory and resolves at
+  // once.
+  const projection = await subject.getPlayerView(seat);
   const gameView =
     options.gameViewOverride !== undefined
       ? options.gameViewOverride
-      : ((testGame.getPlayerView(seat).state as unknown) as UIGameElement);
+      : (projection.state as UIGameElement);
 
   // AutoUI takes only (gameView, playerSeat); a scaffolded custom board also
   // takes (isMyTurn, availableActions, actionController). Supplying the whole
@@ -236,7 +284,7 @@ export async function renderAsSeat<G extends Game, C extends Component = typeof 
   const props: Record<string, unknown> = options.component
     ? {
         ...retainDeclaredProps(options.component, {
-          ...buildCustomUIContractProps(testGame, seat, gameView),
+          ...buildCustomUIContractProps(projection, seat, gameView),
           ...options.componentProps,
         }),
         // Non-negotiable: the scan is only meaningful against the real
@@ -293,22 +341,18 @@ function retainDeclaredProps(
  * template to read. It deliberately does not send actions — a leak scan that
  * mutated the game would not be a scan.
  */
-function buildCustomUIContractProps<G extends Game>(
-  testGame: TestGame<G>,
+function buildCustomUIContractProps(
+  projection: SeatProjection,
   seat: number,
   gameView: UIGameElement | null,
 ): Record<string, unknown> {
-  const view = testGame.getPlayerView(seat) as {
-    availableActions?: Array<{ name: string } | string>;
-    isMyTurn?: boolean;
-  };
-  const availableActions = (view.availableActions ?? []).map((a) =>
+  const availableActions = (projection.availableActions ?? []).map((a) =>
     typeof a === 'string' ? a : a.name,
   );
 
   return {
     playerSeat: seat,
-    isMyTurn: view.isMyTurn ?? false,
+    isMyTurn: projection.isMyTurn ?? false,
     availableActions,
     actionController: inertActionController(availableActions),
     gameView,
@@ -696,28 +740,34 @@ interface LeakDetectionData {
  * fully explained by THAT owner's own legitimate content — never merely
  * because the owner's id differs from the marker's element id.
  */
-function deriveLeakDetectionData(game: Game, seat: number): LeakDetectionData {
-  const finalTree = game.toJSONForPlayer(seat) as ElementJSON;
+function deriveLeakDetectionData(
+  unredacted: readonly ElementJSON[],
+  finalTree: ElementJSON,
+): LeakDetectionData {
   const nodesById = new Map<number, ElementJSON>();
   indexNodesById(finalTree, nodesById);
 
   const markers: ForbiddenMarker[] = [];
   const ownValuesById = new Map<number, Set<string>>();
 
-  for (const element of game.all(GameElement)) {
-    const unfiltered = element.toJSON();
+  for (const unfiltered of unredacted) {
     const candidates = extractIdentityCandidates(unfiltered);
     if (candidates.length === 0) continue;
 
-    const elementLabel = `${element.constructor.name}#${element.id}`;
-    const node = nodesById.get(element.id);
+    const elementLabel = `${unfiltered.className}#${unfiltered.id}`;
+    const node = nodesById.get(unfiltered.id);
     const elementHidden = !node || node.attributes?.__hidden === true;
 
     if (elementHidden) {
       // Absent from the final tree, or present only as a `__hidden` placeholder:
       // every identity candidate is forbidden.
       for (const c of candidates) {
-        markers.push({ value: c.value, attribute: c.attribute, elementId: element.id, elementLabel });
+        markers.push({
+          value: c.value,
+          attribute: c.attribute,
+          elementId: unfiltered.id,
+          elementLabel,
+        });
       }
     } else {
       // Element is visible in the final tree — only candidates the final tree
@@ -725,10 +775,15 @@ function deriveLeakDetectionData(game: Game, seat: number): LeakDetectionData {
       // are forbidden. The full surviving set is this element's OWN
       // legitimate identity, recorded for the surface-exemption check.
       const surviving = collectSurvivingValues(node);
-      ownValuesById.set(element.id, surviving);
+      ownValuesById.set(unfiltered.id, surviving);
       for (const c of candidates) {
         if (!surviving.has(c.value)) {
-          markers.push({ value: c.value, attribute: c.attribute, elementId: element.id, elementLabel });
+          markers.push({
+            value: c.value,
+            attribute: c.attribute,
+            elementId: unfiltered.id,
+            elementLabel,
+          });
         }
       }
     }
@@ -885,12 +940,18 @@ function collectScopedSurfaceStrings(wrapper: VueWrapper<unknown>): SurfaceStrin
  * @throws If called outside a jsdom test environment (WR-03) — add
  *   `// @vitest-environment jsdom` as the first line of your test file.
  */
-export async function assertNoHiddenInfoLeak<G extends Game>(
-  testGame: TestGame<G>,
+export async function assertNoHiddenInfoLeak(
+  subject: HiddenInfoSubject,
   seat: number,
   options: AssertNoHiddenInfoLeakOptions = {},
 ): Promise<void> {
-  const { markers, ownValuesById } = deriveLeakDetectionData(testGame.game, seat);
+  // THE DIFF, AND BOTH HALVES OF IT COME FROM THE SUBJECT. What it holds
+  // against what this seat is sent -- never a hand-written field list, and
+  // never a second implementation of the projection (#262).
+  const { markers, ownValuesById } = deriveLeakDetectionData(
+    await subject.unredactedElements(),
+    (await subject.getPlayerView(seat)).state as ElementJSON,
+  );
   const { allow } = options;
   const activeMarkers = allow
     ? markers.filter(
@@ -918,7 +979,7 @@ export async function assertNoHiddenInfoLeak<G extends Game>(
 
   if (activeMarkers.length === 0) return;
 
-  const wrapper = await renderAsSeat(testGame, seat, {
+  const wrapper = await renderAsSeat(subject, seat, {
     gameViewOverride: options.gameViewOverride,
     component: options.component,
     componentProps: options.componentProps,

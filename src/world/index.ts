@@ -25,6 +25,15 @@
  * world that read a clock would compute a different state depending on how busy
  * its host was; one that opened a file could not run in a Worker at all.
  *
+ * ## The host half lives in `./host/`, and is not re-exported here
+ *
+ * `boardsmith/world/host` carries `ResidentWorld` -- the loop every host runs
+ * over a world: genesis, migration, declare-then-run-then-checkpoint, the
+ * per-seat projection, the offer walk, the drain. It is the OTHER SIDE of the
+ * two seams this barrel promises are interfaces, because it is the thing that
+ * takes a clock and a store and drives them, so importing it is a decision a
+ * host makes on purpose rather than something a `world` import drags in.
+ *
  * ## What is NOT here, and why
  *
  * Every host's own lifecycle policy. Sockets and transport, hibernation and

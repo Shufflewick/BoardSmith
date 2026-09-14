@@ -22,7 +22,7 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
-import { dirname, join } from "node:path";
+import { dirname, join, relative as relativeTo, resolve } from "node:path";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -144,8 +144,16 @@ describe("#165: boardsmith/world reaches no environment", () => {
     const imports = [...source.matchAll(/(^|\n)\s*import\s+(type\s+)?([\s\S]*?)from\s+["']([^"']+)["']/g)];
     for (const match of imports) {
       const specifier = match[4]!;
-      const local = specifier.startsWith("./");
-      const engine = specifier.startsWith("../engine/");
+      // LOCAL MEANS "INSIDE THIS MODULE", not "beside this file". `host/` is a
+      // subdirectory of it -- the half a host drives a world through -- so
+      // `../partition-store.js` from in there is this module reaching itself,
+      // and a rule written as `./` would have called it foreign.
+      const resolved = resolve(dirname(join(HERE, relative)), specifier);
+      const fromHere = relativeTo(HERE, resolved);
+      const local = fromHere !== "" && !fromHere.startsWith("..");
+      // AND THE ENGINE IS THE ENGINE wherever it is reached from: `../engine/`
+      // from this directory and `../../engine/` from `host/` are one place.
+      const engine = !relativeTo(join(HERE, "..", "engine"), resolved).startsWith("..");
       const erased = match[2] !== undefined || everyBindingIsAType(match[3]!);
       expect(
         local || engine || erased,

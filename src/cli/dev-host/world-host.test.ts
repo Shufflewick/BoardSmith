@@ -35,7 +35,7 @@ import {
   type WorldMigration,
 } from '../../world/index.js';
 import { openWorldStore, worldStorePath, type LocalWorldStore } from './world-store.js';
-import type { WorldDevClock } from './node-world-clock.js';
+import type { WorldHostClock } from './node-world-clock.js';
 import { LocalWorldHost, devWorldPlayer, type WorldDevRequest } from './world-host.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
@@ -263,7 +263,7 @@ function bundle(overrides: Record<string, unknown> = {}) {
  * clock and firing what was armed, which is the same code path a real
  * `setTimeout` takes and none of the wall time.
  */
-function testClock(): WorldDevClock & { advance(ms: number): void; fireArmed(): void; armedDelay: number | null } {
+function testClock(): WorldHostClock & { advance(ms: number): void; fireArmed(): void; armedDelay: number | null } {
   let now = 1_000_000;
   let armed: { delayMs: number; fire: () => void } | null = null;
   return {
@@ -271,6 +271,10 @@ function testClock(): WorldDevClock & { advance(ms: number): void; fireArmed(): 
     arm(delayMs, fire) {
       armed = delayMs === null ? null : { delayMs, fire };
     },
+    yieldTurn: () =>
+      new Promise<void>((resolve) => {
+        setImmediate(resolve);
+      }),
     get armedDelay() {
       return armed === null ? null : armed.delayMs;
     },
@@ -306,7 +310,7 @@ interface Sent {
 function openHost(options: {
   dir: string;
   definition?: ConstructorParameters<typeof LocalWorldHost>[0]['definition'];
-  clock?: WorldDevClock;
+  clock?: WorldHostClock;
   budgets?: WorldBudgets;
 }): { host: LocalWorldHost; store: LocalWorldStore; sent: Sent[] } {
   const budgets = options.budgets ?? worldBudgets();
@@ -2347,7 +2351,7 @@ describe('#383: a seat\'s activity, stamped by the host', () => {
     return bundle({ world: worldBlock({ actions: ACTIVITY_ACTIONS }) });
   }
 
-  function opened(clock?: WorldDevClock) {
+  function opened(clock?: WorldHostClock) {
     return attached({ dir, definition: activityBundle(), ...(clock === undefined ? {} : { clock }) });
   }
 

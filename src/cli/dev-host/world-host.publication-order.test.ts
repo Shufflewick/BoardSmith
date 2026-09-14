@@ -37,7 +37,7 @@ import {
   type WorldDefinition,
 } from '../../world/index.js';
 import { openWorldStore, worldStorePath, type LocalWorldStore } from './world-store.js';
-import type { WorldDevClock } from './node-world-clock.js';
+import type { WorldHostClock } from './node-world-clock.js';
 import { LocalWorldHost } from './world-host.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
@@ -97,13 +97,17 @@ function bundle(): ConstructorParameters<typeof LocalWorldHost>[0]['definition']
 }
 
 /** A clock nothing waits on, as `world-host.test.ts` uses. */
-function testClock(): WorldDevClock {
+function testClock(): WorldHostClock {
   let now = 1_000_000;
   return {
     now: () => now,
     arm(delayMs) {
       if (delayMs !== null) now += 0;
     },
+    yieldTurn: () =>
+      new Promise<void>((resolve) => {
+        setImmediate(resolve);
+      }),
   };
 }
 

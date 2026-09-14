@@ -2234,6 +2234,39 @@ partitions. `walkDeclaration(declare, read)` is the loop itself, exported so a
 host writes it once rather than three times; `settleDeclaration` is the view's
 fixpoint. Every refusal on this page is reachable from a test file.
 
+**Under `boardsmith/testing`, driven the way a host drives one.** `createWorld`
+above is the raw runner: you walk the declaration, stamp the command and write
+the bytes yourself, which is what you want when the thing under test IS one of
+those steps. When what you want is a world to look at and act in, `TestWorld` is
+the harness -- `createTestGame`'s sibling, with an in-memory store and a clock
+you move by hand:
+
+```ts
+import { createTestWorld, assertNoHiddenInfoLeak } from 'boardsmith/testing';
+import { gameDefinition } from '../src/rules/index.js';
+import GameBoard from '../src/ui/GameBoard.vue';
+
+const world = await createTestWorld({ definition: gameDefinition });
+
+// Genesis has run and every seat is on the roster by the time this resolves.
+await world.take(1, 'tend', { neighbour: 7 });
+await world.advanceClock(600_000); // and whatever falls due runs, at its own due
+
+const seen = await world.getPlayerView(2);
+seen.state;             // the pruned tree this seat's board is handed
+seen.offers;            // what this seat may do, disabled ones with their reason
+
+// And the reason it exists: the platform's hidden-information gate, aimed at
+// the board your players actually look at.
+await assertNoHiddenInfoLeak(world, 2, { component: GameBoard });
+```
+
+`getPlayerView` is assembled by the same two calls a host makes to fill a
+`world_state` and a `world_offers` frame -- `viewsFor` then `offersFor`, over one
+world lock, carrying one revision between them. It is not a second
+implementation of the projection, and `src/cli/dev-host/world-host.parity.test.ts`
+holds the harness and `boardsmith dev` to the same bytes so it cannot become one.
+
 The example worlds each drive their whole world contract from their own project
 under plain `vitest`: `~/BoardSmithGames/example-mud/tests/world.test.ts` and
 `~/BoardSmithGames/example-rts/tests/world.test.ts`. Both are written against
@@ -2245,21 +2278,29 @@ the clock's own.
 **On a hosting platform.** The world runtime a published world runs under is the
 host's, built over this module.
 
-**Under `boardsmith dev`.** The same module, driven by
-`src/cli/dev-host/world-host.ts` over the durable store in
-`src/cli/dev-host/world-store.ts`. Nothing about a world is decided there: the
-host owns which sockets are open, when it checkpoints, and the two controls a
-watching person needs, and the library owns everything else. That is what makes
-"the same world here and in production" a property of the code rather than a
-promise on this page.
+**Under `boardsmith dev`.** The same module, driven by `ResidentWorld`
+(`src/world/host/resident-world.ts`) over the durable store in
+`src/cli/dev-host/world-store.ts`. `ResidentWorld` is the loop every host runs --
+genesis, migration, declare-then-run-then-checkpoint, the per-seat projection,
+the offer walk, the drain -- written against a clock and a store it is handed;
+`src/cli/dev-host/world-host.ts` is the transport over it, and `TestWorld` is the
+other driver. Nothing about a world is decided in either: a host owns which
+sockets are open, when it checkpoints, and the two controls a watching person
+needs, and the library owns everything else. That is what makes "the same world
+here and in production" a property of the code rather than a promise on this
+page.
 
 **On a hosting platform.** The world runtime a published world runs under is the
 host's, built over this module.
 
-**Under `boardsmith dev`.** The same module, driven by
-`src/cli/dev-host/world-host.ts` over the durable store in
-`src/cli/dev-host/world-store.ts`. Nothing about a world is decided there: the
-host owns which sockets are open, when it checkpoints, and the two controls a
-watching person needs, and the library owns everything else. That is what makes
-"the same world here and in production" a property of the code rather than a
-promise on this page.
+**Under `boardsmith dev`.** The same module, driven by `ResidentWorld`
+(`src/world/host/resident-world.ts`) over the durable store in
+`src/cli/dev-host/world-store.ts`. `ResidentWorld` is the loop every host runs --
+genesis, migration, declare-then-run-then-checkpoint, the per-seat projection,
+the offer walk, the drain -- written against a clock and a store it is handed;
+`src/cli/dev-host/world-host.ts` is the transport over it, and `TestWorld` is the
+other driver. Nothing about a world is decided in either: a host owns which
+sockets are open, when it checkpoints, and the two controls a watching person
+needs, and the library owns everything else. That is what makes "the same world
+here and in production" a property of the code rather than a promise on this
+page.
