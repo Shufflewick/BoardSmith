@@ -530,6 +530,14 @@ export type WebSocketMessage =
 /**
  * Reference to a board element for highlighting and identification.
  * Used in action selections and UI highlighting.
+ *
+ * THIS IS THE ONLY DECLARATION (#263). The UI layer and the engine's tutorial
+ * types re-export it rather than restating it, so `boardsmith`, `boardsmith/ui`
+ * and `boardsmith/types` all hand a game the same type under the same name.
+ *
+ * Matching is precedence-based wherever a ref is resolved (`matchesRef` in
+ * useBoardInteraction, and the tutorial overlay): id wins, else notation, else
+ * name. At least one field must be set to form a meaningful ref.
  */
 export interface ElementRef {
   /** Element ID (for direct lookup) */
@@ -538,8 +546,6 @@ export interface ElementRef {
   name?: string;
   /** Chess-style notation (e.g., "A1", "e4") */
   notation?: string;
-  /** CSS class name for styling/selection */
-  className?: string;
 }
 
 // ============================================

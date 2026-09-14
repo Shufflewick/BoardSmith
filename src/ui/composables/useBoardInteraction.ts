@@ -13,14 +13,15 @@
 import { reactive, provide, inject, type InjectionKey } from 'vue';
 import { devWarn } from '../../utils/dev.js';
 
-/**
- * Reference to a board element (can match by various properties)
- */
-export interface ElementRef {
-  id?: number;
-  name?: string;
-  notation?: string;
-}
+// THE ELEMENT REFERENCE SHAPE IS OWNED BY ../../types/protocol.js (#263).
+//
+// This module used to declare its own, and `boardsmith/ui` exported that one
+// while `boardsmith/types` exported the protocol's — two different types under
+// one name, differing by a `className` field, with nothing telling a game which
+// of them it had imported. Imported locally (so it is usable as a type here)
+// AND re-exported, keeping the protocol layer the single source of truth.
+import type { ElementRef } from '../../types/protocol.js';
+export type { ElementRef };
 
 /**
  * A choice that can be highlighted on the board
