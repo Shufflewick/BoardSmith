@@ -12,22 +12,9 @@
  * The deadline is the truth; each native arm is only the next chunk of it, and
  * `fire` is called once, when the whole delay has actually elapsed.
  */
-/**
- * The clock and the timer, injected as one thing.
- *
- * Injected because "fires on its due time" is the one behaviour a test must not
- * prove by waiting for it, and because the "fire due events now" control
- * moves the world's clock -- which is only expressible if the host reads time
- * through something it can offset. It lives here, beside the shipped
- * implementation, because the shape and the Node timer it has to survive are
- * one subject.
- */
-export interface WorldDevClock {
-  /** Wall clock, in epoch ms. */
-  now(): number;
-  /** Arm a single timer, replacing any previous one. `null` disarms. */
-  arm(delayMs: number | null, fire: () => void): void;
-}
+import type { WorldHostClock } from '../../world/host/index.js';
+
+export type { WorldHostClock };
 
 /** The largest delay Node's `setTimeout` can hold without overflowing. */
 export const NATIVE_TIMER_MAX_MS = 2_147_483_647;
@@ -39,7 +26,7 @@ export const NATIVE_TIMER_MAX_MS = 2_147_483_647;
  * earliest pending event and nothing else: a second live timer would be a
  * second opinion about when this world next wakes.
  */
-export function createNodeWorldClock(): WorldDevClock {
+export function createNodeWorldClock(): WorldHostClock {
   let timer: ReturnType<typeof setTimeout> | null = null;
   const disarm = (): void => {
     if (timer !== null) clearTimeout(timer);
@@ -47,6 +34,10 @@ export function createNodeWorldClock(): WorldDevClock {
   };
   return {
     now: () => Date.now(),
+    // NODE'S OWN TURN. `setImmediate` runs after the current poll phase and
+    // before any timer, which is what "let everything else go once" means in a
+    // Node process; a `setTimeout(0)` would sit behind pending I/O instead.
+    yieldTurn: () => new Promise<void>((resolve) => { setImmediate(resolve); }),
     arm(delayMs, fire) {
       disarm();
       if (delayMs === null) return;

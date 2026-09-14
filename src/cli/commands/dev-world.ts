@@ -40,12 +40,8 @@ import { createServer as createViteServer, type Plugin as VitePlugin } from 'vit
 import { WebSocket } from 'ws';
 
 import { worldBudgets } from '../../world/index.js';
-import {
-  LocalWorldHost,
-  type WorldDevRequest,
-  type WorldLiftOutcome,
-  type WorldMigrationOutcome,
-} from '../dev-host/world-host.js';
+import type { WorldLiftOutcome, WorldMigrationOutcome } from '../../world/host/index.js';
+import { LocalWorldHost, type WorldDevRequest } from '../dev-host/world-host.js';
 import { openWorldStore, worldStorePath, type LocalWorldStore } from '../dev-host/world-store.js';
 import { announceHost, onShutdown } from '../dev-host/shutdown.js';
 import type { WorldDevConfig } from '../dev-host/world-config-types.js';
