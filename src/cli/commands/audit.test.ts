@@ -386,4 +386,14 @@ describe('AUDIT_ORDER', () => {
       ['changes', 'dupesBaseline', 'duplication', 'healthBaseline'],
     );
   });
+
+  /**
+   * #265: the whole-repository duplicate-export sweep FILES, it does not gate.
+   * Adding it here would make a bare `boardsmith audit` block a merge on
+   * latent debt the branch did not introduce, which is the failure mode the
+   * baselines exist to prevent.
+   */
+  it('does not make the whole-repository sweep a gate check (#265)', () => {
+    expect([...AUDIT_ORDER]).not.toContain('sweep');
+  });
 });

@@ -415,3 +415,98 @@ Neither carries an address, so neither can be invalidated this way.
 drift, but they drift in what they RECORD rather than in where they POINT --
 which is why #159's answer for the health baseline is the drift report above
 and not a re-key, and why a content key would tell you nothing about either.
+
+## The gate cannot see a duplicate whose halves never change together (#265)
+
+`fallow audit` reports a duplicate export only when more than one of the files
+declaring the name is in the diff being audited. So a duplicate whose two
+halves live in files that never change together is invisible for as long as
+that holds, and nothing ever asks the whole repository the question.
+
+The `ElementRef` triplicate of #263 had been in the tree for as long as its
+three declarations existed. It surfaced because #258 touched
+`src/types/protocol.ts` and #260 touched
+`src/ui/composables/useBoardInteraction.ts` inside one merge window, which put
+both in a single audit scope by coincidence. Three public barrels were handing
+out three different types under one name the whole time.
+
+Duplicate exports are the only finding with this property, and the reason is
+structural: every other dead-code category is a property of a single file -- an
+unused export is unused in the file that declares it, so the changed-files
+audit sees it the moment that file is touched. A duplicate export's identity is
+a SET of files, which is also why its baseline key is the name followed by
+every exporting file, and why a scoped run that sees only some of them produces
+the subset key described above.
+
+### The sweep
+
+```bash
+boardsmith audit --sweep              # report
+boardsmith audit --sweep --file-issue # report, and open a ticket for anything new
+```
+
+It asks fallow for the whole repository's duplicate exports with
+`.fallow-dead-code-baseline.json` applied, so what it reports is exactly what
+nothing has accepted. For each finding it prints the export, every file and
+line that declares it, and the baseline key that would accept it.
+
+**It never gates.** It exits 0 whatever it finds, and it is not one of the
+checks a bare `boardsmith audit` runs. Making the whole-repository view
+blocking would drop the repo's accepted backlog onto whoever merges next, which
+is the exact failure mode the baselines exist to prevent. A latent duplicate
+deserves a ticket, not a red board. The one thing that does exit non-zero is a
+scan that produced nothing readable, because a broken tool must not be reported
+as a clean sweep.
+
+### Why not `--backlog`, and why not a wider `--since`
+
+`boardsmith audit --backlog` already reports the whole repository, but with the
+baselines set ASIDE. It answers "how much accepted debt is there" -- the
+hundreds of findings recorded above -- rather than "what is here that nothing
+has accepted". A latent duplicate is one line in that flood.
+
+`boardsmith audit --since <first commit>` does put the whole tree in scope with
+the baselines applied, and it passes today. But it is a gate: it exits non-zero
+on findings, and it drags the jscpd duplication sweep and the health-baseline
+drift check along with it, both of which report this repo's accepted backlog
+over a whole-repository scope. On a schedule it would be red forever, which is
+what teaches people to stop reading a gate.
+
+So no new analysis and no new scope rule was added. What was missing was a run
+that asks the one question that can go latent and FILES rather than blocks.
+
+### Filing, and why it cannot spam
+
+`--file-issue` opens one GitHub issue per finding through `gh`. Each body
+carries a fingerprint -- a hash of the baseline key, spelled as one lowercase
+alphanumeric token because GitHub's issue search splits on punctuation -- and
+the sweep searches open AND closed issues for that token before filing.
+
+Searching closed issues too is deliberate. A closed issue is a human's ruling
+on this exact finding, and re-filing it every run is the auto-filer that spams,
+which is worse than no auto-filer. The sweep still REPORTS the finding and says
+which issue already covers it; the way to stop it recurring is to fix the
+duplication or to record it in `.fallow-dead-code-baseline.json`.
+
+The fingerprint follows the debt rather than its address: code moving above a
+declaration does not change it, and a third file starting to export the name
+does -- so a widened duplicate is a new finding and gets its own ticket.
+
+### The cadence
+
+**This repository has no CI.** There is no `.github/` directory and no
+workflow, so there is nowhere a scheduled job could live, and inventing one
+would be a mechanism nobody runs. The sweep is an on-demand command first: run
+it after a merge window, or whenever you have been reading barrels.
+
+To run it weekly on a machine that has this checkout, the GitHub CLI and node,
+add one `launchd` job (macOS) or one crontab line (Linux):
+
+```
+# crontab -e -- Mondays at 09:00
+0 9 * * 1 cd ~/BoardSmith && /usr/bin/env node bin/boardsmith.js audit --sweep --file-issue
+```
+
+`cron` runs with a bare `PATH`, so give `node` and `gh` absolute paths if they
+are not on it. If a scheduled run cannot reach `gh`, the sweep says so and
+names the command to run by hand; it does not silently report a clean sweep.

@@ -20,6 +20,7 @@ import {
   type AcceptedDupes,
   type DupesScan,
 } from '../lib/dupes-baseline.js';
+import { githubIssueTracker, sweepDuplicateExports } from '../lib/duplicate-export-sweep.js';
 
 export interface AuditOptions {
   /** Selector flags — when any is set, only the selected audits run. */
@@ -33,6 +34,10 @@ export interface AuditOptions {
   backlog?: boolean;
   /** Re-address the accepted clone groups whose content still matches (#232). */
   rekeyDupes?: boolean;
+  /** Sweep the whole repository for unaccepted duplicate exports (#265). */
+  sweep?: boolean;
+  /** Open a GitHub issue for each finding the sweep reports (#265). */
+  fileIssue?: boolean;
 }
 
 /** The committed baseline `fallow audit` subtracts its findings against. */
@@ -493,6 +498,32 @@ async function backlogAction(cwd: string, conflicting: boolean): Promise<void> {
 }
 
 /**
+ * `--sweep`: the whole repository's duplicate exports, and never one of the
+ * checks (#265).
+ *
+ * Its own command for the same reason `--backlog` is: it always exits 0, and
+ * mixing a report that cannot fail into a run that gives a verdict is how a
+ * report starts reading as a pass. Making the whole-repository view blocking
+ * would drop the repo's accepted backlog onto whoever merges next, which is
+ * what the baselines exist to prevent.
+ */
+async function sweepAction(cwd: string, conflicting: boolean, fileIssue: boolean): Promise<void> {
+  if (conflicting) {
+    console.error(chalk.red('Error: --sweep is a whole-repository report, not one of the gate\'s checks.'));
+    console.error(chalk.dim('Run `boardsmith audit --sweep` on its own, optionally with --file-issue.'));
+    process.exit(1);
+  }
+  console.log(chalk.cyan('\nSweeping the whole repository for duplicate exports...\n'));
+  const { code, report } = await sweepDuplicateExports(cwd, {
+    tracker: fileIssue ? githubIssueTracker(cwd) : undefined,
+  });
+  console.log(code === 0 ? chalk.yellow(report) : chalk.red(report));
+  console.log('');
+  // Findings never gate; only a scan that produced nothing readable does.
+  if (code !== 0) process.exit(code);
+}
+
+/**
  * `--rekey-dupes`: a WRITE, so it runs alone.
  *
  * A run that re-addressed the duplication baseline and then audited against it
@@ -579,6 +610,18 @@ export async function auditCommand(options: AuditOptions): Promise<void> {
     options.changes || options.duplication || options.healthBaseline || options.dupesBaseline,
   );
 
+  if (options.sweep) {
+    return sweepAction(
+      cwd,
+      selectors || Boolean(options.since) || Boolean(options.backlog) || Boolean(options.rekeyDupes),
+      Boolean(options.fileIssue),
+    );
+  }
+  if (options.fileIssue) {
+    console.error(chalk.red('Error: --file-issue files what --sweep finds, so it needs --sweep.'));
+    console.error(chalk.dim('Run `boardsmith audit --sweep --file-issue`.'));
+    process.exit(1);
+  }
   if (options.backlog) {
     return backlogAction(cwd, selectors || Boolean(options.since) || Boolean(options.rekeyDupes));
   }

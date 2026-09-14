@@ -153,6 +153,11 @@ program
   .option('--since <ref>', "Diff against this git ref instead of fallow's detected base branch")
   .option('--backlog', "Report the whole repository's dead code instead — informational, never a gate")
   .option(
+    '--sweep',
+    "Sweep the whole repository for duplicate exports no baseline accepts — files tickets, never gates",
+  )
+  .option('--file-issue', 'Open a GitHub issue for each finding --sweep reports, one per finding, once')
+  .option(
     '--rekey-dupes',
     "Record this tree's duplication as accepted from scratch — refuses on any content mismatch",
   )
