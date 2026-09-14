@@ -686,6 +686,27 @@ export interface PickMetadata<TElement extends ValidElement = ValidElement> {
   max?: number;
   /** For number inputs: integer only */
   integer?: boolean;
+  /**
+   * For number picks: the value the field OPENS ON (#258).
+   *
+   * Absent unless the action declared one. It is a starting value, not a default
+   * for an omitted answer: a player may change or clear it, and an optional pick
+   * they skip is still absent. It always satisfies `min`/`max`/`integer` -- the
+   * builder refuses a declaration where it would not.
+   */
+  initial?: number;
+  /**
+   * For number picks: what each value in the range MEANS (#258), keyed by the
+   * value as a string.
+   *
+   * The numeric twin of a choice's `display`, and the only shape it can take on
+   * the wire: the label belongs to a value the player is still typing, so the
+   * callback is evaluated once per value when the pick is built rather than per
+   * keystroke over the network. Present only when the action declared a
+   * `display`, and then only over an enumerable range -- so a reader may assume
+   * every value between `min` and `max` has a key.
+   */
+  valueLabels?: Record<string, string>;
   // Text-specific properties
   /** For text inputs: regex pattern */
   pattern?: string;

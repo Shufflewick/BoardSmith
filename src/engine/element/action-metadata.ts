@@ -13,9 +13,10 @@
 import { evaluateCondition } from '../action/action.js';
 import { devWarn } from '../../utils/dev.js';
 import { resolveMultiSelect, resolveOrderedList } from '../utils/resolve-multiselect.js';
+import { numberValueLabels } from '../action/number-labels.js';
 import type { Game } from './game.js';
 import type { Player } from '../player/player.js';
-import type { Selection, ActionDefinition, TextSelection } from '../action/types.js';
+import type { Selection, ActionDefinition, TextSelection, NumberSelection } from '../action/types.js';
 import type { ActionMetadata, PickMetadata } from '../../types/protocol.js';
 
 /**
@@ -142,6 +143,29 @@ function describeTextPick(base: PickMetadata, selection: TextSelection): void {
   if (selection.multiline) base.multiline = true;
 }
 
+/**
+ * A number pick's range, its starting value and what its values are called, on
+ * the metadata a host serializes.
+ *
+ * Its own function for the reason `describeTextPick` is: the switch it came out
+ * of is the most complex thing in this file, and #258 added two branches to this
+ * arm.
+ *
+ * `initial` and `valueLabels` are emitted ONLY WHEN DECLARED. A pick that asked
+ * for neither sends neither, so no existing game's offer moves by a byte, and a
+ * reader can tell "the game named no starting value" from "the game named one"
+ * -- which an `initial: undefined` could not survive JSON to say.
+ */
+function describeNumberPick(base: PickMetadata, selection: NumberSelection): void {
+  base.min = selection.min;
+  base.max = selection.max;
+  base.integer = selection.integer;
+  if (selection.initial !== undefined) base.initial = selection.initial;
+  if (selection.display !== undefined) {
+    base.valueLabels = numberValueLabels(selection.name, selection, selection.display);
+  }
+}
+
 export function buildPickMetadata(
   game: Game,
   player: Player,
@@ -263,10 +287,7 @@ export function buildPickMetadata(
     }
 
     case 'number': {
-      const numSel = selection;
-      base.min = numSel.min;
-      base.max = numSel.max;
-      base.integer = numSel.integer;
+      describeNumberPick(base, selection);
       break;
     }
 

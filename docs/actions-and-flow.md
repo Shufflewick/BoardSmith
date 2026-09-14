@@ -372,6 +372,38 @@ Action.create('bid')
   })
 ```
 
+Two options shape what the player actually sees in the field:
+
+- `initial` is the value the field **opens on**. It is a starting value, not a
+  default for an omitted answer: the player may change or clear it, and an
+  optional selection they skip still arrives absent. It is checked against the
+  selection's own `min`/`max`/`integer` when the action is declared, so a field
+  can never open on a value the same selection would refuse.
+- `display` says what the current value **means**, matching the callback the
+  choice selections take. It is evaluated once for every value in the range when
+  the selection is built and travels with it, which is the only way a label can
+  follow a number the player is still typing without a round trip per keystroke.
+  That is why it requires an enumerable range - `min`, `max` and `integer: true`
+  - of at most 200 values, and says so if the range is not one.
+
+```typescript
+Action.create('declareAge')
+  .enterNumber('age', {
+    prompt: 'How old are you?',
+    min: 16,
+    max: 65,
+    integer: true,
+    initial: 35,
+    display: (age) =>
+      age <= 20 ? 'barely grown' : age <= 30 ? 'young' : age <= 50 ? 'in your prime' : 'seasoned',
+  })
+```
+
+The Action Panel opens on 35 and shows "in your prime" beside the field, moving
+the label as the number changes. A custom UI reads the same starting value off
+`useBoardInteraction`'s pick draft and the same labels off the pick, so the two
+surfaces cannot disagree about either.
+
 #### `enterText` - Enter text
 
 ```typescript

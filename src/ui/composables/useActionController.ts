@@ -363,7 +363,16 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   // the opposite bug unrepresentable rather than merely fixed: #229 had to
   // repair typed text leaking from one pick into the next, and a draft that
   // cannot be read outside its own question cannot leak at all.
-  const pickDraft = ref<{ identity: string; value: string | number } | null>(null);
+  //
+  // `value: null` IS AN ANSWER, AND IT IS WHAT A PRE-FILL RESTS ON (#258). A
+  // number pick may name the value its field opens on, and the only place that
+  // value can live is here -- putting it anywhere else would give the panel and
+  // a custom UI two different starting values. So "no record" means the player
+  // has not touched the question yet and the pick's own `initial` stands, while
+  // a record of `null` means they emptied the box on purpose. Collapsing the
+  // two would make a cleared field snap back to the pre-fill on the next read,
+  // which is a control fighting its own player.
+  const pickDraft = ref<{ identity: string; value: string | number | null } | null>(null);
 
   // === The draft's quote (shared source of truth) (#248) ===
   //
@@ -1007,10 +1016,13 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   }
 
   const currentPickDraft = computed((): string | number | null => {
-    const draft = pickDraft.value;
     const pick = currentPick.value;
-    if (!draft || !pick || editorKindOf(pick) === null) return null;
-    return draft.identity === draftIdentityFor(pick.name) ? draft.value : null;
+    if (!pick || editorKindOf(pick) === null) return null;
+    const draft = pickDraft.value;
+    if (draft && draft.identity === draftIdentityFor(pick.name)) return draft.value;
+    // UNTOUCHED, so the pick's own starting value stands (#258). A number pick
+    // that named none, and every text pick, read as empty exactly as before.
+    return pick.type === 'number' ? pick.initial ?? null : null;
   });
 
   /**
@@ -1048,10 +1060,19 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   }
 
   function setPickDraft(value: string | number | null): void {
-    // Clearing comes first and is always allowed: a panel being unmounted or an
-    // action ending should not have to ask what is on screen before tidying up.
+    // Clearing is always allowed: a panel being unmounted or an action ending
+    // should not have to ask what is on screen before tidying up.
+    //
+    // It is RECORDED against the question when there is one, though, rather than
+    // forgotten (#258): an emptied field is an answer about the pick being
+    // asked, and forgetting it would let a pre-filled pick read as untouched and
+    // put its starting value straight back.
     if (value === null) {
-      pickDraft.value = null;
+      const asked = currentPick.value;
+      pickDraft.value =
+        asked !== null && editorKindOf(asked) !== null
+          ? { identity: draftIdentityFor(asked.name), value: null }
+          : null;
       return;
     }
     const pick = currentPick.value;

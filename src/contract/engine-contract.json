@@ -1,8 +1,8 @@
 {
-  "revision": 80,
+  "revision": 81,
   "bundleProtocol": 2,
   "surfaceHash": "0cdd059b44b2d573",
-  "payloadHash": "b66e751ab92f9508",
+  "payloadHash": "7d88d174839e99b4",
   "formatHash": "0058593e7cc80205",
   "history": [
     {
@@ -664,6 +664,15 @@
       "payloadHash": "b66e751ab92f9508",
       "formatHash": "0058593e7cc80205",
       "summary": "A new platform-owned refusal, world-state-unreadable (#257). A host that versions a piece of a world's durable state had no code for finding one written in a shape this worker does not read, so the condition arrived as a bare Error and ownerOf called it the GAME's - which dead-lettered an event the bundle's code had never been asked to run, and downstream (ShufflewickPub #464) left a player told a definitively failed request 'may still have gone through'. PLATFORM-owned, so a host's ladder parks it: the same bytes meet the same reader on every wake, so retrying is the one response that cannot work and parking after two is what stops a world spending a wake an hour on it. Deliberately NOT infrastructure, which is forgiven on a timer because somebody else's service coming back is the repair, and not game-owned, which world-migration-unavailable already is for the version gap that IS the bundle's. The park/drain question is settled in the table rather than per host: such a world is still drained and still parked, because the condition is only discoverable by reading and every event that does not read the key is the rest of the world's ordinary business. New worldStateUnreadable({ key, storedVersion, readableVersion }) raises it and takes those three things and nothing else, so what the state held - player data, on its way into a log - cannot be interpolated into the sentence; storedVersion null means state that predates versioning. surfaceHash only: no stored byte and no player-view payload changes."
+    },
+    {
+      "revision": 81,
+      "date": "2026-09-14",
+      "bundleProtocol": 2,
+      "surfaceHash": "0cdd059b44b2d573",
+      "payloadHash": "7d88d174839e99b4",
+      "formatHash": "0058593e7cc80205",
+      "summary": "enterNumber can open a field on a starting value and label each value in its range (#258): number picks now carry optional initial and valueLabels on the wire."
     }
   ]
 }

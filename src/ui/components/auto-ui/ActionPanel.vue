@@ -188,6 +188,7 @@ const editorInputId = `bs-editor-${useId()}`;
 const editorHintId = `${editorInputId}-hint`;
 const editorCountId = `${editorInputId}-count`;
 const editorErrorId = `${editorInputId}-error`;
+const editorLabelId = `${editorInputId}-value-label`;
 
 const currentArgs = computed(() => actionController.currentArgs.value);
 
@@ -539,6 +540,25 @@ const editorHint = computed(() => {
 });
 
 /**
+ * WHAT THE NUMBER IN THE BOX MEANS, IF THE GAME SAID (#258).
+ *
+ * The numeric twin of a choice's `display`. The game's callback was evaluated
+ * once per value when the pick was built, so this is a lookup and not a call:
+ * the label moves with the field at no cost and with no round trip.
+ *
+ * `undefined` for a value the game did not label -- which is every value when it
+ * declared no `display`, and any value outside the range it described. A panel
+ * that invented a meaning there would be saying something the game never said.
+ */
+const numberValueLabel = computed((): string | undefined => {
+  const pick = currentPick.value;
+  if (pick?.type !== 'number' || !pick.valueLabels) return undefined;
+  const value = numberInputValue.value;
+  if (value === null) return undefined;
+  return pick.valueLabels[String(value)];
+});
+
+/**
  * How much the player has written, against the bound the engine will enforce.
  *
  * Read on arrival at the field through `aria-describedby` rather than announced
@@ -571,6 +591,10 @@ const editorDescribedBy = computed(() => {
   const ids: string[] = [];
   if (editorHint.value) ids.push(editorHintId);
   if (pick?.type === 'text' && pick.multiline) ids.push(editorCountId);
+  // What the current number means (#258), read on arrival at the field as well
+  // as announced when it changes -- a player who tabs into a pre-filled box
+  // should hear the meaning of the value already in it.
+  if (numberValueLabel.value) ids.push(editorLabelId);
   if (editorInputError.value) ids.push(editorErrorId);
   return ids.length ? ids.join(' ') : undefined;
 });
@@ -2092,6 +2116,13 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
               {{ typeof currentPick.optional === 'string' ? currentPick.optional : 'Skip' }}
             </button>
           </div>
+          <!-- WHAT THE NUMBER IN THE BOX MEANS (#258). A live region, because
+               the value can move without a keystroke -- the spinner, or a
+               pre-fill the player never typed -- and a line that only a sighted
+               player can see is half a control. -->
+          <span v-if="numberValueLabel" :id="editorLabelId" class="value-label" role="status">
+            {{ numberValueLabel }}
+          </span>
           <!-- Empty at every length but the last one, so it speaks when a
                keystroke stops working and stays quiet while the player types. -->
           <span v-if="currentPick.multiline" class="sr-only" role="status">
@@ -2638,6 +2669,15 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
 .input-hint {
   color: var(--bsg-ink-2);
   font-size: 0.8rem;
+}
+
+/* What the current number means (issue 258 -- not written with a hash, because
+   the contrast guard reads one in a style block as a colour literal). The
+   game's own words about the value, so it takes the panel's ink rather than the
+   muted grey a hint uses: the hint is the rule, this is the answer. */
+.value-label {
+  color: var(--bsg-ink);
+  font-size: 0.85rem;
 }
 
 .input-row {

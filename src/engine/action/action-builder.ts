@@ -20,6 +20,7 @@ import type {
   OnSelectContext,
 } from './types.js';
 import { DEFAULT_TEXT_MAX_LENGTH } from './types.js';
+import { assertLabellableRange, assertUsableInitial } from './number-labels.js';
 
 /**
  * The args record for an action with no selections yet. Using an empty key set
@@ -861,6 +862,12 @@ export class Action<
    * @param options.min - Minimum allowed value
    * @param options.max - Maximum allowed value
    * @param options.integer - If true, only whole numbers are allowed
+   * @param options.initial - The value the field opens on (#258). Refused at
+   *   declaration time if this pick's own min/max/integer would reject it.
+   * @param options.display - What the value the player is on means (#258), the
+   *   numeric twin of the choice kinds' `display`. Evaluated once per value in
+   *   the range and shipped with the pick, so the range must be enumerable:
+   *   min, max and `integer: true`, within `MAX_LABELLED_NUMBER_VALUES`.
    * @param options.optional - If true, player can skip this selection. A string skips
    *   too, and is used as the Skip button's label.
    * @param options.validate - Custom validation function
@@ -880,6 +887,20 @@ export class Action<
    *     ctx.player.resources += amount;
    *   });
    * ```
+   *
+   * @example A field that opens on a value and says what it means
+   * ```typescript
+   * action('declareAge')
+   *   .enterNumber('age', {
+   *     prompt: 'How old are you?',
+   *     min: 16,
+   *     max: 65,
+   *     integer: true,
+   *     initial: 35,
+   *     display: (age) => (age <= 20 ? 'barely grown' : age <= 30 ? 'young' : 'seasoned'),
+   *   })
+   *   .execute(({ age }, ctx) => { ctx.player.age = age; });
+   * ```
    */
   enterNumber<K extends string>(
     name: K,
@@ -888,6 +909,8 @@ export class Action<
       min?: number;
       max?: number;
       integer?: boolean;
+      initial?: number;
+      display?: (value: number) => string;
       optional?: boolean | string;
       validate?: (value: number, args: Record<string, unknown>, context: ActionContext<G>) => boolean | string;
       /** Called after this step is resolved. Receives the resolved value and a restricted context. */
@@ -896,6 +919,14 @@ export class Action<
       onCancel?: (context: OnSelectContext) => void;
     } = {}
   ): Action<G, AddArg<A, K, number>> {
+    // REFUSED WHEN THE ACTION IS WRITTEN, not when a player opens the panel
+    // (#258). Both of these are about the declaration alone, so there is no
+    // state to wait for -- and a field that opens on a refused value, or a
+    // display that could never be answered, is exactly the kind of thing that
+    // otherwise surfaces as a blank field in front of a player.
+    const range = { min: options.min, max: options.max, integer: options.integer };
+    if (options.initial !== undefined) assertUsableInitial(name, options.initial, range);
+    if (options.display !== undefined) assertLabellableRange(name, range);
     const selection = {
       type: 'number',
       name,
@@ -903,6 +934,8 @@ export class Action<
       min: options.min,
       max: options.max,
       integer: options.integer,
+      initial: options.initial,
+      display: options.display,
       optional: options.optional,
       validate: options.validate,
       onSelect: options.onSelect,

@@ -902,6 +902,10 @@ function assertCoversWorldRedaction(bodies: readonly unknown[]): void {
  *    a line, and the flag that says so is an OPTIONAL FIELD on a text pick --
  *    which `verbatimModuleSyntax` erases along with the type declaring it. Only
  *    a fixture that produces one puts it in front of a hash.
+ *  - A NUMBER THAT OPENS ON A VALUE AND SAYS WHAT THE VALUE MEANS (#258).
+ *    `initial` and `valueLabels` are the same class of thing as `multiline`:
+ *    optional fields on a pick, invisible to both hashes unless the fixture
+ *    actually produces them, and decisive for the control a host draws.
  *  - A NUMBER. `candidateless` is defined over `validElements ?? choices`, so a
  *    number selection can never be one -- which is exactly why `kindle` sat
  *    correctly greyed in the field while `tend` vanished. Without a number in
@@ -925,6 +929,7 @@ function assertCoversWorldOffer(facts: {
   selectionShapes: readonly (readonly string[])[];
   menuPlacements: readonly { group?: readonly string[]; order?: number }[];
   multilineTextIsOffered: boolean;
+  prefilledLabelledNumberIsOffered: boolean;
   ownLandIsBare: boolean;
   everyNeighbourIsGreyed: boolean;
 }): void {
@@ -938,6 +943,12 @@ function assertCoversWorldOffer(facts: {
     // #229. `multiline` is an optional field on a text pick, so nothing but a
     // text pick that sets it can put it in front of a fingerprint.
     ['an action whose selection is multiline text', facts.multilineTextIsOffered],
+    // #258, for #229's reason on the pick beside it: a number pick that names
+    // neither a starting value nor labels puts neither field on the wire.
+    [
+      'an action whose number selection opens pre-filled and labelled',
+      facts.prefilledLabelledNumberIsOffered,
+    ],
     // The action panel's hierarchy (#228). All three states, because all three
     // are bytes on the offer: a nested path, an order standing alone, and the
     // absence that a game declaring no hierarchy sends.
@@ -1192,7 +1203,20 @@ async function computeWorldFixture(): Promise<{ view: unknown; offer: unknown }>
     // to promote a common verb without nesting anything.
     .order(10)
     .needs(() => [COMMONS])
-    .enterNumber('logs', { prompt: 'How many?', min: 1, max: 9 })
+    // A PRE-FILLED, LABELLED NUMBER, WHICH IS ONLY VISIBLE HERE (#258).
+    // `initial` and `valueLabels` are optional fields on a `number` pick's
+    // metadata, exactly as `multiline` is on a text pick's -- so on their own
+    // they move neither hash while changing what every host draws for a number
+    // selection. `integer: true` is not decoration: a labelled range must be
+    // enumerable, and one log is not a number of logs a fire can take.
+    .enterNumber('logs', {
+      prompt: 'How many?',
+      min: 1,
+      max: 9,
+      integer: true,
+      initial: 3,
+      display: (logs: number) => (logs < 4 ? 'a gentle fire' : logs < 7 ? 'a good blaze' : 'a bonfire'),
+    })
     .execute((args: any, ctx: any) => {
       (ctx.world.partition(COMMONS) as any).embers += args.logs;
     });
@@ -1412,6 +1436,24 @@ async function computeWorldFixture(): Promise<{ view: unknown; offer: unknown }>
       (verb.selections ?? []).some(
         (pick) => (pick as { type?: string; multiline?: boolean }).multiline === true,
       ),
+    ),
+    // OFF THE OFFER FOR #229's REASON, ON THE PICK BESIDE IT (#258): a builder
+    // that kept `initial` and a metadata builder that dropped it would leave
+    // this false with the declaration still reading correctly, which is the
+    // exact half-journey the ticket reported.
+    prefilledLabelledNumberIsOffered: offer.some((verb: { selections?: readonly unknown[] }) =>
+      (verb.selections ?? []).some((pick) => {
+        const number = pick as {
+          type?: string;
+          initial?: number;
+          valueLabels?: Record<string, string>;
+        };
+        return (
+          number.type === 'number' &&
+          number.initial !== undefined &&
+          number.valueLabels !== undefined
+        );
+      }),
     ),
     // OFF THE OFFER FOR #229's REASON, AND FOR A SHARPER ONE (#228). A
     // placement dropped by `offerOf` would leave the panel flat with the
