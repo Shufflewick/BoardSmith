@@ -23,9 +23,11 @@
  *  - `aria-disabled="true"` — NOT the native `disabled` attribute, which drops
  *    the control out of the tab order, so a keyboard or screen-reader user
  *    could never reach the reason at all.
- *  - the shared tooltip on hover, on focus, and on tap. Tap matters: the native
- *    `title` this replaces does nothing whatsoever on touch, so on a phone the
- *    reason simply did not exist.
+ *  - the shared tooltip on hover, on tap, and on focus the player moved
+ *    themselves — never on focus a redraw placed, which nothing would close
+ *    (#261). Tap matters as much as hover: the native `title` this replaces
+ *    does nothing whatsoever on touch, so on a phone the reason simply did not
+ *    exist.
  *  - an inert activation. The click and the Enter/Space keydown are swallowed in
  *    the CAPTURE phase, which at the event target runs ahead of the handlers
  *    Vue attached — so the control's own `@click` never fires and callers do not
@@ -37,7 +39,9 @@
 import type { Directive, DirectiveBinding } from 'vue';
 import {
   showDisabledReason,
+  showDisabledReasonOnFocus,
   hideDisabledReason,
+  trackInputModality,
   DISABLED_TOOLTIP_ID,
 } from '../composables/useDisabledReasonTooltip.js';
 
@@ -59,6 +63,7 @@ export function isDisabled(reason: DisabledReason): reason is string {
 interface Attached {
   reason: string;
   show: () => void;
+  showOnFocus: () => void;
   hide: () => void;
   blockPointer: (e: Event) => void;
   revealOnPointer: () => void;
@@ -71,7 +76,7 @@ function detach(el: HTMLElement): void {
   const a = attached.get(el);
   if (!a) return;
   el.removeEventListener('mouseenter', a.show);
-  el.removeEventListener('focus', a.show);
+  el.removeEventListener('focus', a.showOnFocus);
   el.removeEventListener('mouseleave', a.hide);
   el.removeEventListener('blur', a.hide);
   el.removeEventListener('pointerdown', a.revealOnPointer);
@@ -98,6 +103,11 @@ function attach(el: HTMLElement, reason: string): void {
   const bundle: Attached = {
     reason,
     show: () => showDisabledReason(el, attached.get(el)?.reason ?? reason),
+    // Focus is the one entry point the player may not have asked for: the panel
+    // moves focus back into itself after every redraw, and a bubble opened that
+    // way has no pointer to leave and no blur coming (#261). The composable
+    // owns that judgement so every control makes it the same way.
+    showOnFocus: () => showDisabledReasonOnFocus(el, attached.get(el)?.reason ?? reason),
     hide: () => hideDisabledReason(el),
     // Touch fires no mouseenter, and Playwright/real browsers differ on whether
     // a tap synthesizes a click at all — pointerdown is the one signal every
@@ -123,8 +133,9 @@ function attach(el: HTMLElement, reason: string): void {
     },
   };
 
+  trackInputModality(el.ownerDocument);
   el.addEventListener('mouseenter', bundle.show);
-  el.addEventListener('focus', bundle.show);
+  el.addEventListener('focus', bundle.showOnFocus);
   el.addEventListener('mouseleave', bundle.hide);
   el.addEventListener('blur', bundle.hide);
   el.addEventListener('pointerdown', bundle.revealOnPointer);

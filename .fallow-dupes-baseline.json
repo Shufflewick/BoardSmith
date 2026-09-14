@@ -1051,7 +1051,7 @@
     "src/ui/composables/useSelectable.test.ts:250-261|src/ui/composables/useSelectable.test.ts:265-276",
     "src/ui/composables/useZoomPreview.test.ts:142-150|src/ui/composables/useZoomPreview.test.ts:48-56",
     "src/ui/composables/useZoomPreview.test.ts:349-356|src/ui/composables/useZoomPreview.test.ts:371-378",
-    "src/ui/directives/vDisabledReason.test.ts:76-84|src/ui/directives/vDisabledReason.test.ts:88-96",
+    "src/ui/directives/vDisabledReason.test.ts:86-94|src/ui/directives/vDisabledReason.test.ts:98-106",
     "src/world/action.test.ts:183-187|src/world/action.test.ts:49-55",
     "src/world/action.test.ts:384-388|src/world/action.test.ts:604-608",
     "src/world/action.ts:1036-1041|src/world/action.ts:998-1003",
