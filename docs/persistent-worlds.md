@@ -2019,7 +2019,24 @@ thing next time.
 deterministic, so a host with a park ladder parks on it:
 `partition-not-resident`, `partition-vanished`, `checkpoint-unknown-partition`,
 `allocation-undeclared`, `allocation-stale`, `unknown-child-op`,
-`child-generations-exhausted`, `world-engine-unavailable`.
+`child-generations-exhausted`, `world-engine-unavailable`,
+`world-state-unreadable`.
+
+`world-state-unreadable` is the one of those a host raises about its own durable
+state rather than its bookkeeping: a value it keeps beside a world was written in
+a shape this worker does not read, whether the stored version is below the
+reader's, above it after a rollback, or absent because the state predates the
+host versioning it. Do not confuse it with `world-migration-unavailable`, which
+is the game-owned code for the version gap that is your BUNDLE's. Raise it with
+`worldStateUnreadable({ key, storedVersion, readableVersion })`, which takes
+those three things and nothing else, because what the state held is the players'
+own data and a refusal's words end up in logs. Retrying never lifts it -- the
+same bytes meet the same reader on every wake -- so the repairs are deploying a
+worker that reads the stored version, or clearing that key. Such a world is
+still drained and still parked: the condition is only discoverable by reading,
+so there is no earlier moment at which a ladder could decline to touch the
+world, and parking after two is what stops it spending a wake an hour on a
+refusal only a deploy or a clear can lift.
 
 **`infrastructure`**: a service the host depends on did not answer.
 `bundle-store-unavailable` is the one code, and it repairs itself when the

@@ -19,6 +19,7 @@ import {
   WorldRefusal,
   ownerOf,
   worldRefusal,
+  worldStateUnreadable,
   type WorldRefusalCode,
 } from "./refusals.js";
 import { createInlinedPartitionStore, createWorldRunner } from "./runner.js";
@@ -348,4 +349,97 @@ describe("the owners a host's ladder reads", () => {
     expect(WORLD_REFUSALS["child-generations-exhausted"].owner).toBe("platform");
   });
 
+});
+
+/**
+ * #257: STORED STATE WRITTEN IN A SHAPE THIS WORKER DOES NOT READ.
+ *
+ * The gap the table had. A platform that versions a durable scalar can find one
+ * written by a shape it no longer reads -- or by one it does not read YET, on a
+ * rolled-back deployment -- and none of the existing codes says that honestly:
+ * it is not the caller's mistake, the bundle's code never ran, and it is not an
+ * outage that time repairs.
+ *
+ * Found downstream (ShufflewickPub #464): a conversation ledger stored before a
+ * field was added half-read into a handler, which threw a bare TypeError, and
+ * the world answered the player "it may still have gone through" about a
+ * request that had definitively failed.
+ */
+describe("#257: a world whose stored state this worker cannot read", () => {
+  it("has a code for it at all, which is the whole gap", () => {
+    expect(Object.keys(WORLD_REFUSALS)).toContain("world-state-unreadable");
+  });
+
+  it("is PLATFORM-owned, so the ladder parks rather than retries", () => {
+    // The decision #257 asks to be settled once, here, rather than per
+    // consumer. A shape mismatch is answered identically on every wake: the
+    // same bytes meet the same reader, so a world left retrying spends a wake
+    // an hour forever against a refusal only a deploy or a clear can repair.
+    // Parking is what stops that, and parking is what `platform` means.
+    expect(WORLD_REFUSALS["world-state-unreadable"].owner).toBe("platform");
+    expect(ownerOf(worldRefusal("world-state-unreadable", "x"))).toBe("platform");
+  });
+
+  it("is deliberately NOT infrastructure, because time never repairs a shape", () => {
+    // The distinction the issue asks for, and the one an operator acts on.
+    // `bundle-store-unavailable` charges the event nothing and re-arms, because
+    // somebody else's service coming back IS the repair. Nothing comes back
+    // here: the bytes are what they are until code that reads them is deployed
+    // or the state is cleared, so forgiving it on a timer would hide a world
+    // that is never going to recover on its own.
+    expect(WORLD_REFUSALS["world-state-unreadable"].owner).not.toBe("infrastructure");
+    expect(WORLD_REFUSALS["world-state-unreadable"].owner).not.toBe("game");
+  });
+
+  it("settles park-and-drain in the table, rather than leaving it to each host", () => {
+    // A consumer must not have to decide this for itself: two hosts drawing
+    // opposite conclusions from one code is the drift the whole table exists to
+    // prevent. The answer is that such a world IS still parked and drained --
+    // the condition is only discoverable by reading, so "never touch it" is not
+    // a rule anything could apply, and the events that never read the key are
+    // the rest of the world's.
+    const why = WORLD_REFUSALS["world-state-unreadable"].why;
+    expect(why, "the table has to say whether such a world may still drain").toMatch(/drain/i);
+    expect(why, "and whether the ladder may still park it").toMatch(/park/i);
+  });
+
+  it("names the key and both versions, and carries no stored contents", () => {
+    // The refusal an operator reads. It has to identify WHICH state is
+    // unreadable and WHICH two shapes met, because those are the two facts that
+    // pick between the two repairs -- and it must carry none of what the state
+    // held, which is player data on its way into a log.
+    const refusal = worldStateUnreadable({
+      key: "conversation-ledger",
+      storedVersion: 1,
+      readableVersion: 3,
+    });
+
+    expect(refusal).toBeInstanceOf(WorldRefusal);
+    expect(refusal.code).toBe("world-state-unreadable");
+    expect(refusal.owner).toBe("platform");
+    expect(refusal.message).toContain("conversation-ledger");
+    expect(refusal.message).toContain("1");
+    expect(refusal.message).toContain("3");
+    // Both repairs, because which one is right is the operator's call: a stored
+    // shape older than the reader is usually a missing deploy, a newer one is
+    // usually a rollback, and clearing is what is left when neither is coming.
+    expect(refusal.message).toMatch(/deploy/i);
+    expect(refusal.message).toMatch(/clear/i);
+    // And retrying is named as the thing that will not work, because the
+    // sentence an operator reads has to disagree with their first instinct.
+    expect(refusal.message).toMatch(/retry|again/i);
+  });
+
+  it("says so plainly when the stored state carries no version stamp at all", () => {
+    // ShufflewickPub #464's own shape: a ledger written before the platform
+    // versioned it has no stamp, and "version null" is not a sentence.
+    const refusal = worldStateUnreadable({
+      key: "conversation-ledger",
+      storedVersion: null,
+      readableVersion: 1,
+    });
+
+    expect(refusal.message).toMatch(/no version/i);
+    expect(refusal.message).not.toContain("null");
+  });
 });
