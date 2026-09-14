@@ -17,32 +17,22 @@
  */
 
 import type { Game } from '../element/game.js';
+import type { ElementRef } from '../../types/protocol.js';
 
 // ============================================
 // Annotation content model (Phase 105)
 // ============================================
 
-/**
- * Engine-local element reference for annotation targeting.
- *
- * Structurally identical to `useBoardInteraction.ElementRef` from the UI layer
- * (kept in sync by convention — both carry `{id?, name?, notation?}`). The
- * engine must not import upward from the UI layer; this re-declaration preserves
- * the correct dependency direction (engine → never → ui).
- *
- * Match precedence (parity contract, mirrors `matchesRef` in useBoardInteraction):
- *   id wins, else notation, else name.
- *
- * At least one field must be set to form a meaningful ref.
- */
-export interface ElementRef {
-  /** Engine-assigned numeric element id. Takes precedence over notation + name. */
-  id?: number;
-  /** Logical element name (e.g. 'queen'). Matched after id, before notation. */
-  name?: string;
-  /** Board notation (e.g. 'd4'). Matched after id; beats name when both present. */
-  notation?: string;
-}
+// The element reference used for annotation targeting is the protocol's, not a
+// copy of it (#263). The engine must not import upward from the UI layer, and it
+// does not have to: `types/protocol.ts` is a standalone wire-format module that
+// imports nothing, which the engine already depends on elsewhere. Re-exported
+// here so `boardsmith` hands a game the same `ElementRef` as `boardsmith/ui` and
+// `boardsmith/types`.
+//
+// Match precedence (parity contract, mirrors `matchesRef` in useBoardInteraction):
+//   id wins, else notation, else name.
+export type { ElementRef };
 
 /**
  * Discriminated union describing what a tutorial annotation points at.
