@@ -2242,7 +2242,7 @@ the harness -- `createTestGame`'s sibling, with an in-memory store and a clock
 you move by hand:
 
 ```ts
-import { createTestWorld, assertNoHiddenInfoLeak } from 'boardsmith/testing';
+import { createTestWorld, assertNoHiddenInfoLeak, diffPlayerViews } from 'boardsmith/testing';
 import { gameDefinition } from '../src/rules/index.js';
 import GameBoard from '../src/ui/GameBoard.vue';
 
@@ -2259,6 +2259,12 @@ seen.offers;            // what this seat may do, disabled ones with their reaso
 // And the reason it exists: the platform's hidden-information gate, aimed at
 // the board your players actually look at.
 await assertNoHiddenInfoLeak(world, 2, { component: GameBoard });
+
+// The same two seats, as trees rather than as markup: what seat 2's frame
+// carries that seat 1's does not hold AT ALL, which is the shape a world's
+// hidden information takes (a pruned frame, not a redacted one).
+const diff = await diffPlayerViews(world, 1, 2);
+expect(diff.onlyInB).toContain('Colony[0].vault-2');
 ```
 
 `getPlayerView` is assembled by the same two calls a host makes to fill a

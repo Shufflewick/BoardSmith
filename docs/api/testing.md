@@ -364,22 +364,34 @@ assertVisible(testGame.game.getPlayer(1)!.hand.first()!, 1);
 `TestGame` also exposes these as delegate methods: `testGame.isElementVisible(element, seat)` /
 `testGame.getVisibleElements(seat)`.
 
-**`diffPlayerViews(viewA, viewB)`** classifies every node across two
-`PlayerStateView`s (e.g. two different seats' `getPlayerView()` results) into
-`bothVisible` / `onlyInA` / `onlyInB` / `bothHidden` — useful for asserting
-"this element is visible to me but not my opponent" without manually walking
-both trees:
+**`diffPlayerViews(viewA, viewB)`** sorts every node across two seats' final
+per-seat trees into `onlyInA` / `onlyInB` / `attributeDiffs` — useful for
+asserting "this element is visible to me but not my opponent" without manually
+walking both trees:
 
 ```typescript
 import { diffPlayerViews } from 'boardsmith/testing';
 
-const diff = diffPlayerViews(testGame.getPlayerView(1), testGame.getPlayerView(2));
+const diff = diffPlayerViews(testGame, 1, 2);
 // diff.onlyInA -- elements visible to seat 1 but hidden from seat 2 (e.g. seat 1's own hand)
 ```
 
-Classification is judged purely by each node's `__hidden` flag (never by id),
-which sidesteps the engine's zone-hidden-vs-individually-hidden
-id-anonymization asymmetry.
+**A world's two seats are diffed the same way, with an `await`:**
+
+```typescript
+const diff = await diffPlayerViews(world, 1, 2);
+// diff.onlyInB -- rooms seat 2's frame carries that seat 1's does not hold at all
+```
+
+Nodes are paired BY ELEMENT IDENTITY, falling back to position only where the
+engine anonymized an id (a hidden zone's fungible children, which carry a fresh
+synthetic id per serialization). That is what lets the diff say a whole
+partition is ABSENT from the other seat's frame — a world's frame is pruned to
+what its own `world.view` named, so two seats hold different rooms in the same
+place rather than the same room redacted differently (#267). Each pair is then
+classified on its `__hidden` flag, which keeps an individually-hidden element
+(stable id, hidden for one seat) reported once rather than as a removal plus an
+addition.
 
 **`renderAsSeat(subject, seat, options?)` / `assertNoHiddenInfoLeak(subject,
 seat, options?)`** go one level deeper than JSON-tree checks: they mount a real
@@ -388,6 +400,15 @@ leaks — the class of bug a JSON-tree assertion can miss entirely (e.g. a
 renderer that accidentally prints a hidden card's rank into a tooltip `title`
 attribute). Both are `async` because mounting is real Vue component work, not a
 synchronous JSON walk.
+
+**A board that fails AFTER it renders fails the assertion** (#267). An async
+lifecycle hook, a watcher or a promise started in `setup()` all fail later than
+`mount()` returns, and with nothing catching them they reach the process as an
+unhandled rejection — which arrives after the assertion has resolved, so vitest
+attributes it to nothing and the run stays green. Both functions collect what
+the mounted tree raises, give it a turn to arrive, and raise it to the caller
+instead. A subject that holds no elements at all is refused for the same reason:
+a diff with nothing on one side of it cannot fail.
 
 ```typescript
 import { assertNoHiddenInfoLeak } from 'boardsmith/testing';
