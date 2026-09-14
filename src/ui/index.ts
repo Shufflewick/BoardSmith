@@ -86,6 +86,8 @@ export {
   tryUseBoardInteraction,
   createBoardInteraction,
   provideBoardInteraction,
+  // The key a test harness provides under when it stands in for GameShell (#260).
+  BOARD_INTERACTION_KEY,
   anchorAttrs,
   // #189: the hook that makes an anchored candidate findable by the wording the
   // panel would have shown. A custom board spreads it beside anchorAttrs (or

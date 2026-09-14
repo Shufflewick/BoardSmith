@@ -83,6 +83,26 @@ function loadAutoUI(): Promise<typeof AutoUIComponent> {
   return autoUIComponentPromise;
 }
 
+let boardInteractionModulePromise:
+  | Promise<typeof import('../ui/composables/useBoardInteraction.js')>
+  | undefined;
+
+/**
+ * Dynamically import the board-interaction module (cached).
+ *
+ * Deferred for the same reason as `loadAutoUI`/`loadMount`: it pulls in Vue,
+ * and a static import here would make every consumer of the
+ * `boardsmith/testing` barrel resolve Vue whether or not it ever renders.
+ */
+function loadBoardInteractionModule(): Promise<
+  typeof import('../ui/composables/useBoardInteraction.js')
+> {
+  if (!boardInteractionModulePromise) {
+    boardInteractionModulePromise = import('../ui/composables/useBoardInteraction.js');
+  }
+  return boardInteractionModulePromise;
+}
+
 // ---------------------------------------------------------------------------
 // `@vue/test-utils` is a devDependency of BoardSmith itself — consuming
 // projects (games, MERC) have no reason to install it unless they actually
@@ -152,6 +172,24 @@ export interface RenderAsSeatOptions<C extends Component = Component> {
    * to (its own doc explains why you almost certainly do not).
    */
   componentProps?: Record<string, unknown>;
+  /**
+   * Values to `provide` to the mounted tree, merged OVER the defaults this
+   * function supplies.
+   *
+   * A board is driven by two sibling injection APIs, not one: the action
+   * controller arrives as a prop, but board interaction arrives through a
+   * `provide` that `<GameShell>` makes. So this function stands in for the
+   * shell and provides a real `createBoardInteraction()` under
+   * `BOARD_INTERACTION_KEY` by default — a board that calls
+   * `useBoardInteraction()` mounts here with no wiring from the caller, which
+   * before this threw inside `setup()` and left the leak assertion reporting a
+   * bare injection Error instead of a verdict (#260).
+   *
+   * Pass this only to supply something the default does not cover: an
+   * interaction pre-loaded with valid targets so the board renders its
+   * candidate state, or a provider your own board asks for.
+   */
+  provide?: Record<string | symbol, unknown>;
 }
 
 /**
@@ -212,7 +250,19 @@ export async function renderAsSeat<G extends Game, C extends Component = typeof 
   // own generic pinned to the base `Component`. The wrapper is then re-stated as
   // being over the component that was passed, which is what the signature promises
   // and what a caller inspecting its own board's props needs.
-  return mount<Component>(component, { props }) as VueWrapper<RenderedInstance<C>>;
+  // GameShell provides board interaction; nothing does here, so this function
+  // is the shell's stand-in. The default is the REAL interaction, not an inert
+  // shape: a board reads it in setup() and again on every render, and half of
+  // one would fail somewhere further in than the injection error it replaces.
+  const { BOARD_INTERACTION_KEY, createBoardInteraction } = await loadBoardInteractionModule();
+  const provide: Record<string | symbol, unknown> = {
+    [BOARD_INTERACTION_KEY]: createBoardInteraction(),
+    ...options.provide,
+  };
+
+  return mount<Component>(component, { props, global: { provide } }) as VueWrapper<
+    RenderedInstance<C>
+  >;
 }
 
 /**
