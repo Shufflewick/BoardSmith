@@ -409,6 +409,25 @@ else. Add `componentProps` for anything beyond that contract. `gameView` is
 always the real per-seat view and cannot be overridden through
 `componentProps` — rendering any other tree would invalidate the scan.
 
+Board interaction is provided too. A board that calls `useBoardInteraction()`
+is normally inside a `<GameShell>`; this utility stands in for the shell and
+provides a real `createBoardInteraction()` under `BOARD_INTERACTION_KEY`, so
+such a board mounts with no wiring from you. Use the `provide` option only to
+supply something the default does not cover — an interaction pre-loaded with
+valid targets, say, so the board renders its candidate state:
+
+```typescript
+import { createBoardInteraction, BOARD_INTERACTION_KEY } from 'boardsmith/ui';
+
+const interaction = createBoardInteraction();
+interaction.setValidElements([{ id: cardId, ref: { id: cardId } }], () => {});
+
+await assertNoHiddenInfoLeak(testGame, 2, {
+  component: GameTable,
+  provide: { [BOARD_INTERACTION_KEY]: interaction },
+});
+```
+
 `assertNoHiddenInfoLeak` derives forbidden markers by diffing each element's
 *unfiltered* `toJSON()` against its node in the final `toJSONForPlayer(seat)`
 tree, so it honors a game's `static playerView` hook automatically. Pass an

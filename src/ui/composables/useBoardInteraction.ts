@@ -222,7 +222,16 @@ export interface BoardInteractionActions {
 
 export type BoardInteraction = BoardInteractionState & BoardInteractionActions;
 
-const BOARD_INTERACTION_KEY: InjectionKey<BoardInteraction> = Symbol('boardInteraction');
+/**
+ * The injection key `<GameShell>` provides board interaction under.
+ *
+ * Exported so a test harness can stand in for the shell and provide a real
+ * interaction of its own — `renderAsSeat`/`assertNoHiddenInfoLeak` mount a
+ * board outside any shell, and a board that calls {@link useBoardInteraction}
+ * would otherwise throw in `setup()` before a node rendered (#260). A
+ * component in the app never needs this: it calls `useBoardInteraction()`.
+ */
+export const BOARD_INTERACTION_KEY: InjectionKey<BoardInteraction> = Symbol('boardInteraction');
 
 /**
  * Create board interaction state (call in GameShell)

@@ -22,64 +22,20 @@
 import { describe, it, expect } from 'vitest';
 import { defineComponent, h, type PropType } from 'vue';
 import {
-  Game,
-  Player,
-  Hand,
-  Card,
-  Action,
-  defineFlow,
-  loop,
-  eachPlayer,
-  actionStep,
-  type GameOptions,
-} from '../engine/index.js';
-import { TestGame } from './test-game.js';
+  collectCards,
+  makeSecretHandGame,
+  type SecretHandGame,
+  type ViewNode,
+} from './dom-leak.test-helper.js';
+import type { TestGame } from './test-game.js';
 import { assertNoHiddenInfoLeak } from './dom-leak.js';
 
-// ---------------------------------------------------------------------------
-// Fixture: two seats, each with an owner-only Hand holding one secret card.
-// ---------------------------------------------------------------------------
-
-class SecretCard extends Card<CustomUILeakGame> {
-  rank!: string;
-}
-
-class CustomUILeakGame extends Game<CustomUILeakGame, Player> {
-  constructor(options: GameOptions) {
-    super(options);
-    this.registerElements([SecretCard]);
-
-    for (const player of this.all(Player)) {
-      const hand = this.create(Hand, `hand-${player.seat}`);
-      hand.player = player;
-      // Hand defaults to owner-only content visibility.
-      hand.create(SecretCard, `${player.seat}-secret-card`, {
-        rank: player.seat === 1 ? 'Ace' : 'King',
-      });
-    }
-
-    this.registerAction(
-      Action.create<CustomUILeakGame>('pass').execute(() => ({ success: true })),
-    );
-
-    this.setFlow(
-      defineFlow({
-        root: loop({
-          while: () => false,
-          maxIterations: 10,
-          do: eachPlayer({ do: actionStep({ actions: ['pass'] }) }),
-        }),
-      }),
-    );
-  }
-}
-
-function makeGame(): TestGame<CustomUILeakGame> {
-  return TestGame.create(CustomUILeakGame, { playerCount: 2, seed: 'custom-ui-leak' });
-}
+// The fixture (two seats, one owner-only secret card each) lives in
+// ./dom-leak.test-helper.ts, shared with dom-leak-board-interaction.test.ts.
+const makeGame = () => makeSecretHandGame('custom-ui-leak');
 
 /** The full authoritative tree — what a careless custom board might reach for. */
-function authoritativeView(tg: TestGame<CustomUILeakGame>): unknown {
+function authoritativeView(tg: TestGame<SecretHandGame>): unknown {
   return tg.game.toJSON();
 }
 
@@ -88,19 +44,6 @@ function authoritativeView(tg: TestGame<CustomUILeakGame>): unknown {
 // each card's identity into a real DOM surface, the way a game's own renderer
 // does (`data-element-id` + an aria-label).
 // ---------------------------------------------------------------------------
-
-interface ViewNode {
-  id?: number;
-  name?: string;
-  rank?: string;
-  children?: ViewNode[];
-}
-
-function collectCards(node: ViewNode, into: ViewNode[] = []): ViewNode[] {
-  if (node.rank !== undefined || (node.name?.includes('secret-card') ?? false)) into.push(node);
-  for (const child of node.children ?? []) collectCards(child, into);
-  return into;
-}
 
 /** A correct board: renders ONLY what the per-seat view actually carries. */
 const RedactedBoard = defineComponent({

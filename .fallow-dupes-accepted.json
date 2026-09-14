@@ -1099,6 +1099,16 @@
       ]
     },
     {
+      "content": "22b101799bad8449",
+      "lines": 17,
+      "files": [
+        "src/testing/assertions.test.ts",
+        "src/testing/dom-leak.test-helper.ts",
+        "src/testing/test-game.test.ts",
+        "src/testing/visibility.test.ts"
+      ]
+    },
+    {
       "content": "22f354caf22c32d4",
       "lines": 10,
       "files": [
@@ -1548,6 +1558,14 @@
       "lines": 8,
       "files": [
         "src/cli/commands/verify-enumerate.test.ts"
+      ]
+    },
+    {
+      "content": "35889b593e413fa6",
+      "lines": 30,
+      "files": [
+        "src/testing/test-game.test.ts",
+        "src/testing/visibility.test.ts"
       ]
     },
     {
@@ -5489,16 +5507,6 @@
       "files": [
         "src/ui/composables/useElementAnimation.test.ts",
         "src/ui/composables/useFLIP.test.ts"
-      ]
-    },
-    {
-      "content": "b01167e0ac711e94",
-      "lines": 30,
-      "files": [
-        "src/testing/assertions.test.ts",
-        "src/testing/dom-leak-custom-ui.test.ts",
-        "src/testing/test-game.test.ts",
-        "src/testing/visibility.test.ts"
       ]
     },
     {
