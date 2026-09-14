@@ -514,7 +514,6 @@
     "CheckpointPolicy|src/engine/utils/snapshot.ts|src/runtime/runner.ts",
     "ConnectionStatus|src/client/types.ts|src/ui/composables/liveRegionAnnouncer.ts",
     "ElementDiff|src/session/state-history.ts|src/session/utils.ts|src/ui/composables/useDebugBridge.ts",
-    "ElementRef|src/engine/tutorial/types.ts|src/types/protocol.ts|src/ui/composables/useBoardInteraction.ts",
     "FollowUpAction|src/client/types.ts|src/engine/action/types.ts|src/ui/composables/useActionControllerTypes.ts",
     "GameElement|src/engine/element/game-element.ts|src/ui/components/auto-ui/AutoRenderer.vue|src/ui/components/auto-ui/renderers/board-renderer-a11y.test-helper.ts|src/ui/types.ts",
     "Player|src/engine/player/player.ts|src/ui/components/GameOverCard.vue|src/ui/components/PlayersPanel.vue|src/ui/types.ts",
