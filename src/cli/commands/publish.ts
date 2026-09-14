@@ -39,7 +39,6 @@ interface PublishOptions {
   apiKey?: string;
   publisher?: string;
   dev?: boolean;
-  test?: boolean;
   prod?: boolean;
   dryRun?: boolean;
 }
@@ -57,18 +56,17 @@ export class PublishTargetError extends Error {
  *
  * There is deliberately NO default (#36). `boardsmith publish` used to mean
  * "ship to production", so the most dangerous target was the zero-effort one
- * and the safe targets were the ones you had to type — the Pit of Success
- * exactly inverted. One forgotten flag while iterating against test put a
+ * and the safe target was the one you had to type — the Pit of Success
+ * exactly inverted. One forgotten flag while iterating against dev put a
  * work-in-progress build in front of players, with no confirmation anywhere in
  * the flow to catch it.
  *
  * Naming the target is one word, and it is the word that makes the difference
- * between a test deploy and a live one.
+ * between a dev deploy and a live one.
  */
 export function resolveTarget(options: PublishOptions): PlatformTarget {
   const named: PlatformTarget[] = [];
   if (options.dev) named.push('dev');
-  if (options.test) named.push('test');
   if (options.prod) named.push('prod');
 
   if (named.length > 1) {
@@ -81,7 +79,6 @@ export function resolveTarget(options: PublishOptions): PlatformTarget {
     throw new PublishTargetError(
       'Name the platform to publish to. There is no default, because the default used to be production.\n' +
       '  --dev    the local dev platform (http://localhost:3006)\n' +
-      '  --test   the test platform (test.shufflewick.pub)\n' +
       '  --prod   the LIVE platform, where players will see this build'
     );
   }
@@ -102,7 +99,7 @@ export async function publishCommand(options: PublishOptions): Promise<void> {
     process.exit(1);
   }
 
-  // -- Resolve API key (per target: dev/test/prod are separate deployments
+  // -- Resolve API key (per target: dev and prod are separate deployments
   // with separate key stores) --
   let apiKey = options.apiKey;
 
@@ -119,11 +116,11 @@ export async function publishCommand(options: PublishOptions): Promise<void> {
       console.error(chalk.red(`No API key configured for the ${target} platform.`));
       if (hasLegacyApiKeyField()) {
         console.error(chalk.dim(
-          `${globalConfigPath()} still holds a single "apiKey" from before dev/test/prod had ` +
+          `${globalConfigPath()} still holds a single "apiKey" from before dev and prod had ` +
           `separate key stores. It is not read for any target — save the key against the one you want.`
         ));
       }
-      console.error(chalk.dim(`Run: boardsmith publish${target === 'prod' ? '' : ` --${target}`} --api-key spk_YOUR_KEY`));
+      console.error(chalk.dim(`Run: boardsmith publish --${target} --api-key spk_YOUR_KEY`));
       process.exit(1);
     }
   }

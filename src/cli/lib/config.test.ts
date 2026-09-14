@@ -38,25 +38,24 @@ afterEach(() => {
 
 describe('readGlobalConfig / getApiKey', () => {
   it('reads a key back for the target it was saved under', () => {
-    saveApiKey('test', 'spk_test_key');
-    expect(getApiKey('test')).toBe('spk_test_key');
+    saveApiKey('dev', 'spk_dev_key');
+    expect(getApiKey('dev')).toBe('spk_dev_key');
   });
 
   it('never hands one target the key saved for another', () => {
-    saveApiKey('test', 'spk_test_key');
+    saveApiKey('dev', 'spk_dev_key');
     expect(getApiKey('prod')).toBeUndefined();
-    expect(getApiKey('dev')).toBeUndefined();
   });
 
-  it('does not resurrect a pre-taxonomy `apiKey` field as the test key', () => {
+  it('does not resurrect a pre-taxonomy `apiKey` field as a target key', () => {
     writeConfigFile({ apiKey: 'spk_old_key' });
-    expect(getApiKey('test')).toBeUndefined();
+    expect(getApiKey('dev')).toBeUndefined();
   });
 
   it('does not rewrite the user\'s config file just because it read it', () => {
     writeConfigFile({ apiKey: 'spk_old_key' });
     const before = readFileSync(configFile(), 'utf-8');
-    getApiKey('test');
+    getApiKey('dev');
     expect(readFileSync(configFile(), 'utf-8')).toBe(before);
   });
 

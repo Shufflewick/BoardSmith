@@ -1,10 +1,9 @@
 import { CONVEX_SINK_KEYS } from './config-schema.js';
 
-export type PlatformTarget = 'dev' | 'test' | 'prod';
+export type PlatformTarget = 'dev' | 'prod';
 
 const PLATFORM_URLS: Record<PlatformTarget, string> = {
   dev: 'http://localhost:3006',
-  test: 'https://test.shufflewick.pub',
   prod: 'https://shufflewick.pub',
 };
 
