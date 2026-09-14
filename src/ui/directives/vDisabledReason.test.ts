@@ -34,6 +34,16 @@ function mountButton(initial: string | false) {
   return { wrapper, reason, onClick, btn: wrapper.find('button') };
 }
 
+/**
+ * Focus `el` the way a keyboard user gets there: the Tab that moved focus is
+ * what tells the tooltip this focus is the player's own (#261), so a test that
+ * only dispatches `focus` is describing a script, not a person.
+ */
+function tabTo(el: HTMLElement): void {
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
+  el.dispatchEvent(new FocusEvent('focus'));
+}
+
 const tooltip = useDisabledReasonTooltip();
 
 describe('vDisabledReason', () => {
@@ -169,9 +179,25 @@ describe('vDisabledReason', () => {
     it('shows the reason on focus, so the keyboard path reaches it too', async () => {
       const { btn, wrapper } = mountButton('A gorge blocks your way.');
 
-      await btn.trigger('focus');
+      tabTo(btn.element as HTMLElement);
+      await nextTick();
 
       expect(tooltip.text.value).toBe('A gorge blocks your way.');
+      wrapper.unmount();
+    });
+
+    // #261: the Action Panel puts focus back inside itself after every redraw,
+    // and when the redrawn step offers nothing operable that lands on a dimmed
+    // control. The player is holding a mouse, so no blur is ever coming: the
+    // bubble that focus opens stays painted over the panel through redraw after
+    // redraw. A reason the player did not ask for is not worth that.
+    it('stays shut when a redraw moves focus onto it after the player clicked', async () => {
+      const { btn, wrapper } = mountButton('A gorge blocks your way.');
+
+      document.dispatchEvent(new Event('pointerdown', { bubbles: true }));
+      await btn.trigger('focus');
+
+      expect(tooltip.text.value).toBe(null);
       wrapper.unmount();
     });
 
@@ -191,7 +217,7 @@ describe('vDisabledReason', () => {
       await btn.trigger('mouseleave');
       expect(tooltip.text.value).toBe(null);
 
-      await btn.trigger('focus');
+      tabTo(btn.element as HTMLElement);
       await btn.trigger('blur');
       expect(tooltip.text.value).toBe(null);
       wrapper.unmount();

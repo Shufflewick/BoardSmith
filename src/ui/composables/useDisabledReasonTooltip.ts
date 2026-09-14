@@ -60,6 +60,50 @@ function detachDismiss(): void {
 }
 
 /**
+ * Whether the player is driving with the keyboard right now.
+ *
+ * A dimmed control explains itself when the player REACHES it: hovers it, taps
+ * it, or tabs to it. Focus by itself is not the same thing. The Action Panel
+ * puts focus back inside itself after every redraw so a keyboard user is never
+ * stranded (#27, #228), and when the redrawn step offers nothing operable — a
+ * direction row where every compass point is blocked — that lands focus on a
+ * dimmed control. A tooltip opened by that focus has no pointer to leave and no
+ * blur coming, so it sits over the panel through redraw after redraw with the
+ * player nowhere near it (#261).
+ *
+ * This is the question `:focus-visible` answers, asked at the moment focus
+ * arrives rather than about whatever already holds it. Before the first gesture
+ * the answer is "keyboard", which is what a browser assumes too.
+ */
+let keyboardModality = true;
+
+/** Documents already watched, so a control can ask for tracking every time. */
+const modalityDocs = new WeakSet<Document>();
+
+function onModalityKey(): void {
+  keyboardModality = true;
+}
+
+function onModalityPointer(): void {
+  keyboardModality = false;
+}
+
+/**
+ * Start watching `doc` for which input the player is using.
+ *
+ * Idempotent, and called by `v-disabled-reason` for every control it wires up:
+ * the answer has to be known already when a focus event asks for it, so it
+ * cannot be gathered at show time. Capture phase for the same reason the
+ * dismiss listener uses it — the answer must settle before anything reads it.
+ */
+export function trackInputModality(doc: Document): void {
+  if (modalityDocs.has(doc)) return;
+  modalityDocs.add(doc);
+  doc.addEventListener('keydown', onModalityKey, true);
+  doc.addEventListener('pointerdown', onModalityPointer, true);
+}
+
+/**
  * Show the tooltip for `element`, describing it with `reason`.
  *
  * Calling this for a different element while one is open simply moves the
@@ -70,6 +114,18 @@ export function showDisabledReason(element: HTMLElement, reason: string): void {
   anchor.value = element;
   showCount.value++;
   attachDismiss(element.ownerDocument);
+}
+
+/**
+ * Show the reason because `element` TOOK FOCUS — which is a reason the player
+ * asked for only when the player moved focus themselves.
+ *
+ * A script placing focus is not a player reading a control, and the bubble that
+ * focus would open is one nothing closes. See `keyboardModality` above.
+ */
+export function showDisabledReasonOnFocus(element: HTMLElement, reason: string): void {
+  if (!keyboardModality) return;
+  showDisabledReason(element, reason);
 }
 
 /**
