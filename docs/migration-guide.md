@@ -38,7 +38,7 @@ There is no default, because the default used to be production:
 
 ```diff
 -boardsmith publish
-+boardsmith publish --prod    # or --test, or --dev
++boardsmith publish --prod    # or --dev
 ```
 
 ### `--bot-level expert` is rejected (r18)

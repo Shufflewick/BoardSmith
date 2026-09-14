@@ -179,10 +179,9 @@ boardsmith build
 ### 6. Publish
 
 Every publish names its platform. There is no default target — the flag is what
-separates a test deploy from one players will see.
+separates a dev deploy from one players will see.
 
 ```bash
-boardsmith publish --test    # test.shufflewick.pub
 boardsmith publish --prod    # the live platform
 boardsmith publish --dev     # a local platform at http://localhost:3006
 ```
