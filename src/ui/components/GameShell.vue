@@ -2348,10 +2348,6 @@ if ((import.meta as any).hot) {
   border-color: var(--bsg-accent);
   background: var(--bsg-selectable);
 }
-.bsg-demo-btn:disabled {
-  opacity: 0.4;
-  cursor: not-allowed;
-}
 .bsg-demo-btn--speed {
   font-size: 0.8rem;
   padding: 0 10px;
@@ -2367,6 +2363,14 @@ if ((import.meta as any).hot) {
 .bsg-demo-btn--stop {
   font-size: 0.8rem;
   color: var(--bsg-ink-2);
+}
+/* Last among the demo-button rules so it wins on order against every variant:
+   a disabled control lands on the token pair whatever else it is. */
+.bsg-demo-btn:disabled {
+  background: var(--bsg-disabled-surface);
+  color: var(--bsg-disabled-ink);
+  border-color: var(--bsg-line);
+  cursor: not-allowed;
 }
 /* Time travel banner */
 .time-travel-banner {

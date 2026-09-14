@@ -216,7 +216,9 @@ const emit = defineEmits<{
   background: color-mix(in srgb, var(--bsg-warn) 40%, transparent) !important;
 }
 .rewind-btn:disabled {
-  opacity: 0.5;
+  background: var(--bsg-disabled-surface) !important;
+  border-color: var(--bsg-line) !important;
+  color: var(--bsg-disabled-ink) !important;
   cursor: not-allowed;
 }
 .rewind-error {

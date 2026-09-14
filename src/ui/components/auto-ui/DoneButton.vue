@@ -54,8 +54,8 @@ const emit = defineEmits<{
 }
 
 .done-button[aria-disabled='true'] {
-  opacity: 0.5;
+  background: var(--bsg-disabled-surface);
+  color: var(--bsg-disabled-ink);
   cursor: not-allowed;
-  background: var(--bsg-surface-3);
 }
 </style>

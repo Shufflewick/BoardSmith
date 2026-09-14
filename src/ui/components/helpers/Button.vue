@@ -95,8 +95,13 @@ function handleClick(event: MouseEvent) {
   font-family: inherit;
 }
 
+/* Beats every variant on specificity, so a disabled button of any variant lands on
+   the same measurable ground/ink pair instead of a composited multiplier. */
 .btn[aria-disabled='true'] {
-  opacity: 0.5;
+  background: var(--bsg-disabled-surface);
+  color: var(--bsg-disabled-ink);
+  border-color: var(--bsg-line);
+  box-shadow: none;
   cursor: not-allowed;
 }
 

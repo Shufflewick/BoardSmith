@@ -1285,7 +1285,8 @@ function handleUpdateGameOption(key: string, value: unknown) {
 }
 
 .join-btn:disabled {
-  opacity: 0.5;
+  background: var(--bsg-disabled-surface);
+  color: var(--bsg-disabled-ink);
   cursor: not-allowed;
 }
 

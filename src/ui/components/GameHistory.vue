@@ -336,7 +336,8 @@ defineExpose({ clearHistory, copyHistory, hasMessages });
 }
 
 .history-copy:disabled {
-  opacity: 0.35;
+  background: var(--bsg-disabled-surface);
+  color: var(--bsg-disabled-ink);
   cursor: not-allowed;
 }
 

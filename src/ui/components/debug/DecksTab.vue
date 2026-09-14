@@ -398,16 +398,17 @@ const {
   margin-left: auto;
 }
 .deck-action-btn {
-  opacity: 0.6;
+  color: var(--bsg-ink-2);
   font-size: 12px !important;
   padding: 2px 6px !important;
   line-height: 1;
 }
 .deck-action-btn:hover:not(:disabled) {
-  opacity: 1;
+  color: var(--bsg-ink);
 }
 .deck-action-btn:disabled {
-  opacity: 0.3;
+  background: var(--bsg-disabled-surface);
+  color: var(--bsg-disabled-ink);
   cursor: not-allowed;
 }
 /* Deck cards list */
@@ -507,7 +508,9 @@ const {
   color: var(--bsg-accent-2);
 }
 .card-action-btn:disabled {
-  opacity: 0.3;
+  background: var(--bsg-disabled-surface);
+  border-color: var(--bsg-line);
+  color: var(--bsg-disabled-ink);
   cursor: not-allowed;
 }
 /* Deck loading indicator */
