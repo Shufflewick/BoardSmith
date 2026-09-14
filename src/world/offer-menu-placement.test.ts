@@ -14,62 +14,35 @@
  * and ShufflewickPub #378 were both about.
  */
 import { describe, it, expect } from "vitest";
-import { Game, Space } from "../engine/index.js";
-import { worldAction, createWorld } from "./index.js";
-
-class Yard extends Space {
-  ore = 3;
-}
-
-class PlacementWorld extends Game {
-  constructor(options: ConstructorParameters<typeof Game>[0]) {
-    super(options);
-    this.registerElements([Yard]);
-  }
-}
+import { worldAction } from "./index.js";
+import { offersFor, PARTITION } from "./offer-fixture.test-helper.js";
 
 const construct = worldAction("construct")
   .prompt("Construct building")
   .order(10)
-  .needs(() => ["yard"])
+  .needs(() => [PARTITION])
   .execute(() => {});
 
 const dumpOre = worldAction("dumpOre")
   .prompt("Dump ore")
   .group("Dump")
   .order(20)
-  .needs(() => ["yard"])
+  .needs(() => [PARTITION])
   .execute(() => {});
 
 const renamePlanet = worldAction("renamePlanet")
   .prompt("Rename planet")
   .group("More", "Empire settings")
-  .needs(() => ["yard"])
+  .needs(() => [PARTITION])
   .execute(() => {});
 
 const skipMission = worldAction("skipMission")
   .prompt("Skip mission")
-  .needs(() => ["yard"])
+  .needs(() => [PARTITION])
   .execute(() => {});
 
-async function offers() {
-  const { runner } = createWorld({
-    definition: {
-      gameClass: PlacementWorld,
-      world: {
-        maxPlayers: 1,
-        actions: [construct, dumpOre, renamePlanet, skipMission],
-        view: () => ["yard"],
-        genesis: (game) => ({ yard: game.create(Yard, "yard") }),
-      },
-    },
-    seed: "placement",
-    seats: new Map([["p1", 1]]),
-  });
-  await runner.genesis();
-  await runner.declareOffers("p1", {}, 1);
-  return runner.offersFor("p1", { now: 1, presence: [], activity: null });
-}
+const offers = () =>
+  offersFor([construct, dumpOre, renamePlanet, skipMission], "placement");
 
 describe("a world offer's Action Panel menu placement", () => {
   it("carries the group path and the order a world action declared", async () => {

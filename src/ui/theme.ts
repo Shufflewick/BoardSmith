@@ -74,6 +74,10 @@ const DARK_COLOR_TOKENS = `
   --bsg-ok: #54cf9c;
   --bsg-warn: #e6b450;
   --bsg-away: #8a939b;
+  /* Destructive action button (#268) -- see the note in STATIC_TOKENS for why
+     this is its own pair rather than a reference to --bsg-danger. 6.55:1. */
+  --bsg-destructive-surface: #ef7a5f;
+  --bsg-destructive-ink: #2b0d06;
   --bsg-cell: rgba(255,255,255,.035);
   --bsg-cell-line: rgba(255,255,255,.07);
   --bsg-shadow: 0 8px 30px rgba(0,0,0,.45);
@@ -102,6 +106,9 @@ const LIGHT_COLOR_TOKENS = `
   --bsg-ok: #1c8a5a;
   --bsg-warn: #8c6318;
   --bsg-away: #9aa1a8;
+  /* Destructive action button (#268). 7.34:1. */
+  --bsg-destructive-surface: #a3271a;
+  --bsg-destructive-ink: #ffffff;
   --bsg-cell: rgba(22,27,32,.025);
   --bsg-cell-line: rgba(22,27,32,.10);
   --bsg-shadow: 0 10px 34px rgba(22,27,32,.14);
@@ -170,6 +177,16 @@ const STATIC_TOKENS = `
      pair whose contrast is still guaranteed. */
   --bsg-disabled-surface: var(--bsg-surface-2);
   --bsg-disabled-ink: var(--bsg-ink-2);
+
+  /* Destructive verbs -- a defined ground/ink PAIR of their own, per theme, and
+     deliberately NOT a reference to --bsg-danger or --bsg-warn (#268). Those are
+     general-purpose status tokens a game theme remaps for its own copy; one
+     theme in the wild points --bsg-warn at its accent-hover colour, which would
+     have made this emphasis silently do nothing. A theme that wants a different
+     destructive plate overrides THESE TWO, and overriding a pair cannot leave a
+     label stranded on a ground it does not contrast with. The values live in the
+     per-scheme blocks above; contrast is measured in
+     theme.destructive-contrast.test.ts. */
   --bsg-elevation: var(--bsg-shadow-sm);
 
   /* Drag / drop tokens — defaults registered here; Phase 99 sweep references them */

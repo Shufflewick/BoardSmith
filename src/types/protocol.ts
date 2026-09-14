@@ -768,6 +768,21 @@ export interface ActionMetadata<TElement extends ValidElement = ValidElement> {
    */
   suppressFromActionPanel?: boolean;
   /**
+   * THIS VERB PERMANENTLY ENDS SOMETHING (#268). Set via
+   * `ActionBuilder.destructive()`, emitted by the engine
+   * (`engine/element/action-metadata.ts`) and carried on a world's offer.
+   *
+   * The Action Panel paints it from the dedicated destructive token pair and
+   * adds a ring, a marker glyph and a screen-reader label, so the warning does
+   * not depend on a player being able to separate two hues. Presentation only:
+   * it is NOT a confirmation, NOT a permission, and changes nothing about
+   * availability or validation.
+   *
+   * A custom board reads it from this same record, which is what keeps the two
+   * surfaces from disagreeing about which verb is the dangerous one.
+   */
+  destructive?: boolean;
+  /**
    * The Action Panel menu path this action's START BUTTON sits at, outermost
    * first (#228); absent means the top level. Set via `ActionBuilder.group()`.
    * Arrangement only -- it changes neither availability nor executability, and

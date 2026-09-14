@@ -1634,10 +1634,17 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
                button cannot be reached by keyboard, taking the reason with it. -->
           <button
             class="action-btn"
+            :class="{ destructive: node.action.destructive }"
             :data-bs-action="node.action.name"
             v-disabled-reason="actionDisabledReason(node.action.name)"
             @click="startAction(node.action.name)"
           >
+            <!-- #268: the emphasis on a destructive verb is carried FOUR ways,
+                 only one of which is colour -- the plate, an inset ring (CSS),
+                 this glyph, and the words a screen reader reads. A player who
+                 cannot separate the hues still gets the warning. -->
+            <span v-if="node.action.destructive" class="sr-only">Destructive action.</span>
+            <span v-if="node.action.destructive" aria-hidden="true" class="action-destructive-mark">&#9888;</span>
             {{ node.action.prompt || formatActionName(node.action.name) }}
           </button>
           <!-- "?" affordance: shown when global toggle is ON and content exists.
@@ -2247,6 +2254,35 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
 .action-btn:hover:not([aria-disabled='true']) {
   transform: translateY(-1px);
   box-shadow: var(--bsg-shadow);
+}
+
+/* Destructive verbs (issue 268) -- the one verb in the bar that permanently ends
+   something must not be drawn as the primary call to action, which is what the
+   shared accent plate made it (and, being the longest prompt, usually the widest
+   button on the bar too).
+
+   The plate comes from the DEDICATED destructive pair rather than --bsg-danger
+   or --bsg-warn: those are general-purpose status tokens a game theme remaps,
+   and emphasis that resolved through one would silently vanish on such a theme.
+
+   The ring is the half of the emphasis that is not colour. Drawn inset in the
+   label's own ink, it gives the button a different SHAPE from every other verb,
+   so it still reads as set apart in greyscale, under a remapped palette, or to a
+   player who cannot separate the two hues. The glyph and the screen-reader label
+   in the markup are the other two carriers. */
+.action-btn.destructive {
+  background: var(--bsg-destructive-surface);
+  color: var(--bsg-destructive-ink);
+  outline: 2px solid var(--bsg-destructive-ink);
+  outline-offset: -5px;
+}
+
+.action-destructive-mark {
+  /* Sits with the label rather than floating: the mark and the words are one
+     phrase, and a mark that could wrap away from its label warns about nothing. */
+  margin-right: 6px;
+  font-size: 1.05em;
+  line-height: 1;
 }
 
 /* Disabled verbs are drawn, not hidden — the Action Panel is the accessibility

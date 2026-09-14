@@ -1,7 +1,7 @@
 {
-  "revision": 81,
+  "revision": 82,
   "bundleProtocol": 2,
-  "surfaceHash": "0cdd059b44b2d573",
+  "surfaceHash": "05714c9ba827ab52",
   "payloadHash": "7d88d174839e99b4",
   "formatHash": "0058593e7cc80205",
   "history": [
@@ -673,6 +673,15 @@
       "payloadHash": "7d88d174839e99b4",
       "formatHash": "0058593e7cc80205",
       "summary": "enterNumber can open a field on a starting value and label each value in its range (#258): number picks now carry optional initial and valueLabels on the wire."
+    },
+    {
+      "revision": 82,
+      "date": "2026-09-14",
+      "bundleProtocol": 2,
+      "surfaceHash": "05714c9ba827ab52",
+      "payloadHash": "7d88d174839e99b4",
+      "formatHash": "0058593e7cc80205",
+      "summary": "ActionBuilder gains .destructive() (issue 268): an action can mark itself as one that permanently ends something, and the flag rides the actionMetadata channel as ActionMetadata.destructive and on a world's offer frame. The Action Panel paints such a verb from the new dedicated --bsg-destructive-surface / --bsg-destructive-ink token pair and adds an inset ring, a marker glyph and a screen-reader label, so the warning is not carried by colour alone; a custom board reads the same flag off the same metadata. Presentation only: availability, validation and execution are unchanged."
     }
   ]
 }

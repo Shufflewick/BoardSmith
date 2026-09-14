@@ -307,6 +307,49 @@ export class Action<
   }
 
   /**
+   * Mark this verb as one that permanently ends something, so the Action Panel
+   * draws it apart from every other button in the bar.
+   *
+   * ```typescript
+   * Action.create('endSurvivor')
+   *   .prompt('End this survivor, scattering everything you carry')
+   *   .destructive()
+   *   .execute(...)
+   * ```
+   *
+   * Use it for a move a player cannot take back: eliminating their own piece,
+   * conceding, razing something, spending a one-time resource for good. Do not
+   * use it for merely expensive or merely bad moves -- a bar where half the
+   * buttons are marked warns about nothing.
+   *
+   * ## What it draws
+   *
+   * The button is painted from `--bsg-destructive-surface` / `--bsg-destructive-ink`
+   * instead of the accent, AND carries an inset ring, a marker glyph and a
+   * screen-reader label. The warning is deliberately not colour alone: a player
+   * who cannot separate the hues still sees a differently shaped button and
+   * still hears "Destructive action."
+   *
+   * ## What it does NOT change
+   *
+   * Availability, validation, ordering and execution are all untouched, and a
+   * destructive action is confirmed exactly as much as it was before -- if the
+   * move needs a confirmation step, the game still writes one. This makes the
+   * button look like what it does; it does not make it safe.
+   *
+   * A custom board reads the same flag off the same metadata
+   * (`actionMetadata[name].destructive`), so the two surfaces cannot disagree
+   * about which verb is the dangerous one.
+   *
+   * @returns The builder for chaining
+   */
+  // fallow-ignore-next-line unused-class-member
+  destructive(): this {
+    this.definition.destructive = true;
+    return this;
+  }
+
+  /**
    * Put this action's **start button** inside a named Action Panel menu group.
    *
    * A game with many simultaneously available verbs gives a rare
