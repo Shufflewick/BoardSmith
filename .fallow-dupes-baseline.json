@@ -323,7 +323,7 @@
     "src/cli/lib/asset-scan.ts:35-48|src/cli/lib/sandbox-scan.ts:137-148",
     "src/cli/lib/ingest-hook.test.ts:79-83|src/cli/lib/ingest-hook.test.ts:90-94",
     "src/cli/lib/select-checks.test.ts:13-17|src/cli/lib/select-checks.test.ts:38-42",
-    "src/cli/lib/treeshake-bundle.test.ts:237-249|src/cli/lib/treeshake-bundle.test.ts:331-345",
+    "src/cli/lib/treeshake-bundle.test.ts:245-257|src/cli/lib/treeshake-bundle.test.ts:339-353",
     "src/cli/slash-command/bs/build-chunk.test.ts:29-37|src/cli/slash-command/bs/build-game.test.ts:15-23",
     "src/cli/slash-command/bs/build-chunk.test.ts:1328-1336|src/cli/slash-command/bs/build-chunk.test.ts:288-296",
     "src/cli/slash-command/bs/build-chunk.test.ts:1539-1544|src/cli/slash-command/bs/build-chunk.test.ts:501-506",
