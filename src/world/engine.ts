@@ -351,6 +351,17 @@ export interface BoardSmithWorldEngineOptions {
    */
   readonly actions: readonly ActionDefinition[];
   /**
+   * WHICH VERB MAY FINALIZE A VACANCY FROM THE CLOCK (ShufflewickPub #475), or
+   * nothing for a world that declares no such road.
+   *
+   * The bundle's `world.vacateByClock`, already held to its three rules by
+   * `readWorldDefinition`. It is here because the rule it carries is about a
+   * call made from INSIDE a running dispatch, and the engine is the only thing
+   * standing there: a host can see that a chair came back, and cannot see which
+   * line asked for it.
+   */
+  readonly vacateByClock?: string;
+  /**
    * WHAT ONE SEAT'S VIEW IS ABOUT (#95).
    *
    * The bundle's own declaration, taken by SEAT because that is what the world
@@ -483,6 +494,9 @@ export class BoardSmithWorldEngine implements WorldEngine {
   private readonly actions = new Map<string, ActionDefinition>();
   /** What a seat's view is about, from the bundle (#95). */
   private readonly view: WorldViewDeclaration;
+  /** The one verb that may free a chair from the clock (ShufflewickPub #475),
+   *  or undefined for a world that declares none. */
+  private readonly vacateByClock: string | undefined;
 
   /** Partition name to the id of its resident root. */
   private readonly residentIds = new Map<string, number>();
@@ -528,6 +542,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
     this.seats = new Map(options.seats);
     this.store = options.store;
     this.view = options.view;
+    this.vacateByClock = options.vacateByClock;
     this.budgets = options.budgets ?? worldBudgets();
     this.buildOnFirstUse = options.createPartition;
     this.buildSourceGame = options.sourceGame;
@@ -1860,6 +1875,11 @@ export class BoardSmithWorldEngine implements WorldEngine {
       convertCredits: (): never => {
         throw creditsUnavailable(action);
       },
+      // AN OFFER FREES NO CHAIR (ShufflewickPub #475), for `schedule`'s reason
+      // and more so: an offer runs once per watcher per refresh, on a path with
+      // no checkpoint and no rollback, so a release here would be a seat handed
+      // on that nothing ever wrote down.
+      vacate: () => refuse("vacate"),
       schedule: () => refuse("schedule"),
       cancel: () => refuse("cancel"),
       complete: () => refuse("complete"),
@@ -2259,7 +2279,13 @@ export class BoardSmithWorldEngine implements WorldEngine {
     // following move; a leaked schedule would arm a timer nobody asked for,
     // charged to whoever acted next; a leaked event would narrate one action's
     // news over another's.
-    const ledger: DispatchLedger = { completed: false, schedules: [], events: [], refused: null };
+    const ledger: DispatchLedger = {
+      completed: false,
+      schedules: [],
+      events: [],
+      refused: null,
+      vacated: null,
+    };
     const facilities = this.dispatchFacilities(
       command.name,
       named,
@@ -2330,7 +2356,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
         // what it costs is the room.
         dirty: this.dirtySet(command.name, named, touchedOnce()),
         schedules: ledger.schedules,
-        ...(ledger.completed ? { ending: "completed" as const } : {}),
+        ...outcomeOf(ledger),
       };
     } catch (error) {
       // A REFUSED ACTION LEAVES THE WORLD UNCHANGED, or the word is worthless
@@ -2413,6 +2439,44 @@ export class BoardSmithWorldEngine implements WorldEngine {
       ledger.refused = refusal;
       throw refusal;
     };
+    /**
+     * ONE CHAIR'S ANSWER, AND WHETHER THIS HANDLER MAY HAVE IT.
+     *
+     * Two refusals and not one, because they are two different mistakes -- a
+     * game reading a chair it never declared, and a host that did not answer
+     * one it was asked for -- and telling them apart is the difference between
+     * fixing a bundle and fixing a host. Written once because `activityOf` and
+     * `vacate` (ShufflewickPub #475) admit a chair on exactly the same terms:
+     * the host's own point read is what vouches for it, and a second copy of
+     * that rule is how the read and the release would come to admit different
+     * chairs.
+     */
+    const answeredSeat = (seat: number): DeclaredSeatActivityStamp => {
+      if (!namedSeats.includes(seat)) {
+        return raise(
+          worldRefusal(
+            "undeclared-activity",
+            `Action "${action}" asked for seat ${seat}'s activity, which it did not declare. ` +
+              "A phase says which chair it is about with `.about()`, before it runs, and the " +
+              "host answers one point read for it -- so a chair nobody named has no answer to " +
+              "give.",
+          ),
+        );
+      }
+      const answered = charge.declaredActivity.find((stamp) => stamp.seat === seat);
+      if (answered === undefined) {
+        return raise(
+          worldRefusal(
+            "activity-unanswered",
+            `Action "${action}" declared it was about seat ${seat}, and this host answered no ` +
+              "watermark for it. The declaration walk asks for a chair and the host supplies " +
+              "it before the handler runs; a handler reaching an unanswered chair means the " +
+              "walk was not driven to the end.",
+          ),
+        );
+      }
+      return answered;
+    };
     return {
       now: charge.now,
       timing,
@@ -2428,30 +2492,82 @@ export class BoardSmithWorldEngine implements WorldEngine {
       // host that did not answer one it was asked for -- and telling them apart
       // is the difference between fixing a bundle and fixing a host.
       activityOf: (seat: number): DeclaredSeatActivity => {
-        if (!namedSeats.includes(seat)) {
-          return raise(
-            worldRefusal(
-              "undeclared-activity",
-              `Action "${action}" asked for seat ${seat}'s activity, which it did not declare. ` +
-                "A phase says which chair it is about with `.about()`, before it runs, and the " +
-                "host answers one point read for it -- so a chair nobody named has no answer to " +
-                "give.",
-            ),
-          );
-        }
-        const answered = charge.declaredActivity.find((stamp) => stamp.seat === seat);
-        if (answered === undefined) {
-          return raise(
-            worldRefusal(
-              "activity-unanswered",
-              `Action "${action}" declared it was about seat ${seat}, and this host answered no ` +
-                "watermark for it. The declaration walk asks for a chair and the host supplies " +
-                "it before the handler runs; a handler reaching an unanswered chair means the " +
-                "walk was not driven to the end.",
-            ),
-          );
-        }
+        const answered = answeredSeat(seat);
         return { ...answered, inactiveSince: answered.at ?? answered.since };
+      },
+      // THE LAST RUNG OF A WORLD-OWNED TEARDOWN (ShufflewickPub #475).
+      //
+      // THE BUNDLE NAMES A SEAT AND NEVER A PLAYER. What it may name is what
+      // `answeredSeat` admits -- a chair this phase declared and the HOST
+      // answered a point read about -- and the roster key is resolved here,
+      // from this engine's own roster. So there is no string a bundle could
+      // write that would free somebody else's chair, and nothing to forge an
+      // owner with: the seat is the host's answer and the identity is ours.
+      //
+      // ONLY THE DECLARED VERB, checked against `world.vacateByClock` rather
+      // than against a flag on the action, because the declaration is the thing
+      // a reviewer reads and the host has already been told the same name.
+      vacate: (seat: number): void => {
+        if (this.vacateByClock === undefined) {
+          raise(
+            worldRefusal(
+              "not-the-vacancy-verb",
+              `Action "${action}" called ctx.world.vacate(), and this world declares no ` +
+                "`world.vacateByClock`. A world that names no clock verb never hands a chair " +
+                "on from the clock, which is an answer and not a gap -- declare " +
+                "`world: { vacateByClock: \"<verb>\" }` naming the seatless verb that finishes " +
+                "a teardown, or leave every chair held for as long as this world lasts.",
+            ),
+          );
+        }
+        if (action !== this.vacateByClock) {
+          raise(
+            worldRefusal(
+              "not-the-vacancy-verb",
+              `Action "${action}" called ctx.world.vacate(), and this world's vacancy verb is ` +
+                `"${this.vacateByClock}". One verb frees a chair here, declared as ` +
+                "`world.vacateByClock`, so that the line which hands a seat on is findable in " +
+                "the bundle. Move the release into that verb and schedule it as the last rung " +
+                "of this teardown.",
+            ),
+          );
+        }
+        const answered = answeredSeat(seat);
+        // THE HOST SAYS THE CHAIR IS ALREADY BACK. A completion retried after a
+        // cold wake runs against a roster that has already released it, so this
+        // is the same release rather than a second one -- which is the whole of
+        // how a retry frees exactly one chair without the bundle remembering
+        // anything.
+        if (answered.tenancy === "empty") return;
+        if (ledger.vacated !== null) {
+          if (ledger.vacated.seat === seat) return;
+          raise(
+            worldRefusal(
+              "vacancy-already-claimed",
+              `Action "${action}" finalized seat ${ledger.vacated.seat}'s vacancy and then seat ` +
+                `${seat}'s in the same dispatch. A release is one chair's own committed step: ` +
+                "the host writes it beside the checkpoint that proves THAT estate is down, so a " +
+                "second chair here is a teardown nothing proved. Schedule one occurrence per " +
+                "chair.",
+            ),
+          );
+        }
+        // THE IDENTITY IS RESOLVED HERE, from this engine's own roster, and a
+        // chair the host vouched for that this roster does not seat is a
+        // disagreement rather than a release of nobody.
+        const holder =
+          this.holderOf(seat) ??
+          raise(
+            worldRefusal(
+              "vacancy-unheld",
+              `Action "${action}" finalized seat ${seat}'s vacancy, the host answered that the ` +
+                `chair is "${answered.tenancy}", and this world seats nobody there. The roster ` +
+                "comes down from the host, so the two layers disagree about who holds this " +
+                "chair -- and a chair they disagree about is exactly the one that must not be " +
+                "handed on.",
+            ),
+          );
+        ledger.vacated = { seat, player: holder };
       },
       convertCredits: (): never => raise(creditsUnavailable(action)),
       partition: (name: string) => {
@@ -2872,6 +2988,23 @@ export class BoardSmithWorldEngine implements WorldEngine {
     this.seats.delete(player);
   }
 
+  /**
+   * WHO HOLDS THIS CHAIR, or null (ShufflewickPub #475).
+   *
+   * `seatFor` backwards, and the only reason it exists: a vacancy finalized by
+   * the clock names a SEAT, and the layer that counts chairs knows people by
+   * their roster key. Resolving it here rather than letting a bundle say it is
+   * the whole anti-impersonation argument -- a game that could name the key
+   * could name anybody's.
+   *
+   * O(seats) over a map a world holds one entry per PLAYER in, walked once per
+   * release, which happens once in a chair's life.
+   */
+  private holderOf(seat: number): string | null {
+    for (const [player, held] of this.seats) if (held === seat) return player;
+    return null;
+  }
+
   private seatFor(player: string): number {
     const seat = this.seats.get(player);
     if (seat === undefined) {
@@ -3230,6 +3363,29 @@ function sent(fields: Record<string, unknown>): Record<string, unknown> {
 }
 
 /** What one dispatch collects while the rules run. */
+/**
+ * WHAT A DISPATCH REPORTS BESIDE ITS DIRTY SET: the two facts a host cannot
+ * observe from outside.
+ *
+ * `ending`, which is a game reaching its own conclusion, and `vacated`, which
+ * is a world-owned teardown reaching its end (ShufflewickPub #475). Both are
+ * ABSENT rather than null when they did not happen: these travel as JSON, and a
+ * key whose value is `undefined` vanishes on the way, so "nothing ended here"
+ * and "nothing ended" would be the same frame with two spellings.
+ *
+ * The chair rides the ordinary result rather than a channel of its own, so it
+ * rides the same checkpoint the teardown's last write does: a host that wrote
+ * the release without the bytes would hand a newcomer an estate still standing.
+ */
+function outcomeOf(
+  ledger: DispatchLedger,
+): Pick<WorldCommandResult, "ending" | "vacated"> {
+  return {
+    ...(ledger.completed ? { ending: "completed" as const } : {}),
+    ...(ledger.vacated === null ? {} : { vacated: ledger.vacated }),
+  };
+}
+
 interface DispatchLedger {
   completed: boolean;
   readonly schedules: ScheduleRequest[];
@@ -3240,4 +3396,8 @@ interface DispatchLedger {
   /** The classified refusal a facility raised, kept so the failure path can
    *  rethrow the object rather than a fresh Error carrying only its message. */
   refused: WorldRefusal | null;
+  /** The chair this dispatch finalized the vacancy of (ShufflewickPub #475), or
+   *  null. Per dispatch like everything else on the ledger: a vacancy that
+   *  leaked into the next one would free a chair nothing proved was empty. */
+  vacated: { readonly seat: number; readonly player: string } | null;
 }

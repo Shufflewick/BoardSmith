@@ -54,7 +54,7 @@ import { describe, expect, it } from "vitest";
 import { Game, Space, type GameElement, type GameOptions } from "../engine/index.js";
 import type { ActionDefinition } from "../engine/index.js";
 import { createWorld, type WorldRunnerOptions } from "./definition.js";
-import { checkpointBytes } from "./stored-world.test-helper.js";
+import { checkpointBytes, drainScheduled } from "./stored-world.test-helper.js";
 import { worldAction, worldClockAction, type WorldNeedsRound } from "./action.js";
 import type {
   DeclaredSeatActivity,
@@ -229,15 +229,12 @@ function stamp(
 }
 
 /**
- * DRIVE ONE CLOCK DISPATCH THE WAY A HOST DOES.
+ * ONE CLOCK DISPATCH, DRIVEN THE WAY A HOST DOES.
  *
- * Declare, answer what the walk named, declare again, and apply with everything
- * the walk collected. The activity legs are answered by one point read per
- * declared seat -- exactly what a host's store does -- and the answers
- * ACCUMULATE across rounds, because the host is the side that remembers them:
- * the child holds no store, and must not hold a watermark between calls either.
+ * `drainScheduled` is the loop; this is only the default answer these cases
+ * share -- a chair that has never acted since this world began recording.
  */
-async function drain(
+function drain(
   runner: Awaited<ReturnType<typeof world>>,
   bytes: Record<string, StoredPartition>,
   options: {
@@ -247,41 +244,12 @@ async function drain(
     activityOf?: (seat: number) => DeclaredSeatActivityStamp;
   },
 ) {
-  const command = { name: options.name, args: options.args ?? {} };
-  const declared: DeclaredSeatActivityStamp[] = [];
-  const asked: number[] = [];
-  let supplied: Record<string, StoredPartition> = {};
-  for (;;) {
-    const needs = await runner.declare(
-      command,
-      null,
-      supplied,
-      { kind: "scheduled", timing: { due: options.due, missedCount: 0 } },
-      declared,
-    );
-    if (needs.partitions.length === 0 && needs.seats.length === 0) break;
-    supplied = {};
-    for (const name of needs.partitions) {
-      const stored = bytes[name];
-      if (stored === undefined) throw new Error(`test store has no partition "${name}"`);
-      supplied[name] = stored;
-    }
-    for (const seat of needs.seats) {
-      asked.push(seat);
-      declared.push((options.activityOf ?? ((one) => stamp(one, null)))(seat));
-    }
-  }
-  const result = await runner.apply({
-    player: null,
-    command,
-    timing: { due: options.due, missedCount: 0 },
-    arrivedAt: options.due,
-    allowance: { unkeyed: 0, keys: [], worldPending: 0 },
-    presence: [] as readonly number[],
-    activity: null,
-    declaredActivity: declared,
+  return drainScheduled(runner, bytes, {
+    name: options.name,
+    ...(options.args === undefined ? {} : { args: options.args }),
+    due: options.due,
+    answer: options.activityOf ?? ((seat) => stamp(seat, null)),
   });
-  return { result, asked };
 }
 
 /** Genesis, as a host's store would hold it. */
@@ -433,7 +401,7 @@ describe("#423 — a successor is elected through cold bounded continuations", (
       [3, "held"],
     ]);
     let bytes = (await launched()).bytes;
-    const askedPerPhase: number[][] = [];
+    const askedPerPhase: (readonly number[])[] = [];
 
     // FOUR PHASES: three members, and the one that runs off the end of the
     // roster and asks about nobody.

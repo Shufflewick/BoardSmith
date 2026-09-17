@@ -180,6 +180,24 @@ export const WORLD_REFUSALS = {
       "for the same reason: the declaration is in the bundle's source, so the " +
       "same phase will read the same undeclared chair on its next occurrence",
   },
+  "not-the-vacancy-verb": {
+    owner: "game",
+    why:
+      "ShufflewickPub #475: an action called `ctx.world.vacate()` and it is not " +
+      "the verb this world declared as `world.vacateByClock`. GAME-owned and " +
+      "refused rather than ignored: the verb that frees a chair is a line in " +
+      "the bundle a reviewer can find, and a call site anywhere else would make " +
+      "\"which verb gives a chair back\" a question only a trace could answer",
+  },
+  "vacancy-already-claimed": {
+    owner: "game",
+    why:
+      "ShufflewickPub #475: one dispatch finalized the vacancy of two DIFFERENT " +
+      "chairs. A release is one chair's own committed step -- the host writes it " +
+      "beside the checkpoint that proves that estate is down -- so a second " +
+      "chair in the same dispatch is a teardown that was never proved. Naming " +
+      "the same chair twice is the same release and is admitted",
+  },
   "invalid-seat-declaration": {
     owner: "game",
     why:
@@ -303,6 +321,16 @@ export const WORLD_REFUSALS = {
       "walk told nothing was folded names one partition, the handler then owes " +
       "ten, and the nine it may not write are production the world silently " +
       "never does",
+  },
+  "vacancy-unheld": {
+    owner: "platform",
+    why:
+      "ShufflewickPub #475: a host answered that a chair is held or erased, and " +
+      "this world's own roster seats nobody there. PLATFORM-owned for the reason " +
+      "`activity-answered-wrong` is -- the roster is handed down by the host and " +
+      "a bundle cannot correct it -- and refused rather than reported as a " +
+      "release of nobody, because a chair the two layers disagree about is " +
+      "exactly the chair that must not be handed on",
   },
   "partition-not-resident": {
     owner: "platform",
