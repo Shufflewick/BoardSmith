@@ -13,7 +13,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { ref, nextTick, effectScope } from 'vue';
+import { ref, nextTick, effectScope, type Ref } from 'vue';
 import {
   useActionController,
   injectActionController,
@@ -2757,6 +2757,94 @@ describe('useActionController', () => {
 
       disabledActions.value = {};
       expect((await controller.execute('endTurn')).success).toBe(true);
+    });
+  });
+
+  /**
+   * #272: A DRAFT BELONGS TO THE SEAT THAT STARTED IT.
+   *
+   * Both shells keep the panel mounted across a change of viewer -- the dev
+   * bar's seat switcher is the way anyone checks that one seat cannot see
+   * another's private information, and the platform's own seat switch is the
+   * same move. An action half-filled as seat 1, still on screen under seat 2,
+   * is that seat's prompt and that seat's candidates drawn over a board that
+   * belongs to somebody else.
+   */
+  describe('the viewer changing seat', () => {
+    /** A controller whose viewer is the given seat, and nothing else unusual. */
+    function seatedAt(playerSeat: Ref<number>, extra: Partial<Parameters<typeof useActionController>[0]> = {}) {
+      return useActionController({ sendAction, availableActions, actionMetadata, isMyTurn, playerSeat, ...extra });
+    }
+
+    it('abandons an in-progress action', async () => {
+      const playerSeat = ref(1);
+      const controller = seatedAt(playerSeat);
+
+      controller.start('playCard');
+      await nextTick();
+      expect(controller.currentAction.value).toBe('playCard');
+      expect(controller.currentPick.value?.name).toBe('card');
+
+      playerSeat.value = 2;
+      await nextTick();
+
+      // Asked as one fact, because it is one: nothing of the draft is left.
+      expect({
+        action: controller.currentAction.value,
+        args: controller.currentArgs.value,
+        pick: controller.currentPick.value,
+      }).toEqual({ action: null, args: {}, pick: null });
+    });
+
+    it('drops the collected args as well, so nothing survives into the next seat', async () => {
+      const playerSeat = ref(1);
+      const controller = seatedAt(playerSeat);
+
+      // Two selections, so binding the first leaves the action mid-draft
+      // rather than completing and submitting it.
+      controller.start('attack');
+      await nextTick();
+      controller.fill('attacker', 1);
+      await nextTick();
+      expect(controller.currentArgs.value).toEqual({ attacker: 1 });
+
+      playerSeat.value = 2;
+      await nextTick();
+
+      expect(controller.currentArgs.value).toEqual({});
+      expect(sendAction).not.toHaveBeenCalled();
+    });
+
+    it('does not ask the server to cancel, because the seat it would name is the new one', async () => {
+      const playerSeat = ref(1);
+      const cancelPendingAction = vi.fn().mockResolvedValue(undefined);
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        playerSeat,
+        cancelPendingAction,
+      });
+
+      controller.start('playCard');
+      await nextTick();
+      playerSeat.value = 2;
+      await nextTick();
+
+      expect(cancelPendingAction).not.toHaveBeenCalled();
+    });
+
+    it('leaves the draft alone when the seat is re-asserted unchanged', async () => {
+      const playerSeat = ref(1);
+      const controller = seatedAt(playerSeat);
+
+      controller.start('playCard');
+      await nextTick();
+      playerSeat.value = 1;
+      await nextTick();
+
+      expect(controller.currentAction.value).toBe('playCard');
     });
   });
 

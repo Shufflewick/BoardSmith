@@ -61,14 +61,53 @@ let messageCounter = 0;
 // this index so pre-clear messages are never re-added when new ones arrive.
 let lastProcessedSourceIndex = 0;
 
+/** A line's text and the game's classification of it, however it was written. */
+function lineOf(message: HistoryMessage): { text: string; type: string } {
+  if (typeof message === 'string') return { text: message, type: 'action' };
+  return { text: message.text, type: message.type ? message.type : 'action' };
+}
+
+/**
+ * IS THIS SOURCE LIST AN APPEND TO THE ONE ALREADY DRAWN? (#272)
+ *
+ * The log is drawn once per line and kept, because the arrival time it stamps
+ * on a line is not re-derivable afterwards and a growing list is what a log
+ * normally is. That made this an ACCUMULATOR, though, and an accumulator has
+ * nowhere to put a list that is not an extension of what it holds: a seat
+ * switch hands the shell a different seat's log entirely, and every line of the
+ * seat that left stayed on screen until the page was reloaded -- which is one
+ * player's private lines drawn over another player's board.
+ *
+ * So the question is asked rather than assumed: a list is an append when it is
+ * at least as long as what was processed and still carries the same lines in
+ * the places already drawn. Anything else is a DIFFERENT log, and a different
+ * log is drawn from scratch.
+ */
+function isAppendToDrawn(source: readonly HistoryMessage[]): boolean {
+  if (source.length < lastProcessedSourceIndex) return false;
+  // The last line already drawn is the cheap witness: every line before it came
+  // in the same deliveries, and a source that dropped or replaced anything
+  // moves it.
+  if (lastProcessedSourceIndex === 0) return true;
+  const drawn = processedMessages.value[processedMessages.value.length - 1];
+  // NOTHING DRAWN, BUT LINES PROCESSED, is the player having pressed Clear.
+  // That is the one case where holding no lines is not a different log, and
+  // rebuilding here would put back exactly what they asked to be rid of.
+  if (!drawn) return true;
+  const incoming = lineOf(source[lastProcessedSourceIndex - 1]!);
+  return incoming.text === drawn.text && incoming.type === drawn.type;
+}
+
 watch(
   () => props.messages,
   (newMessages) => {
+    if (!isAppendToDrawn(newMessages)) {
+      processedMessages.value = [];
+      lastProcessedSourceIndex = 0;
+    }
     if (newMessages.length > lastProcessedSourceIndex) {
       for (let i = lastProcessedSourceIndex; i < newMessages.length; i++) {
-        const msg = newMessages[i];
-        const text = typeof msg === 'string' ? msg : msg.text;
-        const type = typeof msg === 'object' && msg.type ? msg.type : 'action';
+        const { text, type } = lineOf(newMessages[i]!);
 
         if (text) {
           processedMessages.value.push({
