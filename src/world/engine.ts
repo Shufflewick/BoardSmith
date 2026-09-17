@@ -96,6 +96,7 @@ import type {
   SeatActivityStamp,
   WorldActionOffer,
   WorldDispatchNeeds,
+  WorldDispatchWhen,
   WorldCommand,
   WorldCommandResult,
   WorldCommandStamp,
@@ -168,6 +169,53 @@ function declaredOnce(names: readonly string[]): readonly string[] {
 }
 
 /**
+ * THE CLOCK'S ROAD CARRIES ITS OCCURRENCE OR IT DOES NOT RUN (#271).
+ *
+ * `apply` is handed the timing whatever the declaration side was told, so a
+ * walk driven as an arrival would size its catch-up against a fold of nothing
+ * and then hand the handler a fold of ten -- the partitions past the first
+ * undeclared, and the work they were owed silently lost. That is the exact
+ * shortfall `world.timing` exists to end, so it is refused rather than
+ * answered.
+ */
+function assertClockIsTimed(action: string, seat: number | null, when: WorldDispatchWhen): void {
+  if (seat !== null || when.kind === "scheduled") return;
+  throw worldRefusal(
+    "untimed-clock-declaration",
+    `The clock's action "${action}" had its declaration driven as an arrival, with no scheduled ` +
+      "occurrence. A due event's declaration is answered against the occurrence it is " +
+      "running -- its own `due`, and how many occurrences were folded into it -- so drive it " +
+      'with `{ kind: "scheduled", timing }`, the same timing `apply` is given.',
+  );
+}
+
+/**
+ * A SEAT'S OWN INSTANT, as the read paths declare against (#271).
+ *
+ * An offer, a pick and a quote belong to a person looking at the world, and a
+ * person is never an occurrence of a recurrence -- so there is nothing to fold
+ * and `world.timing` is null on all three. The clock's own road builds its
+ * `when` from the timing it was handed instead.
+ */
+function arrivalAt(now: number): WorldDispatchWhen {
+  return { kind: "arrival", now };
+}
+
+/**
+ * WHEN A DISPATCH IS HAPPENING, AS ONE FACT (#271).
+ *
+ * The clock's road declares against its whole occurrence -- `due`, and how many
+ * occurrences were folded into it -- so a catch-up's declaration can size
+ * itself instead of guessing a ceiling. A seat's road has no occurrence at all.
+ */
+function whenOf(
+  timing: { readonly due: number; readonly missedCount: number } | null,
+  now: number,
+): WorldDispatchWhen {
+  return timing === null ? arrivalAt(now) : { kind: "scheduled", timing };
+}
+
+/**
  * Every element id a serialized subtree claims.
  *
  * What the rollback has to free before it can graft that subtree back: a
@@ -231,6 +279,20 @@ export interface WorldDeclarationFacilities extends WorldResidency {
    * instant the offer is being made at.
    */
   readonly now: number;
+  /**
+   * WHICH OCCURRENCE OF A RECURRENCE THIS IS, or null for a seat's own command
+   * and for an offer (#271).
+   *
+   * The same field, with the same meaning, that `execute` reads as
+   * `world.timing` -- and it is here because a declaration is where a
+   * catch-up's SIZE has to be known. `missedCount` is how many occurrences got
+   * no call of their own and were folded into this one; this call is not one of
+   * them, so a walk that names a partition per occurrence names
+   * `1 + missedCount` of them. Without it the only declaration available was a
+   * fixed ceiling, and every occurrence past the ceiling was work the world
+   * silently never did.
+   */
+  readonly timing: { readonly due: number; readonly missedCount: number } | null;
 }
 
 /**
@@ -534,8 +596,12 @@ export class BoardSmithWorldEngine implements WorldEngine {
    * therefore the wrong one. A view that wants the time takes it from the
    * partition it is projecting.
    */
-  private declaringWorld(now: number): WorldDeclarationFacilities {
-    return { ...this.residentWorld(), now };
+  private declaringWorld(when: WorldDispatchWhen): WorldDeclarationFacilities {
+    return when.kind === "scheduled"
+      ? // ITS CLOCK IS ITS OCCURRENCE'S OWN `due` (#375), read off the timing
+        // rather than taken as a second number a host could get wrong.
+        { ...this.residentWorld(), now: when.timing.due, timing: when.timing }
+      : { ...this.residentWorld(), now: when.now, timing: null };
   }
 
   /**
@@ -958,7 +1024,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
         // may declare an activity round, and a seatless action is never
         // offered. There is nothing here to read and nothing to hydrate.
         if (round.kind === "activity") continue;
-        const unmet = this.declareRound(round, seat, {}, now).filter(
+        const unmet = this.declareRound(round, seat, {}, arrivalAt(now)).filter(
           (name) => !this.residentIds.has(name),
         );
         // ONE ROUND AT A TIME. A later round may read what an earlier one
@@ -987,7 +1053,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
     try {
       // ROUND ONE (and any round that shares its place), before anything is
       // asked of the player.
-      await this.hydrateRounds(definition, 0, seat, {}, named, namedSeats, stamp.now);
+      await this.hydrateRounds(definition, 0, seat, {}, named, namedSeats, arrivalAt(stamp.now));
 
       // WITH EMPTY ARGS, exactly as a table evaluates availability. An action
       // whose condition is false is not offered and no further round runs, so a
@@ -1025,7 +1091,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
       let satisfiable = true;
       for (let index = 0; index < definition.selections.length; index++) {
         if (index > 0) {
-          await this.hydrateRounds(definition, index, seat, {}, named, namedSeats, stamp.now);
+          await this.hydrateRounds(definition, index, seat, {}, named, namedSeats, arrivalAt(stamp.now));
         }
         const pick = this.pickOf(definition, index, acting, named);
         selections.push(pick);
@@ -1136,7 +1202,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
     bindWorldFacilities(this.game, this.readOnlyFacilities(definition.name, named, stamp));
     try {
       for (let step = 0; step <= through; step++) {
-        await this.hydrateRounds(definition, step, seat, args, named, namedSeats, stamp.now);
+        await this.hydrateRounds(definition, step, seat, args, named, namedSeats, arrivalAt(stamp.now));
       }
       return answer(acting, named);
     } finally {
@@ -1272,7 +1338,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
         if (round.before !== step) continue;
         // The activity round is the clock's, and a seat's read never asks one.
         if (round.kind === "activity") continue;
-        const unmet = this.declareRound(round, seat, args, now).filter(
+        const unmet = this.declareRound(round, seat, args, arrivalAt(now)).filter(
           (name) => !this.residentIds.has(name),
         );
         if (unmet.length > 0) return declaredOnce(unmet);
@@ -1428,16 +1494,18 @@ export class BoardSmithWorldEngine implements WorldEngine {
    * are still absent -- that is the whole of declare-then-apply.
    *
    * `player` is null for a scheduled event, which reaches a seatless action's
-   * declaration as a null seat and no player at all.
+   * declaration as a null seat and no player at all -- and whose `when` is the
+   * occurrence that came due rather than an arrival (#271).
    */
   commandNeeds(
     player: string | null,
     command: WorldCommand,
-    now: number,
+    when: WorldDispatchWhen,
     declared: readonly DeclaredSeatActivityStamp[],
   ): WorldDispatchNeeds {
     const seat = player === null ? null : this.seatFor(player);
     const definition = this.actionFor(command.name, seat);
+    assertClockIsTimed(command.name, seat, when);
     // WHICH OF THE HOST'S ANSWERS THIS WALK HAS ACCOUNTED FOR SO FAR.
     //
     // IN ORDER, and the order is what makes the walk terminate. A host answers
@@ -1449,7 +1517,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
     let answered = 0;
     for (const round of definition.world!.needs) {
       if (round.kind === "activity") {
-        const about = this.declareSeatRound(round, command.args, now, definition.name);
+        const about = this.declareSeatRound(round, command.args, when, definition.name);
         if (about === null) continue;
         const already = declared[answered];
         if (already === undefined) return { partitions: [], seats: [about] };
@@ -1465,7 +1533,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
         answered += 1;
         continue;
       }
-      const missing = this.declareRound(round, seat, command.args, now).filter(
+      const missing = this.declareRound(round, seat, command.args, when).filter(
         (name) => !this.residentIds.has(name),
       );
       if (missing.length > 0) return { partitions: declaredOnce(missing), seats: [] };
@@ -1489,7 +1557,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
     round: WorldPartitionsRound,
     seat: number | null,
     args: Readonly<Record<string, unknown>>,
-    now: number,
+    when: WorldDispatchWhen,
   ): readonly string[] {
     const player = seat === null ? null : this.playerFor(seat);
     return declaredOnce(
@@ -1503,7 +1571,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
           // with when this is absent is `game.first(Class, name)`, which walks
           // the resident tree through the projection to rediscover an id
           // `residentIds` already holds -- the whole of the cost #374 measured.
-          world: this.declaringWorld(now),
+          world: this.declaringWorld(when),
         }),
       ),
     );
@@ -1525,7 +1593,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
   private declareSeatRound(
     round: WorldActivityRound,
     args: Readonly<Record<string, unknown>>,
-    now: number,
+    when: WorldDispatchWhen,
     action: string,
   ): number | null {
     const about = this.game.readingOnly(() =>
@@ -1533,7 +1601,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
         game: readOnlyProjection(this.game),
         seat: null,
         args: args as Record<string, unknown>,
-        world: this.declaringWorld(now),
+        world: this.declaringWorld(when),
       }),
     );
     if (about === null) return null;
@@ -1565,7 +1633,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
     args: Readonly<Record<string, unknown>>,
     named: string[],
     namedSeats: number[],
-    now: number,
+    when: WorldDispatchWhen,
   ): Promise<void> {
     for (const round of definition.world!.needs) {
       if (round.before !== step) continue;
@@ -1576,11 +1644,11 @@ export class BoardSmithWorldEngine implements WorldEngine {
       // resident tree the declaration walk saw -- so what `activityOf` admits
       // is exactly what the host was asked for and nothing else.
       if (round.kind === "activity") {
-        const about = this.declareSeatRound(round, args, now, definition.name);
+        const about = this.declareSeatRound(round, args, when, definition.name);
         if (about !== null && !namedSeats.includes(about)) namedSeats.push(about);
         continue;
       }
-      for (const name of this.declareRound(round, seat, args, now)) {
+      for (const name of this.declareRound(round, seat, args, when)) {
         if (!named.includes(name)) named.push(name);
         await this.ensureResident(name);
       }
@@ -2043,13 +2111,16 @@ export class BoardSmithWorldEngine implements WorldEngine {
     // `named` is the union of every round, and it is what the dirty set starts
     // from and what `assertDeclared` holds the action to.
     const named: string[] = [];
+    // WHEN THIS DISPATCH IS HAPPENING, handed whole to every round of the walk
+    // below and to the handler after it (#271).
+    const when = whenOf(timing, charge.now);
     // AND WHICH CHAIRS IT NAMED (ShufflewickPub #423), evaluated in the same
     // walk and in the same order the host was asked in. It is what `activityOf`
     // admits, so a handler can read exactly the watermarks its declaration
     // asked for and no others.
     const namedSeats: number[] = [];
     for (let step = 0; step <= definition.selections.length; step++) {
-      await this.hydrateRounds(definition, step, seat, command.args, named, namedSeats, charge.now);
+      await this.hydrateRounds(definition, step, seat, command.args, named, namedSeats, when);
     }
 
     // Raised once per command and stamped on everything this one NAMED, so two

@@ -291,6 +291,19 @@ export const WORLD_REFUSALS = {
       "the end before `apply`. PLATFORM-owned for the reason " +
       "`activity-answered-wrong` is: the loop belongs to the host",
   },
+  "untimed-clock-declaration": {
+    owner: "platform",
+    why:
+      "#271: a host drove a CLOCK action's declaration as a seat's arrival, so " +
+      "the walk was answered with no occurrence -- no `due` of its own and no " +
+      "fold -- while the `apply` that follows is handed both. PLATFORM-owned " +
+      "for the reason the two activity codes beside it are: the declaration " +
+      "loop belongs to the host, and a bundle cannot correct it. It is refused " +
+      "rather than tolerated because a catch-up sizes itself from the fold: a " +
+      "walk told nothing was folded names one partition, the handler then owes " +
+      "ten, and the nine it may not write are production the world silently " +
+      "never does",
+  },
   "partition-not-resident": {
     owner: "platform",
     why: "a partition was serialized or read without being adopted, which means the engine and the store disagree about what is loaded",

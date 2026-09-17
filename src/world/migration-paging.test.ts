@@ -23,6 +23,11 @@ import type { WorldMigrated } from "./runner.js";
 import { worldAction } from "./action.js";
 import type { DeclaredSeatActivityStamp, StoredPartition } from "./contract.js";
 
+/** A SEAT'S ARRIVAL, as a declaration is told when it is happening (#271).
+ *  The clock's road passes its whole occurrence instead. */
+const arrival = (now: number) => ({ kind: "arrival", now }) as const;
+
+
 class Room extends Space<Demo> {
   tally = 0;
 }
@@ -226,7 +231,7 @@ describe("#407 — a migrated page may be let go of", () => {
     expect(JSON.parse(JSON.stringify(after.d!.json)).attributes.tally).toBe(1);
 
     const command = { name: "poke", args: {} };
-    await runner.declare(command, "p1", { a: after.a! }, 0, []);
+    await runner.declare(command, "p1", { a: after.a! }, arrival(0), []);
     const result = await runner.apply({ player: "p1", command, timing: null, ...STAMP });
 
     // ONLY the room the command named. A touch-mark left behind by the
@@ -245,7 +250,7 @@ describe("#407 — a migrated page may be let go of", () => {
     runner.evict(["c", "d"]);
 
     const command = { name: "poke", args: {} };
-    await runner.declare(command, "p1", {}, 0, []);
+    await runner.declare(command, "p1", {}, arrival(0), []);
     const result = await runner.apply({ player: "p1", command, timing: null, ...STAMP });
 
     expect(result.dirty).toEqual(["a"]);
@@ -988,7 +993,7 @@ describe("#246 — a transform page emits the roots its own source root splits i
     const stored: Record<string, StoredPartition> = {
       "owner-1": { parentId: 0, json: JSON.parse(answer.partitions["owner-1"]!) },
     };
-    await runner.declare(command, "p1", stored, 0, []);
+    await runner.declare(command, "p1", stored, arrival(0), []);
     const result = await runner.apply({ player: "p1", command, timing: null, ...STAMP });
 
     expect(result.dirty).toEqual(["owner-1"]);

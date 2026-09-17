@@ -30,3 +30,25 @@ export class MapStore implements WorldPartitionSource {
 export function offerStamp(now: number, presence: readonly number[] = [1, 2]): WorldOfferStamp {
   return { now, presence, activity: { seat: 1, at: null, since: now } };
 }
+
+/**
+ * ONE CHECKPOINT, AS A HOST WRITES ONE.
+ *
+ * Serialize what the dispatch dirtied and fold it back into the bytes the
+ * store holds, so the NEXT wake starts from bytes rather than from a live
+ * tree. Shared, because a cold-wake case is the only way to see what a
+ * declaration really asks a host to load and every such case needs this same
+ * three lines.
+ */
+export async function checkpointBytes(
+  runner: { serialize(dirty: readonly string[]): Promise<{ partitions: Record<string, string> }> },
+  bytes: Record<string, StoredPartition>,
+  dirty: readonly string[],
+): Promise<Record<string, StoredPartition>> {
+  const written = await runner.serialize(dirty);
+  const next = { ...bytes };
+  for (const [name, json] of Object.entries(written.partitions)) {
+    next[name] = { parentId: bytes[name]!.parentId, json: JSON.parse(json) as unknown };
+  }
+  return next;
+}

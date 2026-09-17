@@ -54,6 +54,7 @@ import { describe, expect, it } from "vitest";
 import { Game, Space, type GameElement, type GameOptions } from "../engine/index.js";
 import type { ActionDefinition } from "../engine/index.js";
 import { createWorld, type WorldRunnerOptions } from "./definition.js";
+import { checkpointBytes } from "./stored-world.test-helper.js";
 import { worldAction, worldClockAction, type WorldNeedsRound } from "./action.js";
 import type {
   DeclaredSeatActivity,
@@ -251,7 +252,13 @@ async function drain(
   const asked: number[] = [];
   let supplied: Record<string, StoredPartition> = {};
   for (;;) {
-    const needs = await runner.declare(command, null, supplied, options.due, declared);
+    const needs = await runner.declare(
+      command,
+      null,
+      supplied,
+      { kind: "scheduled", timing: { due: options.due, missedCount: 0 } },
+      declared,
+    );
     if (needs.partitions.length === 0 && needs.seats.length === 0) break;
     supplied = {};
     for (const name of needs.partitions) {
@@ -284,20 +291,6 @@ async function launched() {
   return { runner, bytes: { ...genesis.partitions } };
 }
 
-/** Re-read what a dispatch wrote, so the next phase starts from bytes rather
- *  than from a live tree. */
-async function checkpoint(
-  runner: Awaited<ReturnType<typeof world>>,
-  bytes: Record<string, StoredPartition>,
-  dirty: readonly string[],
-): Promise<Record<string, StoredPartition>> {
-  const written = await runner.serialize(dirty);
-  const next = { ...bytes };
-  for (const [name, json] of Object.entries(written.partitions)) {
-    next[name] = { parentId: bytes[name]!.parentId, json: JSON.parse(json) as unknown };
-  }
-  return next;
-}
 
 describe("#423 — a world-owned phase declares the seat it asks about", () => {
   it("answers an EXISTING seat that will never return, with no player command anywhere", async () => {
@@ -404,7 +397,7 @@ describe("#423 — an overdue destructive deadline rechecks the real watermark",
     expect(result.schedules).toEqual([
       { key: "destroy:1", delayMs: 19 * DAY, action: "destroy", args: { seat: 1 } },
     ]);
-    const after = await checkpoint(runner, bytes, result.dirty);
+    const after = await checkpointBytes(runner, bytes, result.dirty);
     await drain(world(), after, { name: "report", due: OPENED });
     expect(reported.destroyed).toBe(0);
   });
@@ -421,7 +414,7 @@ describe("#423 — an overdue destructive deadline rechecks the real watermark",
 
     expect(result.schedules).toEqual([]);
     expect(result.dirty).toContain("hall");
-    const after = await checkpoint(runner, bytes, result.dirty);
+    const after = await checkpointBytes(runner, bytes, result.dirty);
     await drain(world(), after, { name: "report", due: OPENED });
     expect(reported.destroyed).toBe(1);
   });
@@ -456,7 +449,7 @@ describe("#423 — a successor is elected through cold bounded continuations", (
           stamp(seat, watermarks.get(seat) ?? null, OPENED, tenancies.get(seat) ?? "empty"),
       });
       askedPerPhase.push(asked);
-      bytes = await checkpoint(cold, bytes, result.dirty);
+      bytes = await checkpointBytes(cold, bytes, result.dirty);
     }
 
     // ONE seat per phase, and none at all once the roster is exhausted.
@@ -484,7 +477,7 @@ describe("#423 — a successor is elected through cold bounded continuations", (
         activityOf: (seat) =>
           stamp(seat, watermarks.get(seat) ?? null, OPENED, tenancies.get(seat) ?? "empty"),
       });
-      bytes = await checkpoint(cold, bytes, result.dirty);
+      bytes = await checkpointBytes(cold, bytes, result.dirty);
     }
 
     await drain(world(), bytes, { name: "report", due: OPENED });

@@ -15,6 +15,11 @@
 import { expect, it } from "vitest";
 import type { WorldEngine } from "./contract.js";
 
+/** A SEAT'S ARRIVAL, as a declaration is told when it is happening (#271).
+ *  The clock's road passes its whole occurrence instead. */
+const arrival = (now: number) => ({ kind: "arrival", now }) as const;
+
+
 /** Build a fresh engine holding at least the two named players and two
  *  partitions. The suite supplies nothing: how a world is constructed is the
  *  engine's business. */
@@ -132,7 +137,7 @@ export function assertWorldEngineConformance(makeEngine: WorldEngineFactory): vo
     const resident = engine.residency().map(({ name }) => name).sort();
     const command = { name: "touch", args: {} };
 
-    const named = engine.commandNeeds(alice, command, STAMP.now, []).partitions;
+    const named = engine.commandNeeds(alice, command, arrival(STAMP.now), []).partitions;
     expect(Array.isArray(named)).toBe(true);
     expect(engine.residency().map(({ name }) => name).sort()).toEqual(resident);
 
@@ -141,7 +146,7 @@ export function assertWorldEngineConformance(makeEngine: WorldEngineFactory): vo
     // than passing quietly, which is the property the ceiling used to buy.
     const walked = new Set<string>(named);
     for (let round = 0; ; round++) {
-      const needs = engine.commandNeeds(alice, command, STAMP.now, []).partitions;
+      const needs = engine.commandNeeds(alice, command, arrival(STAMP.now), []).partitions;
       if (needs.length === 0) break;
       expect(round, "a command's declaration walk did not end").toBeLessThan(16);
       for (const name of needs) walked.add(name);
@@ -159,7 +164,7 @@ export function assertWorldEngineConformance(makeEngine: WorldEngineFactory): vo
     // than reaching `player.seat` on nothing and answering with a TypeError out
     // of game code. The clock's own verbs are seatless, and `worldClockAction()` is
     // enforced on BOTH roads` below is where the pair is asserted.
-    expect(() => engine.commandNeeds(null, command, STAMP.now, []).partitions).toThrow(/no player/);
+    expect(() => engine.commandNeeds(null, command, arrival(STAMP.now), []).partitions).toThrow(/no player/);
   });
 
   // "viewFor is PER PLAYER" USED TO BE ASSERTED HERE, AND IS RETIRED

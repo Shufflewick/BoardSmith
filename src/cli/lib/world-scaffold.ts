@@ -447,7 +447,17 @@ async function perform(
   arrivedAt: number = T0,
 ) {
   const declaredActivity = await walkDeclaration(
-    (supplied, declared) => runner.declare(command, player, supplied, arrivedAt, declared),
+    (supplied, declared) =>
+      runner.declare(
+        command,
+        player,
+        supplied,
+        // THE CLOCK DECLARES AGAINST ITS WHOLE OCCURRENCE (#271): its own
+        // \`due\`, and how many occurrences were folded into it, so a catch-up
+        // can name one partition per occurrence instead of guessing a ceiling.
+        timing === null ? { kind: 'arrival', now: arrivedAt } : { kind: 'scheduled', timing },
+        declared,
+      ),
     unstored,
     unrecorded,
   );
@@ -521,7 +531,13 @@ describe('the world', () => {
     const { runner } = launch();
     await runner.genesis();
     await expect(
-      runner.declare({ name: 'ripen', args: { seat: 1 } }, 'alice', {}, T0, []),
+      runner.declare(
+        { name: 'ripen', args: { seat: 1 } },
+        'alice',
+        {},
+        { kind: 'arrival', now: T0 },
+        [],
+      ),
     ).rejects.toThrow();
   });
 

@@ -273,6 +273,12 @@ export interface WorldActionContext<G extends Game = Game> extends ActionContext
  * fallback that masks the real problem later -- the flat table's `requireSeat`
  * and `ownHolding` helpers exist precisely because the old model let a null
  * seat reach a handler that assumed one. Here the type says it.
+ *
+ * ITS OCCURRENCE IS ON `world.timing` (#271): the `due` this call is for, and
+ * how many occurrences of the recurrence were folded into it. This call is not
+ * one of them, so a handler that produces at a rate integrates with
+ * `1 + timing.missedCount` -- and its declaration reads the same field, which
+ * is what lets it name the partitions all of them will be written into.
  */
 export interface WorldClockContext<G extends Game = Game> {
   readonly game: G;
@@ -404,9 +410,17 @@ export interface WorldClockNeedsContext<G extends Game = Game> {
   readonly game: G;
   readonly seat: null;
   readonly args: Record<string, unknown>;
-  /** As `WorldNeedsContext.world` (#374, #375). A clock's declaration reads the
-   *  same resident state a seat's does, and its `now` is the event's own
-   *  `due` -- the instant the clock is acting at. */
+  /**
+   * As `WorldNeedsContext.world` (#374, #375). A clock's declaration reads the
+   * same resident state a seat's does, and its `now` is the event's own
+   * `due` -- the instant the clock is acting at.
+   *
+   * AND ITS `timing` IS THE WHOLE OCCURRENCE (#271), which this road is the
+   * reason for: a catch-up names one partition per folded occurrence, and what
+   * a handler may WRITE is what its declaration NAMED. A declaration that could
+   * not see the fold had to name a fixed maximum, and every occurrence past it
+   * was work the world silently never did.
+   */
   readonly world: WorldDeclarationFacilities;
 }
 

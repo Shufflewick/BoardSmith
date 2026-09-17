@@ -105,8 +105,14 @@ async function dispatch(
   },
 ) {
   const command = { name: options.name, args: {} };
-  await runner.declare(command, options.player, {}, options.at);
-  await runner.declare(command, options.player, { hall }, options.at);
+  // The same `when` both declarations and the apply below run under (#271): the
+  // clock's whole occurrence, or a seat's arrival instant.
+  const when =
+    options.timing === undefined
+      ? ({ kind: "arrival", now: options.at } as const)
+      : ({ kind: "scheduled", timing: options.timing } as const);
+  await runner.declare(command, options.player, {}, when, []);
+  await runner.declare(command, options.player, { hall }, when, []);
   return runner.apply({
     player: options.player,
     command,

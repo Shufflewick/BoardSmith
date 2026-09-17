@@ -445,6 +445,37 @@ export interface WorldDispatchNeeds {
 }
 
 /**
+ * WHEN A DISPATCH'S DECLARATION IS BEING MADE, AS ONE FACT (#271).
+ *
+ * A declaration is answered against an instant -- `world.now` -- and a
+ * SCHEDULED one is also answered against an OCCURRENCE: which moment on the
+ * recurrence this is, and how many moments were folded into it because nothing
+ * ran for them. A rate-producing recurrence needs the second half in the
+ * declaration and not only in the handler, because what a handler may write is
+ * what its declaration named: a body that learns it owes ten spawns into ten
+ * partitions cannot make them unless the walk already named ten.
+ *
+ * TWO CASES RATHER THAN TWO FIELDS, so a host cannot hand the walk one instant
+ * and the handler another. A scheduled dispatch's clock IS its occurrence's own
+ * `due` (#375) -- the engine reads it off the timing rather than taking a
+ * second number that could disagree with it.
+ */
+export type WorldDispatchWhen =
+  /** A seat's command, at the instant the platform stamped its arrival. */
+  | { readonly kind: "arrival"; readonly now: number }
+  /**
+   * The clock's own, at the occurrence that came due.
+   *
+   * `missedCount` is how many occurrences of a recurrence got no call of their
+   * own and were folded into this one; this call is not one of them, so a
+   * declaration and a handler both integrate with `1 + missedCount`.
+   */
+  | {
+      readonly kind: "scheduled";
+      readonly timing: { readonly due: number; readonly missedCount: number };
+    };
+
+/**
  * WHAT THE HOST KNOWS AT THE MOMENT IT ASKS FOR AN OFFER.
  *
  * The same two facts a command's stamp carries, and for the same reason: time
@@ -940,6 +971,11 @@ export interface WorldEngine {
    * not -- so a handler integrates with `1 + timing.missedCount`. It is 0 on a
    * one-shot and on every real iteration, so a handler that ignores the field
    * is correct whenever nothing was missed.
+   *
+   * THE DECLARATION READS IT TOO (#271). The same timing is handed to
+   * `commandNeeds` as a `WorldDispatchWhen`, so a `needs()` round can size a
+   * catch-up -- one partition per folded occurrence -- instead of naming a
+   * fixed ceiling and losing everything past it.
    */
   onEvent(
     event: WorldCommand,
@@ -993,12 +1029,19 @@ export interface WorldEngine {
    * `player` is null for a scheduled event, which is the clock acting rather
    * than a seat.
    *
-   * `now` IS THE PLATFORM'S, exactly as `apply`'s stamp is (#375). A
-   * declaration reaches it as `world.now`, and it is the instant this dispatch
-   * is happening at: a command's stamped arrival, a scheduled event's own
-   * `due`. Without it a world whose partitions are TIMED had to declare every
-   * active one, because it could not tell a due partition from a future one --
-   * O(world) in the mode whose argument is that a command costs O(room).
+   * `when` IS THE PLATFORM'S, exactly as `apply`'s stamp is (#375, #271). A
+   * declaration reaches its instant as `world.now` -- a command's stamped
+   * arrival, a scheduled event's own `due`. Without it a world whose partitions
+   * are TIMED had to declare every active one, because it could not tell a due
+   * partition from a future one -- O(world) in the mode whose argument is that
+   * a command costs O(room).
+   *
+   * THE CLOCK'S ROAD CARRIES ITS WHOLE OCCURRENCE (#271), which the declaration
+   * reads as `world.timing` and a seat's command reads as `null`. A recurrence
+   * that produces at a rate names one partition per folded occurrence, so a
+   * walk that could not see the fold had to guess a ceiling and lose everything
+   * past it. A scheduled event declared as an `arrival` is refused rather than
+   * answered against a fold of nothing.
    *
    * IT LOADS NOTHING ITSELF, exactly as `viewPartitions` does not: the platform
    * reads this, loads what it names, and only then applies. What it MAY read is
@@ -1018,7 +1061,7 @@ export interface WorldEngine {
   commandNeeds(
     player: string | null,
     command: WorldCommand,
-    now: number,
+    when: WorldDispatchWhen,
     declared: readonly DeclaredSeatActivityStamp[],
   ): WorldDispatchNeeds;
 

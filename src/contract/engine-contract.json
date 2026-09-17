@@ -1,7 +1,7 @@
 {
-  "revision": 82,
+  "revision": 83,
   "bundleProtocol": 2,
-  "surfaceHash": "05714c9ba827ab52",
+  "surfaceHash": "3adf1fca658f625e",
   "payloadHash": "7d88d174839e99b4",
   "formatHash": "0058593e7cc80205",
   "history": [
@@ -682,6 +682,15 @@
       "payloadHash": "7d88d174839e99b4",
       "formatHash": "0058593e7cc80205",
       "summary": "ActionBuilder gains .destructive() (issue 268): an action can mark itself as one that permanently ends something, and the flag rides the actionMetadata channel as ActionMetadata.destructive and on a world's offer frame. The Action Panel paints such a verb from the new dedicated --bsg-destructive-surface / --bsg-destructive-ink token pair and adds an inset ring, a marker glyph and a screen-reader label, so the warning is not carried by colour alone; a custom board reads the same flag off the same metadata. Presentation only: availability, validation and execution are unchanged."
+    },
+    {
+      "revision": 83,
+      "date": "2026-09-17",
+      "bundleProtocol": 2,
+      "surfaceHash": "3adf1fca658f625e",
+      "payloadHash": "7d88d174839e99b4",
+      "formatHash": "0058593e7cc80205",
+      "summary": "A world action's DECLARATION can now read the scheduled occurrence it is running (#271): WorldDeclarationFacilities carries timing alongside now, so a clock handler's needs() and about() rounds read world.timing and a rate-producing catch-up names one partition per folded occurrence instead of guessing a fixed ceiling and silently losing the work past it. commandNeeds and WorldRunnerHandle.declare take a WorldDispatchWhen -- { kind: 'arrival', now } for a seat's command, { kind: 'scheduled', timing } for the clock -- so the walk and the apply that follows it cannot disagree about the instant or the fold; a clock dispatch declared as an arrival is refused with the new platform-owned untimed-clock-declaration."
     }
   ]
 }
