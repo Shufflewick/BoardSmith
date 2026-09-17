@@ -935,7 +935,21 @@ export class ResidentWorld {
       // EVERYTHING ALREADY DUE FIRST, for a world that declared it (#380).
       // After the receipt check above, so a REPLAYED order is answered from its
       // receipt without running the clock: a receipt is not a reason to tick.
-      await this.#catchUpBefore(arrivedAt);
+      //
+      // AND A WORLD STILL BEHIND DOES NOT RUN THIS COMMAND (ShufflewickPub
+      // #395, #274). Raised BEFORE the dispatch, so the handler never runs and
+      // no receipt is written: the world is exactly as it was, which is what
+      // makes sending the same order again the right response rather than a
+      // gamble. The `finally` below re-arms, so the catch-up is already
+      // continuing while the player reads the refusal.
+      if (await this.#catchUpBefore(arrivedAt)) {
+        throw worldRefusal(
+          "world-catching-up",
+          "This world is still catching up on events that were due before your command " +
+            "arrived, and its rules say a command must not overtake them. Nothing was changed. " +
+            "Send it again in a moment -- it will run exactly once when the world is level.",
+        );
+      }
       const events = await this.#dispatch({
         player,
         command: { name: action, args },
@@ -1221,30 +1235,46 @@ export class ResidentWorld {
    * BOUNDED, AND YIELDING. One `drainBatch` at a time, `catchUpRounds` of them
    * at most, with the runtime given a turn between each -- so a defective
    * handler that re-arms itself at zero delay makes a slow world rather than a
-   * wedged one, and the host's own overload protections still apply. Running
-   * out, or meeting an event that refuses, STOPS the catch-up and the command
-   * is applied over a world that is still behind: degradation by latency, never
-   * refusal, because a refusal would make the player press the button again and
-   * lose the ordering this exists to keep.
+   * wedged one, and the host's own overload protections still apply.
+   *
+   * ANSWERS WHETHER THE WORLD IS STILL BEHIND, which is what the caller refuses
+   * on (ShufflewickPub #395, #274). Running out of the budget, or meeting an
+   * event that refuses, stops the catch-up with work still due -- and the
+   * command is then NOT applied over it. This host used to apply anyway, which
+   * made the declaration a bigger budget rather than an ordering: it held only
+   * while a world was less than one budget behind, and past that a player
+   * overtook the remainder with nothing anywhere saying so. The old reasoning
+   * was that refusing "would make the player press the button again and lose
+   * the ordering this exists to keep"; since #195 an order carries a durable
+   * identity and receipt, so pressing again runs exactly once and in order.
    *
    * `arrivedAt` is the player's own stamped instant and is never moved. What
    * this changes is what has happened before their handler runs.
    */
-  async #catchUpBefore(arrivedAt: number): Promise<void> {
-    if ((readWorldDefinition(this.#definition).ordering ?? "arrival") !== "chronological") return;
+  async #catchUpBefore(arrivedAt: number): Promise<boolean> {
+    if ((readWorldDefinition(this.#definition).ordering ?? "arrival") !== "chronological") {
+      // AN `arrival` WORLD IS NEVER BEHIND for this purpose. It did not ask not
+      // to be overtaken, and the absence of a guarantee is not a lesser one.
+      return false;
+    }
     for (let round = 0; round < this.#budgets.catchUpRounds; round++) {
-      const { batch } = nextDueBatch(
-        this.#store.pendingEvents(),
-        arrivedAt,
-        this.#budgets.drainBatch,
-      );
-      if (batch.length === 0) return;
-      if ((await this.#drainBatch(arrivedAt)) === 0) return;
+      if (!this.#anythingDueAt(arrivedAt)) return false;
+      // A BATCH THAT RAN NOTHING WILL RUN NOTHING NEXT ROUND EITHER: an earlier
+      // event refused, said so out loud, and stays queued. The world is behind
+      // it and stopping here is what keeps this from spinning.
+      if ((await this.#drainBatch(arrivedAt)) === 0) return true;
       // A TURN FOR EVERYTHING ELSE. The world lock is still held -- the catch-up
       // and the command it gates are one ordered unit -- but the runtime is not
       // starved, so a host under load stays answerable while it happens.
       await this.#clock.yieldTurn();
     }
+    return this.#anythingDueAt(arrivedAt);
+  }
+
+  /** Whether any scheduled event was already due at `instant`, which is the
+   *  whole of "is this world behind that instant?". */
+  #anythingDueAt(instant: number): boolean {
+    return this.#store.pendingEvents().some((event) => event.due <= instant);
   }
 
   /**

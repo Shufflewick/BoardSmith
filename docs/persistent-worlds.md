@@ -1560,11 +1560,24 @@ What the gate does NOT change:
 **It is bounded, and it yields.** One `drainBatch` at a time, `catchUpRounds` of
 them at most, with the runtime given a turn between each -- so a handler that
 re-arms itself at zero delay makes a slow world rather than a wedged one, and
-the host's own overload and parking protections still apply. Running out of that
-budget, or meeting an event that refuses, STOPS the catch-up and the command is
-applied over a world that is still behind. Degradation by latency, never
-refusal: a refusal would make the player press the button again, which loses the
-ordering the gate exists to keep.
+the host's own overload and parking protections still apply.
+
+**And running out REFUSES the command** (ShufflewickPub #395). Running out of
+that budget, or meeting an event that refuses, stops the catch-up with work
+still due, and the command is then not applied over it: it is refused
+[`world-catching-up`](#the-refusals), the handler never runs, no
+receipt is written and the world is left exactly as it was. That is what makes
+the declaration an ORDERING rather than a bigger budget -- applying anyway held
+only while a world was less than one budget behind, and past that a player
+overtook the remainder silently.
+
+**Sending it again is safe, and is what the refusal asks for.** An order carries
+a durable identity and receipt, so a repeat that arrives once the world is level
+runs exactly once and in order; a host re-arms the remaining work before it
+answers, so the catch-up is already continuing while the player reads the
+message. This is the same contract on a laptop and on a hosting platform: the
+`boardsmith dev` host refuses identically, so a world tested locally behaves the
+way the published one does.
 
 An `'arrival'` world's correct move is unchanged and is written down under
 [`world.now`](#and-worldnow-the-instant-the-dispatch-is-happening-at): declare
@@ -2075,7 +2088,7 @@ makes local behaviour a poor guide to published behaviour.
 | `maxPendingEvents` | derived: 16000 | The whole world's queue. `maxPlayers` times the unkeyed cap. |
 | `catchUpMaxRealIterations` | 4 | Real occurrences a late recurrence runs before the rest are coalesced into one call. |
 | `drainBatch` | 200 | Due events one drain runs. A world still behind re-arms: overload degrades to latency, never refusal. |
-| `catchUpRounds` | 8 | Drain batches one command may wait behind on a `ordering: 'chronological'` world. Running out applies the command over a world still behind, never refuses it. |
+| `catchUpRounds` | 8 | Drain batches one command may wait behind on a `ordering: 'chronological'` world. Running out with events still due refuses the command `world-catching-up` rather than applying it over a world still behind. |
 | `maxCandidatesPerSelection` | 200 | Candidates one selection may offer, checked at enumeration. A 500-seat roster is one honest partition and one honest declaration, and enumerating it yields 500 candidates, so this is the guard the declaration itself cannot supply. |
 | `receiptRetentionMs` | 1209600000 (14 days) | How long a committed order's receipt is kept, and so how long a page may be away and still have an uncertain order answered rather than refused. |
 

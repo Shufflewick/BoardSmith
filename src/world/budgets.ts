@@ -145,10 +145,15 @@ export interface WorldBudgets {
    * them -- so the host stays responsive and a defective handler that re-arms
    * itself at zero delay makes a slow world rather than a wedged one.
    *
-   * When the ceiling is reached with events still due, the command is applied
-   * ANYWAY, over a world that is still behind. Degradation by latency, never
-   * refusal: a refusal would make the player press the button again, which
-   * loses the ordering the gate exists to keep.
+   * WHEN THE CEILING IS REACHED WITH EVENTS STILL DUE, THE COMMAND IS REFUSED
+   * `world-catching-up` and nothing is applied over the remainder
+   * (ShufflewickPub #395). That is what makes the declaration an ORDERING
+   * rather than a bigger budget: applying anyway held the guarantee only while
+   * a world was less than one budget behind, and past that a player overtook
+   * the rest with nothing anywhere saying so. Sending the same order again is
+   * safe and is the intended response -- an order's durable identity (#195)
+   * makes the repeat run exactly once -- and a host re-arms before it answers,
+   * so the catch-up is already continuing while the player reads the refusal.
    */
   readonly catchUpRounds: number;
   /**

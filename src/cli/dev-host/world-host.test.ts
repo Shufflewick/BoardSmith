@@ -1945,15 +1945,21 @@ describe('#380: a chronological world catches up before a player acts', () => {
     await opened.host.close();
   });
 
-  it('applies the command anyway when the catch-up runs out of budget', async () => {
-    // Degradation by LATENCY, never refusal -- the same rule the drain has.
-    // A world that cannot be caught up inside its ceiling still answers, and
-    // says so, rather than making the player press the button again.
+  /** A world whose budget cannot finish the chain it is behind on: one event
+   *  per batch, one batch per command. The chain is three beats long, so the
+   *  first command always stops with work still due. */
+  const TOO_SMALL_TO_CATCH_UP = { drainBatch: 1, catchUpRounds: 1 };
+
+  it('REFUSES the command when the catch-up runs out of budget, and changes nothing', async () => {
+    // THE ORDERING IS THE GUARANTEE, NOT THE BUDGET (ShufflewickPub #395).
+    // Applying anyway is what this host used to do, and it made the
+    // declaration a bigger budget: past one budget's worth of due events a
+    // player overtook the rest with nothing anywhere saying so.
     const clock = testClock();
     const opened = await attached({
       dir,
       clock,
-      budgets: worldBudgets({ drainBatch: 1, catchUpRounds: 1 }),
+      budgets: worldBudgets(TOO_SMALL_TO_CATCH_UP),
       definition: bundle({ world: timedWorld({ ordering: 'chronological' }) }),
     });
     await opened.host.handleMessage('c1', {
@@ -1965,25 +1971,78 @@ describe('#380: a chronological world catches up before a player acts', () => {
     });
     clock.advance(5_000);
     ran = [];
+    const order = nextOrder();
 
     await opened.host.handleMessage('c1', {
       type: 'action',
-      order: nextOrder(),
+      order,
       requestId: 'r1',
       action: 'arrive',
       args: {},
     });
 
-    expect(last(opened.sent, 'c1', 'world_response')).toMatchObject({ ok: true });
-    // One batch of one ran, and then the command was applied over a world that
-    // is still behind rather than being refused.
-    expect(ran).toEqual([expect.stringMatching(/^tick@/), 'arrive@burns=1']);
+    // REFUSED BY NAME, with the sentence that tells the player what to do.
+    const answer = last(opened.sent, 'c1', 'world_response');
+    expect(answer).toMatchObject({ ok: false, code: 'world-catching-up' });
+    expect(answer?.message).toMatch(/Send it again/);
+    // The budget bought one beat, and the player's handler did NOT run behind
+    // it -- which is the whole claim.
+    expect(ran).toEqual([expect.stringMatching(/^tick@/)]);
+    // THE REST OF THE WORK IS STILL SCHEDULED. Nothing was dropped to answer.
+    expect(opened.store.pendingEvents()).toHaveLength(1);
+    // AND NO RECEIPT WAS WRITTEN, which is what makes sending it again right
+    // rather than a gamble.
+    expect(opened.store.receipt(devWorldPlayer(1), order.id)).toBeUndefined();
     await opened.host.close();
   });
 
-  it('stops catching up when a due event refuses, and still applies the command', async () => {
+  it('runs the same order once the world is level, so the refusal costs the player nothing', async () => {
+    const clock = testClock();
+    const opened = await attached({
+      dir,
+      clock,
+      budgets: worldBudgets(TOO_SMALL_TO_CATCH_UP),
+      definition: bundle({ world: timedWorld({ ordering: 'chronological' }) }),
+    });
+    await opened.host.handleMessage('c1', {
+      type: 'action',
+      order: nextOrder(),
+      requestId: 'arm',
+      action: 'arm',
+      args: {},
+    });
+    clock.advance(5_000);
+    ran = [];
+    const order = nextOrder();
+
+    // Each attempt spends its budget on one more beat; the chain is three
+    // beats long, so the third attempt is the one that finds it level.
+    for (const requestId of ['r1', 'r2']) {
+      await opened.host.handleMessage('c1', { type: 'action', order, requestId, action: 'arrive', args: {} });
+      expect(last(opened.sent, 'c1', 'world_response')).toMatchObject({
+        ok: false,
+        code: 'world-catching-up',
+      });
+    }
+
+    await opened.host.handleMessage('c1', { type: 'action', order, requestId: 'r3', action: 'arrive', args: {} });
+
+    // THE SAME ORDER IDENTITY RUNS, ONCE, IN ORDER -- not replayed from a
+    // receipt a refusal must never have written.
+    expect(last(opened.sent, 'c1', 'world_response')).toEqual(
+      expect.objectContaining({ ok: true }),
+    );
+    expect(last(opened.sent, 'c1', 'world_response')?.replayed).toBeUndefined();
+    expect(ran.filter((step) => step.startsWith('arrive@'))).toEqual(['arrive@burns=3']);
+    expect(opened.store.pendingEvents()).toHaveLength(0);
+    await opened.host.close();
+  });
+
+  it('REFUSES the command when a due event refuses, and leaves that event queued', async () => {
     // A refused event stays queued and is said out loud; a catch-up that kept
-    // retrying it would spin forever on a world nobody can move.
+    // retrying it would spin forever on a world nobody can move. The command
+    // behind it is refused for the same reason budget exhaustion refuses it --
+    // the world is still behind, and the declaration says not to overtake.
     const doomed = worldClockAction<Village>('doomed')
       .needs(() => [HEARTH])
       .execute(() => {
@@ -2014,19 +2073,26 @@ describe('#380: a chronological world catches up before a player acts', () => {
     });
     clock.advance(5_000);
     ran = [];
+    const order = nextOrder();
 
     await opened.host.handleMessage('c1', {
       type: 'action',
-      order: nextOrder(),
+      order,
       requestId: 'r1',
       action: 'arrive',
       args: {},
     });
 
-    expect(last(opened.sent, 'c1', 'world_response')).toMatchObject({ ok: true });
-    expect(ran).toEqual(['arrive@burns=0']);
+    expect(last(opened.sent, 'c1', 'world_response')).toMatchObject({
+      ok: false,
+      code: 'world-catching-up',
+    });
+    expect(ran).toEqual([]);
     // The event is still queued, and somebody was told.
     expect(opened.store.pendingEvents()).toHaveLength(1);
+    expect(last(opened.sent, 'c1', 'world_notice')?.message).toMatch(/"doomed" refused/);
+    // AND NO RECEIPT, so the player's next attempt is their first spend.
+    expect(opened.store.receipt(devWorldPlayer(1), order.id)).toBeUndefined();
     await opened.host.close();
   });
 
