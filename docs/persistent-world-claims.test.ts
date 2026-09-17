@@ -58,6 +58,11 @@ import {
   newVillageEngine,
 } from '../src/world/village.test-helper.js';
 
+/** A SEAT'S ARRIVAL, as a declaration is told when it is happening (#271).
+ *  The clock's road passes its whole occurrence instead. */
+const arrival = (now: number) => ({ kind: 'arrival', now }) as const;
+
+
 const DOCS = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(DOCS, '..');
 const read = (name: string) => readFileSync(join(DOCS, name), 'utf-8');
@@ -437,10 +442,10 @@ describe('#169: a world action is an Action, and the guide teaches the real one'
     const { engine } = newEngine([look]);
     const command = { name: 'look', args: {} };
 
-    expect(engine.commandNeeds('p1', command, 0, []).partitions).toEqual([COMMONS]);
+    expect(engine.commandNeeds('p1', command, arrival(0), []).partitions).toEqual([COMMONS]);
     await engine.hydrate([COMMONS]);
     // Only reachable because the first round's partition is now in the tree.
-    expect(engine.commandNeeds('p1', command, 0, []).partitions).toEqual([holdingPartition(1)]);
+    expect(engine.commandNeeds('p1', command, arrival(0), []).partitions).toEqual([holdingPartition(1)]);
     expect(flatGuide).toContain('.needs() may be chained');
     // AND THE GUIDE'S SAMPLE IS A SHIPPED VERB, NOT A SKETCH (#352). The
     // fixture above proves the engine does it; only a citation proves an
@@ -456,11 +461,11 @@ describe('#169: a world action is an Action, and the guide teaches the real one'
     const command = { name: 'tend', args: { neighbour: 0 } };
 
     // Round one is a pure function of the seat, answered with nothing resident.
-    expect(engine.commandNeeds('p2', command, 0, []).partitions).toEqual([holdingPartition(2)]);
+    expect(engine.commandNeeds('p2', command, arrival(0), []).partitions).toEqual([holdingPartition(2)]);
 
     await engine.hydrate([holdingPartition(2)]);
     // The selection's own round, answered with round one in front of it.
-    expect(engine.commandNeeds('p2', command, 0, []).partitions.sort()).toEqual([
+    expect(engine.commandNeeds('p2', command, arrival(0), []).partitions.sort()).toEqual([
       holdingPartition(1),
       holdingPartition(3),
     ]);
@@ -468,7 +473,7 @@ describe('#169: a world action is an Action, and the guide teaches the real one'
     await engine.hydrate([holdingPartition(1), holdingPartition(3)]);
     // And it ends. There is no ceiling to trip: the walk's length is the
     // action's own selection count.
-    expect(engine.commandNeeds('p2', command, 0, []).partitions).toEqual([]);
+    expect(engine.commandNeeds('p2', command, arrival(0), []).partitions).toEqual([]);
   });
 
   it('refuses a declaration that tries to write, and the guide says to write in execute', async () => {
@@ -480,7 +485,7 @@ describe('#169: a world action is an Action, and the guide teaches the real one'
       .execute(() => {});
     const { engine } = newEngine([writer]);
     await engine.hydrate([holdingPartition(1)]);
-    expect(() => engine.commandNeeds('p1', { name: 'writer', args: {} }, 0, []).partitions).toThrow(
+    expect(() => engine.commandNeeds('p1', { name: 'writer', args: {} }, arrival(0), []).partitions).toThrow(
       /A read-only view of this world tried to write/,
     );
     expect(guide).toContain('declaration-write');
@@ -802,7 +807,12 @@ describe('#169: a schedule names a seatless action and carries scalars', () => {
 
     const event = { name: 'settleBurn', args: { holding: holdingPartition(1) } };
     for (;;) {
-      const needs = engine.commandNeeds(null, event, 0, []).partitions;
+      const needs = engine.commandNeeds(
+        null,
+        event,
+        { kind: 'scheduled', timing: { due: STAMP.now + 1000, missedCount: 0 } },
+        [],
+      ).partitions;
       if (needs.length === 0) break;
       await engine.hydrate(needs);
     }

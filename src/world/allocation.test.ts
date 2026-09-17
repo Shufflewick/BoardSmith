@@ -30,6 +30,11 @@ import { worldAction } from "./action.js";
 import { WorldRefusal, ownerOf } from "./refusals.js";
 import type { StoredPartition } from "./contract.js";
 
+/** A SEAT'S ARRIVAL, as a declaration is told when it is happening (#271).
+ *  The clock's road passes its whole occurrence instead. */
+const arrival = (now: number) => ({ kind: "arrival", now }) as const;
+
+
 class Room extends Space<Demo> {}
 
 class Demo extends Game<Demo> {
@@ -104,8 +109,8 @@ describe("#377 — a world's id allocation is durable, not derived from what is 
     // wrote down last time. It hydrates ONE room, exactly as a real command
     // that only declared `a` would.
     const cold = createWorld(options({ nextElementId: genesis.nextElementId })).runner;
-    await cold.declare({ name: "read-a", args: {} }, "p1", {}, 1_000, []);
-    await cold.declare({ name: "read-a", args: {} }, "p1", { a: genesis.partitions.a! }, 1_000, []);
+    await cold.declare({ name: "read-a", args: {} }, "p1", {}, arrival(1_000), []);
+    await cold.declare({ name: "read-a", args: {} }, "p1", { a: genesis.partitions.a! }, arrival(1_000), []);
 
     const made = await cold.createPartition("dynamic");
 
@@ -120,12 +125,12 @@ describe("#377 — a world's id allocation is durable, not derived from what is 
     // run a command naming both roots.
     const genesis = await storedWorld();
     const cold = createWorld(options({ nextElementId: genesis.nextElementId })).runner;
-    await cold.declare({ name: "read-a", args: {} }, "p1", {}, 1_000, []);
-    await cold.declare({ name: "read-a", args: {} }, "p1", { a: genesis.partitions.a! }, 1_000, []);
+    await cold.declare({ name: "read-a", args: {} }, "p1", {}, arrival(1_000), []);
+    await cold.declare({ name: "read-a", args: {} }, "p1", { a: genesis.partitions.a! }, arrival(1_000), []);
     await cold.createPartition("dynamic");
 
     await expect(
-      cold.declare({ name: "read-both", args: {} }, "p1", { c: genesis.partitions.c! }, 1_000, []),
+      cold.declare({ name: "read-both", args: {} }, "p1", { c: genesis.partitions.c! }, arrival(1_000), []),
     ).resolves.toBeDefined();
   });
 
@@ -170,10 +175,10 @@ describe("#377 — a world's id allocation is durable, not derived from what is 
     const genesis = await storedWorld();
     const stale = createWorld(options({ nextElementId: 1_000_001 })).runner;
 
-    await stale.declare({ name: "read-a", args: {} }, "p1", {}, 1_000, []);
+    await stale.declare({ name: "read-a", args: {} }, "p1", {}, arrival(1_000), []);
 
     await expect(
-      stale.declare({ name: "read-a", args: {} }, "p1", { c: genesis.partitions.c! }, 1_000, []),
+      stale.declare({ name: "read-a", args: {} }, "p1", { c: genesis.partitions.c! }, arrival(1_000), []),
     ).rejects.toThrow(/nextElementId/);
   });
 
@@ -185,10 +190,10 @@ describe("#377 — a world's id allocation is durable, not derived from what is 
     // health score paid for a platform defect.
     const genesis = await storedWorld();
     const stale = createWorld(options({ nextElementId: 1_000_001 })).runner;
-    await stale.declare({ name: "read-a", args: {} }, "p1", {}, 1_000, []);
+    await stale.declare({ name: "read-a", args: {} }, "p1", {}, arrival(1_000), []);
 
     const refusal = await stale
-      .declare({ name: "read-a", args: {} }, "p1", { c: genesis.partitions.c! }, 1_000, [])
+      .declare({ name: "read-a", args: {} }, "p1", { c: genesis.partitions.c! }, arrival(1_000), [])
       .catch((error: unknown) => error);
 
     expect(refusal).toBeInstanceOf(WorldRefusal);
@@ -258,8 +263,8 @@ describe("#224 — a checkpoint carries the stamp of the ids its command minted"
     const genesis = await born.genesis();
 
     const host = createWorld(grown({ nextElementId: genesis.nextElementId })).runner;
-    await host.declare({ name: "fill", args: {} }, "p1", {}, 1_000, []);
-    await host.declare({ name: "fill", args: {} }, "p1", { a: genesis.partitions.a! }, 1_000, []);
+    await host.declare({ name: "fill", args: {} }, "p1", {}, arrival(1_000), []);
+    await host.declare({ name: "fill", args: {} }, "p1", { a: genesis.partitions.a! }, arrival(1_000), []);
     const result = await host.apply({
       player: "p1",
       command: { name: "fill", args: {} },
@@ -290,10 +295,10 @@ describe("#224 — a checkpoint carries the stamp of the ids its command minted"
     };
 
     const fresh = createWorld(grown({ nextElementId: checkpoint.nextElementId })).runner;
-    await fresh.declare({ name: "read-a", args: {} }, "p1", {}, 2_000, []);
+    await fresh.declare({ name: "read-a", args: {} }, "p1", {}, arrival(2_000), []);
 
     await expect(
-      fresh.declare({ name: "read-a", args: {} }, "p1", { a: stored }, 2_000, []),
+      fresh.declare({ name: "read-a", args: {} }, "p1", { a: stored }, arrival(2_000), []),
     ).resolves.toBeDefined();
   });
 

@@ -30,6 +30,11 @@ import { worldAction, worldClockAction } from "./action.js";
 import { planSchedules } from "./schedule-api.js";
 import { worldBudgets } from "./budgets.js";
 
+/** A SEAT'S ARRIVAL, as a declaration is told when it is happening (#271).
+ *  The clock's road passes its whole occurrence instead. */
+const arrival = (now: number) => ({ kind: "arrival", now }) as const;
+
+
 const BUDGETS = worldBudgets();
 const WORLD_MAX_UNKEYED_PENDING_PER_PLAYER = BUDGETS.maxUnkeyedPendingPerPlayer;
 
@@ -195,7 +200,7 @@ describe("#37 item 5 — the world refusal taxonomy", () => {
     const runner = createWorldRunner(engineWith([]), createInlinedPartitionStore());
 
     try {
-      await runner.declare({ name: "nope", args: {} }, "p1", {}, 0, []);
+      await runner.declare({ name: "nope", args: {} }, "p1", {}, arrival(0), []);
       expect.unreachable("declare accepted an action this world does not have");
     } catch (error) {
       expect(error).toBeInstanceOf(WorldRefusal);
@@ -218,13 +223,21 @@ describe("#37 item 5 — the world refusal taxonomy", () => {
     );
 
     // THE CLOCK MAY. `null` is the clock, and the same declaration answers it.
-    expect(await runner.declare({ name: "settle", args: {} }, null, {}, 0, [])).toEqual({
+    expect(
+      await runner.declare(
+        { name: "settle", args: {} },
+        null,
+        {},
+        { kind: "scheduled", timing: { due: 0, missedCount: 0 } },
+        [],
+      ),
+    ).toEqual({
       partitions: [],
       seats: [],
     });
 
     try {
-      await runner.declare({ name: "settle", args: {} }, "p1", {}, 0, []);
+      await runner.declare({ name: "settle", args: {} }, "p1", {}, arrival(0), []);
       expect.unreachable("declare accepted the clock's own action from a player");
     } catch (error) {
       expect(error).toBeInstanceOf(WorldRefusal);

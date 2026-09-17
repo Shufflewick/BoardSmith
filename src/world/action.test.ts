@@ -34,6 +34,11 @@ import {
   CountingStore,
 } from "./village.test-helper.js";
 
+/** A SEAT'S ARRIVAL, as a declaration is told when it is happening (#271).
+ *  The clock's road passes its whole occurrence instead. */
+const arrival = (now: number) => ({ kind: "arrival", now }) as const;
+
+
 /** This suite's own verbs. The village itself -- its ring, its elements, its
  *  genesis and the two loops a host drives -- is shared with the guide's claims
  *  suite, so the two cannot come to disagree about what a world does. */
@@ -210,11 +215,11 @@ describe("the ordered declaration walk", () => {
     const { engine } = newEngine();
     const command = { name: "tend", args: { neighbour: 0 } };
 
-    const first = engine.commandNeeds("p2", command, STAMP.now, []).partitions;
+    const first = engine.commandNeeds("p2", command, arrival(STAMP.now), []).partitions;
     expect(first).toEqual([holdingPartition(2)]);
 
     await engine.hydrate(first);
-    expect([...engine.commandNeeds("p2", command, STAMP.now, []).partitions].sort()).toEqual([
+    expect([...engine.commandNeeds("p2", command, arrival(STAMP.now), []).partitions].sort()).toEqual([
       holdingPartition(1),
       holdingPartition(3),
     ]);
@@ -224,7 +229,7 @@ describe("the ordered declaration walk", () => {
     const { engine } = newEngine();
     const command = { name: "tend", args: { neighbour: 0 } };
     await engine.hydrate([holdingPartition(1), holdingPartition(2), holdingPartition(3)]);
-    expect(engine.commandNeeds("p2", command, STAMP.now, []).partitions).toEqual([]);
+    expect(engine.commandNeeds("p2", command, arrival(STAMP.now), []).partitions).toEqual([]);
   });
 
   it("refuses a declaration that tries to write", async () => {
@@ -236,7 +241,7 @@ describe("the ordered declaration walk", () => {
       .execute(() => {});
     const { engine } = newEngine([writer]);
     await engine.hydrate([holdingPartition(1)]);
-    expect(() => engine.commandNeeds("p1", { name: "writer", args: {} }, STAMP.now, []).partitions).toThrow(
+    expect(() => engine.commandNeeds("p1", { name: "writer", args: {} }, arrival(STAMP.now), []).partitions).toThrow(
       /A read-only view of this world tried to write/,
     );
   });
@@ -306,7 +311,7 @@ describe("the clock", () => {
       const needs = engine.commandNeeds(null, {
         name: "settleBurn",
         args: { holding: holdingPartition(1) },
-      }, STAMP.now, []).partitions;
+      }, { kind: "scheduled", timing: { due: STAMP.now + 1000, missedCount: 0 } }, []).partitions;
       if (needs.length === 0) break;
       await engine.hydrate(needs);
     }
@@ -466,11 +471,11 @@ describe("a chain of rounds at one step", () => {
     const { engine } = newEngine([chained]);
     const command = { name: "chained", args: {} };
 
-    expect(engine.commandNeeds("p1", command, STAMP.now, []).partitions).toEqual([INDEX]);
+    expect(engine.commandNeeds("p1", command, arrival(STAMP.now), []).partitions).toEqual([INDEX]);
     await engine.hydrate([INDEX]);
-    expect(engine.commandNeeds("p1", command, STAMP.now, []).partitions).toEqual([holdingPartition(1)]);
+    expect(engine.commandNeeds("p1", command, arrival(STAMP.now), []).partitions).toEqual([holdingPartition(1)]);
     await engine.hydrate([holdingPartition(1)]);
-    expect(engine.commandNeeds("p1", command, STAMP.now, []).partitions).toEqual([]);
+    expect(engine.commandNeeds("p1", command, arrival(STAMP.now), []).partitions).toEqual([]);
 
     const result = await engine.applyCommand("p1", command, STAMP);
     expect([...result.dirty].sort()).toEqual([INDEX, holdingPartition(1)]);

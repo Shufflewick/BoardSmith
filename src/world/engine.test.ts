@@ -35,6 +35,11 @@ import {
   newVillageEngine,
 } from "./village.test-helper.js";
 
+/** A SEAT'S ARRIVAL, as a declaration is told when it is happening (#271).
+ *  The clock's road passes its whole occurrence instead. */
+const arrival = (now: number) => ({ kind: "arrival", now }) as const;
+
+
 class Token extends Piece<WorldFixtureGame> {}
 
 class Room extends Space<WorldFixtureGame> {
@@ -1286,7 +1291,7 @@ describe("#68 — a refused command leaves the world unchanged", () => {
     // boundary twice for one command.
     const engine = newEngine();
     expect(
-      engine.commandNeeds("player-a", { name: "tearOwn", args: { aim: "room-one" } }, STAMP.now, []).partitions,
+      engine.commandNeeds("player-a", { name: "tearOwn", args: { aim: "room-one" } }, arrival(STAMP.now), []).partitions,
     ).toEqual([ROOM_ONE]);
   });
 
@@ -2036,7 +2041,7 @@ describe("retiring a seat's holder (ShufflewickPub #399)", () => {
     // begins, so it arrives synchronously rather than as a rejected promise.
     let refused: unknown;
     try {
-      engine.commandNeeds("p2", { name: "tend", args: {} }, 0, []);
+      engine.commandNeeds("p2", { name: "tend", args: {} }, arrival(0), []);
     } catch (error) {
       refused = error;
     }
@@ -2051,7 +2056,7 @@ describe("retiring a seat's holder (ShufflewickPub #399)", () => {
     engine.unseat("p2");
     engine.seat("newcomer", 2);
 
-    expect(engine.commandNeeds("newcomer", { name: "tend", args: {} }, 0, []).partitions).toEqual([
+    expect(engine.commandNeeds("newcomer", { name: "tend", args: {} }, arrival(0), []).partitions).toEqual([
       holdingPartition(2),
     ]);
   });
@@ -2093,7 +2098,7 @@ describe("retiring a seat's holder (ShufflewickPub #399)", () => {
     // And the chair's next holder reaches that same standing ground, which is
     // the danger stated as an assertion: retiring a seat is not a cleanup.
     engine.seat("newcomer", 2);
-    expect(engine.commandNeeds("newcomer", { name: "tend", args: {} }, 0, []).partitions).toEqual([
+    expect(engine.commandNeeds("newcomer", { name: "tend", args: {} }, arrival(0), []).partitions).toEqual([
       holdingPartition(2),
     ]);
   });

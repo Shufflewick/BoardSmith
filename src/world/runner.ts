@@ -72,6 +72,7 @@ import type {
   DeclaredSeatActivityStamp,
   SeatActivityStamp,
   StoredPartition,
+  WorldDispatchWhen,
   WorldPartitionSource,
   WorldActionOffer,
   WorldCommand,
@@ -908,7 +909,7 @@ export function createWorldRunner(
       command: WorldCommand,
       player: string | null,
       supplied: Readonly<Record<string, StoredPartition>>,
-      now: number,
+      when: WorldDispatchWhen,
       declared: readonly DeclaredSeatActivityStamp[],
     ): Promise<WorldDispatchDeclaration> {
       // WHAT THE LAST ROUND ASKED FOR, MADE RESIDENT (#122). Adopted rather
@@ -916,7 +917,7 @@ export function createWorldRunner(
       // tree and bytes sitting in the store answer nothing.
       await adopt(engine, store, supplied);
       const resident = residentNames(engine);
-      const needs = engine.commandNeeds(player, command, now, declared);
+      const needs = engine.commandNeeds(player, command, when, declared);
       return {
         partitions: needs.partitions.filter(
           (name) => !store.holds(name) && !resident.has(name),
@@ -1527,7 +1528,7 @@ export interface WorldRunnerHandle {
     command: WorldCommand,
     player: string | null,
     supplied: Readonly<Record<string, StoredPartition>>,
-    now: number,
+    when: WorldDispatchWhen,
     declared: readonly DeclaredSeatActivityStamp[],
   ): Promise<WorldDispatchDeclaration>;
   apply(request: WorldApplyRequest): Promise<WorldCommandResult>;

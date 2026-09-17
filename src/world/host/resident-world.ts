@@ -1022,7 +1022,19 @@ export class ResidentWorld {
     const declaredActivity = await walkDeclaration(
       // THE SAME INSTANT THE APPLY BELOW IS STAMPED WITH (#375), so the
       // declaration and the handler it precedes agree about what time it is.
-      (supplied, declared) => runner.declare(command, player, supplied, arrivedAt, declared),
+      (supplied, declared) =>
+        runner.declare(
+          command,
+          player,
+          supplied,
+          // AND THE WHOLE OCCURRENCE ON THE CLOCK'S ROAD (#271). A scheduled
+          // declaration is answered against the occurrence it is running --
+          // its own `due`, and how many occurrences were folded into it --
+          // because a catch-up names one partition per occurrence and a walk
+          // that could not see the fold had to guess a ceiling.
+          timing === null ? { kind: "arrival", now: arrivedAt } : { kind: "scheduled", timing },
+          declared,
+        ),
       (name) =>
         this.#readPartition(
           name,

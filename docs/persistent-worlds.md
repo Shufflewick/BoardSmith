@@ -529,6 +529,43 @@ arrival, a scheduled event's own `due`, and on the offer path the instant the
 offer is being made at. A declaration and the handler it precedes cannot
 disagree about what time it is.
 
+### And `world.timing`: which occurrence of a recurrence this is
+
+The declaration's `world` carries the whole occurrence, not just its instant
+(#271):
+
+```ts
+const spawn = worldClockAction<G>('spawn')
+  .needs(() => ['yard'])
+  // ONE CRATE PER OCCURRENCE. `1 + missedCount` is this call plus the calls
+  // that never happened, so a world that was idle for an hour names an hour's
+  // worth of partitions and fills them all.
+  .needs(({ world }) => {
+    const from = (world.partition('yard') as Yard).cursor;
+    const due = 1 + (world.timing?.missedCount ?? 0);
+    return Array.from({ length: due }, (_, step) => `crate:${from + step}`);
+  })
+  .execute((_args, ctx) => { /* ... fill exactly those ... */ });
+```
+
+It is the same `{ due, missedCount }` the handler reads as `ctx.world.timing`,
+with the same meaning, and `null` on a seat's own command and on the offer path
+-- a player's action is not an occurrence of anything.
+
+**It is here because a catch-up's SIZE has to be known before anything is
+loaded.** What a handler may write is what its declaration named, so a body that
+learns it owes ten spawns into ten partitions cannot make them unless the walk
+already named ten. Without the fold the only declaration available was a fixed
+ceiling -- "eight crates, and hope" -- and every occurrence past the ceiling was
+production the world silently never did. A recurrence that produces at a RATE
+turns downtime into a permanent shortfall that way.
+
+**A host drives the clock's declaration with the occurrence, or it is refused**
+with `untimed-clock-declaration`. `apply` is handed the timing whatever the walk
+was told, so a walk driven as a seat's arrival would size its catch-up against a
+fold of nothing and then hand the handler a fold of ten. That is the exact
+shortfall this field exists to end, so it is refused rather than answered.
+
 **There is no `presence` here, and that is deliberate** even though `execute`
 has one. What a declaration names decides what is RESIDENT, and residency that
 depended on who happened to be connected would differ between two watchers of
@@ -676,7 +713,9 @@ would finish every timer the moment they started it.
 occurrences of a recurrence got no call of their own and were folded into this
 one; this call is not one of them, so integrate with `1 + timing.missedCount`. It
 is `0` whenever the world kept up, so an action that never reads it is correct on
-a healthy world.
+a healthy world. A `needs()` declaration reads the same field, which is what lets
+a catch-up name one partition per folded occurrence -- see
+[`world.timing`](#and-worldtiming-which-occurrence-of-a-recurrence-this-is).
 
 **`ctx.world.presence`** is the set of seats holding at least one open connection
 at this instant. Per seat, so a player with two tabs is present once. Derived at
@@ -2215,7 +2254,16 @@ const born = await runner.genesis();
 // loop ends when the walk names nothing. Everything genesis created is already
 // here, so this first ask answers nothing at all.
 const command = { name: 'tend', args: { neighbour: 7 } };
-const { needs } = await runner.declare(command, 'alice', {});
+// WHEN the dispatch is happening, as one fact: a seat's stamped arrival, or
+// `{ kind: 'scheduled', timing }` on the clock's road -- so the walk and the
+// handler cannot disagree about the instant, or about the fold (#271).
+const { needs } = await runner.declare(
+  command,
+  'alice',
+  {},
+  { kind: 'arrival', now: 1_800_000_000_000 },
+  [],
+);
 
 const result = await runner.apply({
   player: 'alice',

@@ -27,6 +27,11 @@ import { worldAction, worldClockAction } from "./action.js";
 import { worldBudgets } from "./budgets.js";
 import { WorldRefusal } from "./refusals.js";
 
+/** A SEAT'S ARRIVAL, as a declaration is told when it is happening (#271).
+ *  The clock's road passes its whole occurrence instead. */
+const arrival = (now: number) => ({ kind: "arrival", now }) as const;
+
+
 class Yard extends Space<TinyWorld> {
   pokes = 0;
 }
@@ -353,7 +358,7 @@ describe("createWorld — one construction, every host", () => {
     // Genesis CREATED the partition, so the engine already holds it and the
     // host is told to send nothing -- the residency subtraction that keeps a
     // warm world's command free of storage reads.
-    const declared = await runner.declare({ name: "poke", args: {} }, "p1", {}, 0, []);
+    const declared = await runner.declare({ name: "poke", args: {} }, "p1", {}, arrival(0), []);
     expect(declared).toEqual({ partitions: [], seats: [] });
 
     const result = await runner.apply({

@@ -32,6 +32,11 @@ import type {
   WorldPartitionSource,
 } from "./contract.js";
 
+/** A SEAT'S ARRIVAL, as a declaration is told when it is happening (#271).
+ *  The clock's road passes its whole occurrence instead. */
+const arrival = (now: number) => ({ kind: "arrival", now }) as const;
+
+
 /** Small enough to read in a failure message, large enough that a ring is a
  *  ring rather than a pair. */
 export const SETTLERS = 6;
@@ -197,7 +202,7 @@ export async function applyThroughWalk(
   command: { name: string; args: Record<string, unknown> },
 ): ReturnType<BoardSmithWorldEngine["applyCommand"]> {
   for (;;) {
-    const needs = engine.commandNeeds(player, command, STAMP.now, STAMP.declaredActivity);
+    const needs = engine.commandNeeds(player, command, arrival(STAMP.now), STAMP.declaredActivity);
     if (needs.partitions.length === 0) break;
     await engine.hydrate(needs.partitions);
   }

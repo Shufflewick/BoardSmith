@@ -24,6 +24,11 @@ import { createWorld, type WorldRunnerOptions } from "./definition.js";
 import { worldAction } from "./action.js";
 import { WorldRefusal } from "./refusals.js";
 
+/** A SEAT'S ARRIVAL, as a declaration is told when it is happening (#271).
+ *  The clock's road passes its whole occurrence instead. */
+const arrival = (now: number) => ({ kind: "arrival", now }) as const;
+
+
 class Vault extends Space<Shop> {}
 
 class Shop extends Game<Shop> {
@@ -66,8 +71,8 @@ async function attempt() {
   }).runner;
   const genesis = await runner.genesis();
   const command = { name: "buy", args: {} };
-  await runner.declare(command, "p1", {}, STAMP.arrivedAt, []);
-  await runner.declare(command, "p1", { vault: genesis.partitions.vault! }, STAMP.arrivedAt, []);
+  await runner.declare(command, "p1", {}, arrival(STAMP.arrivedAt), []);
+  await runner.declare(command, "p1", { vault: genesis.partitions.vault! }, arrival(STAMP.arrivedAt), []);
   return runner.apply({ player: "p1", command, timing: null, ...STAMP });
 }
 
