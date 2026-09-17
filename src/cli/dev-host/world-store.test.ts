@@ -20,11 +20,13 @@ import type { WorldGenesis, WorldSerialized } from '../../world/runner.js';
 import {
   assertNodeSupportsSqlite,
   openWorldStore,
+  prepareSchema,
   resetWorldStore,
   worldStoreDir,
   worldStorePath,
   worldResetNotice,
   REQUIRED_NODE_VERSION,
+  type SqliteDatabase,
   type LocalWorldStore,
 } from './world-store.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
@@ -762,6 +764,64 @@ describe('the local world store', () => {
       // The bug that made a refusal destructive: the schema was created before
       // the layout was read, so being told no still changed the store.
       expect(tablesOf(worldStorePath(root))).not.toContain('seat_activity');
+    });
+
+    /**
+     * A STEP THAT DOES NOT LEAVE THE STAMP IT PROMISED (#273).
+     *
+     * Unreachable through today's two upgrades, which is exactly why the guard
+     * has to be proved rather than assumed: the next step somebody writes is
+     * the one that can forget, and what it would produce is a store whose
+     * tables and stamp disagree -- read wrong by every later open, or spun on
+     * forever by this loop. So the chain is a parameter here, and the tests
+     * below hand `prepareSchema` the step that forgets.
+     */
+    describe('an upgrade step that does not stamp what it promised (#273)', () => {
+      /** The layout-3 world from the fixtures above, on a raw handle. */
+      const layout3Database = async (): Promise<{ db: SqliteDatabase; path: string }> => {
+        await anOccupiedWorld();
+        const path = worldStorePath(root);
+        rewindToLayout3(path);
+        const { DatabaseSync } = createRequire(import.meta.url)('node:sqlite') as {
+          DatabaseSync: new (file: string) => SqliteDatabase;
+        };
+        return { db: new DatabaseSync(path), path };
+      };
+
+      it('refuses the store when the step leaves no stamp at all', async () => {
+        const { db, path } = await layout3Database();
+        try {
+          expect(() =>
+            prepareSchema(db, path, [
+              { from: '3', to: '4', apply: (one) => one.exec("DELETE FROM meta WHERE key = 'schemaVersion'") },
+            ]),
+          ).toThrow(/upgraded from layout 3 to layout 4.*carrying no layout stamp at all.*report it/s);
+        } finally {
+          db.close();
+        }
+      });
+
+      it('refuses the store when the step leaves the stamp where it was', async () => {
+        const { db, path } = await layout3Database();
+        try {
+          expect(() =>
+            prepareSchema(db, path, [{ from: '3', to: '4', apply: () => {} }]),
+          ).toThrow(/upgraded from layout 3 to layout 4.*layout 3.*report it/s);
+        } finally {
+          db.close();
+        }
+      });
+
+      it('names the store so the author knows which world to keep', async () => {
+        const { db, path } = await layout3Database();
+        try {
+          expect(() =>
+            prepareSchema(db, path, [{ from: '3', to: '4', apply: () => {} }]),
+          ).toThrow(new RegExp(path.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+        } finally {
+          db.close();
+        }
+      });
     });
 
     it('refuses a store written by a NEWER BoardSmith, and says which way to move', async () => {
