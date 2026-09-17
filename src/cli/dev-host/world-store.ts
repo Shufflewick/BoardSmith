@@ -772,9 +772,18 @@ const SCHEMA_VERSION = '5';
  * knows what their tables held, and a store opened on a guess is worse than one
  * refused.
  */
-const LAYOUT_UPGRADES: readonly { readonly from: string; readonly apply: (db: SqliteDatabase) => void }[] = [
-  { from: '3', apply: upgradeToLayout4 },
-  { from: '4', apply: upgradeToLayout5 },
+interface LayoutUpgrade {
+  /** The stamp a store must carry for this step to be the next one. */
+  readonly from: string;
+  /** The stamp the store must carry once `apply` has committed. */
+  readonly to: string;
+  /** Rewrite the store, stamping `to` in the SAME transaction as the tables. */
+  readonly apply: (db: SqliteDatabase) => void;
+}
+
+const LAYOUT_UPGRADES: readonly LayoutUpgrade[] = [
+  { from: '3', to: '4', apply: upgradeToLayout4 },
+  { from: '4', to: '5', apply: upgradeToLayout5 },
 ];
 
 /**
@@ -784,8 +793,18 @@ const LAYOUT_UPGRADES: readonly { readonly from: string; readonly apply: (db: Sq
  * looks: a gate that created the current schema first and asked afterwards left
  * its new tables inside a store it then refused, so being told "no" had already
  * changed the world it was protecting.
+ *
+ * `upgrades` is a parameter, and this is exported, for one reason: the stamp check
+ * below guards against a step that rewrites a store without moving its layout
+ * stamp, and no step in {@link LAYOUT_UPGRADES} does that. A guard that cannot
+ * be run is a guard nobody knows is broken, so the tests hand this the step
+ * that forgets. Every caller in this file uses the real chain.
  */
-function prepareSchema(db: SqliteDatabase, path: string): void {
+export function prepareSchema(
+  db: SqliteDatabase,
+  path: string,
+  upgrades: readonly LayoutUpgrade[] = LAYOUT_UPGRADES,
+): void {
   const stored = storedLayout(db);
   if (stored === undefined) {
     // A world this open is creating. The tables and the layout stamp commit
@@ -803,10 +822,19 @@ function prepareSchema(db: SqliteDatabase, path: string): void {
   let at = stored;
   for (;;) {
     if (at === SCHEMA_VERSION) return;
-    const step = LAYOUT_UPGRADES.find((one) => one.from === at);
+    const step = upgrades.find((one) => one.from === at);
     if (step === undefined) throw unreadableLayout(stored, path);
     step.apply(db);
-    at = storedLayout(db);
+    // WHAT THE STEP SAID IT WOULD LEAVE, CHECKED AGAINST WHAT IT LEFT.
+    //
+    // The stamp is what every later open reads the store's tables through, so
+    // a step that rewrote the tables without moving it has produced a file no
+    // BoardSmith writes -- and carrying on would run the same upgrade over a
+    // store that has already had it, or spin here forever on a stamp that
+    // never advances. Both are silent; this is not.
+    const stamped = storedLayout(db);
+    if (stamped !== step.to) throw upgradeLeftWrongStamp(step, stamped, path);
+    at = step.to;
   }
 }
 
@@ -870,6 +898,30 @@ function upgradeToLayout5(db: SqliteDatabase): void {
   });
 }
 
+/**
+ * An upgrade that did not leave the stamp it promised, said so that the author
+ * keeps their world and we get told about it.
+ *
+ * Deliberately NOT recoverable here. The one thing this file will not do is
+ * read a store whose tables and stamp disagree, because every later decision --
+ * which columns exist, which upgrade runs next -- is taken off the stamp.
+ */
+function upgradeLeftWrongStamp(
+  step: LayoutUpgrade,
+  stamped: string | undefined,
+  path: string,
+): Error {
+  return new Error(
+    `The local world store at ${path} was upgraded from layout ${step.from} to layout ${step.to}, but it now ` +
+      `reads as ${stamped === undefined ? 'carrying no layout stamp at all' : `layout ${stamped}`}. ` +
+      `A store whose tables and stamp disagree is one no BoardSmith writes, so it is refused rather than read. ` +
+      `This is a fault in BoardSmith's layout ${step.from} upgrade, not in your world: leave ${path} exactly as ` +
+      `it is and report it at https://github.com/Shufflewick/BoardSmith/issues with this message, so the world ` +
+      `can be recovered. To carry on in the meantime, move that file aside and run \`boardsmith dev\` again to ` +
+      `start a world from genesis.`,
+  );
+}
+
 /** A store this BoardSmith cannot read, said in the direction the author has to
  *  move: forward to a newer BoardSmith, or aside because nothing here can carry
  *  that layout's world across. */
@@ -923,7 +975,7 @@ interface SqliteStatement {
   get(...params: Array<string | number | null>): unknown;
   all(...params: Array<string | number | null>): unknown[];
 }
-interface SqliteDatabase {
+export interface SqliteDatabase {
   exec(sql: string): void;
   prepare(sql: string): SqliteStatement;
   close(): void;

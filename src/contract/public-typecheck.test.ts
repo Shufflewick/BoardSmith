@@ -25,22 +25,12 @@
  * a gate that can never be zero, which is the same as no gate.
  */
 import { describe, it, expect } from 'vitest';
-import { spawnSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
-import { dirname, resolve } from 'node:path';
 
-const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
+import { REPO_ROOT, vueTscErrors } from './vue-tsc-run.test-helper.js';
 
 describe("BoardSmith's public surface type-checks the way a game checks it", () => {
   it('reports zero vue-tsc errors from tsconfig.public.json', () => {
-    const run = spawnSync(
-      process.execPath,
-      [resolve(REPO_ROOT, 'node_modules/vue-tsc/bin/vue-tsc.js'), '--noEmit', '-p', 'tsconfig.public.json'],
-      { cwd: REPO_ROOT, encoding: 'utf8' },
-    );
-
-    const output = `${run.stdout ?? ''}${run.stderr ?? ''}`;
-    const errors = output.split('\n').filter(line => /error TS\d+:/.test(line));
+    const errors = vueTscErrors(REPO_ROOT, 'tsconfig.public.json');
 
     expect(
       errors,
