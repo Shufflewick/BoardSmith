@@ -340,6 +340,27 @@ export interface BoardSmithWorldEngineOptions {
    * exactly the collision #377 records.
    */
   readonly nextElementId?: number;
+  /**
+   * A SECOND, EMPTY GAME TO HYDRATE A MIGRATION'S ORIGINAL SOURCES INTO (#275).
+   *
+   * `join` hands a transform the ORIGINAL bytes of another root, and those
+   * bytes cannot be adopted into the live tree: the root they belong to may be
+   * resident and being transformed on this very page, and `adoptSubtree`
+   * refuses a repeated element id exactly because two copies of one identity is
+   * corruption. A stored reference inside them would resolve to whichever copy
+   * a walk reached first.
+   *
+   * So an original is hydrated into a game of its own -- same class, same
+   * registry, its own id space -- read through the read-only projection, and
+   * thrown away with that game when the call ends. A reference pointing out of
+   * the source subtree stays the `{ __elementId }` it was stored as, which is
+   * what keeps a read-only join from reaching a live element at all.
+   *
+   * Left out, a migration that declares `join` is refused rather than run: only
+   * `createWorld` holds the game class, and a join with nowhere to hydrate is a
+   * platform fault rather than an author's.
+   */
+  readonly sourceGame?: () => Game;
 }
 
 /**
@@ -408,6 +429,9 @@ export class BoardSmithWorldEngine implements WorldEngine {
   private readonly lastUsed = new Map<string, number>();
   /** The bundle's first-use root builder, or undefined for a world with none. */
   private readonly buildOnFirstUse: ((game: Game, name: string) => GameElement | undefined) | undefined;
+  /** A second, empty game to hydrate a migration's ORIGINAL sources into
+   *  (#275), or undefined for a host that supplied none. */
+  private readonly buildSourceGame: (() => Game) | undefined;
   /**
    * A monotonic counter, raised once per command.
    *
@@ -443,6 +467,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
     this.view = options.view;
     this.budgets = options.budgets ?? worldBudgets();
     this.buildOnFirstUse = options.createPartition;
+    this.buildSourceGame = options.sourceGame;
     if (options.nextElementId !== undefined) this.adoptAllocation(options.nextElementId);
     // AT CONSTRUCTION, NOT AT THE FIRST OFFER. A bundle whose declaration is
     // wrong is wrong for every player who will ever attach, so it is refused
@@ -608,6 +633,67 @@ export class BoardSmithWorldEngine implements WorldEngine {
    */
   surveyPartition<TDigest>(name: string, fold: (element: GameElement) => TDigest): TDigest {
     return fold(readOnlyProjection(this.rootOf(name)));
+  }
+
+  /**
+   * THE ORIGINAL BYTES OF OTHER ROOTS, READABLE FOR EXACTLY ONE CALL (#275).
+   *
+   * A join reads a root's stored records while transforming a DIFFERENT root,
+   * and the two cannot share a tree: the source's identity may already be
+   * resident -- it may be on this very page -- and `adoptSubtree` refuses a
+   * repeated element id because two copies of one identity is corruption, not a
+   * convenience. So the originals are hydrated into a game of their own, which
+   * exists for the duration of this call and is dropped with it.
+   *
+   * SCOPED RATHER THAN OPENED AND CLOSED, because "a hook kept the accessor" is
+   * the failure that would follow: the reader is only reachable inside `run`,
+   * and the second game -- with every original in it -- is unreachable the
+   * moment `run` returns, whether it returned or threw.
+   *
+   * Hydrated ON DEMAND: a root that declares a source and never reads it costs
+   * the transfer the host already paid for and no parse. Each source is adopted
+   * at most once per call, so two roots joining against the same original read
+   * the same element rather than two copies of it.
+   */
+  migrateSources<T>(
+    supplied: Readonly<Record<string, StoredPartition>>,
+    run: (source: (name: string) => GameElement) => T,
+  ): T {
+    // BOTH DIE WITH THIS CALL. Nothing outside it can reach either, so a page's
+    // originals cost this call's memory and no more -- which is the whole of
+    // what makes a join bounded.
+    let sources: Game | undefined;
+    const read = new Map<string, GameElement>();
+    return run((name) => {
+      const already = read.get(name);
+      if (already !== undefined) return already;
+      const stored = supplied[name];
+      if (stored === undefined) {
+        // THE ENGINE'S OWN FAULT IF IT HAPPENS: the runner checks every
+        // declared name against what the host sent before a hook runs, so
+        // reaching here means those two lists parted.
+        throw worldRefusal(
+          "world-migration-unavailable",
+          `This world's migration asked for the original of "${name}", which this call was ` +
+            "not sent. That is a fault in the engine rather than in this world's migration: " +
+            "the names a root declares are checked against the bytes the host sent before any " +
+            "hook runs. Report it with this world's bundle. The world was not changed.",
+        );
+      }
+      if (this.buildSourceGame === undefined) {
+        throw worldRefusal(
+          "world-migration-unavailable",
+          "This world's migration declares `join`, and this world was built without the second " +
+            "game an original source is hydrated into. That is a fault in the platform rather " +
+            "than in this world's migration -- `createWorld` supplies it from the bundle's own " +
+            "game class. Report it with this world's bundle. The world was not changed.",
+        );
+      }
+      sources ??= this.buildSourceGame();
+      const root = readOnlyProjection(sources.adoptSubtree(sources.id, stored.json as ElementJSON));
+      read.set(name, root);
+      return root;
+    });
   }
 
   /**

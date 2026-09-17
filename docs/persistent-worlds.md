@@ -1881,6 +1881,111 @@ than run against a half-folded world. A survey pass writes nothing at all --
 no partition bytes, no created roots -- which is what makes it safe to run a
 page at a time.
 
+**And `join`, for the exact records a fold cannot carry** (#275). A survey
+answers what the world ADDS UP TO -- a total, a directory, a maximum, a
+reconciliation. It is the wrong shape for an exact join: "this existing root's
+new value is THOSE PARTICULAR RECORDS, held by those other roots" is not a fold
+of the world, it is the world. Put it in the digest and the digest is the
+corpus; the reproduction on #275 measured a complete exact join at 524,401 bytes
+against the platform's 262,144-byte ceiling, and no `maxBytes` you write changes
+a host's number. The other roads are closed for reasons of their own: `derive`
+may not replace a root that already exists, `finalize` may not page, and a cold
+transform page could name no other root at all.
+
+So the records travel as ROOTS, and the migration says which ones:
+
+```ts
+migration: worldMigration({
+  from: 1,
+  join: {
+    // From the root's NAME and the completed digest, and nothing else.
+    sources: (name, digest) => (isOperative(name) ? digest.carriersOf[name] ?? [] : []),
+    maxSources: 4,
+  },
+  partition: (element, { name, source }) => {
+    if (!isOperative(name)) return;
+    element.transport = carrierRefs(name, (owner) => source(owner));
+  },
+})
+```
+
+`join.sources` is answered from the root's name and the completed digest --
+**never from the root's own contents**, because a host asks this while it is
+deciding which bytes to load, so a declaration that needed the root would be a
+declaration that could only be answered after the load it is meant to plan. That
+is what makes a page's whole cost knowable before any of it is read. A digest is
+still exactly the right place for the bounded part of a join: which few roots a
+given root reads. The unbounded part -- the records themselves -- is what
+travels as bytes beside the page.
+
+`ctx.source(name)` is then available in `partition` and in `derive`, and answers
+that root **as it was stored when the migration began** -- read-only, through
+the same projection a survey's fold reads through. A name the root did not
+declare is refused rather than served: the declaration is what the host loaded
+the page against, so reading past it would be reading bytes that are not there.
+A root may not name ITSELF; the element the hook is handed already is its own
+original.
+
+`maxSources` is required for `survey.maxBytes`'s reason: one page must carry the
+root being transformed AND every original it names, so a join whose width grows
+with the world stops fitting on the world it was written for. The host states
+its own ceiling too, and a refusal names the size, the bound and whose bound it
+was.
+
+`join` and `finalize` are **mutually exclusive**, refused where they are
+declared: `finalize` is already handed every root in one call, so a join beside
+it would put a second copy of the world into the one call a large world cannot
+make. `join` rides either pageable shape, with or without a `survey`.
+
+#### What a host owes a migration that joins
+
+`runner.migrationShape()` carries `joins: { maxSources }` on `independent` and
+`survey` alike, and it is not advisory: **a host that cannot meet the three
+promises below may not run the migration**, and the engine refuses a transform
+page that does not carry what it declared rather than transforming against
+whatever arrived.
+
+1. **Ask, then load.** Before each transform page, call
+   `runner.migrationSources(pageNames, { digest, maxSources })`. It runs the
+   bundle's `join.sources` and nothing else -- it adopts nothing, writes nothing
+   and is repeatable -- and answers the exact union of original roots that page
+   must carry. Send those rows back as `ctx.sources`. Both directions are
+   checked before any hook runs: a name declared and not sent, and a row sent
+   and not declared, are each a refusal naming the names.
+
+2. **Cold-page stability: originals are the world as the migration found it.**
+   The bytes a host serves for a source root are the bytes that root held when
+   the migration began, **however many roots the migration has already
+   rewritten** -- across wakes, evictions and cold restarts. A host that served
+   live rows would make the answer depend on the order it happened to page its
+   roots in, which is the ordering this whole design exists to remove. The
+   straightforward implementation is a generation: transform pages write the new
+   bytes under a new generation of keys while the old generation stays readable,
+   and the world's current generation is one value that moves at the end.
+
+3. **Atomicity, rollback and replay.**
+   - *Atomic:* the world is on the old rules until every page has landed, and
+     then it is on the new ones. No player may be served a world that is half
+     joined -- with a generation pointer that is one storage write, which is the
+     same all-or-nothing every other migration already promises.
+   - *Rollback:* because the originals are still there, a migration that stalls
+     part way is abandonable: drop the partly written generation and the world
+     is exactly the world it was, playable on its old rules. That is strictly
+     better than the forward-only resume a host has when it overwrites in place,
+     and it is the reason this contract asks for the snapshot rather than
+     merely suggesting it.
+   - *Replay:* a page's answer is a pure function of (its stored roots, the
+     completed digest, the originals it declared), and all three are as the
+     migration found them. So a host that committed a page and lost the
+     acknowledgement may send the page again and land byte-identical bytes.
+     Re-sending a page whose `derive` answered new roots is still refused by
+     name, exactly as it was before (#246) -- that refusal is what makes the
+     resume safe rather than merely likely to be safe.
+
+A survey pass is never sent originals and is refused if it is: it folds every
+root in the world exactly once and has each root's own bytes in front of it
+already.
+
 **Changing `world.maxPlayers` across an upgrade needs no separate roster
 migration.** The roster is the host's, not the bundle's: `maxPlayers` is read
 from the compiled rules at construction and bounds who may sit down, so raising

@@ -186,6 +186,12 @@ class ReferenceWorldEngine implements WorldEngine {
     throw new Error("the reference world holds no elements to survey");
   }
 
+  /** Nor is there a second game to hydrate another root's original into
+   *  (#275). A conformance engine is asked to have the METHOD. */
+  migrateSources(): never {
+    throw new Error("the reference world holds no elements to read an original source from");
+  }
+
   /** Nothing to re-baseline either: a migration here transformed no root
    *  (ShufflewickPub #407). A conformance engine is asked to have the METHOD. */
   migrateBaseline(): void {

@@ -85,8 +85,10 @@ import type {
   WorldMigrationCreateContext,
   WorldMigrationDeriveContext,
   WorldMigrationFinalizeContext,
+  WorldMigrationJoin,
   WorldMigrationSurvey,
 } from "./migration.js";
+import { declaredSources } from "./migration.js";
 import type { ScheduleAllowance } from "./schedule-api.js";
 import { WorldRefusal, worldRefusal } from "./refusals.js";
 
@@ -331,6 +333,7 @@ function deriveRoots(
   page: readonly string[],
   existing: readonly string[],
   hookCtx: { readonly from: number; readonly to: number; readonly digest: unknown },
+  sourceFor: (root: string) => (name: string) => GameElement,
 ): Record<string, StoredPartition> {
   const derived: Record<string, StoredPartition> = Object.create(null) as Record<
     string,
@@ -342,7 +345,13 @@ function deriveRoots(
   for (const name of page) {
     const built = engine.migrateDerive(
       name,
-      (element) => derive(element, { name, existing: [...taken].sort(), ...hookCtx }),
+      (element) =>
+        derive(element, {
+          name,
+          existing: [...taken].sort(),
+          ...hookCtx,
+          source: sourceFor(name),
+        }),
       taken,
     );
     for (const [derivedName, record] of Object.entries(built)) {
@@ -367,6 +376,119 @@ function mergedRoots(
   for (const [name, record] of Object.entries(derived)) all[name] = record;
   for (const [name, record] of Object.entries(created)) all[name] = record;
   return all;
+}
+
+/**
+ * WHICH ORIGINALS THIS PAGE'S ROOTS DECLARED, BY ROOT (#275).
+ *
+ * The one place a `join.sources` answer is normalized, so the names a host is
+ * told to load and the names a hook is then allowed to read are the SAME list.
+ * Asked with the root's name and the completed digest and nothing else: a host
+ * runs this to decide which bytes to read, so a declaration that needed the
+ * root's own contents could only be answered after the load it is planning.
+ */
+function declaredPerRoot(
+  join: WorldMigrationJoin<unknown>,
+  page: readonly string[],
+  digest: unknown,
+  hostMax: number | undefined,
+): Map<string, readonly string[]> {
+  const declared = new Map<string, readonly string[]>();
+  for (const name of page) {
+    declared.set(
+      name,
+      declaredSources(name, join.sources(name, digest), join.maxSources, hostMax),
+    );
+  }
+  return declared;
+}
+
+/** The union of what a page declared, sorted -- one row per name, however many
+ *  of the page's roots named it (#275). */
+function sourceUnion(declared: ReadonlyMap<string, readonly string[]>): readonly string[] {
+  const union = new Set<string>();
+  for (const names of declared.values()) for (const name of names) union.add(name);
+  return [...union].sort();
+}
+
+/**
+ * WHAT THE HOST SENT IS EXACTLY WHAT THIS PAGE DECLARED, checked before a
+ * single hook runs (#275).
+ *
+ * Both directions, and neither is pedantry. A MISSING original is a hook that
+ * would read bytes nobody loaded. An EXTRA one is the two sides disagreeing
+ * about what this page is -- which, on a resumed migration, is the difference
+ * between re-running a page and running a different one.
+ */
+function assertSourceBytes(
+  supplied: Readonly<Record<string, StoredPartition>> | undefined,
+  wanted: readonly string[],
+): Readonly<Record<string, StoredPartition>> {
+  if (supplied === undefined) {
+    throw worldRefusal(
+      "world-migration-unavailable",
+      "This migration declares `join`, so a transform page carries the ORIGINAL bytes of the " +
+        "roots it reads, and this call carried none. Ask `migrationSources()` which originals " +
+        "this page's roots declare, read each one AS IT WAS WHEN THE MIGRATION BEGAN -- not as " +
+        "an earlier page has since rewritten it -- and send them as `sources`. A host that " +
+        "cannot serve the originals of roots it has already written cannot run this migration. " +
+        "The world was not changed.",
+    );
+  }
+  const sent = Object.keys(supplied).sort();
+  const missing = wanted.filter((name) => !(name in supplied));
+  const extra = sent.filter((name) => !wanted.includes(name));
+  if (missing.length === 0 && extra.length === 0) return supplied;
+  throw worldRefusal(
+    "world-migration-unavailable",
+    `This transform page was sent originals that are not the ones its roots declared. ` +
+      `${missing.length === 0 ? "" : `Not sent: ${missing.join(", ")}. `}` +
+      `${extra.length === 0 ? "" : `Sent and not declared: ${extra.join(", ")}. `}` +
+      "`migrationSources()` answers the exact list for a page, from the same declaration this " +
+      "call checks against, so the two part only when a host sends a page it asked about with a " +
+      "different digest or a different set of roots. The world was not changed.",
+  );
+}
+
+/**
+ * ONE ROOT'S READER, HELD TO ONE ROOT'S DECLARATION (#275).
+ *
+ * The page's originals are hydrated once and shared, and what differs per root
+ * is what that root may SEE: a read outside its own `join.sources` answer is
+ * refused rather than served, because the declaration is what the host loaded
+ * this page against and a hook that could read past it would make the page a
+ * host sends depend on what the hooks happen to do.
+ */
+function sourceReader(
+  read: (name: string) => GameElement,
+  root: string,
+  declared: readonly string[],
+): (name: string) => GameElement {
+  return (name) => {
+    if (!declared.includes(name)) {
+      throw worldRefusal(
+        "world-migration-unavailable",
+        `This world's migration read the original of "${name}" while transforming "${root}", ` +
+          `which did not declare it. \`join.sources("${root}", digest)\` answered ` +
+          `${declared.length === 0 ? "nothing" : declared.join(", ")}, and that answer is what ` +
+          "the host loaded this page against -- so these bytes are not here to be read. Name " +
+          "every original a root reads, from its name and the digest alone. The world was not " +
+          "changed.",
+      );
+    }
+    return read(name);
+  };
+}
+
+/** A migration with no `join`, reached for an original anyway (#275). */
+function joinUndeclared(name: string, root: string): WorldRefusal {
+  return worldRefusal(
+    "world-migration-unavailable",
+    `This world's migration read the original of "${name}" while transforming "${root}", and it ` +
+      "declares no `join` block. `ctx.source` answers another root's STORED bytes, and a host " +
+      "only sends those for a migration that declared which roots need them: add " +
+      "`join: { sources: (name, digest) => [...], maxSources: n }`. The world was not changed.",
+  );
 }
 
 /**
@@ -479,12 +601,37 @@ function assertPassNaming(
   ctx: WorldMigrateContext,
 ): void {
   if (paged && hooks.finalize !== undefined) throw pagingRefused();
+  if (hooks.join === undefined && ctx.sources !== undefined) throw sourcesUnexpected();
   if (hooks.survey === undefined) {
     if (ctx.pass !== undefined) throw passUnexpected();
     return;
   }
   if (paged && ctx.pass === undefined) throw passMissing();
   if (ctx.pass === "survey" && ctx.runCreate === true) throw createOnSurvey();
+  if (ctx.pass === "survey" && ctx.sources !== undefined) throw sourcesOnSurvey();
+}
+
+/** A page sent originals for a migration that reads none (#275). */
+function sourcesUnexpected(): WorldRefusal {
+  return worldRefusal(
+    "world-migration-unavailable",
+    "This call was sent original source roots to join against, and this migration declares no " +
+      "`join` -- so no hook can read one and every byte of them is page room something else " +
+      "needed. Ask `migrationShape()` before running a migration: only a shape carrying " +
+      "`joins` is sent originals. The world was not changed.",
+  );
+}
+
+/** A survey pass sent the originals a TRANSFORM page joins against (#275). */
+function sourcesOnSurvey(): WorldRefusal {
+  return worldRefusal(
+    "world-migration-unavailable",
+    "This call is a `survey` pass and was also sent original source roots to join against. A " +
+      "survey folds every root in the world exactly once and writes nothing -- it has every " +
+      "root's own bytes in front of it already -- so the originals are bytes the fold would " +
+      "never read and page room it did not need. Send them on the `transform` pages, which are " +
+      "the pages that join. The world was not changed.",
+  );
 }
 
 /** A survey pass told to create this version's roots (#449). */
@@ -551,6 +698,43 @@ export interface WorldMigrateContext {
    * the two it was so nobody tunes the wrong number.
    */
   readonly maxDigestBytes?: number;
+  /**
+   * THE ORIGINAL BYTES THIS PAGE'S ROOTS DECLARED THEY READ (#275).
+   *
+   * Exactly what `migrationSources()` answered for this page, by name, as the
+   * roots were stored WHEN THE MIGRATION BEGAN -- not as some earlier page has
+   * since rewritten them. A transform page of a migration that declares `join`
+   * is refused without this, and refused when what it carries is not that
+   * answer, because a page loaded against one list and read against another is
+   * a page whose result depends on which host ran it.
+   *
+   * Meaningless on a survey pass, which reads every root anyway, and on a
+   * migration that declares no `join`.
+   */
+  readonly sources?: Readonly<Record<string, StoredPartition>>;
+  /**
+   * THE HOST'S OWN CEILING ON ONE ROOT'S JOIN WIDTH (#275).
+   *
+   * The author states one in `join.maxSources` and the host may state a lower
+   * one here; whichever is smaller is enforced, and the refusal says which of
+   * the two it was so nobody tunes the wrong number.
+   */
+  readonly maxSources?: number;
+}
+
+/**
+ * WHAT `migrationSources()` IS ASKED (#275).
+ *
+ * The page's names and the completed digest, which is the whole of what a join
+ * may be declared from -- deliberately not the bytes, because this is the call
+ * a host makes to find out WHICH bytes to read.
+ */
+export interface WorldMigrationSourcesContext {
+  /** The finished fold, as the host persisted it, for a migration that
+   *  declares `survey`. Absent for one that declares none. */
+  readonly digest?: string;
+  /** The host's own ceiling on one root's join width, as `migrateAll` takes. */
+  readonly maxSources?: number;
 }
 
 /** Which pass of a bounded cross-root migration a call is (#449). */
@@ -573,9 +757,32 @@ export type WorldMigratePass = "survey" | "transform";
  *                     the host has to say so rather than discover it.
  */
 export type WorldMigrationShape =
-  | { readonly kind: "independent" }
-  | { readonly kind: "survey"; readonly maxDigestBytes: number }
+  | { readonly kind: "independent"; readonly joins?: WorldMigrationJoins }
+  | {
+      readonly kind: "survey";
+      readonly maxDigestBytes: number;
+      readonly joins?: WorldMigrationJoins;
+    }
   | { readonly kind: "whole-world" };
+
+/**
+ * THAT THIS MIGRATION READS ORIGINAL ROOTS, and how wide a read may be (#275).
+ *
+ * Orthogonal to the pass structure above rather than a fourth kind of it: a
+ * join changes what ONE transform page must carry, not how many passes there
+ * are, so either pageable shape may declare one. `whole-world` never does --
+ * `finalize` and `join` are mutually exclusive at declaration.
+ *
+ * A host that sees this must do two things it otherwise need not, and a host
+ * that cannot do both may not run the migration at all: ask
+ * `migrationSources()` which originals each transform page needs, and serve
+ * those originals AS THEY WERE WHEN THE MIGRATION BEGAN, however many roots it
+ * has already rewritten. `maxSources` is the AUTHOR's stated ceiling on one
+ * root's width, so a host can pick the lower of it and its own up front.
+ */
+export interface WorldMigrationJoins {
+  readonly maxSources: number;
+}
 
 export interface WorldSerialized extends WorldAllocation {
   readonly partitions: Record<string, string>;
@@ -620,6 +827,7 @@ export interface WorldMigrationHooks {
   readonly create?: (game: Game, ctx: WorldMigrationCreateContext) => Record<string, GameElement>;
   readonly finalize?: (game: Game, ctx: WorldMigrationFinalizeContext) => void;
   readonly survey?: WorldMigrationSurvey<unknown>;
+  readonly join?: WorldMigrationJoin<unknown>;
 }
 
 /**
@@ -947,10 +1155,40 @@ export function createWorldRunner(
 
     migrationShape(): WorldMigrationShape {
       if (migrationHooks.finalize !== undefined) return { kind: "whole-world" };
+      // THE JOIN RIDES EITHER PAGEABLE SHAPE (#275). It says what a transform
+      // page must CARRY, not how many passes there are, so a host reads it
+      // beside the pass structure rather than instead of it.
+      const joins =
+        migrationHooks.join === undefined
+          ? {}
+          : { joins: { maxSources: migrationHooks.join.maxSources } };
       if (migrationHooks.survey !== undefined) {
-        return { kind: "survey", maxDigestBytes: migrationHooks.survey.maxBytes };
+        return { kind: "survey", maxDigestBytes: migrationHooks.survey.maxBytes, ...joins };
       }
-      return { kind: "independent" };
+      return { kind: "independent", ...joins };
+    },
+
+    /**
+     * WHICH ORIGINALS THIS TRANSFORM PAGE NEEDS (#275).
+     *
+     * Asked before the page's own bytes are read, because that is the point:
+     * the declaration is a function of each root's NAME and the completed
+     * digest, so a host can plan a page's whole cost -- the roots it transforms
+     * and the originals they join against -- before it loads any of it.
+     *
+     * Pure: it runs the bundle's `join.sources` and nothing else, adopts
+     * nothing and writes nothing, so a host that asks twice is told the same
+     * thing twice. That is what makes a cold resume send the same page.
+     */
+    migrationSources(
+      page: readonly string[],
+      ctx: WorldMigrationSourcesContext,
+    ): readonly string[] {
+      const join = migrationHooks.join;
+      if (join === undefined) return [];
+      if (migrationHooks.survey !== undefined && ctx.digest === undefined) throw digestMissing();
+      const digest = ctx.digest === undefined ? undefined : (JSON.parse(ctx.digest) as unknown);
+      return sourceUnion(declaredPerRoot(join, [...page].sort(), digest, ctx.maxSources));
     },
 
     async migrateAll(
@@ -1004,13 +1242,38 @@ export function createWorldRunner(
       // `create` below runs once, on the last page, with every earlier root
       // already serialized and let go of. Its answers join `created`, so the
       // page and the roots it derived land in ONE host transaction.
-      const derived = deriveRoots(engine, migrationHooks, page, existing, hookCtx);
+      //
+      // AND THE ORIGINALS THOSE HOOKS JOIN AGAINST (#275), resident for exactly
+      // as long as the hooks are. A digest is a fold and an exact join is a
+      // corpus, so the records one root rebuilds itself from travel as bytes
+      // beside the page rather than inside the digest -- declared per root
+      // before the host loaded anything, checked against what it sent before
+      // anything runs, and read through a second game that dies with this call.
+      const join = migrationHooks.join;
+      const declared =
+        join === undefined
+          ? undefined
+          : declaredPerRoot(join, page, digest, ctx.maxSources);
+      const supplied =
+        declared === undefined ? {} : assertSourceBytes(ctx.sources, sourceUnion(declared));
+      const derived = engine.migrateSources(supplied, (read) => {
+        const sourceFor = (root: string) => {
+          if (declared === undefined) {
+            return (name: string): GameElement => {
+              throw joinUndeclared(name, root);
+            };
+          }
+          return sourceReader(read, root, declared.get(root) ?? []);
+        };
+        const split = deriveRoots(engine, migrationHooks, page, existing, hookCtx, sourceFor);
+        for (const name of page) {
+          engine.migratePartition(name, (element) => {
+            migrationHooks.partition?.(element, { name, ...hookCtx, source: sourceFor(name) });
+          });
+        }
+        return split;
+      });
       const taken = [...existing, ...Object.keys(derived)];
-      for (const name of page) {
-        engine.migratePartition(name, (element) => {
-          migrationHooks.partition?.(element, { name, ...hookCtx });
-        });
-      }
 
       // (2) THE ROOTS THIS VERSION ADDS (#218). Their bytes are re-taken in (4);
       // what this step establishes is the NAMES, their parents, and that none
@@ -1338,6 +1601,26 @@ export interface WorldRunnerHandle {
    * the host must state rather than discover at a deadline.
    */
   migrationShape(): WorldMigrationShape;
+
+  /**
+   * WHICH ORIGINAL ROOTS A TRANSFORM PAGE MUST CARRY (#275).
+   *
+   * Asked for the names a page is ABOUT to transform, before their bytes are
+   * read, and answered from each root's name and the completed digest alone --
+   * so the whole cost of a page is knowable before any of it is loaded. Empty
+   * for a migration that declares no `join`, which is every migration written
+   * before this one.
+   *
+   * What comes back is exactly what `migrateAll` will check `ctx.sources`
+   * against, and every name in it must be sent AS IT WAS WHEN THE MIGRATION
+   * BEGAN -- a host that has already transformed one of these roots must still
+   * answer with the bytes it started from, or the same page transforms
+   * differently depending on when it ran.
+   */
+  migrationSources(
+    page: readonly string[],
+    ctx: WorldMigrationSourcesContext,
+  ): readonly string[];
 
 
   /**

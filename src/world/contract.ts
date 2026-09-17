@@ -1059,6 +1059,24 @@ export interface WorldEngine {
   surveyPartition<TDigest>(name: string, fold: (element: GameElement) => TDigest): TDigest;
 
   /**
+   * THE ORIGINAL BYTES OF OTHER ROOTS, READABLE FOR EXACTLY ONE CALL (#275).
+   *
+   * A digest is a FOLD, so an exact join -- "this root's new value is those
+   * particular records, held by those other roots" -- cannot travel in one: the
+   * records are the corpus. They travel as bytes beside the page instead, and
+   * this is what reads them.
+   *
+   * Hydrated into a SECOND, empty game, because the original of a root that is
+   * resident holds ids that are resident, and one identity may not be in a tree
+   * twice. Scoped to the call rather than opened and closed, so no hook can keep
+   * the reader alive past the page it was loaded for.
+   */
+  migrateSources<T>(
+    supplied: Readonly<Record<string, StoredPartition>>,
+    run: (source: (name: string) => GameElement) => T,
+  ): T;
+
+  /**
    * THE MIGRATION'S LAST PHASE, over every root at once (ShufflewickPub #379).
    *
    * `migratePartition` transforms one root and `createMigratedPartitions` only
@@ -1382,6 +1400,7 @@ export const WORLD_ENGINE_METHODS = Object.keys({
   migrateDerive: null,
   migrateFinalize: null,
   migratePartition: null,
+  migrateSources: null,
   nextElementId: null,
   pickPartitions: null,
   resolvePick: null,
