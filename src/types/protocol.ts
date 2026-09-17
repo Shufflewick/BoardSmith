@@ -52,6 +52,9 @@ export enum ErrorCode {
   // Pick errors
   INVALID_PICK = 'INVALID_PICK',
   PICK_NOT_FOUND = 'PICK_NOT_FOUND',
+  /** The step was reached and has nothing to pick (#270): a dead end, said to
+   *  the player rather than drawn as an empty list. */
+  PICK_HAS_NO_CANDIDATES = 'PICK_HAS_NO_CANDIDATES',
 
   // State errors
   NOT_AWAITING_INPUT = 'NOT_AWAITING_INPUT',

@@ -2975,10 +2975,16 @@ function askable(first: PickMetadata | undefined): boolean {
  * has exactly one cause, so it can name the question that caused it.
  */
 function warnDropped(definition: ActionDefinition, seat: number): null {
-  const first = definition.selections[0]!;
+  // ONLY WHERE IT COULD SURPRISE ANYONE. A one-question verb is dropped exactly
+  // when that question has no candidate, which is most of what a seat cannot do
+  // right now; #270's confusion needs a LATER question to have been blamed, so
+  // it cannot arise there. Warning on every such verb, on every offer, would
+  // train its reader to ignore the warning that means something.
+  const first = definition.selections[0];
+  if (first === undefined || definition.selections.length < 2) return null;
   devWarn(
     `world-offer-pruned:${definition.name}:${first.name}`,
-    `World action '${definition.name}' was dropped from seat ${seat}'s offer: its first ` +
+    `World action '${definition.name}' was dropped from seat ${seat}'s offer: its FIRST ` +
     `question '${first.name}' has no selectable candidate (every candidate is either absent ` +
     `or disabled).\n` +
     `  A later selection is never the reason -- it is asked with nothing bound and re-asked ` +

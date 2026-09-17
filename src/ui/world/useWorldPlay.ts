@@ -48,6 +48,7 @@
  * 4. **The log is a tail, not a history.** See `messages`.
  */
 import { computed, type ComputedRef } from 'vue';
+import { deadEndPickMessage } from '../../engine/element/pick-candidates.js';
 import type { WorldHost } from './useWorldHost.js';
 import type { WorldActionOffer } from './worldProtocol.js';
 import type {
@@ -308,13 +309,7 @@ export function useWorldPlay(host: WorldHost): WorldPlay {
           `The world would not say what "${selectionName}" may be, and did not say why.`,
       };
     }
-    return {
-      success: true,
-      choices: answer.selection.choices,
-      validElements: answer.selection.validElements,
-      multiSelect: answer.selection.multiSelect,
-      orderedList: answer.selection.orderedList,
-    };
+    return answeredPick(offer, answer.selection, currentArgs);
   }
 
   return {
@@ -329,5 +324,45 @@ export function useWorldPlay(host: WorldHost): WorldPlay {
     sendAction,
     fetchPickChoices,
     fetchActionQuote,
+  };
+}
+
+/**
+ * A pick the world has just re-answered, as the panel reads it.
+ *
+ * A QUESTION THE SEAT REACHED AND CANNOT ANSWER (BoardSmith #270) is refused
+ * here rather than drawn as an empty list under a prompt: an offered verb can
+ * now walk a seat to a later pick that, with its input bound, genuinely has
+ * nothing in it -- the case the old offer-time pruning hid by deleting the verb,
+ * and one silence is no better than the other. The refusal travels on the
+ * channel the world's own already travels, in the words the table's
+ * `PickHandler` uses for the same state.
+ *
+ * Only with args BOUND, which is the only place this is knowable: a pick
+ * answered off the offer frame was evaluated with nothing bound, where an empty
+ * list means "not narrowed yet" rather than "nothing".
+ */
+function answeredPick(
+  offer: WorldActionOffer,
+  answered: WorldActionOffer['selections'][number],
+  args: Readonly<Record<string, unknown>>,
+): PickChoicesResult {
+  const candidates = answered.choices ?? answered.validElements;
+  if (candidates?.length === 0 && answered.optional !== true) {
+    return {
+      success: false,
+      error: deadEndPickMessage({
+        action: offer.prompt ?? offer.name,
+        pick: answered.prompt ?? answered.name,
+        args,
+      }),
+    };
+  }
+  return {
+    success: true,
+    choices: answered.choices,
+    validElements: answered.validElements,
+    multiSelect: answered.multiSelect,
+    orderedList: answered.orderedList,
   };
 }

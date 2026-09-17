@@ -1080,10 +1080,16 @@ by an earlier answer has nothing to narrow by yet, so the natural
 `if (args.slot === undefined) return []` used to take the whole verb out of the
 seat's offer. It no longer does; the later selection's candidates are re-asked
 with the args bound as soon as the player answers (`resolvePick`), and that
-narrowed list is what `apply` validates against. When an action IS dropped for
-want of an answer, the engine prints a development warning naming the action and
-the question, rather than leaving a seat looking at a world where the verb does
-not exist.
+narrowed list is what `apply` validates against. When a re-asked pick comes back
+with nothing in it, the panel says so -- naming the question, the verb and the
+answers that narrowed it -- rather than drawing an empty list under a prompt.
+
+When an action IS dropped for want of an answer, a development warning names the
+action and the question, but **only for an action that asks more than one
+question**: a one-question verb is dropped exactly when that question has no
+candidate, which is most of what a seat cannot do right now, and a warning on
+every one of those would train its reader to ignore the one that means
+something.
 
 It costs `O(actions) x (condition + each selection's own candidates)`. There is
 no term that scales with the world.

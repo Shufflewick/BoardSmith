@@ -17,7 +17,7 @@
  * What still drops an action is its FIRST question having no answer -- #187's
  * rule, unchanged: a pick that opens on nothing.
  */
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { Game, Piece, Player, Space } from "../engine/index.js";
 import type { ElementJSON, GameOptions } from "../engine/index.js";
 import { BoardSmithWorldEngine } from "./engine.js";
@@ -108,6 +108,26 @@ describe("#270 — a dependent choice does not take the verb out of the offer", 
 
     expect(forHead.choices?.map((choice) => choice.value)).toEqual(["helm"]);
     expect(forHand.choices?.map((choice) => choice.value)).toEqual(["sword"]);
+  });
+
+  it("says nothing about a ONE-QUESTION verb it drops", async () => {
+    // A world drops a verb whenever its one question has no candidate, which is
+    // most of what a seat cannot do right now. Warning about it would fire for
+    // every such verb on every offer and teach its reader to ignore the warning
+    // that means something.
+    const nothingHere = worldAction<KitGame>("nothingHere")
+      .needs(() => [KIT])
+      .chooseFrom("slot", { choices: () => [] as string[] })
+      .execute(() => {});
+    const engine = await warmEngine([look, nothingHere]);
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+
+    try {
+      expect((await engine.offersFor("player-a", STAMP)).map((o) => o.name)).toEqual(["look"]);
+      expect(warn).not.toHaveBeenCalled();
+    } finally {
+      warn.mockRestore();
+    }
   });
 
   it("still drops an action whose FIRST question has no answer", async () => {

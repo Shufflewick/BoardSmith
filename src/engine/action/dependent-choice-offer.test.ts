@@ -142,6 +142,21 @@ describe('#270 — the pruning that remains is observable', () => {
     expect(said).toContain("'item'");
   });
 
+  it('says nothing about a ONE-QUESTION verb, whose absence is its own explanation', () => {
+    // The noise this must not make. A single-question verb is dropped exactly
+    // when that question has no answer, which is ordinary play -- no deck, so no
+    // draw -- and #270's confusion cannot arise: there is no later step to have
+    // been blamed. A warning here would fire for every such verb on every seat
+    // and train its reader to ignore the one that means something.
+    const said = dropped(
+      Action.create('draw')
+        .chooseFrom('card', { choices: [] as string[] })
+        .execute(() => {}),
+    );
+
+    expect(said).toBe('');
+  });
+
   it('says nothing at all about a verb it offers', () => {
     expect(executor.isActionAvailable(equipAction(), game.getPlayer(1)!)).toBe(true);
     expect(warn).not.toHaveBeenCalled();

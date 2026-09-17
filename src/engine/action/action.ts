@@ -1537,7 +1537,13 @@ export class ActionExecutor {
       .filter(c => c.disabled === false);
 
     if (enabledChoices.length === 0) {
-      devWarn(
+      // ONLY WHERE IT COULD SURPRISE ANYONE. A one-question verb is dropped
+      // exactly when that question has no answer -- no deck, so no draw -- which
+      // is ordinary play and is the whole of what its absence means. #270's
+      // confusion needs a LATER step to have been blamed, so it cannot arise
+      // there, and a warning that fires for every such verb on every seat trains
+      // its reader to ignore the one that means something.
+      if (selections.length > 1) devWarn(
         `offer-pruned:${actionName}:${selection.name}`,
         `Action '${actionName}' was dropped from this player's offers: its first question ` +
         `'${selection.name}' has no selectable candidate right now (every candidate is either ` +

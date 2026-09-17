@@ -164,14 +164,41 @@ This works with all selection types:
 })
 ```
 
-### When an action IS dropped, you will hear about it
+### When the player reaches a step with nothing in it
+
+They are told, in words. A **required** step that comes back empty refuses
+instead of drawing an empty list, naming the question, the verb and the answers
+that narrowed it:
+
+> There is nothing to choose for "Item" in "Equip an item": nothing qualifies
+> once slot = "head". Cancel this action and answer it differently, or take
+> another action.
+
+That refusal travels on the channel a refused pick already travels, which both
+the action panel and a custom board watch, so the two cannot disagree about it.
+
+Two things are deliberately **not** treated as dead ends: an **optional** step
+(skipping it is the answer) and a step whose candidates are all **disabled**
+(every row carries its own reason, which says more than the message could).
+
+If your game knows a better sentence than the engine's, say it earlier with
+`.condition()` or `.disabled()` on the action — both run before the player is
+walked this far.
+
+### When an action IS dropped, and when you hear about it
 
 Two things, and only two, take an action off a seat's list for want of an
-answer, and both print a development warning naming the action and the step:
+answer:
 
 1. Its **first** question has no selectable candidate (every one absent or
    disabled). That is a pick that would open on nothing.
 2. A **declared** dependency that no value of its input can satisfy.
+
+A development warning naming the action and the step is printed **only for an
+action that asks more than one question**. A one-question verb is dropped
+exactly when that question has no answer — no deck, so no draw — which is
+ordinary play and is the whole of what its absence means; warning on every such
+verb would train you to ignore the warning that matters.
 
 If the verb should be missing, prefer saying so with `.condition()` or
 `.disabled()`: a disabled action with a reason teaches the player something, a

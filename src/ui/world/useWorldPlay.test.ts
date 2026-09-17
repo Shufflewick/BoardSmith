@@ -190,6 +190,40 @@ describe('re-asking one pick once something is bound (ShufflewickPub #378)', () 
     expect(result.choices).toEqual(DEPLOY.selections[0]!.choices);
   });
 
+  /** A world that answers `crew` with exactly this, offered as `deploy`. */
+  const asking = (
+    selection: Record<string, unknown>,
+    offer: WorldActionOffer = DEPLOY,
+  ) => {
+    const host = fakeHost({ resolvePick: vi.fn(async () => ({ ok: true, selection })) });
+    host.actions.value = [offer];
+    return play(host).fetchPickChoices('deploy', 'crew', 4, { ship: 'dory' });
+  };
+
+  it('says what was asked and why, when the re-asked pick comes back with nothing (#270)', async () => {
+    // An offered verb can now walk a seat to a question that, once its input is
+    // bound, genuinely has nothing to pick -- the case the old pruning hid by
+    // deleting the verb. An empty list under a prompt would be one silence
+    // traded for another, so the panel refuses and says what it asked for.
+    const result = await asking(
+      { name: 'crew', type: 'choice', choices: [] },
+      { ...DEPLOY, prompt: 'Deploy operatives' },
+    );
+
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('crew');
+    expect(result.error).toContain('Deploy operatives');
+    expect(result.error).toContain('ship');
+    expect(result.error).toContain('dory');
+  });
+
+  it('leaves an OPTIONAL pick with nothing in it alone: skipping is the answer', async () => {
+    const result = await asking({ name: 'crew', type: 'choice', optional: true, choices: [] });
+
+    expect(result.success).toBe(true);
+    expect(result.choices).toEqual([]);
+  });
+
   it('reports the world\'s own refusal rather than a stale offer', async () => {
     // Falling back to the offer here would show the player a cap the world has
     // just said is wrong, which is the divergence the round trip exists to end.
