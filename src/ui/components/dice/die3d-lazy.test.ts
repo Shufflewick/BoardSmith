@@ -38,6 +38,20 @@ function sourceFiles(dir: string): string[] {
   return out;
 }
 
+/**
+ * Every module under `src/` whose text matches `pattern`, relative to `src/`.
+ *
+ * This file is skipped: it quotes the specifiers it forbids in order to assert
+ * on them, and would otherwise report itself as the offender every time.
+ */
+function modulesMatching(pattern: RegExp): string[] {
+  return sourceFiles(SRC)
+    .filter((f) => !f.endsWith('die3d-lazy.test.ts'))
+    .filter((f) => pattern.test(readFileSync(f, 'utf8')))
+    .map((f) => relative(SRC, f))
+    .sort();
+}
+
 describe('Die3D lazy-loading invariant (BS-2 follow-up)', () => {
   it('routes Die3D.vue through a dynamic import, so three.js gets its own chunk', () => {
     const index = readFileSync(DICE_INDEX, 'utf8');
@@ -49,30 +63,34 @@ describe('Die3D lazy-loading invariant (BS-2 follow-up)', () => {
   });
 
   it('is the only module in src/ that references Die3D.vue', () => {
-    const offenders = sourceFiles(SRC)
-      .filter((f) => f !== DICE_INDEX)
-      .filter((f) => !f.endsWith('die3d-lazy.test.ts'))
-      .filter((f) => /['"][^'"]*Die3D\.vue['"]/.test(readFileSync(f, 'utf8')))
-      .map((f) => relative(SRC, f));
+    const referrers = modulesMatching(/['"][^'"]*Die3D\.vue['"]/);
 
     expect(
-      offenders,
-      `These modules import Die3D.vue directly, which pulls three.js back into every game's ` +
-        `main bundle. Import { Die3D } from the dice barrel (components/dice/index.ts) instead:\n` +
-        offenders.map((f) => `  - ${f}`).join('\n'),
-    ).toEqual([]);
+      referrers,
+      `Only the dice barrel may name Die3D.vue: importing it anywhere else pulls three.js back into every ` +
+        `game's main bundle. Import { Die3D } from components/dice/index.ts instead. Found:\n` +
+        referrers.map((f) => `  - ${f}`).join('\n'),
+    ).toEqual(['ui/components/dice/index.ts']);
   });
 
-  it('keeps three.js out of every module except Die3D.vue', () => {
-    const importers = sourceFiles(SRC)
-      .filter((f) => /from\s+['"]three['"]|import\(\s*['"]three['"]\s*\)/.test(readFileSync(f, 'utf8')))
-      .map((f) => relative(SRC, f));
+  it('keeps three.js out of every module except Die3D.vue and the barrel\u2019s lazy probe', () => {
+    const importers = modulesMatching(/from\s+['"]three['"]|import\(\s*['"]three['"]\s*\)/);
 
     expect(
       importers,
-      `Only Die3D.vue may import three.js — it is the module the lazy chunk is built around. ` +
-        `Any other importer needs its own lazy boundary, or three re-enters the eager graph:\n` +
+      `Only these modules may import three.js \u2014 Die3D.vue is what the lazy chunk is built around, and the ` +
+        `barrel asks the resolver for three inside the same async loader so an uninstalled optional peer ` +
+        `says so (#276). Any other importer needs its own lazy boundary, or three re-enters the eager graph:\n` +
         importers.map((f) => `  - ${f}`).join('\n'),
-    ).toEqual(['ui/components/dice/Die3D.vue']);
+    ).toEqual(['ui/components/dice/Die3D.vue', 'ui/components/dice/index.ts']);
+  });
+
+  it('reaches three only through a dynamic import, never a static one', () => {
+    const barrel = readFileSync(DICE_INDEX, 'utf8');
+
+    // A static `import ... from 'three'` here would put the whole renderer in
+    // the eager graph of every game that draws dice, probe or no probe.
+    expect(barrel).not.toMatch(/^\s*(?:import|export).*from\s+['"]three['"]/m);
+    expect(barrel).toMatch(/import\(\s*['"]three['"]\s*\)/);
   });
 });
