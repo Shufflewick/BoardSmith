@@ -719,18 +719,24 @@ export function createWorld(options: WorldRunnerOptions): WorldRunner {
     assertSeatWithinWorld(player, seat, seatCount);
   }
 
-  const game = new options.definition.gameClass({
-    playerCount: seatCount,
-    seed: options.seed,
-    colors: worldColorPalette(seatCount),
-    worldMode: true,
-  });
+  const buildGame = () => {
+    const built = new options.definition.gameClass({
+      playerCount: seatCount,
+      seed: options.seed,
+      colors: worldColorPalette(seatCount),
+      worldMode: true,
+    });
+    built.reserveConstructionIdSpace();
+    return built;
+  };
+  const game = buildGame();
   // CONSTRUCTION BELOW, THE DURABLE WORLD ABOVE (#218). Everything the game
   // class built for itself -- players most of all -- has an id below the floor;
   // everything genesis and every command build has one above it. That is what
   // lets `world.maxPlayers` change on a live world without the wider
-  // construction minting ids its stored partitions already hold.
-  game.reserveConstructionIdSpace();
+  // construction minting ids its stored partitions already hold. Said inside
+  // `buildGame`, because the second game a migration's original sources are
+  // hydrated into (#275) is the same kind of world and adopts the same bytes.
 
   const store = createInlinedPartitionStore();
   const engine = new BoardSmithWorldEngine({
@@ -746,6 +752,11 @@ export function createWorld(options: WorldRunnerOptions): WorldRunner {
     // THE HOST'S PERSISTED ALLOCATION (#377), or nothing -- and a world built
     // with nothing refuses to mint rather than minting a guess.
     ...(options.nextElementId === undefined ? {} : { nextElementId: options.nextElementId }),
+    // WHERE A MIGRATION'S ORIGINAL SOURCES ARE HYDRATED (#275). A second, empty
+    // world of the same class: an original's element ids are the ids the live
+    // root already holds, and one identity may not be in a tree twice. Built
+    // only if a migration that declares `join` actually reads one.
+    sourceGame: buildGame,
   });
   const runner = createWorldRunner(
     engine,
@@ -762,6 +773,7 @@ export function createWorld(options: WorldRunnerOptions): WorldRunner {
       ...(world.migration?.create === undefined ? {} : { create: world.migration.create }),
       ...(world.migration?.finalize === undefined ? {} : { finalize: world.migration.finalize }),
       ...(world.migration?.survey === undefined ? {} : { survey: world.migration.survey }),
+      ...(world.migration?.join === undefined ? {} : { join: world.migration.join }),
     },
   );
   return { runner, store, seatCount, vacate: worldVacateAction(world) };

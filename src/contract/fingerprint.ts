@@ -198,6 +198,12 @@ export const WORLD_FIXTURE_COVERAGE: Record<(typeof WORLD_ENGINE_METHODS)[number
     + 'at all -- what it accumulates is the author\'s own digest, whose shape is the bundle\'s '
     + 'and not this engine\'s. The fixture drives no migration.',
 
+  migrateSources: 'The ORIGINAL bytes of other roots, read while one root is transformed (#275). '
+    + 'It happens once, at startup, before any player is in the world, and it produces NOTHING '
+    + 'AT ALL: it hydrates the originals a page declared into a second, throwaway game, hands '
+    + 'them to the hooks read-only, and drops them with the call. What the hooks then write is '
+    + 'ordinary partition bytes, whose STORED FORM is `formatHash`\'s subject.',
+
   migrateFinalize: 'The last phase of a world MOVING BETWEEN state versions (ShufflewickPub '
     + '#379), which happens once, at startup, before any player is in it. It derives one root\'s '
     + 'value from another\'s, and like `migratePartition` its ANSWER is ordinary partition bytes '
@@ -484,6 +490,21 @@ const WORLD_DURABILITY_FIXTURE = {
     digest: '{"total":7}',
     nextElementId: 1_000_011,
   },
+  // A TRANSFORM PAGE THAT JOINS AGAINST ORIGINAL ROOTS (#275), here for the
+  // reason both contexts above are: a host reads `migrationSources()`, loads
+  // those rows AS THEY WERE WHEN THE MIGRATION BEGAN and sends them back on the
+  // call -- so this is a shape a platform must write against, and it is a type,
+  // which `surfaceHash` cannot see.
+  migrateJoinPage: {
+    from: 1,
+    to: 2,
+    allNames: ["room:a", "room:b"],
+    pass: "transform",
+    digest: '{"total":7}',
+    maxDigestBytes: 65_536,
+    sources: { "room:b": { parentId: 1_000_000, json: { id: 1_000_001, className: 'Room' } } },
+    maxSources: 4,
+  },
 } satisfies {
   genesis: WorldGenesis;
   checkpoint: WorldSerialized;
@@ -493,6 +514,7 @@ const WORLD_DURABILITY_FIXTURE = {
   migratePage: WorldMigrateContext;
   migrateSurveyPass: WorldMigrateContext;
   surveyed: WorldMigrated;
+  migrateJoinPage: WorldMigrateContext;
 };
 
 /**

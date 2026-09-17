@@ -246,6 +246,75 @@ export interface WorldMigration<TDigest = unknown> {
    * says nothing about which one a host should run.
    */
   readonly survey?: WorldMigrationSurvey<TDigest>;
+  /**
+   * THE ORIGINAL ROOTS ONE ROOT'S TRANSFORM READS (#275).
+   *
+   * A survey answers what the world ADDS UP TO, and that is the right shape for
+   * a total, a directory or a maximum. It is the wrong shape for an EXACT JOIN:
+   * "this existing root's new value is these particular records, held by those
+   * other roots". Folding those records into the digest is folding the corpus
+   * into a bounded value, which is the one thing a digest may not be -- the
+   * reproduction on #275 measured a complete exact join at 524,401 bytes
+   * against a host ceiling of 262,144, and no author's `maxBytes` changes that.
+   *
+   * So the join travels as ROOTS rather than as digest bytes. A root's
+   * transform DECLARES which other roots it reads, from its own name and the
+   * completed digest -- never from its own contents, which are not resident
+   * when a host is deciding what to send -- and the host sends those roots'
+   * bytes with the page. `ctx.source(name)` then answers each one.
+   *
+   * WHAT IT ANSWERS IS THE ORIGINAL, always: the root exactly as it was stored
+   * when the migration began, whether or not some earlier page has already
+   * transformed it. That is what makes the answer independent of the order a
+   * host pages its roots in, and it is the one thing this hook asks of a host
+   * that the others do not -- see `docs/persistent-worlds.md` for the host
+   * contract, which a host must meet before it may run a migration that
+   * declares this.
+   *
+   * MUTUALLY EXCLUSIVE WITH `finalize`, refused where it is declared. That hook
+   * is already handed every root in one call, and a join would put a SECOND
+   * copy of the world into the one call a large world already cannot make.
+   */
+  readonly join?: WorldMigrationJoin<TDigest>;
+}
+
+/**
+ * THE BOUNDED ORIGINAL-SOURCE JOIN A TRANSFORM DECLARES (#275).
+ *
+ * Declared per root and answered before that root is resident, because the
+ * whole point is that the host can READ what it must send before it sends it.
+ * Two roots may name the same source; the host sends it once.
+ */
+export interface WorldMigrationJoin<TDigest> {
+  /**
+   * WHICH ORIGINAL ROOTS THIS ROOT'S TRANSFORM READS.
+   *
+   * Handed the root's NAME and the COMPLETED digest, and nothing else. Not the
+   * element: a host asks this while it is deciding which bytes to load, so a
+   * declaration that needed the root's own contents would be a declaration that
+   * could only be answered after the load it is supposed to plan.
+   *
+   * Answer the names as an array -- `[]` for a root that reads none. A root may
+   * not name ITSELF: the element the hook is handed IS its own original, and
+   * asking a host to send a second copy of it is paying twice for one root.
+   *
+   * The same names on every call for the same (name, digest), because a host
+   * that resumes a migration cold asks again and must be sent the same page.
+   */
+  sources(name: string, digest: TDigest): readonly string[];
+  /**
+   * THE AUTHOR'S OWN CEILING ON HOW MANY ORIGINALS ONE ROOT MAY NAME.
+   *
+   * Required, for `survey.maxBytes`'s reason: a join whose width grows with the
+   * world is the unbounded read this design refuses, and it stops fitting on
+   * the very world it was written for. A page must carry the root being
+   * transformed AND every original it names, so this number times a root's size
+   * is what a host has to fit in one call.
+   *
+   * The HOST enforces its own ceiling as well, and a refusal says which of the
+   * two it was.
+   */
+  readonly maxSources: number;
 }
 
 /**
@@ -333,6 +402,21 @@ export interface WorldMigrationContext<TDigest = unknown> {
    * a migration that declares no survey.
    */
   readonly digest: TDigest;
+  /**
+   * ONE ORIGINAL ROOT THIS ROOT'S TRANSFORM DECLARED (#275).
+   *
+   * Answers the root as it was STORED when the migration began -- read-only,
+   * through the same projection a survey's fold reads through, and never the
+   * live element some other page may already have transformed. A name this root
+   * did not name in `join.sources` is a refusal rather than an answer: the
+   * declaration is what the host loaded the page against, so a read outside it
+   * is a read of bytes that are not there.
+   *
+   * Present on every migration, and a migration that declares no `join` refuses
+   * by name here -- an author who reaches for a source without declaring one is
+   * told which sentence is missing rather than handed `undefined`.
+   */
+  readonly source: (name: string) => GameElement;
   /** The version being left, and the one being arrived at. */
   readonly from: number;
   readonly to: number;
@@ -412,6 +496,21 @@ export function planMigration(args: {
  */
 export function assertWorldMigration(migration: unknown, stateVersion: number): void {
   const candidate = migration as Partial<WorldMigration>;
+  assertMigrationFrom(candidate, stateVersion);
+  for (const hook of ["partition", "derive", "create", "finalize"] as const) {
+    assertHookIsFunction(candidate, hook);
+  }
+  assertWholeWorldBlocks(candidate);
+  assertHookIsFunction(candidate, "event");
+}
+
+/**
+ * REFUSE A `from` THAT IS NOT A VERSION THIS MIGRATION COULD READ.
+ *
+ * It is the state version the migration reads, so it is a whole number, and it
+ * is older than the one the rules declare -- a migration moves a world forward.
+ */
+function assertMigrationFrom(candidate: Partial<WorldMigration>, stateVersion: number): void {
   if (!Number.isInteger(candidate.from) || (candidate.from as number) < 0) {
     throw worldRefusal(
       "bundle-not-a-world",
@@ -429,49 +528,60 @@ export function assertWorldMigration(migration: unknown, stateVersion: number): 
         "is to leave `stateVersion` alone rather than to migrate from it to itself.",
     );
   }
-  if (candidate.partition !== undefined && typeof candidate.partition !== "function") {
-    throw worldRefusal(
-      "bundle-not-a-world",
-      "This bundle's `world.migration.partition` is not a function. It is handed one partition's " +
-        "element and mutates it in place; leave it out entirely for a version whose change is " +
-        "only in its queued events.",
-    );
+}
+
+/** The hooks an author writes as functions, and what each one is for -- said in
+ *  the refusal an author who wrote something else reads. */
+const HOOK_IS_NOT_A_FUNCTION: Record<
+  "partition" | "derive" | "create" | "finalize" | "event",
+  string
+> = {
+  partition:
+    "This bundle's `world.migration.partition` is not a function. It is handed one partition's " +
+    "element and mutates it in place; leave it out entirely for a version whose change is " +
+    "only in its queued events.",
+  derive:
+    "This bundle's `world.migration.derive` is not a function. It is handed ONE source root, " +
+    "live and mutable, and answers the NEW partition roots that root splits into as " +
+    "`name -> element` -- `{}` for a root that splits into none; leave it out for a version " +
+    "where no existing root fans out into new ones.",
+  create:
+    "This bundle's `world.migration.create` is not a function. It is handed the game and the " +
+    "names the world already holds, and answers the NEW partition roots to add as " +
+    "`name -> element`; leave it out for a version that adds none.",
+  finalize:
+    "This bundle's `world.migration.finalize` is not a function. It is handed the game and an " +
+    "accessor for every root this world holds -- transformed and newly created alike -- and " +
+    "may write across them; leave it out for a version whose roots do not read one another.",
+  event:
+    "This bundle's `world.migration.event` is not a function. It is handed one queued event " +
+    "and answers the arguments the new rules should see; leave it out to keep every queued " +
+    "event's arguments as they are.",
+};
+
+/** A declared hook that is not callable is refused where it was written. */
+function assertHookIsFunction(
+  candidate: Partial<WorldMigration>,
+  hook: keyof typeof HOOK_IS_NOT_A_FUNCTION,
+): void {
+  const declared = candidate[hook];
+  if (declared !== undefined && typeof declared !== "function") {
+    throw worldRefusal("bundle-not-a-world", HOOK_IS_NOT_A_FUNCTION[hook]);
   }
-  if (candidate.derive !== undefined && typeof candidate.derive !== "function") {
-    throw worldRefusal(
-      "bundle-not-a-world",
-      "This bundle's `world.migration.derive` is not a function. It is handed ONE source root, " +
-        "live and mutable, and answers the NEW partition roots that root splits into as " +
-        "`name -> element` -- `{}` for a root that splits into none; leave it out for a version " +
-        "where no existing root fans out into new ones.",
-    );
-  }
-  if (candidate.create !== undefined && typeof candidate.create !== "function") {
-    throw worldRefusal(
-      "bundle-not-a-world",
-      "This bundle's `world.migration.create` is not a function. It is handed the game and the " +
-        "names the world already holds, and answers the NEW partition roots to add as " +
-        "`name -> element`; leave it out for a version that adds none.",
-    );
-  }
-  if (candidate.finalize !== undefined && typeof candidate.finalize !== "function") {
-    throw worldRefusal(
-      "bundle-not-a-world",
-      "This bundle's `world.migration.finalize` is not a function. It is handed the game and an " +
-        "accessor for every root this world holds -- transformed and newly created alike -- and " +
-        "may write across them; leave it out for a version whose roots do not read one another.",
-    );
-  }
+}
+
+/**
+ * REFUSE THE TWO BOUNDED BLOCKS AGAINST `finalize`, AND EACH AGAINST ITSELF.
+ *
+ * `survey` (#449) and `join` (#275) are both the bounded way to read across
+ * roots, and `finalize` is the whole-world way -- declaring one of them and
+ * `finalize` together leaves a host with no way to know which it is running.
+ */
+function assertWholeWorldBlocks(candidate: Partial<WorldMigration>): void {
   if (candidate.survey !== undefined && candidate.finalize !== undefined) throw surveyAndFinalize();
   assertSurvey(candidate.survey);
-  if (candidate.event !== undefined && typeof candidate.event !== "function") {
-    throw worldRefusal(
-      "bundle-not-a-world",
-      "This bundle's `world.migration.event` is not a function. It is handed one queued event " +
-        "and answers the arguments the new rules should see; leave it out to keep every queued " +
-        "event's arguments as they are.",
-    );
-  }
+  if (candidate.join !== undefined && candidate.finalize !== undefined) throw joinAndFinalize();
+  assertJoin(candidate.join);
 }
 
 /**
@@ -535,6 +645,128 @@ function assertSurvey(survey: unknown): void {
         "enforces its own ceiling as well, and a refusal says which of the two was hit.",
     );
   }
+}
+
+/** A migration that declares BOTH the bounded join and the unbounded whole
+ *  world, refused where it is written (#275). */
+function joinAndFinalize(): WorldRefusal {
+  return worldRefusal(
+    "bundle-not-a-world",
+    "This bundle's `world.migration` declares BOTH `join` and `finalize`, and the two answer the " +
+      "same question at opposite costs. `finalize` is already handed every root in one call, so " +
+      "it needs no join to reach another root -- and a join beside it would put a SECOND copy of " +
+      "the world into the one call a large world already cannot make. Keep `join`, which reads " +
+      "the originals it names a page at a time, unless the derivation genuinely needs every root " +
+      "resident at once, and then keep `finalize` alone.",
+  );
+}
+
+/**
+ * REFUSE A `join` BLOCK THAT IS NOT ONE (#275).
+ *
+ * At the door with every other declaration check, because every one of these is
+ * a sentence the author can only get wrong while they are writing it.
+ */
+function assertJoin(join: unknown): void {
+  if (join === undefined) return;
+  if (typeof join !== "object" || join === null || Array.isArray(join)) {
+    throw worldRefusal(
+      "bundle-not-a-world",
+      "This bundle's `world.migration.join` is not a join block. It is " +
+        "`{ sources, maxSources }`: `sources(name, digest)` answers which ORIGINAL roots that " +
+        "root's transform reads, and `maxSources` is your own ceiling on how many one root may " +
+        "name. Leave it out for a migration whose roots do not read one another's stored " +
+        "records.",
+    );
+  }
+  const block = join as Partial<WorldMigrationJoin<unknown>>;
+  if (typeof block.sources !== "function") {
+    throw worldRefusal(
+      "bundle-not-a-world",
+      "This bundle's `world.migration.join.sources` is not a function. It is handed ONE root's " +
+        "name and the completed digest, and answers the names of the ORIGINAL roots that root's " +
+        "transform reads -- `[]` for a root that reads none. It may not read the root itself: a " +
+        "host asks this while it is deciding which bytes to load.",
+    );
+  }
+  if (!Number.isInteger(block.maxSources) || (block.maxSources as number) < 1) {
+    throw worldRefusal(
+      "bundle-not-a-world",
+      `This bundle's \`world.migration.join.maxSources\` is ` +
+        `${JSON.stringify(block.maxSources)}, which is not a ceiling. It is a whole number, 1 or ` +
+        "more: the most originals any one root may name. It is required because a join whose " +
+        "width grows with the world is the unbounded read this design refuses -- a host must fit " +
+        "the root being transformed AND every original it names into one call. The host enforces " +
+        "its own ceiling as well, and a refusal says which of the two was hit.",
+    );
+  }
+}
+
+/**
+ * WHAT ONE ROOT DECLARED IT READS, CHECKED BEFORE A HOST LOADS ANYTHING (#275).
+ *
+ * Answered here rather than at each host's call site so that the names a host
+ * is told to send and the names a hook is then allowed to read are the SAME
+ * list, computed once -- a second normalization is how a page comes to be
+ * loaded against one answer and read against another.
+ *
+ * Sorted and deduplicated, because a host sends bytes per NAME and two roots
+ * naming the same original is one row.
+ */
+export function declaredSources(
+  root: string,
+  answered: unknown,
+  authorMax: number,
+  hostMax: number | undefined,
+): readonly string[] {
+  if (!Array.isArray(answered)) {
+    throw worldRefusal(
+      "world-migration-unavailable",
+      `This world's migration answered ${JSON.stringify(answered)} from \`join.sources\` for the ` +
+        `root "${root}". It answers the ORIGINAL roots that root's transform reads, as an array ` +
+        "of names -- `[]` for a root that reads none. The world was not changed.",
+    );
+  }
+  for (const name of answered as readonly unknown[]) {
+    if (typeof name !== "string" || name.length === 0) {
+      throw worldRefusal(
+        "world-migration-unavailable",
+        `This world's migration named ${JSON.stringify(name)} as an original source of the root ` +
+          `"${root}". A source is the NAME a root is stored under, and a host reads a row by ` +
+          "that name. The world was not changed.",
+      );
+    }
+    if (name === root) {
+      throw worldRefusal(
+        "world-migration-unavailable",
+        `This world's migration named "${root}" as an original source of itself. The element the ` +
+          "transform is handed IS that root's original -- `derive` runs on it exactly as stored, " +
+          "and `partition` runs on it before anything else has -- so asking a host to send a " +
+          "second copy is paying twice for one root. Drop it from `join.sources`. The world was " +
+          "not changed.",
+      );
+    }
+  }
+  const unique = [...new Set(answered as readonly string[])].sort();
+  const hostIsLower = hostMax !== undefined && hostMax < authorMax;
+  const bound = hostIsLower ? (hostMax as number) : authorMax;
+  if (unique.length > bound) {
+    throw worldRefusal(
+      "world-migration-unavailable",
+      `This world's migration named ${unique.length} original sources for the root "${root}", ` +
+        `past the ceiling of ${bound} ${
+          hostIsLower
+            ? "THIS HOST puts on one root's join. It is lower than this migration's own " +
+              `\`join.maxSources\` of ${authorMax}, so raising that would change nothing`
+            : "this migration declares in `join.maxSources`"
+        }. A page must carry the root being transformed AND every original it names, inside one ` +
+        "call: a join whose width grows with the world is the unbounded read this design " +
+        "refuses. Join against fewer roots per root -- a directory in `survey` can say WHICH few " +
+        "-- rather than against all of them. Running the migration again will not help. The " +
+        "world was not changed.",
+    );
+  }
+  return unique;
 }
 
 /**

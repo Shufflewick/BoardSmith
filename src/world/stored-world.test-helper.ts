@@ -8,6 +8,39 @@
  * supplies" sitting in the fixtures of tests about something else.
  */
 import type { StoredPartition, WorldOfferStamp, WorldPartitionSource } from "./contract.js";
+import { createWorld, type WorldRunnerOptions } from "./definition.js";
+
+/**
+ * WHAT A HOST SUPPLIES TO OPEN A WORLD: one definition, one seed, one seat, and
+ * -- once a world has been born -- the id the next element it creates must take.
+ *
+ * Every migration test opens its world this way, so the shape lives here rather
+ * than once per file.
+ */
+export function worldOptions(
+  definition: WorldRunnerOptions["definition"],
+  seed: string,
+  nextElementId?: number,
+): WorldRunnerOptions {
+  return {
+    definition,
+    seed,
+    seats: new Map([["p1", 1]]),
+    ...(nextElementId === undefined ? {} : { nextElementId }),
+  } as WorldRunnerOptions;
+}
+
+/**
+ * GENESIS, AS THE HOST STORES IT: the bytes a world is born with and the id its
+ * next element takes, which together are what a migration starts from.
+ */
+export async function storedWorld(
+  definition: WorldRunnerOptions["definition"],
+  seed: string,
+): Promise<{ rows: Record<string, StoredPartition>; nextElementId: number }> {
+  const genesis = await createWorld(worldOptions(definition, seed)).runner.genesis();
+  return { rows: genesis.partitions, nextElementId: genesis.nextElementId };
+}
 
 /** A store that holds exactly what a test put in it, and forgets nothing. */
 export class MapStore implements WorldPartitionSource {

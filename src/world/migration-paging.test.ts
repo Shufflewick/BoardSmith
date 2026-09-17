@@ -21,6 +21,7 @@ import { Game, Space, type GameElement, type GameOptions } from "../engine/index
 import { createWorld, type WorldRunnerOptions } from "./definition.js";
 import type { WorldMigrated } from "./runner.js";
 import { worldAction } from "./action.js";
+import { storedWorld, worldOptions } from "./stored-world.test-helper.js";
 import type { DeclaredSeatActivityStamp, StoredPartition } from "./contract.js";
 
 /** A SEAT'S ARRIVAL, as a declaration is told when it is happening (#271).
@@ -72,22 +73,10 @@ function bundle(migration: Record<string, unknown> | undefined, stateVersion: nu
 }
 
 const options = (definition: WorldRunnerOptions["definition"], nextElementId?: number) =>
-  ({
-    definition,
-    seed: "pages",
-    seats: new Map([["p1", 1]]),
-    ...(nextElementId === undefined ? {} : { nextElementId }),
-  }) as WorldRunnerOptions;
+  worldOptions(definition, "pages", nextElementId);
 
 /** Genesis, as the host stores it. */
-async function stored(): Promise<{
-  rows: Record<string, StoredPartition>;
-  nextElementId: number;
-}> {
-  const born = createWorld(options(bundle(undefined, 1))).runner;
-  const genesis = await born.genesis();
-  return { rows: genesis.partitions, nextElementId: genesis.nextElementId };
-}
+const stored = () => storedWorld(bundle(undefined, 1), "pages");
 
 /** The migration every case below that does not care WHAT changed runs: one
  *  root, transformed from itself alone, which is the independently pageable
@@ -220,6 +209,18 @@ const STAMP = {
 describe("#407 — a migrated page may be let go of", () => {
   const migrating = (nextElementId: number) => runnerFor(BUMPING, nextElementId);
 
+  /** The world's next command after the migration, and the roots it dirtied --
+   *  which is the only thing a touch-mark left behind would change. */
+  const pokeDirty = async (
+    runner: ReturnType<typeof migrating>,
+    resident: Record<string, StoredPartition>,
+  ): Promise<readonly string[]> => {
+    const command = { name: "poke", args: {} };
+    await runner.declare(command, "p1", resident, arrival(0), []);
+    const result = await runner.apply({ player: "p1", command, timing: null, ...STAMP });
+    return result.dirty;
+  };
+
   it("answers the world's next command after each page was evicted", async () => {
     const world = await stored();
     const runner = migrating(world.nextElementId);
@@ -230,14 +231,10 @@ describe("#407 — a migrated page may be let go of", () => {
     ]);
     expect(JSON.parse(JSON.stringify(after.d!.json)).attributes.tally).toBe(1);
 
-    const command = { name: "poke", args: {} };
-    await runner.declare(command, "p1", { a: after.a! }, arrival(0), []);
-    const result = await runner.apply({ player: "p1", command, timing: null, ...STAMP });
-
     // ONLY the room the command named. A touch-mark left behind by the
     // migration would either refuse this command outright or checkpoint a
     // partition nothing wrote.
-    expect(result.dirty).toEqual(["a"]);
+    expect(await pokeDirty(runner, { a: after.a! })).toEqual(["a"]);
   });
 
   it("lets a WHOLE-WORLD migration's roots be evicted afterwards too", async () => {
@@ -249,11 +246,7 @@ describe("#407 — a migrated page may be let go of", () => {
     await runner.migrateAll(world.rows, { from: 1, to: 2 });
     runner.evict(["c", "d"]);
 
-    const command = { name: "poke", args: {} };
-    await runner.declare(command, "p1", {}, arrival(0), []);
-    const result = await runner.apply({ player: "p1", command, timing: null, ...STAMP });
-
-    expect(result.dirty).toEqual(["a"]);
+    expect(await pokeDirty(runner, {})).toEqual(["a"]);
   });
 });
 
@@ -334,14 +327,7 @@ const CROSS_ROOT = {
   },
 };
 
-async function storedLedger(): Promise<{
-  rows: Record<string, StoredPartition>;
-  nextElementId: number;
-}> {
-  const born = createWorld(options(ledger(undefined, 1))).runner;
-  const genesis = await born.genesis();
-  return { rows: genesis.partitions, nextElementId: genesis.nextElementId };
-}
+const storedLedger = () => storedWorld(ledger(undefined, 1), "pages");
 
 /**
  * ONE BOUNDED MIGRATION, DRIVEN THE WAY A HOST MUST DRIVE IT.
@@ -705,11 +691,7 @@ const FAN_OUT = {
   },
 };
 
-async function storedEstate(): Promise<StoredEstate> {
-  const born = createWorld(options(estate(undefined, 1))).runner;
-  const genesis = await born.genesis();
-  return { rows: genesis.partitions, nextElementId: genesis.nextElementId };
-}
+const storedEstate = (): Promise<StoredEstate> => storedWorld(estate(undefined, 1), "pages");
 
 /** What a host holds after a page's transaction lands: the bytes it wrote, the
  *  allocation stamp those bytes were minted under, and the names it now knows
