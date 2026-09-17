@@ -41,6 +41,28 @@ const STAMP = {
 
 const CONFORMANCE_PLAYERS = ["player-a", "player-b"] as const;
 
+/** What the engine currently holds, by name, in a stable order. */
+const residencyOf = (engine: WorldEngine): string[] =>
+  engine.residency().map(({ name }) => name).sort();
+
+/**
+ * ASK A DECLARATION ROAD, AND PROVE ASKING LOADED NOTHING.
+ *
+ * Both roads -- the read path's `viewPartitions` and the write path's
+ * `commandNeeds` -- are answered while the world is still absent, so both cases
+ * make the same two assertions about their own question: it named something,
+ * and residency is exactly what it was. That second half is the part a type
+ * cannot make, so it is written once here rather than twice by hand.
+ */
+function askedWithoutLoading(engine: WorldEngine, ask: () => readonly string[]): readonly string[] {
+  const resident = residencyOf(engine);
+  const named = ask();
+
+  expect(Array.isArray(named)).toBe(true);
+  expect(residencyOf(engine)).toEqual(resident);
+  return named;
+}
+
 /**
  * Assert one candidate meets the contract. Call inside a `describe`.
  */
@@ -100,13 +122,8 @@ export function assertWorldEngineConformance(makeEngine: WorldEngineFactory): vo
     // and only then asks for the projection. An engine that consulted its own
     // tree here would be answering in the one condition the question exists for.
     const engine = await makeEngine();
-    const resident = engine.residency().map(({ name }) => name).sort();
-    const named = engine.viewPartitions(alice);
+    const named = askedWithoutLoading(engine, () => engine.viewPartitions(alice));
 
-    expect(Array.isArray(named)).toBe(true);
-    // ASKING LOADED NOTHING. The residency is exactly what it was, which is the
-    // half of the claim a type cannot make.
-    expect(engine.residency().map(({ name }) => name).sort()).toEqual(resident);
     // The SAME answer twice: a declaration is a property of the seat, not of
     // whatever the world happened to be doing the first time it was asked.
     expect([...engine.viewPartitions(alice)]).toEqual([...named]);
@@ -134,12 +151,12 @@ export function assertWorldEngineConformance(makeEngine: WorldEngineFactory): vo
     // resident before it is asked again, which is what replaced the fixpoint's
     // ceiling on this road.
     const engine = await makeEngine();
-    const resident = engine.residency().map(({ name }) => name).sort();
     const command = { name: "touch", args: {} };
 
-    const named = engine.commandNeeds(alice, command, arrival(STAMP.now), []).partitions;
-    expect(Array.isArray(named)).toBe(true);
-    expect(engine.residency().map(({ name }) => name).sort()).toEqual(resident);
+    const named = askedWithoutLoading(
+      engine,
+      () => engine.commandNeeds(alice, command, arrival(STAMP.now), []).partitions,
+    );
 
     // THE LOOP ENDS. Driven exactly as a host drives it -- and an engine that
     // kept naming a partition it had just been handed would hang here rather

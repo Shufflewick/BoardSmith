@@ -32,6 +32,10 @@ import {
   newVillageEngine,
   villageGenesis as genesis,
   CountingStore,
+  declarationWriter,
+  expectBurnSettled,
+  expectDeclarationWriteRefused,
+  fireThroughWalk,
 } from "./village.test-helper.js";
 
 /** A SEAT'S ARRIVAL, as a declaration is told when it is happening (#271).
@@ -233,17 +237,9 @@ describe("the ordered declaration walk", () => {
   });
 
   it("refuses a declaration that tries to write", async () => {
-    const writer = worldAction<VillageFixture>("writer")
-      .needs(({ game, player }) => {
-        game.holdingOf(player.seat).woodpile = 99;
-        return [];
-      })
-      .execute(() => {});
-    const { engine } = newEngine([writer]);
-    await engine.hydrate([holdingPartition(1)]);
-    expect(() => engine.commandNeeds("p1", { name: "writer", args: {} }, arrival(STAMP.now), []).partitions).toThrow(
-      /A read-only view of this world tried to write/,
-    );
+    const { engine } = newEngine([declarationWriter]);
+
+    await expectDeclarationWriteRefused(engine);
   });
 });
 
@@ -307,24 +303,13 @@ describe("the clock", () => {
     const banked = game.holdingOf(1).woodpile;
     expect(banked).toBeGreaterThan(0);
 
-    for (;;) {
-      const needs = engine.commandNeeds(null, {
-        name: "settleBurn",
-        args: { holding: holdingPartition(1) },
-      }, { kind: "scheduled", timing: { due: STAMP.now + 1000, missedCount: 0 } }, []).partitions;
-      if (needs.length === 0) break;
-      await engine.hydrate(needs);
-    }
-    const result = await engine.onEvent(
+    const result = await fireThroughWalk(
+      engine,
       { name: "settleBurn", args: { holding: holdingPartition(1) } },
       { due: STAMP.now + 1000, missedCount: 0 },
-      { allowance: STAMP.allowance, presence: [], activity: null },
     );
 
-    expect(game.holdingOf(1).woodpile).toBe(0);
-    expect(result.events).toEqual([
-      { scope: COMMONS, payload: { embers: banked }, seats: [1, 2, 3, 4, 5, 6] },
-    ]);
+    expectBurnSettled(game, result, banked);
   });
 
   it("names the action a schedule wakes for", async () => {

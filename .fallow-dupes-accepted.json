@@ -103,13 +103,6 @@
       ]
     },
     {
-      "content": "058015dc7fa39e39",
-      "lines": 19,
-      "files": [
-        "src/cli/dev-host/world-host.test.ts"
-      ]
-    },
-    {
       "content": "05dbcb275a193d45",
       "lines": 15,
       "files": [
@@ -966,13 +959,6 @@
       "lines": 9,
       "files": [
         "src/ui/components/auto-ui/renderers/PieceRenderer.asset-fallback.test.ts"
-      ]
-    },
-    {
-      "content": "1e76e50bcb27a8cc",
-      "lines": 8,
-      "files": [
-        "src/world/engine.test.ts"
       ]
     },
     {
@@ -2242,13 +2228,6 @@
       ]
     },
     {
-      "content": "4ae960effc86397c",
-      "lines": 17,
-      "files": [
-        "src/cli/dev-host/world-host.test.ts"
-      ]
-    },
-    {
       "content": "4af3a0b17c9d437b",
       "lines": 8,
       "files": [
@@ -2408,14 +2387,6 @@
       "files": [
         "src/ui/components/auto-ui/useAutoRendererAnimations.test.ts",
         "src/ui/composables/useAnimationEvents.test.ts"
-      ]
-    },
-    {
-      "content": "4ff1c86af3d3bb66",
-      "lines": 8,
-      "files": [
-        "docs/persistent-world-claims.test.ts",
-        "src/world/action.test.ts"
       ]
     },
     {
@@ -3777,13 +3748,6 @@
       ]
     },
     {
-      "content": "7b487d88328c0907",
-      "lines": 9,
-      "files": [
-        "src/world/allocation.test.ts"
-      ]
-    },
-    {
       "content": "7bae9ac227fe3644",
       "lines": 28,
       "files": [
@@ -4675,13 +4639,6 @@
       ]
     },
     {
-      "content": "965a5b16b05eb543",
-      "lines": 24,
-      "files": [
-        "src/cli/dev-host/world-host.test.ts"
-      ]
-    },
-    {
       "content": "966f4a3c52a8ce62",
       "lines": 8,
       "files": [
@@ -5018,14 +4975,6 @@
       "files": [
         "src/testing/assertions.test.ts",
         "src/testing/visibility.test.ts"
-      ]
-    },
-    {
-      "content": "a28e24df9f9026fe",
-      "lines": 10,
-      "files": [
-        "docs/persistent-world-claims.test.ts",
-        "src/world/action.test.ts"
       ]
     },
     {
@@ -5885,13 +5834,6 @@
       ]
     },
     {
-      "content": "bb6f816e2a237d1d",
-      "lines": 9,
-      "files": [
-        "src/world/allocation.test.ts"
-      ]
-    },
-    {
       "content": "bc00cfc575ac20ac",
       "lines": 16,
       "files": [
@@ -5911,13 +5853,6 @@
       "files": [
         "src/engine/flow/builders.ts",
         "src/engine/flow/types.ts"
-      ]
-    },
-    {
-      "content": "bcd895ac7e9ca4a2",
-      "lines": 6,
-      "files": [
-        "src/world/engine-conformance.test-helper.ts"
       ]
     },
     {
@@ -7358,13 +7293,6 @@
       "lines": 8,
       "files": [
         "src/engine/tutorial/predicates.test.ts"
-      ]
-    },
-    {
-      "content": "ee18eee2dc50e5f0",
-      "lines": 26,
-      "files": [
-        "src/cli/dev-host/world-host.test.ts"
       ]
     },
     {

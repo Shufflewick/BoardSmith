@@ -17,12 +17,21 @@
  * the element classes, genesis, a store that counts its reads, and the two
  * loops a host drives.
  *
+ * THE ONE VERB HERE IS THE EXCEPTION THAT SHOWS THE RULE. `declarationWriter`
+ * transcribes nothing: the guide states "a declaration may not write" in prose
+ * and prints no sample of it, so both suites had written the same four-line
+ * verb and the same refusal assertion by hand. What each suite still writes for
+ * itself is its claim about what the GUIDE says, which is what the
+ * transcription rule is actually about.
+ *
  * EVERY WORLD BUILT HERE IS COLD. Genesis runs on one game and only its BYTES
  * survive; the engine under test adopts them from the store. A fixture that
  * handed the engine live objects would prove adoption worked without ever
  * running it (`docs/TEST-FIXTURES.md`).
  */
+import { expect } from "vitest";
 import { Game, Player, Space, type ElementJSON, type GameOptions } from "../engine/index.js";
+import { worldAction } from "./action.js";
 import { BoardSmithWorldEngine } from "./engine.js";
 import { worldBudgets, type WorldBudgets } from "./budgets.js";
 import type { ActionDefinition } from "../engine/index.js";
@@ -208,6 +217,81 @@ export async function applyThroughWalk(
   }
   return engine.applyCommand(player, command, STAMP);
 }
+
+/**
+ * THE CLOCK'S HALF OF THE SAME LOOP.
+ *
+ * A due event walks its declaration exactly as a command does, and is then run
+ * through `onEvent` rather than `applyCommand`. The difference that matters is
+ * the road it is told it is on: a scheduled dispatch carries its whole
+ * occurrence, so `.needs()` reads the fold its handler will read (#271).
+ *
+ * A world-owned event is about nobody, so it carries no watermark and names no
+ * chair (ShufflewickPub #383, #423).
+ */
+export async function fireThroughWalk(
+  engine: BoardSmithWorldEngine,
+  event: { name: string; args: Record<string, unknown> },
+  timing: { readonly due: number; readonly missedCount: number },
+): ReturnType<BoardSmithWorldEngine["onEvent"]> {
+  for (;;) {
+    const needs = engine.commandNeeds(null, event, { kind: "scheduled", timing }, []).partitions;
+    if (needs.length === 0) break;
+    await engine.hydrate(needs);
+  }
+  return engine.onEvent(event, timing, {
+    allowance: STAMP.allowance,
+    presence: [],
+    activity: null,
+    declaredActivity: [],
+  });
+}
+
+/**
+ * THE SETTLED BURN, AS BOTH SUITES CLAIM IT.
+ *
+ * The clock's event emptied holding 1 into the commons and told every seat.
+ * The engine's suite claims it about the behaviour and the guide's about the
+ * sample that teaches it, and one village exists so the two cannot come to
+ * disagree about what it means.
+ */
+export function expectBurnSettled(
+  game: VillageFixture,
+  result: Awaited<ReturnType<BoardSmithWorldEngine["onEvent"]>>,
+  banked: number,
+): void {
+  expect(game.holdingOf(1).woodpile).toBe(0);
+  expect(result.events).toEqual([
+    { scope: COMMONS, payload: { embers: banked }, seats: [1, 2, 3, 4, 5, 6] },
+  ]);
+}
+
+/**
+ * A DECLARATION THAT TRIES TO WRITE, AND THE REFUSAL IT EARNS.
+ *
+ * Shared against this file's own rule that verbs belong to their suite: this
+ * one is nobody's transcription of a guide sample -- the guide states the rule
+ * in prose -- and it is the same three-line mechanism check in both suites, so
+ * a divergence between them would be a difference nothing reported. Each suite
+ * still makes its own claim about what the GUIDE says, which is the part the
+ * transcription rule is about.
+ */
+export async function expectDeclarationWriteRefused(engine: BoardSmithWorldEngine): Promise<void> {
+  await engine.hydrate([holdingPartition(1)]);
+
+  expect(() =>
+    engine.commandNeeds("p1", { name: "writer", args: {} }, arrival(STAMP.now), []).partitions,
+  ).toThrow(/A read-only view of this world tried to write/);
+}
+
+/** The verb `expectDeclarationWriteRefused` drives: it assigns through the
+ *  read-only projection a declaration is handed. */
+export const declarationWriter = worldAction<VillageFixture>("writer")
+  .needs(({ game, player }) => {
+    game.holdingOf(player.seat).woodpile = 99;
+    return [];
+  })
+  .execute(() => {});
 
 /** The element id of one holding, which is what the wire carries for an element
  *  selection. Hydrated first, because an id is minted by adoption. */

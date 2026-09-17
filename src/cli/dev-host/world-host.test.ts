@@ -1814,29 +1814,55 @@ describe('#380: a chronological world catches up before a player acts', () => {
     });
   }
 
-  it('runs every overdue event before the command, in nominal order', async () => {
-    const world = timedWorld({ ordering: 'chronological' });
-    const clock = testClock();
-    const opened = await attached({ dir, clock, definition: bundle({ world }) });
+  /**
+   * ONE PLAYER'S ACTION, SENT ON `c1`.
+   *
+   * Every message this suite sends is that shape and only the verb, the
+   * request id and -- where the order's identity is the claim -- the order
+   * itself differ. Written once so a case reads as what it varies.
+   */
+  async function play(
+    opened: Awaited<ReturnType<typeof attached>>,
+    action: string,
+    requestId: string,
+    order = nextOrder(),
+  ): Promise<void> {
+    await opened.host.handleMessage('c1', { type: 'action', order, requestId, action, args: {} });
+  }
 
-    // Arm the chain, then let three beats fall due without draining.
-    await opened.host.handleMessage('c1', {
-      type: 'action',
-      order: nextOrder(),
-      requestId: 'arm',
-      action: 'arm',
-      args: {},
-    });
+  /**
+   * ARMED, AND THREE BEATS BEHIND.
+   *
+   * The starting position of every case below: the chain is armed, the clock
+   * has run past three of its beats without anything draining them, and `ran`
+   * is cleared so what a case asserts is what its own command caused.
+   */
+  async function armedAndBehind(
+    opened: Awaited<ReturnType<typeof attached>>,
+    clock: ReturnType<typeof testClock>,
+    arming = 'arm',
+  ): Promise<void> {
+    await play(opened, arming, 'arm');
     clock.advance(5_000);
     ran = [];
+  }
 
-    await opened.host.handleMessage('c1', {
-      type: 'action',
-      order: nextOrder(),
-      requestId: 'r1',
-      action: 'arrive',
-      args: {},
-    });
+  /** That starting position, on a world of this suite's making: the host, its
+   *  clock, and the chain already three beats behind. */
+  async function behindOn(
+    world: WorldDefinition,
+    budgets?: Parameters<typeof attached>[0]['budgets'],
+  ): Promise<{ opened: Awaited<ReturnType<typeof attached>>; clock: ReturnType<typeof testClock> }> {
+    const clock = testClock();
+    const opened = await attached({ dir, clock, budgets, definition: bundle({ world }) });
+    await armedAndBehind(opened, clock);
+    return { opened, clock };
+  }
+
+  it('runs every overdue event before the command, in nominal order', async () => {
+    const { opened } = await behindOn(timedWorld({ ordering: 'chronological' }));
+
+    await play(opened, 'arrive', 'r1');
 
     // Every tick ran, in order, and the player's handler saw the world they
     // left behind rather than the one they overtook.
@@ -1851,26 +1877,9 @@ describe('#380: a chronological world catches up before a player acts', () => {
 
   it('leaves an ARRIVAL world exactly as it was: the command overtakes', async () => {
     // The default, unchanged, and pinned here so the gate is visibly opt-in.
-    const world = timedWorld();
-    const clock = testClock();
-    const opened = await attached({ dir, clock, definition: bundle({ world }) });
-    await opened.host.handleMessage('c1', {
-      type: 'action',
-      order: nextOrder(),
-      requestId: 'arm',
-      action: 'arm',
-      args: {},
-    });
-    clock.advance(5_000);
-    ran = [];
+    const { opened } = await behindOn(timedWorld());
 
-    await opened.host.handleMessage('c1', {
-      type: 'action',
-      order: nextOrder(),
-      requestId: 'r1',
-      action: 'arrive',
-      args: {},
-    });
+    await play(opened, 'arrive', 'r1');
 
     expect(ran[0]).toBe('arrive@burns=0');
     await opened.host.close();
@@ -1883,31 +1892,12 @@ describe('#380: a chronological world catches up before a player acts', () => {
       .execute((_args, ctx) => {
         sawNow = ctx.world.now;
       });
-    const clock = testClock();
-    const opened = await attached({
-      dir,
-      clock,
-      definition: bundle({
-        world: timedWorld({ ordering: 'chronological', actions: [...VILLAGE_ACTIONS, tick, arm, arrive, stamped] }),
-      }),
-    });
-    await opened.host.handleMessage('c1', {
-      type: 'action',
-      order: nextOrder(),
-      requestId: 'arm',
-      action: 'arm',
-      args: {},
-    });
-    clock.advance(5_000);
+    const { opened, clock } = await behindOn(
+      timedWorld({ ordering: 'chronological', actions: [...VILLAGE_ACTIONS, tick, arm, arrive, stamped] }),
+    );
     const arrivedAt = clock.now();
 
-    await opened.host.handleMessage('c1', {
-      type: 'action',
-      order: nextOrder(),
-      requestId: 'r1',
-      action: 'stamped',
-      args: {},
-    });
+    await play(opened, 'stamped', 'r1');
 
     // The catch-up ran at the ticks' OWN dues, all of them earlier than this.
     expect(sawNow).toBe(arrivedAt);
@@ -1921,24 +1911,10 @@ describe('#380: a chronological world catches up before a player acts', () => {
     const clock = testClock();
     const opened = await attached({ dir, clock, definition: bundle({ world }) });
     const order = nextOrder();
-    await opened.host.handleMessage('c1', {
-      type: 'action',
-      order,
-      requestId: 'r1',
-      action: 'arrive',
-      args: {},
-    });
-    await opened.host.handleMessage('c1', {
-      type: 'action',
-      order: nextOrder(),
-      requestId: 'arm',
-      action: 'arm',
-      args: {},
-    });
-    clock.advance(5_000);
-    ran = [];
+    await play(opened, 'arrive', 'r1', order);
 
-    await opened.host.handleMessage('c1', { type: 'action', order, requestId: 'r2', action: 'arrive', args: {} });
+    await armedAndBehind(opened, clock);
+    await play(opened, 'arrive', 'r2', order);
 
     expect(last(opened.sent, 'c1', 'world_response')).toMatchObject({ ok: true, replayed: true });
     expect(ran).toEqual([]);
@@ -1950,36 +1926,26 @@ describe('#380: a chronological world catches up before a player acts', () => {
    *  first command always stops with work still due. */
   const TOO_SMALL_TO_CATCH_UP = { drainBatch: 1, catchUpRounds: 1 };
 
+  /** A chronological world on that budget, armed and three beats behind. */
+  async function behindOnTooSmallABudget(): Promise<{
+    opened: Awaited<ReturnType<typeof attached>>;
+    order: ReturnType<typeof nextOrder>;
+  }> {
+    const { opened } = await behindOn(
+      timedWorld({ ordering: 'chronological' }),
+      worldBudgets(TOO_SMALL_TO_CATCH_UP),
+    );
+    return { opened, order: nextOrder() };
+  }
+
   it('REFUSES the command when the catch-up runs out of budget, and changes nothing', async () => {
     // THE ORDERING IS THE GUARANTEE, NOT THE BUDGET (ShufflewickPub #395).
     // Applying anyway is what this host used to do, and it made the
     // declaration a bigger budget: past one budget's worth of due events a
     // player overtook the rest with nothing anywhere saying so.
-    const clock = testClock();
-    const opened = await attached({
-      dir,
-      clock,
-      budgets: worldBudgets(TOO_SMALL_TO_CATCH_UP),
-      definition: bundle({ world: timedWorld({ ordering: 'chronological' }) }),
-    });
-    await opened.host.handleMessage('c1', {
-      type: 'action',
-      order: nextOrder(),
-      requestId: 'arm',
-      action: 'arm',
-      args: {},
-    });
-    clock.advance(5_000);
-    ran = [];
-    const order = nextOrder();
+    const { opened, order } = await behindOnTooSmallABudget();
 
-    await opened.host.handleMessage('c1', {
-      type: 'action',
-      order,
-      requestId: 'r1',
-      action: 'arrive',
-      args: {},
-    });
+    await play(opened, 'arrive', 'r1', order);
 
     // REFUSED BY NAME, with the sentence that tells the player what to do.
     const answer = last(opened.sent, 'c1', 'world_response');
@@ -1997,35 +1963,19 @@ describe('#380: a chronological world catches up before a player acts', () => {
   });
 
   it('runs the same order once the world is level, so the refusal costs the player nothing', async () => {
-    const clock = testClock();
-    const opened = await attached({
-      dir,
-      clock,
-      budgets: worldBudgets(TOO_SMALL_TO_CATCH_UP),
-      definition: bundle({ world: timedWorld({ ordering: 'chronological' }) }),
-    });
-    await opened.host.handleMessage('c1', {
-      type: 'action',
-      order: nextOrder(),
-      requestId: 'arm',
-      action: 'arm',
-      args: {},
-    });
-    clock.advance(5_000);
-    ran = [];
-    const order = nextOrder();
+    const { opened, order } = await behindOnTooSmallABudget();
 
     // Each attempt spends its budget on one more beat; the chain is three
     // beats long, so the third attempt is the one that finds it level.
     for (const requestId of ['r1', 'r2']) {
-      await opened.host.handleMessage('c1', { type: 'action', order, requestId, action: 'arrive', args: {} });
+      await play(opened, 'arrive', requestId, order);
       expect(last(opened.sent, 'c1', 'world_response')).toMatchObject({
         ok: false,
         code: 'world-catching-up',
       });
     }
 
-    await opened.host.handleMessage('c1', { type: 'action', order, requestId: 'r3', action: 'arrive', args: {} });
+    await play(opened, 'arrive', 'r3', order);
 
     // THE SAME ORDER IDENTITY RUNS, ONCE, IN ORDER -- not replayed from a
     // receipt a refusal must never have written.
@@ -2064,24 +2014,11 @@ describe('#380: a chronological world catches up before a player acts', () => {
         }),
       }),
     });
-    await opened.host.handleMessage('c1', {
-      type: 'action',
-      order: nextOrder(),
-      requestId: 'arm',
-      action: 'arm-doom',
-      args: {},
-    });
-    clock.advance(5_000);
-    ran = [];
+
+    await armedAndBehind(opened, clock, 'arm-doom');
     const order = nextOrder();
 
-    await opened.host.handleMessage('c1', {
-      type: 'action',
-      order,
-      requestId: 'r1',
-      action: 'arrive',
-      args: {},
-    });
+    await play(opened, 'arrive', 'r1', order);
 
     expect(last(opened.sent, 'c1', 'world_response')).toMatchObject({
       ok: false,

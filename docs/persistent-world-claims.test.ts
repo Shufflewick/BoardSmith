@@ -56,6 +56,10 @@ import {
   holdingPartition,
   neighboursOf,
   newVillageEngine,
+  declarationWriter,
+  expectBurnSettled,
+  expectDeclarationWriteRefused,
+  fireThroughWalk,
 } from '../src/world/village.test-helper.js';
 
 /** A SEAT'S ARRIVAL, as a declaration is told when it is happening (#271).
@@ -477,17 +481,10 @@ describe('#169: a world action is an Action, and the guide teaches the real one'
   });
 
   it('refuses a declaration that tries to write, and the guide says to write in execute', async () => {
-    const writer = worldAction<VillageFixture>('writer')
-      .needs(({ game, player }) => {
-        game.holdingOf(player.seat).woodpile = 99;
-        return [];
-      })
-      .execute(() => {});
-    const { engine } = newEngine([writer]);
-    await engine.hydrate([holdingPartition(1)]);
-    expect(() => engine.commandNeeds('p1', { name: 'writer', args: {} }, arrival(0), []).partitions).toThrow(
-      /A read-only view of this world tried to write/,
-    );
+    const { engine } = newEngine([declarationWriter]);
+
+    await expectDeclarationWriteRefused(engine);
+
     expect(guide).toContain('declaration-write');
     expect(flatGuide).toContain('Do the write in execute');
   });
@@ -806,28 +803,9 @@ describe('#169: a schedule names a seatless action and carries scalars', () => {
     const banked = game.holdingOf(1).woodpile;
 
     const event = { name: 'settleBurn', args: { holding: holdingPartition(1) } };
-    for (;;) {
-      const needs = engine.commandNeeds(
-        null,
-        event,
-        { kind: 'scheduled', timing: { due: STAMP.now + 1000, missedCount: 0 } },
-        [],
-      ).partitions;
-      if (needs.length === 0) break;
-      await engine.hydrate(needs);
-    }
-    const result = await engine.onEvent(
-      event,
-      { due: STAMP.now + 1000, missedCount: 0 },
-      // The world's own clock event is about nobody, so it carries no
-      // watermark (ShufflewickPub #383) -- and it named no chair, so there is
-      // nothing declared for it to read either (ShufflewickPub #423).
-      { allowance: STAMP.allowance, presence: [], activity: null, declaredActivity: [] },
-    );
-    expect(game.holdingOf(1).woodpile).toBe(0);
-    expect(result.events).toEqual([
-      { scope: COMMONS, payload: { embers: banked }, seats: [1, 2, 3, 4, 5, 6] },
-    ]);
+    const result = await fireThroughWalk(engine, event, { due: STAMP.now + 1000, missedCount: 0 });
+
+    expectBurnSettled(game, result, banked);
   });
 });
 

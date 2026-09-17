@@ -2029,6 +2029,21 @@ describe("retiring a seat's holder (ShufflewickPub #399)", () => {
       (ctx.world.partition(holdingPartition(ctx.player.seat)) as Holding).standing += 1;
     });
 
+  /**
+   * SEAT 2, REISSUED, AND THE NEW HOLDER REACHES ITS GROUND.
+   *
+   * Both halves matter and neither implies the other: the chair is free (a
+   * live roster could not reissue it at all), and what the newcomer's command
+   * declares is seat 2's own holding rather than a chair-shaped blank.
+   */
+  function reissueSeatTwo(engine: BoardSmithWorldEngine): void {
+    engine.seat("newcomer", 2);
+
+    expect(engine.commandNeeds("newcomer", { name: "tend", args: {} }, arrival(0), []).partitions).toEqual([
+      holdingPartition(2),
+    ]);
+  }
+
   it("forgets the mapping, so a command for a retired holder is unknown-player", async () => {
     // NOT "runs against whoever holds the chair now", which is the failure this
     // exists to prevent: the seat number is about to be handed on, and a
@@ -2054,11 +2069,8 @@ describe("retiring a seat's holder (ShufflewickPub #399)", () => {
     // rebuilt engine.
     const { engine } = newVillageEngine([tend]);
     engine.unseat("p2");
-    engine.seat("newcomer", 2);
 
-    expect(engine.commandNeeds("newcomer", { name: "tend", args: {} }, arrival(0), []).partitions).toEqual([
-      holdingPartition(2),
-    ]);
+    reissueSeatTwo(engine);
   });
 
   it("lets a retired holder come back to a DIFFERENT chair", async () => {
@@ -2097,10 +2109,7 @@ describe("retiring a seat's holder (ShufflewickPub #399)", () => {
     expect(await store.read(holdingPartition(2))).toEqual(before);
     // And the chair's next holder reaches that same standing ground, which is
     // the danger stated as an assertion: retiring a seat is not a cleanup.
-    engine.seat("newcomer", 2);
-    expect(engine.commandNeeds("newcomer", { name: "tend", args: {} }, arrival(0), []).partitions).toEqual([
-      holdingPartition(2),
-    ]);
+    reissueSeatTwo(engine);
   });
 });
 

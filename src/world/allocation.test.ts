@@ -92,6 +92,29 @@ async function storedWorld() {
   return genesis;
 }
 
+/** The one verb these cases drive the world with. */
+const READ_A = { name: "read-a", args: {} } as const;
+
+/**
+ * A SECOND HOST ON A STORED WORLD: same definition, seed and roster, plus the
+ * allocation stamp its predecessor wrote down. The empty first declaration is
+ * the walk any real command makes before anything is hydrated, so every case
+ * below starts from it rather than restating it.
+ */
+async function hostHoldingStamp(nextElementId: number) {
+  const runner = createWorld(options({ nextElementId })).runner;
+  await runner.declare(READ_A, "p1", {}, arrival(1_000), []);
+  return runner;
+}
+
+/** That host with room `a` hydrated: exactly what a command declaring only
+ *  `a` leaves resident, and nothing else. */
+async function hostHoldingA(genesis: Awaited<ReturnType<typeof storedWorld>>) {
+  const runner = await hostHoldingStamp(genesis.nextElementId);
+  await runner.declare(READ_A, "p1", { a: genesis.partitions.a! }, arrival(1_000), []);
+  return runner;
+}
+
 describe("#377 — a world's id allocation is durable, not derived from what is resident", () => {
   it("reports the stamp a host must persist alongside genesis", async () => {
     const genesis = await storedWorld();
@@ -105,12 +128,7 @@ describe("#377 — a world's id allocation is durable, not derived from what is 
   it("mints a cold on-demand root OUTSIDE every stored root's identity", async () => {
     const genesis = await storedWorld();
 
-    // A fresh host: same definition, same seed, same roster, and the stamp it
-    // wrote down last time. It hydrates ONE room, exactly as a real command
-    // that only declared `a` would.
-    const cold = createWorld(options({ nextElementId: genesis.nextElementId })).runner;
-    await cold.declare({ name: "read-a", args: {} }, "p1", {}, arrival(1_000), []);
-    await cold.declare({ name: "read-a", args: {} }, "p1", { a: genesis.partitions.a! }, arrival(1_000), []);
+    const cold = await hostHoldingA(genesis);
 
     const made = await cold.createPartition("dynamic");
 
@@ -124,9 +142,7 @@ describe("#377 — a world's id allocation is durable, not derived from what is 
     // The failure the collision actually produced: a world that could no longer
     // run a command naming both roots.
     const genesis = await storedWorld();
-    const cold = createWorld(options({ nextElementId: genesis.nextElementId })).runner;
-    await cold.declare({ name: "read-a", args: {} }, "p1", {}, arrival(1_000), []);
-    await cold.declare({ name: "read-a", args: {} }, "p1", { a: genesis.partitions.a! }, arrival(1_000), []);
+    const cold = await hostHoldingA(genesis);
     await cold.createPartition("dynamic");
 
     await expect(
@@ -173,12 +189,10 @@ describe("#377 — a world's id allocation is durable, not derived from what is 
     // number is told so at the moment it hydrates the proof, rather than at the
     // collision it would cause later.
     const genesis = await storedWorld();
-    const stale = createWorld(options({ nextElementId: 1_000_001 })).runner;
-
-    await stale.declare({ name: "read-a", args: {} }, "p1", {}, arrival(1_000), []);
+    const stale = await hostHoldingStamp(1_000_001);
 
     await expect(
-      stale.declare({ name: "read-a", args: {} }, "p1", { c: genesis.partitions.c! }, arrival(1_000), []),
+      stale.declare(READ_A, "p1", { c: genesis.partitions.c! }, arrival(1_000), []),
     ).rejects.toThrow(/nextElementId/);
   });
 
@@ -189,11 +203,10 @@ describe("#377 — a world's id allocation is durable, not derived from what is 
     // room-touching verb while the park ladder sat still and the publisher's
     // health score paid for a platform defect.
     const genesis = await storedWorld();
-    const stale = createWorld(options({ nextElementId: 1_000_001 })).runner;
-    await stale.declare({ name: "read-a", args: {} }, "p1", {}, arrival(1_000), []);
+    const stale = await hostHoldingStamp(1_000_001);
 
     const refusal = await stale
-      .declare({ name: "read-a", args: {} }, "p1", { c: genesis.partitions.c! }, arrival(1_000), [])
+      .declare(READ_A, "p1", { c: genesis.partitions.c! }, arrival(1_000), [])
       .catch((error: unknown) => error);
 
     expect(refusal).toBeInstanceOf(WorldRefusal);
