@@ -1,9 +1,14 @@
 /**
- * `dependentFilter` exists because BoardSmith evaluates EVERY selection filter
- * during availability checks — including filters for selections the player has
- * not reached yet, whose dependency is therefore still `undefined`. A filter
- * that forgets that case either hides an action that is legal or offers one
- * that is not, so the two branches are the whole point.
+ * `dependentFilter` exists because a filter is handed `ctx.args` as they stand,
+ * and there are two paths that evaluate one before the selection it narrows by
+ * has been answered: the engine walking a DECLARED dependency (`dependsOn` /
+ * `filterBy`), and a persistent world enumerating every selection of an offer in
+ * a single frame. A filter that forgets that case dereferences `undefined`, so
+ * the two branches are the whole point.
+ *
+ * What it is no longer for is keeping an action on the panel. Since #270 an
+ * action is offered on its FIRST unsatisfied step, so `whenUndefined` is free to
+ * be the truth rather than the union of every earlier answer's rows.
  */
 import { describe, it, expect, vi } from 'vitest';
 import { dependentFilter, not } from './helpers.js';

@@ -34,7 +34,7 @@ import {
   type VisibilityMode,
   type VisibilityState,
 } from '../command/visibility.js';
-import type { ActionDefinition, ActionResult, SerializedAction, ActionTrace, ActionDebugInfo, PickDebugInfo, AnnotatedChoice } from '../action/types.js';
+import type { ActionDefinition, ActionResult, SerializedAction, ActionTrace, ActionDebugInfo, PickTrace, PickDebugInfo, AnnotatedChoice } from '../action/types.js';
 import { ActionExecutor } from '../action/action.js';
 import type { FlowDefinition, FlowState, FlowPosition, FlowDebugInfo } from '../flow/types.js';
 import type { TutorialDefinition, TutorialProgress } from '../tutorial/types.js';
@@ -574,6 +574,70 @@ function persistentMapFields(game: Game): ReadonlySet<string> {
     }
   }
   return names;
+}
+
+/**
+ * Why an action whose condition passed is still not offered.
+ *
+ * Either a question the player would be asked has no answer, or -- when every
+ * one of those does -- a DECLARED dependency that no value of its input can
+ * satisfy, which is the only other thing availability walks (#270).
+ */
+function unavailableReason(trace: ActionTrace, selections: PickDebugInfo[]): string {
+  const blocking = selections.find(s => !s.passed);
+  if (blocking) {
+    return blocking.note
+      ? `Selection '${blocking.name}' has no valid choices (${blocking.note})`
+      : `Selection '${blocking.name}' has no valid choices`;
+  }
+  const dependent = trace.selections.find(s => s.dependentOn !== undefined);
+  return dependent
+    ? `No value of '${dependent.dependentOn}' leaves '${dependent.name}' anything to pick`
+    : 'No valid selection path found';
+}
+
+/**
+ * One step of an availability trace, in the words `debugActionAvailability`
+ * answers in.
+ *
+ * `notYetAskable` comes first and decides both halves (#270): a step the player
+ * has not reached was never evaluated, so its choice count says nothing, and
+ * naming it as the reason an action is missing points the author at a question
+ * that has not been asked.
+ */
+function describePickForDebug(sel: PickTrace): PickDebugInfo {
+  if (sel.notYetAskable) {
+    return {
+      name: sel.name,
+      choices: sel.choiceCount,
+      passed: true,
+      note: sel.dependentOn
+        ? `Not asked yet - narrowed by '${sel.dependentOn}' once that is answered`
+        : 'Not asked yet - evaluated when the player reaches it',
+    };
+  }
+  return {
+    name: sel.name,
+    choices: sel.choiceCount,
+    passed: !!sel.optional || sel.choiceCount !== 0,
+    note: pickDebugNote(sel),
+  };
+}
+
+/** The note half of the above, for a step that WAS evaluated. */
+function pickDebugNote(sel: PickTrace): string {
+  if (sel.choiceCount === -1) return 'Free input (text/number) - always available';
+  if (sel.optional) {
+    return sel.choiceCount > 0
+      ? `Optional with ${sel.choiceCount} choices`
+      : 'Optional - can be skipped';
+  }
+  if (sel.choiceCount > 0) {
+    return `${sel.choiceCount} valid choice${sel.choiceCount === 1 ? '' : 's'}`;
+  }
+  if (sel.dependentOn) return `Depends on '${sel.dependentOn}' - no valid combinations found`;
+  if (sel.filterApplied) return 'Filter eliminated all choices';
+  return 'No elements/choices available';
 }
 
 /**
@@ -2659,35 +2723,7 @@ export class Game<
    * Convert an ActionTrace to human-readable ActionDebugInfo
    */
   private _formatActionDebugInfo(trace: ActionTrace): ActionDebugInfo {
-    const selections: PickDebugInfo[] = trace.selections.map(sel => {
-      const passed = !!sel.optional || sel.choiceCount !== 0;
-      let note: string | undefined;
-
-      if (sel.choiceCount === -1) {
-        note = 'Free input (text/number) - always available';
-      } else if (sel.optional) {
-        note = sel.choiceCount > 0
-          ? `Optional with ${sel.choiceCount} choices`
-          : 'Optional - can be skipped';
-      } else if (sel.choiceCount === 0) {
-        if (sel.dependentOn) {
-          note = `Depends on '${sel.dependentOn}' - no valid combinations found`;
-        } else if (sel.filterApplied) {
-          note = 'Filter eliminated all choices';
-        } else {
-          note = 'No elements/choices available';
-        }
-      } else {
-        note = `${sel.choiceCount} valid choice${sel.choiceCount === 1 ? '' : 's'}`;
-      }
-
-      return {
-        name: sel.name,
-        choices: sel.choiceCount,
-        passed,
-        note,
-      };
-    });
+    const selections: PickDebugInfo[] = trace.selections.map(describePickForDebug);
 
     // Determine the reason
     let reason: string;
@@ -2713,16 +2749,7 @@ export class Game<
         conditionNote = 'Condition returned false (use object-based condition for automatic tracing)';
       }
     } else if (!trace.available) {
-      // Find the blocking selection
-      const blockingSel = selections.find(s => !s.passed);
-      if (blockingSel) {
-        reason = `Selection '${blockingSel.name}' has no valid choices`;
-        if (blockingSel.note) {
-          reason += ` (${blockingSel.note})`;
-        }
-      } else {
-        reason = 'No valid selection path found';
-      }
+      reason = unavailableReason(trace, selections);
     } else {
       // Action is available
       if (selections.length === 0) {

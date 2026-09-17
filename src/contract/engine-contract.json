@@ -1,7 +1,7 @@
 {
-  "revision": 85,
+  "revision": 86,
   "bundleProtocol": 2,
-  "surfaceHash": "8acbc2ae3015d0b7",
+  "surfaceHash": "0c3611ed469d90ae",
   "payloadHash": "adb9e8ed9a9dbcdd",
   "formatHash": "0058593e7cc80205",
   "history": [
@@ -709,6 +709,15 @@
       "payloadHash": "adb9e8ed9a9dbcdd",
       "formatHash": "0058593e7cc80205",
       "summary": "Elements and the game root can declare static seatAttributes (#269): a per-seat DERIVED attribute, a name-to-function map evaluated at projection time with the live element and the receiving seat (null for a spectator), whose value is merged into that seat's node after the visibleAttributes whitelist and stored nowhere. visibleAttributes is a whitelist over STORED attributes, so a value gated on a fact that can change had to be stored already-gated and re-derived by every write path that could change the gate -- a world character's coordinate readout gated on carrying a GPS unit kept its stale figure when another seat's command emptied the pack, and was served until that seat happened to issue a command that rewrote it. A derivation is asked at serialization instead, so there is nothing to keep in step: returning undefined leaves the attribute out of that seat's view, toJSON() and stored world partitions never carry one, and a restore of a per-seat view does not turn one back into a stored field. It runs on the single per-seat path (toJSONForPlayer, the batched toJSONForPlayers under it, snapshots taken forSeat, a bot's redacted clone and a world's viewFor), never for an element the seat cannot see, and projectionSignaturesFor now refuses an audience whose tree declares one, the same way it refuses visibleAttributes and playerView. Refused loudly at projection: a derived name the element also stores or the engine owns, a derivation that throws (the error names class, attribute and seat), and a value JSON cannot carry (the error names the path inside it)."
+    },
+    {
+      "revision": 86,
+      "date": "2026-09-17",
+      "bundleProtocol": 2,
+      "surfaceHash": "0c3611ed469d90ae",
+      "payloadHash": "adb9e8ed9a9dbcdd",
+      "formatHash": "0058593e7cc80205",
+      "summary": "An action is offered on its first unsatisfied step: a later chooseFrom returning [] before its input exists no longer removes the verb from a seat's offer (table and world), and the pruning that remains warns with the action and question named (#270)"
     }
   ]
 }

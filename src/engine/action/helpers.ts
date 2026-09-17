@@ -200,8 +200,17 @@ export interface DependentFilterOptions<T, TPrev> {
 /**
  * Creates a filter function that handles the undefined case for multi-step selections.
  *
- * BoardSmith evaluates ALL filters during availability checks, even for selections
- * the player hasn't made yet. This helper makes it easy to handle both cases correctly.
+ * A filter is handed `ctx.args` as they stand, so it can be called before the
+ * selection it narrows by has been answered: when the engine walks a DECLARED
+ * dependency (`dependsOn` / `filterBy`), and when a persistent world enumerates
+ * every selection of an offer in one frame. This helper makes both cases
+ * explicit instead of leaving a callback to dereference `undefined`.
+ *
+ * It is NOT needed to keep an action on the panel. Since #270 an action is
+ * offered on its FIRST unsatisfied step, so a later step that answers nothing
+ * while its input is missing no longer removes the verb -- `whenUndefined` may
+ * return `false` for everything if that is the truth, rather than over-offering
+ * the union of every earlier answer's rows.
  *
  * @example
  * ```typescript

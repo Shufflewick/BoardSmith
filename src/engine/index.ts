@@ -320,3 +320,15 @@ export type {
  * `Error` is sanitized at the action boundary instead.
  */
 export { PlayerFacingError, NotSimulableError, RedactedAttributeError } from './errors.js';
+
+/**
+ * The engine's one diagnostic channel: a warning an author sees in development
+ * and a shipped game never pays for, printed once per key.
+ *
+ * Exported from the barrel because `boardsmith/world` may reach the engine and
+ * itself at runtime and nothing else (see `src/world/purity.test.ts`), and a
+ * world drops an action for exactly one reason -- its first question having no
+ * answer -- which it must say out loud rather than leaving a verb missing from
+ * a seat's panel (#270).
+ */
+export { devWarn } from '../utils/dev.js';

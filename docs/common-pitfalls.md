@@ -67,44 +67,85 @@ Each deserialization creates new object instances with the same data but differe
 
 ## 2. Dependent Selections (Selection B depends on Selection A)
 
-### The Problem
+### The short version
 
-When selection B depends on selection A's value, the filter/elements function for B can't access A during the availability check because A hasn't been selected yet:
+Write the guard. It is correct, and the action stays on the panel.
 
 ```typescript
-// WRONG - crashes when merc is undefined during availability check
-Action.create('dropEquipment')
-  .chooseElement('merc', { elements: () => [...game.all(Merc)] })
-  .chooseElement('equipment', {
-    elements: (ctx) => {
-      const merc = ctx.args.merc as Merc;  // undefined during availability!
-      return [...merc.equipment.all(Equipment)];  // CRASH!
-    }
+// CORRECT, and all that is required
+Action.create('equip')
+  .chooseFrom('slot', { choices: ['head', 'hand'] })
+  .chooseFrom('item', {
+    choices: (ctx) => {
+      const slot = ctx.args.slot as string | undefined;
+      if (slot === undefined) return [];   // nothing to narrow by yet
+      return itemsFor(slot);
+    },
   })
 ```
 
-### The Solution: Use `dependsOn`
+An action is offered on its **first unsatisfied step** -- the question the
+player is actually about to be asked. A step after it has not been reached, so
+its empty list means "ask me again once you know", never "this action cannot be
+taken". Before BoardSmith #270 that empty list took the whole verb off the panel
+with no error anywhere, and the workaround was to over-offer the union of every
+slot's items, which shows the player rows they will not be allowed to pick.
 
-Add `dependsOn` to tell the framework that selection B depends on selection A. The framework will automatically verify the action is available by checking if ANY choice for A leads to valid choices for B:
+The narrowed list is what the panel fetches the moment `slot` is answered, and
+it is the list dispatch is validated against, so nothing invalid can be
+submitted either way.
+
+### When a step IS still evaluated with nothing bound
+
+- **A step that declares `dependsOn` or `filterBy`.** That declaration asks the
+  engine to walk the whole path, so it re-asks the dependent step once per value
+  of the step it depends on, with that value bound. See below.
+- **Every selection of a persistent-world action.** A world's offer is
+  enumerated in a single frame, so each selection's candidates are produced with
+  `args: {}` once. The guard above is what that frame needs, and the candidates
+  are re-asked with the args bound as soon as the player answers
+  ([Persistent Worlds](./persistent-worlds.md)).
+
+In both cases the callback is called with its input `undefined`, so it must not
+assume otherwise:
 
 ```typescript
-// CORRECT - use dependsOn for automatic handling
+// WRONG - throws the moment it is evaluated with nothing bound
+elements: (ctx) => {
+  const merc = ctx.args.merc as Merc;
+  return [...merc.equipment.all(Equipment)];  // merc is undefined -> CRASH
+}
+```
+
+### `dependsOn`: ask the engine to prove a whole path exists
+
+`dependsOn` is opt-in strictness, not a requirement. It tells the engine that B
+is narrowed by A, and the engine then checks that **at least one** value of A
+leaves B with something to pick -- dropping the action when none does:
+
+```typescript
 Action.create('dropEquipment')
   .chooseElement('merc', { elements: () => [...game.all(Merc)] })
   .chooseElement('equipment', {
-    dependsOn: 'merc',  // Framework handles availability check!
+    dependsOn: 'merc',
     elements: (ctx) => {
-      const merc = ctx.args.merc as Merc;
+      const merc = ctx.args.merc as Merc | undefined;
+      if (merc === undefined) return [];
       return [...merc.equipment.all(Equipment)];
-    }
+    },
   })
 ```
 
 **How it works:**
-- During availability check, the framework iterates through all mercs
-- For each merc, it checks if the equipment selection would have choices
-- Action is available if at least one merc has equipment
-- No crashes, no manual undefined handling needed!
+- During the availability check the engine iterates every choice for `merc`
+- For each one it re-asks `equipment` with that merc bound
+- The action is available if at least one merc has equipment
+- If none does, the action is dropped **and says so** with a warning naming the
+  action, the step and the dependency
+
+Use it when "this verb is pointless right now" is a real state you want the
+panel to reflect, and when the candidate set is small enough to walk. Skip it
+otherwise: without it the verb is offered, the player picks A, and B narrows.
 
 This works with all selection types:
 
@@ -123,36 +164,45 @@ This works with all selection types:
 })
 ```
 
-### Alternative: Manual Undefined Handling
+### When the player reaches a step with nothing in it
 
-For complex cases where you need custom availability logic, you can still handle `undefined` manually:
+They are told, in words. A **required** step that comes back empty refuses
+instead of drawing an empty list, naming the question, the verb and the answers
+that narrowed it:
 
-```typescript
-// Manual approach - handle undefined explicitly
-.chooseElement('destination', {
-  filter: (sector, ctx) => {
-    const selectedSquad = ctx.args?.squad as Squad | undefined;
+> There is nothing to choose for "Item" in "Equip an item": nothing qualifies
+> once slot = "head". Cancel this action and answer it differently, or take
+> another action.
 
-    if (!selectedSquad) {
-      // Availability check - return true if valid for ANY squad
-      return movableSquads.some(squad =>
-        isAdjacent(squad.sectorId, sector.id)
-      );
-    }
+That refusal travels on the channel a refused pick already travels, which both
+the action panel and a custom board watch, so the two cannot disagree about it.
 
-    // Actual selection - filter based on selected squad
-    return isAdjacent(selectedSquad.sectorId, sector.id);
-  }
-})
-```
+Two things are deliberately **not** treated as dead ends: an **optional** step
+(skipping it is the answer) and a step whose candidates are all **disabled**
+(every row carries its own reason, which says more than the message could).
 
-### When to Use Which
+If your game knows a better sentence than the engine's, say it earlier with
+`.condition()` or `.disabled()` on the action — both run before the player is
+walked this far.
 
-| Use `dependsOn` when... | Use manual handling when... |
-|------------------------|----------------------------|
-| Simple dependency (B's choices come from A) | Complex availability logic needed |
-| Standard patterns (select container, then contents) | Need to filter A's choices based on B's existence |
-| Want automatic framework handling | Need custom "any possible path" logic |
+### When an action IS dropped, and when you hear about it
+
+Two things, and only two, take an action off a seat's list for want of an
+answer:
+
+1. Its **first** question has no selectable candidate (every one absent or
+   disabled). That is a pick that would open on nothing.
+2. A **declared** dependency that no value of its input can satisfy.
+
+A development warning naming the action and the step is printed **only for an
+action that asks more than one question**. A one-question verb is dropped
+exactly when that question has no answer — no deck, so no draw — which is
+ordinary play and is the whole of what its absence means; warning on every such
+verb would train you to ignore the warning that matters.
+
+If the verb should be missing, prefer saying so with `.condition()` or
+`.disabled()`: a disabled action with a reason teaches the player something, a
+missing one looks like a verb the game does not have.
 
 ---
 

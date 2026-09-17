@@ -6,7 +6,15 @@
  * A "pick" represents a choice the player must make during action resolution.
  */
 
-import type { Game, Player, PendingActionState } from '../engine/index.js';
+import type {
+  ActionDefinition,
+  ChoiceSelection,
+  ElementSelection,
+  ElementsSelection,
+  Game,
+  Player,
+  PendingActionState,
+} from '../engine/index.js';
 import type { GameRunner } from '../runtime/index.js';
 import {
   ErrorCode,
@@ -19,6 +27,7 @@ import { PendingActionManager, type PickStepResult } from './pending-action-mana
 import { buildSingleActionMetadata } from './utils.js';
 import { resolveOrderedList } from '../engine/utils/resolve-multiselect.js';
 import {
+  deadEndPickMessage,
   formatChoiceCandidates,
   formatElementCandidates,
   type AnnotatedCandidate,
@@ -35,6 +44,122 @@ function deserializePendingState(s: Record<string, unknown>): PendingActionState
   return {
     ...(s as unknown as PendingActionState),
     onSelectFired: Array.isArray(onSelectFired) ? new Set(onSelectFired as number[]) : undefined,
+  };
+}
+
+/**
+ * What the executor says this pick's candidates are, or the response that says
+ * the game's own callback threw while being asked.
+ *
+ * Written once for both pick kinds: they differ in the word in the message and
+ * in nothing else, and two copies of "what a throwing choices() becomes on the
+ * wire" is how the two would come to answer it differently.
+ */
+function evaluateCandidates(
+  executor: ReturnType<Game['getActionExecutor']>,
+  selection: ChoiceSelection | ElementSelection | ElementsSelection,
+  player: Player,
+  args: Record<string, unknown>,
+): { candidates: AnnotatedCandidate[] } | { refusal: PickChoicesResponse } {
+  try {
+    return { candidates: executor.getChoices(selection, player, args) as AnnotatedCandidate[] };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    const asChoices = selection.type === 'choice';
+    return {
+      refusal: {
+        success: false,
+        error: `Error evaluating ${asChoices ? 'choices' : 'elements'}: ${message}`,
+        errorCode: asChoices ? ErrorCode.CHOICES_EVALUATION_ERROR : ErrorCode.ELEMENTS_EVALUATION_ERROR,
+      },
+    };
+  }
+}
+
+/**
+ * One pick with candidates, answered: its rows, its bounds, or the reason it
+ * cannot be answered at all.
+ *
+ * ONE BODY FOR ALL THREE KINDS. A choice, an element and a set of elements
+ * differ in which formatter draws their rows and in which bounds ride along --
+ * and three bodies that agreed about everything else is how they came to
+ * disagree about a label, and then about whether an empty step says anything.
+ */
+function answerPick(
+  executor: ReturnType<Game['getActionExecutor']>,
+  action: ActionDefinition,
+  selection: ChoiceSelection | ElementSelection | ElementsSelection,
+  player: Player,
+  ctx: { game: Game; player: Player; args: Record<string, unknown> },
+  warnings: WarningEntry[],
+): PickChoicesResponse {
+  const evaluated = evaluateCandidates(executor, selection, player, ctx.args);
+  if ('refusal' in evaluated) return evaluated.refusal;
+
+  // AFTER THE FORMATTERS RUN, NEVER BEFORE: a soft-failing `display()` or
+  // `boardRefs()` is what puts anything in here, so reading the array early
+  // would ship an answer that drops the very warnings it is meant to carry.
+  const said = () => (warnings.length > 0 ? warnings : undefined);
+
+  if (selection.type === 'choice') {
+    const choices = formatChoiceCandidates(evaluated.candidates, selection, ctx, warnings);
+    if (choices.length === 0 && !selection.optional) return deadEnd(action, selection, ctx);
+    return {
+      success: true,
+      choices,
+      multiSelect: resolveMultiSelectConfig(selection.multiSelect, ctx),
+      // The ORDERED-LIST bounds for THIS step (#249), resolved here for the
+      // reason multiSelect is: a bound that reads an earlier selection's value
+      // is only knowable once that value is bound, and the static metadata was
+      // resolved with no arguments at all.
+      orderedList: resolveOrderedList(selection, ctx),
+      warnings: said(),
+    };
+  }
+
+  const validElements = formatElementCandidates(evaluated.candidates, selection, ctx, warnings);
+  if (validElements.length === 0 && !selection.optional) return deadEnd(action, selection, ctx);
+  return {
+    success: true,
+    validElements,
+    multiSelect: selection.type === 'elements'
+      ? resolveMultiSelectConfig(selection.multiSelect, ctx)
+      : undefined,
+    warnings: said(),
+  };
+}
+
+/**
+ * A STEP THE PLAYER REACHED AND CANNOT ANSWER (#270).
+ *
+ * An offered action can now walk a player to a later question that, with its
+ * input bound, has nothing to pick -- which is the honest state of the game and
+ * is exactly what the old pruning hid by deleting the verb. Drawing it as an
+ * empty list under a prompt would trade one silence for another, so it refuses
+ * on the channel a refused pick already travels (#227): both shells watch that
+ * channel, so the action panel and a custom board say the same thing without
+ * either of them learning a new field.
+ *
+ * Only a REQUIRED step, and only a genuinely EMPTY one. Skipping is the answer
+ * to an optional step, and a step whose candidates are all greyed already tells
+ * the player more than this could -- every row carries its own reason.
+ */
+function deadEnd(
+  action: { name: string; prompt?: string },
+  selection: { name: string; prompt?: unknown },
+  ctx: { game: Game; player: Player; args: Record<string, unknown> },
+): PickChoicesResponse {
+  const prompt = typeof selection.prompt === 'function'
+    ? (selection.prompt as (c: typeof ctx) => string)(ctx)
+    : (selection.prompt as string | undefined);
+  return {
+    success: false,
+    error: deadEndPickMessage({
+      action: action.prompt ?? action.name,
+      pick: prompt ?? selection.name,
+      args: ctx.args,
+    }),
+    errorCode: ErrorCode.PICK_HAS_NO_CANDIDATES,
   };
 }
 
@@ -217,54 +342,10 @@ export class PickHandler<G extends Game = Game> {
     const warnings: WarningEntry[] = [];
 
     switch (selection.type) {
-      case 'choice': {
-        let annotatedChoices: AnnotatedCandidate[];
-        try {
-          annotatedChoices = executor.getChoices(selection, player, resolvedArgs) as AnnotatedCandidate[];
-        } catch (error) {
-          const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-          return { success: false, error: `Error evaluating choices: ${errorMsg}`, errorCode: ErrorCode.CHOICES_EVALUATION_ERROR };
-        }
-
-        const choices = formatChoiceCandidates(annotatedChoices, selection, ctx, warnings);
-        const multiSelect = resolveMultiSelectConfig(selection.multiSelect, ctx);
-        // The ORDERED-LIST bounds for THIS step (#249), resolved here for the
-        // reason multiSelect is: a bound that reads an earlier selection's value
-        // is only knowable once that value is bound, and the static metadata was
-        // resolved with no arguments at all.
-        const orderedList = resolveOrderedList(selection, ctx);
-
-        return {
-          success: true,
-          choices,
-          multiSelect,
-          orderedList,
-          warnings: warnings.length > 0 ? warnings : undefined,
-        };
-      }
-
-      // ONE BRANCH FOR BOTH ELEMENT PICKS. They differ in exactly one thing --
-      // `elements` resolves to an array and carries a multiSelect config -- and
-      // two bodies that agreed about everything else is how they came to
-      // disagree about a label.
+      case 'choice':
       case 'element':
-      case 'elements': {
-        let annotatedElements: AnnotatedCandidate[];
-        try {
-          annotatedElements = executor.getChoices(selection, player, resolvedArgs) as AnnotatedCandidate[];
-        } catch (error) {
-          const errorMsg = error instanceof Error ? error.message : 'Unknown error';
-          return { success: false, error: `Error evaluating elements: ${errorMsg}`, errorCode: ErrorCode.ELEMENTS_EVALUATION_ERROR };
-        }
-
-        const validElements = formatElementCandidates(annotatedElements, selection, ctx, warnings);
-        const multiSelect =
-          selection.type === 'elements'
-            ? resolveMultiSelectConfig(selection.multiSelect, ctx)
-            : undefined;
-
-        return { success: true, validElements, multiSelect, warnings: warnings.length > 0 ? warnings : undefined };
-      }
+      case 'elements':
+        return answerPick(executor, action, selection, player, ctx, warnings);
 
       case 'number':
       case 'text':

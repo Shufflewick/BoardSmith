@@ -21,6 +21,7 @@
  * time a value reaches this file.
  */
 import { isDevThrowEnabled } from '../../utils/dev.js';
+import { isElement } from './game-element.js';
 import type {
   BoardElementRef,
   ChoiceSelection,
@@ -231,4 +232,65 @@ function refFor(
     });
     return { id: element.id };
   }
+}
+
+/**
+ * A QUESTION WITH NO ANSWER, SAID TO THE PLAYER (#270).
+ *
+ * Offering an action on its first unsatisfied step is the fix for a verb that
+ * used to vanish, and it moves one failure rather than removing it: an offered
+ * verb can now walk a player to a later question that, once its input is bound,
+ * genuinely has nothing to pick. An empty list under a prompt is a silent dead
+ * end traded for a silent absence, so the step refuses with this instead.
+ *
+ * It is written here, beside the two formatters, for the reason they are: the
+ * session's `PickHandler` and a world's panel both ask a step the same question
+ * with the same arguments, and two messages would be two accounts of one state.
+ *
+ * What it says is what the engine actually knows -- the question, the verb, and
+ * the answers that narrowed it -- and never a rule it would be inventing. A
+ * game that can say more should say it with `.condition()` or `.disabled()`,
+ * which run before the player is walked this far.
+ */
+export function deadEndPickMessage(options: {
+  /** What the verb is called to a player: its prompt, else its name. */
+  action: string;
+  /** What the question is called to a player: its prompt, else its name. */
+  pick: string;
+  /** The answers bound so far, which are what narrowed this question. */
+  args: Readonly<Record<string, unknown>>;
+}): string {
+  const narrowedBy = describeBoundArgs(options.args);
+  // The tail is the player's next move, and it differs: an answer they gave is
+  // something they can give differently, and when they have given none there is
+  // nothing in this action to change.
+  const because = narrowedBy === undefined
+    ? 'nothing in the game qualifies for it right now. Cancel this action and take another'
+    : `nothing qualifies once ${narrowedBy}. Cancel this action and answer it differently, ` +
+      'or take another action';
+  return `There is nothing to choose for "${options.pick}" in "${options.action}": ${because}.`;
+}
+
+/** The bound answers as a player would recognize them, or `undefined` when none
+ *  of them has a form worth showing (an answer nobody can read is worse than
+ *  saying only that the question was narrowed). */
+function describeBoundArgs(args: Readonly<Record<string, unknown>>): string | undefined {
+  const parts: string[] = [];
+  for (const [name, value] of Object.entries(args)) {
+    const described = describeBoundValue(value);
+    if (described !== undefined) parts.push(`${name} = ${described}`);
+  }
+  if (parts.length === 0) return Object.keys(args).length > 0 ? 'your earlier answers' : undefined;
+  return parts.join(' and ');
+}
+
+function describeBoundValue(value: unknown): string | undefined {
+  if (isElement(value)) return `"${value.name ?? `${value.constructor.name} #${value.id}`}"`;
+  if (typeof value === 'string') return `"${value}"`;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  if (Array.isArray(value)) {
+    const described = value.map(describeBoundValue).filter((one): one is string => one !== undefined);
+    return described.length > 0 ? described.join(', ') : undefined;
+  }
+  return undefined;
 }

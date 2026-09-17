@@ -330,13 +330,6 @@
       ]
     },
     {
-      "content": "0ad37056b2ee1fcc",
-      "lines": 13,
-      "files": [
-        "src/engine/action/action.ts"
-      ]
-    },
-    {
       "content": "0b20853585c6d29d",
       "lines": 12,
       "files": [
@@ -2083,13 +2076,6 @@
       ]
     },
     {
-      "content": "4507a55b82b348d8",
-      "lines": 20,
-      "files": [
-        "src/engine/action/action.ts"
-      ]
-    },
-    {
       "content": "45922544add0487b",
       "lines": 13,
       "files": [
@@ -2277,13 +2263,6 @@
         "src/session/game-session.test.ts",
         "src/session/snapshot-session-host.test.ts",
         "src/session/stateless-ops.test.ts"
-      ]
-    },
-    {
-      "content": "4c541c479c89e648",
-      "lines": 12,
-      "files": [
-        "src/engine/action/action.ts"
       ]
     },
     {
@@ -4913,13 +4892,6 @@
       "lines": 16,
       "files": [
         "src/ui/components/GameShell.time-travel-desync.test.ts"
-      ]
-    },
-    {
-      "content": "9f0978857ca71431",
-      "lines": 17,
-      "files": [
-        "src/engine/action/action.ts"
       ]
     },
     {

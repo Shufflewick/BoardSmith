@@ -860,6 +860,13 @@ export interface PickTrace {
   filterApplied?: boolean;
   /** Name of pick this depends on (if using dependsOn) */
   dependentOn?: string;
+  /**
+   * This step comes after the one the player is waiting on, so it was NOT
+   * evaluated (#270): its candidates are a function of answers that do not
+   * exist yet. `choiceCount` is not meaningful on such a step, and it is never
+   * the reason an action is or is not offered.
+   */
+  notYetAskable?: boolean;
 }
 
 /**
