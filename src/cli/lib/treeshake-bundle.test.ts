@@ -222,13 +222,21 @@ describe('tree-shaking bundle proof (real Vite/Rollup build)', () => {
   });
 
   afterAll(() => {
-    // Clean up the parent fixtures dir if it exists and is now empty.
-    if (existsSync(FIXTURE_PARENT)) {
-      try {
-        rmSync(FIXTURE_PARENT, { recursive: true, force: true });
-      } catch {
-        // Ignore — another test run may have cleaned up already.
-      }
+    // The fixtures live INSIDE the repo (see FIXTURE_PARENT above), so a run
+    // that fails to remove them leaves the working tree dirty and the litter
+    // surfaces later as untracked files in somebody's merge. Swallowing that
+    // failure is how it went unnoticed, so it is raised instead.
+    if (!existsSync(FIXTURE_PARENT)) return;
+    try {
+      rmSync(FIXTURE_PARENT, { recursive: true, force: true });
+    } catch (cause) {
+      throw new Error(
+        `Could not remove the tree-shaking fixtures at ${FIXTURE_PARENT}. ` +
+          'They live inside the repo so Rollup can reach its node_modules, so ' +
+          'leaving them behind dirties the working tree. Remove the directory ' +
+          'by hand, then re-run.',
+        { cause },
+      );
     }
   });
 

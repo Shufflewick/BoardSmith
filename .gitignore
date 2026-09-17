@@ -47,3 +47,7 @@ Vector Cards (Version 3.2)
 
 # Git worktrees (per-branch checkouts; never part of a commit)
 /.worktrees/
+
+# Tree-shaking test fixtures live inside the repo so Rollup reaches node_modules;
+# an interrupted run must not be able to dirty the working tree.
+.treeshake-test-fixtures/
