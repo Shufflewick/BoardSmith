@@ -30,11 +30,9 @@
  * and a failure prints its path so the run can be repeated there.
  */
 import { describe, it, expect } from 'vitest';
-import { mkdirSync, readFileSync, symlinkSync, writeFileSync, existsSync } from 'node:fs';
-import { dirname, join } from 'node:path';
 
-import { tempTree } from '../testing/temp-tree.test-helper.js';
-import { REPO_ROOT, VUE_TSC, vueTscErrors } from './vue-tsc-run.test-helper.js';
+import { consumerInstall } from './consumer-install.test-helper.js';
+import { VUE_TSC, vueTscErrors } from './vue-tsc-run.test-helper.js';
 
 /**
  * THE MODULES A NATIVE-HOST HARNESS IMPORTS, and the reason this list is short.
@@ -50,85 +48,9 @@ const DEV_HOST_ENTRY_POINTS = [
   'src/cli/commands/dev-server.ts',
 ] as const;
 
-/**
- * What a game installs alongside us to run `vue-tsc` at all. Anything NOT in
- * this list and not in our production closure is absent from the sandbox, which
- * is the whole point: `three` and `@types/three` are devDependencies here, and
- * a consumer of the development host does not get them.
- */
-const SUPPLIED_BY_THE_CONSUMER = ['typescript', 'vue', 'vue-tsc'] as const;
-
-interface LockPackage {
-  readonly dev?: boolean;
-}
-
-/** Every top-level package a plain `npm install boardsmith` would produce. */
-function productionClosure(): string[] {
-  const lock = JSON.parse(readFileSync(join(REPO_ROOT, 'package-lock.json'), 'utf8')) as {
-    packages: Record<string, LockPackage>;
-  };
-  const prefix = 'node_modules/';
-  return Object.entries(lock.packages)
-    .filter(([path, entry]) => path.startsWith(prefix) && !entry.dev)
-    .map(([path]) => path.slice(prefix.length))
-    .filter((name) => !name.includes('node_modules/'));
-}
-
-/**
- * A tree that holds this package as a consumer would hold it: our `src` under
- * `node_modules/boardsmith`, and beside it only what we declare.
- */
-function consumerInstall(): string {
-  const root = tempTree('bs-dev-host-consumer-');
-  const modules = join(root, 'node_modules');
-
-  for (const name of new Set([...productionClosure(), ...SUPPLIED_BY_THE_CONSUMER])) {
-    const from = join(REPO_ROOT, 'node_modules', name);
-    if (!existsSync(from)) continue;
-    const to = join(modules, name);
-    mkdirSync(dirname(to), { recursive: true });
-    symlinkSync(from, to);
-  }
-
-  // `src` and `package.json` only -- NOT the checkout, whose `node_modules`
-  // would put every devDependency back within reach of the lookup.
-  const installed = join(modules, 'boardsmith');
-  mkdirSync(installed, { recursive: true });
-  symlinkSync(join(REPO_ROOT, 'src'), join(installed, 'src'));
-  symlinkSync(join(REPO_ROOT, 'package.json'), join(installed, 'package.json'));
-
-  writeFileSync(
-    join(root, 'tsconfig.json'),
-    JSON.stringify(
-      {
-        compilerOptions: {
-          target: 'ES2022',
-          module: 'ESNext',
-          moduleResolution: 'bundler',
-          lib: ['ES2022', 'DOM', 'DOM.Iterable'],
-          strict: true,
-          esModuleInterop: true,
-          skipLibCheck: true,
-          resolveJsonModule: true,
-          jsx: 'preserve',
-          types: ['vite/client', 'node'],
-          noEmit: true,
-          // Resolve from where the file SITS, not from where it really lives.
-          preserveSymlinks: true,
-        },
-        files: DEV_HOST_ENTRY_POINTS.map((entry) => `node_modules/boardsmith/${entry}`),
-      },
-      null,
-      2,
-    ),
-  );
-
-  return root;
-}
-
 describe("BoardSmith's development host type-checks from a consumer's install (#273)", () => {
   it('reports zero vue-tsc errors with only the declared dependencies present', () => {
-    const root = consumerInstall();
+    const root = consumerInstall({ entryPoints: DEV_HOST_ENTRY_POINTS });
 
     const errors = vueTscErrors(root, 'tsconfig.json');
 

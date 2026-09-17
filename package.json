@@ -99,6 +99,18 @@
     "vite": "^5.4.0",
     "ws": "^8.16.0"
   },
+  "peerDependencies": {
+    "@types/three": ">=0.180.0",
+    "three": ">=0.180.0"
+  },
+  "peerDependenciesMeta": {
+    "@types/three": {
+      "optional": true
+    },
+    "three": {
+      "optional": true
+    }
+  },
   "devDependencies": {
     "@types/node": "^22.0.0",
     "@types/three": "^0.182.0",

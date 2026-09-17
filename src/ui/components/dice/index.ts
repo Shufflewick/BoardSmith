@@ -11,6 +11,12 @@
  * import { Die3D } from 'boardsmith/ui/dice';
  * ```
  *
+ * The install is opt-in for the same reason: `three` and `@types/three` are
+ * optional PEER dependencies, so a game that draws dice runs
+ * `npm install three @types/three` and a game that does not never carries the
+ * 41 MB. `./three-peer.ts` records why that was the packaging decision and
+ * holds the message a missing install produces.
+ *
  * Two separate things keep that cost off games that do not roll dice:
  *
  * 1. `Die3D` is an async component, so three.js lands in its own chunk rather
@@ -33,8 +39,30 @@
 
 import { defineAsyncComponent } from 'vue';
 import { setDiePreviewComponent } from './die-preview-registry.js';
+import { missingThreePeerError } from './three-peer.js';
 
-export const Die3D = defineAsyncComponent(() => import('./Die3D.vue'));
+/**
+ * Load the die, and say which install is missing when it cannot be loaded.
+ *
+ * three.js is an OPTIONAL PEER DEPENDENCY (see `./three-peer.ts` for why), so
+ * "not installed" is a supported state of the world and has to read as one. The
+ * probe is what makes the message honest: `Die3D.vue` fails for its own reasons
+ * too, and asking the resolver about `three` FIRST separates the game that
+ * never installed it from a genuine fault in the component, which is then
+ * rethrown untouched. Both imports are dynamic, so the chunk split the whole
+ * module is built around is unaffected -- three.js still lands beside the die
+ * and never in a game's main bundle.
+ */
+async function loadDie3D() {
+  try {
+    await import('three');
+  } catch (cause) {
+    throw missingThreePeerError(cause);
+  }
+  return import('./Die3D.vue');
+}
+
+export const Die3D = defineAsyncComponent(loadDie3D);
 
 // Side effect: see (2) above. Registering the async wrapper — not the SFC —
 // keeps the chunk split intact; the preview pays the same lazy fetch as any

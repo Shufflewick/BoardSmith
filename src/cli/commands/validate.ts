@@ -31,6 +31,7 @@ import {
   type UnboundedChoiceStep,
 } from '../lib/choice-cardinality.js';
 import type { Game, GameOptions } from '../../engine/index.js';
+import { missingThreePeerHint } from '../../ui/components/dice/three-peer.js';
 
 interface ValidationResult {
   name: string;
@@ -536,12 +537,21 @@ async function validateTypeScript(cwd: string): Promise<TypeCheckRun> {
           shown.push(`... and ${remaining} more error${remaining === 1 ? '' : 's'}. Run \`npx vue-tsc --noEmit\` for full output.`);
         }
 
+        // A game that imports `boardsmith/ui/dice` without installing the
+        // optional `three` peer fails INSIDE node_modules/boardsmith, which
+        // reads as our bug and tells the author nothing they can act on. The
+        // instruction goes first, above the compiler's own words (#276).
+        const threePeer = missingThreePeerHint(allErrors);
+        const details = threePeer
+          ? [...threePeer.split('\n').filter((line) => line.trim() !== ''), ...shown]
+          : shown;
+
         resolve({
           result: {
             name: 'TypeScript',
             passed: false,
             message: 'TypeScript compilation failed',
-            details: shown.length > 0 ? shown : ['Run `npx vue-tsc --noEmit` for details'],
+            details: details.length > 0 ? details : ['Run `npx vue-tsc --noEmit` for details'],
           },
           programFiles,
         });
