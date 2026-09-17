@@ -2301,6 +2301,22 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     }
   }
 
+  /**
+   * Drop the draft on this page and nothing else: the action, its collected
+   * args, every selection snapshot and the last refusal.
+   *
+   * Local by construction, because the two callers below want different things
+   * from the server. `cancel()` is the player abandoning an action they own, so
+   * it tells the server first; a change of viewer is not that, and the seat a
+   * cancel would name is already the wrong one.
+   */
+  function abandonDraft(): void {
+    currentAction.value = null;
+    clearArgs(); // also clears multiSelectDraft
+    clearAdvancedState();
+    lastError.value = null;
+  }
+
   function cancel(): void {
     // If action is pending on server, cancel it there too
     if (pendingOnServer.value && options.cancelPendingAction) {
@@ -2310,10 +2326,35 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       });
     }
 
-    currentAction.value = null;
-    clearArgs(); // also clears multiSelectDraft
-    clearAdvancedState();
-    lastError.value = null;
+    abandonDraft();
+  }
+
+  /**
+   * A DRAFT BELONGS TO THE SEAT THAT STARTED IT (#272).
+   *
+   * Both shells keep this controller mounted across a change of viewer -- the
+   * dev bar's seat switcher, and the platform seating a page somewhere else --
+   * and everything a half-walked action holds is that seat's: the prompt, the
+   * args bound so far, and the candidates enumerated over what that seat could
+   * see. Drawn under the next seat it is one player's private information on
+   * another player's screen, which is precisely what the "switch seats and
+   * check" pass exists to catch, and why it kept reporting a leak that was not
+   * one.
+   *
+   * Here rather than in either shell because the seat is already an input to
+   * this controller: a third caller cannot forget to do it, and the panel and
+   * every custom UI reading the same controller are reset by the one fact
+   * changing.
+   *
+   * The server is deliberately not told. A seat switch leaves the old seat by
+   * its own road (the host is what moves the attachment), and a cancel sent
+   * from here could only name the seat that has just arrived.
+   */
+  if (playerSeat) {
+    watch(playerSeat, (seat, previous) => {
+      if (seat === previous) return;
+      abandonDraft();
+    });
   }
 
   // === Multi-select draft methods ===

@@ -55,6 +55,49 @@ describe('GameHistory', () => {
     });
   });
 
+  /**
+   * #272: THE LOG IS THE LIST IT IS GIVEN, NOT EVERYTHING IT HAS EVER SEEN.
+   *
+   * The drawn log is built by appending each new source entry, which is right
+   * for the only thing a log usually does -- grow. It made the component an
+   * ACCUMULATOR though, and a list that is not an extension of what is already
+   * drawn has nowhere to go: a seat switch hands both shells a different seat's
+   * log, and every line of the seat that left stayed on screen until the page
+   * was reloaded. That is the false leak report #272 is about.
+   */
+  describe('a source list that is not an append', () => {
+    it('redraws from a shorter list, so a log that emptied is empty', async () => {
+      const wrapper = mount(GameHistory, { props: { messages: ['a', 'b'] } });
+      await nextTick();
+      expect(wrapper.findAll('.message')).toHaveLength(2);
+
+      await wrapper.setProps({ messages: [] });
+      await nextTick();
+
+      expect(wrapper.findAll('.message')).toHaveLength(0);
+    });
+
+    it('redraws when the lines already drawn have been replaced', async () => {
+      const wrapper = mount(GameHistory, { props: { messages: ['You found a vest.', 'You are hidden.'] } });
+      await nextTick();
+
+      await wrapper.setProps({ messages: ['Nobody has been made on this seat.'] });
+      await nextTick();
+
+      const lines = wrapper.findAll('.message').map((line) => line.text());
+      expect(lines).toHaveLength(1);
+      expect(lines[0]).toContain('Nobody has been made on this seat.');
+    });
+
+    it('still appends when the list simply grew', async () => {
+      const wrapper = mount(GameHistory, { props: { messages: ['a'] } });
+      await nextTick();
+      await wrapper.setProps({ messages: ['a', 'b'] });
+      await nextTick();
+      expect(wrapper.findAll('.message')).toHaveLength(2);
+    });
+  });
+
   // -------------------------------------------------------------------------
 
   describe('log header', () => {

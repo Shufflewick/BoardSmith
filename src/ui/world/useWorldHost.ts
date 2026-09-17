@@ -320,6 +320,52 @@ export function useWorldHost(options: WorldHostOptions = {}): WorldHost {
    * stops `WorldShell` saying nobody has spoken to this frame, and only a
    * state frame earns it.
    */
+  /**
+   * A NEW STATE RETIRES THE OFFERS THAT WERE ABOUT THE OLD ONE (#244), AND SO
+   * DOES A NEW SEAT (#272).
+   *
+   * The offers arrive on their own frame, after the state, so between the two
+   * there is a moment where the page is showing a world it has not been told
+   * the verbs for. Keeping the previous set on screen through that moment would
+   * be showing buttons enumerated against a world that has moved -- or, on a
+   * seat switch, against a player who is no longer here; `offersPending` is how
+   * the shell says "not yet" rather than "nothing", which is a different
+   * sentence and the only honest one. The host follows every state frame with
+   * the offers for the seat it names, so the panel is filled again by the next
+   * message either way.
+   *
+   * A RE-PUSH OF THE SAME STATE TO THE SAME SEAT KEEPS THEM. A presence change
+   * and a notice both re-send that frame without the world having moved, and
+   * clearing there would flicker every panel for no reason.
+   */
+  function takeRevision(revision: number, switched: boolean): void {
+    if (revision === stateRevision && !switched) return;
+    stateRevision = revision;
+    // THE SET THIS PAGE IS HOLDING MAY ALREADY BE ABOUT THIS STATE (#250) --
+    // the offers frame of this very push, arrived first. Asked before the panel
+    // is blanked, so the ordinary case of a state arriving ahead of its offers
+    // is the only one that ever says "not yet". A set held from before a seat
+    // switch was dropped with the seat, so it cannot answer here.
+    if (showHeldOffers()) return;
+    actions.value = [];
+    offersPending.value = true;
+  }
+
+  /**
+   * EVERYTHING THIS PAGE HOLDS THAT BELONGED TO THE SEAT IT JUST LEFT (#272).
+   *
+   * The log, because every line in it was narrated to that seat in private and
+   * the seat arriving has been told nothing yet -- the shell's empty log says
+   * exactly that, instead of showing one player what another was told. And the
+   * offer set held but not shown (#250), because it was enumerated for the seat
+   * that left whatever revision it names, so there is no state it could ever be
+   * the right answer for.
+   */
+  function forgetTheSeatThatLeft(): void {
+    events.value = [];
+    heldOffers = null;
+  }
+
   function takeState(data: Extract<WorldHostMessage, { type: 'world_state' }>): void {
     heardFromHost.value = true;
     hostSilent.value = false;
@@ -330,30 +376,22 @@ export function useWorldHost(options: WorldHostOptions = {}): WorldHost {
 
     phase.value = data.phase;
     view.value = data.view;
+    // WHO IS LOOKING, WHICH IS THE OTHER HALF OF "WHAT IS ON SCREEN" (#272).
+    //
+    // A state frame that names a different seat is a SEAT SWITCH -- the dev
+    // bar's switcher, or the platform seating this page somewhere else -- and
+    // everything this page holds about the seat before it is now about a player
+    // who is not here. It carries the same revision as the frame before it,
+    // because the world has not moved, so the revision cannot be what says so.
+    //
+    // BEING SEATED IS NOT SWITCHING. A page with no seat yet holds nothing that
+    // could belong to somebody else, and the first state frame is the one that
+    // seats it -- treating that as a switch would throw away the offers frame
+    // of its own push (#250) before it could ever be shown.
+    const switched = seat.value !== null && seat.value !== data.seat;
     seat.value = data.seat;
-    // A NEW STATE RETIRES THE OFFERS THAT WERE ABOUT THE OLD ONE (#244).
-    //
-    // The offers arrive on their own frame now, after this one, so between the
-    // two there is a moment where the page is showing a world it has not been
-    // told the verbs for. Keeping the previous set on screen through that
-    // moment would be showing buttons enumerated against a world that has
-    // moved; `offersPending` is how the shell says "not yet" rather than
-    // "nothing", which is a different sentence and the only honest one.
-    //
-    // A RE-PUSH OF THE SAME STATE KEEPS THEM. Presence changes, a seat switch
-    // and a notice all re-send this frame without the world having moved, and
-    // clearing there would flicker every panel for no reason.
-    if (data.revision !== stateRevision) {
-      stateRevision = data.revision;
-      // THE SET THIS PAGE IS HOLDING MAY ALREADY BE ABOUT THIS STATE (#250) --
-      // the offers frame of this very push, arrived first. Asked before the
-      // panel is blanked, so the ordinary case of a state arriving ahead of its
-      // offers is the only one that ever says "not yet".
-      if (!showHeldOffers()) {
-        actions.value = [];
-        offersPending.value = true;
-      }
-    }
+    if (switched) forgetTheSeatThatLeft();
+    takeRevision(data.revision, switched);
     notice.value = data.notice;
     worldName.value = data.worldName;
     presence.value = data.presence;

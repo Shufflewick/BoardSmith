@@ -174,13 +174,50 @@ describe('useWorldHost', () => {
     expect(offered(host)).toEqual({ names: ['flee'], pending: false });
   });
 
-  it('keeps the offers through a re-push of the same state', () => {
-    // Presence changes, a seat switch and a notice all re-send the state frame
-    // without the world having moved. Clearing there would blank every panel in
-    // the world for a frame, for nothing.
+  it('keeps the offers through a re-push of the same state to the same seat', () => {
+    // Presence changes and a notice re-send the state frame without the world
+    // having moved. Clearing there would blank every panel in the world for a
+    // frame, for nothing.
     const host = showing(4, ['look']);
     deliver(host, stateFrame({ revision: 4, presence: [3] }));
     expect(offered(host)).toEqual({ names: ['look'], pending: false });
+  });
+
+  /**
+   * #272: A SEAT SWITCH IS NOT A RE-PUSH.
+   *
+   * The state frame of a seat switch carries the same revision -- the world has
+   * not moved, somebody else is simply looking at it -- so the revision alone
+   * says nothing about whose verbs are on screen. An offer set enumerated for
+   * the seat that just left is about a player who is not here, and leaving it
+   * up draws that player's options over the new seat's board: the exact reading
+   * that makes a dev bar's "check the other seat" produce a leak report.
+   */
+  it('retires the offers when the state frame names a different seat', () => {
+    const host = showing(4, ['look']);
+    deliver(host, stateFrame({ revision: 4, seat: 7 }));
+    expect(offered(host)).toEqual({ names: [], pending: true });
+  });
+
+  it('shows the new seat its own offers when they arrive', () => {
+    const host = showing(4, ['look']);
+    deliver(host, stateFrame({ revision: 4, seat: 7 }));
+    deliver(host, offersFrame(4, ['wake up']));
+    expect(offered(host)).toEqual({ names: ['wake up'], pending: false });
+  });
+
+  it('does not let a set held for the old seat reach the new one', () => {
+    // The set arrived before the state frame of its own push (#250), which is
+    // the one case a held set is applied to a revision it was not on screen
+    // for. A seat switch has to retire it there too, or the hold becomes a way
+    // back in for exactly what the frame above retired.
+    const host = make();
+    deliver(host, offersFrame(4, ['look']));
+    deliver(host, stateFrame({ revision: 4, seat: 3 }));
+    expect(offered(host)).toEqual({ names: ['look'], pending: false });
+
+    deliver(host, stateFrame({ revision: 4, seat: 7 }));
+    expect(offered(host)).toEqual({ names: [], pending: true });
   });
 
   /**
@@ -576,6 +613,33 @@ describe('useWorldHost — the world narrating (#331)', () => {
     narrate(host, [{ scope: 'world', payload: { dawn: true } }]);
     expect(host.heardFromHost.value).toBe(false);
     expect(host.view.value).toBeNull();
+  });
+
+  /**
+   * #272: THE LOG IS THIS SEAT'S, AND A DIFFERENT SEAT HAS BEEN TOLD NOTHING.
+   *
+   * Narration is delivered to the seat this frame belongs to, so every line in
+   * it was addressed to whoever was sitting here. Carrying those lines across a
+   * seat switch shows one seat what another was told in private -- which is
+   * what the standard "switch seats and check" privacy pass is looking for, and
+   * why it kept finding it.
+   */
+  it('clears the log when the host seats this frame somewhere else', () => {
+    const host = make();
+    deliver(host, stateFrame({ seat: 3 }));
+    narrate(host, [{ scope: 'seat:3', payload: {}, text: 'You found 1 x padded steel vest.' }]);
+    expect(host.events.value).toHaveLength(1);
+
+    deliver(host, stateFrame({ seat: 7 }));
+    expect(host.events.value).toEqual([]);
+  });
+
+  it('keeps the log through a re-push of the state to the same seat', () => {
+    const host = make();
+    deliver(host, stateFrame({ seat: 3 }));
+    narrate(host, [{ scope: 'seat:3', payload: {}, text: 'You believe you have gone into stealth mode.' }]);
+    deliver(host, stateFrame({ seat: 3, presence: [3] }));
+    expect(host.events.value).toHaveLength(1);
   });
 
   it('drops narration from an origin the host never named', () => {
