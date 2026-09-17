@@ -4345,6 +4345,8 @@ export class Game<
    *     about the state (`redactedVisibilityFor`);
    *   a class withholding attributes from non-owners (`visibleAttributes`,
    *     likewise decided against the viewer's ownership);
+   *   a class COMPUTING attributes for the receiving seat (`seatAttributes`,
+   *     #269), which is author code handed the seat;
    *   `static playerView`, which is author code handed the seat;
    *   any tutorial progress, which is scoped to the receiving seat (SEC-05);
    *   any animation event addressed to an audience (#23).
@@ -4358,7 +4360,11 @@ export class Game<
     /** Every state the tree declares, in one fixed order for every seat. */
     const declared: VisibilityState[] = [];
     const collect = (element: GameElement): boolean => {
-      if ((element.constructor as typeof GameElement).visibleAttributes !== undefined) return false;
+      const ElementClass = element.constructor as typeof GameElement;
+      if (ElementClass.visibleAttributes !== undefined) return false;
+      // #269: a derived attribute is author code handed the seat, so no two
+      // seats may be assumed to receive the same bytes for this element.
+      if (ElementClass.seatAttributes !== undefined) return false;
       if (element._visibility !== undefined) declared.push(element._visibility);
       if (hasZoneVisibility(element)) {
         const zone = element.getZoneVisibility();
@@ -4560,6 +4566,21 @@ export class Game<
           // fact the searcher then reasoned from. See `GameElement.fromJSON`.
           ownJson = { ...json, attributes: filteredAttrs, redacted: true };
         }
+      }
+
+      // #269: attributes COMPUTED for this seat, from state, right here.
+      //
+      // After the whitelist and not before it: a derivation ran knowing the
+      // receiving seat, so it is already the gate, and passing its result
+      // through a whitelist written for STORED attributes would only make the
+      // author declare the same name twice. Merged over `ownJson.attributes`,
+      // which is where every later branch reads the element's own attributes
+      // from -- the container early-returns below included. Both fully-hidden
+      // branches returned long before this line, so an element the seat cannot
+      // see derives nothing.
+      const seatAttributes = element._seatAttributesFor(playerSeat);
+      if (seatAttributes !== undefined && Object.keys(seatAttributes).length > 0) {
+        ownJson = { ...ownJson, attributes: { ...(ownJson.attributes ?? {}), ...seatAttributes } };
       }
 
       // F-09 (residual): redact grant rosters on the way OUT of the per-player
@@ -5008,9 +5029,15 @@ export class Game<
     // sees a field the payload does not carry, takes it for an attribute this
     // seat was denied, and replaces the live map with a throwing accessor
     // (#139).
+    // #269: a `seatAttributes` name on the game ROOT is derived, never stored,
+    // for the same reason `GameElement.fromJSON` skips one on any other
+    // element — assigning it back would restore a stored copy of a value the
+    // hook exists to keep uncopied. It is KNOWN rather than withheld, so the
+    // redaction pass below must not turn it into a throwing accessor either.
     const handledKeys = new Set<string>([
       ...GAME_SELF_SERIALIZED_FIELDS,
       ...persistentMapFields(this),
+      ...Object.keys((this.constructor as typeof GameElement).seatAttributes ?? {}),
     ]);
     for (const [key, value] of Object.entries(json.attributes)) {
       if (!unserializable.has(key) && !key.startsWith('_') && !handledKeys.has(key)) {

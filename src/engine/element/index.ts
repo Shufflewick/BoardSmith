@@ -1,4 +1,7 @@
 export { GameElement } from './game-element.js';
+// The shape of one `static seatAttributes` entry (#269), so a game can name
+// what it is declaring rather than rely on inference.
+export type { SeatAttributeDerivation } from './game-element.js';
 export { Space } from './space.js';
 export { Piece } from './piece.js';
 export { Card } from './card.js';
