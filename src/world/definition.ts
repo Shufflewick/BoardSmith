@@ -254,6 +254,36 @@ export interface WorldDefinition {
    * reported, because a host needs it before it can decide anything.
    */
   readonly vacate?: string;
+  /**
+   * WHICH OF THE CLOCK'S OWN VERBS MAY FINALIZE A VACANCY, or nothing
+   * (ShufflewickPub #475).
+   *
+   * `vacate`'s counterpart for the one departure nobody ever sends. A seat that
+   * leaves sends `vacate`; a seat that never comes back sends nothing, and its
+   * estate is taken down by the world's OWN clock -- a ladder of scheduled
+   * occurrences, each its own committed checkpoint, because a five-hundred
+   * holding empire is not one dispatch. At the end of that ladder the ground is
+   * back and there is nobody left to say so: a scheduled dispatch runs only a
+   * seatless action, and a seatless action has no `ctx.player` to vacate.
+   *
+   * So this names the verb that says it, and `ctx.world.vacate(seat)` is the
+   * saying. The chair it may name is not the bundle's to choose freely: it must
+   * be one an `.about()` round declared and the HOST answered a point read
+   * about, on this dispatch's own walk. That is why the third rule below exists
+   * and why it is checked here rather than discovered at a dispatch -- a verb
+   * with no activity round could never name a chair at all, so declaring one is
+   * declaring a door that does not open.
+   *
+   * THREE RULES, and `assertWorldVacateByClock` raises each by name: it must
+   * answer to one of this world's verbs, that verb must be SEATLESS (built with
+   * `worldClockAction()`, since the clock is who runs it), and it must declare
+   * at least one chair with `.about()`.
+   *
+   * ABSENT IS AN ANSWER, exactly as `vacate`'s absence is: a world that never
+   * says how the clock finishes a teardown has no clock road to a chair, and
+   * `ctx.world.vacate()` is refused by name everywhere in it.
+   */
+  readonly vacateByClock?: string;
 }
 
 /** Each hook names a SEATLESS action from the world's own list. */
@@ -312,6 +342,7 @@ export function readWorldDefinition(definition: {
     assertWorldMigration(world.migration, world.stateVersion ?? 0);
   }
   assertWorldVacate(world);
+  assertWorldVacateByClock(world);
   if (world.ordering !== undefined && !WORLD_ORDERINGS.includes(world.ordering)) {
     throw worldRefusal(
       "bundle-not-a-world",
@@ -403,6 +434,58 @@ function assertWorldVacate(world: WorldDefinition): void {
         `${action.selections.length} question(s). This verb is run for a player who has already ` +
         "gone, so there is nobody left to answer one. Take everything it needs from the seat it " +
         "runs for.",
+    );
+  }
+}
+
+/**
+ * WHICH CLOCK VERB MAY FINALIZE A VACANCY, or null (ShufflewickPub #475).
+ *
+ * `worldVacateAction`'s counterpart on the clock's road, handed back as a name
+ * a host may hold. Null for a world that declares none, which is an ANSWER: no
+ * verb in that world may free a chair from the clock, and the call that would
+ * is refused by name.
+ */
+export function worldVacateByClockAction(world: WorldDefinition): string | null {
+  return world.vacateByClock ?? null;
+}
+
+/** `worldVacateByClockAction`'s three rules, raised as refusals at read time. */
+function assertWorldVacateByClock(world: WorldDefinition): void {
+  if (world.vacateByClock === undefined) return;
+
+  const action = typeof world.vacateByClock === "string"
+    ? world.actions.find((one) => one.name === world.vacateByClock)
+    : undefined;
+  if (action === undefined) {
+    throw worldRefusal(
+      "bundle-not-a-world",
+      `This bundle's \`world.vacateByClock\` names ${JSON.stringify(world.vacateByClock)}, ` +
+        "which is not an action in `world.actions`. It is the verb this world's clock runs to " +
+        "finish a teardown and give the chair back, so it has to name one of this world's own " +
+        "verbs. A name nothing answers to would mean every abandoned chair stayed held with " +
+        "nothing anywhere saying why.",
+    );
+  }
+  if (action.world?.seatless !== true) {
+    throw worldRefusal(
+      "bundle-not-a-world",
+      `This bundle's \`world.vacateByClock\` names "${action.name}", which is a seated action. ` +
+        "This is the road for a player who never came back, so there is nobody to run it FOR: " +
+        "it is dispatched by the clock when the event the teardown armed comes due. Build it " +
+        "with `worldClockAction()`, and name the chair with `.about()`. A seat's own departure " +
+        "is `world.vacate`, which is the other road and is unchanged.",
+    );
+  }
+  if (!action.world.needs.some((round) => round.kind === "activity")) {
+    throw worldRefusal(
+      "bundle-not-a-world",
+      `This bundle's \`world.vacateByClock\` names "${action.name}", which declares no chair ` +
+        "with `.about()`. The only chair this verb may finalize is one its own declaration " +
+        "asked the host about and the host answered -- that answer is what makes the release " +
+        "the host's fact rather than the bundle's claim -- so a verb that declares none could " +
+        "never name a chair at all. Add `.about(({ args }) => Number(args.seat))`, or whatever " +
+        "says which chair this occurrence is for.",
     );
   }
 }
@@ -691,6 +774,15 @@ export interface WorldRunner {
    * host can hold a name this world would refuse to dispatch.
    */
   readonly vacate: string | null;
+  /**
+   * WHICH CLOCK VERB MAY FINALIZE A VACANCY, or null (ShufflewickPub #475).
+   *
+   * `vacate`'s counterpart, reported for the same reason: a host has to know,
+   * before anything is dispatched, whether this world has a clock road to a
+   * chair at all -- and the three rules that make the name usable are checked
+   * once, in `worldVacateByClockAction`, rather than by each host.
+   */
+  readonly vacateByClock: string | null;
 }
 
 /**
@@ -745,6 +837,10 @@ export function createWorld(options: WorldRunnerOptions): WorldRunner {
     store,
     actions: world.actions,
     view: world.view,
+    // WHICH VERB MAY FREE A CHAIR FROM THE CLOCK (ShufflewickPub #475), or
+    // nothing. The engine is the only thing that can hold the rule, because the
+    // rule is about a call made from inside a running dispatch.
+    ...(world.vacateByClock === undefined ? {} : { vacateByClock: world.vacateByClock }),
     budgets,
     // A world that builds a root the first time somebody reaches for it (#218).
     // Absent for a world whose every root came from genesis, which is most.
@@ -776,6 +872,12 @@ export function createWorld(options: WorldRunnerOptions): WorldRunner {
       ...(world.migration?.join === undefined ? {} : { join: world.migration.join }),
     },
   );
-  return { runner, store, seatCount, vacate: worldVacateAction(world) };
+  return {
+    runner,
+    store,
+    seatCount,
+    vacate: worldVacateAction(world),
+    vacateByClock: worldVacateByClockAction(world),
+  };
 }
 

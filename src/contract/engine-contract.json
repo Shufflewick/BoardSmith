@@ -1,7 +1,7 @@
 {
-  "revision": 86,
+  "revision": 87,
   "bundleProtocol": 2,
-  "surfaceHash": "0c3611ed469d90ae",
+  "surfaceHash": "3f83f0f42f3cf6b1",
   "payloadHash": "adb9e8ed9a9dbcdd",
   "formatHash": "0058593e7cc80205",
   "history": [
@@ -718,6 +718,15 @@
       "payloadHash": "adb9e8ed9a9dbcdd",
       "formatHash": "0058593e7cc80205",
       "summary": "An action is offered on its first unsatisfied step: a later chooseFrom returning [] before its input exists no longer removes the verb from a seat's offer (table and world), and the pruning that remains warns with the action and question named (#270)"
+    },
+    {
+      "revision": 87,
+      "date": "2026-09-17",
+      "bundleProtocol": 2,
+      "surfaceHash": "3f83f0f42f3cf6b1",
+      "payloadHash": "adb9e8ed9a9dbcdd",
+      "formatHash": "0058593e7cc80205",
+      "summary": "The world clock can finalize a vacancy for a chair the host itself vouched for (ShufflewickPub #475): world.vacateByClock names one seatless verb -- checked at createWorld to exist, to be built with worldClockAction() and to declare a chair with .about() -- and only that verb may call the new ctx.world.vacate(seat) on WorldClockFacilities, which admits exactly the chairs activityOf admits (one the declaration asked about and the host answered a point read for), resolves the roster key from the engine's own roster rather than letting a bundle name a player, and reports it to the host as WorldCommandResult.vacated = { seat, player } on the same result the dirty set rides, so the chair is released on the checkpoint that proves the ground came back; a host stamp of tenancy 'empty' makes the call a no-op so a completion retried after a cold wake releases exactly once, a second different chair in one dispatch is refused with vacancy-already-claimed, any other verb with not-the-vacancy-verb, and a chair this world seats nobody in with vacancy-unheld; createWorld now also reports vacateByClock beside vacate, and the seated world.vacate road is unchanged."
     }
   ]
 }

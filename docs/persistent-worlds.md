@@ -141,8 +141,9 @@ export const gameDefinition: GameDefinition = {
 
 `GameDefinition.world` is typed by `WorldDefinition` from `boardsmith/world`, so
 you get the shape checked without importing anything extra. `maxPlayers`,
-`actions` and `view` are required; `stateVersion`, `genesis` and `presence` are
-optional.
+`actions` and `view` are required; `stateVersion`, `genesis`, `presence`, `vacate` and
+`vacateByClock` are optional — the last two are how a chair comes back, see
+[giving a chair back](#giving-a-chair-back).
 
 **No `minPlayers`/`maxPlayers` on the definition.** Those are a *table's*
 roster, and a world has none: it does not start, so there is no minimum to
@@ -979,9 +980,11 @@ tree back many times inside one real dispatch and a schedule escapes the tree.
 
 `WorldCommandResult` carries the routed events, the **dirty set** (the partitions
 whose serialized form changed, which is the engine's answer and not the host's
-guess), any schedule requests, and `ending: "completed"` if the action called
-`ctx.world.complete()`. An empty dirty set with a full event list is legal and
-normal: an action that only tells people something changed nothing durable.
+guess), any schedule requests, `ending: "completed"` if the action called
+`ctx.world.complete()`, and `vacated: { seat, player }` if it called
+`ctx.world.vacate(seat)` — see [giving a chair back](#giving-a-chair-back). An
+empty dirty set with a full event list is legal and normal: an action that only
+tells people something changed nothing durable.
 
 ## What keeps enumeration O(view), and never O(world)
 
@@ -1552,6 +1555,125 @@ durable cursor**, sweeping one empire per occurrence:
   Keep the instant itself -- not a rank, not a boolean -- in the partition the
   sweep owns. The next occurrence compares against it after an eviction, and a
   sweep that stored "was better" could not.
+
+## Giving a chair back
+
+A seat is assigned once and is **not** handed on while the ground behind it is
+still held. A dead player is still in the world even when they are not playing:
+their planets are still occupied, their fields still theirs. Reclaiming the chair
+early advertises room and has nothing to give the newcomer who accepts, which is
+worse than refusing them at the door. So the deliverable is the **ground**, and
+the chair comes back as a consequence.
+
+Only your game knows what a departed empire becomes — returned to the map,
+archived, inherited by a neighbour, left standing as a ruin — so the library
+types the verb and never owns the policy. A world that declares neither field
+below holds every chair it has given for as long as it lasts, which is an
+**answer** rather than a gap and is still right for a season that fills once and
+never churns.
+
+There are two roads, because there are two ways a chair empties.
+
+### `world.vacate`: the seat's own departure
+
+```ts
+world: { maxPlayers: 200, actions, view, vacate: 'leave' }
+```
+
+The name of a **seated** verb the host dispatches when a player leaves or is
+ejected. `createWorld` holds it to three rules and refuses the bundle otherwise:
+it must answer to one of this world's own verbs, it must be seated (built with
+`worldAction()`, reading the seat from `ctx.player.seat`), and it must ask no
+questions — it runs for somebody who has already gone, so there is nobody left
+to answer one.
+
+Seated is the right shape here and not a limitation: a vacating is about the
+**sender's own** ground, and the worst a player does by sending it is give up
+their own chair, which is leaving and is already theirs to do at any moment.
+
+### `world.vacateByClock`: the departure nobody sends
+
+```ts
+world: { maxPlayers: 200, actions, view, vacate: 'leave', vacateByClock: 'reap' }
+```
+
+A player who never comes back sends nothing. Their estate is taken down by the
+world's own clock — the ladder in [writing an occupied world's
+lifecycle](#writing-an-occupied-worlds-lifecycle-with-it), one scheduled
+occurrence per bounded chunk, each its own committed checkpoint, because a
+five-hundred-holding empire is not one dispatch. At the end of it the ground is
+back and there is nobody to say so: a scheduled dispatch runs only a seatless
+action, and a seatless action has no `ctx.player` to vacate.
+
+`world.vacateByClock` names the verb that says it. Three rules, checked at
+`createWorld`: it must answer to one of this world's verbs, it must be
+**seatless** (built with `worldClockAction()` — the clock is who runs it), and it
+must declare at least one chair with `.about()`. The third is not bookkeeping:
+the only chair it may ever name is one its own declaration asked the host about,
+so a verb with no activity round is a door that cannot open.
+
+```ts
+const reap = worldClockAction<Colony>('reap')
+  .about(({ args }) => Number(args.seat))
+  .needs(({ args }) => [`estate:${Number(args.seat)}`])
+  .execute((args, { world }) => {
+    const seat = Number(args.seat);
+    const estate = world.partition(`estate:${seat}`) as Estate;
+    // The proof is the game's, and it is durable: this reads what the last
+    // teardown checkpoint wrote, not a memory held across dispatches.
+    if (estate.holdings > 0) {
+      throw new PlayerFacingError(`seat ${seat} still holds ${estate.holdings} things`);
+    }
+    world.vacate(seat);
+  });
+```
+
+**The chair is not yours to choose freely, and that is the point.**
+`ctx.world.vacate(seat)` admits exactly the chairs `ctx.world.activityOf(seat)`
+admits: one an `.about()` round declared and the **host** answered a point read
+about, on this dispatch's own walk. A chair nobody named is refused with
+`undeclared-activity`, and one the host did not answer with
+`activity-unanswered`. A bundle never names a *player* anywhere on this road —
+the engine resolves the roster key from its own roster and reports it in
+`vacated` — so there is no string a game could write that impersonates anybody
+or forges an event's owner.
+
+**Only the declared verb may call it.** Any other action — a seat's, and the
+clock's other phases — is refused with `not-the-vacancy-verb`, so the one line
+in your bundle that hands a seat on is findable rather than being anywhere at
+all. On the offer road it is refused with `not-in-a-world`, for the reason
+`schedule` is: an offer runs once per watcher per refresh with no checkpoint
+behind it.
+
+**Retrying releases exactly once.** The host's own stamp decides whether there is
+anything to release: `tenancy: 'empty'` is the host saying the chair is already
+back, and the call is then a no-op rather than a second release. So a completion
+retried after a cold wake frees one chair, and your handler remembers nothing.
+If the host says the chair is held and this world's roster seats nobody there,
+that is `vacancy-unheld` — a chair the two layers disagree about is exactly the
+one that must not be handed on.
+
+**One chair per dispatch.** Naming the same chair twice is the same release;
+naming a second, different one is `vacancy-already-claimed`. A release is one
+chair's own committed step, written beside the checkpoint that proves *that*
+estate is down — so schedule one occurrence per chair.
+
+**Keep the release its own rung.** The teardown passes free nothing and re-arm
+themselves; the last pass schedules the vacancy verb. That is what lets a
+teardown interrupted at pass two resume at pass three from bytes, and it is why
+the ground coming back and the chair coming back are two writes a host can
+order rather than one it cannot.
+
+### What the host does with the answer
+
+`createWorld` reports both names — `vacate` and `vacateByClock` — beside
+`seatCount`, because a host has to know before it dispatches anything whether a
+chair can ever come back at all. What it does with them is its own policy: which
+departures reach the seated verb, what it counts as a departure, and when it
+writes the release down. A platform releases the seat **downstream** of the
+ground coming back, on the same checkpoint that made the teardown durable — a
+refused checkpoint must leave the player holding both their chair and their
+holdings rather than neither.
 
 ## Scheduling
 
@@ -2215,13 +2337,15 @@ thing next time.
 | `invalid-schedule-command` | A schedule request that names no action, names a seated one, or carries an argument that is not a JSON scalar. |
 | `invalid-schedule-cancel` | A cancel that names no key. A cancel is keyed the way arming is keyed, so a nameless one addresses nothing; cancelling a key nothing holds is a no-op rather than this. |
 | `engine-not-world-mode` | The engine was built over a game that is not in world mode. |
+| `not-the-vacancy-verb` | An action called `ctx.world.vacate()` and it is not the verb this world declared as `world.vacateByClock` — or this world declares none at all. See [giving a chair back](#giving-a-chair-back). |
+| `vacancy-already-claimed` | One dispatch finalized the vacancy of two different chairs. A release is one chair's own committed step; schedule one occurrence per chair. |
 | `allocation-undeclared` | A host asked for a partition to be created on demand without handing the world its durable id allocation stamp, so any id minted would be a guess. See [a created root's identity is durable](#a-created-roots-identity-is-durable). |
 | `allocation-stale` | A host handed back a stamp standing below an id its own stored bytes hold, so the next id minted would collide with one already written. Raised at the adoption that proves it. Repair by deriving the stamp with `worldIdAllocationOf` over every stored partition. |
 | `child-timeout` | The bundle did not answer a host's call inside its deadline. |
 **`platform`**: a host's own bookkeeping broke. Not yours to fix, and
 deterministic, so a host with a park ladder parks on it:
 `partition-not-resident`, `partition-vanished`, `checkpoint-unknown-partition`,
-`allocation-undeclared`, `allocation-stale`, `unknown-child-op`,
+`allocation-undeclared`, `allocation-stale`, `vacancy-unheld`, `unknown-child-op`,
 `child-generations-exhausted`, `world-engine-unavailable`,
 `world-state-unreadable`.
 

@@ -7,8 +7,15 @@
  * and the stamp were written out per file, which is two copies of "what a host
  * supplies" sitting in the fixtures of tests about something else.
  */
-import type { StoredPartition, WorldOfferStamp, WorldPartitionSource } from "./contract.js";
+import type {
+  DeclaredSeatActivityStamp,
+  StoredPartition,
+  WorldCommandResult,
+  WorldOfferStamp,
+  WorldPartitionSource,
+} from "./contract.js";
 import { createWorld, type WorldRunnerOptions } from "./definition.js";
+import type { WorldRunnerHandle } from "./runner.js";
 
 /**
  * WHAT A HOST SUPPLIES TO OPEN A WORLD: one definition, one seed, one seat, and
@@ -84,4 +91,67 @@ export async function checkpointBytes(
     next[name] = { parentId: bytes[name]!.parentId, json: JSON.parse(json) as unknown };
   }
   return next;
+}
+
+/**
+ * DRIVE ONE SCHEDULED DISPATCH THE WAY A HOST DOES.
+ *
+ * Declare, answer what the walk named, declare again, and apply with everything
+ * the walk collected -- the library's own loop rather than each test file's, so
+ * a case cannot prove a declaration right against a walk only it knows how to
+ * drive. The activity legs are answered by one point read per declared seat,
+ * exactly as a host's own seat table answers them, and the answers ACCUMULATE
+ * across rounds because the host is the side that remembers them: the child
+ * holds no store and must not hold a watermark between calls either.
+ *
+ * `answer` is required rather than defaulted. A default would be one file's
+ * idea of an ordinary chair standing in for another's, and the whole of what
+ * these cases turn on -- a watermark, a tenancy -- is exactly that answer.
+ */
+export async function drainScheduled(
+  runner: WorldRunnerHandle,
+  bytes: Readonly<Record<string, StoredPartition>>,
+  options: {
+    readonly name: string;
+    readonly args?: Record<string, unknown>;
+    readonly due: number;
+    readonly answer: (seat: number) => DeclaredSeatActivityStamp;
+  },
+): Promise<{ result: WorldCommandResult; asked: readonly number[] }> {
+  const command = { name: options.name, args: options.args ?? {} };
+  const timing = { due: options.due, missedCount: 0 };
+  const declared: DeclaredSeatActivityStamp[] = [];
+  const asked: number[] = [];
+  let supplied: Record<string, StoredPartition> = {};
+  for (;;) {
+    const needs = await runner.declare(
+      command,
+      null,
+      supplied,
+      { kind: "scheduled", timing },
+      declared,
+    );
+    if (needs.partitions.length === 0 && needs.seats.length === 0) break;
+    supplied = {};
+    for (const name of needs.partitions) {
+      const stored = bytes[name];
+      if (stored === undefined) throw new Error(`test store has no partition "${name}"`);
+      supplied[name] = stored;
+    }
+    for (const seat of needs.seats) {
+      asked.push(seat);
+      declared.push(options.answer(seat));
+    }
+  }
+  const result = await runner.apply({
+    player: null,
+    command,
+    timing,
+    arrivedAt: options.due,
+    allowance: { unkeyed: 0, keys: [], worldPending: 0 },
+    presence: [] as readonly number[],
+    activity: null,
+    declaredActivity: declared,
+  });
+  return { result, asked };
 }

@@ -626,6 +626,29 @@ export interface WorldCommandResult {
    * conclusion.
    */
   readonly ending?: "completed";
+  /**
+   * THE CHAIR THIS DISPATCH FINALIZED THE VACANCY OF, absent otherwise
+   * (ShufflewickPub #475).
+   *
+   * `ending`'s shape, for the other fact a host cannot observe from outside: a
+   * world-owned teardown reaching its end. The seat and the roster key are BOTH
+   * here because they answer different layers -- the world holds a seat number,
+   * and enrolment counts a chair by the name it knows the holder as -- and
+   * neither is the bundle's to choose: the seat is one the host itself answered
+   * a declared point read about, and the player is resolved from this engine's
+   * own roster. A game never names a player id anywhere on this road.
+   *
+   * ABSENT IS THE NORMAL CASE, and it is also what a RETRY answers once the
+   * chair is already back: a host whose own stamp says the chair is empty is
+   * told nothing was released, so a completion driven twice frees one chair.
+   *
+   * WHAT A HOST DOES WITH IT is the host's, exactly as `vacate`'s answer is:
+   * the chair is released downstream of the ground coming back, so this rides
+   * the same checkpoint the teardown's last write does -- a refused checkpoint
+   * leaves the seat held and the ground gone, which is the one pairing that
+   * must not come apart.
+   */
+  readonly vacated?: { readonly seat: number; readonly player: string };
 }
 
 /**

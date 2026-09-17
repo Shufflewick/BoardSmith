@@ -311,6 +311,33 @@ export interface WorldClockFacilities extends WorldFacilities {
    * upgrade.
    */
   activityOf(seat: number): DeclaredSeatActivity;
+  /**
+   * FINISH THIS CHAIR'S VACANCY, so the host may hand the seat on
+   * (ShufflewickPub #475).
+   *
+   * The last rung of a world-owned teardown, and the ONLY way a chair comes
+   * back without its holder sending anything. Reachable only from the verb this
+   * world declared as `world.vacateByClock`; every other action -- a seat's,
+   * and the clock's other phases -- is refused by name, so the one line that
+   * frees a chair is findable in the bundle rather than anywhere in it.
+   *
+   * THE CHAIR MUST BE ONE THIS PHASE DECLARED WITH `.about()` AND THE HOST
+   * ANSWERED, which is `activityOf`'s admission and deliberately the same one:
+   * the host's own point read is what makes the release a fact it vouched for
+   * rather than a number the bundle chose. A bundle never names a PLAYER at
+   * all -- the engine resolves the roster key itself and reports it -- so there
+   * is nothing here to impersonate anybody with.
+   *
+   * IDEMPOTENT AGAINST A RETRY. A host whose own answer says the chair is
+   * already `empty` has already released it, and this is then a no-op rather
+   * than a second release -- which is what makes a completion retried after a
+   * cold wake release exactly once.
+   *
+   * ONE CHAIR PER DISPATCH. Naming the same chair twice is the same release;
+   * naming a second, different one is refused, because a release is one chair's
+   * own committed step.
+   */
+  vacate(seat: number): void;
 }
 
 /**
