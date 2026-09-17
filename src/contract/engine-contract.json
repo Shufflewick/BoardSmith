@@ -1,7 +1,7 @@
 {
-  "revision": 82,
+  "revision": 83,
   "bundleProtocol": 2,
-  "surfaceHash": "05714c9ba827ab52",
+  "surfaceHash": "91407c68eb082a4b",
   "payloadHash": "7d88d174839e99b4",
   "formatHash": "0058593e7cc80205",
   "history": [
@@ -682,6 +682,15 @@
       "payloadHash": "7d88d174839e99b4",
       "formatHash": "0058593e7cc80205",
       "summary": "ActionBuilder gains .destructive() (issue 268): an action can mark itself as one that permanently ends something, and the flag rides the actionMetadata channel as ActionMetadata.destructive and on a world's offer frame. The Action Panel paints such a verb from the new dedicated --bsg-destructive-surface / --bsg-destructive-ink token pair and adds an inset ring, a marker glyph and a screen-reader label, so the warning is not carried by colour alone; a custom board reads the same flag off the same metadata. Presentation only: availability, validation and execution are unchanged."
+    },
+    {
+      "revision": 83,
+      "date": "2026-09-17",
+      "bundleProtocol": 2,
+      "surfaceHash": "91407c68eb082a4b",
+      "payloadHash": "7d88d174839e99b4",
+      "formatHash": "0058593e7cc80205",
+      "summary": "An action is offered on its first unsatisfied step: a later chooseFrom returning [] before its input exists no longer removes the verb from a seat's offer (table and world), and the pruning that remains warns with the action and question named (#270)"
     }
   ]
 }

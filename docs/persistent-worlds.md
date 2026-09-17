@@ -1070,9 +1070,20 @@ function of another's value, so the whole offer is one pass and there is no
 product to enumerate.
 
 Seatless actions are filtered out here. An action whose `condition` is false is
-not offered, and neither is one whose non-optional selection has no candidates at
-all -- with no dependent selections, "is there a legal path through this action"
-is exactly "does every question it asks have at least one answer".
+not offered, and neither is one whose **first** non-optional selection has no
+candidates at all -- a pick that would open on nothing.
+
+**A later selection never decides the offer** (BoardSmith #270). Every selection
+is enumerated in the same frame with `args: {}`, which is the right question to
+ask the first one and the wrong question to ask any other: a selection narrowed
+by an earlier answer has nothing to narrow by yet, so the natural
+`if (args.slot === undefined) return []` used to take the whole verb out of the
+seat's offer. It no longer does; the later selection's candidates are re-asked
+with the args bound as soon as the player answers (`resolvePick`), and that
+narrowed list is what `apply` validates against. When an action IS dropped for
+want of an answer, the engine prints a development warning naming the action and
+the question, rather than leaving a seat looking at a world where the verb does
+not exist.
 
 It costs `O(actions) x (condition + each selection's own candidates)`. There is
 no term that scales with the world.

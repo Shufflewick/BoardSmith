@@ -443,9 +443,33 @@ selection kind of its own: a new `type` would carry a duplicate of every rule
 `text` already has, and every host that switches on `type` would draw nothing at
 all for a selection whose rules it already knew.
 
-### Chaining Selections with `dependsOn`
+### Chaining Selections
 
-When selection B depends on selection A's value, use the `dependsOn` option:
+When selection B is narrowed by selection A's value, read A out of `ctx.args`
+and answer nothing until it is there:
+
+```typescript
+Action.create('equip')
+  .chooseFrom('slot', { choices: ['head', 'hand'] })
+  .chooseFrom('item', {
+    choices: (ctx) => {
+      const slot = ctx.args.slot as string | undefined;
+      if (slot === undefined) return [];   // nothing to narrow by yet
+      return itemsFor(slot);
+    },
+  })
+```
+
+That is the whole pattern. An action is offered on its **first unsatisfied
+step** -- the question the player is about to be asked -- so a later step's
+empty list means "ask me again once you know", not "this action cannot be
+taken" (BoardSmith #270). The panel fetches `item`'s narrowed list the moment
+`slot` is answered, and dispatch is validated against that same narrowed list.
+
+**`dependsOn` is opt-in strictness on top of it.** It tells the engine that B is
+narrowed by A, and the engine then walks every value of A to prove at least one
+leaves B with something to pick -- dropping the action, with a warning that
+names it, when none does:
 
 ```typescript
 Action.create('dropEquipment')
@@ -453,19 +477,24 @@ Action.create('dropEquipment')
     elements: () => [...game.all(Merc)],
   })
   .chooseElement('equipment', {
-    dependsOn: 'merc',  // Tells framework B depends on A
+    dependsOn: 'merc',  // check every merc for equipment before offering
     elements: (ctx) => {
-      const merc = ctx.args.merc as Merc;
+      const merc = ctx.args.merc as Merc | undefined;
+      if (merc === undefined) return [];
       return [...merc.equipment.all(Equipment)];
     },
   })
 ```
 
 **What `dependsOn` does:**
-- During availability check, the framework automatically iterates through all choices for A
-- For each A choice, it checks if B would have valid choices
-- Action is available if at least one A choice leads to valid B choices
-- No crashes, no manual undefined handling needed!
+- During the availability check the engine iterates every choice for A
+- For each one it re-asks B with that value bound
+- The action is available if at least one A leads to a usable B
+- When none does, the action is dropped **and says which step and why**
+
+Reach for it when "this verb is pointless right now" is a state worth showing,
+and when A's candidates are cheap to walk. A callback it re-asks is still handed
+`undefined` on other paths, so keep the guard.
 
 Works with all selection types:
 
@@ -491,21 +520,13 @@ Action.create('selectItem')
   })
 ```
 
-> **Alternative: Manual Undefined Handling**
->
-> For complex cases where you need custom availability logic, you can handle `undefined` manually instead of using `dependsOn`:
+> A `filter` is handed the same half-filled `ctx.args` when the engine walks a
+> declared dependency, so it takes the same shape:
 >
 > ```typescript
 > filter: (cell, ctx) => {
 >   const piece = ctx.args?.piece as Piece | undefined;
->
->   if (!piece) {
->     // Availability check - no piece selected yet
->     // Return true if this cell would be valid for ANY movable piece
->     return getMovablePieces(ctx.player).some(p => p.canMoveTo(cell));
->   }
->
->   // Actual selection - piece is selected
+>   if (!piece) return false;   // not narrowed yet
 >   return piece.canMoveTo(cell);
 > }
 > ```

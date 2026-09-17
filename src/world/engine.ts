@@ -118,10 +118,11 @@ import {
   type ScheduleRequest,
 } from "./schedule-api.js";
 import { worldRefusal, WorldRefusal } from "./refusals.js";
-import { evaluateCondition } from "../engine/index.js";
+import { devWarn, evaluateCondition } from "../engine/index.js";
 import { readOnlyProjection } from "./readonly.js";
 import { assertAnsweredAllocations, assertCreatedRoots } from "./migration.js";
 import { worldBudgets, type WorldBudgets } from "./budgets.js";
+
 
 /**
  * The authoring types below are EXPORTED, and that reverses the call this file
@@ -1022,20 +1023,13 @@ export class BoardSmithWorldEngine implements WorldEngine {
       // at all here -- selection i's candidates are evaluated with selection
       // i's declaration resident and not before.
       const selections: PickMetadata[] = [];
-      let satisfiable = true;
       for (let index = 0; index < definition.selections.length; index++) {
         if (index > 0) {
           await this.hydrateRounds(definition, index, seat, {}, named, namedSeats, stamp.now);
         }
-        const pick = this.pickOf(definition, index, acting, named);
-        selections.push(pick);
-        // WHAT `hasValidSelectionPath` MEANS FOR A WORLD ACTION. On a table it
-        // recurses, because a later selection may depend on an earlier one's
-        // value; a world action may not declare a dependent selection, so the
-        // whole of "is there a legal path through this action" is "does every
-        // question it asks have at least one answer".
-        if (!pick.optional && candidateless(pick)) satisfiable = false;
+        selections.push(this.pickOf(definition, index, acting, named));
       }
+      const satisfiable = askable(selections[0]);
       // THE REASON IT CANNOT BE TAKEN OUTRANKS WHETHER IT HAS AN ANSWER (#187).
       //
       // A disabled action is never STARTED, so whether its questions still have
@@ -1060,7 +1054,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
       const disabled = this.game.readingOnly(() =>
         this.game.getActionDisabledReason(definition, acting, readOnlyProjection(this.game)),
       );
-      if (disabled === null && !satisfiable) return null;
+      if (disabled === null && !satisfiable) return warnDropped(definition, seat);
 
       return offerOf(definition, selections, disabled);
     } finally {
@@ -2945,6 +2939,56 @@ function pruneRoster(
  * action offered on that basis is a button whose every press is refused --
  * which is what `disabled` on the ACTION exists to say instead.
  */
+/**
+ * THE FIRST QUESTION DECIDES THE OFFER, AND ONLY THE FIRST (BoardSmith #270).
+ *
+ * Every pick of an offer is enumerated with `args: {}`, which is the right
+ * question to ask the FIRST one -- that is exactly what the player will have in
+ * hand when they are asked it -- and the wrong question to ask any other. A
+ * second selection narrowed by the first has nothing to narrow by yet, so the
+ * natural `if (args.slot === undefined) return []` came back candidateless and
+ * took the whole verb out of the seat's offer, with no diagnostic anywhere and
+ * every single-step verb beside it offered normally. The workaround was to
+ * over-offer the union of every first answer's rows, which shows the player rows
+ * they will not be allowed to pick.
+ *
+ * Nothing is lost by not deciding on a later pick: its candidates are re-asked
+ * with the args bound (`resolvePick`, ShufflewickPub #378), so the panel gets the
+ * narrowed list the moment the player answers, and that is the list `apply`
+ * validates against. A world action may not declare `dependsOn` either, so there
+ * is no second, BOUND reading of a later pick here that could mean anything.
+ *
+ * An action that asks nothing is offerable: there is no question to open on
+ * nothing.
+ */
+function askable(first: PickMetadata | undefined): boolean {
+  if (first === undefined) return true;
+  return first.optional === true || !candidateless(first);
+}
+
+/**
+ * NOT SILENTLY (BoardSmith #270).
+ *
+ * A verb simply absent from a panel teaches nobody anything: the author starts
+ * looking at the seat, the state and the partitions, and the player reads it as
+ * a verb this game does not have. Dropping an action for want of an answer now
+ * has exactly one cause, so it can name the question that caused it.
+ */
+function warnDropped(definition: ActionDefinition, seat: number): null {
+  const first = definition.selections[0]!;
+  devWarn(
+    `world-offer-pruned:${definition.name}:${first.name}`,
+    `World action '${definition.name}' was dropped from seat ${seat}'s offer: its first ` +
+    `question '${first.name}' has no selectable candidate (every candidate is either absent ` +
+    `or disabled).\n` +
+    `  A later selection is never the reason -- it is asked with nothing bound and re-asked ` +
+    `once the seat answers this one (#270).\n` +
+    `  If the verb should be there, give '${first.name}' a candidate. If it should not, prefer ` +
+    `.condition() / .disabled(), so the seat reads a reason instead of a missing verb.`,
+  );
+  return null;
+}
+
 function candidateless(pick: PickMetadata): boolean {
   const candidates = pick.validElements ?? pick.choices;
   if (candidates === undefined) return false;

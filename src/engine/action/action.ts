@@ -1352,89 +1352,96 @@ export class ActionExecutor {
       trace.conditionResult = true;
     }
 
-    // Trace each selection
-    trace.available = this.traceSelectionPath(action.selections, player, {}, 0, trace.selections);
+    // ONE SOURCE OF TRUTH FOR "AVAILABLE" (#270). The trace describes each step;
+    // whether the action is offered is decided by the very walk that offers it,
+    // so a trace can never name a reason the offer does not act on.
+    this.traceSelectionPath(action.selections, player, trace.selections);
+    trace.available = this.hasValidSelectionPath(action.selections, player, {}, 0, action.name);
     return trace;
   }
 
   /**
-   * Recursively trace selection availability for debug purposes.
-   * Populates the selectionTraces array with info about each selection.
+   * The same walk as {@link hasValidSelectionPath}, written down (#270).
+   *
+   * A trace that disagreed with the offer is worse than no trace: it would name
+   * a later step as the reason a verb the engine actually offers is missing, and
+   * send the author debugging a question the player has not been asked yet. So
+   * this stops where availability stops, and every step past that is recorded
+   * with `notYetAskable` -- present in the trace, NOT evaluated, and never the
+   * reason for anything.
    */
   private traceSelectionPath(
     selections: Selection[],
     player: Player,
-    args: Record<string, unknown>,
-    index: number,
     selectionTraces: PickTrace[]
-  ): boolean {
-    // Base case: all selections processed
-    if (index >= selections.length) {
-      return true;
+  ): void {
+    // Nothing is asked, so there is nothing to describe.
+    if (selections.length === 0) {
+      return;
     }
 
-    const selection = selections[index];
+    // The first step is the only one evaluated, for the reason it is the only
+    // one availability evaluates: it is the only one whose arguments are known.
+    const selection = selections[0];
+    const selTrace = this.describePick(selection);
+
+    // Optional steps and free input always have an answer, and what that answer
+    // will be is unknown, so nothing past them can be judged either.
+    if (selection.optional || selection.type === 'text' || selection.type === 'number') {
+      if (selection.type === 'text' || selection.type === 'number') {
+        selTrace.choiceCount = -1; // -1 indicates free input, not choices
+      }
+      selectionTraces.push(selTrace);
+      this.traceNotYetAskable(selections, 1, selectionTraces);
+      return;
+    }
+
+    const choices = this.getChoices(selection, player, {});
+    selTrace.choiceCount = choices.length; // Total including disabled
+    selectionTraces.push(selTrace);
+    this.traceNotYetAskable(selections, 1, selectionTraces);
+  }
+
+  /**
+   * Record every step after the one the player is waiting on, unevaluated.
+   *
+   * Their candidates are a function of answers that do not exist yet, so the
+   * trace says which step each one is waiting for rather than a choice count
+   * that would only be the empty list a dependent callback correctly returns.
+   */
+  private traceNotYetAskable(
+    selections: Selection[],
+    from: number,
+    selectionTraces: PickTrace[]
+  ): void {
+    for (let i = from; i < selections.length; i++) {
+      selectionTraces.push({ ...this.describePick(selections[i]), notYetAskable: true });
+    }
+  }
+
+  /**
+   * One step's trace, minus anything that takes evaluating it to know.
+   *
+   * Written once because an evaluated step and an unevaluated one differ in
+   * exactly that, and two copies of "what a step is called and what it depends
+   * on" is how the two came to describe the same selection differently.
+   */
+  private describePick(selection: Selection): PickTrace {
     const selTrace: PickTrace = {
       name: selection.name,
       type: selection.type,
       choiceCount: 0,
       optional: selection.optional,
     };
-
-    // Skip optional selections - they don't block availability
-    if (selection.optional) {
-      selectionTraces.push(selTrace);
-      return this.traceSelectionPath(selections, player, args, index + 1, selectionTraces);
-    }
-
-    // Text/number inputs are always available
-    if (selection.type === 'text' || selection.type === 'number') {
-      selTrace.choiceCount = -1; // -1 indicates free input, not choices
-      selectionTraces.push(selTrace);
-      return this.traceSelectionPath(selections, player, args, index + 1, selectionTraces);
-    }
-
-    // Check for filterBy
     if (selection.type === 'choice') {
       const choiceSel = selection as ChoiceSelection;
-      if (choiceSel.filterBy) {
-        selTrace.filterApplied = true;
-      }
-      if (choiceSel.dependsOn) {
-        selTrace.dependentOn = choiceSel.dependsOn;
-      }
+      if (choiceSel.filterBy) selTrace.filterApplied = true;
+      if (choiceSel.dependsOn) selTrace.dependentOn = choiceSel.dependsOn;
     }
-
-    // Check dependsOn for element/elements selections too
     if ((selection.type === 'element' || selection.type === 'elements') && 'dependsOn' in selection) {
       selTrace.dependentOn = (selection as ElementSelection | ElementsSelection).dependsOn;
     }
-
-    // Get choices for this selection
-    const choices = this.getChoices(selection, player, args);
-    selTrace.choiceCount = choices.length; // Total including disabled
-    selectionTraces.push(selTrace);
-
-    // Only enabled choices count for availability
-    const enabledChoices = choices.filter(c => c.disabled === false);
-    if (enabledChoices.length === 0) {
-      // Development mode warning: suggest dependsOn if there are prior selections
-      if (index > 0 && !selTrace.dependentOn) {
-        const priorSelections = selections.slice(0, index).map(s => s.name);
-        devWarn(
-          `dependsOn-hint:${selection.name}`,
-          `Selection '${selection.name}' returned 0 choices during availability check.\n` +
-          `  If it depends on a prior selection (${priorSelections.join(', ')}), add \`dependsOn: "${priorSelections[priorSelections.length - 1]}"\`.\n` +
-          `  This tells the framework to check availability for each prior choice.\n` +
-          `  See: https://boardsmith.io/docs/common-pitfalls#dependent-selections`
-        );
-      }
-      return false;
-    }
-
-    // For simple path checking, just continue with no value
-    // (full path validation would be too expensive for traces)
-    return this.traceSelectionPath(selections, player, args, index + 1, selectionTraces);
+    return selTrace;
   }
 
   /**
@@ -1463,142 +1470,118 @@ export class ActionExecutor {
   }
 
   /**
-   * Recursively check if there's a valid path through all selections.
-   * For dependent selections, we need to verify at least one choice
-   * leads to valid subsequent selections.
+   * OFFERED ON ITS FIRST UNSATISFIED STEP, NEVER PRUNED BY A LATER ONE (#270).
    *
-   * OPTIMIZATION: We only do full path validation for choice selections
-   * with static choices and filterBy. For element/player selections,
-   * or choice selections with dynamic choices functions, the cost of
-   * repeatedly computing choices is too high.
+   * Availability runs with `args: {}`, so every step past the first is being
+   * asked a question it cannot answer: a dependent `choices` callback has
+   * nothing to narrow by until the answer it narrows by exists, and the natural
+   * `if (args.slot === undefined) return []` is the correct thing for an author
+   * to write. Reading that as "impossible" took the whole verb off the seat's
+   * panel with no diagnostic anywhere, and the only way out was to over-offer
+   * the union of every first answer's rows -- showing the player items they
+   * would not be allowed to pick, once per multi-step verb in the game.
+   *
+   * So the walk STOPS at the first step the player would actually be asked. A
+   * later step is "not yet askable", never "empty, therefore impossible".
+   *
+   * Two things still prune, because in both the engine has a real answer:
+   *
+   *   THE FIRST STEP ITSELF. Its candidates are evaluated with exactly the
+   *     arguments the player will have when they are asked -- none -- so an
+   *     empty list there is a pick that opens on nothing.
+   *
+   *   A DECLARED DEPENDENCY (`dependsOn` / `filterBy`). The walk enumerates the
+   *     earlier step's enabled choices and re-asks the dependent step with each
+   *     one BOUND, which is the same question the player's own answer will ask.
+   *     Exhausting them all means no answer leads anywhere.
+   *
+   * Both say so out loud through `devWarn` rather than vanishing.
+   *
+   * An OPTIONAL step, a `text` and a `number` can never be the reason an action
+   * is impossible -- and their answers are equally unknown here, so a step after
+   * one of them is no more askable than a step after a choice. The walk stops
+   * there too.
    *
    * @param actionName - Propagated from `isActionAvailable` so tutorial gate
-   *   disabled reasons are included when filtering enabled choices.
+   *   disabled reasons are included when filtering enabled choices, and so a
+   *   pruning diagnostic can name the verb that disappeared.
    */
   private hasValidSelectionPath(
     selections: Selection[],
     player: Player,
     args: Record<string, unknown>,
     index: number,
-    actionName?: string,
+    actionName: string,
   ): boolean {
-    // Base case: all selections processed
+    // Base case: every step has been walked (or bound by the enumeration above).
     if (index >= selections.length) {
       return true;
     }
 
     const selection = selections[index];
 
-    // Skip optional selections - they don't block availability
-    if (selection.optional) {
+    // Already answered by the dependent enumeration below: keep walking, this
+    // step is not the one the player is waiting on.
+    if (Object.prototype.hasOwnProperty.call(args, selection.name)) {
       return this.hasValidSelectionPath(selections, player, args, index + 1, actionName);
     }
 
-    // Text/number inputs are always available
-    if (selection.type === 'text' || selection.type === 'number') {
-      return this.hasValidSelectionPath(selections, player, args, index + 1, actionName);
+    // The first unsatisfied step. Optional steps and free input always have an
+    // answer, and what that answer will be is unknown, so nothing past them can
+    // be judged either.
+    if (selection.optional || selection.type === 'text' || selection.type === 'number') {
+      return true;
     }
 
-    // For element selections, check if they have enabled choices
-    // If a later selection depends on this one, do full path validation
-    if (selection.type === 'element') {
-      const annotatedChoices = this.getChoices(selection, player, args, actionName);
-      const enabledChoices = annotatedChoices.filter(c => c.disabled === false);
-      if (enabledChoices.length === 0) {
-        return false;
-      }
-      // Check if any later selection depends on this one
-      const hasDependent = this.hasDependentSelection(selections, index + 1, selection.name);
-      if (hasDependent) {
-        // Need to verify at least one enabled choice leads to a valid path
-        for (const choice of enabledChoices) {
-          const newArgs = { ...args, [selection.name]: choice.value };
-          if (this.hasValidSelectionPath(selections, player, newArgs, index + 1, actionName)) {
-            return true;
-          }
-        }
-        return false;
-      }
-      return this.hasValidSelectionPath(selections, player, args, index + 1, actionName);
-    }
+    const enabledChoices = this.getChoices(selection, player, args, actionName)
+      .filter(c => c.disabled === false);
 
-    // For elements selections (chooseElements), check if they have enabled elements
-    // If a later selection depends on this one, do full path validation
-    if (selection.type === 'elements') {
-      const annotatedElements = this.getChoices(selection, player, args, actionName);
-      const enabledElements = annotatedElements.filter(c => c.disabled === false);
-      if (enabledElements.length === 0) {
-        return false;
-      }
-      // Check if any later selection depends on this one
-      const hasDependent = this.hasDependentSelection(selections, index + 1, selection.name);
-      if (hasDependent) {
-        // Need to verify at least one enabled element leads to a valid path
-        for (const element of enabledElements) {
-          const newArgs = { ...args, [selection.name]: element.value };
-          if (this.hasValidSelectionPath(selections, player, newArgs, index + 1, actionName)) {
-            return true;
-          }
-        }
-        return false;
-      }
-      return this.hasValidSelectionPath(selections, player, args, index + 1, actionName);
-    }
-
-    // For choice selections with dynamic choices functions
-    // If a later selection depends on this one, do full path validation
-    if (selection.type === 'choice') {
-      const choiceSel = selection as ChoiceSelection;
-      if (typeof choiceSel.choices === 'function') {
-        const annotatedChoices = this.getChoices(selection, player, args, actionName);
-        const enabledChoices = annotatedChoices.filter(c => c.disabled === false);
-        if (enabledChoices.length === 0) {
-          return false;
-        }
-        // Check if any later selection depends on this one
-        const hasDependent = this.hasDependentSelection(selections, index + 1, selection.name);
-        if (hasDependent) {
-          // Need to verify at least one enabled choice leads to a valid path
-          for (const choice of enabledChoices) {
-            const newArgs = { ...args, [selection.name]: choice.value };
-            if (this.hasValidSelectionPath(selections, player, newArgs, index + 1, actionName)) {
-              return true;
-            }
-          }
-          return false;
-        }
-        return this.hasValidSelectionPath(selections, player, args, index + 1, actionName);
-      }
-    }
-
-    // Get choices for this selection (static choices only at this point)
-    const annotatedChoices = this.getChoices(selection, player, args, actionName);
-    const enabledChoices = annotatedChoices.filter(c => c.disabled === false);
     if (enabledChoices.length === 0) {
+      devWarn(
+        `offer-pruned:${actionName}:${selection.name}`,
+        `Action '${actionName}' was dropped from this player's offers: its first question ` +
+        `'${selection.name}' has no selectable candidate right now (every candidate is either ` +
+        `absent or disabled).\n` +
+        `  That is the ONLY reason an unanswered question drops an action -- a later step is ` +
+        `never evaluated before the player reaches it (#270).\n` +
+        `  If the verb should be there, give '${selection.name}' a candidate. If it should ` +
+        `not, prefer .condition() / .disabled(), so the player reads a reason instead of a ` +
+        `missing verb.`
+      );
       return false;
     }
 
-    // Check if any later selection depends on this one
-    const hasDependent = this.hasDependentSelection(selections, index + 1, selection.name);
-
-    if (!hasDependent) {
-      // No dependent selections, just check if subsequent selections are valid
-      return this.hasValidSelectionPath(selections, player, args, index + 1, actionName);
+    // Nothing later declared a dependency on this step, so nothing later can be
+    // judged until the player answers it. The action is offerable.
+    if (!this.hasDependentSelection(selections, index + 1, selection.name)) {
+      return true;
     }
 
-    // Has dependent selections - need to check if at least one enabled choice
-    // leads to a valid path through subsequent selections
+    // A DECLARED dependency: re-ask the dependent step with each enabled answer
+    // bound, exactly as the player's own answer will.
     for (const choice of enabledChoices) {
-      // Build new args with this choice's value
       const newArgs = { ...args, [selection.name]: choice.value };
-
-      // Check if this choice leads to a valid path
       if (this.hasValidSelectionPath(selections, player, newArgs, index + 1, actionName)) {
-        return true; // Found at least one valid path
+        return true;
       }
     }
 
-    // No choice led to a valid path
+    const dependents = selections
+      .slice(index + 1)
+      .filter(s => ('dependsOn' in s && s.dependsOn === selection.name) ||
+        (s.type === 'choice' && (s as ChoiceSelection).filterBy?.selectionName === selection.name))
+      .map(s => `'${s.name}'`)
+      .join(', ');
+    devWarn(
+      `offer-pruned-dependent:${actionName}:${selection.name}`,
+      `Action '${actionName}' was dropped from this player's offers: no value of ` +
+      `'${selection.name}' leaves ${dependents} with anything to pick.\n` +
+      `  A DECLARED dependency is evaluated during availability with the earlier answer bound, ` +
+      `which is what dependsOn/filterBy asks for.\n` +
+      `  If the verb should be there, narrow '${selection.name}' to the values that lead ` +
+      `somewhere. If it should not, prefer .condition() / .disabled(), so the player reads a ` +
+      `reason instead of a missing verb.`
+    );
     return false;
   }
 
@@ -1689,7 +1672,7 @@ export class ActionExecutor {
       };
     }
 
-    // Capture before accumulation — onSelect fires on first iteration only
+    // Capture before accumulation -- onSelect fires on first iteration only
     const isFirstIteration = pendingState.repeating.iterationCount === 0;
 
     // Resolve element/player IDs to actual objects before validating choices
@@ -1892,7 +1875,7 @@ export class ActionExecutor {
           console.error(`[BoardSmith] ${detail}:`, error);
           if (isDevThrowEnabled()) {
             throw new Error(
-              `${detail}. Fix the display callback — a label it cannot produce would otherwise ` +
+              `${detail}. Fix the display callback -- a label it cannot produce would otherwise ` +
               `be silently replaced by the element's name, which reads as correct output.`
             );
           }
@@ -2061,7 +2044,7 @@ export class ActionExecutor {
       args: resolvedArgs,
     };
 
-    // The action-level gate applies here too — this is the interactive path
+    // The action-level gate applies here too -- this is the interactive path
     // (choice by choice), and the whole point of the gate is that it sees the
     // COMPLETE submission, which is exactly what has just been assembled.
     const validateError = this.checkActionValidate(action, context);
