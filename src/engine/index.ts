@@ -49,6 +49,7 @@ export type {
   ElementJSON,
   ElementFinder,
   ElementAttributes,
+  SeatAttributeDerivation,
   Sorter,
   GameOptions,
   RandomnessPolicy,

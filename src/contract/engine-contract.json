@@ -1,7 +1,7 @@
 {
-  "revision": 84,
+  "revision": 85,
   "bundleProtocol": 2,
-  "surfaceHash": "cc09b4ff188a3d24",
+  "surfaceHash": "8acbc2ae3015d0b7",
   "payloadHash": "adb9e8ed9a9dbcdd",
   "formatHash": "0058593e7cc80205",
   "history": [
@@ -700,6 +700,15 @@
       "payloadHash": "adb9e8ed9a9dbcdd",
       "formatHash": "0058593e7cc80205",
       "summary": "A migration may rebuild an EXISTING root from another root's exact ORIGINAL records, a page at a time (issue 275). #449's survey is a FOLD, so an exact join -- \"this root's new value is those particular records, held by those other roots\" -- could only be expressed by putting the corpus in the digest, which a host refuses: the reported reproduction measured a complete join at 524,401 bytes against the platform's 262,144-byte ceiling, and derive may not replace an existing root, finalize may not page, and a cold transform page could name no other root at all. world.migration gains join: { sources(name, digest), maxSources }: each root DECLARES which original roots its transform reads, from its name and the completed digest alone -- never from its own contents, because a host asks while deciding what to load -- and ctx.source(name) on the partition and derive contexts then answers that root AS IT WAS STORED WHEN THE MIGRATION BEGAN, read-only, through readonly.ts's projection. New runner.migrationSources(page, { digest, maxSources }) answers the exact union a transform page must carry, is pure and repeatable so a cold resume asks for the same page, and migrateAll's context gains sources (those originals, by name) and maxSources (the host's own lower ceiling). A transform page of a joining migration is refused without them, refused when what it carries is not what the page declared in either direction, and a hook reading an original it did not declare is refused by name. join and finalize are mutually exclusive, refused at declaration; a root may not name itself; a survey pass sent originals is refused. migrationShape() gains an optional joins: { maxSources } on the two pageable kinds, so a host learns before it starts that it must serve originals stably across pages. WorldEngine gains migrateSources(supplied, run), which hydrates the originals into a SECOND, empty game -- an original's element ids are the ids the live root already holds, and one identity may not be in a tree twice -- scoped to the call so nothing can keep them. createWorld supplies that second game from the bundle's own game class. THE HOST CONTRACT IS NEW WORK: a platform must serve a joining migration's originals from the world as it stood when the migration began, however many roots it has already rewritten, and may not run such a migration until it can. No stored byte and no player-view payload changes; payloadHash moves only because WORLD_DURABILITY_FIXTURE gains the join page's context, which is a type surfaceHash cannot see."
+    },
+    {
+      "revision": 85,
+      "date": "2026-09-17",
+      "bundleProtocol": 2,
+      "surfaceHash": "8acbc2ae3015d0b7",
+      "payloadHash": "adb9e8ed9a9dbcdd",
+      "formatHash": "0058593e7cc80205",
+      "summary": "Elements and the game root can declare static seatAttributes (#269): a per-seat DERIVED attribute, a name-to-function map evaluated at projection time with the live element and the receiving seat (null for a spectator), whose value is merged into that seat's node after the visibleAttributes whitelist and stored nowhere. visibleAttributes is a whitelist over STORED attributes, so a value gated on a fact that can change had to be stored already-gated and re-derived by every write path that could change the gate -- a world character's coordinate readout gated on carrying a GPS unit kept its stale figure when another seat's command emptied the pack, and was served until that seat happened to issue a command that rewrote it. A derivation is asked at serialization instead, so there is nothing to keep in step: returning undefined leaves the attribute out of that seat's view, toJSON() and stored world partitions never carry one, and a restore of a per-seat view does not turn one back into a stored field. It runs on the single per-seat path (toJSONForPlayer, the batched toJSONForPlayers under it, snapshots taken forSeat, a bot's redacted clone and a world's viewFor), never for an element the seat cannot see, and projectionSignaturesFor now refuses an audience whose tree declares one, the same way it refuses visibleAttributes and playerView. Refused loudly at projection: a derived name the element also stores or the engine owns, a derivation that throws (the error names class, attribute and seat), and a value JSON cannot carry (the error names the path inside it)."
     }
   ]
 }

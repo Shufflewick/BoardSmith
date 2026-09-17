@@ -215,6 +215,67 @@ answer, rather than a move scored against an invented value. Making the action
 searchable again means deriving its `condition`, `choices`, `disabled` and
 `validate` from public information, or guarding as above.
 
+### Computed (Per-Seat) Attributes
+
+`static visibleAttributes` is a whitelist over attributes the element **already
+stores**. That is the wrong shape for a value whose visibility depends on a
+fact that can change: the value has to be stored already-gated, and every write
+path that can change the gating fact has to remember to re-derive it. Miss one
+path — another character takes the item, an event destroys it — and the stale
+gated value is served until that seat happens to issue a command that rewrites
+it.
+
+`static seatAttributes` computes the value instead, when the element is
+serialized **for a seat**:
+
+```typescript
+class Character extends Space<MyGame> {
+  cell = 'AB-2';          // real state, always stored
+
+  static seatAttributes = {
+    // Present only while this character is carrying a GPS unit.
+    coordinates: (character: Character) =>
+      character.first(Gps) ? character.cell : undefined,
+
+    // The receiving seat is the second argument (null for a spectator).
+    ownReading: (character: Character, seat: number | null) =>
+      character.player?.seat === seat ? character.reading : undefined,
+  };
+}
+```
+
+What the hook guarantees:
+
+- **Evaluated at projection time, per receiving seat.** Every per-seat view
+  goes through one serializer (`Game.toJSONForPlayer`, and the batched
+  `toJSONForPlayers` under it), so a derivation runs for every view a seat can
+  receive — a table's player view, a snapshot taken `forSeat`, a bot's redacted
+  clone, and a world's `viewFor`.
+- **Never stored.** `toJSON()` (checkpoints, storage, a world's partitions)
+  carries no derived attribute, and a restore of a per-seat view does not turn
+  one back into a stored field. There is nothing to keep in step, so there is
+  nothing to go stale.
+- **`undefined` means absent.** That is how a gate closes: the attribute is
+  simply not in that seat's view.
+- **The derivation is the gate, so `visibleAttributes` does not filter it.** It
+  already knew the seat; running it through a whitelist written for stored
+  attributes would only make you declare the same name twice.
+- **Nothing derives for an element the seat cannot see.** A hidden element is a
+  placeholder, and a placeholder carries no derived attributes.
+
+And what it refuses, loudly, at projection time:
+
+- a derived name the element also stores, or one the engine owns (`name`,
+  `player`, `$image`, …) — two sources for one attribute is the hazard this
+  removes;
+- a derivation that throws — the error names the class, the attribute and the
+  receiving seat;
+- a derived value JSON cannot carry (a function, a symbol, a bigint) — the
+  error names the path inside the returned value.
+
+A derivation runs while state is being serialized: read state and return a
+value, never write.
+
 ## Actions and State Mutation
 
 BoardSmith separates player intent (actions) from state mutation (direct
@@ -407,6 +468,9 @@ Each player receives a filtered view of the game state:
 - A declared `static visibleAttributes` whitelist further redacts individual
   attributes on visible elements for non-owners, and on the game root redacts
   the game's own root fields (see Attribute Visibility above)
+- A declared `static seatAttributes` adds attributes COMPUTED for the receiving
+  seat from live state (see Computed (Per-Seat) Attributes above); they are
+  never stored, so they cannot be served stale
 - Private zones of other players are hidden via `contentsHidden()` /
   `contentsVisibleToOwner()`
 - Server-side information is stripped

@@ -281,6 +281,78 @@ const RESERVED_KEY_REASONS: Record<string, string> = {
  */
 export const HIDDEN_PLACEHOLDER_ATTRIBUTE = '__hidden';
 
+/**
+ * One entry of `static seatAttributes` (#269): the value of that attribute for
+ * the seat this element is being serialized for.
+ *
+ * `element` is the live element, so the whole game is reachable from it
+ * (`element.game`, `element.first(...)`, a parent's contents). `seat` is the
+ * receiving seat, or `null` for a spectator. Returning `undefined` leaves the
+ * attribute out of that seat's view.
+ *
+ * The element parameter defaults to `any` so a class can type its own
+ * derivations against ITSELF (`(character: Character) => ...`), which is what
+ * makes the hook readable at the declaration site.
+ */
+export type SeatAttributeDerivation<E extends GameElement = any> = (
+  element: E,
+  seat: number | null,
+) => unknown;
+
+/**
+ * Refuse a derived NAME that something else already writes (#269).
+ *
+ * Two sources for one attribute is the hazard the hook removes, so a
+ * derivation may not shadow an engine-owned name or a name the element stores.
+ * Both are authoring mistakes and both are refused at the first projection.
+ */
+function assertSeatAttributeName(element: GameElement, name: string, className: string): void {
+  if (name.startsWith('_') || name.startsWith('$') || ENGINE_OWNED_ATTRIBUTES.has(name)) {
+    throw new Error(
+      `${className}.seatAttributes.${name} names an attribute the engine owns.\n` +
+      `  Engine-owned names (${[...ENGINE_OWNED_ATTRIBUTES].join(', ')}) and names starting with "_" or "$" ` +
+      `are structure the engine reads for itself.\n` +
+      `  Fix: derive a different name (for example "${name}Readout").`
+    );
+  }
+  if (Object.prototype.hasOwnProperty.call(element, name)) {
+    throw new Error(
+      `${className}.seatAttributes.${name} is also stored on this element.\n` +
+      `  A derived attribute is computed at projection time and never stored, so a stored attribute of ` +
+      `the same name would be a second, silently-ignored source for one value.\n` +
+      `  Fix: delete the stored "${name}" field (the derivation replaces it), or derive a different name.`
+    );
+  }
+}
+
+/**
+ * Refuse a derived value JSON cannot carry, naming the exact path inside it.
+ *
+ * `serializeValue` already refuses cycles, over-deep shapes and raw buffers.
+ * What it passes through untouched is the set of values `JSON.stringify` drops
+ * or chokes on silently -- a function, a symbol, a bigint -- and a derived
+ * attribute that vanishes between the engine and the wire is precisely the
+ * quiet failure this hook exists to remove.
+ */
+function assertSeatAttributeSerializable(value: unknown, path: string, describe: () => string): void {
+  const type = typeof value;
+  if (type === 'function' || type === 'symbol' || type === 'bigint') {
+    throw new Error(
+      `${describe()} returned a value JSON cannot carry at '${path}': a ${type}.\n` +
+      `  Fix: derive a plain serializable value (string, number, boolean, null, array, or plain object), ` +
+      `or a GameElement, which serializes to a stable reference.`
+    );
+  }
+  if (value === null || type !== 'object') return;
+  if (Array.isArray(value)) {
+    value.forEach((item, i) => assertSeatAttributeSerializable(item, `${path}[${i}]`, describe));
+    return;
+  }
+  for (const [key, nested] of Object.entries(value as Record<string, unknown>)) {
+    assertSeatAttributeSerializable(nested, `${path}.${key}`, describe);
+  }
+}
+
 const ENGINE_OWNED_ATTRIBUTES: ReadonlySet<string> = new Set([
   // GameElement: identity, ownership, grid position, artwork.
   'name', 'player', 'row', 'column', '$image', '$images',
@@ -351,6 +423,42 @@ export class GameElement<G extends Game = any, P extends Player = any> {
 
   /** Attributes visible to all players (undefined = all visible) */
   static visibleAttributes: string[] | undefined;
+
+  /**
+   * Attributes COMPUTED for the seat receiving this element (#269).
+   *
+   * `visibleAttributes` is a whitelist over attributes the element already
+   * stores, so a value whose visibility depends on a fact that can change has
+   * to be stored already-gated, and every write path that can change the
+   * gating fact has to remember to rewrite it. Miss one -- another character
+   * takes the item, an event destroys it -- and the stale gated value is
+   * served until that seat happens to issue a command that rewrites it.
+   *
+   * A derivation here runs when the element is serialized FOR A SEAT, reads
+   * live state, and is never stored, so there is nothing to keep in step:
+   *
+   * ```ts
+   * class Character extends Space<MyGame> {
+   *   cell = 'AB-2';
+   *   static seatAttributes = {
+   *     // present only while this character carries a GPS unit
+   *     coordinates: (character: Character) =>
+   *       character.first(Gps) ? character.cell : undefined,
+   *   };
+   * }
+   * ```
+   *
+   * - Returning `undefined` leaves the attribute out of that seat's view
+   *   entirely: that is how a gate closes.
+   * - The name may not be one the element also stores, nor one the engine owns
+   *   -- a derived name that shadowed a stored one would be two sources for one
+   *   attribute, which is the hazard this removes. Both are refused loudly.
+   * - The derivation runs only where the seat can see the element at all: a
+   *   hidden element's placeholder carries no derived attributes.
+   * - The value is the seat's own, so `visibleAttributes` does not filter it --
+   *   the derivation is the gate, and it already knew the seat.
+   */
+  static seatAttributes: Record<string, SeatAttributeDerivation> | undefined;
 
   constructor(ctx: Partial<ElementContext>) {
     this._ctx = ctx as ElementContext;
@@ -1267,6 +1375,51 @@ export class GameElement<G extends Game = any, P extends Player = any> {
   }
 
   /**
+   * What `static seatAttributes` derives for ONE seat (#269).
+   *
+   * Returns the already-serialized values to merge into that seat's node, or
+   * `undefined` when the class declares no derivations. Nothing is written to
+   * the element: a derived attribute exists only in the projection that asked
+   * for it, which is what makes it impossible to serve stale.
+   *
+   * @internal Engine-internal. Called by `Game`'s per-seat redaction.
+   */
+  _seatAttributesFor(seat: number | null): Record<string, unknown> | undefined {
+    const derivations = (this.constructor as typeof GameElement).seatAttributes;
+    if (derivations === undefined) return undefined;
+
+    const className = this.constructor.name;
+    const derived: Record<string, unknown> = {};
+    for (const [name, derive] of Object.entries(derivations)) {
+      const describe = () =>
+        `${className}.seatAttributes.${name} (projecting for ${seat === null ? 'a spectator' : `seat ${seat}`})`;
+
+      assertSeatAttributeName(this, name, className);
+
+      let value: unknown;
+      try {
+        value = derive(this, seat);
+      } catch (cause) {
+        throw new Error(
+          `${describe()} threw: ${cause instanceof Error ? cause.message : String(cause)}\n` +
+          `  A derivation runs while the element is being serialized for a seat, so it must read state and ` +
+          `return a value -- it may not write, and it may not assume state a seat can reach is present.`,
+          { cause },
+        );
+      }
+
+      // Absent, not null: a gate closes by leaving the attribute out of the
+      // seat's view entirely.
+      if (value === undefined) continue;
+
+      const serialized = this.serializeValue(value, name);
+      assertSeatAttributeSerializable(serialized, name, describe);
+      derived[name] = serialized;
+    }
+    return derived;
+  }
+
+  /**
    * Serialize this element and its descendants to JSON
    */
   toJSON(): ElementJSON {
@@ -1653,7 +1806,16 @@ export class GameElement<G extends Game = any, P extends Player = any> {
     // `notation` getter that toJSON serializes for the client): the getter
     // recomputes the value from restored coordinates, and assigning to it would
     // throw "Cannot set property ... which has only a getter".
+    // #269: a `seatAttributes` name is DERIVED, not stored. The per-seat view
+    // it rode in on was computed for one seat at one instant; assigning it here
+    // would turn it back into exactly the stored, staleable copy the hook
+    // exists to remove. The restored element derives it again when IT is
+    // projected.
+    const derivedNames = new Set(
+      Object.keys((element.constructor as typeof GameElement).seatAttributes ?? {}),
+    );
     for (const [key, value] of Object.entries(json.attributes)) {
+      if (derivedNames.has(key)) continue;
       let getterOnly = false;
       for (let proto: object | null = element; proto; proto = Object.getPrototypeOf(proto)) {
         const desc = Object.getOwnPropertyDescriptor(proto, key);

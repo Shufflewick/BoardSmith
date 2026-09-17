@@ -1260,7 +1260,33 @@ by anything in the visibility state:
 
 - an **owner-only** element or zone (`contentsVisibleToOwner()`,
   `setVisibility('owner')`), decided against the reader's ownership;
-- a class with **`static visibleAttributes`**, likewise decided against ownership.
+- a class with **`static visibleAttributes`**, likewise decided against ownership;
+- a class with **`static seatAttributes`**, which is author code handed the
+  receiving seat.
+
+**A value gated on something a character can LOSE belongs in `seatAttributes`**
+(core-concepts.md, "Computed (Per-Seat) Attributes"). A world is exactly where
+the write-time alternative breaks: a character's coordinate readout gated on
+carrying a GPS unit, stored already-gated, stays on the character when another
+seat's command or a scheduled event empties the pack, and keeps being served
+until that character happens to issue a command that rewrites it. Declared as a
+derivation, the gate is asked at projection, from live state, and stored
+nowhere:
+
+```ts
+class Character extends Space<MyWorld> {
+  cell = 'AB-2';
+
+  static seatAttributes = {
+    coordinates: (character: Character) =>
+      character.first(Gps) ? character.cell : undefined,
+  };
+}
+```
+
+A derivation may only READ, and may only read what is resident: it runs while
+one seat's view is being serialized, and a world holds just the partitions that
+seat's `view` declaration named.
 
 So is a game with `static playerView`, a live tutorial, or an animation event
 addressed to particular seats. Anything else -- public, hidden, count-only, and
