@@ -2922,11 +2922,22 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
   display: contents;
 }
 
+/* A quote line WRAPS (issue 279). Each line is a flex item of the bar, so on a wide
+   screen it is as wide as its own text and nothing changes; on a phone it has
+   to fold inside the bar instead of running off the side of it, because a price
+   nobody can read is not a price and the confirmation beneath it is pressable
+   either way. `min-width: 0` is what lets the item become narrower than its
+   content at all, and `overflow-wrap: anywhere` is what makes a single unbroken
+   token -- an id, a proper name -- break: `break-word` would leave the item's
+   min-content width at the whole token and the flex row wide with it. The game
+   writes the words; where they fold is never its problem. */
 .quote-line {
   font-size: 0.9rem;
   font-weight: 600;
   color: var(--bsg-ink);
-  white-space: nowrap;
+  min-width: 0;
+  max-width: 100%;
+  overflow-wrap: anywhere;
 }
 
 .quote-pending {

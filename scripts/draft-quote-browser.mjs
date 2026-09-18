@@ -19,6 +19,12 @@
  * request never left the frame" is how #227 found the identical class of defect
  * on the pick road.
  *
+ * It then shrinks the window to a phone (#279). A price is only shown if it can
+ * be READ, and a quote line that cannot wrap ends past the side of a 390px
+ * screen while every assertion about its text still passes -- so the last two
+ * checks measure where each line ends against the bar's own content edge, with
+ * a whole conditions sentence and one unbroken reference in the quote.
+ *
  * ## Why this is not in `npx vitest run`
  *
  * It needs Chromium, and BoardSmith depends on no browser. It never skips: with
@@ -33,6 +39,20 @@
 import { assert, check, runBrowserRegression, summarise, surfaceOf, waitUntil } from './browser-harness.mjs';
 
 // ── The fixture world ────────────────────────────────────────────────────────
+
+/**
+ * THE TWO LINES #279 WAS REPORTED AGAINST, held here rather than in the rules
+ * text so the checks below assert the game's own words and not a copy of them.
+ *
+ * The first is a whole sentence, which is how a game writes what the price does
+ * not buy. The second is ONE unbroken token, the shape an id or a proper name
+ * takes when the game has no say in where a browser may break it. A quote line
+ * that cannot wrap loses both on a phone, and the player confirms a purchase
+ * whose conditions ran off the side of the screen.
+ */
+const CONDITIONS =
+  'Sabotage can still prevent the boost from starting; a blocked guarantee is not charged.';
+const LEDGER = 'UNDERWRITINGLEDGERREFERENCE000000000000042';
 
 /**
  * An empire with sixteen genuinely earned Essentia and no boost.
@@ -74,6 +94,10 @@ const PER_WEEK = 5;
 /** The operation's rule in ONE place, so the quote and the purchase cannot
  *  disagree: an omitted quantity is one week, and zero is zero. */
 const weeksOf = (weeks: number | undefined): number => (weeks === undefined ? 1 : weeks);
+
+const CONDITIONS = '${CONDITIONS}';
+const LEDGER = '${LEDGER}';
+
 const expiryAfter = (from: number, saved: number, weeks: number): number =>
   Math.max(from, saved) + weeks * WEEK_MS;
 const day = (at: number): string => new Date(at).toISOString().slice(0, 10);
@@ -97,6 +121,8 @@ const boost = worldAction<Realm>('boost')
       paid === 0
         ? 'adds no time'
         : \`until \${day(expiryAfter(world.now, empire.boostUntil, paid))}\`,
+      CONDITIONS,
+      \`Recorded against \${LEDGER}\`,
     ];
   })
   .execute(({ weeks, resource }, ctx) => {
@@ -216,6 +242,49 @@ async function expectQuote(page, accept, what) {
   return seen;
 }
 
+/**
+ * WHERE EACH QUOTE LINE ACTUALLY ENDS, measured by the browser that laid it out.
+ *
+ * The bar is a wrapping flex flow with its own padding, so the edge a line has
+ * to stay inside is the bar's content edge and not the window's -- and the
+ * window is what a screenshot shows you. #279 was reported as pixels running
+ * off a 390px screen; this is that in numbers, plus the bar's own horizontal
+ * overflow, which is the same defect seen from the container's side.
+ */
+async function quoteLayout(page) {
+  return surfaceOf(page)
+    .locator('[data-bs-quote]')
+    .evaluate((quote) => {
+      const bar = quote.closest('.actionbar');
+      const edge = bar.getBoundingClientRect().right - parseFloat(getComputedStyle(bar).paddingRight);
+      return {
+        viewport: window.innerWidth,
+        edge,
+        overflow: bar.scrollWidth - bar.clientWidth,
+        lines: Array.from(quote.querySelectorAll('.quote-line')).map((line) => ({
+          text: (line.textContent ?? '').trim(),
+          right: line.getBoundingClientRect().right,
+          height: line.getBoundingClientRect().height,
+        })),
+      };
+    });
+}
+
+/**
+ * A DRAFT OF TWO WEEKS OF STORAGE, typed and not submitted.
+ *
+ * The reporter's own state in #248 and the state #279's measurements are taken
+ * in, so it is one sentence in both places rather than two copies that could
+ * drift into drafting different things.
+ */
+async function draftTwoWeeksOfStorage(page) {
+  const surface = surfaceOf(page);
+  await surface.locator('[data-bs-action="boost"]').click();
+  await surface.locator('.action-config .choice-btn', { hasText: 'storage' }).click();
+  // Answered but NOT submitted: exactly the state the reporter was in.
+  await surface.locator('.number-input input').fill('2');
+}
+
 /** The empire's balance as the custom board renders it. */
 async function balance(page) {
   return (await surfaceOf(page).locator('[data-fixture="balance"]').textContent())?.trim();
@@ -274,17 +343,13 @@ async function driveThrough({ chromium, hostUrl }) {
 
     // ── 1. The price of a TYPED, UNSUBMITTED quantity, on the bar ───────────
     await check('the standard panel shows the price of a typed draft before Done', async () => {
-      const surface = surfaceOf(page);
-      await surface.locator('[data-bs-action="boost"]').click();
-      await surface.locator('.action-config .choice-btn', { hasText: 'storage' }).click();
-      // Answered but NOT submitted: exactly the state the reporter was in.
-      await surface.locator('.number-input input').fill('2');
+      await draftTwoWeeksOfStorage(page);
       await expectQuote(page, (text) => text.includes('10 Essentia'), 'the total for two weeks');
       const shown = await quoteText(page);
       assert(/until \d{4}-\d{2}-\d{2}/.test(shown), `the bar named no resulting expiry: "${shown}"`);
       // And the field still holds what the player typed.
       assert(
-        (await surface.locator('.number-input input').inputValue()) === '2',
+        (await surfaceOf(page).locator('.number-input input').inputValue()) === '2',
         'the field lost the value it was quoted for',
       );
     });
@@ -368,6 +433,78 @@ async function driveThrough({ chromium, hostUrl }) {
       assert(
         (await balance(page)) === 'Essentia: 1',
         'a refused purchase moved the balance anyway',
+      );
+    });
+
+    // ── 6. The same quote on a wide screen, and then on a phone ────────────
+    //
+    // #279: the reporter's quote named its price, its cooldown, its chances and
+    // the terms of its guarantee, and at 390 x 844 the last two lines ended at
+    // x=505 and x=737 on a 390px screen. The confirmation was still pressable,
+    // so a player could buy what they had not been able to read. The wide
+    // screen is measured FIRST, because the answer to a line that overflows a
+    // phone must not be a line that folds on a desktop with room to spare.
+    await check('a line that fits still occupies one row on a wide screen', async () => {
+      await draftTwoWeeksOfStorage(page);
+      await expectQuote(page, (text) => text.includes(LEDGER), 'the whole of its conditions');
+
+      const laid = await quoteLayout(page);
+      // The shortest line is one row by construction ("10 Essentia"), so it is
+      // the ruler: wrapping must not fold a line the window has room for.
+      const row = Math.min(...laid.lines.map((line) => line.height));
+      const folded = laid.lines.filter((line) => line.height > row * 1.5);
+      assert(
+        folded.length === 0,
+        `${folded.length} lines wrapped in a ${laid.viewport}px window with room to spare: ` +
+          folded.map((line) => `"${line.text}" is ${line.height.toFixed(0)}px tall`).join('; '),
+      );
+    });
+
+    await check('every quote line stays inside the panel at 390 x 844 (#279)', async () => {
+      await page.setViewportSize({ width: 390, height: 844 });
+      await surfaceOf(page).locator('[data-bs-quote]').waitFor({ timeout: 15_000 });
+
+      const laid = await quoteLayout(page);
+      assert(
+        laid.lines.some((line) => line.text.includes(CONDITIONS)),
+        'the conditions sentence never reached the bar, so nothing long was measured',
+      );
+      assert(
+        laid.lines.some((line) => line.text.includes(LEDGER)),
+        'the unbroken reference never reached the bar, so nothing unbreakable was measured',
+      );
+      const ran = laid.lines.filter((line) => line.right > laid.edge + 0.5);
+      assert(
+        ran.length === 0,
+        `${ran.length} of ${laid.lines.length} quote lines run past the panel's content edge ` +
+          `(${laid.edge.toFixed(0)}px, in a ${laid.viewport}px viewport): ` +
+          ran.map((line) => `"${line.text}" ends at ${line.right.toFixed(0)}px`).join('; '),
+      );
+      assert(
+        laid.overflow <= 1,
+        `the bar itself is ${laid.overflow.toFixed(0)}px wider than it can show, ` +
+          'so part of the price is off the side of the screen',
+      );
+    });
+
+    await check('the confirmation is reachable on that screen, after the price', async () => {
+      const surface = surfaceOf(page);
+      await surface.locator('.number-input button', { hasText: 'Done' }).click();
+      const confirm = surface.locator('[data-bs-confirm]');
+      await confirm.waitFor({ timeout: 15_000 });
+      // A trial click is the browser's own answer to "could the player press
+      // this": visible, stable, enabled, and nothing covering the point.
+      await confirm.click({ trial: true, timeout: 10_000 });
+      const box = await confirm.boundingBox();
+      assert(box !== null, 'the confirmation has no box at all on a 390px screen');
+      assert(
+        box.x >= -0.5 && box.x + box.width <= 390.5,
+        `the confirmation spans ${box.x.toFixed(0)}px to ${(box.x + box.width).toFixed(0)}px ` +
+          'on a 390px screen',
+      );
+      assert(
+        box.y >= -0.5 && box.y + box.height <= 844.5,
+        `the confirmation sits at ${box.y.toFixed(0)}px on an 844px screen`,
       );
     });
 
