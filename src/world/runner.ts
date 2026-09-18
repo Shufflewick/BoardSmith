@@ -392,14 +392,10 @@ function declaredPerRoot(
   join: WorldMigrationJoin<unknown>,
   page: readonly string[],
   digest: unknown,
-  hostMax: number | undefined,
 ): Map<string, readonly string[]> {
   const declared = new Map<string, readonly string[]>();
   for (const name of page) {
-    declared.set(
-      name,
-      declaredSources(name, join.sources(name, digest), join.maxSources, hostMax),
-    );
+    declared.set(name, declaredSources(name, join.sources(name, digest), join.maxSources));
   }
   return declared;
 }
@@ -488,7 +484,8 @@ function joinUndeclared(name: string, root: string): WorldRefusal {
     `This world's migration read the original of "${name}" while transforming "${root}", and it ` +
       "declares no `join` block. `ctx.source` answers another root's STORED bytes, and a host " +
       "only sends those for a migration that declared which roots need them: add " +
-      "`join: { sources: (name, digest) => [...], maxSources: n }`. The world was not changed.",
+      "`join: { sources: (name, digest) => [...], maxSources: n, maxSourceBytes: b }`. The world " +
+      "was not changed.",
   );
 }
 
@@ -726,14 +723,6 @@ export interface WorldMigrateContext {
    * migration that declares no `join`.
    */
   readonly sources?: Readonly<Record<string, StoredPartition>>;
-  /**
-   * THE HOST'S OWN CEILING ON ONE ROOT'S JOIN WIDTH (#275).
-   *
-   * The author states one in `join.maxSources` and the host may state a lower
-   * one here; whichever is smaller is enforced, and the refusal says which of
-   * the two it was so nobody tunes the wrong number.
-   */
-  readonly maxSources?: number;
 }
 
 /**
@@ -747,8 +736,6 @@ export interface WorldMigrationSourcesContext {
   /** The finished fold, as the host persisted it, for a migration that
    *  declares `survey`. Absent for one that declares none. */
   readonly digest?: string;
-  /** The host's own ceiling on one root's join width, as `migrateAll` takes. */
-  readonly maxSources?: number;
 }
 
 /** Which pass of a bounded cross-root migration a call is (#449). */
@@ -791,11 +778,20 @@ export type WorldMigrationShape =
  * that cannot do both may not run the migration at all: ask
  * `migrationSources()` which originals each transform page needs, and serve
  * those originals AS THEY WERE WHEN THE MIGRATION BEGAN, however many roots it
- * has already rewritten. `maxSources` is the AUTHOR's stated ceiling on one
- * root's width, so a host can pick the lower of it and its own up front.
+ * has already rewritten.
+ *
+ * BOTH NUMBERS ARE THE AUTHOR'S, and only one of them is a host's business
+ * (ShufflewickPub #487). `maxSources` bounds the WIDTH, and a host needs no
+ * opinion on it -- it is already enforced here, with nothing loaded.
+ * `maxSourceBytes` is the stated COST: the most the originals one root names
+ * may weigh together, which is what a host admits the migration against before
+ * it writes a marker and holds it to while it pages. A host that derives a
+ * count ceiling of its own is pricing every original as a maximal root, and
+ * #487 is the join that fit and was refused for it.
  */
 export interface WorldMigrationJoins {
   readonly maxSources: number;
+  readonly maxSourceBytes: number;
 }
 
 export interface WorldSerialized extends WorldAllocation {
@@ -1175,7 +1171,12 @@ export function createWorldRunner(
       const joins =
         migrationHooks.join === undefined
           ? {}
-          : { joins: { maxSources: migrationHooks.join.maxSources } };
+          : {
+              joins: {
+                maxSources: migrationHooks.join.maxSources,
+                maxSourceBytes: migrationHooks.join.maxSourceBytes,
+              },
+            };
       if (migrationHooks.survey !== undefined) {
         return { kind: "survey", maxDigestBytes: migrationHooks.survey.maxBytes, ...joins };
       }
@@ -1202,7 +1203,7 @@ export function createWorldRunner(
       if (join === undefined) return [];
       if (migrationHooks.survey !== undefined && ctx.digest === undefined) throw digestMissing();
       const digest = ctx.digest === undefined ? undefined : (JSON.parse(ctx.digest) as unknown);
-      return sourceUnion(declaredPerRoot(join, [...page].sort(), digest, ctx.maxSources));
+      return sourceUnion(declaredPerRoot(join, [...page].sort(), digest));
     },
 
     async migrateAll(
@@ -1264,10 +1265,7 @@ export function createWorldRunner(
       // before the host loaded anything, checked against what it sent before
       // anything runs, and read through a second game that dies with this call.
       const join = migrationHooks.join;
-      const declared =
-        join === undefined
-          ? undefined
-          : declaredPerRoot(join, page, digest, ctx.maxSources);
+      const declared = join === undefined ? undefined : declaredPerRoot(join, page, digest);
       const supplied =
         declared === undefined ? {} : assertSourceBytes(ctx.sources, sourceUnion(declared));
       const derived = engine.migrateSources(supplied, (read) => {

@@ -503,7 +503,6 @@ const WORLD_DURABILITY_FIXTURE = {
     digest: '{"total":7}',
     maxDigestBytes: 65_536,
     sources: { "room:b": { parentId: 1_000_000, json: { id: 1_000_001, className: 'Room' } } },
-    maxSources: 4,
   },
 } satisfies {
   genesis: WorldGenesis;

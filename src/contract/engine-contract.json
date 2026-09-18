@@ -1,8 +1,8 @@
 {
-  "revision": 88,
+  "revision": 89,
   "bundleProtocol": 2,
   "surfaceHash": "3f83f0f42f3cf6b1",
-  "payloadHash": "f4ff9f1c56b72ceb",
+  "payloadHash": "c6eff75ba31c903a",
   "formatHash": "0058593e7cc80205",
   "history": [
     {
@@ -736,6 +736,15 @@
       "payloadHash": "f4ff9f1c56b72ceb",
       "formatHash": "0058593e7cc80205",
       "summary": "A world bundle can declare its referral verbs (ShufflewickPub #473): world.referral = { founding, onGrant } is typed by WorldDefinition and exported as WorldReferralDeclaration from boardsmith/world, and readWorldDefinition hands the block back exactly as the bundle wrote it -- the engine reads nothing from it and checks neither name, because whether a founding earns a reward and which verbs a host may issue is host policy, as it is for presence; the host is the one that refuses a non-seated founding or a non-seatless onGrant."
+    },
+    {
+      "revision": 89,
+      "date": "2026-09-18",
+      "bundleProtocol": 2,
+      "surfaceHash": "3f83f0f42f3cf6b1",
+      "payloadHash": "c6eff75ba31c903a",
+      "formatHash": "0058593e7cc80205",
+      "summary": "A joining migration's cost is declared in BYTES and the host's count ceiling is gone (ShufflewickPub #487). world.migration.join gains a required maxSourceBytes: the most the originals ONE root names may weigh together. migrationShape().joins carries it beside maxSources, so a host admits or refuses a joining version against the figure that actually binds one call, before any marker exists, and holds the migration to it while it pages. The host-stated COUNT ceiling is removed: WorldMigrateContext.maxSources and WorldMigrationSourcesContext.maxSources are gone, migrationSources(page, { digest }) takes no ceiling, and declaredSources enforces the author's join.maxSources alone. #476's host derived its count by dividing the page budget by the largest a root may be, which prices every original as a maximal root -- ShufflewickPub #487 measured a thirty-six-source join at 625,119 bytes refused against a ceiling of three on a page carrying 1,835,008. A root's stored size is a fact only a host has, so the host measures the bytes and the library declares them; no second measurement is made here. No stored byte and no player-view payload changes; payloadHash moves because WorldMigrateContext lost a field."
     }
   ]
 }

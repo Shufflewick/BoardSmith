@@ -311,10 +311,37 @@ export interface WorldMigrationJoin<TDigest> {
    * transformed AND every original it names, so this number times a root's size
    * is what a host has to fit in one call.
    *
-   * The HOST enforces its own ceiling as well, and a refusal says which of the
-   * two it was.
+   * A COUNT, AND THE ONLY ONE (ShufflewickPub #487). A host states no count
+   * ceiling of its own: what binds a host is the BYTES one call carries, and
+   * `maxSourceBytes` below is the number it admits a version against. This one
+   * is checkable with nothing loaded, which is why it is here as well -- a
+   * `sources` answer that grows with the world is refused before a host has
+   * read a single row.
    */
   readonly maxSources: number;
+  /**
+   * THE MOST BYTES THE ORIGINALS ONE ROOT NAMES MAY WEIGH (ShufflewickPub
+   * #487).
+   *
+   * Required, and it is the number a host actually admits a joining migration
+   * against: a page carries the root being transformed AND every original it
+   * names inside one call, so what decides whether that call can ever be made
+   * is those originals' SIZE, not how many of them there are. #476's host
+   * derived a count ceiling instead, by pricing every original as a maximal
+   * root -- and refused a thirty-six-source join measuring 625,119 bytes
+   * against a 1,835,008-byte page, for a width that was never what bound it.
+   *
+   * Stated as an aggregate rather than per source, because that is the figure
+   * one call is measured against. A host compares it to what it can carry
+   * beside one root and refuses the version outright if it cannot, before a
+   * marker exists; then, while paging, it holds the migration to it and stops
+   * before writing anything if the real bytes are past what was declared.
+   *
+   * THE LIBRARY DOES NOT CHECK IT. A root's stored size is the host's fact, and
+   * a second measurement here would be a second answer waiting to disagree with
+   * the one that decides.
+   */
+  readonly maxSourceBytes: number;
 }
 
 /**
@@ -673,10 +700,10 @@ function assertJoin(join: unknown): void {
     throw worldRefusal(
       "bundle-not-a-world",
       "This bundle's `world.migration.join` is not a join block. It is " +
-        "`{ sources, maxSources }`: `sources(name, digest)` answers which ORIGINAL roots that " +
-        "root's transform reads, and `maxSources` is your own ceiling on how many one root may " +
-        "name. Leave it out for a migration whose roots do not read one another's stored " +
-        "records.",
+        "`{ sources, maxSources, maxSourceBytes }`: `sources(name, digest)` answers which " +
+        "ORIGINAL roots that root's transform reads, `maxSources` is your own ceiling on how " +
+        "many one root may name, and `maxSourceBytes` is how much they may weigh together. " +
+        "Leave it out for a migration whose roots do not read one another's stored records.",
     );
   }
   const block = join as Partial<WorldMigrationJoin<unknown>>;
@@ -696,8 +723,20 @@ function assertJoin(join: unknown): void {
         `${JSON.stringify(block.maxSources)}, which is not a ceiling. It is a whole number, 1 or ` +
         "more: the most originals any one root may name. It is required because a join whose " +
         "width grows with the world is the unbounded read this design refuses -- a host must fit " +
-        "the root being transformed AND every original it names into one call. The host enforces " +
-        "its own ceiling as well, and a refusal says which of the two was hit.",
+        "the root being transformed AND every original it names into one call.",
+    );
+  }
+  if (!Number.isInteger(block.maxSourceBytes) || (block.maxSourceBytes as number) < 1) {
+    throw worldRefusal(
+      "bundle-not-a-world",
+      `This bundle's \`world.migration.join.maxSourceBytes\` is ` +
+        `${JSON.stringify(block.maxSourceBytes)}, which is not a ceiling. It is a whole number ` +
+        "of bytes, 1 or more: the most the originals ONE root names may weigh together. It is " +
+        "required because it is the figure a host admits this migration against -- a page " +
+        "carries the root being transformed and every original it named inside one call, and " +
+        "what decides whether that call can be made is their size. A host refuses a version " +
+        "whose stated cost is past what one of its calls carries, before anything is written, " +
+        "and holds the migration to this number while it pages.",
     );
   }
 }
@@ -717,7 +756,6 @@ export function declaredSources(
   root: string,
   answered: unknown,
   authorMax: number,
-  hostMax: number | undefined,
 ): readonly string[] {
   if (!Array.isArray(answered)) {
     throw worldRefusal(
@@ -748,22 +786,18 @@ export function declaredSources(
     }
   }
   const unique = [...new Set(answered as readonly string[])].sort();
-  const hostIsLower = hostMax !== undefined && hostMax < authorMax;
-  const bound = hostIsLower ? (hostMax as number) : authorMax;
-  if (unique.length > bound) {
+  if (unique.length > authorMax) {
     throw worldRefusal(
       "world-migration-unavailable",
       `This world's migration named ${unique.length} original sources for the root "${root}", ` +
-        `past the ceiling of ${bound} ${
-          hostIsLower
-            ? "THIS HOST puts on one root's join. It is lower than this migration's own " +
-              `\`join.maxSources\` of ${authorMax}, so raising that would change nothing`
-            : "this migration declares in `join.maxSources`"
-        }. A page must carry the root being transformed AND every original it names, inside one ` +
-        "call: a join whose width grows with the world is the unbounded read this design " +
-        "refuses. Join against fewer roots per root -- a directory in `survey` can say WHICH few " +
-        "-- rather than against all of them. Running the migration again will not help. The " +
-        "world was not changed.",
+        `past the ceiling of ${authorMax} this migration declares in \`join.maxSources\`. A page ` +
+        "must carry the root being transformed AND every original it names, inside one call: a " +
+        "join whose width grows with the world is the unbounded read this design refuses. Join " +
+        "against fewer roots per root -- a directory in `survey` can say WHICH few -- rather " +
+        "than against all of them. Raising `join.maxSources` is the fix only if the originals " +
+        "still weigh less than the `join.maxSourceBytes` this migration declares, which is what " +
+        "a host admits it against. Running the migration again will not help. The world was not " +
+        "changed.",
     );
   }
   return unique;

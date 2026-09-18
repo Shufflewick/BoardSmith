@@ -2166,6 +2166,7 @@ migration: worldMigration({
     // From the root's NAME and the completed digest, and nothing else.
     sources: (name, digest) => (isOperative(name) ? digest.carriersOf[name] ?? [] : []),
     maxSources: 4,
+    maxSourceBytes: 600_000,
   },
   partition: (element, { name, source }) => {
     if (!isOperative(name)) return;
@@ -2191,11 +2192,28 @@ the page against, so reading past it would be reading bytes that are not there.
 A root may not name ITSELF; the element the hook is handed already is its own
 original.
 
-`maxSources` is required for `survey.maxBytes`'s reason: one page must carry the
-root being transformed AND every original it names, so a join whose width grows
-with the world stops fitting on the world it was written for. The host states
-its own ceiling too, and a refusal names the size, the bound and whose bound it
-was.
+`maxSources` and `maxSourceBytes` are both required, for `survey.maxBytes`'s
+reason: one page must carry the root being transformed AND every original it
+names, so a join whose width grows with the world stops fitting on the world it
+was written for.
+
+They are two different bounds and only one of them is a host's business
+(ShufflewickPub #487). `maxSources` bounds the WIDTH and is enforced here, with
+nothing loaded, so a `sources` answer that has grown past it is refused before a
+host reads a row. `maxSourceBytes` is the stated COST -- the most the originals
+one root names may weigh TOGETHER -- and it is the number a host admits the
+migration against: it compares that figure against what one of its calls can
+carry beside a single root, refuses the version outright before any marker
+exists if it cannot, and holds the migration to the figure while it pages.
+
+**A host states no count ceiling of its own, and the library takes none.** It
+used to: #476's host derived one by dividing its page budget by the largest a
+root may be, which prices every original as a maximal root. ShufflewickPub #487
+is the bill -- a thirty-six-source join measuring 625,119 bytes, refused against
+a ceiling of three on a page that carries 1,835,008. Bytes are what bind a call,
+and a root's stored size is a fact only the host has, so the host measures it
+and the library declares it. A second measurement here would be a second answer
+waiting to disagree with the one that decides.
 
 `join` and `finalize` are **mutually exclusive**, refused where they are
 declared: `finalize` is already handed every root in one call, so a join beside
@@ -2204,14 +2222,14 @@ make. `join` rides either pageable shape, with or without a `survey`.
 
 #### What a host owes a migration that joins
 
-`runner.migrationShape()` carries `joins: { maxSources }` on `independent` and
-`survey` alike, and it is not advisory: **a host that cannot meet the three
+`runner.migrationShape()` carries `joins: { maxSources, maxSourceBytes }` on
+`independent` and `survey` alike, and it is not advisory: **a host that cannot meet the three
 promises below may not run the migration**, and the engine refuses a transform
 page that does not carry what it declared rather than transforming against
 whatever arrived.
 
 1. **Ask, then load.** Before each transform page, call
-   `runner.migrationSources(pageNames, { digest, maxSources })`. It runs the
+   `runner.migrationSources(pageNames, { digest })`. It runs the
    bundle's `join.sources` and nothing else -- it adopts nothing, writes nothing
    and is repeatable -- and answers the exact union of original roots that page
    must carry. Send those rows back as `ctx.sources`. Both directions are
@@ -2229,6 +2247,12 @@ whatever arrived.
    and the world's current generation is one value that moves at the end.
 
 3. **Atomicity, rollback and replay.**
+   - *Bounded:* a page carries the roots it transforms and the originals they
+     named, and the host measures BOTH halves against what one call holds.
+     Narrow the page when the two together are past it; when a single root and
+     its originals still will not fit, or when those originals weigh more than
+     the migration's own `maxSourceBytes`, stop before writing anything and say
+     which half was large.
    - *Atomic:* the world is on the old rules until every page has landed, and
      then it is on the new ones. No player may be served a world that is half
      joined -- with a generation pointer that is one storage write, which is the

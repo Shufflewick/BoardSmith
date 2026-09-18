@@ -124,6 +124,7 @@ const REBUILDING = worldMigration<undefined>({
   join: {
     sources: (name) => (name.startsWith("dest:") ? [sourceName(Number(name.slice(5)))] : []),
     maxSources: 1,
+    maxSourceBytes: 200_000,
   },
   partition: (element, ctx) => {
     if (!ctx.name.startsWith("dest:")) return;
@@ -219,13 +220,13 @@ describe("#275 — the join that does not fit in a digest", () => {
     let widest = 0;
     for (const owner of OWNERS) {
       const page = [destName(owner)];
-      const needed = runner.migrationSources(page, { maxSources: 4 });
+      const needed = runner.migrationSources(page, {});
       expect(needed).toEqual([sourceName(owner)]);
 
       const sources = Object.fromEntries(needed.map((name) => [name, world.rows[name]!]));
       const answer = await runner.migrateAll(
         { [destName(owner)]: world.rows[destName(owner)]! },
-        { from: 1, to: 2, allNames: ALL_NAMES, runCreate: false, sources, maxSources: 4 },
+        { from: 1, to: 2, allNames: ALL_NAMES, runCreate: false, sources },
       );
       Object.assign(written, answer.partitions);
       widest = Math.max(
@@ -257,6 +258,7 @@ describe("#275 — the join that does not fit in a digest", () => {
         sources: (name) =>
           name.startsWith("dest:") ? [sourceName((Number(name.slice(5)) + 1) % 8)] : [],
         maxSources: 1,
+        maxSourceBytes: 200_000,
       },
       partition: (element, ctx) => {
         const owner = Number(ctx.name.slice(ctx.name.indexOf(":") + 1));
@@ -325,7 +327,11 @@ describe("#275 — the join that does not fit in a digest", () => {
     const world = await stored();
     const throwing = worldMigration<undefined>({
       from: 1,
-      join: { sources: (name) => (name === destName(1) ? [sourceName(1)] : []), maxSources: 1 },
+      join: {
+        sources: (name) => (name === destName(1) ? [sourceName(1)] : []),
+        maxSources: 1,
+        maxSourceBytes: 200_000,
+      },
       partition: (element, ctx) => {
         if (ctx.name !== destName(1)) return;
         (element as Owner).rebuilt = [...(ctx.source(sourceName(1)) as Owner).records];
@@ -359,7 +365,7 @@ describe("#275 — what a join may not be", () => {
     const world = await stored();
     const peeking = worldMigration<undefined>({
       from: 1,
-      join: { sources: () => [], maxSources: 1 },
+      join: { sources: () => [], maxSources: 1, maxSourceBytes: 200_000 },
       partition: (_element, ctx) => {
         ctx.source(sourceName(2));
       },
@@ -388,7 +394,7 @@ describe("#275 — what a join may not be", () => {
     const world = await stored();
     const selfish = worldMigration<undefined>({
       from: 1,
-      join: { sources: (name) => [name], maxSources: 1 },
+      join: { sources: (name) => [name], maxSources: 1, maxSourceBytes: 200_000 },
       partition: () => {},
     });
 
@@ -397,11 +403,11 @@ describe("#275 — what a join may not be", () => {
     );
   });
 
-  it("refuses a join wider than the author's own ceiling, and than the host's lower one", async () => {
+  it("refuses a join wider than the author's own ceiling, which is the only count ceiling", async () => {
     const world = await stored();
     const wide = worldMigration<undefined>({
       from: 1,
-      join: { sources: () => OWNERS.map(sourceName), maxSources: 4 },
+      join: { sources: () => OWNERS.map(sourceName), maxSources: 4, maxSourceBytes: 600_000 },
       partition: () => {},
     });
     const page = { [destName(0)]: world.rows[destName(0)]! };
@@ -415,22 +421,6 @@ describe("#275 — what a join may not be", () => {
         sources: {},
       }),
     ).rejects.toThrow(/past the ceiling of 4 this migration declares in `join.maxSources`/);
-
-    const narrow = worldMigration<undefined>({
-      from: 1,
-      join: { sources: () => [sourceName(1), sourceName(2)], maxSources: 8 },
-      partition: () => {},
-    });
-    await expect(
-      runnerFor(narrow, world.nextElementId).migrateAll(page, {
-        from: 1,
-        to: 2,
-        allNames: ALL_NAMES,
-        runCreate: false,
-        sources: {},
-        maxSources: 1,
-      }),
-    ).rejects.toThrow(/past the ceiling of 1 THIS HOST puts/);
   });
 
   it("refuses a transform page whose originals are not the ones it declared", async () => {
@@ -471,7 +461,7 @@ describe("#275 — what a join may not be", () => {
     const surveyed = worldMigration<number>({
       from: 1,
       survey: { initial: () => 0, root: (digest) => digest + 1, maxBytes: 64 },
-      join: { sources: () => [], maxSources: 1 },
+      join: { sources: () => [], maxSources: 1, maxSourceBytes: 200_000 },
       partition: () => {},
     });
 
@@ -484,7 +474,7 @@ describe("#275 — what a join may not be", () => {
     expect(() =>
       createWorld(
         options(
-          bundle({ from: 1, join: { sources: () => [], maxSources: 1 }, finalize: () => {} }, 2),
+          bundle({ from: 1, join: { sources: () => [], maxSources: 1, maxSourceBytes: 200_000 }, finalize: () => {} }, 2),
           1,
         ),
       ),
@@ -498,13 +488,27 @@ describe("#275 — what a join may not be", () => {
     expect(() =>
       createWorld(options(bundle({ from: 1, join: { maxSources: 2 } }, 2), 1)),
     ).toThrow(/`world.migration.join.sources` is not a function/);
+    // #487: AND THE BYTES, which is the half a host can actually admit against.
+    expect(() =>
+      createWorld(
+        options(bundle({ from: 1, join: { sources: () => [], maxSources: 2 } }, 2), 1),
+      ),
+    ).toThrow(/`world.migration.join.maxSourceBytes` is undefined, which is not a ceiling/);
+    expect(() =>
+      createWorld(
+        options(
+          bundle({ from: 1, join: { sources: () => [], maxSources: 2, maxSourceBytes: 0 } }, 2),
+          1,
+        ),
+      ),
+    ).toThrow(/`world.migration.join.maxSourceBytes` is 0, which is not a ceiling/);
   });
 
   it("tells a host that this migration joins, and how wide", async () => {
     const world = await stored();
     expect(runnerFor(REBUILDING, world.nextElementId).migrationShape()).toEqual({
       kind: "independent",
-      joins: { maxSources: 1 },
+      joins: { maxSources: 1, maxSourceBytes: 200_000 },
     });
     // A migration with no join says nothing new, so a host written before this
     // reads exactly the shape it always did.
@@ -527,7 +531,7 @@ describe("#275 — what a join may not be", () => {
     const world = await stored();
     const writing = worldMigration<undefined>({
       from: 1,
-      join: { sources: () => [sourceName(0)], maxSources: 1 },
+      join: { sources: () => [sourceName(0)], maxSources: 1, maxSourceBytes: 200_000 },
       partition: (_element, ctx) => {
         (ctx.source(sourceName(0)) as Owner).records = ["stolen"];
       },
@@ -545,5 +549,74 @@ describe("#275 — what a join may not be", () => {
         },
       ),
     ).rejects.toThrow(/read-only/);
+  });
+});
+
+/**
+ * #487 (ShufflewickPub): A JOIN IS BOUNDED BY BYTES, AND THE COUNT IS THE
+ * AUTHOR'S OWN.
+ *
+ * ShufflewickPub #476 gave this contract a SECOND count ceiling, stated by the
+ * host and enforced here as the lower of the two. The host derived it the only
+ * way a count can be derived -- the page budget divided by the largest a root
+ * may be -- which is to say it priced every original as a maximal root. On the
+ * reporter's fixture that made three the ceiling for a join of thirty-six
+ * originals whose actual bytes were 625,119 against a 1,835,008-byte page: a
+ * join that fits, refused for a width that was never the thing that bound it.
+ *
+ * So the host's ceiling is BYTES now, and bytes are a thing no runner can
+ * measure: the stored size of a root it has not been sent is the host's fact,
+ * and a second opinion computed here would be a second answer waiting to
+ * disagree with the one that decides. The library's half is therefore the
+ * DECLARATION -- `join.maxSourceBytes`, required at the door and reported by
+ * `migrationShape()` so a host can admit or refuse a version before it writes
+ * a marker -- and the author's own `maxSources`, which is checkable with
+ * nothing loaded and is what still refuses a join whose width grows with the
+ * world.
+ */
+describe("#487 — a join's width is the author's, and its cost is the host's", () => {
+  it("runs a page that joins against EVERY other root, at the author's own ceiling", async () => {
+    const world = await stored();
+    // ONE DESTINATION REBUILT FROM ALL EIGHT SOURCES. Under #476's host count
+    // ceiling this shape was unreachable on the platform whatever it weighed.
+    const everything = worldMigration<undefined>({
+      from: 1,
+      join: {
+        sources: (name) => (name === destName(0) ? OWNERS.map(sourceName) : []),
+        maxSources: OWNERS.length,
+        maxSourceBytes: 600_000,
+      },
+      partition: (element, ctx) => {
+        if (ctx.name !== destName(0)) return;
+        (element as Owner).rebuilt = OWNERS.flatMap(
+          (owner) => (ctx.source(sourceName(owner)) as Owner).records,
+        );
+      },
+    });
+    const runner = runnerFor(everything, world.nextElementId);
+
+    const needed = runner.migrationSources([destName(0)], {});
+    expect(needed).toEqual(OWNERS.map(sourceName));
+
+    const sources = Object.fromEntries(needed.map((name) => [name, world.rows[name]!]));
+    const answer = await runner.migrateAll(
+      { [destName(0)]: world.rows[destName(0)]! },
+      { from: 1, to: 2, allNames: ALL_NAMES, runCreate: false, sources },
+    );
+
+    // EXACTLY every source's records, in order, from the originals.
+    expect(rebuiltIn(answer.partitions, 0)).toEqual(OWNERS.flatMap(recordsFor));
+    // AND THE CALL IS STILL BOUNDED -- by the number the author declared, which
+    // is the one a host admits against.
+    expect(bytes(JSON.stringify(sources))).toBeLessThan(600_000);
+  });
+
+  it("tells a host what one root's originals may WEIGH, not just how many there are", async () => {
+    const world = await stored();
+    const shape = runnerFor(REBUILDING, world.nextElementId).migrationShape();
+    expect(shape).toEqual({
+      kind: "independent",
+      joins: { maxSources: 1, maxSourceBytes: 200_000 },
+    });
   });
 });
