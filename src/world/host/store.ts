@@ -357,6 +357,27 @@ export interface WorldCheckpointExtras {
    * presence hook, a migration.
    */
   readonly activity?: { readonly seat: number; readonly at: number };
+  /**
+   * THE CHAIR THIS CHECKPOINT HANDS ON (#278, ShufflewickPub #475).
+   *
+   * The engine answers `result.vacated` when the world's own clock verb
+   * finalized a vacancy, and this is the write that makes it true. In the same
+   * transaction as the effects for the reason the receipt is, and one more: the
+   * release is downstream of the ground coming back, so a checkpoint that
+   * refuses must leave the chair HELD and the estate standing. A seat freed
+   * beside its teardown rather than with it is the one pairing that hands a
+   * newcomer somebody else's castle.
+   *
+   * BOTH HALVES ARE THE ENGINE'S ANSWER: the seat a declared point read
+   * vouched for, and the roster key resolved from the engine's own roster. A
+   * store writes exactly that identity and resolves nothing of its own.
+   *
+   * The seat's activity watermark goes with the holder. It measures how long
+   * the person in the chair has been away, and a chair that kept the last
+   * holder's mark would report its NEXT occupant as idle since before they
+   * arrived -- an inactivity sweep reaping somebody on their first day.
+   */
+  readonly vacate?: { readonly seat: number; readonly player: string };
 }
 
 /** One partition, ready to be written: checked, and with its bytes already a

@@ -143,6 +143,7 @@ export class LocalWorldHost {
       onEvents: (events) => this.#narrate(events),
       onNotice: (message) => this.#broadcastNotice(message),
       onChanged: () => this.#pushViews(),
+      onVacated: (vacancy) => this.#released(vacancy),
     });
   }
 
@@ -310,6 +311,42 @@ export class LocalWorldHost {
     const command = this.#world.presenceHooks?.onArrive;
     if (command === undefined) return;
     await this.#clockCommand(command, { seat, present: true });
+  }
+
+  /**
+   * THE WORLD'S CLOCK TOOK A CHAIR, AND THE PAGE IN IT IS TOLD (#278).
+   *
+   * A dev client watching through that seat is looking at holdings the world
+   * has just given back, and its next action would be answered `unknown-player`
+   * by a roster that no longer seats it. So the attachment goes -- the chair is
+   * genuinely not theirs any more -- and the sentence says which chair and why,
+   * because the reader is the AUTHOR watching their own teardown run.
+   *
+   * IT DOES NOT RE-SEAT ANYBODY. Attaching seats the player, so a host that
+   * helpfully put the page back in the chair would undo the release it is
+   * announcing. Pressing the seat selector again is the author's own choice.
+   *
+   * The departure timer goes with it: `onDepart` is a presence hook about the
+   * holder of a chair, and this chair has none.
+   */
+  #released(vacancy: { readonly seat: number; readonly player: string }): void {
+    const departing = this.#departing.get(vacancy.seat);
+    if (departing !== undefined) {
+      clearTimeout(departing);
+      this.#departing.delete(vacancy.seat);
+    }
+    for (const [clientId, seat] of [...this.#attached]) {
+      if (seat !== vacancy.seat) continue;
+      this.#attached.delete(clientId);
+      this.#send(clientId, {
+        type: 'world_notice',
+        message:
+          `This world's clock finalized the vacancy of seat ${vacancy.seat}, so this page no ` +
+          'longer holds it. The estate behind it was given back first -- that is what the ' +
+          '`world.vacateByClock` verb proved before it released the chair. Pick a seat again ' +
+          'to join as a newcomer.',
+      });
+    }
   }
 
   #armDeparture(seat: number): void {

@@ -125,6 +125,19 @@ export function createMemoryWorldStore(budgets: WorldBudgets = worldBudgets()): 
     if (extras.activity !== undefined) {
       activity.set(extras.activity.seat, extras.activity.at);
     }
+    releaseChair(extras.vacate);
+  }
+
+  /** A chair the world's clock handed on (#278), matched on both keys and
+   *  taking the holder's watermark with it -- the rule is `WorldStore`'s
+   *  `vacate`, and the SQLite store keeps the same one in SQL. */
+  function releaseChair(
+    vacancy: { readonly seat: number; readonly player: string } | undefined,
+  ): void {
+    if (vacancy === undefined) return;
+    if (roster.get(vacancy.player)?.seat !== vacancy.seat) return;
+    roster.delete(vacancy.player);
+    activity.delete(vacancy.seat);
   }
 
   return {

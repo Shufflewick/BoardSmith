@@ -245,6 +245,16 @@ export function openWorldStore(path: string, budgets: WorldBudgets): LocalWorldS
       'INSERT INTO seats (player, seat, seated_at) VALUES (?, ?, ?) ' +
         'ON CONFLICT(player) DO UPDATE SET seat = excluded.seat',
     ),
+    // THE CHAIR THE WORLD'S CLOCK HANDED ON (#278). BOTH KEYS, because the
+    // engine resolved both and they must still agree at the instant of the
+    // write: a row whose player moved chairs between the dispatch and the
+    // checkpoint is not the row this release was about, and deleting it by seat
+    // alone would retire whoever is sitting there now.
+    deleteSeat: db.prepare('DELETE FROM seats WHERE player = ? AND seat = ?'),
+    // AND THE WATERMARK GOES WITH THE HOLDER, because it measures how long the
+    // person in the chair has been away. Left behind, it would report the next
+    // occupant as idle since before they arrived.
+    deleteSeatActivity: db.prepare('DELETE FROM seat_activity WHERE seat = ?'),
     readMeta: db.prepare('SELECT value FROM meta WHERE key = ?'),
     writeMeta: db.prepare(
       'INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
@@ -589,6 +599,25 @@ export function openWorldStore(path: string, budgets: WorldBudgets): LocalWorldS
     if (extras.activity !== undefined) {
       stmt.writeActivity.run(extras.activity.seat, extras.activity.at);
     }
+    // LAST, so a dispatch that both stamped a seat and freed it leaves the
+    // chair empty rather than empty-with-a-watermark. Nothing reaches both
+    // today -- the clock's road stamps no activity -- and an order between two
+    // writes that could contradict each other is not a detail to leave to
+    // whichever runs first.
+    //
+    // THE CHAIR THE WORLD'S CLOCK HANDED ON (#278) is written inside the same
+    // transaction as the partitions, because the release is downstream of the
+    // ground coming back: a checkpoint that refuses must leave the chair held
+    // and the estate standing, which is the one pairing that would otherwise
+    // hand a newcomer somebody else's castle.
+    if (extras.vacate === undefined) return;
+    const released = stmt.deleteSeat.run(extras.vacate.player, extras.vacate.seat) as {
+      changes: number | bigint;
+    };
+    // THE WATERMARK FOLLOWS THE ROW AND NEVER LEADS IT. A release that matched
+    // no row freed nobody, and clearing the chair's mark anyway would reset the
+    // idleness of whoever is still sitting in it.
+    if (Number(released.changes) > 0) stmt.deleteSeatActivity.run(extras.vacate.seat);
   }
 
   /** The partition rows of a write, and the dirty marks they satisfy. Shared by

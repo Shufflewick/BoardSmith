@@ -319,7 +319,7 @@
     "src/cli/dev-host/world-host.test.ts:2320-2325|src/cli/dev-host/world-host.test.ts:2330-2335",
     "src/cli/dev-host/world-store.test.ts:651-656|src/cli/dev-host/world-store.test.ts:677-682",
     "src/cli/dev-host/world-store.test.ts:755-760|src/cli/dev-host/world-store.test.ts:837-845",
-    "src/cli/dev-host/world-store.ts:501-506|src/cli/dev-host/world-store.ts:517-522",
+    "src/cli/dev-host/world-store.ts:511-516|src/cli/dev-host/world-store.ts:527-532",
     "src/cli/lib/asset-scan.ts:35-48|src/cli/lib/sandbox-scan.ts:137-148",
     "src/cli/lib/ingest-hook.test.ts:79-83|src/cli/lib/ingest-hook.test.ts:90-94",
     "src/cli/lib/select-checks.test.ts:13-17|src/cli/lib/select-checks.test.ts:38-42",
