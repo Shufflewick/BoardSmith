@@ -9,5 +9,10 @@
     "deadCodeBaseline": ".fallow-dead-code-baseline.json",
     "healthBaseline": ".fallow-health-baseline.json",
     "dupesBaseline": ".fallow-dupes-baseline.json"
+  },
+  "health": {
+    "maxCyclomatic": 9,
+    "maxCognitive": 15,
+    "maxCrap": 1000000000
   }
 }
