@@ -284,6 +284,31 @@ export interface WorldDefinition {
    * `ctx.world.vacate()` is refused by name everywhere in it.
    */
   readonly vacateByClock?: string;
+  /**
+   * WHICH VERBS A REFERRAL IS ATTRIBUTED THROUGH (ShufflewickPub #473).
+   *
+   * `founding` is the verb a player FOUNDS with -- the first thing an invited
+   * newcomer does that makes them a real inhabitant rather than a name on a
+   * chair. Its commit is what a host reports as the founding moment. `onGrant`
+   * is the verb a reward is delivered AS, so a granted reward arrives as one of
+   * this world's own moves and not as a host reaching into its state.
+   *
+   * NOT VALIDATED HERE, and that is `presence`'s rule rather than `vacate`'s.
+   * Whether a founding is worth a reward at all, what the reward is, and which
+   * verbs a host is willing to issue on its own behalf are that HOST's policy:
+   * a platform paying out credits answers it differently from a laptop with one
+   * browser tab, and no library can hold both answers. The library types the
+   * SHAPE, which is the part a host cannot recover once a bundle is compiled.
+   *
+   * The host is the one that checks it. ShufflewickPub does this in
+   * `games/src/world-referral-policy.ts`, refusing a non-seated `founding` or a
+   * non-seatless `onGrant` at the world's first wake with a sentence the author
+   * can read.
+   *
+   * NOTHING IN THIS ENGINE READS THE BLOCK. It is carried, and interpreted
+   * elsewhere.
+   */
+  readonly referral?: WorldReferralDeclaration;
 }
 
 /** Each hook names a SEATLESS action from the world's own list. */
@@ -293,6 +318,14 @@ export interface WorldPresenceDeclaration {
   readonly departGraceMs?: number;
 }
 
+/** The two verbs a referral is attributed through (ShufflewickPub #473). */
+export interface WorldReferralDeclaration {
+  /** A SEATED action's name -- the verb a player founds with. Its COMMIT is what the host reports. */
+  readonly founding: string;
+  /** A SEATLESS (worldClockAction) action's name -- the verb a referral reward is delivered as. */
+  readonly onGrant: string;
+}
+
 /**
  * The world half of a bundle's definition, or a refusal naming what is missing.
  *
@@ -300,6 +333,10 @@ export interface WorldPresenceDeclaration {
  * own grace bounds and its own answer to what a departure is, so the host
  * checks it; what cannot be left to the host is the SHAPE, which is why the
  * field is typed here.
+ *
+ * `referral` is returned the same way and for the same reason: whether a
+ * founding is worth a reward, and which verbs a host may issue, is that host's
+ * policy and not the engine's -- see the field.
  *
  * `vacate` IS validated here, because what makes it usable is answerable from
  * the declaration alone and is the same for every host -- see the field.

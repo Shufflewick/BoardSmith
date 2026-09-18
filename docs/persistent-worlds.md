@@ -141,9 +141,9 @@ export const gameDefinition: GameDefinition = {
 
 `GameDefinition.world` is typed by `WorldDefinition` from `boardsmith/world`, so
 you get the shape checked without importing anything extra. `maxPlayers`,
-`actions` and `view` are required; `stateVersion`, `genesis`, `presence`, `vacate` and
-`vacateByClock` are optional — the last two are how a chair comes back, see
-[giving a chair back](#giving-a-chair-back).
+`actions` and `view` are required; `stateVersion`, `genesis`, `presence`,
+`referral`, `vacate` and `vacateByClock` are optional — the last two are how a
+chair comes back, see [giving a chair back](#giving-a-chair-back).
 
 **No `minPlayers`/`maxPlayers` on the definition.** Those are a *table's*
 roster, and a world has none: it does not start, so there is no minimum to
@@ -1338,6 +1338,40 @@ lifecycle policy: how long a departure's grace really is, whether a dropped
 socket counts as a departure at all, whether presence is observable in the first
 place. A laptop with one browser tab answers that differently from a platform
 holding 500 sockets, and should.
+
+## Referral: the verbs an invitation is attributed through
+
+```ts
+referral?: {
+  founding: string;
+  onGrant: string;
+};
+```
+
+`founding` is the verb an invited newcomer **founds** with — the first move that
+makes them a real inhabitant of your world rather than a name on a chair. It is
+a **seated** action, because founding is something a player does. Its commit is
+the moment a host reports as "this invitation became a player".
+
+`onGrant` is the verb a referral reward is **delivered as**. It is a **seatless**
+action, one built with `worldClockAction()`, so a reward arrives as one of your
+world's own moves rather than as a host reaching into your state. Whatever a
+grant means in your rules — a stipend, a settled parcel, a favour owed — you
+write it, and the host only says when.
+
+The library types the declaration and hands it back exactly as you wrote it.
+**Nothing in the engine reads it, and nothing in the engine checks the two
+names.** That is `presence`'s rule rather than `vacate`'s, for `presence`'s
+reason: whether a founding is worth a reward at all, what the reward is, and
+which verbs a host is willing to issue on its own behalf are that **host's**
+policy. A platform paying out credits answers that differently from a laptop
+with one browser tab, and should.
+
+So the host is the one that checks it, and the host is the one that decides what
+it means. ShufflewickPub reads the block at a world's first wake and refuses a
+`founding` that is not seated or an `onGrant` that is not seatless, with a
+sentence you can read. A world that declares no `referral` is simply a world no
+invitation is attributed through.
 
 ## Activity: how long this seat has been gone
 
