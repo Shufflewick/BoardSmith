@@ -1,8 +1,8 @@
 {
-  "revision": 87,
+  "revision": 88,
   "bundleProtocol": 2,
   "surfaceHash": "3f83f0f42f3cf6b1",
-  "payloadHash": "adb9e8ed9a9dbcdd",
+  "payloadHash": "f4ff9f1c56b72ceb",
   "formatHash": "0058593e7cc80205",
   "history": [
     {
@@ -727,6 +727,15 @@
       "payloadHash": "adb9e8ed9a9dbcdd",
       "formatHash": "0058593e7cc80205",
       "summary": "The world clock can finalize a vacancy for a chair the host itself vouched for (ShufflewickPub #475): world.vacateByClock names one seatless verb -- checked at createWorld to exist, to be built with worldClockAction() and to declare a chair with .about() -- and only that verb may call the new ctx.world.vacate(seat) on WorldClockFacilities, which admits exactly the chairs activityOf admits (one the declaration asked about and the host answered a point read for), resolves the roster key from the engine's own roster rather than letting a bundle name a player, and reports it to the host as WorldCommandResult.vacated = { seat, player } on the same result the dirty set rides, so the chair is released on the checkpoint that proves the ground came back; a host stamp of tenancy 'empty' makes the call a no-op so a completion retried after a cold wake releases exactly once, a second different chair in one dispatch is refused with vacancy-already-claimed, any other verb with not-the-vacancy-verb, and a chair this world seats nobody in with vacancy-unheld; createWorld now also reports vacateByClock beside vacate, and the seated world.vacate road is unchanged."
+    },
+    {
+      "revision": 88,
+      "date": "2026-09-18",
+      "bundleProtocol": 2,
+      "surfaceHash": "3f83f0f42f3cf6b1",
+      "payloadHash": "f4ff9f1c56b72ceb",
+      "formatHash": "0058593e7cc80205",
+      "summary": "A world bundle can declare its referral verbs (ShufflewickPub #473): world.referral = { founding, onGrant } is typed by WorldDefinition and exported as WorldReferralDeclaration from boardsmith/world, and readWorldDefinition hands the block back exactly as the bundle wrote it -- the engine reads nothing from it and checks neither name, because whether a founding earns a reward and which verbs a host may issue is host policy, as it is for presence; the host is the one that refuses a non-seated founding or a non-seatless onGrant."
     }
   ]
 }

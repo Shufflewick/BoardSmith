@@ -205,6 +205,48 @@ describe("readWorldDefinition — what a bundle must export", () => {
     ).toBeNull();
   });
 
+  // ── ShufflewickPub #473: the two verbs a referral is attributed through ──
+
+  it("hands back a declared referral block exactly as the bundle wrote it", () => {
+    const referring = bundle({
+      world: {
+        maxPlayers: 2,
+        actions: [poke, sweep],
+        view: () => [],
+        referral: { founding: "poke", onGrant: "sweep" },
+      },
+    });
+    expect(readWorldDefinition(referring).referral).toEqual({
+      founding: "poke",
+      onGrant: "sweep",
+    });
+  });
+
+  it("leaves an undeclared referral undeclared, so no host attributes anything", () => {
+    expect(readWorldDefinition(bundle()).referral).toBeUndefined();
+  });
+
+  it("does NOT check the two names, because whose reward it is, is the HOST's", () => {
+    // The presence precedent, not vacate's. Whether a founding is worth a
+    // reward at all, and which verbs a host is willing to issue on its own
+    // behalf, is that host's policy -- a platform paying real credits answers
+    // it differently from a laptop with one browser tab. So a block naming
+    // verbs this world does not have still comes back, and the host that cares
+    // is the one that refuses it.
+    const unchecked = bundle({
+      world: {
+        maxPlayers: 2,
+        actions: [poke],
+        view: () => [],
+        referral: { founding: "nosuch", onGrant: "alsonosuch" },
+      },
+    });
+    expect(readWorldDefinition(unchecked).referral).toEqual({
+      founding: "nosuch",
+      onGrant: "alsonosuch",
+    });
+  });
+
   it.each([-1, 1.5, Number.NaN])(
     "REFUSES stateVersion %p, naming what a usable one is",
     (bad) => {

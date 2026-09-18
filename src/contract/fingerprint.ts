@@ -1042,6 +1042,11 @@ function assertCoversWorldOffer(facts: {
  * before it writes one, the second to know whether a chair can ever come back
  * at all and what to run when one is leaving.
  *
+ * And the `referral` block `readWorldDefinition` hands back (ShufflewickPub
+ * #473), which is the third such fact and the one the engine deliberately does
+ * not check. What a host reads off a bundle is what it can act on, so the
+ * CARRYING is the contract even where the checking is somebody else's.
+ *
  * IT IS HERE FOR THE REASON `WORLD_DURABILITY_FIXTURE` IS. `world.vacate` is a
  * declaration: adding it changed what a host may read off a bundle and what it
  * may then do with a seat, and `verbatimModuleSyntax` erases a type, so it
@@ -1062,7 +1067,8 @@ function assertCoversWorldOffer(facts: {
  */
 async function computeWorldDeclaration(): Promise<unknown> {
   const engine = await import('../engine/index.js');
-  const { createWorld, worldAction } = await import('../world/index.js');
+  const { createWorld, readWorldDefinition, worldAction, worldClockAction } =
+    await import('../world/index.js');
   const { Game, Space } = engine as any;
 
   class DeclarationHolding extends Space<any> {}
@@ -1079,6 +1085,28 @@ async function computeWorldDeclaration(): Promise<unknown> {
       ctx.world.partition(`holding:${ctx.player.seat}`);
     });
 
+  // THE VERB A REFERRAL REWARD IS DELIVERED AS (ShufflewickPub #473), which is
+  // seatless because a grant is the clock acting on the host's say-so.
+  const settle = worldClockAction<any>('settle')
+    .needs(() => [])
+    .execute(() => {});
+
+  const world = {
+    maxPlayers: 3,
+    actions: [abandon, settle],
+    view: (seat: number) => [`holding:${seat}`],
+    // DECLARED, so the field is exercised rather than merely typed. A world
+    // that named nothing would hash the same as one built by an engine that
+    // had never heard of the field.
+    vacate: 'abandon',
+    // AND THE TWO VERBS AN INVITATION IS ATTRIBUTED THROUGH (ShufflewickPub
+    // #473), declared here for the same reason. The engine checks neither name
+    // -- that is the host's policy, as it is for `presence` -- so the fact this
+    // fixture pins is the one a platform depends on: the block a bundle wrote
+    // is the block `readWorldDefinition` hands back.
+    referral: { founding: 'abandon', onGrant: 'settle' },
+  };
+
   const built = createWorld({
     definition: {
       // `as any` for the reason every other class in this file carries one: the
@@ -1086,15 +1114,7 @@ async function computeWorldDeclaration(): Promise<unknown> {
       // engine's own type plumbing, and its construct signature is then not the
       // nominal one `createWorld` names.
       gameClass: DeclarationWorld as any,
-      world: {
-        maxPlayers: 3,
-        actions: [abandon],
-        view: (seat: number) => [`holding:${seat}`],
-        // DECLARED, so the field is exercised rather than merely typed. A world
-        // that named nothing would hash the same as one built by an engine that
-        // had never heard of the field.
-        vacate: 'abandon',
-      },
+      world,
     },
     seed: 'engine-contract-declaration',
     // HANDED TO THE CONSTRUCTOR, as every other seat in this file is, so the
@@ -1118,7 +1138,12 @@ async function computeWorldDeclaration(): Promise<unknown> {
     })(),
   };
 
-  return { seatCount: built.seatCount, vacate: built.vacate, seatedAfterUnseat };
+  return {
+    seatCount: built.seatCount,
+    vacate: built.vacate,
+    referral: readWorldDefinition({ world: world as any }).referral,
+    seatedAfterUnseat,
+  };
 }
 
 /**
