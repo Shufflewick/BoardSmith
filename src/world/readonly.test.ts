@@ -166,8 +166,7 @@ describe("readOnlyProjection", () => {
     expect(here.all(Token).contains(token)).toBe(true);
   });
 
-  it("costs about what the live tree costs, because an offer is a fan-out of finders",
-    () => {
+  it("charges ONE trap per ANSWER, not one per step of the walk", () => {
     // ShufflewickPub #409. A world's OFFER runs every action's condition, its
     // greying rule and every selection's candidate callback for one seat, and
     // a world-scoped change runs that for every seat at once. All of it reads
@@ -176,35 +175,46 @@ describe("readOnlyProjection", () => {
     // fan-out cost 2277 ms against a view fan-out's 208 ms, and 95% of the
     // difference was here rather than in anything an offer decides.
     //
-    // A RATIO AND NOT A DURATION, so the number means the same thing on a
-    // loaded machine as on an idle one: the same finder, over the same tree,
-    // reached the two ways.
+    // A COUNT AND NOT A CLOCK (#281). The claim is "a read the engine owns runs
+    // on the REAL element and only its ANSWER is projected", and that is a
+    // number of proxy traps, not a duration. The ratio of two wall-clock walks
+    // that stood here could only fail in one direction for a reason that had
+    // nothing to do with this module: a contended machine inflates the
+    // projected walk more than the live one, because it allocates more, so a
+    // busy box turned correct code red.
+    //
+    // The subject is the collection the finder walks, wrapped in a counter that
+    // tallies only the reads reaching it FROM SOMEWHERE ELSE -- a read whose
+    // receiver is the collection itself is the finder's own body running on the
+    // real object, which is the thing being asserted, and a read whose receiver
+    // is the projection is a trap the walk paid. With the read doors of #409 in
+    // place that is one trap per finder call, for the method itself; take them
+    // away and every element the walk visits costs two more.
     const game = new ProjectionGame({ playerCount: 2, seed: "cost", worldMode: true });
     for (let i = 0; i < 500; i += 1) game.create(Room, `room-${i}`);
-    const projection = readOnlyProjection(game);
+    const rooms = game.all(Room);
     const ROUNDS = 200;
 
-    const walk = (subject: ProjectionGame): void => {
-      for (let round = 0; round < ROUNDS; round += 1) subject.first(Room, `room-${round % 500}`);
-    };
-    // Warm both roads before either is timed.
-    walk(game);
-    walk(projection);
-
-    const startedLive = performance.now();
-    walk(game);
-    const live = performance.now() - startedLive;
-    const startedRead = performance.now();
-    walk(projection);
-    const read = performance.now() - startedRead;
+    let traps = 0;
+    const counted: typeof rooms = new Proxy(rooms, {
+      get(target, property, receiver) {
+        if (receiver !== counted) traps += 1;
+        return Reflect.get(target, property, receiver);
+      },
+    });
+    const projection = readOnlyProjection(counted);
+    for (let round = 0; round < ROUNDS; round += 1) {
+      expect(projection.first(Room, `room-${round % 500}`)?.name).toBe(`room-${round % 500}`);
+    }
 
     expect(
-      read / Math.max(live, 0.001),
-      `A finder over 500 roots took ${read.toFixed(1)}ms through the projection against ` +
-        `${live.toFixed(1)}ms live. A read the engine owns runs on the real element and only ` +
-        "its ANSWER is projected; a ratio in the double figures means the method body is " +
-        "running with the projection as its receiver, so every step of the walk pays a trap.",
-    ).toBeLessThan(4);
+      traps,
+      `A finder called ${ROUNDS} times over a 500-element collection cost ${traps} proxy traps. ` +
+        "A read the engine owns runs on the real element and only its ANSWER is projected, so " +
+        "the bill is one trap per call for the method itself. A bill that scales with the " +
+        "COLLECTION means the method body is running with the projection as its receiver and " +
+        "every step of the walk is paying a trap.",
+    ).toBeLessThanOrEqual(ROUNDS * 4);
   });
 
   it("mints ONE projection per element however deeply it is reached", () => {
