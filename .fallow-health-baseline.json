@@ -1,34 +1,16 @@
 {
   "finding_counts": {
     "scripts/ingest-harness/check.mjs": {
-      "complexity_critical": {
-        "count": 2
-      },
       "complexity_high": {
         "count": 1
       },
-      "crap_critical": {
-        "count": 2
-      },
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 1
+      "complexity_moderate": {
+        "count": 3
       }
     },
     "scripts/ingest-harness/run.mjs": {
-      "complexity_critical": {
-        "count": 3
-      },
-      "crap_critical": {
+      "complexity_moderate": {
         "count": 4
-      },
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 2
       }
     },
     "src/bot-trainer/analyzer.ts": {
@@ -45,50 +27,26 @@
       },
       "complexity_high": {
         "count": 1
-      },
-      "crap_critical": {
-        "count": 1
       }
     },
     "src/bot-trainer/code-generator.ts": {
-      "complexity_critical": {
-        "count": 1
-      },
       "complexity_high": {
         "count": 1
       },
       "complexity_moderate": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
+        "count": 2
       }
     },
     "src/bot-trainer/feature-generator.ts": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
+      "complexity_high": {
         "count": 1
       }
     },
     "src/bot-trainer/feature-templates.ts": {
-      "complexity_critical": {
-        "count": 1
-      },
       "complexity_high": {
-        "count": 3
+        "count": 4
       },
       "complexity_moderate": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_high": {
-        "count": 3
-      },
-      "crap_moderate": {
         "count": 4
       }
     },
@@ -100,25 +58,16 @@
         "count": 1
       },
       "complexity_moderate": {
-        "count": 3
-      },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 1
+        "count": 4
       }
     },
     "src/bot-trainer/weight-evolver.ts": {
-      "crap_moderate": {
+      "complexity_moderate": {
         "count": 1
       }
     },
     "src/bot/determinization.ts": {
-      "crap_moderate": {
+      "complexity_moderate": {
         "count": 1
       }
     },
@@ -130,35 +79,27 @@
         "count": 1
       },
       "complexity_moderate": {
-        "count": 2
-      },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
         "count": 4
       }
     },
     "src/cli/commands/analyze.ts": {
-      "complexity_high": {
-        "count": 2
-      },
       "complexity_moderate": {
-        "count": 1
-      },
-      "crap_high": {
-        "count": 3
-      },
-      "crap_moderate": {
+        "count": 5
+      }
+    },
+    "src/cli/commands/audit.ts": {
+      "complexity_moderate": {
         "count": 1
       }
     },
     "src/cli/commands/build-manifest.ts": {
       "complexity_moderate": {
         "count": 1
+      }
+    },
+    "src/cli/commands/build.ts": {
+      "complexity_moderate": {
+        "count": 2
       }
     },
     "src/cli/commands/chunk-provenance.ts": {
@@ -169,9 +110,11 @@
         "count": 1
       },
       "complexity_moderate": {
-        "count": 2
-      },
-      "crap_critical": {
+        "count": 4
+      }
+    },
+    "src/cli/commands/contract.ts": {
+      "complexity_moderate": {
         "count": 1
       }
     },
@@ -184,7 +127,7 @@
       "complexity_high": {
         "count": 1
       },
-      "crap_moderate": {
+      "complexity_moderate": {
         "count": 1
       }
     },
@@ -203,44 +146,44 @@
         "count": 1
       }
     },
+    "src/cli/commands/game-runtime.ts": {
+      "complexity_moderate": {
+        "count": 1
+      }
+    },
     "src/cli/commands/ingest-archive.ts": {
       "complexity_critical": {
         "count": 1
       },
       "complexity_moderate": {
         "count": 5
-      },
-      "crap_critical": {
+      }
+    },
+    "src/cli/commands/init.ts": {
+      "complexity_moderate": {
         "count": 1
-      },
-      "crap_moderate": {
+      }
+    },
+    "src/cli/commands/install-claude-command.ts": {
+      "complexity_moderate": {
         "count": 1
       }
     },
     "src/cli/commands/lint.ts": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "complexity_moderate": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      }
-    },
-    "src/cli/commands/pack.ts": {
       "complexity_high": {
         "count": 1
       },
-      "crap_high": {
-        "count": 1
+      "complexity_moderate": {
+        "count": 2
+      }
+    },
+    "src/cli/commands/pack.ts": {
+      "complexity_moderate": {
+        "count": 2
       }
     },
     "src/cli/commands/publish.ts": {
       "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
         "count": 1
       }
     },
@@ -252,9 +195,11 @@
     "src/cli/commands/trace-check.ts": {
       "complexity_critical": {
         "count": 1
-      },
-      "crap_critical": {
-        "count": 1
+      }
+    },
+    "src/cli/commands/validate.ts": {
+      "complexity_moderate": {
+        "count": 4
       }
     },
     "src/cli/commands/verify-classify.test.ts": {
@@ -270,29 +215,28 @@
         "count": 2
       },
       "complexity_moderate": {
-        "count": 1
-      },
-      "crap_critical": {
+        "count": 2
+      }
+    },
+    "src/cli/commands/verify-close-record.ts": {
+      "complexity_moderate": {
         "count": 1
       }
     },
     "src/cli/commands/verify-derive-check.ts": {
       "complexity_moderate": {
-        "count": 2
-      },
-      "crap_moderate": {
-        "count": 2
+        "count": 5
       }
     },
     "src/cli/commands/verify-enumerate.ts": {
       "complexity_critical": {
-        "count": 2
-      },
-      "crap_critical": {
         "count": 1
       },
-      "crap_moderate": {
-        "count": 2
+      "complexity_high": {
+        "count": 1
+      },
+      "complexity_moderate": {
+        "count": 3
       }
     },
     "src/cli/commands/verify-example-replay.ts": {
@@ -300,25 +244,27 @@
         "count": 1
       },
       "complexity_moderate": {
-        "count": 3
-      },
-      "crap_high": {
-        "count": 1
+        "count": 4
       }
     },
     "src/cli/commands/verify-impact.ts": {
       "complexity_moderate": {
-        "count": 3
+        "count": 4
       }
     },
     "src/cli/commands/verify-repair.test.ts": {
-      "crap_moderate": {
+      "complexity_moderate": {
         "count": 1
       }
     },
     "src/cli/commands/verify-repair.ts": {
       "complexity_moderate": {
         "count": 1
+      }
+    },
+    "src/cli/commands/verify-ruling-recheck.ts": {
+      "complexity_moderate": {
+        "count": 2
       }
     },
     "src/cli/commands/verify-run.ts": {
@@ -329,24 +275,12 @@
         "count": 2
       },
       "complexity_moderate": {
-        "count": 2
-      },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 1
+        "count": 3
       }
     },
     "src/cli/dev-host/DevHost.vue": {
-      "complexity_high": {
-        "count": 1
-      },
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 1
+      "complexity_moderate": {
+        "count": 2
       }
     },
     "src/cli/dev-host/bridge.ts": {
@@ -355,24 +289,20 @@
       },
       "complexity_moderate": {
         "count": 1
-      },
-      "crap_high": {
+      }
+    },
+    "src/cli/dev-host/config-types.ts": {
+      "complexity_moderate": {
         "count": 1
       }
     },
     "src/cli/dev-host/multiplayer-host.ts": {
       "complexity_moderate": {
-        "count": 1
-      },
-      "crap_moderate": {
         "count": 2
       }
     },
     "src/cli/lib/asset-scan.ts": {
       "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
         "count": 1
       }
     },
@@ -382,15 +312,12 @@
       }
     },
     "src/client/client.ts": {
-      "crap_moderate": {
+      "complexity_moderate": {
         "count": 1
       }
     },
     "src/client/game-connection.ts": {
-      "complexity_high": {
-        "count": 1
-      },
-      "crap_high": {
+      "complexity_moderate": {
         "count": 1
       }
     },
@@ -402,24 +329,20 @@
         "count": 1
       },
       "complexity_moderate": {
-        "count": 3
-      },
-      "crap_critical": {
-        "count": 4
-      },
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 5
+        "count": 6
       }
     },
     "src/engine/action/helpers.ts": {
-      "crap_moderate": {
+      "complexity_moderate": {
         "count": 1
       }
     },
     "src/engine/command/executor.ts": {
+      "complexity_moderate": {
+        "count": 1
+      }
+    },
+    "src/engine/command/inverse.ts": {
       "complexity_moderate": {
         "count": 1
       }
@@ -433,58 +356,28 @@
       }
     },
     "src/engine/element/element-collection.ts": {
-      "complexity_high": {
-        "count": 1
-      },
-      "crap_high": {
+      "complexity_moderate": {
         "count": 1
       }
     },
     "src/engine/element/game-element.ts": {
-      "complexity_critical": {
-        "count": 3
-      },
       "complexity_high": {
-        "count": 2
+        "count": 3
       },
       "complexity_moderate": {
-        "count": 1
-      },
-      "crap_critical": {
         "count": 3
-      },
-      "crap_high": {
-        "count": 2
-      },
-      "crap_moderate": {
-        "count": 1
       }
     },
     "src/engine/element/game.ts": {
       "complexity_critical": {
-        "count": 3
-      },
-      "complexity_high": {
         "count": 2
       },
       "complexity_moderate": {
-        "count": 2
-      },
-      "crap_critical": {
-        "count": 3
-      },
-      "crap_high": {
-        "count": 2
-      },
-      "crap_moderate": {
-        "count": 4
+        "count": 8
       }
     },
     "src/engine/element/typed-array-codec.ts": {
-      "complexity_high": {
-        "count": 1
-      },
-      "crap_high": {
+      "complexity_moderate": {
         "count": 1
       }
     },
@@ -493,36 +386,44 @@
         "count": 1
       }
     },
-    "src/engine/flow/describe-flow-position.ts": {
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
+    "src/engine/flow/builders.ts": {
+      "complexity_moderate": {
         "count": 1
       }
     },
-    "src/engine/flow/engine.ts": {
-      "complexity_critical": {
-        "count": 4
-      },
-      "complexity_high": {
-        "count": 3
-      },
+    "src/engine/flow/describe-flow-position.ts": {
       "complexity_moderate": {
+        "count": 2
+      }
+    },
+    "src/engine/flow/engine.ts": {
+      "complexity_high": {
         "count": 1
       },
-      "crap_critical": {
-        "count": 4
-      },
-      "crap_high": {
-        "count": 8
-      },
-      "crap_moderate": {
-        "count": 5
+      "complexity_moderate": {
+        "count": 16
+      }
+    },
+    "src/engine/flow/seat-activity.ts": {
+      "complexity_moderate": {
+        "count": 1
+      }
+    },
+    "src/engine/flow/walk-flow-nodes.ts": {
+      "complexity_moderate": {
+        "count": 1
       }
     },
     "src/engine/tutorial/progress.ts": {
       "complexity_high": {
+        "count": 1
+      },
+      "complexity_moderate": {
+        "count": 1
+      }
+    },
+    "src/engine/utils/arg-builder.ts": {
+      "complexity_moderate": {
         "count": 1
       }
     },
@@ -530,8 +431,13 @@
       "complexity_high": {
         "count": 1
       },
-      "crap_high": {
-        "count": 1
+      "complexity_moderate": {
+        "count": 2
+      }
+    },
+    "src/engine/utils/serializer.ts": {
+      "complexity_moderate": {
+        "count": 2
       }
     },
     "src/engine/utils/snapshot.ts": {
@@ -540,47 +446,32 @@
       }
     },
     "src/eslint-plugin/rules/no-element-array-state.ts": {
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 1
-      }
-    },
-    "src/eslint-plugin/rules/no-element-identity-comparison.ts": {
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
+      "complexity_moderate": {
         "count": 2
       }
     },
+    "src/eslint-plugin/rules/no-element-identity-comparison.ts": {
+      "complexity_moderate": {
+        "count": 3
+      }
+    },
     "src/eslint-plugin/rules/no-network.ts": {
-      "crap_moderate": {
+      "complexity_moderate": {
         "count": 1
       }
     },
     "src/eslint-plugin/rules/no-nondeterministic.ts": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
+      "complexity_moderate": {
         "count": 1
       }
     },
     "src/runtime/runner.ts": {
-      "complexity_high": {
-        "count": 1
-      },
-      "crap_high": {
-        "count": 2
-      },
-      "crap_moderate": {
-        "count": 3
+      "complexity_moderate": {
+        "count": 5
       }
     },
     "src/session/bot-controller.ts": {
-      "crap_high": {
+      "complexity_moderate": {
         "count": 1
       }
     },
@@ -589,19 +480,10 @@
         "count": 1
       },
       "complexity_high": {
-        "count": 3
-      },
-      "complexity_moderate": {
         "count": 2
       },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_high": {
-        "count": 3
-      },
-      "crap_moderate": {
-        "count": 6
+      "complexity_moderate": {
+        "count": 7
       }
     },
     "src/session/lobby-manager.ts": {
@@ -609,19 +491,10 @@
         "count": 1
       },
       "complexity_high": {
-        "count": 2
+        "count": 1
       },
       "complexity_moderate": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_high": {
-        "count": 3
-      },
-      "crap_moderate": {
-        "count": 4
+        "count": 6
       }
     },
     "src/session/move-summary.ts": {
@@ -630,76 +503,55 @@
       }
     },
     "src/session/pending-action-manager.ts": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
+      "complexity_high": {
         "count": 1
       }
     },
     "src/session/pick-handler.ts": {
-      "crap_moderate": {
+      "complexity_moderate": {
         "count": 1
       }
     },
     "src/session/snapshot-session-host.ts": {
-      "complexity_critical": {
-        "count": 1
-      },
       "complexity_high": {
-        "count": 2
+        "count": 1
       },
       "complexity_moderate": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_high": {
-        "count": 3
-      },
-      "crap_moderate": {
-        "count": 2
+        "count": 5
       }
     },
     "src/session/state-history.ts": {
-      "crap_moderate": {
+      "complexity_moderate": {
         "count": 1
       }
     },
     "src/session/stateless-ops.ts": {
       "complexity_high": {
-        "count": 3
+        "count": 2
       },
-      "crap_high": {
-        "count": 3
-      },
-      "crap_moderate": {
-        "count": 1
+      "complexity_moderate": {
+        "count": 2
       }
     },
     "src/session/utils.ts": {
       "complexity_high": {
         "count": 1
+      },
+      "complexity_moderate": {
+        "count": 1
       }
     },
     "src/testing/assertions.ts": {
       "complexity_moderate": {
-        "count": 1
+        "count": 2
       }
     },
     "src/testing/debug.ts": {
-      "complexity_critical": {
+      "complexity_high": {
         "count": 1
       },
       "complexity_moderate": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 1
+        "count": 2
       }
     },
     "src/testing/dom-leak.ts": {
@@ -708,12 +560,6 @@
       },
       "complexity_moderate": {
         "count": 3
-      },
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 1
       }
     },
     "src/testing/random-simulation.ts": {
@@ -722,19 +568,10 @@
       },
       "complexity_high": {
         "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_high": {
-        "count": 1
       }
     },
     "src/testing/simulate-action.ts": {
       "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
         "count": 1
       }
     },
@@ -744,28 +581,22 @@
       }
     },
     "src/testing/view-diff.ts": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
+      "complexity_moderate": {
         "count": 1
       }
     },
     "src/ui/components/DebugPanel.vue": {
-      "crap_moderate": {
+      "complexity_moderate": {
         "count": 1
       }
     },
     "src/ui/components/GameLobby.vue": {
-      "crap_moderate": {
+      "complexity_moderate": {
         "count": 1
       }
     },
     "src/ui/components/GameShell.vue": {
-      "complexity_critical": {
-        "count": 1
-      },
-      "crap_critical": {
+      "complexity_high": {
         "count": 1
       }
     },
@@ -774,60 +605,59 @@
         "count": 1
       },
       "complexity_moderate": {
-        "count": 1
-      },
-      "crap_high": {
-        "count": 2
-      },
-      "crap_moderate": {
-        "count": 2
+        "count": 3
       }
     },
     "src/ui/components/auto-ui/AutoRenderer.vue": {
-      "crap_high": {
+      "complexity_moderate": {
         "count": 1
       }
     },
     "src/ui/components/auto-ui/auto-ui-helpers.ts": {
       "complexity_high": {
         "count": 1
+      },
+      "complexity_moderate": {
+        "count": 1
       }
     },
     "src/ui/components/auto-ui/builtin-renderers.ts": {
-      "crap_moderate": {
+      "complexity_moderate": {
+        "count": 1
+      }
+    },
+    "src/ui/components/auto-ui/presentation.ts": {
+      "complexity_moderate": {
         "count": 1
       }
     },
     "src/ui/components/auto-ui/renderers/CardRenderer.vue": {
-      "crap_moderate": {
+      "complexity_moderate": {
         "count": 2
       }
     },
     "src/ui/components/auto-ui/renderers/HandRenderer.vue": {
-      "complexity_high": {
-        "count": 1
-      },
-      "crap_high": {
+      "complexity_moderate": {
         "count": 1
       }
     },
     "src/ui/components/auto-ui/renderers/HexBoardRenderer.vue": {
-      "crap_moderate": {
+      "complexity_moderate": {
         "count": 1
       }
     },
     "src/ui/components/auto-ui/renderers/SpaceRenderer.vue": {
-      "crap_moderate": {
+      "complexity_moderate": {
         "count": 1
       }
     },
     "src/ui/components/auto-ui/useAutoRendererAnimations.ts": {
-      "crap_moderate": {
+      "complexity_moderate": {
         "count": 2
       }
     },
     "src/ui/components/debug/debug-view-tree.ts": {
-      "crap_moderate": {
+      "complexity_moderate": {
         "count": 1
       }
     },
@@ -835,38 +665,32 @@
       "complexity_critical": {
         "count": 1
       },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_moderate": {
+      "complexity_moderate": {
         "count": 2
       }
     },
     "src/ui/components/helpers/FlyingCardsOverlay.vue": {
-      "crap_moderate": {
+      "complexity_moderate": {
         "count": 1
       }
     },
     "src/ui/components/helpers/HintOverlay.vue": {
-      "crap_moderate": {
+      "complexity_moderate": {
         "count": 1
       }
     },
     "src/ui/components/helpers/TutorialOverlay.vue": {
       "complexity_moderate": {
         "count": 2
-      },
-      "crap_moderate": {
-        "count": 1
       }
     },
     "src/ui/components/helpers/ZoomPreviewOverlay.vue": {
-      "crap_moderate": {
+      "complexity_moderate": {
         "count": 1
       }
     },
     "src/ui/components/platformRequestClone.ts": {
-      "crap_moderate": {
+      "complexity_moderate": {
         "count": 1
       }
     },
@@ -876,128 +700,107 @@
       }
     },
     "src/ui/composables/useActionAnimations.ts": {
-      "complexity_high": {
-        "count": 1
-      },
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 1
+      "complexity_moderate": {
+        "count": 2
       }
     },
     "src/ui/composables/useActionController.ts": {
       "complexity_critical": {
-        "count": 5
+        "count": 1
       },
       "complexity_high": {
         "count": 3
       },
-      "crap_critical": {
-        "count": 5
-      },
-      "crap_high": {
-        "count": 6
-      },
-      "crap_moderate": {
-        "count": 2
+      "complexity_moderate": {
+        "count": 9
       }
     },
     "src/ui/composables/useAnimationEvents.ts": {
       "complexity_high": {
         "count": 1
       },
-      "crap_high": {
-        "count": 1
-      },
-      "crap_moderate": {
+      "complexity_moderate": {
         "count": 1
       }
     },
     "src/ui/composables/useAutoZoom.ts": {
-      "crap_moderate": {
+      "complexity_moderate": {
         "count": 1
       }
     },
     "src/ui/composables/useBoardActionBridge.ts": {
-      "complexity_critical": {
-        "count": 1
-      },
       "complexity_high": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_high": {
         "count": 2
       },
-      "crap_moderate": {
-        "count": 4
+      "complexity_moderate": {
+        "count": 5
       }
     },
     "src/ui/composables/useDragDropTargets.ts": {
-      "complexity_critical": {
-        "count": 1
-      },
       "complexity_moderate": {
-        "count": 1
-      },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_moderate": {
-        "count": 1
+        "count": 3
       }
     },
     "src/ui/composables/useFLIP.ts": {
-      "complexity_high": {
-        "count": 1
-      },
-      "crap_high": {
-        "count": 1
+      "complexity_moderate": {
+        "count": 2
       }
     },
     "src/ui/composables/useFlyingElements.ts": {
       "complexity_critical": {
         "count": 1
       },
-      "crap_critical": {
-        "count": 1
-      },
-      "crap_moderate": {
+      "complexity_moderate": {
         "count": 2
       }
     },
     "src/ui/composables/useFocusTrap.ts": {
-      "crap_moderate": {
+      "complexity_moderate": {
         "count": 1
       }
     },
     "src/ui/composables/useGameViewHelpers.ts": {
-      "crap_moderate": {
-        "count": 1
+      "complexity_moderate": {
+        "count": 2
       }
     },
     "src/ui/composables/useLobby.ts": {
-      "complexity_high": {
-        "count": 1
-      },
-      "crap_high": {
+      "complexity_moderate": {
         "count": 2
       }
     },
     "src/ui/composables/useZoomPreview.ts": {
-      "complexity_high": {
-        "count": 1
-      },
+      "complexity_moderate": {
+        "count": 2
+      }
+    },
+    "src/ui/theme.ts": {
       "complexity_moderate": {
         "count": 1
-      },
-      "crap_high": {
+      }
+    },
+    "src/ui/utils/image.ts": {
+      "complexity_moderate": {
         "count": 1
-      },
-      "crap_moderate": {
+      }
+    },
+    "src/world/action.ts": {
+      "complexity_moderate": {
+        "count": 1
+      }
+    },
+    "src/world/budgets.ts": {
+      "complexity_moderate": {
+        "count": 1
+      }
+    },
+    "src/world/definition.ts": {
+      "complexity_moderate": {
+        "count": 2
+      }
+    },
+    "src/world/migration.ts": {
+      "complexity_moderate": {
         "count": 1
       }
     }

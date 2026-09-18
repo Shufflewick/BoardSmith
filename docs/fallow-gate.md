@@ -68,6 +68,194 @@ this and is *not* the same as switching the gate off:
 `.stylelintrc.cjs:5` sets `customSyntax: 'postcss-html'`, a string reference no
 static import analyzer can see.
 
+## The complexity rule is cyclomatic 9, and it says so (#277)
+
+```json
+"health": {
+  "maxCyclomatic": 9,
+  "maxCognitive": 15,
+  "maxCrap": 1000000000
+}
+```
+
+A function over cyclomatic 9 or cognitive 15 fails the gate, and the way down is
+to split it. That is the whole rule. `maxCrap` is parked at a number nothing can
+reach, which is fallow's only way to switch the CRAP check off.
+
+Before #277 there was no `health` block here at all, so the gate ran on fallow's
+defaults — `maxCyclomatic: 20`, `maxCognitive: 15`, `maxCrap: 30` — and the
+number that actually bit was none of them.
+
+### Why CRAP is off rather than tuned
+
+CRAP is `CC^2 * (1 - coverage/100)^3 + CC`, and it is a good metric when the
+coverage term is measured. **In this gate it was never measured.** `fallow audit`
+is handed no Istanbul data, so fallow fills the term in from the module graph:
+
+| what the module graph says about a function | coverage it is assigned |
+|---|---|
+| a test file names this export directly | 85% |
+| reachable only *through* such an export | 40% |
+| no test root reaches it at all | 0% |
+
+Re-measured on this repository rather than taken from Pub: of the 225 functions
+fallow scored above `maxCrap: 30`, the implied coverage was 40% for 212 of them,
+85% for 6 and 0% for 7 — those three values and nothing else. So `maxCrap: 30`
+was not a coverage rule. It was three cyclomatic rules at once, selected by a
+reachability class nobody reads:
+
+- **40%** — 212 of 225 here: every private or internal function, because a test
+  reaches one only through its public caller. `CRAP = CC^2 * 0.216 + CC`, so
+  CC 9 scores 26.5 and CC 10 scores 31.6: the real ceiling was **9**.
+- **0%** — `scripts/ingest-harness/*.mjs`, `.vue` components, anything no test
+  root reaches. `CRAP = CC^2 + CC`, so CC 5 scores exactly 30.0: the real
+  ceiling was **4**. The smallest of the 104 findings below was
+  `scripts/ingest-harness/run.mjs` `turnDiagnosticLine`, at cyclomatic 5.
+- **85%** — a function a test imports by name: the ceiling was **29**.
+
+Meanwhile the config said nothing, and fallow's own default said 20.
+
+**104 findings on this tree had `crap` as their only exceeded threshold**, and
+225 in total carried fallow's `add-tests` action — *"Add test coverage for X to
+lower its CRAP score"*. For the 40% and 0% tiers that instruction cannot be
+carried out. The score came from the import graph, so no test moves it; only
+editing the graph or the function does. A gate whose advice cannot be followed
+is one people learn to route around, and this repo's CLAUDE.md treats the audit
+as a gate rather than a courtesy — which only holds while its findings are
+legible.
+
+### Why not wire in a real coverage report
+
+That was the preferred answer and it does not work, measured on fallow 2.48.0:
+
+- **`fallow audit` cannot read coverage at all.** It has no `--coverage` flag,
+  there is no `health.coverage` key in `fallow config-schema`, and it ignores
+  `FALLOW_COVERAGE` — pointed at a genuine Istanbul report it returns
+  byte-identical CRAP scores with no `istanbul_matched` in its summary. Only
+  `fallow health` reads coverage, and `fallow health` cannot be what the gate
+  runs: it has no dead-code and no duplication verdict.
+- **A partial report is worse than none.** fallow scores a function it cannot
+  match in the report as 0% covered, so a three-file report does not degrade to
+  the old estimate — it degrades to something more confidently wrong.
+
+So the choice was between a rule nobody can read and a rule that is written
+down. `maxCyclomatic: 9` is the second one.
+
+### Why 9 and not something looser
+
+9 is **exactly the ceiling the CRAP estimate was already enforcing** on the 40%
+tier, which is 94% of everything it scored here. Picking it changes nothing about
+the standard the bulk of this codebase was already held to; it only makes the
+standard readable. Any looser number — 12, 15 — would be a number nothing was
+enforcing, and would *relax* the rule for the code the gate was working on. Any
+tighter one would be new.
+
+Two things did change, both deliberately:
+
+- **Loosened:** code no test root reaches statically — the ingest harness
+  scripts, `.vue` components — was being held to cyclomatic 4. Nobody chose that
+  and it is not the standard now.
+- **Tightened:** a function a test imports by name used to be allowed up to
+  cyclomatic 29.
+
+**324 functions in this tree exceed cyclomatic 9, and 9 more exceed cognitive 15
+without exceeding cyclomatic: 333 findings, against 287 before.** All 333 are
+recorded in `.fallow-health-baseline.json`, which was regenerated as part of
+#277 — that is what the health baseline is for, and it is the only baseline this
+change touched. `.fallow-dupes-baseline.json` is derived and was not regenerated;
+`.fallow-dead-code-baseline.json` is unaffected by a `health` block.
+
+Of those 333, 284 were already findings under the old rule. **These 49 are the
+ones the tightening newly exposes** — functions that were passing on the 85%
+tier's allowance of 29, or that the old CRAP rule never scored. They are
+baselined, so they are not blocking anything today; they will be findings the
+next time their file is edited, and the answer will be to split them:
+
+| function | cyclomatic | cognitive |
+|---|---|---|
+| `src/cli/commands/verify-impact.ts` `parseRulesStaleness` | 18 | 14 |
+| `src/engine/command/inverse.ts` `createInverseCommand` | 18 | 1 |
+| `src/world/definition.ts` `createWorld` | 18 | 11 |
+| `src/cli/commands/audit.ts` `auditCommand` | 16 | 10 |
+| `src/engine/flow/walk-flow-nodes.ts` `walkFlowNodes` | 16 | 9 |
+| `src/engine/utils/serializer.ts` `deserializeValue` | 16 | 13 |
+| `src/ui/components/auto-ui/auto-ui-helpers.ts` `resolvePieceVisual` | 16 | 15 |
+| `src/cli/commands/verify-ruling-recheck.ts` `verifyRulingRecordCommand` | 15 | 14 |
+| `src/cli/commands/contract.ts` `contractCommand` | 14 | 14 |
+| `src/cli/commands/validate.ts` `checkMetadataIssues` | 14 | 15 |
+| `src/ui/components/auto-ui/presentation.ts` `resolvePresentation` | 14 | 13 |
+| `src/ui/theme.ts` `applyTheme` | 14 | 14 |
+| `src/cli/commands/build.ts` `buildCommand` | 13 | 14 |
+| `src/cli/commands/game-runtime.ts` `boardsmithSourceEntries` | 13 | 14 |
+| `src/cli/commands/lint.ts` `lintCommand` | 13 | 15 |
+| `src/cli/commands/verify-derive-check.ts` `createDeriveCheckRecord` | 13 | 12 |
+| `src/engine/flow/builders.ts` `stateAwareLoop` | 13 | 12 |
+| `src/engine/utils/arg-builder.ts` `buildActionArgs` | 13 | 13 |
+| `src/engine/utils/dev-state.ts` `restoreDevState` | 13 | 15 |
+| `src/world/definition.ts` `readWorldDefinition` | 13 | 12 |
+| `src/cli/commands/init.ts` `initCommand` | 12 | 13 |
+| `src/cli/commands/verify-derive-check.ts` `verifyDeriveRecordCommand` | 12 | 10 |
+| `src/engine/utils/serializer.ts` `serializeValue` | 12 | 12 |
+| `src/session/utils.ts` `computeUndoEligibility` | 12 | 11 |
+| `src/testing/debug.ts` `toDebugString` | 12 | 14 |
+| `src/world/action.ts` `assertWorldAction` | 12 | 13 |
+| `src/world/budgets.ts` `worldBudgets` | 12 | 11 |
+| `src/cli/commands/build.ts` `deriveManifest` | 11 | 10 |
+| `src/cli/commands/chunk-provenance.ts` `computeVerificationScope` | 11 | 11 |
+| `src/cli/commands/validate.ts` `checkTaxonomyShape` | 11 | 11 |
+| `src/cli/commands/verify-classify.ts` `resolveProvenance` | 11 | 13 |
+| `src/cli/commands/verify-close-record.ts` `verifyCloseRecordCommand` | 11 | 14 |
+| `src/engine/tutorial/progress.ts` `autoAdvanceTutorial` | 11 | 10 |
+| `src/ui/composables/useFLIP.ts` `useFLIP` | 11 | 12 |
+| `src/ui/composables/useGameViewHelpers.ts` `findElement` | 11 | 13 |
+| `src/ui/utils/image.ts` `parseImageInfo` | 11 | 11 |
+| `src/cli/commands/chunk-provenance.ts` `renderVerifiedAgainst` | 10 | 12 |
+| `src/cli/commands/install-claude-command.ts` `installClaudeCommand` | 10 | 12 |
+| `src/cli/commands/pack.ts` `packCommand` | 10 | 12 |
+| `src/cli/commands/validate.ts` `validateBundleSize` | 10 | 14 |
+| `src/cli/commands/validate.ts` `validateAssetPaths` | 10 | 10 |
+| `src/cli/commands/verify-enumerate.ts` `composeArithmeticClaim` | 10 | 12 |
+| `src/cli/commands/verify-ruling-recheck.ts` `verifyRulingRecheckCommand` | 10 | 10 |
+| `src/cli/commands/verify-run.ts` `verifyRunInitCommand` | 10 | 10 |
+| `src/cli/dev-host/config-types.ts` `coerceGameOptionValue` | 10 | 12 |
+| `src/engine/flow/seat-activity.ts` `availableActionsForSeat` | 10 | 8 |
+| `src/engine/utils/dev-state.ts` `restoreFromDevCheckpoint` | 10 | 13 |
+| `src/testing/assertions.ts` `assertGameFinished` | 10 | 9 |
+| `src/world/migration.ts` `declaredSources` | 10 | 12 |
+
+Roughly half sit in `src/cli/commands/`, which is touched often. That is the
+real cost of the number and it is the intended one: those are the functions the
+gate should have something to say about.
+
+### Proven on a real finding
+
+`src/runtime/runner.ts` `fromSnapshot`, cyclomatic 16, cognitive 10 — one of the
+104:
+
+| | old rule | new rule |
+|---|---|---|
+| severity | `high` | `moderate` |
+| exceeded | `crap` (71.3) | `cyclomatic` (16 > 9) |
+| action | `add-tests` — "Add test coverage for `fromSnapshot` to lower its CRAP score" | `refactor-function` — "extract helper functions, simplify branching" |
+
+Same function, same gate, and the reason given is now the one that is true.
+Going the other way, `scripts/ingest-harness/run.mjs` `turnDiagnosticLine`
+(cyclomatic 5, cognitive 4, CRAP exactly 30.0) stops being a finding at all,
+because cyclomatic 4 was never a standard anyone chose.
+
+Across the whole tree after the change: **0 findings carry an `add-tests` action
+and 0 carry a `crap` field.** Audit wall-clock over a five-commit scope is
+unchanged at ~5.3s end to end, of which fallow's health pass is 0.36s before and
+after.
+
+`scripts/fallow-gate-honesty.test.mjs` holds it there. It generates a function at
+`maxCyclomatic` and one at `maxCyclomatic + 1` **from the config**, runs the real
+fallow binary over them in a throwaway project with no test root — the 0% tier,
+the worst case — and requires that the first is silent, that the second is
+reported as `cyclomatic`, and that no finding carries an `add-tests` action or a
+`crap` field. With no `health` block, or with one that leaves `maxCrap` at 30,
+it fails.
+
 ## Regenerating the baselines
 
 Do this deliberately — never to turn a red board green.
