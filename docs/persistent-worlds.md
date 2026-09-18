@@ -1709,6 +1709,20 @@ ground coming back, on the same checkpoint that made the teardown durable — a
 refused checkpoint must leave the player holding both their chair and their
 holdings rather than neither.
 
+**BoardSmith's own hosts do exactly that, and the game does not help** (#278).
+`ResidentWorld` spreads `vacated` into the checkpoint as its `vacate` extra, so
+the roster row is deleted in the same transaction as the partitions the teardown
+wrote and the settlement of the occurrence that wrote them. The seat's activity
+watermark goes with the row, because it measures how long the person in that
+chair has been away and the next occupant is a newcomer. Only after that write
+lands does the resident roster lose the player, so a checkpoint that refuses
+leaves the chair held and the estate standing. A game never writes a host table
+and never claims a release from the engine result alone.
+
+In `boardsmith dev`, a page watching through that seat is told the world took
+its chair and is left seatless; picking a seat again joins as a newcomer, which
+is a fresh grant rather than the old tenancy coming back.
+
 ## Scheduling
 
 ```ts

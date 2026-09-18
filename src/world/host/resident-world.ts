@@ -85,6 +85,7 @@ import {
   type WorldCommand,
   type WorldPresenceDeclaration,
   type WorldRunner,
+  type WorldRunnerHandle,
   type WorldRunnerOptions,
   type WorldActionOffer,
   type WorldOrder,
@@ -106,6 +107,21 @@ import type { WorldStore } from "./store.js";
  */
 export function worldSeatPlayer(seat: number): string {
   return `seat-${seat}`;
+}
+
+/**
+ * THE CHAIR A DISPATCH FINALIZED THE VACANCY OF, for the checkpoint (#278).
+ *
+ * `#activityWrite`'s shape, and spread into the same write for the same reason:
+ * the release is downstream of the ground coming back, so a checkpoint that
+ * refuses leaves the chair HELD and the estate standing -- the one pairing that
+ * must not come apart. ABSENT is the normal case, and it is also what a retried
+ * teardown answers once the chair is already empty.
+ */
+function vacancyWrite(
+  vacated: { readonly seat: number; readonly player: string } | undefined,
+): { vacate?: { readonly seat: number; readonly player: string } } {
+  return vacated === undefined ? {} : { vacate: vacated };
 }
 
 interface ResidentWorldOptions {
@@ -141,6 +157,15 @@ interface ResidentWorldOptions {
    *  so whatever is on screen is stale. A caller's own commands do not reach
    *  this; it is for the changes nobody asked for. */
   readonly onChanged?: () => Promise<void> | void;
+  /**
+   * THE WORLD'S CLOCK FINALIZED A CHAIR'S VACANCY (#278).
+   *
+   * Called once per release, AFTER the checkpoint that made it durable, so
+   * nothing a host does here is about a release that might still roll back.
+   * Who was watching through that chair, and what they are told, is the host's:
+   * this core sends nothing and knows about no client.
+   */
+  readonly onVacated?: (vacancy: { readonly seat: number; readonly player: string }) => void;
 }
 
 /** What one id lift moved, for whoever says it out loud. */
@@ -220,6 +245,7 @@ export class ResidentWorld {
   readonly #onEvents: (events: readonly RoutedEvent[]) => void;
   readonly #onNotice: (message: string) => void;
   readonly #onChanged: () => Promise<void> | void;
+  readonly #onVacated: (vacancy: { readonly seat: number; readonly player: string }) => void;
   readonly #presenceDeclaration: WorldPresenceDeclaration | undefined;
 
   /** Rebuilt whole by `wake`, which is what makes that control real. */
@@ -283,6 +309,7 @@ export class ResidentWorld {
     this.#onEvents = options.onEvents ?? (() => {});
     this.#onNotice = options.onNotice ?? (() => {});
     this.#onChanged = options.onChanged ?? (() => {});
+    this.#onVacated = options.onVacated ?? (() => {});
     this.#skewMs = this.#store.clockSkewMs();
     this.#world = this.#build();
     this.#presenceDeclaration = readWorldDefinition(options.definition).presence;
@@ -472,6 +499,27 @@ export class ResidentWorld {
   ): { activity?: { seat: number; at: number } } {
     const seat = this.#seatOf(player);
     return seat === undefined ? {} : { activity: { seat, at: arrivedAt } };
+  }
+
+  /**
+   * THE RESIDENT ROSTER FOLLOWS THE DURABLE ONE (#278).
+   *
+   * Called only past the checkpoint, and in that order for the reason the
+   * revision moves there: the store is the truth, and a chair released in
+   * memory before the write landed would be one this host could not get back.
+   * After it lands the two agree -- and they agree again after a discard,
+   * because `#build` reads the roster out of the store.
+   *
+   * The host is told LAST, once the release is both durable and resident, so
+   * nothing a page is told outlives a rollback.
+   */
+  #released(
+    runner: WorldRunnerHandle,
+    vacated: { readonly seat: number; readonly player: string } | undefined,
+  ): void {
+    if (vacated === undefined) return;
+    runner.unseat(vacated.player);
+    this.#onVacated(vacated);
   }
 
   /** The seat a player id is filed under, or undefined for the world's own
@@ -1120,11 +1168,15 @@ export class ResidentWorld {
         // THIS SEAT WAS HERE (ShufflewickPub #383), landing with the effects
         // it produced or not at all.
         ...this.#activityWrite(player, arrivedAt),
+        // AND THIS CHAIR IS HANDED ON (#278), in the same write as the teardown
+        // that earned it.
+        ...vacancyWrite(result.vacated),
       });
       // THE STATE MOVED, AND IT MOVED HERE (#244). After the write and not
       // before: a checkpoint that refuses is a command that did not happen, and
       // the discard below leaves the world at the revision it was already at.
       this.#revision += 1;
+      this.#released(runner, result.vacated);
     } catch (error) {
       // A COMMAND THAT CANNOT BE MADE DURABLE IS A COMMAND THAT DID NOT HAPPEN.
       //
