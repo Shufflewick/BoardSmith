@@ -1232,53 +1232,100 @@ export class ResidentWorld {
    * catch-up loop that it is making progress (ShufflewickPub #380): a batch
    * that ran nothing is a batch that will run nothing again, and the loop stops
    * rather than spinning on an event the world cannot move past.
+   *
+   * THE QUEUE IS RE-READ BEFORE EVERY ENTRY, AND THAT IS THE BATCH (#280). It
+   * used to be selected once and then dispatched, which made "nominal order" a
+   * claim about the queue as it was when the batch began rather than about the
+   * queue. Every entry here ends in its own checkpoint, and a checkpoint can
+   * insert an event due EARLIER than one the old list already held, cancel one
+   * of them, or displace one with a keyed upsert -- so a chronological world
+   * committed T+20 before the T+10 its own T event had just scheduled, and
+   * fired occurrences its own earlier occurrence had taken back. The only way
+   * a drain can honour an ordering is to arbitrate against what is committed.
+   *
+   * STILL ONE BATCH AND STILL BOUNDED: at most `drainBatch` entries, whoever
+   * added them. Re-reading a queue the entries themselves can grow is exactly
+   * how a drain becomes an unbounded loop, and the bound is what makes a
+   * handler that re-arms itself at zero delay a slow world rather than a
+   * wedged one.
    */
   async #drainBatch(now: number): Promise<number> {
     let ran = 0;
-    const { batch } = nextDueBatch(this.#store.pendingEvents(), now, this.#budgets.drainBatch);
-    for (const event of batch) {
-      // A ONE-SHOT IS ONE CALL AT ITS OWN DUE. A RECURRENCE THAT FELL BEHIND IS
-      // INTEGRATED, not replayed: at most `catchUpMaxRealIterations` real
-      // iterations and then one coalesced call carrying how many got no call at
-      // all, so a world that was away for a week is caught up in one wake.
-      const { occurrences, nextDue } = occurrencesDue(
-        event,
-        now,
-        this.#budgets.catchUpMaxRealIterations,
-      );
-      const advanced: PlannedEvent[] =
-        nextDue === null ? [] : [{ ...event, due: nextDue, attempts: 0 }];
-      for (const [index, timing] of occurrences.entries()) {
-        const last = index === occurrences.length - 1;
-        try {
-          const events = await this.#dispatch({
-            player: null,
-            command: { name: event.action, args: event.args },
-            timing,
-            // ITS `now` IS ITS `due`, never the wall clock at execution: a
-            // world that drained late must produce the state a punctual one
-            // would.
-            arrivedAt: timing.due,
-            // THE EVENT'S OWNER IS WHO IT IS ABOUT (#383), which is not who is
-            // charged for it. A seat's own deadline rechecks that seat.
-            about: event.owner,
-            settle: last ? [event.id] : [],
-            rearm: last ? advanced : [],
-          });
-          this.#onEvents(events);
-          ran += 1;
-        } catch (error) {
-          // A DUE EVENT THAT REFUSED IS SAID OUT LOUD AND LEFT QUEUED. Its
-          // effects rolled back, so the world is unchanged; dropping it
-          // silently is how a world stops ticking with nobody told.
-          this.#onNotice(
-            `The scheduled action "${event.action}" refused, and stays queued: ${messageOf(error)}`,
-          );
-          break;
-        }
+    // WHAT THIS BATCH HAS ALREADY TAKEN. An event that REFUSED stays queued by
+    // design, and a re-read would hand back the same refusal until the bound
+    // ran out; an event that ran is gone from the queue and is here only
+    // because being spent is this batch's fact, not the store's.
+    const spent = new Set<string>();
+    for (let taken = 0; taken < this.#budgets.drainBatch; taken++) {
+      const event = this.#nextDue(now, spent);
+      if (event === undefined) break;
+      spent.add(event.id);
+      ran += await this.#runQueued(event, now);
+    }
+    return ran;
+  }
+
+  /**
+   * ONE QUEUED EVENT, AND EVERY OCCURRENCE OF IT THAT IS DUE AT `now`.
+   *
+   * A ONE-SHOT IS ONE CALL AT ITS OWN DUE. A RECURRENCE THAT FELL BEHIND IS
+   * INTEGRATED, not replayed: at most `catchUpMaxRealIterations` real
+   * iterations and then one coalesced call carrying how many got no call at
+   * all, so a world that was away for a week is caught up in one wake.
+   *
+   * Answers how many calls it made, which is a batch's own measure of progress.
+   */
+  async #runQueued(event: PlannedEvent, now: number): Promise<number> {
+    const { occurrences, nextDue } = occurrencesDue(
+      event,
+      now,
+      this.#budgets.catchUpMaxRealIterations,
+    );
+    const advanced: PlannedEvent[] =
+      nextDue === null ? [] : [{ ...event, due: nextDue, attempts: 0 }];
+    let ran = 0;
+    for (const [index, timing] of occurrences.entries()) {
+      const last = index === occurrences.length - 1;
+      try {
+        const events = await this.#dispatch({
+          player: null,
+          command: { name: event.action, args: event.args },
+          timing,
+          // ITS `now` IS ITS `due`, never the wall clock at execution: a world
+          // that drained late must produce the state a punctual one would.
+          arrivedAt: timing.due,
+          // THE EVENT'S OWNER IS WHO IT IS ABOUT (#383), which is not who is
+          // charged for it. A seat's own deadline rechecks that seat.
+          about: event.owner,
+          settle: last ? [event.id] : [],
+          rearm: last ? advanced : [],
+        });
+        this.#onEvents(events);
+        ran += 1;
+      } catch (error) {
+        // A DUE EVENT THAT REFUSED IS SAID OUT LOUD AND LEFT QUEUED. Its
+        // effects rolled back, so the world is unchanged; dropping it silently
+        // is how a world stops ticking with nobody told.
+        this.#onNotice(
+          `The scheduled action "${event.action}" refused, and stays queued: ${messageOf(error)}`,
+        );
+        break;
       }
     }
     return ran;
+  }
+
+  /**
+   * THE EARLIEST EVENT DUE AT `now` THAT THIS BATCH HAS NOT TAKEN.
+   *
+   * `nextDueBatch` is the library's ordering and is asked for one, so the
+   * order a re-reading drain runs in is the same `(due, seq)` a single
+   * selection ran in -- insertion still breaks a tie within one millisecond,
+   * and no second comparison of due times exists to disagree with it.
+   */
+  #nextDue(now: number, spent: ReadonlySet<string>): PlannedEvent | undefined {
+    const queued = this.#store.pendingEvents().filter((event) => !spent.has(event.id));
+    return nextDueBatch(queued, now, 1).batch[0];
   }
 
   /**
