@@ -1366,7 +1366,24 @@ onMounted(async () => {
   updateCompact(compactQuery);
   compactQuery.addEventListener('change', updateCompact);
 
-  if (platformMode.value) return;
+  if (platformMode.value) {
+    // I AM MOUNTED (ShufflewickPub #486), and it is the table twin of
+    // `world_ready`.
+    //
+    // The host is on the far side of a cross-origin frame: it cannot read this
+    // document, its resource timings or its console, and `postMessage` reports
+    // no delivery. So without this one message a bundle whose script threw and
+    // a bundle drawing a board nobody is touching are the same thing from
+    // there, and a host that guessed from a timeout alone would tell every
+    // healthy table in the catalogue it had failed to start. Silence past the
+    // host's deadline is evidence ONLY because a live shell breaks it.
+    //
+    // Sent before anything else this branch could do, and sent unconditionally:
+    // a hello a host has to wait for a game's own readiness to receive would
+    // stop being a statement about the shell.
+    window.parent.postMessage({ source: 'shufflewick-game', type: 'game_ready' }, '*');
+    return;
+  }
 
   // A game ONLY runs through the production path: GameShell embedded in an
   // <iframe> as platform mode. A top-level (non-iframe) load can't run a game,
