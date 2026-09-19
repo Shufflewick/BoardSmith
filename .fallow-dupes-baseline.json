@@ -751,7 +751,7 @@
     "src/ui/components/GameShell.panel-token.test.ts:100-108|src/ui/components/GameShell.panel-token.test.ts:143-150",
     "src/ui/components/GameShell.player-order.test.ts:48-54|src/ui/components/GameShell.vue:881-887",
     "src/ui/components/GameShell.test.ts:53-62|src/ui/components/GameShell.vue:1193-1208",
-    "src/ui/components/GameShell.test.ts:347-361|src/ui/components/GameShell.vue:1726-1745",
+    "src/ui/components/GameShell.test.ts:347-361|src/ui/components/GameShell.vue:1743-1762",
     "src/ui/components/GameShell.test.ts:375-384|src/ui/components/GameShell.test.ts:426-436",
     "src/ui/components/GameShell.test.ts:378-386|src/ui/components/GameShell.test.ts:412-420|src/ui/components/GameShell.test.ts:480-488",
     "src/ui/components/GameShell.test.ts:412-424|src/ui/components/GameShell.test.ts:480-492",

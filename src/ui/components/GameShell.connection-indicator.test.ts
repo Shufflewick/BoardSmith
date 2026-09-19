@@ -14,49 +14,18 @@
  * `window.parent !== window`, so the test redefines `window.parent` before mount.
  */
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { mount } from '@vue/test-utils';
-import { nextTick, defineComponent, h } from 'vue';
-import GameShell from './GameShell.vue';
-import { defineGameUIs, defaultUI } from '../game-uis.js';
-
-// The shell observes panel size for its modal viewport; jsdom has no layout observer.
-vi.stubGlobal('ResizeObserver', class { observe() {} disconnect() {} });
-
-const StubBoard = defineComponent({ name: 'StubBoard', setup: () => () => h('div', 'board') });
-const uis = defineGameUIs({ Stub: defaultUI(StubBoard) });
-
-const realParent = Object.getOwnPropertyDescriptor(window, 'parent');
-
-function enterIframe(): void {
-  Object.defineProperty(window, 'parent', {
-    configurable: true,
-    value: { postMessage: vi.fn() },
-  });
-}
-
-// jsdom ships no matchMedia; GameShell's compact-tier watch needs one.
-if (typeof window.matchMedia !== 'function') {
-  Object.defineProperty(window, 'matchMedia', {
-    configurable: true,
-    value: (query: string) => ({
-      matches: false,
-      media: query,
-      addEventListener: () => {},
-      removeEventListener: () => {},
-    }),
-  });
-}
+import { nextTick } from 'vue';
+import {
+  enterIframe,
+  leaveIframe,
+  mountPlatformShell,
+} from './GameShell.platform-mount.test-helper.js';
 
 function mountShell() {
-  return mount(GameShell, {
-    props: { gameType: 'indicator-test', uis },
-    global: { stubs: { DisabledReasonTooltip: true, Toast: true } },
-  });
+  return mountPlatformShell({ gameType: 'indicator-test' });
 }
 
-afterEach(() => {
-  if (realParent) Object.defineProperty(window, 'parent', realParent);
-});
+afterEach(leaveIframe);
 
 describe('GameShell connection indicator (IA-01 / #179)', () => {
   it('renders the dot while the platform connection is still connecting', async () => {
