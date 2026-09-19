@@ -1,5 +1,5 @@
 {
-  "revision": 89,
+  "revision": 90,
   "bundleProtocol": 2,
   "surfaceHash": "3f83f0f42f3cf6b1",
   "payloadHash": "c6eff75ba31c903a",
@@ -745,6 +745,15 @@
       "payloadHash": "c6eff75ba31c903a",
       "formatHash": "0058593e7cc80205",
       "summary": "A joining migration's cost is declared in BYTES and the host's count ceiling is gone (ShufflewickPub #487). world.migration.join gains a required maxSourceBytes: the most the originals ONE root names may weigh together. migrationShape().joins carries it beside maxSources, so a host admits or refuses a joining version against the figure that actually binds one call, before any marker exists, and holds the migration to it while it pages. The host-stated COUNT ceiling is removed: WorldMigrateContext.maxSources and WorldMigrationSourcesContext.maxSources are gone, migrationSources(page, { digest }) takes no ceiling, and declaredSources enforces the author's join.maxSources alone. #476's host derived its count by dividing the page budget by the largest a root may be, which prices every original as a maximal root -- ShufflewickPub #487 measured a thirty-six-source join at 625,119 bytes refused against a ceiling of three on a page carrying 1,835,008. A root's stored size is a fact only a host has, so the host measures the bytes and the library declares them; no second measurement is made here. No stored byte and no player-view payload changes; payloadHash moves because WorldMigrateContext lost a field."
+    },
+    {
+      "revision": 90,
+      "date": "2026-09-19",
+      "bundleProtocol": 2,
+      "surfaceHash": "3f83f0f42f3cf6b1",
+      "payloadHash": "c6eff75ba31c903a",
+      "formatHash": "0058593e7cc80205",
+      "summary": "A chronological world's checkpoint drain re-reads the committed queue before every entry instead of dispatching a once-selected snapshot (#280), so an entry cancelled or displaced by an earlier entry in the same drain no longer fires and a later event can no longer commit ahead of an earlier one the preceding checkpoint scheduled. Also carries the projection trap-count test (#281) and GameShell's platform-mode game_ready hello (ShufflewickPub #486). No exported surface, player-view payload or stored byte moves, which is why the platform cannot reach this build without a number of its own."
     }
   ]
 }
