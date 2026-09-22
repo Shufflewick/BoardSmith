@@ -1209,6 +1209,40 @@ shape one layer down. The rule for a host is therefore: replay the last state
 AND the offers that go with it to a frame that says it is ready, and never assume
 the frame was listening when you first spoke.
 
+### And the panel SAYS it has not been told yet (#282)
+
+**A world's action panel fills in stages, and that is the contract — not a bug
+to wait out.** Two things make it inherent, and neither is going away:
+
+* every push is two frames, the projection first and the verbs behind it
+  (above), and on a real world the second frame is *seconds* behind the first —
+  measured at **3.3 s to 13 s** on a 1,600-sector world with twenty-seven verbs,
+  each declaring its own partitions to hydrate; and
+* a world moves more than once over an attach. An arrival command commits, the
+  clock starts, an overdue tick drains. Each commit is another push, another
+  revision, another gap — so the offered set is legitimately **replaced, and may
+  legitimately grow, several times in the first seconds after a page attaches**,
+  and again after each command resolves.
+
+So the shared shell does not pretend the set is whole. While
+`useWorldHost.offersPending` is true, the action panel renders
+
+> Working out what you can do here…
+
+in place of the button list, marked `data-testid="bs-actions-pending"` and
+`role="status"`. An empty button list therefore means exactly one thing — **this
+seat may do nothing right now** — and "not told yet" is a different, visible
+state. `WorldShell` wires this through `PlayShell`'s `actionsPending` prop; a
+table never sets it, because a table's action table rides the same frame as the
+state it is about.
+
+**What a checker should wait on.** A script reaching for a verb should wait for
+`[data-testid="bs-actions-pending"]` to be absent, not for a fixed number of
+seconds, and must not read a verb's absence *while it is present* as a missing
+feature. A custom board wants the same fact and gets it from
+`useWorld().offersPending` — the panel and the board read one value, so they
+cannot disagree about whether the world has answered.
+
 ## `view(seat, world)`: what one seat sees
 
 ```ts

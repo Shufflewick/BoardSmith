@@ -73,6 +73,17 @@ export type Pick = PickMetadata;
  * bare names (#179).
  */
 export interface AwaitingPlayer { seat: number; name: string; color?: string }
+
+/**
+ * WHAT THE PANEL SAYS WHILE THE OFFERED SET IS STILL COMING (#282).
+ *
+ * In the player's own terms rather than the protocol's: "the world has not
+ * sent this frame its offers yet" is true and useless, and what a reader --
+ * a person waiting, or a script waiting on the testid beside it -- needs to
+ * know is only that the list in front of them is not the whole answer yet.
+ * `docs/persistent-worlds.md` quotes this sentence as the contract.
+ */
+const ACTIONS_PENDING_TEXT = 'Working out what you can do here\u2026';
 export type ActionMetadata = ControllerActionMetadata;
 
 const props = defineProps<{
@@ -111,6 +122,19 @@ const props = defineProps<{
   isActionHelpVisible?: boolean;
   /** Per-action disabled reasons from PlayerGameState.disabledActions */
   disabledActions?: Record<string, string>;
+  /**
+   * THE OFFERED SET HAS NOT ARRIVED YET (#282).
+   *
+   * A table never sets this: its available actions ride the same frame as the
+   * state they are about, so an empty list there IS "you may do nothing". A
+   * RESIDENT WORLD publishes the projection first and the verbs enumerated
+   * over it second (#244), and the second frame can be seconds behind the
+   * first -- so between them an empty list means "not told yet", which is a
+   * different sentence and the only honest one.
+   *
+   * Absent and `false` both mean the list on screen is the whole answer.
+   */
+  actionsPending?: boolean;
 }>();
 
 const emit = defineEmits<{
@@ -1591,7 +1615,18 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
          honest, the open level, is resolved against the menu on every read and
          kept outside this component, so the key had nothing left to do and a
          button that still exists now keeps its DOM node and its focus. -->
-    <div v-if="!currentAction" class="action-buttons">
+    <!-- THE VERBS ARE STILL BEING WORKED OUT (#282), said instead of an empty
+         button list. `role="status"` and not `alert`: it is the panel telling
+         a reader what it is doing, not an interruption, and it must not pull
+         focus off whatever the player was already on. -->
+    <div
+      v-if="!currentAction && actionsPending"
+      class="action-panel-arriving"
+      data-testid="bs-actions-pending"
+      role="status"
+    >{{ ACTIONS_PENDING_TEXT }}</div>
+
+    <div v-else-if="!currentAction" class="action-buttons">
       <!-- Menu chrome, drawn only inside a group (#228). At the top level there
            is none, so a game that declares no grouping renders exactly the flat
            panel it always did. -->
@@ -2881,6 +2916,18 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
   font-style: italic;
   font-size: 0.9rem;
   animation: pulse 1.5s infinite;
+}
+
+/* The offered set is still arriving (BoardSmith issue 282 -- written out, because
+   the hash form reads as a hex literal to the atomic-pairing guard). Sits where
+   the button list sits, so the bar keeps its height and nothing below it jumps
+   when the verbs land. */
+.action-panel-arriving {
+  display: flex;
+  align-items: center;
+  padding: 0.25rem 0.5rem;
+  color: var(--bsg-ink-2); /* explicit -- do not rely on Rule A cascade */
+  font-style: italic;
 }
 
 /* Animation pending state */

@@ -810,3 +810,126 @@ describe('WorldShell — a custom UI that prefills every selection (#226)', () =
     wrapper.unmount();
   });
 });
+
+/**
+ * #282: A PANEL THAT HAS NOT BEEN TOLD THE VERBS YET SAYS SO.
+ *
+ * A world host publishes a committed projection FIRST and the verbs
+ * enumerated over it SECOND (#244), because enumeration is an unbounded cost
+ * the view does not depend on -- measured at 3.3 to 13 seconds on a
+ * 1,600-sector world whose twenty-seven verbs each declare their own
+ * partitions. Every push is therefore a gap: state on screen, verbs still
+ * being worked out. And a world that moves several times over an attach --
+ * an arrival command, the clock starting, a tick draining -- opens that gap
+ * once per push, which is what a player sees as the panel filling in waves.
+ *
+ * The gap is inherent and the waves are honest; what was NOT honest is the
+ * panel during them. An empty button list is the same markup as "this seat may
+ * do nothing", so a reader -- a person or a script -- could not tell a verb
+ * that is still coming from a verb this seat does not have, and read a missing
+ * control as a missing feature.
+ *
+ * `offersPending` already answered the question on `useWorldHost`; it simply
+ * never reached the panel. These cases hold it there.
+ */
+describe('WorldShell — the panel says when the verbs are still arriving (#282)', () => {
+  /** The projection frame ALONE, which is the first half of every push. */
+  function tellState(wrapper: ReturnType<typeof mount>, over: Record<string, unknown> = {}) {
+    const { actions: _enumerated, ...state } = stateFrame(over);
+    (wrapper.vm as any).host.handleMessage({ origin: 'https://shufflewick.pub', data: state });
+  }
+
+  /** The verbs frame that follows it, stamped with the state it was over. */
+  function tellOffers(
+    wrapper: ReturnType<typeof mount>,
+    revision: number,
+    names: readonly string[],
+  ) {
+    (wrapper.vm as any).host.handleMessage({
+      origin: 'https://shufflewick.pub',
+      data: {
+        source: WORLD_HOST_SOURCE,
+        type: 'world_offers',
+        revision,
+        actions: names.map((name) => ({ name, selections: [] })),
+      },
+    });
+  }
+
+  const verbsOn = (wrapper: ReturnType<typeof mount>): string[] =>
+    wrapper.findAll('[data-bs-action]').map((button) => button.attributes('data-bs-action') ?? '');
+
+  const stillArriving = (wrapper: ReturnType<typeof mount>): boolean =>
+    wrapper.find('[data-testid="bs-actions-pending"]').exists();
+
+  it('says the verbs are still being worked out instead of drawing an empty panel', async () => {
+    const wrapper = mountShell();
+    tellState(wrapper, { revision: 7 });
+    await flushPromises();
+
+    expect(verbsOn(wrapper)).toEqual([]);
+    expect(stillArriving(wrapper)).toBe(true);
+    // In words, and announced: a script reads the testid, a player reads this,
+    // and a screen reader is told without the panel stealing focus.
+    const pending = wrapper.find('[data-testid="bs-actions-pending"]');
+    expect(pending.text()).toBe('Working out what you can do here…');
+    expect(pending.attributes('role')).toBe('status');
+
+    wrapper.unmount();
+  });
+
+  it('stops saying it the moment the verbs land', async () => {
+    const wrapper = mountShell();
+    tellState(wrapper, { revision: 7 });
+    await flushPromises();
+    tellOffers(wrapper, 7, ['look', 'move']);
+    await flushPromises();
+
+    expect(verbsOn(wrapper)).toEqual(['look', 'move']);
+    expect(stillArriving(wrapper)).toBe(false);
+
+    wrapper.unmount();
+  });
+
+  /**
+   * THE WAVES THEMSELVES, COUNTED RATHER THAN TIMED.
+   *
+   * BoardSmith #281's lesson: a wall-clock assertion about this would be
+   * measuring the machine. What the report is actually about is the SEQUENCE --
+   * how many times the offered set is replaced across one attach and the
+   * command resolutions after it, and what the panel says in between -- so that
+   * is what is counted here. Three pushes, three gaps, and the invariant that
+   * matters holds at every reading.
+   */
+  it('is never silently empty across a world that pushes three times', async () => {
+    const wrapper = mountShell();
+    const readings: { verbs: string[]; arriving: boolean }[] = [];
+    const read = () => readings.push({ verbs: verbsOn(wrapper), arriving: stillArriving(wrapper) });
+
+    const pushes: [number, string[]][] = [
+      [1, ['look']],
+      [2, ['look', 'move']],
+      [3, ['look', 'move', 'trade']],
+    ];
+    for (const [revision, names] of pushes) {
+      tellState(wrapper, { revision });
+      await flushPromises();
+      read();
+      tellOffers(wrapper, revision, names);
+      await flushPromises();
+      read();
+    }
+
+    // The staged arrival is real and is the thing being explained: the offered
+    // set was replaced once per push and grew every time.
+    expect(readings.filter((r) => !r.arriving).map((r) => r.verbs)).toEqual([
+      ['look'],
+      ['look', 'move'],
+      ['look', 'move', 'trade'],
+    ]);
+    // And at NO reading was the panel an empty list with nothing said about it.
+    expect(readings.every((r) => r.verbs.length > 0 || r.arriving)).toBe(true);
+
+    wrapper.unmount();
+  });
+});
