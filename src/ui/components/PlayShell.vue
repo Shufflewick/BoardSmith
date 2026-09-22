@@ -88,6 +88,16 @@ const props = withDefaults(defineProps<{
   actionMetadata: Record<string, ActionMetadata>;
   /** Action name to why it is offered but cannot be taken. */
   disabledActions?: Record<string, string>;
+  /**
+   * WHETHER `availableActions` IS "NOT TOLD YET" RATHER THAN "NOTHING" (#282).
+   *
+   * A table leaves it alone: its action table rides the same frame as the state
+   * it is about, so an empty list there is the whole answer. A world's verbs
+   * arrive on a frame of their own, after the projection (#244) and on a real
+   * world seconds after it, and the panel has to be able to tell a reader which
+   * of the two silences it is showing.
+   */
+  actionsPending?: boolean;
   /** Whether the panel is showing each action's help text. */
   isActionHelpVisible?: boolean;
   /** The identity token at the head of the action bar. Never absent while the
@@ -575,6 +585,7 @@ const mobileToggleLabel = computed(() => {
                 :action-metadata="actionMetadata"
                 :is-action-help-visible="isActionHelpVisible"
                 :disabled-actions="disabledActions"
+                :actions-pending="actionsPending"
                 :players="players"
                 :player-seat="playerSeat"
                 :is-my-turn="mayAct"

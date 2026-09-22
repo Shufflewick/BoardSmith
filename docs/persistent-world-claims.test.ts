@@ -1015,3 +1015,48 @@ describe('the guide is reachable from where an author starts', () => {
     expect(readSrc('src', 'cli', 'lib', 'world-project.ts')).toContain(`'docs/${GUIDE}'`);
   });
 });
+
+/**
+ * #282: THE GUIDE'S PROMISE ABOUT A PANEL THAT IS STILL FILLING IS THE CODE'S.
+ *
+ * The staged arrival itself is the shell's, and `WorldShell.test.ts` drives it
+ * frame by frame. What is tied down here is the part a READER depends on: the
+ * sentence the panel says, the hook a checker waits on, and the fact that both
+ * halves of the shell -- the panel and a custom board -- read the one value.
+ * A guide that named a different testid, or a panel that stopped saying
+ * anything, is exactly the drift this file exists to catch.
+ */
+describe('#282: the panel says when a world has not sent its verbs yet', () => {
+  const panel = readSrc('src', 'ui', 'components', 'auto-ui', 'ActionPanel.vue');
+  const playShell = readSrc('src', 'ui', 'components', 'PlayShell.vue');
+  const worldShell = readSrc('src', 'ui', 'world', 'WorldShell.vue');
+
+  it('the panel renders the sentence the guide quotes, on the hook it names', () => {
+    expect(panel).toContain('Working out what you can do here');
+    expect(panel).toContain('data-testid="bs-actions-pending"');
+    expect(guide).toContain('Working out what you can do here');
+    expect(guide).toContain('data-testid="bs-actions-pending"');
+  });
+
+  it('it is announced rather than shouted, so it cannot steal a player\'s focus', () => {
+    expect(panel).toMatch(/data-testid="bs-actions-pending"[\s\S]{0,120}role="status"/);
+  });
+
+  it('a world is what turns it on, through the prop the shared chrome forwards', () => {
+    expect(worldShell).toContain(':actions-pending="host.offersPending.value"');
+    expect(playShell).toContain('actionsPending?: boolean');
+    expect(playShell).toContain(':actions-pending="actionsPending"');
+  });
+
+  it('the panel and a board read ONE value, so the two cannot disagree', () => {
+    // The panel's is `host.offersPending` above; a board's is the same ref,
+    // provided on the world context -- not a second flag computed beside it.
+    expect(worldShell).toContain('offersPending: host.offersPending,');
+    expect(guide).toContain('useWorld().offersPending');
+  });
+
+  it('the guide says the staging is the contract, with the measurement behind it', () => {
+    expect(flatGuide).toContain('A world’s action panel fills in stages'.replace('’', "'"));
+    expect(flatGuide).toContain('3.3 s to 13 s');
+  });
+});

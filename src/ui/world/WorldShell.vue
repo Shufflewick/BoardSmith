@@ -52,6 +52,7 @@
       :available-actions="play.availableActions.value"
       :action-metadata="play.actionMetadata.value"
       :disabled-actions="play.disabledActions.value"
+      :actions-pending="host.offersPending.value"
       :panel-token="panelToken"
       :prompt="actionController.currentPick.value?.prompt"
       :connection="connectionIndicator"
