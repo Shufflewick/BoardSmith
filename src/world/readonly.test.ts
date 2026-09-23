@@ -336,3 +336,44 @@ describe("readOnlyProjection over frozen values (#247)", () => {
     expect(readOnlyProjection(frozen).holding).toBe(readOnlyProjection(frozen.holding));
   });
 });
+
+// #285: a class read off a projection is code, not world state. It was being
+// wrapped like a method, so `element.constructor` came back as an anonymous
+// function with no name and no statics, and a finder handed it treated it as a
+// predicate instead of a class. A declaration then answered differently from
+// the same code in `execute`, and nothing said so.
+describe("readOnlyProjection over classes (#285)", () => {
+  it("answers an element's constructor as its own class", () => {
+    const { here } = world();
+    const projection = readOnlyProjection(here);
+
+    expect(projection.constructor).toBe(Room);
+    expect(projection.constructor.name).toBe("Room");
+    expect((projection.constructor as typeof Room).isGameElement).toBe(true);
+  });
+
+  it("lets a finder handed that constructor find by class", () => {
+    const { game } = world();
+    const projection = readOnlyProjection(game);
+    const token = projection.first(Token)!;
+
+    const found = projection.first(token.constructor as typeof Token, "token-one");
+    expect(found).toBe(token);
+    expect(projection.all(token.constructor as typeof Token)).toHaveLength(1);
+  });
+
+  it("answers a class held as a plain value as that class", () => {
+    const projection = readOnlyProjection({ kind: Token });
+
+    expect(projection.kind).toBe(Token);
+  });
+
+  it("still wraps a method, so a mutating one is still refused", () => {
+    const { here, there } = world();
+    const token = readOnlyProjection(here).first(Token)!;
+
+    expect(token.putInto).not.toBe(Token.prototype.putInto);
+    expect(() => token.putInto(there)).toThrow(WorldRefusal);
+    expect(here.first(Token)).toBeDefined();
+  });
+});

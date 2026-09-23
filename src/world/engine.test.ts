@@ -1104,6 +1104,43 @@ describe("#219 — a declaration reads, and cannot write", () => {
   });
 });
 
+describe("#285 — a declaration reads an element's class as that class", () => {
+  it("answers constructor as the class, and a finder handed it finds by class", async () => {
+    // A declaration reads through the read-only projection, which wrapped every
+    // function it handed back -- a class included. So `room.constructor` was
+    // an anonymous wrapper, and `game.first(room.constructor, ...)` used it as
+    // a predicate. The same lines in execute() answered differently, silently.
+    const seen: { same: boolean; name: string; found: boolean }[] = [];
+    const byClass = worldAction<WorldFixtureGame>("byClass")
+      .needs(({ game }) => {
+        const room = game.first(Room, "room-one");
+        if (room) {
+          seen.push({
+            same: room.constructor === Room,
+            name: room.constructor.name,
+            found: game.first(room.constructor as typeof Room, "room-one") !== undefined,
+          });
+        }
+        return [ROOM_ONE];
+      })
+      .execute(() => {});
+    const engine = new BoardSmithWorldEngine({
+      game: newWorldGame(),
+      seats: new Map([["player-a", 1]]),
+      store: new CountingStore(genesis()),
+      actions: [touch, byClass],
+      view: () => [],
+    });
+    // Made resident first, so the declaration below has a room to read.
+    await engine.applyCommand("player-a", { name: "touch", args: {} }, STAMP);
+
+    await engine.applyCommand("player-a", { name: "byClass", args: {} }, STAMP);
+
+    expect(seen.length).toBeGreaterThan(0);
+    expect(seen).toEqual(seen.map(() => ({ same: true, name: "Room", found: true })));
+  });
+});
+
 describe("#68 — a refused command leaves the world unchanged", () => {
   it("rolls back a handler that mutated and then threw", async () => {
     // The failure this closes: a handler debits gold, throws before crediting
