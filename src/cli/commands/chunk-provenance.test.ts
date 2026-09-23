@@ -398,7 +398,11 @@ describe('chunk-check', () => {
       'utf-8',
     );
     const withInterpretation = template.replace(
-      '1. <!-- claim text --> — cites <!-- rulebook section / RULINGS.md entry -->',
+      [
+        '1. **<!-- claim text -->**',
+        '   > <!-- the exact source text, copied character for character -->',
+        '   Source: <!-- <file> §"<heading>", or <file>:<line>-<line> for code -->',
+      ].join('\n'),
       interpretation,
     );
     const chunkDir = join(project, DESIGN_DIR, 'chunks', slug);
@@ -822,7 +826,11 @@ describe('chunk-provenance-status', () => {
     let text = template.replace(/^Status: proposed$/m, `Status: ${status}`);
     if (cites) {
       text = text.replace(
-        '1. <!-- claim text --> — cites <!-- rulebook section / RULINGS.md entry -->',
+        [
+        '1. **<!-- claim text -->**',
+        '   > <!-- the exact source text, copied character for character -->',
+        '   Source: <!-- <file> §"<heading>", or <file>:<line>-<line> for code -->',
+      ].join('\n'),
         `1. A claim — cites ${cites}`,
       );
     }

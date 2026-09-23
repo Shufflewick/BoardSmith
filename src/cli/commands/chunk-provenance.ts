@@ -14,6 +14,7 @@ import { normalizeEdition, parseAdditionalSources } from './ingest-archive.js';
 import { readBoardsmithVersion } from '../lib/boardsmith-version.js';
 import { hashSkillsTree } from '../lib/skills-tree-hash.js';
 import { findHeadingIndex } from './build-manifest.js';
+import { checkSignoff } from './chunk-signoff.js';
 
 /**
  * `computeVerificationScope()` / `resolveCitedSlices()` — the two pure computations behind
@@ -658,6 +659,10 @@ export async function chunkCheckCommand(
   });
   const record = { scope: recordScope, reason: recordReason };
 
+  // #291: a verified Status must be backed by a recorded sign-off. Nothing here can be repaired:
+  // only the designer can sign a chunk off, so this fails without writing anything.
+  const signoffProblems = await checkSignoff(resolve(options.project ?? process.cwd()), slug);
+
   const result = {
     slug,
     scope: record.scope,
@@ -665,14 +670,24 @@ export async function chunkCheckCommand(
     changed,
     citedSlices,
     unresolved,
+    signoffProblems,
   };
 
   if (options.json) {
     console.log(JSON.stringify(result, null, 2));
   }
 
-  if (!changed) {
+  if (signoffProblems.length) {
     if (!options.json) {
+      console.error(chalk.red(`${relChunkPath}'s verified status is not backed by a valid sign-off:`));
+      for (const p of signoffProblems) console.error(`  • ${p}`);
+      console.error('');
+    }
+    process.exitCode = 1;
+  }
+
+  if (!changed) {
+    if (!options.json && !signoffProblems.length) {
       console.log(
         chalk.green(
           `✓ ${relChunkPath} — Verified Against up to date (${record.scope}${record.reason ? `, ${record.reason}` : ''})`,
@@ -901,6 +916,13 @@ export interface ChunkProvenanceStatusResult {
    */
   verifiedWithoutProvenance: string[];
   /**
+   * #291: chunks whose Status claims verification that no valid sign-off backs, with the reasons
+   * `checkSignoff` gives. Unlike `verifiedWithoutProvenance` this has no "older project" excuse: a
+   * verified status is derived from a sign-off, so every entry here is a status set by hand, a
+   * waiver stretched past the chunks it names, or a playtest item nobody observed.
+   */
+  verifiedWithoutSignoff: Array<{ slug: string; problems: string[] }>;
+  /**
    * Project-level classification, which is what makes `verifiedWithoutProvenance` usable.
    *
    * The flag's membership is correct but its SEVERITY is not uniform, and without this field a
@@ -959,6 +981,7 @@ export async function chunkProvenanceStatusCommand(
   const bySkillsTreeHash: Record<string, string[]> = {};
   const byBoardsmithVersion: Record<string, string[]> = {};
   const verifiedWithoutProvenance: string[] = [];
+  const verifiedWithoutSignoff: Array<{ slug: string; problems: string[] }> = [];
   const counts = { full: 0, codeConformanceOnly: 0, unknown: 0 };
 
   for (const slug of slugs) {
@@ -986,6 +1009,9 @@ export async function chunkProvenanceStatusCommand(
     if (status.startsWith('verified') && parsed.state === PROVENANCE_UNKNOWN) {
       verifiedWithoutProvenance.push(slug);
     }
+
+    const signoffProblems = await checkSignoff(projectDir, slug);
+    if (signoffProblems.length) verifiedWithoutSignoff.push({ slug, problems: signoffProblems });
 
     chunks.push({
       slug,
@@ -1018,6 +1044,7 @@ export async function chunkProvenanceStatusCommand(
     bySkillsTreeHash,
     byBoardsmithVersion,
     verifiedWithoutProvenance,
+    verifiedWithoutSignoff,
     projectProvenanceState,
   };
 
@@ -1092,6 +1119,21 @@ export async function chunkProvenanceStatusCommand(
     }
     for (const slug of verifiedWithoutProvenance) {
       console.log(`  • ${slug}`);
+    }
+  }
+
+  if (verifiedWithoutSignoff.length) {
+    console.log('');
+    console.log(
+      chalk.red(
+        `VERIFIED WITHOUT SIGN-OFF: these chunks' Status claims verification that no valid ` +
+          `designer sign-off backs. Set each back to built and have the designer sign it off ` +
+          `with \`boardsmith chunk-signoff <slug>\`:`,
+      ),
+    );
+    for (const { slug, problems } of verifiedWithoutSignoff) {
+      console.log(`  • ${slug}`);
+      for (const p of problems) console.log(`      ${p}`);
     }
   }
 

@@ -1,6 +1,7 @@
 import {
   DESIGN_DIR,
   RULEBOOK_DIR,
+  chunkSlugs,
   designChunksDir,
   designDir,
   designRulebookDir,
@@ -481,13 +482,7 @@ export async function resolveProvenance(
   );
 
   const chunksDir = designChunksDir(dir);
-  let slugs: string[] = [];
-  try {
-    const entries = await fs.readdir(chunksDir, { withFileTypes: true });
-    slugs = entries.filter((e) => e.isDirectory()).map((e) => e.name).sort();
-  } catch {
-    slugs = [];
-  }
+  const slugs = await chunkSlugs(dir);
 
   const rulebookDir = designRulebookDir(dir);
   let sliceFilenames: string[] = [];
@@ -1226,13 +1221,7 @@ async function computeChunkVerdicts(
   classifications: ClassificationRecord[],
 ): Promise<{ verdicts: ChunkVerdict[]; warnings: string[] }> {
   const chunksDir = designChunksDir(projectDir);
-  let slugs: string[] = [];
-  try {
-    const entries = await fs.readdir(chunksDir, { withFileTypes: true });
-    slugs = entries.filter((e) => e.isDirectory()).map((e) => e.name).sort();
-  } catch {
-    slugs = [];
-  }
+  const slugs = await chunkSlugs(projectDir);
 
   const rulebookDir = designRulebookDir(projectDir);
   let sliceFilenames: string[] = [];

@@ -214,16 +214,25 @@ describe('PROV-03 — check-status.md item 8: verification provenance and drift'
     expect(checkStatus).toContain('verifiedWithoutProvenance');
   });
 
-  it('the count sentences say "eleven items", never an earlier count', () => {
+  it('the count sentences say "twelve items", never an earlier count', () => {
     // The report grew from seven → nine (provenance + rules staleness) → eleven (unanswered
-    // questions + BoardSmith filings). Pinning the exact number keeps a newly-added item from
-    // shipping with a count sentence that still claims the old one.
+    // questions + BoardSmith filings) → twelve (ledger integrity, #293). Pinning the exact number
+    // keeps a newly-added item from shipping with a count sentence that still claims the old one.
     const checkStatus = read('check-status.md');
     expect(checkStatus).not.toMatch(/seven items/i);
     expect(checkStatus).not.toMatch(/eight items/i);
     expect(checkStatus).not.toMatch(/nine items/i);
-    const matches = checkStatus.match(/eleven items/gi) ?? [];
+    expect(checkStatus).not.toMatch(/eleven items/i);
+    const matches = checkStatus.match(/twelve items/gi) ?? [];
     expect(matches.length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('item 12 runs `boardsmith ledger-check` and reports its findings rather than re-deriving them (#293)', () => {
+    const checkStatus = read('check-status.md');
+    const item12 = checkStatus.slice(checkStatus.indexOf('**12. Ledger integrity.**'));
+    expect(checkStatus).toContain('**12. Ledger integrity.**');
+    expect(item12).toContain('boardsmith ledger-check --json');
+    expect(item12).toMatch(/read-only/);
   });
 
   it('still contains no instruction to write a state file (read-only posture preserved)', () => {

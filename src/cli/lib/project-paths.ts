@@ -1,3 +1,4 @@
+import { promises as fs } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 /**
@@ -49,6 +50,20 @@ export function designChunksDir(projectDir: string): string {
   return join(designDir(projectDir), CHUNKS_DIR);
 }
 
+/**
+ * Every chunk directory's slug under `design/chunks/`, sorted; empty when the project has no
+ * chunks yet. Any error other than the directory being absent is thrown, not read as "no chunks".
+ */
+export async function chunkSlugs(projectDir: string): Promise<string[]> {
+  try {
+    const entries = await fs.readdir(designChunksDir(projectDir), { withFileTypes: true });
+    return entries.filter((e) => e.isDirectory()).map((e) => e.name).sort();
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return [];
+    throw err;
+  }
+}
+
 /** Absolute path to one chunk's `CHUNK.md`. */
 export function chunkMdPath(projectDir: string, slug: string): string {
   return join(designChunksDir(projectDir), slug, CHUNK_MD);
@@ -75,6 +90,11 @@ export const ASSETS_MD = 'ASSETS.md';
 export const DESIGN_MD = 'DESIGN.md';
 export const BRIEF_MD = 'BRIEF.md';
 export const BOARDSMITH_BUGS_MD = 'BOARDSMITH-BUGS.md';
+/** The filings ledger and the orchestrated-run journal, written by `/bs-build-game`. */
+export const FILINGS_MD = 'FILINGS.md';
+export const RUN_MD = 'RUN.md';
+/** Designer playtest waivers, written only by `boardsmith chunk-waiver` (#291). */
+export const WAIVERS_MD = 'WAIVERS.md';
 
 /** Every ledger `design/` owns, in the order `boardsmith doctor` reports them. */
 export const DESIGN_LEDGERS = [
@@ -85,6 +105,7 @@ export const DESIGN_LEDGERS = [
   RULINGS_MD,
   ASSETS_MD,
   BOARDSMITH_BUGS_MD,
+  WAIVERS_MD,
 ] as const;
 
 /** Absolute path to a ledger in `design/`. */

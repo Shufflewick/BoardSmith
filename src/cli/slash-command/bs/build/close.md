@@ -55,7 +55,8 @@ release) and no tail detailing.
    machine-owned `## Verified Against` block. A NON-ZERO exit means it had to write or repair the
    block: re-read `chunks/<slug>/CHUNK.md` (the copy in context is stale) and re-run the command,
    which will then pass. Do not hand-author anything between the block's fences — that section is
-   written by this command and by nothing else.
+   written by this command and by nothing else. If it instead names the sign-off, re-running will
+   not help: the chunk is not closed until the designer signs it off (`build/playtest.md` "Who Signs Off").
 
 4. **Roll up decisions.** Append this chunk's settled house-rule/adaptation choices and any
    revise-round resolutions into `DECISIONS.md`'s append-only ledger, one entry per decision, so
@@ -90,6 +91,21 @@ release) and no tail detailing.
    any of the four ledgers, record that explicitly ("no ledger changes this chunk") rather than
    omitting the step — a reconciliation that never appears is indistinguishable from one that
    never ran.
+
+   Then run `boardsmith ledger-check`. It checks, as code, what this reconciliation is most often
+   done wrong: a ruling, decision, filing or dispatch number used twice; an entry that a later
+   one supersedes but that does not carry its `- Superseded by:` line; a filing whose
+   `Reported:`, `Issue:` and any status banner disagree; and a `RUN.md` `Dispatched at` or
+   `Finished at` that is not a real `date -u` read (later than the commit that recorded it,
+   a finish before its dispatch, or out of order). It also refuses to close a chunk whose cited
+   evidence is not in git: when `RULINGS.md`, `DECISIONS.md` or a verified CHUNK.md (its sign-off
+   included) cites a script or a capture, that file must be committed. A cited file that is
+   gitignored (anything in `.boardsmith/scratch/`), not yet added, missing, or outside the project
+   is a finding; move it into `chunks/<slug>/evidence/`, commit it, and cite that path
+   (`state-machine.md` "Project Layout"). A non-zero exit means the ledgers are wrong:
+   fix every entry it names, following the fix its message states, and run it again. This step
+   is not done, and the lock is not released, until it exits zero. Never edit around a finding
+   by renumbering a citation you have not traced, or by deleting an entry.
 
 6. **Release the lock.** The FINAL write of this Bookkeeping Sequence: set SKETCH.md's
    `Session Lock:` line back to `Session Lock: none` (`templates/SKETCH.template.md`), so a

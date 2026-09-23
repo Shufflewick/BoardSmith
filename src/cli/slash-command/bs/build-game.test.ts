@@ -319,7 +319,7 @@ describe('WF-06 — a run resumes cleanly after a /clear or a crash', () => {
     for (const value of ['active', 'paused', 'complete']) {
       expect(template).toContain(value);
     }
-    for (const field of ['Chunk:', 'Pipeline:', 'Dispatched at:', 'Outcome:', 'Detail:']) {
+    for (const field of ['Chunk:', 'Pipeline:', 'Dispatched at:', 'Finished at:', 'Outcome:', 'Detail:']) {
       expect(template, `RUN.template.md must document \`${field}\``).toContain(field);
     }
   });
@@ -409,7 +409,7 @@ describe('WF-08 — check-status reports the two new ledgers, read-only', () => 
     const checkStatus = read('check-status.md');
     expect(checkStatus).toMatch(/\*\*10\. Unanswered questions\.\*\*/);
     expect(checkStatus).toMatch(/\*\*11\. BoardSmith bugs and gaps filed\.\*\*/);
-    expect(checkStatus).toMatch(/Present all eleven items together/);
+    expect(checkStatus).toMatch(/Present all twelve items together/);
   });
 
   it('never re-poses an answered question and never reports a declined filing', () => {
@@ -450,5 +450,52 @@ describe('WF-09 — state-machine.md owns the orchestrated-run rules once', () =
   it('keeps the how-never-what boundary: relaying an answer is not deciding it', () => {
     const stateMachine = flat(read('state-machine.md'));
     expect(stateMachine).toMatch(/Only \*who relays\* the answer changes, never \*who decides\* it/i);
+  });
+});
+
+/**
+ * #291: an orchestrated run accepted its own ask gates, extended a one-chunk waiver by
+ * "precedent", and marked playtests verified that nobody observed. The three files that govern a
+ * gate state ONE policy, word for word, so no file can drift into a looser reading; and the
+ * playtest step routes Status through the command that enforces it, never a hand-written line.
+ */
+const GATE_POLICY =
+  'Only the designer answers an ask gate or signs off a playtest. An unattended run parks the ' +
+  'chunk at that gate and moves on only to work that does not need the answer.';
+
+describe('#291: one gate policy for orchestrated runs', () => {
+  for (const file of ['build-game.md', 'build/ask.md', 'build/playtest.md']) {
+    it(`${file} states the gate policy verbatim`, () => {
+      expect(flat(read(file))).toContain(GATE_POLICY);
+    });
+
+    it(`${file} says a decision about one chunk is never a precedent for another`, () => {
+      expect(flat(read(file))).toMatch(/never a precedent/i);
+    });
+  }
+
+  it('playtest.md derives Status from `boardsmith chunk-signoff`, never by writing the line itself', () => {
+    const playtest = flat(read('build/playtest.md'));
+    expect(playtest).toContain('boardsmith chunk-signoff');
+    expect(playtest).toContain('--observed');
+    expect(playtest).toContain('--automated');
+    expect(playtest).not.toMatch(/Write `Status: verified`/);
+  });
+
+  it('playtest.md routes a skipped playtest through a named, expiring waiver', () => {
+    const playtest = flat(read('build/playtest.md'));
+    expect(playtest).toContain('boardsmith chunk-waiver');
+    expect(playtest).toMatch(/--expires/);
+  });
+
+  it('build-game.md re-checks a closed chunk with chunk-check before continuing', () => {
+    const buildGame = flat(read('build-game.md'));
+    expect(buildGame).toMatch(/`closed`[^]*?boardsmith chunk-check <slug>/);
+  });
+
+  it('ask.md does not let an unrecorded precedent stand in for an answer', () => {
+    const ask = flat(read('build/ask.md'));
+    expect(ask).toMatch(/standing precedent/i);
+    expect(ask).toMatch(/reversible/i);
   });
 });

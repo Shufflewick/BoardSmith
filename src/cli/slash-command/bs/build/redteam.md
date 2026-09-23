@@ -48,9 +48,16 @@ rulebook slice(s): {slicePaths}. Also read RULINGS.md in this project — ruling
 rulebook (see state-machine.md "Rulings Outrank Rulebook"); the rulebook plus RULINGS.md
 together form the composite source of truth.
 
-Here is a numbered list of factual claims. For each claim, decide: does the cited slice (plus
-RULINGS.md) support this claim as written? Default to REFUTED if you are uncertain — do not
-give the benefit of the doubt.
+Here is a numbered list of factual claims. Each claim carries one or more quoted passages
+(`> ` lines) and a `Source:` naming where each passage is. For each claim, RE-OPEN every cited
+Source location yourself and read the text there, and around it, rather than the claim text:
+  - Is the quoted passage really at that location, word for word?
+  - Does the passage, read in its own context (plus RULINGS.md), say what the claim says? A
+    claim that adds, drops, or reverses anything the passage says is refuted.
+  - A claim that rests on something no quoted passage says is refuted: the source does not back
+    it, so it must become an open question for the designer, never a rule an agent fills in.
+Default to REFUTED if you are uncertain — do not give the benefit of the doubt. Every objection
+quotes the source text it rests on, with its location.
 
 {numberedClaimsList}
 
@@ -73,6 +80,18 @@ none found.
 
 This is the concrete pattern to copy: 3 independent Task-tool dispatches, each prompt containing
 only slice paths + the numbered claims list — no investigator rationale, no framing.
+
+## Gate Before Dispatch: Quotes Are Checked as Code
+
+Before any round's dispatch, the orchestrator runs `boardsmith claim-quote-check <slug>`. It
+re-opens every claim's cited location and refuses a claim with no quote, a quote that is not at
+its citation, or an open question that does not show where it looked (see `build/investigate.md`
+"Quoted Claims, Checked as Code"). A non-zero exit sends the refusals back to a narrower
+investigate subagent; redteam is never dispatched on claims that fail it. The check proves the
+quote is THERE; the refuters judge whether it SAYS what the claim says, which is why they re-open
+the source rather than the claim text. A claim refuted because no passage backs it is resolved by
+turning it into an open question (`Q<N>.`) for the ask step, never by writing a rule the source
+does not contain.
 
 ## Default-to-Refuted
 

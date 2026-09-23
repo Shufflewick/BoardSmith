@@ -1711,6 +1711,46 @@ describe('PROV-01/PROV-03 — both close paths invoke chunk-check, reused by cit
     expect(close).toContain('boardsmith chunk-check');
   });
 
+  it('close.md\'s ledger reconciliation (item 5) runs `boardsmith ledger-check` and does not pass on a non-zero exit (#293)', () => {
+    const close = read('build/close.md');
+    const item5 = close.slice(
+      close.indexOf('5. **Reconcile the paperwork ledgers'),
+      close.indexOf('6. **Release the lock.**'),
+    );
+    expect(item5).toContain('boardsmith ledger-check');
+    expect(item5.replace(/\s+/g, ' ')).toMatch(/non-zero exit/i);
+  });
+
+  it('close.md refuses to close a chunk whose cited evidence is not in git (#292)', () => {
+    const close = read('build/close.md');
+    const item5 = close.slice(
+      close.indexOf('5. **Reconcile the paperwork ledgers'),
+      close.indexOf('6. **Release the lock.**'),
+    ).replace(/\s+/g, ' ');
+    expect(item5).toMatch(/cites a script or a capture/);
+    expect(item5).toContain('chunks/<slug>/evidence/');
+    expect(item5).toMatch(/gitignored/);
+  });
+
+  it('state-machine.md defines both locations, scratch and committed evidence, and when to use each (#292)', () => {
+    const layout = read('state-machine.md');
+    const section = layout.slice(layout.indexOf('## Project Layout'), layout.indexOf('## Companion Authority'));
+    expect(section).toContain('chunks/<slug>/evidence/');
+    expect(section).toContain('.boardsmith/scratch/');
+    const flat = section.replace(/\s+/g, ' ');
+    expect(flat).toMatch(/Evidence goes in `chunks\/<slug>\/evidence\/`/);
+    expect(flat).toContain('boardsmith ledger-check');
+  });
+
+  it('no skill step sends a script someone will rely on to scratch without naming the evidence folder (#292)', () => {
+    for (const file of ['build-chunk.md', 'ingest-rules.md']) {
+      const text = read(file).replace(/\s+/g, ' ');
+      const at = text.indexOf('.boardsmith/scratch/');
+      expect(at, file).toBeGreaterThan(-1);
+      expect(text.slice(at - 400, at + 600), file).toContain('evidence/');
+    }
+  });
+
   it('playtest.md\'s Light-Path Bookkeeping cites close.md\'s Bookkeeping Sequence BY NAME and does not duplicate the chunk-check text', () => {
     const playtest = read('build/playtest.md');
     expect(playtest).toContain('## Bookkeeping Sequence');
@@ -1858,5 +1898,55 @@ describe('Bookkeeping Sequence ordinal citations resolve to the item they descri
     }
 
     expect(failures, failures.join('\n')).toEqual([]);
+  });
+});
+
+/**
+ * Issue #289: every rule claim carries an exact quote and its location, red team and the fidelity
+ * lens re-open that location rather than reviewing the claim text, and a claim the source does not
+ * back becomes a designer question through ask. The mechanical half is
+ * `boardsmith claim-quote-check` (src/cli/commands/claim-quotes.ts); these assertions pin that each
+ * step that owns a part of the rule states it and calls the check.
+ */
+describe('#289 — claims carry quoted source; unsupported claims become designer questions', () => {
+  it('investigate.md states the quote + Source format, the open-question form, and runs the check before redteam', () => {
+    const investigate = read('build/investigate.md');
+    expect(investigate).toContain('boardsmith claim-quote-check');
+    expect(investigate).toMatch(/Source: rulebook\/[^\n]*§"/);
+    expect(investigate).toMatch(/Source: [^\n]*:\d+-\d+/);
+    expect(investigate).toContain('Searched:');
+    expect(investigate).toMatch(/Q1\. \*\*/);
+    expect(investigate).toMatch(/never\s+invent/i);
+    expect(investigate).toMatch(/never\s+write\s+that\s+the\s+source\s+is\s+missing\s+without/i);
+  });
+
+  it('redteam.md gates dispatch on the check and makes refuters re-open each cited location', () => {
+    const redteam = read('build/redteam.md');
+    expect(redteam).toContain('boardsmith claim-quote-check');
+    expect(redteam).toMatch(/re-open/i);
+    expect(redteam).toMatch(/rather\s+than\s+the\s+claim\s+text/i);
+    expect(redteam).toMatch(/open question/i);
+  });
+
+  it("audit.md's fidelity lens re-opens every quoted source and routes an unsupported finding to a question", () => {
+    const audit = read('build/audit.md');
+    const fidelity = audit.slice(audit.indexOf('**Fidelity lens:**'), audit.indexOf('**Visibility lens:**'));
+    expect(audit).toContain('boardsmith claim-quote-check {slug} --json');
+    expect(fidelity).toMatch(/re-open/i);
+    expect(fidelity).toContain('quote');
+    expect(fidelity).toMatch(/question/i);
+  });
+
+  it('ask.md puts every open question from investigate to the designer, past the triple-gate', () => {
+    const ask = read('build/ask.md');
+    expect(ask).toMatch(/`Q<N>\.` open question/);
+    expect(ask).toMatch(/never\s+an\s+invented\s+rule/i);
+  });
+
+  it('CHUNK.template.md documents the claim format the check parses', () => {
+    const template = read('templates/CHUNK.template.md');
+    expect(template).toContain('Source:');
+    expect(template).toContain('Searched:');
+    expect(template).toContain('boardsmith claim-quote-check');
   });
 });

@@ -538,7 +538,10 @@ describe('parseRulings', () => {
     expect(ruling2.body).toContain('This sentence comes after the final Rationale: line');
   });
 
-  it('does not add a second ### Ruling (\\d+) heading regex declaration anywhere under src/cli/', () => {
+  it('declares no ### Ruling (\\d+) heading regex of its own anywhere under src/cli/ (#293)', () => {
+    // Every ledger's entry headings are read by ONE kind-generic parser, parseLedgerEntries
+    // (lib/ledger-entries.ts); parseRulings and ledger-check both call it. A literal Ruling
+    // heading regex anywhere else is a second parser that can disagree with it.
     // Strips /** ... */ block comments and // line comments before counting, so a *comment*
     // mentioning the pattern in prose (as this very file, verify-impact.ts, and 176-PATTERNS.md
     // do) is never mistaken for a second competing regex literal.
@@ -566,7 +569,8 @@ describe('parseRulings', () => {
       const matches = stripped.match(/###\s*Ruling\s*\(\\d\+\)/g) ?? [];
       regexDeclarationCount += matches.length;
     }
-    expect(regexDeclarationCount).toBe(1);
+    expect(regexDeclarationCount).toBe(0);
+    expect(readFileSync(join(cliRoot, 'lib', 'ledger-entries.ts'), 'utf-8')).toContain('`^### ${kind} (\\\\d+)');
   });
 });
 

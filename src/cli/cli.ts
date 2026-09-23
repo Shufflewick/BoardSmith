@@ -22,8 +22,11 @@ import {
 } from './commands/ingest-archive.js';
 import { chunkCheckCommand, chunkProvenanceStatusCommand } from './commands/chunk-provenance.js';
 import { testStepCheckCommand } from './commands/test-step-check.js';
+import { claimQuoteCheckCommand } from './commands/claim-quotes.js';
+import { chunkReopenCommand, chunkSignoffCommand, chunkWaiverCommand } from './commands/chunk-signoff.js';
 import { traceCheckCommand } from './commands/trace-check.js';
 import { driftCheckCommand } from './commands/drift-check.js';
+import { ledgerCheckCommand } from './commands/ledger-check.js';
 import {
   verifyRunInitCommand,
   verifyRunRecordCommand,
@@ -281,6 +284,47 @@ program
   .option('--json', 'Emit JSON instead of human-readable output')
   .action(testStepCheckCommand);
 
+// Issue #289: every Interpretation claim carries an exact quote and its location, and the quote
+// must be there. Read-only; exits non-zero on any refused claim so a build session cannot pass it.
+program
+  .command('claim-quote-check <slug>')
+  .description("Refuse a chunk's Interpretation claims that carry no exact source quote, or whose quote is not at its cited location")
+  .option('--project <dir>', 'Project directory (defaults to cwd)')
+  .option('--json', 'Emit JSON (the quotes and their sources, without the claim text) instead of human-readable output')
+  .action(claimQuoteCheckCommand);
+
+// #291: a chunk's verified status is derived from a recorded sign-off, and a playtest waiver is
+// scoped to the chunks it names and expires. Both are written here and nowhere else, so
+// `chunk-check` can refuse a verified status these did not produce.
+program
+  .command('chunk-signoff <slug>')
+  .description(
+    "Record who signed a built chunk off, when, and on what basis, and derive its verified Status from it",
+  )
+  .option('--project <dir>', 'Project directory (defaults to cwd)')
+  .option('--by <designer>', "The designer's name (with --observed)")
+  .option('--observed <items>', 'Every Verified Checklist item the designer confirmed, e.g. 1,2,3')
+  .option('--waiver <id>', 'A designer waiver from design/WAIVERS.md that names this chunk, e.g. W2')
+  .option('--automated <evidence>', 'For a chunk with no designer playtest: the test and sim pass that stands in')
+  .action(chunkSignoffCommand);
+
+program
+  .command('chunk-reopen <slug>')
+  .description('Send a verified chunk back to built for rework, voiding its sign-off')
+  .option('--project <dir>', 'Project directory (defaults to cwd)')
+  .requiredOption('--reason <text>', 'Why the chunk goes back for rework')
+  .action(chunkReopenCommand);
+
+program
+  .command('chunk-waiver')
+  .description('Record a designer waiver of playtesting for the named chunks, until it expires')
+  .option('--project <dir>', 'Project directory (defaults to cwd)')
+  .requiredOption('--chunks <slugs>', 'Comma-separated chunk slugs the waiver covers, each one by name')
+  .requiredOption('--by <designer>', "The designer's name")
+  .requiredOption('--expires <date>', 'YYYY-MM-DD; the waiver ends after this day')
+  .requiredOption('--reason <text>', 'Why the designer waived these chunks')
+  .action(chunkWaiverCommand);
+
 program
   .command('chunk-provenance-status')
   .description('Report per-chunk verification provenance and drift (read-only)')
@@ -311,6 +355,17 @@ program
   .option('--project <dir>', 'Project directory (defaults to cwd)')
   .option('--json', 'Emit JSON instead of human-readable output')
   .action(traceCheckCommand);
+
+// #293: ledger integrity (duplicate numbers, supersession pointers, filing status, run-log
+// timestamps against the commits that recorded them). Unlike the report-only sweeps above, a
+// finding exits non-zero: close runs it as a gate. It reads the tree as it stands, so the same
+// command checks a combined tree at merge time.
+program
+  .command('ledger-check')
+  .description('Check the design ledgers and the run log for numbering, supersession, status and timestamp errors, and that every script or capture a ledger or verified chunk cites is committed')
+  .option('--project <dir>', 'Project directory (defaults to cwd)')
+  .option('--json', 'Emit JSON instead of human-readable output')
+  .action(ledgerCheckCommand);
 
 program
   .command('drift-check')
