@@ -11,7 +11,7 @@ import {
   relChunkMdPath,
 } from '../lib/project-paths.js';
 import { assertBareName } from '../lib/user-name.js';
-import { extractSection } from './build-manifest.js';
+import { extractSection, parseRulings } from './build-manifest.js';
 
 /**
  * `boardsmith constraint-check [slug]`: does the project hold its own hard constraints (#288)?
@@ -229,7 +229,7 @@ function coverageRefusals(claudeMd: string | undefined, constraints: HardConstra
 
 async function rulingNumbers(projectDir: string): Promise<Set<string>> {
   const text = stripComments((await readOptional(designPath(projectDir, RULINGS_MD))) ?? '');
-  return new Set([...text.matchAll(/^### Ruling (\d+)\b/gm)].map((m) => m[1]));
+  return new Set(parseRulings(text).map((r) => String(r.number)));
 }
 
 async function capRefusals(projectDir: string, g: GrowingStructure, name: string): Promise<string[]> {
