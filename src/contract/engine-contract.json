@@ -1,7 +1,7 @@
 {
-  "revision": 91,
+  "revision": 92,
   "bundleProtocol": 2,
-  "surfaceHash": "3f83f0f42f3cf6b1",
+  "surfaceHash": "dcaf23b8b8aeaeca",
   "payloadHash": "c6eff75ba31c903a",
   "formatHash": "0058593e7cc80205",
   "history": [
@@ -763,6 +763,15 @@
       "payloadHash": "c6eff75ba31c903a",
       "formatHash": "0058593e7cc80205",
       "summary": "A world's action panel says when its verbs are still arriving (#282). While useWorldHost.offersPending is true, ActionPanel renders \"Working out what you can do here...\" on data-testid=\"bs-actions-pending\" with role=\"status\" in place of the button list; PlayShell forwards the new optional actionsPending prop and WorldShell binds it to the same ref a custom board reads. A table never sets it, so GameShell is unchanged and an empty button list on a table still means what it always meant. The two-frame publication contract (#244) puts a world's offers seconds behind the projection they are enumerated over -- measured at 3.1s, 7.4s and up to 13s cold -- and a world commits several times over an attach, so the panel legitimately fills in stages; what was wrong was that it rendered markup identical to \"this seat may do nothing\" in between. No exported surface, player-view payload or stored byte moves, which is why the platform cannot reach this build without a number of its own."
+    },
+    {
+      "revision": 92,
+      "date": "2026-09-23",
+      "bundleProtocol": 2,
+      "surfaceHash": "dcaf23b8b8aeaeca",
+      "payloadHash": "c6eff75ba31c903a",
+      "formatHash": "0058593e7cc80205",
+      "summary": "A world's rules and its runner must share one engine (#283): createWorld refuses a gameClass that does not extend this engine's Game with the new platform-owned WorldRefusal code \"engine-mismatch\", which is the one exported-surface change here. Also carries the engine fix that a class finder (first/all/firstN/last/lastN with a class and a predicate) runs its predicates only on elements of that class instead of every element walked, and boardsmith dev's world host now being bundled with the rules so it runs on their engine. On a 1,600-sector world that took boardsmith dev from 4-132 s per command to under 250 ms. No player-view payload or stored byte moves."
     }
   ]
 }
