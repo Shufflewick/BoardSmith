@@ -86,7 +86,8 @@ async function chunkMd(slug: string): Promise<string> {
 let main: string;
 
 async function setUp(): Promise<void> {
-  main = join(tempTree('bs-chunk-merge-'), 'game');
+  const tree = tempTree('bs-chunk-merge-');
+  main = join(tree, 'game');
   await write(main, {
     'CLAUDE.md': CLAUDE_MD,
     'tests/budget.test.ts': '// measures the world partition\n',

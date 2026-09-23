@@ -271,6 +271,14 @@ function commitAt(dir: string, iso: string): void {
   });
 }
 
+/** A committed project holding `files`, checked; `found` is each finding as `ledger:entry:kind`. */
+async function committedProject(files: Record<string, string>): Promise<{ result: LedgerCheckResult; found: string[] }> {
+  const dir = await project(files);
+  commitAt(dir, '2026-09-23T12:00:00Z');
+  const result = await ledgerCheck(dir);
+  return { result, found: result.findings.map((f) => `${f.ledger}:${f.entry}:${f.kind}`) };
+}
+
 describe('ledgerCheck — the whole project', () => {
   let logSpy: ReturnType<typeof vi.spyOn>;
   let errSpy: ReturnType<typeof vi.spyOn>;
@@ -318,40 +326,28 @@ describe('ledgerCheck — the whole project', () => {
   });
 
   it('fails a cross-chunk merge the audit has not ruled on (#294)', async () => {
-    const dir = await project({
+    const { result, found } = await committedProject({
       'CROSS-CHUNK.md': '# Cross-Chunk References\n\n### Merge 1\n- Chunk: auctions\n- Verdict: pending\n',
     });
-    commitAt(dir, '2026-09-23T12:00:00Z');
-    const result = await ledgerCheck(dir);
     expect(result.checked).toContain('CROSS-CHUNK.md');
-    expect(result.findings.map((f) => `${f.ledger}:${f.entry}:${f.kind}`)).toEqual([
-      'CROSS-CHUNK.md:Merge 1:cross-chunk-unreviewed',
-    ]);
+    expect(found).toEqual(['CROSS-CHUNK.md:Merge 1:cross-chunk-unreviewed']);
   });
 
   it('fails a question number used twice, and a provisional id used twice (#294)', async () => {
-    const dir = await project({
+    const { found } = await committedProject({
       'QUESTIONS.md': '### Question 3\n- Question: a\n### Question 3\n- Question: b\n',
       'RULINGS.md': '### Ruling @trading.1\n- Decision: a\n### Ruling @trading.1\n- Decision: b\n',
     });
-    commitAt(dir, '2026-09-23T12:00:00Z');
-    const result = await ledgerCheck(dir);
-    expect(result.findings.map((f) => `${f.ledger}:${f.entry}:${f.kind}`)).toContain(
-      'RULINGS.md:Ruling @trading.1:duplicate-number',
-    );
-    expect(result.findings.map((f) => `${f.ledger}:${f.entry}:${f.kind}`)).toContain(
-      'QUESTIONS.md:Question 3:duplicate-number',
-    );
+    expect(found).toContain('RULINGS.md:Ruling @trading.1:duplicate-number');
+    expect(found).toContain('QUESTIONS.md:Question 3:duplicate-number');
   });
 
   it('fails a provisional id in the main checkout, where only chunk-merge may land one (#294)', async () => {
-    const dir = await project({
+    const { result, found } = await committedProject({
       'RULINGS.md': ruling(1) + '### Ruling @trading.1\n- Decision: merged by hand.\n',
       'CONSTRAINTS.md': '# Constraints\n\n## Growing Structures\n\n### G@trading.1\n- State: x\n',
     });
-    commitAt(dir, '2026-09-23T12:00:00Z');
-    const result = await ledgerCheck(dir);
-    expect(result.findings.map((f) => `${f.ledger}:${f.entry}:${f.kind}`)).toEqual([
+    expect(found).toEqual([
       'RULINGS.md:Ruling @trading.1:provisional-on-main-line',
       'CONSTRAINTS.md:G@trading.1:provisional-on-main-line',
     ]);
