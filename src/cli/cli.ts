@@ -342,7 +342,7 @@ program
 // command checks a combined tree at merge time.
 program
   .command('ledger-check')
-  .description('Check the design ledgers and the run log for numbering, supersession, status and timestamp errors')
+  .description('Check the design ledgers and the run log for numbering, supersession, status and timestamp errors, and that every script or capture a ledger or verified chunk cites is committed')
   .option('--project <dir>', 'Project directory (defaults to cwd)')
   .option('--json', 'Emit JSON instead of human-readable output')
   .action(ledgerCheckCommand);

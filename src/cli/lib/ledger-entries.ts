@@ -22,7 +22,7 @@ export interface LedgerEntry {
  * examples (which live inside `<!-- -->`) are never read as entries, and every line number still
  * points at the real line in the file.
  */
-function blankComments(text: string): string {
+export function blankComments(text: string): string {
   return text.replace(/<!--[\s\S]*?-->/g, (comment) => comment.replace(/[^\n]/g, ' '));
 }
 

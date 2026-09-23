@@ -341,3 +341,81 @@ describe('ledgerCheck — the whole project', () => {
     await expect(ledgerCheck(dir)).rejects.toThrow(/not a git repository/);
   });
 });
+
+/**
+ * #292: a ledger entry or a verified CHUNK.md (its sign-off included) that cites a script or a
+ * capture is only evidence if that file is in git. sotf's food-invariant harness lived in the
+ * gitignored scratch folder while Decision 257 said it was committed.
+ */
+describe('ledgerCheck — cited evidence must be in git (#292)', () => {
+  async function tree(files: Record<string, string>): Promise<string> {
+    const dir = await project({});
+    await fs.writeFile(join(dir, '.gitignore'), '.boardsmith/\n');
+    for (const [rel, text] of Object.entries(files)) {
+      await fs.mkdir(join(dir, rel, '..'), { recursive: true });
+      await fs.writeFile(join(dir, rel), text);
+    }
+    return dir;
+  }
+
+  function chunk(status: string, body: string): string {
+    return [`# Chunk: world-shell`, '', `Status: ${status}`, '', '## Sign-off', body, ''].join('\n');
+  }
+
+  const evidence = (f: LedgerFinding[]) => f.filter((x) => x.kind === 'evidence-not-committed');
+
+  it('fails a decision that cites a harness in the gitignored scratch folder', async () => {
+    const dir = await tree({
+      'design/DECISIONS.md': '### Decision 257\n- Decision: food holds; see `.boardsmith/scratch/food-invariant.mjs`.\n',
+      '.boardsmith/scratch/food-invariant.mjs': '// harness\n',
+    });
+    commitAt(dir, '2026-09-23T12:00:00Z');
+    const found = evidence((await ledgerCheck(dir)).findings);
+    expect(found).toHaveLength(1);
+    expect(found[0].ledger).toBe('DECISIONS.md');
+    expect(found[0].entry).toBe('line 2');
+    expect(found[0].detail).toContain('.boardsmith/scratch/food-invariant.mjs');
+    expect(found[0].detail).toMatch(/gitignored/);
+    expect(found[0].detail).toContain('design/chunks/<slug>/evidence/');
+  });
+
+  it('passes a verified chunk whose sign-off cites committed evidence, design-relative or project-relative', async () => {
+    const dir = await tree({
+      'design/chunks/world-shell/CHUNK.md': chunk(
+        'verified',
+        'automated: chunks/world-shell/evidence/food.mjs and design/chunks/world-shell/evidence/after.png',
+      ),
+      'design/chunks/world-shell/evidence/food.mjs': '// kept\n',
+      'design/chunks/world-shell/evidence/after.png': 'png',
+    });
+    commitAt(dir, '2026-09-23T12:00:00Z');
+    const result = await ledgerCheck(dir);
+    expect(evidence(result.findings)).toEqual([]);
+    expect(result.checked).toContain('chunks/world-shell/CHUNK.md');
+  });
+
+  it('fails a verified chunk that cites a missing file, an untracked file, or a path outside the project', async () => {
+    const dir = await tree({
+      'design/chunks/world-shell/CHUNK.md': chunk(
+        'verified (user-waived)',
+        ['- tests/gone.test.ts', '- chunks/world-shell/evidence/new.mjs', '- /tmp/driver.mjs'].join('\n'),
+      ),
+    });
+    commitAt(dir, '2026-09-23T12:00:00Z');
+    await fs.mkdir(join(dir, 'design/chunks/world-shell/evidence'), { recursive: true });
+    await fs.writeFile(join(dir, 'design/chunks/world-shell/evidence/new.mjs'), '// not added\n');
+    const found = evidence((await ledgerCheck(dir)).findings);
+    expect(found.map((f) => f.ledger)).toEqual(Array(3).fill('chunks/world-shell/CHUNK.md'));
+    expect(found[0].detail).toMatch(/does not exist/);
+    expect(found[1].detail).toMatch(/git add/);
+    expect(found[2].detail).toMatch(/outside the project/);
+  });
+
+  it('does not hold a chunk that is not verified yet to its citations', async () => {
+    const dir = await tree({
+      'design/chunks/world-shell/CHUNK.md': chunk('built', '- tests/not-written-yet.test.ts'),
+    });
+    commitAt(dir, '2026-09-23T12:00:00Z');
+    expect(evidence((await ledgerCheck(dir)).findings)).toEqual([]);
+  });
+});
