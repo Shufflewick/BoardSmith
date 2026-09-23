@@ -268,7 +268,7 @@ async function testSupportSources(projectDir: string): Promise<SourceFile[]> {
 // checkTestStep — the static checks
 // -------------------------------------------------------------------------------------------
 
-interface TestStepCheckResult {
+export interface TestStepCheckResult {
   slug: string;
   /** Verbs this chunk added. */
   verbs: string[];
@@ -506,7 +506,7 @@ export async function checkTestStep(
 export async function testStepCheckCommand(
   slug: string,
   options: { project?: string; json?: boolean } = {},
-): Promise<TestStepCheckResult> {
+): Promise<void> {
   const dir = pathResolve(options.project ?? process.cwd());
   const { testFiles, added, ...staticResult } = await checkTestStep(dir, slug);
   const result: TestStepCheckResult = { ...staticResult };
@@ -528,10 +528,9 @@ export async function testStepCheckCommand(
 
   if (options.json) {
     console.log(JSON.stringify(result, null, 2));
-    return result;
+    return;
   }
   printReport(result);
-  return result;
 }
 
 function printReport(result: TestStepCheckResult): void {

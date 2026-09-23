@@ -1,8 +1,13 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi, type MockInstance } from 'vitest';
 import { execFileSync } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { checkTestStep, parseSpecManifest, testStepCheckCommand } from './test-step-check.js';
+import {
+  checkTestStep,
+  parseSpecManifest,
+  testStepCheckCommand,
+  type TestStepCheckResult,
+} from './test-step-check.js';
 import {
   findDefinedVerbs,
   findDispatchWrappers,
@@ -491,6 +496,7 @@ it('claim 1 and 2', () => { testGame.doAction(1, 'bid'); });
 
 describe('testStepCheckCommand', () => {
   let project: string;
+  let printed: MockInstance<typeof console.log>;
 
   beforeEach(async () => {
     const tree = tempTree('bs-test-step-cmd-');
@@ -516,13 +522,19 @@ export function resolveBid(high: number, offer: number): boolean {
 }
 `,
     });
-    vi.spyOn(console, 'log').mockImplementation(() => {});
+    printed = vi.spyOn(console, 'log').mockImplementation(() => {});
   });
 
   afterEach(() => {
     process.exitCode = undefined;
     vi.restoreAllMocks();
   });
+
+  /** Runs the command with --json and returns the report it printed. */
+  async function runCommand(): Promise<TestStepCheckResult> {
+    await testStepCheckCommand('auction', { project, json: true });
+    return JSON.parse(String(printed.mock.calls.at(-1)?.[0])) as TestStepCheckResult;
+  }
 
   async function commitTests(tests: string): Promise<void> {
     await write(project, {
@@ -542,7 +554,7 @@ ${tests}`,
     await commitTests(`it('claim 1 — a higher offer wins', () => { expect(testGame.doAction(1, 'bid', { high: 3, offer: 4 })).toBe(true); });
 it('claim 2 — an equal offer loses', () => { expect(testGame.doAction(1, 'bid', { high: 3, offer: 3 })).toBe(false); });
 `);
-    const result = await testStepCheckCommand('auction', { project, json: true });
+    const result = await runCommand();
     expect(result.findings).toEqual([]);
     expect(result.mutation?.killed).toBeGreaterThan(0);
     expect(process.exitCode).toBeUndefined();
@@ -552,7 +564,7 @@ it('claim 2 — an equal offer loses', () => { expect(testGame.doAction(1, 'bid'
     await commitTests(`it('claim 1 — a higher offer wins', () => { expect(testGame.doAction(1, 'bid', { high: 3, offer: 4 })).toBe(true); });
 it('claim 2 — tautology', () => { const high = 3; expect(high).toBe(3); });
 `);
-    const result = await testStepCheckCommand('auction', { project, json: true });
+    const result = await runCommand();
     expect(result.findings.map((f) => f.kind)).toEqual(['claim-survives-mutation', 'test-survives-mutation']);
     expect(process.exitCode).toBe(1);
   }, 60_000);
@@ -560,7 +572,7 @@ it('claim 2 — tautology', () => { const high = 3; expect(high).toBe(3); });
   it('fails the step on a static finding without running any mutant', async () => {
     await commitTests(`it('claim 1 and claim 2', () => { expect(resolveBid(3, 4)).toBe(true); });
 `);
-    const result = await testStepCheckCommand('auction', { project, json: true });
+    const result = await runCommand();
     expect(result.findings.map((f) => [f.kind, f.subject])).toEqual([['verb-not-dispatched', 'bid']]);
     expect(result.mutation).toBeUndefined();
     expect(process.exitCode).toBe(1);
