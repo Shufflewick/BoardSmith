@@ -454,6 +454,45 @@ describe('TDD-01 — red-before-green enforcement across spec/build/test', () =>
   });
 });
 
+/**
+ * #290 — the test step cannot pass on tests that cannot fail. The rules are stated in spec.md
+ * (where the tests are written) and test.md (where they are gated), and the gate is a real CLI
+ * command, so a session that skims the prose still hits a non-zero exit.
+ */
+describe('#290 — test-step-check gate', () => {
+  const cli = readFileSync(join(__dirname, '..', '..', 'cli.ts'), 'utf-8');
+
+  it('test.md item 3 runs `boardsmith test-step-check <slug>` as a build-blocking gate', () => {
+    const test = read('build/test.md');
+    expect(cli).toContain(".command('test-step-check <slug>')");
+    expect(test).toContain('boardsmith test-step-check <slug>');
+    expect(test).toMatch(/test-step-check[\s\S]{0,400}non-zero/);
+  });
+
+  // One rule per entry: [file, what its text must say].
+  const RULES: Array<[string, RegExp]> = [
+    ['build/test.md', /dispatched through the engine/],
+    ['build/test.md', /Spec Manifest[\s\S]{0,200}names a test that exists/],
+    ['build/test.md', /survives every mutant/],
+    ['build/test.md', /called unreachable/],
+    ['build/test.md', /human-readable error/],
+    ['build/spec.md', /dispatched through the engine/],
+    ['build/spec.md', /boardsmith test-step-check/],
+    ['build/spec.md', /mutation check/],
+    ['build/spec.md', /Nothing is called unreachable/],
+    ['build/spec.md', /\| exempt \| <reason> \| n\/a \|/],
+  ];
+  for (const [file, rule] of RULES) {
+    it(`${file} states the rule ${rule}`, () => {
+      expect(read(file)).toMatch(rule);
+    });
+  }
+
+  it('the CHUNK template shows the exempt row the gate parses', () => {
+    expect(read('templates/CHUNK.template.md')).toContain('| exempt | <reason> | n/a |');
+  });
+});
+
 describe('BUILD-05 — build step', () => {
   it('reads raw rulebook slices AND the approved interpretation', () => {
     const build = read('build/build.md');
