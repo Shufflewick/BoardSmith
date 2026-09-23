@@ -606,6 +606,10 @@ checkpointed: it would either survive an action the player was told was refused,
 or be reverted at the next hibernation with nobody told. Do the write in
 `execute`.
 
+Everything a declaration reads answers as it does in `execute`, classes
+included: `element.constructor` is the element's own class, with its name and
+static members, so `game.first(element.constructor)` searches by class.
+
 ### Selections: what an action asks a player for
 
 `WorldCommandArgument` is gone, and what replaces it is the engine's own
