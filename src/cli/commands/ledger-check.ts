@@ -662,27 +662,26 @@ export async function ledgerCheck(projectDir: string): Promise<LedgerCheckResult
  */
 export async function ledgerCheckCommand(
   options: { project?: string; json?: boolean } = {},
-): Promise<LedgerCheckResult> {
+): Promise<void> {
   const projectDir = pathResolve(options.project ?? process.cwd());
   const result = await ledgerCheck(projectDir);
   if (result.findings.length > 0) process.exitCode = 1;
 
   if (options.json) {
     console.log(JSON.stringify(result, null, 2));
-    return result;
+    return;
   }
 
   if (result.checked.length === 0) {
     console.log(`No ledgers in ${DESIGN_DIR}/ yet, so there is nothing to check.`);
-    return result;
+    return;
   }
   if (result.findings.length === 0) {
     console.log(`Ledgers consistent: ${result.checked.join(', ')}.`);
-    return result;
+    return;
   }
   console.log(`Ledger check found ${result.findings.length} problem(s). Fix each one, then run \`boardsmith ledger-check\` again:`);
   for (const f of result.findings) {
     console.log(`  ${DESIGN_DIR}/${f.ledger}, ${f.entry}: ${f.detail}`);
   }
-  return result;
 }
