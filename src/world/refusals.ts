@@ -371,6 +371,18 @@ export const WORLD_REFUSALS = {
       "the same way on every later wake, and the archive is not something the world can repair, " +
       "so the ladder parks it rather than spending a wake an hour on it forever",
   },
+  "engine-mismatch": {
+    owner: "platform",
+    why:
+      "#283: a host handed `createWorld` rules whose game class was built on a different copy " +
+      "of the BoardSmith engine than the world runner reading them -- a rules bundle with the " +
+      "engine inlined, run by a host that imported its own. Nothing about it fails loudly on its " +
+      "own: the read-only projection recognises the engine's finders by function identity, so " +
+      "against the other copy it recognises none of them and every declaration walks the " +
+      "resident tree through a proxy, which put `boardsmith dev` at 15-30 seconds a command. " +
+      "PLATFORM-owned and deterministic: it is how the host assembled the world, the bundle's " +
+      "code never runs, and the same assembly answers the same way every time",
+  },
   "world-state-unreadable": {
     owner: "platform",
     why:

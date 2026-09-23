@@ -103,7 +103,7 @@ export function boardsmithSourceEntries(): ReadonlyMap<string, string> {
  * Only used in monorepo context - standalone games resolve from node_modules.
  * Returns a no-op plugin for standalone context.
  */
-export function boardsmithResolvePlugin(context: 'monorepo' | 'standalone'): EsbuildPlugin {
+function boardsmithResolvePlugin(context: 'monorepo' | 'standalone'): EsbuildPlugin {
   if (context === 'standalone') {
     return {
       name: 'boardsmith-resolve-noop',
@@ -153,13 +153,40 @@ export async function loadGameDefinition(
   tempDir: string,
   context: 'monorepo' | 'standalone',
 ): Promise<{ gameDefinition: GameDefinition }> {
-  const rulesIndexPath = join(rulesPath, 'index.ts');
-  const entryPath = join(tempDir, 'simulate-entry.ts');
+  const module = await importRuntimeBundle({ rulesPath, tempDir, name: 'simulate', context, exports: [] });
+  return { gameDefinition: module.gameDefinition };
+}
+
+/**
+ * BUNDLE THE PROJECT'S RULES, AND WHATEVER MUST SHARE THEIR ENGINE, AND LOAD IT.
+ *
+ * ONE esbuild bundle, because a game's rules are built with the engine inlined:
+ * anything that touches the elements they build -- `executeOp` for a table, the
+ * world host for a world (#283) -- has to come out of the same bundle, or it
+ * runs on a second copy of the engine whose classes and functions the rules'
+ * elements do not share.
+ *
+ * `exports` are extra `export ... from ...;` lines for the entry, beside the
+ * `gameDefinition` every bundle exports. The import is cache-busted, so calling
+ * this again after an edit is a genuine re-read of the author's source.
+ */
+export async function importRuntimeBundle(args: {
+  rulesPath: string;
+  tempDir: string;
+  /** Names the entry and bundle files in `tempDir`, so loaders cannot collide. */
+  name: string;
+  context: 'monorepo' | 'standalone';
+  exports: readonly string[];
+}): Promise<{ gameDefinition: GameDefinition } & Record<string, unknown>> {
+  const rulesIndexPath = join(args.rulesPath, 'index.ts');
+  const entryPath = join(args.tempDir, `${args.name}-entry.ts`);
   writeFileSync(
     entryPath,
-    [`export { gameDefinition } from ${JSON.stringify(toPosix(rulesIndexPath))};`].join('\n'),
+    [`export { gameDefinition } from ${JSON.stringify(toPosix(rulesIndexPath))};`, ...args.exports].join(
+      '\n',
+    ),
   );
-  const bundlePath = join(tempDir, 'simulate-bundle.mjs');
+  const bundlePath = join(args.tempDir, `${args.name}-bundle.mjs`);
 
   await build({
     entryPoints: [entryPath],
@@ -168,15 +195,15 @@ export async function loadGameDefinition(
     platform: 'node',
     outfile: bundlePath,
     logLevel: 'silent',
-    plugins: [boardsmithResolvePlugin(context)],
+    plugins: [boardsmithResolvePlugin(args.context)],
   });
 
   const moduleUrl = pathToFileURL(bundlePath).href;
-  const module = await import(`${moduleUrl}?t=${Date.now()}`);
+  const module = (await import(`${moduleUrl}?t=${Date.now()}`)) as Record<string, unknown>;
 
   if (!module.gameDefinition) {
     throw new Error('Rules module must export a gameDefinition');
   }
 
-  return { gameDefinition: module.gameDefinition as GameDefinition };
+  return module as { gameDefinition: GameDefinition } & Record<string, unknown>;
 }

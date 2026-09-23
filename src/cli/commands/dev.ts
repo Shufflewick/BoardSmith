@@ -1,9 +1,8 @@
-import { existsSync, readFileSync, writeFileSync, mkdirSync, rmSync } from 'node:fs';
+import { existsSync, readFileSync, mkdirSync, rmSync } from 'node:fs';
 import { join, resolve, relative, dirname } from 'node:path';
 import { createServer as createViteServer } from 'vite';
 import type { Plugin as VitePlugin } from 'vite';
-import { build } from 'esbuild';
-import { pathToFileURL, fileURLToPath } from 'node:url';
+import { fileURLToPath } from 'node:url';
 import { WebSocket } from 'ws';
 import chalk from 'chalk';
 import open from 'open';
@@ -16,12 +15,12 @@ import { devStorePath, loadDevStore } from '../dev-host/persistence-file-store.j
 import { resetWorldStore, worldResetNotice, worldStoreDir } from '../dev-host/world-store.js';
 import { announceHost, onShutdown } from '../dev-host/shutdown.js';
 import type { PersistenceStore } from '../../persistence/index.js';
-import { getProjectContext, boardsmithResolvePlugin, toPosix } from './game-runtime.js';
+import { getProjectContext, importRuntimeBundle, toPosix } from './game-runtime.js';
 import { findUnknownKeys } from '../lib/config-schema.js';
 import { requireGameProject, resolveRulesDir, requireRulesIndex } from '../lib/game-project.js';
 import { resolveWorldMode } from '../lib/world-project.js';
 import { resolveUserPath } from '../lib/user-path.js';
-import { startWorldDevServer } from './dev-world.js';
+import { loadWorldRuntime, startWorldDevServer, type WorldRuntime } from './dev-world.js';
 import {
   claimWebSocketPath,
   devNotFoundMiddleware,
@@ -458,39 +457,13 @@ async function loadGameRuntime(
   tempDir: string,
   context: 'monorepo' | 'standalone',
 ): Promise<{ gameDefinition: GameDefinition; executeOp: RuntimeExecuteOp }> {
-  // with the other CLI commands. Surfaced only because #41 touched this file;
-  // extracting it is a CLI-wide refactor, not part of this change.
-  // fallow-ignore-next-line code-duplication
-  const rulesIndexPath = join(rulesPath, 'index.ts');
-  const entryPath = join(tempDir, 'runtime-entry.ts');
-  writeFileSync(
-    entryPath,
-    [
-      `export { gameDefinition } from ${JSON.stringify(toPosix(rulesIndexPath))};`,
-      `export { executeOp } from 'boardsmith/session';`,
-    ].join('\n'),
-  );
-  const bundlePath = join(tempDir, 'runtime-bundle.mjs');
-
-  // with the other CLI commands. Surfaced only because #41 touched this file;
-  // extracting it is a CLI-wide refactor, not part of this change.
-  // fallow-ignore-next-line code-duplication
-  await build({
-    entryPoints: [entryPath],
-    bundle: true,
-    format: 'esm',
-    platform: 'node',
-    outfile: bundlePath,
-    logLevel: 'silent',
-    plugins: [boardsmithResolvePlugin(context)],
+  const module = await importRuntimeBundle({
+    rulesPath,
+    tempDir,
+    name: 'runtime',
+    context,
+    exports: [`export { executeOp } from 'boardsmith/session';`],
   });
-
-  const moduleUrl = pathToFileURL(bundlePath).href;
-  const module = await import(`${moduleUrl}?t=${Date.now()}`);
-
-  if (!module.gameDefinition) {
-    throw new Error('Rules module must export a gameDefinition');
-  }
   if (typeof module.executeOp !== 'function') {
     throw new Error("Could not load executeOp from 'boardsmith/session'.");
   }
@@ -783,25 +756,14 @@ export async function devCommand(options: DevOptions): Promise<void> {
 
   console.log(chalk.dim(`  Loading game rules from ${rulesPath}...`));
 
-  // Load the game runtime (Node side): gameDefinition + executeOp, one engine.
-  let gameDefinition: GameDefinition;
-  let runExecuteOp: RuntimeExecuteOp;
-  let minPlayers: number;
-  let maxPlayers: number;
-  let colorPalette: Array<{ value: string; label: string }> = [];
-  try {
-    const runtime = await loadGameRuntime(rulesPath, tempDir, context);
-    gameDefinition = runtime.gameDefinition;
-    runExecuteOp = runtime.executeOp;
-  } catch (error) {
-    // THROWN, NOT PRINTED (#240). Handing the error object to `console.error`
-    // printed Node's own formatting of it -- every stack frame, and the
-    // absolute path of both this CLI and the game being loaded -- and exited
-    // before `cli.ts`'s handler could render it as one clean line.
-    throw new Error(
+  // THROWN, NOT PRINTED (#240). Handing the error object to `console.error`
+  // printed Node's own formatting of it -- every stack frame, and the absolute
+  // path of both this CLI and the game being loaded -- and exited before
+  // `cli.ts`'s handler could render it as one clean line.
+  const rulesFailed = (error: unknown): Error =>
+    new Error(
       `Failed to load this game's rules: ${error instanceof Error ? error.message : String(error)}`,
     );
-  }
 
   // A WORLD IS A DIFFERENT RUN, AND THIS IS WHERE THE ROADS PART (#167).
   //
@@ -813,24 +775,48 @@ export async function devCommand(options: DevOptions): Promise<void> {
   // world declares no minPlayers/maxPlayers as of #171, so `--players`
   // resolution below has no range to resolve against. `dev-world.ts` says why
   // at length.
+  //
+  // It loads its OWN runtime, before the table's: the world host is bundled
+  // with the rules so the two share one engine (#283).
   if (worldMode) {
+    let runtime: WorldRuntime;
+    try {
+      runtime = await loadWorldRuntime(rulesPath, tempDir, context);
+    } catch (error) {
+      throw rulesFailed(error);
+    }
+    const { gameDefinition } = runtime;
     await startWorldDevServer({
       cwd,
       uiPath,
-      gameDefinition,
+      runtime,
       displayName: config.displayName || gameDefinition.displayName || gameDefinition.gameType,
       context,
       port,
       host,
       tempDir,
       openBrowser: shouldOpenBrowser(options),
-      // HOW THE WORLD HOST GETS THE RULES AGAIN (#201). `loadGameRuntime`
-      // already cache-busts its own import, so re-running it is a genuine
-      // re-read of the author's edited source rather than the module this
-      // process loaded at startup.
-      reloadRules: async () => (await loadGameRuntime(rulesPath, tempDir, context)).gameDefinition,
+      // HOW THE WORLD HOST GETS THE RULES AGAIN (#201). `loadWorldRuntime`
+      // cache-busts its own import, so re-running it is a genuine re-read of
+      // the author's edited source rather than the module this process loaded
+      // at startup.
+      reloadRules: () => loadWorldRuntime(rulesPath, tempDir, context),
     });
     return;
+  }
+
+  // Load the game runtime (Node side): gameDefinition + executeOp, one engine.
+  let gameDefinition: GameDefinition;
+  let runExecuteOp: RuntimeExecuteOp;
+  let minPlayers: number;
+  let maxPlayers: number;
+  let colorPalette: Array<{ value: string; label: string }> = [];
+  try {
+    const runtime = await loadGameRuntime(rulesPath, tempDir, context);
+    gameDefinition = runtime.gameDefinition;
+    runExecuteOp = runtime.executeOp;
+  } catch (error) {
+    throw rulesFailed(error);
   }
 
   try {

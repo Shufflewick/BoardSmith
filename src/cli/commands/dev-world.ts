@@ -10,7 +10,7 @@
  * already there before anybody opens a browser.
  *
  * WHAT IT SHARES WITH THE TABLE RUN, deliberately and by import rather than by
- * copy: the Vite server, `boardsmithResolvePlugin`'s monorepo resolution, the
+ * copy: the Vite server, `importRuntimeBundle`'s one-engine rules bundle, the
  * "no SPA fallback, a missing asset is a 404" rule (issue 134), the
  * `noServer` WebSocket upgrade that leaves Vite's HMR socket alone, and the
  * iframe-in-platform-mode shape -- the outer page is dev chrome and the game's
@@ -40,14 +40,14 @@ import { createServer as createViteServer, type Plugin as VitePlugin } from 'vit
 
 import { worldBudgets } from '../../world/index.js';
 import type { WorldLiftOutcome, WorldMigrationOutcome } from '../../world/host/index.js';
-import { LocalWorldHost } from '../dev-host/world-host.js';
+import type { LocalWorldHost } from '../dev-host/world-host.js';
 import { createWorldConnections } from '../dev-host/world-connections.js';
-import { openWorldStore, worldStorePath, type LocalWorldStore } from '../dev-host/world-store.js';
+import { worldStorePath, type LocalWorldStore, type openWorldStore } from '../dev-host/world-store.js';
 import { announceHost, onShutdown } from '../dev-host/shutdown.js';
 import type { WorldDevConfig } from '../dev-host/world-config-types.js';
 import { ensureWorldEntry, WORLD_ENTRY_HTML } from '../lib/world-entry.js';
 import type { GameDefinition } from '../../session/index.js';
-import { toPosix } from './game-runtime.js';
+import { importRuntimeBundle, toPosix } from './game-runtime.js';
 import {
   claimWebSocketPath,
   devNotFoundMiddleware,
@@ -158,10 +158,58 @@ function boardsmithWorldDevPlugin(args: {
   };
 }
 
+/**
+ * A WORLD'S RULES AND THE HOST THAT RUNS THEM, OUT OF ONE BUNDLE (#283).
+ *
+ * The rules are bundled with the engine inlined, so the host has to come out of
+ * the same bundle or it runs them on a second copy of the engine. It used to be
+ * the CLI's own: nothing failed, but the read-only projection a declaration
+ * reads through knows the engine's finders by function identity and knew none
+ * of the bundle's, so every offer walk crossed the resident world through a
+ * proxy -- 15-30 seconds a command with two seats attached. `createWorld` now
+ * refuses that pairing by name, and this is the road that never makes it: the
+ * table road's `loadGameRuntime` takes `executeOp` from the rules' bundle for
+ * the same reason, and the platform splices a world bundle around one engine.
+ *
+ * The store comes out of the bundle too, because its budget refusals are
+ * `WorldRefusal`s the host tells apart by class.
+ */
+export interface WorldRuntime {
+  readonly gameDefinition: GameDefinition;
+  readonly LocalWorldHost: typeof LocalWorldHost;
+  readonly openWorldStore: typeof openWorldStore;
+}
+
+/** Bundle and load a world project's rules with the host that runs them. The
+ *  import is cache-busted, so calling it again re-reads the author's edits. */
+export async function loadWorldRuntime(
+  rulesPath: string,
+  tempDir: string,
+  context: 'monorepo' | 'standalone',
+): Promise<WorldRuntime> {
+  const devHostDir = resolveDevHostDir(__dirname, 'world-host.ts');
+  const module = await importRuntimeBundle({
+    rulesPath,
+    tempDir,
+    name: 'world-runtime',
+    context,
+    exports: [
+      `export { LocalWorldHost } from ${JSON.stringify(toPosix(join(devHostDir, 'world-host.ts')))};`,
+      `export { openWorldStore } from ${JSON.stringify(toPosix(join(devHostDir, 'world-store.ts')))};`,
+    ],
+  });
+  return {
+    gameDefinition: module.gameDefinition,
+    LocalWorldHost: module.LocalWorldHost as typeof LocalWorldHost,
+    openWorldStore: module.openWorldStore as typeof openWorldStore,
+  };
+}
+
 interface WorldDevServerOptions {
   readonly cwd: string;
   readonly uiPath: string;
-  readonly gameDefinition: GameDefinition;
+  /** The rules and the host that runs them, from one bundle (#283). */
+  readonly runtime: WorldRuntime;
   readonly displayName: string;
   readonly context: 'monorepo' | 'standalone';
   readonly port: number;
@@ -174,10 +222,12 @@ interface WorldDevServerOptions {
    * A world runs the rules this process loaded at startup, and an author's
    * saved edits reach only the browser -- so a rule edit used to leave the new
    * UI acting on the old rules, and the world committed the result. This is how
-   * the host gets the new ones: `loadGameRuntime` cache-busts its own import,
-   * so calling it again is a genuine re-read of the edited source.
+   * the host gets the new ones: `loadWorldRuntime` cache-busts its own import,
+   * so calling it again is a genuine re-read of the edited source. It answers
+   * the whole runtime and not only the rules, because a rebuilt bundle is a new
+   * copy of the engine and the host has to be the one built beside it (#283).
    */
-  readonly reloadRules: () => Promise<GameDefinition>;
+  readonly reloadRules: () => Promise<WorldRuntime>;
 }
 
 /**
@@ -236,13 +286,13 @@ export async function startWorldDevServer(
   // from production makes a game's local behaviour a poor guide to its
   // published behaviour, which is the whole reason #165 made them parameters.
   const budgets = worldBudgets();
-  const store = openWorldStore(worldStorePath(options.cwd), budgets);
+  const store = options.runtime.openWorldStore(worldStorePath(options.cwd), budgets);
   const launchedBefore = store.isLaunched();
 
   // THE PAGES OUTLIVE THE HOST: a rule edit replaces `worldHost` below, and the
   // sockets stay where they are, so the connections ask for the current one.
   const connections = createWorldConnections(() => worldHost);
-  const hostOver = (definition: GameDefinition, over: LocalWorldStore) =>
+  const hostOver = ({ gameDefinition: definition, LocalWorldHost }: WorldRuntime, over: LocalWorldStore) =>
     new LocalWorldHost({
       definition: definition as unknown as ConstructorParameters<
         typeof LocalWorldHost
@@ -261,7 +311,7 @@ export async function startWorldDevServer(
   // MUTABLE, because a rule edit replaces the whole world host (#201): the
   // rules, the store handle and the resident tree go together, or the two
   // halves are a world made of two versions.
-  let worldHost: LocalWorldHost = hostOver(options.gameDefinition, store);
+  let worldHost: LocalWorldHost = hostOver(options.runtime, store);
 
   const started = await worldHost.start();
   reportMigration(started);
@@ -354,7 +404,7 @@ export async function startWorldDevServer(
 
   async function reloadWorld(named: string): Promise<void> {
     console.log(chalk.dim(`\n  ${named} changed -- reloading the world's rules...`));
-    let rules: GameDefinition;
+    let rules: WorldRuntime;
     try {
       rules = await options.reloadRules();
     } catch (error) {
@@ -366,7 +416,7 @@ export async function startWorldDevServer(
     }
     try {
       await worldHost.close();
-      worldHost = hostOver(rules, openWorldStore(worldStorePath(options.cwd), budgets));
+      worldHost = hostOver(rules, rules.openWorldStore(worldStorePath(options.cwd), budgets));
       reportMigration(await worldHost.start());
     } catch (error) {
       console.error(
