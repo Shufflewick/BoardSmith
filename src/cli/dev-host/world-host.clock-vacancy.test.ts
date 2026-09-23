@@ -203,6 +203,8 @@ async function opened(budgets: WorldBudgets = worldBudgets()): Promise<{
     store,
     clock,
     send: (clientId, message) => sent.push({ clientId, message: message as Record<string, unknown> }),
+    // No page in this file ever closes its socket.
+    isOpen: () => true,
   });
   await host.start();
   await host.handleMessage('c1', { type: 'hello' });

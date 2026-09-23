@@ -71,6 +71,17 @@ interface LocalWorldHostOptions {
   readonly budgets: WorldBudgets;
   readonly store: LocalWorldStore;
   readonly send: (clientId: string, message: unknown) => void;
+  /**
+   * IS THIS CLIENT'S SOCKET STILL OPEN, at the instant this asks (#284)?
+   *
+   * The transport's answer, not a copy of it: the socket closes the moment the
+   * peer dies, but the departure {@link LocalWorldHost.disconnect} queues only
+   * reaches the world lock after everything received before it. Between the
+   * two, a seat whose page is gone would otherwise still be projected, offered
+   * and counted as present -- on a real world, seconds of work per push for
+   * somebody who is not there.
+   */
+  readonly isOpen: (clientId: string) => boolean;
   readonly clock?: WorldHostClock;
 }
 
@@ -119,9 +130,13 @@ export class LocalWorldHost {
   readonly #store: LocalWorldStore;
   readonly #worldName: string;
   readonly #send: (clientId: string, message: unknown) => void;
+  readonly #isOpen: (clientId: string) => boolean;
+  readonly #clock: WorldHostClock;
   readonly #world: ResidentWorld;
 
-  /** Which seat each open connection is looking through. */
+  /** Which seat each connection is looking through. A connection whose socket
+   *  has closed stays here until its queued departure runs, and counts for
+   *  nothing meanwhile -- see {@link LocalWorldHost.#watching}. */
   readonly #attached = new Map<string, number>();
   /** Departure timers, one per seat, for a bundle that declares `onDepart`. */
   readonly #departing = new Map<number, ReturnType<typeof setTimeout>>();
@@ -132,12 +147,14 @@ export class LocalWorldHost {
     this.#store = options.store;
     this.#worldName = options.worldName;
     this.#send = options.send;
+    this.#isOpen = options.isOpen;
+    this.#clock = options.clock ?? createNodeWorldClock();
     this.#world = new ResidentWorld({
       definition: options.definition,
       seed: options.seed,
       budgets: options.budgets,
       store: options.store,
-      clock: options.clock ?? createNodeWorldClock(),
+      clock: this.#clock,
       presence: () => this.#presence(),
       mintId: () => randomUUID(),
       onEvents: (events) => this.#narrate(events),
@@ -175,30 +192,42 @@ export class LocalWorldHost {
 
   async handleMessage(clientId: string, message: WorldDevRequest): Promise<void> {
     await this.#world.run(async () => {
-      switch (message.type) {
-        case 'hello':
-          await this.#hello(clientId);
-          return;
-        case 'attach':
-          await this.#attach(clientId, message.seat);
-          return;
-        case 'action':
-          await this.#command(clientId, message);
-          return;
-        case 'pick':
-          await this.#resolvePick(clientId, message);
-          return;
-        case 'quote':
-          await this.#resolveQuote(clientId, message);
-          return;
-        case 'fire_due':
-          await this.#fireDueNow(clientId);
-          return;
-        case 'wake':
-          await this.#wake(clientId);
-          return;
-      }
+      // A PAGE THAT IS GONE IS ASKED NOTHING ON ITS BEHALF (#284). Its request
+      // waited behind the world lock while its socket died, and a greeting, a
+      // seat change or a read would now seat, project and walk offers for
+      // nobody. What still runs is what CHANGES the world: that was received,
+      // and a command must not have run or not run depending on how fast a
+      // socket died -- its order's receipt answers the player's next page.
+      if (!this.#isOpen(clientId) && !changesTheWorld(message)) return;
+      await this.#route(clientId, message);
     });
+  }
+
+  /** One request, to the handler for its type. Always inside the world lock. */
+  async #route(clientId: string, message: WorldDevRequest): Promise<void> {
+    switch (message.type) {
+      case 'hello':
+        await this.#hello(clientId);
+        return;
+      case 'attach':
+        await this.#attach(clientId, message.seat);
+        return;
+      case 'action':
+        await this.#command(clientId, message);
+        return;
+      case 'pick':
+        await this.#resolvePick(clientId, message);
+        return;
+      case 'quote':
+        await this.#resolveQuote(clientId, message);
+        return;
+      case 'fire_due':
+        await this.#fireDueNow(clientId);
+        return;
+      case 'wake':
+        await this.#wake(clientId);
+        return;
+    }
   }
 
   /**
@@ -289,12 +318,23 @@ export class LocalWorldHost {
     await this.#pushViews();
   }
 
+  /**
+   * THE ATTACHMENTS WHOSE SOCKETS ARE STILL OPEN (#284), which is the only
+   * sense in which anybody is watching. Everything this host does for an
+   * audience -- presence, projection, offers, narration -- asks this, so a
+   * socket that died counts for nothing from the instant it closed rather
+   * than from the instant its departure reaches the world lock.
+   */
+  #watching(): Array<[clientId: string, seat: number]> {
+    return [...this.#attached].filter(([clientId]) => this.#isOpen(clientId));
+  }
+
   #presence(): readonly number[] {
-    return [...new Set(this.#attached.values())].sort((a, b) => a - b);
+    return [...new Set(this.#watching().map(([, seat]) => seat))].sort((a, b) => a - b);
   }
 
   #seatIsOpen(seat: number): boolean {
-    return [...this.#attached.values()].includes(seat);
+    return this.#watching().some(([, watched]) => watched === seat);
   }
 
   // ── presence hooks, which are this host's lifecycle policy ─────────────────
@@ -579,18 +619,19 @@ export class LocalWorldHost {
    * the batch's.
    */
   async #pushViews(): Promise<void> {
-    if (this.#attached.size === 0) {
+    const watching = this.#watching();
+    if (watching.length === 0) {
       this.#broadcastStatus();
       return;
     }
-    const players = [...new Set(this.#attached.values())].map(devWorldPlayer);
+    const players = [...new Set(watching.map(([, seat]) => seat))].map(devWorldPlayer);
     let projections;
     try {
       projections = await this.#world.viewsFor(players);
     } catch (error) {
       // NOTHING CAN BE PROJECTED, so every watcher is told the same sentence
       // rather than left looking at a board that stopped updating.
-      for (const clientId of this.#attached.keys()) {
+      for (const [clientId] of watching) {
         this.#send(
           clientId,
           this.#stateFrame(clientId, null, messageOf(error), 'refused', this.#world.revision),
@@ -610,7 +651,7 @@ export class LocalWorldHost {
     // does not depend on. Worse, the second pass below is sequential, so on one
     // frame the LAST watcher used to wait on every earlier seat's walk as well.
     const offering: Array<{ clientId: string; seat: number }> = [];
-    for (const [clientId, seat] of this.#attached) {
+    for (const [clientId, seat] of watching) {
       const player = devWorldPlayer(seat);
       const refusal = failed[player];
       if (refusal !== undefined) {
@@ -630,27 +671,42 @@ export class LocalWorldHost {
     // what is resident in the one engine this host has, so two of them at once
     // would be two dispatches over a tree with a single rollback baseline --
     // the same reason every entry point goes through the world lock.
+    //
+    // AND A TURN FOR THE REST OF THE PROCESS BEFORE EACH ONE (#284). A walk is
+    // the whole of a real world's cost, and without a turn between them one push
+    // held the event loop for all of them: no close was noticed, no socket
+    // accepted, nothing answered -- a port that took connections and settled
+    // nothing. The world lock is still held, so nothing can commit and the
+    // revision on these frames stays true; what the turn buys is that a seat
+    // whose socket died meanwhile is skipped rather than walked for nobody.
     for (const { clientId, seat } of offering) {
-      // ONE SEAT'S OFFER IS ONE SEAT'S FATE, exactly as its view is. An action
-      // whose enumeration refuses -- a candidate outside its declaration, a
-      // selection past the budget -- is a bundle mistake, and raising it here
-      // would refuse the whole audience for one seat's bad verb.
-      let actions: readonly WorldActionOffer[] = [];
-      let offerRefusal: string | null = null;
-      try {
-        actions = await this.#world.offersFor(devWorldPlayer(seat));
-      } catch (error) {
-        offerRefusal = messageOf(error);
-      }
-      this.#send(clientId, { type: 'world_offers', revision, actions });
-      // SAID OUT LOUD IN THE DEV BAR, because the reader is the AUTHOR. An
-      // offer that refuses is a bundle mistake -- a candidate outside its own
-      // declaration, a selection past the budget -- and the seat it happened to
-      // is simply offered nothing. Left on the offer frame alone it would be a
-      // world that quietly stopped having verbs.
-      if (offerRefusal !== null) {
-        this.#send(clientId, { type: 'world_notice', message: offerRefusal });
-      }
+      await this.#clock.yieldTurn();
+      if (this.#isOpen(clientId)) await this.#offer(clientId, seat, revision);
+    }
+  }
+
+  /** One seat's offers, walked and sent, stamped with the revision the push
+   *  that asks for them projected. */
+  async #offer(clientId: string, seat: number, revision: number): Promise<void> {
+    // ONE SEAT'S OFFER IS ONE SEAT'S FATE, exactly as its view is. An action
+    // whose enumeration refuses -- a candidate outside its declaration, a
+    // selection past the budget -- is a bundle mistake, and raising it here
+    // would refuse the whole audience for one seat's bad verb.
+    let actions: readonly WorldActionOffer[] = [];
+    let offerRefusal: string | null = null;
+    try {
+      actions = await this.#world.offersFor(devWorldPlayer(seat));
+    } catch (error) {
+      offerRefusal = messageOf(error);
+    }
+    this.#send(clientId, { type: 'world_offers', revision, actions });
+    // SAID OUT LOUD IN THE DEV BAR, because the reader is the AUTHOR. An
+    // offer that refuses is a bundle mistake -- a candidate outside its own
+    // declaration, a selection past the budget -- and the seat it happened to
+    // is simply offered nothing. Left on the offer frame alone it would be a
+    // world that quietly stopped having verbs.
+    if (offerRefusal !== null) {
+      this.#send(clientId, { type: 'world_notice', message: offerRefusal });
     }
   }
 
@@ -692,7 +748,7 @@ export class LocalWorldHost {
    */
   #narrate(events: readonly RoutedEvent[]): void {
     if (events.length === 0) return;
-    for (const [clientId, seat] of this.#attached) {
+    for (const [clientId, seat] of this.#watching()) {
       // THE AUDIENCE IS THE ENGINE'S ANSWER, not this host's guess. `seats` was
       // routed inside the command, while the world it is a fact about was still
       // in front of the engine.
@@ -715,7 +771,7 @@ export class LocalWorldHost {
   }
 
   #broadcastNotice(message: string): void {
-    for (const clientId of this.#attached.keys()) {
+    for (const [clientId] of this.#watching()) {
       this.#send(clientId, { type: 'world_notice', message });
     }
   }
@@ -745,6 +801,25 @@ export class LocalWorldHost {
       storePath: this.#store.path,
       completed: this.#world.completed,
     };
-    for (const clientId of this.#attached.keys()) this.#send(clientId, status);
+    for (const [clientId] of this.#watching()) this.#send(clientId, status);
+  }
+}
+
+/**
+ * THE REQUESTS THAT CHANGE THE WORLD, as opposed to the ones that ask it
+ * something on a page's behalf (#284). Exhaustive by construction: a new
+ * request type does not compile until somebody says which it is.
+ */
+function changesTheWorld(message: WorldDevRequest): boolean {
+  switch (message.type) {
+    case 'action':
+    case 'fire_due':
+    case 'wake':
+      return true;
+    case 'hello':
+    case 'attach':
+    case 'pick':
+    case 'quote':
+      return false;
   }
 }
