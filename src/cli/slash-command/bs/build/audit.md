@@ -36,7 +36,11 @@ Fresh-Context, No-Framing Dispatch" applied one step further down the pipeline: 
 upstream step is exactly what would defeat an independent audit.
 
 1. **Fidelity** — does the built code actually implement what the raw rulebook slice(s) (plus
-   `RULINGS.md`) say, not what `## Interpretation` says they say?
+   `RULINGS.md`) say, not what `## Interpretation` says they say? It re-opens every source
+   location the chunk's claims quote, and every finding it reports quotes the source too.
+   Before dispatching it, the orchestrator runs `boardsmith claim-quote-check <slug>`; a
+   non-zero exit means the claims were never properly quoted, so the chunk goes back to
+   `investigate` rather than into an audit built on them.
 2. **Visibility** — a two-seat diff: does any hidden information leak to a seat that should not
    see it?
 3. **Undo** — does undo (where applicable) restore state cleanly, with no residual leak or
@@ -61,9 +65,30 @@ prior agent's summary of it.
 
 Then read the built code at: {codeFilePaths}.
 
-Return exactly: a list of { findingId, lens: 'fidelity', description, citation, severity } —
-one entry per defect found (empty array if none).
+These are the source passages this chunk was built on, as
+`boardsmith claim-quote-check {slug} --json` reports them: each quote and the location it came
+from, without any agent's reading of it. RE-OPEN every location yourself, read the passage in its surrounding context, and check the
+code against what the source says there, not against the quote alone:
+
+{quotedSourcesJson}
+
+Every finding quotes the exact source text it rests on and its location (rulebook section, or
+file and line when the source is code). If you believe the code is wrong but no source passage
+says what it should do instead, do not invent the rule: report it as a question for the
+designer, listing every location you searched. Never say the source is missing without that
+list.
+
+Return exactly: a list of { findingId, lens: 'fidelity', kind: 'defect' | 'question',
+description, quote, citation, severity } — one entry per defect or question (empty array if
+none). A 'defect' needs a quote found at its citation; a 'question' has an empty quote and a
+citation listing where you looked.
 ```
+
+A fidelity `question` is never repaired by guessing. The orchestrator records it in the
+`## Findings Ledger` like any finding and puts it to the designer the way `build/ask.md` puts an
+open question: a `QUESTIONS.md` entry with `Answer: pending` (the batched-question queue in
+`state-machine.md`), in designer language. The answer becomes a `RULINGS.md` ruling, and only
+then does `repair` act on it.
 
 **Visibility lens:**
 

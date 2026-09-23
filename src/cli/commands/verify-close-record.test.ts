@@ -98,7 +98,11 @@ async function makeChunk(
   let text = template;
   if (opts.cite) {
     text = text.replace(
-      '1. <!-- claim text --> — cites <!-- rulebook section / RULINGS.md entry -->',
+      [
+        '1. **<!-- claim text -->**',
+        '   > <!-- the exact source text, copied character for character -->',
+        '   Source: <!-- <file> §"<heading>", or <file>:<line>-<line> for code -->',
+      ].join('\n'),
       `1. A claim — cites ${opts.cite}`,
     );
   }

@@ -82,13 +82,32 @@ Investigate the rules interpretation for {gameName}, chunk "{slug}". Read the fo
   - DESIGN.md (only if this chunk's `## ui:` tag is touches or major)
 
 WRITE directly into this chunk's CHUNK.md — do not return this content, write it yourself:
-  1. `## Interpretation` — a numbered list of factual claims this chunk's design rests on, each
-     with a citation into the rulebook (via INDEX.md) or RULINGS.md. When a claim quotes rule
-     text, copy it character-exactly from the slice — never quote from memory. A claim resting
-     on a slice line marked `Derived` or `Named-but-undefined` must say so explicitly, and a
-     `Named-but-undefined` rule can only feed an open question for the ask step, never a claim.
-     Append new claims after any already present — never renumber existing claims
-     (CHUNK.template.md's parse contract).
+  1. `## Interpretation` — a numbered list of factual claims this chunk's design rests on. EVERY
+     claim carries the exact source passage it rests on and where that passage is, in this
+     shape (one or more quote + Source pairs per claim):
+
+       3. **Ties go against combatant 1.** Any explanation you need.
+          > Ties favour combatant 2: an equal roll sends damage to combatant 1.
+          Source: rulebook/08-combat.md §"The exchange"
+
+     Copy the quote character for character from the file you have open — never from memory,
+     never paraphrased. `Source:` paths are relative to design/. Cite a Markdown source (a
+     rulebook slice, RULINGS.md, DECISIONS.md) by its heading, `§"<heading text>"`, or by line
+     range. Cite code by file and line: `Source: ../old/lib/combat.pm:101-135`.
+     A claim resting on a slice line marked `Derived` or `Named-but-undefined` must say so
+     explicitly, and a `Named-but-undefined` rule can only feed an open question, never a claim.
+     If no passage in the sources backs something this chunk needs, it is NOT a claim: never
+     invent the rule, the text or the numbers. Write it as an open question instead, listing
+     every place you looked:
+
+       Q1. **Does armour reduce healing?** The combat and healing sections do not say.
+          Searched: rulebook/08-combat.md §"Armour"
+          Searched: rulebook/09-healing.md §"Healing"
+
+     Never write that the source is missing without those `Searched:` lines: a gap you did not
+     show is a gap nobody can check. Append new claims after any already present — never
+     renumber existing claims (CHUNK.template.md's parse contract). When you are done, run
+     `boardsmith claim-quote-check {slug}` and fix every claim it refuses before you return.
   2. `## Visibility Declaration` — what is hidden from whom, keyed to the claim numbers above
      (e.g. "claim 3: the drawn card is hidden from all other seats until played"). If this chunk
      has no hidden information, write that explicitly ("none — no hidden information in this
@@ -114,6 +133,22 @@ orchestrator reads CHUNK.md's `## Interpretation` and `## Visibility Declaration
 state-file read — see the Context-Economics Hard Rule above) and embeds that text verbatim as
 `{numberedClaimsList}` in the redteam dispatch prompts.
 
+## Quoted Claims, Checked as Code
+
+Every rule claim carries its exact quote and location, and a claim the sources do not back is an
+open question (`Q<N>.`) that shows where it looked (the shape is in the dispatch prompt above).
+`boardsmith claim-quote-check <slug>` enforces this: it re-opens every cited location and refuses
+a claim with no quote, a quote that is not at its citation, a location that does not exist, and an
+open question with no `Searched:` line. It works the same for a rulebook-sourced project (cite a
+heading) and a code-sourced one (cite file and lines).
+
+The orchestrator runs `boardsmith claim-quote-check <slug>` itself once the investigate subagent
+returns, before checking off `investigate`. A non-zero exit means the claims are not done: send
+its refusals to a narrower follow-up investigate subagent, which fixes the quote or location or
+turns the claim into an open question, and run the check again. Never check off `investigate`,
+and never dispatch redteam, while it exits non-zero. Open questions go to `build/ask.md` as part
+(b) questions; the agent never settles them by inventing a rule.
+
 ## Re-Investigate Round Behavior (redteam refuted-once path)
 
 When `redteam.md` returns a refuted-once verdict on a claim, the re-investigate round APPENDS a
@@ -133,7 +168,8 @@ The investigate subagent writes every section named above; the orchestrator accu
 returned `claimsList`, `visibilityDeclaration`, and `newlyDiscoveredCitations` fields, then
 performs the sanctioned bounded read of CHUNK.md's `## Interpretation` and `## Visibility
 Declaration` to obtain the numbered claims list text it will embed in the redteam dispatch
-prompts and restate at ask. It never re-opens the chunk's sources — slices, docs, RULINGS.md,
+prompts and restate at ask. Before that it runs `boardsmith claim-quote-check <slug>` (see
+"Quoted Claims, Checked as Code" above); a non-zero exit blocks the check-off. It never re-opens the chunk's sources — slices, docs, RULINGS.md,
 DECISIONS.md, DESIGN.md — to verify the subagent's work. If a returned summary or the written
 claims look incomplete or wrong, dispatch a narrower follow-up investigate subagent rather than
 reading the sources to verify. Once the return is recorded, the orchestrator checks off
