@@ -37,11 +37,11 @@ import { fileURLToPath } from 'node:url';
 import chalk from 'chalk';
 import open from 'open';
 import { createServer as createViteServer, type Plugin as VitePlugin } from 'vite';
-import { WebSocket } from 'ws';
 
 import { worldBudgets } from '../../world/index.js';
 import type { WorldLiftOutcome, WorldMigrationOutcome } from '../../world/host/index.js';
-import type { LocalWorldHost, WorldDevRequest } from '../dev-host/world-host.js';
+import type { LocalWorldHost } from '../dev-host/world-host.js';
+import { createWorldConnections } from '../dev-host/world-connections.js';
 import { worldStorePath, type LocalWorldStore, type openWorldStore } from '../dev-host/world-store.js';
 import { announceHost, onShutdown } from '../dev-host/shutdown.js';
 import type { WorldDevConfig } from '../dev-host/world-config-types.js';
@@ -289,11 +289,9 @@ export async function startWorldDevServer(
   const store = options.runtime.openWorldStore(worldStorePath(options.cwd), budgets);
   const launchedBefore = store.isLaunched();
 
-  const clients = new Map<string, WebSocket>();
-  const send = (clientId: string, message: unknown) => {
-    const socket = clients.get(clientId);
-    if (socket && socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message));
-  };
+  // THE PAGES OUTLIVE THE HOST: a rule edit replaces `worldHost` below, and the
+  // sockets stay where they are, so the connections ask for the current one.
+  const connections = createWorldConnections(() => worldHost);
   const hostOver = ({ gameDefinition: definition, LocalWorldHost }: WorldRuntime, over: LocalWorldStore) =>
     new LocalWorldHost({
       definition: definition as unknown as ConstructorParameters<
@@ -306,7 +304,8 @@ export async function startWorldDevServer(
       seed: `world:${definition.gameType}`,
       budgets,
       store: over,
-      send,
+      send: connections.send,
+      isOpen: connections.isOpen,
     });
 
   // MUTABLE, because a rule edit replaces the whole world host (#201): the
@@ -336,46 +335,7 @@ export async function startWorldDevServer(
     console.log(chalk.dim(`  Wrote ${file} -- a world project needs an entry, and this one had none.`));
   }
 
-  const worldSocket = claimWebSocketPath(WORLD_WS_PATH, (socket: WebSocket) => {
-    let clientId: string | null = null;
-    socket.on('message', (raw) => {
-      let message: { type?: string; clientId?: unknown; [key: string]: unknown };
-      try {
-        message = JSON.parse(raw.toString());
-      } catch {
-        return;
-      }
-      if (message.type === 'hello') {
-        clientId =
-          typeof message.clientId === 'string'
-            ? message.clientId
-            : `anon-${Math.random().toString(36).slice(2)}`;
-        clients.set(clientId, socket);
-      }
-      if (clientId === null) return; // a client identifies itself first
-      void worldHost
-        .handleMessage(clientId, message as unknown as WorldDevRequest)
-        .catch((error: unknown) =>
-          // The message, not the error object, exactly as `reloadWorld`'s
-          // second catch below already does it (#240).
-          console.error(
-            chalk.red(
-              `[boardsmith dev] world message '${String(message.type)}' failed: ` +
-                `${error instanceof Error ? error.message : String(error)}`,
-            ),
-          ),
-        );
-    });
-    socket.on('close', () => {
-      // Only tear down if THIS socket still owns the id: a reload's new socket
-      // may be helloed before the old one's close fires, and a stale close
-      // would drop the seat the reconnected page just took.
-      if (clientId !== null && clients.get(clientId) === socket) {
-        clients.delete(clientId);
-        void worldHost.disconnect(clientId);
-      }
-    });
-  });
+  const worldSocket = claimWebSocketPath(WORLD_WS_PATH, connections.accept);
 
   const plugins: VitePlugin[] = [
     boardsmithWorldDevPlugin({
@@ -468,12 +428,7 @@ export async function startWorldDevServer(
     // EVERY PAGE STARTS AGAIN. Their sockets are attached to a host that no
     // longer exists, and their UI has just been hot-reloaded to match rules the
     // world only now has.
-    for (const [clientId, socket] of clients) {
-      if (socket.readyState === WebSocket.OPEN) {
-        socket.send(JSON.stringify({ type: 'world_reload' }));
-      }
-      clients.delete(clientId);
-    }
+    connections.forgetAll({ type: 'world_reload' });
     console.log(chalk.green('  Reloaded. The world is durable and running the new rules.\n'));
   }
 
@@ -500,7 +455,7 @@ export async function startWorldDevServer(
   let stopping: Promise<void> | null = null;
   const teardown = async (): Promise<void> => {
     worldSocket.close();
-    clients.clear();
+    connections.forgetAll();
     // `close` drains the world lock before it touches the store, so an
     // in-flight disconnect or command is finished rather than abandoned -- and
     // the checkpoint it writes on the way out is the last write there is.

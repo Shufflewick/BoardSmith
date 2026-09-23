@@ -78,6 +78,7 @@ describe('loadWorldRuntime (#283)', () => {
       store: runtime.openWorldStore(storePath, budgets),
       send: (clientId, message) =>
         frames.push({ clientId, message: message as { type: string; actions?: unknown } }),
+      isOpen: () => true,
     });
     closing.push(() => host.close());
 
@@ -111,6 +112,7 @@ describe('loadWorldRuntime (#283)', () => {
           budgets,
           store,
           send: () => {},
+          isOpen: () => true,
         }),
     ).toThrow(/different copy of the BoardSmith engine/);
   });

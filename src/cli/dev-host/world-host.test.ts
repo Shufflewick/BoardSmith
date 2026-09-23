@@ -312,10 +312,18 @@ function openHost(options: {
   definition?: ConstructorParameters<typeof LocalWorldHost>[0]['definition'];
   clock?: WorldHostClock;
   budgets?: WorldBudgets;
-}): { host: LocalWorldHost; store: LocalWorldStore; sent: Sent[] } {
+}): {
+  host: LocalWorldHost;
+  store: LocalWorldStore;
+  sent: Sent[];
+  /** A socket going away the way `dev-world.ts` reports one: shut at once,
+   *  and the host told. Answers the host's departure, still queued. */
+  drop: (clientId: string) => Promise<void>;
+} {
   const budgets = options.budgets ?? worldBudgets();
   const store = openWorldStore(worldStorePath(options.dir), budgets);
   const sent: Sent[] = [];
+  const shut = new Set<string>();
   const host = new LocalWorldHost({
     definition: options.definition ?? bundle(),
     worldName: 'Village',
@@ -324,8 +332,13 @@ function openHost(options: {
     store,
     clock: options.clock ?? testClock(),
     send: (clientId, message) => sent.push({ clientId, message: message as Record<string, unknown> }),
+    isOpen: (clientId) => !shut.has(clientId),
   });
-  return { host, store, sent };
+  const drop = (clientId: string): Promise<void> => {
+    shut.add(clientId);
+    return host.disconnect(clientId);
+  };
+  return { host, store, sent, drop };
 }
 
 /**
@@ -483,6 +496,143 @@ describe('#167: presence is the seats this host has open', () => {
     await host.handleMessage('c2', { type: 'hello' });
     await host.handleMessage('c1', { type: 'action', order: nextOrder(), requestId: 'r1', action: 'roll', args: {} });
     expect(seen).toEqual([[1, 2]]);
+    await host.close();
+  });
+});
+
+/**
+ * #284: A SOCKET THAT DIED ABRUPTLY COSTS THE SEATS THAT REMAIN NOTHING.
+ *
+ * The reported wedge: driver processes killed mid-command left a dev host whose
+ * port answered and whose commands never settled. What it was doing was work
+ * for the dead. Every message ends in a push that enumerates the offers of
+ * every attached seat, one after another, and on a real world one walk runs to
+ * seconds -- and the host kept walking the killed seats until their queued
+ * departure finally reached the world lock, never looking up in between, so
+ * not even a close could be noticed until the whole push was over.
+ *
+ * `warm` is offered to every seat, and its condition writes down which seat's
+ * offers were being walked. That list is the cost this ticket is about.
+ */
+describe('#284: an abruptly closed connection is not worked for', () => {
+  function counting() {
+    const walked: number[] = [];
+    const warm = worldAction<Village>('warm')
+      .prompt('Warm your hands')
+      .condition({
+        'counted as walked': (ctx) => {
+          walked.push(ctx.player.seat);
+          return true;
+        },
+      })
+      .needs(() => [HEARTH])
+      .execute(() => {});
+    const definition = bundle({ world: worldBlock({ actions: [...VILLAGE_ACTIONS, warm] }) });
+    return { walked, definition };
+  }
+
+  it('stops walking, projecting and presenting a seat the moment its socket closes', async () => {
+    const { walked, definition } = counting();
+    const { host, sent, drop } = await attached({ dir, definition });
+    await host.handleMessage('c2', { type: 'hello' });
+    walked.length = 0;
+    const before = sent.length;
+
+    // c1's command is received first and c2's socket dies while it is still
+    // queued: the order a killed driver produces against a busy host.
+    const acting = host.handleMessage('c1', {
+      type: 'action',
+      order: nextOrder(),
+      requestId: 'r1',
+      action: 'chop',
+      args: {},
+    });
+    const leaving = drop('c2');
+    await Promise.all([acting, leaving]);
+
+    expect(last(sent, 'c1', 'world_response')).toMatchObject({ requestId: 'r1', ok: true });
+    expect(walked).not.toContain(2);
+    expect(sent.slice(before).filter((frame) => frame.clientId === 'c2')).toEqual([]);
+    // The very first frame c1 is sent after the close already says who is here.
+    const firstState = sent.slice(before).find(
+      (frame) => frame.clientId === 'c1' && frame.message.type === 'world_state',
+    );
+    expect(firstState?.message.presence).toEqual([1]);
+    await host.close();
+  });
+
+  it('notices a close that arrives while an earlier seat is being walked', async () => {
+    const { walked, definition } = counting();
+    const opened = await attached({ dir, definition });
+    const { host, drop } = opened;
+    await host.handleMessage('c2', { type: 'hello' });
+    await host.handleMessage('c3', { type: 'hello' });
+    walked.length = 0;
+
+    // THE KILL LANDS MID-PUSH. The close is an I/O callback, so it is modelled
+    // as the next turn of the event loop from inside seat 1's walk: a host that
+    // never yields between seats cannot see it until the push is over.
+    let killed = false;
+    const walkedBefore = walked.length;
+    const hook = setInterval(() => {
+      if (!killed && walked.length > walkedBefore) {
+        killed = true;
+        void drop('c3');
+      }
+    }, 0);
+    // A push walks in seat order, and this one starts with seat 1.
+    await host.handleMessage('c1', {
+      type: 'action',
+      order: nextOrder(),
+      requestId: 'r1',
+      action: 'chop',
+      args: {},
+    });
+    clearInterval(hook);
+    await host.settled();
+
+    expect(walked).not.toContain(3);
+    expect(walked).toContain(1);
+    expect(killed).toBe(true);
+    await host.close();
+  });
+
+  it('seats nobody for a connection that closed before its hello ran', async () => {
+    const { walked, definition } = counting();
+    const { host, store, sent, drop } = await attached({ dir, definition });
+    walked.length = 0;
+
+    const greeting = host.handleMessage('c2', { type: 'hello' });
+    const leaving = drop('c2');
+    await Promise.all([greeting, leaving]);
+
+    // THE ROSTER IS DURABLE, so a chair granted to a page that was already
+    // gone is a chair held by nobody forever.
+    expect(store.seats().map((row) => row.seat)).toEqual([1]);
+    expect(walked).not.toContain(2);
+    expect(sent.filter((frame) => frame.clientId === 'c2')).toEqual([]);
+    await host.close();
+  });
+
+  it('still applies an order its connection sent before dying', async () => {
+    const { host, sent, drop } = await attached({ dir });
+    await host.handleMessage('c2', { type: 'hello' });
+
+    // RECEIVED IS RECEIVED. The order carries a durable identity (#195), so the
+    // player's next page can ask again and be answered from its receipt; what
+    // must not happen is a command that silently did or did not run depending
+    // on how fast a socket died.
+    const acting = host.handleMessage('c2', {
+      type: 'action',
+      order: { id: 'dying-order', at: 0 },
+      requestId: 'r1',
+      action: 'chop',
+      args: {},
+    });
+    const leaving = drop('c2');
+    await Promise.all([acting, leaving]);
+
+    expect(JSON.stringify(last(sent, 'c1', 'world_state')?.view)).toContain('"logs":1');
     await host.close();
   });
 });
@@ -891,6 +1041,7 @@ describe('#167: the refusals a bundle hits on the platform are hit locally, in t
           budgets: worldBudgets(),
           store,
           send: () => {},
+          isOpen: () => true,
         }),
     ).toThrow(/A world game exports `world: \{ actions, view \}` alongside `gameClass`/);
     store.close();

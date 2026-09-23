@@ -53,6 +53,8 @@ async function hostFrame(seat: number): Promise<{ view: unknown; actions: unknow
     store,
     clock: pinnedClock(),
     send: (_clientId, message) => sent.push(message as Record<string, unknown>),
+    // No page in this file ever closes its socket.
+    isOpen: () => true,
   });
   await host.start();
   await host.handleMessage('c1', { type: 'hello' });

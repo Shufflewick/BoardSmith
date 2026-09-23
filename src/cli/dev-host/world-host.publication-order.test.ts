@@ -179,6 +179,8 @@ function openHost(dir: string): {
     store: gate.store,
     clock: testClock(),
     send: (clientId, message) => sent.push({ clientId, message: message as Record<string, unknown> }),
+    // No page in this file ever closes its socket.
+    isOpen: () => true,
   });
   return { host, sent, gate };
 }
