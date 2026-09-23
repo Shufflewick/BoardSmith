@@ -246,23 +246,52 @@ export function parseBuildManifest(chunkText: string): ParsedManifest {
 // ---------------------------------------------------------------------------------------------
 
 /**
- * The LIVE claim set: the integers that actually appear as `^N. **` items inside the
+ * The LIVE claim set: the integers that actually appear as `^N. ` items inside the
  * `## Interpretation` body only. A numbered list in another section (e.g.
  * `## Playtest Test Script`'s own `6. **Regression ...**` step) contributes nothing — this
  * function never scans `chunkText` directly, only the section body `extractSection` returns.
  *
  * Non-contiguous starts are preserved verbatim, never normalised to `1..max`.
+ *
+ * A claim is any numbered item at the start of a line, bolded or not: the CHUNK template writes
+ * `1. <claim text> — cites ...` with no bold, and real chunks use both shapes, so requiring `**`
+ * silently dropped every plain claim from the set (#290). The template's unfilled placeholder,
+ * `1. <!-- claim text -->`, is not a claim.
  */
 export function parseInterpretationClaims(chunkText: string): number[] {
   const body = extractSection(chunkText, '## Interpretation');
   if (body === undefined) return [];
 
   const claims = new Set<number>();
-  const CLAIM_ITEM = /^(\d+)\.\s+\*\*/gm;
+  const CLAIM_ITEM = /^(\d+)\.[ \t]+(?!<!--)\S/gm;
   for (const match of body.matchAll(CLAIM_ITEM)) {
     claims.add(Number(match[1]));
   }
   return [...claims].sort((a, b) => a - b);
+}
+
+/**
+ * The claims a later claim supersedes in full. Correction is append-only (investigate.md: a new claim
+ * "supersedes claim 7 per redteam objection"; redteam.md marks the old one
+ * `7. [superseded by claim 12 — do not review]`), so a superseded claim keeps its number in
+ * `parseInterpretationClaims` and is removed here by whoever needs only the claims in force.
+ * Scoped to `## Interpretation` like the claim set itself.
+ */
+export function parseSupersededClaims(chunkText: string): number[] {
+  const body = extractSection(chunkText, '## Interpretation');
+  if (body === undefined) return [];
+  const superseded = new Set<number>();
+  // Only a WHOLE supersession retires a claim: "supersedes claim 7 per redteam objection", "in
+  // full", or the end of the sentence. "Supersedes claim 8's closing sentence" and "supersedes
+  // claim 9 on the gem count" correct part of a claim, and the rest of it still stands.
+  const whole = /\bsupersedes claims? (\d+(?:\s*(?:,|and)\s*\d+)*)(?=\s+per\b|\s+in full\b|\s*[.*:;,)]|\s*$)/gim;
+  for (const match of body.matchAll(whole)) {
+    for (const n of match[1].matchAll(/\d+/g)) superseded.add(Number(n[0]));
+  }
+  for (const match of body.matchAll(/^(\d+)\.[ \t]+\[superseded by claim/gim)) {
+    superseded.add(Number(match[1]));
+  }
+  return [...superseded].sort((a, b) => a - b);
 }
 
 // ---------------------------------------------------------------------------------------------
