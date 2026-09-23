@@ -21,6 +21,7 @@ import {
   ingestRelabelCommand,
 } from './commands/ingest-archive.js';
 import { chunkCheckCommand, chunkProvenanceStatusCommand } from './commands/chunk-provenance.js';
+import { claimQuoteCheckCommand } from './commands/claim-quotes.js';
 import { traceCheckCommand } from './commands/trace-check.js';
 import { driftCheckCommand } from './commands/drift-check.js';
 import {
@@ -267,6 +268,15 @@ program
   )
   .option('--json', 'Emit JSON instead of human-readable output')
   .action(chunkCheckCommand);
+
+// Issue #289: every Interpretation claim carries an exact quote and its location, and the quote
+// must be there. Read-only; exits non-zero on any refused claim so a build session cannot pass it.
+program
+  .command('claim-quote-check <slug>')
+  .description("Refuse a chunk's Interpretation claims that carry no exact source quote, or whose quote is not at its cited location")
+  .option('--project <dir>', 'Project directory (defaults to cwd)')
+  .option('--json', 'Emit JSON (the quotes and their sources, without the claim text) instead of human-readable output')
+  .action(claimQuoteCheckCommand);
 
 program
   .command('chunk-provenance-status')
