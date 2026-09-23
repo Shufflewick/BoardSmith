@@ -9,6 +9,15 @@ main session, and records their answers itself; it never dispatches a Task-tool 
 step. Mirrors `build/ask.md`'s no-subagent shape exactly, not `build/redteam.md`'s or
 `build/audit.md`'s Dispatch Template pattern — playtest has no dispatch prompt of its own.
 
+## Who Signs Off
+
+Only the designer answers an ask gate or signs off a playtest. An unattended run parks the chunk at
+that gate and moves on only to work that does not need the answer. A chunk's `Status: verified` is
+never typed: it is derived from a sign-off that `boardsmith chunk-signoff` records (who, when, and
+which checklist items were observed), and the provenance check at close refuses a verified status
+that no sign-off backs. A designer decision about one chunk is never a precedent for another: a
+"machine playtest" or "skip it" decision is a waiver, it names its chunks one by one, and it expires.
+
 ## Milestone/UI Gate (SKILLAUTO-01)
 
 The human client-playtest stop below — "The Numbered Click-By-Click Test Script" through "The
@@ -24,11 +33,12 @@ Verified Gate" — runs ONLY when BOTH are true for this chunk:
 scoping; this file implements it. When either condition is false, this step's human stop is
 skipped entirely — but its content is NOT skipped: `build/test.md`'s random-sim/self-playtest
 pass already exercised the chunk's new behavior at `test`, and that automated result is what
-`Status: built → verified` relies on for a non-milestone or UI-less chunk. Write
-`Status: verified` to CHUNK.md (citing the automated test/sim pass that stands in for a human
-playtest here — never silently reuse the `verified` wording used for a human-confirmed chunk
-without this citation), update SKETCH.md's derived-status pointer to match (CHUNK.md first, then
-SKETCH.md second — "Write Order"), and flow straight through to `close`/the next chunk per
+`Status: built → verified` relies on for a non-milestone or UI-less chunk. Record it with
+`boardsmith chunk-signoff <slug> --automated "<the test/sim pass that stands in, e.g. its test
+file and sim run>"`. That command writes the sign-off, derives `Status: verified` in CHUNK.md, and
+mirrors SKETCH.md's pointer (CHUNK.md first, then SKETCH.md second, per "Write Order"). It refuses an
+automated sign-off for a chunk that does need a designer playtest. Then flow straight through to
+`close`/the next chunk per
 `state-machine.md` "Session Handoff Seams" — no session stop here. A genuine rules-adjudication /
 open-question escalation discovered during this chunk's work is the one exception: it always
 stops the session regardless of milestone/UI status (see `state-machine.md`'s human-gate list).
@@ -154,21 +164,35 @@ subagent must never fill the `## Verified Checklist`, write `Status: verified`, 
 from silence — no human confirmed anything, and a self-confirmed playtest is exactly the fabricated
 verification this gate exists to prevent.
 
-Presenting the script is not verifying it — only the human's explicit, item-by-item confirmation
-(or an explicit, honest choice to skip playtesting) authorizes the write. If the human explicitly
-chooses to skip playtesting this chunk, record that honestly as `verified (user-waived)` rather
-than silently marking `verified` — `verified (user-waived)` is a legitimate, recordable status,
-never a shortcut taken without the user's explicit say-so.
+Presenting the script is not verifying it. Only the designer's explicit, item-by-item
+confirmation (or the designer's explicit waiver) authorizes the write. An orchestrated run that has
+no designer to walk the script with leaves the chunk parked at this gate; it never signs it off.
 
-Only after every `## Verified Checklist` item is individually confirmed, or the human explicitly
-waives:
+Only after every `## Verified Checklist` item is individually confirmed by the designer, record the
+sign-off:
 
-1. Write `Status: verified` (or `Status: verified (user-waived)`) to CHUNK.md **last**, after
-   every other write for this gate has landed — cite `state-machine.md` "Write Order": the
-   `Status:` line is updated last so a session that crashes mid-write leaves a file whose status
-   still reflects the last fully-completed state, never a half-written one.
-2. Then update this chunk's derived-status pointer in SKETCH.md to match — CHUNK.md first, then
-   SKETCH.md second, per `state-machine.md` "Write Order", never SKETCH.md alone.
+```bash
+npx boardsmith chunk-signoff <slug> --by "<designer's name>" --observed 1,2,3
+```
+
+`--observed` lists every checklist item the designer confirmed. The command refuses when any item is
+missing (that chunk goes to `build/revise.md` instead), when `--by` names the run rather than a
+person, or when the chunk is not `built`. On success it records who, when and which items, writes
+`Status: verified` to CHUNK.md last, then mirrors SKETCH.md's derived pointer (`state-machine.md`
+"Write Order"). Never write the `Status:` line or the `## Sign-off` block by hand.
+
+**If the designer explicitly chooses to skip playtesting**, that is a waiver, and it is theirs to
+grant. Record it with the chunks they named and the date it ends:
+
+```bash
+npx boardsmith chunk-waiver --chunks <slug>[,<slug>...] --by "<designer's name>" --expires YYYY-MM-DD --reason "<what they said>"
+npx boardsmith chunk-signoff <slug> --waiver W<n>
+```
+
+The second command derives `Status: verified (user-waived)`. It refuses a waiver that does not name
+this chunk or has expired: a waiver the designer gave for one chunk is never stretched to cover the
+next, and a waiver for a chunk not yet built is only valid if the designer named that chunk. A waiver
+is never inferred from silence, from a standing decision, or from an earlier chunk's waiver.
 
 ## Light-Path Bookkeeping (cite, never restate)
 
