@@ -144,7 +144,8 @@ Loop until there is nothing left to build or a stop condition fires
    - anything else, including the mandated final-acceptance chunk → `bs-build-chunk`, which routes
      ceremony and final-acceptance itself (`build-chunk.md` Steps 2-3). This skill never routes
      steps within a chunk.
-3. **Refresh the lock**, append the `### Dispatch N` entry to `RUN.md` with `Outcome: pending`, and
+3. **Refresh the lock**, append the `### Dispatch N` entry to the chunk's own `design/run-log/<slug>.md` with
+   `Outcome: pending`, and
    dispatch one fresh subagent per
    `${CLAUDE_SKILL_DIR}/../bs-shared/orchestrate/chunk-dispatch.md` — its seven-field brief, its
    no-designer rule, and its return shape. One dispatch at a time, never two.

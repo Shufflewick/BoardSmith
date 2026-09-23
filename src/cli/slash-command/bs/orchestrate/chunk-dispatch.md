@@ -107,7 +107,7 @@ also malformed, stop the run and tell the designer plainly what did not come bac
 
 ## After the Return
 
-The orchestrator, in this order: fills the `RUN.md` dispatch entry's `Outcome`/`Detail`
+The orchestrator, in this order: fills the chunk's `design/run-log/<slug>.md` dispatch entry's `Outcome`/`Detail`
 (`orchestrate/run-state.md` "Writing It"), records any `questions` and `filings`
 (`orchestrate/questions.md`, `orchestrate/filings.md`), relays `designerSummary` if there is
 anything the designer can see, and then routes on `outcome` per `build-game.md` Step 4.

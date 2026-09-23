@@ -298,3 +298,34 @@ describe('constraint-check through the real CLI entry point', () => {
     expect(refused.stderr).toMatch(/G1 .* has no cap/);
   });
 });
+
+/**
+ * #294: a chunk built on a parallel branch numbers its entries provisionally (`G@<slug>.<n>`,
+ * `Ruling @<slug>.<n>`) until `boardsmith chunk-merge` allocates real numbers. The check must hold
+ * those entries to the same rules on the branch, not skip them for having no number, and must
+ * refuse one id used twice, which is what two branches taking "the next" number produce.
+ */
+describe('provisional ids on a parallel branch, and ids used twice', () => {
+  const PROVISIONAL_MAIL = MAIL.replace('### G1', '### G@clans.1');
+
+  it('checks a provisional growing structure like any other', async () => {
+    const refusals = await refusalsFor({ 'design/CONSTRAINTS.md': ledger('', PROVISIONAL_MAIL) });
+    expectOneRefusal(refusals, /G@clans\.1/, /no cap/i);
+  });
+
+  it('accepts a provisional ruling that the branch recorded', async () => {
+    const refusals = await refusalsFor({
+      'design/CONSTRAINTS.md': ledger('', `${PROVISIONAL_MAIL}\n- Ruling: Ruling @clans.1\n`),
+      'design/RULINGS.md': '# Rulings\n\n### Ruling @clans.1\n- Decision: mail may grow; the designer accepts it.\n',
+    });
+    expect(refusals).toEqual([]);
+  });
+
+  it('refuses an id used by two entries', async () => {
+    const refusals = await refusalsFor({
+      'design/CONSTRAINTS.md': ledger('', `${MAIL}\n- Ruling: Ruling 1\n\n${MAIL}\n- Ruling: Ruling 1\n`),
+      'design/RULINGS.md': '# Rulings\n\n### Ruling 1\n- Decision: mail may grow.\n',
+    });
+    expectOneRefusal(refusals, /G1 is used by 2 entries/);
+  });
+});

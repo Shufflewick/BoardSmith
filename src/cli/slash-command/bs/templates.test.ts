@@ -675,7 +675,9 @@ describe('#293 — ledger templates agree with boardsmith ledger-check', () => {
     'RULINGS.md': 'templates/RULINGS.template.md',
     'DECISIONS.md': 'templates/DECISIONS.template.md',
     'FILINGS.md': 'templates/FILINGS.template.md',
+    'QUESTIONS.md': 'templates/QUESTIONS.template.md',
     'RUN.md': 'templates/RUN.template.md',
+    'run-log/core-loop.md': 'templates/RUN-LOG.template.md',
   } as const;
 
   /** The template with its comment markers removed, so its examples read as real entries. */
@@ -685,8 +687,8 @@ describe('#293 — ledger templates agree with boardsmith ledger-check', () => {
       .replace(/^[ \t]+(?=### |- )/gm, '');
   const NOW = Date.parse('2026-09-24T00:00:00Z') / 1000;
 
-  it('RUN.template.md defines "Finished at" with the same date -u rule as "Dispatched at"', () => {
-    const run = flat(read('templates/RUN.template.md'));
+  it('RUN-LOG.template.md defines "Finished at" with the same date -u rule as "Dispatched at"', () => {
+    const run = flat(read('templates/RUN-LOG.template.md'));
     expect(run).toMatch(/Finished at: `pending` while the dispatch runs, then an ISO timestamp from `date -u \+%Y-%m-%dT%H:%M:%SZ`/);
     expect(run).toContain('boardsmith ledger-check');
   });
@@ -705,27 +707,36 @@ describe('#293 — ledger templates agree with boardsmith ledger-check', () => {
     const dir = tempTree('bs-ledger-templates-');
     mkdirSync(join(dir, 'design'));
     execSync('git init', { cwd: dir, stdio: 'ignore' });
+    mkdirSync(join(dir, 'design', 'run-log'));
     for (const [file, template] of Object.entries(LEDGERS)) {
       writeFileSync(join(dir, 'design', file), read(template));
     }
     const result = await ledgerCheck(dir);
     expect(result.findings).toEqual([]);
-    expect(result.checked).toEqual(['RULINGS.md', 'DECISIONS.md', 'FILINGS.md', 'RUN.md']);
+    expect(result.checked).toEqual([
+      'RULINGS.md',
+      'DECISIONS.md',
+      'FILINGS.md',
+      'QUESTIONS.md',
+      'RUN.md',
+      'run-log/core-loop.md',
+    ]);
   });
 
   it("each template's own example, read as real entries, passes the check", () => {
     // Guard against a vacuous pass: the examples must actually be read as entries.
     expect(uncommented(LEDGERS['DECISIONS.md'])).toMatch(/^### Decision 3$/m);
-    expect(uncommented(LEDGERS['RUN.md'])).toMatch(/^### Dispatch 2$/m);
+    expect(uncommented(LEDGERS['run-log/core-loop.md'])).toMatch(/^### Dispatch 2$/m);
 
     expect(checkNumberedLedger(uncommented(LEDGERS['RULINGS.md']), 'Ruling', 'RULINGS.md')).toEqual([]);
     expect(checkNumberedLedger(uncommented(LEDGERS['DECISIONS.md']), 'Decision', 'DECISIONS.md')).toEqual([]);
     const filings = uncommented(LEDGERS['FILINGS.md']);
     expect(checkNumberedLedger(filings, 'Filing', 'FILINGS.md')).toEqual([]);
     expect(checkFilingStatus(filings)).toEqual([]);
-    const run = uncommented(LEDGERS['RUN.md']);
+    const run = uncommented(LEDGERS['run-log/core-loop.md']);
     expect(run).toMatch(/- Finished at: \d{4}-/);
-    expect(checkRunLog(run, () => null, NOW)).toEqual([]);
+    expect(checkRunLog(run, 'run-log/core-loop.md', () => null, NOW)).toEqual([]);
+    expect(checkNumberedLedger(uncommented(LEDGERS['QUESTIONS.md']), 'Question', 'QUESTIONS.md')).toEqual([]);
   });
 
   it("DECISIONS.template.md's supersession example is load-bearing: without its pointer the check fails", () => {

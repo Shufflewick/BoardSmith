@@ -12,6 +12,7 @@ import {
 } from '../lib/project-paths.js';
 import { assertBareName } from '../lib/user-name.js';
 import { extractSection, parseRulings } from './build-manifest.js';
+import { ENTRY_NUMBER, NUMBERED_LEDGER_SPECS, provisionalHeadings } from '../lib/ledger-allocation.js';
 
 /**
  * `boardsmith constraint-check [slug]`: does the project hold its own hard constraints (#288)?
@@ -105,7 +106,7 @@ function normalize(text: string): string {
 /** Splits a section into its `### <id>` entries and reads each entry's `- Field: value` lines. */
 function readEntries(section: string | undefined, prefix: 'C' | 'G'): Array<Record<string, string>> {
   const body = stripComments(section ?? '');
-  const heading = new RegExp(`^### (${prefix}\\d+)\\s*$`, 'gm');
+  const heading = new RegExp(`^### (${prefix}${ENTRY_NUMBER})\\s*$`, 'gm');
   const starts = [...body.matchAll(heading)];
   return starts.map((match, i) => {
     const end = i + 1 < starts.length ? starts[i + 1].index : body.length;
@@ -227,9 +228,27 @@ function coverageRefusals(claudeMd: string | undefined, constraints: HardConstra
     );
 }
 
+/** Every ruling id a structure may cite: real numbers, and a parallel branch's provisional ids (#294). */
+/** One refusal per id used by more than one entry: a citation of it would mean two things. */
+function duplicateIdRefusals(entries: ReadonlyArray<{ id: string }>): string[] {
+  const counts = new Map<string, number>();
+  for (const { id } of entries) counts.set(id, (counts.get(id) ?? 0) + 1);
+  return [...counts]
+    .filter(([, count]) => count > 1)
+    .map(
+      ([id, count]) =>
+        `${id} is used by ${count} entries in design/${CONSTRAINTS_MD}. Keep the first, give each later ` +
+        'one the next unused id, and update every citation that meant it.',
+    );
+}
+
 async function rulingNumbers(projectDir: string): Promise<Set<string>> {
   const text = stripComments((await readOptional(designPath(projectDir, RULINGS_MD))) ?? '');
-  return new Set(parseRulings(text).map((r) => String(r.number)));
+  const rulings = NUMBERED_LEDGER_SPECS.find((spec) => spec.file === RULINGS_MD)!;
+  return new Set([
+    ...parseRulings(text).map((r) => `Ruling ${r.number}`),
+    ...provisionalHeadings(text, rulings),
+  ]);
 }
 
 async function capRefusals(projectDir: string, g: GrowingStructure, name: string): Promise<string[]> {
@@ -266,8 +285,7 @@ async function capRefusals(projectDir: string, g: GrowingStructure, name: string
 }
 
 function rulingRefusal(g: GrowingStructure, name: string, rulings: Set<string>): string[] {
-  const number = /^Ruling (\d+)$/.exec(g.ruling)?.[1];
-  if (number !== undefined && rulings.has(number)) return [];
+  if (rulings.has(g.ruling)) return [];
   return [
     `${name} cites "${g.ruling}", which is not a ruling in design/${RULINGS_MD}. Only a recorded ` +
       'designer ruling lets a structure grow without a cap; put the question to the designer (build/ask.md).',
@@ -312,7 +330,7 @@ interface ReviewVerdict {
 function parseVerdicts(section: string): Map<string, ReviewVerdict> {
   const verdicts = new Map<string, ReviewVerdict>();
   for (const line of stripComments(section).split('\n')) {
-    const m = /^- (C\d+):\s*([a-z ]+?)\.\s*(.*)$/i.exec(line.trim());
+    const m = new RegExp(`^- (C${ENTRY_NUMBER}):\\s*([a-z ]+?)\\.\\s*(.*)$`, 'i').exec(line.trim());
     if (m) verdicts.set(m[1], { verdict: m[2].toLowerCase(), citation: m[3].trim() });
   }
   return verdicts;
@@ -348,7 +366,7 @@ async function reviewRefusals(projectDir: string, slug: string, constraints: Har
 }
 
 /** Runs the project's own vitest over the named files. */
-const runVitest: TestRunner = (projectDir, files) =>
+export const runVitest: TestRunner = (projectDir, files) =>
   new Promise((done) => {
     const child = spawn('npx', ['vitest', 'run', ...files], { cwd: projectDir, shell: process.platform === 'win32' });
     let output = '';
@@ -384,6 +402,7 @@ export async function checkConstraints(
   }
   const { constraints, structures } = parseLedger(text);
   const refusals = [
+    ...duplicateIdRefusals([...constraints, ...structures]),
     ...coverageRefusals(await readOptional(join(dir, 'CLAUDE.md')), constraints),
     ...(await constraintRefusals(dir, constraints)),
     ...(await structureRefusals(dir, structures)),

@@ -68,7 +68,7 @@ describe('WF-01 — the skill and its reference tree exist and are wired', () =>
   });
 
   it('the three new templates exist on disk', () => {
-    for (const file of ['RUN.template.md', 'QUESTIONS.template.md', 'FILINGS.template.md']) {
+    for (const file of ['RUN.template.md', 'RUN-LOG.template.md', 'QUESTIONS.template.md', 'FILINGS.template.md']) {
       expect(existsSync(join(__dirname, 'templates', file)), `templates/${file}`).toBe(true);
     }
   });
@@ -309,18 +309,25 @@ describe('WF-05 — BoardSmith bugs and gaps are filed and reported upstream', (
 });
 
 describe('WF-06 — a run resumes cleanly after a /clear or a crash', () => {
-  it('RUN.template.md carries its parse contract, run-level lines, and log fields', () => {
+  it('RUN.template.md carries its parse contract and run-level lines, and no shared log (#294)', () => {
     const template = read('templates/RUN.template.md');
     expect(template).toMatch(/^# Run/m);
     expect(template).toMatch(/PARSE CONTRACT \(TMPL-02\)/);
-    for (const line of ['Run Status:', 'Open Gate:', 'Stop Reason:', '## Run Log']) {
+    for (const line of ['Run Status:', 'Open Gate:', 'Stop Reason:']) {
       expect(template, `RUN.template.md must carry \`${line}\``).toContain(line);
     }
     for (const value of ['active', 'paused', 'complete']) {
       expect(template).toContain(value);
     }
-    for (const field of ['Chunk:', 'Pipeline:', 'Dispatched at:', 'Finished at:', 'Outcome:', 'Detail:']) {
-      expect(template, `RUN.template.md must document \`${field}\``).toContain(field);
+    expect(template).not.toContain('## Run Log');
+    expect(template).toContain('design/run-log/<slug>.md');
+  });
+
+  it('RUN-LOG.template.md is one chunk\'s log, with every dispatch field (#294)', () => {
+    const template = read('templates/RUN-LOG.template.md');
+    expect(template).toMatch(/^# Run Log: /m);
+    for (const field of ['Pipeline:', 'Dispatched at:', 'Finished at:', 'Outcome:', 'Detail:']) {
+      expect(template, `RUN-LOG.template.md must document \`${field}\``).toContain(field);
     }
   });
 
@@ -343,7 +350,7 @@ describe('WF-06 — a run resumes cleanly after a /clear or a crash', () => {
 
   it('a dispatch is journalled BEFORE it launches, so a mid-chunk crash is visible', () => {
     const runState = flat(read('orchestrate/run-state.md'));
-    expect(runState).toMatch(/\*\*Before\*\* each dispatch: append a `### Dispatch N` entry with `Outcome: pending`/i);
+    expect(runState).toMatch(/\*\*Before\*\* each dispatch: append a `### Dispatch N` entry to that chunk's own `design\/run-log\/<slug>\.md`, with `Outcome: pending`/i);
     expect(runState).toMatch(/a dispatch that never returned/i);
   });
 

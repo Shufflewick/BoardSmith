@@ -28,6 +28,8 @@ import { chunkReopenCommand, chunkSignoffCommand, chunkWaiverCommand } from './c
 import { traceCheckCommand } from './commands/trace-check.js';
 import { driftCheckCommand } from './commands/drift-check.js';
 import { ledgerCheckCommand } from './commands/ledger-check.js';
+import { parallelCheckCommand } from './commands/parallel-check.js';
+import { chunkMergeCommand } from './commands/chunk-merge.js';
 import {
   verifyRunInitCommand,
   verifyRunRecordCommand,
@@ -378,6 +380,27 @@ program
   .option('--project <dir>', 'Project directory (defaults to cwd)')
   .option('--json', 'Emit JSON instead of human-readable output')
   .action(ledgerCheckCommand);
+
+// #294: chunks built at the same time. `parallel-check` decides, from the sketch's dependency
+// graph and the chunks' rulebook citations, whether they may be; `chunk-merge` is the serial gate
+// every such chunk's branch reaches the main line through, re-running the tree-wide checks on the
+// combined tree and refusing (leaving the main line unchanged) when it fails one.
+program
+  .command('parallel-check <slugs...>')
+  .description('Decide whether these chunks may be built at the same time: no dependency between them and no shared rulebook citation')
+  .option('--project <dir>', 'Project directory (defaults to cwd)')
+  .option('--json', 'Emit JSON instead of human-readable output')
+  .action(parallelCheckCommand);
+
+program
+  .command('chunk-merge <slug>')
+  .description(
+    "Merge a chunk's branch into the main line, one merge at a time: allocate ledger numbers, re-run every tree-wide check on the combined tree, and record cross-chunk references for the audit",
+  )
+  .option('--project <dir>', 'Project directory (defaults to cwd)')
+  .option('--branch <name>', "The chunk's branch (defaults to chunk/<slug>)")
+  .option('--json', 'Emit JSON instead of human-readable output')
+  .action(chunkMergeCommand);
 
 program
   .command('drift-check')

@@ -93,6 +93,16 @@ export const BOARDSMITH_BUGS_MD = 'BOARDSMITH-BUGS.md';
 /** The filings ledger and the orchestrated-run journal, written by `/bs-build-game`. */
 export const FILINGS_MD = 'FILINGS.md';
 export const RUN_MD = 'RUN.md';
+/** The answer cache `/bs-build-game` asks from and records into. */
+export const QUESTIONS_MD = 'QUESTIONS.md';
+/**
+ * One run log per chunk, `design/run-log/<slug>.md` (#294). Chunks built at the same time on
+ * separate branches each append only to their own file, so the log has no shared field for two
+ * writers to collide on.
+ */
+export const RUN_LOG_DIR = 'run-log';
+/** The references between chunks built at the same time, recorded by `boardsmith chunk-merge` (#294). */
+export const CROSS_CHUNK_MD = 'CROSS-CHUNK.md';
 /** Designer playtest waivers, written only by `boardsmith chunk-waiver` (#291). */
 export const WAIVERS_MD = 'WAIVERS.md';
 

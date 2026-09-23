@@ -25,7 +25,11 @@ corrected entry, and continue. Never repair `CHUNK.md` to match `RUN.md`.
 `${CLAUDE_SKILL_DIR}/../bs-shared/templates/RUN.template.md` the first time `/bs-build-game` runs
 in a project — fill the placeholders, never restructure the file. If it does not exist, this is the
 run's first pass; create it with `Run Status: active`, `Open Gate: none`, `Stop Reason: none`, and
-an empty `## Run Log`, then continue. A missing `RUN.md` is never a parse failure — an absent
+no dispatch entries, then continue. Each chunk's dispatches go in that chunk's own run log,
+`design/run-log/<slug>.md`, created from `${CLAUDE_SKILL_DIR}/../bs-shared/templates/RUN-LOG.template.md`
+the first time the chunk is dispatched (#294). One file per chunk is what lets chunks built at the
+same time journal without sharing a field; `boardsmith ledger-check` fails a dispatch entry written
+into `RUN.md` itself. A missing `RUN.md` is never a parse failure — an absent
 journal simply means no orchestrated run has happened yet.
 
 A `RUN.md` that exists but does not parse against its template IS a parse failure: stop and ask the
@@ -37,14 +41,19 @@ designer (`state-machine.md` "Cold-Resume Parse Contract"). Never guess what an 
 A resuming run reconstructs everything it needs from files, never from a conversation it no longer
 has. In this exact order:
 
-1. **Read `RUN.md`.** Note `Run Status:`, `Open Gate:`, `Stop Reason:`, and the last `## Run Log`
-   entry (which chunk, which pipeline, whether its Outcome is still `pending`).
+1. **Read `RUN.md`.** Note `Run Status:`, `Open Gate:` and `Stop Reason:`. Then read the last entry
+   of each chunk run log in `design/run-log/` whose chunk is not verified (which pipeline, whether
+   its Outcome is still `pending`). During a parallel batch there can be several; also run
+   `git worktree list` to see which chunk checkouts are still open
+   (`orchestrate/chunk-dispatch.md` "Parallel Dispatch").
 2. **Read `SKETCH.md`'s `## Ordered Chunk List`** and derive the true build position exactly as
    `build-chunk.md` Step 2 does: the first chunk whose derived status is neither `verified` nor
    `verified (user-waived)`. This — not the journal — is what gets built next.
-3. **Reconcile.** If step 2's chunk differs from the last log entry's chunk, the journal is behind
-   (a dispatch closed but its Outcome was never written, or a chunk closed and the run died before
-   the next dispatch). Append a corrected entry and proceed against step 2's answer.
+3. **Reconcile.** If a chunk's run log disagrees with its `CHUNK.md` (its last entry still says
+   `pending` for a chunk that has since closed, or says `closed` for one that is still `built`),
+   the journal is behind: a dispatch returned but its Outcome was never written, or the run died
+   between the work and the journal write. Append a corrected entry to that chunk's log and proceed
+   against step 2's answer.
 4. **Read `QUESTIONS.md`.** Every entry whose `Answer:` is filled is a settled answer the resuming
    run must never re-ask (`orchestrate/questions.md`). Every entry whose `Answer:` is still
    `pending` is an open question the run still owes the designer.
@@ -64,14 +73,15 @@ Only after all six does the run dispatch anything.
 Every write is append-only except the two sanctioned in-place fills the template documents (an
 entry's `Finished at`/`Outcome`/`Detail`, and the three run-level lines). Specifically:
 
-- **Before** each dispatch: append a `### Dispatch N` entry with `Outcome: pending`,
+- **Before** each dispatch: append a `### Dispatch N` entry to that chunk's own `design/run-log/<slug>.md`, with `Outcome: pending`,
   `Finished at: pending`, and a fresh `date -u +%Y-%m-%dT%H:%M:%SZ` clock read as `Dispatched at`.
   This is what makes a mid-chunk crash visible on resume as a dispatch that never returned.
 - **After** each dispatch returns: run `date -u +%Y-%m-%dT%H:%M:%SZ` again and fill that entry's
   `Finished at` with what it prints, together with `Outcome` and `Detail`, once. Never copy a time
   from another entry or type one; `boardsmith ledger-check` compares both times against the
   commits that recorded them and fails a time that could not have been read from the clock.
-- When a gate opens: set `Open Gate:` to that gate; when it is answered and recorded, set it back
+- When a gate opens: set `Open Gate:` to that gate (during a parallel batch, add it to the list,
+  separated by `; `); when it is answered and recorded, set it back
   to `none`. A gate is never left recorded as open after its answer has landed in `QUESTIONS.md`,
   and never cleared before.
 - When the run stops: set `Run Status:` and `Stop Reason:` as the LAST writes of the run, after
@@ -90,8 +100,8 @@ An orchestrated run stops for exactly four reasons, and says which one in the de
    waiting. `Stop Reason: gate-open`, with `Open Gate:` naming it. This is the ordinary,
    healthy stop.
 3. **A stuck dispatch.** A subagent returned `stuck` — a gate that keeps failing, a typecheck that
-   will not go green, a subagent that died on a terminal error. `Stop Reason: stuck`, and the Run
-   Log entry names what was stuck. Never retry a stuck dispatch a third time; surface it.
+   will not go green, a subagent that died on a terminal error. `Stop Reason: stuck`, and the
+   chunk's run log entry names what was stuck. Never retry a stuck dispatch a third time; surface it.
 4. **The orchestrator's own context ceiling.** `Stop Reason: context-ceiling`. See below.
 
 ## Context: the Orchestrator's Own Budget
