@@ -7,6 +7,17 @@ line of code is written. Mirrors `ingest-rules.md` Step 6 (Approval Gate) + Step
 Files) — same negotiate-then-gate posture, same single-point-of-write discipline, applied here
 to one chunk instead of the whole sketch.
 
+## Who Answers This Gate
+
+Only the designer answers an ask gate or signs off a playtest. An unattended run parks the chunk at
+that gate and moves on only to work that does not need the answer. The run, the orchestrator, and
+any dispatched subagent present this gate; none of them answers it, and none of them writes
+`Status: approved` or a `RULINGS.md` entry on the designer's behalf. A ruling or an archive override
+being "reversible" does not make it the run's to take. There is no waiver for an ask gate: a
+playtest waiver (`build/playtest.md`) never covers one. A designer decision about one chunk is never
+a precedent for another (see "Never re-ask an already-granted approval" below for what an earlier
+answer does cover).
+
 ## First-UI-Chunk Design Check (the visual-identity opening of this same ask)
 
 For the first UI chunk, **the ask IS the design ask** — one ask step, one human-approval
@@ -70,7 +81,10 @@ recorded as a ruling, never an invented rule.
 **Never re-ask an already-granted approval.** If the user already approved a choice — at this
 chunk's own earlier redteam escalation, at a prior chunk's `ask`, or as a standing `RULINGS.md`
 entry — that approval stands; re-presenting it as a fresh question wastes the user's attention and
-implies their prior answer didn't count.
+implies their prior answer didn't count. An earlier approval covers only the question it answered,
+as recorded in `QUESTIONS.md`, `RULINGS.md` or `DECISIONS.md` with the designer's own answer. A
+"standing precedent" that no record states is not an approval, and an answer given for one chunk
+does not settle a different question in a later chunk: that is a new question, and it is asked.
 
 **Read the answer cache before asking, and write to it as you ask.** A question that lived only in
 a conversation was lost to the next `/clear`, and the designer got asked it again — so `QUESTIONS.md`
