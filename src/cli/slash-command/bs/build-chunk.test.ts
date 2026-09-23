@@ -1682,6 +1682,36 @@ describe('PROV-01/PROV-03 — both close paths invoke chunk-check, reused by cit
     expect(item5.replace(/\s+/g, ' ')).toMatch(/non-zero exit/i);
   });
 
+  it('close.md refuses to close a chunk whose cited evidence is not in git (#292)', () => {
+    const close = read('build/close.md');
+    const item5 = close.slice(
+      close.indexOf('5. **Reconcile the paperwork ledgers'),
+      close.indexOf('6. **Release the lock.**'),
+    ).replace(/\s+/g, ' ');
+    expect(item5).toMatch(/cites a script or a capture/);
+    expect(item5).toContain('chunks/<slug>/evidence/');
+    expect(item5).toMatch(/gitignored/);
+  });
+
+  it('state-machine.md defines both locations, scratch and committed evidence, and when to use each (#292)', () => {
+    const layout = read('state-machine.md');
+    const section = layout.slice(layout.indexOf('## Project Layout'), layout.indexOf('## Companion Authority'));
+    expect(section).toContain('chunks/<slug>/evidence/');
+    expect(section).toContain('.boardsmith/scratch/');
+    const flat = section.replace(/\s+/g, ' ');
+    expect(flat).toMatch(/Evidence goes in `chunks\/<slug>\/evidence\/`/);
+    expect(flat).toContain('boardsmith ledger-check');
+  });
+
+  it('no skill step sends a script someone will rely on to scratch without naming the evidence folder (#292)', () => {
+    for (const file of ['build-chunk.md', 'ingest-rules.md']) {
+      const text = read(file).replace(/\s+/g, ' ');
+      const at = text.indexOf('.boardsmith/scratch/');
+      expect(at, file).toBeGreaterThan(-1);
+      expect(text.slice(at - 400, at + 600), file).toContain('evidence/');
+    }
+  });
+
   it('playtest.md\'s Light-Path Bookkeeping cites close.md\'s Bookkeeping Sequence BY NAME and does not duplicate the chunk-check text', () => {
     const playtest = read('build/playtest.md');
     expect(playtest).toContain('## Bookkeeping Sequence');

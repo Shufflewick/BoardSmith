@@ -1,3 +1,4 @@
+import { promises as fs } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 /**
@@ -47,6 +48,20 @@ export function designRulebookDir(projectDir: string): string {
 /** Absolute path to a project's `design/chunks/`. */
 export function designChunksDir(projectDir: string): string {
   return join(designDir(projectDir), CHUNKS_DIR);
+}
+
+/**
+ * Every chunk directory's slug under `design/chunks/`, sorted; empty when the project has no
+ * chunks yet. Any error other than the directory being absent is thrown, not read as "no chunks".
+ */
+export async function chunkSlugs(projectDir: string): Promise<string[]> {
+  try {
+    const entries = await fs.readdir(designChunksDir(projectDir), { withFileTypes: true });
+    return entries.filter((e) => e.isDirectory()).map((e) => e.name).sort();
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return [];
+    throw err;
+  }
 }
 
 /** Absolute path to one chunk's `CHUNK.md`. */

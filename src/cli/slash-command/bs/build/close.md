@@ -97,7 +97,12 @@ release) and no tail detailing.
    one supersedes but that does not carry its `- Superseded by:` line; a filing whose
    `Reported:`, `Issue:` and any status banner disagree; and a `RUN.md` `Dispatched at` or
    `Finished at` that is not a real `date -u` read (later than the commit that recorded it,
-   a finish before its dispatch, or out of order). A non-zero exit means the ledgers are wrong:
+   a finish before its dispatch, or out of order). It also refuses to close a chunk whose cited
+   evidence is not in git: when `RULINGS.md`, `DECISIONS.md` or a verified CHUNK.md (its sign-off
+   included) cites a script or a capture, that file must be committed. A cited file that is
+   gitignored (anything in `.boardsmith/scratch/`), not yet added, missing, or outside the project
+   is a finding; move it into `chunks/<slug>/evidence/`, commit it, and cite that path
+   (`state-machine.md` "Project Layout"). A non-zero exit means the ledgers are wrong:
    fix every entry it names, following the fix its message states, and run it again. This step
    is not done, and the lock is not released, until it exits zero. Never edit around a finding
    by renumbering a citation you have not traced, or by deleting an entry.

@@ -88,9 +88,12 @@ existed still has. On a non-zero exit run `npx boardsmith doctor --fix`, which m
 into place with `git mv` and deletes nothing, then continue. Do not hand-move these files and do
 not proceed against a project that failed this gate: a stale path silently reads the wrong file.
 
-Throwaway scripts you write during this chunk — repro drivers, probes, capture harnesses — go in
+Throwaway scripts you write during this chunk (one-off probes, a repro you run once) go in
 `.boardsmith/scratch/`, never the project root. That directory is gitignored; the project root is
-not, and scratch left there gets committed.
+not, and scratch left there gets committed. A script or capture that anything will cite as
+evidence (a measurement harness, a playtest driver, a screenshot behind a claim or a sign-off)
+goes in the committed `chunks/<slug>/evidence/` instead, and close refuses a chunk whose cited
+evidence is not in git (`state-machine.md` "Project Layout").
 
 Then run:
 

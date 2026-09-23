@@ -13,6 +13,7 @@ Every design artifact this protocol names lives under the project's **`design/`*
     BRIEF.md  SKETCH.md  DESIGN.md  DECISIONS.md  RULINGS.md  ASSETS.md
     QUESTIONS.md  FILINGS.md  RUN.md
     chunks/<slug>/CHUNK.md
+    chunks/<slug>/evidence/      <- committed; every script or capture a claim relies on
     rulebook/INDEX.md  rulebook/NN-*.md  rulebook/source/
   src/  tests/  public/          <- the game itself; never a design artifact
   .boardsmith/scratch/           <- gitignored; every throwaway script goes here
@@ -31,11 +32,28 @@ one. The paths are design-relative and not project-relative because that is exac
 are written inside CHUNK.md's Build Manifest and `## Interpretation` — one grammar, not two, so a
 citation copied out of a doc resolves the same way the `boardsmith` commands resolve it.
 
-**Throwaway scripts go in `.boardsmith/scratch/`, never the project root.** A repro driver, a
-one-off probe, a capture harness — anything you would not ship — is written to
-`.boardsmith/scratch/<name>.mjs`. That directory is gitignored, so scratch can never be committed
-by accident. (It has been: `_dbg.mjs`, `_cap_tmp.mjs` and friends were tracked in a real game,
-which is what issue #6 was filed about.)
+**Two places for a script, and the test is whether anything will cite it.**
+
+- **Throwaway scripts go in `.boardsmith/scratch/`, never the project root.** A one-off probe, a
+  quick repro you run once and discard, a conversion one-off: anything nobody will point at
+  later is written to `.boardsmith/scratch/<name>.mjs`. That directory is gitignored, so scratch
+  can never be committed by accident. (It has been: `_dbg.mjs`, `_cap_tmp.mjs` and friends were
+  tracked in a real game, which is what issue #6 was filed about.)
+- **Evidence goes in `chunks/<slug>/evidence/`, and it is committed.** A measurement harness, a
+  playtest driver, a repro that proves a fix, a screenshot or recording: anything a ledger entry,
+  a CHUNK.md claim, or a sign-off cites as the reason something is true. Write it there from the
+  start, or move it there from scratch the moment you decide to cite it, and commit it with the
+  chunk. Cite it by that path (`chunks/<slug>/evidence/food-invariant.mjs`), never by a bare file
+  name. A path in another repository, such as a BoardSmith source file, is written
+  `<repo>:<path>` (`BoardSmith:src/engine/element/game.ts`) so it is not read as this game's.
+  The design-review screenshots in `chunks/<slug>/shots/` are committed evidence of the same kind.
+
+`boardsmith ledger-check` enforces the split as code, and `build/close.md` runs it before a chunk
+closes: every script or capture that `RULINGS.md`, `DECISIONS.md` or a verified CHUNK.md (its
+sign-off included) cites must be a committed file in the project. A cited file that is missing,
+not yet added, gitignored (anything in scratch) or outside the project fails the close. That is
+the failure this rule exists for: a harness in scratch, cited as the proof behind `verified`,
+exists nowhere once the session ends.
 
 **`boardsmith doctor` is the check.** Every `bs-` skill runs `boardsmith doctor` before it does
 anything else. It exits non-zero when a design artifact is loose in the project root or a scratch

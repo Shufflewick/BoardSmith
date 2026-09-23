@@ -73,8 +73,9 @@ Layout"): `rulebook/02-setup.md` is on disk at `design/rulebook/02-setup.md`. Pr
 whenever you Write or Read one directly. The `boardsmith` commands resolve these paths themselves;
 your own file writes must not.
 
-Throwaway scripts — a probe, a repro driver, a conversion one-off — go in `.boardsmith/scratch/`,
-which is gitignored. Never the project root.
+Throwaway scripts (a probe, a conversion one-off) go in `.boardsmith/scratch/`, which is
+gitignored. Never the project root. A script or capture a later step will cite as evidence goes in
+the committed `chunks/<slug>/evidence/` instead (`state-machine.md` "Project Layout").
 
 Because this skill scaffolds the project rather than entering an existing one, it does not run the
 `boardsmith doctor` layout gate the other `bs-` skills open with; `init` produces the current
