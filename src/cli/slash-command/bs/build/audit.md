@@ -174,6 +174,35 @@ Field names follow `build/redteam.md`'s precedent (`claimNumber`/`verdict`/`obje
 `description`, `citation`, `severity`, plus the fidelity lens's `kind` and `quote` and the
 constraints lens's `constraint` and `verdict`.
 
+## The Constraints Lens — Its Report Lands in Code-Checked Files
+
+The lens judges; `boardsmith constraint-check` decides. When the constraints lens returns, the
+orchestrator, before `repair` starts:
+
+1. If `design/CONSTRAINTS.md` does not exist yet, copies it from
+   `${CLAUDE_SKILL_DIR}/../bs-shared/templates/CONSTRAINTS.template.md`. It adds a `### C<n>`
+   entry for any CLAUDE.md hard constraint the lens found missing, and a `### G<n>` entry for
+   every growing structure the lens reported, with the cap or ruling it has (or neither).
+2. Writes this chunk's `## Constraints Review` in CHUNK.md: one line per constraint,
+   `- C1: held. <citation>` (or `not applicable` or `violated`), exactly as the lens gave it.
+3. Runs `boardsmith constraint-check {slug}`. It refuses a growing structure with no cap
+   enforced in code and no RULINGS.md ruling, a cap whose measurement test never uses it, a
+   hard constraint the ledger leaves out, a missing or `violated` verdict, and a failing
+   measurement test. Every refusal, and every `violated` lens entry, becomes a finding in this
+   round's `### Audit Round N` entry with `lens: 'constraints'`.
+
+`repair` fixes a constraints finding by adding the cap in code (and the test that fills it to
+that cap at the declared maximum population), or, when the designer may want the growth, by
+putting it to the designer the way `build/ask.md` puts an open question. Their answer becomes a
+`RULINGS.md` ruling, and the structure's `- Ruling: Ruling <n>` line cites it. Nothing else lets a
+growing structure through: `boardsmith chunk-signoff` runs the same check and refuses to sign
+the chunk off while it fails, so an uncapped structure cannot reach `verified`.
+
+The rules are the same for a project built from a rulebook or from existing code: the check
+reads CLAUDE.md, the ledger and the code, never the rulebook. With no slug,
+`boardsmith constraint-check` checks the whole tree and runs every measurement test, which is
+what a merge re-runs on the combined result when chunks were built on separate branches.
+
 ## Visibility Lens — Real APIs, Cited by Exact Name
 
 The visibility lens must cite the real functions, not describe the check in prose alone

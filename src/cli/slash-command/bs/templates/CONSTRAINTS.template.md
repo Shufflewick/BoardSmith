@@ -9,6 +9,10 @@
      WHO WRITES HERE: the audit step (build/audit.md), from the constraints lens's report. A
      constraint or structure is never deleted; one that no longer applies says so in its entry. -->
 
+<!-- PARSE CONTRACT (TMPL-02): this file must contain, in order: this H1, "## Hard Constraints"
+     and "## Growing Structures". `boardsmith constraint-check` reads the "### C<n>" and
+     "### G<n>" entries under them. -->
+
 ## Hard Constraints
 
 <!-- One "### C<n>" entry per hard constraint. Every bullet in the project CLAUDE.md's
