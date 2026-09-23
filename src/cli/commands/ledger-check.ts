@@ -14,23 +14,29 @@
  *   - FILINGS.md: each entry's `Reported:`, `Issue:` and any status banner agree.
  *   - RUN.md: every `Dispatched at` / `Finished at` is a `date -u` clock read, in order, and no
  *     later than the commit that recorded that line (or than now, for a line not yet committed).
+ *   - RULINGS.md, DECISIONS.md and every verified `chunks/<slug>/CHUNK.md` (its sign-off
+ *     included): every script or capture they cite is in git (#292). A cited file that is
+ *     missing, untracked, gitignored (the scratch folder) or outside the project is not evidence.
  *
  * It reads the working tree as it stands, so the same command checks one branch at close time
  * and a combined tree at merge time. READ-ONLY: it never writes a file, and the only git
- * subcommands it runs are `rev-parse`, `ls-files` and `blame`.
+ * subcommands it runs are `rev-parse`, `ls-files`, `blame` and `check-ignore`.
  */
 
 import { promises as fs } from 'node:fs';
 import { execFile } from 'node:child_process';
-import { resolve as pathResolve } from 'node:path';
+import { join as pathJoin, resolve as pathResolve } from 'node:path';
 import {
   DECISIONS_MD,
   DESIGN_DIR,
   FILINGS_MD,
   RULINGS_MD,
   RUN_MD,
+  chunkSlugs,
   designPath,
+  relChunkMdPath,
 } from '../lib/project-paths.js';
+import { CHUNK_EVIDENCE_DIR, citedEvidencePaths, resolveCitation } from '../lib/cited-evidence.js';
 import { type LedgerEntry, parseLedgerEntries, supersessionPatterns } from '../lib/ledger-entries.js';
 
 export type LedgerFindingKind =
@@ -39,7 +45,8 @@ export type LedgerFindingKind =
   | 'supersession-target-missing'
   | 'filing-status-conflict'
   | 'filing-status-invalid'
-  | 'run-timestamp';
+  | 'run-timestamp'
+  | 'evidence-not-committed';
 
 export interface LedgerFinding {
   ledger: string;
@@ -468,16 +475,20 @@ const UNCOMMITTED = /^0{40}$/;
  * Committer time (epoch seconds) of the commit that recorded each line of `relPath`, indexed by
  * 1-based line number; null for a line not committed yet. An untracked file is all null.
  */
-async function lineCommitTimes(projectDir: string, relPath: string): Promise<Array<number | null>> {
+async function requireGitRepo(projectDir: string, why: string): Promise<void> {
   try {
     await git(projectDir, ['rev-parse', '--show-toplevel']);
   } catch {
     throw new Error(
       `${projectDir} is not a git repository (or git is not installed).\n` +
-        `ledger-check compares ${relPath}'s timestamps against the commits that recorded them, so ` +
-        `it needs the game's git history. Run it from inside the game project, or pass --project <dir>.`,
+        `ledger-check ${why}, so it needs the game's git history. Run it from inside the game ` +
+        `project, or pass --project <dir>.`,
     );
   }
+}
+
+async function lineCommitTimes(projectDir: string, relPath: string): Promise<Array<number | null>> {
+  await requireGitRepo(projectDir, `compares ${relPath}'s timestamps against the commits that recorded them`);
   try {
     await git(projectDir, ['ls-files', '--error-unmatch', '--', relPath]);
   } catch {
@@ -503,6 +514,100 @@ async function lineCommitTimes(projectDir: string, relPath: string): Promise<Arr
 }
 
 // ---------------------------------------------------------------------------------------------
+// Cited evidence (#292): every script or capture a design record cites is in git
+// ---------------------------------------------------------------------------------------------
+
+/** A design record whose citations are checked, named design-relative as in every message. */
+interface EvidenceSource {
+  file: string;
+  text: string;
+}
+
+type EvidenceProblem = 'outside' | 'missing' | 'ignored' | 'untracked';
+
+const SCRATCH_DIR = '.boardsmith/scratch/';
+const MOVE_TO_EVIDENCE =
+  `Move it into ${CHUNK_EVIDENCE_DIR} for the chunk it proves, commit it, and cite that path.`;
+
+function evidenceDetail(path: string, rel: string | undefined, problem: EvidenceProblem): string {
+  switch (problem) {
+    case 'outside':
+      return `Cites ${path}, which is outside the project, so it is in no commit. ${MOVE_TO_EVIDENCE}`;
+    case 'missing':
+      return `Cites ${path}, which does not exist. Commit the file it names, or correct the citation to the file that was really used.`;
+    case 'ignored':
+      return `Cites ${path}, which is gitignored, so it was never committed (${SCRATCH_DIR} is for throwaway scripts only). ${MOVE_TO_EVIDENCE}`;
+    case 'untracked':
+      return `Cites ${path}, which exists but is not in git. Run \`git add ${rel}\` and commit it.`;
+  }
+}
+
+async function fileExists(path: string): Promise<boolean> {
+  try {
+    return (await fs.stat(path)).isFile();
+  } catch {
+    return false;
+  }
+}
+
+async function isIgnored(projectDir: string, rel: string): Promise<boolean> {
+  try {
+    await git(projectDir, ['check-ignore', '-q', '--', rel]);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function problemOf(
+  projectDir: string,
+  rel: string | undefined,
+  tracked: Set<string>,
+): Promise<EvidenceProblem | undefined> {
+  if (rel === undefined) return 'outside';
+  if (!(await fileExists(pathJoin(projectDir, rel)))) return 'missing';
+  if (tracked.has(rel)) return undefined;
+  return (await isIgnored(projectDir, rel)) ? 'ignored' : 'untracked';
+}
+
+/** One finding per cited script or capture that is not a committed file in the project. */
+async function checkCitedEvidence(projectDir: string, sources: EvidenceSource[]): Promise<LedgerFinding[]> {
+  const cited = sources.flatMap((source) =>
+    citedEvidencePaths(source.text).map((c) => ({ ...c, file: source.file, rel: resolveCitation(projectDir, c.path) })),
+  );
+  if (cited.length === 0) return [];
+  await requireGitRepo(projectDir, 'checks that every script and capture the design records cite is committed');
+  const rels = [...new Set(cited.flatMap((c) => (c.rel === undefined ? [] : [c.rel])))];
+  const listed = rels.length === 0 ? '' : await git(projectDir, ['--literal-pathspecs', 'ls-files', '-z', '--', ...rels]);
+  const tracked = new Set(listed.split('\0').filter(Boolean));
+
+  const findings: LedgerFinding[] = [];
+  for (const c of cited) {
+    const problem = await problemOf(projectDir, c.rel, tracked);
+    if (!problem) continue;
+    findings.push({
+      ledger: c.file,
+      entry: `line ${c.line}`,
+      kind: 'evidence-not-committed',
+      detail: evidenceDetail(c.path, c.rel, problem),
+    });
+  }
+  return findings;
+}
+
+const VERIFIED_STATUS = /^Status:[ \t]*verified(?: \(user-waived\))?[ \t]*$/m;
+
+/** Every chunk whose CHUNK.md says it is verified: the ones whose evidence must already be in git. */
+async function verifiedChunks(projectDir: string): Promise<EvidenceSource[]> {
+  const sources: EvidenceSource[] = [];
+  for (const slug of await chunkSlugs(projectDir)) {
+    const text = await readLedger(projectDir, relChunkMdPath(slug));
+    if (text !== undefined && VERIFIED_STATUS.test(text)) sources.push({ file: relChunkMdPath(slug), text });
+  }
+  return sources;
+}
+
+// ---------------------------------------------------------------------------------------------
 // The whole project
 // ---------------------------------------------------------------------------------------------
 
@@ -515,9 +620,14 @@ async function readLedger(projectDir: string, file: string): Promise<string | un
   }
 }
 
-/** Runs every ledger rule against `projectDir`'s `design/` as it stands on disk. */
+/**
+ * Runs every ledger rule against `projectDir`'s `design/` as it stands on disk. `checked` lists
+ * the ledgers read, then each verified CHUNK.md whose cited evidence was checked.
+ */
 export async function ledgerCheck(projectDir: string): Promise<LedgerCheckResult> {
   const result: LedgerCheckResult = { checked: [], absent: [], findings: [] };
+  // FILINGS.md is not an evidence source: a filing cites BoardSmith's own files, not the game's.
+  const evidence: EvidenceSource[] = [];
 
   for (const { file, kind } of NUMBERED_LEDGERS) {
     const text = await readLedger(projectDir, file);
@@ -528,6 +638,7 @@ export async function ledgerCheck(projectDir: string): Promise<LedgerCheckResult
     result.checked.push(file);
     result.findings.push(...checkNumberedLedger(text, kind, file));
     if (file === FILINGS_MD) result.findings.push(...checkFilingStatus(text));
+    else evidence.push({ file, text });
   }
 
   const run = await readLedger(projectDir, RUN_MD);
@@ -538,6 +649,10 @@ export async function ledgerCheck(projectDir: string): Promise<LedgerCheckResult
     const times = await lineCommitTimes(projectDir, `${DESIGN_DIR}/${RUN_MD}`);
     result.findings.push(...checkRunLog(run, (line) => times[line] ?? null, Math.floor(Date.now() / 1000)));
   }
+
+  const chunks = await verifiedChunks(projectDir);
+  result.checked.push(...chunks.map((c) => c.file));
+  result.findings.push(...(await checkCitedEvidence(projectDir, [...evidence, ...chunks])));
   return result;
 }
 

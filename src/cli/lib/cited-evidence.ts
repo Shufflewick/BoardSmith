@@ -1,0 +1,70 @@
+/**
+ * Which strings in a design record cite a script or a capture, and where each one lives (#292).
+ *
+ * A ledger entry or a verified CHUNK.md that says "measured with <harness>" or "see <screenshot>"
+ * is only evidence if a reviewer can open that file later. `.boardsmith/scratch/` is gitignored,
+ * so a harness written there and cited as proof exists nowhere once the session ends (sotf's
+ * food-invariant harness, cited by a decision that said it was committed). `ledger-check` holds
+ * every path this module finds to "it is in git"; this module only finds and resolves them.
+ *
+ * A citation is a whitespace-, quote-, bracket- or backtick-delimited token that contains a `/`
+ * and ends in a script or capture extension. Skipped on purpose: URLs, a path in another
+ * repository written `<repo>:<path>` (for example `BoardSmith:src/engine/game.ts`), template
+ * placeholders and globs (`<slug>`, `*`, `{a,b}`), bare file names, and anything inside an HTML
+ * comment, which is where the templates keep their examples.
+ */
+
+import { isAbsolute, posix, relative } from 'node:path';
+import { blankComments } from './ledger-entries.js';
+import { CHUNKS_DIR, DESIGN_DIR, RULEBOOK_DIR } from './project-paths.js';
+
+/** Where committed evidence for a chunk lives, project-relative. */
+export const CHUNK_EVIDENCE_DIR = `${DESIGN_DIR}/${CHUNKS_DIR}/<slug>/evidence/`;
+
+interface CitedPath {
+  /** The path as written, without any `:line` suffix. */
+  path: string;
+  /** 1-based line of the file it was cited on. */
+  line: number;
+}
+
+const EVIDENCE_EXTENSION = /\.(?:mjs|cjs|js|mts|cts|ts|sh|py|png|jpe?g|gif|webp|svg|webm|mp4)$/i;
+const TOKEN = /[^\s`'"()[\],;]+/g;
+const NOT_A_GAME_PATH = /[*{}<>$]/;
+
+function asCitation(raw: string): string | undefined {
+  const path = raw.replace(/[.,:;!?]+$/, '').replace(/:\d+(?::\d+)?$/, '');
+  if (!path.includes('/') || !EVIDENCE_EXTENSION.test(path)) return undefined;
+  if (NOT_A_GAME_PATH.test(path)) return undefined;
+  // A colon before the first slash is a URL scheme or a `<repo>:` qualifier.
+  if (/^[^/]*:/.test(path)) return undefined;
+  return path;
+}
+
+/** Every cited script or capture in `text`, in file order. */
+export function citedEvidencePaths(text: string): CitedPath[] {
+  const cited: CitedPath[] = [];
+  blankComments(text)
+    .split('\n')
+    .forEach((lineText, index) => {
+      for (const [token] of lineText.matchAll(TOKEN)) {
+        const path = asCitation(token);
+        if (path) cited.push({ path, line: index + 1 });
+      }
+    });
+  return cited;
+}
+
+/**
+ * The project-relative location of a cited path, or `undefined` when it points outside the
+ * project. A path whose first segment is `chunks/` or `rulebook/` is design-relative, the same
+ * grammar every design citation uses; anything else is project-relative.
+ */
+export function resolveCitation(projectDir: string, path: string): string | undefined {
+  let rel = path;
+  if (isAbsolute(path)) rel = relative(projectDir, path).split('\\').join('/');
+  else if (path.startsWith(`${CHUNKS_DIR}/`) || path.startsWith(`${RULEBOOK_DIR}/`)) rel = `${DESIGN_DIR}/${path}`;
+  rel = posix.normalize(rel);
+  if (rel === '..' || rel.startsWith('../') || isAbsolute(rel)) return undefined;
+  return rel;
+}
