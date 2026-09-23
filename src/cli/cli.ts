@@ -22,7 +22,7 @@ import {
 } from './commands/ingest-archive.js';
 import { chunkCheckCommand, chunkProvenanceStatusCommand } from './commands/chunk-provenance.js';
 import { claimQuoteCheckCommand } from './commands/claim-quotes.js';
-import { chunkSignoffCommand, chunkWaiverCommand } from './commands/chunk-signoff.js';
+import { chunkReopenCommand, chunkSignoffCommand, chunkWaiverCommand } from './commands/chunk-signoff.js';
 import { traceCheckCommand } from './commands/trace-check.js';
 import { driftCheckCommand } from './commands/drift-check.js';
 import { ledgerCheckCommand } from './commands/ledger-check.js';
@@ -294,6 +294,13 @@ program
   .option('--waiver <id>', 'A designer waiver from design/WAIVERS.md that names this chunk, e.g. W2')
   .option('--automated <evidence>', 'For a chunk with no designer playtest: the test and sim pass that stands in')
   .action(chunkSignoffCommand);
+
+program
+  .command('chunk-reopen <slug>')
+  .description('Send a verified chunk back to built for rework, voiding its sign-off')
+  .option('--project <dir>', 'Project directory (defaults to cwd)')
+  .requiredOption('--reason <text>', 'Why the chunk goes back for rework')
+  .action(chunkReopenCommand);
 
 program
   .command('chunk-waiver')

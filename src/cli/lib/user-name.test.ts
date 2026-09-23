@@ -147,6 +147,7 @@ describe('every positional CLI argument is decided to be a name or a path', () =
     'chunk-check <slug>': 'commands/chunk-provenance.ts',
     'claim-quote-check <slug>': 'commands/claim-quotes.ts',
     'chunk-signoff <slug>': 'commands/chunk-signoff.ts',
+    'chunk-reopen <slug>': 'commands/chunk-signoff.ts',
   };
 
   const declared = [...cliText.matchAll(/\.command\('([a-z-]+ <[a-z.]+>)'\)/g)].map((m) => m[1]);

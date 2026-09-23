@@ -217,11 +217,14 @@ Second-seat leak check (if hidden info): <!-- steps, or "n/a — no hidden info 
      Status: verified (user-waived). -->
 
 ## Sign-off
-<!-- MACHINE-OWNED. Written by `boardsmith chunk-signoff <slug>` and by nothing else. It records
-     who signed this chunk off, when, and on what basis: the designer's observed checklist items,
-     a designer waiver that names this chunk, or (only for a chunk with no designer playtest) the
-     automated test and sim pass. The Status line above is DERIVED from this block, never typed:
-     `boardsmith chunk-check` refuses a verified Status that this block does not back. -->
+<!-- MACHINE-OWNED. Written by `boardsmith chunk-signoff <slug>` and `boardsmith chunk-reopen
+     <slug>` and by nothing else. It records who signed this chunk off, when, and on what basis:
+     the designer's observed checklist items, a designer waiver that names this chunk, or (only
+     for a chunk with no designer playtest) the automated test and sim pass. It also records a
+     hash of the Build Manifest's source files, so the sign-off covers only the code that was
+     signed. The Status line above is DERIVED from this block, never typed: `boardsmith
+     chunk-check` refuses a verified Status that this block does not back, once that code
+     changes, and after `boardsmith chunk-reopen` has voided it. -->
 
 <!-- boardsmith:signoff:begin -->
 _Not yet signed off._
