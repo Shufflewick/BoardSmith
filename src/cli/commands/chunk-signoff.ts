@@ -11,6 +11,7 @@ import {
 import { assertBareName } from '../lib/user-name.js';
 import { extractSection, findHeadingIndex } from './build-manifest.js';
 import { atomicWriteFile } from './verify-run.js';
+import { checkConstraints } from './constraint-check.js';
 
 /**
  * `boardsmith chunk-signoff` / `boardsmith chunk-waiver` / `checkSignoff()`: who may say a chunk
@@ -584,7 +585,11 @@ export async function recordSignoff(slug: string, options: SignoffOptions): Prom
   const ctx = await loadContext(dir, slug, chunkText);
   const record = recordFromOptions(options, ctx, (options.now ?? new Date()).toISOString());
 
-  const problems = signoffProblems(record, ctx);
+  // #288: a chunk is not done while the project's hard constraints do not hold for it, whoever
+  // signs. Only the ledger and the chunk's review are read here; the measurement tests ran at
+  // audit (`boardsmith constraint-check <slug>`) and run again in the accumulated suite.
+  const constraints = await checkConstraints(dir, { slug });
+  const problems = [...signoffProblems(record, ctx), ...constraints.refusals];
   if (problems.length) {
     throw new Error(`${slug} was not signed off:\n${problems.map((p) => `  - ${p}`).join('\n')}`);
   }
