@@ -4,8 +4,6 @@ import { promises as fs } from 'node:fs';
 import { join } from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { fileURLToPath } from 'node:url';
-import { dirname } from 'node:path';
 import { parse as parseTypeScript } from '@typescript-eslint/parser';
 import {
   generatedTestFilePath,
@@ -19,12 +17,20 @@ import {
   exampleReplayLedgerPath,
 } from './verify-example-replay.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
+import { INSTALLED_MODULES } from '../../testing/installed-modules.test-helper.js';
 
 const execFileAsync = promisify(execFile);
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-// This file lives at src/cli/commands/example-test-emit.test.ts — repo root is three levels up.
-const REPO_ROOT = join(__dirname, '..', '..', '..');
+/**
+ * Give a generated project this checkout's installed packages as its `node_modules`, the
+ * live-symlink layout every BoardSmithGames project uses, and return the vitest CLI to run
+ * inside it. The install is the one Node resolves from here, which in a git worktree is the
+ * main checkout's (#287).
+ */
+async function linkInstalledModules(project: string): Promise<string> {
+  await fs.symlink(INSTALLED_MODULES, join(project, 'node_modules'), 'dir');
+  return join(INSTALLED_MODULES, '.bin', 'vitest');
+}
 
 async function mkProject(dir: string, opts: { chunkSlug: string; slicePath: string; sliceText: string }) {
   const project = join(dir, 'project');
@@ -175,8 +181,7 @@ describe('verifyExampleEmitCommand', () => {
     // `node_modules` is symlinked from the repo — the same live-symlink layout every real
     // BoardSmithGames project uses (CLAUDE.md's `~/BoardSmithGames/` note), so 'vitest' resolves
     // exactly as it would for a real generated game.
-    await fs.symlink(join(REPO_ROOT, 'node_modules'), join(project, 'node_modules'), 'dir');
-    const vitestBin = join(REPO_ROOT, 'node_modules', '.bin', 'vitest');
+    const vitestBin = await linkInstalledModules(project);
     const { stdout, stderr } = await execFileAsync(vitestBin, ['run'], { cwd: project }).catch(
       (err) => err,
     );
@@ -332,8 +337,7 @@ describe('verifyExampleEmitCommand', () => {
     // Never rendered inside the describe body — an import line never appears indented.
     expect(bytes).not.toMatch(/^[ \t]+import /m);
 
-    await fs.symlink(join(REPO_ROOT, 'node_modules'), join(project, 'node_modules'), 'dir');
-    const vitestBin = join(REPO_ROOT, 'node_modules', '.bin', 'vitest');
+    const vitestBin = await linkInstalledModules(project);
     const { stdout, stderr } = await execFileAsync(vitestBin, ['run'], { cwd: project }).catch(
       (err) => err,
     );
@@ -538,8 +542,7 @@ describe('verifyExampleEmitCommand', () => {
     expect(result.testBlockCount).toBe(3); // tests the file actually declares
 
     // The authority on that number is vitest itself, not our own parse of the file.
-    await fs.symlink(join(REPO_ROOT, 'node_modules'), join(project, 'node_modules'), 'dir');
-    const vitestBin = join(REPO_ROOT, 'node_modules', '.bin', 'vitest');
+    const vitestBin = await linkInstalledModules(project);
     const { stdout } = await execFileAsync(vitestBin, ['run'], { cwd: project });
     expect(stdout).toMatch(/3 passed/i);
   });
@@ -597,8 +600,7 @@ describe('verifyExampleEmitCommand', () => {
     expect(bytes).toContain('1 unexecutable, 1 example-inconsistent');
     expect(bytes).toContain('none executable');
 
-    await fs.symlink(join(REPO_ROOT, 'node_modules'), join(project, 'node_modules'), 'dir');
-    const vitestBin = join(REPO_ROOT, 'node_modules', '.bin', 'vitest');
+    const vitestBin = await linkInstalledModules(project);
     // execFileAsync REJECTS on a non-zero exit: a suite vitest collects nothing from exits 1.
     const { stdout } = await execFileAsync(vitestBin, ['run'], { cwd: project });
     expect(stdout).toMatch(/1 passed|1 test/i);
@@ -733,8 +735,7 @@ describe('verifyExampleEmitCommand', () => {
     });
     expect(result.emittedCount).toBe(1);
 
-    await fs.symlink(join(REPO_ROOT, 'node_modules'), join(project, 'node_modules'), 'dir');
-    const vitestBin = join(REPO_ROOT, 'node_modules', '.bin', 'vitest');
+    const vitestBin = await linkInstalledModules(project);
     // execFileAsync REJECTS on a non-zero exit code — a syntax error (from an unescaped
     // chunkSlug/pageCitation) or an actually-executed `require(...)` call would make vitest exit
     // non-zero, failing this `await` and the test with it. The strong proof this exists to give:

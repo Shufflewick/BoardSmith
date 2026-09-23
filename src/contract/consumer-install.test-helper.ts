@@ -18,6 +18,7 @@ import { mkdirSync, readFileSync, symlinkSync, writeFileSync, existsSync } from 
 import { dirname, join } from 'node:path';
 
 import { tempTree } from '../testing/temp-tree.test-helper.js';
+import { INSTALLED_MODULES } from '../testing/installed-modules.test-helper.js';
 import { REPO_ROOT } from './vue-tsc-run.test-helper.js';
 
 /**
@@ -109,7 +110,7 @@ export function consumerInstall({ entryPoints, alsoInstalled = [] }: ConsumerIns
     ...transitiveClosure([...SUPPLIED_BY_THE_CONSUMER, ...alsoInstalled]),
   ]);
   for (const name of present) {
-    const from = join(REPO_ROOT, 'node_modules', name);
+    const from = join(INSTALLED_MODULES, name);
     if (!existsSync(from)) continue;
     const to = join(modules, name);
     mkdirSync(dirname(to), { recursive: true });

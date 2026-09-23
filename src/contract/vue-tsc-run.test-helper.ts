@@ -11,10 +11,12 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
 
+import { INSTALLED_MODULES } from '../testing/installed-modules.test-helper.js';
+
 export const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../..');
 
 /** The compiler both gates drive, named once so a sandbox can quote it. */
-export const VUE_TSC = join(REPO_ROOT, 'node_modules/vue-tsc/bin/vue-tsc.js');
+export const VUE_TSC = join(INSTALLED_MODULES, 'vue-tsc/bin/vue-tsc.js');
 
 /**
  * Compile `project` from `cwd` and return the error lines, in order.
