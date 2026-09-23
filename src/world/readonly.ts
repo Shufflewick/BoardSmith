@@ -303,11 +303,33 @@ function liveArgument(argument: unknown): unknown {
   return liveFinderObject(argument as Record<string, unknown>);
 }
 
+/**
+ * A CLASS IS CODE, NOT WORLD STATE (#285), so it is never projected.
+ *
+ * `element.constructor`, or a class a bundle keeps as a value, has to answer as
+ * that class: the same identity, name and static members it has in `execute`.
+ * A finder recognises a class by its static `isGameElement`, so a wrapper made
+ * `game.first(element.constructor)` a predicate call instead of a class search.
+ *
+ * Handing it over opens nothing. No partition holds a class and no checkpoint
+ * records one, and its prototype -- the only road from a class to an element's
+ * methods -- is already what `Object.getPrototypeOf` answers for a projection.
+ *
+ * The `prototype` check comes first because it is cheap and rules out every
+ * method and arrow function, which are what this is asked about on the hot road.
+ */
+function isClass(value: object): boolean {
+  return (
+    Object.hasOwn(value, "prototype") &&
+    /^class[\s{]/.test(Function.prototype.toString.call(value))
+  );
+}
+
 /** A finder's own predicate, handed projected elements. */
 function projectingCallback(argument: object): unknown {
   // A CLASS IS A FINDER'S SUBJECT AND NOT ITS CALLBACK. Wrapping one would hand
   // the door an arrow function where it expects a constructor.
-  if (/^class[\s{]/.test(Function.prototype.toString.call(argument))) return argument;
+  if (isClass(argument)) return argument;
   const call = argument as (...a: unknown[]) => unknown;
   return (...inner: unknown[]) => call(...inner.map((one) => readOnlyProjection(one)));
 }
@@ -343,7 +365,7 @@ function projectedProperty(
   projection: object,
 ): unknown {
   const held = Reflect.get(target, property, receiver);
-  if (typeof held !== "function") return readOnlyProjection(held);
+  if (typeof held !== "function" || isClass(held)) return readOnlyProjection(held);
   const call = held as (...a: unknown[]) => unknown;
 
   // THE ENGINE'S OWN READ, ON THE REAL OBJECT (#409). Only its answer is
@@ -471,6 +493,7 @@ export function readOnlyProjection<T>(value: T): T {
   if (minted.has(subject)) return value;
   const existing = projections.get(subject);
   if (existing !== undefined) return existing as T;
+  if (typeof subject === "function" && isClass(subject)) return value;
 
   const cloak = cloakFor(subject);
   // EVERY TRAP READS THE SUBJECT, not the cloak, so the only thing the cloak

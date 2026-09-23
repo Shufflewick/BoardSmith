@@ -96,12 +96,15 @@ const STAMP = {
   // No history: this suite is not about the watermark, and the cases that are
   // name their own (ShufflewickPub #383).
   activity: { seat: 1, at: null, since: 1_700_000_000_000 },
+  // A seated action declares no activity round, so the host hands back none.
+  declaredActivity: [],
 };
 
 const EVENT_STAMP = {
   allowance: { unkeyed: 0, keys: [], worldPending: 0 },
   presence: [],
   activity: null,
+  declaredActivity: [],
 };
 
 const ROOM_ONE = "room:1";
@@ -1044,6 +1047,23 @@ describe("#190 — a partition name that is also an Object.prototype key", () =>
   });
 });
 
+/** An engine offering `touch` and one action under test, with room one made
+ *  resident by a `touch` first, so that action's declaration has a live room
+ *  to read. */
+async function engineWithRoomOneResident(
+  action: ActionDefinition,
+): Promise<BoardSmithWorldEngine> {
+  const engine = new BoardSmithWorldEngine({
+    game: newWorldGame(),
+    seats: new Map([["player-a", 1]]),
+    store: new CountingStore(genesis()),
+    actions: [touch, action],
+    view: () => [],
+  });
+  await engine.applyCommand("player-a", { name: "touch", args: {} }, STAMP);
+  return engine;
+}
+
 describe("#219 — a declaration reads, and cannot write", () => {
   it("REFUSES an action whose needs() writes, and leaves the world alone", async () => {
     // The declaration runs BEFORE the rollback snapshot, so the write was
@@ -1062,14 +1082,7 @@ describe("#219 — a declaration reads, and cannot write", () => {
         return [ROOM_ONE];
       })
       .execute(() => {});
-    const engine = new BoardSmithWorldEngine({
-      game: newWorldGame(),
-      seats: new Map([["player-a", 1]]),
-      store: new CountingStore(genesis()),
-      actions: [touch, writing],
-      view: () => [],
-    });
-    await engine.applyCommand("player-a", { name: "touch", args: {} }, STAMP);
+    const engine = await engineWithRoomOneResident(writing);
 
     await expect(
       engine.applyCommand("player-a", { name: "declareAndWrite", args: {} }, STAMP),
@@ -1101,6 +1114,35 @@ describe("#219 — a declaration reads, and cannot write", () => {
     await expect(engine.viewFor("player-a")).rejects.toThrow(/view\(\)/);
 
     expect(visitsIn(await engine.serializePartitions([ROOM_ONE]))).toBe(0);
+  });
+});
+
+describe("#285 — a declaration reads an element's class as that class", () => {
+  it("answers constructor as the class, and a finder handed it finds by class", async () => {
+    // A declaration reads through the read-only projection, which wrapped every
+    // function it handed back -- a class included. So `room.constructor` was
+    // an anonymous wrapper, and `game.first(room.constructor, ...)` used it as
+    // a predicate. The same lines in execute() answered differently, silently.
+    const seen: { same: boolean; name: string; found: boolean }[] = [];
+    const byClass = worldAction<WorldFixtureGame>("byClass")
+      .needs(({ game }) => {
+        const room = game.first(Room, "room-one");
+        if (room) {
+          seen.push({
+            same: room.constructor === Room,
+            name: room.constructor.name,
+            found: game.first(room.constructor as typeof Room, "room-one") !== undefined,
+          });
+        }
+        return [ROOM_ONE];
+      })
+      .execute(() => {});
+    const engine = await engineWithRoomOneResident(byClass);
+
+    await engine.applyCommand("player-a", { name: "byClass", args: {} }, STAMP);
+
+    expect(seen.length).toBeGreaterThan(0);
+    expect(seen).toEqual(seen.map(() => ({ same: true, name: "Room", found: true })));
   });
 });
 
