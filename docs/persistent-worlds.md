@@ -738,6 +738,13 @@ reverted it. A cross-partition move travels on an element reference a declared
 partition already holds; the engine tracks the re-parent whichever way the
 reference was obtained.
 
+**Catching the refusal does not help.** Every refusal `ctx.world` raises
+(`undeclared-partition`, `schedule-cap` and the rest) is recorded before it is
+thrown, and a command that recorded one is refused and rolled back even if the
+rules caught it and carried on. Check what you need before you reach for it: a
+partition your step did not declare is a declaration to fix, not a case to
+catch.
+
 Unlike the old `WorldCommandContext`, **`ctx.game` is here**, because an action's
 `ctx.game` is the same live game its selections were enumerated against and
 `chooseElement` hands you real elements. It does not widen what you may reach:

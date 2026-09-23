@@ -136,7 +136,7 @@ describe('every positional CLI argument is decided to be a name or a path', () =
    * Positional arguments that are LOCATIONS, and so are `resolveUserPath`'s
    * business (#239) rather than this module's.
    */
-  const PATH_ARGUMENTS = ['ingest-archive <rulebook>'];
+  const PATH_ARGUMENTS = ['ingest-archive <rulebook>', 'test [patterns...]'];
 
   /**
    * Positional arguments that are IDENTITIES, and the module that must refuse
@@ -147,10 +147,11 @@ describe('every positional CLI argument is decided to be a name or a path', () =
     'chunk-check <slug>': 'commands/chunk-provenance.ts',
     'claim-quote-check <slug>': 'commands/claim-quotes.ts',
     'chunk-signoff <slug>': 'commands/chunk-signoff.ts',
+    'constraint-check [slug]': 'commands/constraint-check.ts',
     'chunk-reopen <slug>': 'commands/chunk-signoff.ts',
   };
 
-  const declared = [...cliText.matchAll(/\.command\('([a-z-]+ <[a-z.]+>)'\)/g)].map((m) => m[1]);
+  const declared = [...cliText.matchAll(/\.command\('([a-z-]+ (?:<[a-z.]+>|\[[a-z.]+\]))'\)/g)].map((m) => m[1]);
 
   it('finds the command table it thinks it is reading', () => {
     expect(declared).toContain('init <name>');

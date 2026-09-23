@@ -535,8 +535,9 @@ This skill delegates its heavyweight, step-scoped prose to:
 - `${CLAUDE_SKILL_DIR}/../bs-shared/build/build.md` — code-writing step, fresh-context raw-slice exception, per-file build
   manifest
 - `${CLAUDE_SKILL_DIR}/../bs-shared/build/test.md` — the test-step command sequence, sandbox-rule gate, a11y floor for UI chunks
-- `${CLAUDE_SKILL_DIR}/../bs-shared/build/audit.md` — 3 fresh-context adversarial lenses (fidelity, visibility, undo) +
-  design-review dispatch for UI chunks, Findings Ledger round persistence
+- `${CLAUDE_SKILL_DIR}/../bs-shared/build/audit.md` — 4 fresh-context adversarial lenses (fidelity, visibility, undo,
+  constraints) + design-review dispatch for UI chunks, Findings Ledger round persistence,
+  `boardsmith constraint-check`
 - `${CLAUDE_SKILL_DIR}/../bs-shared/build/repair.md` — fix-or-refute-with-citation loop, round-bound enforcement, round-3 user
   triage
 - `${CLAUDE_SKILL_DIR}/../bs-shared/build/design-review.md` — the UI-chunk screenshot design-review agent dispatched by audit
@@ -563,6 +564,9 @@ And to the shared reference files that ship with every `bs-` skill:
   findings ledger belongs to `audit`/`repair`)
 - `${CLAUDE_SKILL_DIR}/../bs-shared/templates/RULINGS.template.md` — the ledger `ask`'s house-rule choices and redteam's
   refuted-twice escalations append to
+- `${CLAUDE_SKILL_DIR}/../bs-shared/templates/CONSTRAINTS.template.md` — the project's hard constraints and
+  every growing structure with its cap or ruling, filled by `audit` and read by
+  `boardsmith constraint-check`
 - `${CLAUDE_SKILL_DIR}/../bs-shared/templates/QUESTIONS.template.md` — the answer cache every gate
   writes a question to when it is posed, so it is asked exactly once
   (`${CLAUDE_SKILL_DIR}/../bs-shared/orchestrate/questions.md`)

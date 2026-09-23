@@ -292,6 +292,10 @@ or any `CHUNK.md`. Only after Step 6's explicit approval:
   already carries content.
 - Create `chunks/<slug>/CHUNK.md` from `${CLAUDE_SKILL_DIR}/../bs-shared/templates/CHUNK.template.md` for the detailed next 2-3
   chunks only (tail entries get no directory and no stub — see `${CLAUDE_SKILL_DIR}/../bs-shared/ingest/sketch-derivation.md`).
+- Seed `CONSTRAINTS.md` from `${CLAUDE_SKILL_DIR}/../bs-shared/templates/CONSTRAINTS.template.md`, adding a
+  `### C<n>` entry that quotes each bullet of the project `CLAUDE.md`'s "Hard constraints"
+  section, if it has one. `boardsmith constraint-check` refuses a project without this file,
+  and `boardsmith chunk-signoff` will not sign a chunk off until it holds.
 - Seed `RULINGS.md` and `DECISIONS.md` as empty ledgers from their templates. This is a
   deliberate choice, not "copy everything": their first real content arrives at later gates
   (any ask/playtest gate, and build/close respectively), and seeding them now means those later

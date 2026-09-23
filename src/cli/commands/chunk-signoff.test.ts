@@ -92,6 +92,10 @@ async function makeProject(chunks: ChunkSpec[]): Promise<string> {
       ].join('\n'),
     );
   }
+  await fs.copyFile(
+    new URL('../slash-command/bs/templates/CONSTRAINTS.template.md', import.meta.url),
+    join(design, 'CONSTRAINTS.md'),
+  );
   await fs.writeFile(
     join(design, 'SKETCH.md'),
     `# Sketch\n\n## Ordered Chunk List\n\n${sketchEntries.join('\n')}\n### later-tail\n- What it builds: later\n- ui: none\n- Milestone: none\n- Status: proposed (sketch-level — no CHUNK.md yet)\n`,
@@ -204,6 +208,42 @@ describe('recordSignoff — a designer sign-off is the only way a playtested chu
         now: NOW,
       }),
     ).rejects.toThrow(/one of/i);
+  });
+});
+
+describe('recordSignoff — a chunk does not reach verified while a constraint does not hold (#288)', () => {
+  const UNCAPPED = [
+    '',
+    '### G1',
+    '- State: Almanac.mail, in the world partition',
+    '- Grows with: players and time',
+    '- Chunk: deal',
+    '',
+  ].join('\n');
+
+  async function addStructure(project: string, extra: string): Promise<void> {
+    const path = join(project, DESIGN_DIR, 'CONSTRAINTS.md');
+    await fs.appendFile(path, UNCAPPED + extra);
+  }
+
+  it('refuses a sign-off while a growing structure has no cap and no ruling', async () => {
+    const project = await makeProject([{ slug: 'deal' }]);
+    await addStructure(project, '');
+    await expect(
+      recordSignoff('deal', { project, by: 'Jane Designer', observed: '1,2', now: NOW }),
+    ).rejects.toThrow(/G1 .* has no cap/);
+    expect(await readChunk(project, 'deal')).toMatch(/^Status: built$/m);
+  });
+
+  it('accepts it once a designer ruling allows the growth', async () => {
+    const project = await makeProject([{ slug: 'deal' }]);
+    await addStructure(project, '- Ruling: Ruling 1\n');
+    await fs.writeFile(
+      join(project, DESIGN_DIR, 'RULINGS.md'),
+      '# Rulings\n\n## Ledger\n\n### Ruling 1\n- Decision: mail may grow without a cap.\n',
+    );
+    await recordSignoff('deal', { project, by: 'Jane Designer', observed: '1,2', now: NOW });
+    expect(await readChunk(project, 'deal')).toMatch(/^Status: verified$/m);
   });
 });
 
