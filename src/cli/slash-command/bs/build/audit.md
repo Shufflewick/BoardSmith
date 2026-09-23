@@ -26,9 +26,9 @@ This is `state-machine.md` "Rulings Outrank Rulebook" applied, not restated: aud
 back to the printed rule — the rulebook plus `RULINGS.md` together form the composite source of
 truth for every rules-fidelity check.
 
-## Three Lenses, Each a Separate Fresh-Context Dispatch
+## Four Lenses, Each a Separate Fresh-Context Dispatch
 
-Audit runs 3 independent fresh-context agents, one per lens, plus a 4th for `ui: touches|major`
+Audit runs 4 independent fresh-context agents, one per lens, plus a 5th for `ui: touches|major`
 chunks. Each lens is a SEPARATE Task-tool dispatch — fresh context, no inherited conversation,
 never the orchestrator's running conversation, never a peer lens's findings, and never
 `## Interpretation` (per the rule above). This is `build/redteam.md`'s "Independence:
@@ -45,11 +45,17 @@ upstream step is exactly what would defeat an independent audit.
    see it?
 3. **Undo** — does undo (where applicable) restore state cleanly, with no residual leak or
    desync?
+4. **Constraints** — does the chunk hold the project's own hard constraints (the project
+   `CLAUDE.md`'s "Hard constraints" section, recorded in `design/CONSTRAINTS.md`), and is every
+   structure it adds to persistent state that grows with players or with time capped? This lens
+   reads `CLAUDE.md`, `design/CONSTRAINTS.md`, `RULINGS.md` and the code, never the rulebook, so
+   it works the same whether the project was built from a rulebook or from existing code. See
+   "The Constraints Lens" below for what the orchestrator does with its report.
 
-For `ui: touches|major` chunks, a 4th agent is dispatched via `build/design-review.md`
+For `ui: touches|major` chunks, a 5th agent is dispatched via `build/design-review.md`
 (forward-reference — authored in this phase's Plan 02): a screenshot-armed review against
 `DESIGN.md` and frontend-design craft criteria. Its findings land in the same `## Findings
-Ledger` as the three lenses above, through the orchestrator, never a separate track.
+Ledger` as the four lenses above, through the orchestrator, never a separate track.
 
 ### Dispatch Templates
 
@@ -132,9 +138,41 @@ Return exactly: a list of { findingId, lens: 'undo', description, citation, seve
 entry per defect found (empty array if none).
 ```
 
+**Constraints lens:**
+
+```
+You are auditing built code for {gameName}, chunk "{slug}", against THE PROJECT'S OWN HARD
+CONSTRAINTS. Read the project's CLAUDE.md (its "Hard constraints" or "Hard Rules" section, if it
+has one), design/CONSTRAINTS.md, and RULINGS.md. Then read the built code at: {codeFilePaths},
+which is every file this chunk wrote or changed. Do NOT read CHUNK.md
+"## Interpretation" or the rulebook: this lens checks the code against the project's
+constraints, not against the rules.
+
+1. For EVERY hard constraint in design/CONSTRAINTS.md (C1, C2, ...), give a verdict: held,
+   violated, or not applicable, with a citation (file and line, or the test that proves it).
+   A constraint in CLAUDE.md that the ledger does not list is itself a finding.
+2. Find every list, map, queue or counter this chunk adds to persistent state that grows with
+   the number of players or with time. Each one needs a cap the code enforces, or a designer
+   ruling in RULINGS.md that lets it grow. A structure with no cap is a finding by default.
+3. Where a constraint is measurable (a size budget, a count), it must be proven by a test, not
+   by your judgement. For a size budget the test fills every growing structure to the cap the
+   code enforces, at the declared maximum population, with every per-seat list full, and
+   checks the budget. A test that measures an expected population or a count it picked itself
+   is a finding.
+4. A try/catch that swallows a platform refusal (for example `undeclared-partition`) is a
+   finding: the command must not reach what it did not declare.
+
+Return exactly: a list of { findingId, lens: 'constraints', constraint, verdict, description,
+citation, severity } — one entry per hard constraint (constraint: 'C1', verdict: 'held' |
+'violated' | 'not applicable') and one per growing structure this chunk adds (constraint:
+'growth', verdict: 'held' when capped or ruled, 'violated' when not; description names the
+structure, what it grows with, and its cap or ruling).
+```
+
 Field names follow `build/redteam.md`'s precedent (`claimNumber`/`verdict`/`objection` /
 `missingInteractions`) — flat and grep-able, not a new ledger structure: `findingId`, `lens`,
-`description`, `citation`, `severity`.
+`description`, `citation`, `severity`, plus the fidelity lens's `kind` and `quote` and the
+constraints lens's `constraint` and `verdict`.
 
 ## Visibility Lens — Real APIs, Cited by Exact Name
 

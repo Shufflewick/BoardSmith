@@ -1881,3 +1881,58 @@ describe('#289 — claims carry quoted source; unsupported claims become designe
     expect(template).toContain('boardsmith claim-quote-check');
   });
 });
+
+/**
+ * Issue #288: the audit step had no lens for the project's own hard constraints, so four sotf
+ * chunks closed with state that grew without limit against a 512 KiB partition budget. The code
+ * half is `boardsmith constraint-check` (src/cli/commands/constraint-check.ts), which
+ * `chunk-signoff` also runs; these assertions pin that the audit dispatches the lens like the
+ * others, that its output has the same shape, and that audit runs the check.
+ */
+describe('#288 — the audit dispatches a constraints lens', () => {
+  const audit = read('build/audit.md');
+  const templates = audit.split(/^\*\*(\w+) lens:\*\*$/m);
+  const lensTemplates = new Map<string, string>();
+  for (let i = 1; i < templates.length; i += 2) lensTemplates.set(templates[i].toLowerCase(), templates[i + 1]);
+
+  it('has a constraints lens template beside fidelity, visibility and undo, each its own dispatch', () => {
+    expect([...lensTemplates.keys()]).toEqual(['fidelity', 'visibility', 'undo', 'constraints']);
+    expect(audit).toMatch(/Four Lenses, Each a Separate Fresh-Context Dispatch/);
+    expect(audit).toMatch(/Audit runs 4 independent fresh-context agents/);
+  });
+
+  it("every lens returns the shared fields, and the shared field list names every lens's fields", () => {
+    const shared = /flat and grep-able, not a new ledger structure: ([\s\S]*?)\.\n/.exec(audit)?.[1] ?? '';
+    for (const field of ['findingId', 'lens', 'description', 'citation', 'severity', 'kind', 'quote']) {
+      expect(shared, `shared field list names ${field}`).toContain(`\`${field}\``);
+    }
+    for (const [lens, template] of lensTemplates) {
+      const returns = /Return exactly:([\s\S]*?)```/.exec(template)?.[1] ?? '';
+      for (const field of ['findingId', 'description', 'citation', 'severity']) {
+        expect(returns, `${lens} returns ${field}`).toContain(field);
+      }
+      expect(returns).toContain(`lens: '${lens}'`);
+    }
+  });
+
+  it('the constraints lens reads CLAUDE.md and CONSTRAINTS.md, not the rulebook, and gives every constraint a verdict', () => {
+    const lens = lensTemplates.get('constraints') ?? '';
+    expect(lens).toContain('CLAUDE.md');
+    expect(lens).toContain('design/CONSTRAINTS.md');
+    expect(lens).not.toContain('{slicePaths}');
+    expect(lens).toMatch(/held.*violated.*not applicable/s);
+    expect(lens).toMatch(/no cap/i);
+    expect(lens).toMatch(/maximum population/i);
+  });
+
+  it('audit runs boardsmith constraint-check and writes the Constraints Review and the ledger', () => {
+    expect(audit).toContain('boardsmith constraint-check {slug}');
+    expect(audit).toContain('## Constraints Review');
+    expect(audit).toMatch(/rulebook or from existing code/i);
+    expect(audit).toContain('RULINGS.md');
+  });
+
+  it('CHUNK.template.md carries the Constraints Review the check reads', () => {
+    expect(read('templates/CHUNK.template.md')).toContain('## Constraints Review');
+  });
+});
