@@ -55,7 +55,8 @@ release) and no tail detailing.
    machine-owned `## Verified Against` block. A NON-ZERO exit means it had to write or repair the
    block: re-read `chunks/<slug>/CHUNK.md` (the copy in context is stale) and re-run the command,
    which will then pass. Do not hand-author anything between the block's fences — that section is
-   written by this command and by nothing else.
+   written by this command and by nothing else. If it instead names the sign-off, re-running will
+   not help: the chunk is not closed until the designer signs it off (`build/playtest.md` "Who Signs Off").
 
 4. **Roll up decisions.** Append this chunk's settled house-rule/adaptation choices and any
    revise-round resolutions into `DECISIONS.md`'s append-only ledger, one entry per decision, so

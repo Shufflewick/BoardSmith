@@ -63,6 +63,19 @@ This is the rule the whole shape rests on. The moment the orchestrator starts re
 regains the ceiling it exists to remove. If the work needs checking, that is what the pipeline's own
 adversarial audit steps are for — dispatch, don't re-read.
 
+## Who Answers a Gate
+
+Only the designer answers an ask gate or signs off a playtest. An unattended run parks the chunk at
+that gate and moves on only to work that does not need the answer. Because chunks are built in
+order, that usually means the run stops on the unanswered-gate stop condition
+(`orchestrate/run-state.md` "Stop Conditions") with the question pending in `QUESTIONS.md` and
+`RUN.md`'s `Open Gate:` set. The orchestrator relays gates; it never answers one, never takes a
+ruling or an archive override as "reversible" and so safe to settle alone, and never writes a
+sign-off. A designer decision about one chunk is never a precedent for another: an answer covers the
+question it answered, and a playtest waiver covers only the chunks it names, until it expires
+(`build/playtest.md` "The Verified Gate"). Code holds this line: `boardsmith chunk-signoff` is the
+only writer of a verified status, and `boardsmith chunk-check` refuses one it did not produce.
+
 ## Step 0: Entry — Layout, Ingest Synthesis, Consistency, Lock
 
 Identical to `/bs-build-chunk` Step 0, which owns these checks — run them, do not re-derive them:
@@ -143,15 +156,21 @@ nothing, if there is nothing visible yet. Do not announce each dispatch.
 
 ## Step 4: Routing a Return
 
-- **`closed`** — relay the subagent's `designerSummary`, record any `assetsRequested` and `filings`,
-  and continue the loop. No re-invocation prompt, no handoff: continuing is the default.
+- **`closed`**: first run `npx boardsmith chunk-check <slug>`. A non-zero exit that names the
+  sign-off means the chunk's verified status is not backed by the designer (or by a waiver naming
+  it): treat the chunk as still at its playtest gate, never as closed. Otherwise relay the
+  subagent's `designerSummary`, record any `assetsRequested` and `filings`, and continue the loop.
+  No re-invocation prompt, no handoff: continuing is the default.
 - **`gate`** — conduct the gate yourself, here, in the main thread. Relay the `payload` **verbatim**
   — an `ask` gate's four parts, a `playtest` gate's numbered script, a triage's options — because
   that text was composed by the step that owns its format
   (`build/ask.md` "The Fixed 4-Part Presentation Format", `build/playtest.md`). Write each question
   to `QUESTIONS.md` before the designer answers and their answer after, then the `RULINGS.md` or
   `DECISIONS.md` entry it earns, then clear `RUN.md`'s `Open Gate:`
-  (`orchestrate/questions.md` "The Two Non-Negotiables"). Then **re-dispatch the same chunk** with
+  (`orchestrate/questions.md` "The Two Non-Negotiables"). The answer is the designer's, given in this
+  conversation; if the designer is not here to give it, the gate stays open (see "Who Answers a
+  Gate"). A `playtest` gate's sign-off is recorded with `boardsmith chunk-signoff`, and a waiver
+  with `boardsmith chunk-waiver`, only from what the designer said. Then **re-dispatch the same chunk** with
   the answers in its digest — the work never happens in this thread
   (`orchestrate/chunk-dispatch.md` "After the Return").
 - **`filing`** — handle it per `${CLAUDE_SKILL_DIR}/../bs-shared/orchestrate/filings.md`: confirm,

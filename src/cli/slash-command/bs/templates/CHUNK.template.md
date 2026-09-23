@@ -15,7 +15,7 @@ Status: proposed
      "## Ceremony", "## Step Checklist", "## Interpretation", "## Visibility Declaration",
      "## Newly Discovered Citations", "## Redteam Rounds", "## Findings Ledger", "## Revision Rounds",
      "## Spec Manifest", "## Build Manifest", "## Playtest Test Script",
-     "## Verified Checklist", "## Verified Commit Hash", "## Verified Against",
+     "## Verified Checklist", "## Sign-off", "## Verified Commit Hash", "## Verified Against",
      "## Rules Staleness". If any required
      heading is missing, or the Status line doesn't match a recognized enum value above, a
      resuming session STOPS and asks the user — it never guesses the intended state. See
@@ -190,15 +190,27 @@ Second-seat leak check (if hidden info): <!-- steps, or "n/a — no hidden info 
 
 ## Verified Checklist
 <!-- Explicit item-by-item checklist confirmed by the human at playtest/close. Every item must
-     be individually checked (or the chunk recorded as `verified (user-waived)` instead — see
-     Status line above) before Status can move to `verified`. Silently marking `verified` without
-     walking this checklist is prohibited. -->
+     be individually confirmed by the designer (or the chunk waived by the designer instead; see
+     "## Sign-off" below) before Status can move to `verified`. Status moves only through
+     `boardsmith chunk-signoff`, which refuses a sign-off that leaves any item unobserved. -->
 
 - [ ] <!-- item 1 -->
 - [ ] <!-- item 2 -->
 
-<!-- If the human explicitly chooses to skip playtesting, record that honestly: set
-     Status: verified (user-waived) instead of silently marking verified. -->
+<!-- If the designer explicitly chooses to skip playtesting, that is a waiver they grant with
+     `boardsmith chunk-waiver`, naming this chunk; the sign-off below cites it and derives
+     Status: verified (user-waived). -->
+
+## Sign-off
+<!-- MACHINE-OWNED. Written by `boardsmith chunk-signoff <slug>` and by nothing else. It records
+     who signed this chunk off, when, and on what basis: the designer's observed checklist items,
+     a designer waiver that names this chunk, or (only for a chunk with no designer playtest) the
+     automated test and sim pass. The Status line above is DERIVED from this block, never typed:
+     `boardsmith chunk-check` refuses a verified Status that this block does not back. -->
+
+<!-- boardsmith:signoff:begin -->
+_Not yet signed off._
+<!-- boardsmith:signoff:end -->
 
 ## Verified Commit Hash
 <!-- Recorded at close. This is the bisect anchor for any later regression and the diff base
