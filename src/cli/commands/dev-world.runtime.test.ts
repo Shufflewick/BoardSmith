@@ -17,7 +17,8 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 
 import { worldBudgets } from '../../world/index.js';
-import type { LocalWorldHost } from '../dev-host/world-host.js';
+import { LocalWorldHost } from '../dev-host/world-host.js';
+import { openWorldStore } from '../dev-host/world-store.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { loadWorldRuntime } from './dev-world.js';
 
@@ -88,5 +89,29 @@ describe('loadWorldRuntime (#283)', () => {
     expect((offers!.message.actions as Array<{ name: string }>).map((a) => a.name)).toEqual([
       'look',
     ]);
+  });
+
+  it("is needed: the CLI's own host refuses rules bundled on their own engine", async () => {
+    // What `boardsmith dev` used to do, which the world now refuses by name
+    // rather than running slowly on two engines.
+    const { rulesPath, tempDir, storePath } = worldProject();
+    const runtime = await loadWorldRuntime(rulesPath, tempDir, 'monorepo');
+    const budgets = worldBudgets();
+    const store = openWorldStore(storePath, budgets);
+    closing.push(async () => store.close());
+
+    expect(
+      () =>
+        new LocalWorldHost({
+          definition: runtime.gameDefinition as unknown as ConstructorParameters<
+            typeof LocalWorldHost
+          >[0]['definition'],
+          worldName: 'Yard',
+          seed: 'world:dev-world-runtime',
+          budgets,
+          store,
+          send: () => {},
+        }),
+    ).toThrow(/different copy of the BoardSmith engine/);
   });
 });

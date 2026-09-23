@@ -21,8 +21,8 @@
  * one of them is written for the game author rather than for whoever is reading
  * the log.
  */
-import { DEFAULT_COLOR_PALETTE, WORLD_PARTITION_ID_FLOOR } from "../engine/index.js";
-import type { ElementJSON, Game, GameElement } from "../engine/index.js";
+import { DEFAULT_COLOR_PALETTE, Game, WORLD_PARTITION_ID_FLOOR } from "../engine/index.js";
+import type { ElementJSON, GameElement } from "../engine/index.js";
 import { BoardSmithWorldEngine } from "./engine.js";
 import type { WorldViewDeclaration } from "./engine.js";
 import type { ActionDefinition } from "../engine/index.js";
@@ -823,6 +823,33 @@ export interface WorldRunner {
 }
 
 /**
+ * THE RULES AND THE RUNNER ARE ONE ENGINE (#283).
+ *
+ * A host that bundles a game's rules with the engine inlined, and then drives
+ * them with a world runner it imported from its own copy, gets a world that
+ * answers -- slowly, and wrongly in ways nothing reports. The read-only
+ * projection knows the engine's finders by function identity, so it knows none
+ * of the other copy's and every declaration walks the resident tree through a
+ * proxy; `instanceof` checks against this copy's classes answer false for every
+ * element the rules build. So it is refused here, where every host builds a
+ * world, rather than left for a profiler to find.
+ */
+function assertRulesShareThisEngine(gameClass: unknown): void {
+  if (gameClass === Game || (typeof gameClass === "function" && gameClass.prototype instanceof Game)) {
+    return;
+  }
+  throw worldRefusal(
+    "engine-mismatch",
+    "This world's rules were built on a different copy of the BoardSmith engine than the " +
+      "world runner loading them, so the two cannot recognise each other's elements. Build the " +
+      "rules and the world runner into one bundle, so they share one engine -- `boardsmith dev` " +
+      "and the hosting platform both do. If you are running `boardsmith dev`, check that the " +
+      "`boardsmith` your project's node_modules resolves is the same one the command is running " +
+      "from.",
+  );
+}
+
+/**
  * BUILD A WORLD FROM A BUNDLE'S DEFINITION.
  *
  * The one function every host calls, and the reason it exists: the platform's
@@ -840,6 +867,7 @@ export interface WorldRunner {
 export function createWorld(options: WorldRunnerOptions): WorldRunner {
   const budgets = options.budgets ?? worldBudgets();
   const world = readWorldDefinition(options.definition);
+  assertRulesShareThisEngine(options.definition.gameClass);
   // THE WORLD BLOCK'S OWN NUMBER. Not `definition.maxPlayers`: a table's roster
   // is a different fact, and a world game that has one at all is one #174 has
   // not reached yet.
