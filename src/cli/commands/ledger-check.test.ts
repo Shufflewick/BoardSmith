@@ -251,7 +251,8 @@ function located(findings: LedgerFinding[]): Array<`${string}:${LedgerFindingKin
 }
 
 async function project(files: Record<string, string>): Promise<string> {
-  const dir = join(tempTree('bs-ledger-check-'), 'proj');
+  const tree = tempTree('bs-ledger-check-');
+  const dir = join(tree, 'proj');
   await fs.mkdir(join(dir, 'design'), { recursive: true });
   execSync('git init', { cwd: dir, stdio: 'ignore' });
   for (const [name, text] of Object.entries(files)) {
@@ -333,7 +334,8 @@ describe('ledgerCheck — the whole project', () => {
   });
 
   it('refuses a project with a RUN.md outside a git repository, saying why', async () => {
-    const dir = join(tempTree('bs-ledger-check-nogit-'), 'proj');
+    const tree = tempTree('bs-ledger-check-nogit-');
+    const dir = join(tree, 'proj');
     await fs.mkdir(join(dir, 'design'), { recursive: true });
     await fs.writeFile(join(dir, 'design', 'RUN.md'), dispatch(1, '2026-09-23T10:00:00Z', 'pending', 'pending'));
     await expect(ledgerCheck(dir)).rejects.toThrow(/not a git repository/);
