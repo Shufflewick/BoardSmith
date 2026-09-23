@@ -96,12 +96,15 @@ const STAMP = {
   // No history: this suite is not about the watermark, and the cases that are
   // name their own (ShufflewickPub #383).
   activity: { seat: 1, at: null, since: 1_700_000_000_000 },
+  // A seated action declares no activity round, so the host hands back none.
+  declaredActivity: [],
 };
 
 const EVENT_STAMP = {
   allowance: { unkeyed: 0, keys: [], worldPending: 0 },
   presence: [],
   activity: null,
+  declaredActivity: [],
 };
 
 const ROOM_ONE = "room:1";
