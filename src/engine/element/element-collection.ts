@@ -349,11 +349,12 @@ export class ElementCollection<T extends GameElement = GameElement> extends Arra
           firstSeenUnder!.set(el.id, parentPath);
         }
 
-        // Check if element matches class and all predicates
-        const matchesClass = !className || el instanceof className;
-        const matchesPredicates = predicates.every((pred) => pred(el as F));
-
-        if (matchesClass && matchesPredicates) {
+        // The class first, and the predicates only for an element of it (#283).
+        // A predicate is typed for the class it was written against, and on a
+        // world's offer road every call wraps the element it is handed in a
+        // read-only projection -- so asking it about the whole tree cost a
+        // projection per element walked to find one character.
+        if ((!className || el instanceof className) && predicates.every((pred) => pred(el as F))) {
           if (order === 'desc') {
             result.unshift(el as F);
           } else {
