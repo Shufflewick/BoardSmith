@@ -16,7 +16,10 @@ that gate and moves on only to work that does not need the answer. A chunk's `St
 never typed: it is derived from a sign-off that `boardsmith chunk-signoff` records (who, when, and
 which checklist items were observed), and the provenance check at close refuses a verified status
 that no sign-off backs. A designer decision about one chunk is never a precedent for another: a
-"machine playtest" or "skip it" decision is a waiver, it names its chunks one by one, and it expires.
+"machine playtest" or "skip it" decision is a waiver, it names its chunks one by one, and it expires. A sign-off
+covers only the chunk as it was signed: once a file its Build Manifest names changes, it no longer
+counts. A verified chunk goes back to `built` for rework only through `boardsmith chunk-reopen <slug>
+--reason "<why>"`, which voids its sign-off, so the reworked chunk needs a fresh `chunk-signoff`.
 
 ## Milestone/UI Gate (SKILLAUTO-01)
 

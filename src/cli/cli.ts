@@ -23,9 +23,10 @@ import {
 import { chunkCheckCommand, chunkProvenanceStatusCommand } from './commands/chunk-provenance.js';
 import { claimQuoteCheckCommand } from './commands/claim-quotes.js';
 import { constraintCheckCommand } from './commands/constraint-check.js';
-import { chunkSignoffCommand, chunkWaiverCommand } from './commands/chunk-signoff.js';
+import { chunkReopenCommand, chunkSignoffCommand, chunkWaiverCommand } from './commands/chunk-signoff.js';
 import { traceCheckCommand } from './commands/trace-check.js';
 import { driftCheckCommand } from './commands/drift-check.js';
+import { ledgerCheckCommand } from './commands/ledger-check.js';
 import {
   verifyRunInitCommand,
   verifyRunRecordCommand,
@@ -307,6 +308,13 @@ program
   .action(chunkSignoffCommand);
 
 program
+  .command('chunk-reopen <slug>')
+  .description('Send a verified chunk back to built for rework, voiding its sign-off')
+  .option('--project <dir>', 'Project directory (defaults to cwd)')
+  .requiredOption('--reason <text>', 'Why the chunk goes back for rework')
+  .action(chunkReopenCommand);
+
+program
   .command('chunk-waiver')
   .description('Record a designer waiver of playtesting for the named chunks, until it expires')
   .option('--project <dir>', 'Project directory (defaults to cwd)')
@@ -346,6 +354,17 @@ program
   .option('--project <dir>', 'Project directory (defaults to cwd)')
   .option('--json', 'Emit JSON instead of human-readable output')
   .action(traceCheckCommand);
+
+// #293: ledger integrity (duplicate numbers, supersession pointers, filing status, run-log
+// timestamps against the commits that recorded them). Unlike the report-only sweeps above, a
+// finding exits non-zero: close runs it as a gate. It reads the tree as it stands, so the same
+// command checks a combined tree at merge time.
+program
+  .command('ledger-check')
+  .description('Check the design ledgers and the run log for numbering, supersession, status and timestamp errors')
+  .option('--project <dir>', 'Project directory (defaults to cwd)')
+  .option('--json', 'Emit JSON instead of human-readable output')
+  .action(ledgerCheckCommand);
 
 program
   .command('drift-check')

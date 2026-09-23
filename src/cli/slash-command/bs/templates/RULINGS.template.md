@@ -23,7 +23,16 @@
 
      Sessions fill this ledger, never restructure it. Entries are append-only — never edit or
      delete a prior entry, even if a later ruling supersedes it (supersession is itself a new
-     entry that references the one it supersedes). -->
+     entry that references the one it supersedes).
+
+     SUPERSESSION TAKES TWO WRITES, one on each entry: the new entry says "Supersedes Ruling M." in
+     its Decision, and the old entry gets one line added in place, `- Superseded by: Ruling N`.
+     That added line is the only sanctioned edit to a prior entry. Without it a reader who lands
+     on the old ruling (a citation, a search) takes it as current.
+
+     CHECKED AS CODE: `boardsmith ledger-check` fails on a ruling number used twice (take the next
+     unused number, never reuse one), on a "Supersedes Ruling M" whose Ruling M lacks the
+     `- Superseded by:` line, and on either naming a ruling that does not exist. -->
 
 <!-- PARSE CONTRACT (TMPL-02): this file must contain, in order: this H1, the "## Ledger"
      heading, and (once populated) entries each carrying Decision / Citation / Rationale. If

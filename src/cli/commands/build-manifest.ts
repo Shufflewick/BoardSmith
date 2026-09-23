@@ -15,6 +15,7 @@
  */
 
 import { resolveDesignRelative } from '../lib/project-paths.js';
+import { parseLedgerEntries, supersessionPatterns } from '../lib/ledger-entries.js';
 import { relative, resolve as pathResolve, sep } from 'node:path';
 
 /** The locked finding-kind enum from 172-CONTEXT.md decision 7. Never a hand-written union. */
@@ -313,8 +314,7 @@ export interface ParsedRuling {
  * list is the single highest-yield way to make this check fire on correct work, which is how a
  * check gets waived — do not "helpfully" widen it later.
  */
-const SUPERSEDED_BY = /supersede[sd]?\s+by\s+ruling\s+(\d+)/i;
-const SUPERSEDES_RULING = /\bsupersedes\s+ruling\s+(\d+)/i;
+const { supersededBy: SUPERSEDED_BY, supersedes: SUPERSEDES_RULING } = supersessionPatterns('Ruling');
 /** Any other supersede-verb occurrence — recorded verbatim in `unparsedSupersession`. */
 const SUPERSEDE_VERB = /supersede[sd]?/i;
 
@@ -340,26 +340,15 @@ function sentences(body: string): string[] {
  *   `unparsedSupersession`, never assumed as a chain.
  */
 export function parseRulings(rulingsText: string): ParsedRuling[] {
-  const HEADING = /^### Ruling (\d+)[ \t]*$/gm;
-  const headings: Array<{ number: number; index: number; bodyStart: number }> = [];
-  for (const match of rulingsText.matchAll(HEADING)) {
-    const lineEnd = rulingsText.indexOf('\n', match.index);
-    headings.push({
-      number: Number(match[1]),
-      index: match.index,
-      bodyStart: lineEnd === -1 ? rulingsText.length : lineEnd,
-    });
-  }
+  const headings = parseLedgerEntries(rulingsText, 'Ruling');
 
   const byNumber = new Map<number, ParsedRuling>();
   for (const h of headings) {
     byNumber.set(h.number, { number: h.number, unparsedSupersession: [], body: '' });
   }
 
-  for (let i = 0; i < headings.length; i++) {
-    const h = headings[i];
-    const bodyEnd = i + 1 < headings.length ? headings[i + 1].index : rulingsText.length;
-    const body = rulingsText.slice(h.bodyStart, bodyEnd);
+  for (const h of headings) {
+    const body = h.body;
     const entry = byNumber.get(h.number)!;
     entry.body = body;
 
