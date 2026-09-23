@@ -60,6 +60,40 @@ here.
    Both checks are cheap and they are the only thing standing between "the tests pass" and "the
    tests still test what `ask` approved."
 
+   (c) **The tests can fail — run `boardsmith test-step-check <slug>`.** A green suite says the
+       tests pass; it does not say they would catch a regression. Run this command once the chunk's
+       tests are green. It exits non-zero on any finding, and a non-zero exit is a failure of this
+       step like any other: route the chunk back per "Failures Loop Back to `build`". There is no
+       flag that skips part of it, and its findings are never argued away in prose. It enforces
+       four rules, each of which a real build run broke while its suite was green:
+
+       - **Every Spec Manifest claim names a test that exists.** Each `## Spec Manifest` row names a
+         test file on disk with `RED Observed: yes`, and for every claim the row lists, a test in
+         that file that is not skipped cites the claim (`claim N` in its title or in a comment
+         directly above it). Every live `## Interpretation` claim is listed by some row. A row that
+         claims coverage no test gives is a false record, not a formatting slip.
+       - **Every verb the chunk adds is dispatched through the engine** in at least one of the
+         chunk's tests: `testGame.doAction`, `tryAction`, `action(...).execute()`,
+         `simulateAction(s)`, `assertActionSucceeds`, `runner.performAction`, or a world's `take`,
+         with the verb's name written literally. Calling the rules function directly skips the
+         engine's selections, conditions and flow, so it does not count, and neither does a verb
+         only ever dispatched through `assertActionFails`.
+       - **No guard is called unreachable.** A line the chunk added that calls a guard unreachable
+         ("unreachable", "should never happen", "can't happen") is a finding. Either the compiler
+         proves it (an exhaustive check assigning to a `never`-typed variable, with no such
+         wording), or it is reachable: make it a human-readable error that says what happened and
+         what to do, and add a test that reaches it and asserts that message.
+       - **Mutation: every claim and every test can fail.** The command makes one small change at a
+         time to the lines this chunk added (a flipped comparison, a negated condition, a removed
+         statement, a return value replaced) and runs the chunk's test files against each. A test
+         that survives every mutant asserts nothing the chunk's code controls, and a claim none of
+         whose tests fail under any mutant has no real test; both are findings. Mutants are served
+         to vitest in memory, never written over the source. This runs one vitest process per
+         mutant, so it takes minutes on a large chunk; let it finish.
+
+       A finding here goes back to `build` (or to `spec`, when the fix is a test that pins the claim
+       properly), never to an edit of the Spec Manifest that makes the row claim less.
+
 4. **Worked-example tests (TEST-01)** — this chunk's cited worked examples become executable
    tests as part of this same build, generated and immediately run, never left as a one-time
    seed for hand-written tests to accumulate by hand. Run these sub-steps in order, citing the

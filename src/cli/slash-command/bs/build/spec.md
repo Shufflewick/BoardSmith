@@ -46,6 +46,26 @@ this step does not check off until every numbered claim is either covered or car
 named exemption (see "Exemptions" below). Silently covering nine of ten claims is exactly the
 failure this per-claim rule exists to make impossible.
 
+## Tests That Can Fail (checked as code at `test`)
+
+`build/test.md` item 3(c) runs `boardsmith test-step-check <slug>` against what this step writes,
+and it fails the chunk on each of these, so write the tests to meet them now:
+
+- **A claim listed in the Spec Manifest has a test that cites it.** A row's Claims Covered is a
+  promise that a test in that file, not skipped, names each of those claims. List only what the
+  file really covers.
+- **Every verb this chunk adds is dispatched through the engine** in at least one test —
+  `testGame.doAction(seat, 'verb', args)` or one of the other engine entry points `build/test.md`
+  names, with the verb's name written literally. A test that calls the rules function directly
+  never exercises the engine's selections, conditions or flow.
+- **Each test must be able to fail.** A test that asserts a value it just set up, a mock's own
+  return, or a constant passes whatever the implementation does. The mutation check breaks the
+  implementation in small ways and requires every test, and at least one test per claim, to fail
+  under some break. Assert on the outcome the claim describes, reached through the game.
+- **Nothing is called unreachable.** If a claim needs a guard, the guard's error is written for
+  the person who hits it and a test reaches it. A case only the compiler can rule out is an
+  exhaustive `never` check, not a comment saying it cannot happen.
+
 Tests belong to the chunk's own test files in the GENERATED game project — never BoardSmith's repo,
 and never appended to an earlier chunk's test file. Extending an earlier chunk's file is how a
 regression suite becomes unattributable; a chunk's tests live where `close` can point at them.
@@ -141,7 +161,9 @@ leave a completed `spec` unchecked (`build-chunk.md` "Every step persists before
 
 A chunk that introduces no new game behavior — a pure asset swap, a restyle, a refactor with no
 rules change — has no claims to pin and writes no behavioral tests. Name that exemption explicitly
-as a row in `## Spec Manifest` with its reason, the same "name the exemption explicitly rather than
+as the one row in `## Spec Manifest`, written exactly `| exempt | <reason> | n/a |` so
+`boardsmith test-step-check` can read it (an exempt row on a chunk that has claims is a finding),
+the same "name the exemption explicitly rather than
 silently omitting" discipline `build/test.md` items 4(i) and 6 already use. A chunk trivial enough
 to be genuinely exempt is usually a chunk that should have been tagged `light` at proposal time
 (`state-machine.md` "Step Names (exact, light path — trivial chunks)").

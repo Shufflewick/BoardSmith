@@ -176,7 +176,9 @@ full
      never ahead of the run, never in a batch at the end.
 
      A chunk that introduces no new game behavior writes a single exemption row naming the reason
-     (build/spec.md "Exemptions") rather than silently leaving the table empty. -->
+     (build/spec.md "Exemptions") rather than silently leaving the table empty, written exactly
+     `| exempt | <reason> | n/a |`. `boardsmith test-step-check <slug>` (build/test.md item 3(c))
+     reads this table and fails the test step on a row whose claims have no citing test. -->
 
 | Test File | Claims Covered | RED Observed |
 |-----------|----------------|--------------|

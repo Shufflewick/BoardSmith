@@ -21,6 +21,7 @@ import {
   ingestRelabelCommand,
 } from './commands/ingest-archive.js';
 import { chunkCheckCommand, chunkProvenanceStatusCommand } from './commands/chunk-provenance.js';
+import { testStepCheckCommand } from './commands/test-step-check.js';
 import { claimQuoteCheckCommand } from './commands/claim-quotes.js';
 import { constraintCheckCommand } from './commands/constraint-check.js';
 import { chunkReopenCommand, chunkSignoffCommand, chunkWaiverCommand } from './commands/chunk-signoff.js';
@@ -271,6 +272,18 @@ program
   )
   .option('--json', 'Emit JSON instead of human-readable output')
   .action(chunkCheckCommand);
+
+// The build skill's test-step gate (#290): the Spec Manifest maps to real tests, every verb the
+// chunk added runs through the engine, no guard is called unreachable, and a mutation run shows
+// every claim's tests can fail. Exits non-zero on any finding.
+program
+  .command('test-step-check <slug>')
+  .description(
+    "Check that a chunk's tests can fail: Spec Manifest claims have tests, new verbs are dispatched through the engine, and mutating the chunk's code breaks every test",
+  )
+  .option('--project <dir>', 'Project directory (defaults to cwd)')
+  .option('--json', 'Emit JSON instead of human-readable output')
+  .action(testStepCheckCommand);
 
 // Issue #289: every Interpretation claim carries an exact quote and its location, and the quote
 // must be there. Read-only; exits non-zero on any refused claim so a build session cannot pass it.
