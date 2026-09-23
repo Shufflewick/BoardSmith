@@ -515,13 +515,16 @@ describe('#167: presence is the seats this host has open', () => {
  * offers were being walked. That list is the cost this ticket is about.
  */
 describe('#284: an abruptly closed connection is not worked for', () => {
-  function counting() {
+  /** `onWalk`, when given, runs inside each seat's walk, after it is counted:
+   *  the place a case stands to make something happen mid-push. */
+  function counting(onWalk?: (seat: number) => void) {
     const walked: number[] = [];
     const warm = worldAction<Village>('warm')
       .prompt('Warm your hands')
       .condition({
         'counted as walked': (ctx) => {
           walked.push(ctx.player.seat);
+          onWalk?.(ctx.player.seat);
           return true;
         },
       })
@@ -562,25 +565,33 @@ describe('#284: an abruptly closed connection is not worked for', () => {
   });
 
   it('notices a close that arrives while an earlier seat is being walked', async () => {
-    const { walked, definition } = counting();
+    // THE KILL LANDS MID-PUSH. A close is an I/O callback, so it can never run
+    // inside a walk; it runs on a later turn of the event loop. It is modelled
+    // as a turn queued from inside seat 1's own walk, which is queued before
+    // any turn the host takes afterwards, so it has run by the time seat 2's
+    // turn comes -- on every run, however fast the walks are. A host that never
+    // yields between seats reaches seat 3 before that turn, and walks it.
+    // (#286: this case used to poll from a zero-delay interval, whose timer
+    // cannot fire again for a millisecond, longer than a whole three-seat push.)
+    let killed = false;
+    let armed = false;
+    let drop: (clientId: string) => Promise<void> = async () => {};
+    const { walked, definition } = counting((seat) => {
+      if (!armed || killed || seat !== 1) return;
+      killed = true;
+      setImmediate(() => {
+        void drop('c3');
+      });
+    });
     const opened = await attached({ dir, definition });
-    const { host, drop } = opened;
+    const { host } = opened;
+    drop = opened.drop;
     await host.handleMessage('c2', { type: 'hello' });
     await host.handleMessage('c3', { type: 'hello' });
     walked.length = 0;
 
-    // THE KILL LANDS MID-PUSH. The close is an I/O callback, so it is modelled
-    // as the next turn of the event loop from inside seat 1's walk: a host that
-    // never yields between seats cannot see it until the push is over.
-    let killed = false;
-    const walkedBefore = walked.length;
-    const hook = setInterval(() => {
-      if (!killed && walked.length > walkedBefore) {
-        killed = true;
-        void drop('c3');
-      }
-    }, 0);
     // A push walks in seat order, and this one starts with seat 1.
+    armed = true;
     await host.handleMessage('c1', {
       type: 'action',
       order: nextOrder(),
@@ -588,12 +599,11 @@ describe('#284: an abruptly closed connection is not worked for', () => {
       action: 'chop',
       args: {},
     });
-    clearInterval(hook);
     await host.settled();
 
-    expect(walked).not.toContain(3);
-    expect(walked).toContain(1);
     expect(killed).toBe(true);
+    expect(walked).toContain(1);
+    expect(walked).not.toContain(3);
     await host.close();
   });
 
