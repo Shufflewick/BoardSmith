@@ -30,9 +30,68 @@ Reading the sibling instructions is the only sanctioned handoff, exactly as `/bs
 hands off to the kickoff instructions by reading them: it keeps one implementation of the chunk
 pipeline, executing in one context, with no second copy of its rules living in this file.
 
-**Never dispatch two chunks at once.** Chunks share `SKETCH.md`, the ledgers, and the git working
-tree; two concurrent dispatches would race on all three and interleave commits. The loop is strictly
-sequential, and the session lock (`state-machine.md` "Session Lock") stays held by the run.
+**Two chunks never share a checkout.** Chunks share `SKETCH.md`, the ledgers, and the git working
+tree, so two dispatches in one checkout would race on all three and interleave commits. By default
+the loop dispatches one chunk at a time in the main checkout. Chunks that are independent may
+instead be built at the same time, each in its own worktree, under the rules in "Parallel Dispatch"
+below. Either way the session lock (`state-machine.md` "Session Lock") stays held by the run.
+
+## Parallel Dispatch
+
+Chunks may be built at the same time when, and only when, `boardsmith parallel-check <slug> <slug>
+[...]` exits zero for the whole batch. It passes chunks that are **independent in the sketch's
+dependency graph** (every chunk each one names in its `- Depends on:` line is already verified, so
+none of them waits on another) and that have **no rulebook citation in common** (the slices named in
+each chunk's sketch `Citations:` line and its CHUNK.md `## Interpretation` and
+`## Newly Discovered Citations`, the same set `/bs-insert-chunk` compares). A citation that names no
+slice file, or a chunk with no citations yet, cannot be shown to be independent, so it is refused.
+Never start a batch the check refused, and never start one without running it.
+
+### When Chunks Run One at a Time
+
+Build in order, in the main checkout, whenever any of these holds. The check enforces the first
+five; the last two are dispatches it is never asked about:
+
+- the check refused the batch, for any reason;
+- a chunk depends, directly or through another chunk, on one that is not verified;
+- two chunks cite a rulebook slice in common;
+- the chunk is the core-loop chunk or the final-acceptance chunk (they always run alone);
+- the chunk has no `- Depends on:` line, or no rulebook citations yet;
+- the dispatch is a sketch reshape (`/bs-insert-chunk`), which rewrites the whole Ordered Chunk List
+  and so runs only when no chunk is being built;
+- any merge's cross-chunk references are still awaiting the audit (see step 5 below).
+
+### How a Parallel Batch Runs
+
+1. **Check.** Run `boardsmith parallel-check <slug> <slug> [...]` from the main checkout. A non-zero
+   exit ends the attempt: dispatch the first of them alone and continue in order.
+2. **One worktree per chunk.** From the main checkout, for each chunk:
+   `git worktree add .boardsmith/worktrees/<slug> -b chunk/<slug>`. Set `SKETCH.md`'s session lock to
+   the batch (`state-machine.md` "Session Lock", the comma-separated form) and commit it BEFORE
+   creating the worktrees, so every branch starts from it.
+3. **Dispatch every chunk of the batch in one message**, so they run at the same time. Each brief is
+   the ordinary seven fields plus: the project directory is that chunk's worktree, not the main
+   checkout; it is building on a parallel branch, so it numbers every new ledger entry with a
+   provisional id, `Ruling @<slug>.<n>` (`state-machine.md` "Ledger Numbers on a Parallel Branch");
+   and it never writes `RUN.md` or another chunk's files. The orchestrator writes each chunk's run
+   log entry in that chunk's own worktree, `design/run-log/<slug>.md`, and commits it there.
+4. **Gates.** A chunk that returns a gate is handled as always, one gate at a time with the
+   designer. Its answers are written in that chunk's worktree, numbered provisionally, and its
+   re-dispatch goes back to the same worktree. `RUN.md`'s `Open Gate:` lists every open gate.
+5. **Merge, one merge at a time.** When a chunk closes, run `boardsmith chunk-merge <slug>` from the
+   main checkout. Never merge a chunk branch by hand: this command is the gate. It merges under a
+   lock, allocates real ledger numbers on the combined tree, re-runs `ledger-check`,
+   `constraint-check` with its measurement tests, every sign-off and the whole test suite on the
+   combined tree, and refuses (leaving the main checkout exactly as it was) when any of them fails,
+   even though the branch passed them alone. A refusal is fixed on the chunk's branch: merge the
+   main line into it in its worktree, resolve and re-test there, commit, and run `chunk-merge`
+   again. When the merge lists references between this chunk and the chunks merged while it was
+   being built, they land in `design/CROSS-CHUNK.md` as pending, and `ledger-check` (so every close
+   and every later merge) fails until the audit rules on them: dispatch the cross-chunk lens
+   (`build/audit.md` "The Cross-Chunk Lens") against the main checkout before anything else.
+6. **Clean up.** After a chunk merges, `git worktree remove .boardsmith/worktrees/<slug>` and
+   `git branch -d chunk/<slug>`. When the last chunk of the batch has merged, set the session lock
+   back to the next chunk the run dispatches.
 
 ## The Brief (every field required)
 

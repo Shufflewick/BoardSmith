@@ -85,11 +85,11 @@ describe('WF-01 — the skill and its reference tree exist and are wired', () =>
   });
 });
 
-describe('WF-02 — one fresh subagent per chunk, dispatched sequentially', () => {
-  it('chunk-dispatch.md dispatches with the Agent tool, one at a time', () => {
+describe('WF-02 — one fresh subagent per chunk', () => {
+  it('chunk-dispatch.md dispatches with the Agent tool, one subagent per chunk', () => {
     const dispatch = flat(read('orchestrate/chunk-dispatch.md'));
     expect(dispatch).toMatch(/Agent tool/);
-    expect(dispatch).toMatch(/Never dispatch two chunks at once/i);
+    expect(dispatch).toMatch(/one agent per dispatch/i);
   });
 
   it('the subagent runs the pipeline by READING the sibling SKILL.md, never a re-dispatch', () => {
@@ -504,5 +504,69 @@ describe('#291: one gate policy for orchestrated runs', () => {
     const ask = flat(read('build/ask.md'));
     expect(ask).toMatch(/standing precedent/i);
     expect(ask).toMatch(/reversible/i);
+  });
+});
+
+/**
+ * #294: chunks may be built at the same time, but only where code says it is safe. The prose names
+ * the rules and, for every one, the command that enforces it, so a harness that skims the prose
+ * still cannot merge an unsafe batch.
+ */
+describe('#294 — parallel dispatch is allowed only where the checks say so', () => {
+  const dispatch = () => flat(read('orchestrate/chunk-dispatch.md'));
+
+  it('replaces the blanket ban with stated rules for when chunks may and may not run together', () => {
+    expect(dispatch()).not.toMatch(/Never dispatch two chunks at once/i);
+    expect(dispatch()).toMatch(/## Parallel Dispatch/);
+    expect(dispatch()).toMatch(/independent in the sketch's dependency graph/i);
+    expect(dispatch()).toMatch(/no rulebook citation in common/i);
+    expect(dispatch()).toMatch(/`boardsmith parallel-check <slug> <slug>/);
+    expect(dispatch()).toMatch(/When Chunks Run One at a Time/);
+    for (const alone of ['core-loop', 'final-acceptance', 'bs-insert-chunk']) expect(dispatch()).toContain(alone);
+  });
+
+  it('gives each parallel chunk its own worktree and branch, and merges only through chunk-merge, one at a time', () => {
+    expect(dispatch()).toContain('.boardsmith/worktrees/<slug>');
+    expect(dispatch()).toContain('chunk/<slug>');
+    expect(dispatch()).toMatch(/`boardsmith chunk-merge <slug>`/);
+    expect(dispatch()).toMatch(/never merge a chunk branch by hand/i);
+    expect(dispatch()).toMatch(/one merge at a time/i);
+  });
+
+  it('numbers ledger entries provisionally on a parallel branch, allocated at merge', () => {
+    expect(dispatch()).toContain('Ruling @<slug>.<n>');
+    expect(flat(read('state-machine.md'))).toMatch(/## Ledger Numbers on a Parallel Branch/);
+    expect(flat(read('state-machine.md'))).toContain('Ruling @<slug>.<n>');
+  });
+
+  it('routes the cross-chunk references a merge records to the audit before the next merge', () => {
+    expect(dispatch()).toContain('CROSS-CHUNK.md');
+    expect(dispatch()).toMatch(/cross-chunk lens/i);
+    const audit = flat(read('build/audit.md'));
+    expect(audit).toMatch(/## The Cross-Chunk Lens/);
+    expect(audit).toContain('boardsmith chunk-reopen');
+    expect(audit).toMatch(/- Verdict: no conflict: /);
+  });
+
+  it('build-game.md runs the loop in parallel batches when the check allows, and one at a time otherwise', () => {
+    const game = flat(read('build-game.md'));
+    expect(game).not.toMatch(/One dispatch at a time, never two/i);
+    expect(game).toContain('boardsmith parallel-check');
+    expect(game).toContain('boardsmith chunk-merge');
+    expect(game).toMatch(/orchestrate\/chunk-dispatch\.md` "Parallel Dispatch"/);
+  });
+
+  it('the sketch records each chunk\'s dependencies, which the parallel rule reads', () => {
+    expect(read('templates/SKETCH.template.md')).toContain('- Depends on:');
+    expect(flat(read('ingest/sketch-derivation.md'))).toMatch(/`- Depends on:`/);
+    expect(flat(read('insert-chunk.md'))).toMatch(/`- Depends on:`/);
+  });
+
+  it('runs a chunk\'s read-only steps concurrently by default', () => {
+    const chunk = flat(read('build-chunk.md'));
+    expect(chunk).toMatch(/## Concurrency Within a Chunk/);
+    for (const step of ['investigate', 'redteam', 'audit']) expect(chunk).toContain(step);
+    expect(flat(read('build/redteam.md'))).toMatch(/in one message, so they run at the same time/i);
+    expect(flat(read('build/audit.md'))).toMatch(/in one message, so they run at the same time/i);
   });
 });

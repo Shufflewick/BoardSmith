@@ -295,7 +295,7 @@ export async function installClaudeCommand(options: InstallOptions = {}): Promis
   console.log('Skills:');
   console.log(chalk.cyan('  bs-create-game') + chalk.gray('   - Start a new game — from an idea or a rulebook (start here)'));
   console.log(chalk.cyan('  bs-ingest-rules') + chalk.gray('  - Ingest a rulebook and produce the initial sketch/chunk plan'));
-  console.log(chalk.cyan('  bs-build-game') + chalk.gray('    - Build the whole game: one chunk at a time, resumable, questions filed'));
+  console.log(chalk.cyan('  bs-build-game') + chalk.gray('    - Build the whole game: chunk by chunk (independent ones side by side), resumable, questions filed'));
   console.log(chalk.cyan('  bs-build-chunk') + chalk.gray('   - Build, test, audit, and playtest one chunk at a time'));
   console.log(chalk.cyan('  bs-check-status') + chalk.gray('  - Report sketch/chunk progress and next steps'));
   console.log(chalk.cyan('  bs-insert-chunk') + chalk.gray('  - Insert a new chunk into an existing sketch'));

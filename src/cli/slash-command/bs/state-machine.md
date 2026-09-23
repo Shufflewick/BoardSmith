@@ -279,6 +279,12 @@ Any change that re-styles or re-lays-out previously verified surfaces flips thos
     substring `none` appears at its start. A rule that stopped at the first hyphen, or merely
     tested "starts with `none`", would misclassify this as released — this worked example exists
     specifically to pin against that mistake.
+- **A parallel batch's lock** (#294, `orchestrate/chunk-dispatch.md` "Parallel Dispatch") names
+  every chunk of the batch, comma-separated with no spaces, as its leading token:
+  `"trading,quests @ run-7 — locked at <ISO timestamp>"`. A dispatched chunk whose slug is one of
+  those names classifies the lock as its own (a same-chunk resume). The lock belongs to the run in
+  the main checkout: each chunk's worktree releases only its own copy at close, and
+  `boardsmith chunk-merge` keeps the main checkout's lock line when it merges.
 - **Staleness criterion** (evaluated by consistency-check item 4, and only ever reached for a
   value the rule above classifies as a LOCK): a lock is **stale** when its
   timestamp is more than 24 hours old — a crashed or abandoned session, not a live one; the
@@ -287,6 +293,21 @@ Any change that re-styles or re-lays-out previously verified surfaces flips thos
   lock's timestamp (a fresh `date -u +%Y-%m-%dT%H:%M:%SZ` read) and continues (this is the
   normal resume path). Any other lock (less than 24 hours old, naming different work) is treated
   as a live concurrent session and triggers the warning above.
+
+## Ledger Numbers on a Parallel Branch
+
+Numbered ledger entries (`### Ruling N`, `### Decision N`, `### Filing N`, `### Question N`, and
+`### C<n>` / `### G<n>` in `CONSTRAINTS.md`) are cited by number, so a number must mean one thing.
+Built one at a time, a chunk takes the next unused number. Built on a parallel branch
+(`orchestrate/chunk-dispatch.md` "Parallel Dispatch"), a chunk cannot know the next number, because
+another branch may be taking it at the same moment. So on a parallel branch every new entry gets a
+provisional id scoped to the chunk's own slug: `Ruling @<slug>.<n>` (and `Decision @<slug>.<n>`,
+`Filing @<slug>.<n>`, `Question @<slug>.<n>`, `C@<slug>.<n>`, `G@<slug>.<n>`), counting from 1 per
+ledger, and every citation of it uses that id. `boardsmith chunk-merge` allocates the real numbers
+on the combined tree and rewrites every citation. This is enforced as code: `chunk-merge` refuses a
+branch that added a real number, `ledger-check` and `constraint-check` treat a provisional id like
+any other (a duplicate is a finding), and a citation of a provisional id nobody declared stops the
+merge.
 
 ## Git Protocol
 

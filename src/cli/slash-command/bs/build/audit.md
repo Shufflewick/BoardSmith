@@ -29,7 +29,8 @@ truth for every rules-fidelity check.
 ## Four Lenses, Each a Separate Fresh-Context Dispatch
 
 Audit runs 4 independent fresh-context agents, one per lens, plus a 5th for `ui: touches|major`
-chunks. Each lens is a SEPARATE Task-tool dispatch — fresh context, no inherited conversation,
+chunks. Every lens (and the design-review agent) is dispatched in one message, so they run at the
+same time (`build-chunk.md` "Concurrency Within a Chunk"). Each lens is a SEPARATE Task-tool dispatch — fresh context, no inherited conversation,
 never the orchestrator's running conversation, never a peer lens's findings, and never
 `## Interpretation` (per the rule above). This is `build/redteam.md`'s "Independence:
 Fresh-Context, No-Framing Dispatch" applied one step further down the pipeline: framing from any
@@ -201,7 +202,41 @@ the chunk off while it fails, so an uncapped structure cannot reach `verified`.
 The rules are the same for a project built from a rulebook or from existing code: the check
 reads CLAUDE.md, the ledger and the code, never the rulebook. With no slug,
 `boardsmith constraint-check` checks the whole tree and runs every measurement test, which is
-what a merge re-runs on the combined result when chunks were built on separate branches.
+what a merge re-runs on the combined result when chunks were built on separate branches
+(`boardsmith chunk-merge` does exactly that).
+
+## The Cross-Chunk Lens — After a Merge of Chunks Built at the Same Time
+
+Chunks built side by side (`orchestrate/chunk-dispatch.md` "Parallel Dispatch") never saw each
+other's code. When `boardsmith chunk-merge` lands one, it lists in `design/CROSS-CHUNK.md`, as a
+`### Merge N` entry with `- Verdict: pending`, every source file both it and the chunks merged
+while it was being built changed, and every name (an id, a declared constant, a key, a quoted
+string) both sides touched and one side defines. It cannot tell whether they conflict; this lens
+can. `boardsmith ledger-check` fails while any verdict is pending, so no chunk closes and no
+further merge lands until this lens has ruled.
+
+The orchestrator dispatches it as its own fresh-context agent, against the main checkout, with only
+the entry's text (its chunk, the chunks built alongside, the shared files and names):
+
+```
+Chunks {chunk} and {alongside} of {gameName} were built at the same time without seeing each other,
+and have just been merged. Here is every place their changes meet: {sharedFilesAndNames}. For
+each one, read the combined code at both sides and decide whether the two chunks still agree: one
+side must not remove, rename, or change the meaning of something the other relies on (a venue one
+destroys while the other still sends players there, a counter both increment, an id both define).
+Do not report style. Return exactly: { verdict: 'no conflict' | 'conflict', reason, reopen?: slug,
+evidence: [file:line, ...] }.
+```
+
+It records the result by replacing that entry's `pending` line, and nothing else:
+
+- `- Verdict: no conflict: <reason, citing file:line>`, or
+- on a conflict, first `boardsmith chunk-reopen <slug> --reason "<what breaks>"` for the chunk that
+  must change (normally the one merged last), then `- Verdict: conflict: <slug> reopened, <what
+  breaks>`. The reopened chunk goes back through repair and its own gates, like any other finding.
+
+Commit that line before dispatching anything else. `boardsmith ledger-check` accepts only those
+two shapes, and a conflict must name a chunk that exists.
 
 ## Visibility Lens — Real APIs, Cited by Exact Name
 

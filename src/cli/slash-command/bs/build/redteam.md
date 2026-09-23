@@ -24,7 +24,9 @@ follow-up subagent or escalate to the user — never fall back to reading the so
 
 Redteam runs 3 independent fresh-context agents — 2 refuters plus 1 coverage adversary — on the
 claims list produced by `build/investigate.md`. Each of the 3 agents is a SEPARATE Task-tool
-dispatch. The dispatch prompt for every agent contains ONLY the raw slice path(s) and the
+dispatch, and all 3 are dispatched in one message, so they run at the same time: none reads
+another's verdict, so waiting for one before starting the next buys nothing
+(`build-chunk.md` "Concurrency Within a Chunk"). The dispatch prompt for every agent contains ONLY the raw slice path(s) and the
 numbered claims list text (the text the orchestrator read from CHUNK.md's `## Interpretation` —
 the sanctioned state-file read above) — never the orchestrator's running conversation, never the
 investigate subagent's own prompt or rationale, and never a peer agent's verdict. This is
