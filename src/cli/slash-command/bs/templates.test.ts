@@ -519,6 +519,7 @@ describe('TMPL-02 — parse-contract heading lists match each template\'s actual
       '## Visibility Declaration',
       '## Newly Discovered Citations',
       '## Redteam Rounds',
+      '## Constraints Review',
       '## Findings Ledger',
       '## Revision Rounds',
       '## Spec Manifest',
@@ -540,6 +541,7 @@ describe('TMPL-02 — parse-contract heading lists match each template\'s actual
     ],
     'templates/RULINGS.template.md': ['## Ledger'],
     'templates/DECISIONS.template.md': ['## Ledger'],
+    'templates/CONSTRAINTS.template.md': ['## Hard Constraints', '## Growing Structures'],
     'templates/DESIGN.template.md': [
       '## Chosen Direction',
       '## Theme Block (--bsg-* / applyTheme() overrides)',

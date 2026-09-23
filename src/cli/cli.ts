@@ -23,6 +23,7 @@ import {
 import { chunkCheckCommand, chunkProvenanceStatusCommand } from './commands/chunk-provenance.js';
 import { testStepCheckCommand } from './commands/test-step-check.js';
 import { claimQuoteCheckCommand } from './commands/claim-quotes.js';
+import { constraintCheckCommand } from './commands/constraint-check.js';
 import { chunkReopenCommand, chunkSignoffCommand, chunkWaiverCommand } from './commands/chunk-signoff.js';
 import { traceCheckCommand } from './commands/trace-check.js';
 import { driftCheckCommand } from './commands/drift-check.js';
@@ -292,6 +293,17 @@ program
   .option('--project <dir>', 'Project directory (defaults to cwd)')
   .option('--json', 'Emit JSON (the quotes and their sources, without the claim text) instead of human-readable output')
   .action(claimQuoteCheckCommand);
+
+// #288: the project's hard constraints and every growing structure, checked as code. With no
+// slug it checks the whole tree, which is what a merge re-runs on the combined result.
+program
+  .command('constraint-check [slug]')
+  .description(
+    'Refuse uncapped growing state, hard constraints missing from design/CONSTRAINTS.md, and a failing measurement test; with a slug, also that chunk\'s constraints review',
+  )
+  .option('--project <dir>', 'Project directory (defaults to cwd)')
+  .option('--json', 'Emit JSON instead of human-readable output')
+  .action(constraintCheckCommand);
 
 // #291: a chunk's verified status is derived from a recorded sign-off, and a playtest waiver is
 // scoped to the chunks it names and expires. Both are written here and nowhere else, so
