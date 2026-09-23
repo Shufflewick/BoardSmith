@@ -2341,6 +2341,12 @@ export class BoardSmithWorldEngine implements WorldEngine {
           )
         );
       }
+      // A REFUSAL THE RULES CAUGHT STILL REFUSES (#288). Every facility refusal
+      // is a hard constraint the platform enforces -- a partition the command
+      // did not declare, a schedule past its cap -- and a try/catch in the
+      // rules must not turn one into control flow. sotf swallowed
+      // `undeclared-partition` on every border draw and the command succeeded.
+      if (ledger.refused !== null) throw ledger.refused;
 
       return {
         // ROUTED HERE AND NOWHERE ELSE (#58). The action said where; this is

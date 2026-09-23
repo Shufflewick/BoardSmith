@@ -13,7 +13,8 @@ Status: proposed
 
 <!-- PARSE CONTRACT (TMPL-02): this file must contain, in order: this Status line, "## ui:",
      "## Ceremony", "## Step Checklist", "## Interpretation", "## Visibility Declaration",
-     "## Newly Discovered Citations", "## Redteam Rounds", "## Findings Ledger", "## Revision Rounds",
+     "## Newly Discovered Citations", "## Redteam Rounds", "## Constraints Review", "## Findings Ledger",
+     "## Revision Rounds",
      "## Spec Manifest", "## Build Manifest", "## Playtest Test Script",
      "## Verified Checklist", "## Sign-off", "## Verified Commit Hash", "## Verified Against",
      "## Rules Staleness". If any required
@@ -134,6 +135,12 @@ full
 - coverage: <missing interactions found, or "none">
 - disposition: <cleared | re-investigate dispatched | escalation open at ask>
 -->
+
+## Constraints Review
+<!-- Written by audit from the constraints lens (build/audit.md): one line per hard constraint
+     in design/CONSTRAINTS.md, "- C<n>: held. <citation>", or "not applicable" or "violated".
+     `boardsmith constraint-check <slug>` and `boardsmith chunk-signoff` refuse a missing
+     verdict, a verdict with no citation, and any "violated". -->
 
 ## Findings Ledger
 <!-- Populated by audit. Each finding gets a stable ID (e.g. F1, F2, ...) that never changes or
