@@ -7,6 +7,7 @@ import {
   extractSection,
   parseBuildManifest,
   parseInterpretationClaims,
+  parseSupersededClaims,
   extractVerifiedCommitHash,
   parseRulings,
   resolveManifestPath,
@@ -276,6 +277,25 @@ describe('parseInterpretationClaims', () => {
     expect(parseInterpretationClaims(chunk)).toEqual([20, 21]);
   });
 
+  it('counts a plain numbered claim, the shape the CHUNK template writes, not only a bolded one (#290)', () => {
+    const chunk = [
+      '## Interpretation',
+      '',
+      '1. The auction house is one of the twelve amenity types — cites rulebook/04.md',
+      '   continued on a second line.',
+      '2. **The market is global.**',
+      '1. <!-- claim text --> — cites <!-- rulebook section / RULINGS.md entry -->',
+      '',
+      '## Build Manifest',
+      '',
+    ].join('\n');
+    expect(parseInterpretationClaims(chunk)).toEqual([1, 2]);
+    // The template's unfilled placeholder is not a claim.
+    expect(
+      parseInterpretationClaims('## Interpretation\n\n1. <!-- claim text --> — cites <!-- x -->\n'),
+    ).toEqual([]);
+  });
+
   it('returns [] when there is no Interpretation section', () => {
     const chunk = '## Build Manifest\n\n| File | Status |\n|---|---|\n';
     expect(parseInterpretationClaims(chunk)).toEqual([]);
@@ -286,6 +306,28 @@ describe('parseInterpretationClaims', () => {
       '\n',
     );
     expect(parseInterpretationClaims(chunk)).toEqual([3, 5]);
+  });
+});
+
+describe('parseSupersededClaims', () => {
+  it('reads the claims a later claim supersedes, in either wording investigate and redteam use (#290)', () => {
+    const chunk = [
+      '## Interpretation',
+      '',
+      '7. [superseded by claim 12 — do not review] the old text',
+      '8. The market is global.',
+      '12. **Supersedes claim 7 per redteam objection** — the corrected text',
+      '13. Supersedes claims 3 and 5, restating both.',
+      "14. **Supersedes claim 8's closing sentence**, which was wrong; claim 8 otherwise stands.",
+      '15. SUPERSEDES CLAIM 9 ON THE GEM COUNT only.',
+      '16. Supersedes claim 10 in full.',
+      '',
+      '## Playtest Test Script',
+      '',
+      '1. Supersedes claim 8 in prose outside the section does not count.',
+      '',
+    ].join('\n');
+    expect(parseSupersededClaims(chunk)).toEqual([3, 5, 7, 10]);
   });
 });
 
