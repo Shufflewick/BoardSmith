@@ -16,7 +16,6 @@ import { worldAction, type WorldDefinition } from './index.js';
 import { createTestWorld } from '../testing/test-world.js';
 
 class Room extends Space<PeekWorld> {
-  // fallow-ignore-next-line unused-class-member
   visits = '';
 }
 

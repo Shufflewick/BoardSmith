@@ -139,3 +139,5 @@ export function isDesignArtifact(path: string): boolean {
   if (normalized.startsWith(`${CHUNKS_DIR}/`)) return true;
   return (DESIGN_LEDGERS as readonly string[]).includes(normalized);
 }
+/** The project's hard constraints and every state structure that grows, with its cap (#288). */
+export const CONSTRAINTS_MD = 'CONSTRAINTS.md';
