@@ -1,7 +1,8 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
+import { spawnCli } from '../spawn-cli.test-helper.js';
 import { checkConstraints, constraintCheckCommand, type TestRunner } from './constraint-check.js';
 
 /**
@@ -284,5 +285,16 @@ describe('boardsmith constraint-check', () => {
     await fs.writeFile(join(bad, 'design/CONSTRAINTS.md'), ledger(''));
     await constraintCheckCommand(undefined, { project: bad, json: true });
     expect(process.exitCode).toBeUndefined();
+  });
+});
+
+describe('constraint-check through the real CLI entry point', () => {
+  vi.setConfig({ testTimeout: 60_000 });
+
+  it('is registered and exits 1 on an uncapped structure', async () => {
+    const project = await makeProject({ 'design/CONSTRAINTS.md': ledger('', MAIL) });
+    const refused = await spawnCli(['constraint-check', '--project', project]);
+    expect(refused.code).toBe(1);
+    expect(refused.stderr).toMatch(/G1 .* has no cap/);
   });
 });
