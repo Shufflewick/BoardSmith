@@ -365,10 +365,17 @@ async function reviewRefusals(projectDir: string, slug: string, constraints: Har
     .filter((r): r is string => r !== undefined);
 }
 
-/** Runs the project's own vitest over the named files. */
+/**
+ * Chunks built at the same time live in worktrees under `.boardsmith/worktrees/<slug>`, inside the
+ * project (#294), and Vitest's discovery walks into dot-directories, so every run leaves them out:
+ * a run in the main checkout checks the main checkout's code only.
+ */
+const OUTSIDE_THE_CHECKOUT = ['--exclude', '.boardsmith/**'];
+
+/** Runs the project's own vitest over the named files, or its whole suite when none are named. */
 export const runVitest: TestRunner = (projectDir, files) =>
   new Promise((done) => {
-    const child = spawn('npx', ['vitest', 'run', ...files], { cwd: projectDir, shell: process.platform === 'win32' });
+    const child = spawn('npx', ['vitest', 'run', ...OUTSIDE_THE_CHECKOUT, ...files], { cwd: projectDir, shell: process.platform === 'win32' });
     let output = '';
     child.stdout.on('data', (d: Buffer) => (output += d.toString()));
     child.stderr.on('data', (d: Buffer) => (output += d.toString()));

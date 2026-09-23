@@ -3,7 +3,8 @@ import { promises as fs } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { spawnCli } from '../spawn-cli.test-helper.js';
-import { checkConstraints, constraintCheckCommand, type TestRunner } from './constraint-check.js';
+import { checkConstraints, constraintCheckCommand, runVitest, type TestRunner } from './constraint-check.js';
+import { INSTALLED_MODULES } from '../../testing/installed-modules.test-helper.js';
 
 /**
  * #288: four sotf chunks closed with state that grew without limit against a 512 KiB partition
@@ -328,4 +329,25 @@ describe('provisional ids on a parallel branch, and ids used twice', () => {
     });
     expectOneRefusal(refusals, /G1 is used by 2 entries/);
   });
+});
+
+/**
+ * #294: chunks built at the same time live in worktrees under `.boardsmith/worktrees/<slug>`,
+ * inside the project. Vitest's default discovery walks into dot-directories, so without an
+ * exclusion a run in the main checkout would also run every in-progress chunk's tests.
+ */
+describe('runVitest leaves chunk worktrees out of the run', () => {
+  it('passes a project whose only failing test is inside .boardsmith/worktrees', async () => {
+    const project = await makeProject({
+      'vitest.config.mjs': 'export default { test: {} };\n',
+      'tests/ok.test.ts': "import { it } from 'vitest';\nit('holds', () => {});\n",
+      '.boardsmith/worktrees/quests/tests/wip.test.ts':
+        "import { it, expect } from 'vitest';\nit('is still being built', () => { expect(1).toBe(2); });\n",
+    });
+    await fs.symlink(INSTALLED_MODULES, join(project, 'node_modules'), 'dir');
+    const run = await runVitest(project, []);
+    expect(run.output).toContain('ok.test.ts');
+    expect(run.output).not.toContain('wip.test.ts');
+    expect(run.ok).toBe(true);
+  }, 60_000);
 });
