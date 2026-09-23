@@ -113,6 +113,22 @@ async function setStatusByHand(project: string, slug: string, status: string): P
   await fs.writeFile(path, text.replace(/^Status:.*$/m, `Status: ${status}`));
 }
 
+/** Runs chunk-check twice (the first run writes provenance) and expects the second to fail. */
+async function expectChunkCheckRefuses(project: string, slug: string): Promise<void> {
+  await chunkCheckCommand(slug, { project, json: true });
+  process.exitCode = undefined;
+  await chunkCheckCommand(slug, { project, json: true });
+  expect(process.exitCode).toBe(1);
+}
+
+/** Types `verified` into the Status line and returns what checkSignoff says, which must name the fix. */
+async function verifiedByHandProblems(project: string, slug: string): Promise<string> {
+  await setStatusByHand(project, slug, 'verified');
+  const problems = (await checkSignoff(project, slug)).join('\n');
+  expect(problems).toContain(`boardsmith chunk-signoff ${slug}`);
+  return problems;
+}
+
 describe('recordSignoff — a designer sign-off is the only way a playtested chunk becomes verified', () => {
   it('writes who, when, and which items were observed, then derives Status: verified in CHUNK.md and SKETCH.md', async () => {
     const project = await makeProject([{ slug: 'deal' }]);
@@ -345,10 +361,7 @@ describe('chunk-check and chunk-provenance-status run the sign-off check', () =>
   it('chunk-check exits non-zero on a verified chunk with no sign-off, even once provenance is current', async () => {
     const project = await makeProject([{ slug: 'deal' }]);
     await setStatusByHand(project, 'deal', 'verified');
-    await chunkCheckCommand('deal', { project, json: true }); // first run writes provenance
-    process.exitCode = undefined;
-    await chunkCheckCommand('deal', { project, json: true });
-    expect(process.exitCode).toBe(1);
+    await expectChunkCheckRefuses(project, 'deal');
   });
 
   it('chunk-check passes a verified chunk whose sign-off is recorded', async () => {
@@ -380,15 +393,9 @@ describe('a sign-off counts only for the chunk as it was signed (#295)', () => {
     expect(await readChunk(project, 'deal')).toMatch(/^Status: built$/m);
     expect(await readSketch(project)).toContain('- Status (derived from chunks/deal/CHUNK.md): built');
 
-    await setStatusByHand(project, 'deal', 'verified');
-    const problems = (await checkSignoff(project, 'deal')).join('\n');
+    const problems = await verifiedByHandProblems(project, 'deal');
     expect(problems).toMatch(/reopened/i);
-    expect(problems).toContain('boardsmith chunk-signoff deal');
-
-    await chunkCheckCommand('deal', { project, json: true });
-    process.exitCode = undefined;
-    await chunkCheckCommand('deal', { project, json: true });
-    expect(process.exitCode).toBe(1);
+    await expectChunkCheckRefuses(project, 'deal');
   });
 
   it('a code change after the sign-off voids it, even when Status is flipped by hand', async () => {
@@ -396,10 +403,7 @@ describe('a sign-off counts only for the chunk as it was signed (#295)', () => {
     await recordSignoff('deal', { project, by: 'Jane Designer', observed: '1,2', now: NOW });
     await setStatusByHand(project, 'deal', 'built');
     await fs.writeFile(join(project, 'src/deal.ts'), 'v2');
-    await setStatusByHand(project, 'deal', 'verified');
-    const problems = (await checkSignoff(project, 'deal')).join('\n');
-    expect(problems).toMatch(/src\/deal\.ts|Build Manifest/);
-    expect(problems).toContain('boardsmith chunk-signoff deal');
+    expect(await verifiedByHandProblems(project, 'deal')).toMatch(/Build Manifest/);
   });
 
   it('adding a file to the Build Manifest after the sign-off voids it', async () => {
