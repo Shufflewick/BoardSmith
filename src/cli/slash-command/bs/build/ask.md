@@ -61,6 +61,12 @@ instead of a data-model choice), naming what was assumed and why no question was
 genuine rules ambiguity that does clear the triple-gate is recorded in `RULINGS.md` instead (see
 "House-Rule / Adaptation Choices" below), never fabricated as if the rulebook had settled it.
 
+**A `Q<N>.` open question in `## Interpretation` always reaches the designer** as a part (b)
+question, unless an existing `RULINGS.md` or `QUESTIONS.md` answer already settles it. It is
+something the sources were checked for and do not say (`build/investigate.md` "Quoted Claims,
+Checked as Code"), so the triple-gate's reasonable-default escape does not apply: the answer is
+recorded as a ruling, never an invented rule.
+
 **Never re-ask an already-granted approval.** If the user already approved a choice — at this
 chunk's own earlier redteam escalation, at a prior chunk's `ask`, or as a standing `RULINGS.md`
 entry — that approval stands; re-presenting it as a fresh question wastes the user's attention and
