@@ -218,7 +218,8 @@ Pre-Existing Bug Ledger"). If neither exists, this game has hit no library gaps 
 
 **12. Ledger integrity.** Run `boardsmith ledger-check --json` and FORMAT its output — do not
 re-derive any of it here. List every finding under the ledger it names (`RULINGS.md`,
-`DECISIONS.md`, `FILINGS.md`, `RUN.md`), in plain words: which entry, and what is wrong with it.
+`DECISIONS.md`, `FILINGS.md`, `RUN.md`, or a verified chunk's `chunks/<slug>/CHUNK.md` whose cited
+evidence is not in git), in plain words: which entry or line, and what is wrong with it.
 A non-zero exit is the command reporting findings, not the command failing. If `findings` is
 empty, say the ledgers are consistent, naming the ones in `checked`. These are paperwork faults
 the next chunk's `close` must fix before it can release its lock; this skill only reports them.

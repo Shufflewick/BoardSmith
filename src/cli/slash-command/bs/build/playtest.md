@@ -35,7 +35,9 @@ skipped entirely — but its content is NOT skipped: `build/test.md`'s random-si
 pass already exercised the chunk's new behavior at `test`, and that automated result is what
 `Status: built → verified` relies on for a non-milestone or UI-less chunk. Record it with
 `boardsmith chunk-signoff <slug> --automated "<the test/sim pass that stands in, e.g. its test
-file and sim run>"`. That command writes the sign-off, derives `Status: verified` in CHUNK.md, and
+file and sim run>"`. When that evidence names a script or a capture, cite it by its committed
+`chunks/<slug>/evidence/` path; close's `boardsmith ledger-check` refuses a cited file that is not
+in git (`state-machine.md` "Project Layout"). That command writes the sign-off, derives `Status: verified` in CHUNK.md, and
 mirrors SKETCH.md's pointer (CHUNK.md first, then SKETCH.md second, per "Write Order"). It refuses an
 automated sign-off for a chunk that does need a designer playtest. Then flow straight through to
 `close`/the next chunk per
