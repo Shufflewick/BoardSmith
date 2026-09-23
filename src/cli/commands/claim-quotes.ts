@@ -285,6 +285,7 @@ function locateWithin(lines: string[], source: SourceSpec): Located {
  * (the heading line down to the next heading of the same or higher level) or a line range.
  */
 async function locate(projectDir: string, spec: string): Promise<Located> {
+  if (spec.trim() === '') return { ok: false, problem: `a location line is empty. ${FORMAT_HINT}` };
   const source = parseSpec(spec);
   if (!source) return { ok: false, problem: `"${spec}" is not a location. ${FORMAT_HINT}` };
   const file = await readSourceFile(projectDir, source.path);

@@ -91,23 +91,21 @@ full
      renumber existing claims.
 
      Every claim carries the exact source passage it rests on and where it is. `Source:` paths
-     are relative to design/; cite a Markdown source by heading or line range, and code by file
-     and line:
-
-       1. **Claim text.** Any explanation.
-          > the exact source text, copied character for character
-          Source: rulebook/08-combat.md §"The exchange"
-          > if ($roll1 > $roll2) {
-          Source: ../old/lib/combat.pm:101-103
-
-     Something no source passage backs is not a claim but an open question for the designer,
-     listing every place that was searched:
+     are relative to design/; cite a Markdown source (a slice, RULINGS.md) by heading or line
+     range, and code by file and line. Something no source passage backs is not a claim but an
+     open question for the designer, listing every place that was searched:
 
        Q1. **The question.** Why the sources do not settle it.
-          Searched: rulebook/08-combat.md §"Armour"
+          Searched: <file> §"<heading>"
 
      `boardsmith claim-quote-check <slug>` refuses a claim with no quote, a quote not found at its
-     Source, and an open question with no Searched line (build/investigate.md). -->
+     Source, and an open question with no Searched line (build/investigate.md). No real path
+     appears in this comment because chunk-check reads every slice path written anywhere in this
+     file as a citation. -->
+
+1. **<!-- claim text -->**
+   > <!-- the exact source text, copied character for character -->
+   Source: <!-- <file> §"<heading>", or <file>:<line>-<line> for code -->
 
 ## Visibility Declaration
 <!-- What is hidden from whom, keyed to the claims above (e.g. "claim 3: opponent's hand is

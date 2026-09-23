@@ -336,3 +336,16 @@ describe('claim-quote-check through the real CLI entry point', () => {
     expect(passed.code).toBe(0);
   });
 });
+
+describe('the CHUNK.md template', () => {
+  it('scaffolds an Interpretation the check refuses until a real quote and Source are written', async () => {
+    const template = await fs.readFile(
+      new URL('../slash-command/bs/templates/CHUNK.template.md', import.meta.url),
+      'utf-8',
+    );
+    await write('design/chunks/combat/CHUNK.md', template);
+    const refusals = (await checkClaimQuotes(project, 'combat')).refusals;
+    expect(refusals).toHaveLength(1);
+    expect(refusals[0]).toMatch(/Claim 1: a location line is empty/);
+  });
+});
