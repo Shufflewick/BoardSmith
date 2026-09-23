@@ -2718,14 +2718,6 @@
       ]
     },
     {
-      "content": "5d29b27cab326773",
-      "lines": 26,
-      "files": [
-        "src/cli/commands/chunk-provenance.test.ts",
-        "src/cli/commands/verify-close-record.test.ts"
-      ]
-    },
-    {
       "content": "5d455de2b0f54eec",
       "lines": 5,
       "files": [
@@ -6769,13 +6761,6 @@
       "lines": 9,
       "files": [
         "src/session/snapshot-session-host.test.ts"
-      ]
-    },
-    {
-      "content": "dc260f2a8b77eb18",
-      "lines": 10,
-      "files": [
-        "src/cli/commands/verify-classify.ts"
       ]
     },
     {

@@ -24,6 +24,7 @@ import {
   type VerifiedAgainstRecord,
 } from './chunk-provenance.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
+import { readChunkTemplate, withInterpretation, writeChunk } from './design-project.test-helper.js';
 
 /**
  * `chunk-provenance` exists because PROV-02's whole point is that a partial verification must
@@ -393,23 +394,7 @@ describe('chunk-check', () => {
    * Task 1's `<action>`), with a real `## Interpretation` citation line substituted in.
    */
   async function makeChunk(project: string, slug: string, interpretation: string): Promise<string> {
-    const template = await fs.readFile(
-      new URL('../slash-command/bs/templates/CHUNK.template.md', import.meta.url),
-      'utf-8',
-    );
-    const withInterpretation = template.replace(
-      [
-        '1. **<!-- claim text -->**',
-        '   > <!-- the exact source text, copied character for character -->',
-        '   Source: <!-- <file> §"<heading>", or <file>:<line>-<line> for code -->',
-      ].join('\n'),
-      interpretation,
-    );
-    const chunkDir = join(project, DESIGN_DIR, 'chunks', slug);
-    await fs.mkdir(chunkDir, { recursive: true });
-    const chunkPath = join(chunkDir, 'CHUNK.md');
-    await fs.writeFile(chunkPath, withInterpretation);
-    return chunkPath;
+    return writeChunk(project, slug, withInterpretation(await readChunkTemplate(), interpretation));
   }
 
   const JAB_CITES =
@@ -819,26 +804,8 @@ describe('chunk-provenance-status', () => {
     status: string,
     cites = '',
   ): Promise<string> {
-    const template = await fs.readFile(
-      new URL('../slash-command/bs/templates/CHUNK.template.md', import.meta.url),
-      'utf-8',
-    );
-    let text = template.replace(/^Status: proposed$/m, `Status: ${status}`);
-    if (cites) {
-      text = text.replace(
-        [
-        '1. **<!-- claim text -->**',
-        '   > <!-- the exact source text, copied character for character -->',
-        '   Source: <!-- <file> §"<heading>", or <file>:<line>-<line> for code -->',
-      ].join('\n'),
-        `1. A claim — cites ${cites}`,
-      );
-    }
-    const chunkDir = join(project, DESIGN_DIR, 'chunks', slug);
-    await fs.mkdir(chunkDir, { recursive: true });
-    const chunkPath = join(chunkDir, 'CHUNK.md');
-    await fs.writeFile(chunkPath, text);
-    return chunkPath;
+    const text = (await readChunkTemplate()).replace(/^Status: proposed$/m, `Status: ${status}`);
+    return writeChunk(project, slug, cites ? withInterpretation(text, `1. A claim — cites ${cites}`) : text);
   }
 
   /** Recursive path -> sha256 map, for the read-only proof. */
