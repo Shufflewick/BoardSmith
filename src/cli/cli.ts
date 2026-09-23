@@ -21,9 +21,11 @@ import {
   ingestRelabelCommand,
 } from './commands/ingest-archive.js';
 import { chunkCheckCommand, chunkProvenanceStatusCommand } from './commands/chunk-provenance.js';
+import { claimQuoteCheckCommand } from './commands/claim-quotes.js';
 import { chunkReopenCommand, chunkSignoffCommand, chunkWaiverCommand } from './commands/chunk-signoff.js';
 import { traceCheckCommand } from './commands/trace-check.js';
 import { driftCheckCommand } from './commands/drift-check.js';
+import { ledgerCheckCommand } from './commands/ledger-check.js';
 import {
   verifyRunInitCommand,
   verifyRunRecordCommand,
@@ -269,6 +271,15 @@ program
   .option('--json', 'Emit JSON instead of human-readable output')
   .action(chunkCheckCommand);
 
+// Issue #289: every Interpretation claim carries an exact quote and its location, and the quote
+// must be there. Read-only; exits non-zero on any refused claim so a build session cannot pass it.
+program
+  .command('claim-quote-check <slug>')
+  .description("Refuse a chunk's Interpretation claims that carry no exact source quote, or whose quote is not at its cited location")
+  .option('--project <dir>', 'Project directory (defaults to cwd)')
+  .option('--json', 'Emit JSON (the quotes and their sources, without the claim text) instead of human-readable output')
+  .action(claimQuoteCheckCommand);
+
 // #291: a chunk's verified status is derived from a recorded sign-off, and a playtest waiver is
 // scoped to the chunks it names and expires. Both are written here and nowhere else, so
 // `chunk-check` can refuse a verified status these did not produce.
@@ -331,6 +342,17 @@ program
   .option('--project <dir>', 'Project directory (defaults to cwd)')
   .option('--json', 'Emit JSON instead of human-readable output')
   .action(traceCheckCommand);
+
+// #293: ledger integrity (duplicate numbers, supersession pointers, filing status, run-log
+// timestamps against the commits that recorded them). Unlike the report-only sweeps above, a
+// finding exits non-zero: close runs it as a gate. It reads the tree as it stands, so the same
+// command checks a combined tree at merge time.
+program
+  .command('ledger-check')
+  .description('Check the design ledgers and the run log for numbering, supersession, status and timestamp errors')
+  .option('--project <dir>', 'Project directory (defaults to cwd)')
+  .option('--json', 'Emit JSON instead of human-readable output')
+  .action(ledgerCheckCommand);
 
 program
   .command('drift-check')

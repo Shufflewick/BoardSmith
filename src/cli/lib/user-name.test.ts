@@ -145,6 +145,7 @@ describe('every positional CLI argument is decided to be a name or a path', () =
   const NAME_ARGUMENTS: Record<string, string> = {
     'init <name>': 'commands/init.ts',
     'chunk-check <slug>': 'commands/chunk-provenance.ts',
+    'claim-quote-check <slug>': 'commands/claim-quotes.ts',
     'chunk-signoff <slug>': 'commands/chunk-signoff.ts',
     'chunk-reopen <slug>': 'commands/chunk-signoff.ts',
   };

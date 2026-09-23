@@ -24,7 +24,7 @@ user how to proceed; it does not repair them itself.
 
 This skill's whole output is a report, so it is the one place structure is welcome — but it is
 written in `${CLAUDE_SKILL_DIR}/../bs-shared/reporting.md`'s voice, not the pipeline's. Report the
-eleven items in plain words: what's done, what's left, what needs the designer, and the one command
+twelve items in plain words: what's done, what's left, what needs the designer, and the one command
 to run next. Translate every internal spelling rather than printing it (`verified (user-waived)` →
 "you chose to skip testing this one"; `rules-stale` → "needs re-testing, because the rules
 underneath it changed"; `reopen-playtest` → "you'll need to play this one again after the fix").
@@ -64,11 +64,11 @@ to proceed before continuing — this skill never silently repairs a problem it 
 guesses the intended state. If `SKETCH.md` does not exist at all, report that no project has been
 ingested yet and stop here — there is nothing to report status on.
 
-## Body: Read, Then Synthesize the Eleven Items
+## Body: Read, Then Synthesize the Twelve Items
 
 Read `SKETCH.md`'s `## Ordered Chunk List`, then the in-progress chunk's `chunks/<slug>/CHUNK.md`
 (derived below), then `ASSETS.md`, `QUESTIONS.md`, `FILINGS.md`, and `RUN.md`. Synthesize exactly
-the following eleven items — this is the
+the following twelve items — this is the
 canonical contract (see `.planning/bs-skills-plan.md` "/bs-check-status"). Do not add or omit
 items.
 
@@ -139,7 +139,7 @@ from the state just read:
   inserting, splitting, or removing a chunk), the next command is `/bs-insert-chunk` (this
   overrides the build-chunk case above).
 - (Note, not a live branch:) the no-`SKETCH.md` case is terminal at Step 0 — it stops and returns
-  "no project has been ingested yet" before this nine-item synthesis is ever reached, so this item
+  "no project has been ingested yet" before this twelve-item synthesis is ever reached, so this item
   never fires for it. Documented here only so the next-command mapping is complete: that case maps
   to `/bs-ingest-rules`.
 
@@ -216,7 +216,16 @@ does not exist, check for a pre-conversion ledger under the older hand-rolled na
 job, not this skill's (`${CLAUDE_SKILL_DIR}/../bs-shared/orchestrate/filings.md` "Adopting a
 Pre-Existing Bug Ledger"). If neither exists, this game has hit no library gaps — say that plainly.
 
-Present all eleven items together as one report, in the order above, followed by the exact next
+**12. Ledger integrity.** Run `boardsmith ledger-check --json` and FORMAT its output — do not
+re-derive any of it here. List every finding under the ledger it names (`RULINGS.md`,
+`DECISIONS.md`, `FILINGS.md`, `RUN.md`), in plain words: which entry, and what is wrong with it.
+A non-zero exit is the command reporting findings, not the command failing. If `findings` is
+empty, say the ledgers are consistent, naming the ones in `checked`. These are paperwork faults
+the next chunk's `close` must fix before it can release its lock; this skill only reports them.
+This command is read-only — item 12 does not violate this skill's no-writes-of-any-kind posture
+(see `## Read-Only Posture (explicit)` below).
+
+Present all twelve items together as one report, in the order above, followed by the exact next
 command on its own line.
 
 ## Read-Only Posture (explicit)
@@ -226,8 +235,9 @@ This skill performs **no writes** of any kind — not to `SKETCH.md`, not to any
 inside `SKETCH.md`. Items 10 and 11 read their ledgers and report them; answering a pending question
 and reporting a filing upstream are `/bs-build-game`'s jobs. Item 8's
 `boardsmith chunk-provenance-status --json` call and item 9's
-`boardsmith verify-impact-status --json` call are themselves read-only (they aggregate and report;
-neither ever writes a `CHUNK.md` or `SKETCH.md`), so neither violates this posture. It may REPORT the
+`boardsmith verify-impact-status --json` call and item 12's `boardsmith ledger-check --json` call
+are themselves read-only (they aggregate and report; none ever writes a file), so none violates
+this posture. It may REPORT the
 `## Session Lock` note it finds (cite `state-machine.md` "Session Lock") — whether a lock exists,
 which chunk it names, and whether it looks stale — but it never takes, refreshes, or clears that
 lock; refreshing a live-resume lock is `/bs-build-chunk`'s job (Step 0's "Same chunk resume"

@@ -49,13 +49,22 @@ Stop Reason: <!-- none | designer-stopped | context-ceiling | stuck | gate-open 
      filled in once, when that dispatch returns. Never delete, renumber, or rewrite an entry —
      a re-dispatch of the same chunk (after a gate is answered, or after a crash) is a NEW
      entry, not an edit of the old one. That is what makes the log a readable history of how many
-     passes a chunk actually took. -->
+     passes a chunk actually took.
+
+     CHECKED AS CODE: `boardsmith ledger-check` fails when a Dispatched at or Finished at is not a
+     clock read in that exact shape, when a finish is earlier than its dispatch, when a dispatch is
+     earlier than the one logged before it, when Outcome and Finished at disagree about whether
+     the dispatch has returned, and when a time is later than the commit in the game's history
+     that recorded it. A hand-typed or estimated time is caught by that last comparison. -->
 
 <!-- Each entry is a numbered "### Dispatch N" section with exactly these fields:
      - Chunk: the chunk slug this dispatch was for
      - Pipeline: build-chunk | build-bot | insert-chunk
      - Dispatched at: ISO timestamp from `date -u +%Y-%m-%dT%H:%M:%SZ` (never fabricated — the
        same single sanctioned clock read state-machine.md "Session Lock" requires)
+     - Finished at: `pending` while the dispatch runs, then an ISO timestamp from `date -u +%Y-%m-%dT%H:%M:%SZ`,
+       read when the dispatch returns and written together with Outcome (never fabricated, never
+       copied from another entry, never typed from memory)
      - Outcome: pending | closed | gate | filing | stuck
      - Detail: one line — for `gate`, which gate; for `filing`, the filing id; for `stuck`, what
        was stuck; for `closed`, "n/a"
@@ -66,6 +75,7 @@ Stop Reason: <!-- none | designer-stopped | context-ceiling | stuck | gate-open 
      - Chunk: core-loop
      - Pipeline: build-chunk
      - Dispatched at: 2026-08-07T14:02:11Z
+     - Finished at: 2026-08-07T14:29:02Z
      - Outcome: gate
      - Detail: design approval for the turn sequence
 
@@ -73,6 +83,7 @@ Stop Reason: <!-- none | designer-stopped | context-ceiling | stuck | gate-open 
      - Chunk: core-loop
      - Pipeline: build-chunk
      - Dispatched at: 2026-08-07T14:31:40Z
+     - Finished at: 2026-08-07T15:10:23Z
      - Outcome: closed
      - Detail: n/a
 -->

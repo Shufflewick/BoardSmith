@@ -92,6 +92,16 @@ release) and no tail detailing.
    omitting the step — a reconciliation that never appears is indistinguishable from one that
    never ran.
 
+   Then run `boardsmith ledger-check`. It checks, as code, what this reconciliation is most often
+   done wrong: a ruling, decision, filing or dispatch number used twice; an entry that a later
+   one supersedes but that does not carry its `- Superseded by:` line; a filing whose
+   `Reported:`, `Issue:` and any status banner disagree; and a `RUN.md` `Dispatched at` or
+   `Finished at` that is not a real `date -u` read (later than the commit that recorded it,
+   a finish before its dispatch, or out of order). A non-zero exit means the ledgers are wrong:
+   fix every entry it names, following the fix its message states, and run it again. This step
+   is not done, and the lock is not released, until it exits zero. Never edit around a finding
+   by renumbering a citation you have not traced, or by deleting an entry.
+
 6. **Release the lock.** The FINAL write of this Bookkeeping Sequence: set SKETCH.md's
    `Session Lock:` line back to `Session Lock: none` (`templates/SKETCH.template.md`), so a
    cleanly-closed chunk leaves NO live lock behind — cite `state-machine.md` "Session Lock" for

@@ -75,6 +75,9 @@ export const ASSETS_MD = 'ASSETS.md';
 export const DESIGN_MD = 'DESIGN.md';
 export const BRIEF_MD = 'BRIEF.md';
 export const BOARDSMITH_BUGS_MD = 'BOARDSMITH-BUGS.md';
+/** The filings ledger and the orchestrated-run journal, written by `/bs-build-game`. */
+export const FILINGS_MD = 'FILINGS.md';
+export const RUN_MD = 'RUN.md';
 /** Designer playtest waivers, written only by `boardsmith chunk-waiver` (#291). */
 export const WAIVERS_MD = 'WAIVERS.md';
 
