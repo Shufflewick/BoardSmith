@@ -4,6 +4,7 @@ import { dirname, join } from 'node:path';
 import { generateMutants, runMutationCheck } from './test-step-mutation.js';
 import { parseSource } from './test-step-ast.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
+import { designProjectFixtures } from './design-project.test-helper.js';
 import { INSTALLED_MODULES } from '../../testing/installed-modules.test-helper.js';
 
 const lines = (...n: number[]) => new Set(n);
@@ -59,11 +60,7 @@ const LIMIT: 3 = 3;
 
 async function makeProject(files: Record<string, string>): Promise<string> {
   const tree = tempTree('bs-mutation-');
-  const project = join(tree, 'project');
-  for (const [rel, text] of Object.entries(files)) {
-    await fs.mkdir(dirname(join(project, rel)), { recursive: true });
-    await fs.writeFile(join(project, rel), text);
-  }
+  const project = await designProjectFixtures(() => tree).makeProject(files);
   await fs.symlink(INSTALLED_MODULES, join(project, 'node_modules'), 'dir');
   return project;
 }
