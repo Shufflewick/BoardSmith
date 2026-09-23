@@ -336,10 +336,36 @@ describe('ledgerCheck — the whole project', () => {
     });
     commitAt(dir, '2026-09-23T12:00:00Z');
     const result = await ledgerCheck(dir);
-    expect(result.findings.map((f) => `${f.ledger}:${f.entry}:${f.kind}`)).toEqual([
+    expect(result.findings.map((f) => `${f.ledger}:${f.entry}:${f.kind}`)).toContain(
       'RULINGS.md:Ruling @trading.1:duplicate-number',
+    );
+    expect(result.findings.map((f) => `${f.ledger}:${f.entry}:${f.kind}`)).toContain(
       'QUESTIONS.md:Question 3:duplicate-number',
+    );
+  });
+
+  it('fails a provisional id in the main checkout, where only chunk-merge may land one (#294)', async () => {
+    const dir = await project({
+      'RULINGS.md': ruling(1) + '### Ruling @trading.1\n- Decision: merged by hand.\n',
+      'CONSTRAINTS.md': '# Constraints\n\n## Growing Structures\n\n### G@trading.1\n- State: x\n',
+    });
+    commitAt(dir, '2026-09-23T12:00:00Z');
+    const result = await ledgerCheck(dir);
+    expect(result.findings.map((f) => `${f.ledger}:${f.entry}:${f.kind}`)).toEqual([
+      'RULINGS.md:Ruling @trading.1:provisional-on-main-line',
+      'CONSTRAINTS.md:G@trading.1:provisional-on-main-line',
     ]);
+    expect(result.findings[0].detail).toContain('boardsmith chunk-merge');
+  });
+
+  it('accepts provisional ids in a chunk\'s own worktree, where a parallel branch writes them', async () => {
+    const dir = await project({ 'RULINGS.md': ruling(1) });
+    commitAt(dir, '2026-09-23T12:00:00Z');
+    const worktree = join(dirname(dir), 'wt-trading');
+    execSync(`git worktree add -q -b chunk/trading ${worktree}`, { cwd: dir, stdio: 'ignore' });
+    await fs.appendFile(join(worktree, 'design', 'RULINGS.md'), '### Ruling @trading.1\n- Decision: x.\n');
+    commitAt(worktree, '2026-09-23T12:30:00Z');
+    expect((await ledgerCheck(worktree)).findings).toEqual([]);
   });
 
   it('passes a committed log whose times precede their commits, and reports absent ledgers', async () => {

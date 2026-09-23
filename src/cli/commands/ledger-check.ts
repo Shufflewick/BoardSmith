@@ -12,6 +12,8 @@
  *   - RULINGS.md, DECISIONS.md, FILINGS.md, QUESTIONS.md: no entry number, and no provisional id
  *     (`Ruling @<slug>.<n>`, #294), used twice; every `supersedes X N` is matched by
  *     `- Superseded by: X M` on entry N itself, and every pointer names a real entry.
+ *   - Every numbered ledger, CONSTRAINTS.md included: no provisional id in the main checkout. Only a
+ *     chunk's own worktree holds them, and `boardsmith chunk-merge` allocates them as it merges.
  *   - FILINGS.md: each entry's `Reported:`, `Issue:` and any status banner agree.
  *   - run-log/<slug>.md, one per chunk (#294): every `Dispatched at` / `Finished at` is a
  *     `date -u` clock read, in order, and no later than the commit that recorded that line (or
@@ -45,7 +47,7 @@ import {
 } from '../lib/project-paths.js';
 import { CHUNK_EVIDENCE_DIR, citedEvidencePaths, resolveCitation } from '../lib/cited-evidence.js';
 import { type LedgerEntry, parseLedgerEntries, supersessionPatterns } from '../lib/ledger-entries.js';
-import { duplicateProvisionalIds } from '../lib/ledger-allocation.js';
+import { NUMBERED_LEDGER_SPECS, duplicateProvisionalIds, provisionalHeadings } from '../lib/ledger-allocation.js';
 import { checkCrossChunkLedger } from './cross-chunk.js';
 
 export type LedgerFindingKind =
@@ -57,6 +59,7 @@ export type LedgerFindingKind =
   | 'run-timestamp'
   | 'run-log-misplaced'
   | 'cross-chunk-unreviewed'
+  | 'provisional-on-main-line'
   | 'evidence-not-committed';
 
 export interface LedgerFinding {
@@ -479,6 +482,40 @@ export function checkRunLog(
   return findings;
 }
 
+/** True in a repository's main checkout; false in a linked worktree (`git worktree add`). */
+async function isMainCheckout(projectDir: string): Promise<boolean> {
+  const [gitDir, commonDir] = (await git(projectDir, ['rev-parse', '--git-dir', '--git-common-dir'])).trim().split('\n');
+  return pathResolve(projectDir, gitDir) === pathResolve(projectDir, commonDir);
+}
+
+/**
+ * A provisional id (`Ruling @<slug>.<n>`) is written on a chunk's parallel branch, in its own
+ * worktree, and `boardsmith chunk-merge` turns it into a real number as it lands (#294). One in the
+ * main checkout means a branch was merged some other way, skipping the allocation and every
+ * combined-tree check that goes with it.
+ */
+async function provisionalOnMainLine(projectDir: string): Promise<LedgerFinding[]> {
+  const found: LedgerFinding[] = [];
+  for (const spec of NUMBERED_LEDGER_SPECS) {
+    const text = await readLedger(projectDir, spec.file);
+    for (const id of text === undefined ? [] : provisionalHeadings(text, spec)) {
+      found.push({
+        ledger: spec.file,
+        entry: id,
+        kind: 'provisional-on-main-line',
+        detail:
+          `${id} is a provisional id, which only a chunk's own worktree may hold; it reached the main ` +
+          `checkout without \`boardsmith chunk-merge\`, so no real number was allocated and the ` +
+          `combined tree was never checked. Give it the next unused number, update every citation of ` +
+          `it, and run \`boardsmith ledger-check\` and \`boardsmith constraint-check\` on this tree.`,
+      });
+    }
+  }
+  if (found.length === 0) return [];
+  await requireGitRepo(projectDir, 'tells a chunk worktree, where provisional ids belong, from the main checkout');
+  return (await isMainCheckout(projectDir)) ? found : [];
+}
+
 /**
  * RUN.md holds only run-level lines (#294). A dispatch entry there is a log two chunks built at
  * once would both append to, which is how sotf's run log came to carry conflicting times.
@@ -695,6 +732,8 @@ export async function ledgerCheck(projectDir: string): Promise<LedgerCheckResult
     if (file === FILINGS_MD) result.findings.push(...checkFilingStatus(text));
     else evidence.push({ file, text });
   }
+
+  result.findings.push(...(await provisionalOnMainLine(projectDir)));
 
   const run = await readLedger(projectDir, RUN_MD);
   if (run === undefined) {

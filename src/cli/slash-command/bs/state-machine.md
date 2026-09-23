@@ -306,8 +306,9 @@ provisional id scoped to the chunk's own slug: `Ruling @<slug>.<n>` (and `Decisi
 ledger, and every citation of it uses that id. `boardsmith chunk-merge` allocates the real numbers
 on the combined tree and rewrites every citation. This is enforced as code: `chunk-merge` refuses a
 branch that added a real number, `ledger-check` and `constraint-check` treat a provisional id like
-any other (a duplicate is a finding), and a citation of a provisional id nobody declared stops the
-merge.
+any other (a duplicate is a finding), a citation of a provisional id nobody declared stops the
+merge, and `ledger-check` run in the main checkout fails any provisional id it finds there, since
+one can only get there by a merge that skipped `chunk-merge`.
 
 ## Git Protocol
 
