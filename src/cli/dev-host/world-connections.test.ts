@@ -85,7 +85,8 @@ afterEach(async () => {
 
 async function serve(): Promise<{ host: LocalWorldHost; port: number }> {
   const budgets = worldBudgets();
-  const store = openWorldStore(worldStorePath(tempTree('bs-world-connections-')), budgets);
+  const dir = tempTree('bs-world-connections-');
+  const store = openWorldStore(worldStorePath(dir), budgets);
   // Asked for on each message, as the dev server asks, so it may be declared
   // after the connections that read it.
   const connections = createWorldConnections(() => host);
