@@ -1048,7 +1048,7 @@ describe("#190 — a partition name that is also an Object.prototype key", () =>
  *  resident by a `touch` first, so that action's declaration has a live room
  *  to read. */
 async function engineWithRoomOneResident(
-  action: ReturnType<typeof worldAction<WorldFixtureGame>>,
+  action: ActionDefinition,
 ): Promise<BoardSmithWorldEngine> {
   const engine = new BoardSmithWorldEngine({
     game: newWorldGame(),
