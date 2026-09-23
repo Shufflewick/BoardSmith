@@ -9,6 +9,7 @@ import { computeTouchedChunks, verifyCloseRecordCommand } from './verify-close-r
 import { VERIFIED_AGAINST_BEGIN, VERIFIED_AGAINST_END } from './chunk-provenance.js';
 import { computeSourceFreeReport } from './verify-source-free.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
+import { readChunkTemplate, withInterpretation, writeChunk } from './design-project.test-helper.js';
 
 /**
  * `verify-close-record — the durable Close write (SC-3, PROV-02)`
@@ -91,21 +92,8 @@ async function makeChunk(
   slug: string,
   opts: { headSha: string; cite?: string; designerProse?: boolean } = { headSha: '' },
 ): Promise<string> {
-  const template = await fs.readFile(
-    new URL('../slash-command/bs/templates/CHUNK.template.md', import.meta.url),
-    'utf-8',
-  );
-  let text = template;
-  if (opts.cite) {
-    text = text.replace(
-      [
-        '1. **<!-- claim text -->**',
-        '   > <!-- the exact source text, copied character for character -->',
-        '   Source: <!-- <file> §"<heading>", or <file>:<line>-<line> for code -->',
-      ].join('\n'),
-      `1. A claim — cites ${opts.cite}`,
-    );
-  }
+  let text = await readChunkTemplate();
+  if (opts.cite) text = withInterpretation(text, `1. A claim — cites ${opts.cite}`);
   text = text.replace(
     '| File | Status |\n|------|--------|\n<!-- | src/... | written / pending | -->',
     '| File | Status |\n|------|--------|\n| rulebook/01-setup.md | NEW |',
@@ -119,11 +107,7 @@ async function makeChunk(
       `\n<!-- Designer prose below, after everything -->\n`;
   }
 
-  const chunkDir = join(project, DESIGN_DIR, 'chunks', slug);
-  await fs.mkdir(chunkDir, { recursive: true });
-  const chunkPath = join(chunkDir, 'CHUNK.md');
-  await fs.writeFile(chunkPath, text);
-  return chunkPath;
+  return writeChunk(project, slug, text);
 }
 
 async function sha256File(path: string): Promise<string> {

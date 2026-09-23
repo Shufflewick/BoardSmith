@@ -95,3 +95,44 @@ export async function archiveRulebookSource(project: string): Promise<ArchivedSo
   await fs.writeFile(join(project, DESIGN_DIR, archivedPath), bytes);
   return { bytes, hash, archivedPath };
 }
+
+/**
+ * The claim `CHUNK.template.md` ships in `## Interpretation`, which a fixture
+ * replaces with a real one. Held here once so a suite that scaffolds a chunk
+ * cannot keep an older spelling of it (#296).
+ */
+const INTERPRETATION_PLACEHOLDER = [
+  '1. **<!-- claim text -->**',
+  '   > <!-- the exact source text, copied character for character -->',
+  '   Source: <!-- <file> §"<heading>", or <file>:<line>-<line> for code -->',
+].join('\n');
+
+/** The real `CHUNK.template.md`, as a chunk fixture starts from it. */
+export async function readChunkTemplate(): Promise<string> {
+  return fs.readFile(new URL('../slash-command/bs/templates/CHUNK.template.md', import.meta.url), 'utf-8');
+}
+
+/**
+ * `text` with the template's placeholder claim replaced by `interpretation`.
+ *
+ * Throws when the placeholder is not there, so a template edit that changes it
+ * fails every suite that relies on it instead of leaving their chunks uncited.
+ */
+export function withInterpretation(text: string, interpretation: string): string {
+  if (!text.includes(INTERPRETATION_PLACEHOLDER)) {
+    throw new Error(
+      'CHUNK.template.md no longer carries the placeholder claim this fixture replaces. ' +
+        'Update INTERPRETATION_PLACEHOLDER in design-project.test-helper.ts to match the template.',
+    );
+  }
+  return text.replace(INTERPRETATION_PLACEHOLDER, () => interpretation);
+}
+
+/** Write `text` as `chunks/<slug>/CHUNK.md` in `project`, and return its path. */
+export async function writeChunk(project: string, slug: string, text: string): Promise<string> {
+  const chunkDir = join(project, DESIGN_DIR, 'chunks', slug);
+  await fs.mkdir(chunkDir, { recursive: true });
+  const chunkPath = join(chunkDir, 'CHUNK.md');
+  await fs.writeFile(chunkPath, text);
+  return chunkPath;
+}
