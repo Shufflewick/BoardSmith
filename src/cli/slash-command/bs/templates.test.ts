@@ -16,7 +16,8 @@
  *   ASSETS.template.md assertions)
  */
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+import { execSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import {
@@ -33,6 +34,13 @@ import {
   RULES_STALENESS_CLEAR,
   SKETCH_RULES_STALENESS_GRAMMAR,
 } from '../../commands/verify-impact.js';
+import {
+  checkNumberedLedger,
+  checkFilingStatus,
+  checkRunLog,
+  ledgerCheck,
+} from '../../commands/ledger-check.js';
+import { tempTree } from '../../../testing/temp-tree.test-helper.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -650,5 +658,76 @@ describe('decision 1 orthogonality guard — the Status enum did not move', () =
 
   it('RULES_STALENESS_CLEAR is never the same string as any Status enum value', () => {
     expect((STATUS_ENUM_VALUES as readonly string[]).includes(RULES_STALENESS_CLEAR)).toBe(false);
+  });
+});
+
+/**
+ * #293 — the ledger rules run as code (`boardsmith ledger-check`), so the templates and the check
+ * must describe the same shapes. Each test below feeds a template straight to the check: a fresh
+ * scaffold must pass, and the template's own illustrative example, uncommented, must pass too. If
+ * a template's example drifts from what the check accepts, a session copying it would fail close.
+ */
+describe('#293 — ledger templates agree with boardsmith ledger-check', () => {
+  const LEDGERS = {
+    'RULINGS.md': 'templates/RULINGS.template.md',
+    'DECISIONS.md': 'templates/DECISIONS.template.md',
+    'FILINGS.md': 'templates/FILINGS.template.md',
+    'RUN.md': 'templates/RUN.template.md',
+  } as const;
+
+  /** The template with its comment markers removed, so its examples read as real entries. */
+  const uncommented = (path: string) =>
+    read(path)
+      .replace(/<!--|-->/g, '')
+      .replace(/^[ \t]+(?=### |- )/gm, '');
+  const NOW = Date.parse('2026-09-24T00:00:00Z') / 1000;
+
+  it('RUN.template.md defines "Finished at" with the same date -u rule as "Dispatched at"', () => {
+    const run = flat(read('templates/RUN.template.md'));
+    expect(run).toMatch(/Finished at: `pending` while the dispatch runs, then an ISO timestamp from `date -u \+%Y-%m-%dT%H:%M:%SZ`/);
+    expect(run).toContain('boardsmith ledger-check');
+  });
+
+  it('each numbered ledger template documents the in-place "Superseded by" pointer', () => {
+    for (const [kind, path] of [
+      ['Ruling', LEDGERS['RULINGS.md']],
+      ['Decision', LEDGERS['DECISIONS.md']],
+      ['Filing', LEDGERS['FILINGS.md']],
+    ] as const) {
+      expect(read(path), path).toContain(`- Superseded by: ${kind} N`);
+    }
+  });
+
+  it('a freshly scaffolded project, every ledger copied from its template, passes the check', async () => {
+    const dir = tempTree('bs-ledger-templates-');
+    mkdirSync(join(dir, 'design'));
+    execSync('git init', { cwd: dir, stdio: 'ignore' });
+    for (const [file, template] of Object.entries(LEDGERS)) {
+      writeFileSync(join(dir, 'design', file), read(template));
+    }
+    const result = await ledgerCheck(dir);
+    expect(result.findings).toEqual([]);
+    expect(result.checked).toEqual(['RULINGS.md', 'DECISIONS.md', 'FILINGS.md', 'RUN.md']);
+  });
+
+  it("each template's own example, read as real entries, passes the check", () => {
+    // Guard against a vacuous pass: the examples must actually be read as entries.
+    expect(uncommented(LEDGERS['DECISIONS.md'])).toMatch(/^### Decision 3$/m);
+    expect(uncommented(LEDGERS['RUN.md'])).toMatch(/^### Dispatch 2$/m);
+
+    expect(checkNumberedLedger(uncommented(LEDGERS['RULINGS.md']), 'Ruling', 'RULINGS.md')).toEqual([]);
+    expect(checkNumberedLedger(uncommented(LEDGERS['DECISIONS.md']), 'Decision', 'DECISIONS.md')).toEqual([]);
+    const filings = uncommented(LEDGERS['FILINGS.md']);
+    expect(checkNumberedLedger(filings, 'Filing', 'FILINGS.md')).toEqual([]);
+    expect(checkFilingStatus(filings)).toEqual([]);
+    const run = uncommented(LEDGERS['RUN.md']);
+    expect(run).toMatch(/- Finished at: \d{4}-/);
+    expect(checkRunLog(run, () => null, NOW)).toEqual([]);
+  });
+
+  it("DECISIONS.template.md's supersession example is load-bearing: without its pointer the check fails", () => {
+    const withoutPointer = uncommented(LEDGERS['DECISIONS.md']).replace(/^\s*- Superseded by: Decision \d+\n/m, '');
+    const kinds = checkNumberedLedger(withoutPointer, 'Decision', 'DECISIONS.md').map((f) => f.kind);
+    expect(kinds).toEqual(['superseded-without-pointer']);
   });
 });

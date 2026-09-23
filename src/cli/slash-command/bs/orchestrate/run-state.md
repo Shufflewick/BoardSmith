@@ -62,12 +62,15 @@ Only after all six does the run dispatch anything.
 ## Writing It
 
 Every write is append-only except the two sanctioned in-place fills the template documents (an
-entry's `Outcome`/`Detail`, and the three run-level lines). Specifically:
+entry's `Finished at`/`Outcome`/`Detail`, and the three run-level lines). Specifically:
 
-- **Before** each dispatch: append a `### Dispatch N` entry with `Outcome: pending` and a fresh
-  `date -u +%Y-%m-%dT%H:%M:%SZ` clock read. This is what makes a mid-chunk crash visible on resume
-  as a dispatch that never returned.
-- **After** each dispatch returns: fill that entry's `Outcome` and `Detail` once.
+- **Before** each dispatch: append a `### Dispatch N` entry with `Outcome: pending`,
+  `Finished at: pending`, and a fresh `date -u +%Y-%m-%dT%H:%M:%SZ` clock read as `Dispatched at`.
+  This is what makes a mid-chunk crash visible on resume as a dispatch that never returned.
+- **After** each dispatch returns: run `date -u +%Y-%m-%dT%H:%M:%SZ` again and fill that entry's
+  `Finished at` with what it prints, together with `Outcome` and `Detail`, once. Never copy a time
+  from another entry or type one; `boardsmith ledger-check` compares both times against the
+  commits that recorded them and fails a time that could not have been read from the clock.
 - When a gate opens: set `Open Gate:` to that gate; when it is answered and recorded, set it back
   to `none`. A gate is never left recorded as open after its answer has landed in `QUESTIONS.md`,
   and never cleared before.

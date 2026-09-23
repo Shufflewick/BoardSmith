@@ -1672,6 +1672,16 @@ describe('PROV-01/PROV-03 — both close paths invoke chunk-check, reused by cit
     expect(close).toContain('boardsmith chunk-check');
   });
 
+  it('close.md\'s ledger reconciliation (item 5) runs `boardsmith ledger-check` and does not pass on a non-zero exit (#293)', () => {
+    const close = read('build/close.md');
+    const item5 = close.slice(
+      close.indexOf('5. **Reconcile the paperwork ledgers'),
+      close.indexOf('6. **Release the lock.**'),
+    );
+    expect(item5).toContain('boardsmith ledger-check');
+    expect(item5.replace(/\s+/g, ' ')).toMatch(/non-zero exit/i);
+  });
+
   it('playtest.md\'s Light-Path Bookkeeping cites close.md\'s Bookkeeping Sequence BY NAME and does not duplicate the chunk-check text', () => {
     const playtest = read('build/playtest.md');
     expect(playtest).toContain('## Bookkeeping Sequence');

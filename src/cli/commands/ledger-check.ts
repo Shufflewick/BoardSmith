@@ -1,0 +1,573 @@
+/**
+ * `boardsmith ledger-check` (#293): the mechanical integrity check for a game project's design
+ * ledgers and its orchestrated-run journal.
+ *
+ * The templates state these rules in prose, and a real run (Shufflewick/sotf#32, #37) broke every
+ * one of them while the prose sat there: a ruling number used twice, a decision superseded with
+ * no pointer on the old entry, a filing whose banner said posted while its fields said recorded,
+ * and run-log timestamps typed by hand that the git history contradicts. A rule that lives only
+ * in Markdown is followed by some models and not others, so this runs as code and fails loudly.
+ *
+ * It checks, in `design/`:
+ *   - RULINGS.md, DECISIONS.md, FILINGS.md: no entry number used twice; every `supersedes X N`
+ *     is matched by `- Superseded by: X M` on entry N itself, and every pointer names a real entry.
+ *   - FILINGS.md: each entry's `Reported:`, `Issue:` and any status banner agree.
+ *   - RUN.md: every `Dispatched at` / `Finished at` is a `date -u` clock read, in order, and no
+ *     later than the commit that recorded that line (or than now, for a line not yet committed).
+ *
+ * It reads the working tree as it stands, so the same command checks one branch at close time
+ * and a combined tree at merge time. READ-ONLY: it never writes a file, and the only git
+ * subcommands it runs are `rev-parse`, `ls-files` and `blame`.
+ */
+
+import { promises as fs } from 'node:fs';
+import { execFile } from 'node:child_process';
+import { resolve as pathResolve } from 'node:path';
+import {
+  DECISIONS_MD,
+  DESIGN_DIR,
+  FILINGS_MD,
+  RULINGS_MD,
+  RUN_MD,
+  designPath,
+} from '../lib/project-paths.js';
+import { type LedgerEntry, parseLedgerEntries, supersessionPatterns } from '../lib/ledger-entries.js';
+
+export type LedgerFindingKind =
+  | 'duplicate-number'
+  | 'superseded-without-pointer'
+  | 'supersession-target-missing'
+  | 'filing-status-conflict'
+  | 'filing-status-invalid'
+  | 'run-timestamp';
+
+export interface LedgerFinding {
+  ledger: string;
+  /** The entry the finding is about, e.g. `Ruling 138`. */
+  entry: string;
+  kind: LedgerFindingKind;
+  /** What is wrong and what to change, in plain language. */
+  detail: string;
+}
+
+export interface LedgerCheckResult {
+  /** Ledgers found and checked, in check order. */
+  checked: string[];
+  /** Ledgers this project does not have yet (not a finding). */
+  absent: string[];
+  findings: LedgerFinding[];
+}
+
+/** The numbered ledgers, in check order, and the heading kind each one's entries use. */
+const NUMBERED_LEDGERS = [
+  { file: RULINGS_MD, kind: 'Ruling' },
+  { file: DECISIONS_MD, kind: 'Decision' },
+  { file: FILINGS_MD, kind: 'Filing' },
+] as const;
+
+// ---------------------------------------------------------------------------------------------
+// Numbering and supersession
+// ---------------------------------------------------------------------------------------------
+
+function groupByNumber(entries: LedgerEntry[]): Map<number, LedgerEntry[]> {
+  const byNumber = new Map<number, LedgerEntry[]>();
+  for (const entry of entries) {
+    const list = byNumber.get(entry.number) ?? [];
+    list.push(entry);
+    byNumber.set(entry.number, list);
+  }
+  return byNumber;
+}
+
+function duplicateFindings(
+  byNumber: Map<number, LedgerEntry[]>,
+  kind: string,
+  ledger: string,
+): LedgerFinding[] {
+  const findings: LedgerFinding[] = [];
+  for (const [number, list] of byNumber) {
+    if (list.length < 2) continue;
+    const lines = list.map((e) => e.line);
+    findings.push({
+      ledger,
+      entry: `${kind} ${number}`,
+      kind: 'duplicate-number',
+      detail:
+        `${kind} ${number} is used ${list.length} times, at lines ${lines.slice(0, -1).join(', ')} and ` +
+        `${lines[lines.length - 1]}. A citation of "${kind} ${number}" now means two things. Keep the ` +
+        `first, give the later one the next unused number, and update every citation that meant it.`,
+    });
+  }
+  return findings;
+}
+
+function allMatches(pattern: RegExp, text: string): number[] {
+  return [...text.matchAll(new RegExp(pattern.source, 'gi'))].map((m) => Number(m[1]));
+}
+
+interface Supersession {
+  kind: string;
+  ledger: string;
+  byNumber: Map<number, LedgerEntry[]>;
+  supersedes: RegExp;
+  supersededBy: RegExp;
+}
+
+/** Findings for every `supersedes <Kind> M` written on `entry`. */
+function forwardSupersessionFindings(entry: LedgerEntry, s: Supersession): LedgerFinding[] {
+  const { kind, ledger, byNumber } = s;
+  const findings: LedgerFinding[] = [];
+  for (const target of allMatches(s.supersedes, entry.body)) {
+    const targets = byNumber.get(target);
+    if (!targets) {
+      findings.push({
+        ledger,
+        entry: `${kind} ${entry.number}`,
+        kind: 'supersession-target-missing',
+        detail:
+          `${kind} ${entry.number} (line ${entry.line}) says it supersedes ${kind} ${target}, ` +
+          `but there is no ${kind} ${target}. Correct the number it names.`,
+      });
+      continue;
+    }
+    const unmarked = targets.filter((old) => !allMatches(s.supersededBy, old.body).includes(entry.number));
+    for (const old of unmarked) {
+      findings.push({
+        ledger,
+        entry: `${kind} ${target}`,
+        kind: 'superseded-without-pointer',
+        detail:
+          `${kind} ${entry.number} (line ${entry.line}) supersedes ${kind} ${target}, but ` +
+          `${kind} ${target} (line ${old.line}) does not say so, so anyone reading it still ` +
+          `takes it as current. Add the line "- Superseded by: ${kind} ${entry.number}" to ` +
+          `${kind} ${target}.`,
+      });
+    }
+  }
+  return findings;
+}
+
+/** Findings for every in-place `Superseded by: <Kind> M` pointer on `entry` that names nothing. */
+function pointerFindings(entry: LedgerEntry, s: Supersession): LedgerFinding[] {
+  const { kind, ledger, byNumber } = s;
+  return allMatches(s.supersededBy, entry.body)
+    .filter((pointer) => !byNumber.has(pointer))
+    .map((pointer) => ({
+      ledger,
+      entry: `${kind} ${entry.number}`,
+      kind: 'supersession-target-missing' as const,
+      detail:
+        `${kind} ${entry.number} (line ${entry.line}) says it is superseded by ${kind} ${pointer}, ` +
+        `but there is no ${kind} ${pointer}. Correct the number, or add the superseding entry.`,
+    }));
+}
+
+/**
+ * Duplicate numbers and supersession pointers for one numbered ledger (`RULINGS.md`,
+ * `DECISIONS.md`, `FILINGS.md`). `kind` is the heading word, e.g. `Ruling`.
+ */
+export function checkNumberedLedger(text: string, kind: string, ledger: string): LedgerFinding[] {
+  const entries = parseLedgerEntries(text, kind);
+  const byNumber = groupByNumber(entries);
+  const supersession: Supersession = { kind, ledger, byNumber, ...supersessionPatterns(kind) };
+  return [
+    ...duplicateFindings(byNumber, kind, ledger),
+    ...entries.flatMap((entry) => [
+      ...forwardSupersessionFindings(entry, supersession),
+      ...pointerFindings(entry, supersession),
+    ]),
+  ];
+}
+
+// ---------------------------------------------------------------------------------------------
+// FILINGS.md status fields
+// ---------------------------------------------------------------------------------------------
+
+type Reported = 'recorded' | 'posted' | 'posted-by-designer' | 'declined';
+const REPORTED_VALUE = /^(recorded|posted-by-designer|posted|declined)\b/i;
+/** A status line that is not the `Reported:` field, e.g. a `**POSTED 2026-09-22: ...**` banner. */
+const STATUS_BANNER = /^[\s>*_#-]*(POSTED|RECORDED|DECLINED)\b/;
+const URL = /https?:\/\//;
+const STATUSES = 'recorded, posted, posted-by-designer or declined';
+
+function fieldValues(body: string, field: string): string[] {
+  const pattern = new RegExp(`^\\s*-\\s*${field}:[ \\t]*(.*)$`, 'gm');
+  return [...body.matchAll(pattern)].map((m) => m[1].trim());
+}
+
+function isPosted(value: Reported): boolean {
+  return value === 'posted' || value === 'posted-by-designer';
+}
+
+type Problem = { kind: LedgerFindingKind; detail: string };
+
+/** The entry's one `Reported:` status, or the problem that stops it having one. */
+function reportedStatus(body: string, where: string): Reported | Problem {
+  const raw = fieldValues(body, 'Reported');
+  if (raw.length === 0) {
+    return { kind: 'filing-status-invalid', detail: `${where} has no "- Reported:" field. Add one: ${STATUSES}.` };
+  }
+  const unknown = raw.find((v) => !REPORTED_VALUE.test(v));
+  if (unknown !== undefined) {
+    return {
+      kind: 'filing-status-invalid',
+      detail: `${where} has "Reported: ${unknown}", which is not a status. Use ${STATUSES}.`,
+    };
+  }
+  const distinct = [...new Set(raw.map((v) => REPORTED_VALUE.exec(v)![1].toLowerCase() as Reported))];
+  if (distinct.length > 1) {
+    return {
+      kind: 'filing-status-conflict',
+      detail:
+        `${where} has ${raw.length} "Reported:" fields that disagree (${distinct.join(', ')}). ` +
+        `Keep one field, holding the status that is true now.`,
+    };
+  }
+  return distinct[0];
+}
+
+/** Whether the `Issue:` field agrees with `status`. */
+function issueProblem(body: string, where: string, status: Reported): Problem | undefined {
+  const issues = fieldValues(body, 'Issue');
+  if (issues.length !== 1) {
+    return {
+      kind: 'filing-status-invalid',
+      detail: `${where} has ${issues.length} "- Issue:" fields; it needs exactly one: the issue URL, or "n/a — not posted".`,
+    };
+  }
+  const hasUrl = URL.test(issues[0]);
+  if (isPosted(status) && !hasUrl) {
+    return {
+      kind: 'filing-status-conflict',
+      detail:
+        `${where} says "Reported: ${status}" but its Issue field holds no URL. Put the issue URL in ` +
+        `"- Issue:", or set Reported back to recorded if it was never posted.`,
+    };
+  }
+  if (!isPosted(status) && hasUrl) {
+    return {
+      kind: 'filing-status-conflict',
+      detail:
+        `${where} says "Reported: ${status}" but its Issue field holds a URL. If it was posted, set ` +
+        `"- Reported: posted"; if not, set "- Issue: n/a — not posted".`,
+    };
+  }
+  return undefined;
+}
+
+/** Every status banner line in the entry that contradicts `status`. */
+function bannerProblems(body: string, where: string, status: Reported): Problem[] {
+  return body
+    .split('\n')
+    .filter((line) => !/^\s*-\s*Reported:/.test(line))
+    .filter((line) => {
+      const banner = STATUS_BANNER.exec(line)?.[1].toLowerCase();
+      if (!banner) return false;
+      return banner === 'posted' ? !isPosted(status) : banner !== status;
+    })
+    .map((line) => ({
+      kind: 'filing-status-conflict' as const,
+      detail:
+        `${where} carries the line "${line.trim()}" but its field says "Reported: ${status}". ` +
+        `The fields are what every reader acts on: make "- Reported:" and "- Issue:" true, and ` +
+        `remove the line that contradicts them.`,
+    }));
+}
+
+function filingProblems(entry: LedgerEntry): Problem[] {
+  const where = `Filing ${entry.number} (line ${entry.line})`;
+  const status = reportedStatus(entry.body, where);
+  if (typeof status !== 'string') return [status];
+  const issue = issueProblem(entry.body, where, status);
+  if (issue) return [issue];
+  return bannerProblems(entry.body, where, status);
+}
+
+/** Checks that each filing's `Reported:`, `Issue:` and any status banner tell one story. */
+export function checkFilingStatus(text: string): LedgerFinding[] {
+  return parseLedgerEntries(text, 'Filing').flatMap((entry) =>
+    filingProblems(entry).map((p) => ({ ledger: FILINGS_MD, entry: `Filing ${entry.number}`, ...p })),
+  );
+}
+
+// ---------------------------------------------------------------------------------------------
+// RUN.md timestamps
+// ---------------------------------------------------------------------------------------------
+
+/** The exact shape `date -u +%Y-%m-%dT%H:%M:%SZ` prints. */
+const CLOCK_READ = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
+const CLOCK_COMMAND = '`date -u +%Y-%m-%dT%H:%M:%SZ`';
+
+interface RunField {
+  value: string;
+  line: number;
+}
+
+function runField(entry: LedgerEntry, field: string): RunField | undefined {
+  const lines = entry.body.split('\n');
+  const pattern = new RegExp(`^\\s*-\\s*${field}:[ \\t]*(.*?)\\s*$`);
+  for (let i = 0; i < lines.length; i++) {
+    const match = pattern.exec(lines[i]);
+    if (match) return { value: match[1], line: entry.bodyLine + i };
+  }
+  return undefined;
+}
+
+function isoOf(epochSeconds: number): string {
+  return new Date(epochSeconds * 1000).toISOString().replace(/\.000Z$/, 'Z');
+}
+
+interface Clock {
+  commitTimeOfLine: (line: number) => number | null;
+  nowSeconds: number;
+}
+
+/**
+ * Parses one clock-read field and holds it to the commit that recorded it (or to now, when not
+ * committed). Returns the time, or undefined when it is not a clock read at all.
+ */
+function readClock(name: string, field: string, f: RunField, clock: Clock, out: string[]): number | undefined {
+  if (!CLOCK_READ.test(f.value)) {
+    out.push(
+      `${name} "${field}: ${f.value}" (line ${f.line}) is not a clock read. Run ${CLOCK_COMMAND} ` +
+        `and write exactly what it prints; never type or estimate a time.`,
+    );
+    return undefined;
+  }
+  const at = Date.parse(f.value) / 1000;
+  const bound = clock.commitTimeOfLine(f.line);
+  if (bound === null && at > clock.nowSeconds) {
+    out.push(`${name} "${field}: ${f.value}" (line ${f.line}) is in the future. Replace it with a real ${CLOCK_COMMAND} read.`);
+  } else if (bound !== null && at > bound) {
+    out.push(
+      `${name} ${field} ${f.value} (line ${f.line}) is later than the commit that recorded it ` +
+        `(${isoOf(bound)}), so it was not read from the clock when it was written. Replace it ` +
+        `with the time it actually happened, from ${CLOCK_COMMAND} or the git history.`,
+    );
+  }
+  return at;
+}
+
+/** Outcome and Finished at must agree about whether the dispatch has returned. */
+function pendingMismatch(name: string, outcome: string | undefined, finished: RunField): string | undefined {
+  const outcomePending = outcome === 'pending';
+  const finishPending = finished.value === 'pending';
+  if (outcomePending && !finishPending) {
+    return (
+      `${name} has "Outcome: pending" but "Finished at: ${finished.value}" (line ${finished.line}). ` +
+      `A dispatch that has not returned has "Finished at: pending"; fill both when it returns.`
+    );
+  }
+  if (!outcomePending && finishPending) {
+    return (
+      `${name} has "Outcome: ${outcome ?? '(missing)'}" but "Finished at: pending" (line ${finished.line}). ` +
+      `Run ${CLOCK_COMMAND} when the dispatch returns and write that.`
+    );
+  }
+  return undefined;
+}
+
+/** The finish-side rules: Finished at agrees with Outcome, and is not before the dispatch. */
+function finishProblems(
+  name: string,
+  entry: LedgerEntry,
+  dispatched: { field: RunField; at: number } | undefined,
+  clock: Clock,
+  out: string[],
+): void {
+  const finished = runField(entry, 'Finished at');
+  if (!finished) {
+    out.push(
+      `${name} (line ${entry.line}) has no "- Finished at:" field. Add "- Finished at: pending" ` +
+        `while it runs, and a ${CLOCK_COMMAND} read once it returns.`,
+    );
+    return;
+  }
+  const outcome = runField(entry, 'Outcome')?.value.split(/\s/)[0];
+  const mismatch = pendingMismatch(name, outcome, finished);
+  if (mismatch) {
+    out.push(mismatch);
+    return;
+  }
+  if (outcome === 'pending') return;
+  const at = readClock(name, 'Finished at', finished, clock, out);
+  if (at !== undefined && dispatched && at < dispatched.at) {
+    out.push(
+      `${name} Finished at ${finished.value} is earlier than its Dispatched at ` +
+        `${dispatched.field.value}. A dispatch cannot return before it was sent; replace the ` +
+        `finish time with the real one.`,
+    );
+  }
+}
+
+/** The dispatch-side rules; returns the dispatch time for the ordering check. */
+function dispatchProblems(
+  name: string,
+  entry: LedgerEntry,
+  clock: Clock,
+  out: string[],
+): { field: RunField; at: number } | undefined {
+  const field = runField(entry, 'Dispatched at');
+  if (!field) {
+    out.push(`${name} (line ${entry.line}) has no "- Dispatched at:" field. Add the ${CLOCK_COMMAND} read taken before it was launched.`);
+    return undefined;
+  }
+  const at = readClock(name, 'Dispatched at', field, clock, out);
+  return at === undefined ? undefined : { field, at };
+}
+
+/**
+ * Checks RUN.md's Run Log. `commitTimeOfLine(n)` returns the committer time (epoch seconds) of
+ * the commit that recorded line `n`, or null when that line is not committed yet; such a line is
+ * held to `nowSeconds` instead. A clock read taken when the line was written can never be later
+ * than the commit that recorded it.
+ */
+export function checkRunLog(
+  text: string,
+  commitTimeOfLine: (line: number) => number | null,
+  nowSeconds: number,
+): LedgerFinding[] {
+  const entries = parseLedgerEntries(text, 'Dispatch');
+  const findings = duplicateFindings(groupByNumber(entries), 'Dispatch', RUN_MD);
+  const clock: Clock = { commitTimeOfLine, nowSeconds };
+  let previous: { number: number; at: number } | undefined;
+
+  for (const entry of entries) {
+    const name = `Dispatch ${entry.number}`;
+    const out: string[] = [];
+    const dispatched = dispatchProblems(name, entry, clock, out);
+    if (dispatched && previous && dispatched.at < previous.at) {
+      out.push(
+        `${name} Dispatched at ${dispatched.field.value} is earlier than Dispatch ${previous.number}, ` +
+          `which was logged before it. The log is append-only, so dispatch times only move forward.`,
+      );
+    }
+    if (dispatched) previous = { number: entry.number, at: dispatched.at };
+    finishProblems(name, entry, dispatched, clock, out);
+    findings.push(...out.map((detail) => ({ ledger: RUN_MD, entry: name, kind: 'run-timestamp' as const, detail })));
+  }
+  return findings;
+}
+
+// ---------------------------------------------------------------------------------------------
+// Git: the commit time of each line of RUN.md
+// ---------------------------------------------------------------------------------------------
+
+function git(cwd: string, args: string[]): Promise<string> {
+  return new Promise((resolvePromise, reject) => {
+    execFile('git', args, { cwd, maxBuffer: 64 * 1024 * 1024 }, (error, stdout) => {
+      if (error) reject(error);
+      else resolvePromise(stdout.toString());
+    });
+  });
+}
+
+const UNCOMMITTED = /^0{40}$/;
+
+/**
+ * Committer time (epoch seconds) of the commit that recorded each line of `relPath`, indexed by
+ * 1-based line number; null for a line not committed yet. An untracked file is all null.
+ */
+async function lineCommitTimes(projectDir: string, relPath: string): Promise<Array<number | null>> {
+  try {
+    await git(projectDir, ['rev-parse', '--show-toplevel']);
+  } catch {
+    throw new Error(
+      `${projectDir} is not a git repository (or git is not installed).\n` +
+        `ledger-check compares ${relPath}'s timestamps against the commits that recorded them, so ` +
+        `it needs the game's git history. Run it from inside the game project, or pass --project <dir>.`,
+    );
+  }
+  try {
+    await git(projectDir, ['ls-files', '--error-unmatch', '--', relPath]);
+  } catch {
+    return [];
+  }
+  const porcelain = await git(projectDir, ['blame', '--line-porcelain', '--', relPath]);
+  const times: Array<number | null> = [];
+  let sha = '';
+  let finalLine = 0;
+  let time = 0;
+  for (const line of porcelain.split('\n')) {
+    const header = /^([0-9a-f]{40}) \d+ (\d+)/.exec(line);
+    if (header) {
+      sha = header[1];
+      finalLine = Number(header[2]);
+    } else if (line.startsWith('committer-time ')) {
+      time = Number(line.slice('committer-time '.length));
+    } else if (line.startsWith('\t')) {
+      times[finalLine] = UNCOMMITTED.test(sha) ? null : time;
+    }
+  }
+  return times;
+}
+
+// ---------------------------------------------------------------------------------------------
+// The whole project
+// ---------------------------------------------------------------------------------------------
+
+async function readLedger(projectDir: string, file: string): Promise<string | undefined> {
+  try {
+    return await fs.readFile(designPath(projectDir, file), 'utf-8');
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return undefined;
+    throw err;
+  }
+}
+
+/** Runs every ledger rule against `projectDir`'s `design/` as it stands on disk. */
+export async function ledgerCheck(projectDir: string): Promise<LedgerCheckResult> {
+  const result: LedgerCheckResult = { checked: [], absent: [], findings: [] };
+
+  for (const { file, kind } of NUMBERED_LEDGERS) {
+    const text = await readLedger(projectDir, file);
+    if (text === undefined) {
+      result.absent.push(file);
+      continue;
+    }
+    result.checked.push(file);
+    result.findings.push(...checkNumberedLedger(text, kind, file));
+    if (file === FILINGS_MD) result.findings.push(...checkFilingStatus(text));
+  }
+
+  const run = await readLedger(projectDir, RUN_MD);
+  if (run === undefined) {
+    result.absent.push(RUN_MD);
+  } else {
+    result.checked.push(RUN_MD);
+    const times = await lineCommitTimes(projectDir, `${DESIGN_DIR}/${RUN_MD}`);
+    result.findings.push(...checkRunLog(run, (line) => times[line] ?? null, Math.floor(Date.now() / 1000)));
+  }
+  return result;
+}
+
+/**
+ * `boardsmith ledger-check [--project <dir>] [--json]`. Exits non-zero when any finding is
+ * reported, so a skill step that runs it cannot pass over a broken ledger without noticing.
+ */
+export async function ledgerCheckCommand(
+  options: { project?: string; json?: boolean } = {},
+): Promise<LedgerCheckResult> {
+  const projectDir = pathResolve(options.project ?? process.cwd());
+  const result = await ledgerCheck(projectDir);
+  if (result.findings.length > 0) process.exitCode = 1;
+
+  if (options.json) {
+    console.log(JSON.stringify(result, null, 2));
+    return result;
+  }
+
+  if (result.checked.length === 0) {
+    console.log(`No ledgers in ${DESIGN_DIR}/ yet, so there is nothing to check.`);
+    return result;
+  }
+  if (result.findings.length === 0) {
+    console.log(`Ledgers consistent: ${result.checked.join(', ')}.`);
+    return result;
+  }
+  console.log(`Ledger check found ${result.findings.length} problem(s). Fix each one, then run \`boardsmith ledger-check\` again:`);
+  for (const f of result.findings) {
+    console.log(`  ${DESIGN_DIR}/${f.ledger}, ${f.entry}: ${f.detail}`);
+  }
+  return result;
+}
