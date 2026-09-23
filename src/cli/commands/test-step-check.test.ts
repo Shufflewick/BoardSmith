@@ -276,7 +276,8 @@ describe('checkTestStep (static checks)', () => {
   let project: string;
 
   beforeEach(async () => {
-    project = join(tempTree('bs-test-step-'), 'project');
+    const tree = tempTree('bs-test-step-');
+    project = join(tree, 'project');
     await fs.mkdir(project, { recursive: true });
     git(project, 'init', '-q');
     git(project, 'config', 'user.email', 't@example.com');
@@ -492,7 +493,8 @@ describe('testStepCheckCommand', () => {
   let project: string;
 
   beforeEach(async () => {
-    project = join(tempTree('bs-test-step-cmd-'), 'project');
+    const tree = tempTree('bs-test-step-cmd-');
+    project = join(tree, 'project');
     await write(project, {
       'vitest.config.ts': `import { defineConfig } from 'vitest/config';
 export default defineConfig({ test: { include: ['tests/**/*.test.ts'] } });

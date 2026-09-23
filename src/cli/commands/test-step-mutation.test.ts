@@ -58,7 +58,8 @@ const LIMIT: 3 = 3;
 // -------------------------------------------------------------------------------------------
 
 async function makeProject(files: Record<string, string>): Promise<string> {
-  const project = join(tempTree('bs-mutation-'), 'project');
+  const tree = tempTree('bs-mutation-');
+  const project = join(tree, 'project');
   for (const [rel, text] of Object.entries(files)) {
     await fs.mkdir(dirname(join(project, rel)), { recursive: true });
     await fs.writeFile(join(project, rel), text);
@@ -139,7 +140,8 @@ it('claim 1 — red', () => { expect(1).toBe(2); });
   }, 60_000);
 
   it('says how to install vitest when the project has none', async () => {
-    const project = join(tempTree('bs-mutation-'), 'project');
+    const tree = tempTree('bs-mutation-');
+    const project = join(tree, 'project');
     await fs.mkdir(join(project, 'tests'), { recursive: true });
     await expect(check(project, "it('x', () => {});\n")).rejects.toThrow(/npm install/);
   });
