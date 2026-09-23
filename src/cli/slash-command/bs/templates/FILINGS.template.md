@@ -33,8 +33,18 @@
 <!-- Entries are append-only: never delete or renumber one. The sanctioned in-place fills are an
      entry's `Reported` and `Issue` fields (recorded → posted, and the issue URL once it exists)
      and its `Workaround in the game` field when a later chunk changes how the gap is worked
-     around. A filing that turns out to be wrong is superseded by a NEW entry naming it, never
-     deleted.
+     around. A filing that turns out to be wrong is superseded by a NEW entry that says "Supersedes
+     Filing M.", never deleted, and Filing M gets one line added in place, `- Superseded by: Filing N`.
+
+     STATUS LIVES IN THE FIELDS ONLY. `Reported` and `Issue` are the status every reader acts on;
+     never add a banner line such as "POSTED <date>" above them. When a filing is posted, change
+     the two fields. `Reported: posted` or `posted-by-designer` always has the issue URL in
+     `Issue`; `recorded` or `declined` always has "n/a — not posted".
+
+     CHECKED AS CODE: `boardsmith ledger-check` fails on a filing number used twice, on a
+     supersession without its in-place pointer, on a missing or unknown `Reported` value, on two
+     `Reported` fields that disagree, on `Reported` and `Issue` disagreeing, and on a status banner
+     that contradicts `Reported`.
 
      Each entry is a numbered "### Filing N" section with exactly these fields:
      - Kind: bug | feature-request — `bug` is BoardSmith doing something it documents as working;

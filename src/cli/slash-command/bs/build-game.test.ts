@@ -319,7 +319,7 @@ describe('WF-06 — a run resumes cleanly after a /clear or a crash', () => {
     for (const value of ['active', 'paused', 'complete']) {
       expect(template).toContain(value);
     }
-    for (const field of ['Chunk:', 'Pipeline:', 'Dispatched at:', 'Outcome:', 'Detail:']) {
+    for (const field of ['Chunk:', 'Pipeline:', 'Dispatched at:', 'Finished at:', 'Outcome:', 'Detail:']) {
       expect(template, `RUN.template.md must document \`${field}\``).toContain(field);
     }
   });
@@ -409,7 +409,7 @@ describe('WF-08 — check-status reports the two new ledgers, read-only', () => 
     const checkStatus = read('check-status.md');
     expect(checkStatus).toMatch(/\*\*10\. Unanswered questions\.\*\*/);
     expect(checkStatus).toMatch(/\*\*11\. BoardSmith bugs and gaps filed\.\*\*/);
-    expect(checkStatus).toMatch(/Present all eleven items together/);
+    expect(checkStatus).toMatch(/Present all twelve items together/);
   });
 
   it('never re-poses an answered question and never reports a declined filing', () => {

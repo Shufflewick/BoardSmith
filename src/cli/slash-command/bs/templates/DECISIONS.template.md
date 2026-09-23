@@ -19,7 +19,17 @@
 
      Sessions fill this ledger, never restructure it. Entries are append-only — never edit or
      delete a prior entry, even if a later decision supersedes it (supersession is itself a new
-     entry that references the one it supersedes). -->
+     entry that references the one it supersedes).
+
+     SUPERSESSION TAKES TWO WRITES, one on each entry: the new entry says "Supersedes Decision M."
+     in its Decision, and the old entry gets one line added in place, `- Superseded by: Decision N`.
+     That added line is the only sanctioned edit to a prior entry. A decision the code no longer
+     honours is superseded this way the moment the code changes; left unmarked, the next chunk
+     cites it as authority.
+
+     CHECKED AS CODE: `boardsmith ledger-check` fails on a decision number used twice (take the
+     next unused number, never reuse one), on a "Supersedes Decision M" whose Decision M lacks the
+     `- Superseded by:` line, and on either naming a decision that does not exist. -->
 
 <!-- PARSE CONTRACT (TMPL-02): this file must contain, in order: this H1, the "## Ledger"
      heading, and (once populated) entries each carrying Decision / Rationale / Invariant. If
@@ -51,4 +61,12 @@
        RULINGS.md/CHUNK.md that reference "space 12" need no translation layer.
      - Invariant: Space traversal always computes `(currentIndex + steps) % 40`; no code path
        may special-case wraparound past space 39 back to 0.
+     - Superseded by: Decision 3
+
+     ### Decision 3
+     - Decision: Board spaces are indexed 1-40, with index 1 = GO. Supersedes Decision 2.
+     - Rationale: The move-counting UI shows the space number the rulebook prints, and a 0-based
+       index leaked into every label as an off-by-one.
+     - Invariant: Space traversal always computes `((currentIndex - 1 + steps) % 40) + 1`; no code
+       path may special-case wraparound past space 40 back to 1.
 -->
