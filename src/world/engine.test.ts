@@ -1044,6 +1044,23 @@ describe("#190 — a partition name that is also an Object.prototype key", () =>
   });
 });
 
+/** An engine offering `touch` and one action under test, with room one made
+ *  resident by a `touch` first, so that action's declaration has a live room
+ *  to read. */
+async function engineWithRoomOneResident(
+  action: ReturnType<typeof worldAction<WorldFixtureGame>>,
+): Promise<BoardSmithWorldEngine> {
+  const engine = new BoardSmithWorldEngine({
+    game: newWorldGame(),
+    seats: new Map([["player-a", 1]]),
+    store: new CountingStore(genesis()),
+    actions: [touch, action],
+    view: () => [],
+  });
+  await engine.applyCommand("player-a", { name: "touch", args: {} }, STAMP);
+  return engine;
+}
+
 describe("#219 — a declaration reads, and cannot write", () => {
   it("REFUSES an action whose needs() writes, and leaves the world alone", async () => {
     // The declaration runs BEFORE the rollback snapshot, so the write was
@@ -1062,14 +1079,7 @@ describe("#219 — a declaration reads, and cannot write", () => {
         return [ROOM_ONE];
       })
       .execute(() => {});
-    const engine = new BoardSmithWorldEngine({
-      game: newWorldGame(),
-      seats: new Map([["player-a", 1]]),
-      store: new CountingStore(genesis()),
-      actions: [touch, writing],
-      view: () => [],
-    });
-    await engine.applyCommand("player-a", { name: "touch", args: {} }, STAMP);
+    const engine = await engineWithRoomOneResident(writing);
 
     await expect(
       engine.applyCommand("player-a", { name: "declareAndWrite", args: {} }, STAMP),
@@ -1124,15 +1134,7 @@ describe("#285 — a declaration reads an element's class as that class", () => 
         return [ROOM_ONE];
       })
       .execute(() => {});
-    const engine = new BoardSmithWorldEngine({
-      game: newWorldGame(),
-      seats: new Map([["player-a", 1]]),
-      store: new CountingStore(genesis()),
-      actions: [touch, byClass],
-      view: () => [],
-    });
-    // Made resident first, so the declaration below has a room to read.
-    await engine.applyCommand("player-a", { name: "touch", args: {} }, STAMP);
+    const engine = await engineWithRoomOneResident(byClass);
 
     await engine.applyCommand("player-a", { name: "byClass", args: {} }, STAMP);
 
