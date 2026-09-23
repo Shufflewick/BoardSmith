@@ -15,7 +15,7 @@ Status: proposed
      "## Ceremony", "## Step Checklist", "## Interpretation", "## Visibility Declaration",
      "## Newly Discovered Citations", "## Redteam Rounds", "## Findings Ledger", "## Revision Rounds",
      "## Spec Manifest", "## Build Manifest", "## Playtest Test Script",
-     "## Verified Checklist", "## Verified Commit Hash", "## Verified Against",
+     "## Verified Checklist", "## Sign-off", "## Verified Commit Hash", "## Verified Against",
      "## Rules Staleness". If any required
      heading is missing, or the Status line doesn't match a recognized enum value above, a
      resuming session STOPS and asks the user — it never guesses the intended state. See
@@ -88,9 +88,24 @@ full
      the rulebook (via INDEX.md) or RULINGS.md. Every agent that reads a rulebook slice
      (investigate, redteam, audit) also reads RULINGS.md — the rulebook plus RULINGS.md together
      form the composite source of truth. Append new claims as investigate discovers them; never
-     renumber existing claims. -->
+     renumber existing claims.
 
-1. <!-- claim text --> — cites <!-- rulebook section / RULINGS.md entry -->
+     Every claim carries the exact source passage it rests on and where it is. `Source:` paths
+     are relative to design/; cite a Markdown source (a slice, RULINGS.md) by heading or line
+     range, and code by file and line. Something no source passage backs is not a claim but an
+     open question for the designer, listing every place that was searched:
+
+       Q1. **The question.** Why the sources do not settle it.
+          Searched: <file> §"<heading>"
+
+     `boardsmith claim-quote-check <slug>` refuses a claim with no quote, a quote not found at its
+     Source, and an open question with no Searched line (build/investigate.md). No real path
+     appears in this comment because chunk-check reads every slice path written anywhere in this
+     file as a citation. -->
+
+1. **<!-- claim text -->**
+   > <!-- the exact source text, copied character for character -->
+   Source: <!-- <file> §"<heading>", or <file>:<line>-<line> for code -->
 
 ## Visibility Declaration
 <!-- What is hidden from whom, keyed to the claims above (e.g. "claim 3: opponent's hand is
@@ -190,15 +205,27 @@ Second-seat leak check (if hidden info): <!-- steps, or "n/a — no hidden info 
 
 ## Verified Checklist
 <!-- Explicit item-by-item checklist confirmed by the human at playtest/close. Every item must
-     be individually checked (or the chunk recorded as `verified (user-waived)` instead — see
-     Status line above) before Status can move to `verified`. Silently marking `verified` without
-     walking this checklist is prohibited. -->
+     be individually confirmed by the designer (or the chunk waived by the designer instead; see
+     "## Sign-off" below) before Status can move to `verified`. Status moves only through
+     `boardsmith chunk-signoff`, which refuses a sign-off that leaves any item unobserved. -->
 
 - [ ] <!-- item 1 -->
 - [ ] <!-- item 2 -->
 
-<!-- If the human explicitly chooses to skip playtesting, record that honestly: set
-     Status: verified (user-waived) instead of silently marking verified. -->
+<!-- If the designer explicitly chooses to skip playtesting, that is a waiver they grant with
+     `boardsmith chunk-waiver`, naming this chunk; the sign-off below cites it and derives
+     Status: verified (user-waived). -->
+
+## Sign-off
+<!-- MACHINE-OWNED. Written by `boardsmith chunk-signoff <slug>` and by nothing else. It records
+     who signed this chunk off, when, and on what basis: the designer's observed checklist items,
+     a designer waiver that names this chunk, or (only for a chunk with no designer playtest) the
+     automated test and sim pass. The Status line above is DERIVED from this block, never typed:
+     `boardsmith chunk-check` refuses a verified Status that this block does not back. -->
+
+<!-- boardsmith:signoff:begin -->
+_Not yet signed off._
+<!-- boardsmith:signoff:end -->
 
 ## Verified Commit Hash
 <!-- Recorded at close. This is the bisect anchor for any later regression and the diff base

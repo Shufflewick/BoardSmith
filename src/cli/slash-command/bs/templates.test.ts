@@ -525,6 +525,7 @@ describe('TMPL-02 — parse-contract heading lists match each template\'s actual
       '## Build Manifest',
       '## Playtest Test Script',
       '## Verified Checklist',
+      '## Sign-off',
       '## Verified Commit Hash',
       '## Verified Against',
       '## Rules Staleness',
