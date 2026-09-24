@@ -208,6 +208,12 @@ describe('#343: a table dev host reloads its rules on the server', () => {
     }
     expect(printed).toHaveBeenCalledWith(expect.stringContaining('cannot continue on your edited rules'));
 
+    // A page that reloads is seated again (which clears its banner) and told again.
+    const before = table.sent.length;
+    await table.host.handleMessage('dev', { type: 'hello' });
+    const replayed = table.sent.slice(before).filter((e) => e.clientId === 'dev').map((e) => e.msg.type);
+    expect(replayed.indexOf('error')).toBeGreaterThan(replayed.indexOf('init'));
+
     // It does not carry on quietly: a move is refused with the same instruction.
     const refused = await table.bump();
     expect(refused).toBeUndefined();

@@ -1299,6 +1299,9 @@ export class MultiplayerHost {
     if (view !== undefined && this.session) {
       this.send(clientId, this.gameStateFrame(view, this.session.meta()));
     }
+    // A page seated into a game its rules no longer fit is told so, after the
+    // `init` that clears whatever it was showing before.
+    if (this.stranded !== null) this.send(clientId, { type: 'error', message: this.stranded });
   }
 
   private releaseSeat(clientId: string): void {
