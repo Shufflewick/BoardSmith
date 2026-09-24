@@ -928,6 +928,32 @@ describe('#167: scheduled events fire on their due time', () => {
     await host.close();
   });
 
+  it('arms a timer for the event an ARRIVAL scheduled, with no command after it (#327)', async () => {
+    // The bundle's `onArrive` verb is issued by the clock, not by a seat, so
+    // this is the road `command`'s own re-arm does not cover.
+    const kindle = worldClockAction<Village>('kindle')
+      .prompt('A seat arrives and the fire is laid')
+      .needs(() => [HEARTH])
+      .execute((_args, ctx) => {
+        ctx.world.schedule({ delayMs: 600_000, action: 'burn', args: {} });
+      });
+    const clock = testClock();
+    const { host, sent } = await attached({
+      dir,
+      clock,
+      definition: bundle({
+        world: worldBlock({ actions: [...VILLAGE_ACTIONS, kindle], presence: { onArrive: 'kindle' } }),
+      }),
+    });
+    expect(clock.armedDelay).toBe(600_000);
+
+    clock.advance(600_000);
+    clock.fireArmed();
+    await host.settled();
+    expect(JSON.stringify(last(sent, 'c1', 'world_state')?.view)).toContain('"burns":1');
+    await host.close();
+  });
+
   it('says so rather than pretending when nothing is scheduled', async () => {
     const { host, sent } = await attached({ dir });
     await host.handleMessage('c1', { type: 'fire_due' });
