@@ -14,10 +14,11 @@
  * it for something, stop, remove. A signature change is a type error, and a
  * host that no longer starts is a red test.
  *
- * What it asks for is a path nothing serves, which the world road answers
- * itself without compiling a module. A page would start Vite's dependency
- * optimiser, and stopping the host while that is still running never finishes
- * (#366).
+ * What it asks for is the world's own surface and the module that surface
+ * loads, which starts Vite's dependency optimiser, and then a path nothing
+ * serves, which the world road answers itself. The host is stopped the moment
+ * those answers are in, with the optimiser's first run still in flight: a stop
+ * then used to never finish (#366).
  */
 import { existsSync, realpathSync } from 'node:fs';
 import { join } from 'node:path';
@@ -89,6 +90,13 @@ describe('withFixtureWorld (#357)', () => {
           expect(realpathSync(join(fixture, 'node_modules', 'vue'))).toBe(
             realpathSync(join(INSTALLED_MODULES, 'vue')),
           );
+          const surface = await (await fetch(new URL(WORLD_IFRAME_PATH, hostUrl))).text();
+          const entry = [...surface.matchAll(/<script type="module" src="([^"]+)"/g)].at(-1)?.[1];
+          expect(entry, `the world surface has no module script:\n${surface}`).toBeDefined();
+          const module = await (await fetch(new URL(entry!, hostUrl))).text();
+          // The surface's module imports a pre-bundled dependency, so the
+          // optimiser is running when the host is stopped.
+          expect(module).toContain('/node_modules/.vite/deps/');
           const response = await fetch(new URL('/nothing-is-here', hostUrl));
           return { fixture, status: response.status, answer: await response.text() };
         },
