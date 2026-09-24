@@ -20,6 +20,7 @@
 import { inject, provide, type ComputedRef, type InjectionKey, type Ref } from 'vue';
 import type { GameState } from '../../client/types.js';
 import type { UseActionControllerReturn } from './useActionController.js';
+import type { TurnDeadline } from './useTurnDeadline.js';
 
 /** One player as the shell knows them. */
 export interface GameContextPlayer {
@@ -79,7 +80,7 @@ export interface PlayContext {
 }
 
 /**
- * Everything `GameShell` makes available — the shared context plus the two
+ * Everything `GameShell` makes available — the shared context plus the three
  * fields only a table has.
  *
  * Every field is reactive; read `.value` as usual. The shape is what the shell
@@ -91,6 +92,13 @@ export interface GameContext extends PlayContext {
   gameState: Ref<GameState | null>;
   /** What a time-travel step changed, or null when not time travelling. */
   timeTravelDiff: Ref<TimeTravelDiff | null>;
+  /**
+   * The host's deadline for the current step, or null when the host has set
+   * none. `remainingMs` is measured on the host's clock, floors at zero and
+   * updates while there is time left. The host closes the step at zero; a UI
+   * draws the countdown and never disables actions on its own.
+   */
+  turnDeadline: ComputedRef<TurnDeadline | null>;
 }
 
 /** The keys both backends publish. */
@@ -113,6 +121,7 @@ export const GAME_CONTEXT_KEYS: { [K in keyof GameContext]: InjectionKey<GameCon
   platformRequest: Symbol('bs:platformRequest'),
   presentation: Symbol('bs:presentation'),
   debugHighlight: Symbol('bs:debugHighlight'),
+  turnDeadline: Symbol('bs:turnDeadline'),
 };
 
 /**

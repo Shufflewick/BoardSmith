@@ -1,5 +1,5 @@
 import { mount } from '@vue/test-utils';
-import { defineComponent, h } from 'vue';
+import { defineComponent, h, type Component } from 'vue';
 import GameShell from './GameShell.vue';
 import { defineGameUIs, defaultUI } from '../game-uis.js';
 
@@ -38,9 +38,6 @@ if (typeof window.matchMedia !== 'function') {
 
 const StubBoard = defineComponent({ name: 'StubBoard', setup: () => () => h('div', 'board') });
 
-/** One UI registration, which is the least a shell will mount with. */
-const stubUis = defineGameUIs({ Stub: defaultUI(StubBoard) });
-
 const realParent = Object.getOwnPropertyDescriptor(window, 'parent');
 
 /**
@@ -73,11 +70,20 @@ interface PlatformShellOptions {
    * reaches it.
    */
   stubLobby?: boolean;
+  /**
+   * The board to register as the game's one UI. A test that asserts what a
+   * custom UI reads from the context passes a board that reads it; the default
+   * draws nothing worth asserting on.
+   */
+  board?: Component;
 }
 
 export function mountPlatformShell(options: PlatformShellOptions) {
   return mount(GameShell, {
-    props: { gameType: options.gameType, uis: stubUis },
+    props: {
+      gameType: options.gameType,
+      uis: defineGameUIs({ Stub: defaultUI(options.board ?? StubBoard) }),
+    },
     global: {
       stubs: {
         DisabledReasonTooltip: true,
