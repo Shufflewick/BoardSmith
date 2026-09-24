@@ -41,6 +41,7 @@ import type { Plugin as VitePlugin } from 'vite';
 import { worldBudgets } from '../../world/index.js';
 import type { WorldLiftOutcome, WorldMigrationOutcome } from '../../world/host/index.js';
 import type { LocalWorldHost } from '../dev-host/world-host.js';
+import { createRulesReloadQueue, type RulesReloadQueue } from '../dev-host/rules-reload-queue.js';
 import { createWorldConnections } from '../dev-host/world-connections.js';
 import { worldStorePath, type LocalWorldStore, type openWorldStore } from '../dev-host/world-store.js';
 import { announceHost, onShutdown } from '../dev-host/shutdown.js';
@@ -233,6 +234,144 @@ interface WorldDevServerOptions {
 }
 
 /**
+ * A WORLD, ITS PAGES, AND ITS RULES RELOADS: everything a world run holds
+ * except the web server in front of it.
+ *
+ * Its own function so the reload can be driven over real sockets with no Vite
+ * server in the way (`world-rules-reload.test.ts`), exactly as `boardsmith dev`
+ * runs it.
+ *
+ * Not exported: nothing names this type, it is only ever the inferred result of
+ * `openWorldRun`.
+ */
+interface WorldRun {
+  /** The pages' sockets. `accept` is what the socket path hands a connection. */
+  readonly connections: ReturnType<typeof createWorldConnections>;
+  /** Where a saved rules edit goes; every page message is admitted through it. */
+  readonly queue: RulesReloadQueue;
+  readonly seatCount: number;
+  readonly storePath: string;
+  /** Whether this world had already run genesis before this run opened it. */
+  readonly launchedBefore: boolean;
+  /**
+   * Forget every page and close the world. `close` drains the world lock
+   * before it touches the store, so an in-flight disconnect or command is
+   * finished rather than abandoned -- and the checkpoint it writes on the way
+   * out is the last write there is.
+   */
+  close(): Promise<void>;
+}
+
+/** Open the project's world on `runtime`, and reload it through `reloadRules` on every save. */
+export async function openWorldRun(
+  options: Pick<WorldDevServerOptions, 'cwd' | 'displayName' | 'runtime' | 'reloadRules'>,
+): Promise<WorldRun> {
+  // THE ONE PLACE THE BUDGETS ARE DECIDED, and they are the library's defaults
+  // rather than numbers this file invents. A laptop running different ceilings
+  // from production makes a game's local behaviour a poor guide to its
+  // published behaviour, which is the whole reason #165 made them parameters.
+  const budgets = worldBudgets();
+  const store = options.runtime.openWorldStore(worldStorePath(options.cwd), budgets);
+  const launchedBefore = store.isLaunched();
+
+  // A RULE EDIT IS A COORDINATED WORLD RELOAD (#201).
+  //
+  // The Node runtime is loaded once, before this world opens, so an author's
+  // saved rules used to reach the browser through HMR and never reach the
+  // world: the new surface offered a verb the old rules did not have, or the
+  // new shape of one they did, and the world committed the result. A durable
+  // world made of two versions is the one thing it must never be.
+  //
+  // The queue loads the new rules FIRST, so a broken edit leaves this world
+  // running on the ones it had; it takes saves one at a time; and it holds
+  // every page's messages from the save until the world runs the new rules,
+  // so a command sent while the edit was building runs on it (#379). The
+  // table road reloads through the same queue (#343). What this road adds is
+  // the swap, and the order in `reloadWorld` is the rest of the safety.
+  const queue = createRulesReloadQueue<WorldRuntime>({
+    what: 'world',
+    load: options.reloadRules,
+    adopt: reloadWorld,
+    tell: (notice) => {
+      if (notice.state === 'reloaded') {
+        // EVERY PAGE STARTS AGAIN, after the commands it sent during the
+        // rebuild have run and been answered. Vite has hot-reloaded its UI to
+        // match rules the world only now has.
+        connections.forgetAll({ type: 'world_reload' });
+        console.log(chalk.green('  Reloaded. The world is durable and running the new rules.\n'));
+        return;
+      }
+      connections.broadcast({ type: 'world_rules_reload', ...notice });
+    },
+  });
+
+  // THE PAGES OUTLIVE THE HOST: a rule edit replaces `worldHost` below, and the
+  // sockets stay where they are, so the connections ask for the current one.
+  const connections = createWorldConnections(() => worldHost, queue);
+  const hostOver = ({ gameDefinition: definition, LocalWorldHost }: WorldRuntime, over: LocalWorldStore) =>
+    new LocalWorldHost({
+      definition: definition as unknown as ConstructorParameters<
+        typeof LocalWorldHost
+      >[0]['definition'],
+      worldName: options.displayName,
+      // ONE SEED FOREVER, derived from the project rather than from the run: the
+      // same world has to come back on every wake, and a fresh seed per run
+      // would make a rebuilt world a different world.
+      seed: `world:${definition.gameType}`,
+      budgets,
+      store: over,
+      send: connections.send,
+      isOpen: connections.isOpen,
+    });
+
+  // MUTABLE, because a rule edit replaces the whole world host (#201): the
+  // rules, the store handle and the resident tree go together, or the two
+  // halves are a world made of two versions.
+  let worldHost: LocalWorldHost = hostOver(options.runtime, store);
+  reportMigration(await worldHost.start());
+
+  //   1. STOP THE OLD WORLD. `close` checkpoints whatever the resident tree
+  //      holds, so nothing a command left in memory is lost with the isolate.
+  //   2. OPEN THE SAME WORLD AGAIN, on the new rules. Genesis does not re-run
+  //      (`start` runs it only for a world that has never launched), and a
+  //      `stateVersion` bump is migrated or refused there (#200) -- the same
+  //      path a fresh `boardsmith dev` takes.
+  //   3. SEAT EVERY PAGE WHERE IT WAS, so the commands held for this reload
+  //      (#379) are still their seats' commands. The queue runs them next, and
+  //      only then tells the pages to start again.
+  //
+  // Steps 1-2 can only fail on rules that already loaded, and the refusal is
+  // the queue's to print and to answer held commands with, with the world
+  // durable on disk exactly where the old host checkpointed it.
+  async function reloadWorld(rules: WorldRuntime): Promise<void> {
+    const pages = worldHost.attachments();
+    try {
+      await worldHost.close();
+      worldHost = hostOver(rules, rules.openWorldStore(worldStorePath(options.cwd), budgets));
+      reportMigration(await worldHost.start());
+    } catch (error) {
+      throw new Error(
+        'Those rules cannot run this world, so nothing was changed on disk: ' +
+          (error instanceof Error ? error.message : String(error)),
+      );
+    }
+    for (const [clientId, seat] of pages) await worldHost.handleMessage(clientId, { type: 'attach', seat });
+  }
+
+  return {
+    connections,
+    queue,
+    seatCount: worldHost.seatCount,
+    storePath: store.path,
+    launchedBefore,
+    close: async () => {
+      connections.forgetAll();
+      await worldHost.close();
+    },
+  };
+}
+
+/**
  * A RUNNING WORLD HOST, AND THE ONE WAY TO STOP IT (#231).
  *
  * `startWorldDevServer` used to hand back nothing, and its only teardown was
@@ -283,53 +422,21 @@ export async function startWorldDevServer(
   const { created } = await ensureWorldEntry(options.cwd, options.displayName);
   const surfacePath = join(options.uiPath, WORLD_ENTRY_HTML);
 
-  // THE ONE PLACE THE BUDGETS ARE DECIDED, and they are the library's defaults
-  // rather than numbers this file invents. A laptop running different ceilings
-  // from production makes a game's local behaviour a poor guide to its
-  // published behaviour, which is the whole reason #165 made them parameters.
-  const budgets = worldBudgets();
-  const store = options.runtime.openWorldStore(worldStorePath(options.cwd), budgets);
-  const launchedBefore = store.isLaunched();
-
-  // THE PAGES OUTLIVE THE HOST: a rule edit replaces `worldHost` below, and the
-  // sockets stay where they are, so the connections ask for the current one.
-  const connections = createWorldConnections(() => worldHost);
-  const hostOver = ({ gameDefinition: definition, LocalWorldHost }: WorldRuntime, over: LocalWorldStore) =>
-    new LocalWorldHost({
-      definition: definition as unknown as ConstructorParameters<
-        typeof LocalWorldHost
-      >[0]['definition'],
-      worldName: options.displayName,
-      // ONE SEED FOREVER, derived from the project rather than from the run: the
-      // same world has to come back on every wake, and a fresh seed per run
-      // would make a rebuilt world a different world.
-      seed: `world:${definition.gameType}`,
-      budgets,
-      store: over,
-      send: connections.send,
-      isOpen: connections.isOpen,
-    });
-
-  // MUTABLE, because a rule edit replaces the whole world host (#201): the
-  // rules, the store handle and the resident tree go together, or the two
-  // halves are a world made of two versions.
-  let worldHost: LocalWorldHost = hostOver(options.runtime, store);
-
-  const started = await worldHost.start();
-  reportMigration(started);
+  // The world, its pages and its reloads, opened BEFORE anything is served.
+  const run = await openWorldRun(options);
 
   const config: WorldDevConfig = {
     displayName: options.displayName,
-    seatCount: worldHost.seatCount,
+    seatCount: run.seatCount,
     worldUrl: WORLD_IFRAME_PATH,
-    storePath: store.path,
+    storePath: run.storePath,
   };
 
   for (const line of worldDevBanner({
     worldName: options.displayName,
-    seatCount: worldHost.seatCount,
-    launched: launchedBefore,
-    storePath: store.path,
+    seatCount: run.seatCount,
+    launched: run.launchedBefore,
+    storePath: run.storePath,
   })) {
     console.log(chalk.dim(`  ${line}`));
   }
@@ -337,7 +444,7 @@ export async function startWorldDevServer(
     console.log(chalk.dim(`  Wrote ${file} -- a world project needs an entry, and this one had none.`));
   }
 
-  const worldSocket = claimWebSocketPath(WORLD_WS_PATH, connections.accept);
+  const worldSocket = claimWebSocketPath(WORLD_WS_PATH, run.connections.accept);
 
   const plugins: VitePlugin[] = [
     boardsmithWorldDevPlugin({
@@ -353,18 +460,15 @@ export async function startWorldDevServer(
   if (options.context === 'monorepo') plugins.unshift(monorepoBoardsmithResolvePlugin());
 
   // Everything the world half holds, released in the order the full teardown
-  // below releases it. `close` drains the world lock before it touches the
-  // store, so an in-flight disconnect or command is finished rather than
-  // abandoned -- and the checkpoint it writes on the way out is the last write
-  // there is.
+  // below releases it: the socket first, so no page can queue anything more,
+  // then the world (see `WorldRun.close`).
   //
   // THE WORLD IS CLOSED, NOT DELETED. A persistent world that erased itself
   // when its host stopped would be a session; `--reset` is the only thing that
   // removes one.
   const releaseWorld = async (): Promise<void> => {
     worldSocket.close();
-    connections.forgetAll();
-    await worldHost.close();
+    await run.close();
   };
 
   // A HOST THAT CANNOT SERVE HOLDS NOTHING (#345). `devCommand` refuses a taken
@@ -386,59 +490,9 @@ export async function startWorldDevServer(
     releaseWorld,
   );
 
-  // A RULE EDIT IS A COORDINATED WORLD RELOAD (#201).
-  //
-  // The Node runtime is loaded once, before this server starts, so an author's
-  // saved rules used to reach the browser through HMR and never reach the
-  // world: the new surface offered a verb the old rules did not have, or the
-  // new shape of one they did, and the world committed the result. A durable
-  // world made of two versions is the one thing it must never be.
-  //
-  // `reloadOnRulesEdit` loads the new rules FIRST, so a broken edit leaves this
-  // world running on the ones it had, and queues saves one at a time; the table
-  // road reloads through the same function (#343). What this road adds is the
-  // swap, and the order below is the rest of the safety:
-  //
-  //   1. STOP THE OLD WORLD. `close` checkpoints whatever the resident tree
-  //      holds, so nothing a command left in memory is lost with the isolate.
-  //   2. OPEN THE SAME WORLD AGAIN, on the new rules. Genesis does not re-run
-  //      (`start` runs it only for a world that has never launched), and a
-  //      `stateVersion` bump is migrated or refused there (#200) -- the same
-  //      path a fresh `boardsmith dev` takes.
-  //   3. TELL EVERY PAGE. Vite is hot-reloading the bundle's UI in the same
-  //      moment; a page that kept its socket would be new UI holding a seat in
-  //      a world that has just been rebuilt.
-  //
-  // Steps 1-2 can only fail on rules that already loaded, and the refusal is
-  // printed with the world durable on disk, exactly where the old host
-  // checkpointed it.
-  reloadOnRulesEdit({
-    vite,
-    rulesDir: join(options.cwd, 'src', 'rules'),
-    cwd: options.cwd,
-    what: 'world',
-    load: options.reloadRules,
-    adopt: reloadWorld,
-  });
-
-  async function reloadWorld(rules: WorldRuntime): Promise<void> {
-    try {
-      await worldHost.close();
-      worldHost = hostOver(rules, rules.openWorldStore(worldStorePath(options.cwd), budgets));
-      reportMigration(await worldHost.start());
-    } catch (error) {
-      console.error(
-        chalk.red('  Those rules cannot run this world, so nothing was changed on disk:'),
-        error instanceof Error ? error.message : String(error),
-      );
-      return;
-    }
-    // EVERY PAGE STARTS AGAIN. Their sockets are attached to a host that no
-    // longer exists, and their UI has just been hot-reloaded to match rules the
-    // world only now has.
-    connections.forgetAll({ type: 'world_reload' });
-    console.log(chalk.green('  Reloaded. The world is durable and running the new rules.\n'));
-  }
+  // A RULE EDIT IS A COORDINATED WORLD RELOAD (#201), heard here and carried
+  // out by the run's queue (see `openWorldRun`).
+  reloadOnRulesEdit({ vite, rulesDir: join(options.cwd, 'src', 'rules'), cwd: options.cwd, queue: run.queue });
 
   const uiPort = vite.resolvedUrls?.local[0]
     ? parseInt(new URL(vite.resolvedUrls.local[0]).port || String(options.port), 10)

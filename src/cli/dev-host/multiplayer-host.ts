@@ -25,6 +25,7 @@ import {
   type TurnBoundary,
 } from '../../session/index.js';
 import { createNodeWorldClock, type WorldHostClock } from './node-world-clock.js';
+import type { RulesReloadNotice } from './rules-reload-queue.js';
 import { dueSeats, type SeatActivityState, type GameStateSnapshot } from '../../engine/index.js';
 import { validateGameOptionSelection, type DevOptionDef } from './config-types.js';
 import {
@@ -89,7 +90,9 @@ export type HostOutbound =
   | { type: 'server_response'; requestId: string | null; result: Record<string, unknown> }
   | { type: 'follow'; enabled: boolean; seat: number }
   | { type: 'debugToggle' }
-  | { type: 'uiSwitch'; name: string };
+  | { type: 'uiSwitch'; name: string }
+  /** A saved rules edit is reloading, or has settled (#379): see `rules-reload-queue.ts`. */
+  | ({ type: 'rules_reload' } & RulesReloadNotice);
 
 /** Messages a client sends to the host. */
 export type ClientInbound =
@@ -1250,6 +1253,15 @@ export class MultiplayerHost {
       this.stranded = null;
     }
     return outcome;
+  }
+
+  /**
+   * Tell every connected page where a saved rules edit stands (#379), so it can
+   * say "Reloading rules..." while the host holds its moves.
+   */
+  // fallow-ignore-next-line unused-class-member
+  tellRulesReload(notice: RulesReloadNotice): void {
+    for (const clientId of this.connected) this.send(clientId, { type: 'rules_reload', ...notice });
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────────

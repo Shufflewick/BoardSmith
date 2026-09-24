@@ -20,6 +20,7 @@ import { createServer as createViteServer, type ViteDevServer } from 'vite';
 import { WebSocket as WsClient } from 'ws';
 
 import { claimWebSocketPath, reloadOnRulesEdit } from './dev-server.js';
+import { createRulesReloadQueue } from '../dev-host/rules-reload-queue.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
 const TEST_WS_PATH = '/__boardsmith/test-ws';
@@ -162,6 +163,16 @@ describe('a rules edit reloads the rules on the server (#201, #343)', () => {
     });
   }
 
+  /** Hear `rulesDir` the way `boardsmith dev` does, reloading through a queue made of `reload`. */
+  function watch(
+    server: ViteDevServer,
+    rulesDir: string,
+    root: string,
+    reload: Omit<Parameters<typeof createRulesReloadQueue<number>>[0], 'tell'>,
+  ): void {
+    reloadOnRulesEdit({ vite: server, rulesDir, cwd: root, queue: createRulesReloadQueue({ ...reload, tell: () => {} }) });
+  }
+
   /** Resolves on the next call of the returned function, with its argument. */
   function nextCall<T>() {
     let settle: (value: T) => void = () => {};
@@ -174,10 +185,7 @@ describe('a rules edit reloads the rules on the server (#201, #343)', () => {
     vi.spyOn(console, 'log').mockImplementation(() => {});
     const adopted = nextCall<number>();
     let loads = 0;
-    reloadOnRulesEdit({
-      vite: server,
-      rulesDir,
-      cwd: root,
+    watch(server, rulesDir, root, {
       what: 'table',
       load: async () => ++loads,
       adopt: async (rules) => adopted.fn(rules),
@@ -197,10 +205,7 @@ describe('a rules edit reloads the rules on the server (#201, #343)', () => {
     const printed = nextCall<string>();
     vi.spyOn(console, 'error').mockImplementation((...parts: unknown[]) => printed.fn(parts.join(' ')));
     const adopt = vi.fn(async () => {});
-    reloadOnRulesEdit({
-      vite: server,
-      rulesDir,
-      cwd: root,
+    watch(server, rulesDir, root, {
       what: 'table',
       load: async () => {
         throw new Error('Expected ";" but found "}"');
@@ -227,10 +232,7 @@ describe('a rules edit reloads the rules on the server (#201, #343)', () => {
     let release: () => void = () => {};
     const firstHeld = new Promise<void>((resolve) => (release = resolve));
     let loads = 0;
-    reloadOnRulesEdit({
-      vite: server,
-      rulesDir,
-      cwd: root,
+    watch(server, rulesDir, root, {
       what: 'table',
       load: async () => ++loads,
       adopt: async (rules) => {

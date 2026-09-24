@@ -22,7 +22,8 @@
  *   - the host runs rules it bundled once at startup, so a saved edit that
  *     reached only the browser left new UI acting on old rules, on either road
  *     (#201 for worlds, #343 for tables) -- which is why both reload through
- *     `reloadOnRulesEdit`;
+ *     `reloadOnRulesEdit`, into one `RulesReloadQueue` that holds moves sent
+ *     while the edit is still building (#379);
  *   - a Vite server whose listen was refused still holds the process open, so
  *     a run refused its port never exited (#345).
  *
@@ -35,10 +36,10 @@ import { join, relative } from 'node:path';
 
 import type { Duplex } from 'node:stream';
 
-import chalk from 'chalk';
 import { createServer as createViteServer, type Connect, type InlineConfig, type Plugin as VitePlugin, type ViteDevServer } from 'vite';
 import { WebSocketServer, type WebSocket } from 'ws';
 
+import type { RulesReloadQueue } from '../dev-host/rules-reload-queue.js';
 import { boardsmithSourceEntries } from './game-runtime.js';
 
 /**
@@ -234,58 +235,24 @@ export function monorepoBoardsmithResolvePlugin(): VitePlugin {
  * every later edit through Vite. Without this the page ran the edited rules and
  * the host kept the old ones until `boardsmith dev` was restarted.
  *
- * What both roads share is the order, and the order is the safety:
- *
- *   1. LOAD THE NEW RULES FIRST. A broken edit (a syntax error, a bundle that
- *      will not build) throws here, and the host is left exactly as it was,
- *      still running the rules it had. The terminal says why.
- *   2. HAND THEM TO THE HOST. What that means is the road's own business: a
- *      world reopens itself on them, a table carries its game across.
- *
- * Reloads are QUEUED, one save at a time: a save-all across four files is four
- * reloads in order, never four overlapping ones tearing each other down.
- * `adopt` reports its own failures; a throw from it is printed and the queue
- * carries on, so one bad reload never stops the next save from being heard.
+ * This is only the ear: a change under the rules directory is handed to the
+ * road's `RulesReloadQueue` the moment the watcher hears it, before anything is
+ * bundled, so the pages' messages are held from the save on (#379). Loading
+ * the new rules first, adopting them, and one save at a time are the queue's
+ * (`dev-host/rules-reload-queue.ts`).
  */
-export function reloadOnRulesEdit<R>(args: {
+export function reloadOnRulesEdit(args: {
   vite: Pick<ViteDevServer, 'watcher'>;
   /** The project's rules directory. Only a change under it reloads. */
   rulesDir: string;
   /** The project root, so the terminal names the file the way the author does. */
   cwd: string;
-  /** What is running the rules, for the terminal: "this table", "this world". */
-  what: 'table' | 'world';
-  /** Bundle and load the rules again. Must re-read the source, not a cached module. */
-  load: () => Promise<R>;
-  /** Give the loaded rules to the host. */
-  adopt: (rules: R) => Promise<void>;
+  queue: Pick<RulesReloadQueue, 'saved'>;
 }): void {
-  let reloading: Promise<void> = Promise.resolve();
-  const reload = async (named: string): Promise<void> => {
-    console.log(chalk.dim(`\n  ${named} changed -- reloading the ${args.what}'s rules...`));
-    let rules: R;
-    try {
-      rules = await args.load();
-    } catch (error) {
-      console.error(
-        chalk.red(`  Those rules did not load, so this ${args.what} is still running the ones it had:`),
-        error instanceof Error ? error.message : String(error),
-      );
-      return;
-    }
-    try {
-      await args.adopt(rules);
-    } catch (error) {
-      console.error(
-        chalk.red(`  The ${args.what} could not take the reloaded rules:`),
-        error instanceof Error ? error.message : String(error),
-      );
-    }
-  };
   args.vite.watcher.add(args.rulesDir);
   args.vite.watcher.on('change', (changed: string) => {
     if (!changed.startsWith(args.rulesDir)) return;
-    reloading = reloading.then(() => reload(relative(args.cwd, changed)));
+    void args.queue.saved(relative(args.cwd, changed));
   });
 }
 

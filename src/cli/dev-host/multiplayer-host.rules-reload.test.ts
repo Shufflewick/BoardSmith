@@ -12,10 +12,16 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import type { TableRuntime } from '../commands/dev-table-runtime.js';
+import { WebSocket } from 'ws';
+
+import { tableRulesReloadQueue, type TableRuntime } from '../commands/dev-table-runtime.js';
+import { boundaryKeyOf } from '../../session/testing/boundary-stamp.js';
+import { createDevHostConnectionHandler } from './connection-handler.js';
 import type { WorldHostClock } from './node-world-clock.js';
 import { MultiplayerHost, type HostOutbound } from './multiplayer-host.js';
 import { openTable, tableProject } from './table-host.test-helper.js';
+import { buildFailure } from './rules-project.test-helper.js';
+import { openSocketPage, serveSockets } from './socket-page.test-helper.js';
 import { createDevHostClientMemory } from './test-client-memory.js';
 
 const clients = createDevHostClientMemory();
@@ -100,7 +106,7 @@ async function openCounterTable(runtime: TableRuntime, clock = fakeClock()) {
 }
 
 /** The counter as the last frame the seat was sent shows it. */
-function shownCount(frames: Array<Extract<HostOutbound, { type: 'game_state' }>>): number {
+function shownCount(frames: ReadonlyArray<Record<string, unknown>>): number {
   const view = frames.at(-1)?.view as { state: { view: { attributes: { count: number } } } };
   return view.state.view.attributes.count;
 }
@@ -237,5 +243,133 @@ describe('#343: a table dev host reloads its rules on the server', () => {
     });
     const frames = sent.filter((m): m is Extract<HostOutbound, { type: 'game_state' }> => m.type === 'game_state');
     expect(shownCount(frames)).toBe(7);
+  }, 30_000);
+});
+
+/**
+ * #379: A MOVE SENT WHILE THE EDITED RULES ARE STILL BUILDING WAITS FOR THEM.
+ *
+ * Driven the way `boardsmith dev` runs: a real socket into the real connection
+ * handler, the queue `tableRulesReloadQueue` builds for the table road, and
+ * real bundles of the author's rules. The rebuild is held until the move has
+ * reached the host, so "sent before the bundle resolved" is a fact of the test
+ * and not a race it hopes to win.
+ */
+// Bundling is the slow part, so it happens here, while the file is collected
+// and no test timeout applies (#363).
+const pendingProject = counterProject({ step: 1, flow: FLOWS.looped });
+const beforeEdit = await pendingProject.load();
+pendingProject.save({ step: 10, flow: FLOWS.looped });
+const afterEdit = await pendingProject.load();
+const brokenEdit = await buildFailure(tableProject('bs-table-rules-broken-', 'export const gameDefinition = ;').load);
+
+const closing: Array<() => Promise<void>> = [];
+afterEach(async () => {
+  for (const close of closing.splice(0)) await close();
+});
+
+/**
+ * A table on `beforeEdit` served over a real socket, whose next reload builds
+ * `edit` (or fails with it). The rebuild finishes only once a move has reached
+ * the host, so a move sent during it is always held.
+ */
+async function serveTable(edit: TableRuntime | Error) {
+  let moveArrived: Promise<void> = Promise.resolve();
+  const load = async () => {
+    await moveArrived;
+    if (edit instanceof Error) throw edit;
+    return edit;
+  };
+  const sockets = new Map<string, WebSocket>();
+  const host = new MultiplayerHost({
+    playerCount: 1,
+    minPlayers: 1,
+    maxPlayers: 1,
+    makeSeed: () => 'rules-reload',
+    clock: fakeClock().clock,
+    executeOp: beforeEdit.rules.executeOp,
+    send: (clientId, message) => {
+      const socket = sockets.get(clientId);
+      if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message));
+    },
+  });
+  const queue = tableRulesReloadQueue({ host, running: beforeEdit.gameDefinition, load });
+  const server = await serveSockets(
+    createDevHostConnectionHandler({
+      mpHost: host,
+      clients: sockets,
+      queue,
+      onError: (error) => {
+        throw error;
+      },
+    }),
+  );
+  closing.push(server.close);
+  const page = await openSocketPage(server.port, 'dev', (f) => f.type === 'game_state');
+  let request = 0;
+  /** Bump as the page, from the board it last drew; resolves with the host's answer. */
+  const bump = () => {
+    const requestId = `bump-${++request}`;
+    const drawn = page.frames.filter((f) => f.type === 'game_state').at(-1)!;
+    const answer = page.next((f) => (f.type === 'server_response' || f.type === 'error') && f.requestId === requestId);
+    page.send({
+      type: 'server_request',
+      requestId,
+      op: 'action',
+      payload: { actionName: 'bump', args: {}, boundaryKey: boundaryKeyOf(drawn.view) },
+    });
+    return answer;
+  };
+  const count = () => shownCount(page.frames.filter((f) => f.type === 'game_state'));
+  /** Save an edit and bump while it builds; resolves with the answer once the reload has settled. */
+  const bumpDuringRebuild = async () => {
+    moveArrived = server.received((m) => m.type === 'server_request');
+    const reloaded = queue.saved('src/rules/index.ts');
+    const answer = bump();
+    await reloaded;
+    return answer;
+  };
+  return { page, bump, bumpDuringRebuild, count };
+}
+
+describe('#379: a move sent while the edited rules are still building', () => {
+  it('waits for the edited rules and runs on them', async () => {
+    const table = await serveTable(afterEdit);
+    expect(await table.bump()).toMatchObject({ type: 'server_response' });
+    await vi.waitFor(() => expect(table.count()).toBe(1));
+
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    expect(await table.bumpDuringRebuild()).toMatchObject({ type: 'server_response', result: { success: true } });
+    // 1 from the move before the save, 10 from the move sent during the rebuild.
+    await vi.waitFor(() => expect(table.count()).toBe(11));
+    await vi.waitFor(() =>
+      expect(table.page.frames.filter((f) => f.type === 'rules_reload').map((f) => f.state)).toEqual([
+        'reloading',
+        'reloaded',
+      ]),
+    );
+  }, 30_000);
+
+  it('refuses the move with the rebuild error when the edit does not build, and stays on the old rules', async () => {
+    const table = await serveTable(brokenEdit);
+    await table.bump();
+    await vi.waitFor(() => expect(table.count()).toBe(1));
+
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    const refused = await table.bumpDuringRebuild();
+    expect(refused.type).toBe('error');
+    expect(refused.message).toContain('Your edited rules did not load, so this table is still running the ones it had');
+    expect(refused.message).toContain(brokenEdit.message);
+    await vi.waitFor(() =>
+      expect(table.page.frames.filter((f) => f.type === 'rules_reload').at(-1)).toMatchObject({
+        state: 'failed',
+        message: refused.message,
+      }),
+    );
+
+    // The game is where it was, on the rules it had: the next move adds 1.
+    expect(await table.bump()).toMatchObject({ type: 'server_response', result: { success: true } });
+    await vi.waitFor(() => expect(table.count()).toBe(2));
   }, 30_000);
 });

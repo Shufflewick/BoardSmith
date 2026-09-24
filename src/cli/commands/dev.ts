@@ -6,7 +6,7 @@ import { WebSocket } from 'ws';
 import chalk from 'chalk';
 import open from 'open';
 
-import type { GameDefinition, RulesReload } from '../../session/index.js';
+import type { GameDefinition } from '../../session/index.js';
 import { DEFAULT_COLOR_PALETTE, type GameStateSnapshot } from '../../engine/index.js';
 import { MultiplayerHost, type TableRules } from '../dev-host/multiplayer-host.js';
 import { createDevHostConnectionHandler } from '../dev-host/connection-handler.js';
@@ -16,7 +16,7 @@ import { announceHost, onShutdown } from '../dev-host/shutdown.js';
 import { requireFreePort } from '../dev-host/port.js';
 import type { PersistenceStore } from '../../persistence/index.js';
 import { getProjectContext, toPosix } from './game-runtime.js';
-import { loadTableRuntime } from './dev-table-runtime.js';
+import { loadTableRuntime, tableRulesReloadQueue } from './dev-table-runtime.js';
 import { findUnknownKeys } from '../lib/config-schema.js';
 import { requireGameProject, resolveRulesDir, requireRulesIndex } from '../lib/game-project.js';
 import { resolveWorldMode } from '../lib/world-project.js';
@@ -620,53 +620,6 @@ function openDevStore(
   return devStore;
 }
 
-/**
- * What a rules edit changed that a running table host cannot take (#343).
- *
- * The seat range and the game type were read once at startup: the lobby, the
- * seat map and every start op were built from them. An edit that changes one is
- * refused by name, and the table keeps the rules it had, because running new
- * rules against a table shaped for the old ones fails somewhere much less clear.
- * Returns null when the edit is one the host can take.
- */
-export function tableShapeChange(
-  running: Pick<GameDefinition, 'gameType' | 'minPlayers' | 'maxPlayers'>,
-  edited: Pick<GameDefinition, 'gameType' | 'minPlayers' | 'maxPlayers'>,
-): string | null {
-  const changed: string[] = [];
-  if (edited.gameType !== running.gameType) {
-    changed.push(`gameType (from "${running.gameType}" to "${edited.gameType}")`);
-  }
-  if (edited.minPlayers !== running.minPlayers || edited.maxPlayers !== running.maxPlayers) {
-    changed.push(
-      `the seat range (from ${running.minPlayers}-${running.maxPlayers} to ${edited.minPlayers}-${edited.maxPlayers})`,
-    );
-  }
-  if (changed.length === 0) return null;
-  return (
-    `This edit changes ${changed.join(' and ')}, which the running table was set up from, so it ` +
-    'is still running the rules it had. Stop `boardsmith dev` and start it again to use them.'
-  );
-}
-
-/** The terminal's line for a rules reload the table took, or null when there was no game to carry. */
-export function describeTableReload(outcome: RulesReload | null): string | null {
-  if (outcome === null) return 'Reloaded. The next game starts on the edited rules.';
-  switch (outcome.kind) {
-    case 'restored':
-      return 'Reloaded. The game goes on from where it was, on the edited rules.';
-    case 'replayed':
-      return (
-        `Reloaded. The game's saved position does not fit the edited rules (${outcome.restoreError}), ` +
-        `so it was rebuilt by replaying its ${outcome.moves} move${outcome.moves === 1 ? '' : 's'} on them. ` +
-        'Any half-finished selection was dropped.'
-      );
-    case 'failed':
-      // MultiplayerHost has already said so, to the terminal and every page.
-      return null;
-  }
-}
-
 // a 460-line entrypoint over every threshold before #41 added the dev store;
 // the wiring it gained lives in `openDevStore` rather than inline. Splitting
 // the command itself is its own change.
@@ -1025,6 +978,17 @@ export async function devCommand(options: DevOptions): Promise<void> {
     // one road quietly reacquires the collision the other fixed. It is claimed
     // BEFORE the server is made, and as a plugin, because a `vite.config.ts`
     // restart replaces the HTTP server a one-time registration was on (#214).
+    // A SAVED RULES EDIT REACHES THE HOST TOO (#343), the same way it reaches a
+    // world (#201): the browser gets it through Vite, and the host through the
+    // watcher below. From the save until the table runs the new rules, every
+    // page's messages wait in this queue, so a move sent while the edit is
+    // still building runs on it (#379).
+    const rulesReload = tableRulesReloadQueue({
+      host: mpHost,
+      running: gameDefinition,
+      load: () => loadTableRuntime(rulesPath, tempDir, context),
+    });
+
     const hostSocket = claimWebSocketPath(
       '/__boardsmith/ws',
       // Per-connection WS handling (hello routing + DEF-C stale-close guard)
@@ -1034,6 +998,7 @@ export async function devCommand(options: DevOptions): Promise<void> {
       createDevHostConnectionHandler({
         mpHost,
         clients,
+        queue: rulesReload,
         onError: (err, msgType) =>
           // The message, not the error: a running dev server has nothing to
           // throw to, and a stack trace in its log is the same leak (#240).
@@ -1070,25 +1035,7 @@ export async function devCommand(options: DevOptions): Promise<void> {
       },
     }, () => hostSocket.close());
 
-    // A SAVED RULES EDIT REACHES THE HOST TOO (#343), the same way it reaches a
-    // world (#201): the browser gets it through Vite, and the host through this.
-    reloadOnRulesEdit({
-      vite,
-      rulesDir: rulesPath,
-      cwd,
-      what: 'table',
-      load: () => loadTableRuntime(rulesPath, tempDir, context),
-      adopt: async (runtime) => {
-        const refusal = tableShapeChange(gameDefinition, runtime.gameDefinition);
-        if (refusal !== null) {
-          console.error(chalk.red(`  ${refusal}`));
-          return;
-        }
-        const outcome = await mpHost.reloadRules(runtime.rules);
-        const said = describeTableReload(outcome);
-        if (said !== null) console.log(chalk.green(`  ${said}\n`));
-      },
-    });
+    reloadOnRulesEdit({ vite, rulesDir: rulesPath, cwd, queue: rulesReload });
 
     const resolvedUrl = vite.resolvedUrls?.local[0];
     const uiPort = resolvedUrl ? parseInt(new URL(resolvedUrl).port || '5173', 10) : port;

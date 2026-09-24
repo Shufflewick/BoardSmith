@@ -118,19 +118,22 @@ describe('#201: reloading a world\'s rules', () => {
     return index;
   };
 
-  it('reloads through the watcher the table road shares, which loads the new rules first', () => {
+  it('reloads through the watcher and the queue the table road shares, which loads the new rules first', () => {
     // A broken edit -- a syntax error, a bundle that will not build -- must
-    // leave the world running. `reloadOnRulesEdit` loads before it adopts, and
-    // queues saves one at a time; `dev-server.test.ts` holds both by driving it.
-    const watcher = source.indexOf('reloadOnRulesEdit({');
-    expect(watcher, 'dev-world.ts no longer reloads through reloadOnRulesEdit').toBeGreaterThan(-1);
-    expect(source.indexOf('load: options.reloadRules', watcher)).toBeGreaterThan(watcher);
-    expect(source.indexOf('adopt: reloadWorld', watcher)).toBeGreaterThan(watcher);
+    // leave the world running. The queue loads before it adopts, takes saves
+    // one at a time, and holds the pages' messages meanwhile (#379);
+    // `rules-reload-queue.test.ts` and `world-rules-reload.test.ts` hold that
+    // by driving it.
+    expect(source).toContain('queue: run.queue');
+    const queue = source.indexOf('createRulesReloadQueue<WorldRuntime>({');
+    expect(queue, 'dev-world.ts no longer reloads through the rules reload queue').toBeGreaterThan(-1);
+    expect(source.indexOf('load: options.reloadRules', queue)).toBeGreaterThan(queue);
+    expect(source.indexOf('adopt: reloadWorld', queue)).toBeGreaterThan(queue);
   });
 
-  it('reopens the same world on the new rules, and only then tells the pages', () => {
+  it('reopens the same world on the new rules, and seats the pages where they were', () => {
     expect(at('await worldHost.close()')).toBeLessThan(at('worldHost = hostOver(rules,'));
-    expect(at('worldHost = hostOver(rules,')).toBeLessThan(at("type: 'world_reload'"));
+    expect(at('worldHost = hostOver(rules,')).toBeLessThan(at("type: 'attach'"));
   });
 
   it('keeps the world when the new rules cannot run it, and says so', () => {

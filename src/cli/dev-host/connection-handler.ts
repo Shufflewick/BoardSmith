@@ -1,5 +1,19 @@
 import type { WebSocket } from 'ws';
-import type { MultiplayerHost } from './multiplayer-host.js';
+import type { ClientInbound, HostOutbound, MultiplayerHost } from './multiplayer-host.js';
+import type { RulesReloadQueue } from './rules-reload-queue.js';
+
+/**
+ * The messages that run the table's rules, and so are refused rather than run
+ * when a saved edit they were held for does not load (#379). Everything else a
+ * page sends (hello, the lobby, seats, the debug relay) still runs, on the
+ * rules the table kept.
+ */
+const RUNS_THE_RULES: ReadonlySet<ClientInbound['type']> = new Set([
+  'server_request',
+  'restart',
+  'configure',
+  'fireDeadline',
+]);
 
 /**
  * Per-connection WebSocket handler for the dev host.
@@ -16,6 +30,9 @@ import type { MultiplayerHost } from './multiplayer-host.js';
  * that stale close marks the just-reconnected client disconnected and silently
  * orphans every future broadcast/response to its seat.
  *
+ * Every message is admitted through the rules reload queue (#379), so one that
+ * arrives while a saved rules edit is still rebuilding waits for the new rules.
+ *
  * Exported and shared by the real dev server (`dev.ts`) and the DEF-C
  * regression test so the guard has exactly ONE implementation — the test
  * exercises the literal code the server runs, with no hand-mirrored copy to
@@ -24,18 +41,33 @@ import type { MultiplayerHost } from './multiplayer-host.js';
 export function createDevHostConnectionHandler(opts: {
   mpHost: Pick<MultiplayerHost, 'handleMessage' | 'disconnect'>;
   clients: Map<string, WebSocket>;
+  queue: Pick<RulesReloadQueue, 'admit'>;
   /** Called when an async message dispatch rejects; receives the failing message type. */
   onError: (err: unknown, msgType: string) => void;
 }): (socket: WebSocket) => void {
-  const { mpHost, clients, onError } = opts;
-
-  const dispatch = (clientId: string, msg: Parameters<typeof mpHost.handleMessage>[1]) => {
-    Promise.resolve(mpHost.handleMessage(clientId, msg)).catch((err) =>
-      onError(err, (msg as { type?: string }).type ?? 'unknown'),
-    );
-  };
+  const { mpHost, clients, queue, onError } = opts;
 
   return (socket: WebSocket) => {
+    const dispatch = (clientId: string, msg: ClientInbound) => {
+      const refusal = (message: string): HostOutbound => ({
+        type: 'error',
+        message,
+        requestId: 'requestId' in msg ? (msg.requestId ?? null) : null,
+      });
+      queue
+        .admit({
+          run: () => mpHost.handleMessage(clientId, msg),
+          ...(RUNS_THE_RULES.has(msg.type)
+            ? {
+                refuse: (message: string) => {
+                  if (socket.readyState === socket.OPEN) socket.send(JSON.stringify(refusal(message)));
+                },
+              }
+            : {}),
+        })
+        .catch((err: unknown) => onError(err, msg.type));
+    };
+
     let clientId: string | null = null;
 
     socket.on('message', (raw) => {
@@ -53,7 +85,7 @@ export function createDevHostConnectionHandler(opts: {
         return;
       }
       if (!clientId) return; // a client must identify itself via `hello` first
-      dispatch(clientId, msg as Parameters<typeof mpHost.handleMessage>[1]);
+      dispatch(clientId, msg as ClientInbound);
     });
 
     socket.on('close', () => {

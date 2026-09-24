@@ -180,6 +180,15 @@ export class LocalWorldHost {
     return this.#world.residencyBeforeLastWake();
   }
 
+  /**
+   * Which seat each page is looking through. A rules reload (#379) seats the
+   * same pages in the host that replaces this one, so a move a page sent while
+   * the edit was building is still that seat's move on the new rules.
+   */
+  attachments(): ReadonlyMap<string, number> {
+    return new Map(this.#attached);
+  }
+
   /** Resolves once everything queued behind the world lock has run. */
   settled(): Promise<void> {
     return this.#world.settled();

@@ -18,9 +18,8 @@ import {
   parseGameOptionFlags,
   mergeGameOptionDefinitions,
   resolvePreset,
-  tableShapeChange,
-  describeTableReload,
 } from './dev.js';
+import { describeTableReload, tableShapeChange } from './dev-table-runtime.js';
 
 /**
  * PROC-02 regressions for CLIX-01/CLIX-02/CLIX-04/CLIX-06 (135-06-PLAN.md).
@@ -359,10 +358,15 @@ describe('#343: a table reloads its rules when they are saved', () => {
   const source = readFileSync(fileURLToPath(new URL('./dev.ts', import.meta.url)), 'utf-8');
   const table = { gameType: 'counter', minPlayers: 2, maxPlayers: 4 };
 
-  it('devCommand watches the rules and hands every edit to the running host', () => {
-    const wired = source.indexOf("what: 'table'");
-    expect(wired).toBeGreaterThan(source.indexOf('reloadOnRulesEdit({'));
-    expect(source.indexOf('await mpHost.reloadRules(runtime.rules)')).toBeGreaterThan(wired);
+  it('devCommand watches the rules and hands every edit to the running host, through the queue its pages use', () => {
+    // The queue's own behaviour is driven over real sockets in
+    // `multiplayer-host.rules-reload.test.ts` (#379); what is read here is that
+    // devCommand builds one queue and gives it to both the watcher and the socket.
+    const built = source.indexOf('const rulesReload = tableRulesReloadQueue({');
+    expect(built).toBeGreaterThan(-1);
+    expect(source.indexOf('host: mpHost', built)).toBeGreaterThan(built);
+    expect(source).toContain('queue: rulesReload,');
+    expect(source).toContain('reloadOnRulesEdit({ vite, rulesDir: rulesPath, cwd, queue: rulesReload });');
   });
 
   it('takes an edit that keeps the table the same shape', () => {
