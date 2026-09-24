@@ -322,7 +322,6 @@
     "src/client/vue.test.ts:197-209|src/client/vue.test.ts:86-102",
     "src/client/vue.test.ts:146-155|src/client/vue.test.ts:197-205",
     "src/client/vue.test.ts:213-219|src/client/vue.test.ts:235-242",
-    "src/engine/action/action-builder.ts:646-671|src/engine/action/action-builder.ts:755-780",
     "src/engine/action/action.test.ts:165-175|src/engine/action/action.test.ts:2156-2164",
     "src/engine/action/action.test.ts:208-218|src/engine/action/action.test.ts:231-241",
     "src/engine/action/action.test.ts:208-214|src/engine/action/action.test.ts:231-237|src/engine/element/game-element.test.ts:72-78",

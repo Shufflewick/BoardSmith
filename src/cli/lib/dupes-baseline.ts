@@ -173,7 +173,8 @@ export function acceptedFromScan(scan: DupesScan): AcceptedDupes {
  *   it deliberately; it cannot be re-keyed away, because there is no entry to
  *   re-key.
  * - `gone` -- the record accepts duplication the tree no longer has, so a real
- *   regression could return under the old allowance.
+ *   regression could return under the old allowance. Dropping it only narrows
+ *   the record, so `rekeyDupesBaseline` does that (#353).
  *
  * Not exported: it is only ever the inferred result of `compareAcceptedDupes`.
  */
@@ -273,7 +274,13 @@ export function describeDupesDrift(drift: DupesDrift[]): string {
     for (const entry of gone) {
       lines.push(`  - ${entry.content} · ${entry.lines} lines · ${entry.files.join(', ')}`);
     }
-    lines.push('');
+    lines.push(
+      '',
+      'Drop them with `boardsmith audit --rekey-dupes` and commit the two files it',
+      'rewrites. Dropping an allowance only narrows the record, so nothing is',
+      'forgiven; the command refuses while any duplication above is unaccepted.',
+      '',
+    );
   }
 
   lines.push(

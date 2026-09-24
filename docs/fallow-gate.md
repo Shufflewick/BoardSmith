@@ -470,7 +470,7 @@ committed files come from one scan:
 
 ```bash
 boardsmith audit --dupes-baseline   # the check, which re-addresses as it goes
-boardsmith audit --rekey-dupes      # record a tree from scratch, deliberately
+boardsmith audit --rekey-dupes      # drop allowances that are gone, or record a tree from scratch
 ```
 
 The check asks two questions in order, because they have different answers:
@@ -483,14 +483,19 @@ The check asks two questions in order, because they have different answers:
   check RE-ADDRESSES them itself and says it did. See "An address move is not a
   decision" below.
 
-`--rekey-dupes` REFUSES to write anything when the content does not match. That
-is what stops it being a button that turns a red board green: new duplication
-has no entry to re-address, and there is no spelling of the command that
-accepts it. Recording a tree wholesale is a separate, deliberate act -- it
+`--rekey-dupes` REFUSES to write anything when the tree holds duplication the
+record does not accept. That is what stops it being a button that turns a red
+board green: new duplication has no entry to re-address, and there is no
+spelling of the command that accepts it. An accepted entry whose duplication is
+gone is different: dropping it only narrows the record, so `--rekey-dupes` does
+that, and the failure text for it names the command (#353). Before #353 the
+command refused that case too, the text named no command, and one stale entry
+for `action-builder.ts` failed every branch's audit until someone edited the
+record by hand. Recording a tree wholesale is a separate, deliberate act -- it
 requires the record to be absent, and it shows up as a large diff to a
 committed file, which is the point.
 
-The failure text for content that does not match deliberately does NOT name a
+The failure text for duplication nothing accepted deliberately does NOT name a
 command. It used to read "delete `.fallow-dupes-accepted.json` and run
 `--rekey-dupes`", which is the one action that widens the record wholesale: the
 visible remedy was the dangerous one, and it is what a person under time

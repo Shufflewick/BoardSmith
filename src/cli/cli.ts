@@ -193,7 +193,7 @@ export function createProgram(): Command {
     .option('--file-issue', 'Open a GitHub issue for each finding --sweep reports, one per finding, once')
     .option(
       '--rekey-dupes',
-      "Record this tree's duplication as accepted from scratch — refuses on any content mismatch",
+      "Record this tree's duplication from scratch, or drop accepted entries whose duplication is gone — refuses on any unaccepted duplication",
     )
     .action(auditCommand);
 
