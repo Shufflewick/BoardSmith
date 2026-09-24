@@ -2052,6 +2052,11 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         return { valid: false, error };
       }
 
+      // The server now holds this action pending, with this pick's onEach
+      // already run. Every later pick must continue it: sending the whole
+      // action instead would make the repeat's picks a second time (#325).
+      pendingOnServer.value = true;
+
       // Check if action is complete (termination condition met)
       if (result.actionComplete) {
         // Capture the action name before it is nulled below, then publish the

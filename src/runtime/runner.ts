@@ -569,11 +569,12 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
 
     // Check if the action failed (flow state contains error)
     if (flowState.actionError) {
-      // #44: a clean refusal mutated nothing, but a THROW out of execute() may
-      // have applied part of its changes before it stopped — leaving the tree
+      // #44: a clean refusal mutated nothing, but a THROW out of execute(), or
+      // a repeating selection refused after onEach ran for some picks (#325),
+      // may have applied part of its changes before it stopped — leaving the tree
       // half-moved while the player is told nothing happened, and persisting
       // that disagreement at the next snapshot. Undo it.
-      const rollback = flowState.actionThrew ? this.rollbackToPreActionState() : undefined;
+      const rollback = flowState.actionPartiallyApplied ? this.rollbackToPreActionState() : undefined;
       return {
         success: false,
         error: rollback === undefined ? flowState.actionError : `${flowState.actionError} ${rollback}`,

@@ -172,6 +172,59 @@ describe('useActionController picks', () => {
       expect(controller.repeatingState.value).toBe(null);
     });
 
+    it('a selection after a finished repeat goes to the server pending action, never a whole resubmission (#325)', async () => {
+      // The repeat's picks already ran onEach on the server's pending action.
+      // Sending the whole action afterwards would run them a second time, so
+      // every later pick must continue that pending action instead.
+      const pickStep = vi.fn()
+        .mockResolvedValueOnce({ success: true, done: false })
+        .mockResolvedValueOnce({ success: true, done: true })
+        .mockResolvedValueOnce({ success: true, actionComplete: true });
+
+      const repeatMeta: Record<string, ActionMetadata> = {
+        collectThenPlace: {
+          name: 'collectThenPlace',
+          prompt: 'Collect, then place',
+          selections: [
+            {
+              name: 'items',
+              type: 'choice',
+              prompt: 'Collect',
+              repeat: { hasOnEach: true, terminator: 'done' },
+              choices: [{ value: 1, display: 'One' }, { value: 'done', display: 'Done' }],
+            },
+            {
+              name: 'where',
+              type: 'choice',
+              prompt: 'Place',
+              choices: [{ value: 'left', display: 'Left' }, { value: 'right', display: 'Right' }],
+            },
+          ],
+        },
+      };
+
+      actionMetadata.value = { ...createTestMetadata(), ...repeatMeta };
+      availableActions.value = [...(availableActions.value ?? []), 'collectThenPlace'];
+
+      const controller = useActionController({
+        sendAction,
+        availableActions,
+        actionMetadata,
+        isMyTurn,
+        autoExecute: false,
+        pickStep,
+      });
+
+      await controller.start('collectThenPlace');
+      await controller.fill('items', 1);
+      await controller.fill('items', 'done');
+      await controller.fill('where', 'left');
+
+      expect(pickStep).toHaveBeenLastCalledWith(0, 'where', 'left', 'collectThenPlace', expect.anything());
+      expect(sendAction).not.toHaveBeenCalled();
+      expect(controller.currentAction.value).toBe(null);
+    });
+
     it('should update currentChoices from nextChoices', async () => {
       const pickStep = vi.fn().mockResolvedValue({
         success: true,
