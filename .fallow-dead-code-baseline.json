@@ -449,7 +449,6 @@
     "src/session/game-session.ts:GameSession.isDemoRunning",
     "src/session/game-session.ts:GameSession.startDemo",
     "src/session/game-session.ts:GameSession.stopDemo",
-    "src/session/game-session.ts:GameSession.reloadWithCurrentRules",
     "src/session/game-session.ts:GameSession.executeDebugCommand",
     "src/session/game-session.ts:GameSession.moveCardToTop",
     "src/session/game-session.ts:GameSession.reorderCard",

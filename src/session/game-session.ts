@@ -16,17 +16,15 @@
  * - bot scheduling
  */
 
-import type { FlowState, SerializedAction, Game, PendingActionState, GameCommand, DevSnapshot, DevValidationResult, DevCheckpoint, FollowUpAction, GameOptions, GameStateSnapshot, PlayerStateView, FlowDebugInfo, Player } from '../engine/index.js';
+import type { FlowState, SerializedAction, Game, PendingActionState, GameCommand, FollowUpAction, GameStateSnapshot, PlayerStateView, FlowDebugInfo, Player } from '../engine/index.js';
 import { canSeatAct } from '../engine/index.js';
 import type { TutorialDefinition } from '../engine/tutorial/types.js';
 import type { Annotation } from '../engine/tutorial/types.js';
 import type { HeatmapEntry, SerializedFlowDebugInfo } from './types.js';
-import { captureDevState, restoreDevState, validateDevSnapshot, formatValidationErrors, getSnapshotElementCount } from '../engine/index.js';
 import { GameRunner, type CheckpointPolicy, type UndoPolicy } from '../runtime/index.js';
 import {
   ErrorCode,
   type GameClass,
-  type GameDefinition,
   type StoredGameState,
   type PlayerGameState,
   type SessionInfo,
@@ -53,7 +51,6 @@ import { PickHandler } from './pick-handler.js';
 import { PendingActionManager } from './pending-action-manager.js';
 import { StateHistory, type UndoResult, type ElementDiff } from './state-history.js';
 import { DebugController } from './debug-controller.js';
-import { DevCheckpointManager } from './dev-checkpoint-manager.js';
 import { describeMoveDestination, describeMoveForHint } from './move-summary.js';
 import { TutorialController } from './tutorial-controller.js';
 import { autoAdvanceTutorial } from '../engine/tutorial/progress.js';
@@ -329,8 +326,6 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
    * because tutorial is excluded from snapshot.gameOptions — see Game constructor).
    */
   readonly #tutorialDefinition?: TutorialDefinition;
-  /** Dev checkpoint manager for fast HMR recovery (dev only) */
-  #checkpointManager?: DevCheckpointManager<G>;
   /** Circuit breaker: consecutive bot failures before giving up */
   #botConsecutiveFailures = 0;
   /** Injectable persistence-failure hook (ERR-03). Never rethrown — see #persistSafely. */
@@ -487,11 +482,6 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
         broadcast: () => this.broadcast(),
       }
     );
-
-    // Initialize checkpoint manager in dev mode only
-    if (process.env.NODE_ENV !== 'production') {
-      this.#checkpointManager = new DevCheckpointManager<G>();
-    }
   }
 
   // ============================================
@@ -1520,12 +1510,6 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     // is nothing to re-point here.
     this.#stampNewHistoryEntries();
 
-    // Create checkpoint if at interval (dev mode only)
-    const actionIndex = this.#storedState.actionHistory.length;
-    if (this.#checkpointManager?.shouldCheckpoint(actionIndex)) {
-      this.#checkpointManager.capture(this.#runner.game, actionIndex);
-    }
-
     // Persist if storage adapter is provided (refreshes the authoritative
     // snapshot first — see #save).
     await this.#save();
@@ -1592,362 +1576,6 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
   }
 
   // ============================================
-  // Hot Reload Methods
-  // ============================================
-
-  /**
-   * Reload the game with a new game definition (for hot reloading rules).
-   *
-   * In development mode, uses dev state transfer (fast, bypasses replay):
-   * - Captures current game state directly
-   * - Creates new game with new class definitions
-   * - Transfers state to new game (stored properties transfer, getters recompute)
-   *
-   * Falls back to replay if dev transfer fails or in production.
-   */
-  reloadWithCurrentRules(definition: GameDefinition): void {
-    // Validate game type matches
-    if (definition.gameType !== this.#storedState.gameType) {
-      throw new Error(`Cannot reload: game type mismatch (expected ${this.#storedState.gameType}, got ${definition.gameType})`);
-    }
-
-    const isDev = process.env.NODE_ENV !== 'production';
-
-    // In dev mode, try dev state transfer first
-    if (isDev) {
-      try {
-        const newRunner = this.#reloadWithDevTransfer(definition);
-        if (newRunner) {
-          this.#adoptRunner(newRunner);
-          this.#GameClass = definition.gameClass as GameClass<G>;
-          this.#pickHandler = this.#pickHandler.updateRunner(newRunner);
-          this.#pendingActionManager.updateRunner(newRunner);
-          this.broadcast();
-          return;
-        }
-      } catch (error) {
-        // Log warning and fall back to replay
-        console.warn(
-          `[HMR] ⚠️ Dev state transfer failed, falling back to replay:\n` +
-          `  Error: ${error instanceof Error ? error.message : String(error)}`
-        );
-      }
-    }
-
-    // Fallback: Replay all actions with the new game class
-    const newRunner = this.#reloadWithReplay(definition);
-
-    // Replace the current runner and game class
-    this.#adoptRunner(newRunner);
-    this.#GameClass = definition.gameClass as GameClass<G>;
-
-    // Update handlers with new runner reference
-    this.#pickHandler = this.#pickHandler.updateRunner(newRunner);
-    this.#pendingActionManager.updateRunner(newRunner);
-
-    // Broadcast updated state to all clients
-    this.broadcast();
-  }
-
-  /**
-   * Reload using dev state transfer (fast path for HMR).
-   * Returns the new runner if successful, null if transfer not possible.
-   *
-   * Pre-validates snapshot before attempting restore:
-   * - Missing classes → detailed error with registration instructions
-   * - Schema errors → corrupted snapshot warning
-   * - Property mismatches → path and suggestions
-   *
-   * Returns null on validation failure, triggering replay fallback.
-   */
-  #reloadWithDevTransfer(definition: GameDefinition): GameRunner<G> | null {
-    // Capture current state
-    const snapshot = captureDevState(this.#runner.game);
-    const elementCount = getSnapshotElementCount(snapshot);
-
-    // Capture flow state before HMR (will be restored after transfer)
-    const oldFlowState = this.#runner.getFlowState();
-    const oldFlowDefinition = this.#runner.game.getFlow();
-
-    console.log(`[HMR] Capturing state: ${elementCount} elements`);
-
-    // Build class registry from the NEW game class
-    // We create a temporary game instance to get the class registry populated by registerElements()
-    // This ensures we have the NEW classes (with correct identity) for validation and restoration
-    const gameOptions = this.#buildGameOptions();
-    const tempGame = new (definition.gameClass as GameClass<G>)(gameOptions as any);
-    const classRegistry = tempGame._ctx.classRegistry;
-
-    // Also add the Game class itself to the registry (registerElements only adds element classes)
-    classRegistry.set(definition.gameClass.name, definition.gameClass as any);
-
-    // Pre-transfer validation
-    const validation = validateDevSnapshot(snapshot, classRegistry);
-
-    if (!validation.valid) {
-      // Log detailed errors
-      const errorSummary = this.#formatValidationSummary(validation);
-      console.warn(errorSummary);
-
-      // Try checkpoint recovery before falling back to full replay
-      if (this.#checkpointManager) {
-        const checkpoint = this.#checkpointManager.findNearest(this.#storedState.actionHistory.length);
-        if (checkpoint) {
-          console.log(`[HMR] Found checkpoint at action ${checkpoint.actionIndex}, attempting partial replay...`);
-          const newRunner = this.#reloadFromCheckpoint(checkpoint, definition);
-          if (newRunner) return newRunner;
-        }
-      }
-
-      console.log('[HMR] Falling back to full replay...');
-      return null;
-    }
-
-    // Log warnings if any (but continue with transfer)
-    if (validation.warnings.length > 0) {
-      console.warn(`[HMR] Validation warnings (${validation.warnings.length}):`);
-      for (const warning of validation.warnings) {
-        console.warn(`  ⚠️ ${warning.message}`);
-        if (warning.path.length > 0) {
-          console.warn(`     Path: ${warning.path.join(' > ')}`);
-        }
-      }
-    }
-
-    // Restore game with new classes
-    const newGame = restoreDevState(
-      snapshot,
-      definition.gameClass as GameClass<G>,
-      {
-        gameOptions,
-        classRegistry,
-      }
-    );
-
-    // Create new runner with restored game
-    const newRunner = new GameRunner<G>({
-      GameClass: definition.gameClass as GameClass<G>,
-      gameType: this.#storedState.gameType,
-      gameOptions,
-      checkpoints: definition.checkpoints,
-      undo: definition.undo,
-    });
-
-    // Replace the runner's game with our restored game
-    // @ts-expect-error - Accessing readonly property for HMR
-    newRunner.game = newGame;
-
-    // Copy action history to the new runner
-    newRunner.actionHistory.push(...this.#storedState.actionHistory);
-
-    // Restore flow state if there was an active flow
-    // The flow definition comes from the new game class (via its static flow property or setup)
-    // but we restore the full state (position + awaitingInput + currentPlayer, etc.)
-    if (oldFlowState && oldFlowDefinition) {
-      try {
-        // The new game class may have a different flow definition (that's the point of HMR)
-        // Get the flow from the new game class if it's set, otherwise use the old one
-        const newFlowDef = newGame.getFlow() ?? oldFlowDefinition;
-        if (!newGame.getFlow()) {
-          newGame.setFlow(newFlowDef);
-        }
-        // Restore the full flow state (not just position) to preserve awaitingInput, etc.
-        newGame.restoreFlowState(oldFlowState);
-        console.log(`[HMR] ✓ Flow state restored`);
-      } catch (error) {
-        // Flow structure may have changed, fall back to replay
-        console.warn(`[HMR] ⚠️ Flow restore failed: ${error instanceof Error ? error.message : error}`);
-        console.log('[HMR] Falling back to full replay...');
-        return null;
-      }
-    }
-
-    console.log(
-      `[HMR] ✓ State transferred (${elementCount} elements)\n` +
-      `[HMR] ✓ Getters will use new logic\n` +
-      `[HMR] Reload complete`
-    );
-
-    return newRunner;
-  }
-
-  /**
-   * Format validation result for console output.
-   * Groups errors by type and provides actionable summary.
-   */
-  #formatValidationSummary(validation: DevValidationResult): string {
-    const lines: string[] = [];
-
-    // Count by type
-    const classMissing = validation.errors.filter(e => e.type === 'missing-class').length;
-    const schemaErrors = validation.errors.filter(e => e.type === 'schema-error').length;
-    const propMismatch = validation.errors.filter(e => e.type === 'property-mismatch').length;
-
-    const parts: string[] = [];
-    if (classMissing > 0) parts.push(`${classMissing} missing class${classMissing > 1 ? 'es' : ''}`);
-    if (schemaErrors > 0) parts.push(`${schemaErrors} schema error${schemaErrors > 1 ? 's' : ''}`);
-    if (propMismatch > 0) parts.push(`${propMismatch} property mismatch${propMismatch > 1 ? 'es' : ''}`);
-
-    lines.push(`[HMR] Validation failed (${validation.errors.length} error${validation.errors.length > 1 ? 's' : ''}: ${parts.join(', ')}):`);
-    lines.push('');
-
-    for (let i = 0; i < validation.errors.length; i++) {
-      const error = validation.errors[i];
-      lines.push(`  ${i + 1}. ${error.message}`);
-      if (error.path.length > 0) {
-        lines.push(`     Path: ${error.path.join(' > ')}`);
-      }
-      lines.push(`     Fix: ${error.suggestion}`);
-      lines.push('');
-    }
-
-    return lines.join('\n');
-  }
-
-  /**
-   * Reload using action replay (fallback path).
-   * Slower but more reliable for complex state changes.
-   */
-  #reloadWithReplay(definition: GameDefinition): GameRunner<G> {
-    const newRunner = GameRunner.replay<G>(
-      {
-        GameClass: definition.gameClass as GameClass<G>,
-        gameType: this.#storedState.gameType,
-        gameOptions: this.#buildGameOptions(),
-        checkpoints: definition.checkpoints,
-        undo: definition.undo,
-      },
-      this.#storedState.actionHistory
-    );
-
-    // DEV: Log state after reload to detect mismatches
-    if (process.env.NODE_ENV !== 'production') {
-      const newSequence = (newRunner.game as any)._ctx?.sequence;
-      const newElementCount = newRunner.game.all().length;
-      const oldSequence = (this.#runner.game as any)._ctx?.sequence;
-      const oldElementCount = this.#runner.game.all().length;
-
-      if (newSequence !== oldSequence || newElementCount !== oldElementCount) {
-        console.warn(
-          `[HMR] ⚠️ STATE MISMATCH after replay!\n` +
-          `  Before: seq=${oldSequence}, elements=${oldElementCount}\n` +
-          `  After:  seq=${newSequence}, elements=${newElementCount}\n` +
-          `  This may cause game corruption. Check if your game has randomness outside seed control.`
-        );
-      } else {
-        console.log(
-          `[HMR] ✓ Replay complete: seq=${newSequence}, elements=${newElementCount}`
-        );
-      }
-    }
-
-    return newRunner;
-  }
-
-  /**
-   * Reload from a checkpoint when dev state transfer fails.
-   * Restores the checkpoint state and replays only the actions after the checkpoint.
-   * Returns null if checkpoint restore fails, triggering full replay fallback.
-   */
-  #reloadFromCheckpoint(checkpoint: DevCheckpoint, definition: GameDefinition): GameRunner<G> | null {
-    try {
-      const gameOptions = this.#buildGameOptions();
-
-      // Build class registry from the NEW game class
-      // Create a temporary game instance to get the NEW class registry
-      const tempGame = new (definition.gameClass as GameClass<G>)(gameOptions as any);
-      const classRegistry = tempGame._ctx.classRegistry;
-
-      // Also add the Game class itself to the registry (registerElements only adds element classes)
-      classRegistry.set(definition.gameClass.name, definition.gameClass as any);
-
-      // Validate checkpoint snapshot with new classes
-      const validation = validateDevSnapshot(checkpoint, classRegistry);
-      if (!validation.valid) {
-        console.warn('[HMR] Checkpoint validation failed, falling back to full replay');
-        return null;
-      }
-
-      // Restore from checkpoint
-      const restoredGame = restoreDevState(
-        checkpoint,
-        definition.gameClass as GameClass<G>,
-        {
-          gameOptions,
-          classRegistry,
-        }
-      );
-
-      // Create runner with restored game
-      const newRunner = new GameRunner<G>({
-        GameClass: definition.gameClass as GameClass<G>,
-        gameType: this.#storedState.gameType,
-        gameOptions,
-        checkpoints: definition.checkpoints,
-        undo: definition.undo,
-      });
-
-      // @ts-expect-error - Accessing readonly for HMR
-      newRunner.game = restoredGame;
-
-      // Copy action history up to checkpoint
-      newRunner.actionHistory.push(...this.#storedState.actionHistory.slice(0, checkpoint.actionIndex));
-
-      // Replay remaining actions
-      const remainingActions = this.#storedState.actionHistory.slice(checkpoint.actionIndex);
-      for (const action of remainingActions) {
-        const result = newRunner.performAction(action.name, action.player, action.args);
-        if (!result.success) {
-          console.warn(`[HMR] Action replay failed at ${action.name}, falling back to full replay`);
-          return null;
-        }
-      }
-
-      console.log(
-        `[HMR] ✓ Restored from checkpoint (action ${checkpoint.actionIndex})\n` +
-        `[HMR] ✓ Replayed ${remainingActions.length} actions\n` +
-        `[HMR] Reload complete`
-      );
-
-      return newRunner;
-    } catch (error) {
-      console.warn('[HMR] Checkpoint restore failed:', error);
-      return null;
-    }
-  }
-
-  /**
-   * Build full game options from stored state, including playerConfigs
-   * reconstructed from lobbySlots when available.
-   *
-   * All game reconstruction paths (HMR, restore, checkpoint) MUST use this
-   * to ensure the constructor receives the same options as the original game.
-   */
-  #buildGameOptions(): GameOptions & Record<string, unknown> {
-    const colorLabels = buildColorLabelMap(this.#storedState.playerOptionsDefinitions);
-    const options: GameOptions & Record<string, unknown> = {
-      playerCount: this.#storedState.playerCount,
-      playerNames: this.#storedState.playerNames,
-      seed: this.#storedState.seed,
-      ...this.#storedState.gameOptions,
-      ...(colorLabels ? { colorLabels } : {}),
-    };
-
-    // Reconstruct playerConfigs from lobbySlots so constructor-time logic
-    // (e.g. setting up bot flags, roles) runs correctly in clones/replays
-    if (this.#storedState.lobbySlots && this.#storedState.lobbyState === 'playing') {
-      options.playerConfigs = this.#storedState.lobbySlots.map(slot => ({
-        name: slot.name,
-        isBot: slot.status === 'bot',
-        botLevel: slot.botLevel,
-        ...slot.playerOptions,
-      }));
-    }
-
-    return options;
-  }
-
-  // ============================================
   // Undo Methods
   // ============================================
 
@@ -1956,12 +1584,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
    * Only works if it's the player's turn and they've made at least one action.
    */
   async undoToTurnStart(playerPosition: number): Promise<UndoResult> {
-    const result = await this.#stateHistory.undoToTurnStart(playerPosition);
-    // Clear checkpoints after undo
-    if (result.success && result.actionsUndone && result.actionsUndone > 0) {
-      this.#checkpointManager?.clearAfter(this.#storedState.actionHistory.length);
-    }
-    return result;
+    return this.#stateHistory.undoToTurnStart(playerPosition);
   }
 
   /**
@@ -1976,12 +1599,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     actionsDiscarded?: number;
     state?: PlayerGameState;
   }> {
-    const result = await this.#stateHistory.rewindToAction(targetActionIndex);
-    // Clear checkpoints after rewind
-    if (result.success) {
-      this.#checkpointManager?.clearAfter(targetActionIndex);
-    }
-    return result;
+    return this.#stateHistory.rewindToAction(targetActionIndex);
   }
 
   // ============================================

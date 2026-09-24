@@ -656,13 +656,6 @@
       ]
     },
     {
-      "content": "13d5a7b0c6b70d4a",
-      "lines": 12,
-      "files": [
-        "src/session/game-session.ts"
-      ]
-    },
-    {
       "content": "13e87c53103cf029",
       "lines": 10,
       "files": [
@@ -1419,13 +1412,6 @@
       "lines": 11,
       "files": [
         "src/session/testing/random-scumming.test.ts"
-      ]
-    },
-    {
-      "content": "3333fc654c954431",
-      "lines": 20,
-      "files": [
-        "src/session/game-session.ts"
       ]
     },
     {
@@ -3120,13 +3106,6 @@
       ]
     },
     {
-      "content": "6d4be827851f8a08",
-      "lines": 16,
-      "files": [
-        "src/cli/dev-host/multiplayer-host.ts"
-      ]
-    },
-    {
       "content": "6d4d9cc2afeee92b",
       "lines": 13,
       "files": [
@@ -4056,14 +4035,6 @@
       "lines": 5,
       "files": [
         "src/cli/commands/verify-run.test.ts"
-      ]
-    },
-    {
-      "content": "8b2db370e760f91d",
-      "lines": 8,
-      "files": [
-        "src/engine/utils/dev-state.ts",
-        "src/session/game-session.ts"
       ]
     },
     {

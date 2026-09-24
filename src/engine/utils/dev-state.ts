@@ -5,7 +5,9 @@
  * definitions, bypassing action replay. Key insight: stored properties transfer
  * as-is from toJSON(), while getters automatically recompute with new code.
  *
- * Usage (handled by GameSession.reloadWithCurrentRules):
+ * Usage (no BoardSmith host calls these since #343: `boardsmith dev` carries a
+ * table across a rules edit by restoring its snapshot, or replaying its moves,
+ * in `src/cli/dev-host/table-rules-reload.ts`):
  * 1. captureDevState() - Snapshot current game state
  * 2. restoreDevState() - Recreate game with new classes
  *
