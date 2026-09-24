@@ -15,6 +15,7 @@ import {
   verifyExampleReplayCommand,
   verifyExampleRecordCommand,
   verifyExampleTranslateCommand,
+  reanchorExampleLedger,
   type ExampleReplayRecord,
 } from './verify-example-replay.js';
 import {
@@ -127,6 +128,7 @@ function validAgreesInput(overrides: Partial<Parameters<typeof createExampleRepl
     verdict: 'agrees',
     reason: 'The generated test executed and matched the expected outcome.',
     provenance: 'quote-verified',
+    lineText: '"If you are punched while READY, become EXHAUSTED."',
     ...overrides,
   };
   return TRANSLATED_VERDICTS.includes(input.verdict) && !('translation' in overrides)
@@ -565,7 +567,9 @@ describe('verifyExampleReplayCommand — command', () => {
   it('a slice with a recorded verdict is reported not-pending', async () => {
     const text = 'p.1, Definitions:\n"A worked example lives here."\n';
     const project = await makeProject({ 'rulebook/01-x.md': text });
-    await recordExampleReplayVerdicts(project, [recordFor('rulebook/01-x.md', 2)]);
+    await recordExampleReplayVerdicts(project, [
+      recordFor('rulebook/01-x.md', 2, { lineText: '"A worked example lives here."' }),
+    ]);
 
     const result = await verifyExampleReplayCommand({ project });
     expect(result.slices[0].pending).toBe(false);
@@ -1104,6 +1108,209 @@ describe('verifyExampleRecordCommand — record', () => {
 });
 
 // -------------------------------------------------------------------------------------------
+// #350 — a recorded example stays tied to the text of its slice line
+// -------------------------------------------------------------------------------------------
+
+describe('worked examples stay anchored to their slice line (#350)', () => {
+  let dir: string;
+
+  beforeEach(async () => {
+    dir = tempTree('bs-verify-example-anchor-');
+  });
+
+  const { makeProject, writeJson } = designProjectFixtures(() => dir);
+  const { writeExtraction, writeTranslations } = exampleReturnWriters(writeJson);
+
+  const SLICE = 'rulebook/02-punch.md';
+  const READY_LINE = 'Example (p.2): "If you are punched while READY, you become EXHAUSTED."';
+  const TIRED_LINE = 'Example (p.2): "If you are punched while EXHAUSTED, you stay EXHAUSTED."';
+  const SLICE_TEXT = `# Punch\n\np.2, Punch Examples:\n${READY_LINE}\n${TIRED_LINE}\n`;
+
+  const slicePathOnDisk = (project: string) => join(project, DESIGN_DIR, SLICE);
+
+  /** Records the two examples of SLICE_TEXT (lines 4 and 5): one translated, one unexecutable. */
+  async function recordBoth(project: string, lines: [number, number] = [4, 5]): Promise<void> {
+    const extraction = await writeExtraction(`extraction-${lines[0]}.json`, [
+      {
+        lineNumber: lines[0],
+        pageCitation: 'p.2, Punch Examples',
+        kind: 'transition',
+        sourceText: 'If you are punched while READY, you become EXHAUSTED.',
+        setup: 'Guard is READY.',
+        action: 'Guard is punched.',
+        expected: 'Guard becomes EXHAUSTED.',
+      },
+      {
+        lineNumber: lines[1],
+        pageCitation: 'p.2, Punch Examples',
+        kind: 'transition',
+        sourceText: 'If you are punched while EXHAUSTED, you stay EXHAUSTED.',
+        setup: 'Guard is EXHAUSTED.',
+        action: 'Guard is punched.',
+        expected: 'Guard stays EXHAUSTED.',
+      },
+    ]);
+    const translations = await writeTranslations(`translations-${lines[0]}.json`, [
+      { slicePath: SLICE, lineNumber: lines[0], testCode: TRANSLATION.testCode, imports: [], verdictHint: 'agrees' },
+      {
+        slicePath: SLICE,
+        lineNumber: lines[1],
+        testCode: '',
+        imports: [],
+        verdictHint: 'unexecutable',
+        unexecutableReason: 'no-matching-symbol',
+      },
+    ]);
+    await verifyExampleRecordCommand({ project, slicePath: SLICE, extraction, translations });
+  }
+
+  /** Moves every slice line down by two, the way `ingest-slice-source` inserts a Source line. */
+  async function insertSourceLine(project: string): Promise<void> {
+    const text = await fs.readFile(slicePathOnDisk(project), 'utf-8');
+    await fs.writeFile(
+      slicePathOnDisk(project),
+      text.replace('# Punch\n', '# Punch\n\nSource: rulebook/source/rules.pdf\n'),
+    );
+  }
+
+  it('verify-example-record stores the text of the line each example sits on', async () => {
+    const project = await makeProject({ [SLICE]: SLICE_TEXT });
+    await recordBoth(project);
+
+    const recorded = await readExampleReplayVerdicts(project);
+    expect(recorded.map((r) => [r.exampleId, r.lineText])).toEqual([
+      [`${SLICE}:4`, READY_LINE],
+      [`${SLICE}:5`, TIRED_LINE],
+    ]);
+  });
+
+  it('a record with no line text is refused, saying what the field is and how to get one', () => {
+    expect(() => createExampleReplayRecord(validAgreesInput({ lineText: '  ' }))).toThrow(
+      /lineText.*verify-example-record/s,
+    );
+  });
+
+  it('a ledger fence marker in lineText is refused', () => {
+    expect(() =>
+      createExampleReplayRecord(validAgreesInput({ lineText: `x ${EXAMPLE_REPLAY_LEDGER_END}` })),
+    ).toThrow(/lineText contains a ledger fence marker/);
+  });
+
+  it('re-recording a slice replaces every record it held, so a moved example leaves no stale entry', async () => {
+    const project = await makeProject({ [SLICE]: SLICE_TEXT });
+    await recordBoth(project);
+    await insertSourceLine(project);
+
+    await recordBoth(project, [6, 7]);
+
+    const recorded = await readExampleReplayVerdicts(project);
+    expect(recorded.map((r) => r.exampleId)).toEqual([`${SLICE}:6`, `${SLICE}:7`]);
+  });
+
+  it('re-recording one slice leaves every other slice\'s records alone', async () => {
+    const project = await makeProject({
+      [SLICE]: SLICE_TEXT,
+      'rulebook/01-x.md': 'p.1, Definitions:\n"A worked example lives here."\n',
+    });
+    await recordExampleReplayVerdicts(project, [
+      recordFor('rulebook/01-x.md', 2, { lineText: '"A worked example lives here."' }),
+    ]);
+    await recordBoth(project);
+    await recordBoth(project);
+
+    const recorded = await readExampleReplayVerdicts(project);
+    expect(recorded.map((r) => r.exampleId)).toEqual([
+      'rulebook/01-x.md:2',
+      `${SLICE}:4`,
+      `${SLICE}:5`,
+    ]);
+  });
+
+  it('reanchorExampleLedger moves each record to the line its text now sits on, changing nothing else', async () => {
+    const project = await makeProject({ [SLICE]: SLICE_TEXT });
+    await recordBoth(project);
+    const before = await readExampleReplayVerdicts(project);
+    await insertSourceLine(project);
+
+    const result = await reanchorExampleLedger(project);
+
+    expect(result.moved.map((m) => [m.from, m.to])).toEqual([
+      [`${SLICE}:4`, `${SLICE}:6`],
+      [`${SLICE}:5`, `${SLICE}:7`],
+    ]);
+    expect(result.lost).toEqual([]);
+    const after = await readExampleReplayVerdicts(project);
+    expect(after).toEqual(
+      before.map((r) => ({ ...r, exampleId: `${SLICE}:${r.lineNumber + 2}`, lineNumber: r.lineNumber + 2 })),
+    );
+
+    // Once anchored again, there is nothing left to move.
+    expect(await reanchorExampleLedger(project)).toEqual({ moved: [], lost: [] });
+  });
+
+  it('a record whose text is no longer in its slice is reported lost and left as it was', async () => {
+    const project = await makeProject({ [SLICE]: SLICE_TEXT });
+    await recordBoth(project);
+    const before = await readExampleReplayVerdicts(project);
+    await fs.writeFile(slicePathOnDisk(project), SLICE_TEXT.replace('become EXHAUSTED', 'become TIRED'));
+
+    const result = await reanchorExampleLedger(project);
+
+    expect(result.moved).toEqual([]);
+    expect(result.lost).toEqual([
+      { exampleId: `${SLICE}:4`, slicePath: SLICE, lineText: READY_LINE, reason: 'text-gone' },
+    ]);
+    expect(await readExampleReplayVerdicts(project)).toEqual(before);
+  });
+
+  it('a record whose text now appears on several other lines is reported lost, never guessed', async () => {
+    const project = await makeProject({ [SLICE]: SLICE_TEXT });
+    await recordBoth(project);
+    await fs.writeFile(
+      slicePathOnDisk(project),
+      `# Punch\n\np.2, Punch Examples:\n\n${READY_LINE}\n${TIRED_LINE}\n${READY_LINE}\n`,
+    );
+
+    const result = await reanchorExampleLedger(project);
+
+    expect(result.lost).toEqual([
+      { exampleId: `${SLICE}:4`, slicePath: SLICE, lineText: READY_LINE, reason: 'text-ambiguous' },
+    ]);
+    expect(result.moved.map((m) => m.from)).toEqual([`${SLICE}:5`]);
+  });
+
+  it('verify-example-replay reports unanchored examples and sends a slice with a lost one back to pending', async () => {
+    const project = await makeProject({ [SLICE]: SLICE_TEXT });
+    await recordBoth(project);
+    await insertSourceLine(project);
+    const slice = await fs.readFile(slicePathOnDisk(project), 'utf-8');
+    await fs.writeFile(slicePathOnDisk(project), slice.replace('become EXHAUSTED', 'become TIRED'));
+
+    const result = await verifyExampleReplayCommand({ project, json: true });
+
+    expect(result.unanchored).toEqual([
+      { exampleId: `${SLICE}:4`, slicePath: SLICE, lineText: READY_LINE, reason: 'text-gone' },
+      { exampleId: `${SLICE}:5`, slicePath: SLICE, lineText: TIRED_LINE, reason: 'moved', movedTo: 7 },
+    ]);
+    expect(result.slices.find((s) => s.slicePath === SLICE)?.pending).toBe(true);
+    const printed = await printedReport(project);
+    expect(printed).toContain('ingest-check');
+    expect(printed).toContain(`${SLICE}:4`);
+  });
+
+  it('a slice whose records all merely moved stays recorded, and the report says ingest-check re-anchors them', async () => {
+    const project = await makeProject({ [SLICE]: SLICE_TEXT });
+    await recordBoth(project);
+    await insertSourceLine(project);
+
+    const result = await verifyExampleReplayCommand({ project, json: true });
+
+    expect(result.unanchored.map((u) => u.reason)).toEqual(['moved', 'moved']);
+    expect(result.slices.find((s) => s.slicePath === SLICE)?.pending).toBe(false);
+  });
+});
+
+// -------------------------------------------------------------------------------------------
 // Plan 178-04, Task 2 — provenance gating (178-CONTEXT.md decision 12)
 // -------------------------------------------------------------------------------------------
 
@@ -1231,6 +1438,7 @@ describe('verifyExampleRecordCommand / verifyExampleReplayCommand — provenance
         exampleId: 'rulebook/02-punch.md:2',
         slicePath: 'rulebook/02-punch.md',
         lineNumber: 2,
+        lineText: '"If you are punched while READY, you become EXHAUSTED."',
         kind: 'transition',
         verdict: 'agrees',
         reason: 'ok',

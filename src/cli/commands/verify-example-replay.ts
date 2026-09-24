@@ -40,7 +40,8 @@ import {
  *
  * Two commands write the ledger: `verify-example-record` records what the extractor and
  * translator returned, and `verify-example-run` (`example-test-run.ts`) records what running the
- * emitted tests observed. This module's own
+ * emitted tests observed. `ingest-check` only moves a record to the line its text is now on
+ * (`reanchorExampleLedger`, #350). This module's own
  * `verifyExampleReplayCommand` is read-only: it never dispatches a subagent and never assigns
  * `process.exitCode`, including when every recorded verdict is `disagrees` (178-CONTEXT.md
  * decision 11 — CHECK-06 REPORTS, exit 0, and never gates).
@@ -147,6 +148,12 @@ export interface ExampleReplayRecord {
   readonly slicePath: string;
   /** 1-based, matching the slice file's own line numbering. */
   readonly lineNumber: number;
+  /**
+   * The trimmed text of line `lineNumber` when the example was recorded (#350). It is what ties
+   * the record to its slice: a slice edited above the example moves the text to another line, and
+   * `findUnanchoredExamples` finds it there, or reports that it is gone.
+   */
+  readonly lineText: string;
   readonly kind: WorkedExampleKind | 'example-inconsistent';
   readonly verdict: ExampleReplayVerdict;
   /** The reasoning IS the artifact — required for every verdict, not only `unexecutable`. */
@@ -184,9 +191,11 @@ export interface ExampleReplayRecord {
  *   - `reason` is empty or whitespace-only — the reason IS the artifact, required for every
  *     verdict (a strict superset of the `unexecutable`-only requirement this check exists to
  *     satisfy)
+ *   - `lineText` is empty — a record that cannot say which text it cites cannot be checked
+ *     against its slice (#350)
  *   - `verdict === 'disagrees'` and `expected` or `observed` is empty
  *   - `verdict === 'example-inconsistent'` and `contradictionA` or `contradictionB` is empty
- *   - `reason`, `expected`, `observed`, `contradictionA`, `contradictionB`, `testFilePath`, or any
+ *   - `reason`, `lineText`, `expected`, `observed`, `contradictionA`, `contradictionB`, `testFilePath`, or any
  *     `supportingQuoteLines` string contains the ledger's own begin/end fence marker (CR-04),
  *     naming the offending field
  *   - `exampleId` does not equal `workedExampleId({ slicePath, lineNumber })` for the record's
@@ -199,6 +208,7 @@ export function createExampleReplayRecord(input: {
   exampleId: string;
   slicePath: string;
   lineNumber: number;
+  lineText: string;
   kind: string;
   verdict: string;
   reason: string;
@@ -232,13 +242,7 @@ export function createExampleReplayRecord(input: {
         `Expected one of: ${EXAMPLE_REPLAY_PROVENANCE_VALUES.join(', ')}.`,
     );
   }
-  if (input.reason.trim().length === 0) {
-    throw new Error(
-      `${location}'s verdict has no recorded reason.\n` +
-        `The reason is the artifact this check exists to produce — a verdict label with no ` +
-        `reason is not a valid record.`,
-    );
-  }
+  assertReasonAndLineText(location, input.reason, input.lineText);
 
   const expected = input.expected ?? '';
   const observed = input.observed ?? '';
@@ -272,6 +276,7 @@ export function createExampleReplayRecord(input: {
 
   const fenceCheckFields: [string, string][] = [
     ['reason', input.reason],
+    ['lineText', input.lineText],
     ['expected', expected],
     ['observed', observed],
     ['contradictionA', contradictionA],
@@ -305,6 +310,7 @@ export function createExampleReplayRecord(input: {
     exampleId: input.exampleId,
     slicePath: input.slicePath,
     lineNumber: input.lineNumber,
+    lineText: input.lineText,
     kind: input.kind as WorkedExampleKind | 'example-inconsistent',
     verdict: input.verdict,
     reason: input.reason,
@@ -318,6 +324,24 @@ export function createExampleReplayRecord(input: {
     ...(input.testFilePath ? { testFilePath: input.testFilePath } : {}),
     ...(translation ? { translation: frozenTranslation(translation) } : {}),
   });
+}
+
+/** Every record says why it has its verdict, and which slice text it cites (#350). */
+function assertReasonAndLineText(location: string, reason: string, lineText: string): void {
+  if (reason.trim().length === 0) {
+    throw new Error(
+      `${location}'s verdict has no recorded reason.\n` +
+        `The reason is the artifact this check exists to produce — a verdict label with no ` +
+        `reason is not a valid record.`,
+    );
+  }
+  if (lineText.trim().length === 0) {
+    throw new Error(
+      `${location} carries no lineText, the text of the slice line the example was recorded on.\n` +
+        `Without it a record cannot be checked against its slice once the slice changes. Record ` +
+        `the slice again with verify-example-record, which stores it.`,
+    );
+  }
 }
 
 /** A translated test belongs on a not-run, agrees or disagrees record, and only there. */
@@ -425,6 +449,25 @@ export async function recordExampleReplayVerdicts(
 }
 
 /**
+ * Replaces everything the ledger holds for `slicePath` with `records`, keeping every other
+ * slice's records untouched and in order. `verify-example-record` writes through this because an
+ * extraction covers its whole slice: an example recorded earlier at a line the new extraction
+ * does not name (a line that has since moved, say) is no longer one of the slice's examples, and
+ * an upsert by id would leave it behind (#350).
+ */
+async function replaceSliceExampleReplayVerdicts(
+  projectDir: string,
+  slicePath: string,
+  records: ExampleReplayRecord[],
+): Promise<{ ledgerPath: string }> {
+  const existing = await readExampleReplayVerdicts(projectDir);
+  return replaceExampleReplayVerdicts(projectDir, [
+    ...existing.filter((r) => r.slicePath !== slicePath),
+    ...records,
+  ]);
+}
+
+/**
  * Round-trips exactly what `replaceExampleReplayVerdicts`/`recordExampleReplayVerdicts` wrote.
  * Returns an empty array (never throws) when no ledger has been written yet — a project that has
  * never run CHECK-06's recording step has nothing recorded, which is not a tool failure.
@@ -486,6 +529,7 @@ export async function readExampleReplayVerdicts(
         exampleId: String(r.exampleId ?? ''),
         slicePath: String(r.slicePath ?? ''),
         lineNumber: Number(r.lineNumber),
+        lineText: String(r.lineText ?? ''),
         kind: String(r.kind ?? ''),
         verdict: String(r.verdict ?? ''),
         reason: String(r.reason ?? ''),
@@ -535,6 +579,143 @@ function readLedgerTranslation(raw: unknown): ExampleTranslation | undefined {
 }
 
 // -------------------------------------------------------------------------------------------
+// Anchors (#350) — each record is tied to the text of its slice line, not only to its number
+// -------------------------------------------------------------------------------------------
+
+/**
+ * A recorded example whose slice line no longer holds its `lineText`. `moved`: the text is now on
+ * exactly one other line, `movedTo`, that no other record holds. `text-gone`: the slice no longer
+ * contains it. `text-ambiguous`: it is on several other lines, or on one another record already
+ * holds, so which one the example is cannot be told from the text.
+ */
+interface UnanchoredExample {
+  exampleId: string;
+  slicePath: string;
+  lineText: string;
+  reason: 'moved' | 'text-gone' | 'text-ambiguous';
+  movedTo?: number;
+}
+
+/** An unanchored example that cannot be moved: its slice must be recorded again. */
+type LostExample = Omit<UnanchoredExample, 'movedTo'> & {
+  reason: 'text-gone' | 'text-ambiguous';
+};
+
+/**
+ * Every record in `records` whose slice is among `slices` and whose line no longer reads its
+ * `lineText`, in ledger order. A record whose slice is not among `slices` is not checked here.
+ * Lines are compared trimmed, the way `buildExampleExtractionPayload` numbered them.
+ */
+export function findUnanchoredExamples(
+  records: readonly ExampleReplayRecord[],
+  slices: readonly { path: string; text: string }[],
+): UnanchoredExample[] {
+  const linesBySlice = new Map(slices.map((s) => [s.path, s.text.split('\n').map((l) => l.trim())]));
+  const anchored = (r: ExampleReplayRecord) =>
+    linesBySlice.get(r.slicePath)?.[r.lineNumber - 1] === r.lineText;
+  const held = new Set(records.filter(anchored).map((r) => r.exampleId));
+
+  const unanchored: UnanchoredExample[] = [];
+  for (const r of records) {
+    const lines = linesBySlice.get(r.slicePath);
+    if (lines === undefined || anchored(r)) continue;
+    const at = lines.flatMap((line, i) => (line === r.lineText ? [i + 1] : []));
+    const base = { exampleId: r.exampleId, slicePath: r.slicePath, lineText: r.lineText };
+    if (at.length === 0) {
+      unanchored.push({ ...base, reason: 'text-gone' });
+    } else if (at.length > 1 || held.has(workedExampleId({ slicePath: r.slicePath, lineNumber: at[0] }))) {
+      unanchored.push({ ...base, reason: 'text-ambiguous' });
+    } else {
+      unanchored.push({ ...base, reason: 'moved', movedTo: at[0] });
+    }
+  }
+  return unanchored;
+}
+
+function isLost(u: UnanchoredExample): u is LostExample {
+  return u.reason !== 'moved';
+}
+
+export interface ReanchorResult {
+  /** Each re-anchored record's old and new exampleId. */
+  moved: { from: string; to: string }[];
+  /** Records whose text could not be found once; left exactly as they were. */
+  lost: LostExample[];
+}
+
+/**
+ * Moves every recorded example whose text now sits on one other line of its slice to that line
+ * (new `lineNumber` and `exampleId`, every other field unchanged), in one ledger write. Records it
+ * cannot place are returned in `lost` and left as they are. `ingest-check` runs this, so a slice
+ * edited after its examples were recorded (a `Source:` line from `ingest-slice-source`, #311)
+ * keeps its ledger pointing at the right lines. Writes nothing when nothing moved.
+ */
+export async function reanchorExampleLedger(projectDir: string): Promise<ReanchorResult> {
+  const records = await readExampleReplayVerdicts(projectDir);
+  if (records.length === 0) return { moved: [], lost: [] };
+  const unanchored = findUnanchoredExamples(records, await readLiveSlices(projectDir));
+
+  const movedTo = new Map<string, number>();
+  for (const u of unanchored) if (u.movedTo !== undefined) movedTo.set(u.exampleId, u.movedTo);
+  const moved: ReanchorResult['moved'] = [];
+  if (movedTo.size > 0) {
+    const rewritten = records.map((r) => {
+      const lineNumber = movedTo.get(r.exampleId);
+      if (lineNumber === undefined) return r;
+      const exampleId = workedExampleId({ slicePath: r.slicePath, lineNumber });
+      moved.push({ from: r.exampleId, to: exampleId });
+      return createExampleReplayRecord({
+        ...r,
+        exampleId,
+        lineNumber,
+        supportingQuoteLines: [...r.supportingQuoteLines],
+      });
+    });
+    await replaceExampleReplayVerdicts(projectDir, rewritten);
+  }
+  return { moved, lost: unanchored.filter(isLost) };
+}
+
+/**
+ * What to tell a person about unanchored examples, one line each plus the fix: a moved one is
+ * re-anchored by `ingest-check`; a lost one needs its slice's examples recorded again.
+ */
+export function describeUnanchoredExamples(unanchored: readonly UnanchoredExample[]): string[] {
+  const lines: string[] = [];
+  for (const u of unanchored) {
+    const where = u.exampleId;
+    if (u.reason === 'moved') {
+      lines.push(`  ${where} is now on line ${u.movedTo}.`);
+    } else if (u.reason === 'text-gone') {
+      lines.push(`  ${where}: its line "${u.lineText}" is no longer in the slice.`);
+    } else {
+      lines.push(`  ${where}: its line "${u.lineText}" is on several other lines, so it cannot be placed.`);
+    }
+  }
+  if (unanchored.some((u) => u.reason === 'moved')) {
+    lines.push('Run `npx boardsmith ingest-check`, which moves each example to the line its text is now on.');
+  }
+  const lostSlices = [...new Set(unanchored.filter(isLost).map((u) => u.slicePath))];
+  if (lostSlices.length > 0) {
+    lines.push(
+      `Record the worked examples of ${lostSlices.join(', ')} again: \`boardsmith verify-example-replay\` ` +
+        `lists ${lostSlices.length === 1 ? 'it' : 'them'} as pending, and verify-example-record replaces ` +
+        `everything the slice held.`,
+    );
+  }
+  return lines;
+}
+
+/** `verify-example-replay`'s lines about records whose slice line moved or lost their text. */
+function printUnanchoredExamples(unanchored: readonly UnanchoredExample[]): void {
+  if (unanchored.length === 0) return;
+  console.log(
+    chalk.yellow(`  ⚠ ${unanchored.length} recorded example(s) no longer sit on the line they cite:`),
+  );
+  for (const line of describeUnanchoredExamples(unanchored)) console.log(`  ${line}`);
+}
+
+// -------------------------------------------------------------------------------------------
 // Task 3 — verifyExampleReplayCommand — the read/report surface
 // -------------------------------------------------------------------------------------------
 
@@ -570,7 +751,10 @@ export interface VerifyExampleReplaySlice {
    * `verify-ruling-recheck.ts`'s `undetermined` verdict): NAME the state, never drop it silently.
    */
   notDispatchable?: ExampleReplayNotDispatchableReason;
-  /** `true` when the ledger has no recorded verdict yet whose `slicePath` matches this slice. */
+  /**
+   * `true` when the ledger has no recorded verdict yet whose `slicePath` matches this slice, or
+   * when one of its recorded examples' text is no longer in it (`unanchored`, #350).
+   */
   pending: boolean;
 }
 
@@ -594,6 +778,11 @@ export interface VerifyExampleReplayResult {
    * empty for the common single-source project.
    */
   unarchivedSources: readonly string[];
+  /**
+   * Recorded examples whose slice line no longer holds their text (#350). A slice with a lost
+   * one (not merely moved) is reported pending, so its examples get recorded again.
+   */
+  unanchored: UnanchoredExample[];
 }
 
 function emptyExampleReplayVerdictCounts(): Record<ExampleReplayVerdict, number> {
@@ -665,10 +854,13 @@ export async function verifyExampleReplayCommand(
   const allVerdicts = await readExampleReplayVerdicts(projectDir);
   const selectedPaths = new Set(liveSlices.map((s) => s.path));
   const verdicts = allVerdicts.filter((v) => selectedPaths.has(v.slicePath));
+  const unanchored = findUnanchoredExamples(verdicts, liveSlices);
+  const slicesWithLostExamples = new Set(unanchored.filter(isLost).map((u) => u.slicePath));
 
   const slices: VerifyExampleReplaySlice[] = liveSlices
     .map((s) => {
-      const pending = !verdicts.some((v) => v.slicePath === s.path);
+      const pending =
+        slicesWithLostExamples.has(s.path) || !verdicts.some((v) => v.slicePath === s.path);
       try {
         const { payload, lines } = buildExampleExtractionPayload({ path: s.path, text: s.text });
         // 178-12: a zero-content slice never gets an `extractionPayload` — see
@@ -708,6 +900,7 @@ export async function verifyExampleReplayCommand(
     counts,
     perGameBreakdown,
     unarchivedSources,
+    unanchored,
   };
 
   // `--json` emits the result and nothing else on stdout.
@@ -749,6 +942,8 @@ export async function verifyExampleReplayCommand(
       ),
     );
   }
+
+  printUnanchoredExamples(unanchored);
 
   // 178-CONTEXT.md decision 12: a replay mismatch is grouped into two explicitly-named buckets by
   // the PER-RECORD provenance `verifyExampleRecordCommand` already decided (never recomputed
@@ -1109,8 +1304,11 @@ export interface VerifyExampleRecordResult {
  *   - `not-run` — the translator wrote a test. The record carries that test; `verify-example-emit`
  *     writes it into the chunk's file and `verify-example-run` observes `agrees`/`disagrees`.
  *
+ * The records it writes REPLACE everything the ledger held for the slice (#350): an extraction
+ * covers its whole slice, so an earlier record it does not name is no longer one of its examples.
+ *
  * VALIDATES EVERYTHING, THEN WRITES: every spec, translator return and record is built and
- * checked before the single `recordExampleReplayVerdicts` call. Every consistent example needs a
+ * checked before the single `replaceSliceExampleReplayVerdicts` call. Every consistent example needs a
  * translator return and every translator return needs an example, or nothing is written.
  *
  * PROVENANCE GATING (178-CONTEXT.md decision 12): resolved ONCE per invocation via
@@ -1166,12 +1364,20 @@ export async function verifyExampleRecordCommand(
   const provenance: ExampleReplayProvenance =
     provenanceInstance && provenanceInstance.covers(slicePath) ? 'quote-verified' : 'quote-unverified';
 
+  // Every lineNumber is one of these retained lines (`readSliceExamples` checked), so each record
+  // carries the exact text it cites (#350).
+  const lineTextAt = new Map(
+    buildExampleExtractionPayload({ path: slicePath, text: sliceText }).lines.map((l) => [l.lineNumber, l.text]),
+  );
+  const lineText = (lineNumber: number): string => lineTextAt.get(lineNumber) ?? '';
+
   const translatedRecords: ExampleReplayRecord[] = [...specsById.values()].map((spec) => {
     const outcome = readTranslatorOutcome(spec.id, translations.byId.get(spec.id));
     const common = {
       exampleId: spec.id,
       slicePath: spec.slicePath,
       lineNumber: spec.lineNumber,
+      lineText: lineText(spec.lineNumber),
       kind: spec.kind,
       supportingQuoteLines: [...spec.supportingQuoteLines],
       provenance,
@@ -1200,6 +1406,7 @@ export async function verifyExampleRecordCommand(
       exampleId: entry.id,
       slicePath,
       lineNumber: entry.lineNumber,
+      lineText: lineText(entry.lineNumber),
       kind: 'example-inconsistent',
       verdict: 'example-inconsistent',
       reason: entry.reason,
@@ -1215,7 +1422,7 @@ export async function verifyExampleRecordCommand(
   );
 
   // The ONE mutation this function performs — everything above is validation.
-  const { ledgerPath } = await recordExampleReplayVerdicts(projectDir, records);
+  const { ledgerPath } = await replaceSliceExampleReplayVerdicts(projectDir, slicePath, records);
 
   const result: VerifyExampleRecordResult = { records, ledgerPath, provenance, repairs };
   if (options.json) {
