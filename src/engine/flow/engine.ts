@@ -308,8 +308,8 @@ export class FlowEngine<G extends Game = Game> {
   private lastActionResult?: ActionResult;
   /** Error from last action if it failed (cleared on success) */
   private actionError?: string;
-  /** See FlowState.actionThrew — set alongside actionError. */
-  private actionThrew = false;
+  /** See FlowState.actionPartiallyApplied — set alongside actionError. */
+  private actionPartiallyApplied = false;
   /** For simultaneous action steps - tracks which players can act */
   private awaitingPlayers: PlayerAwaitingState[] = [];
   /** Current named phase (for UI display) */
@@ -401,7 +401,7 @@ export class FlowEngine<G extends Game = Game> {
     this.turnRun = undefined;
     this.lastActionResult = undefined;
     this.actionError = undefined;
-    this.actionThrew = false;
+    this.actionPartiallyApplied = false;
     this.currentPhase = undefined;
 
     // Execute until we need input or complete
@@ -432,26 +432,9 @@ export class FlowEngine<G extends Game = Game> {
       return this.getState();
     }
 
-    // Execute the action (regular action step)
-    const result = this.game.performAction(actionName, this.currentPlayer!, args);
-    this.lastActionResult = result;
-
-    if (!result.success) {
-      // Action failed, stay in same state and record the error
-      this.actionError = result.error;
-      // #44: a throw out of execute() may have applied part of its changes.
-      // Staying put is right for the flow, but the runner still has to roll
-      // the game state back, and this is how it learns it must.
-      this.actionThrew = result.threw === true;
-      return this.getState();
-    }
-
-    // Clear error and awaiting state on success
-    this.actionError = undefined;
-    this.actionThrew = false;
-    this.awaitingInput = false;
-
-    return this.continueAfterCommittedAction(result);
+    // Execute the action (regular action step), then settle its result exactly
+    // as a result executed elsewhere (a completed pending action) is settled.
+    return this.resumeAfterExternalAction(this.game.performAction(actionName, this.currentPlayer!, args));
   }
 
   /**
@@ -464,24 +447,28 @@ export class FlowEngine<G extends Game = Game> {
       throw new Error('Flow is not awaiting input');
     }
 
-    this.lastActionResult = result;
+    if (!this.recordActionResult(result)) return this.getState();
+    this.awaitingInput = false;
+    return this.continueAfterCommittedAction(result);
+  }
 
+  /**
+   * Record an action's result. A failure stays in the same state with its error
+   * recorded; returns whether the action succeeded.
+   */
+  private recordActionResult(result: ActionResult): boolean {
+    this.lastActionResult = result;
     if (!result.success) {
-      // Action failed, stay in same state
       this.actionError = result.error;
-      // #44: a throw out of execute() may have applied part of its changes.
+      // #44/#325: a failure that may have applied part of its changes.
       // Staying put is right for the flow, but the runner still has to roll
       // the game state back, and this is how it learns it must.
-      this.actionThrew = result.threw === true;
-      return this.getState();
+      this.actionPartiallyApplied = result.partiallyApplied === true;
+      return false;
     }
-
-    // Clear awaiting state
     this.actionError = undefined;
-    this.actionThrew = false;
-    this.awaitingInput = false;
-
-    return this.continueAfterCommittedAction(result);
+    this.actionPartiallyApplied = false;
+    return true;
   }
 
   /**
@@ -821,21 +808,7 @@ export class FlowEngine<G extends Game = Game> {
       throw new Error(`Invalid player position: ${actingPlayerIndex}`);
     }
     const result = this.game.performAction(actionName, player, args);
-    this.lastActionResult = result;
-
-    if (!result.success) {
-      // Action failed, stay in same state and record the error
-      this.actionError = result.error;
-      // #44: a throw out of execute() may have applied part of its changes.
-      // Staying put is right for the flow, but the runner still has to roll
-      // the game state back, and this is how it learns it must.
-      this.actionThrew = result.threw === true;
-      return this.getState();
-    }
-
-    // Clear error on success (mirrors resume()'s success-path clear).
-    this.actionError = undefined;
-    this.actionThrew = false;
+    if (!this.recordActionResult(result)) return this.getState();
 
     // 160-02 (D4 step-window bound): count this action toward the CURRENT
     // simultaneous-step frame's move counter (mirrors
@@ -988,7 +961,7 @@ export class FlowEngine<G extends Game = Game> {
     // Include action error if present
     if (this.actionError) {
       state.actionError = this.actionError;
-      if (this.actionThrew) state.actionThrew = true;
+      if (this.actionPartiallyApplied) state.actionPartiallyApplied = true;
     }
 
     // Include followUp if last action returned one. NOTE: the sibling fields
@@ -1122,7 +1095,7 @@ export class FlowEngine<G extends Game = Game> {
 
     // Restore action error and follow-up state
     this.actionError = state.actionError;
-    this.actionThrew = state.actionThrew === true;
+    this.actionPartiallyApplied = state.actionPartiallyApplied === true;
     this.lastActionResult = state.followUp ? { success: true, followUp: state.followUp } : undefined;
 
     // Restore move-limit tracking for action steps
