@@ -84,6 +84,14 @@ dependency-order violation — name it concretely and propose the minimal prereq
 case name the dependency concretely and propose the minimal prerequisite (same posture
 `ingest-rules.md`'s Step 6 Approval Gate uses).
 
+The same operation keeps the sketch's `- Depends on:` lines true (`ingest/sketch-derivation.md`
+"The `Depends on:` Line"): a new or split entry gets one naming the chunks it builds on, a removed
+chunk is taken out of every line that named it (its dependents now depend on what it depended on),
+and a reorder never places a chunk above one it depends on. These lines are what
+`boardsmith parallel-check` reads, together with the same citation set operation (b) below
+intersects, to decide which chunks may be built at the same time; an entry missing its line is
+never built beside another.
+
 Fold in the `## Mandated Chunks` invariant guard here (OQ2 resolved YES — `${CLAUDE_SKILL_DIR}/../bs-shared/templates/
 SKETCH.template.md` "## Mandated Chunks"): a reshape must never leave the sketch without all three
 mandated chunks, and must never change their required positions. Apply ONE consistent rule to every

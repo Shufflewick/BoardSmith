@@ -71,6 +71,26 @@ sources (slices, docs, code), not on reading chunk state. `${CLAUDE_SKILL_DIR}/.
 `${CLAUDE_SKILL_DIR}/../bs-shared/build/redteam.md` restate the source-reading ban because those are the two steps where the
 temptation to "double-check by re-reading the sources a subagent just read" is strongest.
 
+## Concurrency Within a Chunk
+
+Work that only reads runs at the same time by default; work that writes stays in order. Reading in
+parallel costs no accuracy, because no reader sees another's output: that independence is already
+the rule for each of these steps.
+
+- **investigate** — the investigate subagent issues its source reads (cited slices, the INDEX
+  search, `RULINGS.md`, `DECISIONS.md`, the required docs) together, not one after another
+  (`build/investigate.md` "Fan-Out Dispatch").
+- **redteam** — the two refuters and the coverage adversary are dispatched in one message
+  (`build/redteam.md`).
+- **audit** — every lens, plus the design-review agent for a `ui: touches|major` chunk, is
+  dispatched in one message (`build/audit.md`).
+
+What stays sequential: every write to `CHUNK.md` and the ledgers, made by the orchestrator only
+after all of a step's agents have returned (a round is persisted whole, never agent by agent), and
+the steps themselves, since each one reads what the one before it wrote. Chunks as a whole are a
+different question, answered by code, not here: `orchestrate/chunk-dispatch.md` "Parallel
+Dispatch".
+
 ## Step 0: Entry — Layout Check + Ingest Synthesis Check + Consistency Check + Session Lock
 
 On entry, before any other work, run:

@@ -3,7 +3,8 @@ import { promises as fs } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { spawnCli } from '../spawn-cli.test-helper.js';
-import { checkConstraints, constraintCheckCommand, type TestRunner } from './constraint-check.js';
+import { checkConstraints, constraintCheckCommand, runVitest, type TestRunner } from './constraint-check.js';
+import { INSTALLED_MODULES } from '../../testing/installed-modules.test-helper.js';
 
 /**
  * #288: four sotf chunks closed with state that grew without limit against a 512 KiB partition
@@ -297,4 +298,56 @@ describe('constraint-check through the real CLI entry point', () => {
     expect(refused.code).toBe(1);
     expect(refused.stderr).toMatch(/G1 .* has no cap/);
   });
+});
+
+/**
+ * #294: a chunk built on a parallel branch numbers its entries provisionally (`G@<slug>.<n>`,
+ * `Ruling @<slug>.<n>`) until `boardsmith chunk-merge` allocates real numbers. The check must hold
+ * those entries to the same rules on the branch, not skip them for having no number, and must
+ * refuse one id used twice, which is what two branches taking "the next" number produce.
+ */
+describe('provisional ids on a parallel branch, and ids used twice', () => {
+  const PROVISIONAL_MAIL = MAIL.replace('### G1', '### G@clans.1');
+
+  it('checks a provisional growing structure like any other', async () => {
+    const refusals = await refusalsFor({ 'design/CONSTRAINTS.md': ledger('', PROVISIONAL_MAIL) });
+    expectOneRefusal(refusals, /G@clans\.1/, /no cap/i);
+  });
+
+  it('accepts a provisional ruling that the branch recorded', async () => {
+    const refusals = await refusalsFor({
+      'design/CONSTRAINTS.md': ledger('', `${PROVISIONAL_MAIL}\n- Ruling: Ruling @clans.1\n`),
+      'design/RULINGS.md': '# Rulings\n\n### Ruling @clans.1\n- Decision: mail may grow; the designer accepts it.\n',
+    });
+    expect(refusals).toEqual([]);
+  });
+
+  it('refuses an id used by two entries', async () => {
+    const refusals = await refusalsFor({
+      'design/CONSTRAINTS.md': ledger('', `${MAIL}\n- Ruling: Ruling 1\n\n${MAIL}\n- Ruling: Ruling 1\n`),
+      'design/RULINGS.md': '# Rulings\n\n### Ruling 1\n- Decision: mail may grow.\n',
+    });
+    expectOneRefusal(refusals, /G1 is used by 2 entries/);
+  });
+});
+
+/**
+ * #294: chunks built at the same time live in worktrees under `.boardsmith/worktrees/<slug>`,
+ * inside the project. Vitest's default discovery walks into dot-directories, so without an
+ * exclusion a run in the main checkout would also run every in-progress chunk's tests.
+ */
+describe('runVitest leaves chunk worktrees out of the run', () => {
+  it('passes a project whose only failing test is inside .boardsmith/worktrees', async () => {
+    const project = await makeProject({
+      'vitest.config.mjs': 'export default { test: {} };\n',
+      'tests/ok.test.ts': "import { it } from 'vitest';\nit('holds', () => {});\n",
+      '.boardsmith/worktrees/quests/tests/wip.test.ts':
+        "import { it, expect } from 'vitest';\nit('is still being built', () => { expect(1).toBe(2); });\n",
+    });
+    await fs.symlink(INSTALLED_MODULES, join(project, 'node_modules'), 'dir');
+    const run = await runVitest(project, []);
+    expect(run.output).toContain('ok.test.ts');
+    expect(run.output).not.toContain('wip.test.ts');
+    expect(run.ok).toBe(true);
+  }, 60_000);
 });

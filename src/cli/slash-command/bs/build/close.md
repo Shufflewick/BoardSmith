@@ -95,8 +95,8 @@ release) and no tail detailing.
    Then run `boardsmith ledger-check`. It checks, as code, what this reconciliation is most often
    done wrong: a ruling, decision, filing or dispatch number used twice; an entry that a later
    one supersedes but that does not carry its `- Superseded by:` line; a filing whose
-   `Reported:`, `Issue:` and any status banner disagree; and a `RUN.md` `Dispatched at` or
-   `Finished at` that is not a real `date -u` read (later than the commit that recorded it,
+   `Reported:`, `Issue:` and any status banner disagree; a dispatch entry in `RUN.md` instead of
+   the chunk's own `run-log/<slug>.md`; and a run log `Dispatched at` or `Finished at` that is not a real `date -u` read (later than the commit that recorded it,
    a finish before its dispatch, or out of order). It also refuses to close a chunk whose cited
    evidence is not in git: when `RULINGS.md`, `DECISIONS.md` or a verified CHUNK.md (its sign-off
    included) cites a script or a capture, that file must be committed. A cited file that is

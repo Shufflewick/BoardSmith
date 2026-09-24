@@ -321,7 +321,7 @@ the build in the same session**, stopping at the first chunk's first human gate 
 Do not end the turn telling the designer to `/clear` and re-invoke.
 
 Continue by **reading `${CLAUDE_SKILL_DIR}/../bs-build-game/SKILL.md` and following it from its
-Step 0** — the whole-game run, which builds the sketch's chunks one at a time in fresh contexts and
+Step 0** — the whole-game run, which builds the sketch's chunks in fresh contexts (independent ones side by side), and
 so does not hand the designer a `/clear` every chunk or two (`state-machine.md` "Orchestrated Runs").
 Read the sibling instructions and execute them in this same turn, exactly as `/bs-create-game` hands
 off to this file — never re-dispatch it as a separate skill invocation. If the designer has said they

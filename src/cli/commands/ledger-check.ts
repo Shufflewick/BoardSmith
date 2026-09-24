@@ -9,11 +9,17 @@
  * in Markdown is followed by some models and not others, so this runs as code and fails loudly.
  *
  * It checks, in `design/`:
- *   - RULINGS.md, DECISIONS.md, FILINGS.md: no entry number used twice; every `supersedes X N`
- *     is matched by `- Superseded by: X M` on entry N itself, and every pointer names a real entry.
+ *   - RULINGS.md, DECISIONS.md, FILINGS.md, QUESTIONS.md: no entry number, and no provisional id
+ *     (`Ruling @<slug>.<n>`, #294), used twice; every `supersedes X N` is matched by
+ *     `- Superseded by: X M` on entry N itself, and every pointer names a real entry.
+ *   - Every numbered ledger, CONSTRAINTS.md included: no provisional id in the main checkout. Only a
+ *     chunk's own worktree holds them, and `boardsmith chunk-merge` allocates them as it merges.
  *   - FILINGS.md: each entry's `Reported:`, `Issue:` and any status banner agree.
- *   - RUN.md: every `Dispatched at` / `Finished at` is a `date -u` clock read, in order, and no
- *     later than the commit that recorded that line (or than now, for a line not yet committed).
+ *   - run-log/<slug>.md, one per chunk (#294): every `Dispatched at` / `Finished at` is a
+ *     `date -u` clock read, in order, and no later than the commit that recorded that line (or
+ *     than now, for a line not yet committed). RUN.md holds no dispatch entries of its own.
+ *   - CROSS-CHUNK.md (#294): every merge of a chunk built alongside others has a ruling from the
+ *     audit's cross-chunk lens, not `pending`.
  *   - RULINGS.md, DECISIONS.md and every verified `chunks/<slug>/CHUNK.md` (its sign-off
  *     included): every script or capture they cite is in git (#292). A cited file that is
  *     missing, untracked, gitignored (the scratch folder) or outside the project is not evidence.
@@ -27,10 +33,13 @@ import { promises as fs } from 'node:fs';
 import { execFile } from 'node:child_process';
 import { join as pathJoin, resolve as pathResolve } from 'node:path';
 import {
+  CROSS_CHUNK_MD,
   DECISIONS_MD,
   DESIGN_DIR,
   FILINGS_MD,
+  QUESTIONS_MD,
   RULINGS_MD,
+  RUN_LOG_DIR,
   RUN_MD,
   chunkSlugs,
   designPath,
@@ -38,6 +47,8 @@ import {
 } from '../lib/project-paths.js';
 import { CHUNK_EVIDENCE_DIR, citedEvidencePaths, resolveCitation } from '../lib/cited-evidence.js';
 import { type LedgerEntry, parseLedgerEntries, supersessionPatterns } from '../lib/ledger-entries.js';
+import { NUMBERED_LEDGER_SPECS, duplicateProvisionalIds, provisionalHeadings } from '../lib/ledger-allocation.js';
+import { checkCrossChunkLedger } from './cross-chunk.js';
 
 export type LedgerFindingKind =
   | 'duplicate-number'
@@ -46,6 +57,9 @@ export type LedgerFindingKind =
   | 'filing-status-conflict'
   | 'filing-status-invalid'
   | 'run-timestamp'
+  | 'run-log-misplaced'
+  | 'cross-chunk-unreviewed'
+  | 'provisional-on-main-line'
   | 'evidence-not-committed';
 
 export interface LedgerFinding {
@@ -70,6 +84,7 @@ const NUMBERED_LEDGERS = [
   { file: RULINGS_MD, kind: 'Ruling' },
   { file: DECISIONS_MD, kind: 'Decision' },
   { file: FILINGS_MD, kind: 'Filing' },
+  { file: QUESTIONS_MD, kind: 'Question' },
 ] as const;
 
 // ---------------------------------------------------------------------------------------------
@@ -177,7 +192,17 @@ export function checkNumberedLedger(text: string, kind: string, ledger: string):
   const entries = parseLedgerEntries(text, kind);
   const byNumber = groupByNumber(entries);
   const supersession: Supersession = { kind, ledger, byNumber, ...supersessionPatterns(kind) };
+  const provisionalDupes = duplicateProvisionalIds(text, { file: ledger, kind, sep: ' ' }).map((id) => ({
+    ledger,
+    entry: id,
+    kind: 'duplicate-number' as const,
+    detail:
+      `${id} is used as a heading more than once. A provisional id is allocated one real number at ` +
+      `merge, so two entries under it would be merged into one citation. Give the later one the ` +
+      `next unused provisional id for this chunk.`,
+  }));
   return [
+    ...provisionalDupes,
     ...duplicateFindings(byNumber, kind, ledger),
     ...entries.flatMap((entry) => [
       ...forwardSupersessionFindings(entry, supersession),
@@ -424,18 +449,19 @@ function dispatchProblems(
 }
 
 /**
- * Checks RUN.md's Run Log. `commitTimeOfLine(n)` returns the committer time (epoch seconds) of
+ * Checks one chunk's run log (`run-log/<slug>.md`, named by `ledger`). `commitTimeOfLine(n)` returns the committer time (epoch seconds) of
  * the commit that recorded line `n`, or null when that line is not committed yet; such a line is
  * held to `nowSeconds` instead. A clock read taken when the line was written can never be later
  * than the commit that recorded it.
  */
 export function checkRunLog(
   text: string,
+  ledger: string,
   commitTimeOfLine: (line: number) => number | null,
   nowSeconds: number,
 ): LedgerFinding[] {
   const entries = parseLedgerEntries(text, 'Dispatch');
-  const findings = duplicateFindings(groupByNumber(entries), 'Dispatch', RUN_MD);
+  const findings = duplicateFindings(groupByNumber(entries), 'Dispatch', ledger);
   const clock: Clock = { commitTimeOfLine, nowSeconds };
   let previous: { number: number; at: number } | undefined;
 
@@ -451,13 +477,79 @@ export function checkRunLog(
     }
     if (dispatched) previous = { number: entry.number, at: dispatched.at };
     finishProblems(name, entry, dispatched, clock, out);
-    findings.push(...out.map((detail) => ({ ledger: RUN_MD, entry: name, kind: 'run-timestamp' as const, detail })));
+    findings.push(...out.map((detail) => ({ ledger, entry: name, kind: 'run-timestamp' as const, detail })));
   }
   return findings;
 }
 
+/** True in a repository's main checkout; false in a linked worktree (`git worktree add`). */
+async function isMainCheckout(projectDir: string): Promise<boolean> {
+  const [gitDir, commonDir] = (await git(projectDir, ['rev-parse', '--git-dir', '--git-common-dir'])).trim().split('\n');
+  return pathResolve(projectDir, gitDir) === pathResolve(projectDir, commonDir);
+}
+
+/**
+ * A provisional id (`Ruling @<slug>.<n>`) is written on a chunk's parallel branch, in its own
+ * worktree, and `boardsmith chunk-merge` turns it into a real number as it lands (#294). One in the
+ * main checkout means a branch was merged some other way, skipping the allocation and every
+ * combined-tree check that goes with it.
+ */
+async function provisionalOnMainLine(projectDir: string): Promise<LedgerFinding[]> {
+  const found: LedgerFinding[] = [];
+  for (const spec of NUMBERED_LEDGER_SPECS) {
+    const text = await readLedger(projectDir, spec.file);
+    for (const id of text === undefined ? [] : provisionalHeadings(text, spec)) {
+      found.push({
+        ledger: spec.file,
+        entry: id,
+        kind: 'provisional-on-main-line',
+        detail:
+          `${id} is a provisional id, which only a chunk's own worktree may hold; it reached the main ` +
+          `checkout without \`boardsmith chunk-merge\`, so no real number was allocated and the ` +
+          `combined tree was never checked. Give it the next unused number, update every citation of ` +
+          `it, and run \`boardsmith ledger-check\` and \`boardsmith constraint-check\` on this tree.`,
+      });
+    }
+  }
+  if (found.length === 0) return [];
+  await requireGitRepo(projectDir, 'tells a chunk worktree, where provisional ids belong, from the main checkout');
+  return (await isMainCheckout(projectDir)) ? found : [];
+}
+
+/**
+ * RUN.md holds only run-level lines (#294). A dispatch entry there is a log two chunks built at
+ * once would both append to, which is how sotf's run log came to carry conflicting times.
+ */
+function misplacedRunLog(text: string): LedgerFinding[] {
+  const entries = parseLedgerEntries(text, 'Dispatch');
+  if (entries.length === 0) return [];
+  return [
+    {
+      ledger: RUN_MD,
+      entry: `Dispatch ${entries[0].number}`,
+      kind: 'run-log-misplaced',
+      detail:
+        `RUN.md holds ${entries.length} dispatch entr${entries.length === 1 ? 'y' : 'ies'}, starting at ` +
+        `line ${entries[0].line}. Each chunk's dispatches belong in its own ` +
+        `${DESIGN_DIR}/${RUN_LOG_DIR}/<slug>.md, so chunks built at the same time never write one ` +
+        `file. Move each entry into the file for the chunk it dispatched, numbered from 1 there.`,
+    },
+  ];
+}
+
+/** Every chunk run log, design-relative (`run-log/<slug>.md`), sorted. */
+async function runLogFiles(projectDir: string): Promise<string[]> {
+  try {
+    const names = await fs.readdir(designPath(projectDir, RUN_LOG_DIR));
+    return names.filter((n) => n.endsWith('.md')).sort().map((n) => `${RUN_LOG_DIR}/${n}`);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return [];
+    throw err;
+  }
+}
+
 // ---------------------------------------------------------------------------------------------
-// Git: the commit time of each line of RUN.md
+// Git: the commit time of each line of a run log
 // ---------------------------------------------------------------------------------------------
 
 function git(cwd: string, args: string[]): Promise<string> {
@@ -641,13 +733,36 @@ export async function ledgerCheck(projectDir: string): Promise<LedgerCheckResult
     else evidence.push({ file, text });
   }
 
+  result.findings.push(...(await provisionalOnMainLine(projectDir)));
+
   const run = await readLedger(projectDir, RUN_MD);
   if (run === undefined) {
     result.absent.push(RUN_MD);
   } else {
     result.checked.push(RUN_MD);
-    const times = await lineCommitTimes(projectDir, `${DESIGN_DIR}/${RUN_MD}`);
-    result.findings.push(...checkRunLog(run, (line) => times[line] ?? null, Math.floor(Date.now() / 1000)));
+    result.findings.push(...misplacedRunLog(run));
+  }
+
+  for (const log of await runLogFiles(projectDir)) {
+    const text = (await readLedger(projectDir, log))!;
+    result.checked.push(log);
+    const times = await lineCommitTimes(projectDir, `${DESIGN_DIR}/${log}`);
+    result.findings.push(...checkRunLog(text, log, (line) => times[line] ?? null, Math.floor(Date.now() / 1000)));
+  }
+
+  const crossChunk = await readLedger(projectDir, CROSS_CHUNK_MD);
+  if (crossChunk === undefined) {
+    result.absent.push(CROSS_CHUNK_MD);
+  } else {
+    result.checked.push(CROSS_CHUNK_MD);
+    const slugs = await chunkSlugs(projectDir);
+    result.findings.push(
+      ...checkCrossChunkLedger(crossChunk, slugs).map((p) => ({
+        ledger: CROSS_CHUNK_MD,
+        kind: 'cross-chunk-unreviewed' as const,
+        ...p,
+      })),
+    );
   }
 
   const chunks = await verifiedChunks(projectDir);

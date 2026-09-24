@@ -69,7 +69,8 @@ and the resolved doc list from above; a fresh-context subagent has no inherited 
 where this chunk's sources live:
 
 ```
-Investigate the rules interpretation for {gameName}, chunk "{slug}". Read the following:
+Investigate the rules interpretation for {gameName}, chunk "{slug}". Read the following, issuing
+the reads together rather than one after another (none depends on another):
   - Cited slices: {citedSlicePaths}
   - INDEX-discovered slices (search rulebook/INDEX.md for this chunk's key terms): any
     additional slice the search surfaces

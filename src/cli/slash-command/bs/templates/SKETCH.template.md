@@ -82,11 +82,18 @@ Cutover chunk (if autoui-with-cutover): <!-- slug, or n/a -->
      to decide whether a chunk gets the human client-playtest stop — it is set explicitly HERE,
      at sketch-derivation time (see ingest/sketch-derivation.md), never inferred at runtime. Only
      the three milestone anchors named in "## Mandated Chunks" below ever carry a non-`none`
-     value; every other chunk (including every tail entry) is `Milestone: none`. -->
+     value; every other chunk (including every tail entry) is `Milestone: none`.
+
+     Depends-on grammar (#294): every chunk entry — detailed or tail — carries a `Depends on:` line
+     naming, comma-separated, the chunks whose work it builds on (their state, verbs, or rules), or
+     `none`. This is the sketch's dependency graph. `boardsmith parallel-check` reads it to decide
+     whether chunks may be built at the same time; an entry without the line is treated as depending
+     on every chunk before it, so it is only ever built in order. -->
 
 ### <!-- slug -->
 - What it builds: <!-- one-line description -->
 - Citations: <!-- rulebook section(s) -->
+- Depends on: <!-- none | comma-separated chunk slugs -->
 - ui: <!-- none | touches | major -->
 - Milestone: <!-- none | core-loop | scoring | final-acceptance -->
 - Status (derived from chunks/<!-- slug -->/CHUNK.md): <!-- proposed | approved | built | verified | verified (user-waived) | stale — re-derive before build -->
@@ -103,6 +110,7 @@ Cutover chunk (if autoui-with-cutover): <!-- slug, or n/a -->
 
 ### <!-- slug (tail entry, sketch-level only) -->
 - What it builds: <!-- one-line description -->
+- Depends on: <!-- none | comma-separated chunk slugs -->
 - ui: <!-- none | touches | major -->
 - Milestone: <!-- none | core-loop | scoring | final-acceptance -->
 - Status: proposed (sketch-level — no CHUNK.md yet)

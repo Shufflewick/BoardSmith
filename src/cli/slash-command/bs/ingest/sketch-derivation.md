@@ -118,6 +118,17 @@ siblings, which reuse that same surface, are typically `ui: touches`. That asymm
 and is another sign the split is sized correctly — a plan where every member chunk is `ui: major`
 usually means the surface should have been introduced once, up front, and reused.
 
+### The `Depends on:` Line
+
+Every chunk entry, detailed or tail, also records a `- Depends on:` line: the chunks whose work it
+builds on, comma-separated, or `none`. A chunk depends on another when it uses that chunk's state,
+verbs, or rules; the core-loop chunk is `none`, and nearly everything else depends on it. Name
+direct dependencies only; the chain is followed by code. This line is the sketch's dependency
+graph: `boardsmith parallel-check` reads it to decide which chunks may be built at the same time
+(`orchestrate/chunk-dispatch.md` "Parallel Dispatch"), and an entry without it is only ever built in
+order. When unsure whether two chunks touch the same state, list the dependency: a missing one lets
+two chunks be built blind to each other, while an extra one only costs a little time.
+
 ## 5. Outcome-Based Test Scripts
 
 Each chunk's test script states an OUTCOME, not a gesture. Write "move a pawn one space; the board
@@ -132,7 +143,7 @@ should be separate chunks.
 
 Detail only the next 2-3 chunks in the Ordered Chunk List. Do not detail the entire game up front —
 this is a deliberate anti-completeness constraint, not an oversight to "fix" by filling in more.
-Every entry beyond the next 2-3 stays at sketch level: `What it builds` and `ui:` only, no
+Every entry beyond the next 2-3 stays at sketch level: `What it builds`, `Depends on:` and `ui:` only, no
 Citations, no Test script detail, and its Status line uses the exact byte-identical tail marker:
 
 ```

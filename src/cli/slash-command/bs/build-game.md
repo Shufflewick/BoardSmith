@@ -1,6 +1,6 @@
 ---
 name: bs-build-game
-description: Build a whole BoardSmith game from its approved sketch — orchestrates one chunk at a time in fresh subagents, handles every question and playtest itself, files BoardSmith bugs upstream, and resumes cleanly after a /clear or crash. Use to run or resume a full build.
+description: Build a whole BoardSmith game from its approved sketch — orchestrates chunks in fresh subagents (independent ones side by side when the checks allow), handles every question and playtest itself, files BoardSmith bugs upstream, and resumes cleanly after a /clear or crash. Use to run or resume a full build.
 ---
 
 # `/bs-build-game` — Build the Whole Game
@@ -9,7 +9,7 @@ Cite `${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md`,
 `${CLAUDE_SKILL_DIR}/../bs-shared/reporting.md`, and the `orchestrate/` reference files rather than
 restating their rules — if you are extending this skill, link to the relevant section instead of
 copying rule text. This file is a lean **run loop**: it checks the project, resolves run state,
-dispatches one chunk at a time into a fresh subagent, conducts every human gate itself, and stops
+dispatches each chunk into a fresh subagent (independent chunks side by side when `parallel-check` allows), conducts every human gate itself, and stops
 only when it must. It does not explain the chunk pipeline, the status enum, or the session lock
 inline — `/bs-build-chunk` and `state-machine.md` own those.
 
@@ -123,7 +123,7 @@ resume, lead with the open gate if there is one — that is the thing they are h
 ## Step 2: Confirm the Run
 
 Before the first dispatch, say what the run will do and get a yes: how many chunks remain, that you
-will build them one at a time, and that you will stop whenever you need a question answered or the
+will build them in order (independent chunks side by side when the checks allow it), and that you will stop whenever you need a question answered or the
 game played. Name the ones that will need them if the sketch already says so (the milestone chunks —
 `state-machine.md`'s human-gate list). This is one short exchange, not a menu of options, and it
 happens once per run — a resumed run that already has a yes does not re-ask; it reports and
@@ -144,19 +144,29 @@ Loop until there is nothing left to build or a stop condition fires
    - anything else, including the mandated final-acceptance chunk → `bs-build-chunk`, which routes
      ceremony and final-acceptance itself (`build-chunk.md` Steps 2-3). This skill never routes
      steps within a chunk.
-3. **Refresh the lock**, append the `### Dispatch N` entry to `RUN.md` with `Outcome: pending`, and
-   dispatch one fresh subagent per
+3. **Look for chunks that can be built beside it.** Take the target plus the next not-yet-verified
+   chunks in list order that have citations and a `- Depends on:` line, and run
+   `npx boardsmith parallel-check <target> <next> [...]`, dropping the last chunk until it passes
+   or only the target is left. A pass means the batch is independent in the sketch's dependency
+   graph and shares no rulebook citation; build it as `orchestrate/chunk-dispatch.md` "Parallel
+   Dispatch" says, each chunk in its own worktree, every chunk in one message. Anything else is
+   built alone in the main checkout. The check decides, never a judgement call made here.
+4. **Refresh the lock**, append the `### Dispatch N` entry to each chunk's own
+   `design/run-log/<slug>.md` with `Outcome: pending`, and dispatch one fresh subagent per chunk per
    `${CLAUDE_SKILL_DIR}/../bs-shared/orchestrate/chunk-dispatch.md` — its seven-field brief, its
-   no-designer rule, and its return shape. One dispatch at a time, never two.
-4. **Consume the return by field name** and fill that entry's `Outcome`/`Detail`. Then route on
-   `outcome` per Step 4.
+   no-designer rule, and its return shape.
+5. **Consume each return by field name** and fill that entry's `Outcome`/`Detail`. Then route on
+   `outcome` per Step 4. A chunk built in its own worktree reaches the main checkout only through
+   `npx boardsmith chunk-merge <slug>`, one merge at a time, once it has closed; when that merge
+   records cross-chunk references, the audit's cross-chunk lens runs before anything else.
 
 Between chunks, say one plain sentence about what the designer can now see in their game — or
 nothing, if there is nothing visible yet. Do not announce each dispatch.
 
 ## Step 4: Routing a Return
 
-- **`closed`**: first run `npx boardsmith chunk-check <slug>`. A non-zero exit that names the
+- **`closed`**: first run `npx boardsmith chunk-check <slug>` (with `--project` set to the chunk's
+  worktree when it was built in one, then `npx boardsmith chunk-merge <slug>` from the main checkout). A non-zero exit that names the
   sign-off means the chunk's verified status is not backed by the designer (or by a waiver naming
   it): treat the chunk as still at its playtest gate, never as closed. Otherwise relay the
   subagent's `designerSummary`, record any `assetsRequested` and `filings`, and continue the loop.

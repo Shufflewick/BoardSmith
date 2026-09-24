@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { execSync } from 'node:child_process';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 import {
   type LedgerCheckResult,
   type LedgerFinding,
@@ -156,7 +156,6 @@ describe('checkFilingStatus', () => {
 function dispatch(n: number, dispatched: string, outcome: string, finished: string): string {
   return [
     `### Dispatch ${n}`,
-    '- Chunk: core-loop',
     '- Pipeline: build-chunk',
     `- Dispatched at: ${dispatched}`,
     `- Finished at: ${finished}`,
@@ -166,6 +165,7 @@ function dispatch(n: number, dispatched: string, outcome: string, finished: stri
   ].join('\n');
 }
 
+const LOG = 'run-log/core-loop.md';
 const epoch = (iso: string) => Date.parse(iso) / 1000;
 const NOW = epoch('2026-09-24T00:00:00Z');
 const uncommitted = () => null;
@@ -176,12 +176,12 @@ describe('checkRunLog', () => {
       dispatch(1, '2026-09-23T10:00:00Z', 'closed', '2026-09-23T11:00:00Z'),
       dispatch(2, '2026-09-23T11:05:00Z', 'pending', 'pending'),
     ].join('\n');
-    expect(checkRunLog(text, () => epoch('2026-09-23T12:00:00Z'), NOW)).toEqual([]);
+    expect(checkRunLog(text, LOG, () => epoch('2026-09-23T12:00:00Z'), NOW)).toEqual([]);
   });
 
   it('fails a finish earlier than its dispatch (sotf Dispatch 73)', () => {
     const text = dispatch(73, '2026-09-23T10:03:30Z', 'closed', '2026-09-22T12:30:00Z');
-    const findings = checkRunLog(text, uncommitted, NOW);
+    const findings = checkRunLog(text, LOG, uncommitted, NOW);
     expect(findings).toHaveLength(1);
     expect(findings[0].entry).toBe('Dispatch 73');
     expect(findings[0].detail).toMatch(/earlier than its Dispatched at/);
@@ -193,14 +193,14 @@ describe('checkRunLog', () => {
     const finishedLine = lines.findIndex((l) => l.startsWith('- Finished at:')) + 1;
     const commitTime = (line: number) =>
       line === finishedLine ? epoch('2026-09-23T10:30:00Z') : epoch('2026-09-23T12:00:00Z');
-    const findings = checkRunLog(text, commitTime, NOW);
+    const findings = checkRunLog(text, LOG, commitTime, NOW);
     expect(findings).toHaveLength(1);
     expect(findings[0].detail).toMatch(/Finished at .* is later than the commit/);
   });
 
   it('fails an uncommitted timestamp that is in the future', () => {
     const text = dispatch(1, '2026-09-25T10:00:00Z', 'pending', 'pending');
-    expect(checkRunLog(text, uncommitted, NOW).map((f) => f.kind)).toEqual(['run-timestamp']);
+    expect(checkRunLog(text, LOG, uncommitted, NOW).map((f) => f.kind)).toEqual(['run-timestamp']);
   });
 
   it('fails a dispatch earlier than the one logged before it', () => {
@@ -208,7 +208,7 @@ describe('checkRunLog', () => {
       dispatch(1, '2026-09-23T10:00:00Z', 'closed', '2026-09-23T11:00:00Z'),
       dispatch(2, '2026-09-22T09:00:00Z', 'pending', 'pending'),
     ].join('\n');
-    const findings = checkRunLog(text, uncommitted, NOW);
+    const findings = checkRunLog(text, LOG, uncommitted, NOW);
     expect(findings.map((f) => f.entry)).toEqual(['Dispatch 2']);
   });
 
@@ -218,7 +218,7 @@ describe('checkRunLog', () => {
       dispatch(2, '2026-09-23T10:10:00Z', 'pending', '2026-09-23T10:20:00Z'),
       dispatch(3, 'Sept 23, 10:30', 'pending', 'pending'),
     ].join('\n');
-    expect(checkRunLog(text, uncommitted, NOW).map((f) => f.entry)).toEqual([
+    expect(checkRunLog(text, LOG, uncommitted, NOW).map((f) => f.entry)).toEqual([
       'Dispatch 1',
       'Dispatch 2',
       'Dispatch 3',
@@ -227,7 +227,7 @@ describe('checkRunLog', () => {
 
   it('fails a missing Finished at field', () => {
     const text = '### Dispatch 1\n- Dispatched at: 2026-09-23T10:00:00Z\n- Outcome: pending\n';
-    expect(checkRunLog(text, uncommitted, NOW)[0].detail).toMatch(/Finished at/);
+    expect(checkRunLog(text, LOG, uncommitted, NOW)[0].detail).toMatch(/Finished at/);
   });
 
   it('reports a dispatch number used twice', () => {
@@ -235,7 +235,7 @@ describe('checkRunLog', () => {
       dispatch(1, '2026-09-23T10:00:00Z', 'closed', '2026-09-23T11:00:00Z'),
       dispatch(1, '2026-09-23T11:05:00Z', 'pending', 'pending'),
     ].join('\n');
-    expect(checkRunLog(text, uncommitted, NOW).map((f) => f.kind)).toEqual(['duplicate-number']);
+    expect(checkRunLog(text, LOG, uncommitted, NOW).map((f) => f.kind)).toEqual(['duplicate-number']);
   });
 });
 
@@ -256,6 +256,7 @@ async function project(files: Record<string, string>): Promise<string> {
   await fs.mkdir(join(dir, 'design'), { recursive: true });
   execSync('git init', { cwd: dir, stdio: 'ignore' });
   for (const [name, text] of Object.entries(files)) {
+    await fs.mkdir(dirname(join(dir, 'design', name)), { recursive: true });
     await fs.writeFile(join(dir, 'design', name), text);
   }
   return dir;
@@ -268,6 +269,14 @@ function commitAt(dir: string, iso: string): void {
     stdio: 'ignore',
     env: { ...process.env, GIT_COMMITTER_DATE: iso, GIT_AUTHOR_DATE: iso },
   });
+}
+
+/** A committed project holding `files`, checked; `found` is each finding as `ledger:entry:kind`. */
+async function committedProject(files: Record<string, string>): Promise<{ result: LedgerCheckResult; found: string[] }> {
+  const dir = await project(files);
+  commitAt(dir, '2026-09-23T12:00:00Z');
+  const result = await ledgerCheck(dir);
+  return { result, found: result.findings.map((f) => `${f.ledger}:${f.entry}:${f.kind}`) };
 }
 
 describe('ledgerCheck — the whole project', () => {
@@ -284,27 +293,87 @@ describe('ledgerCheck — the whole project', () => {
     process.exitCode = undefined;
   });
 
-  it('compares RUN.md times against the commit that recorded each line', async () => {
+  it('compares each chunk run log\'s times against the commit that recorded each line', async () => {
     const dir = await project({
-      'RUN.md': dispatch(1, '2026-09-23T10:00:00Z', 'closed', '2026-09-23T11:00:00Z'),
+      'run-log/core-loop.md': dispatch(1, '2026-09-23T10:00:00Z', 'closed', '2026-09-23T11:00:00Z'),
     });
     // Committed at 10:30, so a finish at 11:00 was typed before it happened.
     commitAt(dir, '2026-09-23T10:30:00Z');
     const result = await ledgerCheck(dir);
-    expect(result.findings.map((f) => f.entry)).toEqual(['Dispatch 1']);
+    expect(located(result.findings)).toEqual(['run-log/core-loop.md:run-timestamp']);
     expect(result.findings[0].detail).toMatch(/Finished at/);
+  });
+
+  it('checks every chunk run log on its own, so two chunks built at once never share a field (#294)', async () => {
+    const dir = await project({
+      'run-log/trading.md': dispatch(1, '2026-09-23T10:00:00Z', 'closed', '2026-09-23T11:00:00Z'),
+      'run-log/auctions.md': dispatch(1, '2026-09-23T09:00:00Z', 'closed', '2026-09-23T08:00:00Z'),
+    });
+    commitAt(dir, '2026-09-23T12:00:00Z');
+    const result = await ledgerCheck(dir);
+    expect(result.checked).toEqual(['run-log/auctions.md', 'run-log/trading.md']);
+    expect(located(result.findings)).toEqual(['run-log/auctions.md:run-timestamp']);
+  });
+
+  it('fails a dispatch entry written into RUN.md, where two writers would share one log (#294)', async () => {
+    const dir = await project({
+      'RUN.md': ['# Run', 'Run Status: active', '## Run Log', dispatch(1, '2026-09-23T10:00:00Z', 'pending', 'pending')].join('\n'),
+    });
+    commitAt(dir, '2026-09-23T12:00:00Z');
+    const result = await ledgerCheck(dir);
+    expect(located(result.findings)).toEqual(['RUN.md:run-log-misplaced']);
+    expect(result.findings[0].detail).toContain('design/run-log/<slug>.md');
+  });
+
+  it('fails a cross-chunk merge the audit has not ruled on (#294)', async () => {
+    const { result, found } = await committedProject({
+      'CROSS-CHUNK.md': '# Cross-Chunk References\n\n### Merge 1\n- Chunk: auctions\n- Verdict: pending\n',
+    });
+    expect(result.checked).toContain('CROSS-CHUNK.md');
+    expect(found).toEqual(['CROSS-CHUNK.md:Merge 1:cross-chunk-unreviewed']);
+  });
+
+  it('fails a question number used twice, and a provisional id used twice (#294)', async () => {
+    const { found } = await committedProject({
+      'QUESTIONS.md': '### Question 3\n- Question: a\n### Question 3\n- Question: b\n',
+      'RULINGS.md': '### Ruling @trading.1\n- Decision: a\n### Ruling @trading.1\n- Decision: b\n',
+    });
+    expect(found).toContain('RULINGS.md:Ruling @trading.1:duplicate-number');
+    expect(found).toContain('QUESTIONS.md:Question 3:duplicate-number');
+  });
+
+  it('fails a provisional id in the main checkout, where only chunk-merge may land one (#294)', async () => {
+    const { result, found } = await committedProject({
+      'RULINGS.md': ruling(1) + '### Ruling @trading.1\n- Decision: merged by hand.\n',
+      'CONSTRAINTS.md': '# Constraints\n\n## Growing Structures\n\n### G@trading.1\n- State: x\n',
+    });
+    expect(found).toEqual([
+      'RULINGS.md:Ruling @trading.1:provisional-on-main-line',
+      'CONSTRAINTS.md:G@trading.1:provisional-on-main-line',
+    ]);
+    expect(result.findings[0].detail).toContain('boardsmith chunk-merge');
+  });
+
+  it('accepts provisional ids in a chunk\'s own worktree, where a parallel branch writes them', async () => {
+    const dir = await project({ 'RULINGS.md': ruling(1) });
+    commitAt(dir, '2026-09-23T12:00:00Z');
+    const worktree = join(dirname(dir), 'wt-trading');
+    execSync(`git worktree add -q -b chunk/trading ${worktree}`, { cwd: dir, stdio: 'ignore' });
+    await fs.appendFile(join(worktree, 'design', 'RULINGS.md'), '### Ruling @trading.1\n- Decision: x.\n');
+    commitAt(worktree, '2026-09-23T12:30:00Z');
+    expect((await ledgerCheck(worktree)).findings).toEqual([]);
   });
 
   it('passes a committed log whose times precede their commits, and reports absent ledgers', async () => {
     const dir = await project({
-      'RUN.md': dispatch(1, '2026-09-23T10:00:00Z', 'closed', '2026-09-23T11:00:00Z'),
+      'run-log/core-loop.md': dispatch(1, '2026-09-23T10:00:00Z', 'closed', '2026-09-23T11:00:00Z'),
       'RULINGS.md': ruling(1),
     });
     commitAt(dir, '2026-09-23T12:00:00Z');
     const result = await ledgerCheck(dir);
     expect(result.findings).toEqual([]);
-    expect(result.checked).toEqual(['RULINGS.md', 'RUN.md']);
-    expect(result.absent).toEqual(['DECISIONS.md', 'FILINGS.md']);
+    expect(result.checked).toEqual(['RULINGS.md', 'run-log/core-loop.md']);
+    expect(result.absent).toEqual(['DECISIONS.md', 'FILINGS.md', 'QUESTIONS.md', 'RUN.md', 'CROSS-CHUNK.md']);
   });
 
   it('checks every ledger in one run, so a merged tree is checked as a whole', async () => {
@@ -333,11 +402,11 @@ describe('ledgerCheck — the whole project', () => {
     expect(process.exitCode).toBeUndefined();
   });
 
-  it('refuses a project with a RUN.md outside a git repository, saying why', async () => {
+  it('refuses a project with a run log outside a git repository, saying why', async () => {
     const tree = tempTree('bs-ledger-check-nogit-');
     const dir = join(tree, 'proj');
-    await fs.mkdir(join(dir, 'design'), { recursive: true });
-    await fs.writeFile(join(dir, 'design', 'RUN.md'), dispatch(1, '2026-09-23T10:00:00Z', 'pending', 'pending'));
+    await fs.mkdir(join(dir, 'design', 'run-log'), { recursive: true });
+    await fs.writeFile(join(dir, 'design', 'run-log', 'core-loop.md'), dispatch(1, '2026-09-23T10:00:00Z', 'pending', 'pending'));
     await expect(ledgerCheck(dir)).rejects.toThrow(/not a git repository/);
   });
 });
