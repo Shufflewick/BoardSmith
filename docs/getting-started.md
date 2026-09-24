@@ -104,6 +104,15 @@ play as bot until claimed).
 By default the server binds to `127.0.0.1` (local-only). Pass `--lan` to let
 other devices on your network join.
 
+Saving a file under your rules directory reloads the rules on the host too, not
+only in the browser, and the game in progress carries on under them from where
+it was. If an edit to your flow means the saved position no longer fits, the
+host rebuilds the game by replaying its moves on the new rules. If even that
+fails, every page and the terminal say so, and **New game** starts a game on the
+edited rules. A rules file that does not load leaves the game running on the
+rules it had, and the terminal says why. An edit that changes `gameType`,
+`minPlayers` or `maxPlayers` needs `boardsmith dev` restarted.
+
 **Building a persistent world?** `boardsmith dev` plays your project's table
 game. The world half of a game definition is run by the hosting platform, not by
 this CLI, so read [Persistent worlds](./persistent-worlds.md) first — it says

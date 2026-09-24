@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import { DEFAULT_COLOR_PALETTE } from '../../engine/index.js';
 import {
   DevFlagError,
@@ -16,6 +18,8 @@ import {
   parseGameOptionFlags,
   mergeGameOptionDefinitions,
   resolvePreset,
+  tableShapeChange,
+  describeTableReload,
 } from './dev.js';
 
 /**
@@ -344,3 +348,63 @@ describe('shouldOpenBrowser (138: --no-open opts out of auto-launching a real br
  * `src/main.ts` at all, so there is nothing left to refuse. What replaces the
  * assertions is `dev-world.test.ts`, on the server that took the road.
  */
+
+/**
+ * #343: THE TABLE ROAD RELOADS ITS RULES ON A SAVE, through the watcher the
+ * world road uses (#201). `multiplayer-host.rules-reload.test.ts` drives the
+ * reload itself; `dev-server.test.ts` drives the watcher. What is held here is
+ * what the terminal says, and that `devCommand` actually wires the two together.
+ */
+describe('#343: a table reloads its rules when they are saved', () => {
+  const source = readFileSync(fileURLToPath(new URL('./dev.ts', import.meta.url)), 'utf-8');
+  const table = { gameType: 'counter', minPlayers: 2, maxPlayers: 4 };
+
+  it('devCommand watches the rules and hands every edit to the running host', () => {
+    const wired = source.indexOf("what: 'table'");
+    expect(wired).toBeGreaterThan(source.indexOf('reloadOnRulesEdit({'));
+    expect(source.indexOf('await mpHost.reloadRules(runtime.rules)')).toBeGreaterThan(wired);
+  });
+
+  it('takes an edit that keeps the table the same shape', () => {
+    expect(tableShapeChange(table, { ...table })).toBeNull();
+  });
+
+  it('refuses an edit to the seat range by name, and says how to use it', () => {
+    const said = tableShapeChange(table, { ...table, maxPlayers: 5 });
+    expect(said).toContain('seat range (from 2-4 to 2-5)');
+    expect(said).toContain('still running the rules it had');
+    expect(said).toContain('start it again');
+  });
+
+  it('refuses an edit to the game type by name', () => {
+    expect(tableShapeChange(table, { ...table, gameType: 'tally' })).toContain('gameType (from "counter" to "tally")');
+  });
+
+  it('says what became of the game', () => {
+    expect(describeTableReload(null)).toContain('next game starts on the edited rules');
+    const result = { success: true } as const;
+    expect(describeTableReload({ kind: 'restored', result: { ...emptyResult, ...result } })).toContain(
+      'goes on from where it was',
+    );
+    const replayed = describeTableReload({
+      kind: 'replayed',
+      restoreError: 'Flow position invalid: out of bounds',
+      moves: 3,
+      result: { ...emptyResult, ...result },
+    });
+    expect(replayed).toContain('Flow position invalid: out of bounds');
+    expect(replayed).toContain('replaying its 3 moves');
+    // The host has already said so, loudly, to the terminal and every page.
+    expect(describeTableReload({ kind: 'failed', reason: 'no' })).toBeNull();
+  });
+});
+
+const emptyResult = {
+  success: true,
+  snapshot: null,
+  pendingState: null,
+  flowState: null,
+  playerViews: [],
+  isComplete: false,
+  winners: [],
+};

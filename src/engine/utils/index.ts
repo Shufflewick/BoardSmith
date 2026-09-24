@@ -39,28 +39,3 @@ export { enumerateLegalMoves, generateCombinations } from './enumerate-moves.js'
 export { buildActionArgs } from './arg-builder.js';
 export type { BuildActionArgsOptions } from './arg-builder.js';
 
-// Dev state transfer (for HMR)
-export {
-  captureDevState,
-  restoreDevState,
-  validateDevSnapshot,
-  formatValidationErrors,
-  getSnapshotElementCount,
-  // Dev checkpoints for fast HMR recovery
-  createDevCheckpoint,
-  restoreFromDevCheckpoint,
-} from './dev-state.js';
-
-export type {
-  DevSnapshot,
-  RestoreDevStateOptions,
-  ValidationResult,
-  ValidationError,
-  ValidationWarning,
-  ValidationErrorType,
-  ValidationWarningType,
-  // Dev checkpoint types
-  DevCheckpoint,
-  RestoreFromDevCheckpointOptions,
-  DevCheckpointRestoreResult,
-} from './dev-state.js';

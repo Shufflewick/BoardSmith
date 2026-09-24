@@ -4,10 +4,9 @@ import {
   Space,
   Piece,
   Player,
-  captureDevState,
-  restoreDevState,
 } from '../index.js';
-import type { GameOptions, ElementClass } from '../index.js';
+import type { GameOptions } from '../index.js';
+import { serializedRoundTrip } from './serialized-round-trip.test-helper.js';
 
 // ============================================
 // Test Utilities
@@ -19,7 +18,7 @@ import type { GameOptions, ElementClass } from '../index.js';
  * Declared array properties on a Game (or Player) are persisted exclusively
  * through the single toJSON attribute path - there is no dev-only Proxy and no
  * parallel `settings.__autoSync_*` shadow copy (see F3). These tests prove that
- * plain arrays survive a capture/restore (HMR) round-trip purely via toJSON,
+ * plain arrays survive a serialize/restore round-trip purely via toJSON,
  * with identical runtime identity (a plain Array) in every environment.
  */
 
@@ -33,38 +32,6 @@ async function createTestGame<G extends Game>(
   const game = new GameClass({ playerCount: 2, playerNames: ['P1', 'P2'] });
   // Wait for post-construction initialization (e.g. the HMR volatile-state scan)
   return game.ready();
-}
-
-/**
- * Simulate HMR by capturing state and restoring to a new game instance.
- * This is the core test utility - if arrays survive this, they survive HMR.
- */
-async function simulateHMR<G extends Game>(
-  originalGame: G,
-  GameClass: new (options: GameOptions) => G
-): Promise<G> {
-  // 1. Capture dev state from original
-  const devState = captureDevState(originalGame);
-
-  // 2. Build class registry from original game
-  const classRegistry = new Map<string, ElementClass>();
-  for (const [name, cls] of originalGame._ctx.classRegistry) {
-    classRegistry.set(name, cls);
-  }
-
-  // 3. Restore state to new instance
-  const restored = restoreDevState(devState, GameClass, {
-    gameOptions: {
-      playerCount: originalGame.players.length,
-      playerNames: originalGame.players.map(p => p.name),
-    },
-    classRegistry,
-  });
-
-  // 4. Let the restored game's post-construction microtask (volatile-state scan) run
-  await Promise.resolve();
-
-  return restored;
 }
 
 // ============================================
@@ -106,7 +73,7 @@ describe('Array persistence: Primitive Arrays', () => {
     const game = await createTestGame(ScoreGame);
     game.scores.push(10, 20, 30);
 
-    const restored = await simulateHMR(game, ScoreGame);
+    const restored = await serializedRoundTrip(game, ScoreGame);
 
     expect(restored.scores).toEqual([10, 20, 30]);
   });
@@ -118,7 +85,7 @@ describe('Array persistence: Primitive Arrays', () => {
     const game = await createTestGame(NameGame);
     game.names.push('Alice', 'Bob');
 
-    const restored = await simulateHMR(game, NameGame);
+    const restored = await serializedRoundTrip(game, NameGame);
     expect(restored.names).toEqual(['Alice', 'Bob']);
   });
 
@@ -129,7 +96,7 @@ describe('Array persistence: Primitive Arrays', () => {
     const game = await createTestGame(FlagGame);
     game.flags.push(true, false, true);
 
-    const restored = await simulateHMR(game, FlagGame);
+    const restored = await serializedRoundTrip(game, FlagGame);
     expect(restored.flags).toEqual([true, false, true]);
   });
 
@@ -140,7 +107,7 @@ describe('Array persistence: Primitive Arrays', () => {
     const game = await createTestGame(MixedGame);
     game.mixed.push('a', 1, true, null);
 
-    const restored = await simulateHMR(game, MixedGame);
+    const restored = await serializedRoundTrip(game, MixedGame);
     expect(restored.mixed).toEqual(['a', 1, true, null]);
   });
 
@@ -150,7 +117,7 @@ describe('Array persistence: Primitive Arrays', () => {
     }
     const game = await createTestGame(PrePopGame);
 
-    const restored = await simulateHMR(game, PrePopGame);
+    const restored = await serializedRoundTrip(game, PrePopGame);
     expect(restored.scores).toEqual([100, 200, 300]);
   });
 });
@@ -169,70 +136,70 @@ describe('Array persistence: All Mutation Methods', () => {
 
   it('push() persists', async () => {
     game.items.push(6, 7);
-    const restored = await simulateHMR(game, MutationGame);
+    const restored = await serializedRoundTrip(game, MutationGame);
     expect(restored.items).toEqual([1, 2, 3, 4, 5, 6, 7]);
   });
 
   it('pop() persists', async () => {
     const popped = game.items.pop();
     expect(popped).toBe(5);
-    const restored = await simulateHMR(game, MutationGame);
+    const restored = await serializedRoundTrip(game, MutationGame);
     expect(restored.items).toEqual([1, 2, 3, 4]);
   });
 
   it('shift() persists', async () => {
     const shifted = game.items.shift();
     expect(shifted).toBe(1);
-    const restored = await simulateHMR(game, MutationGame);
+    const restored = await serializedRoundTrip(game, MutationGame);
     expect(restored.items).toEqual([2, 3, 4, 5]);
   });
 
   it('unshift() persists', async () => {
     game.items.unshift(-1, 0);
-    const restored = await simulateHMR(game, MutationGame);
+    const restored = await serializedRoundTrip(game, MutationGame);
     expect(restored.items).toEqual([-1, 0, 1, 2, 3, 4, 5]);
   });
 
   it('splice() remove persists', async () => {
     game.items.splice(1, 2); // Remove 2 items starting at index 1
-    const restored = await simulateHMR(game, MutationGame);
+    const restored = await serializedRoundTrip(game, MutationGame);
     expect(restored.items).toEqual([1, 4, 5]);
   });
 
   it('splice() insert persists', async () => {
     game.items.splice(2, 0, 99, 98); // Insert at index 2
-    const restored = await simulateHMR(game, MutationGame);
+    const restored = await serializedRoundTrip(game, MutationGame);
     expect(restored.items).toEqual([1, 2, 99, 98, 3, 4, 5]);
   });
 
   it('splice() replace persists', async () => {
     game.items.splice(1, 2, 99); // Replace 2 items with 1
-    const restored = await simulateHMR(game, MutationGame);
+    const restored = await serializedRoundTrip(game, MutationGame);
     expect(restored.items).toEqual([1, 99, 4, 5]);
   });
 
   it('sort() persists', async () => {
     game.items = [5, 2, 8, 1, 9];
     game.items.sort((a, b) => a - b);
-    const restored = await simulateHMR(game, MutationGame);
+    const restored = await serializedRoundTrip(game, MutationGame);
     expect(restored.items).toEqual([1, 2, 5, 8, 9]);
   });
 
   it('reverse() persists', async () => {
     game.items.reverse();
-    const restored = await simulateHMR(game, MutationGame);
+    const restored = await serializedRoundTrip(game, MutationGame);
     expect(restored.items).toEqual([5, 4, 3, 2, 1]);
   });
 
   it('fill() persists', async () => {
     game.items.fill(0, 1, 4);
-    const restored = await simulateHMR(game, MutationGame);
+    const restored = await serializedRoundTrip(game, MutationGame);
     expect(restored.items).toEqual([1, 0, 0, 0, 5]);
   });
 
   it('copyWithin() persists', async () => {
     game.items.copyWithin(0, 3); // Copy [4,5] to start
-    const restored = await simulateHMR(game, MutationGame);
+    const restored = await serializedRoundTrip(game, MutationGame);
     expect(restored.items).toEqual([4, 5, 3, 4, 5]);
   });
 });
@@ -245,7 +212,7 @@ describe('Array persistence: Index Assignment', () => {
     const game = await createTestGame(IndexGame);
     game.items[1] = 99;
 
-    const restored = await simulateHMR(game, IndexGame);
+    const restored = await serializedRoundTrip(game, IndexGame);
     expect(restored.items).toEqual([1, 99, 3]);
   });
 
@@ -256,7 +223,7 @@ describe('Array persistence: Index Assignment', () => {
     const game = await createTestGame(SparseGame);
     game.items[5] = 100; // Creates sparse array
 
-    const restored = await simulateHMR(game, SparseGame);
+    const restored = await serializedRoundTrip(game, SparseGame);
     expect(restored.items[5]).toBe(100);
     expect(restored.items.length).toBe(6);
   });
@@ -268,7 +235,7 @@ describe('Array persistence: Index Assignment', () => {
     const game = await createTestGame(TruncGame);
     game.items.length = 2;
 
-    const restored = await simulateHMR(game, TruncGame);
+    const restored = await serializedRoundTrip(game, TruncGame);
     expect(restored.items).toEqual([1, 2]);
   });
 
@@ -279,7 +246,7 @@ describe('Array persistence: Index Assignment', () => {
     const game = await createTestGame(ExtendGame);
     game.items.length = 5;
 
-    const restored = await simulateHMR(game, ExtendGame);
+    const restored = await serializedRoundTrip(game, ExtendGame);
     expect(restored.items.length).toBe(5);
   });
 });
@@ -293,7 +260,7 @@ describe('Array persistence: Object Arrays', () => {
     game.playerData.push({ name: 'Alice', score: 100 });
     game.playerData.push({ name: 'Bob', score: 200 });
 
-    const restored = await simulateHMR(game, PlayerDataGame);
+    const restored = await serializedRoundTrip(game, PlayerDataGame);
     expect(restored.playerData).toEqual([
       { name: 'Alice', score: 100 },
       { name: 'Bob', score: 200 }
@@ -307,7 +274,7 @@ describe('Array persistence: Object Arrays', () => {
     const game = await createTestGame(NestedGame);
     game.data.push({ outer: { inner: 42 } });
 
-    const restored = await simulateHMR(game, NestedGame);
+    const restored = await serializedRoundTrip(game, NestedGame);
     expect(restored.data[0].outer.inner).toBe(42);
   });
 
@@ -318,7 +285,7 @@ describe('Array persistence: Object Arrays', () => {
     const game = await createTestGame(RoundsGame);
     game.rounds.push({ scores: [10, 20, 30] });
 
-    const restored = await simulateHMR(game, RoundsGame);
+    const restored = await serializedRoundTrip(game, RoundsGame);
     expect(restored.rounds[0].scores).toEqual([10, 20, 30]);
   });
 
@@ -330,7 +297,7 @@ describe('Array persistence: Object Arrays', () => {
     game.playerData.push({ name: 'Alice', score: 100 });
     game.playerData[0].score = 150; // Mutate nested object
 
-    const restored = await simulateHMR(game, MutateNestedGame);
+    const restored = await serializedRoundTrip(game, MutateNestedGame);
     expect(restored.playerData[0].score).toBe(150);
   });
 });
@@ -355,7 +322,7 @@ describe('Array persistence: Element references in arrays', () => {
     }
 
     const game = await createTestGame(DiceGame);
-    const restored = await simulateHMR(game, DiceGame);
+    const restored = await serializedRoundTrip(game, DiceGame);
 
     expect(restored.dice).toHaveLength(2);
     expect(restored.dice[0]).toBeInstanceOf(Die);
@@ -379,7 +346,6 @@ describe('Array persistence: Non-serializable values fail loud at serialization'
     circular.self = circular;
     game.items.push(circular);
 
-    expect(() => captureDevState(game)).toThrow(/circular reference/i);
     expect(() => game.toJSON()).toThrow(/circular reference.*items/i);
   });
 });
@@ -396,7 +362,7 @@ describe('Array persistence: Multiple Arrays', () => {
     game.names.push('Alice');
     game.flags.push(true);
 
-    const restored = await simulateHMR(game, MultiGame);
+    const restored = await serializedRoundTrip(game, MultiGame);
     expect(restored.scores).toEqual([100]);
     expect(restored.names).toEqual(['Alice']);
     expect(restored.flags).toEqual([true]);
@@ -409,7 +375,7 @@ describe('Array persistence: Multiple Arrays', () => {
     const game = await createTestGame(ReassignGame);
     game.items = [1, 2, 3]; // Full reassignment
 
-    const restored = await simulateHMR(game, ReassignGame);
+    const restored = await serializedRoundTrip(game, ReassignGame);
     expect(restored.items).toEqual([1, 2, 3]);
   });
 
@@ -421,7 +387,7 @@ describe('Array persistence: Multiple Arrays', () => {
     game.items = [4, 5, 6];
     game.items.push(7);
 
-    const restored = await simulateHMR(game, ReassignMutateGame);
+    const restored = await serializedRoundTrip(game, ReassignMutateGame);
     expect(restored.items).toEqual([4, 5, 6, 7]);
   });
 });
@@ -434,7 +400,7 @@ describe('Array persistence: Edge Cases', () => {
     const game = await createTestGame(EmptyGame);
     // Don't add anything
 
-    const restored = await simulateHMR(game, EmptyGame);
+    const restored = await serializedRoundTrip(game, EmptyGame);
     expect(restored.items).toEqual([]);
   });
 
@@ -445,7 +411,7 @@ describe('Array persistence: Edge Cases', () => {
     const game = await createTestGame(NullGame);
     game.items.push(1, null, 3);
 
-    const restored = await simulateHMR(game, NullGame);
+    const restored = await serializedRoundTrip(game, NullGame);
     expect(restored.items).toEqual([1, null, 3]);
   });
 
@@ -458,7 +424,7 @@ describe('Array persistence: Edge Cases', () => {
       game.items.push(i);
     }
 
-    const restored = await simulateHMR(game, LargeGame);
+    const restored = await serializedRoundTrip(game, LargeGame);
     expect(restored.items.length).toBe(10000);
     expect(restored.items[9999]).toBe(9999);
   });
@@ -474,7 +440,7 @@ describe('Array persistence: Edge Cases', () => {
       game.items.push(i * 2);
     }
 
-    const restored = await simulateHMR(game, RapidGame);
+    const restored = await serializedRoundTrip(game, RapidGame);
     // Should have 100 items, each i*2
     expect(restored.items.length).toBe(100);
   });
@@ -490,7 +456,7 @@ describe('Array persistence: Edge Cases', () => {
     const player = game.players[0] as AchievementPlayer;
     player.achievements.push('First Win');
 
-    const restored = await simulateHMR(game, PlayerGame);
+    const restored = await serializedRoundTrip(game, PlayerGame);
     const restoredPlayer = restored.players[0] as AchievementPlayer;
     expect(restoredPlayer.achievements).toEqual(['First Win']);
   });

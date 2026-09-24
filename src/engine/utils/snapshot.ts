@@ -56,7 +56,7 @@ export interface GameStateSnapshot {
 
   /** Element sequence counter (`game._ctx.sequence`) captured at snapshot time.
    *  Restored after the tree is loaded so new-element ids stay aligned between
-   *  dev and the executor (mirrors `restoreDevState`). Without this, ids drift
+   *  dev and the executor. Without this, ids drift
    *  on the next created element and can trip the deletion-detector warning. */
   sequence?: number;
 

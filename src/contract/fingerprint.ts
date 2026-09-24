@@ -1311,7 +1311,14 @@ async function computeWorldFixture(): Promise<{
     needs: ({ player }: any) => neighboursOf(player.seat).map(holdingPartition),
     elements: ({ game, player }: any) =>
       neighboursOf(player.seat).map((seat: number) => holdingOf(game, seat)),
-    disabled: (holding: any) => (isAtFullGrowth(holding) ? 'Already at full growth' : false),
+    // THE SHARED WORK OF ONE EVALUATION (#334). `prepare` runs once per
+    // evaluation and its result is `disabled`'s third argument, which is only
+    // visible on the wire if the reason says it: an engine that dropped
+    // `prepare` would hand `disabled` nothing, and without this the offer would
+    // not change and no hash would move.
+    prepare: ({ game, player }: any) => holdingOf(game, player.seat).standing,
+    disabled: (holding: any, _ctx: any, ownStanding: number) =>
+      isAtFullGrowth(holding) ? `Already at full growth, and yours stands at ${ownStanding}` : false,
   };
 
   const tend = worldAction<any>('tend')

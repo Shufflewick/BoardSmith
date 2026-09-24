@@ -381,7 +381,7 @@ async function writeFixtureProject(root: string): Promise<string> {
     [
       "export * from './guards.js';",
       "export { numberCardsOf, RANKS } from './cards.js';",
-      // `punch.ts` is deliberately NOT re-exported — the one-level limit's negative case.
+      // `punch.ts` is deliberately NOT re-exported — a module no re-export chain reaches.
       'export function legalScoringPatterns(): string[] {',
       '  return [];',
       '}',
@@ -467,7 +467,7 @@ describe('collectGameApiSurface — translation (Task 3)', () => {
     );
   });
 
-  it('one-level-only re-export limit: a module index.ts never re-exports contributes no symbols', async () => {
+  it('a module no re-export chain reaches contributes no symbols', async () => {
     const surface = await collectGameApiSurface(projectDir);
     const names = surface.exportedSymbols.map((s) => s.name);
 
@@ -481,6 +481,92 @@ describe('collectGameApiSurface — translation (Task 3)', () => {
   it('throws a descriptive error when the project has no src/rules/index.ts', async () => {
     await expect(collectGameApiSurface('/nonexistent-project-dir-xyz')).rejects.toThrow(
       /No src\/rules\/index\.ts/,
+    );
+  });
+});
+
+/**
+ * A project whose rules API lives in subfolders of `src/rules/` and is reached only through
+ * chains of re-exports (#359): `export *` and named re-exports into subfolders, a `../` hop back
+ * out, a named re-export of a named re-export, an alias, a directory import, and a cycle.
+ */
+async function writeNestedFixtureProject(root: string): Promise<string> {
+  const rules = join(root, 'src', 'rules');
+  for (const dir of ['sim/dice', 'shared', 'world']) {
+    await fs.mkdir(join(rules, dir), { recursive: true });
+  }
+  const files: Record<string, string[]> = {
+    'index.ts': [
+      "export * from './sim/spawn.js';",
+      "export { roll as rollDie } from './sim/random.js';",
+      "export * from './world';",
+    ],
+    // `export *` from a subfolder that itself `export *`s from a sibling folder.
+    'sim/spawn.ts': [
+      'export function spawnUnits(): void {}',
+      "export * from '../shared/grid.js';",
+    ],
+    // A named re-export whose target only re-exports the name again, one folder deeper.
+    'sim/random.ts': ["export { roll } from './dice/roll.js';"],
+    'sim/dice/roll.ts': ['export function roll(): number {', '  return 4;', '}'],
+    // Re-exports back into the module that re-exported it: the walk must terminate.
+    'shared/grid.ts': [
+      'export const GRID_SIZE = 8;',
+      'export class Grid {}',
+      "export * from '../sim/spawn.js';",
+    ],
+    // Reached by a directory import (`./world`), which resolves to `world/index.ts`.
+    'world/index.ts': ['export function worldMap(): string {', "  return '';", '}'],
+    // On disk in a subfolder, but no re-export chain reaches it.
+    'sim/unlisted.ts': ['export function neverReached(): void {}'],
+  };
+  for (const [file, lines] of Object.entries(files)) {
+    await fs.writeFile(join(rules, file), [...lines, ''].join('\n'));
+  }
+  return root;
+}
+
+describe('collectGameApiSurface — re-exports through subfolders, at any depth (#359)', () => {
+  let projectDir: string;
+
+  beforeEach(async () => {
+    projectDir = tempTree('bs-example-derivation-nested-');
+    await writeNestedFixtureProject(projectDir);
+  });
+
+  it('lists every symbol a chain of re-exports reaches, each at the module that declares it', async () => {
+    const surface = await collectGameApiSurface(projectDir);
+
+    expect([...surface.exportedSymbols].sort((a, b) => a.name.localeCompare(b.name))).toEqual([
+      { name: 'Grid', kind: 'class', module: 'src/rules/shared/grid.ts' },
+      { name: 'GRID_SIZE', kind: 'const', module: 'src/rules/shared/grid.ts' },
+      { name: 'roll', kind: 'function', module: 'src/rules/sim/dice/roll.ts' },
+      { name: 'spawnUnits', kind: 'function', module: 'src/rules/sim/spawn.ts' },
+      { name: 'worldMap', kind: 'function', module: 'src/rules/world/index.ts' },
+    ]);
+  });
+
+  it('refuses a re-export that resolves to no file, naming the module and the path it tried', async () => {
+    await fs.writeFile(
+      join(projectDir, 'src', 'rules', 'sim', 'random.ts'),
+      "export { roll } from './dice/missing.js';\n",
+    );
+
+    await expect(collectGameApiSurface(projectDir)).rejects.toThrow(
+      /src\/rules\/sim\/random\.ts re-exports '\.\/dice\/missing\.js'.*src\/rules\/sim\/dice\/missing\.ts/s,
+    );
+  });
+
+  it('refuses a re-export that leaves src/, so the surface can never read the test directory', async () => {
+    await fs.mkdir(join(projectDir, 'tests'), { recursive: true });
+    await fs.writeFile(join(projectDir, 'tests', 'helpers.ts'), 'export function helper(): void {}\n');
+    await fs.writeFile(
+      join(projectDir, 'src', 'rules', 'world', 'index.ts'),
+      "export * from '../../../tests/helpers.js';\n",
+    );
+
+    await expect(collectGameApiSurface(projectDir)).rejects.toThrow(
+      /src\/rules\/world\/index\.ts re-exports '\.\.\/\.\.\/\.\.\/tests\/helpers\.js', which is outside src\//,
     );
   });
 });
