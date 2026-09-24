@@ -35,6 +35,12 @@ type GameClass<G extends Game = Game> = new (options: GameOptions) => G;
  * @param actionHistory - History of actions taken so far
  * @param difficulty - Difficulty level or iteration count
  * @param botStrategy - Optional bot configuration with objectives
+ * @param reproducible - Pass `{ seed }` for a search that picks the same move
+ *   every time it is given the same position (tests, tactical fixtures,
+ *   benchmarks). Without it the bot draws from a fresh random seed. The seed
+ *   also turns off the difficulty's wall-clock `timeout`, because a search the
+ *   clock can cut short is not reproducible whatever its seed: it runs exactly
+ *   the difficulty's `iterations`, however long that takes.
  *
  * @example
  * ```typescript
@@ -56,11 +62,13 @@ export function createBot<G extends Game>(
   playerIndex: number,
   actionHistory: SerializedAction[] = [],
   difficulty: DifficultyLevel | number = 'medium',
-  botStrategy?: BotStrategy
+  botStrategy?: BotStrategy,
+  reproducible?: { seed: string }
 ): MCTSBot<G> {
-  const config: Partial<BotConfig> = typeof difficulty === 'number'
-    ? { iterations: difficulty }
-    : DIFFICULTY_PRESETS[difficulty];
+  const config: Partial<BotConfig> = {
+    ...(typeof difficulty === 'number' ? { iterations: difficulty } : DIFFICULTY_PRESETS[difficulty]),
+    ...(reproducible && { seed: reproducible.seed, timeout: Infinity }),
+  };
 
   return new MCTSBot(
     game,
