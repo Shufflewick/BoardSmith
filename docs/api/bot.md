@@ -92,7 +92,14 @@ console.log(DEFAULT_CONFIG);
 // { iterations: 300, playoutDepth: 3, async: true, timeout: 2000 }
 ```
 
-**`timeout` overrides `iterations`.** It is a wall-clock responsiveness failsafe: when it fires the search returns the best move found so far, so a slow game silently runs far fewer iterations than requested. Pass `timeout: Infinity` when you want the run bounded only by `iterations` — and note that `seed` alone does **not** make a search reproducible for exactly this reason. Deterministic search needs `{ seed, timeout: Infinity }`.
+**`timeout` overrides `iterations`.** It is a wall-clock responsiveness failsafe: when it fires the search returns the best move found so far, so a slow game silently runs far fewer iterations than requested. Pass `timeout: Infinity` when you want the run bounded only by `iterations` — and note that `seed` alone does **not** make a search reproducible for exactly this reason. Deterministic search needs `{ seed, timeout: Infinity }`, which is what `createBot`'s last argument sets:
+
+```typescript
+// Same position, same move, every time. Runs all 300 iterations however long they take.
+const fixtureBot = createBot(game, GameClass, 'game', 2, [], 'medium', undefined, { seed: 'fixture-7' });
+```
+
+The game's seed does not seed the bot: the bot has its own random source.
 
 ### Bot Configuration
 
@@ -147,7 +154,7 @@ parseBotLevel('easy');    // 'easy'
 parseBotLevel('medium');  // 'medium'
 parseBotLevel('hard');    // 'hard'
 parseBotLevel('1000');    // 1000 (custom iteration ceiling)
-parseBotLevel('invalid'); // 'medium' (default fallback)
+parseBotLevel('invalid'); // throws: Unknown bot level "invalid". Use one of: easy, medium, hard, or a positive iteration count such as 750.
 ```
 
 ### Using MCTSBot Directly
