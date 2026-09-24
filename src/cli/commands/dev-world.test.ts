@@ -122,8 +122,10 @@ describe('#201: reloading a world\'s rules', () => {
     // A broken edit -- a syntax error, a bundle that will not build -- must
     // leave the world running. `reloadOnRulesEdit` loads before it adopts, and
     // queues saves one at a time; `dev-server.test.ts` holds both by driving it.
-    expect(at('reloadOnRulesEdit({')).toBeLessThan(at('load: options.reloadRules'));
-    expect(source).toContain('adopt: reloadWorld');
+    const watcher = source.indexOf('reloadOnRulesEdit({');
+    expect(watcher, 'dev-world.ts no longer reloads through reloadOnRulesEdit').toBeGreaterThan(-1);
+    expect(source.indexOf('load: options.reloadRules', watcher)).toBeGreaterThan(watcher);
+    expect(source.indexOf('adopt: reloadWorld', watcher)).toBeGreaterThan(watcher);
   });
 
   it('reopens the same world on the new rules, and only then tells the pages', () => {
