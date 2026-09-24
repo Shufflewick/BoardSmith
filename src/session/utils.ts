@@ -660,6 +660,8 @@ export function buildPlayerState(
     // Unconditional for the same reason: a count, not content -- see
     // PlayerGameState.restoreEpoch.
     restoreEpoch: runner.restoreEpoch,
+    // Unconditional too: which game this is -- see PlayerGameState.gameInstanceId.
+    gameInstanceId: runner.gameInstanceId,
   };
 
   // Action metadata was built above (single-source reconciliation with

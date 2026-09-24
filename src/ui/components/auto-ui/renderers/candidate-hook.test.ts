@@ -117,7 +117,7 @@ function mountHarness(): Harness {
         availableActions: ref(AVAILABLE),
         disabledActions: ref({}),
         isViewingHistory: ref(false),
-        restoreEpoch: ref(undefined),
+        runnerIdentity: ref(undefined),
       });
       return () =>
         h('div', [
