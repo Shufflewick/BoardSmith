@@ -15,7 +15,7 @@
  * prod stay in lockstep.
  */
 
-import { SnapshotSessionHost, type Op, type OpResult, type TurnBoundary } from '../../session/index.js';
+import { SnapshotSessionHost, type Op, type OpResult, type SnapshotSessionAdapters, type TurnBoundary } from '../../session/index.js';
 import { record, getEntries, type LogEntry } from './log-capture.js';
 
 /** Wire op names the embedded GameShell sends (snake_case, prod payload shapes). */
@@ -83,7 +83,7 @@ export interface DevSessionOptions {
    * escalates to 'error' once `persistenceHealthy` flips false. Unconfigured
    * by default (the dev host today has no persistence store).
    */
-  persist?: (state: { snapshot: unknown; pendingStates: Record<string, Record<string, unknown>> }) => void | Promise<void>;
+  persist?: SnapshotSessionAdapters['persist'];
   /**
    * Post a `game_state` frame for one seat's iframe. Called for every seat on
    * each broadcast; the caller decides which seat's iframe actually exists.
