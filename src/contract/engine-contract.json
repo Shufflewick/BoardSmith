@@ -1,8 +1,8 @@
 {
-  "revision": 96,
+  "revision": 97,
   "bundleProtocol": 2,
   "surfaceHash": "9bf56c556e696f03",
-  "payloadHash": "6b3277c32a0ec8d0",
+  "payloadHash": "80aba5002803deaa",
   "formatHash": "0058593e7cc80205",
   "history": [
     {
@@ -808,6 +808,15 @@
       "payloadHash": "6b3277c32a0ec8d0",
       "formatHash": "0058593e7cc80205",
       "summary": "The contract fixture now produces two world facts it had missed, found when #312 type-checked it for the first time: world_command carries order (a paid order's id and instant, #195), and the watching seat's activity watermark is rendered by a pick prompt (an action prompt takes only a string, so the old one was a function JSON dropped and the watermark moved no hash). payloadHash moved only because the fixture now produces these bytes; no engine behavior changed. Not breaking."
+    },
+    {
+      "revision": 97,
+      "date": "2026-09-24",
+      "bundleProtocol": 2,
+      "surfaceHash": "9bf56c556e696f03",
+      "payloadHash": "80aba5002803deaa",
+      "formatHash": "0058593e7cc80205",
+      "summary": "The flow state no longer reports a leftover single-seat prompt during a simultaneous step (#321): FlowState.currentPlayer and availableActions are published only while an action step is awaiting input, so they are absent in a simultaneous step and once the game is complete. Before this, a simultaneous step entered after an action step kept that step's seat and actions, so GameShell showed a seat that had already acted in the step (or had no entry) the previous step's actions, and the random simulator got stuck on every cribbage game. The contract fixture now also hashes the whole-game flow state the executor returns, which is what made this visible. Not breaking: re-vendor to pick up the fix."
     }
   ]
 }

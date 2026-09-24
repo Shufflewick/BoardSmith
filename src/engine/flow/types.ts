@@ -377,11 +377,16 @@ export interface FlowState {
   complete: boolean;
   /** Whether awaiting player input */
   awaitingInput: boolean;
-  /** Current player if awaiting input (for single-player action steps) */
+  /**
+   * The seat an action step is awaiting. Present only while an action step is
+   * the step awaiting input: absent in a simultaneous step (read
+   * `awaitingPlayers`), and absent once the flow is complete. To ask "who may
+   * act" across both kinds of step, use `dueSeats` (seat-activity).
+   */
   currentPlayer?: number;
-  /** Available actions if awaiting input (for single-player action steps) */
+  /** The actions that action step offers `currentPlayer`. Present exactly when `currentPlayer` is. */
   availableActions?: string[];
-  /** Multiple players awaiting input (for simultaneous action steps) */
+  /** Every seat a simultaneous step is awaiting, with each seat's own actions. */
   awaitingPlayers?: PlayerAwaitingState[];
   /** Current named phase (for UI display) */
   currentPhase?: string;

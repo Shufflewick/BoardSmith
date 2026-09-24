@@ -908,12 +908,20 @@ export class FlowEngine<G extends Game = Game> {
    * Get the current flow state
    */
   getState(): FlowState {
+    // `currentPlayer` and `availableActions` describe ONE seat's prompt, so they
+    // are published only while an action step is the step awaiting input. The
+    // private fields keep the last action step's values after the flow moves
+    // on (`currentPlayer` also serves as the flow context's player), and a
+    // simultaneous step that published them beside `awaitingPlayers` offered a
+    // stale prompt to every reader that checks them first (#321).
+    const awaitingActionStep =
+      this.awaitingInput && this.stack[this.stack.length - 1]?.node.type === 'action-step';
     const state: FlowState = {
       position: this.getPosition(),
       complete: this.complete,
       awaitingInput: this.awaitingInput,
-      currentPlayer: this.currentPlayer?.seat,
-      availableActions: this.awaitingInput ? this.availableActions : undefined,
+      currentPlayer: awaitingActionStep ? this.currentPlayer?.seat : undefined,
+      availableActions: awaitingActionStep ? this.availableActions : undefined,
       // D3/SIM-01: return a deep-copied value, never the live private array.
       // `completed` lives ONLY here (excluded from FlowPosition) and is
       // mutated in place by resumeSimultaneousAction -- every prior caller

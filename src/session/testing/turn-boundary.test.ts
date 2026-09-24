@@ -53,26 +53,15 @@ describe('meta.turnBoundary — the engine states the turn boundary', () => {
     expect(session.metas.length).toBeGreaterThan(0);
     expect(session.metas[0].turnBoundary.dueSeats).toEqual([1, 2]);
 
-    // The field whose reading caused BUG-006, pinned so the next reader of this
-    // test can see what the regression actually was -- and it is WORSE than the
-    // folklore.
-    //
-    // The received wisdom is that `currentPlayer` is `undefined` for the life of
-    // a simultaneous step, so a consumer reading it reports "nobody is up".
-    // MEASURED, that is false. `FlowEngine.getState()` publishes
-    // `this.currentPlayer?.seat`, and `this.currentPlayer` is seeded from
-    // `game.currentPlayer` when the flow starts (engine.ts) and simply never
-    // reassigned while a simultaneous step is open. So it reads **1** here: not
-    // an obviously-empty answer that a developer would question, but a
-    // plausible, confident, permanently WRONG one. A consumer trusting it says
-    // "seat 1 is up" in every round of every simultaneous game forever, and
-    // seat 2 is never told it owes a move.
-    //
-    // That is the whole argument for `meta.turnBoundary`: the wrong answer here
-    // does not look wrong.
+    // The field whose reading caused BUG-006. `FlowEngine.getState()` used to
+    // publish the seat of the last action step (here the seat the flow started
+    // on, 1) for the whole life of a simultaneous step: a plausible, confident,
+    // permanently WRONG answer that said "seat 1 is up" every round and never
+    // told seat 2 it owed a move. Since #321 the engine publishes
+    // `currentPlayer` only while an action step is awaiting, so here it is
+    // absent. Seats due in a simultaneous step are read from `dueSeats`.
     const flowState = session.host.flowState as { currentPlayer?: number };
-    expect(flowState.currentPlayer).toBe(1);
-    expect(session.metas[0].turnBoundary.dueSeats).not.toEqual([flowState.currentPlayer]);
+    expect(flowState.currentPlayer).toBeUndefined();
 
     // ...and the boundary is a real identity, not a placeholder.
     expect(session.metas[0].turnBoundary.key).toBe(flowBoundaryKey(session.host.flowState as never));
