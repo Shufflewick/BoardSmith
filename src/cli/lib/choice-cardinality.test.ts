@@ -120,17 +120,25 @@ describe('findUnboundedChoiceSteps', () => {
 });
 
 describe('describeUnboundedChoiceStep', () => {
+  const step = { action: 'build', selection: 'target', maxCandidates: 120 };
+
   it('names the action, the step, the count and the two ways out', () => {
-    const message = describeUnboundedChoiceStep({
-      action: 'build',
-      selection: 'target',
-      maxCandidates: 120,
-    });
+    const message = describeUnboundedChoiceStep(step, 'table');
     expect(message).toContain("build");
     expect(message).toContain('target');
     expect(message).toContain('120');
     expect(message).toContain('boardRef');
     expect(message).toContain('dependsOn');
+  });
+
+  // #323: a world action may not declare dependsOn, so telling a world author
+  // to add one sends them into a refusal.
+  it('gives a world the way out a world has: an earlier question, never dependsOn', () => {
+    const message = describeUnboundedChoiceStep(step, 'world');
+    expect(message).toContain('120');
+    expect(message).toContain('boardRef');
+    expect(message).toMatch(/earlier question/);
+    expect(message).not.toContain('dependsOn');
   });
 });
 
@@ -184,5 +192,97 @@ describe('auditChoiceCardinality', () => {
     expect(await auditChoiceCardinality(ThreeSeatWideGame, { seed: 'audit', games: 1, players: 3 })).toEqual([
       { action: 'shout', selection: 'verb', maxCandidates: 40 },
     ]);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Worlds (#323): driven the way a host drives one -- seats arrive, offers are
+// enumerated per seat, later picks are re-asked with earlier answers bound,
+// random offers are taken, and what falls due is fired.
+// ---------------------------------------------------------------------------
+
+describe('auditWorldChoiceCardinality', () => {
+  it('flags a flat unanchored step and leaves a board-anchored one alone', async () => {
+    const { cardinalityWorld } = await import('./choice-cardinality.fixture.js');
+    const { auditWorldChoiceCardinality } = await import('./choice-cardinality.js');
+
+    expect(await auditWorldChoiceCardinality(cardinalityWorld(['shout', 'mark']), { seed: 'audit' })).toEqual([
+      { action: 'shout', selection: 'verb', maxCandidates: 40 },
+    ]);
+  });
+
+  it('finds nothing in a world whose steps are all small', async () => {
+    const { cardinalityWorld } = await import('./choice-cardinality.fixture.js');
+    const { auditWorldChoiceCardinality } = await import('./choice-cardinality.js');
+
+    expect(await auditWorldChoiceCardinality(cardinalityWorld(['nod']), { seed: 'audit' })).toEqual([]);
+  });
+
+  it('counts a later question with the earlier answers bound, as the panel re-asks it', async () => {
+    const { cardinalityWorld } = await import('./choice-cardinality.fixture.js');
+    const { auditWorldChoiceCardinality } = await import('./choice-cardinality.js');
+
+    expect(await auditWorldChoiceCardinality(cardinalityWorld(['pair']), { seed: 'audit' })).toEqual([
+      { action: 'pair', selection: 'second', maxCandidates: 40 },
+    ]);
+  });
+
+  it('announces each driven seat’s arrival, so what arrivals build is counted', async () => {
+    const { cardinalityWorld } = await import('./choice-cardinality.fixture.js');
+    const { auditWorldChoiceCardinality } = await import('./choice-cardinality.js');
+
+    // Ten lanterns per arrival: thirty once all three seats are here.
+    expect(
+      await auditWorldChoiceCardinality(cardinalityWorld(['light', 'hang', 'nod'], 'hang'), { seed: 'audit' }),
+    ).toEqual([{ action: 'light', selection: 'lantern', maxCandidates: 30 }]);
+  });
+
+  it('takes offers and fires what falls due, so a list that only grows in play is counted', async () => {
+    const { cardinalityWorld } = await import('./choice-cardinality.fixture.js');
+    const { auditWorldChoiceCardinality, MAX_FLAT_CHOICE_CANDIDATES } = await import('./choice-cardinality.js');
+
+    const findings = await auditWorldChoiceCardinality(cardinalityWorld(['plant', 'sprout', 'harvest']), {
+      seed: 'audit',
+    });
+
+    expect(findings.map(({ action, selection }) => ({ action, selection }))).toEqual([
+      { action: 'harvest', selection: 'shoot' },
+    ]);
+    expect(findings[0]!.maxCandidates).toBeGreaterThan(MAX_FLAT_CHOICE_CANDIDATES);
+  });
+
+  it('is reproducible from its seed', async () => {
+    const { cardinalityWorld } = await import('./choice-cardinality.fixture.js');
+    const { auditWorldChoiceCardinality } = await import('./choice-cardinality.js');
+    const run = () => auditWorldChoiceCardinality(cardinalityWorld(['plant', 'sprout', 'harvest']), { seed: 'same' });
+
+    expect(await run()).toEqual(await run());
+  });
+
+  it('refuses to call a world clean when no seat was offered anything it could take', async () => {
+    const { cardinalityWorld } = await import('./choice-cardinality.fixture.js');
+    const { auditWorldChoiceCardinality } = await import('./choice-cardinality.js');
+
+    await expect(auditWorldChoiceCardinality(cardinalityWorld(['say']), { seed: 'audit' })).rejects.toThrow(
+      /no seat was offered an action it could take.*'say' asks for text input 'line'/s,
+    );
+  });
+
+  it('stops and names the seat when the world refuses to enumerate its offers', async () => {
+    const { cardinalityWorld } = await import('./choice-cardinality.fixture.js');
+    const { auditWorldChoiceCardinality } = await import('./choice-cardinality.js');
+
+    await expect(auditWorldChoiceCardinality(cardinalityWorld(['flood']), { seed: 'audit' })).rejects.toThrow(
+      /seat 1's offers.*250 candidates.*200/s,
+    );
+  });
+
+  it('stops and names the move when the world itself refuses one', async () => {
+    const { cardinalityWorld } = await import('./choice-cardinality.fixture.js');
+    const { auditWorldChoiceCardinality } = await import('./choice-cardinality.js');
+
+    await expect(auditWorldChoiceCardinality(cardinalityWorld(['trespass']), { seed: 'audit' })).rejects.toThrow(
+      /seat 1's 'trespass'.*"how":"quietly".*elsewhere/s,
+    );
   });
 });

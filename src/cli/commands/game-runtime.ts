@@ -158,6 +158,26 @@ export async function loadGameDefinition(
 }
 
 /**
+ * THE ABSOLUTE PATH OF ONE OF THE CLI'S OWN SOURCE FILES, for an `exports` line
+ * of {@link importRuntimeBundle} that must be built beside the rules.
+ *
+ * The package ships `src/`, and this module runs either from it under tsx
+ * (`src/cli/commands`) or inlined in the CLI bundle (`dist/cli.js`), so the file
+ * is looked for under both. `pathUnderCli` is relative to `src/cli`.
+ */
+export function cliSourceFile(pathUnderCli: string): string {
+  const candidates = [join(__dirname, '..', pathUnderCli), join(__dirname, '..', 'src', 'cli', pathUnderCli)];
+  const found = candidates.find((candidate) => existsSync(candidate));
+  if (found === undefined) {
+    throw new Error(
+      `this BoardSmith install is missing its own source file src/cli/${pathUnderCli}. ` +
+        'Reinstall boardsmith so the package is whole',
+    );
+  }
+  return found;
+}
+
+/**
  * BUNDLE THE PROJECT'S RULES, AND WHATEVER MUST SHARE THEIR ENGINE, AND LOAD IT.
  *
  * ONE esbuild bundle, because a game's rules are built with the engine inlined:
