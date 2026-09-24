@@ -322,9 +322,11 @@ board) or `dependsOn` (narrow it with an earlier step).
 `MAX_FLAT_CHOICE_CANDIDATES` (24, in
 `engine/element/action-metadata.ts`, beside the code that builds a pick's
 candidates — three things read it: this panel, `boardsmith validate`, and
-`worldBudgets`, whose own per-selection cap must sit strictly above it), an `element`/`elements` pick whose
+`worldBudgets`, whose own per-selection cap must sit strictly above it), a pick whose
 candidates ALL carry a board ref is handed to the board: the panel keeps the
 prompt and renders one control, "Choose on the board (N)", instead of N buttons.
+That is an `element`/`elements` pick, or a `chooseFrom` whose every candidate
+names its own board space by `notation` (see `docs/actions-and-flow.md`).
 The board is the better surface for a set that size — it draws the candidates in
 the geometry the choice actually has.
 
@@ -339,9 +341,9 @@ This is a change of surface, not of content, and three things keep it honest:
   that the player who pressed the control would be standing on something that
   just unmounted.
 
-`choice` picks are never deferred — their values are not board elements. Those
-are partitioned by `splitAnchoredChoices` instead, which keeps every choice in
-the panel by design.
+A `choice` pick below the threshold, or one with a candidate that names no board
+space of its own, is partitioned by `splitAnchoredChoices` instead, which keeps
+every choice in the panel.
 
 #### Text and number picks are editors, not buttons
 
