@@ -1291,7 +1291,7 @@ export function createAskAction(game: GoFishGame): ActionDefinition {
       choices: (ctx) => game.playerChoices({ excludeSelf: true, currentPlayer: ctx.player }),
       boardRefs: (choice: { value: number; display: string }, ctx) => {
         const targetPlayer = game.getPlayer(choice.value) as GoFishPlayer;
-        return { targetRef: { id: game.getPlayerHand(targetPlayer).id } };
+        return { refs: [{ ref: { id: game.getPlayerHand(targetPlayer).id }, role: 'target' as const }] };
       },
     })
     .chooseFrom('rank', {
