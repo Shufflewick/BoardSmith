@@ -1403,6 +1403,12 @@ production:
   hook runs.
 - A return after the departure ran is a new arrival. With no `onDepart`, a
   return is an arrival only if the seat was empty for at least the grace.
+- Which seats the world was told are present is kept with the world, not in
+  the host's memory. `boardsmith dev` keeps it in the local world store, so a
+  rule edit or a restart of `boardsmith dev` announces nothing for a page that
+  comes back. A seat nobody brings back is treated the way the platform treats
+  one after a wake: its absence counts from the start, so `onDepart` runs one
+  grace later.
 
 ## Referral: the verbs an invitation is attributed through
 

@@ -64,8 +64,9 @@ function forgetAllocationStamp(path: string): void {
  * THE SAME STORE, AS LAYOUT 3 LEFT IT (#225, ShufflewickPub #423).
  *
  * Layout 4 added `seat_activity` and the epoch a seat's idleness is measured
- * from; layout 5 added the instant each chair was granted. Neither changed
- * anything else, so undoing all three is layout 3 exactly. Reached through
+ * from; layout 5 added the instant each chair was granted; layout 6 added the
+ * presence ledger (#339). None changed anything else, so undoing all four is
+ * layout 3 exactly. Reached through
  * SQLite for the reason `forgetAllocationStamp` is: the store only ever writes
  * the layout it is on, so a world from an older one cannot be built through its
  * doors.
@@ -83,6 +84,7 @@ function rewindStoreToLayout3(path: string): void {
     db.exec('DROP TABLE seats');
     db.exec('ALTER TABLE seats_old RENAME TO seats');
     db.exec('DROP TABLE seat_activity');
+    db.exec('DROP TABLE presence_told');
     db.exec("DELETE FROM meta WHERE key = 'activitySince'");
     db.exec("UPDATE meta SET value = '3' WHERE key = 'schemaVersion'");
   } finally {
@@ -549,6 +551,15 @@ async function afterDepartureTimers(
   await host.settled();
 }
 
+/** Seat 1, the only seat the world was told arrived, departs exactly one
+ *  default grace from now: not a millisecond sooner. */
+async function expectSeat1DepartsAfterTheGrace(host: LocalWorldHost, told: readonly string[]): Promise<void> {
+  await afterDepartureTimers(host, WORLD_PRESENCE_DEFAULT_GRACE_MS - 1);
+  expect(told).toEqual(['arrive:1']);
+  await afterDepartureTimers(host, 1);
+  expect(told).toEqual(['arrive:1', 'depart:1']);
+}
+
 /**
  * #331: AN ARRIVAL IS A SEAT GOING FROM NO OPEN SOCKET TO ONE.
  *
@@ -623,11 +634,15 @@ describe('#331: an arrival is a seat going from no open socket to one', () => {
   });
 
   it('a return after the departure was delivered is a new arrival', async () => {
-    const { told, definition } = presenceWorld({ onArrive: 'greet', onDepart: 'farewell' });
+    const { told, definition } = presenceWorld({
+      onArrive: 'greet',
+      onDepart: 'farewell',
+      departGraceMs: 1_000,
+    });
     const { host, drop } = await attached({ dir, definition });
 
     await drop('c1');
-    await afterDepartureTimers(host);
+    await afterDepartureTimers(host, 1_000);
     await host.handleMessage('c2', { type: 'hello' });
     expect(told).toEqual(['arrive:1', 'depart:1', 'arrive:1']);
     await host.close();
@@ -667,10 +682,7 @@ describe('#338: the departure grace is the platform grace', () => {
     const { host, drop } = await attached({ dir, definition });
 
     await drop('c1');
-    await afterDepartureTimers(host, WORLD_PRESENCE_DEFAULT_GRACE_MS - 1);
-    expect(told).toEqual(['arrive:1']);
-    await afterDepartureTimers(host, 1);
-    expect(told).toEqual(['arrive:1', 'depart:1']);
+    await expectSeat1DepartsAfterTheGrace(host, told);
     await host.close();
   });
 
@@ -700,6 +712,100 @@ describe('#338: the departure grace is the platform grace', () => {
       await host.close();
     },
   );
+});
+
+/**
+ * #339: WHAT THE WORLD WAS TOLD OUTLIVES THE HOST THAT TOLD IT.
+ *
+ * A rule edit closes this host and opens a new one over the same store, and
+ * restarting `boardsmith dev` does the same. The record of which seats the
+ * world believes present is kept in that store, as the platform keeps it in
+ * its Durable Object (ShufflewickPub `games/src/world-presence-ledger.ts`),
+ * so a page that comes back is not announced again. Seats that do not come
+ * back are reconciled at start the way the platform reconciles at a wake: the
+ * grace is measured from the start, because nobody can say how long they have
+ * been gone.
+ */
+describe('#339: the told-present record is kept in the world store', () => {
+  fakeDepartureTimers();
+
+  /**
+   * A world with a page on seat 1, closed and opened again on the same store
+   * and clock: a rule reload, or `boardsmith dev` restarted. `meanwhile` runs
+   * against the first host before it closes. Answers the second host, started
+   * and with no page open yet.
+   */
+  async function acrossARestart(
+    presence: WorldDefinition['presence'],
+    meanwhile: (first: ReturnType<typeof openHost>, clock: ReturnType<typeof testClock>) => Promise<void> = async () => {},
+  ) {
+    const { told, definition } = presenceWorld(presence);
+    const clock = testClock();
+    const first = await attached({ dir, definition, clock });
+    await meanwhile(first, clock);
+    await first.host.close();
+    const { host } = openHost({ dir, definition, clock });
+    await host.start();
+    return { told, clock, host };
+  }
+
+  it('a page that comes back after a reload is not announced again, and does not depart', async () => {
+    const { told, host } = await acrossARestart({ onArrive: 'greet', onDepart: 'farewell' });
+
+    await host.handleMessage('c1', { type: 'hello' });
+    await afterDepartureTimers(host);
+    expect(told).toEqual(['arrive:1']);
+    await host.close();
+  });
+
+  it('an arrive-only world does not announce a page that comes back after a reload', async () => {
+    const { told, clock, host } = await acrossARestart({ onArrive: 'greet' });
+
+    clock.advance(2_000);
+    await host.handleMessage('c1', { type: 'hello' });
+    expect(told).toEqual(['arrive:1']);
+    await host.close();
+  });
+
+  it('a seat nobody brings back departs one grace after the host started, and its return is an arrival', async () => {
+    const { told, host } = await acrossARestart({ onArrive: 'greet', onDepart: 'farewell' });
+
+    await expectSeat1DepartsAfterTheGrace(host, told);
+
+    await host.handleMessage('c1', { type: 'hello' });
+    expect(told).toEqual(['arrive:1', 'depart:1', 'arrive:1']);
+    await host.close();
+  });
+
+  it('a departure still waiting out its grace when the host closed is owed after the restart', async () => {
+    const { told, host } = await acrossARestart(
+      { onArrive: 'greet', onDepart: 'farewell' },
+      async (first) => {
+        await first.drop('c1');
+      },
+    );
+
+    await afterDepartureTimers(host);
+    expect(told).toEqual(['arrive:1', 'depart:1']);
+    await host.close();
+  });
+
+  it('an arrive-only world counts an absence nobody saw end from the start, and keeps one it saw begin', async () => {
+    // Seat 1 was open when the host closed: its absence is measured from the
+    // restart. Seat 2 had already gone, and its own instant is kept, because it
+    // is older and truer than the restart.
+    const { told, clock, host } = await acrossARestart({ onArrive: 'greet' }, async (first, firstClock) => {
+      await first.host.handleMessage('c2', { type: 'hello' });
+      await first.drop('c2');
+      firstClock.advance(30_000);
+    });
+
+    clock.advance(30_000);
+    await host.handleMessage('c3', { type: 'attach', seat: 2 });
+    await host.handleMessage('c4', { type: 'attach', seat: 1 });
+    expect(told).toEqual(['arrive:1', 'arrive:2', 'arrive:2']);
+    await host.close();
+  });
 });
 
 /**
