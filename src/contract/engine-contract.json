@@ -1,7 +1,7 @@
 {
-  "revision": 102,
+  "revision": 103,
   "bundleProtocol": 2,
-  "surfaceHash": "263276230a5e853a",
+  "surfaceHash": "f70a2bc2d2178ea9",
   "payloadHash": "80aba5002803deaa",
   "formatHash": "0058593e7cc80205",
   "history": [
@@ -862,6 +862,15 @@
       "payloadHash": "80aba5002803deaa",
       "formatHash": "0058593e7cc80205",
       "summary": "boardsmith/world exports the presence departure grace: WORLD_PRESENCE_DEFAULT_GRACE_MS (60s), WORLD_PRESENCE_MIN_GRACE_MS (1s), WORLD_PRESENCE_MAX_GRACE_MS (24h) and presenceDepartGraceMs(), so the platform and boardsmith dev share one default and range (#338)."
+    },
+    {
+      "revision": 103,
+      "date": "2026-09-24",
+      "bundleProtocol": 2,
+      "surfaceHash": "f70a2bc2d2178ea9",
+      "payloadHash": "80aba5002803deaa",
+      "formatHash": "0058593e7cc80205",
+      "summary": "boardsmith and boardsmith/session no longer export the dev state-transfer API (captureDevState, restoreDevState, validateDevSnapshot, formatValidationErrors, getSnapshotElementCount, createDevCheckpoint, restoreFromDevCheckpoint, DevCheckpointManager); nothing called it after boardsmith dev began reloading table rules through a snapshot restore or replay (#343, #362)."
     }
   ]
 }
