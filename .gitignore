@@ -51,3 +51,7 @@ Vector Cards (Version 3.2)
 # Tree-shaking test fixtures live inside the repo so Rollup reaches node_modules;
 # an interrupted run must not be able to dirty the working tree.
 .treeshake-test-fixtures/
+
+# Vite writes <config>.timestamp-<n>-<hash>.mjs beside a config while loading it;
+# a killed test run leaves it behind, and it must not dirty main (#335).
+*.timestamp-*.mjs
