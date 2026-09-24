@@ -1069,7 +1069,7 @@ describe('QuoteVerifiedProvenance.covers() — multi-source honesty (177-19)', (
       'cards.pdf',
       'appendix.pdf',
     ]);
-    expect(provenance.unarchivedSources.sort()).toEqual(['appendix.pdf', 'cards.pdf']);
+    expect([...provenance.unarchivedSources].sort()).toEqual(['appendix.pdf', 'cards.pdf']);
     expect(provenance.covers('rulebook/CARDS.md')).toBe(false);
     expect(provenance.covers('rulebook/01-objective-and-setup.md')).toBe(false);
   });

@@ -67,6 +67,17 @@ import { evolveBotWeightsCommand } from './commands/evolve-bot-weights.js';
 import { packCommand } from './commands/pack.js';
 import { doctorCommand } from './commands/doctor.js';
 
+/**
+ * Wraps a command that returns its result (so its tests can read it) for
+ * commander, whose actions return nothing. The command has already printed what
+ * the user needs and set the exit code.
+ */
+function discardResult<A extends unknown[]>(command: (...args: A) => Promise<unknown>) {
+  return async (...args: A): Promise<void> => {
+    await command(...args);
+  };
+}
+
 const program = new Command();
 
 program
@@ -248,7 +259,7 @@ program
   .option('--project <dir>', 'Project directory (defaults to cwd)')
   .option('--skip-relabel', 'Do not relabel presentation-only Derived lines first')
   .option('--json', 'Emit JSON instead of human-readable output')
-  .action(ingestGapsCommand);
+  .action(discardResult(ingestGapsCommand));
 
 program
   .command('ingest-check')
@@ -263,7 +274,7 @@ program
   .option('--project <dir>', 'Project directory (defaults to cwd)')
   .option('--dry-run', 'Report what would change without writing')
   .option('--json', 'Emit JSON instead of human-readable output')
-  .action(ingestRelabelCommand);
+  .action(discardResult(ingestRelabelCommand));
 
 // Provenance: record or repair a chunk's `## Verified Against` block. Same mechanical-work-
 // belongs-in-code rationale as the ingest-* family above (171-CONTEXT.md).
@@ -347,7 +358,7 @@ program
   .description('Report per-chunk verification provenance and drift (read-only)')
   .option('--project <dir>', 'Project directory (defaults to cwd)')
   .option('--json', 'Emit JSON instead of human-readable output')
-  .action(chunkProvenanceStatusCommand);
+  .action(discardResult(chunkProvenanceStatusCommand));
 
 // CHECK-03/CHECK-05: the two source-free conformance sweeps (172-CONTEXT.md decisions 5-6).
 // Unlike chunk-check above, these never write a file and never repair anything — there is
@@ -364,14 +375,14 @@ program
   .option('--fix', 'Move misplaced files into place instead of only reporting them')
   .option('--json', 'Emit JSON instead of human-readable output')
   .option('--quiet', 'Suppress the human-readable report')
-  .action(doctorCommand);
+  .action(discardResult(doctorCommand));
 
 program
   .command('trace-check')
   .description('Report traceability gaps between Interpretation claims, rulings, and tests (read-only)')
   .option('--project <dir>', 'Project directory (defaults to cwd)')
   .option('--json', 'Emit JSON instead of human-readable output')
-  .action(traceCheckCommand);
+  .action(discardResult(traceCheckCommand));
 
 // #293: ledger integrity (duplicate numbers, supersession pointers, filing status, run-log
 // timestamps against the commits that recorded them). Unlike the report-only sweeps above, a
@@ -410,7 +421,7 @@ program
   .description('Report chunks whose Build Manifest files changed since their verified commit (read-only)')
   .option('--project <dir>', 'Project directory (defaults to cwd)')
   .option('--json', 'Emit JSON instead of human-readable output')
-  .action(driftCheckCommand);
+  .action(discardResult(driftCheckCommand));
 
 // Verify: staging-tree allocation + the append-only RUN.md resume ledger (VERIFY-02/VERIFY-08,
 // 173-CONTEXT.md decisions 5/9/11). Mechanical work belongs in code, not in skill text a session
@@ -426,7 +437,7 @@ program
       'e.g. \'["1-1","2-2"]\' (decided once at first init; ignored when resuming an existing run)',
   )
   .option('--json', 'Emit JSON instead of human-readable output')
-  .action((options) => {
+  .action(async (options) => {
     let ranges: string[] | undefined;
     if (options.ranges !== undefined) {
       let parsed: unknown;
@@ -442,7 +453,7 @@ program
       }
       ranges = parsed as string[];
     }
-    return verifyRunInitCommand({ ...options, ranges });
+    await verifyRunInitCommand({ ...options, ranges });
   });
 
 program
@@ -462,7 +473,7 @@ program
   )
   .option('--project <dir>', 'Project directory (defaults to cwd)')
   .option('--json', 'Emit JSON instead of human-readable output')
-  .action(verifyRunRecordCommand);
+  .action(discardResult(verifyRunRecordCommand));
 
 program
   .command('verify-run-status')
@@ -470,7 +481,7 @@ program
   .option('--project <dir>', 'Project directory (defaults to cwd)')
   .option('--run-id <id>', 'Report on a specific run instead of the most recent')
   .option('--json', 'Emit JSON instead of human-readable output')
-  .action(verifyRunStatusCommand);
+  .action(discardResult(verifyRunStatusCommand));
 
 // Verify classification: VERIFY-03's recordable, resumable verdicts on top of the same run-scoped
 // ledger (174-CONTEXT.md decision 5). Findings exit 0 (decision 7) — only a tool failure (unknown
@@ -485,7 +496,7 @@ program
   .option('--run-id <id>', 'Report on a specific run instead of the most recent')
   .option('--live-slice <path>', 'Restrict the report to pairs containing this rulebook/ slice')
   .option('--json', 'Emit JSON instead of human-readable output')
-  .action(verifyClassifyPairsCommand);
+  .action(discardResult(verifyClassifyPairsCommand));
 
 program
   .command('verify-classify-record')
@@ -510,7 +521,7 @@ program
     'Verbatim quote from the staged (pass-2) slice — required for sharper/contradictory',
   )
   .option('--json', 'Emit JSON instead of human-readable output')
-  .action(verifyClassifyRecordCommand);
+  .action(discardResult(verifyClassifyRecordCommand));
 
 program
   .command('verify-classify-status')
@@ -521,7 +532,7 @@ program
   .option('--project <dir>', 'Project directory (defaults to cwd)')
   .option('--run-id <id>', 'Report on a specific run instead of the most recent')
   .option('--json', 'Emit JSON instead of human-readable output')
-  .action(verifyClassifyStatusCommand);
+  .action(discardResult(verifyClassifyStatusCommand));
 
 // Verify impact / repair gating: VERIFY-04's contradiction gate, VERIFY-05's staleness write, and
 // VERIFY-06's repair-gate disposition (175-CONTEXT.md). Findings exit 0 (172-CONTEXT.md decision
@@ -537,7 +548,7 @@ program
   .option('--project <dir>', 'Project directory (defaults to cwd)')
   .option('--run-id <id>', 'Report on a specific run instead of the most recent')
   .option('--json', 'Emit JSON instead of human-readable output')
-  .action(verifyImpactGateCommand);
+  .action(discardResult(verifyImpactGateCommand));
 
 program
   .command('verify-impact-adjudicate')
@@ -553,7 +564,7 @@ program
   .option('--citation <text>', 'Citation interpreted or overridden, required for --outcome resolved')
   .option('--rationale <text>', 'Rationale, required for --outcome resolved')
   .option('--json', 'Emit JSON instead of human-readable output')
-  .action(verifyImpactAdjudicateCommand);
+  .action(discardResult(verifyImpactAdjudicateCommand));
 
 program
   .command('verify-impact-apply')
@@ -564,7 +575,7 @@ program
   .option('--project <dir>', 'Project directory (defaults to cwd)')
   .option('--run-id <id>', 'Report on a specific run instead of the most recent')
   .option('--json', 'Emit JSON instead of human-readable output')
-  .action(verifyImpactApplyCommand);
+  .action(discardResult(verifyImpactApplyCommand));
 
 program
   .command('verify-impact-status')
@@ -575,7 +586,7 @@ program
   .option('--project <dir>', 'Project directory (defaults to cwd)')
   .option('--run-id <id>', 'Report on a specific run instead of the most recent')
   .option('--json', 'Emit JSON instead of human-readable output')
-  .action(verifyImpactStatusCommand);
+  .action(discardResult(verifyImpactStatusCommand));
 
 // CHECK-01 / CHECK-02 (176-CONTEXT.md): re-checking every RULINGS.md entry against the fresh
 // staged transcription, and reporting each rules-stale chunk's next repair step. Neither command
@@ -590,7 +601,7 @@ program
   .option('--project <dir>', 'Project directory (defaults to cwd)')
   .option('--run-id <id>', 'Report against a specific verify run instead of the most recent')
   .option('--json', 'Emit JSON instead of human-readable output')
-  .action(verifyRulingRecheckCommand);
+  .action(discardResult(verifyRulingRecheckCommand));
 
 // `verify-ruling-record` is the ONLY write surface for CHECK-01's ledger, mirroring the
 // check/record pairing every sibling already had (verify-classify-record, verify-derive-record,
@@ -617,7 +628,7 @@ program
     "The judgment's reasoning — the artifact this check exists to produce",
   )
   .option('--json', 'Emit JSON instead of human-readable output')
-  .action(verifyRulingRecordCommand);
+  .action(discardResult(verifyRulingRecordCommand));
 
 program
   .command('verify-repair')
@@ -629,7 +640,7 @@ program
   .option('--project <dir>', 'Project directory (defaults to cwd)')
   .option('--run-id <id>', 'Report against a specific verify run instead of the most recent')
   .option('--json', 'Emit JSON instead of human-readable output')
-  .action(verifyRepairStatusCommand);
+  .action(discardResult(verifyRepairStatusCommand));
 
 // CHECK-04 (177.1-CONTEXT.md decision 2): dual-enumeration derived-line check — two
 // independently-dispatched enumerators (claude-opus-5, claude-haiku-4-5-20251001) each read a
@@ -651,7 +662,7 @@ program
   )
   .option('--project <dir>', 'Project directory (defaults to cwd)')
   .option('--json', 'Emit JSON instead of human-readable output')
-  .action(verifyDeriveCheckCommand);
+  .action(discardResult(verifyDeriveCheckCommand));
 
 program
   .command('verify-derive-record')
@@ -673,7 +684,7 @@ program
     "The reconciler's structured JSON return (claude-sonnet-5)",
   )
   .option('--json', 'Emit JSON instead of human-readable output')
-  .action(verifyDeriveRecordCommand);
+  .action(discardResult(verifyDeriveRecordCommand));
 
 // CHECK-06 (178-CONTEXT.md decision 12): worked-example replay — an extractor turns a rulebook
 // slice's worked examples into structured specs, a translator turns each spec into a runnable
@@ -699,7 +710,7 @@ program
   .option('--project <dir>', 'Project directory (defaults to cwd)')
   .option('--json', 'Emit JSON instead of human-readable output')
   .option('--chunk <slug>', 'Scope the report to exactly one chunk\'s cited slices')
-  .action(verifyExampleReplayCommand);
+  .action(discardResult(verifyExampleReplayCommand));
 
 program
   .command('verify-example-record')
@@ -713,7 +724,7 @@ program
   .requiredOption('--extraction <file>', "The extractor's structured JSON return")
   .requiredOption('--translation <file>', "The translator's structured JSON return")
   .option('--json', 'Emit JSON instead of human-readable output')
-  .action(verifyExampleRecordCommand);
+  .action(discardResult(verifyExampleRecordCommand));
 
 program
   .command('verify-example-translate')
@@ -726,7 +737,7 @@ program
   .requiredOption('--slice-path <path>', 'The rulebook/ slice the worked examples live in')
   .requiredOption('--extraction <file>', "The extractor's structured JSON return")
   .option('--json', 'Emit JSON instead of human-readable output')
-  .action(verifyExampleTranslateCommand);
+  .action(discardResult(verifyExampleTranslateCommand));
 
 // VERIFY-09 (179-CONTEXT.md decision 1/4): source-free mode's one read-only CLI surface, over the
 // step -> defect-class mapping and computation `verify-source-free.ts` owns. This command RENDERS
@@ -749,7 +760,7 @@ program
   )
   .option('--project <dir>', 'Project directory (defaults to cwd)')
   .option('--json', 'Emit JSON instead of human-readable output')
-  .action(verifySourceFreeCheckCommand);
+  .action(discardResult(verifySourceFreeCheckCommand));
 
 // VERIFY-09/PROV-02 (179-CONTEXT.md decision "WIRE IT"): a verify pass's Close durably records
 // `## Verified Against` provenance for exactly the chunks it evaluated, reusing the ONE fenced
@@ -780,7 +791,7 @@ program
       'source-free mode, where no run ledger exists)',
   )
   .option('--json', 'Emit JSON instead of human-readable output')
-  .action(verifyCloseRecordCommand);
+  .action(discardResult(verifyCloseRecordCommand));
 
 // TEST-01 (178-CONTEXT.md decision 8): the build-side write surface — one generated example-test
 // file per chunk (`tests/examples/<chunk>.examples.test.ts`), written idempotently and atomically.
@@ -808,7 +819,7 @@ program
       'chunk has at least one example recorded agrees/disagrees',
   )
   .option('--json', 'Emit JSON instead of human-readable output')
-  .action(verifyExampleEmitCommand);
+  .action(discardResult(verifyExampleEmitCommand));
 
 // Claude Code integration
 const claudeCmd = // Live-agent ingest harness (BoardSmith repo only, operator-invoked)

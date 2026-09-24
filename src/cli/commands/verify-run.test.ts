@@ -272,6 +272,7 @@ describe('verifyRunRecordCommand / verifyRunStatusCommand — ledger', () => {
       slice: '03-setup.md',
       json: true,
     });
+    if (!('unitId' in result)) throw new Error('expected a unit record, got a range action');
     expect(result.unitId).toBe('03-setup');
     expect(result.slicePath).toBe('03-setup.md');
     const bytes = await fs.readFile(join(stagingAbs, '03-setup.md'));

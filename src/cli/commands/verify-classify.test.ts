@@ -765,6 +765,13 @@ async function recordedSevenRun(opts?: {
   return { project, runId, stagingDirAbs };
 }
 
+/** A recorded `seven` run and the id of the first pair it enumerates, for the record tests. */
+async function recordedSevenRunFirstPair(): Promise<{ project: string; runId: string; pairId: string }> {
+  const { project, runId } = await recordedSevenRun();
+  const pairsResult = await verifyClassifyPairsCommand({ project, runId, json: true });
+  return { project, runId, pairId: pairsResult.pairs[0].pairId };
+}
+
 describe('verifyClassifyPairsCommand — enumerate pairs with provenance, over a real recorded run', () => {
   it('pairs-1: every pair carries live/staged arrays and rule-bearing counts; provenance is a sibling map keyed identically', async () => {
     const { project, runId } = await recordedSevenRun();
@@ -900,9 +907,7 @@ async function ledgerBody(project: string, runId: string): Promise<string> {
 
 describe('verifyClassifyRecordCommand — one verdict, atomically appended, stale/provenance derived', () => {
   it('ledger-1: recording cosmetic appends exactly one classification line inside the fences, stale:false, provenance derived', async () => {
-    const { project, runId } = await recordedSevenRun();
-    const pairsResult = await verifyClassifyPairsCommand({ project, runId, json: true });
-    const pairId = pairsResult.pairs[0].pairId;
+    const { project, runId, pairId } = await recordedSevenRunFirstPair();
 
     const result = await verifyClassifyRecordCommand({
       project,
@@ -927,9 +932,7 @@ describe('verifyClassifyRecordCommand — one verdict, atomically appended, stal
   });
 
   it('ledger-2: sharper and contradictory both record stale:true', async () => {
-    const { project, runId } = await recordedSevenRun();
-    const pairsResult = await verifyClassifyPairsCommand({ project, runId, json: true });
-    const pairId = pairsResult.pairs[0].pairId;
+    const { project, runId, pairId } = await recordedSevenRunFirstPair();
 
     const sharper = await verifyClassifyRecordCommand({
       project,
@@ -957,9 +960,7 @@ describe('verifyClassifyRecordCommand — one verdict, atomically appended, stal
   });
 
   it('unclassified-1: an out-of-enum --label records unclassified/stale, warns naming the received value verbatim, never throws', async () => {
-    const { project, runId } = await recordedSevenRun();
-    const pairsResult = await verifyClassifyPairsCommand({ project, runId, json: true });
-    const pairId = pairsResult.pairs[0].pairId;
+    const { project, runId, pairId } = await recordedSevenRunFirstPair();
     const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     const result = await verifyClassifyRecordCommand({
@@ -977,9 +978,7 @@ describe('verifyClassifyRecordCommand — one verdict, atomically appended, stal
   });
 
   it('unclassified-2: a missing --label behaves identically to an out-of-enum label, never defaulting to cosmetic', async () => {
-    const { project, runId } = await recordedSevenRun();
-    const pairsResult = await verifyClassifyPairsCommand({ project, runId, json: true });
-    const pairId = pairsResult.pairs[0].pairId;
+    const { project, runId, pairId } = await recordedSevenRunFirstPair();
 
     const result = await verifyClassifyRecordCommand({ project, runId, pairId, json: true });
     expect(result.record.ruleDelta).toBe('unclassified');
@@ -987,9 +986,7 @@ describe('verifyClassifyRecordCommand — one verdict, atomically appended, stal
   });
 
   it('unclassified-3: sharper with an empty --quoted-pass1 demotes to unclassified, naming quotedPass1', async () => {
-    const { project, runId } = await recordedSevenRun();
-    const pairsResult = await verifyClassifyPairsCommand({ project, runId, json: true });
-    const pairId = pairsResult.pairs[0].pairId;
+    const { project, runId, pairId } = await recordedSevenRunFirstPair();
 
     const result = await verifyClassifyRecordCommand({
       project,
@@ -1006,9 +1003,7 @@ describe('verifyClassifyRecordCommand — one verdict, atomically appended, stal
   });
 
   it('unclassified-4: contradictory with a non-empty pass1 but empty --quoted-pass2 demotes to unclassified, naming quotedPass2', async () => {
-    const { project, runId } = await recordedSevenRun();
-    const pairsResult = await verifyClassifyPairsCommand({ project, runId, json: true });
-    const pairId = pairsResult.pairs[0].pairId;
+    const { project, runId, pairId } = await recordedSevenRunFirstPair();
 
     const result = await verifyClassifyRecordCommand({
       project,
@@ -1024,9 +1019,7 @@ describe('verifyClassifyRecordCommand — one verdict, atomically appended, stal
   });
 
   it('unclassified-5: cosmetic with both quotes empty stays cosmetic — the quote requirement is scoped to sharper/contradictory only', async () => {
-    const { project, runId } = await recordedSevenRun();
-    const pairsResult = await verifyClassifyPairsCommand({ project, runId, json: true });
-    const pairId = pairsResult.pairs[0].pairId;
+    const { project, runId, pairId } = await recordedSevenRunFirstPair();
 
     const result = await verifyClassifyRecordCommand({ project, runId, pairId, label: 'cosmetic', json: true });
     expect(result.record.ruleDelta).toBe('cosmetic');
@@ -1035,9 +1028,7 @@ describe('verifyClassifyRecordCommand — one verdict, atomically appended, stal
   });
 
   it('ledger-3: pre-existing ledger content is byte-identical before/after, except for the one added line', async () => {
-    const { project, runId } = await recordedSevenRun();
-    const pairsResult = await verifyClassifyPairsCommand({ project, runId, json: true });
-    const pairId = pairsResult.pairs[0].pairId;
+    const { project, runId, pairId } = await recordedSevenRunFirstPair();
     const bodyBefore = await ledgerBody(project, runId);
 
     await verifyClassifyRecordCommand({ project, runId, pairId, label: 'cosmetic', json: true });
@@ -1050,9 +1041,7 @@ describe('verifyClassifyRecordCommand — one verdict, atomically appended, stal
   });
 
   it('ledger-4: re-recording the same pairId appends a second line; resolveLedgerState reports only the newer verdict', async () => {
-    const { project, runId } = await recordedSevenRun();
-    const pairsResult = await verifyClassifyPairsCommand({ project, runId, json: true });
-    const pairId = pairsResult.pairs[0].pairId;
+    const { project, runId, pairId } = await recordedSevenRunFirstPair();
 
     await verifyClassifyRecordCommand({ project, runId, pairId, label: 'cosmetic', json: true });
     await verifyClassifyRecordCommand({
@@ -1089,21 +1078,20 @@ describe('verifyClassifyRecordCommand — one verdict, atomically appended, stal
   });
 
   it('ledger-6: there is no CLI option through which stale or provenance can be supplied — passing them has no effect on the derived values', async () => {
-    const { project, runId } = await recordedSevenRun();
-    const pairsResult = await verifyClassifyPairsCommand({ project, runId, json: true });
-    const pairId = pairsResult.pairs[0].pairId;
+    const { project, runId, pairId } = await recordedSevenRunFirstPair();
 
-    const result = await verifyClassifyRecordCommand({
+    // stale/provenance are not part of the options interface; a caller that
+    // passes them anyway (a forwarded JSON object, say) must have them ignored.
+    const forged = {
       project,
       runId,
       pairId,
       label: 'cosmetic',
       json: true,
-      // @ts-expect-error — stale/provenance are not part of the options interface.
       stale: true,
-      // @ts-expect-error — stale/provenance are not part of the options interface.
       provenance: 'source-changed',
-    });
+    };
+    const result = await verifyClassifyRecordCommand(forged);
     // A forced stale:true was ignored — cosmetic still derives to stale:false.
     expect(result.record.stale).toBe(false);
 

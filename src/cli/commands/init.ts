@@ -14,7 +14,6 @@ import {
   type ProjectConfig,
 } from '../lib/project-scaffold.js';
 import {
-  WORLD_SCAFFOLD_SEATS,
   generateWorldA11yTestTs,
   generateWorldBoardVue,
   generateWorldElementsTs,
@@ -169,7 +168,6 @@ const WORLD_SCAFFOLD: ProjectScaffold = {
     description: 'A persistent world: a place that keeps going while nobody is looking.',
     // NO `playerCount`: a world has no table roster. Its seats are a lifetime
     // count declared in the compiled rules (#171 / ShufflewickPub #354).
-    worldSeats: WORLD_SCAFFOLD_SEATS,
     audience: 'casual',
     tags: ['persistent-world'],
   }),

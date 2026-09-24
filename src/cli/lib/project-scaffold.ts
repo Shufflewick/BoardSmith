@@ -46,12 +46,11 @@ interface TableProjectConfig extends ProjectConfigBase {
   playerCount: { min: number; max: number };
 }
 
+/** No seat count: a world's lifetime seat count lives in the COMPILED rules
+ *  (`gameDefinition.world.maxPlayers`), which is the number the runtime
+ *  enforces, and the manifest's copy is derived from it at build. */
 interface WorldProjectConfig extends ProjectConfigBase {
   backend: Extract<GameBackend, 'world'>;
-  /** A world's lifetime seat count. It lives in the COMPILED rules
-   *  (`gameDefinition.world.maxPlayers`), which is the number the runtime
-   *  enforces; the manifest's copy is derived from it at build. */
-  worldSeats: number;
 }
 
 export type ProjectConfig = TableProjectConfig | WorldProjectConfig;
