@@ -17,6 +17,7 @@ import {
   findUntypedTestFiles,
   hasBlockingFailure,
   buildChoiceCardinalityResult,
+  checkRulesAgreement,
   validateRequiredFiles,
   successGuidance,
 } from './validate.js';
@@ -28,6 +29,11 @@ import {
   encodedRulesBytes,
 } from '../lib/bundle-limits.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
+import {
+  fixedDeployDefinition,
+  untimedDeployDefinition,
+} from '../../session/testing/fixtures/timed-step-fixture.js';
+import type { GameDefinition } from '../../session/index.js';
 
 describe('config-schema', () => {
   it('ALLOWED_TOP_LEVEL_KEYS matches boardsmith.schema.json properties (single source, no drift)', async () => {
@@ -734,6 +740,32 @@ describe('validate.ts choice cardinality (#172)', () => {
     expect(result.details![0]).toContain('40');
     expect(result.details![0]).toContain('boardRef');
     expect(result.details![0]).toContain('dependsOn');
+  });
+});
+
+/**
+ * #300: the compiled rules and boardsmith.json are held to the same agreement
+ * `boardsmith build` enforces, so validate refuses what build would refuse --
+ * a timed step with no `idleAction` to close it among them.
+ */
+describe('validate.ts rules agreement (#300)', () => {
+  const timed = fixedDeployDefinition as GameDefinition;
+  const untimed = untimedDeployDefinition as GameDefinition;
+
+  it('refuses a timed step without an idleAction, naming the step and the fix', () => {
+    const result = checkRulesAgreement({ backend: 'table' }, timed);
+    expect(result.passed).toBe(false);
+    expect(result.severity).toBeUndefined();
+    expect(result.details!.join('\n')).toContain("'deploy'");
+    expect(result.details!.join('\n')).toContain('"idleAction": { "name": "pass" }');
+  });
+
+  it('passes a timed step whose game declares an idleAction', () => {
+    expect(checkRulesAgreement({ backend: 'table', idleAction: { name: 'commit' } }, timed).passed).toBe(true);
+  });
+
+  it('passes an untimed game with no idleAction', () => {
+    expect(checkRulesAgreement({ backend: 'table' }, untimed).passed).toBe(true);
   });
 });
 

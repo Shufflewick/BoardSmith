@@ -157,7 +157,7 @@
     "idleAction": {
       "x-convex-sink": false,
       "$ref": "#/definitions/namedAction",
-      "description": "The action the platform submits on behalf of a seat whose round deadline expired, for a game that ships no bot. Required by the platform alongside `roundDeadline` when the bundle ships no bot. Whether it does is not authorable: `boardsmith build` derives it from the compiled `gameDefinition.bot` and sends it as `capabilities.bots`. Consumed by the platform (manifest-schema.ts `idleAction`)."
+      "description": "The action the platform submits on behalf of a seat whose round deadline expired, for a game that ships no bot. Required by the platform alongside `roundDeadline` when the bundle ships no bot. Whether it does is not authorable: `boardsmith build` derives it from the compiled `gameDefinition.bot` and sends it as `capabilities.bots`. Also required whenever a flow step declares `timeLimitMs`: the host closes a timed step by submitting this action for every seat that has not acted, never by handing the seat to a bot, so `boardsmith validate` and `boardsmith build` refuse a timed game without it (`capabilities.timedSteps`). Consumed by the platform (manifest-schema.ts `idleAction`)."
     },
     "imageSources": {
       "x-convex-sink": false,

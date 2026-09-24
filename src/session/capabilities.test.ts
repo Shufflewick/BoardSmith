@@ -6,6 +6,7 @@ import {
   resolveCapabilities,
   type GameBackend,
 } from './capabilities.js';
+import { actionStep, loop, simultaneousActionStep, type FlowNode } from '../engine/index.js';
 
 /** A table game's compiled definition: seat range, no world block. */
 const tableDefinition = { minPlayers: 2, maxPlayers: 4 };
@@ -13,12 +14,22 @@ const tableDefinition = { minPlayers: 2, maxPlayers: 4 };
 /** A world game's compiled definition: a world block with its own seat count. */
 const worldDefinition = { world: { maxPlayers: 40 } };
 
+/** A compiled flow with one timed step, nested the way a real game nests it. */
+const timedFlow: FlowNode = loop({
+  maxIterations: 3,
+  do: simultaneousActionStep({ name: 'deploy', actions: ['commit'], timeLimitMs: 120_000 }),
+});
+
+/** A compiled flow whose only step declares no limit. */
+const untimedFlow: FlowNode = actionStep({ name: 'turn', actions: ['pass'] });
+
 function capabilities(
   backend: GameBackend,
   definition: Parameters<typeof resolveCapabilities>[0]['definition'],
   declared: Parameters<typeof resolveCapabilities>[0]['declared'] = {},
+  flows: readonly FlowNode[] = [],
 ) {
-  return resolveCapabilities({ backend, definition, declared });
+  return resolveCapabilities({ backend, definition, declared, flows });
 }
 
 describe('GAME_BACKENDS', () => {
@@ -71,6 +82,12 @@ describe('resolveCapabilities — the table backend', () => {
     ).toBe(true);
   });
 
+  it('offers timedSteps exactly when a step of the compiled flow declares a time limit', () => {
+    expect(capabilities('table', tableDefinition).timedSteps).toBe(false);
+    expect(capabilities('table', tableDefinition, {}, [untimedFlow]).timedSteps).toBe(false);
+    expect(capabilities('table', tableDefinition, {}, [untimedFlow, timedFlow]).timedSteps).toBe(true);
+  });
+
   it('answers a non-boolean declaration as false rather than as truthiness', () => {
     // A malformed declaration is refused by `capabilityContradictions`; what
     // matters here is that the resolved set never carries a non-boolean.
@@ -86,11 +103,12 @@ describe('resolveCapabilities — the world backend', () => {
     expect(set.table).toBe(false);
   });
 
-  it('offers no undo, no spectators and no bots', () => {
+  it('offers no undo, no spectators, no bots and no timed steps', () => {
     const set = capabilities('world', worldDefinition);
     expect(set.undo).toBe(false);
     expect(set.spectators).toBe(false);
     expect(set.bots).toBe(false);
+    expect(set.timedSteps).toBe(false);
   });
 
   it('implies asyncPlay, joinInProgress and crossSessionState from the backend', () => {
@@ -114,7 +132,8 @@ describe('capabilityContradictions', () => {
     backend: GameBackend,
     definition: Parameters<typeof capabilityContradictions>[0]['definition'],
     declared: Parameters<typeof capabilityContradictions>[0]['declared'] = {},
-  ) => capabilityContradictions({ backend, definition, declared });
+    flows: readonly FlowNode[] = [],
+  ) => capabilityContradictions({ backend, definition, declared, flows });
 
   it('is silent on a consistent table game', () => {
     expect(contradictions('table', tableDefinition)).toEqual([]);
@@ -185,6 +204,25 @@ describe('capabilityContradictions', () => {
     const [message] = contradictions('table', {});
     expect(message).toContain('minPlayers');
     expect(message).toContain('maxPlayers');
+  });
+
+  it('refuses a timed step without an idleAction, naming the step and the fix', () => {
+    const [message] = contradictions('table', tableDefinition, {}, [timedFlow]);
+    expect(message).toContain("'deploy'");
+    expect(message).toContain('timeLimitMs');
+    expect(message).toContain('"idleAction"');
+    expect(message).toContain('boardsmith.json');
+  });
+
+  it('refuses it even when the game ships a bot: a bot is not how a timed step closes', () => {
+    const [message] = contradictions('table', { ...tableDefinition, bot: {} }, {}, [timedFlow]);
+    expect(message).toContain('"idleAction"');
+    expect(message).toContain('not');
+    expect(message).toMatch(/bot/);
+  });
+
+  it('is silent on a timed step whose game declares an idleAction', () => {
+    expect(contradictions('table', tableDefinition, { idleAction: { name: 'pass' } }, [timedFlow])).toEqual([]);
   });
 
   it('refuses a non-boolean declaration rather than reading its truthiness', () => {

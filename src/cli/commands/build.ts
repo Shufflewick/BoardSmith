@@ -18,6 +18,7 @@ import {
   isGameBackend,
   resolveCapabilities,
 } from '../../session/index.js';
+import { compiledFlowRoots } from '../../session/capabilities.js';
 
 interface BuildOptions {
   outDir?: string;
@@ -160,12 +161,15 @@ export function deriveManifest(
   pkg: Record<string, unknown>,
   gameDefinition: Pick<
     GameDefinition,
-    'minPlayers' | 'maxPlayers' | 'bot' | 'persistence' | 'world'
+    'gameClass' | 'minPlayers' | 'maxPlayers' | 'bot' | 'persistence' | 'world'
   >,
   engine: { protocol: number; revision: number },
   artifacts: { tableUi: boolean; worldUi: boolean },
 ): Record<string, unknown> {
   const backend = readBackend(config);
+  // The flow a table actually runs, read from the compiled rules: whether any
+  // of its steps closes on a clock is a capability no config key may claim.
+  const flows = backend === 'table' ? compiledFlowRoots(gameDefinition) : [];
 
   // EVERY WAY THE DECLARATION AND THE CODE DISAGREE, IN ONE ERROR. Reporting
   // them one at a time turns a single bad edit into a queue of rebuilds.
@@ -173,6 +177,7 @@ export function deriveManifest(
     backend,
     definition: gameDefinition,
     declared: config,
+    flows,
   });
   if (contradictions.length > 0) {
     throw new Error(contradictions.join('\n\n'));
@@ -237,6 +242,7 @@ export function deriveManifest(
       backend,
       definition: gameDefinition,
       declared: config,
+      flows,
     }),
     // A world's seat count and its state version, and nothing else: the surface
     // is guaranteed above rather than described here (#170).
