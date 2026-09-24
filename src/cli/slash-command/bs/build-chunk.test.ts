@@ -1596,6 +1596,20 @@ describe('SKILLAUTO-08 — fail-loud sims (sim exercised this chunk\'s new actio
     expect(test).toMatch(/do not invent one/i);
   });
 
+  // #317: a chunk whose game cannot end yet declares its rest with isResting,
+  // which is what lets `stuck` stay a plain zero check. #318: the simulator
+  // never plays a disabled action, so `.disabled()` is no reason to reshape a
+  // rule or the sim test.
+  it.each([
+    ['declares a rest with isResting', /isResting/],
+    ['asserts results.resting', /results\.resting/],
+    ['forbids relaxing the stuck check', /never relax `results\.stuck`/i],
+    ['says boardsmith simulate cannot declare a rest', /boardsmith simulate` has no `isResting`/],
+    ['says a disabled action is never played', /never submits an action its `\.disabled\(\)`\s+rule refuses/],
+  ])('build/test.md %s (#317, #318)', (_claim, pattern) => {
+    expect(read('build/test.md')).toMatch(pattern);
+  });
+
   it('build/playtest.md\'s freshness guard is reinforced against a stale/non-exercising human playtest run', () => {
     const playtest = read('build/playtest.md');
     expect(playtest).toMatch(/Freshness guard reinforced/i);
