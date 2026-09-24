@@ -14,11 +14,11 @@
  *   Reproduction: mount the panel WHILE the destination pick is active but choices
  *   haven't arrived yet, then resolve the deferred fetch and assert re-render.
  *
- * Test D1: a choice pick never yields its options to the board
- *   Even when every choice carries a notation ref, a choice pick contributes no
- *   board element candidates and is never deferred to the board, so the panel stays
- *   the surface that offers them. An earlier notation-walking rule got this wrong and
- *   removed the only keyboard-reachable control.
+ * Test D1: a small choice pick keeps its options in the panel
+ *   Even when every choice carries a notation ref, a pick the panel can read is not
+ *   handed to the board, so the panel stays the surface that offers them. An earlier
+ *   notation-walking rule got this wrong and removed the only keyboard-reachable
+ *   control. Only a set past the reading threshold goes to the board (#313).
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -27,7 +27,7 @@ import { nextTick, ref } from 'vue';
 import { useActionController } from '../../composables/useActionController.js';
 import type { ActionMetadata } from '../../composables/useActionController.js';
 import ActionPanel from './ActionPanel.vue';
-import { shouldDeferElementPickToBoard } from './action-panel-helpers.js';
+import { shouldDeferChoicePickToBoard } from './action-panel-helpers.js';
 import { GAME_CONTEXT_KEYS } from '../../composables/useGameContext.js';
 
 // ── Fixture: two-step move ────────────────────────────────────────────────
@@ -49,9 +49,8 @@ const twoStepMoveAction: ActionMetadata = {
 };
 
 // Fixture: notation-anchored choice action (used for test D1)
-// All destination choices carry notation refs. A notation ref makes a choice
-// highlightable on the board; it does not turn the choice into a board element
-// candidate, so the panel must still be the surface that offers it.
+// All destination choices carry notation refs. Two is a set the panel can read,
+// so the panel still offers each of them (a large set is handed to the board, #313).
 const notationChoiceAction: ActionMetadata = {
   name: 'notationChoice',
   prompt: 'Place',
@@ -293,7 +292,7 @@ describe('ActionPanel interaction tests', () => {
   });
 
   // ── Test D1: a notation choice pick still belongs to the panel ───────────
-  it('D1: a choice pick offers no board candidates and is never deferred, even with notation refs', async () => {
+  it('D1: a small notation choice pick stays in the panel, with a button per destination', async () => {
     const controller = useActionController({
       sendAction,
       availableActions: ref(['notationChoice']),
@@ -310,9 +309,10 @@ describe('ActionPanel interaction tests', () => {
 
     // A choice pick produces no board element candidates, regardless of ref type...
     expect(controller.validElements.value).toEqual([]);
-    // ...and is therefore never handed to the board (see action-panel-helpers.test.ts),
-    // so the panel keeps every option reachable by keyboard.
-    expect(shouldDeferElementPickToBoard('choice', controller.validElements.value)).toBe(false);
+    // ...and two destinations are well under the reading threshold, so the pick is
+    // not handed to the board (see action-panel-helpers.test.ts) and the panel keeps
+    // every option reachable by keyboard.
+    expect(shouldDeferChoicePickToBoard(controller.currentChoices.value)).toBe(false);
 
     // Mount to verify the panel is renderable (smoke-level check: no throw)
     const wrapper = mount(ActionPanel, {
@@ -326,6 +326,7 @@ describe('ActionPanel interaction tests', () => {
       },
     });
 
-    expect(wrapper.exists()).toBe(true);
+    expect(wrapper.findAll('button.anchored-choice-btn').map((b) => b.text())).toEqual(['a5', 'c5']);
+    expect(wrapper.find('.board-handoff-btn').exists()).toBe(false);
   });
 });

@@ -61,6 +61,7 @@ export {
   type SingleGameResult,
   type SimulationResults,
   type SelectionChoicesObservation,
+  type IsResting,
 } from './random-simulation.js';
 
 // Assertion helpers

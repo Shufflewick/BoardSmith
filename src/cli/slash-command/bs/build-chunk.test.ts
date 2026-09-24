@@ -612,12 +612,13 @@ describe('BUILD-06 / TEST-01 — worked-example step (178-08)', () => {
     expect(items[workedExampleIdx].n).toBe(4);
   });
 
-  it('names all four real commands, including verify-example-translate as the cited producer of the translation dispatch bytes', () => {
+  it('names all five real commands, including verify-example-translate as the cited producer of the translation dispatch bytes', () => {
     const test = read('build/test.md');
     expect(test).toContain('boardsmith verify-example-replay');
     expect(test).toContain('boardsmith verify-example-translate');
     expect(test).toContain('boardsmith verify-example-record');
     expect(test).toContain('boardsmith verify-example-emit');
+    expect(test).toContain('boardsmith verify-example-run');
     expect(test).toMatch(/verify-example-translate.{0,260}ONLY source of those bytes/s);
   });
 
@@ -647,6 +648,13 @@ describe('BUILD-06 / TEST-01 — worked-example step (178-08)', () => {
     expect(test).toMatch(
       /zero worked examples SKIPS this step and names the\s+exemption explicitly in the generated test file/,
     );
+  });
+
+  it('says how each subagent return is saved: the extractor\'s object unchanged, translator returns filed by exampleId (#319)', () => {
+    const test = read('build/test.md');
+    expect(test).toMatch(/save its return to a file UNCHANGED.{0,40}`\{ "examples": \[\.\.\.\] \}`/s);
+    expect(test).toContain('`{ "<exampleId>": <that example\'s return>, ... }`');
+    expect(test).toContain('--translations <f>');
   });
 
   it('states the recorded verdict comes from running the emitted test, never from the translator\'s verdictHint', () => {
@@ -1594,6 +1602,20 @@ describe('SKILLAUTO-08 — fail-loud sims (sim exercised this chunk\'s new actio
     const test = read('build/test.md');
     expect(test).toMatch(/src\/testing\/random-simulation\.ts/);
     expect(test).toMatch(/do not invent one/i);
+  });
+
+  // #317: a chunk whose game cannot end yet declares its rest with isResting,
+  // which is what lets `stuck` stay a plain zero check. #318: the simulator
+  // never plays a disabled action, so `.disabled()` is no reason to reshape a
+  // rule or the sim test.
+  it.each([
+    ['declares a rest with isResting', /isResting/],
+    ['asserts results.resting', /results\.resting/],
+    ['forbids relaxing the stuck check', /never relax `results\.stuck`/i],
+    ['says boardsmith simulate cannot declare a rest', /boardsmith simulate` has no `isResting`/],
+    ['says a disabled action is never played', /never submits an action its `\.disabled\(\)`\s+rule refuses/],
+  ])('build/test.md %s (#317, #318)', (_claim, pattern) => {
+    expect(read('build/test.md')).toMatch(pattern);
   });
 
   it('build/playtest.md\'s freshness guard is reinforced against a stale/non-exercising human playtest run', () => {

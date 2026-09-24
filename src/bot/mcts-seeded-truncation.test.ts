@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { Game, Action, defineFlow, actionStep, type GameOptions } from '../engine/index.js';
 import { MCTSBot } from './mcts-bot.js';
+import { createBot } from './index.js';
+import { DIFFICULTY_PRESETS, type BotConfig } from './types.js';
 
 /**
  * A `seed` promises a reproducible search, but `timeout` is wall-clock — so a
@@ -34,15 +36,18 @@ class ChoiceGame extends Game {
   }
 }
 
-function makeBot(config: { iterations: number; seed?: string; timeout?: number }) {
+function newGame(): ChoiceGame {
   const game = new ChoiceGame({
     playerCount: 2,
     playerNames: ['Player 1', 'Player 2'],
     seed: 'game-seed',
   });
   game.startFlow();
+  return game;
+}
 
-  return new MCTSBot(game, ChoiceGame, 'choice', 1, [], {
+function makeBot(config: { iterations: number; seed?: string; timeout?: number }) {
+  return new MCTSBot(newGame(), ChoiceGame, 'choice', 1, [], {
     playoutDepth: 2,
     async: false,
     ...config,
@@ -100,5 +105,84 @@ describe('MCTS seeded-search truncation is never silent', () => {
     await bot.play();
 
     expect(warn).toHaveBeenCalledOnce();
+  });
+});
+
+/**
+ * A parallel bot (the `hard` preset has `parallel: 2`) runs several
+ * sub-searches and votes. Each sub-search's randomness must follow the bot's
+ * own: an unseeded bot's sub-searches draw fresh random seeds, and a seeded
+ * bot's derive theirs from its seed so the whole ensemble stays reproducible
+ * (#329). Before this, an unseeded bot handed its sub-searches the fixed seeds
+ * "default-parallel-0", "default-parallel-1", ..., so every unseeded hard bot
+ * searched identically and warned about a seed nobody set.
+ */
+
+interface SubSearch { seed?: string; rngState: number }
+
+type BotInternals = { config: BotConfig; rng: { state: number } };
+
+/**
+ * Run `bot.play()` and report every sub-search it started: the seed it was
+ * configured with and its random source's state before it drew anything.
+ */
+async function subSearchesOf(bot: MCTSBot<ChoiceGame>): Promise<SubSearch[]> {
+  const subs: SubSearch[] = [];
+  const play = MCTSBot.prototype.play;
+  const spy = vi.spyOn(MCTSBot.prototype, 'play').mockImplementation(function (this: MCTSBot<Game>) {
+    const self = this as unknown as BotInternals;
+    if (this !== (bot as unknown)) subs.push({ seed: self.config.seed, rngState: self.rng.state });
+    return play.call(this);
+  });
+  await bot.play();
+  spy.mockRestore();
+  return subs;
+}
+
+const hardBot = (seed?: string) => createBot(
+  newGame(), ChoiceGame, 'choice', 1, [], 'hard', undefined, seed === undefined ? undefined : { seed },
+);
+
+describe('parallel MCTS sub-search seeding (#329)', () => {
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it('gives an unseeded hard bot\'s sub-searches independent random seeds', async () => {
+    const first = await subSearchesOf(hardBot());
+    const second = await subSearchesOf(hardBot());
+
+    expect(first).toHaveLength(DIFFICULTY_PRESETS.hard.parallel!);
+    for (const sub of [...first, ...second]) expect(sub.seed).toBeUndefined();
+
+    const states = [...first, ...second].map(sub => sub.rngState);
+    expect(new Set(states).size).toBe(states.length);
+  });
+
+  it('derives a seeded hard bot\'s sub-searches from its seed, so the same seed searches the same way', async () => {
+    const first = await subSearchesOf(hardBot('fixture-7'));
+    const second = await subSearchesOf(hardBot('fixture-7'));
+    const other = await subSearchesOf(hardBot('fixture-8'));
+
+    expect(first).toHaveLength(DIFFICULTY_PRESETS.hard.parallel!);
+    expect(second).toEqual(first);
+    expect(new Set(first.map(sub => sub.rngState)).size).toBe(first.length);
+    expect(other.map(sub => sub.rngState)).not.toEqual(first.map(sub => sub.rngState));
+  });
+
+  it('picks the same move every time for the same seed', async () => {
+    const move = async () => hardBot('fixture-7').play();
+    const first = await move();
+    for (let run = 0; run < 3; run++) expect(await move()).toEqual(first);
+  });
+
+  it('does not warn about a seed when an unseeded hard bot\'s search is cut short', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+
+    // timeout: 0 truncates every sub-search at its first clock check.
+    const bot = new MCTSBot(newGame(), ChoiceGame, 'choice', 1, [], { ...DIFFICULTY_PRESETS.hard, timeout: 0 });
+    expect(await bot.play()).not.toBeNull();
+
+    expect(warn).not.toHaveBeenCalled();
   });
 });

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { nextTick, watch } from 'vue';
+import { computed, nextTick, watch } from 'vue';
 import {
   createBoardInteraction,
   useBoardInteraction,
@@ -120,5 +120,86 @@ describe('requestBoardFocus', () => {
     bi.requestBoardFocus();
     bi.clear();
     expect(bi.boardFocusRequest).toBe(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// #313 — a board of thousands of candidates is asked about each of its spaces
+// ---------------------------------------------------------------------------
+
+describe('candidate lookups on a large pick (#313)', () => {
+  /** Windup Warfare's placePack: one notation-anchored candidate per space. */
+  function spaces(n: number): BoardTarget[] {
+    return Array.from({ length: n }, (_, i) => ({
+      id: -1 - i,
+      ref: { notation: `s${i}` },
+      display: `Space ${i}`,
+      ...(i % 2 === 1 ? { disabled: 'Too close to the enemy' } : {}),
+    }));
+  }
+
+  it('answers for every space of a 3,720-candidate pick without rescanning the list per space', () => {
+    // A board renders each space and asks whether it is a candidate, whether it is
+    // disabled and what it is called. Scanning the whole list for every space is
+    // 3,720 x 3,720 comparisons through reactive proxies: over forty seconds
+    // measured, on every render of the board.
+    const interaction = createBoardInteraction();
+    interaction.setValidElements(spaces(3720), () => {});
+
+    const started = performance.now();
+    let selectable = 0;
+    let disabled = 0;
+    for (let i = 0; i < 3720; i++) {
+      const cell = { id: 1000 + i, notation: `s${i}` };
+      if (interaction.isSelectableElement(cell)) selectable++;
+      if (interaction.isDisabledElement(cell)) disabled++;
+      expect(interaction.candidateLabel(cell)).toBe(`Space ${i}`);
+    }
+    const elapsed = performance.now() - started;
+
+    expect(selectable).toBe(3720);
+    expect(disabled).toBe(1860);
+    expect(elapsed).toBeLessThan(1000);
+  });
+
+  it('keeps the list order when two candidates match one element', () => {
+    // matchesRef precedence is per ref; across the list the FIRST match is the
+    // candidate, as it was when every lookup was a scan.
+    const interaction = createBoardInteraction();
+    const onSelect = vi.fn();
+    interaction.setValidElements(
+      [
+        { id: -1, ref: { notation: 'a1' }, display: 'by notation' },
+        { id: 7, ref: { id: 7 }, display: 'by id' },
+      ],
+      onSelect,
+    );
+
+    expect(interaction.candidateLabel({ id: 7, notation: 'a1' })).toBe('by notation');
+    interaction.triggerElementSelect({ id: 7, notation: 'a1' });
+    expect(onSelect).toHaveBeenCalledWith(-1);
+    expect(interaction.candidateLabel({ id: 7, notation: 'b2' })).toBe('by id');
+  });
+
+  it('matches by name when a ref carries neither id nor notation', () => {
+    const interaction = createBoardInteraction();
+    interaction.setValidElements([{ id: -1, ref: { name: 'north-gate' } }], () => {});
+
+    expect(interaction.isSelectableElement({ id: 3, name: 'north-gate' })).toBe(true);
+    expect(interaction.isSelectableElement({ id: 3, name: 'south-gate' })).toBe(false);
+  });
+
+  it('a computed reading a lookup follows a new candidate list', async () => {
+    const interaction = createBoardInteraction();
+    const isA1 = computed(() => interaction.isSelectableElement({ notation: 'a1' }));
+    expect(isA1.value).toBe(false);
+
+    interaction.setValidElements([{ id: -1, ref: { notation: 'a1' } }], () => {});
+    await nextTick();
+    expect(isA1.value).toBe(true);
+
+    interaction.clear();
+    await nextTick();
+    expect(isA1.value).toBe(false);
   });
 });

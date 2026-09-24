@@ -1,15 +1,11 @@
-import {
-  DESIGN_DIR,
-  designChunksDir,
-  designDir,
-  designRulebookDir,
-} from '../lib/project-paths.js';
+import { designChunksDir, designRulebookDir } from '../lib/project-paths.js';
 import { promises as fs } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import chalk from 'chalk';
 import { atomicWriteFile } from './verify-run.js';
 import {
   readLiveSlices,
+  readSliceArgument,
   parseSubagentJsonInput,
   type SubagentJsonParseResult,
 } from './verify-derive-check.js';
@@ -42,8 +38,9 @@ import {
  * a different problem (178-RESEARCH Pitfall 3): CHECK-04 re-derives a value; CHECK-06 replays a
  * worked example's expected outcome against the real engine.
  *
- * The WRITE surface (`verify-example-record`, plan 178-04) is the ONLY place a subagent's raw
- * verdict reaches `createExampleReplayRecord` for the first time. This module's own
+ * Two commands write the ledger: `verify-example-record` records what the extractor and
+ * translator returned, and `verify-example-run` (`example-test-run.ts`) records what running the
+ * emitted tests observed. This module's own
  * `verifyExampleReplayCommand` is read-only: it never dispatches a subagent and never assigns
  * `process.exitCode`, including when every recorded verdict is `disagrees` (178-CONTEXT.md
  * decision 11 — CHECK-06 REPORTS, exit 0, and never gates).
@@ -54,21 +51,38 @@ import {
 // -------------------------------------------------------------------------------------------
 
 /**
- * The frozen four-member verdict set. Unlike `DERIVE_CHECK_VERDICTS` (`verify-derive-check.ts`),
+ * The frozen verdict set. Unlike `DERIVE_CHECK_VERDICTS` (`verify-derive-check.ts`),
  * which is compile-time tied to an EXTERNALLY-imported `DerivedLineClassification` union, this
  * set has no external type to drift from — it IS the canonical source of truth for
  * `ExampleReplayVerdict`, and the type below is derived directly from it (`(typeof
  * EXAMPLE_REPLAY_VERDICTS)[number]`), which is definitionally exhaustive by construction: there
  * is no second declaration of the union anywhere in this module for the array to drift against.
+ *
+ * Each example moves through these explicitly (#319):
+ *
+ *   - `example-inconsistent` — decided by the extractor; final.
+ *   - `unexecutable` — decided by the translator, with a named reason; final.
+ *   - `not-run` — the translator wrote a test, `verify-example-record` stored it, and nothing
+ *     has run it yet. It is not an outcome: `verify-example-run` runs the emitted test and
+ *     replaces it with `agrees` (the test passed) or `disagrees` (it failed). Those two are
+ *     only ever observed, never taken from the translator's `verdictHint`.
  */
 export const EXAMPLE_REPLAY_VERDICTS = Object.freeze([
   'agrees',
   'disagrees',
   'example-inconsistent',
   'unexecutable',
+  'not-run',
 ] as const);
 
 export type ExampleReplayVerdict = (typeof EXAMPLE_REPLAY_VERDICTS)[number];
+
+/** The verdicts whose record carries a translated test (`ExampleReplayRecord.translation`). */
+const TRANSLATED_VERDICTS: readonly ExampleReplayVerdict[] = Object.freeze([
+  'not-run',
+  'agrees',
+  'disagrees',
+]);
 
 function isExampleReplayVerdict(value: string): value is ExampleReplayVerdict {
   return (EXAMPLE_REPLAY_VERDICTS as readonly string[]).includes(value);
@@ -113,6 +127,20 @@ const EXAMPLE_REPLAY_RECORD_KINDS = Object.freeze([
   'example-inconsistent',
 ] as const);
 
+/**
+ * The test a translator wrote for one example, stored on its record so the emitted file can be
+ * regenerated from the ledger alone. `pageCitation` and `sourceText` come from the extractor's
+ * spec and head the emitted test as a comment, so a failing test traces back to its rulebook line.
+ */
+export interface ExampleTranslation {
+  readonly pageCitation: string;
+  readonly sourceText: string;
+  /** One self-contained `it(...)` block, exactly as the translator returned it. */
+  readonly testCode: string;
+  /** Single-line `import ... ;` statements `testCode` depends on. */
+  readonly imports: readonly string[];
+}
+
 export interface ExampleReplayRecord {
   /** Caller-assigned (`workedExampleId({ slicePath, lineNumber })`) — never a model-returned field. */
   readonly exampleId: string;
@@ -123,7 +151,10 @@ export interface ExampleReplayRecord {
   readonly verdict: ExampleReplayVerdict;
   /** The reasoning IS the artifact — required for every verdict, not only `unexecutable`. */
   readonly reason: string;
-  /** `disagrees` only (required, non-empty); '' for every other verdict. */
+  /**
+   * The example's expected outcome, from the extractor's spec, on every translated record
+   * (`not-run`/`agrees`/`disagrees`); required non-empty for `disagrees`; '' otherwise.
+   */
   readonly expected: string;
   /** `disagrees` only (required, non-empty); '' for every other verdict. */
   readonly observed: string;
@@ -138,6 +169,8 @@ export interface ExampleReplayRecord {
   readonly recordedAt: string;
   /** Present only when a generated test file backs this record. */
   readonly testFilePath?: string;
+  /** Present exactly when `verdict` is `not-run`, `agrees` or `disagrees`. */
+  readonly translation?: ExampleTranslation;
 }
 
 /**
@@ -145,7 +178,7 @@ export interface ExampleReplayRecord {
  * checked against `EXAMPLE_REPLAY_VERDICTS`; every recording path AND the read path
  * (`readExampleReplayVerdicts`, CR-02) route through it. Throws when:
  *
- *   - `verdict` is outside `EXAMPLE_REPLAY_VERDICTS` (message names all four legal verdicts)
+ *   - `verdict` is outside `EXAMPLE_REPLAY_VERDICTS` (message names every legal verdict)
  *   - `kind` is outside `WORKED_EXAMPLE_KINDS`
  *   - `provenance` is outside the two legal provenance values
  *   - `reason` is empty or whitespace-only — the reason IS the artifact, required for every
@@ -159,8 +192,8 @@ export interface ExampleReplayRecord {
  *   - `exampleId` does not equal `workedExampleId({ slicePath, lineNumber })` for the record's
  *     own fields — identity is caller-assigned, never model-supplied
  *
- * Modeled as additional `if` blocks inside this same function — never a second validator
- * elsewhere in the module.
+ * Modeled as `if` blocks inside this function and the private helpers only it calls — never a
+ * second validator elsewhere in the module.
  */
 export function createExampleReplayRecord(input: {
   exampleId: string;
@@ -177,6 +210,7 @@ export function createExampleReplayRecord(input: {
   provenance: string;
   recordedAt?: string;
   testFilePath?: string;
+  translation?: ExampleTranslation;
 }): ExampleReplayRecord {
   const location = `${input.slicePath}:${input.lineNumber}`;
 
@@ -233,6 +267,9 @@ export function createExampleReplayRecord(input: {
     );
   }
 
+  const translation = input.translation;
+  assertTranslationFitsVerdict(location, input.verdict, translation);
+
   const fenceCheckFields: [string, string][] = [
     ['reason', input.reason],
     ['expected', expected],
@@ -241,6 +278,7 @@ export function createExampleReplayRecord(input: {
     ['contradictionB', contradictionB],
     ...(input.testFilePath ? ([['testFilePath', input.testFilePath]] as [string, string][]) : []),
     ...supportingQuoteLines.map((line, i): [string, string] => [`supportingQuoteLines[${i}]`, line]),
+    ...translationFenceFields(translation),
   ];
   for (const [field, value] of fenceCheckFields) {
     if (value.includes(EXAMPLE_REPLAY_LEDGER_BEGIN) || value.includes(EXAMPLE_REPLAY_LEDGER_END)) {
@@ -278,6 +316,48 @@ export function createExampleReplayRecord(input: {
     provenance: input.provenance,
     recordedAt: input.recordedAt ?? new Date().toISOString(),
     ...(input.testFilePath ? { testFilePath: input.testFilePath } : {}),
+    ...(translation ? { translation: frozenTranslation(translation) } : {}),
+  });
+}
+
+/** A translated test belongs on a not-run, agrees or disagrees record, and only there. */
+function assertTranslationFitsVerdict(
+  location: string,
+  verdict: ExampleReplayVerdict,
+  translation: ExampleTranslation | undefined,
+): void {
+  const translated = TRANSLATED_VERDICTS.includes(verdict);
+  if (translated && translation === undefined) {
+    throw new Error(
+      `${location}'s "${verdict}" verdict carries no translated test.\n` +
+        `A "${verdict}" record is about a test the translator wrote, so it must carry that test ` +
+        `(its testCode and imports) — record it through verify-example-record.`,
+    );
+  }
+  if (!translated && translation !== undefined) {
+    throw new Error(
+      `${location}'s "${verdict}" verdict carries a translated test.\n` +
+        `Only a not-run, agrees or disagrees record is backed by a test.`,
+    );
+  }
+}
+
+function translationFenceFields(translation: ExampleTranslation | undefined): [string, string][] {
+  if (translation === undefined) return [];
+  return [
+    ['translation.pageCitation', translation.pageCitation],
+    ['translation.sourceText', translation.sourceText],
+    ['translation.testCode', translation.testCode],
+    ...translation.imports.map((imp, i): [string, string] => [`translation.imports[${i}]`, imp]),
+  ];
+}
+
+function frozenTranslation(translation: ExampleTranslation): ExampleTranslation {
+  return Object.freeze({
+    pageCitation: translation.pageCitation,
+    sourceText: translation.sourceText,
+    testCode: translation.testCode,
+    imports: Object.freeze([...translation.imports]),
   });
 }
 
@@ -419,6 +499,7 @@ export async function readExampleReplayVerdicts(
         provenance: String(r.provenance ?? ''),
         recordedAt: r.recordedAt !== undefined ? String(r.recordedAt) : undefined,
         testFilePath: r.testFilePath !== undefined ? String(r.testFilePath) : undefined,
+        translation: readLedgerTranslation(r.translation),
       });
     } catch (err) {
       throw new Error(
@@ -427,6 +508,30 @@ export async function readExampleReplayVerdicts(
       );
     }
   });
+}
+
+/** A ledger line's `translation`, typed field by field so a hand-edited one fails loudly. */
+function readLedgerTranslation(raw: unknown): ExampleTranslation | undefined {
+  if (raw === undefined) return undefined;
+  const t = (raw ?? {}) as Record<string, unknown>;
+  if (
+    typeof t.pageCitation !== 'string' ||
+    typeof t.sourceText !== 'string' ||
+    typeof t.testCode !== 'string' ||
+    !Array.isArray(t.imports) ||
+    !t.imports.every((imp) => typeof imp === 'string')
+  ) {
+    throw new Error(
+      'its translation must carry string pageCitation, sourceText and testCode, and an imports ' +
+        'array of strings.',
+    );
+  }
+  return {
+    pageCitation: t.pageCitation,
+    sourceText: t.sourceText,
+    testCode: t.testCode,
+    imports: t.imports as string[],
+  };
 }
 
 // -------------------------------------------------------------------------------------------
@@ -655,7 +760,10 @@ export async function verifyExampleReplayCommand(
   const disagreesUnverified = verdicts.filter(
     (v) => v.verdict === 'disagrees' && v.provenance === 'quote-unverified',
   );
-  const otherFindings = verdicts.filter((v) => v.verdict !== 'agrees' && v.verdict !== 'disagrees');
+  const notRun = verdicts.filter((v) => v.verdict === 'not-run');
+  const otherFindings = verdicts.filter(
+    (v) => v.verdict === 'unexecutable' || v.verdict === 'example-inconsistent',
+  );
 
   if (disagreesVerified.length > 0) {
     console.log(chalk.yellow(`  mismatch, quotes source-verified:`));
@@ -674,6 +782,15 @@ export async function verifyExampleReplayCommand(
       console.log(`    ⚠ ${finding.slicePath}:${finding.lineNumber} — ${finding.reason}`);
     }
   }
+  if (notRun.length > 0) {
+    console.log(
+      chalk.yellow(
+        `  translated but not run yet — run boardsmith verify-example-emit and then ` +
+          `boardsmith verify-example-run for a chunk that cites each slice:`,
+      ),
+    );
+    for (const record of notRun) console.log(`    ${record.slicePath}:${record.lineNumber}`);
+  }
   for (const finding of otherFindings) {
     console.log(
       chalk.yellow(
@@ -688,14 +805,283 @@ export async function verifyExampleReplayCommand(
 }
 
 // -------------------------------------------------------------------------------------------
-// Task 1/2 (178-04) — verifyExampleRecordCommand — the sole write surface, provenance-gated
+// The extractor's and translator's returns, as the commands read them (#319)
+// -------------------------------------------------------------------------------------------
+
+/**
+ * One entry of the extractor's return (`verify/extract-example.md` § RETURN). The extractor never
+ * returns a slice path or an id: the slice is the caller's `--slice-path`, and the id is assigned
+ * from it and `lineNumber`. An `example-inconsistent` entry carries `reason` and
+ * `supportingQuoteLines` in place of the spec fields.
+ */
+interface RawExtractedExample {
+  lineNumber: number;
+  pageCitation?: string;
+  kind: string;
+  sourceText?: string;
+  setup?: string;
+  action?: string;
+  expected?: string;
+  supportingQuoteLines?: string[];
+  reason?: string;
+}
+
+async function readSubagentJsonFile(
+  filePath: string,
+  flagLabel: string,
+  command: string,
+): Promise<SubagentJsonParseResult> {
+  let text: string;
+  try {
+    text = await fs.readFile(filePath, 'utf-8');
+  } catch {
+    throw new Error(`${command} could not read ${flagLabel} at "${filePath}".`);
+  }
+  return parseSubagentJsonInput(text, flagLabel, filePath);
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Reads the extractor's return: exactly the one object `verify/extract-example.md` tells it to
+ * return, `{ "examples": [...] }`. A bare array, or anything else, is refused with the shape
+ * spelled out, because the contract and this reader are one agreement (#319).
+ */
+async function readExtractorReturn(
+  filePath: string,
+  command: string,
+): Promise<{ examples: RawExtractedExample[]; repairs: string[] }> {
+  const parsed = await readSubagentJsonFile(filePath, '--extraction', command);
+  const value = parsed.value;
+  if (!isPlainObject(value) || !Array.isArray(value.examples)) {
+    throw new Error(
+      `--extraction at "${filePath}" is not the extractor's return.\n` +
+        `verify/extract-example.md has the extractor return one object, { "examples": [ ... ] } ` +
+        `(an empty list when the slice has no worked example). Save that return to the file ` +
+        `unchanged — do not unwrap it or rebuild it.`,
+    );
+  }
+  value.examples.forEach((entry, i) => {
+    if (!isPlainObject(entry) || typeof entry.lineNumber !== 'number' || typeof entry.kind !== 'string') {
+      throw new Error(
+        `--extraction at "${filePath}": examples[${i}] needs a numeric lineNumber and a kind, as ` +
+          `verify/extract-example.md describes. Re-dispatch the extractor; writing nothing.`,
+      );
+    }
+  });
+  return { examples: value.examples as RawExtractedExample[], repairs: parsed.repairs };
+}
+
+/** A short, non-identifying preview of a colliding entry's text for an error message. */
+function shortEntryPreview(text: string, maxLen = 80): string {
+  const trimmed = text.trim();
+  return trimmed.length > maxLen ? `${trimmed.slice(0, maxLen)}…` : trimmed;
+}
+
+interface InconsistentExample {
+  id: string;
+  lineNumber: number;
+  reason: string;
+  supportingQuoteLines: string[];
+}
+
+/**
+ * Turns one slice's extractor return into the specs a translator can work from and the
+ * `example-inconsistent` findings it cannot — the ONE place both `verify-example-translate` and
+ * `verify-example-record` do this, so they can never disagree about an extraction.
+ *
+ * Identity is the caller's: every id is `workedExampleId({ slicePath: --slice-path, lineNumber })`,
+ * and every `lineNumber` is first checked against the lines the extractor was actually shown
+ * (CR-03). Two entries at the same line throw rather than replace one another (CR-01/CR-02). An
+ * `example-inconsistent` entry must carry its reason; it is never re-judged here.
+ */
+function readSliceExamples(
+  slicePath: string,
+  sliceText: string,
+  examples: RawExtractedExample[],
+): { specsById: Map<string, WorkedExampleSpec>; inconsistent: InconsistentExample[] } {
+  assertValidExampleLineNumbers({ path: slicePath, text: sliceText }, examples, '--extraction');
+
+  const seen = new Map<string, RawExtractedExample>();
+  for (const entry of examples) {
+    const id = workedExampleId({ slicePath, lineNumber: entry.lineNumber });
+    const existing = seen.get(id);
+    if (existing) {
+      throw new Error(
+        `--extraction contains two entries resolving to the same slicePath+lineNumber ("${id}").\n` +
+          `Existing: ${shortEntryPreview(existing.sourceText ?? existing.reason ?? '')}\n` +
+          `New:      ${shortEntryPreview(entry.sourceText ?? entry.reason ?? '')}\n` +
+          `Entries are keyed by slicePath+lineNumber, never by returned prose — remove or merge ` +
+          `the duplicate before recording. Writing nothing.`,
+      );
+    }
+    seen.set(id, entry);
+  }
+
+  const inconsistent: InconsistentExample[] = [];
+  const specs: WorkedExampleSpec[] = [];
+  for (const entry of examples) {
+    const id = workedExampleId({ slicePath, lineNumber: entry.lineNumber });
+    if (entry.kind === 'example-inconsistent') {
+      const reason = (entry.reason ?? '').trim();
+      if (reason.length === 0) {
+        throw new Error(
+          `${slicePath}:${entry.lineNumber} is marked "example-inconsistent" but carries no ` +
+            `reason.\nDeciding it is inconsistent already happened at extraction time; this ` +
+            `command never re-judges it, so it cannot proceed without the reason the extractor ` +
+            `recorded. Writing nothing.`,
+        );
+      }
+      inconsistent.push({
+        id,
+        lineNumber: entry.lineNumber,
+        reason,
+        supportingQuoteLines: entry.supportingQuoteLines ?? [],
+      });
+      continue;
+    }
+    specs.push(
+      createWorkedExampleSpec({
+        id,
+        sliceText,
+        returned: {
+          slicePath,
+          lineNumber: entry.lineNumber,
+          pageCitation: entry.pageCitation ?? '',
+          kind: entry.kind,
+          sourceText: entry.sourceText ?? '',
+          setup: entry.setup ?? '',
+          action: entry.action,
+          expected: entry.expected ?? '',
+          supportingQuoteLines: entry.supportingQuoteLines,
+        },
+      }),
+    );
+  }
+  return { specsById: collectWorkedExampleSpecs(specs), inconsistent };
+}
+
+/**
+ * The translator's named reasons for declining (`verify/translate-example.md` § unexecutable),
+ * each with the plain sentence the ledger records beside it.
+ */
+const UNEXECUTABLE_REASONS: Readonly<Record<string, string>> = Object.freeze({
+  'no-matching-symbol': "no exported symbol expresses this example's action or predicate.",
+  'unmodeled-component-state':
+    'the example depends on component state the game does not model yet.',
+  'image-derived-indeterminate':
+    'the example comes from an image and is not specific enough to assert an outcome from.',
+});
+
+const TRANSLATOR_VERDICT_HINTS: readonly string[] = ['agrees', 'disagrees', 'unexecutable'];
+
+/** What one translator return means for the ledger. */
+type TranslatorOutcome =
+  | { kind: 'translated'; testCode: string; imports: string[] }
+  | { kind: 'unexecutable'; reason: string };
+
+/**
+ * Validates one translator return against `verify/translate-example.md` § RETURN — `testCode`,
+ * `imports`, `verdictHint`, and `unexecutableReason` exactly when the hint is `unexecutable` —
+ * and says what it means. `verdictHint` decides only whether a test exists; `agrees`/`disagrees`
+ * is never taken from it, only observed by `verify-example-run`.
+ */
+function readTranslatorOutcome(exampleId: string, value: unknown): TranslatorOutcome {
+  const where = `--translations entry "${exampleId}"`;
+  if (!isTranslatorReturn(value)) {
+    throw new Error(
+      `${where} does not have the translator's return shape.\n` +
+        'verify/translate-example.md has the translator return { "testCode": string, "imports": ' +
+        'string[], "verdictHint": "agrees" | "disagrees" | "unexecutable", "unexecutableReason"?: ' +
+        'string } — file that return unchanged under the exampleId it was dispatched for.',
+    );
+  }
+  if (value.verdictHint === 'unexecutable') return readUnexecutableOutcome(where, value);
+  if (value.unexecutableReason !== undefined) {
+    throw new Error(
+      `${where} names an unexecutableReason but its verdictHint is "${value.verdictHint}".\n` +
+        `Only an "unexecutable" return names a reason. Re-dispatch the translator; writing nothing.`,
+    );
+  }
+  if (value.testCode.trim().length === 0) {
+    throw new Error(
+      `${where} has verdictHint "${value.verdictHint}" but no testCode.\n` +
+        `A translated example must carry its it(...) block. Re-dispatch the translator; writing ` +
+        `nothing.`,
+    );
+  }
+  return { kind: 'translated', testCode: value.testCode, imports: value.imports };
+}
+
+/** A translator return as `verify/translate-example.md` § RETURN shapes it. */
+interface TranslatorReturn {
+  testCode: string;
+  imports: string[];
+  verdictHint: string;
+  unexecutableReason?: unknown;
+}
+
+function isTranslatorReturn(value: unknown): value is TranslatorReturn {
+  return (
+    isPlainObject(value) &&
+    typeof value.testCode === 'string' &&
+    Array.isArray(value.imports) &&
+    value.imports.every((imp) => typeof imp === 'string') &&
+    typeof value.verdictHint === 'string' &&
+    TRANSLATOR_VERDICT_HINTS.includes(value.verdictHint)
+  );
+}
+
+/** An `unexecutable` return: a named reason from the contract's list, and no test. */
+function readUnexecutableOutcome(where: string, value: TranslatorReturn): TranslatorOutcome {
+  const reason = value.unexecutableReason;
+  const sentence = typeof reason === 'string' ? UNEXECUTABLE_REASONS[reason] : undefined;
+  if (sentence === undefined) {
+    throw new Error(
+      `${where} is "unexecutable" without a named reason.\n` +
+        `unexecutableReason must be one of: ${Object.keys(UNEXECUTABLE_REASONS).join(', ')}. ` +
+        `Re-dispatch the translator; writing nothing.`,
+    );
+  }
+  if (value.testCode !== '') {
+    throw new Error(
+      `${where} is "unexecutable" but carries testCode.\n` +
+        `An unexecutable example has no test: testCode must be "". Re-dispatch the ` +
+        `translator; writing nothing.`,
+    );
+  }
+  return { kind: 'unexecutable', reason: `${reason}: ${sentence}` };
+}
+
+/**
+ * Reads `--translations`: one JSON object per slice mapping each `exampleId`
+ * `verify-example-translate` handed out to that example's translator return, unchanged.
+ */
+async function readTranslatorReturns(
+  filePath: string,
+): Promise<{ byId: Map<string, unknown>; repairs: string[] }> {
+  const parsed = await readSubagentJsonFile(filePath, '--translations', 'verify-example-record');
+  if (!isPlainObject(parsed.value)) {
+    throw new Error(
+      `--translations at "${filePath}" must be one JSON object keyed by exampleId: ` +
+        `{ "<exampleId>": <that example's translator return, unchanged>, ... }, using the ` +
+        `exampleIds verify-example-translate printed.`,
+    );
+  }
+  return { byId: new Map(Object.entries(parsed.value)), repairs: parsed.repairs };
+}
+
+// -------------------------------------------------------------------------------------------
+// verifyExampleRecordCommand — the extraction/translation write surface, provenance-gated
 // -------------------------------------------------------------------------------------------
 
 export interface VerifyExampleRecordOptions {
   project?: string;
   slicePath?: string;
   extraction?: string;
-  translation?: string;
+  translations?: string;
   json?: boolean;
 }
 
@@ -706,156 +1092,33 @@ export interface VerifyExampleRecordResult {
   provenance: ExampleReplayProvenance;
   /**
    * Every JSON-transport repair `parseSubagentJsonInput` performed across `--extraction`/
-   * `--translation` (180-01 finding 5) — logged, never silent. Empty when both files parsed as
+   * `--translations` (180-01 finding 5) — logged, never silent. Empty when both files parsed as
    * bare JSON.
    */
   repairs: string[];
 }
 
 /**
- * A raw entry from the extractor's `--extraction` JSON return, as consumed by
- * `verifyExampleRecordCommand`. Mirrors `RawExampleTranslateExtractionEntry` below in shape
- * (`extract-example.md`'s own RETURN contract governs both): most entries carry `kind:
- * 'transition' | 'predicate'` and the full spec field set; an entry the extractor already judged
- * `example-inconsistent` (decision 4) instead carries only `pageCitation`, `reason`, and
- * `supportingQuoteLines` — `sourceText`/`setup`/`expected` are therefore optional here, not
- * required, matching what the contract actually returns for that kind.
- */
-interface RawExampleExtractionEntry {
-  slicePath: string;
-  lineNumber: number;
-  pageCitation: string;
-  kind: string;
-  sourceText?: string;
-  setup?: string;
-  action?: string;
-  expected?: string;
-  supportingQuoteLines?: string[];
-  /** Required when `kind === 'example-inconsistent'`; ignored otherwise. */
-  reason?: string;
-}
-
-interface RawExampleTranslationEntry {
-  slicePath: string;
-  lineNumber: number;
-  verdict: string;
-  reason: string;
-  expected?: string;
-  observed?: string;
-  contradictionA?: string;
-  contradictionB?: string;
-  testFilePath?: string;
-}
-
-/**
- * The SINGLE `--slice-path` containment guard for every CHECK-06 command in this module that
- * accepts a `--slice-path` option (`verifyExampleRecordCommand` and, from plan 178-05,
- * `verifyExampleTranslateCommand`) — mirrors `verify-derive-record`'s CR-04 fix /
- * `verify-classify.ts`'s `--live-slice` guard verbatim in shape and message. Resolves `slicePath`
- * against the DESIGN directory — `--slice-path` is a citation, and citations are written relative
- * to `design/` (`rulebook/<file>.md`), not to the project root — and throws, naming `rulebook/`,
- * BEFORE any read when the resolved path escapes `design/rulebook` — a second, differently-shaped
- * copy of this check is exactly the class of drift 177.1's code review found at this same trust
- * boundary.
- */
-function resolveSlicePathWithinRulebook(projectDir: string, slicePath: string): string {
-  const rulebookDir = designRulebookDir(projectDir);
-  const sliceAbsPath = resolve(designDir(projectDir), slicePath);
-  const sliceRelToRulebook = relative(rulebookDir, sliceAbsPath);
-  if (
-    sliceRelToRulebook === '' ||
-    sliceRelToRulebook.startsWith('..') ||
-    isAbsolute(sliceRelToRulebook)
-  ) {
-    throw new Error(
-      `--slice-path "${slicePath}" resolves outside ${relative(projectDir, rulebookDir)}.\n` +
-        `Pass a path of the form "rulebook/<file>.md", relative to ${DESIGN_DIR}/.`,
-    );
-  }
-  return sliceAbsPath;
-}
-
-/**
- * Mirrors `verify-derive-check.ts`'s module-private `readRequiredJsonFile` (per this plan's
- * `<interfaces>` — reimplemented here, not imported, since that function is not exported).
- */
-async function readRequiredExampleJsonFile(
-  filePath: string,
-  flagLabel: string,
-): Promise<SubagentJsonParseResult> {
-  let text: string;
-  try {
-    text = await fs.readFile(filePath, 'utf-8');
-  } catch {
-    throw new Error(`verify-example-record could not read ${flagLabel} at "${filePath}".`);
-  }
-  return parseSubagentJsonInput(text, flagLabel, filePath);
-}
-
-/** A short, non-identifying preview of a colliding entry's text for an error message. */
-function shortEntryPreview(text: string, maxLen = 80): string {
-  const trimmed = (text ?? '').toString().trim();
-  return trimmed.length > maxLen ? `${trimmed.slice(0, maxLen)}…` : trimmed;
-}
-
-/**
- * Keys a raw returned-array entry by `workedExampleId({ slicePath, lineNumber })` — the caller's
- * OWN `slicePath` (this invocation's `--slice-path`), never a model-returned field — and throws,
- * naming BOTH colliding entries via `preview`, rather than silently overwriting. Direct inheritance
- * of 177.1's CR-01/CR-02 fix: two returned entries must never collapse onto one record just
- * because they resolve to the same `slicePath`+`lineNumber`.
- */
-function keyRawExampleEntriesByLocation<T extends { lineNumber: number }>(
-  entries: T[],
-  slicePath: string,
-  flagLabel: string,
-  preview: (entry: T) => string,
-): Map<string, T> {
-  const map = new Map<string, T>();
-  for (const entry of entries) {
-    const id = workedExampleId({ slicePath, lineNumber: entry.lineNumber });
-    const existing = map.get(id);
-    if (existing) {
-      throw new Error(
-        `${flagLabel} contains two entries resolving to the same slicePath+lineNumber ("${id}").\n` +
-          `Existing: ${shortEntryPreview(preview(existing))}\n` +
-          `New:      ${shortEntryPreview(preview(entry))}\n` +
-          `Entries are keyed by slicePath+lineNumber, never by returned prose — remove or merge ` +
-          `the duplicate before recording. Writing nothing.`,
-      );
-    }
-    map.set(id, entry);
-  }
-  return map;
-}
-
-/**
- * `boardsmith verify-example-record` — the ONLY write surface for CHECK-06's ledger. Reads the
- * extractor's and translator's already-dispatched structured JSON returns
- * (`--extraction`/`--translation`), assigns EVERY example's identity itself via
- * `workedExampleId({ slicePath: --slice-path, lineNumber: <the returned lineNumber> })` — never a
- * model-supplied field, the direct continuation of 177.1's CR-01/CR-02 fix — and
- * VALIDATES-EVERYTHING-THEN-WRITES: every `WorkedExampleSpec` and every `ExampleReplayRecord` is
- * built and checked before the single `recordExampleReplayVerdicts` call at the very end. A
- * rejection anywhere in that validation throws before any write, leaving the ledger byte-identical
- * to its pre-call state.
+ * `boardsmith verify-example-record` — writes one slice's extraction and translation results to
+ * CHECK-06's ledger. Reads the extractor's return (`--extraction`, `{ "examples": [...] }`) and
+ * the translator returns (`--translations`, keyed by the exampleIds `verify-example-translate`
+ * handed out), then records each example as:
  *
- * PROVENANCE GATING (178-CONTEXT.md decision 12, this milestone's hardest-won lesson): resolved
- * ONCE per invocation — never per example — via `QuoteVerifiedProvenance.obtain(projectDir)` +
- * `.covers(slicePath)`. `'quote-verified'` only when an archived, hash-verified source exists AND
- * can honestly be said to cover THIS `--slice-path`; `'quote-unverified'` in every other case
- * (including no archived source at all). `createExampleReplayRecord` REQUIRES this field on every
- * record it constructs — a caller cannot omit the gate, and the downgrade NEVER rewrites `verdict`
- * itself (a `disagrees` stays `disagrees`), only its confidence label at the report layer
- * (`verifyExampleReplayCommand`'s two named buckets).
+ *   - `example-inconsistent` — the extractor found it contradicts its own source;
+ *   - `unexecutable` — the translator declined, with its named reason;
+ *   - `not-run` — the translator wrote a test. The record carries that test; `verify-example-emit`
+ *     writes it into the chunk's file and `verify-example-run` observes `agrees`/`disagrees`.
  *
- * `--slice-path` is validated against `projectDir/rulebook` BEFORE any read — mirrors
- * `verify-derive-record`'s CR-04 fix / `verify-classify.ts`'s `--live-slice` guard verbatim in
- * shape and message.
+ * VALIDATES EVERYTHING, THEN WRITES: every spec, translator return and record is built and
+ * checked before the single `recordExampleReplayVerdicts` call. Every consistent example needs a
+ * translator return and every translator return needs an example, or nothing is written.
+ *
+ * PROVENANCE GATING (178-CONTEXT.md decision 12): resolved ONCE per invocation via
+ * `QuoteVerifiedProvenance.obtain(projectDir)` + `.covers(slicePath)`, and carried on every
+ * record, including the ones `verify-example-run` later rewrites.
  *
  * No run identifier flag, and no bypass option of any kind, exists anywhere on this command —
- * CHECK-06 is project-level and source-free by construction, the same discipline `verify-derive-
- * record` holds.
+ * CHECK-06 is project-level and source-free by construction.
  */
 export async function verifyExampleRecordCommand(
   options: VerifyExampleRecordOptions = {},
@@ -868,170 +1131,84 @@ export async function verifyExampleRecordCommand(
   if (!options.extraction) {
     throw new Error('verify-example-record requires --extraction <file>.');
   }
-  if (!options.translation) {
-    throw new Error('verify-example-record requires --translation <file>.');
+  if (!options.translations) {
+    throw new Error('verify-example-record requires --translations <file>.');
   }
 
   const slicePath = options.slicePath;
-  const sliceAbsPath = resolveSlicePathWithinRulebook(projectDir, slicePath);
+  const sliceText = await readSliceArgument(projectDir, slicePath, 'verify-example-record');
+  const extraction = await readExtractorReturn(options.extraction, 'verify-example-record');
+  const translations = await readTranslatorReturns(options.translations);
+  const repairs = [...extraction.repairs, ...translations.repairs];
 
-  let sliceText: string;
-  try {
-    sliceText = await fs.readFile(sliceAbsPath, 'utf-8');
-  } catch {
-    throw new Error(
-      `verify-example-record could not read --slice-path "${slicePath}" (looked for it at ` +
-        `${sliceAbsPath}).`,
-    );
-  }
+  const { specsById, inconsistent } = readSliceExamples(slicePath, sliceText, extraction.examples);
 
-  const extractionParsed = await readRequiredExampleJsonFile(options.extraction, '--extraction');
-  const extractionRaw = extractionParsed.value as RawExampleExtractionEntry[];
-  if (!Array.isArray(extractionRaw)) {
-    throw new Error(`--extraction at "${options.extraction}" must contain a JSON array.`);
-  }
-  const translationParsed = await readRequiredExampleJsonFile(options.translation, '--translation');
-  const translationRaw = translationParsed.value as RawExampleTranslationEntry[];
-  if (!Array.isArray(translationRaw)) {
-    throw new Error(`--translation at "${options.translation}" must contain a JSON array.`);
-  }
-  const repairs = [...extractionParsed.repairs, ...translationParsed.repairs];
-
-  // CR-03 fix: every raw lineNumber is cross-validated against buildExampleExtractionPayload's
-  // own retained-line set for this slice BEFORE it is ever used to build a workedExampleId — a
-  // fabricated or off-by-one lineNumber must fail closed here, never reach the ledger.
-  assertValidExampleLineNumbers({ path: slicePath, text: sliceText }, extractionRaw, '--extraction');
-  assertValidExampleLineNumbers(
-    { path: slicePath, text: sliceText },
-    translationRaw,
-    '--translation',
-  );
-
-  // Collision guard on BOTH raw returns, keyed by slicePath+lineNumber — never by prose. Preview
-  // falls back to `reason` for an `example-inconsistent` entry, which carries no `sourceText`.
-  keyRawExampleEntriesByLocation(
-    extractionRaw,
-    slicePath,
-    '--extraction',
-    (e) => e.sourceText ?? e.reason ?? '',
-  );
-  const translationByLocation = keyRawExampleEntriesByLocation(
-    translationRaw,
-    slicePath,
-    '--translation',
-    (e) => e.reason ?? '',
-  );
-
-  // `example-inconsistent` entries (decision 4) never become a `WorkedExampleSpec`
-  // (`createWorkedExampleSpec` only accepts `WORKED_EXAMPLE_KINDS`) and were never dispatched for
-  // translation (`verifyExampleTranslateCommand` routes them to `notTranslated[]` instead) — split
-  // them off BEFORE spec construction so the extractor's own already-decided contradiction is
-  // recorded directly, never re-judged and never routed through the transition/predicate path.
-  const inconsistentEntries = extractionRaw.filter((raw) => raw.kind === 'example-inconsistent');
-  const consistentEntries = extractionRaw.filter((raw) => raw.kind !== 'example-inconsistent');
-
-  for (const raw of inconsistentEntries) {
-    if ((raw.reason ?? '').trim().length === 0) {
-      throw new Error(
-        `${slicePath}:${raw.lineNumber} is marked "example-inconsistent" but carries no reason.\n` +
-          `Deciding it is inconsistent already happened at extraction time; this command never ` +
-          `re-judges it, so it cannot proceed without the reason the extractor recorded. Writing ` +
-          `nothing.`,
-      );
-    }
-  }
-
-  // Build specs through the ONE shared choke point (example-derivation.ts) — never re-validated
-  // here. `returned.slicePath` is overridden with THIS invocation's own --slice-path: identity is
-  // assigned from the caller, never trusted from the model's own return.
-  const specs: WorkedExampleSpec[] = consistentEntries.map((raw) => {
-    const id = workedExampleId({ slicePath, lineNumber: raw.lineNumber });
-    return createWorkedExampleSpec({
-      id,
-      sliceText,
-      returned: {
-        slicePath,
-        lineNumber: raw.lineNumber,
-        pageCitation: raw.pageCitation ?? '',
-        kind: raw.kind,
-        sourceText: raw.sourceText ?? '',
-        setup: raw.setup ?? '',
-        action: raw.action,
-        expected: raw.expected ?? '',
-        supportingQuoteLines: raw.supportingQuoteLines,
-      },
-    });
-  });
-  const specsById = collectWorkedExampleSpecs(specs);
-
-  // Validate-everything-then-write: every consistent extracted example must have a matching
-  // translation, and every translation must correspond to an extracted example — before any write.
-  // `example-inconsistent` entries are exempt from this pairing (they were never dispatched for
-  // translation) and are validated separately above.
   for (const [id, spec] of specsById) {
-    if (!translationByLocation.has(id)) {
+    if (!translations.byId.has(id)) {
       throw new Error(
-        `No --translation entry for the worked example at ${spec.slicePath}:${spec.lineNumber} ` +
-          `(id "${id}").\nEvery extracted example must have a matching translation entry before ` +
-          `recording. Writing nothing.`,
+        `No --translations entry for the worked example at ${spec.slicePath}:${spec.lineNumber} ` +
+          `(id "${id}").\nEvery extracted example must have its translator return filed under ` +
+          `its exampleId before recording. Writing nothing.`,
       );
     }
   }
-  for (const [id] of translationByLocation) {
+  for (const id of translations.byId.keys()) {
     if (!specsById.has(id)) {
       throw new Error(
-        `--translation contains an entry for "${id}" with no matching --extraction entry.\n` +
-          `A translation entry must correspond to an extracted worked example. Writing nothing.`,
+        `--translations contains an entry for "${id}" with no matching translatable --extraction ` +
+          `entry.\nKey each translator return by an exampleId verify-example-translate printed ` +
+          `for this slice. Writing nothing.`,
       );
     }
   }
 
-  // Provenance resolved ONCE per invocation (decision 12), never per example.
   const provenanceInstance = await QuoteVerifiedProvenance.obtain(projectDir);
   const provenance: ExampleReplayProvenance =
     provenanceInstance && provenanceInstance.covers(slicePath) ? 'quote-verified' : 'quote-unverified';
 
   const translatedRecords: ExampleReplayRecord[] = [...specsById.values()].map((spec) => {
-    const translated = translationByLocation.get(spec.id)!;
-    return createExampleReplayRecord({
+    const outcome = readTranslatorOutcome(spec.id, translations.byId.get(spec.id));
+    const common = {
       exampleId: spec.id,
       slicePath: spec.slicePath,
       lineNumber: spec.lineNumber,
       kind: spec.kind,
-      verdict: translated.verdict,
-      reason: translated.reason,
-      expected: translated.expected,
-      observed: translated.observed,
-      contradictionA: translated.contradictionA,
-      contradictionB: translated.contradictionB,
       supportingQuoteLines: [...spec.supportingQuoteLines],
       provenance,
-      testFilePath: translated.testFilePath,
+    };
+    if (outcome.kind === 'unexecutable') {
+      return createExampleReplayRecord({ ...common, verdict: 'unexecutable', reason: outcome.reason });
+    }
+    return createExampleReplayRecord({
+      ...common,
+      verdict: 'not-run',
+      reason: 'Translated into a test that has not been run yet.',
+      expected: spec.expected,
+      translation: {
+        pageCitation: spec.pageCitation,
+        sourceText: spec.sourceText,
+        testCode: outcome.testCode,
+        imports: outcome.imports,
+      },
     });
   });
 
-  // `example-inconsistent` records go straight from the extractor's own return to the ledger — no
-  // translation dispatch happened for them, and none is needed: the verdict IS
-  // `example-inconsistent`, decided at extraction time. `supportingQuoteLines` already carries BOTH
-  // contradicting excerpts verbatim (`extract-example.md`'s own instruction) — the first two lines
-  // map onto `contradictionA`/`contradictionB`, the two fields `createExampleReplayRecord` requires
-  // non-empty for this verdict; that constructor is still the ONLY place either is validated.
-  const inconsistentRecords: ExampleReplayRecord[] = inconsistentEntries.map((raw) => {
-    const id = workedExampleId({ slicePath, lineNumber: raw.lineNumber });
-    const quotes = raw.supportingQuoteLines ?? [];
-    return createExampleReplayRecord({
-      exampleId: id,
+  // `supportingQuoteLines` carries BOTH contradicting excerpts verbatim (`extract-example.md`);
+  // the first two become contradictionA/B, which `createExampleReplayRecord` requires non-empty.
+  const inconsistentRecords: ExampleReplayRecord[] = inconsistent.map((entry) =>
+    createExampleReplayRecord({
+      exampleId: entry.id,
       slicePath,
-      lineNumber: raw.lineNumber,
+      lineNumber: entry.lineNumber,
       kind: 'example-inconsistent',
       verdict: 'example-inconsistent',
-      reason: raw.reason ?? '',
-      contradictionA: quotes[0] ?? '',
-      contradictionB: quotes[1] ?? '',
-      supportingQuoteLines: quotes,
+      reason: entry.reason,
+      contradictionA: entry.supportingQuoteLines[0] ?? '',
+      contradictionB: entry.supportingQuoteLines[1] ?? '',
+      supportingQuoteLines: entry.supportingQuoteLines,
       provenance,
-    });
-  });
+    }),
+  );
 
   const records: ExampleReplayRecord[] = [...translatedRecords, ...inconsistentRecords].sort(
     (a, b) => a.lineNumber - b.lineNumber,
@@ -1047,11 +1224,18 @@ export async function verifyExampleRecordCommand(
   }
   console.log(
     chalk.green(
-      `✓ Recorded ${records.length} example-replay verdict(s) for ${slicePath} ` +
+      `✓ Recorded ${records.length} worked example(s) for ${slicePath} ` +
         `(provenance: ${provenance}).`,
     ),
   );
   console.log(`  Ledger: ${ledgerPath}`);
+  const notRun = records.filter((r) => r.verdict === 'not-run').length;
+  if (notRun > 0) {
+    console.log(
+      `  ${notRun} translated test(s) not run yet: run boardsmith verify-example-emit, then ` +
+        `boardsmith verify-example-run, for the chunk that cites this slice.`,
+    );
+  }
   for (const repair of repairs) {
     console.log(chalk.yellow(`  ⚠ JSON transport repair — ${repair}`));
   }
@@ -1070,7 +1254,10 @@ export interface VerifyExampleTranslateOptions {
 }
 
 export interface VerifyExampleTranslatePayloadEntry {
-  /** Caller-assigned (`workedExampleId({ slicePath, lineNumber })`) — never a model-returned field. */
+  /**
+   * Caller-assigned (`workedExampleId({ slicePath, lineNumber })`) — never a model-returned field.
+   * The translator's return for this payload is filed under this id in `--translations`.
+   */
   exampleId: string;
   lineNumber: number;
   kind: WorkedExampleKind;
@@ -1098,58 +1285,18 @@ export interface VerifyExampleTranslateResult {
 }
 
 /**
- * A raw entry from the extractor's `--extraction` JSON return, as consumed by
- * `verifyExampleTranslateCommand`. Most entries carry `kind: 'transition' | 'predicate'` and the
- * full `WorkedExampleSpec` field set (178-CONTEXT.md decision 5). An entry the extractor already
- * judged inconsistent against its own source (decision 4) instead carries `kind:
- * 'example-inconsistent'` plus a required `reason` — every other field is optional for that shape,
- * since this command never builds a spec for it.
- */
-interface RawExampleTranslateExtractionEntry {
-  slicePath: string;
-  lineNumber: number;
-  pageCitation?: string;
-  kind: string;
-  sourceText?: string;
-  setup?: string;
-  action?: string;
-  expected?: string;
-  supportingQuoteLines?: string[];
-  /** Required when `kind === 'example-inconsistent'`; ignored otherwise. */
-  reason?: string;
-}
-
-/**
  * `boardsmith verify-example-translate` — the SECOND dispatch's byte source (178-CONTEXT.md
- * decisions 6 and 9): reads the extractor's already-dispatched `--extraction` return for ONE
- * `--slice-path`, assigns EVERY surviving entry's identity itself via `workedExampleId({
- * slicePath: --slice-path, lineNumber: <the returned lineNumber> })` — never a model-supplied
- * field, the same CR-01/CR-02 continuation `verifyExampleRecordCommand` already holds — builds
- * each into a `WorkedExampleSpec` through the ONE shared choke point (`createWorkedExampleSpec` /
- * `collectWorkedExampleSpecs`, `example-derivation.ts`), collects the generated project's real
- * exported API surface EXACTLY ONCE per invocation (`collectGameApiSurface`), and maps every
- * surviving spec through `buildExampleTranslationPayload` — never composing that prompt text
- * itself. A caller that describes `GameApiSurface` in its own prose instead of citing this
- * command's bytes is re-deriving the exact thing this command exists to make unnecessary.
+ * decisions 6 and 9): reads the extractor's return (`--extraction`, `{ "examples": [...] }`) for
+ * ONE `--slice-path`, turns it into specs through `readSliceExamples` (the same reading
+ * `verify-example-record` does), collects the generated project's real exported API surface
+ * EXACTLY ONCE per invocation (`collectGameApiSurface`), and maps every spec through
+ * `buildExampleTranslationPayload` — never composing that prompt text itself.
  *
- * An entry the extractor already marked `example-inconsistent` is NOT translated — deciding it is
- * inconsistent already happened at extraction time, and this command never re-judges it. It is
- * reported in `notTranslated[]` with its reason instead, and never reaches
- * `buildExampleTranslationPayload`.
+ * An entry the extractor already marked `example-inconsistent` is NOT translated; it is reported
+ * in `notTranslated[]` with its reason.
  *
- * READ-ONLY: this command writes nothing — no ledger, no test file, no scratch file. Its entire
- * output is stdout (or the returned result object). Exit discipline mirrors its
- * `verifyExampleReplayCommand`/`verifyExampleRecordCommand` siblings: a finding (zero payloads, a
- * non-empty `notTranslated[]`) never sets `process.exitCode` — only a tool failure does (an
- * unreadable or unparseable `--extraction` file, a containment violation, an id collision, or a
- * spec that fails `createWorkedExampleSpec`).
- *
- * `--slice-path` is validated through the SAME `resolveSlicePathWithinRulebook` guard
- * `verifyExampleRecordCommand` uses — not a second copy of it.
- *
- * No run identifier flag, and no bypass option of any kind, exists anywhere on this command —
- * CHECK-06's translation half is project-level and source-free by construction, matching every
- * other command in this module.
+ * READ-ONLY: this command writes nothing. A finding (zero payloads, a non-empty
+ * `notTranslated[]`) never sets `process.exitCode` — only a tool failure does.
  */
 export async function verifyExampleTranslateCommand(
   options: VerifyExampleTranslateOptions = {},
@@ -1164,86 +1311,12 @@ export async function verifyExampleTranslateCommand(
   }
 
   const slicePath = options.slicePath;
-  const sliceAbsPath = resolveSlicePathWithinRulebook(projectDir, slicePath);
+  const sliceText = await readSliceArgument(projectDir, slicePath, 'verify-example-translate');
+  const extraction = await readExtractorReturn(options.extraction, 'verify-example-translate');
+  const { specsById, inconsistent } = readSliceExamples(slicePath, sliceText, extraction.examples);
 
-  let sliceText: string;
-  try {
-    sliceText = await fs.readFile(sliceAbsPath, 'utf-8');
-  } catch {
-    throw new Error(
-      `verify-example-translate could not read --slice-path "${slicePath}" (looked for it at ` +
-        `${sliceAbsPath}).`,
-    );
-  }
-
-  const extractionParsed = await readRequiredExampleJsonFile(options.extraction, '--extraction');
-  const extractionRaw = extractionParsed.value as RawExampleTranslateExtractionEntry[];
-  if (!Array.isArray(extractionRaw)) {
-    throw new Error(`--extraction at "${options.extraction}" must contain a JSON array.`);
-  }
-  const repairs = [...extractionParsed.repairs];
-
-  // CR-03 fix: every raw lineNumber is cross-validated against buildExampleExtractionPayload's
-  // own retained-line set for this slice BEFORE it is ever used to build a workedExampleId — a
-  // fabricated or off-by-one lineNumber must fail closed here, never reach a payload or the
-  // ledger.
-  assertValidExampleLineNumbers({ path: slicePath, text: sliceText }, extractionRaw, '--extraction');
-
-  // Collision guard on the FULL raw return, before any entry is split into
-  // translatable/notTranslated — two entries at the same slicePath+lineNumber collide regardless
-  // of which bucket they would otherwise fall into. Reuses the same helper
-  // `verifyExampleRecordCommand` uses, never a second copy of it.
-  keyRawExampleEntriesByLocation(
-    extractionRaw,
-    slicePath,
-    '--extraction',
-    (e) => e.sourceText ?? e.reason ?? '',
-  );
-
-  const notTranslated: VerifyExampleTranslateNotTranslatedEntry[] = [];
-  const translatable: RawExampleTranslateExtractionEntry[] = [];
-  for (const raw of extractionRaw) {
-    if (raw.kind === 'example-inconsistent') {
-      const reason = (raw.reason ?? '').trim();
-      if (reason.length === 0) {
-        throw new Error(
-          `${slicePath}:${raw.lineNumber} is marked "example-inconsistent" but carries no reason.\n` +
-            `Deciding it is inconsistent already happened at extraction time; this command never ` +
-            `re-judges it, so it cannot proceed without the reason the extractor recorded.`,
-        );
-      }
-      notTranslated.push({ lineNumber: raw.lineNumber, reason });
-      continue;
-    }
-    translatable.push(raw);
-  }
-
-  // Build specs through the ONE shared choke point (example-derivation.ts) — never re-validated
-  // here. `raw.slicePath` is overridden with THIS invocation's own --slice-path: identity is
-  // assigned from the caller, never trusted from the model's own return.
-  const specs: WorkedExampleSpec[] = translatable.map((raw) => {
-    const id = workedExampleId({ slicePath, lineNumber: raw.lineNumber });
-    return createWorkedExampleSpec({
-      id,
-      sliceText,
-      returned: {
-        slicePath,
-        lineNumber: raw.lineNumber,
-        pageCitation: raw.pageCitation ?? '',
-        kind: raw.kind,
-        sourceText: raw.sourceText ?? '',
-        setup: raw.setup ?? '',
-        action: raw.action,
-        expected: raw.expected ?? '',
-        supportingQuoteLines: raw.supportingQuoteLines,
-      },
-    });
-  });
-  const specsById = collectWorkedExampleSpecs(specs);
-
-  // `collectGameApiSurface` called EXACTLY ONCE per invocation (178-CONTEXT.md decision, this
-  // plan's <behavior>) — the same surface object is passed to every `buildExampleTranslationPayload`
-  // call below, never re-collected per example.
+  // `collectGameApiSurface` called EXACTLY ONCE per invocation — the same surface object is
+  // passed to every `buildExampleTranslationPayload` call below.
   const api = await collectGameApiSurface(projectDir);
 
   const payloads: VerifyExampleTranslatePayloadEntry[] = [...specsById.values()]
@@ -1259,12 +1332,13 @@ export async function verifyExampleTranslateCommand(
     slicePath,
     apiSurfaceSymbolCount: api.exportedSymbols.length,
     payloads,
-    notTranslated: notTranslated.sort((a, b) => a.lineNumber - b.lineNumber),
-    repairs,
+    notTranslated: inconsistent
+      .map((entry) => ({ lineNumber: entry.lineNumber, reason: entry.reason }))
+      .sort((a, b) => a.lineNumber - b.lineNumber),
+    repairs: extraction.repairs,
   };
 
-  // `--json` emits the result and nothing else on stdout. This command writes NOTHING to disk —
-  // no ledger, no test file, no scratch file — its entire output is stdout.
+  // `--json` emits the result and nothing else on stdout. This command writes NOTHING to disk.
   if (options.json) {
     console.log(JSON.stringify(result, null, 2));
     return result;
@@ -1283,7 +1357,7 @@ export async function verifyExampleTranslateCommand(
   for (const nt of result.notTranslated) {
     console.log(`  ⚠ ${slicePath}:${nt.lineNumber} — not translated: ${nt.reason}`);
   }
-  for (const repair of repairs) {
+  for (const repair of result.repairs) {
     console.log(chalk.yellow(`  ⚠ JSON transport repair — ${repair}`));
   }
 

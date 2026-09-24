@@ -643,6 +643,19 @@ describe('ActionPanel — disabled action buttons carry their reason', () => {
   });
 });
 
+/** Mount the panel inside a host that provides a real board interaction. */
+function mountWithBoard(controller: Record<string, unknown>, bi: BoardInteraction) {
+  const Host = defineComponent({
+    setup() {
+      provideBoardInteraction(bi);
+      return () => h(ActionPanel, { availableActions: [], playerSeat: 1, isMyTurn: true });
+    },
+  });
+  return mount(Host, {
+    global: { provide: { [GAME_CONTEXT_KEYS.actionController as symbol]: controller } },
+  });
+}
+
 // ---------------------------------------------------------------------------
 // #172 — a large board-anchored element pick is handed to the board
 // ---------------------------------------------------------------------------
@@ -664,18 +677,6 @@ describe('ActionPanel large element picks (#172)', () => {
       validElements: ref(anchoredElements(count)),
     });
     return mountWithBoard(controller, bi);
-  }
-
-  function mountWithBoard(controller: Record<string, unknown>, bi: BoardInteraction) {
-    const Host = defineComponent({
-      setup() {
-        provideBoardInteraction(bi);
-        return () => h(ActionPanel, { availableActions: [], playerSeat: 1, isMyTurn: true });
-      },
-    });
-    return mount(Host, {
-      global: { provide: { [GAME_CONTEXT_KEYS.actionController as symbol]: controller } },
-    });
   }
 
   it('renders one board handoff control instead of a wall of buttons', () => {
@@ -722,5 +723,141 @@ describe('ActionPanel large element picks (#172)', () => {
 
     expect(wrapper.findAll('.element-btn')).toHaveLength(51);
     expect(wrapper.find('.board-handoff-btn').exists()).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// #313 — a large board-anchored chooseFrom is handed to the board too
+// ---------------------------------------------------------------------------
+
+describe('ActionPanel large board-anchored choice picks (#313)', () => {
+  /** N chooseFrom candidates, each on its own board space (`boardRefs` with a notation). */
+  function spaces(n: number): ChoiceWithRefs[] {
+    return Array.from({ length: n }, (_, i) => ({
+      value: `s${i}`,
+      display: `Space ${i}`,
+      refs: [{ ref: { notation: `s${i}` }, role: 'target' as const }],
+    }));
+  }
+
+  /** Windup Warfare's placePack `space` step, with the given pick shape and candidates. */
+  function mountSpacePick(
+    choices: ChoiceWithRefs[],
+    pick: Record<string, unknown> = {},
+    bi: BoardInteraction = createBoardInteraction(),
+    overrides: Record<string, unknown> = {},
+  ) {
+    const controller = stubActionController({
+      currentAction: ref('placePack'),
+      currentPick: ref({ name: 'space', type: 'choice', prompt: 'Choose where the pack goes', ...pick }),
+      currentChoices: ref(choices),
+      ...overrides,
+    });
+    return mountWithBoard(controller, bi);
+  }
+
+  it('renders one board handoff control instead of 3,720 buttons', () => {
+    const wrapper = mountSpacePick(spaces(3720));
+
+    const handoff = wrapper.find('.board-handoff-btn');
+    expect(handoff.exists()).toBe(true);
+    expect(handoff.text()).toContain('3720');
+    expect(handoff.attributes('aria-label')).toContain('3720 options');
+    // The handoff is the only candidate control: no anchored list, no plain buttons.
+    expect(wrapper.findAll('.anchored-choice-btn')).toHaveLength(0);
+    expect(wrapper.findAll('.choice-btn:not(.board-handoff-btn)')).toHaveLength(0);
+  });
+
+  it('still keeps the prompt in the panel', () => {
+    expect(mountSpacePick(spaces(50)).text()).toContain('Choose where the pack goes');
+  });
+
+  it('hands keyboard focus to the board when the control is activated', async () => {
+    const bi = createBoardInteraction();
+    const wrapper = mountSpacePick(spaces(50), {}, bi);
+
+    await wrapper.find('.board-handoff-btn').trigger('click');
+    expect(bi.boardFocusRequest).toBe(1);
+  });
+
+  it('renders every candidate as before for a set the panel can still read', () => {
+    const wrapper = mountSpacePick(spaces(24));
+
+    expect(wrapper.findAll('.anchored-choice-btn')).toHaveLength(24);
+    expect(wrapper.find('.board-handoff-btn').exists()).toBe(false);
+  });
+
+  it('keeps every button when a large set has a candidate the board cannot draw', () => {
+    const wrapper = mountSpacePick([...spaces(50), { value: 'reserve', display: 'Hold in reserve' }]);
+
+    expect(wrapper.findAll('.anchored-choice-btn')).toHaveLength(50);
+    expect(wrapper.text()).toContain('Hold in reserve');
+    expect(wrapper.find('.board-handoff-btn').exists()).toBe(false);
+  });
+
+  it('keeps every button when two candidates share one board space', () => {
+    const twin: ChoiceWithRefs = {
+      value: 's0-flipped',
+      display: 'Space 0, flipped',
+      refs: [{ ref: { notation: 's0' }, role: 'target' }],
+    };
+    const wrapper = mountSpacePick([...spaces(50), twin]);
+
+    expect(wrapper.findAll('.anchored-choice-btn')).toHaveLength(51);
+    expect(wrapper.find('.board-handoff-btn').exists()).toBe(false);
+  });
+
+  it('counts only what is still offered, after an earlier step took its value', () => {
+    // A value an earlier choice step of the same action already took is not
+    // offered again, so the count the player is told must leave it out too.
+    const wrapper = mountSpacePick(spaces(50), { name: 'second' }, createBoardInteraction(), {
+      currentAction: ref('placeTwo'),
+      currentArgs: ref({ first: 's0' }),
+      actionSnapshot: ref({
+        actionName: 'placeTwo',
+        metadata: {
+          name: 'placeTwo',
+          selections: [
+            { name: 'first', type: 'choice', prompt: 'First space' },
+            { name: 'second', type: 'choice', prompt: 'Second space' },
+          ],
+        },
+        pickSnapshots: new Map(),
+      }),
+    });
+
+    expect(wrapper.find('.board-handoff-btn').text()).toContain('49');
+  });
+
+  it('defers a dependsOn / filterBy choice step the same way', () => {
+    const wrapper = mountSpacePick(spaces(50), { dependsOn: 'unit' });
+
+    expect(wrapper.find('.board-handoff-btn').exists()).toBe(true);
+    expect(wrapper.findAll('.filtered-choice-btn')).toHaveLength(0);
+    expect(wrapper.findAll('.anchored-choice-btn')).toHaveLength(0);
+  });
+
+  it('keeps the count and Done for a multi-select pick handed to the board', () => {
+    const wrapper = mountSpacePick(spaces(50), { multiSelect: { min: 1, max: 3 } }, createBoardInteraction(), {
+      multiSelectDraft: ref({ selectionName: 'space', values: ['s1'] }),
+    });
+
+    expect(wrapper.find('.board-handoff-btn').exists()).toBe(true);
+    expect(wrapper.findAll('.multi-select-choice')).toHaveLength(0);
+    expect(wrapper.text()).toContain('Selected: 1/3');
+    expect(wrapper.find('.done-button').exists()).toBe(true);
+  });
+
+  it('keeps the entries built so far and Done for an ordered list handed to the board', () => {
+    const wrapper = mountSpacePick(spaces(50), { orderedList: { min: 1, max: 4 } }, createBoardInteraction(), {
+      multiSelectDraft: ref({ selectionName: 'space', values: ['s3', 's3'] }),
+    });
+
+    expect(wrapper.find('.board-handoff-btn').exists()).toBe(true);
+    expect(wrapper.findAll('.ordered-list-add')).toHaveLength(0);
+    // The list is still readable and each entry still removable from the panel.
+    expect(wrapper.findAll('.ordered-list-entry')).toHaveLength(2);
+    expect(wrapper.findAll('.ordered-list-remove')).toHaveLength(2);
+    expect(wrapper.find('.done-button').exists()).toBe(true);
   });
 });
