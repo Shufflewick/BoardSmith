@@ -9,8 +9,9 @@
  * and the SnapshotSessionHost pending-selection restore tests (#320).
  *
  * Player 1 keeps the turn (`repeatUntil: () => false`), so undo stays
- * available after a completed collect. `execute` records the picks it received
- * in `collected`, so a test can see what the finished action was handed.
+ * available after a completed collect. `execute` records the `token` argument
+ * it received in `collected`, so a test can see what the finished action was
+ * handed.
  */
 import {
   Game,
@@ -31,8 +32,8 @@ class Hand extends Space<RepeatingCollectGame> {}
 export class RepeatingCollectGame extends Game<RepeatingCollectGame, Player> {
   stash!: Stash;
   hand!: Hand;
-  /** The token names the last completed `collect` was handed, without 'stop'. */
-  collected: string[] = [];
+  /** The `token` argument the last completed `collect` was handed, as given. */
+  collected: unknown = null;
 
   constructor(options: GameOptions) {
     super(options);
@@ -61,9 +62,7 @@ export class RepeatingCollectGame extends Game<RepeatingCollectGame, Player> {
           },
         })
         .execute((args, ctx) => {
-          (ctx.game as RepeatingCollectGame).collected = (args.token as unknown as string[]).filter(
-            (t) => t !== 'stop',
-          );
+          (ctx.game as RepeatingCollectGame).collected = args.token;
           return { success: true };
         }),
     );

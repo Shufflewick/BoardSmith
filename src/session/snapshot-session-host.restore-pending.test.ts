@@ -80,8 +80,8 @@ describe('SnapshotSessionHost restores in-progress selections (#320)', () => {
     const done = await pick(second.host, 'stop');
     expect(done.success).toBe(true);
     expect(done.actionComplete).toBe(true);
-    const game = second.host.snapshot as { state: { attributes: { collected: string[] } } };
-    expect(game.state.attributes.collected).toEqual(['p1', 'p2']);
+    const game = second.host.snapshot as { state: { attributes: { collected: unknown } } };
+    expect(game.state.attributes.collected).toEqual(['p1', 'p2', 'stop']);
   });
 
   it("a restored seat's pending action is broadcast to that seat only", async () => {
