@@ -90,6 +90,16 @@ export interface PlayContext {
 export interface GameContext extends PlayContext {
   /** The whole server state for this seat, or null before the first frame. */
   gameState: Ref<GameState | null>;
+  /**
+   * Every seat that has to act right now, the viewer's own included: the one
+   * seat of a turn-based step, or every seat a simultaneous step is still
+   * waiting on (a seat leaves the list when it commits). Empty when nobody is
+   * due. The shell's players panel, its Action Panel and its screen-reader
+   * announcements read this same list, so a custom UI that shows who is acting
+   * from it agrees with them. `isMyTurn` is `dueSeats.includes(playerSeat)`.
+   * A world has no turn, so this is a table-only field.
+   */
+  dueSeats: ComputedRef<number[]>;
   /** What a time-travel step changed, or null when not time travelling. */
   timeTravelDiff: Ref<TimeTravelDiff | null>;
   /**
@@ -110,6 +120,7 @@ const PLAY_CONTEXT_KEY_NAMES = [
 /** One typed key per field of {@link GameContext}. */
 export const GAME_CONTEXT_KEYS: { [K in keyof GameContext]: InjectionKey<GameContext[K]> } = {
   gameState: Symbol('bs:gameState'),
+  dueSeats: Symbol('bs:dueSeats'),
   gameView: Symbol('bs:gameView'),
   players: Symbol('bs:players'),
   myPlayer: Symbol('bs:myPlayer'),

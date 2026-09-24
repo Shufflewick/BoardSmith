@@ -30,14 +30,14 @@ const PLAYERS: Player[] = [
 
 function mountPanel(props: Record<string, unknown> = {}, slots: Record<string, string> = {}) {
   return mount(PlayersPanel, {
-    props: { players: PLAYERS, playerSeat: 0, currentPlayerSeat: 0, ...props },
+    props: { players: PLAYERS, playerSeat: 0, dueSeats: [0], ...props },
     slots,
   });
 }
 
 describe('B12: turn-change attention pulse', () => {
   it('renders the pulse only on the active seat', () => {
-    const wrapper = mountPanel({ currentPlayerSeat: 1 });
+    const wrapper = mountPanel({ dueSeats: [1] });
     const cards = wrapper.findAll('.player-card');
     expect(cards[0].find('.turn-pulse').exists()).toBe(false);
     expect(cards[1].find('.turn-pulse').exists()).toBe(true);
@@ -45,10 +45,10 @@ describe('B12: turn-change attention pulse', () => {
   });
 
   it('remounts the pulse on a turn change so the animation replays', async () => {
-    const wrapper = mountPanel({ currentPlayerSeat: 0 });
+    const wrapper = mountPanel({ dueSeats: [0] });
     const before = wrapper.find('.turn-pulse').element;
 
-    await wrapper.setProps({ currentPlayerSeat: 1 });
+    await wrapper.setProps({ dueSeats: [1] });
     await nextTick();
 
     const active = wrapper.findAll('.player-card')[1];
@@ -60,10 +60,10 @@ describe('B12: turn-change attention pulse', () => {
   });
 
   it('replays even when the SAME seat becomes active again after another seat', async () => {
-    const wrapper = mountPanel({ currentPlayerSeat: 0 });
+    const wrapper = mountPanel({ dueSeats: [0] });
     const first = wrapper.find('.turn-pulse').element;
-    await wrapper.setProps({ currentPlayerSeat: 1 });
-    await wrapper.setProps({ currentPlayerSeat: 0 });
+    await wrapper.setProps({ dueSeats: [1] });
+    await wrapper.setProps({ dueSeats: [0] });
     await nextTick();
     // Same seat, same card position — without the tick in the key Vue would
     // patch the existing node in place and the player would get no cue at all.
@@ -71,7 +71,7 @@ describe('B12: turn-change attention pulse', () => {
   });
 
   it('pulses for a seat made active by a simultaneous step, not just the turn seat', () => {
-    const wrapper = mountPanel({ currentPlayerSeat: undefined, awaitingPlayerSeats: [2] });
+    const wrapper = mountPanel({ dueSeats: [2] });
     const cards = wrapper.findAll('.player-card');
     expect(cards[2].find('.turn-pulse').exists()).toBe(true);
     expect(cards[0].find('.turn-pulse').exists()).toBe(false);
@@ -81,7 +81,7 @@ describe('B12: turn-change attention pulse', () => {
 describe('B13: per-seat vertical cost', () => {
   it('renders #player-token-extra inside the token column, not the info column', () => {
     const wrapper = mountPanel(
-      { currentPlayerSeat: 1 },
+      { dueSeats: [1] },
       { 'player-token-extra': '<img class="portrait" src="p.png" alt="" />' },
     );
     const card = wrapper.findAll('.player-card')[1];
@@ -98,19 +98,19 @@ describe('B13: per-seat vertical cost', () => {
   });
 
   it('renders the turn-status sentence by default', () => {
-    const wrapper = mountPanel({ currentPlayerSeat: 0 });
+    const wrapper = mountPanel({ dueSeats: [0] });
     expect(wrapper.find('.turn-status').text()).toBe('Your move');
   });
 
   it('suppresses the turn-status sentence when showTurnStatus is false', () => {
-    const wrapper = mountPanel({ currentPlayerSeat: 0, showTurnStatus: false });
+    const wrapper = mountPanel({ dueSeats: [0], showTurnStatus: false });
     expect(wrapper.find('.turn-status').exists()).toBe(false);
   });
 
   it('keeps every non-sentence turn cue when the sentence is suppressed', () => {
     // Suppressing a redundant line must not cost the seat its turn identity —
     // that would trade one game's tidiness for the panel's accessibility floor.
-    const wrapper = mountPanel({ currentPlayerSeat: 1, showTurnStatus: false });
+    const wrapper = mountPanel({ dueSeats: [1], showTurnStatus: false });
     const card = wrapper.findAll('.player-card')[1];
     expect(card.classes()).toContain('current');
     expect(card.attributes('aria-current')).toBe('true');
