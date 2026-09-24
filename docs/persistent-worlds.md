@@ -1384,6 +1384,18 @@ socket counts as a departure at all, whether presence is observable in the first
 place. A laptop with one browser tab answers that differently from a platform
 holding 500 sockets, and should.
 
+What counts as an arrival is the same in both. `boardsmith dev` follows
+ShufflewickPub's rule, so `onArrive` runs as often locally as it does in
+production:
+
+- A seat arrives only when it goes from no open socket to one. A second tab on
+  that seat, or a page re-attaching to the seat it holds, is not an arrival.
+- When the last socket leaves, `onDepart` runs after `departGraceMs`, and only
+  if the seat is still empty then. A return inside the grace is a flap: neither
+  hook runs.
+- A return after the departure ran is a new arrival. With no `onDepart`, a
+  return is an arrival only if the seat was empty for at least the grace.
+
 ## Referral: the verbs an invitation is attributed through
 
 ```ts
