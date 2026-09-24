@@ -96,7 +96,8 @@ describe('describeFlowPosition', () => {
     const step = actionStepNode(['play'], 'idle-step');
     const root: FlowNode = { type: 'sequence', config: { steps: [step] } };
 
-    const info = describeFlowPosition(root, position([0]), flowState());
+    // A live sequence frame points one past the child in progress (#324).
+    const info = describeFlowPosition(root, position([1, 0]), flowState());
 
     expect(info.describe()).toBe('step *idle-step*');
   });
