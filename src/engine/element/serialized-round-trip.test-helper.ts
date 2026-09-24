@@ -1,4 +1,4 @@
-import type { Game, GameOptions } from './game.js';
+import { constructGame, type Game, type GameOptions } from './game.js';
 
 /**
  * Round-trip a game through its serialized state into a fresh instance: the
@@ -9,7 +9,7 @@ export async function serializedRoundTrip<G extends Game>(
   original: G,
   GameClass: new (options: GameOptions) => G,
 ): Promise<G> {
-  const restored = new GameClass({
+  const restored = constructGame(GameClass, {
     playerCount: original.players.length,
     playerNames: original.players.map((p) => p.name),
   });

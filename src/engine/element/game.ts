@@ -5180,7 +5180,7 @@ export class Game<
  * (#346).
  *
  * This is how the engine constructs every game: the runner, a world, a bot's
- * search copy, a dev-state restore, the capability and introspection passes.
+ * search copy, the capability and introspection passes.
  * `engine-owned-fields.test.ts` holds that there is no other construction site.
  * The check has to run here rather than in `Game`'s constructor, because a
  * subclass's field declarations and constructor body run only after that
