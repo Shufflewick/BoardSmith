@@ -65,7 +65,7 @@ This library is developed alongside two sibling repos. When a BoardSmith change 
 
 # `boardsmith dev` host (CLI)
 
-`npx boardsmith dev` serves a multiplayer dev host (`src/cli/dev-host/DevHost.vue`): each browser is a real player connecting over WS, rendering its seat via a GameShell **iframe in platform mode** (the exact code production runs). The outer page is the "Dev" chrome (seat selector w/ Follow-active-seat, UI switcher, New game, Table setup, Debug). The Debug panel lives inside the iframe but is toggled from the Dev header via postMessage. To repro GameShell's mobile breakpoint without shrinking the whole window, shrink the iframe element width via JS in the page context.
+`npx boardsmith dev` serves a multiplayer dev host (`src/cli/dev-host/DevHost.vue`): each browser is a real player connecting over WS, rendering its seat via a GameShell **iframe in platform mode** (the exact code production runs). The outer page is the "Dev" chrome (seat selector w/ Follow-active-seat, UI switcher, New game, End step while a timed step is open, Table setup, Debug). The Debug panel lives inside the iframe but is toggled from the Dev header via postMessage. To repro GameShell's mobile breakpoint without shrinking the whole window, shrink the iframe element width via JS in the page context.
 
 # Hard Rules
 - **Pit of Success**: The right path is always the easy path, the wrong path is always hard. Design APIs and code so correct usage is obvious and incorrect usage is difficult.
@@ -81,6 +81,11 @@ This library is developed alongside two sibling repos. When a BoardSmith change 
 - Trace at least one real value through the full stack (config → engine → session → UI) to confirm data survives every layer boundary.
 - Treat identified test gaps as blockers, not observations. If verification flags untested code within the scope of the change, address it before completion.
 - Write at least one integration test per cross-layer boundary the change touches.
+
+# Typechecking and Merging
+- **`boardsmith typecheck` is the one type check.** It runs `vue-tsc` over the whole package (every `.ts` and `.vue` file under `src/` and `docs/`), and `main` is at zero errors. `docs/typecheck.md` says exactly what it covers. Plain `tsc` cannot read `.vue` files, so it is not a substitute.
+- **`boardsmith test` type-checks first** and runs no test if that fails. A bare `npx vitest run` does not type-check.
+- **A branch reaches `main` only through `bash scripts/merge-branch.sh <branch> "<summary (#issue)>"`**, run from the main checkout on a clean `main`. It merges without committing, runs `boardsmith test` on the merged tree, and aborts the merge if that fails. Merge `main` into your branch first so conflicts are resolved there.
 
 # Code Quality Audits
 - Run `boardsmith audit` after significant refactors. **It checks the files your branch changed against its base branch, not the whole repository**, and it subtracts this repo's committed baselines (`.fallow-dead-code-baseline.json`, `.fallow-dupes-baseline.json`, `.fallow-health-baseline.json`). So it reports what your change introduced — unused exports, dead files, circular dependencies, complexity and duplication — and a clean branch passes it. See `docs/fallow-gate.md` for why the baselines exist.

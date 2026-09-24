@@ -7,6 +7,15 @@ import { promises as fs } from 'node:fs';
 import { basename, dirname, join, resolve } from 'node:path';
 import chalk from 'chalk';
 import { DERIVED_LINE_RE } from './derived-line-pattern.js';
+import {
+  ADDITIONAL_SOURCES_BEGIN,
+  ADDITIONAL_SOURCES_END,
+  ADDITIONAL_SOURCES_HEADING,
+  type AdditionalSourceRecord,
+  checkSliceSources,
+  describeSliceSourceProblems,
+  parseAdditionalSources,
+} from './rulebook-sources.js';
 
 /**
  * `boardsmith ingest-archive <rulebook>` — the deterministic half of ingest Step 3.
@@ -36,6 +45,40 @@ export interface IngestArchiveOptions {
   edition?: string;
   /** Emit machine-readable JSON instead of human output. */
   json?: boolean;
+  /**
+   * Further documents the rules incorporate (`--additional-source`, repeatable): a companion
+   * reference the rulebook defers to, a separate card list. Each is archived beside the primary
+   * and recorded with its own SHA-256 in `## Additional Sources`, which the verify pass checks.
+   */
+  additionalSource?: string[];
+  /**
+   * The game's name for the index title. `boardsmith init` passes the `<name>` it was given,
+   * because `init --into-existing` scaffolds into a directory named anything. Without it the
+   * project directory's name is used.
+   */
+  gameName?: string;
+}
+
+/** Where archiving `userPath` into `projectDir` puts its copy: `rulebook/source/<its file name>`. */
+function archivePathFor(projectDir: string, userPath: string): string {
+  return join(designRulebookDir(resolve(projectDir)), 'source', basename(resolveUserPath(process.cwd(), userPath)));
+}
+
+/**
+ * The files archiving `rulebook` and its `additionalSources` into `projectDir` writes: one
+ * archived copy per source (the rulebook's first) and the index. `boardsmith init
+ * --into-existing` checks all of them for conflicts before writing anything, so this is the one
+ * statement of where they go.
+ */
+export function rulebookArchivePaths(
+  projectDir: string,
+  rulebook: string,
+  additionalSources: readonly string[] = [],
+): { archivePaths: string[]; indexPath: string } {
+  return {
+    archivePaths: [rulebook, ...additionalSources].map((path) => archivePathFor(projectDir, path)),
+    indexPath: join(designRulebookDir(resolve(projectDir)), 'INDEX.md'),
+  };
 }
 
 /** The exact strings downstream tooling parses. Changing one is a breaking change. */
@@ -110,53 +153,6 @@ function sha256(buf: Buffer): string {
 function isoDate(now: Date): string {
   const pad = (n: number) => String(n).padStart(2, '0');
   return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
-}
-
-/**
- * `## Additional Sources` — 177-19's fix for a real, measured gap: a project with MORE than one
- * source document (doom-machine: `rules.pdf` + `cards.pdf`) had no way to represent the second
- * one at all. `boardsmith ingest-archive` archived it (never clobbers a differently-NAMED file —
- * that path already worked), but `INDEX.md`'s header always writes into the SAME `Source:`/
- * `Source hash:` labels regardless of what was already there, so the second call silently
- * discarded the first source's provenance record.
- *
- * DELIBERATELY A SEPARATE SECTION, NEVER A SECOND `Source:`/`Source hash:` PAIR: `HEADER_LABELS`
- * is the PRIMARY provenance contract `computeVerificationScope()` reads (its regexes match the
- * FIRST `^Source:`/`^Source hash:` line — 177-16's own comment on that function documents this as
- * load-bearing). Reusing those same labels for a second source would either silently become the
- * "first match" scope reads (wrong — the primary source must stay primary) or require rewriting
- * `computeVerificationScope`'s contract (risky — `verify-classify.ts`, `verify-enumerate.ts`, and
- * `chunk-provenance.ts` itself all depend on its current single-primary-source shape). A distinct,
- * ADDITIVE section leaves every existing consumer, and every existing single-source project's
- * `INDEX.md` byte output, completely untouched — this section is present ONLY when a project
- * genuinely has more than one source.
- */
-export const ADDITIONAL_SOURCES_HEADING = '## Additional Sources';
-export const ADDITIONAL_SOURCES_BEGIN = '<!-- boardsmith:additional-sources:begin -->';
-export const ADDITIONAL_SOURCES_END = '<!-- boardsmith:additional-sources:end -->';
-
-export interface AdditionalSourceRecord {
-  /** Relative to the project directory, e.g. `rulebook/source/cards.pdf`. */
-  path: string;
-  sourceHash: string;
-}
-
-/**
- * Parses the `## Additional Sources` table, if present. Pure — never touches disk. Returns `[]`
- * (never throws) when the section is absent, matching `renderVerifiedAgainst`'s sibling
- * `VERIFIED_AGAINST_EMPTY` precedent: an absent machine-owned section is "nothing recorded yet",
- * not an error.
- */
-export function parseAdditionalSources(indexText: string): AdditionalSourceRecord[] {
-  const begin = indexText.indexOf(ADDITIONAL_SOURCES_BEGIN);
-  const end = indexText.indexOf(ADDITIONAL_SOURCES_END);
-  if (begin === -1 || end === -1 || end < begin) return [];
-  const body = indexText.slice(begin + ADDITIONAL_SOURCES_BEGIN.length, end);
-  const records: AdditionalSourceRecord[] = [];
-  for (const row of body.matchAll(/^\|\s*([^|]+?)\s*\|\s*([0-9a-f]{64})\s*\|\s*$/gm)) {
-    records.push({ path: row[1].trim(), sourceHash: row[2].trim() });
-  }
-  return records;
 }
 
 /** Renders the `## Additional Sources` section body (between the fences), one row per record. */
@@ -554,6 +550,11 @@ export async function ingestRelabelCommand(
  * `INDEX.md` it already read into its context. So the repair lands on disk AND the non-zero exit
  * forces a re-read — the one mechanism this phase proved survives contact with a live session.
  * Re-running immediately afterwards exits 0, so it can never wedge a project.
+ *
+ * The one thing it checks without repairing is that every slice names the document it was
+ * transcribed from (#311, `rulebook-sources.ts`): that is a fact only the transcription knows. A
+ * slice that names none, or names a document `INDEX.md` does not record, fails the check with the
+ * `boardsmith ingest-slice-source` command that records it.
  */
 export async function ingestCheckCommand(
   options: { project?: string; json?: boolean } = {},
@@ -562,30 +563,51 @@ export async function ingestCheckCommand(
   const relabel = await ingestRelabelCommand({ project: projectDir, quiet: true });
   const gaps = await ingestGapsCommand({ project: projectDir, skipRelabel: true, quiet: true });
   const repaired = relabel.relabelled > 0 || gaps.changed;
+  // Which document a slice came from is a fact only the transcription knows, so a slice that does
+  // not say is reported, never repaired by guessing (#311).
+  const sources = await checkSliceSources(projectDir);
+  const sourcesMissing = sources.unattributed.length > 0 || sources.unrecorded.length > 0;
 
   if (options.json) {
-    console.log(
-      JSON.stringify(
-        { repaired, relabelled: relabel.relabelled, gapsWritten: gaps.gapsWritten }, null, 2),
-    );
+    const result = {
+      repaired,
+      relabelled: relabel.relabelled,
+      gapsWritten: gaps.gapsWritten,
+      unattributedSlices: sources.unattributed,
+      unrecordedSliceSources: sources.unrecorded,
+    };
+    console.log(JSON.stringify(result, null, 2));
+  } else {
+    reportIngestCheck(relabel, gaps, sourcesMissing ? describeSliceSourceProblems(sources) : []);
   }
 
-  if (!repaired) {
-    if (!options.json) {
-      console.log(
-        chalk.green(
-          `✓ Ingest synthesis up to date — ${gaps.gapsWritten} open rules gap${gaps.gapsWritten === 1 ? '' : 's'}, no Derived/Visual misfiling`,
-        ),
-      );
-    }
+  // Set the exit code rather than throwing: `program.parse()` does not await action handlers, so a
+  // rejection surfaces as an unhandled-rejection stack trace. The caller here is a git hook or a
+  // build session, both of which need the non-zero status and neither of which should be shown
+  // this repo's internal paths.
+  if (repaired || sourcesMissing) process.exitCode = 1;
+}
+
+/** `ingest-check`'s human-readable report: what it repaired, and what it could not. */
+function reportIngestCheck(
+  relabel: Awaited<ReturnType<typeof ingestRelabelCommand>>,
+  gaps: Awaited<ReturnType<typeof ingestGapsCommand>>,
+  sourceProblems: string[],
+): void {
+  const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
+  if (relabel.relabelled === 0 && !gaps.changed && sourceProblems.length === 0) {
+    console.log(
+      chalk.green(
+        `✓ Ingest synthesis up to date — ${gaps.gapsWritten} open rules ${plural(gaps.gapsWritten, 'gap', 'gaps')}, no Derived/Visual misfiling`,
+      ),
+    );
     return;
   }
-
-  if (!options.json) {
+  if (relabel.relabelled > 0 || gaps.changed) {
     console.error(chalk.yellow('rulebook/ was out of sync with its slices. It has been REPAIRED:'));
     if (relabel.relabelled) {
       console.error(
-        `  • relabelled ${relabel.relabelled} presentation line${relabel.relabelled === 1 ? '' : 's'} Derived → Visual`,
+        `  • relabelled ${relabel.relabelled} presentation ${plural(relabel.relabelled, 'line', 'lines')} Derived → Visual`,
       );
       for (const c of relabel.changes) {
         console.error(`      ${chalk.gray(`${c.file}:${c.line}`)} matched "${c.matched}"`);
@@ -593,19 +615,135 @@ export async function ingestCheckCommand(
     }
     if (gaps.changed) {
       console.error(
-        `  • rewrote ## Open Rules Gaps from the slices — ${gaps.gapsWritten} entr${gaps.gapsWritten === 1 ? 'y' : 'ies'}`,
+        `  • rewrote ## Open Rules Gaps from the slices — ${gaps.gapsWritten} ${plural(gaps.gapsWritten, 'entry', 'entries')}`,
       );
     }
     console.error('');
     console.error(chalk.yellow('Re-read rulebook/INDEX.md before continuing — the copy you have is stale.'));
-    console.error(chalk.dim('Then re-run `boardsmith ingest-check`; it will pass.'));
+    console.error(chalk.dim('Then re-run `boardsmith ingest-check`; it will pass once nothing below is left.'));
+  }
+  if (sourceProblems.length > 0) {
+    console.error(chalk.red('rulebook/ slices do not all say which document they came from. NOT repaired:'));
+    for (const line of sourceProblems) console.error(line);
+  }
+}
+
+/** One source file as read from the designer's path, with where it will be archived. */
+interface SourceToArchive {
+  /** Absolute path the designer supplied, resolved. */
+  sourcePath: string;
+  bytes: Buffer;
+  /** Absolute path of the archived copy under `rulebook/source/`. */
+  archivePath: string;
+  /** The same, relative to `design/` -- the form every `Source:` and table row records. */
+  relArchivePath: string;
+}
+
+/**
+ * Reads one source the designer named. A supplied-but-unreadable path fails loudly: falling
+ * through would produce an INDEX.md with a provenance record describing a file that was never
+ * archived. `role` names which argument was wrong in the message.
+ */
+async function readSourceToArchive(
+  projectDir: string,
+  userPath: string,
+  role: 'Rulebook' | 'Additional source',
+): Promise<SourceToArchive> {
+  const sourcePath = resolveUserPath(process.cwd(), userPath);
+  let bytes: Buffer;
+  try {
+    bytes = await fs.readFile(sourcePath);
+  } catch {
+    throw new Error(
+      `${role} not found or unreadable: ${sourcePath}\n` +
+        (role === 'Rulebook'
+          ? 'Pass the path to the rulebook file (PDF, images, or text) as the first argument.'
+          : 'Pass the path to a document the rules incorporate (PDF, images, or text) to --additional-source.'),
+    );
+  }
+  return {
+    sourcePath,
+    bytes,
+    archivePath: archivePathFor(projectDir, userPath),
+    relArchivePath: `rulebook/source/${basename(sourcePath)}`,
+  };
+}
+
+/**
+ * Never clobber: ingest does not overwrite a designer's archived source. A byte-identical copy
+ * already in place is fine (a re-run); a different one is refused before anything is written.
+ */
+async function assertArchiveSlotFree(source: SourceToArchive): Promise<void> {
+  let existing: Buffer;
+  try {
+    existing = await fs.readFile(source.archivePath);
+  } catch {
+    return; // Not archived yet -- the normal path.
+  }
+  if (sha256(existing) !== sha256(source.bytes)) {
+    throw new Error(
+      `${source.relArchivePath} already exists in this project and differs from ${source.sourcePath}.\n` +
+        `Remove or rename the archived copy and re-run, or pass --project to target a different project.`,
+    );
+  }
+}
+
+/** Copies (never moves) one source into `rulebook/source/` and returns the archived copy's hash. */
+async function archiveSource(source: SourceToArchive): Promise<string> {
+  await fs.mkdir(dirname(source.archivePath), { recursive: true });
+  await fs.writeFile(source.archivePath, source.bytes);
+  const sourceHash = sha256(await fs.readFile(source.archivePath));
+  if (sourceHash !== sha256(source.bytes)) {
+    throw new Error(`Archived copy at ${source.relArchivePath} does not match the source. Aborting.`);
+  }
+  return sourceHash;
+}
+
+/**
+ * Reads and checks every source this call names BEFORE anything is written, so a bad
+ * `--additional-source` never leaves a primary archived with its companion missing. Refuses an
+ * additional source that is the primary itself (by the path it would archive to, or by the
+ * primary INDEX.md already records) and two sources that would archive to the same file name.
+ */
+async function readAllSources(
+  projectDir: string,
+  rulebook: string,
+  additional: readonly string[],
+  indexPath: string,
+): Promise<{ primary: SourceToArchive; additional: SourceToArchive[] }> {
+  const primary = await readSourceToArchive(projectDir, rulebook, 'Rulebook');
+  const extras: SourceToArchive[] = [];
+  for (const path of additional) {
+    extras.push(await readSourceToArchive(projectDir, path, 'Additional source'));
   }
 
-  // Set the exit code rather than throwing: `program.parse()` does not await action handlers, so a
-  // rejection surfaces as an unhandled-rejection stack trace. The caller here is a git hook or a
-  // build session, both of which need the non-zero status and neither of which should be shown
-  // this repo's internal paths.
-  process.exitCode = 1;
+  let recordedPrimary: string | undefined;
+  try {
+    recordedPrimary = readCanonicalPrimarySource(await fs.readFile(indexPath, 'utf-8'))?.path;
+  } catch {
+    recordedPrimary = undefined; // No INDEX.md yet.
+  }
+
+  const claimed = new Map<string, string>([[primary.relArchivePath, primary.sourcePath]]);
+  for (const extra of extras) {
+    if (extra.relArchivePath === primary.relArchivePath || extra.relArchivePath === recordedPrimary) {
+      throw new Error(
+        `${basename(extra.sourcePath)} is already the primary source (${extra.relArchivePath}).\n` +
+          'Pass it once, as the first argument; --additional-source is for the other documents the rules incorporate.',
+      );
+    }
+    const other = claimed.get(extra.relArchivePath);
+    if (other !== undefined) {
+      throw new Error(
+        `${other} and ${extra.sourcePath} both archive to ${extra.relArchivePath}.\n` +
+          'Rename one of them so every archived source has its own file name, then re-run.',
+      );
+    }
+    claimed.set(extra.relArchivePath, extra.sourcePath);
+  }
+
+  for (const source of [primary, ...extras]) await assertArchiveSlotFree(source);
+  return { primary, additional: extras };
 }
 
 export async function ingestArchiveCommand(
@@ -613,53 +751,14 @@ export async function ingestArchiveCommand(
   options: IngestArchiveOptions = {},
 ): Promise<void> {
   const projectDir = resolve(options.project ?? process.cwd());
-  const sourcePath = resolveUserPath(process.cwd(), rulebook);
+  const { indexPath } = rulebookArchivePaths(projectDir, rulebook);
+  const sources = await readAllSources(projectDir, rulebook, options.additionalSource ?? [], indexPath);
 
-  let sourceBuf: Buffer;
-  try {
-    sourceBuf = await fs.readFile(sourcePath);
-  } catch {
-    // A supplied-but-unreadable path must fail loudly. Falling through would produce an INDEX.md
-    // with a provenance block describing a file that was never archived.
-    throw new Error(
-      `Rulebook not found or unreadable: ${sourcePath}\n` +
-        `Pass the path to the rulebook file (PDF, images, or text) as the first argument.`,
-    );
-  }
+  const relArchivePath = sources.primary.relArchivePath;
+  const sourceHash = await archiveSource(sources.primary);
 
-  const fileName = basename(sourcePath);
-  const archiveDir = join(designRulebookDir(projectDir), 'source');
-  const archivePath = join(archiveDir, fileName);
-  const relArchivePath = `rulebook/source/${fileName}`;
-
-  // Never clobber. Ingest does not overwrite a designer's archived source.
-  try {
-    await fs.access(archivePath);
-    const existing = await fs.readFile(archivePath);
-    if (sha256(existing) !== sha256(sourceBuf)) {
-      throw new Error(
-        `An archived rulebook already exists at ${relArchivePath} and differs from the source.\n` +
-          `Remove or rename it and re-run, or pass --project to target a different project.`,
-      );
-    }
-  } catch (err) {
-    if (err instanceof Error && err.message.startsWith('An archived rulebook')) throw err;
-    // Not present — the normal path.
-  }
-
-  await fs.mkdir(archiveDir, { recursive: true });
-  // Copy, never move: the designer's original stays exactly where it is.
-  await fs.writeFile(archivePath, sourceBuf);
-
-  const archivedBuf = await fs.readFile(archivePath);
-  const sourceHash = sha256(archivedBuf);
-  if (sourceHash !== sha256(sourceBuf)) {
-    throw new Error(`Archived copy at ${relArchivePath} does not match the source. Aborting.`);
-  }
-
-  const gameName = basename(projectDir);
+  const gameName = options.gameName ?? basename(projectDir);
   const transcribed = isoDate(new Date());
-  const indexPath = join(designRulebookDir(projectDir), 'INDEX.md');
 
   // Decide the branch BEFORE any try/catch that performs a write. Today's bug (T-173-01): the
   // existence probe and the real repair write shared one try, with a catch that overwrote a real
@@ -717,6 +816,16 @@ export async function ingestArchiveCommand(
     }
   }
 
+  // Every source named by --additional-source, archived and recorded in `## Additional Sources`
+  // once the primary header exists to hold that section. All of them were already read and
+  // checked by `readAllSources`, so nothing below can fail on a bad argument half-way through.
+  const additionalSources: Array<{ archivedPath: string; sourceHash: string }> = [];
+  for (const extra of sources.additional) {
+    const extraHash = await archiveSource(extra);
+    await addAdditionalSource(indexPath, { path: extra.relArchivePath, sourceHash: extraHash });
+    additionalSources.push({ archivedPath: extra.relArchivePath, sourceHash: extraHash });
+  }
+
   if (options.json) {
     console.log(
       JSON.stringify(
@@ -726,6 +835,7 @@ export async function ingestArchiveCommand(
           indexPath: 'rulebook/INDEX.md',
           wroteIndex,
           recordedAsAdditionalSource,
+          additionalSources,
         },
         null,
         2,
@@ -741,27 +851,33 @@ export async function ingestArchiveCommand(
     console.log(
       `  ${chalk.gray('index:')} rulebook/INDEX.md's "${ADDITIONAL_SOURCES_HEADING}" section updated (primary Source:/Source hash: untouched)`,
     );
-    return;
-  }
-
-  console.log(chalk.green('✓ Archived source rulebook'));
-  console.log(`  ${chalk.gray('path:')} ${relArchivePath}`);
-  console.log(`  ${chalk.gray('sha256:')} ${sourceHash}`);
-  // Only report the header as updated when it was actually brought to the four-line contract —
-  // the unconditional "provenance header updated" message is what hid this defect (T-173-03).
-  if (wroteIndex) {
-    console.log(
-      `  ${chalk.gray('index:')} rulebook/INDEX.md written with provenance header + section scaffolding`,
-    );
-  } else if (headerBroughtToContract) {
-    console.log(
-      `  ${chalk.gray('index:')} rulebook/INDEX.md provenance header updated (existing sections untouched)`,
-    );
   } else {
-    console.log(
-      `  ${chalk.gray('index:')} rulebook/INDEX.md was NOT updated — its provenance header was already at contract`,
-    );
+    console.log(chalk.green('✓ Archived source rulebook'));
+    console.log(`  ${chalk.gray('path:')} ${relArchivePath}`);
+    console.log(`  ${chalk.gray('sha256:')} ${sourceHash}`);
+    // Only report the header as updated when it was actually brought to the four-line contract —
+    // the unconditional "provenance header updated" message is what hid this defect (T-173-03).
+    if (wroteIndex) {
+      console.log(
+        `  ${chalk.gray('index:')} rulebook/INDEX.md written with provenance header + section scaffolding`,
+      );
+    } else if (headerBroughtToContract) {
+      console.log(
+        `  ${chalk.gray('index:')} rulebook/INDEX.md provenance header updated (existing sections untouched)`,
+      );
+    } else {
+      console.log(
+        `  ${chalk.gray('index:')} rulebook/INDEX.md was NOT updated — its provenance header was already at contract`,
+      );
+    }
   }
+  for (const extra of additionalSources) {
+    console.log(chalk.green('✓ Archived additional source'));
+    console.log(`  ${chalk.gray('path:')} ${extra.archivedPath}`);
+    console.log(`  ${chalk.gray('sha256:')} ${extra.sourceHash}`);
+    console.log(`  ${chalk.gray('index:')} recorded in rulebook/INDEX.md's "${ADDITIONAL_SOURCES_HEADING}" section`);
+  }
+  if (recordedAsAdditionalSource) return;
   console.log();
   console.log(chalk.gray('Fill the scaffolded sections from the transcription summaries.'));
   console.log(chalk.gray('Keep every heading exactly as written — downstream tooling parses them.'));

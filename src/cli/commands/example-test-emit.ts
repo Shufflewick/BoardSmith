@@ -102,7 +102,7 @@ function rootCalleeName(expression: TSESTreeNode): string | null {
   let node: TSESTreeNode = expression;
   while (node.type === 'CallExpression') node = node.callee as TSESTreeNode;
   while (node.type === 'MemberExpression') node = node.object as TSESTreeNode;
-  return node.type === 'Identifier' ? (node as { name: string }).name : null;
+  return node.type === 'Identifier' && typeof node.name === 'string' ? node.name : null;
 }
 
 /**

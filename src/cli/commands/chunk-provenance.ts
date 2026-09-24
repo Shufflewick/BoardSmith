@@ -8,9 +8,16 @@ import {
 import { assertBareName } from '../lib/user-name.js';
 import { createHash } from 'node:crypto';
 import { promises as fs } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { basename, join, resolve } from 'node:path';
 import chalk from 'chalk';
-import { normalizeEdition, parseAdditionalSources } from './ingest-archive.js';
+import { normalizeEdition } from './ingest-archive.js';
+import {
+  NON_SLICE_FILES,
+  parseAdditionalSources,
+  parseSliceSource,
+  readRecordedSourcePaths,
+  sliceDocuments,
+} from './rulebook-sources.js';
 import { readBoardsmithVersion } from '../lib/boardsmith-version.js';
 import { hashSkillsTree } from '../lib/skills-tree-hash.js';
 import { findHeadingIndex } from './build-manifest.js';
@@ -36,7 +43,7 @@ export const SCOPE_FULL = 'full';
 export const SCOPE_CODE_ONLY = 'code-conformance-only';
 
 /**
- * The five reasons a verification's scope is reduced from `full`. Each fires from ONE specific
+ * The eight reasons a verification's scope is reduced from `full`. Each fires from ONE specific
  * disk state, and the precedence order below (checked top to bottom, first match wins) is part
  * of the contract:
  *
@@ -46,14 +53,24 @@ export const SCOPE_CODE_ONLY = 'code-conformance-only';
  *     project predates Phase 170's ingest contract entirely (no `rulebook/source/`, no recorded
  *     hash) — DISTINCT from `source-missing` on purpose. Conflating "never had provenance" with
  *     "had it and lost it" would report every pre-170 project as damaged rather than simply older
- *     (171-CONTEXT.md decision 10). Both reference games (`seven`, `one-two-punch`) are real,
- *     live examples of this state as of 2026-07-28.
+ *     (171-CONTEXT.md decision 10).
  *  4. `source-missing`         — `INDEX.md` records a `Source:` path and a `Source hash:`, but no
  *     file exists at that path. Provenance was recorded and the archive is now gone.
  *  5. `source-hash-mismatch`   — the archived file exists, but its SHA-256 does not match the
  *     recorded `Source hash:`. The archive was recorded and then silently changed.
+ *  6. `additional-source-missing` — a row of `INDEX.md`'s `## Additional Sources` names a file
+ *     that no longer exists (#305).
+ *  7. `additional-source-hash-mismatch` — a row's archived file exists but its SHA-256 no longer
+ *     matches the recorded one (#305).
+ *  8. `slice-source-unrecorded` — a slice names, as the document it was transcribed from, a file
+ *     `INDEX.md` does not record (#311). Only `scopeForDocuments` returns it: the project as a
+ *     whole cannot have it, since the project-level check reads no slice.
  *
- * `full` is everything past all five checks: the archived file exists AND its hash matches.
+ * `computeVerificationScope` is the PROJECT's scope: every recorded document exists and matches.
+ * A chunk's scope is narrower (#311): each slice names the document it came from
+ * (`rulebook-sources.ts`), so `scopeForDocuments` reduces a chunk only for a failure in a document
+ * its own slices came from. A changed companion document no longer reduces a chunk built on the
+ * rulebook alone.
  */
 export const SCOPE_REASONS = Object.freeze([
   'source-missing',
@@ -61,6 +78,9 @@ export const SCOPE_REASONS = Object.freeze([
   'index-missing',
   'no-rulebook-project',
   'pre-provenance-project',
+  'additional-source-missing',
+  'additional-source-hash-mismatch',
+  'slice-source-unrecorded',
 ] as const);
 
 export type ScopeReason = (typeof SCOPE_REASONS)[number];
@@ -76,17 +96,23 @@ export interface VerificationScope {
   /** `INDEX.md`'s `Source hash:` value — the edition anchor a verification is checked against. */
   sourceHash?: string;
   /**
-   * 177-19: `INDEX.md`'s `## Additional Sources` table (`ingest-archive.ts`'s fix for a project
-   * with more than one source document), EACH ENTRY INDEPENDENTLY VERIFIED the same way the
-   * primary source is — the archived file at `path` must exist and its SHA-256 must match the
-   * recorded `sourceHash`. An entry whose archived file is missing or whose hash no longer
-   * matches is OMITTED here entirely (never included with a `verified: false` flag a careless
-   * caller could ignore) — this array only ever contains sources this function itself confirmed,
-   * mirroring the primary `SCOPE_FULL` contract's own all-or-nothing verification. Always present
-   * (possibly `[]`); absent only when `scope` itself could not read `rulebook/INDEX.md` at all
-   * (the `no-rulebook-project`/`index-missing` reasons).
+   * `INDEX.md`'s `## Additional Sources` rows that this function itself confirmed: the archived
+   * file at `path` exists and its SHA-256 matches the recorded `sourceHash`. Only confirmed rows
+   * are listed here, so a caller reading this array can never mistake a failed one for a verified
+   * one. Always present (possibly `[]`) once `rulebook/INDEX.md` could be read.
    */
   additionalSources?: Array<{ sourcePath: string; sourceHash: string }>;
+  /**
+   * The rows that FAILED that check, each naming why (#305). Any entry here reduces the project's
+   * `scope`, and the scope of every chunk whose slices came from that document
+   * (`scopeForDocuments`); the list is what lets a report say which document moved. Always present (possibly `[]`) alongside
+   * `additionalSources`.
+   */
+  failedAdditionalSources?: Array<{
+    sourcePath: string;
+    sourceHash: string;
+    reason: 'additional-source-missing' | 'additional-source-hash-mismatch';
+  }>;
 }
 
 function sha256(buf: Buffer): string {
@@ -129,19 +155,18 @@ export async function computeVerificationScope(projectDir: string): Promise<Veri
     return { scope: SCOPE_CODE_ONLY, reason: 'index-missing' };
   }
 
-  // 177-19: verified independently of the primary Source:/Source hash: outcome below — a
-  // project's ADDITIONAL sources (`## Additional Sources`, `ingest-archive.ts`) are their own
-  // provenance records, each checked the identical way (archived file exists AND its SHA-256
-  // matches). An entry that fails either check is silently dropped, never included with a
-  // caller-ignorable flag — see `VerificationScope.additionalSources`'s own comment.
-  const additionalSources = await verifyAdditionalSources(dir, index);
+  // A project's ADDITIONAL sources (`## Additional Sources`, `ingest-archive.ts`) are checked the
+  // same way as the primary (archived file exists AND its SHA-256 matches), and reported whatever
+  // the primary's outcome, so a report can name every document that moved.
+  const { additionalSources, failedAdditionalSources } = await verifyAdditionalSources(dir, index);
+  const additional = { additionalSources, failedAdditionalSources };
 
   const editionMatch = /^Edition:\s*(.*)$/m.exec(index);
   const edition = editionMatch ? normalizeEdition(editionMatch[1]) : undefined;
 
   const hashMatch = /^Source hash:\s*(.*)$/m.exec(index);
   if (!hashMatch) {
-    return { scope: SCOPE_CODE_ONLY, reason: 'pre-provenance-project', edition, additionalSources };
+    return { scope: SCOPE_CODE_ONLY, reason: 'pre-provenance-project', edition, ...additional };
   }
   const sourceHash = hashMatch[1].trim();
 
@@ -167,7 +192,7 @@ export async function computeVerificationScope(projectDir: string): Promise<Veri
       edition,
       sourcePath,
       sourceHash,
-      additionalSources,
+      ...additional,
     };
   }
 
@@ -178,37 +203,111 @@ export async function computeVerificationScope(projectDir: string): Promise<Veri
       edition,
       sourcePath,
       sourceHash,
-      additionalSources,
+      ...additional,
     };
   }
 
-  return { scope: SCOPE_FULL, edition, sourcePath, sourceHash, additionalSources };
+  // Precedence mirrors the primary checks: a missing file before a changed one.
+  const firstFailure =
+    failedAdditionalSources.find((f) => f.reason === 'additional-source-missing') ??
+    failedAdditionalSources[0];
+  if (firstFailure) {
+    return {
+      scope: SCOPE_CODE_ONLY,
+      reason: firstFailure.reason,
+      edition,
+      sourcePath,
+      sourceHash,
+      ...additional,
+    };
+  }
+
+  return { scope: SCOPE_FULL, edition, sourcePath, sourceHash, ...additional };
+}
+
+/** The reasons that describe the project rather than one document, so no narrowing escapes them. */
+const PROJECT_WIDE_REASONS: ReadonlySet<ScopeReason> = new Set([
+  'no-rulebook-project',
+  'index-missing',
+  'pre-provenance-project',
+]);
+
+/** Which of two per-document failures a narrowed scope reports: the same order as the project's. */
+const DOCUMENT_REASON_PRECEDENCE: readonly ScopeReason[] = [
+  'source-missing',
+  'source-hash-mismatch',
+  'additional-source-missing',
+  'additional-source-hash-mismatch',
+  'slice-source-unrecorded',
+];
+
+/**
+ * Why `document` cannot be verified against, or `undefined` when it can: it is a document
+ * `INDEX.md` records, its archived copy exists, and its SHA-256 matches. Read from `scope`, which
+ * `computeVerificationScope` computed from disk — this re-reads nothing.
+ */
+export function documentFailure(scope: VerificationScope, document: string): ScopeReason | undefined {
+  if (scope.reason && PROJECT_WIDE_REASONS.has(scope.reason)) return scope.reason;
+  if (document === scope.sourcePath) {
+    return scope.reason === 'source-missing' || scope.reason === 'source-hash-mismatch'
+      ? scope.reason
+      : undefined;
+  }
+  const failed = scope.failedAdditionalSources?.find((f) => f.sourcePath === document);
+  if (failed) return failed.reason;
+  if (scope.additionalSources?.some((a) => a.sourcePath === document)) return undefined;
+  return 'slice-source-unrecorded';
 }
 
 /**
- * Verifies every `## Additional Sources` entry the same way the primary source is verified: the
- * archived file at `path` (relative to `dir`) must exist AND its SHA-256 must match the recorded
- * `sourceHash`. Entries that fail either check are dropped, not reported — see
- * `VerificationScope.additionalSources`'s comment for why a caller-ignorable partial result is
- * deliberately not offered here.
+ * The scope of a verification against `documents` only — the documents a chunk's cited slices
+ * came from (`rulebook-sources.ts`'s `sliceDocuments`). `full` when every one of them is verified,
+ * whatever has happened to the project's other documents; otherwise reduced with the reason of the
+ * first failure, in the project's own precedence order. With no documents to narrow to (a chunk
+ * citing no slice) the project's scope applies unchanged.
+ *
+ * Like `computeVerificationScope`, this takes no caller-declared scope: `scope` must be that
+ * function's result, and `documents` are read from the slices, never supplied by a session.
+ */
+export function scopeForDocuments(scope: VerificationScope, documents: readonly string[]): VerificationScope {
+  if (documents.length === 0) return scope;
+  if (scope.reason && PROJECT_WIDE_REASONS.has(scope.reason)) return scope;
+  const failures = new Set(documents.map((d) => documentFailure(scope, d)).filter((r) => r !== undefined));
+  const reason = DOCUMENT_REASON_PRECEDENCE.find((r) => failures.has(r));
+  if (reason) return { ...scope, scope: SCOPE_CODE_ONLY, reason };
+  const full: VerificationScope = { ...scope, scope: SCOPE_FULL };
+  delete full.reason;
+  return full;
+}
+
+/**
+ * Checks every `## Additional Sources` row the same way the primary source is checked: the
+ * archived file at `path` (relative to `design/`) must exist AND its SHA-256 must match the
+ * recorded `sourceHash`. Splits the rows into the confirmed and the failed, each failure naming
+ * its reason.
  */
 async function verifyAdditionalSources(
   dir: string,
   index: string,
-): Promise<Array<{ sourcePath: string; sourceHash: string }>> {
-  const records = parseAdditionalSources(index);
-  const verified: Array<{ sourcePath: string; sourceHash: string }> = [];
-  for (const record of records) {
+): Promise<Required<Pick<VerificationScope, 'additionalSources' | 'failedAdditionalSources'>>> {
+  const additionalSources: Array<{ sourcePath: string; sourceHash: string }> = [];
+  const failedAdditionalSources: NonNullable<VerificationScope['failedAdditionalSources']> = [];
+  for (const record of parseAdditionalSources(index)) {
+    const row = { sourcePath: record.path, sourceHash: record.sourceHash };
+    let buf: Buffer;
     try {
-      const buf = await fs.readFile(join(designDir(dir), record.path));
-      if (sha256(buf) === record.sourceHash) {
-        verified.push({ sourcePath: record.path, sourceHash: record.sourceHash });
-      }
+      buf = await fs.readFile(join(designDir(dir), record.path));
     } catch {
-      // archived file missing — silently excluded, per this function's contract.
+      failedAdditionalSources.push({ ...row, reason: 'additional-source-missing' });
+      continue;
+    }
+    if (sha256(buf) === record.sourceHash) {
+      additionalSources.push(row);
+    } else {
+      failedAdditionalSources.push({ ...row, reason: 'additional-source-hash-mismatch' });
     }
   }
-  return verified;
+  return { additionalSources, failedAdditionalSources };
 }
 
 /**
@@ -273,6 +372,27 @@ export function resolveCitedSlices(
 }
 
 /**
+ * Each cited slice's hash, and the documents the slices came from (`rulebook-sources.ts`'s
+ * `sliceDocuments`): what a chunk's `## Verified Against` block records, and what its scope
+ * narrows to.
+ */
+async function readCitedSlices(
+  projectDir: string,
+  resolved: string[],
+): Promise<{ citedSlices: Array<{ path: string; hash: string }>; documents: string[] }> {
+  const recorded = await readRecordedSourcePaths(projectDir);
+  const citedSlices: Array<{ path: string; hash: string }> = [];
+  const documents = new Set<string>();
+  for (const rel of resolved) {
+    const bytes = await fs.readFile(join(designDir(projectDir), rel));
+    citedSlices.push({ path: rel, hash: sha256(bytes) });
+    const sliceSource = NON_SLICE_FILES.includes(basename(rel)) ? undefined : parseSliceSource(bytes.toString('utf-8'));
+    for (const d of sliceDocuments(sliceSource, recorded)) documents.add(d);
+  }
+  return { citedSlices, documents: [...documents] };
+}
+
+/**
  * `boardsmith chunk-check <slug>` — PROV-01's deliverable. Writes or repairs a fenced,
  * machine-owned `## Verified Against` block into `chunks/<slug>/CHUNK.md`, and exits non-zero
  * when it had to. `ingestCheckCommand` (`ingest-archive.ts`) is the precedent copied line for
@@ -316,6 +436,7 @@ export const VERIFIED_AGAINST_LABELS = Object.freeze([
   'Cited slices:',
   'Unresolved citations:',
   'Re-verified (no code change):',
+  'Additional source hash:',
 ] as const);
 
 const [
@@ -328,7 +449,20 @@ const [
   LABEL_CITED,
   LABEL_UNRESOLVED,
   LABEL_REVERIFIED,
+  LABEL_ADDITIONAL_SOURCE,
 ] = VERIFIED_AGAINST_LABELS;
+
+/**
+ * One `Additional source hash: <sha256> <path>` line per `## Additional Sources` row the chunk was
+ * verified against (#305), rendered right after `Rulebook source hash:`. Hash first because it is
+ * fixed-width, so a path containing spaces still parses. Absent for a single-source project, so
+ * those blocks are byte-identical to before; a block without the line records no additional
+ * source, which `resolveProvenance` reads as "not verified against the current one".
+ */
+const ADDITIONAL_SOURCE_LINE_RE = new RegExp(
+  `^${LABEL_ADDITIONAL_SOURCE}\\s+([0-9a-f]{64})\\s+(\\S.*)$`,
+  'gm',
+);
 
 /**
  * The placeholder body a freshly scaffolded CHUNK.md carries before its first `chunk-check` —
@@ -345,6 +479,8 @@ export interface VerifiedAgainstRecord {
   edition?: string;
   /** The edition anchor (171-CONTEXT.md decision 4) — `INDEX.md`'s own `Source hash:` value. */
   sourceHash?: string;
+  /** The hash-verified `## Additional Sources` rows, anchoring the rest of the rules (#305). */
+  additionalSources?: Array<{ sourcePath: string; sourceHash: string }>;
   boardsmithVersion: string;
   skillsTreeHash: string;
   citedSlices: Array<{ path: string; hash: string }>;
@@ -372,6 +508,9 @@ export function renderVerifiedAgainst(record: VerifiedAgainstRecord): string {
   }
   lines.push(`${LABEL_EDITION} ${record.edition ?? 'none recorded'}`);
   lines.push(`${LABEL_SOURCE_HASH} ${record.sourceHash ?? 'none recorded'}`);
+  for (const additional of record.additionalSources ?? []) {
+    lines.push(`${LABEL_ADDITIONAL_SOURCE} ${additional.sourceHash} ${additional.sourcePath}`);
+  }
   lines.push(`${LABEL_VERSION} ${record.boardsmithVersion}`);
   lines.push(`${LABEL_SKILLS_HASH} ${record.skillsTreeHash}`);
   if (record.reverifiedNoCodeChange) {
@@ -491,7 +630,7 @@ export async function recordVerifiedAgainst(
     );
   }
 
-  const scope = await computeVerificationScope(projectDir);
+  const projectScope = await computeVerificationScope(projectDir);
 
   const rulebookDir = designRulebookDir(projectDir);
   let sliceFilenames: string[] = [];
@@ -522,17 +661,16 @@ export async function recordVerifiedAgainst(
   // citation and never letting `changed` settle to false on a second identical run.
   const citableText = headingIdx === -1 ? chunkText : chunkText.slice(0, headingIdx);
   const { resolved, unresolved } = resolveCitedSlices(citableText, sliceFilenames);
-  const citedSlices: Array<{ path: string; hash: string }> = [];
-  for (const rel of resolved) {
-    const bytes = await fs.readFile(join(designDir(projectDir), rel));
-    citedSlices.push({ path: rel, hash: sha256(bytes) });
-  }
+  const { citedSlices, documents } = await readCitedSlices(projectDir, resolved);
+  // The chunk is verified against the documents its slices came from, not the whole project (#311).
+  const scope = scopeForDocuments(projectScope, documents);
 
   const record: VerifiedAgainstRecord = {
     scope: scope.scope,
     reason: scope.reason,
     edition: scope.edition,
     sourceHash: scope.sourceHash,
+    additionalSources: scope.additionalSources ?? [],
     boardsmithVersion: readBoardsmithVersion(),
     skillsTreeHash: await hashSkillsTree(projectDir),
     citedSlices,
@@ -753,6 +891,8 @@ export interface ParsedVerifiedAgainst {
   /** The RAW recorded edition string (not yet normalised) — undefined when `state` is `unknown` or the block recorded no edition. */
   edition?: string;
   sourceHash?: string;
+  /** Each `Additional source hash:` line (#305); `[]` when the block records none. */
+  additionalSources: Array<{ sourcePath: string; sourceHash: string }>;
   boardsmithVersion?: string;
   skillsTreeHash?: string;
   citedSlices: string[];
@@ -774,7 +914,13 @@ export interface ParsedVerifiedAgainst {
 }
 
 function unparsed(blockMalformed: boolean): ParsedVerifiedAgainst {
-  return { state: PROVENANCE_UNKNOWN, citedSlices: [], unresolved: [], blockMalformed };
+  return {
+    state: PROVENANCE_UNKNOWN,
+    additionalSources: [],
+    citedSlices: [],
+    unresolved: [],
+    blockMalformed,
+  };
 }
 
 /**
@@ -868,6 +1014,10 @@ export function parseVerifiedAgainst(chunkText: string): ParsedVerifiedAgainst {
     reason,
     edition: editionRaw === 'none recorded' ? undefined : editionRaw,
     sourceHash: sourceHashRaw === 'none recorded' ? undefined : sourceHashRaw,
+    additionalSources: [...body.matchAll(ADDITIONAL_SOURCE_LINE_RE)].map((m) => ({
+      sourcePath: m[2].trim(),
+      sourceHash: m[1],
+    })),
     boardsmithVersion: versionRaw,
     skillsTreeHash: skillsHashRaw,
     citedSlices,

@@ -46,12 +46,11 @@ interface TableProjectConfig extends ProjectConfigBase {
   playerCount: { min: number; max: number };
 }
 
+/** No seat count: a world's lifetime seat count lives in the COMPILED rules
+ *  (`gameDefinition.world.maxPlayers`), which is the number the runtime
+ *  enforces, and the manifest's copy is derived from it at build. */
 interface WorldProjectConfig extends ProjectConfigBase {
   backend: Extract<GameBackend, 'world'>;
-  /** A world's lifetime seat count. It lives in the COMPILED rules
-   *  (`gameDefinition.world.maxPlayers`), which is the number the runtime
-   *  enforces; the manifest's copy is derived from it at build. */
-  worldSeats: number;
 }
 
 export type ProjectConfig = TableProjectConfig | WorldProjectConfig;
@@ -252,7 +251,7 @@ export function generateTsConfig(): string {
       // `./ui` export resolves to raw source, so tsc must fully type-check
       // that module graph — which reaches `useActionController.ts`'s
       // `import.meta.env.DEV` (a Vite-ambient global). Without this, a
-      // freshly-scaffolded, unmodified project fails `tsc --noEmit` out of
+      // freshly-scaffolded, unmodified project fails `vue-tsc --noEmit` out of
       // the box with TS2339 on `ImportMeta.env` (Phase 149 dry-run Defect 1).
       //
       // COUPLING (WR-04): listing `types` at all switches tsc from

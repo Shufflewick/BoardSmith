@@ -6,13 +6,17 @@
  */
 import { describe, it, expect } from 'vitest';
 import { actionNeedsWizardMode } from './actionControllerHelpers.js';
-import type { ActionMetadata, PickMetadata } from './useActionControllerTypes.js';
+import type { ActionMetadata, ChoiceWithRefs, PickMetadata } from './useActionControllerTypes.js';
 
 const selection = (overrides: Partial<PickMetadata>): PickMetadata => ({
   name: 'pick',
   type: 'choice',
   ...overrides,
 } as PickMetadata);
+
+/** Static choices as the wire carries them: each value with its display text. */
+const choices = (...values: number[]): ChoiceWithRefs[] =>
+  values.map((value) => ({ value, display: String(value) }));
 
 const meta = (...selections: PickMetadata[]): ActionMetadata =>
   ({ name: 'act', selections } as ActionMetadata);
@@ -27,7 +31,7 @@ describe('actionNeedsWizardMode', () => {
   });
 
   it('says no for a plain choice with static choices', () => {
-    expect(actionNeedsWizardMode(meta(selection({ name: 'value', choices: [1, 2] })), {}))
+    expect(actionNeedsWizardMode(meta(selection({ name: 'value', choices: choices(1, 2) })), {}))
       .toEqual({ needed: false });
   });
 
@@ -67,7 +71,7 @@ describe('actionNeedsWizardMode', () => {
 
   it('says yes for a selection whose dependency has not been chosen', () => {
     const check = actionNeedsWizardMode(
-      meta(selection({ name: 'unit', choices: [1] }), selection({ name: 'move', dependsOn: 'unit' })),
+      meta(selection({ name: 'unit', choices: choices(1) }), selection({ name: 'move', dependsOn: 'unit' })),
       {},
     );
     expect(check.needed).toBe(true);
@@ -77,14 +81,14 @@ describe('actionNeedsWizardMode', () => {
 
   it('says no once the dependency is supplied', () => {
     expect(actionNeedsWizardMode(
-      meta(selection({ name: 'move', dependsOn: 'unit', choices: [1] })),
+      meta(selection({ name: 'move', dependsOn: 'unit', choices: choices(1) })),
       { unit: 3 },
     )).toEqual({ needed: false });
   });
 
   it('says yes for choices that only exist per dependent value', () => {
     const check = actionNeedsWizardMode(
-      meta(selection({ name: 'move', choicesByDependentValue: { '1': [1, 2] } })),
+      meta(selection({ name: 'move', choicesByDependentValue: { '1': choices(1, 2) } })),
       {},
     );
     expect(check.needed).toBe(true);
@@ -93,14 +97,14 @@ describe('actionNeedsWizardMode', () => {
 
   it('says yes for elements that only exist per dependent value', () => {
     expect(actionNeedsWizardMode(
-      meta(selection({ name: 'move', elementsByDependentValue: { '1': [1] } })),
+      meta(selection({ name: 'move', elementsByDependentValue: { '1': [{ id: 1 }] } })),
       {},
     ).needed).toBe(true);
   });
 
   it('says no when static choices are present alongside the dependent map', () => {
     expect(actionNeedsWizardMode(
-      meta(selection({ name: 'move', choices: [1, 2], choicesByDependentValue: { '1': [1] } })),
+      meta(selection({ name: 'move', choices: choices(1, 2), choicesByDependentValue: { '1': choices(1) } })),
       {},
     )).toEqual({ needed: false });
   });
@@ -134,7 +138,7 @@ describe('actionNeedsWizardMode', () => {
   });
 
   it('carries no reason or selection name when wizard mode is not needed', () => {
-    const check = actionNeedsWizardMode(meta(selection({ name: 'value', choices: [1] })), {});
+    const check = actionNeedsWizardMode(meta(selection({ name: 'value', choices: choices(1) })), {});
     expect(check.reason).toBeUndefined();
     expect(check.selectionName).toBeUndefined();
   });

@@ -24,7 +24,11 @@ function seats(n: number): Player[] {
   return Array.from({ length: n }, (_, i) => ({ seat: i, name: `Player ${i}` }));
 }
 
-function mountPanel(props: Record<string, unknown>) {
+/** The props `PlayersPanel` declares, as a mount passes them. */
+type PanelProps = InstanceType<typeof PlayersPanel>['$props'];
+
+/** Mounts from seat 0 unless the test names another seat. */
+function mountPanel(props: Partial<PanelProps> & Pick<PanelProps, 'players'>) {
   return mount(PlayersPanel, { props: { playerSeat: 0, ...props } });
 }
 

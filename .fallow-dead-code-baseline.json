@@ -505,10 +505,7 @@
     "src/ui/game-uis.ts:./heirloom/HeirloomTable.vue",
     "src/ui/game-uis.ts:./three/scene.js"
   ],
-  "unlisted_dependencies": [
-    "@boardsmith/checkers-rules",
-    "@boardsmith/cribbage-rules"
-  ],
+  "unlisted_dependencies": [],
   "duplicate_exports": [
     "ActionResult|src/client/types.ts|src/engine/action/types.ts|src/session/game-session.ts|src/ui/composables/useActionControllerTypes.ts",
     "CheckpointPolicy|src/engine/utils/snapshot.ts|src/runtime/runner.ts",

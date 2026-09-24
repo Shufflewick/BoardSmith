@@ -90,7 +90,11 @@ checks in the current directory, never `**/glob` patterns that search subfolders
 
 1. **Empty / fresh directory** — no `design/`, no `PROJECT.md`. The current directory is the
    **parent** the game project will be created under. Proceed straight to Step 1, which scaffolds
-   `<name>/`; every subsequent step then runs from inside `<name>/`.
+   `<name>/`; every subsequent step then runs from inside `<name>/`. **Exception:** when the
+   current directory is the top folder of a git repository (a `.git` folder is present), ask the
+   designer whether this repository is where the game lives. If it is, Step 1 scaffolds it in
+   place with `init --into-existing` (see `${CLAUDE_SKILL_DIR}/../bs-shared/ingest/scaffold.md`)
+   and every step runs from here.
 2. **Interrupted ingest** (`design/rulebook/` or `design/ASSETS.md` present, but no
    `design/SKETCH.md`) — a
    previous ingest session crashed after transcription/interview started but before Step 7
@@ -130,13 +134,14 @@ checks in the current directory, never `**/glob` patterns that search subfolders
 
 Delegate the entire scaffold-and-verify sequence to `${CLAUDE_SKILL_DIR}/../bs-shared/ingest/scaffold.md`: deriving
 display/project/class names, running `boardsmith init`, verifying the empty skeleton compiles
-(`tsc --noEmit`) and serves, and killing any server this skill starts before returning. Chunk 1
+(`npx vue-tsc --noEmit`) and serves, and killing any server this skill starts before returning. Chunk 1
 must start from a known-good, verified-compiling baseline.
 
 This step deliberately runs **before** transcription/interview: every artifact the later steps
 write (`rulebook/NN-topic.md`, `rulebook/INDEX.md`, `ASSETS.md`, `SKETCH.md`, ...) lives inside
-the game project, which does not exist until `init` creates `<name>/`. Once the scaffold is
-verified, `cd <name>` and treat the project directory as the working directory for every
+the game project, which does not exist until `init` creates `<name>/` (or scaffolds the current
+repository, with `--into-existing`). Once the scaffold is verified, `cd <name>` (not needed after
+`--into-existing`) and treat the project directory as the working directory for every
 remaining step — nothing this skill produces is ever written to the parent directory.
 
 ## Step 2: Route to Transcription or Interview Fallback
@@ -216,7 +221,9 @@ create the file.
 3. **If `Edition:` reads `not stated in the rulebook` and the transcription subagent returned an
    actual edition**, update just that line with the returned value. Leave `Source:`,
    `Source hash:`, and `Transcribed:` untouched — those are the provenance record a later verify
-   pass reads, and they describe the archive Step 1 made.
+   pass reads, and they describe the archive Step 1 made. The same goes for
+   `## Additional Sources`, when Step 1 archived more than one document: it is machine-owned,
+   written only by `boardsmith ingest-archive`.
 
 4. **Component inventory + aspect ratio(s)** — every component mentioned, with citations and
    approximate aspect ratios (cards, tiles, board proportions), accumulated from the transcription

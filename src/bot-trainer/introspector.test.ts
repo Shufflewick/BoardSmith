@@ -48,8 +48,8 @@ class CardGame extends Game<CardGame, CardPlayer> {
 }
 
 class Square extends GridCell<BoardGame> {
-  row!: number;
-  column!: number;
+  declare row: number;
+  declare column: number;
 }
 
 class Board extends Grid<BoardGame> {}

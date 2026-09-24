@@ -75,11 +75,8 @@
       "complexity_critical": {
         "count": 1
       },
-      "complexity_high": {
-        "count": 1
-      },
       "complexity_moderate": {
-        "count": 4
+        "count": 5
       }
     },
     "src/cli/commands/analyze.ts": {

@@ -26,7 +26,7 @@
  * useBoardActionBridge composable (no harness — the actual production code),
  * exactly like the existing useBoardActionBridge.test.ts does.
  */
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { defineComponent, ref, computed, h, nextTick, type Ref } from 'vue';
 import { mount } from '@vue/test-utils';
 import fs from 'node:fs';
@@ -35,8 +35,8 @@ import { fileURLToPath } from 'node:url';
 
 import { createBoardInteraction } from '../composables/useBoardInteraction.js';
 import { useBoardActionBridge } from '../composables/useBoardActionBridge.js';
+import { makeController } from '../composables/fake-action-controller.test-helper.js';
 import type {
-  UseActionControllerReturn,
   PickMetadata,
   ValidElement,
 } from '../composables/useActionControllerTypes.js';
@@ -244,49 +244,6 @@ describe('GameShell.vue source: displayedState wired at every board/sidebar site
 
 // ── (2) useBoardActionBridge isViewingHistory guard — the REAL composable ────
 
-function makeController(opts: { pick?: PickMetadata | null; action?: string | null; validElements?: ValidElement[] }) {
-  const currentAction = ref<string | null>(opts.action ?? null);
-  const currentPick = computed<PickMetadata | null>(() => opts.pick ?? null);
-  const currentArgs = ref<Record<string, unknown>>({});
-  const isExecuting = ref(false);
-  const actionCompletedTick = ref(0);
-  const multiSelectDraft = ref(null);
-  const actionSnapshot = ref(null);
-  const pendingFollowUp = ref(false);
-  const pendingOnServer = ref(false);
-
-  const fill = vi.fn(async () => ({ valid: true }));
-  const start = vi.fn(async () => {});
-  const execute = vi.fn(async () => ({ success: true }));
-  const cancel = vi.fn(() => {});
-  const toggleMultiSelect = vi.fn(async () => {});
-
-  const currentChoices = computed(() => opts.pick?.choices ?? []);
-  const validElements = computed(() => opts.validElements ?? []);
-
-  const controller = {
-    currentAction,
-    currentPick,
-    currentArgs,
-    isExecuting,
-    actionCompletedTick,
-    multiSelectDraft,
-    actionSnapshot,
-    pendingFollowUp,
-    pendingOnServer,
-    currentChoices,
-    validElements,
-    getCurrentChoices: () => currentChoices.value,
-    getValidElements: () => opts.validElements ?? [],
-    fill,
-    start,
-    execute,
-    cancel,
-    toggleMultiSelect,
-  } as unknown as UseActionControllerReturn;
-
-  return { controller, fill, start, execute, toggleMultiSelect, currentAction, currentPick };
-}
 
 const cellPick: PickMetadata = { name: 'cell', type: 'element', prompt: 'Select a cell' };
 

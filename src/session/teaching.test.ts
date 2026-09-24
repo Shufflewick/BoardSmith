@@ -117,17 +117,20 @@ async function until(
   }
 }
 
+/**
+ * Teaching fields are session-layer only -- they must never appear in the
+ * engine's serialization surface. If any of these appear, a regression has
+ * leaked transient UI state into persistent storage.
+ */
+function expectNoTeachingFields(snapshot: unknown): void {
+  expect(snapshot).not.toHaveProperty('hint');
+  expect(snapshot).not.toHaveProperty('heatmap');
+  expect(snapshot).not.toHaveProperty('narration');
+}
+
 describe('teaching state — no-serialization invariant', () => {
   it('runner snapshot never contains hint, heatmap, or narration fields', () => {
-    const session = makeSession();
-    const snapshot = session.runner.getSnapshot();
-
-    // Teaching fields are session-layer only — they must never appear in the
-    // engine's serialization surface. If any of these appear, a regression
-    // has leaked transient UI state into persistent storage.
-    expect((snapshot as Record<string, unknown>)['hint']).toBeUndefined();
-    expect((snapshot as Record<string, unknown>)['heatmap']).toBeUndefined();
-    expect((snapshot as Record<string, unknown>)['narration']).toBeUndefined();
+    expectNoTeachingFields(makeSession().runner.getSnapshot());
   });
 
   it('captureCheckpoint does not contain teaching fields', async () => {
@@ -136,10 +139,7 @@ describe('teaching state — no-serialization invariant', () => {
     // Perform an action to generate a checkpoint
     await session.performAction('pick', 1, { option: 'a' });
 
-    const snapshot = session.runner.getSnapshot();
-    expect((snapshot as Record<string, unknown>)['hint']).toBeUndefined();
-    expect((snapshot as Record<string, unknown>)['heatmap']).toBeUndefined();
-    expect((snapshot as Record<string, unknown>)['narration']).toBeUndefined();
+    expectNoTeachingFields(session.runner.getSnapshot());
   });
 });
 

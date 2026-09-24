@@ -385,7 +385,7 @@ describe('pairing — m:n page-overlap group join, over REAL archived fixtures',
           text: await readFixture(`${game}/staged/${name}`),
         })),
       );
-      const pairs = pairSlices({ liveSlices, stagedUnits });
+      const pairs = pairSlices({ liveSlices, stagedUnits, sources: [] });
       const paired = pairs.filter((p) => p.kind === 'paired');
       expect(paired).toHaveLength(1);
       expect(paired[0].liveSlices).toHaveLength(liveNames.length);
@@ -424,7 +424,7 @@ describe('pairing — m:n page-overlap group join, over REAL archived fixtures',
       { unit: 'u1', slicePath: 'u1.md', text: 'p.1, A:\n"one restated"\n' },
       { unit: 'u2', slicePath: 'u2.md', text: 'p.2, B:\n"two restated"\n' },
     ];
-    const pairs = pairSlices({ liveSlices, stagedUnits });
+    const pairs = pairSlices({ liveSlices, stagedUnits, sources: [] });
     const paired = pairs.filter((p) => p.kind === 'paired');
     expect(paired).toHaveLength(2);
     expect(paired.map((p) => p.span).sort((a, b) => a.first - b.first)).toEqual([
@@ -440,7 +440,7 @@ describe('pairing — m:n page-overlap group join, over REAL archived fixtures',
     const stagedUnits = [
       { unit: '09-only-staged', slicePath: '09-only-staged.md', rangeId: '9-9', text: 'p.9, Something else:\n"A staged-only rule."\n' },
     ];
-    const pairs = pairSlices({ liveSlices, stagedUnits });
+    const pairs = pairSlices({ liveSlices, stagedUnits, sources: [] });
     expect(pairs).toHaveLength(2);
     const staleFinding = pairs.find((p) => p.liveSlices.length > 0);
     const liveMissing = pairs.find((p) => p.stagedUnits.length > 0);
@@ -458,13 +458,14 @@ describe('pairing — m:n page-overlap group join, over REAL archived fixtures',
       { unit: 'u2', slicePath: 'u2.md', rangeId: '2-2', text: 'p.2, B:\n"two restated"\n' },
     ];
 
-    const first = pairSlices({ liveSlices, stagedUnits });
-    const second = pairSlices({ liveSlices, stagedUnits });
+    const first = pairSlices({ liveSlices, stagedUnits, sources: [] });
+    const second = pairSlices({ liveSlices, stagedUnits, sources: [] });
     expect(first.map((p) => p.pairId).sort()).toEqual(second.map((p) => p.pairId).sort());
 
     const shuffled = pairSlices({
       liveSlices: [liveSlices[1], liveSlices[0]],
       stagedUnits: [stagedUnits[1], stagedUnits[0]],
+      sources: [],
     });
     expect(shuffled.map((p) => p.pairId).sort()).toEqual(first.map((p) => p.pairId).sort());
 
@@ -493,7 +494,7 @@ describe('pairing — m:n page-overlap group join, over REAL archived fixtures',
         text: 'p.4, Cover:\nVisual (p.4): The same purely decorative layout, restated.\n',
       },
     ];
-    const pairs = pairSlices({ liveSlices, stagedUnits });
+    const pairs = pairSlices({ liveSlices, stagedUnits, sources: [] });
     expect(pairs).toHaveLength(1);
     expect(pairs[0]).toMatchObject({
       kind: 'presentation-only',
@@ -508,7 +509,7 @@ describe('pairing — m:n page-overlap group join, over REAL archived fixtures',
       { unit: 'u1', slicePath: 'u1.md', rangeId: '1-1', text: 'p.1, A:\n"one restated"\n' },
       { unit: 'orphan', slicePath: 'orphan.md', rangeId: '1-1', text: 'Some content with no p.N citation at all.\n' },
     ];
-    const pairs = pairSlices({ liveSlices, stagedUnits });
+    const pairs = pairSlices({ liveSlices, stagedUnits, sources: [] });
     const orphanGroup = pairs.find((p) => p.stagedUnits.includes('orphan'));
     expect(orphanGroup).toMatchObject({ kind: 'unpaired-slice', missingSide: 'live-missing' });
     expect(orphanGroup!.stagedUnits).toEqual(['orphan']);
@@ -553,12 +554,16 @@ async function provenanceProject(): Promise<{ project: string; liveSliceRel: str
   return { project, liveSliceRel: `rulebook/${liveSliceName}`, sourceHash };
 }
 
-/** Writes `chunks/<slug>/CHUNK.md` citing `citedSlice` and recording `recordedSourceHash` (or none). */
+/**
+ * Writes `chunks/<slug>/CHUNK.md` citing `citedSlice` and recording `recordedSourceHash` (or
+ * none), plus any additional-source hashes the chunk was verified against.
+ */
 async function writeCitingChunk(
   project: string,
   slug: string,
   citedSlice: string,
   recordedSourceHash: string | undefined,
+  additionalSources: Array<{ sourcePath: string; sourceHash: string }> = [],
 ): Promise<void> {
   const chunkDir = join(project, DESIGN_DIR, 'chunks', slug);
   await fs.mkdir(chunkDir, { recursive: true });
@@ -566,6 +571,7 @@ async function writeCitingChunk(
     scope: SCOPE_FULL,
     edition: 'none recorded',
     sourceHash: recordedSourceHash,
+    additionalSources,
     boardsmithVersion: '9.9.9',
     skillsTreeHash: 'deadbeef',
     citedSlices: [],
@@ -577,6 +583,55 @@ async function writeCitingChunk(
   await fs.writeFile(join(chunkDir, 'CHUNK.md'), chunkText);
 }
 
+
+/**
+ * #311: a slice's `p.N` is a page of the document it names, so two documents' page 1s are
+ * different pages. Pairing by page overlap happens only within one document.
+ */
+describe('pairing — within one document only (#311)', () => {
+  const RULES = 'rulebook/source/rules.pdf';
+  const CARDS = 'rulebook/source/cards.pdf';
+  const slice = (source: string | undefined, body: string) =>
+    `# S\n\n${source ? `Source: ${source}\n\n` : ''}${body}`;
+
+  it('a rulebook p.1 slice never pairs with a card list p.1 slice, and pair ids name the document', () => {
+    const pairs = pairSlices({
+      sources: [RULES, CARDS],
+      liveSlices: [
+        { path: 'rulebook/01-setup.md', text: slice(RULES, 'p.1, Setup:\n"Deal six."\n') },
+        { path: 'rulebook/01-cards-anatomy.md', text: slice(CARDS, 'p.1, Anatomy:\n"A cost."\n') },
+      ],
+      stagedUnits: [
+        { unit: 'u1', slicePath: '01-setup.md', text: slice(RULES, 'p.1, Setup:\n"Deal six."\n') },
+        { unit: 'u2', slicePath: '01-cards-anatomy.md', text: slice(CARDS, 'p.1, Anatomy:\n"A cost."\n') },
+      ],
+    });
+    expect(pairs.map((p) => [p.pairId, p.liveSlices, p.stagedUnits])).toEqual([
+      ['cards.pdf:pages-1-1', ['rulebook/01-cards-anatomy.md'], ['u2']],
+      ['rules.pdf:pages-1-1', ['rulebook/01-setup.md'], ['u1']],
+    ]);
+  });
+
+  it('a live slice naming no document pairs with its only possible one in a single-source project', () => {
+    const pairs = pairSlices({
+      sources: [RULES],
+      liveSlices: [{ path: 'rulebook/01-setup.md', text: slice(undefined, 'p.1, Setup:\n"Deal six."\n') }],
+      stagedUnits: [{ unit: 'u1', slicePath: '01-setup.md', text: slice(RULES, 'p.1, Setup:\n"Deal six."\n') }],
+    });
+    expect(pairs).toHaveLength(1);
+    expect(pairs[0]).toMatchObject({ pairId: 'pages-1-1', kind: 'paired' });
+  });
+
+  it('refuses a slice naming no document when the project has several, naming the slice and the fix', () => {
+    expect(() =>
+      pairSlices({
+        sources: [RULES, CARDS],
+        liveSlices: [{ path: 'rulebook/01-setup.md', text: slice(undefined, 'p.1, Setup:\n"Deal six."\n') }],
+        stagedUnits: [],
+      }),
+    ).toThrow(/rulebook\/01-setup\.md[\s\S]*ingest-slice-source/);
+  });
+});
 
 describe('provenance — three states, hash-only, never the subagent\'s opinion', () => {
   it('provenance-1: a chunk recording the CURRENT hash resolves to source-unchanged', async () => {
@@ -637,6 +692,132 @@ describe('provenance — three states, hash-only, never the subagent\'s opinion'
 
     const src = await fs.readFile(join(__dirname, 'verify-classify.ts'), 'utf-8');
     expect(src).not.toMatch(/deriveStale\([^)]*provenance/i);
+  });
+
+  describe('additional sources (#305)', () => {
+    const REFERENCE = 'rulebook/source/REFERENCE.md';
+
+    /** `provenanceProject()` plus an archived, recorded companion document. */
+    async function withReference(bytes: string): Promise<{ referenceHash: string }> {
+      const project = join(dir, 'game');
+      const referenceHash = sha256(Buffer.from(bytes));
+      await fs.writeFile(join(project, DESIGN_DIR, REFERENCE), bytes);
+      const indexPath = join(project, DESIGN_DIR, 'rulebook', 'INDEX.md');
+      const index = await fs.readFile(indexPath, 'utf-8');
+      await fs.writeFile(
+        indexPath,
+        index.replace(
+          '## Open Rules Gaps',
+          '## Additional Sources\n\n<!-- boardsmith:additional-sources:begin -->\n| file | sha256 |\n|------|--------|\n' +
+            `| ${REFERENCE} | ${referenceHash} |\n<!-- boardsmith:additional-sources:end -->\n\n## Open Rules Gaps`,
+        ),
+      );
+      return { referenceHash };
+    }
+
+    it('a chunk recording the current primary AND additional hashes resolves to source-unchanged', async () => {
+      const { project, liveSliceRel, sourceHash } = await provenanceProject();
+      const { referenceHash } = await withReference('# Reference v1\n');
+      await writeCitingChunk(project, 'battle', liveSliceRel, sourceHash, [
+        { sourcePath: REFERENCE, sourceHash: referenceHash },
+      ]);
+
+      const result = await resolveProvenance(project, [liveSliceRel]);
+      expect(result.provenance).toBe('source-unchanged');
+      expect(result.changedSources).toEqual([]);
+    });
+
+    it('a chunk verified against an older version of the additional source resolves to source-changed, naming it', async () => {
+      const { project, liveSliceRel, sourceHash } = await provenanceProject();
+      await withReference('# Reference v2, rebalanced\n');
+      await writeCitingChunk(project, 'battle', liveSliceRel, sourceHash, [
+        { sourcePath: REFERENCE, sourceHash: sha256(Buffer.from('# Reference v1\n')) },
+      ]);
+
+      const result = await resolveProvenance(project, [liveSliceRel]);
+      expect(result.provenance).toBe('source-changed');
+      expect(result.changedSources).toEqual([REFERENCE]);
+      expect(result.reason).toContain(REFERENCE);
+    });
+
+    it('a chunk verified before the additional source was recorded resolves to source-changed', async () => {
+      const { project, liveSliceRel, sourceHash } = await provenanceProject();
+      await withReference('# Reference v1\n');
+      await writeCitingChunk(project, 'battle', liveSliceRel, sourceHash);
+
+      const result = await resolveProvenance(project, [liveSliceRel]);
+      expect(result.provenance).toBe('source-changed');
+      expect(result.changedSources).toEqual([REFERENCE]);
+    });
+  });
+
+  describe('narrowed to the documents the pair\'s slices came from (#311)', () => {
+    const REFERENCE = 'rulebook/source/REFERENCE.md';
+    const RULES = 'rulebook/source/rules.pdf';
+
+    /** `provenanceProject()` with `REFERENCE.md` recorded, and the live slice naming `source`. */
+    async function attributed(source: string, referenceOnDisk: string) {
+      const setup = await provenanceProject();
+      const recordedReference = '# Reference v1\n';
+      const referenceHash = sha256(Buffer.from(recordedReference));
+      await fs.writeFile(join(setup.project, DESIGN_DIR, REFERENCE), referenceOnDisk);
+      const indexPath = join(setup.project, DESIGN_DIR, 'rulebook', 'INDEX.md');
+      const index = await fs.readFile(indexPath, 'utf-8');
+      await fs.writeFile(
+        indexPath,
+        index.replace(
+          '## Open Rules Gaps',
+          '## Additional Sources\n\n<!-- boardsmith:additional-sources:begin -->\n| file | sha256 |\n|------|--------|\n' +
+            `| ${REFERENCE} | ${referenceHash} |\n<!-- boardsmith:additional-sources:end -->\n\n## Open Rules Gaps`,
+        ),
+      );
+      const slicePath = join(setup.project, DESIGN_DIR, setup.liveSliceRel);
+      await fs.writeFile(slicePath, `Source: ${source}\n\n${await fs.readFile(slicePath, 'utf-8')}`);
+      return { ...setup, referenceHash };
+    }
+
+    it('a companion the chunk saw an older version of does not touch a pair transcribed from the rulebook', async () => {
+      const { project, liveSliceRel, sourceHash } = await attributed(RULES, '# Reference v1\n');
+      await writeCitingChunk(project, 'setup', liveSliceRel, sourceHash, [
+        { sourcePath: REFERENCE, sourceHash: 'c'.repeat(64) },
+      ]);
+      const result = await resolveProvenance(project, [liveSliceRel]);
+      expect(result.provenance).toBe('source-unchanged');
+      expect(result.sources).toEqual([RULES]);
+    });
+
+    it('a companion whose archive changed on disk does not make a rulebook pair unknown', async () => {
+      const { project, liveSliceRel, sourceHash } = await attributed(RULES, '# Reference v2\n');
+      await writeCitingChunk(project, 'setup', liveSliceRel, sourceHash);
+      const result = await resolveProvenance(project, [liveSliceRel]);
+      expect(result.provenance).toBe('source-unchanged');
+    });
+
+    it('a pair transcribed from the companion is compared against the companion only', async () => {
+      const { project, liveSliceRel, referenceHash } = await attributed(REFERENCE, '# Reference v1\n');
+      // The rulebook hash this chunk recorded is stale, and does not matter to this pair.
+      await writeCitingChunk(project, 'battle', liveSliceRel, 'stalehash0000000', [
+        { sourcePath: REFERENCE, sourceHash: referenceHash },
+      ]);
+      const unchanged = await resolveProvenance(project, [liveSliceRel]);
+      expect(unchanged.provenance).toBe('source-unchanged');
+
+      await writeCitingChunk(project, 'battle', liveSliceRel, 'stalehash0000000', [
+        { sourcePath: REFERENCE, sourceHash: 'c'.repeat(64) },
+      ]);
+      const changed = await resolveProvenance(project, [liveSliceRel]);
+      expect(changed.provenance).toBe('source-changed');
+      expect(changed.changedSources).toEqual([REFERENCE]);
+    });
+
+    it('a pair from a companion whose archive changed on disk is unknown, naming the document', async () => {
+      const { project, liveSliceRel, referenceHash } = await attributed(REFERENCE, '# Reference v2\n');
+      await writeCitingChunk(project, 'battle', liveSliceRel, 'x', [{ sourcePath: REFERENCE, sourceHash: referenceHash }]);
+      const result = await resolveProvenance(project, [liveSliceRel]);
+      expect(result.provenance).toBe('unknown');
+      expect(result.reason).toContain('additional-source-hash-mismatch');
+      expect(result.reason).toContain(REFERENCE);
+    });
   });
 
   it('PROVENANCE_KINDS is the frozen three-state enum', () => {
@@ -701,6 +882,13 @@ async function recordedSevenRun(opts?: {
   }
 
   return { project, runId, stagingDirAbs };
+}
+
+/** A recorded `seven` run and the id of the first pair it enumerates, for the record tests. */
+async function recordedSevenRunFirstPair(): Promise<{ project: string; runId: string; pairId: string }> {
+  const { project, runId } = await recordedSevenRun();
+  const pairsResult = await verifyClassifyPairsCommand({ project, runId, json: true });
+  return { project, runId, pairId: pairsResult.pairs[0].pairId };
 }
 
 describe('verifyClassifyPairsCommand — enumerate pairs with provenance, over a real recorded run', () => {
@@ -838,9 +1026,7 @@ async function ledgerBody(project: string, runId: string): Promise<string> {
 
 describe('verifyClassifyRecordCommand — one verdict, atomically appended, stale/provenance derived', () => {
   it('ledger-1: recording cosmetic appends exactly one classification line inside the fences, stale:false, provenance derived', async () => {
-    const { project, runId } = await recordedSevenRun();
-    const pairsResult = await verifyClassifyPairsCommand({ project, runId, json: true });
-    const pairId = pairsResult.pairs[0].pairId;
+    const { project, runId, pairId } = await recordedSevenRunFirstPair();
 
     const result = await verifyClassifyRecordCommand({
       project,
@@ -865,9 +1051,7 @@ describe('verifyClassifyRecordCommand — one verdict, atomically appended, stal
   });
 
   it('ledger-2: sharper and contradictory both record stale:true', async () => {
-    const { project, runId } = await recordedSevenRun();
-    const pairsResult = await verifyClassifyPairsCommand({ project, runId, json: true });
-    const pairId = pairsResult.pairs[0].pairId;
+    const { project, runId, pairId } = await recordedSevenRunFirstPair();
 
     const sharper = await verifyClassifyRecordCommand({
       project,
@@ -895,9 +1079,7 @@ describe('verifyClassifyRecordCommand — one verdict, atomically appended, stal
   });
 
   it('unclassified-1: an out-of-enum --label records unclassified/stale, warns naming the received value verbatim, never throws', async () => {
-    const { project, runId } = await recordedSevenRun();
-    const pairsResult = await verifyClassifyPairsCommand({ project, runId, json: true });
-    const pairId = pairsResult.pairs[0].pairId;
+    const { project, runId, pairId } = await recordedSevenRunFirstPair();
     const errSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
     const result = await verifyClassifyRecordCommand({
@@ -915,9 +1097,7 @@ describe('verifyClassifyRecordCommand — one verdict, atomically appended, stal
   });
 
   it('unclassified-2: a missing --label behaves identically to an out-of-enum label, never defaulting to cosmetic', async () => {
-    const { project, runId } = await recordedSevenRun();
-    const pairsResult = await verifyClassifyPairsCommand({ project, runId, json: true });
-    const pairId = pairsResult.pairs[0].pairId;
+    const { project, runId, pairId } = await recordedSevenRunFirstPair();
 
     const result = await verifyClassifyRecordCommand({ project, runId, pairId, json: true });
     expect(result.record.ruleDelta).toBe('unclassified');
@@ -925,9 +1105,7 @@ describe('verifyClassifyRecordCommand — one verdict, atomically appended, stal
   });
 
   it('unclassified-3: sharper with an empty --quoted-pass1 demotes to unclassified, naming quotedPass1', async () => {
-    const { project, runId } = await recordedSevenRun();
-    const pairsResult = await verifyClassifyPairsCommand({ project, runId, json: true });
-    const pairId = pairsResult.pairs[0].pairId;
+    const { project, runId, pairId } = await recordedSevenRunFirstPair();
 
     const result = await verifyClassifyRecordCommand({
       project,
@@ -944,9 +1122,7 @@ describe('verifyClassifyRecordCommand — one verdict, atomically appended, stal
   });
 
   it('unclassified-4: contradictory with a non-empty pass1 but empty --quoted-pass2 demotes to unclassified, naming quotedPass2', async () => {
-    const { project, runId } = await recordedSevenRun();
-    const pairsResult = await verifyClassifyPairsCommand({ project, runId, json: true });
-    const pairId = pairsResult.pairs[0].pairId;
+    const { project, runId, pairId } = await recordedSevenRunFirstPair();
 
     const result = await verifyClassifyRecordCommand({
       project,
@@ -962,9 +1138,7 @@ describe('verifyClassifyRecordCommand — one verdict, atomically appended, stal
   });
 
   it('unclassified-5: cosmetic with both quotes empty stays cosmetic — the quote requirement is scoped to sharper/contradictory only', async () => {
-    const { project, runId } = await recordedSevenRun();
-    const pairsResult = await verifyClassifyPairsCommand({ project, runId, json: true });
-    const pairId = pairsResult.pairs[0].pairId;
+    const { project, runId, pairId } = await recordedSevenRunFirstPair();
 
     const result = await verifyClassifyRecordCommand({ project, runId, pairId, label: 'cosmetic', json: true });
     expect(result.record.ruleDelta).toBe('cosmetic');
@@ -973,9 +1147,7 @@ describe('verifyClassifyRecordCommand — one verdict, atomically appended, stal
   });
 
   it('ledger-3: pre-existing ledger content is byte-identical before/after, except for the one added line', async () => {
-    const { project, runId } = await recordedSevenRun();
-    const pairsResult = await verifyClassifyPairsCommand({ project, runId, json: true });
-    const pairId = pairsResult.pairs[0].pairId;
+    const { project, runId, pairId } = await recordedSevenRunFirstPair();
     const bodyBefore = await ledgerBody(project, runId);
 
     await verifyClassifyRecordCommand({ project, runId, pairId, label: 'cosmetic', json: true });
@@ -988,9 +1160,7 @@ describe('verifyClassifyRecordCommand — one verdict, atomically appended, stal
   });
 
   it('ledger-4: re-recording the same pairId appends a second line; resolveLedgerState reports only the newer verdict', async () => {
-    const { project, runId } = await recordedSevenRun();
-    const pairsResult = await verifyClassifyPairsCommand({ project, runId, json: true });
-    const pairId = pairsResult.pairs[0].pairId;
+    const { project, runId, pairId } = await recordedSevenRunFirstPair();
 
     await verifyClassifyRecordCommand({ project, runId, pairId, label: 'cosmetic', json: true });
     await verifyClassifyRecordCommand({
@@ -1027,21 +1197,20 @@ describe('verifyClassifyRecordCommand — one verdict, atomically appended, stal
   });
 
   it('ledger-6: there is no CLI option through which stale or provenance can be supplied — passing them has no effect on the derived values', async () => {
-    const { project, runId } = await recordedSevenRun();
-    const pairsResult = await verifyClassifyPairsCommand({ project, runId, json: true });
-    const pairId = pairsResult.pairs[0].pairId;
+    const { project, runId, pairId } = await recordedSevenRunFirstPair();
 
-    const result = await verifyClassifyRecordCommand({
+    // stale/provenance are not part of the options interface; a caller that
+    // passes them anyway (a forwarded JSON object, say) must have them ignored.
+    const forged = {
       project,
       runId,
       pairId,
       label: 'cosmetic',
       json: true,
-      // @ts-expect-error — stale/provenance are not part of the options interface.
       stale: true,
-      // @ts-expect-error — stale/provenance are not part of the options interface.
       provenance: 'source-changed',
-    });
+    };
+    const result = await verifyClassifyRecordCommand(forged);
     // A forced stale:true was ignored — cosmetic still derives to stale:false.
     expect(result.record.stale).toBe(false);
 

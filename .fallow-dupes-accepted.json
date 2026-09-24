@@ -30,13 +30,6 @@
       ]
     },
     {
-      "content": "00f023b4bb893281",
-      "lines": 13,
-      "files": [
-        "src/bot/mcts-stats-checkers.test.ts"
-      ]
-    },
-    {
       "content": "01910219756dddb5",
       "lines": 6,
       "files": [
@@ -392,13 +385,6 @@
       "lines": 6,
       "files": [
         "src/ui/composables/createFLIPSnapshot.test.ts"
-      ]
-    },
-    {
-      "content": "0d78e16053a21b2f",
-      "lines": 9,
-      "files": [
-        "src/cli/commands/verify-classify.ts"
       ]
     },
     {
@@ -771,14 +757,6 @@
       ]
     },
     {
-      "content": "17568af66934c7ae",
-      "lines": 10,
-      "files": [
-        "src/bot/mcts-stats-checkers.test.ts",
-        "src/bot/mcts-stats.test.ts"
-      ]
-    },
-    {
       "content": "1784dab72184ccca",
       "lines": 37,
       "files": [
@@ -860,24 +838,10 @@
       ]
     },
     {
-      "content": "1b6c7bd3b46629a8",
-      "lines": 10,
-      "files": [
-        "src/session/teaching.test.ts"
-      ]
-    },
-    {
       "content": "1c7f19f5de9b77bc",
       "lines": 6,
       "files": [
         "src/ui/composables/useActionController.test.ts"
-      ]
-    },
-    {
-      "content": "1cb7378d11016290",
-      "lines": 9,
-      "files": [
-        "src/cli/commands/verify-classify.test.ts"
       ]
     },
     {
@@ -1166,14 +1130,6 @@
       "files": [
         "src/ui/components/ControlsMenu.action-help.test.ts",
         "src/ui/components/ControlsMenu.tutorial-toggle.test.ts"
-      ]
-    },
-    {
-      "content": "2547da0f60a06fec",
-      "lines": 11,
-      "files": [
-        "src/bot/mcts-stats-checkers.test.ts",
-        "src/bot/mcts-stats.test.ts"
       ]
     },
     {
@@ -1534,13 +1490,6 @@
       ]
     },
     {
-      "content": "360918b88dea8966",
-      "lines": 13,
-      "files": [
-        "src/bot/mcts-stats-checkers.test.ts"
-      ]
-    },
-    {
       "content": "360af77e28130ab5",
       "lines": 6,
       "files": [
@@ -1599,13 +1548,6 @@
       ]
     },
     {
-      "content": "3823d445d1bd7dac",
-      "lines": 11,
-      "files": [
-        "src/cli/commands/verify-classify.test.ts"
-      ]
-    },
-    {
       "content": "3829bdf42fc24dc2",
       "lines": 5,
       "files": [
@@ -1653,14 +1595,6 @@
       "lines": 5,
       "files": [
         "src/ui/components/ControlsMenu.action-help.test.ts"
-      ]
-    },
-    {
-      "content": "399ee7dd48ba3803",
-      "lines": 48,
-      "files": [
-        "src/ui/components/GameShell.time-travel-desync.test.ts",
-        "src/ui/composables/useBoardActionBridge.test.ts"
       ]
     },
     {
@@ -1846,13 +1780,6 @@
       "files": [
         "src/ui/components/auto-ui/renderers/CardRenderer.vue",
         "src/ui/components/auto-ui/renderers/HandRenderer.vue"
-      ]
-    },
-    {
-      "content": "3e63e9db6c0e6919",
-      "lines": 12,
-      "files": [
-        "src/bot/mcts-bot.test.ts"
       ]
     },
     {
@@ -2816,13 +2743,6 @@
       "lines": 8,
       "files": [
         "src/client/vue.test.ts"
-      ]
-    },
-    {
-      "content": "6005011ea958d379",
-      "lines": 6,
-      "files": [
-        "src/cli/commands/verify-run.test.ts"
       ]
     },
     {
@@ -4065,13 +3985,6 @@
       ]
     },
     {
-      "content": "872298a0d8aca235",
-      "lines": 10,
-      "files": [
-        "src/cli/commands/verify-classify.test.ts"
-      ]
-    },
-    {
       "content": "879d0000f2bab5a7",
       "lines": 6,
       "files": [
@@ -4316,13 +4229,6 @@
       ]
     },
     {
-      "content": "8efbd575bc8215f9",
-      "lines": 5,
-      "files": [
-        "src/session/testing/parity-contract.test.ts"
-      ]
-    },
-    {
       "content": "8f08ad4415369fc6",
       "lines": 6,
       "files": [
@@ -4487,13 +4393,6 @@
       "lines": 6,
       "files": [
         "src/ui/components/ControlsMenu.tutorial-toggle.test.ts"
-      ]
-    },
-    {
-      "content": "9465ca5902ebf2ef",
-      "lines": 9,
-      "files": [
-        "src/ui/components/auto-ui/renderers/HandRenderer.a11y.test.ts"
       ]
     },
     {
@@ -5169,13 +5068,6 @@
       ]
     },
     {
-      "content": "aa379fc2d3e8d224",
-      "lines": 14,
-      "files": [
-        "src/cli/commands/verify-classify.ts"
-      ]
-    },
-    {
       "content": "aa4ebf9f264651ea",
       "lines": 8,
       "files": [
@@ -5474,13 +5366,6 @@
       ]
     },
     {
-      "content": "b3f1429abb132697",
-      "lines": 10,
-      "files": [
-        "src/bot/mcts-cache.test.ts"
-      ]
-    },
-    {
       "content": "b3fcab1b6e774212",
       "lines": 23,
       "files": [
@@ -5589,13 +5474,6 @@
       ]
     },
     {
-      "content": "b6a2dc0e35901557",
-      "lines": 8,
-      "files": [
-        "src/session/testing/parity-contract.test.ts"
-      ]
-    },
-    {
       "content": "b6ac172450108368",
       "lines": 20,
       "files": [
@@ -5701,13 +5579,6 @@
       "lines": 13,
       "files": [
         "src/engine/action/action.test.ts"
-      ]
-    },
-    {
-      "content": "ba44d2c0e0d5e182",
-      "lines": 8,
-      "files": [
-        "src/session/testing/parity-contract.test.ts"
       ]
     },
     {
@@ -5837,13 +5708,6 @@
       "lines": 15,
       "files": [
         "src/ui/components/helpers/TutorialOverlay.parity.test.ts"
-      ]
-    },
-    {
-      "content": "bebe146e90b7df0d",
-      "lines": 9,
-      "files": [
-        "src/ui/components/auto-ui/renderers/HandRenderer.a11y.test.ts"
       ]
     },
     {
@@ -6073,13 +5937,6 @@
       "lines": 7,
       "files": [
         "src/ui/composables/useAnimationEvents.test.ts"
-      ]
-    },
-    {
-      "content": "c5e910312f79de27",
-      "lines": 10,
-      "files": [
-        "src/cli/commands/verify-classify.test.ts"
       ]
     },
     {
@@ -7668,13 +7525,6 @@
       "lines": 11,
       "files": [
         "src/engine/action/action.test.ts"
-      ]
-    },
-    {
-      "content": "feb4f530a052320a",
-      "lines": 12,
-      "files": [
-        "src/bot/mcts-bot.test.ts"
       ]
     },
     {

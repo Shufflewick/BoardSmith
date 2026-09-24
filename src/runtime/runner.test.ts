@@ -119,7 +119,7 @@ class Deck extends Space<TestGame> {}
 // policy exists for. TestGame's flow ends after 20 actions, which is exactly
 // the length at which this problem is invisible.
 class LongGame extends Game<LongGame, Player> {
-  board!: Space<LongGame>;
+  board!: Deck;
 
   constructor(options: { playerCount: number; playerNames?: string[]; seed?: string }) {
     super(options);

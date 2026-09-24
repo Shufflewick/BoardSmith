@@ -286,6 +286,7 @@ describe("#224 — a checkpoint carries the stamp of the ids its command minted"
       allowance: { unkeyed: 0, keys: [], worldPending: 0 },
       presence: [1],
       activity: null,
+      declaredActivity: [],
     });
 
     return { genesis, checkpoint: await host.serialize([...result.dirty]) };

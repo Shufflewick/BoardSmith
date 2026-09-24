@@ -47,7 +47,6 @@ const WORLD: ProjectConfig = {
   displayName: 'Scope World',
   description: 'A persistent world.',
   backend: 'world',
-  worldSeats: 4,
 };
 
 describe('a scaffolded project leaves chunk worktrees out of its default test run', () => {

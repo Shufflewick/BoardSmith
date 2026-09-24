@@ -84,8 +84,6 @@ export class MCTSBot<G extends Game = Game> {
    * refresh must not widen past it. Undefined for every other search.
    */
   private forcedRootMoveKeys?: Set<string>;
-  /** Transposition table for caching position evaluations */
-  private transpositionTable: Map<string, { value: number; visits: number }> = new Map();
   /** RAVE table for move value estimation across all playouts */
   private raveTable: Map<string, { visits: number; value: number }> = new Map();
 
@@ -340,8 +338,7 @@ export class MCTSBot<G extends Game = Game> {
       moves = allMoves.length > 20 ? this.sampleMovesWithPreserved(allMoves, 20, []) : allMoves;
     }
 
-    // Clear transposition table and RAVE table for fresh search
-    this.transpositionTable.clear();
+    // Clear the RAVE table for a fresh search
     this.raveTable.clear();
 
     // rootCommandCount tracks the command baseline on `searchGame` (built
@@ -564,22 +561,24 @@ export class MCTSBot<G extends Game = Game> {
   }
 
   /**
-   * Select the most promising child node using UCT-RAVE-PN formula.
+   * Select the most promising child node using the UCT-RAVE formula.
    * Blends UCT (tree statistics) with RAVE (global move statistics):
    *   score = (1 - beta) * UCT + beta * RAVE
    *   beta = sqrt(k / (3*visits + k))  // decreases as visits increase
    *
-   * When PNS is enabled, also blends proof number ranking:
-   *   finalScore = (1 - pnWeight) * uctRaveScore + pnWeight * pnRank
-   *
    * Early in search, beta is high so RAVE dominates (fast learning from all playouts).
    * As visits accumulate, beta decreases so UCT dominates (accurate tree statistics).
+   *
+   * When PNS is enabled, solved children are set aside first: a proven loss is
+   * never chosen on the bot's turn, and a proven win never on the opponent's.
+   * Proof numbers play no other part in selection (#316). Until something below
+   * a child is solved they only count its expanded leaves, and blending a rank
+   * of those into the score let that count outweigh the evaluation.
    */
   private selectChild(node: MCTSNode, candidates: MCTSNode[] = node.children): MCTSNode {
     const C = this.cachedUctC; // Exploration constant (cached per move)
     const k = this.config.raveK ?? 500; // RAVE decay constant
     const usePNS = this.config.usePNS !== false;
-    const pnWeight = this.config.pnWeight ?? 0.5;
     const isBotTurn = node.currentPlayer === this.playerIndex;
 
     // Filter out proven/disproven children with sufficient visits (solver enhancement)
@@ -600,12 +599,6 @@ export class MCTSBot<G extends Game = Game> {
       }
     }
 
-    // Pre-compute proof number ranks if PNS is enabled
-    let pnRanks: Map<MCTSNode, number> | null = null;
-    if (usePNS && pnWeight > 0) {
-      pnRanks = this.computeProofNumberRanks(eligibleChildren, isBotTurn);
-    }
-
     let best = eligibleChildren[0];
     let bestScore = -Infinity;
 
@@ -620,7 +613,7 @@ export class MCTSBot<G extends Game = Game> {
       const uct = exploitation + exploration;
 
       // RAVE component (blend with UCT if enabled)
-      let uctRaveScore = uct;
+      let score = uct;
       if (this.config.useRAVE !== false && child.parentMove) {
         const raveEntry = this.raveTable.get(this.getMoveKey(child.parentMove));
         if (raveEntry && raveEntry.visits > 0) {
@@ -635,15 +628,8 @@ export class MCTSBot<G extends Game = Game> {
 
           // Beta decreases as node visits increase (trust UCT more with more data)
           const beta = Math.sqrt(k / (3 * visits + k));
-          uctRaveScore = (1 - beta) * uct + beta * raveValue;
+          score = (1 - beta) * uct + beta * raveValue;
         }
-      }
-
-      // Blend with proof number ranking if PNS enabled
-      let score = uctRaveScore;
-      if (pnRanks && pnWeight > 0) {
-        const pnRank = pnRanks.get(child) ?? 0;
-        score = (1 - pnWeight) * uctRaveScore + pnWeight * pnRank;
       }
 
       if (score > bestScore) {
@@ -652,39 +638,6 @@ export class MCTSBot<G extends Game = Game> {
       }
     }
     return best;
-  }
-
-  /**
-   * Compute proof number ranks for children, normalized to [0, 1].
-   * Higher rank = better for current player.
-   *
-   * Bot's turn: rank by proof number (lower pn = easier to prove win = higher rank)
-   * Opponent's turn: rank by disproof number (lower dpn = easier for opponent = higher rank for them)
-   */
-  private computeProofNumberRanks(children: MCTSNode[], isBotTurn: boolean): Map<MCTSNode, number> {
-    const ranks = new Map<MCTSNode, number>();
-
-    // Get the relevant proof numbers for ranking
-    const pnValues: Array<{ child: MCTSNode; value: number }> = children.map(child => ({
-      child,
-      // Bot's turn: want low proof number (close to proving win)
-      // Opponent's turn: want low disproof number (close to proving loss for bot)
-      value: isBotTurn ? child.proofNumber : child.disproofNumber,
-    }));
-
-    // Sort by value ascending (lower is better)
-    pnValues.sort((a, b) => a.value - b.value);
-
-    // Assign ranks: position 0 gets rank 1 (best), position n-1 gets rank 0 (worst)
-    const maxRank = children.length - 1;
-    pnValues.forEach((entry, index) => {
-      // Normalize rank to [0, 1] where higher is better
-      // Handle case where all children have same value (all get 0.5)
-      const rank = maxRank > 0 ? 1 - (index / maxRank) : 0.5;
-      ranks.set(entry.child, rank);
-    });
-
-    return ranks;
   }
 
   /**
@@ -821,8 +774,10 @@ export class MCTSBot<G extends Game = Game> {
       depth++;
     }
 
-    // Evaluate using the final game state (with transposition table caching)
-    const score = this.evaluateWithCache(this.searchGame, flowState);
+    // Evaluate the position the playout reached. There is no evaluation cache
+    // (#315): a key correct for every game has to cover the whole board, and
+    // building one cost more than the evaluations it saved in every example game.
+    const score = this.evaluateTerminalFromGame(this.searchGame, flowState);
     return { score, playoutMoves };
   }
 
@@ -1565,54 +1520,6 @@ export class MCTSBot<G extends Game = Game> {
     // Update solved status
     node.isProven = node.proofNumber === 0;
     node.isDisproven = node.disproofNumber === 0;
-  }
-
-  /**
-   * Hash a position for transposition table lookup.
-   * Uses flow state position as unique identifier (tracks game progression).
-   */
-  private hashPosition(game: Game, flowState: FlowState): string {
-    // Flow state position changes as the game progresses through flow nodes
-    // It uniquely identifies where we are in the game flow
-    return JSON.stringify(flowState.position);
-  }
-
-  /**
-   * Evaluate position with transposition table caching.
-   * Caches evaluation results to avoid redundant computation for positions
-   * reached via different move orders.
-   */
-  private evaluateWithCache(game: Game, flowState: FlowState): number {
-    // Skip caching if disabled, or under determinization (#73): the table keys
-    // on flow position alone, and under a sampler the same flow position is
-    // reached in many different worlds with different outcomes. Caching there
-    // freezes the first world's verdict and destroys the averaging the whole
-    // feature exists to do.
-    if (this.config.useTranspositionTable === false || this.determinize) {
-      return this.evaluateTerminalFromGame(game, flowState);
-    }
-
-    const hash = this.hashPosition(game, flowState);
-    const cached = this.transpositionTable.get(hash);
-
-    // Return cached value if we have enough confidence (3+ visits)
-    if (cached && cached.visits >= 3) {
-      return cached.value;
-    }
-
-    // Evaluate the position
-    const value = this.evaluateTerminalFromGame(game, flowState);
-
-    // Update cache with running average
-    if (cached) {
-      const newVisits = cached.visits + 1;
-      const newValue = (cached.value * cached.visits + value) / newVisits;
-      this.transpositionTable.set(hash, { value: newValue, visits: newVisits });
-    } else {
-      this.transpositionTable.set(hash, { value, visits: 1 });
-    }
-
-    return value;
   }
 
   /**

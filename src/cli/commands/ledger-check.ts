@@ -563,10 +563,6 @@ function git(cwd: string, args: string[]): Promise<string> {
 
 const UNCOMMITTED = /^0{40}$/;
 
-/**
- * Committer time (epoch seconds) of the commit that recorded each line of `relPath`, indexed by
- * 1-based line number; null for a line not committed yet. An untracked file is all null.
- */
 async function requireGitRepo(projectDir: string, why: string): Promise<void> {
   try {
     await git(projectDir, ['rev-parse', '--show-toplevel']);
@@ -579,13 +575,18 @@ async function requireGitRepo(projectDir: string, why: string): Promise<void> {
   }
 }
 
+/** The subset of `relPaths` that git tracks, in one `ls-files` for all of them. */
+async function trackedFiles(projectDir: string, relPaths: string[]): Promise<Set<string>> {
+  if (relPaths.length === 0) return new Set();
+  const listed = await git(projectDir, ['--literal-pathspecs', 'ls-files', '-z', '--', ...relPaths]);
+  return new Set(listed.split('\0').filter(Boolean));
+}
+
+/**
+ * Committer time (epoch seconds) of the commit that recorded each line of the tracked file
+ * `relPath`, indexed by 1-based line number; null for a line not committed yet.
+ */
 async function lineCommitTimes(projectDir: string, relPath: string): Promise<Array<number | null>> {
-  await requireGitRepo(projectDir, `compares ${relPath}'s timestamps against the commits that recorded them`);
-  try {
-    await git(projectDir, ['ls-files', '--error-unmatch', '--', relPath]);
-  } catch {
-    return [];
-  }
   const porcelain = await git(projectDir, ['blame', '--line-porcelain', '--', relPath]);
   const times: Array<number | null> = [];
   let sha = '';
@@ -670,8 +671,7 @@ async function checkCitedEvidence(projectDir: string, sources: EvidenceSource[])
   if (cited.length === 0) return [];
   await requireGitRepo(projectDir, 'checks that every script and capture the design records cite is committed');
   const rels = [...new Set(cited.flatMap((c) => (c.rel === undefined ? [] : [c.rel])))];
-  const listed = rels.length === 0 ? '' : await git(projectDir, ['--literal-pathspecs', 'ls-files', '-z', '--', ...rels]);
-  const tracked = new Set(listed.split('\0').filter(Boolean));
+  const tracked = await trackedFiles(projectDir, rels);
 
   const findings: LedgerFinding[] = [];
   for (const c of cited) {
@@ -743,10 +743,17 @@ export async function ledgerCheck(projectDir: string): Promise<LedgerCheckResult
     result.findings.push(...misplacedRunLog(run));
   }
 
-  for (const log of await runLogFiles(projectDir)) {
+  const logs = await runLogFiles(projectDir);
+  if (logs.length > 0) {
+    await requireGitRepo(projectDir, 'compares each run log\'s timestamps against the commits that recorded them');
+  }
+  // An untracked run log has no commit times: every line of it reads as not committed yet.
+  const trackedLogs = await trackedFiles(projectDir, logs.map((log) => `${DESIGN_DIR}/${log}`));
+  for (const log of logs) {
     const text = (await readLedger(projectDir, log))!;
     result.checked.push(log);
-    const times = await lineCommitTimes(projectDir, `${DESIGN_DIR}/${log}`);
+    const rel = `${DESIGN_DIR}/${log}`;
+    const times = trackedLogs.has(rel) ? await lineCommitTimes(projectDir, rel) : [];
     result.findings.push(...checkRunLog(text, log, (line) => times[line] ?? null, Math.floor(Date.now() / 1000)));
   }
 

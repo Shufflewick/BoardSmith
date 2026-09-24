@@ -136,6 +136,8 @@ let closedByUs = false;
 // Cache the latest init/state so a (re)mounted iframe can be re-fed on @load.
 let lastInitSeat: number | null = null;
 let lastGameState: Record<string, unknown> | null = null;
+/** True while the host reports a deadline on the open step; shows "End step". */
+const stepDeadlineOpen = ref(false);
 
 function wsUrl(): string {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
@@ -196,7 +198,15 @@ function onHostMessage(msg: Record<string, unknown>): void {
         // lastGameState is also replayed on request-state + iframe reload
         // (below), so this one line covers all three relay paths.
         isDraw: msg.isDraw,
+        // The step deadline (#301/#302). This page is the parent page of the
+        // platform contract: it stamps `receivedAt` as the frame comes off the
+        // socket, and every replay forwards the same stamp, because a stamp
+        // taken at re-post time would add the frame's age back on.
+        deadlineAt: msg.deadlineAt,
+        serverNow: msg.serverNow,
+        receivedAt: Date.now(),
       };
+      stepDeadlineOpen.value = msg.deadlineAt !== null && msg.deadlineAt !== undefined;
       postToGame(lastGameState);
       if (pendingRestart.value) {
         pendingRestart.value = false;
@@ -322,6 +332,10 @@ function leaveSeat(): void {
 function newGame(): void {
   pendingRestart.value = true;
   wsSend({ type: 'restart' });
+}
+/** Close the open timed step now, as its window elapsing would (#302). */
+function fireDeadline(): void {
+  wsSend({ type: 'fireDeadline' });
 }
 function toggleFollow(): void {
   wsSend({ type: 'follow', enabled: !followActive.value });
@@ -694,6 +708,17 @@ onUnmounted(() => {
                   <span class="dev-chrome__btn-label">{{ restartConfirming ? 'Confirm restart?' : 'New game' }}</span>
                 </button>
                 <button
+                  v-if="stepDeadlineOpen"
+                  type="button"
+                  class="btn"
+                  data-testid="fire-deadline"
+                  title="Close the timed step now, as if its time ran out"
+                  @click="fireDeadline"
+                >
+                  <span class="dev-chrome__btn-icon" aria-hidden="true">⏱</span>
+                  <span class="dev-chrome__btn-label">End step</span>
+                </button>
+                <button
                   type="button"
                   class="btn"
                   :class="{ 'btn--on': tableSetupOpen }"
@@ -723,6 +748,16 @@ onUnmounted(() => {
                 :class="{ 'btn--confirming': restartConfirming }"
                 @click="handleNewGameClick"
               >{{ restartConfirming ? 'Confirm restart?' : 'New game' }}</button>
+              <button
+                v-if="stepDeadlineOpen"
+                type="button"
+                class="btn"
+                data-testid="fire-deadline"
+                title="Close the timed step now, as if its time ran out"
+                @click="fireDeadline"
+              >
+                End step
+              </button>
               <button
                 type="button"
                 class="btn"

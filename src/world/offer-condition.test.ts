@@ -31,7 +31,6 @@ describe("offer declarations and stamped conditions", () => {
     const { runner } = createWorld({
       definition: {
         gameClass: TestGame,
-        gameType: "offer-condition",
         world: {
           maxPlayers: 1,
           actions: [ready, tick],

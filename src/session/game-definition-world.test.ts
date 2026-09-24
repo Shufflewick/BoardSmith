@@ -22,7 +22,7 @@
  *      and the removed `--kind resolution` flag. That regression is what #304
  *      was, and nothing here should bring it back.
  *   2. A real world bundle's definition ANNOTATES. The declaration below is
- *      checked by `tsc -p tsconfig.json` (docs/typecheck.md); before #304 it
+ *      checked by `boardsmith typecheck` (docs/typecheck.md); before #304 it
  *      failed with "Property 'resolveAction' is missing", and after #165 it
  *      must go on compiling against the library's own type.
  *   3. The field is typed by `boardsmith/world` and by nothing else. A second

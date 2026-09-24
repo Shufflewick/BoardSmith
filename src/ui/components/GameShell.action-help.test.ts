@@ -30,7 +30,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { ref, computed, defineComponent, nextTick } from 'vue';
+import { ref, computed, defineComponent, nextTick, type PropType } from 'vue';
 import { mount } from '@vue/test-utils';
 
 // ── Production localStorage helpers (mirrored from GameShell.vue) ────────────
@@ -193,25 +193,24 @@ describe('help-toggle handler (GameShell.handleTeachingAction)', () => {
 //   <slot name="game-board" :is-action-help-visible="isActionHelpVisible" ...>
 //
 // Also verifies disabledActions computed from broadcast state:
-//   const disabledActions = computed(() =>
-//     (state.value?.state as any)?.disabledActions as Record<string, string> | undefined
-//   )
+//   const disabledActions = computed(() => state.value?.state?.disabledActions);
 //   <ActionPanel :disabled-actions="disabledActions" .../>
 
 const ParityHarness = defineComponent({
   name: 'ParityHarness',
   props: {
     initialHelpVisible: { type: Boolean, default: true },
-    broadcastState: { type: Object, default: null },
+    broadcastState: {
+      type: Object as PropType<{ state?: { disabledActions?: Record<string, string> } } | null>,
+      default: null,
+    },
   },
   setup(props, { expose }) {
     const isActionHelpVisible = ref(props.initialHelpVisible);
 
     // Mirrors the disabledActions computed in GameShell
     const state = computed(() => props.broadcastState);
-    const disabledActions = computed(() => {
-      return (state.value?.state as any)?.disabledActions as Record<string, string> | undefined;
-    });
+    const disabledActions = computed(() => state.value?.state?.disabledActions);
 
     expose({ isActionHelpVisible, disabledActions });
     return { isActionHelpVisible, disabledActions };

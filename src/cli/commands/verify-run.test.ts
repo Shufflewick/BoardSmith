@@ -45,6 +45,9 @@ beforeEach(async () => {
   dir = tempTree('bs-verify-run-');
 });
 
+/** The document `liveProject()` records as its rulebook. */
+const RULES = 'rulebook/source/rules.pdf';
+
 const LIVE_03 = '## 03-setup\n\nLive setup slice content.\n';
 const LIVE_07 = '## 07-turn\n\nLive turn slice content.\n';
 
@@ -272,6 +275,7 @@ describe('verifyRunRecordCommand / verifyRunStatusCommand — ledger', () => {
       slice: '03-setup.md',
       json: true,
     });
+    if (!('unitId' in result)) throw new Error('expected a unit record, got a range action');
     expect(result.unitId).toBe('03-setup');
     expect(result.slicePath).toBe('03-setup.md');
     const bytes = await fs.readFile(join(stagingAbs, '03-setup.md'));
@@ -479,29 +483,41 @@ describe('CR-01 — the ledger write is atomic, not a truncate+rewrite', () => {
 // -------------------------------------------------------------------------------------------
 
 describe('173-08 Task 2 — dispatch-plan manifest + range-level resume determinism', () => {
+  /** A fresh `liveProject()` run whose manifest is the single range `1-1`. */
+  async function oneRangeRun() {
+    const project = await liveProject();
+    const init = await verifyRunInitCommand({ project, ranges: { [RULES]: ['1-1'] }, json: true });
+    return { project, init, stagingAbs: join(project, init.stagingDir) };
+  }
+
   it('M1: --ranges persists a manifest at fresh init, echoed back via --json', async () => {
     const project = await liveProject();
-    const result = await verifyRunInitCommand({ project, ranges: ['1-1', '2-2'], json: true });
-    expect(result.ranges).toEqual(['1-1', '2-2']);
+    const result = await verifyRunInitCommand({ project, ranges: { [RULES]: ['1-1', '2-2'] }, json: true });
+    const persisted = [
+      { rangeId: '1-1', source: RULES, pages: '1-1' },
+      { rangeId: '2-2', source: RULES, pages: '2-2' },
+    ];
+    expect(result.ranges).toEqual(persisted);
 
     const status = await verifyRunStatusCommand({ project, runId: result.runId, json: true });
-    expect(status.ranges).toEqual(['1-1', '2-2']);
+    expect(status.ranges).toEqual(persisted);
     expect(status.rangesPending).toEqual(['1-1', '2-2']);
     expect(status.rangesRecorded).toEqual([]);
   });
 
   it('M2: the manifest is decided ONCE — a resuming init call with different --ranges is ignored', async () => {
     const project = await liveProject();
-    const first = await verifyRunInitCommand({ project, ranges: ['1-1', '2-2'], json: true });
+    const first = await verifyRunInitCommand({ project, ranges: { [RULES]: ['1-1', '2-2'] }, json: true });
 
     const second = await verifyRunInitCommand({
       project,
       runId: first.runId,
-      ranges: ['9-9', '10-10', '11-11'],
+      ranges: { [RULES]: ['9-9', '10-10', '11-11'] },
       json: true,
     });
     expect(second.created).toBe(false);
-    expect(second.ranges).toEqual(['1-1', '2-2']); // unchanged — first init's manifest wins
+    // unchanged — first init's manifest wins
+    expect(second.ranges.map((r) => r.rangeId)).toEqual(['1-1', '2-2']);
   });
 
   it('M3: verify-run-init with no --ranges creates no manifest section — ranges: [] and never breaks an unrelated run', async () => {
@@ -515,7 +531,7 @@ describe('173-08 Task 2 — dispatch-plan manifest + range-level resume determin
 
   it('M4: --complete-range marks a manifest range recorded; it moves from rangesPending to rangesRecorded and is idempotent', async () => {
     const project = await liveProject();
-    const init = await verifyRunInitCommand({ project, ranges: ['1-1', '2-2'], json: true });
+    const init = await verifyRunInitCommand({ project, ranges: { [RULES]: ['1-1', '2-2'] }, json: true });
 
     const first = await verifyRunRecordCommand({ project, runId: init.runId, completeRange: '1-1', json: true });
     expect(first).toMatchObject({ action: 'range-complete', rangeId: '1-1', alreadyRecorded: false });
@@ -529,9 +545,7 @@ describe('173-08 Task 2 — dispatch-plan manifest + range-level resume determin
   });
 
   it('M5: --complete-range / --unit --range refuse a range id absent from a non-empty manifest', async () => {
-    const project = await liveProject();
-    const init = await verifyRunInitCommand({ project, ranges: ['1-1'], json: true });
-    const stagingAbs = join(project, init.stagingDir);
+    const { project, init, stagingAbs } = await oneRangeRun();
     await fs.writeFile(join(stagingAbs, 'x.md'), 'content\n');
 
     await expect(
@@ -543,9 +557,7 @@ describe('173-08 Task 2 — dispatch-plan manifest + range-level resume determin
   });
 
   it('M6: --reset-range supersedes a partially-recorded range\'s prior units — they drop out of recorded[]', async () => {
-    const project = await liveProject();
-    const init = await verifyRunInitCommand({ project, ranges: ['1-1'], json: true });
-    const stagingAbs = join(project, init.stagingDir);
+    const { project, init, stagingAbs } = await oneRangeRun();
 
     await fs.writeFile(join(stagingAbs, '01-overview-contents-setup.md'), 'stale attempt, unit 1\n');
     await fs.writeFile(join(stagingAbs, '01-starting-a-new-round.md'), 'stale attempt, unit 2\n');
@@ -564,8 +576,7 @@ describe('173-08 Task 2 — dispatch-plan manifest + range-level resume determin
   });
 
   it('M7: refuses to reset an already-complete range (would discard verified work)', async () => {
-    const project = await liveProject();
-    const init = await verifyRunInitCommand({ project, ranges: ['1-1'], json: true });
+    const { project, init } = await oneRangeRun();
     await verifyRunRecordCommand({ project, runId: init.runId, completeRange: '1-1', json: true });
 
     await expect(
@@ -575,7 +586,7 @@ describe('173-08 Task 2 — dispatch-plan manifest + range-level resume determin
 
   it('M8: after a reset, re-recording the same unitId is a fresh record (not alreadyRecorded), and a completed range is never re-dispatched', async () => {
     const project = await liveProject();
-    const init = await verifyRunInitCommand({ project, ranges: ['1-1', '2-2'], json: true });
+    const init = await verifyRunInitCommand({ project, ranges: { [RULES]: ['1-1', '2-2'] }, json: true });
     const stagingAbs = join(project, init.stagingDir);
 
     // Range 1-1: killed mid-loop, exactly like PROOF.md §4 — one of two units recorded.
@@ -641,6 +652,7 @@ describe('173-08 Task 2 — dispatch-plan manifest + range-level resume determin
     }
 
     const manifest = ['1-1', '2-2'];
+    const ranges = { [RULES]: manifest };
     const planByRange: Record<string, string[]> = {
       '1-1': ['01-overview-and-setup', '01-starting-a-new-round'],
       '2-2': ['02-action-cards', '02-punch-examples-discard-and-end-of-game'],
@@ -649,7 +661,7 @@ describe('173-08 Task 2 — dispatch-plan manifest + range-level resume determin
     // Clean run: both ranges dispatched once, uninterrupted.
     const cleanProject = await liveProject('clean-game');
     const cleanInit = await verifyRunInitCommand({
-      project: cleanProject, runId: '2026-01-01T00-00-00Z', ranges: manifest, json: true,
+      project: cleanProject, runId: '2026-01-01T00-00-00Z', ranges, json: true,
     });
     const cleanStaging = join(cleanProject, cleanInit.stagingDir);
     for (const rangeId of manifest) {
@@ -660,7 +672,7 @@ describe('173-08 Task 2 — dispatch-plan manifest + range-level resume determin
     // Killed-then-resumed run: range 1-1 killed after its FIRST unit only, then resumed.
     const killedProject = await liveProject('killed-game');
     const killedInit = await verifyRunInitCommand({
-      project: killedProject, runId: '2026-01-02T00-00-00Z', ranges: manifest, json: true,
+      project: killedProject, runId: '2026-01-02T00-00-00Z', ranges, json: true,
     });
     const killedStaging = join(killedProject, killedInit.stagingDir);
     await fs.writeFile(join(killedStaging, '01-overview-and-setup.md'), 'content for 01-overview-and-setup\n');
@@ -685,6 +697,88 @@ describe('173-08 Task 2 — dispatch-plan manifest + range-level resume determin
     expect(resumedStatus.recorded.sort()).toEqual(cleanStatus.recorded.sort());
     expect(resumedStatus.count).toBe(cleanStatus.count);
     expect(resumedStatus.rangesRecorded.sort()).toEqual(cleanStatus.rangesRecorded.sort());
+  });
+});
+
+/**
+ * #311: a verify pass re-transcribes every document the rules come from, not just the rulebook.
+ * The manifest is per document, a range is a page range OF one document, and a staged slice must
+ * name the document its range belongs to.
+ */
+describe('the dispatch-plan manifest is per archived document (#311)', () => {
+  const CARDS = 'rulebook/source/cards.pdf';
+
+  /** `liveProject()` with `cards.pdf` recorded as an additional document. */
+  async function twoDocumentProject(): Promise<string> {
+    const project = await liveProject();
+    const indexPath = join(project, DESIGN_DIR, 'rulebook', 'INDEX.md');
+    const index = await fs.readFile(indexPath, 'utf-8');
+    await fs.writeFile(
+      indexPath,
+      index.replace(
+        '## Open Rules Gaps',
+        '## Additional Sources\n\n<!-- boardsmith:additional-sources:begin -->\n| file | sha256 |\n|------|--------|\n' +
+          `| ${CARDS} | ${'b'.repeat(64)} |\n<!-- boardsmith:additional-sources:end -->\n\n## Open Rules Gaps`,
+      ),
+    );
+    return project;
+  }
+
+  it('every document gets its ranges, and each range id names its document', async () => {
+    const project = await twoDocumentProject();
+    const init = await verifyRunInitCommand({
+      project,
+      ranges: { [RULES]: ['1-2'], [CARDS]: ['1-3'] },
+      json: true,
+    });
+    expect(init.ranges).toEqual([
+      { rangeId: 'rules.pdf:1-2', source: RULES, pages: '1-2' },
+      { rangeId: 'cards.pdf:1-3', source: CARDS, pages: '1-3' },
+    ]);
+    const status = await verifyRunStatusCommand({ project, runId: init.runId, json: true });
+    expect(status.rangesPending).toEqual(['rules.pdf:1-2', 'cards.pdf:1-3']);
+  });
+
+  it('refuses a manifest that leaves out a recorded document, naming it', async () => {
+    const project = await twoDocumentProject();
+    await expect(verifyRunInitCommand({ project, ranges: { [RULES]: ['1-2'] }, json: true })).rejects.toThrow(
+      new RegExp(`${CARDS}[\\s\\S]*every archived document`),
+    );
+  });
+
+  it('refuses a range of a document INDEX.md does not record', async () => {
+    const project = await liveProject();
+    await expect(
+      verifyRunInitCommand({ project, ranges: { [RULES]: ['1-2'], 'rulebook/source/x.pdf': ['1-1'] }, json: true }),
+    ).rejects.toThrow(/rulebook\/source\/x\.pdf.*not a document rulebook\/INDEX\.md records/);
+  });
+
+  it('refuses a manifest naming no range at all', async () => {
+    const project = await liveProject();
+    await expect(verifyRunInitCommand({ project, ranges: { [RULES]: [] }, json: true })).rejects.toThrow(
+      new RegExp(RULES),
+    );
+  });
+
+  it('a staged slice must name the document its range belongs to', async () => {
+    const project = await twoDocumentProject();
+    const init = await verifyRunInitCommand({
+      project,
+      ranges: { [RULES]: ['1-2'], [CARDS]: ['1-3'] },
+      json: true,
+    });
+    const staging = join(project, init.stagingDir);
+    const record = (slice: string) =>
+      verifyRunRecordCommand({ project, runId: init.runId, unit: slice, slice, range: 'cards.pdf:1-3', json: true });
+
+    await fs.writeFile(join(staging, '01-cards-a.md'), `# A\n\nSource: ${CARDS}\n\np.1, A:\n"x"\n`);
+    await expect(record('01-cards-a.md')).resolves.toMatchObject({ rangeId: 'cards.pdf:1-3' });
+
+    await fs.writeFile(join(staging, '01-cards-b.md'), `# B\n\nSource: ${RULES}\n\np.1, B:\n"x"\n`);
+    await expect(record('01-cards-b.md')).rejects.toThrow(/names rulebook\/source\/rules\.pdf.*cards\.pdf:1-3 is a range of rulebook\/source\/cards\.pdf/s);
+
+    await fs.writeFile(join(staging, '01-cards-c.md'), '# C\n\np.1, C:\n"x"\n');
+    await expect(record('01-cards-c.md')).rejects.toThrow(/does not say which document/);
   });
 });
 
@@ -914,7 +1008,7 @@ describe('verify-run.ts — classification record kind (174-02)', () => {
 
   it('LEDGER-4: a range-reset marker does not supersede a classification record — reset is unit-scoped only', async () => {
     const project = await liveProject();
-    const init = await verifyRunInitCommand({ project, runId: undefined, json: true, ranges: ['1-2'] });
+    const init = await verifyRunInitCommand({ project, runId: undefined, json: true, ranges: { [RULES]: ['1-2'] } });
     const record = classificationFixture({ pairId: 'pair-4', units: ['03-setup'] });
     await appendClassificationLine(project, init.runId, record);
     await verifyRunRecordCommand({ project, runId: init.runId, resetRange: '1-2' });
@@ -1158,7 +1252,7 @@ describe('verify-run.ts — impact/adjudication record kinds (175-02)', () => {
       project,
       runId: undefined,
       json: true,
-      ranges: ['1-2'],
+      ranges: { [RULES]: ['1-2'] },
     });
     const stagingAbs = join(project, init.stagingDir);
     await fs.writeFile(join(stagingAbs, '03-setup.md'), LIVE_03);

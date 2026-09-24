@@ -40,8 +40,6 @@ import ActionPanel, { type AwaitingPlayer } from './auto-ui/ActionPanel.vue';
 import GameHistory, { type HistoryMessage } from './GameHistory.vue';
 import PlayersPanel, { type Player } from './PlayersPanel.vue';
 import PlayerToken from './PlayerToken.vue';
-import Toast from './Toast.vue';
-import DisabledReasonTooltip from './helpers/DisabledReasonTooltip.vue';
 import { GAME_CONTEXT_KEYS } from '../composables/useGameContext.js';
 import type { ActionMetadata, UseActionControllerReturn } from '../composables/useActionControllerTypes.js';
 
@@ -638,18 +636,6 @@ const mobileToggleLabel = computed(() => {
     <div v-if="$slots.debug" data-testid="bs-debug">
       <slot name="debug"></slot>
     </div>
-
-    <!-- The single tooltip every dimmed control borrows to explain itself.
-         Mounted once here rather than per-button: at most one shows at a time,
-         and a teleported node per compass point / card / option is waste. -->
-    <DisabledReasonTooltip />
-
-    <!-- ONE VOICE FOR REFUSALS. A refusal you can PREDICT is a greyed control
-         with a reason (the tooltip above, fed by `disabledActions`); a refusal
-         you can only discover by TRYING is a sentence next to the thing you
-         tried. Both backends now agree on that rule, so both speak it through
-         the same component. -->
-    <Toast />
   </div>
 </template>
 

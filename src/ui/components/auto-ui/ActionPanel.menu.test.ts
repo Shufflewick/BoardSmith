@@ -19,21 +19,15 @@ import { mount } from '@vue/test-utils';
 import { nextTick } from 'vue';
 import ActionPanel from './ActionPanel.vue';
 import { GAME_CONTEXT_KEYS } from '../../composables/useGameContext.js';
-import { stubActionController } from './action-panel-controller.test-helper.js';
+import { stubActionController, type ActionPanelProps } from './action-panel-controller.test-helper.js';
+import type { ActionMetadata } from '../../composables/useActionControllerTypes.js';
 
-type Meta = {
-  name: string;
-  prompt?: string;
-  group?: string[];
-  order?: number;
-  selections?: unknown[];
-  suppressFromActionPanel?: boolean;
-  help?: string;
-};
+/** An action as this file declares one: a name, and whatever else the test needs. */
+type Meta = Partial<ActionMetadata> & { name: string };
 
-function mountPanel(actions: Meta[], extra: Record<string, unknown> = {}) {
+function mountPanel(actions: Meta[], extra: Partial<ActionPanelProps> = {}) {
   const controller = stubActionController();
-  const metadata: Record<string, unknown> = {};
+  const metadata: Record<string, ActionMetadata> = {};
   for (const action of actions) metadata[action.name] = { selections: [], ...action };
   const wrapper = mount(ActionPanel, {
     global: { provide: { [GAME_CONTEXT_KEYS.actionController as symbol]: controller } },

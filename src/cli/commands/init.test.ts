@@ -13,13 +13,15 @@
  * pin that pattern so the template can't regress to the crashing shape.
  */
 import { describe, it, expect, afterEach, beforeEach, vi, type MockInstance } from 'vitest';
-import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { generateGameTs, generateTestTs, initCommand, type InitOptions } from './init.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { rejectionMessage } from '../../testing/rejection.test-helper.js';
+import { createTestGame, playUntilComplete } from '../../testing/index.js';
+import { _clearShownWarnings } from '../../utils/dev.js';
 
 /**
  * Scaffold a real project into a fresh temp directory and chdir into its
@@ -156,6 +158,38 @@ describe('init command — no -t/--template surface (CLIX-05 / F33)', () => {
     );
     expect(initBlock).not.toContain('template');
     expect(initBlock).not.toMatch(/-t\b/);
+  });
+});
+
+/**
+ * #305: a rulebook that incorporates a second document by reference needs that document archived
+ * with the same provenance guarantees, and `init` is the one command no ingest run skips.
+ */
+describe('initCommand --additional-source (#305)', () => {
+  const originalCwd = process.cwd();
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    process.chdir(originalCwd);
+  });
+
+  it('archives the rulebook and each additional source, recording both in rulebook/INDEX.md', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    const sourcesDir = tempTree('bs-init-305-sources-');
+    const rules = join(sourcesDir, 'REQUIREMENTS.md');
+    const reference = join(sourcesDir, 'REFERENCE.md');
+    writeFileSync(rules, '# Requirements\n\nBattles follow the reference.\n');
+    writeFileSync(reference, '# Reference\n\nUnit stats.\n');
+
+    const { projectPath } = await scaffoldProject('bs-init-305-', 'windup', {
+      rulebook: rules,
+      additionalSource: [reference],
+    });
+
+    const index = readFileSync(join(projectPath, 'design', 'rulebook', 'INDEX.md'), 'utf-8');
+    expect(index).toMatch(/^Source: rulebook\/source\/REQUIREMENTS\.md$/m);
+    expect(index).toMatch(/^\| rulebook\/source\/REFERENCE\.md \| [0-9a-f]{64} \|$/m);
+    expect(existsSync(join(projectPath, 'design', 'rulebook', 'source', 'REFERENCE.md'))).toBe(true);
   });
 });
 
@@ -531,6 +565,17 @@ describe('init command — <name> is a name, and a failure is one clean line (#2
     expect(exitSpy).not.toHaveBeenCalled();
   });
 
+  it('refuses --additional-source without --rulebook, before anything is created (#305)', async () => {
+    const parentDir = tempTree('bs-init-305-no-primary-');
+    process.chdir(parentDir);
+
+    const message = await rejectionMessage(
+      initCommand('mygame', { withoutRulebook: true, additionalSource: [join(parentDir, 'ref.md')] }),
+    );
+    expect(message).toMatch(/--additional-source needs --rulebook/);
+    expect(readdirSync(parentDir)).toEqual([]);
+  });
+
   it('refuses a missing rulebook decision by throwing, so the message survives to the terminal', async () => {
     const parentDir = tempTree('bs-init-240-rulebook-');
     process.chdir(parentDir);
@@ -613,5 +658,230 @@ describe('initCommand — a failed init leaves nothing behind (#242)', () => {
     ).rejects.toThrow(/already exists/);
 
     expect(existsSync(join(parentDir, 'mygame', 'the-users-file.txt'))).toBe(true);
+  });
+});
+
+/**
+ * `init --into-existing` scaffolds into the git repository it is run from (#304).
+ *
+ * A game often starts as a repository of design research, with history and a
+ * remote, before anyone runs BoardSmith. Without this flag the only route was to
+ * run `init` elsewhere and copy the tree in by hand, which silently dropped the
+ * ingest `pre-commit` hook `init` installs.
+ */
+describe('initCommand --into-existing — scaffold into the repository you are in (#304)', () => {
+  const originalCwd = process.cwd();
+  const GIT = '-c user.name=Test -c user.email=test@example.com';
+
+  beforeEach(() => {
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    process.chdir(originalCwd);
+  });
+
+  /** A research repository: one committed notes file, nothing BoardSmith. */
+  function researchRepo(prefix: string): string {
+    const repo = join(tempTree(prefix), 'research');
+    mkdirSync(repo);
+    writeFileSync(join(repo, 'notes.md'), '# Design notes\n');
+    execSync(`git init -q && git add -A && git ${GIT} commit -q -m research`, { cwd: repo });
+    return repo;
+  }
+
+  function rulebook(): string {
+    const path = join(tempTree('bs-init-304-rulebook-'), 'rules.txt');
+    writeFileSync(path, 'Each player draws five cards.\n');
+    return path;
+  }
+
+  /** Every file under `root`, relative, with its bytes. `.git/` is read too unless skipped. */
+  function snapshot(root: string, skipGit = false): Map<string, string> {
+    const files = new Map<string, string>();
+    for (const entry of readdirSync(root, { recursive: true, withFileTypes: true })) {
+      if (!entry.isFile()) continue;
+      const full = join(entry.parentPath, entry.name);
+      const rel = full.slice(root.length + 1);
+      if (skipGit && rel.split('/')[0] === '.git') continue;
+      files.set(rel, readFileSync(full, 'base64'));
+    }
+    return files;
+  }
+
+  const head = (repo: string): string =>
+    execSync('git rev-list --all', { cwd: repo, encoding: 'utf-8' }).trim();
+
+  it('produces the same tree and hook as a fresh init, and leaves history alone', async () => {
+    const source = rulebook();
+
+    const parent = tempTree('bs-init-304-fresh-');
+    process.chdir(parent);
+    await initCommand('sample-game', { rulebook: source, edition: 'First' });
+    const fresh = join(parent, 'sample-game');
+
+    const repo = researchRepo('bs-init-304-into-');
+    const history = head(repo);
+    process.chdir(repo);
+    await initCommand('sample-game', { rulebook: source, edition: 'First', intoExisting: true });
+
+    const scaffolded = snapshot(repo, true);
+    expect(scaffolded.get('notes.md')).toBe(Buffer.from('# Design notes\n').toString('base64'));
+    scaffolded.delete('notes.md');
+    expect(scaffolded).toEqual(snapshot(fresh, true));
+
+    const hook = (root: string) => readFileSync(join(root, '.git', 'hooks', 'pre-commit'), 'utf-8');
+    expect(hook(repo)).toBe(hook(fresh));
+    expect(hook(repo)).toContain('BoardSmith ingest synthesis');
+
+    // No `git init` and no scaffold commit: the research history is exactly as it was, and the
+    // scaffold is left for the designer to review and commit.
+    expect(head(repo)).toBe(history);
+    const untracked = execSync('git status --porcelain', { cwd: repo, encoding: 'utf-8' });
+    expect(untracked).toContain('?? package.json');
+  });
+
+  it('changes nothing and names every conflicting path when a scaffold file already exists', async () => {
+    const repo = researchRepo('bs-init-304-conflict-');
+    writeFileSync(join(repo, '.gitignore'), 'secrets/\n');
+    writeFileSync(join(repo, 'tsconfig.json'), '{}\n');
+    mkdirSync(join(repo, 'design', 'rulebook'), { recursive: true });
+    writeFileSync(join(repo, 'design', 'rulebook', 'INDEX.md'), '# mine\n');
+    const before = snapshot(repo);
+    process.chdir(repo);
+
+    const message = await rejectionMessage(
+      initCommand('sample-game', { rulebook: rulebook(), intoExisting: true }),
+    );
+
+    expect(message).toContain('.gitignore');
+    expect(message).toContain('tsconfig.json');
+    expect(message).toContain(join('design', 'rulebook', 'INDEX.md'));
+    expect(message).not.toContain('package.json');
+    expect(snapshot(repo)).toEqual(before);
+  });
+
+  it('treats an additional source already archived in the repository as a conflict, changing nothing (#305)', async () => {
+    const repo = researchRepo('bs-init-305-conflict-');
+    mkdirSync(join(repo, 'design', 'rulebook', 'source'), { recursive: true });
+    writeFileSync(join(repo, 'design', 'rulebook', 'source', 'reference.txt'), 'copied by hand\n');
+    const before = snapshot(repo);
+    const reference = join(tempTree('bs-init-305-reference-'), 'reference.txt');
+    writeFileSync(reference, 'Battles follow this reference.\n');
+    process.chdir(repo);
+
+    const message = await rejectionMessage(
+      initCommand('sample-game', { rulebook: rulebook(), additionalSource: [reference], intoExisting: true }),
+    );
+
+    expect(message).toContain(join('design', 'rulebook', 'source', 'reference.txt'));
+    expect(snapshot(repo)).toEqual(before);
+  });
+
+  it('refuses a directory that is not the top of a git repository, and creates nothing', async () => {
+    const plain = tempTree('bs-init-304-plain-');
+    process.chdir(plain);
+    await expect(
+      initCommand('sample-game', { withoutRulebook: true, intoExisting: true }),
+    ).rejects.toThrow(/not the top folder of a git repository/);
+    expect(readdirSync(plain)).toEqual([]);
+
+    const repo = researchRepo('bs-init-304-nested-');
+    const nested = join(repo, 'game');
+    mkdirSync(nested);
+    const before = snapshot(repo);
+    process.chdir(nested);
+    await expect(
+      initCommand('sample-game', { withoutRulebook: true, intoExisting: true }),
+    ).rejects.toThrow(/not the top folder of a git repository/);
+    expect(snapshot(repo)).toEqual(before);
+  });
+
+  it('leaves the repository exactly as it was when a later step fails', async () => {
+    const repo = researchRepo('bs-init-304-failure-');
+    const before = snapshot(repo);
+    process.chdir(repo);
+
+    await expect(
+      initCommand('sample-game', { rulebook: join(repo, 'missing', 'rules.pdf'), intoExisting: true }),
+    ).rejects.toThrow(/Rulebook not found or unreadable/);
+
+    expect(snapshot(repo)).toEqual(before);
+    expect(readdirSync(repo).sort()).toEqual(['.git', 'notes.md']);
+  });
+
+  it("keeps a pre-commit hook the designer already has, as a fresh init does", async () => {
+    const repo = researchRepo('bs-init-304-hook-');
+    const own = '#!/bin/sh\necho mine\n';
+    writeFileSync(join(repo, '.git', 'hooks', 'pre-commit'), own);
+    process.chdir(repo);
+
+    await initCommand('sample-game', { withoutRulebook: true, intoExisting: true });
+
+    expect(readFileSync(join(repo, '.git', 'hooks', 'pre-commit'), 'utf-8')).toBe(own);
+    expect(existsSync(join(repo, 'boardsmith.json'))).toBe(true);
+  });
+});
+
+/**
+ * BoardSmith #309: A FRESHLY SCAFFOLDED GAME PLAYS WITHOUT A WARNING.
+ *
+ * The scaffold's turn is two same-seat action steps, draw then play. With no
+ * `turnScope` on the second, the engine cannot tell whether the seat is still
+ * taking the same turn, so the first draw printed a dev warning and left undo
+ * off for the rest of that turn. The scaffold is the template every author
+ * copies, so its first run must not tell them their game is wrong.
+ *
+ * This drives the real scaffolded rules, not the template text: it links the
+ * project's `boardsmith` dependency the way `npm install` does and plays the
+ * game the command wrote.
+ */
+describe('initCommand — a scaffolded game plays with no warnings (#309)', () => {
+  const { scaffold } = scaffoldSuite('bs-init-309-', 'warning-free-game', {
+    withoutRulebook: true,
+  });
+  const repoRoot = join(__dirname, '..', '..', '..');
+  let warn: MockInstance<typeof console.warn>;
+
+  beforeEach(() => {
+    // Warnings are shown once per key per process; start from none shown so an
+    // earlier test cannot have used up the one this test is looking for.
+    _clearShownWarnings();
+    warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    warn.mockRestore();
+  });
+
+  async function loadScaffoldedGame() {
+    const projectPath = await scaffold();
+    // `"boardsmith": "file:..."` installs as a symlink to the checkout.
+    mkdirSync(join(projectPath, 'node_modules'));
+    symlinkSync(repoRoot, join(projectPath, 'node_modules', 'boardsmith'), 'dir');
+    const rules = await import(join(projectPath, 'src', 'rules', 'index.ts'));
+    return createTestGame(rules.gameDefinition.gameClass, { playerCount: 2, seed: 'issue-309' });
+  }
+
+  const warnings = () => warn.mock.calls.map((call) => String(call[0]));
+
+  it("plays the first turn, draw then play, without a warning", async () => {
+    const game = await loadScaffoldedGame();
+
+    game.doAction(1, 'draw');
+    const [card] = game.action('play', 1).getChoices('card');
+    game.action('play', 1).select('card', card).execute();
+
+    expect(warnings()).toEqual([]);
+  });
+
+  it('plays to the end without a warning', async () => {
+    const game = await loadScaffoldedGame();
+
+    playUntilComplete(game);
+
+    expect(game.isComplete()).toBe(true);
+    expect(warnings()).toEqual([]);
   });
 });

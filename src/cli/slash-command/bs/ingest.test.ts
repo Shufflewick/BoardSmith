@@ -140,11 +140,38 @@ describe('INGEST-04 — scaffold with compile+serve verification', () => {
     expect(ingestRules).toContain('ingest/scaffold.md');
   });
 
-  it('scaffold.md names boardsmith init, tsc --noEmit, and an explicit kill instruction', () => {
+  it('scaffold.md names boardsmith init, vue-tsc --noEmit, and an explicit kill instruction', () => {
     const scaffold = read('ingest/scaffold.md');
     expect(scaffold).toContain('boardsmith init');
-    expect(scaffold).toContain('tsc --noEmit');
+    expect(scaffold).toContain('npx vue-tsc --noEmit');
     expect(scaffold).toMatch(/kill/i);
+  });
+});
+
+// #303: plain `tsc` cannot type a `.vue` import, so on a freshly scaffolded game it reports
+// TS2307 for every single-file component (the game's own and BoardSmith's) and can never be
+// clean. `vue-tsc` is the checker `boardsmith validate` runs and the one a scaffold installs.
+// A skill that names plain `tsc --noEmit` as a gate sends a session into a loop it cannot win.
+describe('#303 — every compile gate in the skill text is vue-tsc', () => {
+  const skillRoot = join(__dirname, '..');
+
+  function markdownFiles(dir: string): string[] {
+    return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) return markdownFiles(full);
+      return entry.name.endsWith('.md') ? [full] : [];
+    });
+  }
+
+  it('no skill file names plain `tsc --noEmit`', () => {
+    const offenders = markdownFiles(skillRoot).flatMap((file) =>
+      readFileSync(file, 'utf-8')
+        .split('\n')
+        .map((line, i) => ({ line, at: `${file.slice(skillRoot.length + 1)}:${i + 1}` }))
+        .filter(({ line }) => /(?<!vue-)\btsc --noEmit/.test(line))
+        .map(({ at }) => at),
+    );
+    expect(offenders).toEqual([]);
   });
 });
 
@@ -404,16 +431,17 @@ describe('transcription-subagent.md — output directory is a dispatch input (VE
     expect(contract).not.toMatch(/`slicePath`\*\* — the `rulebook\//);
   });
 
-  it('the ## Your inputs block still enumerates exactly three dispatch inputs', () => {
+  it('the ## Your inputs block enumerates exactly four dispatch inputs (Source record added by #311)', () => {
     const contract = read('ingest/transcription-subagent.md');
     const inputsIdx = contract.indexOf('## Your inputs');
     expect(inputsIdx).toBeGreaterThan(-1);
     const nextSectionIdx = contract.indexOf('---', inputsIdx);
     const inputsSection = contract.slice(inputsIdx, nextSectionIdx);
     const bulletCount = (inputsSection.match(/^- \*\*/gm) ?? []).length;
-    expect(bulletCount).toBe(3);
+    expect(bulletCount).toBe(4);
     expect(inputsSection).toContain('**Page range**');
     expect(inputsSection).toContain('**Rulebook path**');
+    expect(inputsSection).toContain('**Source record**');
     expect(inputsSection).toContain('**Output directory**');
   });
 
@@ -439,7 +467,7 @@ describe('transcription-subagent.md — output directory is a dispatch input (VE
   it('no verify-side fork exists: no file under bs/verify/ restates the transcription contract body', () => {
     // Structural guard, not a comment asking people to be careful. Runs whether or not
     // bs/verify/ exists yet (it does not, until plan 173-04). If plan 173-04 ever adds a file
-    // there that pastes in the BS-DISPATCH-V2 contract body instead of pointing at
+    // there that pastes in the BS-DISPATCH-V3 contract body instead of pointing at
     // ingest/transcription-subagent.md, this must fail loudly -- a fork here silently
     // reintroduces the copy-drift trap (f73153a3 and its Phase 172 recurrence) at the exact
     // point decision 15 forbids it.
@@ -604,7 +632,7 @@ describe('v4.9 INGEST-02 — inline transcription path is contract-bound', () =>
   });
 });
 
-describe('v4.9 INGEST-02 — BS-DISPATCH-V2 handshake', () => {
+describe('v4.9 INGEST-02 — BS-DISPATCH-V3 handshake', () => {
   // Root cause, observed directly via stream-json tool-call capture: the orchestrator reads
   // transcription.md, sees the pointer block, and then dispatches a prompt it composed from
   // memory -- reproducing the superseded inline contract that opened "Slice text is made of
@@ -618,7 +646,7 @@ describe('v4.9 INGEST-02 — BS-DISPATCH-V2 handshake', () => {
 
   it('the pointer block carries the token', () => {
     const transcription = read('ingest/transcription.md');
-    expect(transcription).toContain('BS-DISPATCH-V2');
+    expect(transcription).toContain('BS-DISPATCH-V3');
   });
 
   it('transcription.md explains why the token cannot be produced from memory', () => {
@@ -629,7 +657,7 @@ describe('v4.9 INGEST-02 — BS-DISPATCH-V2 handshake', () => {
 
   it('the subagent validates the token before transcribing anything', () => {
     const contract = read('ingest/transcription-subagent.md');
-    expect(contract).toContain('BS-DISPATCH-V2');
+    expect(contract).toContain('BS-DISPATCH-V3');
     expect(flat(contract)).toMatch(/FIRST: validate your dispatch prompt/);
     expect(flat(contract)).toMatch(/DISPATCH REJECTED/);
   });
@@ -644,6 +672,35 @@ describe('v4.9 INGEST-02 — BS-DISPATCH-V2 handshake', () => {
   it('the rejection message names the two-kinds-of-line signature of a stale prompt', () => {
     const contract = flat(read('ingest/transcription-subagent.md'));
     expect(contract).toMatch(/TWO kinds of slice line/);
+  });
+});
+
+describe('#311 — every slice records the document it was transcribed from', () => {
+  // With a rulebook plus a companion document, `p.3` is ambiguous and the verify pass could
+  // re-transcribe only the rulebook. The dispatch names the document, and the slice records it.
+
+  it('the dispatch block carries the Source record substitution', () => {
+    const transcription = read('ingest/transcription.md');
+    expect(transcription).toContain('Source record:   {sourceRecord}');
+    expect(flat(transcription)).toMatch(/divide and dispatch EACH document/);
+  });
+
+  it('the contract puts the Source line directly under the title and scopes p.N to that document', () => {
+    const contract = flat(read('ingest/transcription-subagent.md'));
+    expect(contract).toMatch(/The first line under the slice's `# ` title is its source record/);
+    expect(contract).toContain('Source: rulebook/source/<file>');
+    expect(contract).toMatch(/Every `p\.N` in the slice is a page of THAT document/);
+  });
+
+  it('the contract names a non-rulebook document\'s slices so two documents\' page 1s cannot collide', () => {
+    const contract = flat(read('ingest/transcription-subagent.md'));
+    expect(contract).toContain('`01-cards-anatomy.md` for `rulebook/source/cards.pdf`');
+  });
+
+  it('build-chunk tells a session how to record a missing Source line, and never to guess it', () => {
+    const buildChunk = flat(read('build-chunk.md'));
+    expect(buildChunk).toContain('npx boardsmith ingest-slice-source');
+    expect(buildChunk).toMatch(/never infer it from the file name/);
   });
 });
 
@@ -914,6 +971,25 @@ describe('CLI string claims in scaffold.md match the CLI source (WR-07)', () => 
     expect(initSrc).toContain('Directory "${name}" already exists');
     const scaffold = read('ingest/scaffold.md');
     expect(scaffold).toContain('already exists');
+  });
+
+  it('scaffold.md offers --into-existing for a game that already lives in a git repo (#304)', () => {
+    // Without it, a research-first project was scaffolded elsewhere and copied in by hand, which
+    // silently drops the ingest pre-commit hook `init` installs into `.git`.
+    const cli = read('../../cli.ts');
+    expect(cli).toContain("'--into-existing'");
+    const scaffold = read('ingest/scaffold.md');
+    expect(scaffold).toContain('npx boardsmith init <name> --rulebook <absolute-rulebookPath> --into-existing');
+    expect(scaffold).not.toContain('There is no in-place mode');
+    // The case check that decides where Step 1 scaffolds has to know the mode exists, or a
+    // session in a research repository scaffolds a nested `<name>/` beside the research.
+    expect(read('ingest-rules.md')).toContain('init --into-existing');
+    // The two refusals the file tells a session to expect are the ones init.ts raises.
+    const initSrc = read('../../commands/init.ts');
+    expect(initSrc).toContain('not the top folder of a git repository');
+    expect(scaffold).toContain('not the top folder of a git repository');
+    expect(initSrc).toContain('already exist here, so nothing was changed');
+    expect(scaffold).toContain('already exist here, so nothing was changed');
   });
 
   it('scaffold.md states the <name> rule the CLI actually enforces (#240)', () => {

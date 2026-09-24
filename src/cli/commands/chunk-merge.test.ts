@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
@@ -14,6 +14,15 @@ import { checkConstraints, type TestRunner } from './constraint-check.js';
  * check each branch passed alone: the sotf failure, where each chunk measured only its own growth
  * in a shared partition and nobody measured the total (Shufflewick/sotf#24, #25).
  */
+
+/**
+ * These tests merge real branches, so each one runs real git processes: at most about 80 (building
+ * the repository and up to three chunk branches, then about 18 per merge). The count is fixed per
+ * test, and the time is almost all process start-up, which a loaded machine stretches: the heaviest
+ * test takes about 2 seconds at a load average of 140 (#310). The timeout covers that load, not
+ * unbounded work. If a test here nears it, count the git calls the merge makes before raising it.
+ */
+vi.setConfig({ testTimeout: 30_000 });
 
 const git = (cwd: string, ...args: string[]): string =>
   execFileSync('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', ...args], { cwd, encoding: 'utf-8' });

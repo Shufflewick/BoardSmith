@@ -69,9 +69,15 @@ class HiddenInfoGame extends Game<HiddenInfoGame, Player> {
    *  way to exercise the `objectives` scoring hook this suite is about.) */
   lastGuess?: number;
 
-  constructor(options: GameOptions & { secretValue: number; guesserSeat?: number; choices?: number[] }) {
+  // `secretValue` is optional in the TYPE only because MCTSBot's game class
+  // contract constructs from plain `GameOptions`; every construction here, and
+  // every clone the bot makes from `snapshot.gameOptions`, carries it.
+  constructor(options: GameOptions & { secretValue?: number; guesserSeat?: number; choices?: number[] }) {
     super(options);
     const { secretValue, guesserSeat = 1, choices = [1, 2, 3] } = options;
+    if (secretValue === undefined) {
+      throw new Error('HiddenInfoGame needs a secretValue option.');
+    }
     const holderSeat = guesserSeat === 1 ? 2 : 1;
 
     this.opponentHand = this.create(Space<HiddenInfoGame>, 'opponentHand');
@@ -111,7 +117,7 @@ function createHiddenInfoGame(secretValue: number, seed: string, guesserSeat = 1
     secretValue,
     guesserSeat,
     choices,
-  } as GameOptions & { secretValue: number; guesserSeat: number; choices: number[] });
+  });
   game.startFlow();
   return game;
 }
@@ -479,7 +485,7 @@ describe('MCTSBot root-decision redaction (bot-02 / CR-01)', () => {
           // throws, which is the point: the hook cannot be handed a number
           // that looks like the truth.
           sawRedacted = (g as HiddenInfoGame).secretCard.isAttributeRedacted('value');
-          return { moves: [] };
+          return { moves: [], urgent: false };
         },
       },
     );

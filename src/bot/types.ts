@@ -64,8 +64,6 @@ export interface BotConfig {
    * `Infinity` to disable it and make the search depend only on `iterations`.
    */
   timeout?: number;
-  /** Enable transposition table caching for position evaluations. Default: true */
-  useTranspositionTable?: boolean;
   /** Number of parallel ensemble searches. Default: 1 */
   parallel?: number;
   /** Enable RAVE (Rapid Action Value Estimation) for faster move learning. Default: true */
@@ -80,10 +78,14 @@ export interface BotConfig {
    * Typical range: 0.5 (very exploitative) to 2.0 (very explorative).
    */
   uctC?: number;
-  /** Enable Proof Number Search for detecting forced wins/losses. Default: true */
+  /**
+   * Track proof and disproof numbers so the search recognises forced wins and
+   * losses among the positions it reaches. Selection then skips a solved
+   * child that is a known loss for the side to move, and the final choice takes
+   * a proven win and avoids a proven loss. Until something is solved it has no
+   * effect on which move is chosen. Default: true
+   */
   usePNS?: boolean;
-  /** Weight for proof number ranking in UCB formula (0-1). Default: 0.5 */
-  pnWeight?: number;
   /** Enable debug logging for proof number statistics. Default: false */
   debug?: boolean;
 }
@@ -307,10 +309,9 @@ export interface BotStrategy {
    * see, and drops the rest (`NotSimulableError`). That stays the default, and
    * a game with no hidden state pays nothing for this hook existing.
    *
-   * Two costs come with declaring it, both inherent rather than incidental:
-   * the transposition table is off (it keys on flow position, which means the
-   * same key in two different worlds), and the root searches the UNION of the
-   * moves every sampled world offers rather than a capped sample of one world's.
+   * One cost comes with declaring it, and it is inherent rather than
+   * incidental: the root searches the UNION of the moves every sampled world
+   * offers rather than a capped sample of one world's.
    *
    * @see DeterminizeSampler for the contract every sampler must keep.
    */

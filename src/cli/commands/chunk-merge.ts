@@ -101,6 +101,8 @@ interface MergeContext {
   projectDir: string;
   /** The repository's top level; pathspecs are given from here. */
   top: string;
+  /** The git directory every worktree shares, where the merge lock lives. */
+  common: string;
   slug: string;
   branch: string;
   /** The project's path inside its repository, `''` or ending in `/`. */
@@ -109,6 +111,8 @@ interface MergeContext {
   base: string;
   /** Where the branch first left the main line, even if the main line was merged into it since. */
   fork: string;
+  /** Every repository-relative path the branch changed since `base`, read once for every check. */
+  changed: string[];
 }
 
 const refused = (refusals: string[]): ChunkMergeResult => ({
@@ -130,7 +134,8 @@ async function showAt(ctx: MergeContext, rev: string, designRel: string): Promis
 
 async function realNumbersAdded(ctx: MergeContext): Promise<string[]> {
   const refusals: string[] = [];
-  for (const spec of NUMBERED_LEDGER_SPECS) {
+  // A ledger the branch did not change cannot have gained a number on it.
+  for (const spec of NUMBERED_LEDGER_SPECS.filter((s) => ctx.changed.includes(`${ctx.prefix}${DESIGN_DIR}/${s.file}`))) {
     const added = plainNumbersAdded(await showAt(ctx, ctx.base, spec.file), await showAt(ctx, ctx.branch, spec.file), spec);
     for (const id of added) {
       refusals.push(
@@ -144,13 +149,11 @@ async function realNumbersAdded(ctx: MergeContext): Promise<string[]> {
   return refusals;
 }
 
-async function sharedRunFiles(ctx: MergeContext): Promise<string[]> {
+function sharedRunFiles(ctx: MergeContext): string[] {
   const design = `${ctx.prefix}${DESIGN_DIR}/`;
-  const names = await git(ctx.top, ['diff', '--name-only', ctx.base, ctx.branch, '--', `${design}${RUN_MD}`, `${design}${RUN_LOG_DIR}/`]);
   const own = `${design}${RUN_LOG_DIR}/${ctx.slug}.md`;
-  return names
-    .split('\n')
-    .filter((name) => name && name !== own)
+  return ctx.changed
+    .filter((name) => (name === `${design}${RUN_MD}` || name.startsWith(`${design}${RUN_LOG_DIR}/`)) && name !== own)
     .map(
       (name) =>
         `${ctx.branch} changes ${name.slice(ctx.prefix.length)}. A chunk's branch writes only its own run log, ` +
@@ -225,10 +228,9 @@ async function readText(path: string): Promise<string | undefined> {
 
 async function allocate(ctx: MergeContext): Promise<{ allocated: Record<string, string>; refusals: string[] }> {
   const top = ctx.top;
-  const changed = (await git(top, ['diff', '--name-only', ctx.base, ctx.branch])).split('\n').filter(Boolean);
   const ledgers = NUMBERED_LEDGER_SPECS.map((spec) => ({ spec, path: `${ctx.prefix}${DESIGN_DIR}/${spec.file}` }));
   const files: Record<string, string> = {};
-  for (const name of new Set([...changed, ...ledgers.map((l) => l.path)])) {
+  for (const name of new Set([...ctx.changed, ...ledgers.map((l) => l.path)])) {
     const text = await readText(join(top, name));
     if (text !== undefined) files[name] = text;
   }
@@ -333,8 +335,9 @@ async function recordCrossChunk(ctx: MergeContext, alongside: string[]): Promise
 
 /** The merge's facts, or the reason there is nothing that can be merged. */
 async function readContext(projectDir: string, slug: string, branch: string): Promise<MergeContext | string> {
-  const top = await run(projectDir, ['rev-parse', '--show-toplevel']);
-  if (top.code !== 0) return `${projectDir} is not in a git repository. Run chunk-merge from the game project's main checkout.`;
+  // One process for all three: --show-prefix prints an empty line at the top level.
+  const where = await run(projectDir, ['rev-parse', '--show-toplevel', '--show-prefix', '--git-common-dir']);
+  if (where.code !== 0) return `${projectDir} is not in a git repository. Run chunk-merge from the game project's main checkout.`;
   if ((await run(projectDir, ['rev-parse', '--verify', '--quiet', `${branch}^{commit}`])).code !== 0) {
     return `There is no branch ${branch}. A chunk built alongside others lives on chunk/<slug>; pass --branch if it is elsewhere.`;
   }
@@ -343,14 +346,18 @@ async function readContext(projectDir: string, slug: string, branch: string): Pr
   }
   const own = (await git(projectDir, ['rev-list', '--first-parent', branch, '^HEAD'])).split('\n').filter(Boolean);
   if (own.length === 0) return `${branch} has nothing the main line does not already have.`;
+  const [top, prefix, common] = where.out.split('\n');
+  const base = (await git(projectDir, ['merge-base', 'HEAD', branch])).trim();
   return {
     projectDir,
-    top: top.out.trim(),
+    top,
+    common: resolve(projectDir, common),
     slug,
     branch,
-    prefix: (await git(projectDir, ['rev-parse', '--show-prefix'])).trim(),
-    base: (await git(projectDir, ['merge-base', 'HEAD', branch])).trim(),
+    prefix,
+    base,
     fork: (await git(projectDir, ['rev-parse', `${own[own.length - 1]}^1`])).trim(),
+    changed: (await git(top, ['diff', '--name-only', base, branch])).split('\n').filter(Boolean),
   };
 }
 
@@ -371,7 +378,7 @@ function commitMessage(ctx: MergeContext, allocated: Record<string, string>, alo
 
 /** Merges with the lock held; aborts the merge, restoring the main line, on any refusal. */
 async function mergeLocked(ctx: MergeContext, runTests: TestRunner): Promise<ChunkMergeResult> {
-  const before = [...(await realNumbersAdded(ctx)), ...(await sharedRunFiles(ctx))];
+  const before = [...(await realNumbersAdded(ctx)), ...sharedRunFiles(ctx)];
   if (before.length) return refused(before);
 
   const left = await startMerge(ctx);
@@ -394,8 +401,7 @@ async function mergeLocked(ctx: MergeContext, runTests: TestRunner): Promise<Chu
   return { merged: true, refusals: [], allocated, alongside, crossChunk };
 }
 
-async function withLock<T>(projectDir: string, work: () => Promise<T>): Promise<T | string> {
-  const common = resolve(projectDir, (await git(projectDir, ['rev-parse', '--git-common-dir'])).trim());
+async function withLock<T>(common: string, work: () => Promise<T>): Promise<T | string> {
   const lock = join(common, 'boardsmith-chunk-merge.lock');
   try {
     await fs.mkdir(lock);
@@ -417,7 +423,7 @@ export async function chunkMerge(projectDir: string, slug: string, options: Chun
   const dir = resolve(projectDir);
   const ctx = await readContext(dir, slug, options.branch ?? `chunk/${slug}`);
   if (typeof ctx === 'string') return refused([ctx]);
-  const result = await withLock(dir, () => mergeLocked(ctx, options.runTests ?? runVitest));
+  const result = await withLock(ctx.common, () => mergeLocked(ctx, options.runTests ?? runVitest));
   return typeof result === 'string' ? refused([result]) : result;
 }
 

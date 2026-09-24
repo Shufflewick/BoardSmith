@@ -3,7 +3,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { dirname, join } from 'node:path';
-import { renderIndex, EDITION_UNKNOWN } from './ingest-archive.js';
+import { renderIndex, EDITION_UNKNOWN, ingestArchiveCommand } from './ingest-archive.js';
 import {
   computeVerificationScope,
   resolveCitedSlices,
@@ -209,16 +209,175 @@ describe('computeVerificationScope — scope', () => {
     expect(result.edition).toBe('First Printing 2020');
   });
 
-  it('SCOPE_REASONS carries exactly the five enumerated codes', () => {
+  it('SCOPE_REASONS carries exactly the eight enumerated codes', () => {
     expect([...SCOPE_REASONS].sort()).toEqual(
       [
+        'slice-source-unrecorded',
         'source-missing',
         'source-hash-mismatch',
+        'additional-source-missing',
+        'additional-source-hash-mismatch',
         'index-missing',
         'no-rulebook-project',
         'pre-provenance-project',
       ].sort(),
     );
+  });
+});
+
+/**
+ * A project archived through the real `ingest-archive`, with `RULES.md` as its primary source and
+ * `REFERENCE.md` (holding `referenceBytes`) as an additional one.
+ */
+async function archiveRulesWithReference(referenceBytes: Buffer): Promise<string> {
+  const project = join(dir, 'windup');
+  await fs.mkdir(project, { recursive: true });
+  const rules = join(dir, 'RULES.md');
+  const reference = join(dir, 'REFERENCE.md');
+  await fs.writeFile(rules, '# Rules\n\nBattles follow the reference.\n');
+  await fs.writeFile(reference, referenceBytes);
+  vi.spyOn(console, 'log').mockImplementation(() => {});
+  try {
+    await ingestArchiveCommand(rules, { project, json: true, additionalSource: [reference] });
+  } finally {
+    vi.restoreAllMocks();
+  }
+  return project;
+}
+
+/**
+ * #305: an additional source (a companion document the rules incorporate by reference) is part of
+ * the rules. When it changes or disappears the PROJECT's scope drops and names it; dropping the
+ * entry silently, as this used to, left the scope `full` and every slice looking verified against
+ * a document that had moved underneath it. Which chunks it reduces is #311's narrowing, below.
+ */
+describe('computeVerificationScope — additional sources (#305)', () => {
+  const REFERENCE_BYTES = Buffer.from('# Reference\n\nUnit stats.\n');
+  const REFERENCE_HASH = createHash('sha256').update(REFERENCE_BYTES).digest('hex');
+  const REL_REFERENCE = 'rulebook/source/REFERENCE.md';
+
+  const projectWithReference = () => archiveRulesWithReference(REFERENCE_BYTES);
+
+  it('every recorded source present and matching → full, each additional source listed', async () => {
+    const project = await projectWithReference();
+    const result = await computeVerificationScope(project);
+    expect(result.scope).toBe(SCOPE_FULL);
+    expect(result.additionalSources).toEqual([{ sourcePath: REL_REFERENCE, sourceHash: REFERENCE_HASH }]);
+    expect(result.failedAdditionalSources).toEqual([]);
+  });
+
+  it('an additional source whose archived copy is gone → additional-source-missing, naming it', async () => {
+    const project = await projectWithReference();
+    await fs.rm(join(project, DESIGN_DIR, REL_REFERENCE));
+    const result = await computeVerificationScope(project);
+    expect(result.scope).toBe(SCOPE_CODE_ONLY);
+    expect(result.reason).toBe('additional-source-missing');
+    expect(result.additionalSources).toEqual([]);
+    expect(result.failedAdditionalSources).toEqual([
+      { sourcePath: REL_REFERENCE, sourceHash: REFERENCE_HASH, reason: 'additional-source-missing' },
+    ]);
+  });
+
+  it('an additional source whose archived bytes changed → additional-source-hash-mismatch, naming it', async () => {
+    const project = await projectWithReference();
+    await fs.writeFile(join(project, DESIGN_DIR, REL_REFERENCE), '# Reference\n\nUnit stats, rebalanced.\n');
+    const result = await computeVerificationScope(project);
+    expect(result.scope).toBe(SCOPE_CODE_ONLY);
+    expect(result.reason).toBe('additional-source-hash-mismatch');
+    expect(result.failedAdditionalSources).toEqual([
+      { sourcePath: REL_REFERENCE, sourceHash: REFERENCE_HASH, reason: 'additional-source-hash-mismatch' },
+    ]);
+  });
+
+  it('a primary-source problem takes precedence, and the additional-source failure is still reported', async () => {
+    const project = await projectWithReference();
+    await fs.writeFile(join(project, DESIGN_DIR, 'rulebook/source/RULES.md'), 'rewritten rules\n');
+    await fs.rm(join(project, DESIGN_DIR, REL_REFERENCE));
+    const result = await computeVerificationScope(project);
+    expect(result.reason).toBe('source-hash-mismatch');
+    expect(result.failedAdditionalSources).toEqual([
+      { sourcePath: REL_REFERENCE, sourceHash: REFERENCE_HASH, reason: 'additional-source-missing' },
+    ]);
+  });
+
+  it('chunk-check records the reduced scope, and the record parses back', async () => {
+    const project = await projectWithReference();
+    await fs.writeFile(join(project, DESIGN_DIR, REL_REFERENCE), 'changed\n');
+    await writeChunk(project, 'battle', withInterpretation(await readChunkTemplate(), 'Cites rulebook/INDEX.md.'));
+    await recordVerifiedAgainst('battle', { project });
+    const chunkText = await fs.readFile(join(project, DESIGN_DIR, 'chunks', 'battle', 'CHUNK.md'), 'utf-8');
+    const parsed = parseVerifiedAgainst(chunkText);
+    expect(parsed.blockMalformed).toBe(false);
+    expect(parsed.state).toBe(SCOPE_CODE_ONLY);
+    expect(parsed.reason).toBe('additional-source-hash-mismatch');
+  });
+});
+
+/**
+ * #311: a slice names the document it was transcribed from, so a chunk's scope narrows to the
+ * documents its cited slices came from. A changed companion document reduces only the chunks
+ * built on it; a chunk built on the unchanged rulebook keeps its full scope.
+ */
+describe('chunk-check — scope narrows to the documents a chunk\'s slices came from (#311)', () => {
+  const REL_RULES = 'rulebook/source/RULES.md';
+  const REL_REFERENCE = 'rulebook/source/REFERENCE.md';
+
+  /** The #305 project plus one slice from each document and a chunk citing `slice`. */
+  async function chunkCiting(slice: string): Promise<string> {
+    const project = await archiveRulesWithReference(Buffer.from('# Reference\n\nUnit stats.\n'));
+    const rulebook = join(project, DESIGN_DIR, 'rulebook');
+    await fs.writeFile(join(rulebook, '01-turn.md'), `# Turn\n\nSource: ${REL_RULES}\n\np.1, Turn:\n"Draw."\n`);
+    await fs.writeFile(
+      join(rulebook, '01-reference-units.md'),
+      `# Units\n\nSource: ${REL_REFERENCE}\n\np.1, Units:\n"Tanks."\n`,
+    );
+    await fs.writeFile(join(rulebook, '02-unattributed.md'), '# Old\n\np.2, Old:\n"Before #311."\n');
+    await fs.writeFile(
+      join(rulebook, '03-elsewhere.md'),
+      '# Elsewhere\n\nSource: rulebook/source/other.pdf\n\np.3, Elsewhere:\n"?"\n',
+    );
+    await writeChunk(project, 'c', withInterpretation(await readChunkTemplate(), `Cites rulebook/${slice}.`));
+    return project;
+  }
+
+  async function recordedScope(project: string) {
+    await recordVerifiedAgainst('c', { project });
+    return parseVerifiedAgainst(await fs.readFile(join(project, DESIGN_DIR, 'chunks', 'c', 'CHUNK.md'), 'utf-8'));
+  }
+
+  /** What `chunk-check` records for a chunk citing `slice` after the archive of `changed` moved. */
+  async function scopeAfterRewriting(slice: string, changed: string) {
+    const project = await chunkCiting(slice);
+    await fs.writeFile(join(project, DESIGN_DIR, changed), 'rewritten\n');
+    return recordedScope(project);
+  }
+
+  it('a changed companion leaves a chunk built only on the rulebook at full scope', async () => {
+    const parsed = await scopeAfterRewriting('01-turn.md', REL_REFERENCE);
+    expect(parsed.state).toBe(SCOPE_FULL);
+    // The document that failed is not recorded as verified, so a later pass still sees it moved.
+    expect(parsed.additionalSources).toEqual([]);
+  });
+
+  it.each([
+    ['a chunk built on its slices', '01-reference-units.md'],
+    ['a chunk citing a slice that names no document, since it may have come from any', '02-unattributed.md'],
+  ])('a changed companion reduces %s, naming why', async (_what, slice) => {
+    const parsed = await scopeAfterRewriting(slice, REL_REFERENCE);
+    expect(parsed.state).toBe(SCOPE_CODE_ONLY);
+    expect(parsed.reason).toBe('additional-source-hash-mismatch');
+  });
+
+  it('a changed rulebook leaves a chunk built only on the companion at full scope', async () => {
+    const parsed = await scopeAfterRewriting('01-reference-units.md', REL_RULES);
+    expect(parsed.state).toBe(SCOPE_FULL);
+  });
+
+  it('a slice naming a document INDEX.md does not record → slice-source-unrecorded', async () => {
+    const project = await chunkCiting('03-elsewhere.md');
+    const parsed = await recordedScope(project);
+    expect(parsed.state).toBe(SCOPE_CODE_ONLY);
+    expect(parsed.reason).toBe('slice-source-unrecorded');
   });
 });
 
@@ -346,7 +505,7 @@ describe('cited slices — resolveCitedSlices', () => {
  * a rejection there would surface as an unhandled-rejection stack trace (CLAUDE.md forbids that).
  */
 describe('chunk-check', () => {
-  let exitCode: number | undefined;
+  let exitCode: typeof process.exitCode;
   beforeEach(() => {
     exitCode = process.exitCode;
     process.exitCode = undefined;
@@ -415,7 +574,7 @@ describe('chunk-check', () => {
       `<!-- required sections: "## Verified Against" must be present -->\n${text}`,
     );
 
-    await chunkCheckCommand('prose-mention', { project, quiet: true }).catch(() => {});
+    await chunkCheckCommand('prose-mention', { project, json: true }).catch(() => {});
 
     const after = await fs.readFile(chunkPath, 'utf-8');
     expect(after).toContain(`| rulebook/01-setup-and-round-structure.md | ${sliceHash} |`);
@@ -758,7 +917,7 @@ describe('chunk-check', () => {
  * `chunk-check` invocation surfaces rather than passing silently.
  */
 describe('chunk-provenance-status', () => {
-  let exitCode: number | undefined;
+  let exitCode: typeof process.exitCode;
   beforeEach(() => {
     exitCode = process.exitCode;
     process.exitCode = undefined;
@@ -1152,7 +1311,7 @@ describe('projectProvenanceState', () => {
   it('classifies a project that records provenance but has a blockless verified chunk as partial', async () => {
     // THIS is the case that indicates a skipped chunk-check, and the only one worth alarming on.
     const withBlock = await projectWithChunks([{ slug: 'has-block', status: 'verified' }]);
-    await chunkCheckCommand('has-block', { project: withBlock, quiet: true }).catch(() => {});
+    await chunkCheckCommand('has-block', { project: withBlock, json: true }).catch(() => {});
     const chunkDir = join(withBlock, DESIGN_DIR, 'chunks', 'skipped');
     await fs.mkdir(chunkDir, { recursive: true });
     await fs.writeFile(join(chunkDir, 'CHUNK.md'), '# Chunk: skipped\n\nStatus: verified\n');
@@ -1200,17 +1359,18 @@ describe('VERIFIED_AGAINST_LABELS — Re-verified (no code change) append (175-0
     };
   }
 
-  it('has exactly nine members, with the new one appended last', () => {
-    expect(VERIFIED_AGAINST_LABELS).toHaveLength(9);
+  it('has exactly ten members: Re-verified appended ninth, Additional source hash tenth (#305)', () => {
+    expect(VERIFIED_AGAINST_LABELS).toHaveLength(10);
     expect(VERIFIED_AGAINST_LABELS[8]).toBe('Re-verified (no code change):');
+    expect(VERIFIED_AGAINST_LABELS[9]).toBe('Additional source hash:');
   });
 
   it('the first eight members deep-equal the pre-change label set, byte-for-byte', () => {
     expect(VERIFIED_AGAINST_LABELS.slice(0, 8)).toEqual(PRE_CHANGE_EIGHT_LABELS);
   });
 
-  it('SCOPE_REASONS is unchanged: 5 members, none mentioning "code change"', () => {
-    expect(SCOPE_REASONS).toHaveLength(5);
+  it('SCOPE_REASONS holds its 8 members, none mentioning "code change"', () => {
+    expect(SCOPE_REASONS).toHaveLength(8);
     expect(SCOPE_REASONS.some((r) => r.includes('code change'))).toBe(false);
   });
 
@@ -1268,5 +1428,83 @@ describe('VERIFIED_AGAINST_LABELS — Re-verified (no code change) append (175-0
     expect(parsed.blockMalformed).toBe(false);
     expect(parsed.state).toBe(SCOPE_FULL);
     expect(parsed.reverifiedNoCodeChange).toBeUndefined();
+  });
+});
+
+/**
+ * #305: a chunk built from slices of a companion document must record which version of that
+ * document it was verified against, or re-archiving a changed companion leaves every chunk
+ * reading as verified against the current rules.
+ */
+describe('## Verified Against — additional source hashes (#305)', () => {
+  const HASH_A = 'a'.repeat(64);
+  const HASH_B = 'b'.repeat(64);
+
+  function record(overrides: Partial<VerifiedAgainstRecord> = {}): VerifiedAgainstRecord {
+    return {
+      scope: SCOPE_FULL,
+      edition: 'First Printing 2020',
+      sourceHash: 'deadbeef',
+      boardsmithVersion: '4.7.0',
+      skillsTreeHash: 'cafef00d',
+      citedSlices: [],
+      unresolved: [],
+      ...overrides,
+    };
+  }
+
+  function asChunk(rendered: string): string {
+    return `# Chunk: x\n\n${VERIFIED_AGAINST_HEADING}\n\n${VERIFIED_AGAINST_BEGIN}${rendered}${VERIFIED_AGAINST_END}\n`;
+  }
+
+  it('renders one line per additional source, right after the rulebook source hash', () => {
+    const rendered = renderVerifiedAgainst(
+      record({
+        additionalSources: [
+          { sourcePath: 'rulebook/source/REFERENCE.md', sourceHash: HASH_A },
+          { sourcePath: 'rulebook/source/cards.pdf', sourceHash: HASH_B },
+        ],
+      }),
+    );
+    expect(rendered).toContain(
+      'Rulebook source hash: deadbeef\n' +
+        `Additional source hash: ${HASH_A} rulebook/source/REFERENCE.md\n` +
+        `Additional source hash: ${HASH_B} rulebook/source/cards.pdf\n` +
+        'BoardSmith version: 4.7.0\n',
+    );
+  });
+
+  it('a single-source record renders no such line, byte-identical to before', () => {
+    expect(renderVerifiedAgainst(record({ additionalSources: [] }))).toBe(renderVerifiedAgainst(record()));
+    expect(renderVerifiedAgainst(record())).not.toContain('Additional source hash:');
+  });
+
+  it('round-trips through parseVerifiedAgainst', () => {
+    const additionalSources = [{ sourcePath: 'rulebook/source/REFERENCE.md', sourceHash: HASH_A }];
+    const parsed = parseVerifiedAgainst(asChunk(renderVerifiedAgainst(record({ additionalSources }))));
+    expect(parsed.blockMalformed).toBe(false);
+    expect(parsed.additionalSources).toEqual(additionalSources);
+  });
+
+  it('a block without the line parses as valid, with no additional sources recorded', () => {
+    const parsed = parseVerifiedAgainst(asChunk(renderVerifiedAgainst(record())));
+    expect(parsed.blockMalformed).toBe(false);
+    expect(parsed.additionalSources).toEqual([]);
+  });
+
+  it('chunk-check records each additional source the project has', async () => {
+    const project = await archiveRulesWithReference(Buffer.from('# Reference\n'));
+    await writeChunk(project, 'battle', withInterpretation(await readChunkTemplate(), 'Cites rulebook/INDEX.md.'));
+    await recordVerifiedAgainst('battle', { project });
+
+    const parsed = parseVerifiedAgainst(
+      await fs.readFile(join(project, DESIGN_DIR, 'chunks', 'battle', 'CHUNK.md'), 'utf-8'),
+    );
+    expect(parsed.additionalSources).toEqual([
+      {
+        sourcePath: 'rulebook/source/REFERENCE.md',
+        sourceHash: createHash('sha256').update('# Reference\n').digest('hex'),
+      },
+    ]);
   });
 });

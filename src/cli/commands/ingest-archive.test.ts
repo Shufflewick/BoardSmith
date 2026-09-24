@@ -17,11 +17,13 @@ import {
   GAPS_EMPTY,
   GAPS_BEGIN,
   GAPS_END,
+} from './ingest-archive.js';
+import {
   ADDITIONAL_SOURCES_HEADING,
   ADDITIONAL_SOURCES_BEGIN,
   ADDITIONAL_SOURCES_END,
   parseAdditionalSources,
-} from './ingest-archive.js';
+} from './rulebook-sources.js';
 import { computeVerificationScope } from './chunk-provenance.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { rejectionMessage } from '../../testing/rejection.test-helper.js';
@@ -232,6 +234,161 @@ describe('ingest-archive — multiple sources (177-19)', () => {
   });
 });
 
+// ===========================================================================================
+// ingest-archive --additional-source (#305)
+//
+// A rulebook can incorporate a second document by reference ("battle rules follow
+// MECHCORE_REFERENCE.md"). Nothing in `--help` said a second source could be recorded, so the
+// session that met one copied it into rulebook/source/ by hand and wrote its hash in prose that
+// nothing parses. The flag names the case where the designer is looking for it.
+// ===========================================================================================
+
+describe('ingest-archive --additional-source (#305)', () => {
+  let rulesPath: string;
+  let companionPath: string;
+  let appendixPath: string;
+  const RULES_BYTES = Buffer.from('# Requirements\n\nBattles follow the companion reference.\n');
+  const COMPANION_BYTES = Buffer.from('# Reference\n\nUnit stats live here.\n');
+  const APPENDIX_BYTES = Buffer.from('# Appendix\n\nCard list.\n');
+  const RULES_HASH = createHash('sha256').update(RULES_BYTES).digest('hex');
+  const COMPANION_HASH = createHash('sha256').update(COMPANION_BYTES).digest('hex');
+  const APPENDIX_HASH = createHash('sha256').update(APPENDIX_BYTES).digest('hex');
+
+  beforeEach(async () => {
+    rulesPath = join(dir, 'REQUIREMENTS.md');
+    companionPath = join(dir, 'REFERENCE.md');
+    appendixPath = join(dir, 'APPENDIX.md');
+    await fs.writeFile(rulesPath, RULES_BYTES);
+    await fs.writeFile(companionPath, COMPANION_BYTES);
+    await fs.writeFile(appendixPath, APPENDIX_BYTES);
+  });
+
+  async function freshProject(name = 'windup'): Promise<string> {
+    const project = join(dir, name);
+    await fs.mkdir(project, { recursive: true });
+    return project;
+  }
+
+  const indexOf = (project: string) =>
+    fs.readFile(join(project, DESIGN_DIR, 'rulebook', 'INDEX.md'), 'utf-8');
+
+  it('archives the primary and every additional source in one call, each with its own hash', async () => {
+    const project = await freshProject();
+    await ingestArchiveCommand(rulesPath, {
+      project,
+      json: true,
+      additionalSource: [companionPath, appendixPath],
+    });
+
+    const index = await indexOf(project);
+    expect(/^Source:\s*(.*)$/m.exec(index)![1].trim()).toBe('rulebook/source/REQUIREMENTS.md');
+    expect(/^Source hash:\s*(.*)$/m.exec(index)![1].trim()).toBe(RULES_HASH);
+    expect(parseAdditionalSources(index)).toEqual([
+      { path: 'rulebook/source/APPENDIX.md', sourceHash: APPENDIX_HASH },
+      { path: 'rulebook/source/REFERENCE.md', sourceHash: COMPANION_HASH },
+    ]);
+    const archived = await fs.readFile(join(project, DESIGN_DIR, 'rulebook', 'source', 'REFERENCE.md'));
+    expect(archived.equals(COMPANION_BYTES)).toBe(true);
+  });
+
+  it('the verify pass reads each additional source as a hash-verified provenance record', async () => {
+    const project = await freshProject();
+    await ingestArchiveCommand(rulesPath, { project, json: true, additionalSource: [companionPath] });
+
+    const scope = await computeVerificationScope(project);
+    expect(scope.scope).toBe('full');
+    expect(scope.sourceHash).toBe(RULES_HASH);
+    expect(scope.additionalSources).toEqual([
+      { sourcePath: 'rulebook/source/REFERENCE.md', sourceHash: COMPANION_HASH },
+    ]);
+  });
+
+  it('adds an additional source to a project whose primary is already archived, leaving the primary alone', async () => {
+    const project = await freshProject();
+    await ingestArchiveCommand(rulesPath, { project, json: true });
+    const before = await indexOf(project);
+
+    await ingestArchiveCommand(rulesPath, { project, json: true, additionalSource: [companionPath] });
+
+    const after = await indexOf(project);
+    expect(/^Source hash:\s*(.*)$/m.exec(after)![1].trim()).toBe(RULES_HASH);
+    expect(parseAdditionalSources(after)).toEqual([
+      { path: 'rulebook/source/REFERENCE.md', sourceHash: COMPANION_HASH },
+    ]);
+    // Only the new section was added; the header and every other section are byte-identical.
+    expect(after.replace(/## Additional Sources[\s\S]*?<!-- boardsmith:additional-sources:end -->\n\n/, '')).toBe(
+      before,
+    );
+  });
+
+  it('re-running the same call is a byte-identical no-op', async () => {
+    const project = await freshProject();
+    await ingestArchiveCommand(rulesPath, { project, json: true, additionalSource: [companionPath] });
+    const before = await indexOf(project);
+    await ingestArchiveCommand(rulesPath, { project, json: true, additionalSource: [companionPath] });
+    expect(await indexOf(project)).toBe(before);
+  });
+
+  it('reports every additional source in the JSON result', async () => {
+    const project = await freshProject();
+    const out: string[] = [];
+    const origLog = console.log;
+    console.log = (s: string) => out.push(s);
+    try {
+      await ingestArchiveCommand(rulesPath, { project, json: true, additionalSource: [companionPath] });
+    } finally {
+      console.log = origLog;
+    }
+    expect(JSON.parse(out[0]).additionalSources).toEqual([
+      { archivedPath: 'rulebook/source/REFERENCE.md', sourceHash: COMPANION_HASH },
+    ]);
+  });
+
+  /**
+   * Runs a call that must be refused, and proves it wrote nothing: a primary archived with its
+   * additional source missing is a half-recorded provenance header, worse than none.
+   */
+  async function refusedBeforeWriting(additionalSource: string[]): Promise<string> {
+    const project = await freshProject();
+    const message = await rejectionMessage(
+      ingestArchiveCommand(rulesPath, { project, json: true, additionalSource }),
+    );
+    await expect(fs.access(join(project, DESIGN_DIR, 'rulebook'))).rejects.toThrow();
+    return message;
+  }
+
+  it('refuses an unreadable additional source BEFORE archiving anything', async () => {
+    expect(await refusedBeforeWriting([join(dir, 'missing-reference.md')])).toMatch(
+      /Additional source not found or unreadable: .*missing-reference\.md/,
+    );
+  });
+
+  it('refuses an additional source that is the primary source itself', async () => {
+    expect(await refusedBeforeWriting([rulesPath])).toMatch(/REQUIREMENTS\.md is already the primary source/);
+  });
+
+  it('refuses two sources that would archive to the same file name', async () => {
+    const otherDir = join(dir, 'other');
+    await fs.mkdir(otherDir);
+    const sameName = join(otherDir, 'REFERENCE.md');
+    await fs.writeFile(sameName, 'a different reference document\n');
+
+    expect(await refusedBeforeWriting([companionPath, sameName])).toMatch(
+      /both archive to rulebook\/source\/REFERENCE\.md/,
+    );
+  });
+
+  it('refuses to clobber a different archived copy of an additional source', async () => {
+    const project = await freshProject();
+    await ingestArchiveCommand(rulesPath, { project, json: true, additionalSource: [companionPath] });
+    await fs.writeFile(join(project, DESIGN_DIR, 'rulebook', 'source', 'REFERENCE.md'), 'edited by hand');
+
+    await expect(
+      ingestArchiveCommand(rulesPath, { project, json: true, additionalSource: [companionPath] }),
+    ).rejects.toThrow(/rulebook\/source\/REFERENCE\.md already exists .* and differs/);
+  });
+});
+
 describe('ingest-archive — INDEX.md contract', () => {
   it('writes all four header labels, in order, with non-empty values', async () => {
     const project = await run({ edition: '2nd edition, 2019 printing' });
@@ -394,10 +551,13 @@ describe('v4.9 — machine-owned gaps section and ingest-check (170-PROOF-RUN-2)
     const project = await run();
     await fs.writeFile(
       join(project, DESIGN_DIR, 'rulebook', '01-core.md'),
-      ['# Core', '', ...entries, '', ...derivedLines, ''].join('\n'),
+      ['# Core', '', `Source: ${PRIMARY}`, '', ...entries, '', ...derivedLines, ''].join('\n'),
     );
     return project;
   }
+
+  /** Where `run()` archives the rulebook, as INDEX.md and every slice record it. */
+  const PRIMARY = 'rulebook/source/src-rules.pdf';
 
   const readIndex = (project: string) =>
     fs.readFile(join(project, DESIGN_DIR, 'rulebook', 'INDEX.md'), 'utf-8');
@@ -465,7 +625,7 @@ describe('v4.9 — machine-owned gaps section and ingest-check (170-PROOF-RUN-2)
   });
 
   describe('ingest-check', () => {
-    let exitCode: number | undefined;
+    let exitCode: typeof process.exitCode;
     beforeEach(() => {
       exitCode = process.exitCode;
       process.exitCode = undefined;
@@ -511,10 +671,87 @@ describe('v4.9 — machine-owned gaps section and ingest-check (170-PROOF-RUN-2)
       // Re-introduce the misfiled line after the section is already current.
       await fs.writeFile(
         join(project, DESIGN_DIR, 'rulebook', '01-core.md'),
-        'Derived (p.1): The page is set in a bold sans-serif with four columns.\n',
+        `Source: ${PRIMARY}\n\nDerived (p.1): The page is set in a bold sans-serif with four columns.\n`,
       );
       await ingestCheckCommand({ project, json: true });
       expect(process.exitCode).toBe(1);
+    });
+
+    describe('every slice names the document it was transcribed from (#311)', () => {
+      const slicePath = (project: string, name: string) =>
+        join(project, DESIGN_DIR, 'rulebook', name);
+
+      async function check(project: string): Promise<{ output: string; exitCode: typeof process.exitCode }> {
+        const lines: string[] = [];
+        const log = console.log;
+        const error = console.error;
+        console.log = (...args: unknown[]) => lines.push(args.join(' '));
+        console.error = (...args: unknown[]) => lines.push(args.join(' '));
+        try {
+          await ingestCheckCommand({ project });
+        } finally {
+          console.log = log;
+          console.error = error;
+        }
+        return { output: lines.join('\n'), exitCode: process.exitCode };
+      }
+
+      it('fails on a slice with no Source line, naming it and the exact command that records it', async () => {
+        const project = await withSlices([]);
+        await ingestGapsCommand({ project, quiet: true });
+        await fs.writeFile(slicePath(project, '02-turn.md'), '# Turn\n\np.2, Turn:\n"Draw a card."\n');
+        process.exitCode = undefined;
+
+        const { output, exitCode } = await check(project);
+        expect(exitCode).toBe(1);
+        expect(output).toContain('rulebook/02-turn.md');
+        expect(output).not.toContain('rulebook/01-core.md');
+        expect(output).toContain(`npx boardsmith ingest-slice-source ${PRIMARY} 02-turn.md`);
+        // Nothing is guessed: the slice is left exactly as it was.
+        expect(await fs.readFile(slicePath(project, '02-turn.md'), 'utf-8')).not.toContain('Source:');
+      });
+
+      it('fails on a slice naming a document INDEX.md does not record', async () => {
+        const project = await withSlices([]);
+        await ingestGapsCommand({ project, quiet: true });
+        await fs.writeFile(
+          slicePath(project, '02-cards.md'),
+          '# Cards\n\nSource: rulebook/source/cards.pdf\n\np.1, Cards:\n"Six cards."\n',
+        );
+        process.exitCode = undefined;
+
+        const { output, exitCode } = await check(project);
+        expect(exitCode).toBe(1);
+        expect(output).toContain('rulebook/02-cards.md → rulebook/source/cards.pdf');
+      });
+
+      it('passes once every slice names a recorded document', async () => {
+        const project = await withSlices([]);
+        await ingestGapsCommand({ project, quiet: true });
+        process.exitCode = undefined;
+        const { exitCode } = await check(project);
+        expect(exitCode).toBeUndefined();
+      });
+
+      it('checks nothing on the interview path, where no document was archived', async () => {
+        const project = join(dir, 'interview');
+        await fs.mkdir(join(project, DESIGN_DIR, 'rulebook'), { recursive: true });
+        await fs.writeFile(
+          join(project, DESIGN_DIR, 'rulebook', 'INDEX.md'),
+          renderIndex({
+            gameName: 'interview',
+            edition: 'unpublished — designer statement',
+            archivedPath: 'not applicable — no source rulebook (interview path)',
+            sourceHash: 'not applicable — no source rulebook (interview path)',
+            transcribed: '2026-09-24',
+          }),
+        );
+        await fs.writeFile(slicePath(project, '01-core.md'), '# Core\n\nDerived (p.1): Two players.\n');
+        await ingestGapsCommand({ project, quiet: true });
+        process.exitCode = undefined;
+        const { exitCode } = await check(project);
+        expect(exitCode).toBeUndefined();
+      });
     });
   });
 

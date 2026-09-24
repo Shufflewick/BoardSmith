@@ -16,7 +16,14 @@
  */
 
 import { createDevSession, type DevSession } from './bridge.js';
-import type { Op, OpResult, GamePreset } from '../../session/index.js';
+import {
+  STALE_SUBMISSION_MESSAGE,
+  type Op,
+  type OpResult,
+  type GamePreset,
+  type TurnBoundary,
+} from '../../session/index.js';
+import { createNodeWorldClock, type WorldHostClock } from './node-world-clock.js';
 import { dueSeats, type SeatActivityState, type GameStateSnapshot } from '../../engine/index.js';
 import { validateGameOptionSelection, type DevOptionDef } from './config-types.js';
 import {
@@ -68,6 +75,14 @@ export type HostOutbound =
        * claim either way; the client must not fabricate "Draw" from a bare [].
        */
       isDraw: boolean;
+      /**
+       * Host clock, epoch ms, when the open step closes, or null when it
+       * declared no time window (#301's platform contract, enforced here by
+       * #302). The page counts down with `serverNow` and its own `receivedAt`.
+       */
+      deadlineAt: number | null;
+      /** Host clock, epoch ms, when this frame was sent. */
+      serverNow: number;
       requestId?: string | null;
     }
   | { type: 'server_response'; requestId: string | null; result: Record<string, unknown> }
@@ -87,6 +102,11 @@ export type ClientInbound =
   | { type: 'getLobby'; requestId?: string }
   | { type: 'debugToggle' }
   | { type: 'uiSwitch'; name: string }
+  /**
+   * The dev bar's "End step" control (#302): close the open timed step now,
+   * exactly as its window elapsing would.
+   */
+  | { type: 'fireDeadline' }
   /**
    * D13/DEVHOST-01: a pre-start (lobby) gameOption/preset selection. Either
    * or both fields may be present; a `preset` applies its whole options
@@ -196,6 +216,32 @@ export interface MultiplayerHostOptions {
    * persistence is affected in no way.
    */
   persistence?: DevPersistenceOptions;
+  /**
+   * boardsmith.json's `idleAction` (#302): what the host submits for every
+   * human seat still due when a timed step's window elapses, exactly as the
+   * platform does. A game with no timed step never uses it; a timed step in a
+   * game without one is reported when its window elapses, because nothing can
+   * close it.
+   */
+  idleAction?: { name: string; args?: Record<string, unknown> };
+  /**
+   * The clock step windows are measured and armed on. Defaults to the Node
+   * clock the world host uses (#197), which serves a long window as a chain of
+   * bounded sleeps; a test passes one it drives by hand.
+   */
+  clock?: WorldHostClock;
+}
+
+/**
+ * The open step's window: the boundary it belongs to, the session that
+ * broadcast it, and when it closes on the host clock (null when the step
+ * declared no window). One at a time, replaced whole when the boundary key
+ * changes.
+ */
+interface StepWindow {
+  session: DevSession;
+  boundary: TurnBoundary;
+  deadlineAt: number | null;
 }
 
 /**
@@ -354,8 +400,12 @@ export class MultiplayerHost {
    * roster is fixed when the session starts.
    */
   private persistPlayers: PersistPlayer[] = [];
+  private readonly clock: WorldHostClock;
+  /** The open step's window, or null before the first broadcast of a session. */
+  private window: StepWindow | null = null;
 
   constructor(private readonly opts: MultiplayerHostOptions) {
+    this.clock = opts.clock ?? createNodeWorldClock();
     for (let seat = 1; seat <= opts.playerCount; seat++) {
       this.seats.set(seat, { seat, clientId: null, name: `Player ${seat}`, connected: false });
     }
@@ -510,6 +560,8 @@ export class MultiplayerHost {
         return this.handleUiSwitch(msg);
       case 'configure':
         return this.handleConfigure(clientId, msg);
+      case 'fireDeadline':
+        return this.handleFireDeadline(clientId);
     }
   }
 
@@ -762,14 +814,8 @@ export class MultiplayerHost {
       });
       return;
     }
-    const view = this.session.viewForSeat(seat);
-    const meta = this.session.meta();
     this.send(clientId, {
-      type: 'game_state',
-      view,
-      isComplete: meta.isComplete,
-      winners: meta.winners,
-      isDraw: meta.isDraw,
+      ...this.gameStateFrame(this.session.viewForSeat(seat), this.session.meta()),
       requestId: msg.requestId ?? null,
     });
   }
@@ -962,7 +1008,10 @@ export class MultiplayerHost {
     // F-12: dispose the outgoing session BEFORE building the new one so its
     // fire-and-forget demo loop and any late `complete`/state broadcasts cannot
     // leak stale frames onto (and resurrect the GameOverCard over) the fresh
-    // game. Safe on the first start (no session yet).
+    // game. Safe on the first start (no session yet). Its step window goes
+    // with it: the new game arms its own from its first broadcast.
+    this.disarm();
+    this.window = null;
     this.session?.dispose();
     const { playerCount } = this.opts;
     // BUG-12: "covered by a human" is `heldByConnectedHuman` — the SAME rule
@@ -1051,7 +1100,10 @@ export class MultiplayerHost {
       botSeats: this.botSeats,
       teachingDisabled: this.opts.teachingDisabled,
       executeOp,
-      postGameState: (seat, view, meta) => this.deliverGameState(seat, view, meta),
+      postGameState: (seat, view, meta) => {
+        this.observeBoundary(session, meta.turnBoundary);
+        this.deliverGameState(seat, view, meta);
+      },
       postServerResponse: (seat, requestId, result) =>
         this.deliverServerResponse(seat, requestId, result),
     });
@@ -1156,8 +1208,7 @@ export class MultiplayerHost {
     this.send(clientId, { type: 'init', seat });
     const view = this.session?.viewForSeat(seat);
     if (view !== undefined && this.session) {
-      const meta = this.session.meta();
-      this.send(clientId, { type: 'game_state', view, isComplete: meta.isComplete, winners: meta.winners, isDraw: meta.isDraw });
+      this.send(clientId, this.gameStateFrame(view, this.session.meta()));
     }
   }
 
@@ -1219,22 +1270,182 @@ export class MultiplayerHost {
         this.lastFollowerSeat = active;
       }
       const activeView = this.session?.viewForSeat(active);
-      this.send(info.clientId, {
-        type: 'game_state',
-        view: activeView ?? view,
-        isComplete: meta.isComplete,
-        winners: meta.winners,
-        isDraw: meta.isDraw,
-      });
+      this.send(info.clientId, this.gameStateFrame(activeView ?? view, meta));
       return;
     }
-    this.send(info.clientId, {
+    this.send(info.clientId, this.gameStateFrame(view, meta));
+  }
+
+  /**
+   * Every `game_state` frame, in one shape: the view and terminal state, plus
+   * the open step's deadline and this host's clock at send time (#302).
+   */
+  private gameStateFrame(
+    view: unknown,
+    meta: { isComplete: boolean; winners: number[]; isDraw: boolean },
+  ): Extract<HostOutbound, { type: 'game_state' }> {
+    return {
       type: 'game_state',
       view,
       isComplete: meta.isComplete,
       winners: meta.winners,
       isDraw: meta.isDraw,
-    });
+      deadlineAt: this.window?.deadlineAt ?? null,
+      serverNow: this.clock.now(),
+    };
+  }
+
+  // ── Step deadlines (#302) ─────────────────────────────────────────────────
+
+  /**
+   * Read the turn boundary off a broadcast, and arm the step's window when the
+   * boundary is a new one.
+   *
+   * Called for every seat's frame of every broadcast, BEFORE the frame is sent,
+   * so the first frame of a new boundary already carries its deadline. The same
+   * key is the same window: a re-broadcast, a seat acting mid-round or a
+   * reconnect only refreshes which seats are still due and never re-arms, so
+   * the deadline does not slide.
+   */
+  private observeBoundary(session: DevSession, boundary: TurnBoundary): void {
+    const open = this.window;
+    const timed = boundary.timeLimitMs !== undefined;
+    if (
+      open?.session === session &&
+      open.boundary.key === boundary.key &&
+      timed === (open.deadlineAt !== null)
+    ) {
+      open.boundary = boundary;
+      return;
+    }
+    const limit = boundary.timeLimitMs;
+    const window: StepWindow = {
+      session,
+      boundary,
+      deadlineAt: limit === undefined ? null : this.clock.now() + limit,
+    };
+    this.window = window;
+    if (limit === undefined) this.disarm();
+    else this.clock.arm(limit, () => void this.closeWindow(window));
+  }
+
+  private disarm(): void {
+    this.clock.arm(null, () => {});
+  }
+
+  /** The dev bar's "End step": close the open window now. */
+  private async handleFireDeadline(clientId: string): Promise<void> {
+    const open = this.window;
+    if (open === null || open.deadlineAt === null) {
+      this.send(clientId, {
+        type: 'error',
+        message: 'No step deadline is open right now, so there is nothing to fire.',
+      });
+      return;
+    }
+    await this.closeWindow(open);
+  }
+
+  /**
+   * The window elapsed: submit `idleAction` for every seat still due that a
+   * human holds, stamped with the key the window was armed under.
+   *
+   * The ops queue behind any human submission already in flight, so a seat
+   * that acted in time closes the round first and the timer's op is refused
+   * as stale rather than spent on the next round. That refusal is the ordinary
+   * race and is logged at info level. Any other refusal, or a round that did
+   * not move, means the game cannot close its own timed step, and is reported
+   * in the terminal and to every connected client.
+   */
+  private async closeWindow(window: StepWindow): Promise<void> {
+    if (this.window !== window || window.deadlineAt === null) return;
+    this.disarm();
+    const idle = this.opts.idleAction;
+    if (idle === undefined) {
+      this.reportDeadlineFailure(
+        'The step\'s time ran out, but boardsmith.json declares no "idleAction", so there is ' +
+          'nothing to submit for the seats still due and the step stays open. Add the legal no-op ' +
+          'action your rules register, e.g. "idleAction": { "name": "pass" }.',
+      );
+      return;
+    }
+    const seats = window.boundary.dueSeats.filter((seat) => !this.botSeats.some((bot) => bot.seat === seat));
+    for (const seat of seats) {
+      if (this.session !== window.session) return;
+      const result = await this.submitIdleAction(window, idle, seat);
+      if (!result.success) {
+        this.reportIdleRefusal(idle.name, seat, result.error);
+        return;
+      }
+    }
+    if (seats.length > 0) this.assertRoundMoved(window, idle.name, seats);
+  }
+
+  /**
+   * A refused idle action. Stale means the round closed on its own while the
+   * timer's op waited its turn, which is the ordinary race; anything else means
+   * the declared idle action cannot close this step.
+   */
+  private reportIdleRefusal(idleName: string, seat: number, error: string | undefined): void {
+    if (error === STALE_SUBMISSION_MESSAGE) {
+      console.info(
+        `[boardsmith dev] The step's time ran out just as the round moved on by itself, so the ` +
+          `idle action for seat ${seat} was not needed.`,
+      );
+      return;
+    }
+    this.reportDeadlineFailure(
+      `The step's time ran out, and the idle action "${idleName}" was refused for seat ${seat}: ` +
+        `${error ?? 'no reason given'}. "idleAction" in boardsmith.json must name an action ` +
+        'every seat still due can always take.',
+    );
+  }
+
+  /**
+   * One seat's idle action, composed by the host at the instant the window
+   * closed and stamped with the key it was armed under, never the key current
+   * when it lands. A throw is answered as a refusal, so it is reported rather
+   * than lost in the timer callback.
+   */
+  private async submitIdleAction(
+    window: StepWindow,
+    idle: { name: string; args?: Record<string, unknown> },
+    seat: number,
+  ): Promise<OpResult> {
+    try {
+      return await window.session.host.handleOp(seat, {
+        type: 'action',
+        actionName: idle.name,
+        player: seat,
+        args: idle.args ?? {},
+        boundaryKey: window.boundary.key,
+      });
+    } catch (err) {
+      return refusedOp(err instanceof Error ? err.message : String(err));
+    }
+  }
+
+  /**
+   * Every idle action was accepted, so the round must have moved: a new key,
+   * or a finished game. The same key means the game cannot close its own
+   * timed step.
+   */
+  private assertRoundMoved(window: StepWindow, idleName: string, seats: number[]): void {
+    const now = this.window;
+    if (now?.session !== window.session || now.boundary.key !== window.boundary.key) return;
+    if (window.session.meta().isComplete) return;
+    this.reportDeadlineFailure(
+      `The step's time ran out and the idle action "${idleName}" was submitted for seat ` +
+        `${seats.join(', ')}, but the round did not move: seat ${now.boundary.dueSeats.join(', ')} ` +
+        'still owes a move. "idleAction" must name an action that completes a seat\'s turn in ' +
+        'every timed step.',
+    );
+  }
+
+  /** A timed step the host could not close: say so in the terminal and to every client. */
+  private reportDeadlineFailure(message: string): void {
+    console.error(`[boardsmith dev] ${message}`);
+    for (const clientId of this.connected) this.send(clientId, { type: 'error', message });
   }
 
   private send(clientId: string, message: HostOutbound): void {

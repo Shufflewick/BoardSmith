@@ -53,22 +53,22 @@ describe('checkpointAt', () => {
     // calling it 'pruned' would send the author to raise a limit that is not
     // the problem.
     const empty: ActionCheckpointWindow = { baseIndex: 3, entries: [] };
-    expect(checkpointAt(empty, 0).absence).toBe('uncaptured');
-    expect(checkpointAt(empty, 3).absence).toBe('uncaptured');
-    expect(checkpointAt(empty, 9).absence).toBe('uncaptured');
+    expect(checkpointAt(empty, 0)).toEqual({ checkpoint: null, absence: 'uncaptured' });
+    expect(checkpointAt(empty, 3)).toEqual({ checkpoint: null, absence: 'uncaptured' });
+    expect(checkpointAt(empty, 9)).toEqual({ checkpoint: null, absence: 'uncaptured' });
   });
 
   it('distinguishes the two absences at the boundaries of the window', () => {
-    expect(checkpointAt(window, 4).absence).toBe('pruned');
+    expect(checkpointAt(window, 4)).toEqual({ checkpoint: null, absence: 'pruned' });
     expect(checkpointAt(window, 5).checkpoint).not.toBeNull();
     expect(checkpointAt(window, 8).checkpoint).not.toBeNull();
-    expect(checkpointAt(window, 9).absence).toBe('uncaptured');
+    expect(checkpointAt(window, 9)).toEqual({ checkpoint: null, absence: 'uncaptured' });
   });
 
   it('handles a window that starts at action 0', () => {
     const fromStart: ActionCheckpointWindow = { baseIndex: 0, entries: [entry(0), entry(1)] };
     expect(checkpointAt(fromStart, 0).checkpoint).toBe(fromStart.entries[0]);
-    expect(checkpointAt(fromStart, 2).absence).toBe('uncaptured');
+    expect(checkpointAt(fromStart, 2)).toEqual({ checkpoint: null, absence: 'uncaptured' });
   });
 
   it('does not mutate the window it reads', () => {

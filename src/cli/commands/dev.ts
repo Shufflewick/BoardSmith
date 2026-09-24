@@ -305,6 +305,13 @@ interface BoardSmithConfig {
    * `../lib/world-project.ts`.
    */
   backend?: string;
+  /**
+   * What the host submits for every seat still due when a timed step's window
+   * elapses (#302). `boardsmith validate` checks its shape and refuses a timed
+   * game without one; the dev host closes timed steps with it, as the platform
+   * does.
+   */
+  idleAction?: { name: string; args?: Record<string, unknown> };
 }
 
 /**
@@ -984,6 +991,7 @@ export async function devCommand(options: DevOptions): Promise<void> {
       teachingDisabled,
       seedSnapshot,
       worldMode,
+      idleAction: config.idleAction,
       ...(devStore
         ? {
             persistence: {

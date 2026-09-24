@@ -33,6 +33,18 @@ interface ActionMetaEntry {
   suppressFromActionPanel?: boolean;
 }
 
+/** An available action as the panel lists it: its name and its metadata. */
+interface ActionEntry extends ActionMetaEntry {
+  name: string;
+}
+
+/** The harness's props, as each suppression case sets them. */
+interface HarnessProps {
+  platformActionPanelEscapeHatch?: boolean;
+  availableActionNames: string[];
+  actionMetadata: Record<string, ActionMetaEntry>;
+}
+
 // ── Level 1: the suppression filter itself ──────────────────────────────────
 // Mirrors ActionPanel.vue's `visibleActions` computed exactly.
 function visibleActions<T extends ActionMetaEntry>(actions: T[]): T[] {
@@ -71,7 +83,7 @@ describe('suppressFromActionPanel filter (ActionPanel.visibleActions)', () => {
   });
 
   it('leaves an ordinary unsuppressed Action Panel untouched', () => {
-    const actions = [{ name: 'move' }, { name: 'pass' }];
+    const actions: ActionEntry[] = [{ name: 'move' }, { name: 'pass' }];
     expect(visibleActions(actions).map(a => a.name)).toEqual(['move', 'pass']);
   });
 });
@@ -162,11 +174,12 @@ describe('GameShell Action Panel suppression gate (LIBX-01)', () => {
   });
 
   it('a turn indicator is always present, in every suppression combination (T-164-01-02)', () => {
-    for (const props of [
+    const cases: HarnessProps[] = [
       { availableActionNames: ['a'], actionMetadata: { a: { suppressFromActionPanel: true } } },
       { availableActionNames: ['a', 'b'], actionMetadata: { a: { suppressFromActionPanel: true }, b: {} } },
       { platformActionPanelEscapeHatch: true, availableActionNames: ['a'], actionMetadata: { a: {} } },
-    ]) {
+    ];
+    for (const props of cases) {
       const wrapper = mount(ActionPanelHarness, { props });
       const hasIndicator =
         wrapper.find('.turn').exists() || wrapper.find('.action-panel-stub').exists();

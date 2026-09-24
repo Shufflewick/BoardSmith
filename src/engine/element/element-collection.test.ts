@@ -8,9 +8,19 @@ import { ElementCollection } from './element-collection.js';
 import { Game, GameElement, Piece, Player, Space } from '../index.js';
 import type { GameOptions } from '../index.js';
 
+class ShuffleGame extends Game<ShuffleGame, Player> {}
+
+/** Five pieces named 1..5, in order, as the collection a finder returns. */
+function fivePieces(): ElementCollection<Piece<ShuffleGame>> {
+  const game = new ShuffleGame({ playerCount: 2, seed: 'shuffle' });
+  const bag = game.create(Space<ShuffleGame>, 'bag');
+  for (let i = 1; i <= 5; i++) bag.create(Piece<ShuffleGame>, `${i}`);
+  return bag.all(Piece<ShuffleGame>);
+}
+
 describe('ElementCollection.shuffle', () => {
   it('shuffles deterministically using a stub rng', () => {
-    const collection = ElementCollection.from([1, 2, 3, 4, 5]) as ElementCollection<number>;
+    const collection = fivePieces();
 
     // Deterministic stub sequence for Fisher-Yates: always pick index 0.
     let calls = 0;
@@ -23,16 +33,16 @@ describe('ElementCollection.shuffle', () => {
 
     // Fisher-Yates with random()=0 always swaps element i with element 0,
     // producing a fully reversed-ish deterministic order for this input.
-    expect(collection).toEqual([2, 3, 4, 5, 1]);
+    expect(collection.map((piece) => piece.name)).toEqual(['2', '3', '4', '5', '1']);
     expect(calls).toBe(4);
   });
 
   it('rejects being invoked without an rng at runtime (no Math.random default)', () => {
-    const collection = ElementCollection.from([1, 2, 3]) as ElementCollection<number>;
+    const collection = fivePieces();
     // TypeScript rejects this at compile time (shuffle(random: () => number)
     // has no default). Simulate an untyped/JS caller bypassing the type
     // system to assert there is no silent Math.random fallback at runtime.
-    const untypedShuffle = collection.shuffle as (random?: () => number) => ElementCollection<number>;
+    const untypedShuffle = collection.shuffle as (random?: () => number) => ElementCollection<Piece<ShuffleGame>>;
     expect(() => untypedShuffle.call(collection)).toThrow();
   });
 });

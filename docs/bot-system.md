@@ -372,9 +372,6 @@ against the sampler rather than swallowed.
 - **The root searches the union.** Root moves accumulate across samples instead
   of being capped to one world's list. A forced `threatResponseMoves` block
   still wins: the game said MUST.
-- **The transposition table is off.** It keys on flow position alone, so under a
-  sampler the same key covers many different worlds. Caching there would freeze
-  the first world's verdict and destroy the averaging.
 - **Costs nothing when absent.** No sampler means no sampling, no per-world
   refresh, and the classic UCT term unchanged. Games without hidden state pay
   for none of this.

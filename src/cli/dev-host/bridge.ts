@@ -15,7 +15,7 @@
  * prod stay in lockstep.
  */
 
-import { SnapshotSessionHost, type Op, type OpResult } from '../../session/index.js';
+import { SnapshotSessionHost, type Op, type OpResult, type TurnBoundary } from '../../session/index.js';
 import { record, getEntries, type LogEntry } from './log-capture.js';
 
 /** Wire op names the embedded GameShell sends (snake_case, prod payload shapes). */
@@ -87,11 +87,13 @@ export interface DevSessionOptions {
   /**
    * Post a `game_state` frame for one seat's iframe. Called for every seat on
    * each broadcast; the caller decides which seat's iframe actually exists.
+   * `meta.turnBoundary` is the host's own, so the caller can arm a timed
+   * step's window (#302).
    */
   postGameState: (
     seat: number,
     view: unknown,
-    meta: { isComplete: boolean; winners: number[]; isDraw: boolean },
+    meta: { isComplete: boolean; winners: number[]; isDraw: boolean; turnBoundary: TurnBoundary },
   ) => void;
   /** Post a `server_response` frame to the requesting seat's iframe. */
   postServerResponse: (

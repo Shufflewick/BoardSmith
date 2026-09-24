@@ -310,7 +310,15 @@ describe("worldMigration() (#449)", () => {
       },
     });
 
-    declared.partition!({} as GameElement, { name: "a", from: 1, to: 2, digest: { total: 7 } });
+    declared.partition!({} as GameElement, {
+      name: "a",
+      from: 1,
+      to: 2,
+      digest: { total: 7 },
+      source: (name) => {
+        throw new Error(`this migration declares no join, so it has no source "${name}"`);
+      },
+    });
     expect(seen).toEqual([7]);
     expect(() => assertWorldMigration(declared, 2)).not.toThrow();
   });

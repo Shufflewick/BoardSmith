@@ -603,8 +603,8 @@ describe('executeOp', () => {
       // The policy held across all eight ops -- every one of which rebuilt its
       // runner from the snapshot, so this also proves the policy survives the
       // stateless boundary.
-      expect(snapshot.actionCheckpoints!.entries).toHaveLength(3);
-      expect(snapshot.actionCheckpoints!.baseIndex).toBe(6);
+      expect(snapshot).toHaveProperty('actionCheckpoints.entries.length', 3);
+      expect(snapshot).toHaveProperty('actionCheckpoints.baseIndex', 6);
 
       // This game's flow keeps one action-step frame open, so undo targets the
       // frame start (action 0) -- below the retained window.
