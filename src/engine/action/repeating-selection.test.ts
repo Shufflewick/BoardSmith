@@ -7,7 +7,7 @@
  * sequences it offers, so no caller holds a second opinion about what a repeat
  * means.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, expectTypeOf } from 'vitest';
 import {
   Game,
   Player,
@@ -61,10 +61,7 @@ class GemGame extends Game<GemGame, Player> {
           },
         })
         .execute((args, ctx) => {
-          // A repeating selection's argument is its picks. The builder types
-          // it as one element, so the array is asserted here.
-          const gems = args.gems as unknown as Gem[];
-          (ctx.game as GemGame).taken = gems.map((g) => g.name!);
+          (ctx.game as GemGame).taken = args.gems.map((g) => g.name!);
           return { success: true };
         }),
     );
@@ -180,5 +177,45 @@ describe('enumerating a repeating choice (#325)', () => {
       expect(result.error).toBeUndefined();
       expect(runner.game.eachCalls).toEqual(move.args.token);
     }
+  });
+});
+
+describe('a repeating selection is typed as what execute receives (#347)', () => {
+  it('chooseFrom with repeat or repeatUntil adds its argument as an array of picks', () => {
+    Action.create('viaRepeat')
+      .chooseFrom('token', {
+        choices: ['p1', 'p2', 'stop'],
+        repeat: { until: (_ctx, last) => last === 'stop' },
+      })
+      .execute((args) => {
+        expectTypeOf(args.token).toEqualTypeOf<string[]>();
+      });
+
+    Action.create('viaRepeatUntil')
+      .chooseFrom('token', { choices: ['p1', 'p2', 'stop'], repeatUntil: 'stop' })
+      .execute((args) => {
+        expectTypeOf(args.token).toEqualTypeOf<string[]>();
+      });
+  });
+
+  it('chooseElement with repeat or repeatUntil adds its argument as an array of elements', () => {
+    Action.create('viaRepeat')
+      .chooseElement('gems', {
+        elementClass: Gem,
+        repeat: { until: () => true },
+      })
+      .execute((args) => {
+        expectTypeOf(args.gems).toEqualTypeOf<Gem[]>();
+      });
+  });
+
+  it('a selection that does not repeat keeps its single value', () => {
+    Action.create('once')
+      .chooseFrom('token', { choices: ['p1', 'p2'] })
+      .chooseElement('gem', { elementClass: Gem })
+      .execute((args) => {
+        expectTypeOf(args.token).toEqualTypeOf<string>();
+        expectTypeOf(args.gem).toEqualTypeOf<Gem>();
+      });
   });
 });

@@ -120,12 +120,13 @@ the next is offered:
 })
 .execute((args) => {
   // Every pick, in order, ending with the one that ended it: ['p2', 'p1', 'stop']
-  const picks = args.token as unknown as string[];
+  const picks: string[] = args.token;
 });
 ```
 
 (`repeatUntil: value` is shorthand for an `until` that ends on that value.) For
-`chooseElement`, `execute` receives the picked elements.
+`chooseElement`, `execute` receives the picked elements. Either option types the
+argument as an array, so the type says what `execute` receives (#347).
 
 A repeat means the same thing however the move arrives (#325). A player clicking
 picks, a whole `action` submission, a bot's move, the random simulator and

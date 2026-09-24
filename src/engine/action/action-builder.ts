@@ -46,6 +46,97 @@ type NoArgs = Record<never, never>;
 type AddArg<A, K extends string, T> = A & { [P in K]: T };
 
 /**
+ * The options that make a selection REPEAT (#325, #347): `repeat`,
+ * `repeatUntil`, or both. A repeating selection is picked one value at a time,
+ * each pick running `repeat.onEach` before the next is offered, until
+ * `repeat.until` (or the `repeatUntil` value) ends it. The argument `execute`
+ * receives is then every pick, in order, ending with the one that ended it --
+ * which is why a selection given either option is typed as an array.
+ */
+type RepeatingOptions<T> =
+  | {
+      /** Repeat until `until` says the last pick ended it; `onEach` runs once per pick. */
+      repeat: RepeatConfig<T>;
+      /** Shorthand for a `repeat.until` that ends when this value is picked. */
+      repeatUntil?: T;
+    }
+  | { repeat?: RepeatConfig<T>; repeatUntil: T };
+
+/** A selection that does not repeat names neither repeat option. */
+type NonRepeatingOptions = { repeat?: undefined; repeatUntil?: undefined };
+
+/** Every `chooseFrom` option except the repeat options ({@link RepeatingOptions}). */
+type ChooseFromOptions<G extends Game, T> = {
+  prompt?: string | ((context: ActionContext<G>) => string);
+  choices: T[] | ((context: ActionContext<G>) => T[]);
+  display?: (choice: T) => string;
+  optional?: boolean | string;
+  validate?: (value: T, args: Record<string, unknown>, context: ActionContext<G>) => boolean | string;
+  /** Get board element references for highlighting (source/target) */
+  boardRefs?: (choice: T, context: ActionContext<G>) => ChoiceBoardRefs;
+  /** Filter choices based on a previous selection value */
+  filterBy?: DependentFilter;
+  /**
+   * Name of a previous selection this choice depends on.
+   * When specified, choices are computed for each possible value of the
+   * dependent selection and sent to the client as a map.
+   */
+  dependsOn?: string;
+  /**
+   * Enable multi-select mode with checkboxes instead of radio buttons.
+   * Can be a static config or dynamic function evaluated per context.
+   */
+  multiSelect?: number | MultiSelectConfig | ((context: ActionContext<G>) => number | MultiSelectConfig | undefined);
+  /**
+   * Ask for an ORDERED, REPEATABLE list rather than a set (#249): the value
+   * is an array in the order the player built it, one identity may appear
+   * more than once, and `min`/`max` count ENTRIES. Mutually exclusive with
+   * `multiSelect`.
+   */
+  orderedList?: number | OrderedListConfig | ((context: ActionContext<G>) => number | OrderedListConfig | undefined);
+  /** Check if choice should be disabled. Returns reason string or false. */
+  disabled?: (choice: T, context: ActionContext<G>) => string | false;
+  /** Called after this step is resolved. Receives the resolved value and a restricted context. */
+  onSelect?: (value: T, context: OnSelectContext) => void;
+  /** Called if the action is cancelled after onSelect fired but before execute(). */
+  onCancel?: (context: OnSelectContext) => void;
+};
+
+/** Every `chooseElement` option except the repeat options ({@link RepeatingOptions}). */
+type ChooseElementOptions<G extends Game, T extends GameElement> = {
+  prompt?: string | ((context: ActionContext<G>) => string);
+  elementClass?: ElementClass<T>;
+  from?: GameElement | ((context: ActionContext<G>) => GameElement);
+  filter?: (element: GameElement, context: ActionContext<G>) => boolean;
+  /**
+   * Precomputed candidates (alternative to elementClass/from/filter).
+   * Custom UIs send the element ID directly.
+   */
+  elements?: T[] | ((context: ActionContext<G>) => T[]);
+  optional?: boolean | string;
+  validate?: (value: T, args: Record<string, unknown>, context: ActionContext<G>) => boolean | string;
+  /**
+   * Custom label for each element (for UI buttons). Receives the whole
+   * candidate list too, so a label can disambiguate against its siblings.
+   */
+  display?: (element: T, context: ActionContext<G>, allElements: T[]) => string;
+  /** Get board element reference for highlighting */
+  boardRef?: (element: T, context: ActionContext<G>) => BoardElementRef;
+  /**
+   * Name of a previous selection this depends on.
+   * When specified, availability checking will verify that at least one
+   * choice from the dependency leads to valid choices for this selection.
+   */
+  dependsOn?: string;
+  /** Check if element should be disabled. Returns reason string or false. */
+  disabled?: (element: T, context: ActionContext<G>) => string | false;
+  /** Called after this step is resolved. Receives the resolved value and a restricted context. */
+  onSelect?: (value: T, context: OnSelectContext) => void;
+  /** Called if the action is cancelled after onSelect fired but before execute(). */
+  onCancel?: (context: OnSelectContext) => void;
+};
+
+/**
  * Builder class for creating game actions with a fluent API.
  *
  * Actions represent high-level player operations (game-specific, user-facing).
@@ -484,52 +575,16 @@ export class Action<
    */
   chooseFrom<K extends string, T>(
     name: K,
-    options: {
-      prompt?: string | ((context: ActionContext<G>) => string);
-      choices: T[] | ((context: ActionContext<G>) => T[]);
-      display?: (choice: T) => string;
-      optional?: boolean | string;
-      validate?: (value: T, args: Record<string, unknown>, context: ActionContext<G>) => boolean | string;
-      /** Get board element references for highlighting (source/target) */
-      boardRefs?: (choice: T, context: ActionContext<G>) => ChoiceBoardRefs;
-      /** Filter choices based on a previous selection value */
-      filterBy?: DependentFilter;
-      /**
-       * Name of a previous selection this choice depends on.
-       * When specified, choices are computed for each possible value of the
-       * dependent selection and sent to the client as a map.
-       */
-      dependsOn?: string;
-      /**
-       * Repeat this selection until termination condition is met.
-       * When used, the selection value becomes an array of all choices made.
-       */
-      repeat?: RepeatConfig<T>;
-      /**
-       * Shorthand for repeat.until that terminates when this value is selected.
-       * Equivalent to: repeat: { until: (ctx, choice) => choice === repeatUntil }
-       */
-      repeatUntil?: T;
-      /**
-       * Enable multi-select mode with checkboxes instead of radio buttons.
-       * Can be a static config or dynamic function evaluated per context.
-       */
-      multiSelect?: number | MultiSelectConfig | ((context: ActionContext<G>) => number | MultiSelectConfig | undefined);
-      /**
-       * Ask for an ORDERED, REPEATABLE list rather than a set (#249): the value
-       * is an array in the order the player built it, one identity may appear
-       * more than once, and `min`/`max` count ENTRIES. Mutually exclusive with
-       * `multiSelect`.
-       */
-      orderedList?: number | OrderedListConfig | ((context: ActionContext<G>) => number | OrderedListConfig | undefined);
-      /** Check if choice should be disabled. Returns reason string or false. */
-      disabled?: (choice: T, context: ActionContext<G>) => string | false;
-      /** Called after this step is resolved. Receives the resolved value and a restricted context. */
-      onSelect?: (value: T, context: OnSelectContext) => void;
-      /** Called if the action is cancelled after onSelect fired but before execute(). */
-      onCancel?: (context: OnSelectContext) => void;
-    }
-  ): Action<G, AddArg<A, K, T>> {
+    options: ChooseFromOptions<G, T> & RepeatingOptions<T>
+  ): Action<G, AddArg<A, K, T[]>>;
+  chooseFrom<K extends string, T>(
+    name: K,
+    options: ChooseFromOptions<G, T> & NonRepeatingOptions
+  ): Action<G, AddArg<A, K, T>>;
+  chooseFrom<K extends string, T>(
+    name: K,
+    options: ChooseFromOptions<G, T> & Partial<RepeatingOptions<T>>
+  ): Action<G, AddArg<A, K, T>> | Action<G, AddArg<A, K, T[]>> {
     // A SET AND A SEQUENCE ARE DIFFERENT QUESTIONS (#249), and a selection that
     // asked both would have to pick one silently: the set refuses the repeat the
     // list exists to allow. Refused at declaration time, where the author is
@@ -627,50 +682,16 @@ export class Action<
    */
   chooseElement<K extends string, T extends GameElement>(
     name: K,
-    options: {
-      prompt?: string | ((context: ActionContext<G>) => string);
-      elementClass?: ElementClass<T>;
-      from?: GameElement | ((context: ActionContext<G>) => GameElement);
-      filter?: (element: GameElement, context: ActionContext<G>) => boolean;
-      /**
-       * Precomputed candidates (alternative to elementClass/from/filter).
-       * Custom UIs send the element ID directly.
-       */
-      elements?: T[] | ((context: ActionContext<G>) => T[]);
-      optional?: boolean | string;
-      validate?: (value: T, args: Record<string, unknown>, context: ActionContext<G>) => boolean | string;
-      /**
-       * Custom label for each element (for UI buttons). Receives the whole
-       * candidate list too, so a label can disambiguate against its siblings.
-       */
-      display?: (element: T, context: ActionContext<G>, allElements: T[]) => string;
-      /** Get board element reference for highlighting */
-      boardRef?: (element: T, context: ActionContext<G>) => BoardElementRef;
-      /**
-       * Name of a previous selection this depends on.
-       * When specified, availability checking will verify that at least one
-       * choice from the dependency leads to valid choices for this selection.
-       */
-      dependsOn?: string;
-      /**
-       * Repeat this selection until termination condition is met.
-       * When used, the selection value becomes an array of all elements selected.
-       * Each selection round-trips to the server for state updates.
-       */
-      repeat?: RepeatConfig<T>;
-      /**
-       * Shorthand for repeat.until that terminates when this element is selected.
-       * Equivalent to: repeat: { until: (ctx, el) => el === repeatUntil }
-       */
-      repeatUntil?: T;
-      /** Check if element should be disabled. Returns reason string or false. */
-      disabled?: (element: T, context: ActionContext<G>) => string | false;
-      /** Called after this step is resolved. Receives the resolved value and a restricted context. */
-      onSelect?: (value: T, context: OnSelectContext) => void;
-      /** Called if the action is cancelled after onSelect fired but before execute(). */
-      onCancel?: (context: OnSelectContext) => void;
-    } = {}
-  ): Action<G, AddArg<A, K, T>> {
+    options: ChooseElementOptions<G, T> & RepeatingOptions<T>
+  ): Action<G, AddArg<A, K, T[]>>;
+  chooseElement<K extends string, T extends GameElement>(
+    name: K,
+    options?: ChooseElementOptions<G, T> & NonRepeatingOptions
+  ): Action<G, AddArg<A, K, T>>;
+  chooseElement<K extends string, T extends GameElement>(
+    name: K,
+    options: ChooseElementOptions<G, T> & Partial<RepeatingOptions<T>> = {}
+  ): Action<G, AddArg<A, K, T>> | Action<G, AddArg<A, K, T[]>> {
     const selection = {
       type: 'element',
       name,
