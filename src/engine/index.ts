@@ -57,7 +57,7 @@ export type {
   PlayerViewFunction,
   // The type of `Game.random`, which rules and tests may replace -- a game that
   // may set the field must be able to name what it is setting it to.
-  SeededRandom,
+  GameRandom,
   ElementLayout,
   HexOrientation,
   HexCoordSystem,
@@ -166,7 +166,6 @@ export type {
   FollowUpOffer,
   SerializedAction,
   ValidationResult,
-  BoardElementRef,
   RefWithRole,
   ChoiceBoardRefs,
   DependentFilter,

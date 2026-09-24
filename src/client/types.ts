@@ -20,7 +20,7 @@ import type {
   UpdatePlayerOptionsRequest,
   WebSocketMessage,
 } from '../types/protocol.js';
-import type { AnimationEvent, FollowUpOffer, TutorialStepView } from '../engine/index.js';
+import type { AnimationEvent, FlowState, FollowUpOffer, TutorialStepView } from '../engine/index.js';
 // Type-only (erased at runtime, no client -> session coupling in the emitted
 // code). `PlayerState` below is the wire shape of the server's
 // `PlayerGameState`, so borrowing the server's own payload types is what keeps
@@ -124,19 +124,10 @@ export interface MatchmakingStatus {
 // ============================================
 
 /**
- * Client-side view of the engine's `FlowState` (engine/flow/types.ts), which
- * `buildPlayerState` forwards onto the wire as-is. Keep the two in step — this
- * copy silently lacked `complete` for a long time, and GameShell's game-over
- * template reads it.
+ * The engine's `FlowState`, which `buildPlayerState` forwards onto the wire
+ * as-is. Re-exported rather than restated, so the client cannot drift from it.
  */
-export interface FlowState {
-  currentPlayer?: number;
-  awaitingInput?: boolean;
-  availableActions?: string[];
-  phase?: string;
-  /** Whether the flow has finished — drives the game-over UI. */
-  complete?: boolean;
-}
+export type { FlowState };
 
 export interface PlayerState {
   /** Current game phase */

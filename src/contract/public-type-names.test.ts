@@ -94,7 +94,6 @@ const KNOWN_COLLISIONS: Record<string, { issue: number; declarations: string[] }
   ActionMetadata: { issue: 374, declarations: ['src/types/protocol.ts:ActionMetadata', 'src/ui/composables/useActionControllerTypes.ts:ActionMetadata'] },
   PickStepResult: { issue: 374, declarations: ['src/session/pending-action-manager.ts:PickStepResult', 'src/ui/composables/useActionControllerTypes.ts:PickStepResult'] },
   HexOrientation: { issue: 374, declarations: ['src/engine/element/hex-grid.ts:HexOrientation', 'src/ui/composables/useHexGrid.ts:HexOrientation'] },
-  FlowState: { issue: 376, declarations: ['src/client/types.ts:FlowState', 'src/engine/flow/types.ts:FlowState'] },
   CreateGameRequest: { issue: 375, declarations: ['src/session/types.ts:CreateGameRequest', 'src/types/protocol.ts:CreateGameRequest'] },
   PlayerConfig: { issue: 375, declarations: ['src/bot-trainer/benchmark.ts:PlayerConfig', 'src/session/types.ts:PlayerConfig', 'src/types/protocol.ts:PlayerConfig'] },
   ClaimSeatRequest: { issue: 375, declarations: ['src/session/types.ts:ClaimSeatRequest', 'src/types/protocol.ts:ClaimSeatRequest'] },
@@ -102,9 +101,6 @@ const KNOWN_COLLISIONS: Record<string, { issue: number; declarations: string[] }
   JoinLobbyRequest: { issue: 375, declarations: ['src/session/types.ts:JoinLobbyRequest', 'src/types/protocol.ts:JoinLobbyRequest'] },
   JoinLobbyResponse: { issue: 375, declarations: ['src/session/types.ts:JoinLobbyResponse', 'src/types/protocol.ts:JoinLobbyResponse'] },
   GameClass: { issue: 375, declarations: ['src/bot-trainer/types.ts:GameClass', 'src/session/types.ts:GameClass'] },
-  SeededRandom: { issue: 376, declarations: ['src/engine/element/game.ts:SeededRandom', 'src/utils/random.ts:SeededRandom'] },
-  RefWithRole: { issue: 376, declarations: ['src/engine/action/types.ts:RefWithRole', 'src/types/protocol.ts:RefWithRole'] },
-  WorldSeatView: { issue: 376, declarations: ['src/testing/test-world.ts:WorldSeatView', 'src/world/contract.ts:WorldSeatView'] },
 };
 
 // Built once, here, because compiling every entry point is slow one-time setup.

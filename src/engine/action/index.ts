@@ -18,7 +18,6 @@ export type {
   FollowUpOffer,
   SerializedAction,
   ValidationResult,
-  BoardElementRef,
   RefWithRole,
   ChoiceBoardRefs,
   DependentFilter,

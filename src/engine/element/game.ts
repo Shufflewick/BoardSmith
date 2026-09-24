@@ -350,7 +350,7 @@ export type PlayerViewFunction<G extends Game = Game> = (
  * 32-bit integer (`h`); `getState`/`setState` read and write it so a snapshot can
  * round-trip the RNG position without replaying the actions that advanced it.
  */
-export interface SeededRandom {
+export interface GameRandom {
   (): number;
   /** Read the generator's current internal state (the mulberry32 `h`). */
   getState(): number;
@@ -363,7 +363,7 @@ export interface SeededRandom {
  * single-integer state via `getState`/`setState` so it can be captured in a
  * snapshot and restored authoritatively (no action replay needed).
  */
-function createSeededRandom(seed: string): SeededRandom {
+function createGameRandom(seed: string): GameRandom {
   // Simple mulberry32 PRNG
   let h = 0;
   for (let i = 0; i < seed.length; i++) {
@@ -376,7 +376,7 @@ function createSeededRandom(seed: string): SeededRandom {
     let t = Math.imul(h ^ h >>> 15, 1 | h);
     t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
     return ((t ^ t >>> 14) >>> 0) / 4294967296;
-  } as SeededRandom;
+  } as GameRandom;
 
   random.getState = () => h;
   random.setState = (state: number) => {
@@ -875,7 +875,7 @@ export class Game<
   phase: GamePhase = 'setup';
 
   /** Seeded random number generator */
-  random: SeededRandom;
+  random: GameRandom;
 
   /**
    * Message log.
@@ -1018,7 +1018,7 @@ export class Game<
   constructor(options: GameOptions) {
     // Create seed for random
     const seed = options.seed ?? Math.random().toString(36).substring(2);
-    const random = createSeededRandom(seed);
+    const random = createGameRandom(seed);
 
     // Initialize context with Map for class registry
     const ctx: Partial<ElementContext> = {
@@ -3205,7 +3205,7 @@ export class Game<
     const real = this.random;
     const forbidden = function (): number {
       throw new RandomnessForbiddenError();
-    } as SeededRandom;
+    } as GameRandom;
     forbidden.getState = () => real.getState();
     forbidden.setState = (state: number) => real.setState(state);
 
