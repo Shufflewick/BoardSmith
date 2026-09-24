@@ -97,7 +97,7 @@
     "src/cli/commands/drift-check.test.ts:76-80|src/cli/commands/drift-check.test.ts:90-100",
     "src/cli/commands/drift-check.test.ts:178-202|src/cli/commands/trace-check.test.ts:213-237",
     "src/cli/commands/drift-check.ts:202-222|src/cli/commands/trace-check.ts:248-268",
-    "src/cli/commands/example-derivation.test.ts:539-546|src/cli/commands/example-derivation.test.ts:563-575",
+    "src/cli/commands/example-derivation.test.ts:625-632|src/cli/commands/example-derivation.test.ts:649-661",
     "src/cli/commands/ingest-archive.test.ts:1065-1070|src/cli/commands/ingest-archive.test.ts:1139-1144",
     "src/cli/commands/ingest-archive.test.ts:1178-1186|src/cli/commands/ingest-archive.test.ts:1193-1201",
     "src/cli/commands/ingest-archive.ts:823-831|src/cli/commands/ingest-archive.ts:932-953",
