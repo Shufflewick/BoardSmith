@@ -1,71 +1,24 @@
 import type { FlowDebugInfo } from './types.js';
 import type { Game } from '../element/game.js';
 import type { FlowNode, FlowPosition, FlowState } from './types.js';
+import { resolveFlowChild } from './flow-navigation.js';
 
 /**
- * Walk `root` following `position.path` as an index stack, collecting the
- * most-specific named node encountered along the way (falling back to the
- * node's `type` when `config.name` is absent). Degrades gracefully on an
- * invalid/partial path — stops at the deepest reachable node rather than
- * throwing.
- *
- * Uses the SAME `switch (node.type)` child-selection rules as
- * `FlowEngine.getChildNode()` (src/engine/flow/engine.ts) so that a given
- * `FlowPosition.path` resolves to the exact node the engine itself would
- * navigate to:
- *   - `sequence` -> `config.steps[idx]`
- *   - `loop` / `repeat` / `each-player` / `for-each` / `phase` -> `config.do`
- *   - `if` -> `config.then` (idx 0) or `config.else` (idx 1)
- *   - `switch` -> `Object.values(config.cases)[idx]`, falling back to
- *     `config.default` when `idx` is out of range for `cases`
- *   - `action-step` / `simultaneous-action-step` / `execute` -> leaves, no children
+ * The most specific step `position` is at: the deepest node reached by
+ * following `position.path` from `root`, named by `config.name` or, failing
+ * that, by its `type`. Each segment is resolved with {@link resolveFlowChild},
+ * the same rule `FlowEngine.restore()` rebuilds its stack with, so this names
+ * the node the engine itself is at (#324). A path that no longer fits the
+ * flow definition stops at the deepest node it reaches rather than throwing.
  */
-function walkPath<G extends Game = Game>(root: FlowNode<G>, path: number[]): { node: FlowNode<G>; step?: string } {
+function stepAt<G extends Game = Game>(root: FlowNode<G>, position: FlowPosition): string {
   let node = root;
-  let step: string | undefined = root.config.name ?? root.type;
-
-  for (const idx of path) {
-    const child = getChildNode(node, idx);
-    if (!child) {
-      // Out-of-range / invalid path segment: stop here, degrade gracefully.
-      break;
-    }
+  for (const [depth, index] of position.path.entries()) {
+    const child = resolveFlowChild(node, index, position.frameData?.[`__frame_${depth}`]);
+    if (!child) break;
     node = child;
-    step = node.config.name ?? node.type;
   }
-
-  return { node, step };
-}
-
-function getChildNode<G extends Game = Game>(node: FlowNode<G>, index: number): FlowNode<G> | undefined {
-  switch (node.type) {
-    case 'sequence':
-      return node.config.steps[index];
-    case 'loop':
-    case 'repeat':
-    case 'each-player':
-    case 'for-each':
-    case 'phase':
-      return node.config.do;
-    case 'if':
-      return index === 0 ? node.config.then : node.config.else;
-    case 'switch': {
-      const cases = Object.values(node.config.cases);
-      return cases[index] ?? node.config.default;
-    }
-    case 'action-step':
-    case 'simultaneous-action-step':
-    case 'execute':
-      // Leaves: no nested FlowNode children.
-      return undefined;
-    default: {
-      // Exhaustiveness guard: if a new FlowNode variant is added to the
-      // union without updating this function, this becomes a compile-time
-      // error instead of a silent runtime gap.
-      const _exhaustive: never = node;
-      return _exhaustive;
-    }
-  }
+  return node.config.name ?? node.type;
 }
 
 function formatDescribe(phase: string | undefined, step: string | undefined, flowState: FlowState): string {
@@ -118,7 +71,7 @@ export function describeFlowPosition<G extends Game = Game>(
   position: FlowPosition,
   flowState: FlowState,
 ): FlowDebugInfo {
-  const { step } = walkPath(root, position.path);
+  const step = stepAt(root, position);
   const phase = flowState.currentPhase;
 
   return {
