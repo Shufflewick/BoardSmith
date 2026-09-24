@@ -293,8 +293,7 @@ function refuseConflicts(projectPath: string, name: string, paths: string[]): vo
   const conflicts = paths.filter((path) => existsSync(path)).map((path) => relative(projectPath, path));
   if (conflicts.length === 0) return;
   throw new Error(
-    `${conflicts.length === 1 ? 'A file' : `${conflicts.length} files`} that scaffolding "${name}" ` +
-      'writes already exist here, so nothing was changed:\n' +
+    `Scaffolding "${name}" would overwrite files that already exist here, so nothing was changed:\n` +
       conflicts.map((path) => `  ${path}`).join('\n') +
       '\nMove or rename them, run init again, then merge anything you still need back in.',
   );
