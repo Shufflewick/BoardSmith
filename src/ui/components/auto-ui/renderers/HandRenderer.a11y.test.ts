@@ -121,7 +121,7 @@ describe('HandRenderer a11y — selectable slot', () => {
   it('container has tabindex="0" when the whole hand is action-selectable', () => {
     const bi = createBoardInteraction();
     // Mark the hand element (id: 10) as selectable
-    bi.setValidElements([{ ref: { id: 10 }, role: 'target' }], () => {});
+    bi.setValidElements([{ id: 10, ref: { id: 10 } }], () => {});
     const wrapper = mountWithInteraction(buildHandElement([buildCardElement(1)]), bi);
     const container = wrapper.find('.hand-container');
     expect(container.attributes('tabindex')).toBe('0');
@@ -136,14 +136,18 @@ describe('HandRenderer a11y — selectable slot', () => {
   });
 });
 
+/** A mounted hand (id 10) that the current action can select, with triggerElementSelect spied. */
+function selectableHandWithSpy() {
+  const bi = createBoardInteraction();
+  bi.setValidElements([{ id: 10, ref: { id: 10 } }], () => {});
+  const triggerSpy = vi.spyOn(bi, 'triggerElementSelect');
+  const wrapper = mountWithInteraction(buildHandElement([buildCardElement(1)]), bi);
+  return { container: wrapper.find('.hand-container'), triggerSpy };
+}
+
 describe('HandRenderer a11y — keyboard activation (Enter fires triggerElementSelect)', () => {
   it('keydown Enter on selectable container fires exactly one triggerElementSelect', async () => {
-    const bi = createBoardInteraction();
-    bi.setValidElements([{ ref: { id: 10 }, role: 'target' }], () => {});
-    const triggerSpy = vi.spyOn(bi, 'triggerElementSelect');
-
-    const wrapper = mountWithInteraction(buildHandElement([buildCardElement(1)]), bi);
-    const container = wrapper.find('.hand-container');
+    const { container, triggerSpy } = selectableHandWithSpy();
 
     await container.trigger('keydown', { key: 'Enter' });
 
@@ -154,12 +158,7 @@ describe('HandRenderer a11y — keyboard activation (Enter fires triggerElementS
   });
 
   it('keydown Space on selectable container fires exactly one triggerElementSelect', async () => {
-    const bi = createBoardInteraction();
-    bi.setValidElements([{ ref: { id: 10 }, role: 'target' }], () => {});
-    const triggerSpy = vi.spyOn(bi, 'triggerElementSelect');
-
-    const wrapper = mountWithInteraction(buildHandElement([buildCardElement(1)]), bi);
-    const container = wrapper.find('.hand-container');
+    const { container, triggerSpy } = selectableHandWithSpy();
 
     await container.trigger('keydown', { key: ' ' });
 

@@ -33,9 +33,10 @@ import {
   actionStep,
   loop,
   type GameOptions,
-  type OnSelectContext,
 } from '../../engine/index.js';
-import { executeOp, type GameDefinitionLike } from '../../session/stateless-ops.js';
+import type { OnSelectContext } from '../../engine/action/index.js';
+import { executeOp, type GameDefinitionLike, type OpResult } from '../../session/stateless-ops.js';
+import { boundaryKeyOf } from '../../session/testing/boundary-stamp.js';
 import { shapeResult } from '../../cli/dev-host/bridge.js';
 import { useActionController } from './useActionController.js';
 import type { ActionMetadata, ActionResult, PickStepResult, PickChoicesResult } from './useActionControllerTypes.js';
@@ -130,16 +131,16 @@ interface PlayerView {
  */
 function createHost() {
   let snapshot: unknown = null;
-  let pendingState: unknown = null;
+  let pendingState: Record<string, unknown> | null = null;
 
   const availableActions = ref<string[]>([]);
   const actionMetadata = ref<Record<string, ActionMetadata> | undefined>(undefined);
 
-  function absorb(result: Record<string, unknown>): void {
+  function absorb(result: OpResult): void {
     if (result.snapshot !== undefined) snapshot = result.snapshot;
     // `pendingState` is cleared (to null) by the op that completes the action —
     // absorbing it unconditionally is what keeps the next op well-formed.
-    if ('pendingState' in result) pendingState = result.pendingState;
+    pendingState = result.pendingState;
 
     const views = result.playerViews as PlayerView[] | undefined;
     const seatOne = views?.[0];
@@ -153,7 +154,7 @@ function createHost() {
     actionMetadata,
     async start(): Promise<void> {
       const result = await executeOp(gameDef, gameOptions, null, null, { type: 'start' });
-      absorb(result as unknown as Record<string, unknown>);
+      absorb(result);
     },
     async sendAction(actionName: string, args: Record<string, unknown>): Promise<ActionResult> {
       const result = await executeOp(gameDef, gameOptions, snapshot, pendingState, {
@@ -161,8 +162,9 @@ function createHost() {
         actionName,
         player: 1,
         args,
+        boundaryKey: boundaryKeyOf(snapshot),
       });
-      absorb(result as unknown as Record<string, unknown>);
+      absorb(result);
       return shapeResult('action', result) as unknown as ActionResult;
     },
     async pickStep(
@@ -179,8 +181,9 @@ function createHost() {
         selectionName,
         value,
         initialArgs,
+        boundaryKey: boundaryKeyOf(snapshot),
       });
-      absorb(result as unknown as Record<string, unknown>);
+      absorb(result);
       return shapeResult('selection_step', result) as unknown as PickStepResult;
     },
     async fetchPickChoices(

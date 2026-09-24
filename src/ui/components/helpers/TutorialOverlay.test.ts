@@ -19,7 +19,7 @@
  * These are the honest, deterministic assertions for a jsdom environment.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { mount, flushPromises } from '@vue/test-utils';
 import { ref, nextTick } from 'vue';
 import TutorialOverlay from './TutorialOverlay.vue';

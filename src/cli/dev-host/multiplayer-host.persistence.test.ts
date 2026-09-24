@@ -71,7 +71,7 @@ class StoreGame extends Game<StoreGame, Player> {
 }
 
 const def: GameDefinitionLike = {
-  gameClass: StoreGame as unknown as new (...args: unknown[]) => unknown,
+  gameClass: StoreGame,
   gameType: 'store-game',
   minPlayers: 1,
   maxPlayers: 2,

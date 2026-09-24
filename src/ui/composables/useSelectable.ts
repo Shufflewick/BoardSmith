@@ -26,6 +26,18 @@ import type { BoardInteraction, ElementRef } from './useBoardInteraction.js';
 // ---------------------------------------------------------------------------
 
 /**
+ * What `useSelectable().attrs` spreads onto an element: the ARIA button wiring
+ * plus the `data-*` anchor and candidate attributes, whose names depend on the
+ * element's identity.
+ */
+interface SelectableAttrs {
+  role: 'button';
+  tabindex: '0' | '-1';
+  'aria-disabled': true | undefined;
+  [dataAttribute: string]: string | true | undefined;
+}
+
+/**
  * Wire click + keydown (Enter/Space) to triggerElementSelect for a single element.
  *
  * @param identity    Function returning the element's identity ref (id/name/notation)
@@ -55,8 +67,8 @@ export function useSelectable(
     boardInteraction.triggerElementSelect(identity());
   }
 
-  const attrs = computed(() => ({
-    role: 'button' as const,
+  const attrs = computed((): SelectableAttrs => ({
+    role: 'button',
     tabindex: isActionSelectable.value ? '0' : '-1',
     'aria-disabled': isDisabled.value || undefined,
     ...anchorAttrs(identity(), elementType),

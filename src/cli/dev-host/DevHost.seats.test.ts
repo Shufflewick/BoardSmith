@@ -226,7 +226,7 @@ describe('DevHost — seat switcher', () => {
       props: {
         config: {
           ...TEST_CONFIG,
-          presets: [{ name: 'Quick', gameOptions: { speed: 'fast' } }],
+          presets: [{ name: 'Quick', options: { speed: 'fast' } }],
         },
       },
       attachTo: document.body,
