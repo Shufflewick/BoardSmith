@@ -6,7 +6,7 @@
  * published manifest.
  */
 import { describe, it, expect } from 'vitest';
-import { BUNDLE_PROTOCOL_VERSION, ENGINE_REVISION, ENGINE_CONTRACT } from './index.js';
+import { BUNDLE_PROTOCOL_VERSION, ENGINE_REVISION, ENGINE_CONTRACT, Game, Player } from './index.js';
 import contract from '../contract/engine-contract.json' with { type: 'json' };
 
 describe('BUNDLE_PROTOCOL_VERSION', () => {
@@ -52,7 +52,7 @@ describe('the pair the build stamps', () => {
     const manifest = deriveManifest(
       { name: 'test-game', backend: 'table' },
       { name: 'test-game', version: '1.0.0' },
-      { minPlayers: 2, maxPlayers: 4 },
+      { gameClass: class StampGame extends Game<StampGame, Player> {}, minPlayers: 2, maxPlayers: 4 },
       { protocol: BUNDLE_PROTOCOL_VERSION, revision: ENGINE_REVISION },
       { tableUi: true, worldUi: false }
     );

@@ -160,7 +160,7 @@ export function deriveManifest(
   pkg: Record<string, unknown>,
   gameDefinition: Pick<
     GameDefinition,
-    'minPlayers' | 'maxPlayers' | 'bot' | 'persistence' | 'world'
+    'gameClass' | 'minPlayers' | 'maxPlayers' | 'bot' | 'persistence' | 'world'
   >,
   engine: { protocol: number; revision: number },
   artifacts: { tableUi: boolean; worldUi: boolean },

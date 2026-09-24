@@ -5,6 +5,7 @@ import { describe, it, expect } from 'vitest';
 import type { GameDefinition } from '../../session/index.js';
 import { Game, Player } from '../../engine/index.js';
 import { buildOutputDir, deriveManifest, resolveUiBuild } from './build.js';
+import { fixedDeployDefinition } from '../../session/testing/fixtures/timed-step-fixture.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -103,11 +104,25 @@ describe('deriveManifest', () => {
       asyncPlay: true,
       joinInProgress: true,
       crossSessionState: true,
+      timedSteps: false,
     });
     expect(manifest.asyncPlay).toBeUndefined();
     expect(manifest.joinInProgress).toBeUndefined();
     expect(manifest.persistence).toBeUndefined();
     expect(manifest.bot).toBeUndefined();
+  });
+
+  it('stamps capabilities.timedSteps from the compiled flow', () => {
+    const timed = fixedDeployDefinition as GameDefinition;
+    expect(derive({ name: 'fixture', idleAction: { name: 'commit' } }, timed).capabilities).toMatchObject({
+      timedSteps: true,
+    });
+    expect(derive({ name: 'fixture' }).capabilities).toMatchObject({ timedSteps: false });
+  });
+
+  it('refuses a timed game that declares no idleAction, naming the step', () => {
+    const timed = fixedDeployDefinition as GameDefinition;
+    expect(() => derive({ name: 'fixture' }, timed)).toThrow(/'deploy'.*"idleAction"/s);
   });
 
   it('refuses a manifest that declares no backend, naming both answers', () => {
@@ -259,6 +274,7 @@ describe('deriveManifest — a world-only bundle', () => {
       asyncPlay: true,
       joinInProgress: true,
       crossSessionState: true,
+      timedSteps: false,
     });
   });
 

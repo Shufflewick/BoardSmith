@@ -156,6 +156,23 @@ Which means, precisely:
   to close and who acts for a silent seat. The engine has no opinion; it only
   states which round it is in, and refuses submissions from a round that is not
   that one.
+- **A step's time window: the engine states it, the host enforces it.** An
+  `actionStep` or `simultaneousActionStep` may declare `timeLimitMs` (a number,
+  or a function of the flow context). The engine resolves it once, when the step
+  is entered, keeps the number on the step's frame so every restore path
+  (snapshot, undo checkpoint, MCTS clone) carries it rather than re-resolving
+  it, and publishes it as `FlowState.timeLimitMs` and as
+  `TurnBoundary.timeLimitMs` on every broadcast inside that boundary. It is a
+  duration, never an instant, and it does not take part in the boundary key.
+  The HOST arms its own deadline when the key changes, from its own clock, and
+  when the window elapses submits the game's `idleAction` for every seat still
+  due, stamped with the key it armed under — so a round a human closed while
+  the timer ran refuses the idle op as stale rather than letting it land in the
+  next round (§7: the host carries a boundary it captured earlier, not the
+  current one). A timed step is always resolved by `idleAction`, never by a
+  bot: the player is present and slow, not absent. `boardsmith build` stamps
+  `capabilities.timedSteps` from the compiled flow, and `boardsmith validate`
+  and `build` refuse a timed game that declares no `idleAction`.
 - **Un-takeover / seat reclamation** — what happens to a seat that a caretaker
   bot acted for, when the human returns — is deferred and is deliberately not
   specified here.

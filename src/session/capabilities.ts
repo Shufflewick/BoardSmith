@@ -32,6 +32,10 @@
  * what a legal bundle is.
  */
 
+import type { FlowNode } from '../engine/flow/types.js';
+import type { GameClass } from './types.js';
+import { timedStepNames } from '../engine/flow/step-time-limit.js';
+
 /** The backends one engine runs. A third would be added here and nowhere else. */
 export const GAME_BACKENDS = ['table', 'world'] as const;
 
@@ -128,6 +132,18 @@ export interface GameCapabilities {
    * is not called `supportsCampaigns`.
    */
   crossSessionState: boolean;
+  /**
+   * Does a step of this game close on a clock?
+   *
+   * table: true exactly when a step of the COMPILED flow declares `timeLimitMs`
+   * -- derived from the code, like `bots`. The engine states the window on the
+   * turn boundary and never closes the step itself; the host does, by
+   * submitting the game's `idleAction` for every seat still due. So a host
+   * reading `true` must hold the bundle's `idleAction`, and `boardsmith build`
+   * refuses a timed game that declares none (`capabilityContradictions`).
+   * world: false -- a world has no steps to time.
+   */
+  timedSteps: boolean;
 }
 
 /**
@@ -141,8 +157,13 @@ export interface GameCapabilities {
  */
 export interface CapabilityInputs {
   backend: GameBackend;
-  /** The COMPILED `gameDefinition` -- the code, which cannot be wished. */
+  /**
+   * The COMPILED `gameDefinition` -- the code, which cannot be wished. Its
+   * `gameClass` is constructed to read the flow a table actually runs (see
+   * `compiledFlowRoots`), which is where `timedSteps` comes from.
+   */
   definition: {
+    gameClass: GameClass;
     minPlayers?: unknown;
     maxPlayers?: unknown;
     bot?: unknown;
@@ -157,6 +178,27 @@ export interface CapabilityInputs {
     roundDeadline?: unknown;
     idleAction?: unknown;
   };
+}
+
+/**
+ * The root of the compiled flow at every seat count a TABLE's roster allows.
+ *
+ * A game builds its flow in its constructor, so the only way to read the flow
+ * is to construct the game -- once per seat count, because a constructor may
+ * build a different flow for a different table. A world has no flow, and a
+ * table without integer minPlayers/maxPlayers yields none here because
+ * `capabilityContradictions` refuses it by name.
+ */
+function compiledFlowRoots(backend: GameBackend, definition: CapabilityInputs['definition']): FlowNode[] {
+  const { gameClass, minPlayers, maxPlayers } = definition;
+  if (backend !== 'table') return [];
+  if (!Number.isInteger(minPlayers) || !Number.isInteger(maxPlayers)) return [];
+  const roots: FlowNode[] = [];
+  for (let playerCount = minPlayers as number; playerCount <= (maxPlayers as number); playerCount++) {
+    const root = new gameClass({ playerCount, seed: 'compiled-flow' }).getFlow()?.root;
+    if (root) roots.push(root);
+  }
+  return roots;
 }
 
 /** `true` only for a literal `true`; anything else, including `'yes'`, is false. */
@@ -181,6 +223,7 @@ export function resolveCapabilities(inputs: CapabilityInputs): GameCapabilities 
     asyncPlay: isWorld || declaredTrue(declared.asyncPlay),
     joinInProgress: isWorld || declaredTrue(declared.joinInProgress),
     crossSessionState: isWorld || declaredTrue(definition.persistence),
+    timedSteps: timedStepNames(compiledFlowRoots(backend, definition)).length > 0,
   };
 }
 
@@ -314,6 +357,32 @@ function tableContradictions(definition: CapabilityInputs['definition']): string
 }
 
 /**
+ * A step that closes on a clock needs the action that closes it.
+ *
+ * The engine only STATES a step's window; the host closes the step when it
+ * elapses by submitting `idleAction` for every seat still due. Without one the
+ * host has nothing to submit, and the window is a number nobody can enforce. A
+ * bot is not an alternative: the seat's player is present and slow, not absent,
+ * so the host never hands a timed-out seat to a bot.
+ */
+function timedStepContradictions(
+  definition: CapabilityInputs['definition'],
+  declared: CapabilityInputs['declared'],
+): string[] {
+  const timed = timedStepNames(compiledFlowRoots('table', definition));
+  if (timed.length === 0 || declared.idleAction !== undefined) return [];
+  const steps = timed.map((name) => `'${name}'`).join(', ');
+  return [
+    `This game's flow has ${timed.length === 1 ? 'a step' : 'steps'} that declare${timed.length === 1 ? 's' : ''} ` +
+      `timeLimitMs (${steps}), but boardsmith.json declares no "idleAction". The host closes a ` +
+      'timed step when its window elapses by submitting the idle action for every seat that has ' +
+      'not acted, so without one nothing can close it. Add the legal no-op action your rules ' +
+      'register to boardsmith.json, e.g. "idleAction": { "name": "pass" }. A bot is not an ' +
+      'alternative: a timed-out seat is never handed to a bot.',
+  ];
+}
+
+/**
  * EVERY WAY THIS BUNDLE'S DECLARATION CONTRADICTS ITSELF, as sentences for the
  * author. An empty array means the bundle is consistent.
  *
@@ -332,6 +401,6 @@ export function capabilityContradictions(inputs: CapabilityInputs): string[] {
           ...worldSeatContradictions(definition),
           ...worldFieldContradictions(definition, declared),
         ]
-      : tableContradictions(definition)),
+      : [...tableContradictions(definition), ...timedStepContradictions(definition, declared)]),
   ];
 }

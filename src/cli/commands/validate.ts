@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, statSync, readdirSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, statSync, readdirSync } from 'node:fs';
 import { join, relative, sep, resolve as resolvePath } from 'node:path';
 import { spawn } from 'node:child_process';
 import chalk from 'chalk';
@@ -23,7 +23,8 @@ import {
 import { readDistDir, createZip } from '../lib/zip.js';
 import { requireGameProject, resolveRulesDir } from '../lib/game-project.js';
 import { resolveWorldMode, WORLD_AUTHORING_DOC } from '../lib/world-project.js';
-import { GAME_BACKENDS, isGameBackend } from '../../session/index.js';
+import { GAME_BACKENDS, capabilityContradictions, isGameBackend } from '../../session/index.js';
+import type { GameDefinition } from '../../session/index.js';
 import {
   auditChoiceCardinality,
   describeUnboundedChoiceStep,
@@ -97,6 +98,9 @@ export async function validateCommand(): Promise<void> {
 
   // 7. Choice cardinality — the panel offers hierarchy, never free text (#172).
   results.push(await validateChoiceCardinality(cwd));
+
+  // 8. The compiled rules agree with boardsmith.json, exactly as build requires.
+  results.push(await validateRulesAgreement(cwd));
 
   printResults(results);
   if (hasBlockingFailure(results)) {
@@ -1156,4 +1160,80 @@ async function validateChoiceCardinality(cwd: string): Promise<ValidationResult>
       message: `Skipped — the game could not be driven headlessly: ${(error as Error).message}`,
     };
   }
+}
+
+// ---------------------------------------------------------------------------
+// Rules agreement (#300)
+// ---------------------------------------------------------------------------
+
+/**
+ * Hold the compiled rules and boardsmith.json to the agreement `boardsmith
+ * build` enforces (`capabilityContradictions`), so a project that passes
+ * validate is not refused a moment later by build. Among other things this is
+ * where a step declaring `timeLimitMs` without an `idleAction` to close it is
+ * refused, naming the step.
+ *
+ * Pure over an already-loaded definition; {@link validateRulesAgreement} loads it.
+ */
+export function checkRulesAgreement(
+  config: Record<string, unknown>,
+  gameDefinition: GameDefinition,
+): ValidationResult {
+  const name = 'Rules agree with boardsmith.json';
+  const backend = config.backend;
+  if (!isGameBackend(backend)) {
+    return {
+      name,
+      passed: true,
+      message: 'Skipped until "backend" is fixed (see Metadata): the agreement depends on which backend the game runs.',
+    };
+  }
+  const contradictions = capabilityContradictions({
+    backend,
+    definition: gameDefinition,
+    declared: config,
+  });
+  if (contradictions.length === 0) {
+    return { name, passed: true, message: 'Your rules and boardsmith.json agree.' };
+  }
+  return {
+    name,
+    passed: false,
+    message: `${contradictions.length} disagreement(s) between your compiled rules and boardsmith.json. boardsmith build refuses these too.`,
+    details: contradictions,
+  };
+}
+
+/** Load the compiled rules and run {@link checkRulesAgreement} against boardsmith.json. */
+async function validateRulesAgreement(cwd: string): Promise<ValidationResult> {
+  const spinner = ora('Checking rules against boardsmith.json...').start();
+  const config = JSON.parse(readFileSync(join(cwd, 'boardsmith.json'), 'utf-8')) as Record<string, unknown>;
+  const rulesPath = resolveRulesDir(cwd, config as { paths?: { rules?: string } });
+
+  // Command-scoped, like build's `build-tmp`: `.boardsmith` is shared with a
+  // running dev server, so only ever create and delete what this check owns.
+  const tempDir = join(cwd, '.boardsmith', 'validate-tmp');
+  mkdirSync(tempDir, { recursive: true });
+
+  let result: ValidationResult;
+  try {
+    const { loadGameDefinition, getProjectContext } = await import('./game-runtime.js');
+    const { gameDefinition } = await loadGameDefinition(rulesPath, tempDir, getProjectContext(cwd));
+    // Constructs the game at every seat count to read its flow, so a
+    // constructor that throws is reported here too.
+    result = checkRulesAgreement(config, gameDefinition);
+  } catch (error) {
+    spinner.fail('Rules could not be loaded');
+    return {
+      name: 'Rules agree with boardsmith.json',
+      passed: false,
+      message: `Your rules could not be loaded and constructed, so they could not be checked against boardsmith.json: ${(error as Error).message}. Fix that error and run boardsmith validate again.`,
+    };
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+
+  if (result.passed) spinner.succeed('Rules agree with boardsmith.json');
+  else spinner.fail('Rules and boardsmith.json disagree');
+  return result;
 }

@@ -15,6 +15,7 @@ import type {
   PhaseConfig,
   TurnScope,
 } from './types.js';
+import { checkDeclaredTimeLimit } from './step-time-limit.js';
 
 /**
  * Create a sequence of steps executed in order
@@ -245,16 +246,8 @@ export function forEach<
  * })
  * ```
  */
-export function actionStep<G extends Game = Game>(config: {
-  name?: string;
-  player?: (context: FlowContext<G>) => PlayerOf<G>;
-  actions: string[] | ((context: FlowContext<G>) => string[]);
-  repeatUntil?: (context: FlowContext<G>) => boolean;
-  skipIf?: (context: FlowContext<G>) => boolean;
-  minMoves?: number;
-  maxMoves?: number;
-  turnScope?: TurnScope;
-}): FlowNode<G> {
+export function actionStep<G extends Game = Game>(config: ActionStepConfig<G>): FlowNode<G> {
+  checkDeclaredTimeLimit(config.timeLimitMs, config.name ?? 'action-step');
   return {
     type: 'action-step',
     config: {
@@ -266,6 +259,7 @@ export function actionStep<G extends Game = Game>(config: {
       minMoves: config.minMoves,
       maxMoves: config.maxMoves,
       turnScope: config.turnScope,
+      timeLimitMs: config.timeLimitMs,
     },
   };
 }
@@ -339,6 +333,9 @@ export function playerActions<G extends Game = Game>(config: {
  * @param config.skipPlayer - Exclude a seat from the step entirely.
  * @param config.allDone - Round-level completion. Defaults to "every awaiting
  *   seat is done" — see above before relying on it.
+ * @param config.timeLimitMs - How long the step stays open once entered, in
+ *   milliseconds, or a function resolved at entry. The host closes it with the
+ *   game's `idleAction`; see {@link ActionStepConfig.timeLimitMs}.
  *
  * @example
  * ```typescript
@@ -348,14 +345,8 @@ export function playerActions<G extends Game = Game>(config: {
  * })
  * ```
  */
-export function simultaneousActionStep<G extends Game = Game>(config: {
-  name?: string;
-  players?: (context: FlowContext<G>) => PlayerOf<G>[];
-  actions: string[] | ((context: FlowContext<G>, player: PlayerOf<G>) => string[]);
-  playerDone?: (context: FlowContext<G>, player: PlayerOf<G>) => boolean;
-  allDone?: (context: FlowContext<G>) => boolean;
-  skipPlayer?: (context: FlowContext<G>, player: PlayerOf<G>) => boolean;
-}): FlowNode<G> {
+export function simultaneousActionStep<G extends Game = Game>(config: SimultaneousActionStepConfig<G>): FlowNode<G> {
+  checkDeclaredTimeLimit(config.timeLimitMs, config.name ?? 'simultaneous-action-step');
   return {
     type: 'simultaneous-action-step',
     config: {
@@ -365,6 +356,7 @@ export function simultaneousActionStep<G extends Game = Game>(config: {
       playerDone: config.playerDone,
       allDone: config.allDone,
       skipPlayer: config.skipPlayer,
+      timeLimitMs: config.timeLimitMs,
     },
   };
 }

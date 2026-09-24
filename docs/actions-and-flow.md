@@ -1572,6 +1572,48 @@ which is the right trade, but it is not a fix on its own. To actually get the se
 Use `playerDone` for per-seat completion, `skipPlayer` to exclude a seat from the step
 entirely, and `allDone` for the round-level condition.
 
+#### `timeLimitMs` - a step that closes on a clock
+
+`actionStep` and `simultaneousActionStep` both accept `timeLimitMs`: how long the
+step stays open once it is entered, in milliseconds.
+
+```typescript
+simultaneousActionStep({
+  name: 'deploy',
+  actions: ['placeUnit', 'ready'],
+  playerDone: (ctx, player) => player.ready,
+  timeLimitMs: 120_000, // two minutes
+})
+
+// Or resolved from state when the step is entered:
+actionStep({
+  name: 'turn',
+  actions: ['move', 'pass'],
+  timeLimitMs: (ctx) => (ctx.game.round === 1 ? 60_000 : 30_000),
+})
+```
+
+- It is resolved **once, when the step is entered**, and fixed while the step
+  stays open: a seat submitting mid-round does not move it. The next entry (the
+  next round of a `loop`, the next seat of an `eachPlayer`) resolves its own.
+- It must be a positive whole number of milliseconds. A bad number is refused
+  when the flow is built; a function that answers one is refused when the step
+  is entered. Both errors name the step.
+- It is a **duration, never an instant**. The engine keeps no clock and never
+  closes the step itself. It publishes the value as `FlowState.timeLimitMs` and
+  on the host's turn boundary (`meta.turnBoundary.timeLimitMs`), and the host
+  closes the step when the window elapses by submitting your `idleAction` for
+  every seat that has not acted.
+- So a game with a timed step **must declare `idleAction`** in
+  `boardsmith.json`. `boardsmith validate` and `boardsmith build` refuse it
+  otherwise, naming the step. A bot is not an alternative: a timed-out seat is
+  never handed to a bot.
+- `boardsmith build` stamps `capabilities.timedSteps: true` into the manifest
+  when any step of the compiled flow declares a limit.
+
+See [simultaneous-and-interrupt-semantics.md](./simultaneous-and-interrupt-semantics.md)
+section 5 for who enforces what.
+
 #### `phase` - Named game phase
 
 ```typescript

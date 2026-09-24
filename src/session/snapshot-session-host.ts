@@ -3,6 +3,7 @@ import { READ_ONLY_OP_TYPES } from './stateless-ops.js';
 import type { Annotation } from '../engine/index.js';
 import { dueSeats, type SeatActivityState } from '../engine/flow/seat-activity.js';
 import { flowBoundaryKey, type BoundaryKeyState } from '../engine/flow/boundary-key.js';
+import { stepTimeLimitMs, type StepTimeLimitState } from '../engine/flow/step-time-limit.js';
 import { describeMoveForNarration } from './move-summary.js';
 import type { HeatmapEntry, SerializedFlowDebugInfo, SerializedPendingActionState } from './types.js';
 
@@ -58,6 +59,19 @@ export interface TurnBoundary {
    * finished game — nobody owes a move once it is over.
    */
   dueSeats: number[];
+  /**
+   * How long the open step stays open, in milliseconds, when the step declared
+   * a limit (`timeLimitMs` on `actionStep`/`simultaneousActionStep`). Absent
+   * when it did not, and in a finished game.
+   *
+   * A DURATION, never an instant: the engine keeps no clock. It was resolved
+   * when the step was entered and is republished unchanged on every broadcast
+   * inside the same boundary, so a host arms its deadline once, when `key`
+   * changes, from its own clock -- and closes the step when it elapses by
+   * submitting the game's `idleAction` for every seat still due, stamped with
+   * the `key` it armed under. It does not take part in `key`.
+   */
+  timeLimitMs?: number;
 }
 
 export interface SnapshotSessionAdapters {
@@ -433,15 +447,20 @@ export class SnapshotSessionHost {
    * `this._flowState` BEFORE it broadcasts, so a re-broadcast necessarily
    * republishes the identical boundary rather than minting a new one.
    *
-   * Routed through `dueSeats` / `flowBoundaryKey` — never a second predicate.
+   * Routed through `dueSeats` / `flowBoundaryKey` / `stepTimeLimitMs` — never a
+   * second predicate.
    */
   private turnBoundary(): TurnBoundary {
     // A finished game has no seats that owe a move. `dueSeats` already returns
     // [] for a completed flow (it is not awaiting input); this is belt-and-braces
     // for a host whose `isComplete` was set from an op result.
+    const timeLimitMs = this.isComplete
+      ? undefined
+      : stepTimeLimitMs(this._flowState as StepTimeLimitState | null);
     return {
       key: flowBoundaryKey(this._flowState as BoundaryKeyState | null),
       dueSeats: this.isComplete ? [] : dueSeats(this._flowState as SeatActivityState | null),
+      ...(timeLimitMs === undefined ? {} : { timeLimitMs }),
     };
   }
 
