@@ -71,7 +71,7 @@ const gridStyle = computed(() => {
 });
 
 // Natural sizing: expose --cols and --rows as CSS custom properties on the board wrapper.
-// The grid renders at its natural size (--cell: var(--bsg-cell)); the board area scrolls
+// The grid renders at its natural size (--cell: var(--bsg-cell-size)); the board area scrolls
 // when larger than the viewport rather than shrinking cells to fit.
 const boardSizeStyle = computed(() => {
   if (!gridResult.value.ok) return {};
@@ -337,12 +337,12 @@ function handleDrop(event: DragEvent, cell: GameElement) {
   gap: 4px;
 }
 
-/* ── Natural sizing: --cell driven by the --bsg-cell token ──
+/* ── Natural sizing: --cell driven by the --bsg-cell-size token ──
    --cols and --rows are set as CSS custom properties via :style binding from gridResult
    (used for grid-template-columns). The board renders at its natural cell size; the
    board area scrolls when larger than the viewport rather than fitting to the container. */
 .board-with-labels {
-  --cell: var(--bsg-cell);
+  --cell: var(--bsg-cell-size);
 }
 
 /* ── Row/column labels ── */
