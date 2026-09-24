@@ -10,6 +10,8 @@ import { readLiveSlices } from './verify-derive-check.js';
 import { resolveCitedSlices } from './chunk-provenance.js';
 import { scanSourceForSandboxViolations, type SandboxViolation } from '../lib/sandbox-scan.js';
 import {
+  describeUnanchoredExamples,
+  findUnanchoredExamples,
   readExampleReplayVerdicts,
   type ExampleReplayRecord,
   type ExampleTranslation,
@@ -376,7 +378,8 @@ export interface ChunkExampleTests {
  * disk is still this before running it) use.
  *
  * 1. Resolves `--chunk` to the rulebook slices its `CHUNK.md` cites (`resolveCitedSlices`).
- * 2. Reads every recorded `ExampleReplayRecord` for those slices.
+ * 2. Reads every recorded `ExampleReplayRecord` for those slices, and throws when one no longer
+ *    sits on the slice line whose text it recorded (#350): its test would name the wrong line.
  * 3. Splits them into EXEMPT (`unexecutable`/`example-inconsistent` — a named-reason comment,
  *    never a test, decision 7) and EXECUTABLE (every record carrying a translated test).
  * 4. Scans every translated snippet via `scanGeneratedTestCode`, and requires it to declare a
@@ -387,14 +390,15 @@ export async function renderChunkExampleTests(
   projectDir: string,
   chunkSlug: string,
 ): Promise<ChunkExampleTests> {
-  const citedSlicePaths = await readChunkCitedSlices(projectDir, chunkSlug);
-  const citedSet = new Set(citedSlicePaths);
+  const citedSlices = await readChunkCitedSlices(projectDir, chunkSlug);
+  const citedSet = new Set(citedSlices.map((s) => s.path));
 
   const allVerdicts = await readExampleReplayVerdicts(projectDir);
   const records = allVerdicts
     .filter((v) => citedSet.has(v.slicePath))
     .slice()
     .sort((a, b) => a.slicePath.localeCompare(b.slicePath) || a.lineNumber - b.lineNumber);
+  assertExamplesAnchored(chunkSlug, records, citedSlices);
 
   const executable = records.filter(isTranslatedRecord);
   const exempt = records.filter((r) => !isTranslatedRecord(r));
@@ -428,8 +432,31 @@ export async function renderChunkExampleTests(
   };
 }
 
+/**
+ * Throws, naming each example and the fix, when a record's slice line no longer holds the text
+ * it was recorded against — so a test is never emitted or run under a stale line reference.
+ */
+function assertExamplesAnchored(
+  chunkSlug: string,
+  records: readonly ExampleReplayRecord[],
+  citedSlices: readonly { path: string; text: string }[],
+): void {
+  const unanchored = findUnanchoredExamples(records, citedSlices);
+  if (unanchored.length === 0) return;
+  throw new Error(
+    [
+      `${unanchored.length} worked example(s) chunk "${chunkSlug}" cites no longer sit on the ` +
+        `slice line they were recorded on, so no test file was written or run:`,
+      ...describeUnanchoredExamples(unanchored),
+    ].join('\n'),
+  );
+}
+
 /** The rulebook slices `--chunk`'s CHUNK.md cites, after checking the slug stays in chunks/. */
-async function readChunkCitedSlices(projectDir: string, chunkSlug: string): Promise<string[]> {
+async function readChunkCitedSlices(
+  projectDir: string,
+  chunkSlug: string,
+): Promise<{ path: string; text: string }[]> {
   // Path containment guard for `--chunk` reads — mirrors `verifyExampleReplayCommand`'s own
   // `--chunk` guard verbatim in shape and message.
   const chunksDir = designChunksDir(projectDir);
@@ -456,7 +483,8 @@ async function readChunkCitedSlices(projectDir: string, chunkSlug: string): Prom
 
   const liveSlices = await readLiveSlices(projectDir);
   const sliceFilenames = liveSlices.map((s) => s.path.slice('rulebook/'.length));
-  return resolveCitedSlices(chunkText, sliceFilenames).resolved;
+  const cited = new Set(resolveCitedSlices(chunkText, sliceFilenames).resolved);
+  return liveSlices.filter((s) => cited.has(s.path));
 }
 
 /**

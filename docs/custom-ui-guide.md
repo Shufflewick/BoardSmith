@@ -748,6 +748,33 @@ Never cache `actionQuote` into your own ref. A quote is stamped with the draft i
 was computed for and withdrawn the instant the draft moves, which is what makes a
 stale price unreachable — a copy of your own is exactly how one comes back.
 
+### Showing who has to act: `dueSeats`
+
+The game context carries `dueSeats`: every seat that has to act right now, the
+viewer's own included. In a turn-based step that is the one current player. In a
+simultaneous step it is every seat the step is still waiting on, and a seat
+leaves the list when it commits. Since #321 a simultaneous step reports no
+`currentPlayer`, so `flowState.currentPlayer` cannot tell your board who is
+acting there; `dueSeats` can, in both kinds of step.
+
+```typescript
+import { computed } from 'vue';
+import { useGameContext } from 'boardsmith/ui';
+
+const { dueSeats, playerSeat } = useGameContext();
+
+// True exactly when isMyTurn is.
+const myMove = computed(() => dueSeats.value.includes(playerSeat.value));
+// Everyone else still deciding, for a "waiting on Bob and Carol" line.
+const others = computed(() => dueSeats.value.filter((seat) => seat !== playerSeat.value));
+```
+
+The shell's players panel, its Action Panel and its screen-reader announcements
+read this same list, so a board that shows who is acting from it agrees with
+them: the viewer's card says "Your move" and every other acting seat says
+"{name} is playing". A persistent world has no turn and does not publish
+`dueSeats`.
+
 ### Counting down to the host's deadline: `turnDeadline`
 
 When the host will close the current step at a set time, the game context

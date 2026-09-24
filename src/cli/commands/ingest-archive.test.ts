@@ -1,11 +1,10 @@
 import { DESIGN_DIR } from '../lib/project-paths.js';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import {
   ingestArchiveCommand,
-  ingestCheckCommand,
   ingestGapsCommand,
   ingestRelabelCommand,
   renderIndex,
@@ -25,6 +24,13 @@ import {
   parseAdditionalSources,
 } from './rulebook-sources.js';
 import { computeVerificationScope } from './chunk-provenance.js';
+import { ingestCheckCommand } from './ingest-check.js';
+import { ingestSliceSourceCommand } from './rulebook-sources.js';
+import {
+  createExampleReplayRecord,
+  readExampleReplayVerdicts,
+  recordExampleReplayVerdicts,
+} from './verify-example-replay.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { rejectionMessage } from '../../testing/rejection.test-helper.js';
 
@@ -319,6 +325,64 @@ describe('ingest-archive --additional-source (#305)', () => {
     expect(after.replace(/## Additional Sources[\s\S]*?<!-- boardsmith:additional-sources:end -->\n\n/, '')).toBe(
       before,
     );
+  });
+
+  describe('the primary keeps its Transcribed date unless the primary itself changed (#351)', () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    /** Runs `ingest-archive` as though it were `day` (YYYY-MM-DD, local noon). */
+    async function archiveOn(day: string, project: string, additionalSource?: string[]) {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date(`${day}T12:00:00`));
+      try {
+        await ingestArchiveCommand(rulesPath, { project, json: true, additionalSource });
+      } finally {
+        vi.useRealTimers();
+      }
+    }
+    const transcribedOf = async (project: string) =>
+      /^Transcribed:\s*(.*)$/m.exec(await indexOf(project))![1].trim();
+
+    it('adding an additional source a day later leaves the primary header byte-identical', async () => {
+      const project = await freshProject();
+      await archiveOn('2026-09-23', project);
+      const before = await indexOf(project);
+
+      await archiveOn('2026-09-24', project, [companionPath]);
+
+      expect(await transcribedOf(project)).toBe('2026-09-23');
+      const after = await indexOf(project);
+      expect(after.replace(/## Additional Sources[\s\S]*?<!-- boardsmith:additional-sources:end -->\n\n/, '')).toBe(
+        before,
+      );
+    });
+
+    it('re-running on the unchanged primary a day later does not touch INDEX.md', async () => {
+      const project = await freshProject();
+      await archiveOn('2026-09-23', project);
+      const before = await indexOf(project);
+
+      await archiveOn('2026-09-24', project);
+
+      expect(await indexOf(project)).toBe(before);
+    });
+
+    it('a primary whose recorded hash no longer matches is re-dated when its hash is rewritten', async () => {
+      const project = await freshProject();
+      await archiveOn('2026-09-23', project);
+      const indexPath = join(project, DESIGN_DIR, 'rulebook', 'INDEX.md');
+      await fs.writeFile(
+        indexPath,
+        (await indexOf(project)).replace(`Source hash: ${RULES_HASH}`, `Source hash: ${'0'.repeat(64)}`),
+      );
+
+      await archiveOn('2026-09-24', project);
+
+      expect(await transcribedOf(project)).toBe('2026-09-24');
+      expect(/^Source hash:\s*(.*)$/m.exec(await indexOf(project))![1].trim()).toBe(RULES_HASH);
+    });
   });
 
   it('re-running the same call is a byte-identical no-op', async () => {
@@ -634,6 +698,24 @@ describe('v4.9 — machine-owned gaps section and ingest-check (170-PROOF-RUN-2)
       process.exitCode = exitCode;
     });
 
+    const slicePath = (project: string, name: string) =>
+      join(project, DESIGN_DIR, 'rulebook', name);
+
+    async function check(project: string): Promise<{ output: string; exitCode: typeof process.exitCode }> {
+      const lines: string[] = [];
+      const log = console.log;
+      const error = console.error;
+      console.log = (...args: unknown[]) => lines.push(args.join(' '));
+      console.error = (...args: unknown[]) => lines.push(args.join(' '));
+      try {
+        await ingestCheckCommand({ project });
+      } finally {
+        console.log = log;
+        console.error = error;
+      }
+      return { output: lines.join('\n'), exitCode: process.exitCode };
+    }
+
     it('exits non-zero when synthesis is stale — the signal that forces a re-read', async () => {
       const project = await withSlices(['Named-but-undefined (p.1): a gap the index has not seen']);
       await ingestCheckCommand({ project, json: true });
@@ -678,24 +760,6 @@ describe('v4.9 — machine-owned gaps section and ingest-check (170-PROOF-RUN-2)
     });
 
     describe('every slice names the document it was transcribed from (#311)', () => {
-      const slicePath = (project: string, name: string) =>
-        join(project, DESIGN_DIR, 'rulebook', name);
-
-      async function check(project: string): Promise<{ output: string; exitCode: typeof process.exitCode }> {
-        const lines: string[] = [];
-        const log = console.log;
-        const error = console.error;
-        console.log = (...args: unknown[]) => lines.push(args.join(' '));
-        console.error = (...args: unknown[]) => lines.push(args.join(' '));
-        try {
-          await ingestCheckCommand({ project });
-        } finally {
-          console.log = log;
-          console.error = error;
-        }
-        return { output: lines.join('\n'), exitCode: process.exitCode };
-      }
-
       it('fails on a slice with no Source line, naming it and the exact command that records it', async () => {
         const project = await withSlices([]);
         await ingestGapsCommand({ project, quiet: true });
@@ -751,6 +815,76 @@ describe('v4.9 — machine-owned gaps section and ingest-check (170-PROOF-RUN-2)
         process.exitCode = undefined;
         const { exitCode } = await check(project);
         expect(exitCode).toBeUndefined();
+      });
+    });
+
+    describe('recorded worked examples follow the slice lines they cite (#350)', () => {
+      const TURN = 'rulebook/02-turn.md';
+      const EXAMPLE_LINE = 'Example (p.2): "Draw a card, then discard one."';
+
+      /** A slice with no Source line and one worked example recorded at line 4. */
+      async function projectWithRecordedExample(): Promise<string> {
+        const project = await withSlices([]);
+        await fs.writeFile(slicePath(project, '02-turn.md'), `# Turn\n\np.2, Turn:\n${EXAMPLE_LINE}\n`);
+        await ingestGapsCommand({ project, quiet: true });
+        await recordExampleReplayVerdicts(project, [
+          createExampleReplayRecord({
+            exampleId: `${TURN}:4`,
+            slicePath: TURN,
+            lineNumber: 4,
+            lineText: EXAMPLE_LINE,
+            kind: 'transition',
+            verdict: 'unexecutable',
+            reason: 'no-matching-symbol: nothing draws a card yet.',
+            provenance: 'quote-verified',
+          }),
+        ]);
+        return project;
+      }
+
+      async function recordSource(project: string): Promise<void> {
+        const log = console.log;
+        console.log = () => {};
+        try {
+          await ingestSliceSourceCommand(PRIMARY, ['02-turn.md'], { project, json: true });
+        } finally {
+          console.log = log;
+        }
+      }
+
+      it('re-anchors the examples a Source line moved, fails once to say so, then passes', async () => {
+        const project = await projectWithRecordedExample();
+        await recordSource(project);
+        process.exitCode = undefined;
+
+        const first = await check(project);
+        expect(first.exitCode).toBe(1);
+        expect(first.output).toContain(`${TURN}:4 → ${TURN}:6`);
+        const [record] = await readExampleReplayVerdicts(project);
+        expect([record.exampleId, record.lineNumber, record.lineText]).toEqual([`${TURN}:6`, 6, EXAMPLE_LINE]);
+
+        process.exitCode = undefined;
+        expect((await check(project)).exitCode).toBeUndefined();
+      });
+
+      it('fails without repairing when an example\'s line is gone, naming the slice to record again', async () => {
+        const project = await projectWithRecordedExample();
+        await recordSource(project);
+        await fs.writeFile(
+          slicePath(project, '02-turn.md'),
+          `# Turn\n\nSource: ${PRIMARY}\n\np.2, Turn:\nExample (p.2): "Draw two cards."\n`,
+        );
+        process.exitCode = undefined;
+
+        for (let run = 0; run < 2; run++) {
+          const { output, exitCode } = await check(project);
+          expect(exitCode).toBe(1);
+          expect(output).toContain(`${TURN}:4`);
+          expect(output).toContain(EXAMPLE_LINE);
+          expect(output).toMatch(/verify-example-replay.*pending/s);
+          process.exitCode = undefined;
+        }
+        expect((await readExampleReplayVerdicts(project)).map((r) => r.exampleId)).toEqual([`${TURN}:4`]);
       });
     });
   });

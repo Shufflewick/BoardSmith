@@ -82,6 +82,16 @@ const SILENCE_RULES: Linter.RulesRecord = {
   'boardsmith/no-silent-dispatch-fallthrough': 'error',
 };
 
+/**
+ * Ownership rules — guard the names the engine owns on every Game (#346). A
+ * game zone called `pile` works until the first restore, then silently reads
+ * the engine's container instead, because the engine never saves `pile` and
+ * rebuilds it itself. Enforced project-wide: the class can live anywhere.
+ */
+const OWNERSHIP_RULES: Linter.RulesRecord = {
+  'boardsmith/no-engine-field-shadow': 'error',
+};
+
 const FLAT_CONFIG: Linter.Config[] = [
   {
     files: ['**/*.ts', '**/*.tsx', '**/*.js', '**/*.jsx', '**/*.vue'],
@@ -98,7 +108,7 @@ const FLAT_CONFIG: Linter.Config[] = [
     plugins: {
       boardsmith: plugin as unknown as NonNullable<Linter.Config['plugins']>[string],
     },
-    rules: { ...SECURITY_RULES, ...DETERMINISM_RULES, ...IDENTITY_RULES, ...SILENCE_RULES },
+    rules: { ...SECURITY_RULES, ...DETERMINISM_RULES, ...IDENTITY_RULES, ...SILENCE_RULES, ...OWNERSHIP_RULES },
   },
   {
     // UI runs in the browser, not the executor sandbox: relax the determinism

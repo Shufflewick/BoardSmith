@@ -13,6 +13,7 @@
  */
 import { computed, ref, watch } from 'vue';
 import PlayerToken from './PlayerToken.vue';
+import { YOUR_MOVE, describePlaying } from '../composables/liveRegionAnnouncer.js';
 
 export interface Player {
   seat: number;
@@ -31,10 +32,14 @@ const props = withDefaults(defineProps<{
   players: Player[];
   /** Current player's seat (the viewer) */
   playerSeat: number;
-  /** Seat of the player whose turn it is */
-  currentPlayerSeat?: number;
-  /** Seats of players currently awaiting action during simultaneous steps */
-  awaitingPlayerSeats?: number[];
+  /**
+   * Every seat that has to act right now, the viewer's own included: the one
+   * seat of a turn-based step, or every seat a simultaneous step is still
+   * waiting on. Each is drawn as acting, the viewer's card says "Your move" and
+   * every other says "{name} is playing". One list for both kinds of step, so a
+   * simultaneous step cannot lose the viewer (#337).
+   */
+  dueSeats?: readonly number[];
   /** Compact one-line seat-strip mode for phones (IA-06) */
   seatStrip?: boolean;
   /**
@@ -95,7 +100,7 @@ const props = withDefaults(defineProps<{
  */
 const turnTick = ref(0);
 watch(
-  () => [props.currentPlayerSeat ?? -1, ...(props.awaitingPlayerSeats ?? [])].join(','),
+  () => (props.dueSeats ?? []).join(','),
   () => { turnTick.value++; },
 );
 
@@ -106,28 +111,31 @@ watch(
 // shape would disagree with every seat-ordered consumer of the same token.
 
 function isPlayerActive(seat: number): boolean {
-  if (seat === props.currentPlayerSeat) return true;
-  if (props.awaitingPlayerSeats?.includes(seat)) return true;
-  return false;
+  return props.dueSeats?.includes(seat) ?? false;
 }
 
 /**
- * Natural turn-status sentence for the active player.
- * No "your turn" literal — the token icon already identifies who.
- * Local player gets an affirmative ("Your move");
- * other player gets a descriptive ("{name} is playing").
- * Returns '' for inactive players.
+ * Natural turn-status sentence for an acting player.
+ * The local player gets an affirmative ("Your move"); any other acting player
+ * gets a descriptive ("{name} is playing"). Returns '' for a seat not acting.
  */
 function turnStatus(player: Player): string {
   if (!isPlayerActive(player.seat)) return '';
-  const isYou = player.seat === props.playerSeat;
-  return isYou ? 'Your move' : `${player.name} is playing`;
+  return player.seat === props.playerSeat ? YOUR_MOVE : describePlaying([player.name]);
 }
 
-/** The currently-active player (for seat-strip headline). */
-const activePlayer = computed(() =>
-  props.players.find(p => isPlayerActive(p.seat)) ?? null
-);
+/**
+ * The seat strip's one-line headline, naming EVERY acting seat: "Your move",
+ * "Bob is playing", or in a simultaneous step "Your move · Bob and Carol are
+ * playing". Reads all players, not only the rows the cap kept, because an
+ * acting seat the strip has no room to draw still has to be named.
+ */
+const stripStatus = computed(() => {
+  const acting = props.players.filter(p => isPlayerActive(p.seat));
+  const youAct = acting.some(p => p.seat === props.playerSeat);
+  const others = describePlaying(acting.filter(p => p.seat !== props.playerSeat).map(p => p.name));
+  return [youAct ? YOUR_MOVE : '', others].filter(Boolean).join(' · ');
+});
 
 /**
  * Is this seat here right now, or is that not a question this backend answers?
@@ -208,10 +216,8 @@ defineSlots<{
         />
       </span>
     </div>
-    <!-- Active-player turn-status sentence -->
-    <span v-if="activePlayer" class="strip-status">
-      {{ turnStatus(activePlayer) }}
-    </span>
+    <!-- Turn-status sentence naming every acting seat -->
+    <span v-if="stripStatus" class="strip-status">{{ stripStatus }}</span>
     <span v-if="hiddenCount > 0" class="players-overflow">and {{ hiddenCount }} others</span>
   </div>
 

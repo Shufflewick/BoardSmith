@@ -150,13 +150,51 @@ describe('shouldDeferChoicePickToBoard', () => {
     expect(shouldDeferChoicePickToBoard(mixed, 24)).toBe(false);
   });
 
-  it('never defers id-only refs — they highlight an element, the board does not pick by them', () => {
-    const highlights: ChoiceWithRefs[] = Array.from({ length: 40 }, (_, i) => ({
-      value: `r${i}`,
-      display: `Rank ${i}`,
-      refs: [{ ref: { id: i }, role: 'target' as const }],
+  // #341: the board picks an element by its id exactly as it picks a space by
+  // its notation, so a pick anchored on pieces is handed over like one on spaces.
+  /** N choices, each on its own board element by id. */
+  const onTheirPieces = (n: number): ChoiceWithRefs[] =>
+    Array.from({ length: n }, (_, i) => ({
+      value: `p${i}`,
+      display: `Piece ${i}`,
+      refs: [{ ref: { id: 100 + i }, role: 'target' as const }],
     }));
-    expect(shouldDeferChoicePickToBoard(highlights, 24)).toBe(false);
+
+  it('defers a large pick whose every candidate names its own element by id', () => {
+    expect(shouldDeferChoicePickToBoard(onTheirPieces(25), 24)).toBe(true);
+    expect(shouldDeferChoicePickToBoard(onTheirPieces(3720))).toBe(true);
+  });
+
+  it('defers a large pick that mixes id and notation targets, each unique', () => {
+    expect(shouldDeferChoicePickToBoard([...onTheirPieces(20), ...onTheBoard(20)], 24)).toBe(true);
+  });
+
+  it('never defers when two candidates name one element by id — the board can reach only one of them', () => {
+    const shared = [
+      ...onTheirPieces(40),
+      { value: 'other', display: 'Piece 0 again', refs: [{ ref: { id: 100 }, role: 'target' as const }] },
+    ];
+    expect(shouldDeferChoicePickToBoard(shared, 24)).toBe(false);
+  });
+
+  it('reads a ref carrying both an id and a notation by its id, as the board does', () => {
+    // The board matches such a ref by id alone, so two candidates on one square
+    // but on different pieces are two different targets.
+    const stacked: ChoiceWithRefs[] = Array.from({ length: 30 }, (_, i) => ({
+      value: `p${i}`,
+      display: `Piece ${i}`,
+      refs: [{ ref: { id: 100 + i, notation: 'a1' }, role: 'target' as const }],
+    }));
+    expect(shouldDeferChoicePickToBoard(stacked, 24)).toBe(true);
+  });
+
+  it('never defers name-only refs — a name does not single out one element', () => {
+    const named: ChoiceWithRefs[] = Array.from({ length: 30 }, (_, i) => ({
+      value: `n${i}`,
+      display: `Named ${i}`,
+      refs: [{ ref: { name: `n${i}` }, role: 'target' as const }],
+    }));
+    expect(shouldDeferChoicePickToBoard(named, 24)).toBe(false);
   });
 
   it('never defers when two candidates land on one space — the board can reach only one of them', () => {

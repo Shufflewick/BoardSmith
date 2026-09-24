@@ -127,8 +127,8 @@ here.
        `{ "<exampleId>": <that example's return>, ... }`.
 
    (e) Record both files through exactly ONE `boardsmith verify-example-record --project <dir>
-       --slice-path <p> --extraction <f> --translations <f>` invocation per SLICE — an atomic
-       upsert-append, never a whole-ledger rewrite. It records each example as
+       --slice-path <p> --extraction <f> --translations <f>` invocation per SLICE. It replaces
+       everything the ledger held for that slice, leaving other slices alone. It records each example as
        `example-inconsistent`, `unexecutable` (with the translator's named reason), or `not-run`
        carrying the test the translator wrote.
 
@@ -137,6 +137,10 @@ here.
        <dir> --chunk <slug>`, which runs that file with the project's own vitest and records each
        `not-run` example as `agrees` (its test passed) or `disagrees` (it failed, with the failure
        as the observed outcome).
+       Both refuse while a recorded example no longer sits on the slice line whose text it
+       recorded. When the text only moved, run `npx boardsmith ingest-check`, which moves the
+       record to its new line, then emit and run again. When the text is gone, (a) reports that
+       slice pending again: record it again from (b).
        The recorded verdict comes from actually running the emitted test,
        never from the translator's own `verdictHint`, which is a model's guess, not an observation. A test that
        is skipped or a file that fails to load is refused, not recorded: re-dispatch that

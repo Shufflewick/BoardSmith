@@ -22,6 +22,7 @@ import {
 function fakeContext(): GameContext {
   return {
     gameState: ref(null),
+    dueSeats: computed(() => [1]),
     gameView: computed(() => ({ board: 'here' })),
     players: computed(() => [{ name: 'A', seat: 1 }]),
     myPlayer: computed(() => ({ name: 'A', seat: 1 })),

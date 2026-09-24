@@ -5,6 +5,7 @@
 
 import type { ChoiceWithRefs, ValidElement } from '../../composables/useActionControllerTypes.js';
 import { choiceBoardTarget } from '../../composables/actionControllerHelpers.js';
+import { boardRefKey } from '../../composables/useBoardInteraction.js';
 import { MAX_FLAT_CHOICE_CANDIDATES } from '../../../engine/element/action-metadata.js';
 
 /**
@@ -21,11 +22,13 @@ import { MAX_FLAT_CHOICE_CANDIDATES } from '../../../engine/element/action-metad
  * elements whose activation calls triggerElementSelect, providing parity.
  *
  * IMPORTANT — Only NOTATION refs count as "anchored":
- *   - Notation ref { ref: { notation: 'a5' } }: the board grid renders and makes
- *     this cell clickable. Clicking it selects the choice. → anchored set.
- *   - Id-only ref { ref: { id: 10 } }: the board highlights the element for
- *     visual emphasis but the element is NOT a board selection surface (the grid
- *     matches by notation, not by id; id refs are highlight hints). → primary set.
+ *   - Notation ref { ref: { notation: 'a5' } }: a board space. It goes to the
+ *     secondary list, whose buttons choose it through the board. → anchored set.
+ *   - Id-only ref { ref: { id: 10 } }: an element the choice is about, such as a
+ *     card of the rank being asked for. The board can pick it too, but it stays
+ *     an ordinary choice button, labelled by the choice. → primary set.
+ *   Either kind can hand a large pick to the board instead: see
+ *   `shouldDeferChoicePickToBoard`.
  *
  * Examples:
  *   Checkers destination (notation refs): primary empty, all in anchored → secondary list.
@@ -44,7 +47,6 @@ export function splitAnchoredChoices(
   if (pickType !== 'choice') return { primary: choices, anchored: [] };
 
   // A choice is "anchored" only when it has a ref with a NOTATION value.
-  // Id-only refs indicate board highlighting, not a clickable board selection surface.
   const isNotationAnchored = (c: ChoiceWithRefs): boolean =>
     (c.refs ?? []).some(r => r.ref.notation !== undefined);
 
@@ -98,33 +100,36 @@ export function shouldDeferElementPickToBoard(
 }
 
 /**
- * #313 — should the panel hand this `chooseFrom` pick to the board?
+ * #313 / #341 — should the panel hand this `chooseFrom` pick to the board?
  *
  * The same handoff as `shouldDeferElementPickToBoard`, for a choice pick whose
- * candidates are board spaces: Windup Warfare offers 3,720 of them for where a
+ * candidates are on the board: Windup Warfare offers 3,720 spaces for where a
  * pack goes, each with a notation `boardRefs`, and listing them is no more
- * readable than listing Hex's cells.
+ * readable than listing Hex's cells. A pick anchored on pieces by element id is
+ * the same case.
  *
  * A choice is on the board when its board target (`choiceBoardTarget`, the ref
- * the board bridge routes a click by) carries a NOTATION. That is what makes a
- * board space pickable; an id-only ref highlights an element and is not a pick
- * surface (see `splitAnchoredChoices`). The conditions are about not losing a
- * choice, as for elements:
+ * the board bridge routes a click by) names one element: by its id, or by its
+ * notation. `boardRefKey` says which, because it is also what the board looks
+ * the candidate up by. A name-only ref does not count, since a name need not
+ * belong to one element. The conditions are about not losing a choice, as for
+ * elements:
  * - EVERY candidate must have such a target, or the one without would be
  *   reachable from neither surface.
- * - No two candidates may share a space. The board picks by space, so of two
- *   choices on one space only the first could ever be chosen there.
+ * - No two candidates may share a target. The board finds the first candidate
+ *   on an element, so the second could never be chosen there.
  */
 export function shouldDeferChoicePickToBoard(
   choices: ChoiceWithRefs[],
   threshold: number = MAX_FLAT_CHOICE_CANDIDATES,
 ): boolean {
   if (choices.length <= threshold) return false;
-  const spaces = new Set<string>();
+  const targets = new Set<string>();
   for (const choice of choices) {
-    const notation = choiceBoardTarget(choice)?.notation;
-    if (notation === undefined || spaces.has(notation)) return false;
-    spaces.add(notation);
+    const target = choiceBoardTarget(choice);
+    const key = target && boardRefKey(target);
+    if (key === undefined || key.kind === 'name' || targets.has(key.key)) return false;
+    targets.add(key.key);
   }
   return true;
 }

@@ -511,6 +511,7 @@
     "FollowUpAction|src/client/types.ts|src/engine/action/types.ts|src/ui/composables/useActionControllerTypes.ts",
     "GameElement|src/engine/element/game-element.ts|src/ui/components/auto-ui/AutoRenderer.vue|src/ui/components/auto-ui/renderers/board-renderer-a11y.test-helper.ts|src/ui/types.ts",
     "Player|src/engine/player/player.ts|src/ui/components/GameOverCard.vue|src/ui/components/PlayersPanel.vue|src/ui/types.ts",
+    "RandomnessPolicy|src/engine/element/game.ts|src/runtime/runner.ts",
     "RefWithRole|src/engine/action/types.ts|src/types/protocol.ts",
     "UndoPolicy|src/engine/utils/snapshot.ts|src/runtime/runner.ts"
   ],

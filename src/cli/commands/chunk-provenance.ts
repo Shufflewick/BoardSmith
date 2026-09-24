@@ -395,7 +395,7 @@ async function readCitedSlices(
 /**
  * `boardsmith chunk-check <slug>` — PROV-01's deliverable. Writes or repairs a fenced,
  * machine-owned `## Verified Against` block into `chunks/<slug>/CHUNK.md`, and exits non-zero
- * when it had to. `ingestCheckCommand` (`ingest-archive.ts`) is the precedent copied line for
+ * when it had to. `ingestCheckCommand` (`ingest-check.ts`) is the precedent copied line for
  * line — see `<copy_these_mechanisms_exactly>` in 171-04-PLAN.md.
  *
  * The heading text. A new sibling of `## Verified Commit Hash` in the CHUNK.md template.

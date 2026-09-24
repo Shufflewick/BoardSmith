@@ -126,7 +126,12 @@ npx boardsmith ingest-check
 `rulebook/INDEX.md` and any slice it names before continuing, then re-run the command — it will
 pass. Do not proceed to the consistency check on a non-zero exit.
 
-The one thing it reports without repairing is a slice that does not say which document it was
+It also moves any recorded worked example whose slice line moved (a `Source:` line inserted
+above it, say) to the line its text is now on. An example whose text is no longer in its slice is
+reported, not repaired: the build's test step records that slice's examples again
+(`verify-example-replay` reports it pending).
+
+The one other thing it reports without repairing is a slice that does not say which document it was
 transcribed from (its `Source: rulebook/source/<file>` line), because only the transcription
 knows. Run the `npx boardsmith ingest-slice-source` line it prints. In a project with one document
 that line is complete. With several, ask the designer which document each listed slice came from

@@ -59,10 +59,11 @@ const props = withDefaults(defineProps<{
   players: Player[];
   /** The viewer's own seat; -1 for a spectator. */
   playerSeat: number;
-  /** Whose go it is, when the backend HAS a turn. A world never sets this. */
-  currentPlayerSeat?: number;
-  /** Seats still to act in a simultaneous step. A world never sets this. */
-  awaitingPlayerSeats?: number[];
+  /**
+   * Every seat that has to act right now, the viewer's own included, when the
+   * backend HAS a turn. See `PlayersPanel.dueSeats`. A world never sets this.
+   */
+  dueSeats?: readonly number[];
   /** Who is here right now, three-valued. See `PlayersPanel.presentSeats`. */
   presentSeats?: readonly number[] | null;
   /** Whether the seat card carries the shell's own turn-status sentence. */
@@ -364,8 +365,7 @@ const mobileToggleLabel = computed(() => {
             class="mobile-strip__players"
             :players="players"
             :player-seat="playerSeat"
-            :current-player-seat="currentPlayerSeat"
-            :awaiting-player-seats="awaitingPlayerSeats"
+            :due-seats="dueSeats"
             :present-seats="presentSeats"
             seat-strip
           />
@@ -397,8 +397,7 @@ const mobileToggleLabel = computed(() => {
           <PlayersPanel
             :players="players"
             :player-seat="playerSeat"
-            :current-player-seat="currentPlayerSeat"
-            :awaiting-player-seats="awaitingPlayerSeats"
+            :due-seats="dueSeats"
             :present-seats="presentSeats"
             :seat-strip="!isCompact && railed"
             :show-turn-status="showTurnStatus"
