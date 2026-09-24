@@ -562,7 +562,11 @@ boardsmith simulate --games 50 --seed ci-run-1 --players 2 --json
 - `--games` — number of games to simulate (default `10`)
 - `--seed` — base seed; re-running with the same seed reproduces the same
   set of per-game seeds
+- `--replay` — one game's own seed (as a failing game reports it): plays
+  exactly that game instead of a batch, so it cannot be combined with
+  `--games` or `--seed`
 - `--players` — player count for each simulated game (default `2`)
+- `--game-option` — a declared game option as `key=value` (repeatable)
 - `--json` — machine-readable output (array of `{ index, seed, status, turns, winner, error? }`)
 
 Exit code is `0` only if every game reaches `status: 'complete'`; any
@@ -571,12 +575,14 @@ simulate` can gate CI directly. A failing game's output includes a replay
 line:
 
 ```
-Game 3 stuck (seed ci-run-1-3).
-Replay: boardsmith simulate --games 1 --seed ci-run-1-3
+Game 3 stuck (seed ci-run-1-2-3).
+Replay: boardsmith simulate --replay ci-run-1-2-3 --players 2
 ```
 
-Re-running that single-game command reproduces the exact failure
-deterministically — see [Determinism & Seeding](../agent-control.md#determinism--seeding)
+A per-game seed is not a base seed: `--seed ci-run-1-2-3` would derive new
+games from it. The replay line names the game's own seed with `--replay`,
+its seat count, and every `--game-option` the run used, so running it as
+printed reproduces the exact failure deterministically — see [Determinism & Seeding](../agent-control.md#determinism--seeding)
 for why the same seed always replays identically.
 
 ### Flow-Position Debugging (FLOW)

@@ -3,16 +3,23 @@ import { join } from 'node:path';
 import chalk from 'chalk';
 
 import type { Game, GameOptions } from '../../engine/index.js';
-import { simulateRandomGames } from '../../testing/random-simulation.js';
+import {
+  simulateRandomGames,
+  replayRandomGame,
+  type SingleGameResult,
+} from '../../testing/random-simulation.js';
 import { getProjectContext, loadGameDefinition } from './game-runtime.js';
 import { parseGameOptionFlags } from './dev.js';
 import { validateGameOptionSelection, type DevOptionDef } from '../dev-host/config-types.js';
 import type { GameOptionDefinition } from '../../session/types.js';
 import { requireGameProject, resolveRulesDir, requireRulesIndex } from '../lib/game-project.js';
+import { simulateReplayCommand } from '../lib/replay-command.js';
 
 interface SimulateOptions {
   games: string;
   seed?: string;
+  /** One game's own seed, as a failing game reports it: plays exactly that game. */
+  replay?: string;
   players: string;
   json?: boolean;
   /** Repeatable `--game-option key=value`, mirroring `boardsmith dev`. */
@@ -78,7 +85,23 @@ export interface RunSimulationOptions {
 export interface RunSimulationResult {
   games: PerGameReport[];
   baseSeed: string;
-  anyFailed: boolean;
+}
+
+/** Map one simulated game to the CLI's stable per-game report shape. */
+function toPerGameReport(g: SingleGameResult, index: number): PerGameReport {
+  const status: GameStatus = g.completed ? 'complete' : g.stuck ? 'stuck' : 'error';
+  const error = g.error
+    ?? (g.timedOut ? 'Game exceeded the simulation timeout.'
+      : g.exceededMaxActions ? 'Game exceeded the maximum action count.'
+      : undefined);
+  return {
+    index,
+    seed: g.seed,
+    status,
+    turns: g.actionCount,
+    winner: g.winners ?? null,
+    ...(error !== undefined ? { error } : {}),
+  };
 }
 
 /**
@@ -99,27 +122,33 @@ export async function runSimulation<G extends Game>(
     gameOptions: options.gameOptions,
   });
 
-  const games: PerGameReport[] = results.games.map((g, index) => {
-    const status: GameStatus = g.completed ? 'complete' : g.stuck ? 'stuck' : 'error';
-    const error = g.error
-      ?? (g.timedOut ? 'Game exceeded the simulation timeout.'
-        : g.exceededMaxActions ? 'Game exceeded the maximum action count.'
-        : undefined);
-    return {
-      index,
-      seed: g.seed,
-      status,
-      turns: g.actionCount,
-      winner: g.winners ?? null,
-      ...(error !== undefined ? { error } : {}),
-    };
-  });
-
   return {
-    games,
+    games: results.games.map(toPerGameReport),
     baseSeed: results.seed,
-    anyFailed: results.games.some(g => !g.completed),
   };
+}
+
+interface RunReplayOptions {
+  /** The game's own seed, as {@link PerGameReport.seed} reports it. */
+  seed: string;
+  players: number;
+  gameOptions?: Record<string, unknown>;
+}
+
+/**
+ * Play one game again by its own seed (`--replay`), with the same limits a
+ * batch run gives every game, so a failure a batch reported replays the same.
+ */
+export async function runReplay<G extends Game>(
+  gameClass: new (options: GameOptions) => G,
+  options: RunReplayOptions,
+): Promise<PerGameReport> {
+  const result = await replayRandomGame(gameClass, {
+    seed: options.seed,
+    playerCount: options.players,
+    gameOptions: options.gameOptions,
+  });
+  return toPerGameReport(result, 0);
 }
 
 const STATUS_ICON: Record<GameStatus, string> = {
@@ -128,26 +157,28 @@ const STATUS_ICON: Record<GameStatus, string> = {
   error: chalk.red('✗'),
 };
 
-function printHumanReport(report: RunSimulationResult, gameOptionFlags: string[]): void {
-  // Carried into the replay hint below: a seed alone does not reproduce a
-  // game-option-gated run.
-  const replayOptions = gameOptionFlags.map((flag) => ` --game-option ${flag}`).join('');
-  console.log(chalk.cyan(`\nSimulation Results (seed: ${report.baseSeed}):\n`));
+function printHumanReport(
+  heading: string,
+  games: PerGameReport[],
+  players: number,
+  gameOptions: Record<string, unknown>,
+): void {
+  console.log(chalk.cyan(`\n${heading}\n`));
 
-  for (const g of report.games) {
+  for (const g of games) {
     const icon = STATUS_ICON[g.status];
     console.log(`  ${icon} Game ${g.index} (seed ${g.seed}): ${g.status} — ${g.turns} turn(s)`);
   }
 
-  const total = report.games.length;
-  const completeCount = report.games.filter(g => g.status === 'complete').length;
-  const stuckCount = report.games.filter(g => g.status === 'stuck').length;
-  const errorCount = report.games.filter(g => g.status === 'error').length;
+  const total = games.length;
+  const completeCount = games.filter(g => g.status === 'complete').length;
+  const stuckCount = games.filter(g => g.status === 'stuck').length;
+  const errorCount = games.filter(g => g.status === 'error').length;
 
   console.log('');
   console.log(chalk.bold(`${completeCount}/${total} complete, ${stuckCount} stuck, ${errorCount} errored`));
 
-  const failing = report.games.filter(g => g.status !== 'complete');
+  const failing = games.filter(g => g.status !== 'complete');
   if (failing.length > 0) {
     console.log('');
     for (const g of failing) {
@@ -155,7 +186,7 @@ function printHumanReport(report: RunSimulationResult, gameOptionFlags: string[]
       if (g.error) {
         console.log(chalk.dim(`  ${g.error}`));
       }
-      console.log(chalk.dim(`  Replay: boardsmith simulate --games 1 --seed ${g.seed}${replayOptions}`));
+      console.log(chalk.dim(`  Replay: ${simulateReplayCommand({ seed: g.seed, playerCount: players }, gameOptions)}`));
     }
   }
   console.log('');
@@ -220,14 +251,23 @@ export async function simulateCommand(options: SimulateOptions): Promise<void> {
     return;
   }
 
-  let report: RunSimulationResult;
+  const gameClass = gameDefinition.gameClass as new (options: GameOptions) => Game;
+  let heading: string;
+  let games: PerGameReport[];
   try {
-    report = await runSimulation(gameDefinition.gameClass as new (options: GameOptions) => Game, {
-      count: gamesCount,
-      players: playersCount,
-      seed: options.seed,
-      gameOptions,
-    });
+    if (options.replay !== undefined) {
+      games = [await runReplay(gameClass, { seed: options.replay, players: playersCount, gameOptions })];
+      heading = `Replay of game seed ${options.replay}:`;
+    } else {
+      const report = await runSimulation(gameClass, {
+        count: gamesCount,
+        players: playersCount,
+        seed: options.seed,
+        gameOptions,
+      });
+      games = report.games;
+      heading = `Simulation Results (seed: ${report.baseSeed}):`;
+    }
   } finally {
     try {
       rmSync(tempDir, { recursive: true, force: true });
@@ -237,10 +277,10 @@ export async function simulateCommand(options: SimulateOptions): Promise<void> {
   }
 
   if (options.json) {
-    console.log(JSON.stringify(report.games, null, 2));
+    console.log(JSON.stringify(games, null, 2));
   } else {
-    printHumanReport(report, options.gameOption ?? []);
+    printHumanReport(heading, games, playersCount, gameOptions);
   }
 
-  process.exitCode = report.anyFailed ? 1 : 0;
+  process.exitCode = games.some(g => g.status !== 'complete') ? 1 : 0;
 }
