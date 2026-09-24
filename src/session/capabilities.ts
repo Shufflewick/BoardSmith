@@ -157,21 +157,19 @@ export interface GameCapabilities {
  */
 export interface CapabilityInputs {
   backend: GameBackend;
-  /** The COMPILED `gameDefinition` -- the code, which cannot be wished. */
+  /**
+   * The COMPILED `gameDefinition` -- the code, which cannot be wished. Its
+   * `gameClass` is constructed to read the flow a table actually runs (see
+   * `compiledFlowRoots`), which is where `timedSteps` comes from.
+   */
   definition: {
+    gameClass: GameClass;
     minPlayers?: unknown;
     maxPlayers?: unknown;
     bot?: unknown;
     persistence?: unknown;
     world?: { maxPlayers?: unknown } | null;
   };
-  /**
-   * The root of the COMPILED flow, once per seat count the table roster allows
-   * (`compiledFlowRoots`). A flow is built in the game's constructor and may
-   * differ with the seat count, so each is walked. Empty for a world, which has
-   * no flow.
-   */
-  flows: readonly FlowNode[];
   /** The capability flags `boardsmith.json` still carries. */
   declared: {
     asyncPlay?: unknown;
@@ -183,21 +181,17 @@ export interface CapabilityInputs {
 }
 
 /**
- * The root of the compiled flow at every seat count the table roster allows,
- * for {@link CapabilityInputs.flows}.
+ * The root of the compiled flow at every seat count a TABLE's roster allows.
  *
  * A game builds its flow in its constructor, so the only way to read the flow
  * is to construct the game -- once per seat count, because a constructor may
- * build a different flow for a different table. A game with no usable roster
- * yields none: a world has no flow, and a table without integer
- * minPlayers/maxPlayers is refused by name by `capabilityContradictions`.
+ * build a different flow for a different table. A world has no flow, and a
+ * table without integer minPlayers/maxPlayers yields none here because
+ * `capabilityContradictions` refuses it by name.
  */
-export function compiledFlowRoots(definition: {
-  gameClass: GameClass;
-  minPlayers?: unknown;
-  maxPlayers?: unknown;
-}): FlowNode[] {
+function compiledFlowRoots(backend: GameBackend, definition: CapabilityInputs['definition']): FlowNode[] {
   const { gameClass, minPlayers, maxPlayers } = definition;
+  if (backend !== 'table') return [];
   if (!Number.isInteger(minPlayers) || !Number.isInteger(maxPlayers)) return [];
   const roots: FlowNode[] = [];
   for (let playerCount = minPlayers as number; playerCount <= (maxPlayers as number); playerCount++) {
@@ -217,7 +211,7 @@ function declaredTrue(value: unknown): boolean {
  * caller never has to ask which backend it is holding.
  */
 export function resolveCapabilities(inputs: CapabilityInputs): GameCapabilities {
-  const { backend, definition, declared, flows } = inputs;
+  const { backend, definition, declared } = inputs;
   const isWorld = backend === 'world';
 
   return {
@@ -229,7 +223,7 @@ export function resolveCapabilities(inputs: CapabilityInputs): GameCapabilities 
     asyncPlay: isWorld || declaredTrue(declared.asyncPlay),
     joinInProgress: isWorld || declaredTrue(declared.joinInProgress),
     crossSessionState: isWorld || declaredTrue(definition.persistence),
-    timedSteps: !isWorld && timedStepNames(flows).length > 0,
+    timedSteps: timedStepNames(compiledFlowRoots(backend, definition)).length > 0,
   };
 }
 
@@ -372,10 +366,10 @@ function tableContradictions(definition: CapabilityInputs['definition']): string
  * so the host never hands a timed-out seat to a bot.
  */
 function timedStepContradictions(
-  flows: readonly FlowNode[],
+  definition: CapabilityInputs['definition'],
   declared: CapabilityInputs['declared'],
 ): string[] {
-  const timed = timedStepNames(flows);
+  const timed = timedStepNames(compiledFlowRoots('table', definition));
   if (timed.length === 0 || declared.idleAction !== undefined) return [];
   const steps = timed.map((name) => `'${name}'`).join(', ');
   return [
@@ -399,7 +393,7 @@ function timedStepContradictions(
  * winner would ship it.
  */
 export function capabilityContradictions(inputs: CapabilityInputs): string[] {
-  const { backend, definition, declared, flows } = inputs;
+  const { backend, definition, declared } = inputs;
   return [
     ...malformedDeclarations(declared),
     ...(backend === 'world'
@@ -407,6 +401,6 @@ export function capabilityContradictions(inputs: CapabilityInputs): string[] {
           ...worldSeatContradictions(definition),
           ...worldFieldContradictions(definition, declared),
         ]
-      : [...tableContradictions(definition), ...timedStepContradictions(flows, declared)]),
+      : [...tableContradictions(definition), ...timedStepContradictions(definition, declared)]),
   ];
 }

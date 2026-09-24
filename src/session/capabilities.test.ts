@@ -6,30 +6,27 @@ import {
   resolveCapabilities,
   type GameBackend,
 } from './capabilities.js';
-import { actionStep, loop, simultaneousActionStep, type FlowNode } from '../engine/index.js';
+import { Game, Player } from '../engine/index.js';
+import { FixedDeployGame, UntimedDeployGame } from './testing/fixtures/timed-step-fixture.js';
+
+/** A game class that builds no flow. */
+class PlainGame extends Game<PlainGame, Player> {}
 
 /** A table game's compiled definition: seat range, no world block. */
-const tableDefinition = { minPlayers: 2, maxPlayers: 4 };
+const tableDefinition = { gameClass: PlainGame, minPlayers: 2, maxPlayers: 4 };
 
 /** A world game's compiled definition: a world block with its own seat count. */
-const worldDefinition = { world: { maxPlayers: 40 } };
+const worldDefinition = { gameClass: PlainGame, world: { maxPlayers: 40 } };
 
-/** A compiled flow with one timed step, nested the way a real game nests it. */
-const timedFlow: FlowNode = loop({
-  maxIterations: 3,
-  do: simultaneousActionStep({ name: 'deploy', actions: ['commit'], timeLimitMs: 120_000 }),
-});
-
-/** A compiled flow whose only step declares no limit. */
-const untimedFlow: FlowNode = actionStep({ name: 'turn', actions: ['pass'] });
+/** A table whose compiled flow has one step declaring a time limit, 'deploy'. */
+const timedDefinition = { ...tableDefinition, gameClass: FixedDeployGame };
 
 function capabilities(
   backend: GameBackend,
   definition: Parameters<typeof resolveCapabilities>[0]['definition'],
   declared: Parameters<typeof resolveCapabilities>[0]['declared'] = {},
-  flows: readonly FlowNode[] = [],
 ) {
-  return resolveCapabilities({ backend, definition, declared, flows });
+  return resolveCapabilities({ backend, definition, declared });
 }
 
 describe('GAME_BACKENDS', () => {
@@ -84,8 +81,8 @@ describe('resolveCapabilities — the table backend', () => {
 
   it('offers timedSteps exactly when a step of the compiled flow declares a time limit', () => {
     expect(capabilities('table', tableDefinition).timedSteps).toBe(false);
-    expect(capabilities('table', tableDefinition, {}, [untimedFlow]).timedSteps).toBe(false);
-    expect(capabilities('table', tableDefinition, {}, [untimedFlow, timedFlow]).timedSteps).toBe(true);
+    expect(capabilities('table', { ...tableDefinition, gameClass: UntimedDeployGame }).timedSteps).toBe(false);
+    expect(capabilities('table', timedDefinition).timedSteps).toBe(true);
   });
 
   it('answers a non-boolean declaration as false rather than as truthiness', () => {
@@ -132,8 +129,7 @@ describe('capabilityContradictions', () => {
     backend: GameBackend,
     definition: Parameters<typeof capabilityContradictions>[0]['definition'],
     declared: Parameters<typeof capabilityContradictions>[0]['declared'] = {},
-    flows: readonly FlowNode[] = [],
-  ) => capabilityContradictions({ backend, definition, declared, flows });
+  ) => capabilityContradictions({ backend, definition, declared });
 
   it('is silent on a consistent table game', () => {
     expect(contradictions('table', tableDefinition)).toEqual([]);
@@ -150,7 +146,7 @@ describe('capabilityContradictions', () => {
   });
 
   it('refuses a world backend whose rules export no world', () => {
-    const [message] = contradictions('world', {});
+    const [message] = contradictions('world', { gameClass: PlainGame });
     expect(message).toContain('"backend": "world"');
     expect(message).toContain('gameDefinition');
   });
@@ -196,18 +192,18 @@ describe('capabilityContradictions', () => {
   });
 
   it('refuses a world whose world block declares no seats', () => {
-    const [message] = contradictions('world', { world: {} });
+    const [message] = contradictions('world', { gameClass: PlainGame, world: {} });
     expect(message).toContain('world.maxPlayers');
   });
 
   it('refuses a table that declares no seat range', () => {
-    const [message] = contradictions('table', {});
+    const [message] = contradictions('table', { gameClass: PlainGame });
     expect(message).toContain('minPlayers');
     expect(message).toContain('maxPlayers');
   });
 
   it('refuses a timed step without an idleAction, naming the step and the fix', () => {
-    const [message] = contradictions('table', tableDefinition, {}, [timedFlow]);
+    const [message] = contradictions('table', timedDefinition);
     expect(message).toContain("'deploy'");
     expect(message).toContain('timeLimitMs');
     expect(message).toContain('"idleAction"');
@@ -215,14 +211,14 @@ describe('capabilityContradictions', () => {
   });
 
   it('refuses it even when the game ships a bot: a bot is not how a timed step closes', () => {
-    const [message] = contradictions('table', { ...tableDefinition, bot: {} }, {}, [timedFlow]);
+    const [message] = contradictions('table', { ...timedDefinition, bot: {} });
     expect(message).toContain('"idleAction"');
     expect(message).toContain('not');
     expect(message).toMatch(/bot/);
   });
 
   it('is silent on a timed step whose game declares an idleAction', () => {
-    expect(contradictions('table', tableDefinition, { idleAction: { name: 'pass' } }, [timedFlow])).toEqual([]);
+    expect(contradictions('table', timedDefinition, { idleAction: { name: 'commit' } })).toEqual([]);
   });
 
   it('refuses a non-boolean declaration rather than reading its truthiness', () => {
