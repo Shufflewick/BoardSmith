@@ -33,6 +33,7 @@ function fakeContext(): GameContext {
     platformRequest: async () => ({}),
     presentation: ref(undefined),
     debugHighlight: ref(null),
+    turnDeadline: computed(() => null),
   };
 }
 

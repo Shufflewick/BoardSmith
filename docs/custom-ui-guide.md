@@ -748,6 +748,66 @@ Never cache `actionQuote` into your own ref. A quote is stamped with the draft i
 was computed for and withdrawn the instant the draft moves, which is what makes a
 stale price unreachable — a copy of your own is exactly how one comes back.
 
+### Counting down to the host's deadline: `turnDeadline`
+
+When the host will close the current step at a set time, the game context
+carries `turnDeadline`. Draw your countdown from it, never from `Date.now()`
+against a time of your own: a phone's clock can be off by seconds or minutes,
+and `turnDeadline` is already measured on the host's clock.
+
+```typescript
+import { computed } from 'vue';
+import { useGameContext } from 'boardsmith/ui';
+
+const { turnDeadline } = useGameContext();
+
+// null when the host has set no deadline for this step.
+const secondsLeft = computed(() =>
+  turnDeadline.value === null ? null : Math.ceil(turnDeadline.value.remainingMs / 1000),
+);
+```
+
+`turnDeadline.value` is `{ deadlineAt, remainingMs }` or `null`:
+
+- `deadlineAt` is when the step closes, in epoch milliseconds on the host's clock.
+- `remainingMs` is the time left, floored at zero. It updates about four times a
+  second while there is time left, from one interval the whole page shares, and
+  stops at zero.
+
+Rules that keep your board and the Action Panel telling the same story:
+
+- **Zero is not the end of the step.** The host closes it, and the next frame
+  says what happened. At zero, say you are waiting for the server. Do not
+  disable actions yourself: a move the player makes in the last moment is the
+  host's to accept or refuse.
+- **Do not announce every second.** A live region that changes each second
+  talks over everything else a screen reader says. The Action Panel shows the
+  same countdown as a `role="timer"` element, which is not announced as it
+  changes, so a keyboard or screen-reader player can find it without being
+  interrupted by it.
+- **The Action Panel shows it too.** While the panel is up it shows "Time left:
+  0:30", and "Time is up. Waiting for the server…" at zero. Your countdown is in
+  addition to that one, never instead of it.
+- **Only a table has it.** A persistent world has no step deadline, and a world
+  does not publish `turnDeadline`.
+
+**For hosts.** The platform `game_state` message carries three numbers at its
+top level, beside `winners` and `isDraw`:
+
+| Field | Clock | Meaning |
+|---|---|---|
+| `deadlineAt` | host | When the host closes the step, or `null` for no deadline. |
+| `serverNow` | host | When the host sent the frame. |
+| `receivedAt` | page | When the parent page took the frame off its socket. |
+
+The parent page stamps `receivedAt` the moment the frame arrives and forwards
+all three unchanged, including when it re-posts a cached frame on iframe load or
+on `request-state`. A stamp taken at re-post time would pair an old `serverNow`
+with a new page time and hand the player back the time the frame spent in the
+cache. A frame with no `deadlineAt` (or `deadlineAt: null`) means no deadline. A
+frame with a `deadlineAt` but without both stamps shows no countdown and logs an
+error in the game frame's console naming the missing field.
+
 ### Example: Auto-Opening a Detail Panel
 
 When a sector-related action starts (either from ActionPanel or via followUp), automatically show the sector's detail panel:

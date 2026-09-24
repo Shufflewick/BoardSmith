@@ -148,6 +148,8 @@ export {
   type GameContextPlayer,
   type TimeTravelDiff,
 } from './composables/useGameContext.js';
+// The shape of the context's `turnDeadline` (#301), for a board that types it.
+export type { TurnDeadline } from './composables/useTurnDeadline.js';
 
 // THE CHROME BOTH BACKENDS RENDER (#170). A game never mounts this itself --
 // `GameShell` and `WorldShell` do -- but a custom board reads its board-area

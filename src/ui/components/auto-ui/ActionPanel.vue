@@ -60,6 +60,21 @@ if (!_actionController) {
 }
 const actionController = _actionController;
 
+/**
+ * THE HOST'S DEADLINE FOR THIS STEP (#301), the same `turnDeadline` a custom
+ * UI reads from the game context. Only a table publishes it; in a world it is
+ * not provided and the panel draws no countdown. At zero the panel says it is
+ * waiting for the server and leaves the actions alone: the host closes the step.
+ */
+const turnDeadline = inject(GAME_CONTEXT_KEYS.turnDeadline, undefined);
+const turnDeadlineText = computed((): string | null => {
+  const deadline = turnDeadline?.value;
+  if (!deadline) return null;
+  if (deadline.remainingMs === 0) return 'Time is up. Waiting for the server\u2026';
+  const seconds = Math.ceil(deadline.remainingMs / 1000);
+  return `Time left: ${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`;
+});
+
 // Re-export types
 export type { ChoiceWithRefs, ValidElement, ElementRef };
 /** A pick/choice the player must make */
@@ -1580,6 +1595,19 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
 </script>
 
 <template>
+  <!-- ONE root, so attributes a parent puts on the panel (a test id, a class)
+       land on it. `display: contents` keeps it out of the action bar's flow. -->
+  <div class="action-panel-root">
+  <!-- The host's deadline (#301), whatever else the panel is showing. A
+       `timer` is not a live region, so the per-second change is never
+       announced; a reader finds it by moving to it. -->
+  <div
+    v-if="turnDeadlineText"
+    class="turn-deadline"
+    role="timer"
+    data-testid="bs-turn-deadline"
+  >{{ turnDeadlineText }}</div>
+
   <!-- Animations pending indicator -->
   <div v-if="animationsPending" class="action-panel-pending">
     <span class="pending-text">Playing animations...</span>
@@ -2241,6 +2269,7 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
       It is <span v-if="currentPlayerName" :style="currentPlayerColor ? { color: currentPlayerColor } : undefined">{{ currentPlayerName }}</span><span v-else>the other player</span>'s turn
     </template>
   </div>
+  </div>
 </template>
 
 <style scoped>
@@ -2755,6 +2784,21 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
   display: flex;
   gap: 8px;
   align-items: center;
+}
+
+.action-panel-root {
+  display: contents;
+}
+
+.turn-deadline {
+  flex: 0 0 auto;
+  padding: 10px 14px;
+  background: var(--bsg-surface-2);
+  border-radius: 8px;
+  color: var(--bsg-ink);
+  font-size: 0.9rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
 }
 
 .waiting-message {

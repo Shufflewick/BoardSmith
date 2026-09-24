@@ -102,15 +102,19 @@ export function mountPanel(
    * `attachTo: document.body` for a test about FOCUS. A detached mount has no
    * `document.activeElement` to speak of, so `el.focus()` is a no-op and a test
    * asserting where the keyboard landed would pass whatever the panel did.
+   *
+   * `provide` adds context values beside the controller, for a test about one
+   * the panel reads when it is there (a table's `turnDeadline`, for one).
    */
-  mountOptions: { attachTo?: HTMLElement } = {},
+  mountOptions: { attachTo?: HTMLElement; provide?: Record<symbol, unknown> } = {},
 ) {
+  const { provide, ...rest } = mountOptions;
   return mount(ActionPanel, {
     global: {
-      provide: { [GAME_CONTEXT_KEYS.actionController as symbol]: controller },
+      provide: { [GAME_CONTEXT_KEYS.actionController as symbol]: controller, ...provide },
       stubs: { Teleport: true },
     },
     props,
-    ...mountOptions,
+    ...rest,
   });
 }
