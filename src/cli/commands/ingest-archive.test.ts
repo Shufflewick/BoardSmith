@@ -342,45 +342,38 @@ describe('ingest-archive --additional-source (#305)', () => {
     ]);
   });
 
-  it('refuses an unreadable additional source BEFORE archiving anything', async () => {
+  /**
+   * Runs a call that must be refused, and proves it wrote nothing: a primary archived with its
+   * additional source missing is a half-recorded provenance header, worse than none.
+   */
+  async function refusedBeforeWriting(additionalSource: string[]): Promise<string> {
     const project = await freshProject();
     const message = await rejectionMessage(
-      ingestArchiveCommand(rulesPath, {
-        project,
-        json: true,
-        additionalSource: [join(dir, 'missing-reference.md')],
-      }),
+      ingestArchiveCommand(rulesPath, { project, json: true, additionalSource }),
     );
-    expect(message).toMatch(/Additional source not found or unreadable: .*missing-reference\.md/);
-    // Nothing was written: a half-recorded provenance header is worse than none.
     await expect(fs.access(join(project, DESIGN_DIR, 'rulebook'))).rejects.toThrow();
+    return message;
+  }
+
+  it('refuses an unreadable additional source BEFORE archiving anything', async () => {
+    expect(await refusedBeforeWriting([join(dir, 'missing-reference.md')])).toMatch(
+      /Additional source not found or unreadable: .*missing-reference\.md/,
+    );
   });
 
   it('refuses an additional source that is the primary source itself', async () => {
-    const project = await freshProject();
-    const message = await rejectionMessage(
-      ingestArchiveCommand(rulesPath, { project, json: true, additionalSource: [rulesPath] }),
-    );
-    expect(message).toMatch(/REQUIREMENTS\.md is already the primary source/);
-    await expect(fs.access(join(project, DESIGN_DIR, 'rulebook'))).rejects.toThrow();
+    expect(await refusedBeforeWriting([rulesPath])).toMatch(/REQUIREMENTS\.md is already the primary source/);
   });
 
   it('refuses two sources that would archive to the same file name', async () => {
-    const project = await freshProject();
     const otherDir = join(dir, 'other');
     await fs.mkdir(otherDir);
     const sameName = join(otherDir, 'REFERENCE.md');
     await fs.writeFile(sameName, 'a different reference document\n');
 
-    const message = await rejectionMessage(
-      ingestArchiveCommand(rulesPath, {
-        project,
-        json: true,
-        additionalSource: [companionPath, sameName],
-      }),
+    expect(await refusedBeforeWriting([companionPath, sameName])).toMatch(
+      /both archive to rulebook\/source\/REFERENCE\.md/,
     );
-    expect(message).toMatch(/both archive to rulebook\/source\/REFERENCE\.md/);
-    await expect(fs.access(join(project, DESIGN_DIR, 'rulebook'))).rejects.toThrow();
   });
 
   it('refuses to clobber a different archived copy of an additional source', async () => {

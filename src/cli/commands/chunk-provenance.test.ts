@@ -225,6 +225,26 @@ describe('computeVerificationScope — scope', () => {
 });
 
 /**
+ * A project archived through the real `ingest-archive`, with `RULES.md` as its primary source and
+ * `REFERENCE.md` (holding `referenceBytes`) as an additional one.
+ */
+async function archiveRulesWithReference(referenceBytes: Buffer): Promise<string> {
+  const project = join(dir, 'windup');
+  await fs.mkdir(project, { recursive: true });
+  const rules = join(dir, 'RULES.md');
+  const reference = join(dir, 'REFERENCE.md');
+  await fs.writeFile(rules, '# Rules\n\nBattles follow the reference.\n');
+  await fs.writeFile(reference, referenceBytes);
+  vi.spyOn(console, 'log').mockImplementation(() => {});
+  try {
+    await ingestArchiveCommand(rules, { project, json: true, additionalSource: [reference] });
+  } finally {
+    vi.restoreAllMocks();
+  }
+  return project;
+}
+
+/**
  * #305: an additional source (a companion document the rules incorporate by reference) is part of
  * the rules. When it changes or disappears, the slices transcribed from it no longer have a
  * verified source — and slices do not record which document produced them, so no slice can be
@@ -236,21 +256,7 @@ describe('computeVerificationScope — additional sources (#305)', () => {
   const REFERENCE_HASH = createHash('sha256').update(REFERENCE_BYTES).digest('hex');
   const REL_REFERENCE = 'rulebook/source/REFERENCE.md';
 
-  async function projectWithReference(): Promise<string> {
-    const project = join(dir, 'windup');
-    await fs.mkdir(project, { recursive: true });
-    const rules = join(dir, 'RULES.md');
-    const reference = join(dir, 'REFERENCE.md');
-    await fs.writeFile(rules, '# Rules\n\nBattles follow the reference.\n');
-    await fs.writeFile(reference, REFERENCE_BYTES);
-    vi.spyOn(console, 'log').mockImplementation(() => {});
-    try {
-      await ingestArchiveCommand(rules, { project, json: true, additionalSource: [reference] });
-    } finally {
-      vi.restoreAllMocks();
-    }
-    return project;
-  }
+  const projectWithReference = () => archiveRulesWithReference(REFERENCE_BYTES);
 
   it('every recorded source present and matching → full, each additional source listed', async () => {
     const project = await projectWithReference();
@@ -1419,18 +1425,7 @@ describe('## Verified Against — additional source hashes (#305)', () => {
   });
 
   it('chunk-check records each additional source the project has', async () => {
-    const project = join(dir, 'windup');
-    await fs.mkdir(project, { recursive: true });
-    const rules = join(dir, 'RULES.md');
-    const reference = join(dir, 'REFERENCE.md');
-    await fs.writeFile(rules, '# Rules\n');
-    await fs.writeFile(reference, '# Reference\n');
-    vi.spyOn(console, 'log').mockImplementation(() => {});
-    try {
-      await ingestArchiveCommand(rules, { project, json: true, additionalSource: [reference] });
-    } finally {
-      vi.restoreAllMocks();
-    }
+    const project = await archiveRulesWithReference(Buffer.from('# Reference\n'));
     await writeChunk(project, 'battle', withInterpretation(await readChunkTemplate(), 'Cites rulebook/INDEX.md.'));
     await recordVerifiedAgainst('battle', { project });
 

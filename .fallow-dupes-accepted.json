@@ -395,13 +395,6 @@
       ]
     },
     {
-      "content": "0d78e16053a21b2f",
-      "lines": 9,
-      "files": [
-        "src/cli/commands/verify-classify.ts"
-      ]
-    },
-    {
       "content": "0dc7caf6f1b9814d",
       "lines": 9,
       "files": [
@@ -5166,13 +5159,6 @@
       "lines": 10,
       "files": [
         "src/session/snapshot-session-host.test.ts"
-      ]
-    },
-    {
-      "content": "aa379fc2d3e8d224",
-      "lines": 14,
-      "files": [
-        "src/cli/commands/verify-classify.ts"
       ]
     },
     {

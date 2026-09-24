@@ -424,6 +424,30 @@ export interface ProvenanceResult {
   reason: string;
 }
 
+/** Every `.md` file directly in the project's `rulebook/` — `[]` when there is no such directory. */
+async function rulebookSliceFilenames(projectDir: string): Promise<string[]> {
+  try {
+    const entries = await fs.readdir(designRulebookDir(projectDir), { withFileTypes: true });
+    return entries.filter((e) => e.isFile() && e.name.endsWith('.md')).map((e) => e.name);
+  } catch {
+    return [];
+  }
+}
+
+/** Each chunk's `CHUNK.md` text, in `chunkSlugs` order; a chunk directory without one is skipped. */
+async function readChunkTexts(projectDir: string): Promise<Array<{ slug: string; chunkText: string }>> {
+  const chunksDir = designChunksDir(projectDir);
+  const chunks: Array<{ slug: string; chunkText: string }> = [];
+  for (const slug of await chunkSlugs(projectDir)) {
+    try {
+      chunks.push({ slug, chunkText: await fs.readFile(join(chunksDir, slug, 'CHUNK.md'), 'utf-8') });
+    } catch {
+      // No CHUNK.md in this directory — not a chunk to scan.
+    }
+  }
+  return chunks;
+}
+
 /** Strips a leading `rulebook/` prefix, if present, for comparing citation names uniformly. */
 function bareSliceName(path: string): string {
   return path.startsWith('rulebook/') ? path.slice('rulebook/'.length) : path;
@@ -491,30 +515,11 @@ export async function resolveProvenance(
     }),
   );
 
-  const chunksDir = designChunksDir(dir);
-  const slugs = await chunkSlugs(dir);
-
-  const rulebookDir = designRulebookDir(dir);
-  let sliceFilenames: string[] = [];
-  try {
-    const entries = await fs.readdir(rulebookDir, { withFileTypes: true });
-    sliceFilenames = entries
-      .filter((e) => e.isFile() && e.name.endsWith('.md'))
-      .map((e) => e.name);
-  } catch {
-    sliceFilenames = [];
-  }
-
+  const sliceFilenames = await rulebookSliceFilenames(dir);
   const currentAdditional = scope.additionalSources ?? [];
   const recordedHashes = new Set<string>();
   const changedAdditionalSources = new Set<string>();
-  for (const slug of slugs) {
-    let chunkText: string;
-    try {
-      chunkText = await fs.readFile(join(chunksDir, slug, 'CHUNK.md'), 'utf-8');
-    } catch {
-      continue;
-    }
+  for (const { chunkText } of await readChunkTexts(dir)) {
     const { resolved } = resolveCitedSlices(chunkText, sliceFilenames);
     const citesThisPair = resolved.some((r) => wantedNames.has(bareSliceName(r)));
     if (!citesThisPair) continue;
@@ -1245,17 +1250,8 @@ async function computeChunkVerdicts(
   pairs: SlicePair[],
   classifications: ClassificationRecord[],
 ): Promise<{ verdicts: ChunkVerdict[]; warnings: string[] }> {
-  const chunksDir = designChunksDir(projectDir);
-  const slugs = await chunkSlugs(projectDir);
-
   const rulebookDir = designRulebookDir(projectDir);
-  let sliceFilenames: string[] = [];
-  try {
-    const entries = await fs.readdir(rulebookDir, { withFileTypes: true });
-    sliceFilenames = entries.filter((e) => e.isFile() && e.name.endsWith('.md')).map((e) => e.name);
-  } catch {
-    sliceFilenames = [];
-  }
+  const sliceFilenames = await rulebookSliceFilenames(projectDir);
 
   // `null` means "could not be read" — NEVER collapsed to `''`. A live slice cached as `''` on a
   // read failure would match no quote by construction, which is indistinguishable from "read fine,
@@ -1277,13 +1273,7 @@ async function computeChunkVerdicts(
   const warningSet = new Set<string>();
 
   const results: ChunkVerdict[] = [];
-  for (const slug of slugs) {
-    let chunkText: string;
-    try {
-      chunkText = await fs.readFile(join(chunksDir, slug, 'CHUNK.md'), 'utf-8');
-    } catch {
-      continue;
-    }
+  for (const { slug, chunkText } of await readChunkTexts(projectDir)) {
     const { resolved } = resolveCitedSlices(chunkText, sliceFilenames);
     if (resolved.length === 0) continue;
     const citedBare = new Set(resolved.map((r) => bareSliceName(r)));
