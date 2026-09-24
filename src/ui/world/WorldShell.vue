@@ -298,9 +298,9 @@ useBoardActionBridge({
   availableActions: play.availableActions,
   disabledActions: play.disabledActions,
   // A world checkpoints on dirty and keeps no per-action snapshot, so there is
-  // no history to view and no restore epoch to invalidate a pick against.
+  // no history to view and no table runner whose replacement invalidates a pick.
   isViewingHistory: computed(() => false),
-  restoreEpoch: computed(() => undefined),
+  runnerIdentity: computed(() => undefined),
 });
 
 providePlayContext({

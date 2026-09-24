@@ -860,6 +860,7 @@ describe('initCommand — a scaffolded game plays with no warnings (#309)', () =
     // `"boardsmith": "file:..."` installs as a symlink to the checkout.
     mkdirSync(join(projectPath, 'node_modules'));
     symlinkSync(repoRoot, join(projectPath, 'node_modules', 'boardsmith'), 'dir');
+    // Dynamic import: the rules module is the one this test's scaffold just wrote.
     const rules = await import(join(projectPath, 'src', 'rules', 'index.ts'));
     return createTestGame(rules.gameDefinition.gameClass, { playerCount: 2, seed: 'issue-309' });
   }

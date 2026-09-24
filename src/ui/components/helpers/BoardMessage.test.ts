@@ -25,6 +25,8 @@ vi.stubGlobal(
     removeEventListener: vi.fn(),
   })),
 );
+// Loaded here rather than imported statically, so the stub above is in place first.
+const ui = await import('../../index.js');
 
 const CONTENT = '.bsg-board-message__content';
 
@@ -71,8 +73,7 @@ describe('BoardMessage', () => {
     );
   });
 
-  it('is exported from the UI barrel', async () => {
-    const ui = await import('../../index.js');
+  it('is exported from the UI barrel', () => {
     expect(ui.BoardMessage).toBe(BoardMessage);
   });
 });

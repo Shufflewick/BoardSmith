@@ -183,13 +183,14 @@ tell "the game moved" from "the player clicked a log line" when you react to
 `gameView` changing. Do not infer the mode from `flowState === null`; the boolean
 is the stated fact.
 
-#### Undo, rewind, and an open pick
+#### Undo, rewind, a new game, and an open pick
 
-An undo or rewind replaces the server's runner, which invalidates every element
-id captured from the old one. GameShell handles this for you: it cancels the
-shared `actionController` and clears board interaction the moment the server
-reports the restore (`PlayerGameState.restoreEpoch` changes), then re-offers the
-action from the restored position. A board that drives selection through
+An undo or rewind replaces the server's runner, and a new game replaces the
+game, and either invalidates every element id captured from the old one.
+GameShell handles this for you: it cancels the shared `actionController` and
+clears board interaction the moment the server reports the replacement
+(`PlayerGameState.restoreEpoch` or `PlayerGameState.gameInstanceId` changes),
+then re-offers the action from the new position. A board that drives selection through
 `actionController` / `useBoardInteraction` needs no watcher of its own — and
 should not add one, since a game-specific "is my snapshot stale" fingerprint can
 only restate a fact the shell already acts on.

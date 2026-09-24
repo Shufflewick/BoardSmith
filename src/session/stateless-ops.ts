@@ -495,10 +495,15 @@ function handleStart(
   // started state IS the seed's state — restored via the SAME
   // runnerFromSnapshot + stateEnvelope primitives every other op uses, not
   // a rebuilt load path. No seed => unchanged fresh-start behavior below.
+  //
+  // Every start is a NEW game, a start from the same saved position included,
+  // so the seed's own `gameInstanceId` is not adopted: each restart from it
+  // would otherwise be published as the game it replaced (#356).
   if (seedSnapshot) {
+    const { gameInstanceId: _seedsGame, ...position } = seedSnapshot;
     return {
       success: true,
-      ...stateEnvelope(runnerFromSnapshot(seedSnapshot, def), gameOptions.playerCount),
+      ...stateEnvelope(runnerFromSnapshot(position, def), gameOptions.playerCount),
     };
   }
 

@@ -25,6 +25,7 @@ vi.mock('./parallel-benchmark.js', () => ({
 }));
 
 const { WeightEvolver } = await import('./weight-evolver.js');
+const { runParallelBenchmarks } = await import('./parallel-benchmark.js');
 
 class EvolveGame extends Game<EvolveGame, Player> {}
 
@@ -177,7 +178,6 @@ describe('WeightEvolver.evolve', () => {
   });
 
   it('threads the benchmark game count and MCTS budget into every evaluation', async () => {
-    const { runParallelBenchmarks } = await import('./parallel-benchmark.js');
     await evolver({ evolutionBenchmarkGames: 12, benchmarkMCTSIterations: 7 })
       .evolve(objectives(5));
     for (const call of vi.mocked(runParallelBenchmarks).mock.calls) {

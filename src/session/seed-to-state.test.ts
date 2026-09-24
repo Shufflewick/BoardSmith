@@ -42,6 +42,7 @@ import {
   type GameOptions,
 } from '../engine/index.js';
 import { executeOp, type GameDefinitionLike } from './stateless-ops.js';
+import type { GameStateSnapshot } from '../engine/utils/snapshot.js';
 import { boundaryKeyOf } from './testing/boundary-stamp.js';
 import { TestGame } from '../testing/test-game.js';
 
@@ -245,7 +246,12 @@ describe('FEAT-01: seed-to-state PoC — deterministic load via executeOp start'
 
     expect(first.success).toBe(true);
     expect(second.success).toBe(true);
-    expect(first.snapshot).toEqual(second.snapshot);
+    // Identical in everything but WHICH game it is: each start from a seed is a
+    // new game, and its id says so (#356).
+    const { gameInstanceId: firstGame, ...firstState } = first.snapshot as GameStateSnapshot;
+    const { gameInstanceId: secondGame, ...secondState } = second.snapshot as GameStateSnapshot;
+    expect(firstState).toEqual(secondState);
+    expect(firstGame).not.toBe(secondGame);
 
     const firstRandomState = (first.snapshot as { randomState?: unknown }).randomState;
     const secondRandomState = (second.snapshot as { randomState?: unknown }).randomState;

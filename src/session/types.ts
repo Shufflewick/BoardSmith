@@ -465,6 +465,17 @@ export interface PlayerGameState {
    */
   restoreEpoch: number;
   /**
+   * Which game this is (`runner.gameInstanceId`, #356).
+   *
+   * Published unconditionally for EVERY seat, like `restoreEpoch`, and read
+   * with it: `restoreEpoch` says the runner of THIS game was replaced, and a
+   * change here says the GAME was — New game, a host starting another game
+   * under the same page. Every new game starts at epoch 0, so the epoch alone
+   * cannot see that, and a client kept offering the previous game's element
+   * ids at a step whose action set had not changed.
+   */
+  gameInstanceId: string;
+  /**
    * RESERVED (Plan 104-04): Active tutorial step projected for this player.
    *
    * `undefined` when no tutorial is running for this seat. Populated by
