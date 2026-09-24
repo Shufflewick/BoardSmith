@@ -1378,11 +1378,19 @@ one of your world's verbs. A world still has exactly one way to change. A player
 who could send "seat 3 departed" would forge it; seatlessness is what makes that
 structural.
 
-The library types the declaration. What a host *does* with it is that host's
-lifecycle policy: how long a departure's grace really is, whether a dropped
-socket counts as a departure at all, whether presence is observable in the first
-place. A laptop with one browser tab answers that differently from a platform
-holding 500 sockets, and should.
+The library types the declaration and owns the grace. `departGraceMs` defaults
+to `WORLD_PRESENCE_DEFAULT_GRACE_MS` (60 000 ms, a minute) and must lie between
+`WORLD_PRESENCE_MIN_GRACE_MS` (1 000 ms) and `WORLD_PRESENCE_MAX_GRACE_MS`
+(24 hours). A number outside that range is refused, not clamped: `boardsmith
+dev` refuses it when the world starts, and the platform refuses it at the
+world's first wake. Every host reads the grace through `presenceDepartGraceMs`
+from `boardsmith/world`, so a page reload is the same flap locally as it is in
+production.
+
+The rest of what a host does with the declaration is that host's lifecycle
+policy: whether a dropped socket counts as a departure at all, whether presence
+is observable in the first place. A laptop with one browser tab answers that
+differently from a platform holding 500 sockets, and should.
 
 What counts as an arrival is the same in both. `boardsmith dev` follows
 ShufflewickPub's rule, so `onArrive` runs as often locally as it does in
@@ -1395,6 +1403,12 @@ production:
   hook runs.
 - A return after the departure ran is a new arrival. With no `onDepart`, a
   return is an arrival only if the seat was empty for at least the grace.
+- Which seats the world was told are present is kept with the world, not in
+  the host's memory. `boardsmith dev` keeps it in the local world store, so a
+  rule edit or a restart of `boardsmith dev` announces nothing for a page that
+  comes back. A seat nobody brings back is treated the way the platform treats
+  one after a wake: its absence counts from the start, so `onDepart` runs one
+  grace later.
 
 ## Referral: the verbs an invitation is attributed through
 

@@ -1,7 +1,7 @@
 {
   "revision": 103,
   "bundleProtocol": 2,
-  "surfaceHash": "a58f0fd492604bcc",
+  "surfaceHash": "35bc796118b2edfa",
   "payloadHash": "8052a5ba1e4f48d4",
   "formatHash": "0058593e7cc80205",
   "history": [
@@ -858,19 +858,19 @@
       "revision": 102,
       "date": "2026-09-24",
       "bundleProtocol": 2,
-      "surfaceHash": "a58f0fd492604bcc",
+      "surfaceHash": "263276230a5e853a",
       "payloadHash": "80aba5002803deaa",
       "formatHash": "0058593e7cc80205",
-      "summary": "A repeating selection's own validate now runs, once per pick, on every path that submits a move (#352): it receives the pick (an element for chooseElement) with the picks made before it in args, a refused pick runs no onEach, a whole submission containing one is refused as 'Pick N of \"name\": <message>', and bots, the simulator and enumerateLegalMoves never offer it. A repeating chooseElement's callbacks now see its earlier picks as elements. Re-vendor so bots on the platform honour the rule."
+      "summary": "boardsmith/world exports the presence departure grace: WORLD_PRESENCE_DEFAULT_GRACE_MS (60s), WORLD_PRESENCE_MIN_GRACE_MS (1s), WORLD_PRESENCE_MAX_GRACE_MS (24h) and presenceDepartGraceMs(), so the platform and boardsmith dev share one default and range (#338)."
     },
     {
       "revision": 103,
       "date": "2026-09-24",
       "bundleProtocol": 2,
-      "surfaceHash": "a58f0fd492604bcc",
+      "surfaceHash": "35bc796118b2edfa",
       "payloadHash": "8052a5ba1e4f48d4",
       "formatHash": "0058593e7cc80205",
-      "summary": "chooseFrom, chooseElement and chooseElements (and the world facade's versions) take prepare(ctx) (#334): it runs once per evaluation of the choices and its result is disabled's third argument, disabled(choice, ctx, prepared), so a per-choice rule can share board reads across thousands of candidates; a prepare without a disabled rule is refused at declaration. Re-vendor before running a game that uses it: an older engine ignores prepare and hands disabled undefined."
+      "summary": "Two engine changes (#352, #334). A repeating selection's own validate now runs once per pick on every path that submits a move: it receives the pick (an element for chooseElement) with the picks made before it in args, a refused pick runs no onEach, a whole submission containing one is refused as 'Pick N of \"name\": <message>', and bots, the simulator and enumerateLegalMoves never offer it; a repeating chooseElement's callbacks now see earlier picks as elements. And chooseFrom, chooseElement and chooseElements (and the world facade's versions) take prepare(ctx), run once per evaluation of the choices, whose result is disabled's third argument, disabled(choice, ctx, prepared); a prepare without a disabled rule is refused at declaration. Re-vendor before running a game that uses prepare: an older engine ignores it and hands disabled undefined."
     }
   ]
 }

@@ -31,6 +31,7 @@
 import { randomUUID } from 'node:crypto';
 
 import {
+  presenceDepartGraceMs,
   rearmAt,
   WorldRefusal,
   type RoutedEvent,
@@ -140,13 +141,6 @@ export class LocalWorldHost {
   readonly #attached = new Map<string, number>();
   /** Departure timers, one per seat, for a bundle that declares `onDepart`. */
   readonly #departing = new Map<number, ReturnType<typeof setTimeout>>();
-  /**
-   * THE SEATS THE WORLD HAS BEEN TOLD ARE PRESENT, and not since told they
-   * left (#331) -- the platform's "informed" record. `closedAt` is written only
-   * for a bundle with no `onDepart`, where no departure timer carries the
-   * instant, so a return can tell a flap from a genuine absence.
-   */
-  readonly #told = new Map<number, { closedAt: number | null }>();
   /** The one shutdown, once it has been asked for. */
   #closing: Promise<void> | null = null;
 
@@ -191,10 +185,25 @@ export class LocalWorldHost {
     return this.#world.settled();
   }
 
-  /** Launch the world if it has never been launched, migrating and lifting it
-   *  first if these rules need it to be moved (#200, #223). */
-  start(): Promise<WorldStartOutcome> {
-    return this.#world.start();
+  /**
+   * Launch the world if it has never been launched, migrating and lifting it
+   * first if these rules need it to be moved (#200, #223).
+   *
+   * A presence declaration whose grace the platform would refuse is refused
+   * here first, before anything is written (#338), so the author learns it on
+   * the first `boardsmith dev` rather than at publish.
+   *
+   * Then what the world was told about presence is reconciled with this host,
+   * which has no page open yet (#339): see
+   * {@link LocalWorldHost.#reconcilePresence}.
+   */
+  async start(): Promise<WorldStartOutcome> {
+    if (this.#world.presenceHooks !== undefined) this.#departGraceMs();
+    const outcome = await this.#world.start();
+    await this.#world.run(async () => {
+      this.#reconcilePresence();
+    });
+    return outcome;
   }
 
   async handleMessage(clientId: string, message: WorldDevRequest): Promise<void> {
@@ -368,11 +377,15 @@ export class LocalWorldHost {
       this.#departing.delete(seat);
       return;
     }
-    const told = this.#told.get(seat);
-    this.#told.set(seat, { closedAt: null });
+    const told = this.#store.presenceOf(seat);
     if (told !== undefined) {
+      // Told present, and never seen to leave: a return the world already
+      // believes in, which is what a page coming back after a restart is.
       if (told.closedAt === null) return;
+      this.#store.tellPresent(seat);
       if (this.#clock.now() - told.closedAt < this.#departGraceMs()) return;
+    } else {
+      this.#store.tellPresent(seat);
     }
     if (hooks.onArrive !== undefined) {
       await this.#clockCommand(hooks.onArrive, { seat, present: true });
@@ -387,16 +400,41 @@ export class LocalWorldHost {
    */
   #seatBecameAbsent(seat: number): void {
     const hooks = this.#world.presenceHooks;
-    if (hooks === undefined || !this.#told.has(seat)) return;
+    if (hooks === undefined || this.#store.presenceOf(seat) === undefined) return;
     if (hooks.onDepart === undefined) {
-      this.#told.set(seat, { closedAt: this.#clock.now() });
+      this.#store.stampPresenceClosedAt(seat, this.#clock.now());
       return;
     }
     this.#armDeparture(seat, hooks.onDepart);
   }
 
+  /**
+   * WHAT THE WORLD WAS TOLD, CHECKED AGAINST A HOST WITH NO PAGE OPEN (#339).
+   *
+   * The platform's `reconcileSeat`, run once at start. The ledger outlives the
+   * host, but departure timers do not, so a seat the world believes present
+   * has either a page that is about to come back or nobody at all. Either way
+   * its absence is measured from now, because this host cannot know how long
+   * it has been gone: a departure waits out the grace, or, with no `onDepart`,
+   * the instant is written down. A stamp already there is older and truer than
+   * this start, and is kept.
+   */
+  #reconcilePresence(): void {
+    const hooks = this.#world.presenceHooks;
+    if (hooks === undefined) return;
+    for (const { seat, closedAt } of this.#store.presenceTold()) {
+      if (this.#seatIsOpen(seat) || this.#departing.has(seat)) continue;
+      if (hooks.onDepart !== undefined) {
+        this.#armDeparture(seat, hooks.onDepart);
+      } else if (closedAt === null) {
+        this.#store.stampPresenceClosedAt(seat, this.#clock.now());
+      }
+    }
+  }
+
+  /** The platform's grace, defaulted and bounded the platform's way (#338). */
   #departGraceMs(): number {
-    return this.#world.presenceHooks?.departGraceMs ?? 0;
+    return presenceDepartGraceMs(this.#world.presenceHooks?.departGraceMs);
   }
 
   /**
@@ -421,8 +459,8 @@ export class LocalWorldHost {
       clearTimeout(departing);
       this.#departing.delete(vacancy.seat);
     }
-    // The chair's next page holds a new player, and a new player arrives.
-    this.#told.delete(vacancy.seat);
+    // The ledger forgot this chair in the checkpoint that released it (#339),
+    // so the chair's next page holds a new player, and a new player arrives.
     for (const [clientId, seat] of [...this.#attached]) {
       if (seat !== vacancy.seat) continue;
       this.#attached.delete(clientId);
@@ -451,7 +489,7 @@ export class LocalWorldHost {
         if (this.#world.closed) return;
         void this.#world.run(async () => {
           if (this.#seatIsOpen(seat)) return;
-          this.#told.delete(seat);
+          this.#store.untellPresent(seat);
           await this.#clockCommand(command, { seat, present: false });
           await this.#pushViews();
         });
