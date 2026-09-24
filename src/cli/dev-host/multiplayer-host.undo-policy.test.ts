@@ -10,14 +10,9 @@
  * These tests drive the real road: a game project on disk, bundled by the same
  * loader `boardsmith dev` uses, run through `MultiplayerHost`.
  */
-import { mkdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
-
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { tempTree } from '../../testing/temp-tree.test-helper.js';
-import { loadTableRuntime, type TableRuntime } from '../commands/dev-table-runtime.js';
-import { MultiplayerHost, type HostOutbound } from './multiplayer-host.js';
+import { openTable, tableProject } from './table-host.test-helper.js';
 import { createDevHostClientMemory } from './test-client-memory.js';
 
 const clients = createDevHostClientMemory();
@@ -53,45 +48,17 @@ function rulesSource(policy: string): string {
   ].join('\n');
 }
 
-async function loadProject(policy: string): Promise<TableRuntime> {
-  const dir = tempTree('bs-table-undo-policy-');
-  const rulesPath = join(dir, 'src', 'rules');
-  mkdirSync(rulesPath, { recursive: true });
-  const tempDir = join(dir, '.boardsmith');
-  mkdirSync(tempDir, { recursive: true });
-  writeFileSync(join(rulesPath, 'index.ts'), rulesSource(policy));
-  return loadTableRuntime(rulesPath, tempDir, 'monorepo');
+async function openPolicyTable(policy: string) {
+  const runtime = await tableProject('bs-table-undo-policy-', rulesSource(policy)).load();
+  const table = await openTable(runtime, clients, { makeSeed: () => 'undo-policy' });
+  return { ...table, runtime, undo: () => table.ask('undo', {}) };
 }
 
-async function openTable(runtime: TableRuntime) {
-  const sent: Array<{ clientId: string; msg: HostOutbound }> = [];
-  const host = new MultiplayerHost({
-    playerCount: 1,
-    minPlayers: 1,
-    maxPlayers: 1,
-    makeSeed: () => 'undo-policy',
-    executeOp: runtime.rules.executeOp,
-    send: (clientId, msg) => {
-      sent.push({ clientId, msg });
-      clients.remember(clientId, msg);
-    },
-  });
-  await host.handleMessage('dev', { type: 'hello' });
-  let request = 0;
-  const ask = async (op: string, payload: Record<string, unknown>) => {
-    const requestId = `${op}-${++request}`;
-    await host.handleMessage('dev', { type: 'server_request', requestId, op, payload });
-    const response = sent
-      .filter((e) => e.msg.type === 'server_response')
-      .map((e) => e.msg as Extract<HostOutbound, { type: 'server_response' }>)
-      .find((m) => m.requestId === requestId);
-    return response?.result as { success: boolean; error?: string } | undefined;
-  };
-  return {
-    host,
-    act: (actionName: string) => ask('action', { actionName, args: {}, boundaryKey: clients.key('dev') }),
-    undo: () => ask('undo', {}),
-  };
+/** Undo, and expect the host to refuse it with `reason`. */
+async function expectUndoRefused(table: Awaited<ReturnType<typeof openPolicyTable>>, reason: RegExp) {
+  const undo = await table.undo();
+  expect(undo?.success).toBe(false);
+  expect(undo?.error).toMatch(reason);
 }
 
 const FENCED = 'undo: { fenceRandomRewind: true },';
@@ -99,40 +66,33 @@ const NO_CHECKPOINTS = 'checkpoints: { enabled: false },';
 
 describe('#361: the table dev host enforces the game definition', () => {
   it("refuses an undo across a random draw when the game's undo policy fences it", async () => {
-    const table = await openTable(await loadProject(FENCED));
+    const table = await openPolicyTable(FENCED);
     expect((await table.act('roll'))?.success).toBe(true);
 
-    const undo = await table.undo();
-    expect(undo?.success).toBe(false);
-    expect(undo?.error).toMatch(/a random draw was consumed there/);
+    await expectUndoRefused(table, /a random draw was consumed there/);
   }, 30_000);
 
   it('still allows an undo the fence does not cover, so the policy and not undo itself is what refused', async () => {
-    const table = await openTable(await loadProject(FENCED));
+    const table = await openPolicyTable(FENCED);
     expect((await table.act('move'))?.success).toBe(true);
     expect((await table.undo())?.success).toBe(true);
   }, 30_000);
 
   it('captures no checkpoints when the game turns them off, so there is nothing to undo to', async () => {
-    const table = await openTable(await loadProject(NO_CHECKPOINTS));
+    const table = await openPolicyTable(NO_CHECKPOINTS);
     expect((await table.act('move'))?.success).toBe(true);
 
-    const undo = await table.undo();
-    expect(undo?.success).toBe(false);
-    expect(undo?.error).toMatch(/Cannot undo to the start of this turn/);
+    await expectUndoRefused(table, /Cannot undo to the start of this turn/);
   }, 30_000);
 
   it('keeps enforcing the policy after the rules are reloaded', async () => {
-    const runtime = await loadProject(FENCED);
-    const table = await openTable(runtime);
+    const table = await openPolicyTable(FENCED);
     expect((await table.act('move'))?.success).toBe(true);
 
-    const outcome = await table.host.reloadRules(runtime.rules);
+    const outcome = await table.host.reloadRules(table.runtime.rules);
     expect(outcome?.kind).toBe('restored');
 
     expect((await table.act('roll'))?.success).toBe(true);
-    const undo = await table.undo();
-    expect(undo?.success).toBe(false);
-    expect(undo?.error).toMatch(/a random draw was consumed there/);
+    await expectUndoRefused(table, /a random draw was consumed there/);
   }, 30_000);
 });

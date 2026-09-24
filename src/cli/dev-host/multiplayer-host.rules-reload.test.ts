@@ -10,15 +10,12 @@
  * loader `boardsmith dev` uses, a rule EDITED on disk, the bundle loaded again,
  * and the running host handed the result. Nothing here is a hand-built runtime.
  */
-import { mkdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
-
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { tempTree } from '../../testing/temp-tree.test-helper.js';
-import { loadTableRuntime, type TableRuntime } from '../commands/dev-table-runtime.js';
+import type { TableRuntime } from '../commands/dev-table-runtime.js';
 import type { WorldHostClock } from './node-world-clock.js';
 import { MultiplayerHost, type HostOutbound } from './multiplayer-host.js';
+import { openTable, tableProject } from './table-host.test-helper.js';
 import { createDevHostClientMemory } from './test-client-memory.js';
 
 const clients = createDevHostClientMemory();
@@ -66,18 +63,10 @@ function rulesSource(args: { step: number; flow: string }): string {
   ].join('\n');
 }
 
-/** A table project on disk, and the one move an author makes to it: saving the rules. */
-function tableProject(initial: { step: number; flow: string }) {
-  const dir = tempTree('bs-table-rules-reload-');
-  const rulesPath = join(dir, 'src', 'rules');
-  mkdirSync(rulesPath, { recursive: true });
-  const tempDir = join(dir, '.boardsmith');
-  mkdirSync(tempDir, { recursive: true });
-  const save = (rules: { step: number; flow: string }) =>
-    writeFileSync(join(rulesPath, 'index.ts'), rulesSource(rules));
-  save(initial);
-  const load = (): Promise<TableRuntime> => loadTableRuntime(rulesPath, tempDir, 'monorepo');
-  return { save, load };
+/** A table project on disk, saved with the rules an author writes. */
+function counterProject(initial: { step: number; flow: string }) {
+  const project = tableProject('bs-table-rules-reload-', rulesSource(initial));
+  return { save: (rules: { step: number; flow: string }) => project.save(rulesSource(rules)), load: project.load };
 }
 
 const START = 1_700_000_000_000;
@@ -101,43 +90,13 @@ function fakeClock() {
   };
 }
 
-async function openTable(runtime: TableRuntime, clock = fakeClock()) {
-  const sent: Array<{ clientId: string; msg: HostOutbound }> = [];
-  const host = new MultiplayerHost({
-    playerCount: 1,
-    minPlayers: 1,
-    maxPlayers: 1,
+async function openCounterTable(runtime: TableRuntime, clock = fakeClock()) {
+  const table = await openTable(runtime, clients, {
     makeSeed: () => 'rules-reload',
     clock: clock.clock,
     idleAction: { name: 'bump' },
-    executeOp: runtime.rules.executeOp,
-    send: (clientId, msg) => {
-      sent.push({ clientId, msg });
-      clients.remember(clientId, msg);
-    },
   });
-  await host.handleMessage('dev', { type: 'hello' });
-  const frames = () =>
-    sent
-      .filter((e) => e.clientId === 'dev' && e.msg.type === 'game_state')
-      .map((e) => e.msg as Extract<HostOutbound, { type: 'game_state' }>);
-  const errors = () =>
-    sent.filter((e) => e.msg.type === 'error').map((e) => ({ to: e.clientId, message: (e.msg as { message: string }).message }));
-  let request = 0;
-  const bump = async () => {
-    await host.handleMessage('dev', {
-      type: 'server_request',
-      requestId: `bump-${++request}`,
-      op: 'action',
-      payload: { actionName: 'bump', args: {}, boundaryKey: clients.key('dev') },
-    });
-    const response = sent
-      .filter((e) => e.msg.type === 'server_response')
-      .map((e) => e.msg as Extract<HostOutbound, { type: 'server_response' }>)
-      .find((m) => m.requestId === `bump-${request}`);
-    return response?.result;
-  };
-  return { host, frames, errors, bump, sent };
+  return { ...table, bump: () => table.act('bump') };
 }
 
 /** The counter as the last frame the seat was sent shows it. */
@@ -148,8 +107,8 @@ function shownCount(frames: Array<Extract<HostOutbound, { type: 'game_state' }>>
 
 describe('#343: a table dev host reloads its rules on the server', () => {
   it('runs the edited rule on the next move, from the position the game was in', async () => {
-    const project = tableProject({ step: 1, flow: FLOWS.looped });
-    const table = await openTable(await project.load());
+    const project = counterProject({ step: 1, flow: FLOWS.looped });
+    const table = await openCounterTable(await project.load());
     await table.bump();
     expect(shownCount(table.frames())).toBe(1);
 
@@ -163,8 +122,8 @@ describe('#343: a table dev host reloads its rules on the server', () => {
   }, 30_000);
 
   it('rebuilds the game by replaying its moves when the saved position no longer fits the flow', async () => {
-    const project = tableProject({ step: 1, flow: FLOWS.three });
-    const table = await openTable(await project.load());
+    const project = counterProject({ step: 1, flow: FLOWS.three });
+    const table = await openCounterTable(await project.load());
     await table.bump();
     await table.bump();
 
@@ -184,8 +143,8 @@ describe('#343: a table dev host reloads its rules on the server', () => {
   }, 30_000);
 
   it('tells every client and the terminal when the moves cannot be replayed either', async () => {
-    const project = tableProject({ step: 1, flow: FLOWS.three });
-    const table = await openTable(await project.load());
+    const project = counterProject({ step: 1, flow: FLOWS.three });
+    const table = await openCounterTable(await project.load());
     // A second page on a one-seat table takes the seat, so the first takes it
     // back: both stay connected, and both must hear about the failure.
     await table.host.handleMessage('spectator', { type: 'hello' });
@@ -227,9 +186,9 @@ describe('#343: a table dev host reloads its rules on the server', () => {
   }, 30_000);
 
   it('re-arms a timed step from the restored boundary, and the edited limit from the next step', async () => {
-    const project = tableProject({ step: 1, flow: FLOWS.timed(10_000) });
+    const project = counterProject({ step: 1, flow: FLOWS.timed(10_000) });
     const time = fakeClock();
-    const table = await openTable(await project.load(), time);
+    const table = await openCounterTable(await project.load(), time);
     expect(table.frames().at(-1)?.deadlineAt).toBe(START + 10_000);
 
     time.advance(4_000);
@@ -251,7 +210,7 @@ describe('#343: a table dev host reloads its rules on the server', () => {
   }, 30_000);
 
   it('only swaps the rules when no game is running, so the next start uses them', async () => {
-    const project = tableProject({ step: 1, flow: FLOWS.looped });
+    const project = counterProject({ step: 1, flow: FLOWS.looped });
     const sent: HostOutbound[] = [];
     const host = new MultiplayerHost({
       playerCount: 1,
