@@ -890,7 +890,12 @@ neither surface.
 `boardsmith validate` reports a step that has neither answer: more than 24
 candidates, no board anchor, no dependent narrowing. It finds them by playing a
 few seeded random games and reading the engine's own move enumeration, because a
-candidate count does not exist until a game is running.
+candidate count does not exist until a game is running. It plays them at your
+`minPlayers`. If the random simulator cannot play your game through (it crashes
+or gets stuck), the check says it could not run and names the `boardsmith
+simulate` command that shows the same failure; it never reports an unplayed game
+as clean. It does not run for a world, which has no table flow to play, and says
+so.
 
 The one thing you may remove is a **redundant start button**, below. Note what
 that is not: it hides one button while the panel keeps rendering everything
