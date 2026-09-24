@@ -1,4 +1,5 @@
 import { DESIGN_DIR } from './lib/project-paths.js';
+import { generateTsConfig } from './lib/project-scaffold.js';
 import { describe, it, expect, vi } from 'vitest';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -195,6 +196,8 @@ describe('verify-example-translate — registration (CHECK-06, the second dispat
         '  return input.ready;\n' +
         '}\n',
     );
+    // Every generated game has one; the API surface resolves modules with it.
+    await fs.writeFile(join(project, 'tsconfig.json'), generateTsConfig());
     const extraction = {
       examples: [
         {

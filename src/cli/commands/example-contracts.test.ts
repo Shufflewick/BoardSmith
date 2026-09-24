@@ -21,6 +21,7 @@ import { promises as fs, readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DESIGN_DIR } from '../lib/project-paths.js';
+import { generateTsConfig } from '../lib/project-scaffold.js';
 import { buildExampleExtractionPayload } from './example-derivation.js';
 import {
   readExampleReplayVerdicts,
@@ -102,6 +103,7 @@ describe('the worked-example contracts feed the commands they go to (#319)', () 
       `# guards\n\n## Verified Against\n\nCites ${SLICE_PATH}.\n`,
     );
     await fs.mkdir(join(project, 'src', 'rules'), { recursive: true });
+    await fs.writeFile(join(project, 'tsconfig.json'), generateTsConfig());
     await fs.writeFile(join(project, 'src', 'rules', 'guards.ts'), GUARDS_SOURCE);
     await fs.writeFile(join(project, 'src', 'rules', 'index.ts'), "export * from './guards.js';\n");
     // The live-symlink layout every BoardSmithGames project uses, so the emitted test resolves
