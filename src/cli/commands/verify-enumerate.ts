@@ -1,7 +1,8 @@
 import { createHash } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import { basename, resolve } from 'node:path';
-import { computeVerificationScope, SCOPE_FULL } from './chunk-provenance.js';
+import { computeVerificationScope, documentFailure, type VerificationScope } from './chunk-provenance.js';
+import { readRecordedSourcePaths, readSliceSources, sliceDocuments } from './rulebook-sources.js';
 import { quoteLinesOnly } from './verify-derive-check.js';
 import { ANNOTATION_CITATION_RE, ANNOTATION_VOCABULARY_RE } from './derived-line-pattern.js';
 
@@ -53,17 +54,16 @@ import { ANNOTATION_CITATION_RE, ANNOTATION_VOCABULARY_RE } from './derived-line
  *      rulebook once any one source was archived. A doom-machine measurement (177-18) found this
  *      is exactly wrong for a multi-source project: `rules.pdf` archived, `cards.pdf` not, and
  *      `CARDS.md`'s `cards.pdf`-sourced findings were silently treated as quote-verified anyway.
- *      `QuoteVerifiedProvenance.covers(slicePath)` closes this — see that method's own comment
- *      for the (explicitly heuristic, explicitly fail-closed) attribution it performs.
+ *      `QuoteVerifiedProvenance.covers(slicePath)` closes this. Since #311 it reads which document
+ *      a slice came from off the slice's own `Source:` line rather than guessing from its file
+ *      name, and a slice that names none is not covered while an unarchived document is present.
  *
  * HONESTY NOTE ON WHAT IS STRUCTURAL VERSUS PROBABILISTIC (per this plan's honesty-discipline
  * requirement): the annotation-line backstop in `buildEnumeratorPayload`, the fact-grounding
  * check in `validateGrounding`, and the private-constructor provenance guard's null-gating are all
- * STRUCTURAL — they cannot be satisfied by accident or bypassed by a forgetful caller.
- * `QuoteVerifiedProvenance.covers()`'s filename-substring attribution, by contrast, IS a
- * heuristic — labeled as one at its own definition, and deliberately fail-closed (ambiguous or
- * unattributable cases report `false`, never `true`, per this plan's honesty-discipline
- * requirement). The text-similarity matcher underlying grounding (`isTolerantMatch`) is DELIBERATELY
+ * STRUCTURAL — they cannot be satisfied by accident or bypassed by a forgetful caller, and so is
+ * `QuoteVerifiedProvenance.covers()`, which reads each slice's recorded document (#311). The
+ * text-similarity matcher underlying grounding (`isTolerantMatch`) is DELIBERATELY
  * PROBABILISTIC — it tolerates whitespace/punctuation/case/minor-wording restatement so a genuine
  * paraphrase is not rejected as
  * fabrication, and the threshold that draws that line is a documented judgment call (see
@@ -984,9 +984,9 @@ function unitsCompatible(unitA: string, unitB: string): boolean {
 // -------------------------------------------------------------------------------------------
 
 /**
- * A proof that a project's rulebook has been checked against its archived source
- * (`computeVerificationScope(projectDir).scope === SCOPE_FULL` — the archived source file exists
- * AND its SHA-256 matches `INDEX.md`'s recorded `Source hash:`). The ONLY way to obtain an
+ * A proof that a project's rulebook has been checked against its archived sources: at least one
+ * document `INDEX.md` records exists AND its SHA-256 matches the recorded hash, and `covers()`
+ * says which slices that proof reaches (the slices transcribed from a verified document). The ONLY way to obtain an
  * instance is the static `obtain()` method; the constructor is PRIVATE, so no caller anywhere in
  * this codebase can construct a value of this type by asserting a plain object shape (`as
  * QuoteVerifiedProvenance`) past a boolean check it forgot to make — the compiler rejects a `new
@@ -1009,7 +1009,7 @@ function unitsCompatible(unitA: string, unitB: string): boolean {
  * files themselves are `.md` and live in `rulebook/`, so scanning the root avoids ever mistaking
  * a slice for a source). This is a closed, documented list, not an attempt to recognize every
  * conceivable source format — a project whose second source uses an extension outside this list
- * is invisible to `detectUnarchivedSources` below, which is exactly the kind of false-negative
+ * is invisible to `detectRootSourceCandidates` below, which is exactly the kind of false-negative
  * risk 177-EXPERIMENTS/README.md's CORRECTION warns against; see that function's own comment.
  */
 const CANDIDATE_SOURCE_EXTENSIONS = ['.pdf', '.png', '.jpg', '.jpeg', '.txt'];
@@ -1025,9 +1025,9 @@ const CANDIDATE_SOURCE_EXTENSIONS = ['.pdf', '.png', '.jpg', '.jpeg', '.txt'];
  * fooled by a file that merely LOOKS unrelated. What it CANNOT do: prove a listed file is
  * actually a rulebook source (a stray `notes.txt` at project root would also match) or prove that
  * NO further source exists (an extension outside `CANDIDATE_SOURCE_EXTENSIONS`, or a source kept
- * outside the project root entirely, is invisible to it). Both failure directions are named
- * explicitly in `QuoteVerifiedProvenance.covers()`'s own comment, which is the function that
- * actually decides what to trust.
+ * outside the project root entirely, is invisible to it). It matters only for a slice that does not
+ * name its own document: `QuoteVerifiedProvenance.coverage()` refuses to vouch for such a slice
+ * while any candidate is present.
  */
 async function detectRootSourceCandidates(projectDir: string): Promise<string[]> {
   let entries: Array<{ name: string; isFile(): boolean }>;
@@ -1046,129 +1046,81 @@ async function detectRootSourceCandidates(projectDir: string): Promise<string[]>
     .sort();
 }
 
-/**
- * Lowercased basename with its extension stripped. The one normalization step
- * `QuoteVerifiedProvenance.covers()`'s filename-substring heuristic relies on — see that method's
- * comment for what this buys and what it does not.
- */
-function fileStem(name: string): string {
-  const base = basename(name);
-  const dot = base.lastIndexOf('.');
-  return (dot > 0 ? base.slice(0, dot) : base).toLowerCase();
-}
-
-/**
- * Below this length, a stem is refused as a substring-match anchor — mirrors `MIN_MATCH_LENGTH`'s
- * rationale above: a short stem ("hp", "d6") would spuriously "match" against unrelated slice
- * names, turning a targeted heuristic into noise. 4 was chosen because it is the shortest real
- * stem this milestone has measured ("cards") minus one character of margin, while still refusing
- * degenerate two/three-letter stems.
- */
-const MIN_STEM_MATCH_LENGTH = 4;
-
 export class QuoteVerifiedProvenance {
   private constructor(
-    readonly sourceHash: string,
+    readonly sourceHash: string | undefined,
     readonly edition: string | undefined,
-    readonly archivedSourceBasename: string | undefined,
     /**
-     * Basenames of project-root files that LOOK like rulebook source documents but are NEITHER
-     * the primary source this instance's `sourceHash` was computed from NOR one of
-     * `computeVerificationScope`'s hash-verified `## Additional Sources` entries (177-19's
-     * `ingest-archive.ts` fix — once a second source is genuinely archived-and-verified via
-     * `boardsmith ingest-archive <second-file>`, its basename moves OUT of this array). Empty for
-     * the ordinary, common case (a genuinely single-source project) — `seven` and
-     * `one-two-punch` both resolve to `[]`. Public so a caller (e.g. a future CLI report) can
-     * surface "this project has an unarchived source" explicitly, per this plan's requirement,
-     * rather than that fact being swallowed inside a silent per-slice `covers()` decision.
+     * Basenames of project-root files that LOOK like rulebook source documents but are not a
+     * document `INDEX.md` records (neither the primary nor an `## Additional Sources` row). Empty
+     * for the ordinary case. Public so a report can say "this project has an unarchived source"
+     * rather than that fact being swallowed inside a per-slice `covers()` decision: a slice that
+     * does not name its document may have come from one of these.
      */
     readonly unarchivedSources: readonly string[],
+    private readonly scope: VerificationScope,
+    private readonly recorded: readonly string[],
+    /** Each live slice's `Source:` document, keyed by file name (`rulebook-sources.ts`). */
+    private readonly sliceSources: ReadonlyMap<string, string | undefined>,
   ) {}
 
+  /**
+   * An instance when at least one recorded document is archived and hash-verified; `null` when
+   * none is (no rulebook, no provenance, or every document missing or changed), since then no
+   * slice can be covered.
+   */
   static async obtain(projectDir: string): Promise<QuoteVerifiedProvenance | null> {
     const scope = await computeVerificationScope(projectDir);
-    if (scope.scope !== SCOPE_FULL || !scope.sourceHash) return null;
+    const recorded = await readRecordedSourcePaths(projectDir);
+    if (!recorded.some((d) => documentFailure(scope, d) === undefined)) return null;
 
-    // A source is "archived" for THIS guard's purposes when it is either the primary source
-    // (`scope.sourcePath`) or one of `computeVerificationScope`'s independently hash-verified
-    // `additionalSources` (177-19's `ingest-archive.ts` fix — `boardsmith ingest-archive
-    // cards.pdf` after `rules.pdf` no longer silently overwrites the primary; it augments this
-    // list instead). A root-level file whose basename matches either is genuinely archived and
-    // verified, not merely "present" — it is excluded from `unarchivedSources` on that strength.
-    const archivedSourceBasename = scope.sourcePath ? basename(scope.sourcePath) : undefined;
-    const archivedBasenames = new Set(
-      [archivedSourceBasename, ...(scope.additionalSources ?? []).map((s) => basename(s.sourcePath))]
-        .filter((n): n is string => Boolean(n))
-        .map((n) => n.toLowerCase()),
-    );
-    const rootCandidates = await detectRootSourceCandidates(projectDir);
-    const unarchivedSources = rootCandidates.filter(
+    const archivedBasenames = new Set(recorded.map((d) => basename(d).toLowerCase()));
+    const unarchivedSources = (await detectRootSourceCandidates(projectDir)).filter(
       (name) => !archivedBasenames.has(name.toLowerCase()),
     );
 
     return new QuoteVerifiedProvenance(
       scope.sourceHash,
       scope.edition,
-      archivedSourceBasename,
       unarchivedSources,
+      scope,
+      recorded,
+      await readSliceSources(projectDir),
     );
   }
 
   /**
-   * Whether THIS instance's archived-and-hash-verified source can honestly be said to cover
-   * `slicePath` (e.g. `"rulebook/CARDS.md"`) — the fix for the gap named in this plan's brief:
-   * `QuoteVerifiedProvenance` used to answer "has this PROJECT recorded provenance at all", and a
-   * project with two source PDFs but only one archived (doom-machine: `rules.pdf` archived,
-   * `cards.pdf` not) had EVERY slice, including `CARDS.md`'s (sourced from the unarchived PDF),
-   * silently treated as quote-verified. This method is the one place that silent over-vouching is
-   * closed.
+   * Whether this project's archived, hash-verified documents cover `slicePath` (e.g.
+   * `"rulebook/CARDS.md"`), or why not. Read from the slice's own record, never guessed (#311):
    *
-   * THREE CASES, IN ORDER:
-   *
-   *  1. `unarchivedSources.length === 0` — genuinely single-source, by the same root-directory
-   *     scan that found the archived file itself. Every slice is covered, unconditionally. This is
-   *     the common case and matches today's `seven`/`one-two-punch` behavior exactly — neither has
-   *     a second root-level source document, so neither game's classification changes.
-   *
-   *  2. `unarchivedSources.length > 1` — TWO OR MORE unarchived candidates. Refused entirely
-   *     (covers nothing) rather than attempted: the filename-substring heuristic below was built
-   *     from exactly one measured case (`CARDS.md` / `cards.pdf`) and has no evidence it
-   *     discriminates correctly between two or more unknowns at once. Guessing wrong here is
-   *     silent — the whole point of this method — so ambiguity above one candidate fails closed
-   *     rather than being reasoned about further.
-   *
-   *  3. `unarchivedSources.length === 1` — the doom-machine shape. A HEURISTIC, explicitly labeled
-   *     as one: `slicePath`'s filename stem is compared, as a case-insensitive substring in either
-   *     direction, against the one unarchived candidate's filename stem (`fileStem`). A match
-   *     (`"CARDS.md"` vs `"cards.pdf"` → both stem to `"cards"`) means this slice is NOT covered —
-   *     it looks like it belongs to the OTHER, unarchived document, so it is excluded rather than
-   *     vouched for. Every slice that does NOT match is reported covered.
-   *
-   *     HONESTY, STATED PLAINLY: this is a filename convention, not a content check. It is exactly
-   *     right for doom-machine (`CARDS.md`/`cards.pdf` are the one real measured case this was
-   *     built from) and can be WRONG in either direction on a project that does not follow that
-   *     convention — a slice named unrelatedly to its true source (false negative: reported
-   *     covered when it should not be) is invisible to this check entirely, and a slice that
-   *     happens to share vocabulary with an unrelated unarchived file (false positive: excluded
-   *     when it was genuinely covered) merely loses a real corroboration behind a conservative
-   *     `quote-unverified`, which is the safe direction to be wrong in. There is no available data
-   *     to do better — slices do not record which source document produced them, which is the
-   *     root gap this whole method exists to compensate for, not fully close.
+   *  - A slice that names its document (`Source: rulebook/source/<file>`) is covered exactly when
+   *    that document is archived and matches its recorded hash.
+   *  - A slice that names none may have come from any recorded document, so every one of them
+   *    must be verified — and from any unarchived document at the project root too, so it is not
+   *    covered while one is present. That is the doom-machine shape (`rules.pdf` archived,
+   *    `cards.pdf` not) this guard exists for: `CARDS.md`'s quotes were never checked against
+   *    anything.
    */
-  covers(slicePath: string): boolean {
-    if (this.unarchivedSources.length === 0) return true;
-    if (this.unarchivedSources.length > 1) return false;
-
-    const sliceStem = fileStem(slicePath);
-    const candidateStem = fileStem(this.unarchivedSources[0]);
-    if (candidateStem.length < MIN_STEM_MATCH_LENGTH || sliceStem.length < MIN_STEM_MATCH_LENGTH) {
-      // Too short to trust a substring match either way — conservative default is UNCOVERED, per
-      // this method's fail-closed contract (a short stem proves nothing, so nothing is vouched
-      // for on its strength).
-      return false;
+  coverage(slicePath: string): { covered: true } | { covered: false; why: string } {
+    const name = basename(slicePath);
+    const named = this.sliceSources.get(name);
+    for (const document of sliceDocuments(named, this.recorded)) {
+      const failure = documentFailure(this.scope, document);
+      if (failure) return { covered: false, why: `its document ${document} cannot be verified (${failure})` };
     }
-    const matchesUnarchived = sliceStem.includes(candidateStem) || candidateStem.includes(sliceStem);
-    return !matchesUnarchived;
+    if (!named && this.unarchivedSources.length > 0) {
+      return {
+        covered: false,
+        why:
+          `it does not say which document it was transcribed from, and unarchived source ` +
+          `document(s) ${this.unarchivedSources.join(', ')} are also present — it may have come from one of them`,
+      };
+    }
+    return { covered: true };
+  }
+
+  covers(slicePath: string): boolean {
+    return this.coverage(slicePath).covered;
   }
 }
 
@@ -1307,20 +1259,17 @@ function quoteUnverifiedReason(provenance: QuoteVerifiedProvenance | null, slice
   if (!provenance) {
     return (
       "This project's rulebook has not been verified against its archived source " +
-      '(computeVerificationScope !== "full"). A suspect finding cannot be reported until quotes ' +
-      'are verified — an unverified-quote defect is indistinguishable from a genuinely wrong ' +
-      'inference (177-EXPERIMENTS/README.md CORRECTION, seven:11).'
+      '(no document INDEX.md records exists with a matching hash). A suspect finding cannot be reported ' +
+      'until quotes are verified — an unverified-quote defect is indistinguishable from a ' +
+      'genuinely wrong inference (177-EXPERIMENTS/README.md CORRECTION, seven:11).'
     );
   }
+  const coverage = provenance.coverage(slicePath);
+  const why = coverage.covered ? 'it is covered' : coverage.why;
   return (
-    `This project's archived source is verified, but it does not cover "${slicePath}" — ` +
-    `${provenance.unarchivedSources.length} unarchived source document(s) ` +
-    `(${provenance.unarchivedSources.join(', ') || 'more than one candidate'}) are also present, ` +
-    `and this slice cannot be mechanically attributed to the archived one with confidence ` +
-    `(QuoteVerifiedProvenance.covers() — a filename heuristic, not a content check; slices do not ` +
-    `record which source document they came from). Downgraded rather than risking a confident ` +
-    `false accusation against quotes that were never actually checked (177-EXPERIMENTS/README.md ` +
-    'CORRECTION, seven:11).'
+    `This project's archived sources are verified, but that verification does not cover "${slicePath}": ${why}. ` +
+    `Downgraded rather than risking a confident false accusation against quotes that were never ` +
+    'actually checked (177-EXPERIMENTS/README.md CORRECTION, seven:11).'
   );
 }
 

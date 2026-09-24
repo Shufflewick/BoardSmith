@@ -5,6 +5,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import chalk from 'chalk';
+import { parseSliceSource, readRecordedSourcePaths, sliceDocuments } from './rulebook-sources.js';
 
 /**
  * `verify-run.ts` — the mechanical half of VERIFY-02 and VERIFY-08: a non-destructive staging
@@ -94,12 +95,29 @@ export interface VerifyRunOptions {
 export const RUN_ID_RE = /^\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}Z$/;
 
 /**
- * A page-range id's shape (T-173-08-03): letters, digits, `.`/`_`/`-` only — never a path
+ * A page-range id's shape (T-173-08-03): letters, digits, `.`/`_`/`-`/`:` only — never a path
  * separator, `.`/`..` segment, or anything else that could be composed into a filesystem path.
  * The manifest is persisted, untrusted input on every read after the first write, so this is
  * enforced both when a fresh manifest is written and every time an existing one is parsed back.
  */
-export const RANGE_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
+export const RANGE_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._:-]*$/;
+
+/**
+ * One range of the dispatch-plan manifest: a page range OF ONE archived document (#311). A verify
+ * pass re-transcribes every document the rules come from, so the manifest carries each document's
+ * ranges, and a staged slice recorded under a range must name that range's document.
+ */
+interface ManifestRange {
+  /**
+   * `pages` in a project with one document; `<document file name>:<pages>` in a project with
+   * several, since each has its own page 1.
+   */
+  rangeId: string;
+  /** The archived document, as `INDEX.md` records it (`rulebook/source/<file>`). */
+  source: string;
+  /** The page range within `source`, e.g. `1-8`. */
+  pages: string;
+}
 
 /**
  * Fences delimiting the machine-owned body of `RUN.md`. Minted fresh for this section — never
@@ -331,8 +349,8 @@ export async function atomicWriteFile(filePath: string, content: string): Promis
  * fence pair (populated with `ranges` — empty body when the caller supplies none), and an empty
  * ledger fence pair. Both sections are written together, in the one atomic init write.
  */
-function renderEmptyRunMd(runId: string, ranges: string[]): string {
-  const manifestBody = ranges.map((r) => JSON.stringify({ rangeId: r })).join('\n');
+function renderEmptyRunMd(runId: string, ranges: ManifestRange[]): string {
+  const manifestBody = ranges.map((r) => JSON.stringify(r)).join('\n');
   return (
     `# Verify Run Ledger — ${runId}\n\n` +
     `<!-- MACHINE-OWNED. Do not write between the fences below by hand, and do not move or\n` +
@@ -389,22 +407,66 @@ function locateManifestFences(ledgerText: string): { beginIdx: number; endIdx: n
 /**
  * Reads the persisted manifest back. T-173-08-03: a persisted file is untrusted input on every
  * later read, so every `rangeId` is re-validated against `RANGE_ID_RE` here — a line that fails
- * validation, or is not well-formed JSON with a string `rangeId`, is silently skipped rather than
- * thrown, since the manifest is advisory to dispatch decisions, not load-bearing for crash safety.
+ * validation, or is not well-formed JSON with string `rangeId`/`source`/`pages`, is silently
+ * skipped rather than thrown, since the manifest is advisory to dispatch decisions, not
+ * load-bearing for crash safety.
  */
-function parseManifest(ledgerText: string): string[] {
+function parseManifest(ledgerText: string): ManifestRange[] {
   const fences = locateManifestFences(ledgerText);
   if (!fences) return [];
   const body = ledgerText.slice(fences.beginIdx + RUN_MANIFEST_BEGIN.length, fences.endIdx);
-  const ranges: string[] = [];
+  const ranges: ManifestRange[] = [];
   for (const raw of body.split('\n').map((l) => l.trim()).filter((l) => l.length > 0)) {
     try {
       const obj = JSON.parse(raw);
-      if (obj && typeof obj === 'object' && typeof obj.rangeId === 'string' && RANGE_ID_RE.test(obj.rangeId)) {
-        ranges.push(obj.rangeId);
+      if (
+        obj &&
+        typeof obj === 'object' &&
+        typeof obj.rangeId === 'string' &&
+        RANGE_ID_RE.test(obj.rangeId) &&
+        typeof obj.source === 'string' &&
+        typeof obj.pages === 'string'
+      ) {
+        ranges.push({ rangeId: obj.rangeId, source: obj.source, pages: obj.pages });
       }
     } catch {
       // Malformed manifest line — skip it. See doc comment above.
+    }
+  }
+  return ranges;
+}
+
+/**
+ * Builds a fresh manifest from `--ranges`: page ranges keyed by the archived document they belong
+ * to. Refuses a document `INDEX.md` does not record, and a manifest that leaves out a document it
+ * does — a verify pass that re-transcribes only the rulebook never compares a companion's slices
+ * against anything (#311).
+ */
+async function buildManifest(projectDir: string, requested: Record<string, string[]>): Promise<ManifestRange[]> {
+  const recorded = await readRecordedSourcePaths(projectDir);
+  const listed = recorded.length > 0 ? recorded.join(', ') : '(none — archive the rulebook first)';
+  for (const source of Object.keys(requested)) {
+    if (!recorded.includes(source)) {
+      throw new Error(
+        `--ranges names ${source}, which is not a document rulebook/INDEX.md records.\n` +
+          `Recorded documents: ${listed}. Key each document's page ranges by its path exactly as recorded.`,
+      );
+    }
+  }
+  const ranges: ManifestRange[] = [];
+  for (const source of recorded) {
+    const pages = (requested[source] ?? []).map((p) => p.trim()).filter((p) => p.length > 0);
+    if (pages.length === 0) {
+      throw new Error(
+        `--ranges gives no page range for ${source}.\n` +
+          `A verify pass re-transcribes every archived document the rules come from, so the manifest must\n` +
+          `cover each one: ${listed}.`,
+      );
+    }
+    for (const p of pages) {
+      const rangeId = recorded.length > 1 ? `${basename(source)}:${p}` : p;
+      assertValidRangeId(rangeId);
+      ranges.push({ rangeId, source, pages: p });
     }
   }
   return ranges;
@@ -777,7 +839,7 @@ export interface VerifyRunInitResult {
    * call is ignored, because the decomposition is decided once, at first init, and is never
    * re-derived.
    */
-  ranges: string[];
+  ranges: ManifestRange[];
 }
 
 /**
@@ -790,7 +852,7 @@ export interface VerifyRunInitResult {
  * (173-CONTEXT.md decision 11 / specifics — removes the instruction-shaped `date -u` step).
  */
 export async function verifyRunInitCommand(
-  options: VerifyRunOptions & { runId?: string; ranges?: string[] } = {},
+  options: VerifyRunOptions & { runId?: string; ranges?: Record<string, string[]> } = {},
 ): Promise<VerifyRunInitResult> {
   const projectDir = resolve(options.project ?? process.cwd());
   const rulebookDir = designRulebookDir(projectDir);
@@ -814,17 +876,20 @@ export async function verifyRunInitCommand(
   await fs.mkdir(stagingDir, { recursive: true });
 
   let created: boolean;
-  let ranges: string[];
+  let ranges: ManifestRange[];
+  let existingText: string | undefined;
   try {
-    const existingText = await fs.readFile(ledgerFile, 'utf-8');
+    existingText = await fs.readFile(ledgerFile, 'utf-8');
+  } catch {
+    existingText = undefined;
+  }
+  if (existingText !== undefined) {
     created = false;
     // Resume: the manifest was decided at first init and is never re-derived — whatever
     // `options.ranges` this resuming call carries is ignored, matching Task 2's guarantee.
     ranges = parseManifest(existingText);
-  } catch {
-    const requested = (options.ranges ?? []).map((r) => r.trim()).filter((r) => r.length > 0);
-    for (const r of requested) assertValidRangeId(r);
-    ranges = requested;
+  } else {
+    ranges = options.ranges ? await buildManifest(projectDir, options.ranges) : [];
     await atomicWriteFile(ledgerFile, renderEmptyRunMd(runId, ranges));
     created = true;
   }
@@ -846,8 +911,8 @@ export async function verifyRunInitCommand(
   console.log(`  ${chalk.gray('run-id:')} ${runId}`);
   console.log(`  ${chalk.gray('staging:')} ${result.stagingDir}`);
   console.log(`  ${chalk.gray('ledger:')} ${result.ledgerPath}`);
-  if (ranges.length > 0) {
-    console.log(`  ${chalk.gray('ranges:')} ${ranges.join(', ')}`);
+  for (const r of ranges) {
+    console.log(`  ${chalk.gray('range:')} ${r.rangeId} — pages ${r.pages} of ${r.source}`);
   }
   return result;
 }
@@ -892,6 +957,46 @@ export async function readLedgerOrThrow(
   }
 }
 
+/**
+ * The manifest entry for `rangeId`, or `undefined` for a run initialized without a manifest.
+ * Throws when the run HAS a manifest and it does not list `rangeId`.
+ */
+function manifestRangeFor(manifest: ManifestRange[], rangeId: string, runId: string): ManifestRange | undefined {
+  if (manifest.length === 0) return undefined;
+  const range = manifest.find((r) => r.rangeId === rangeId);
+  if (!range) {
+    throw new Error(
+      `Range "${rangeId}" is not in run "${runId}"'s persisted manifest (${manifest.map((r) => r.rangeId).join(', ')}).\n` +
+        `The manifest is decided once at \`verify-run-init\` — pass a range id it actually lists.`,
+    );
+  }
+  return range;
+}
+
+/**
+ * A staged slice recorded under `range` must have been transcribed from `range`'s document (#311):
+ * it names that document on its `Source:` line, or names none in a project with only that one.
+ * Otherwise its pages would be compared against the wrong document's live slices.
+ */
+async function assertSliceNamesRangeDocument(
+  projectDir: string,
+  sliceText: string,
+  slice: string,
+  range: ManifestRange,
+): Promise<void> {
+  const documents = sliceDocuments(parseSliceSource(sliceText), await readRecordedSourcePaths(projectDir));
+  if (documents.length === 1 && documents[0] === range.source) return;
+  const named = parseSliceSource(sliceText);
+  throw new Error(
+    (named
+      ? `Staged slice ${slice} names ${named}, but range ${range.rangeId} is a range of ${range.source}.\n`
+      : `Staged slice ${slice} does not say which document it was transcribed from (range ${range.rangeId} is a range of ${range.source}).\n`) +
+      `The transcription contract writes "Source: ${range.source}" under the slice's title, from the\n` +
+      `dispatch's \`Source record:\` line. Nothing was recorded. Reset the range with \`--reset-range\` if\n` +
+      `it already has recorded units, then re-dispatch it with the pointer block from verify/staging-dispatch.md.`,
+  );
+}
+
 /** Shared by the range-complete and range-reset actions below. */
 async function recordRangeMarker(
   kind: 'range-complete' | 'range-reset',
@@ -906,13 +1011,7 @@ async function recordRangeMarker(
   const relLedgerPath = relative(projectDir, ledgerFile);
   const ledgerText = await readLedgerOrThrow(ledgerFile, runId, projectDir);
 
-  const manifestRanges = parseManifest(ledgerText);
-  if (manifestRanges.length > 0 && !manifestRanges.includes(rangeId)) {
-    throw new Error(
-      `Range "${rangeId}" is not in run "${runId}"'s persisted manifest (${manifestRanges.join(', ')}).\n` +
-        `The manifest is decided once at \`verify-run-init\` — pass a range id it actually lists.`,
-    );
-  }
+  manifestRangeFor(parseManifest(ledgerText), rangeId, runId);
 
   const { lines, malformedLines } = parseLedgerBody(ledgerText, relLedgerPath);
   void malformedLines; // a marker action never depends on unrelated malformed lines
@@ -1032,15 +1131,10 @@ export async function verifyRunRecordCommand(
 
   const ledgerText = await readLedgerOrThrow(ledgerFile, runId, projectDir);
 
+  let range: ManifestRange | undefined;
   if (options.range) {
     assertValidRangeId(options.range);
-    const manifestRanges = parseManifest(ledgerText);
-    if (manifestRanges.length > 0 && !manifestRanges.includes(options.range)) {
-      throw new Error(
-        `Range "${options.range}" is not in run "${runId}"'s persisted manifest (${manifestRanges.join(', ')}).\n` +
-          `The manifest is decided once at \`verify-run-init\` — pass a range id it actually lists.`,
-      );
-    }
+    range = manifestRangeFor(parseManifest(ledgerText), options.range, runId);
   }
 
   const { lines } = parseLedgerBody(ledgerText, relLedgerPath);
@@ -1093,6 +1187,7 @@ export async function verifyRunRecordCommand(
   }
 
   const bytes = await fs.readFile(sliceAbs);
+  if (range) await assertSliceNamesRangeDocument(projectDir, bytes.toString('utf-8'), slice, range);
   const hash = sha256(bytes);
   const record: LedgerRecord = {
     unitId: unit,
@@ -1133,7 +1228,7 @@ export interface VerifyRunStatusResult {
   recorded: string[];
   count: number;
   /** The run's persisted dispatch-plan manifest (`[]` if none was supplied at init). */
-  ranges: string[];
+  ranges: ManifestRange[];
   /** Manifest ranges with a `range-complete` marker not superseded by a later reset. */
   rangesRecorded: string[];
   /** Manifest ranges NOT in `rangesRecorded` — what resume should dispatch, in manifest order. */
@@ -1236,8 +1331,8 @@ export async function verifyRunStatusCommand(
     );
   }
 
-  const rangesRecorded = manifestRanges.filter((r) => completeRanges.has(r));
-  const rangesPending = manifestRanges.filter((r) => !completeRanges.has(r));
+  const rangesRecorded = manifestRanges.map((r) => r.rangeId).filter((r) => completeRanges.has(r));
+  const rangesPending = manifestRanges.map((r) => r.rangeId).filter((r) => !completeRanges.has(r));
 
   const result: VerifyRunStatusResult = {
     runId,

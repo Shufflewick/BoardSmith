@@ -209,9 +209,10 @@ describe('computeVerificationScope — scope', () => {
     expect(result.edition).toBe('First Printing 2020');
   });
 
-  it('SCOPE_REASONS carries exactly the seven enumerated codes', () => {
+  it('SCOPE_REASONS carries exactly the eight enumerated codes', () => {
     expect([...SCOPE_REASONS].sort()).toEqual(
       [
+        'slice-source-unrecorded',
         'source-missing',
         'source-hash-mismatch',
         'additional-source-missing',
@@ -246,10 +247,9 @@ async function archiveRulesWithReference(referenceBytes: Buffer): Promise<string
 
 /**
  * #305: an additional source (a companion document the rules incorporate by reference) is part of
- * the rules. When it changes or disappears, the slices transcribed from it no longer have a
- * verified source — and slices do not record which document produced them, so no slice can be
- * vouched for. Dropping the entry silently, as this used to, left the scope `full` and every
- * slice looking verified against a document that had moved underneath it.
+ * the rules. When it changes or disappears the PROJECT's scope drops and names it; dropping the
+ * entry silently, as this used to, left the scope `full` and every slice looking verified against
+ * a document that had moved underneath it. Which chunks it reduces is #311's narrowing, below.
  */
 describe('computeVerificationScope — additional sources (#305)', () => {
   const REFERENCE_BYTES = Buffer.from('# Reference\n\nUnit stats.\n');
@@ -310,6 +310,74 @@ describe('computeVerificationScope — additional sources (#305)', () => {
     expect(parsed.blockMalformed).toBe(false);
     expect(parsed.state).toBe(SCOPE_CODE_ONLY);
     expect(parsed.reason).toBe('additional-source-hash-mismatch');
+  });
+});
+
+/**
+ * #311: a slice names the document it was transcribed from, so a chunk's scope narrows to the
+ * documents its cited slices came from. A changed companion document reduces only the chunks
+ * built on it; a chunk built on the unchanged rulebook keeps its full scope.
+ */
+describe('chunk-check — scope narrows to the documents a chunk\'s slices came from (#311)', () => {
+  const REL_RULES = 'rulebook/source/RULES.md';
+  const REL_REFERENCE = 'rulebook/source/REFERENCE.md';
+
+  /** The #305 project plus one slice from each document and a chunk citing `slice`. */
+  async function chunkCiting(slice: string): Promise<string> {
+    const project = await archiveRulesWithReference(Buffer.from('# Reference\n\nUnit stats.\n'));
+    const rulebook = join(project, DESIGN_DIR, 'rulebook');
+    await fs.writeFile(join(rulebook, '01-turn.md'), `# Turn\n\nSource: ${REL_RULES}\n\np.1, Turn:\n"Draw."\n`);
+    await fs.writeFile(
+      join(rulebook, '01-reference-units.md'),
+      `# Units\n\nSource: ${REL_REFERENCE}\n\np.1, Units:\n"Tanks."\n`,
+    );
+    await fs.writeFile(join(rulebook, '02-unattributed.md'), '# Old\n\np.2, Old:\n"Before #311."\n');
+    await fs.writeFile(
+      join(rulebook, '03-elsewhere.md'),
+      '# Elsewhere\n\nSource: rulebook/source/other.pdf\n\np.3, Elsewhere:\n"?"\n',
+    );
+    await writeChunk(project, 'c', withInterpretation(await readChunkTemplate(), `Cites rulebook/${slice}.`));
+    return project;
+  }
+
+  async function recordedScope(project: string) {
+    await recordVerifiedAgainst('c', { project });
+    return parseVerifiedAgainst(await fs.readFile(join(project, DESIGN_DIR, 'chunks', 'c', 'CHUNK.md'), 'utf-8'));
+  }
+
+  /** What `chunk-check` records for a chunk citing `slice` after the archive of `changed` moved. */
+  async function scopeAfterRewriting(slice: string, changed: string) {
+    const project = await chunkCiting(slice);
+    await fs.writeFile(join(project, DESIGN_DIR, changed), 'rewritten\n');
+    return recordedScope(project);
+  }
+
+  it('a changed companion leaves a chunk built only on the rulebook at full scope', async () => {
+    const parsed = await scopeAfterRewriting('01-turn.md', REL_REFERENCE);
+    expect(parsed.state).toBe(SCOPE_FULL);
+    // The document that failed is not recorded as verified, so a later pass still sees it moved.
+    expect(parsed.additionalSources).toEqual([]);
+  });
+
+  it.each([
+    ['a chunk built on its slices', '01-reference-units.md'],
+    ['a chunk citing a slice that names no document, since it may have come from any', '02-unattributed.md'],
+  ])('a changed companion reduces %s, naming why', async (_what, slice) => {
+    const parsed = await scopeAfterRewriting(slice, REL_REFERENCE);
+    expect(parsed.state).toBe(SCOPE_CODE_ONLY);
+    expect(parsed.reason).toBe('additional-source-hash-mismatch');
+  });
+
+  it('a changed rulebook leaves a chunk built only on the companion at full scope', async () => {
+    const parsed = await scopeAfterRewriting('01-reference-units.md', REL_RULES);
+    expect(parsed.state).toBe(SCOPE_FULL);
+  });
+
+  it('a slice naming a document INDEX.md does not record → slice-source-unrecorded', async () => {
+    const project = await chunkCiting('03-elsewhere.md');
+    const parsed = await recordedScope(project);
+    expect(parsed.state).toBe(SCOPE_CODE_ONLY);
+    expect(parsed.reason).toBe('slice-source-unrecorded');
   });
 });
 
@@ -1301,8 +1369,8 @@ describe('VERIFIED_AGAINST_LABELS — Re-verified (no code change) append (175-0
     expect(VERIFIED_AGAINST_LABELS.slice(0, 8)).toEqual(PRE_CHANGE_EIGHT_LABELS);
   });
 
-  it('SCOPE_REASONS holds its 7 members, none mentioning "code change"', () => {
-    expect(SCOPE_REASONS).toHaveLength(7);
+  it('SCOPE_REASONS holds its 8 members, none mentioning "code change"', () => {
+    expect(SCOPE_REASONS).toHaveLength(8);
     expect(SCOPE_REASONS.some((r) => r.includes('code change'))).toBe(false);
   });
 

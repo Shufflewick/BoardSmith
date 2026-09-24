@@ -7,14 +7,23 @@ import {
   designRulebookDir,
 } from '../lib/project-paths.js';
 import { promises as fs } from 'node:fs';
-import { isAbsolute, join, relative, resolve } from 'node:path';
+import { basename, isAbsolute, join, relative, resolve } from 'node:path';
 import chalk from 'chalk';
 import {
+  type VerificationScope,
   computeVerificationScope,
+  documentFailure,
   parseVerifiedAgainst,
   resolveCitedSlices,
+  scopeForDocuments,
   SCOPE_FULL,
 } from './chunk-provenance.js';
+import {
+  NON_SLICE_FILES,
+  parseSliceSource,
+  readRecordedSourcePaths,
+  sliceDocuments,
+} from './rulebook-sources.js';
 import { extractSection } from './build-manifest.js';
 import {
   type ClassificationRecord,
@@ -266,12 +275,35 @@ export interface SlicePair {
 interface PairSlicesInput {
   liveSlices: { path: string; text: string }[];
   stagedUnits: { unit: string; slicePath: string; rangeId?: string; text: string }[];
+  /** The documents `INDEX.md` records (`recordedSourcePaths`), `[]` when it records none. */
+  sources: readonly string[];
 }
 
-/** Deterministic derivation for a group's `pairId` — stable across runs and input order. */
-function derivePairId(span: PageSpan | undefined, fallback: string): string {
-  if (span) return `pages-${span.first}-${span.last}`;
-  return `unspanned-${fallback}`;
+/**
+ * Deterministic derivation for a group's `pairId` — stable across runs and input order. In a
+ * project with more than one document, the document's file name leads, since each document has
+ * its own page 1.
+ */
+function derivePairId(span: PageSpan | undefined, fallback: string, document: string | undefined): string {
+  const id = span ? `pages-${span.first}-${span.last}` : `unspanned-${fallback}`;
+  return document ? `${basename(document)}:${id}` : id;
+}
+
+/**
+ * The one document a slice's pages belong to (#311): the one it names, or, for a slice naming
+ * none, the project's only document. `''` when the project records none (a pre-provenance
+ * project, where every slice shares one unnamed page numbering). A slice naming none in a project
+ * with several documents cannot be placed, so it is refused rather than paired by a guess.
+ */
+function slicePageDocument(path: string, text: string, sources: readonly string[]): string {
+  const documents = sliceDocuments(parseSliceSource(text), sources);
+  if (documents.length <= 1) return documents[0] ?? '';
+  throw new Error(
+    `${path} does not say which document it was transcribed from, and this project has ${documents.length}: ` +
+      `${documents.join(', ')}.\n` +
+      `Its p.N citations could be pages of any of them, so it cannot be paired. Record its document with\n` +
+      `\`npx boardsmith ingest-slice-source <document> ${basename(path)}\` and re-run.`,
+  );
 }
 
 /**
@@ -303,6 +335,10 @@ function derivePairId(span: PageSpan | undefined, fallback: string): string {
  * A live slice with no page span at all (`livePageSpan` returned `undefined` — no `p.N`
  * citation anywhere in it, e.g. a non-rule visual-survey file) likewise gets a singleton group of
  * its own rather than being silently excluded from the result, `missingSide: 'staged-missing'`.
+ *
+ * Pages overlap only within ONE document (#311). Each slice's document comes from its own
+ * `Source:` line, the same content-derived way its span does (`slicePageDocument`), so a card
+ * list's p.1 is never grouped with the rulebook's p.1.
  */
 export function pairSlices(input: PairSlicesInput): SlicePair[] {
   const liveCount = input.liveSlices.length;
@@ -312,6 +348,10 @@ export function pairSlices(input: PairSlicesInput): SlicePair[] {
   const spans: (PageSpan | undefined)[] = [
     ...input.liveSlices.map((s) => livePageSpan(s.text)),
     ...input.stagedUnits.map((u) => livePageSpan(u.text)),
+  ];
+  const documents: string[] = [
+    ...input.liveSlices.map((s) => slicePageDocument(s.path, s.text, input.sources)),
+    ...input.stagedUnits.map((u) => slicePageDocument(u.slicePath, u.text, input.sources)),
   ];
 
   const parent = Array.from({ length: total }, (_, i) => i);
@@ -334,7 +374,7 @@ export function pairSlices(input: PairSlicesInput): SlicePair[] {
     for (let j = i + 1; j < total; j++) {
       const spanJ = spans[j];
       if (!spanJ) continue;
-      if (spansOverlap(spanI, spanJ)) union(i, j);
+      if (documents[i] === documents[j] && spansOverlap(spanI, spanJ)) union(i, j);
     }
   }
 
@@ -390,7 +430,7 @@ export function pairSlices(input: PairSlicesInput): SlicePair[] {
     const fallbackId =
       liveSlices[0] ?? stagedUnits[0] ?? `group-${results.length}`;
     results.push({
-      pairId: derivePairId(span, fallbackId),
+      pairId: derivePairId(span, fallbackId, input.sources.length > 1 ? documents[members[0]] : undefined),
       kind,
       span: span ?? { first: 0, last: 0 },
       liveSlices,
@@ -411,15 +451,16 @@ export function pairSlices(input: PairSlicesInput): SlicePair[] {
 
 export interface ProvenanceResult {
   provenance: Provenance;
-  /** The current archived source's hash. Omitted when no archive is available at all. */
-  currentHash?: string;
-  /** Every recorded `Source hash:` value found across chunks citing this pair's live slices. */
-  recordedHashes: string[];
   /**
-   * `## Additional Sources` paths that at least one citing chunk was NOT verified against in their
-   * current version (#305): it recorded a different hash, or none because it predates the row.
+   * The documents this pair's live slices were transcribed from (#311): each slice's `Source:`
+   * document, or every recorded document for a slice naming none. Provenance is computed against
+   * these alone, so a change to any other document never touches this pair.
    */
-  changedAdditionalSources: string[];
+  sources: string[];
+  /** Every hash a citing chunk recorded for one of `sources`. */
+  recordedHashes: string[];
+  /** The `sources` at least one citing chunk was NOT verified against in their current version. */
+  changedSources: string[];
   /** A short, enumerated, machine-stable phrase — never free prose a human report re-derives. */
   reason: string;
 }
@@ -454,27 +495,83 @@ function bareSliceName(path: string): string {
 }
 
 /**
+ * The documents `liveSlices` were transcribed from, sorted: each slice's `Source:` document, or
+ * every recorded document for a slice that names none (`rulebook-sources.ts`'s `sliceDocuments`).
+ */
+async function documentsOfLiveSlices(dir: string, liveSlices: string[]): Promise<string[]> {
+  const recorded = await readRecordedSourcePaths(dir);
+  // Nothing archived: no slice has a document to name, and provenance is unknown regardless.
+  if (recorded.length === 0) return [];
+  const sources = new Set<string>();
+  for (const slice of liveSlices) {
+    const name = bareSliceName(slice);
+    const sliceSource = NON_SLICE_FILES.includes(name)
+      ? undefined
+      : parseSliceSource(await fs.readFile(join(designRulebookDir(dir), name), 'utf-8'));
+    for (const d of sliceDocuments(sliceSource, recorded)) sources.add(d);
+  }
+  return [...sources].sort();
+}
+
+/**
+ * Reads every chunk citing one of `liveSlices` and compares the hash it recorded for each of
+ * `sources` with that document's current one. A chunk recording no `Source hash:` at all predates
+ * provenance and is skipped. Returns every hash recorded and the documents some chunk recorded a
+ * different hash (or none) for.
+ */
+async function compareCitingChunks(
+  dir: string,
+  liveSlices: string[],
+  sources: string[],
+  scope: VerificationScope,
+): Promise<{ recordedHashes: Set<string>; changedSources: Set<string> }> {
+  const currentHashes = new Map<string, string>();
+  if (scope.sourcePath && scope.sourceHash) currentHashes.set(scope.sourcePath, scope.sourceHash);
+  for (const a of scope.additionalSources ?? []) currentHashes.set(a.sourcePath, a.sourceHash);
+
+  const wantedNames = new Set(liveSlices.map((s) => bareSliceName(s)));
+  const sliceFilenames = await rulebookSliceFilenames(dir);
+  const recordedHashes = new Set<string>();
+  const changedSources = new Set<string>();
+  for (const { chunkText } of await readChunkTexts(dir)) {
+    const { resolved } = resolveCitedSlices(chunkText, sliceFilenames);
+    if (!resolved.some((r) => wantedNames.has(bareSliceName(r)))) continue;
+    const parsed = parseVerifiedAgainst(chunkText);
+    if (!parsed.sourceHash) continue;
+    for (const document of sources) {
+      const recordedHash =
+        document === scope.sourcePath
+          ? parsed.sourceHash
+          : parsed.additionalSources.find((a) => a.sourcePath === document)?.sourceHash;
+      if (recordedHash) recordedHashes.add(recordedHash);
+      if (recordedHash !== currentHashes.get(document)) changedSources.add(document);
+    }
+  }
+  return { recordedHashes, changedSources };
+}
+
+/**
  * Provenance is mechanical CLI, hash-only — never the classification subagent's opinion (decision
  * 2). This function takes exactly two parameters and has no `label`/`ruleDelta` parameter through
  * which a subagent's judgment could influence it.
  *
  * Resolution ladder (decision 2b), enumerated:
  *
- *  1. The CURRENT archived-source hash, via `computeVerificationScope()` — never a re-implemented
- *     sha256-of-archive, which risks disagreeing with the source-resolution step that already ran
- *     there. No archive at all (any non-`full` scope) → `unknown`, naming the scope reason.
+ *  1. The documents this pair's live slices came from (#311): the one each slice's `Source:` line
+ *     names, or every recorded document for a slice naming none. Each is checked through
+ *     `computeVerificationScope()` — never a re-implemented sha256-of-archive — narrowed to those
+ *     documents by `scopeForDocuments`. One of them unavailable (missing, changed on disk, not
+ *     recorded) → `unknown`, naming why. A different document being unavailable changes nothing.
  *  2. Every CHUNK.md in the project is scanned via `resolveCitedSlices()` for whether it cites any
- *     of this pair's live slices; for each that does, `parseVerifiedAgainst()` reads its recorded
- *     `Source hash:` (if any). All found hashes are collected.
- *  3. No recorded hash found at all → `unknown` (decision 2b: a first-ever verify pass of a
- *     pre-provenance project — the actual current state of both reference games — has no prior
- *     hash, and both populated states would be claims the tool cannot support). Any recorded hash
- *     differing from current → `source-changed` (any disagreement is a change the designer must
- *     see). So is a citing chunk that did not record the current hash of every `## Additional
- *     Sources` row (#305): slices do not say which document they came from, so a companion
- *     document that changed may be the one this pair was transcribed from. Otherwise (at least
- *     one recorded hash, all equal to current, every additional source current) →
- *     `source-unchanged`.
+ *     of this pair's live slices; for each that does, `parseVerifiedAgainst()` reads the hash it
+ *     recorded for each of those documents (the primary's `Source hash:`, an additional document's
+ *     `Additional source hash:` line). A chunk recording no `Source hash:` at all predates
+ *     provenance and is skipped.
+ *  3. No citing chunk records a hash → `unknown` (decision 2b: a first-ever verify pass has no
+ *     prior hash, and both populated states would be claims the tool cannot support). A citing
+ *     chunk that recorded a different hash for one of the documents, or none for it →
+ *     `source-changed`, naming the document (any disagreement is a change the designer must see).
+ *     Otherwise → `source-unchanged`.
  *
  * No branch of this function can return `source-unchanged` when `recordedHashes` is empty —
  * pinned directly by `provenance-3`.
@@ -484,91 +581,57 @@ export async function resolveProvenance(
   liveSlices: string[],
 ): Promise<ProvenanceResult> {
   const dir = resolve(projectDir);
-  const scope = await computeVerificationScope(dir);
+  const projectScope = await computeVerificationScope(dir);
+  const sourcesArr = await documentsOfLiveSlices(dir, liveSlices);
 
+  const scope = scopeForDocuments(projectScope, sourcesArr);
   if (scope.scope !== SCOPE_FULL) {
+    const failed = sourcesArr.filter((d) => documentFailure(projectScope, d) === scope.reason);
     return {
       provenance: 'unknown',
+      sources: sourcesArr,
       recordedHashes: [],
-      changedAdditionalSources: [],
+      changedSources: [],
       reason:
         `no archived source available to compare against ` +
-        `(${scope.reason ?? 'verification scope is not full'}) — cannot compute a provenance verdict`,
+        `(${scope.reason ?? 'verification scope is not full'}${failed.length > 0 ? `: ${failed.join(', ')}` : ''}) — ` +
+        `cannot compute a provenance verdict`,
     };
   }
 
-  const currentHash = scope.sourceHash;
-
-  const wantedNames = new Set(
-    liveSlices.map((p) => {
-      // Citations are written relative to `design/`, so that — not the project root — is the
-      // containment base: `rulebook/02-x.md` and a bare `02-x.md` both land in `design/rulebook/`.
-      const base = designDir(dir);
-      const rel = relative(base, resolve(base, p.startsWith(`${RULEBOOK_DIR}/`) ? p : join(RULEBOOK_DIR, p)));
-      if (rel.startsWith('..') || isAbsolute(rel)) {
-        throw new Error(
-          `Live slice path "${p}" resolves outside ${base}.\n` +
-            `Pass a path of the form "${RULEBOOK_DIR}/<file>.md", relative to ${DESIGN_DIR}/.`,
-        );
-      }
-      return bareSliceName(p);
-    }),
-  );
-
-  const sliceFilenames = await rulebookSliceFilenames(dir);
-  const currentAdditional = scope.additionalSources ?? [];
-  const recordedHashes = new Set<string>();
-  const changedAdditionalSources = new Set<string>();
-  for (const { chunkText } of await readChunkTexts(dir)) {
-    const { resolved } = resolveCitedSlices(chunkText, sliceFilenames);
-    const citesThisPair = resolved.some((r) => wantedNames.has(bareSliceName(r)));
-    if (!citesThisPair) continue;
-    const parsed = parseVerifiedAgainst(chunkText);
-    if (!parsed.sourceHash) continue;
-    recordedHashes.add(parsed.sourceHash);
-    // Every additional source is part of the rules, and slices do not say which document they
-    // came from, so a citing chunk must have been verified against each one's current version.
-    for (const current of currentAdditional) {
-      const recorded = parsed.additionalSources.find((a) => a.sourcePath === current.sourcePath);
-      if (recorded?.sourceHash !== current.sourceHash) changedAdditionalSources.add(current.sourcePath);
-    }
-  }
+  const { recordedHashes, changedSources } = await compareCitingChunks(dir, liveSlices, sourcesArr, projectScope);
 
   if (recordedHashes.size === 0) {
     return {
       provenance: 'unknown',
-      currentHash,
+      sources: sourcesArr,
       recordedHashes: [],
-      changedAdditionalSources: [],
+      changedSources: [],
       reason:
         'no chunk citing these live slices records a Source hash — a first-ever verify pass, ' +
         'not a claim this tool can support',
     };
   }
 
-  const recordedHashesArr = [...recordedHashes].sort();
-  const changedAdditionalArr = [...changedAdditionalSources].sort();
-  const allMatchCurrent = recordedHashesArr.every((h) => h === currentHash);
-  if (allMatchCurrent && changedAdditionalArr.length === 0) {
+  const changedArr = [...changedSources].sort();
+  if (changedArr.length === 0) {
     return {
       provenance: 'source-unchanged',
-      currentHash,
-      recordedHashes: recordedHashesArr,
-      changedAdditionalSources: [],
-      reason: 'every citing chunk\'s recorded Source hash matches the current archived source',
+      sources: sourcesArr,
+      recordedHashes: [...recordedHashes].sort(),
+      changedSources: [],
+      reason: 'every citing chunk was verified against the current version of every document these slices came from',
     };
   }
 
   return {
     provenance: 'source-changed',
-    currentHash,
-    recordedHashes: recordedHashesArr,
-    changedAdditionalSources: changedAdditionalArr,
-    reason: allMatchCurrent
-      ? 'at least one citing chunk was not verified against the current version of an additional ' +
-        `source (${changedAdditionalArr.join(', ')}) — any disagreement is a change the designer must see`
-      : 'at least one citing chunk\'s recorded Source hash differs from the current archived ' +
-        'source — any disagreement is a change the designer must see',
+    sources: sourcesArr,
+    recordedHashes: [...recordedHashes].sort(),
+    changedSources: changedArr,
+    reason:
+      `at least one citing chunk was not verified against the current version of ${changedArr.join(', ')} ` +
+      '— any disagreement is a change the designer must see',
   };
 }
 
@@ -701,7 +764,7 @@ async function computeRunPairs(
     });
   }
 
-  const pairs = pairSlices({ liveSlices, stagedUnits });
+  const pairs = pairSlices({ liveSlices, stagedUnits, sources: await readRecordedSourcePaths(projectDir) });
 
   const provenanceEntries = await Promise.all(
     pairs.map(async (p) => [p.pairId, await resolveProvenance(projectDir, p.liveSlices)] as const),
