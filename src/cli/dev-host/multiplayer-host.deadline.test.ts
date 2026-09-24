@@ -154,12 +154,16 @@ function makeHost(
    * Seat both players as humans, A in seat 1 and B in seat 2, in a game that
    * started with both seated. The first hello starts the game with seat 2 as a
    * bot, which commits for it at once, so the table is restarted once B sits.
+   * Setup must say nothing on the console: a bot whose only move never ends its
+   * turn spins the pump to its 500-move cap, which is seconds of real work
+   * (#332). Such a game seats its bot with `stallBots`.
    */
   const seatBoth = async () => {
     await host.handleMessage('A', { type: 'hello' });
     await host.handleMessage('B', { type: 'hello' });
     await host.handleMessage('B', { type: 'join', seat: 2 });
     await host.handleMessage('A', { type: 'restart' });
+    expect(error).not.toHaveBeenCalled();
     executed.length = 0;
   };
   const actions = () => executed.filter((e) => e.op.type === 'action');
@@ -277,7 +281,8 @@ describe('MultiplayerHost step deadlines (#302)', () => {
   });
 
   it('reports an idle action that is accepted but leaves the round open', async () => {
-    const h = makeHost(stuckDefinition, { idleAction: { name: 'wait' } });
+    // `wait` never ends a turn, so a bot holding seat 2 during setup would wait forever.
+    const h = makeHost(stuckDefinition, { idleAction: { name: 'wait' }, stallBots: true });
     await h.seatBoth();
 
     h.clock.advance(10_000);
@@ -285,6 +290,7 @@ describe('MultiplayerHost step deadlines (#302)', () => {
     expect(await h.reported()).toMatch(/did not move/);
     expect(h.actionsFor(1)).toHaveLength(1);
     expect(h.actionsFor(2)).toHaveLength(1);
+    expect(error).toHaveBeenCalledTimes(1);
   });
 
   it('reports a timed step in a game that declares no idleAction', async () => {
