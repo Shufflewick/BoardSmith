@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { Game, Player, Action, defineFlow, actionStep, loop, type GameOptions, type TutorialDefinition } from '../engine/index.js';
 import type { BotStrategy } from '../bot/types.js';
-import { executeOp, type GameDefinitionLike } from './stateless-ops.js';
+import { executeOp, READ_ONLY_OP_TYPES, type GameDefinitionLike } from './stateless-ops.js';
 import { boundaryKeyOf } from './testing/boundary-stamp.js';
 import { playThenAcknowledgeFixtureDefinition } from './testing/fixtures/play-then-acknowledge-fixture.js';
 import { ErrorCode } from '../types/protocol.js';
@@ -1393,8 +1393,7 @@ describe('executeOp', () => {
 
     // ── read-only classification ──────────────────────────────────────────
 
-    it('botSuggest is in READ_ONLY_OP_TYPES', async () => {
-      const { READ_ONLY_OP_TYPES } = await import('./stateless-ops.js');
+    it('botSuggest is in READ_ONLY_OP_TYPES', () => {
       expect(READ_ONLY_OP_TYPES.has('botSuggest')).toBe(true);
     });
 

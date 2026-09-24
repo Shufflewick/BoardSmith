@@ -36,12 +36,12 @@ import {
   untimedDeployDefinition,
 } from '../../session/testing/fixtures/timed-step-fixture.js';
 import type { GameDefinition } from '../../session/index.js';
+import boardsmithSchema from '../lib/boardsmith.schema.json' with { type: 'json' };
+
+const schema = boardsmithSchema as { properties: Record<string, Record<string, unknown>> };
 
 describe('config-schema', () => {
-  it('ALLOWED_TOP_LEVEL_KEYS matches boardsmith.schema.json properties (single source, no drift)', async () => {
-    const schema = (await import('../lib/boardsmith.schema.json')).default as {
-      properties: Record<string, unknown>;
-    };
+  it('ALLOWED_TOP_LEVEL_KEYS matches boardsmith.schema.json properties (single source, no drift)', () => {
     expect([...ALLOWED_TOP_LEVEL_KEYS].sort()).toEqual(Object.keys(schema.properties).sort());
   });
 
@@ -67,10 +67,7 @@ describe('config-schema', () => {
    * `x-asset-path` in the schema is the whole of what it takes for
    * `validateAssetPaths` to check that it resolves.
    */
-  it('ASSET_PATH_KEYS is exactly the set of properties marked x-asset-path', async () => {
-    const schema = (await import('../lib/boardsmith.schema.json')).default as {
-      properties: Record<string, Record<string, unknown>>;
-    };
+  it('ASSET_PATH_KEYS is exactly the set of properties marked x-asset-path', () => {
     const marked = Object.entries(schema.properties)
       .filter(([, property]) => property['x-asset-path'] === true)
       .map(([key]) => key);
@@ -80,11 +77,7 @@ describe('config-schema', () => {
     expect(ASSET_PATH_KEYS).toContain('thumbnail');
   });
 
-  it('every top-level schema property declares an x-convex-sink disposition', async () => {
-    const schema = (await import('../lib/boardsmith.schema.json')).default as {
-      properties: Record<string, Record<string, unknown>>;
-    };
-
+  it('every top-level schema property declares an x-convex-sink disposition', () => {
     const undeclared = Object.entries(schema.properties)
       .filter(([, property]) => typeof property['x-convex-sink'] !== 'boolean')
       .map(([key]) => key);
@@ -97,11 +90,7 @@ describe('config-schema', () => {
    * exactly what the schema marks — a hand-maintained copy would be the same
    * drift this whole arrangement exists to remove.
    */
-  it('CONVEX_SINK_KEYS is exactly the set of properties marked x-convex-sink', async () => {
-    const schema = (await import('../lib/boardsmith.schema.json')).default as {
-      properties: Record<string, Record<string, unknown>>;
-    };
-
+  it('CONVEX_SINK_KEYS is exactly the set of properties marked x-convex-sink', () => {
     const marked = Object.entries(schema.properties)
       .filter(([, property]) => property['x-convex-sink'] === true)
       .map(([key]) => key);

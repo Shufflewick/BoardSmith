@@ -13,6 +13,9 @@ import {
   actionStep,
   simultaneousActionStep,
   enumerateLegalMoves,
+  GAME_ROOT_FIELD_AUDIENCE,
+  GAME_SELF_SERIALIZED_FIELDS,
+  isEngineRootField,
   type GameOptions,
 } from './index.js';
 import { _clearShownWarnings } from '../utils/dev.js';
@@ -102,14 +105,12 @@ describe('enumerateLegalMoves fails loudly on a bad seat (#26)', () => {
 });
 
 describe('the root-field audience table is reachable from outside (#32)', () => {
-  it('exports the audience of each engine-owned root field', async () => {
-    const engine = await import('./index.js');
-    expect(engine.GAME_ROOT_FIELD_AUDIENCE).toBeDefined();
-    expect(engine.GAME_SELF_SERIALIZED_FIELDS).toBeDefined();
+  it('exports the audience of each engine-owned root field', () => {
+    expect(GAME_ROOT_FIELD_AUDIENCE).toBeDefined();
+    expect(GAME_SELF_SERIALIZED_FIELDS).toBeDefined();
   });
 
-  it('answers the question a game actually asks: is this field mine to redact?', async () => {
-    const { isEngineRootField } = await import('./index.js');
+  it('answers the question a game actually asks: is this field mine to redact?', () => {
     // Engine-owned, so a game's redaction pass must leave it alone.
     expect(isEngineRootField('tutorialProgress')).toBe(true);
     expect(isEngineRootField('messages')).toBe(true);
@@ -118,8 +119,7 @@ describe('the root-field audience table is reachable from outside (#32)', () => 
     expect(isEngineRootField('mapSeed')).toBe(false);
   });
 
-  it('classifies every field the engine actually puts on the root', async () => {
-    const { GAME_ROOT_FIELD_AUDIENCE, isEngineRootField } = await import('./index.js');
+  it('classifies every field the engine actually puts on the root', () => {
     for (const key of Object.keys(GAME_ROOT_FIELD_AUDIENCE)) {
       expect(isEngineRootField(key), key).toBe(true);
     }

@@ -57,6 +57,7 @@ describe('Die3D with three.js not installed', () => {
       throw new Error("Failed to resolve import 'three'");
     });
 
+    // Dynamic import: after vi.resetModules() and vi.doMock('three'), so the barrel loads against the missing peer.
     const { Die3D } = await import('./index.js');
 
     const captured: unknown[] = [];

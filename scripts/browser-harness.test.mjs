@@ -22,6 +22,7 @@
  * a fourth must not be able to reintroduce it.
  */
 import { describe, it, expect } from 'vitest';
+import { spawnSync } from 'node:child_process';
 import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -74,20 +75,27 @@ describe('#231: the fixture world has one owner', () => {
   });
 });
 
-describe('#231: the harness stops the host before it removes the project', () => {
+describe('#231: the fixture world stops the host before it removes the project', () => {
+  // The lifetime lives in TypeScript so `boardsmith typecheck` compiles its
+  // call to the world dev host (#357); the harness reaches it only through
+  // `runBrowserRegression`.
   const harness = readFileSync(join(SCRIPTS, 'browser-harness.mjs'), 'utf8');
+  const lifetime = readFileSync(
+    join(REPO, 'src', 'cli', 'commands', 'fixture-world.test-helper.ts'),
+    'utf8',
+  );
 
   it('exports no piece of the lifetime on its own', () => {
-    // Exporting `writeWorldFixture`, `startWorldHost` or `withFixtureWorld` is
-    // what let three scripts each own the order and each get it wrong.
-    expect(harness).not.toMatch(
-      /export (async )?function (writeWorldFixture|startWorldHost|withFixtureWorld)\b/,
-    );
+    // Exporting `writeWorldFixture` or `startWorldHost` is what let three
+    // scripts each own the order and each get it wrong.
+    expect(lifetime).not.toMatch(/export (async )?function (writeWorldFixture|startWorldHost)\b/);
+    expect(lifetime).toMatch(/export async function withFixtureWorld\b/);
+    expect(harness).not.toMatch(/export (async )?function withFixtureWorld\b/);
     expect(harness).toMatch(/export async function runBrowserRegression\b/);
   });
 
   it('awaits the stop inside the guard that removes the project', () => {
-    const body = harness.slice(harness.indexOf('async function withFixtureWorld'));
+    const body = lifetime.slice(lifetime.indexOf('async function withFixtureWorld'));
     const stop = body.indexOf('await stop()');
     const remove = body.indexOf('rmSync(fixture');
     expect(stop, 'withFixtureWorld must await the host stop').toBeGreaterThan(-1);
@@ -97,6 +105,25 @@ describe('#231: the harness stops the host before it removes the project', () =>
       'the stop must be awaited BEFORE the fixture is removed, or the removal races ' +
         'the host it never stopped (#231)',
     ).toBeLessThan(remove);
+  });
+});
+
+describe('#358: a browser regression finds the packages where Node does', () => {
+  it('gets past the install check in any checkout, a worktree included', () => {
+    // A worktree has no `node_modules` of its own: Node resolves its packages
+    // from the main checkout's install. The harness used to look for
+    // `<checkout>/node_modules/vue` and refused every run in a worktree. With
+    // no Playwright reachable, a run that got past the install check stops at
+    // the Playwright refusal, before any fixture or browser exists.
+    const run = spawnSync(process.execPath, [join(SCRIPTS, 'world-offers-latch-browser.mjs')], {
+      cwd: REPO,
+      encoding: 'utf8',
+      env: { ...process.env, BOARDSMITH_PLAYWRIGHT_MODULE: join(REPO, 'no-playwright-here') },
+    });
+    const output = `${run.stdout}${run.stderr}`;
+    expect(run.status).toBe(1);
+    expect(output).not.toContain('no node_modules/vue');
+    expect(output).toContain('No Playwright chromium is reachable');
   });
 });
 

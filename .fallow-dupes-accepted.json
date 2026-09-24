@@ -207,13 +207,6 @@
       ]
     },
     {
-      "content": "07305ae49df569b5",
-      "lines": 17,
-      "files": [
-        "src/ui/composables/useFlyingElements.test.ts"
-      ]
-    },
-    {
       "content": "073895d7d01ace54",
       "lines": 7,
       "files": [
@@ -605,13 +598,6 @@
       "files": [
         "src/cli/dev-host/multiplayer-host.test.ts",
         "src/session/seat-activity-canonical.test.ts"
-      ]
-    },
-    {
-      "content": "1291c54808688c53",
-      "lines": 6,
-      "files": [
-        "src/cli/commands/verify-impact.test.ts"
       ]
     },
     {
@@ -1470,13 +1456,6 @@
       "lines": 10,
       "files": [
         "src/session/pick-handler.test.ts"
-      ]
-    },
-    {
-      "content": "3759ffb50e7af92a",
-      "lines": 6,
-      "files": [
-        "src/cli/commands/verify-impact.test.ts"
       ]
     },
     {
@@ -3717,13 +3696,6 @@
       "files": [
         "src/ui/composables/useActionController.picks.test.ts",
         "src/ui/composables/useActionController.test.ts"
-      ]
-    },
-    {
-      "content": "832b7605e5a9e68f",
-      "lines": 11,
-      "files": [
-        "src/cli/commands/verify-impact.test.ts"
       ]
     },
     {

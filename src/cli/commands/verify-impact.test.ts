@@ -1,6 +1,6 @@
 import { DESIGN_DIR } from '../lib/project-paths.js';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { promises as fs } from 'node:fs';
+import { promises as fs, readFileSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { dirname, join, relative } from 'node:path';
@@ -46,10 +46,12 @@ import {
   resolveLedgerState,
   type ClassificationRecord,
   type AdjudicationRecord,
+  atomicWriteFile,
 } from './verify-run.js';
 import {
   verifyClassifyPairsCommand,
   verifyClassifyRecordCommand,
+  verifyClassifyStatusCommand,
   type ChunkVerdict,
 } from './verify-classify.js';
 import { verifyRepairStatusCommand } from './verify-repair.js';
@@ -264,16 +266,12 @@ describe('marker — parseRulesStaleness (strict)', () => {
 
 describe('marker — no bare indexOf on the heading (structural guard)', () => {
   it('the module never calls indexOf(RULES_STALENESS_HEADING) outside comments', async () => {
-    const { readFileSync } = await import('node:fs');
-    const { fileURLToPath } = await import('node:url');
     const source = readFileSync(fileURLToPath(new URL('./verify-impact.ts', import.meta.url)), 'utf-8');
     const codeLines = source.split('\n').filter((line) => !/^\s*[*/]/.test(line));
     expect(codeLines.join('\n')).not.toContain('indexOf(RULES_STALENESS_HEADING)');
   });
 
   it('the module ships its own distinct fence pair, never reusing VERIFIED_AGAINST_BEGIN in code', async () => {
-    const { readFileSync } = await import('node:fs');
-    const { fileURLToPath } = await import('node:url');
     const source = readFileSync(fileURLToPath(new URL('./verify-impact.ts', import.meta.url)), 'utf-8');
     const codeLines = source.split('\n').filter((line) => !/^\s*[*/]/.test(line));
     expect(source).toContain('boardsmith:rules-staleness:begin');
@@ -281,16 +279,12 @@ describe('marker — no bare indexOf on the heading (structural guard)', () => {
   });
 
   it('never calls fs.writeFile directly (atomicWriteFile is the one write path)', async () => {
-    const { readFileSync } = await import('node:fs');
-    const { fileURLToPath } = await import('node:url');
     const source = readFileSync(fileURLToPath(new URL('./verify-impact.ts', import.meta.url)), 'utf-8');
     const codeLines = source.split('\n').filter((line) => !/^\s*[*/]/.test(line));
     expect(codeLines.join('\n')).not.toContain('fs.writeFile(');
   });
 
   it("writeRulesStalenessMarker's own body never mentions RULES_STALENESS_CLEAR or the word clear", async () => {
-    const { readFileSync } = await import('node:fs');
-    const { fileURLToPath } = await import('node:url');
     const source = readFileSync(fileURLToPath(new URL('./verify-impact.ts', import.meta.url)), 'utf-8');
     const start = source.indexOf('export async function writeRulesStalenessMarker');
     expect(start).toBeGreaterThan(-1);
@@ -321,7 +315,6 @@ vi.mock('./verify-run.js', async (importOriginal) => {
 // a failure under --sequence.shuffle. Restoring here covers every block, and
 // `vi.clearAllMocks()` is not enough: it clears call records, not implementations.
 afterEach(async () => {
-  const { atomicWriteFile } = await import('./verify-run.js');
   const actual = await vi.importActual<typeof import('./verify-run.js')>('./verify-run.js');
   vi.mocked(atomicWriteFile).mockImplementation(actual.atomicWriteFile);
 });
@@ -377,7 +370,6 @@ describe('marker write-order — writeRulesStalenessMarker', () => {
     // Reset the mocked atomicWriteFile back to a plain call-through before every test, so a
     // prior test's mockImplementation override (the simulated SKETCH.md write failure) never
     // leaks into the next test.
-    const { atomicWriteFile } = await import('./verify-run.js');
     const actualModule = await vi.importActual<typeof import('./verify-run.js')>('./verify-run.js');
     vi.mocked(atomicWriteFile).mockImplementation(actualModule.atomicWriteFile);
   });
@@ -449,7 +441,6 @@ describe('marker write-order — writeRulesStalenessMarker', () => {
   });
 
   it('write-order — CHUNK.md is written BEFORE SKETCH.md; a failed SKETCH.md write still leaves CHUNK.md written', async () => {
-    const { atomicWriteFile } = await import('./verify-run.js');
     const mocked = vi.mocked(atomicWriteFile);
     mocked.mockImplementation(async (filePath: string, content: string) => {
       if (filePath.endsWith('SKETCH.md')) {
@@ -727,8 +718,7 @@ describe('contradictory — verifyImpactGateCommand: read-only, exit-0, no-bypas
   });
 
   it('no-bypass: verifyImpactGateCommand has exactly project/runId/json options — no force/skip/yes/assumeResolved/bypass/autoAdjudicate anywhere in this module', async () => {
-    const fs2 = await import('node:fs/promises');
-    const moduleSource = await fs2.readFile(
+    const moduleSource = await fs.readFile(
       join(__dirname, 'verify-impact.ts'),
       'utf-8',
     );
@@ -1303,30 +1293,25 @@ describe('line-level-handoff / repair-gate — verifyImpactStatusCommand over a 
     expect(movement.gate.nextStatus).toBe('built');
   });
 
-  it('line-level-handoff: ImpactMapEntry.attributions deep-equals the source ChunkVerdict.attributions verbatim', async () => {
+  /** The `movement` chunk's classify verdict and its impact-map entry, from one project. */
+  async function movementVerdictAndEntry() {
     const { project, runId } = await buildImpactTestProject(root, { ruleDelta: 'sharper', drift: 'clean' });
-
-    const classifyStatus = await import('./verify-classify.js').then((m) =>
-      m.verifyClassifyStatusCommand({ project, runId, json: true }),
-    );
+    const classifyStatus = await verifyClassifyStatusCommand({ project, runId, json: true });
     const result = await verifyImpactStatusCommand({ project, runId, json: true });
+    return {
+      sourceVerdict: classifyStatus.chunkVerdicts.find((v) => v.slug === 'movement')!,
+      entry: result.entries.find((e) => e.slug === 'movement')!,
+    };
+  }
 
-    const sourceVerdict = classifyStatus.chunkVerdicts.find((v) => v.slug === 'movement')!;
-    const entry = result.entries.find((e) => e.slug === 'movement')!;
+  it('line-level-handoff: ImpactMapEntry.attributions deep-equals the source ChunkVerdict.attributions verbatim', async () => {
+    const { sourceVerdict, entry } = await movementVerdictAndEntry();
     expect(entry.attributions).toEqual(sourceVerdict.attributions);
     expect(entry.attributions.some((a) => a.attributed && a.rung === 'quoted-fragment')).toBe(true);
   });
 
   it('line-level-handoff: ImpactMapEntry.pairIds deep-equals the source ChunkVerdict.pairIds verbatim (176-06-discovered bug fix — the field was previously dropped, making verify-repair.ts\'s resolveStagedSlicePaths throw "entry.pairIds is not iterable" on any real stale entry)', async () => {
-    const { project, runId } = await buildImpactTestProject(root, { ruleDelta: 'sharper', drift: 'clean' });
-
-    const classifyStatus = await import('./verify-classify.js').then((m) =>
-      m.verifyClassifyStatusCommand({ project, runId, json: true }),
-    );
-    const result = await verifyImpactStatusCommand({ project, runId, json: true });
-
-    const sourceVerdict = classifyStatus.chunkVerdicts.find((v) => v.slug === 'movement')!;
-    const entry = result.entries.find((e) => e.slug === 'movement')!;
+    const { sourceVerdict, entry } = await movementVerdictAndEntry();
     expect(Array.isArray(entry.pairIds)).toBe(true);
     expect(entry.pairIds).toEqual(sourceVerdict.pairIds);
     expect(entry.pairIds.length).toBeGreaterThan(0);
