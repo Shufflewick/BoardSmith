@@ -73,13 +73,10 @@ const botFor = (
   seat = 1,
   difficulty: Parameters<typeof createBot>[5] = 20,
   botStrategy?: unknown,
-) => createBot(runner.game, RaceGame, 'race', seat, runner.actionHistory, difficulty, botStrategy as never);
-
-/** Search bounded by iterations alone — the wall clock cannot cut it short. */
-const deterministic = (bot: ReturnType<typeof botFor>) => {
-  (bot as unknown as { config: { timeout: number } }).config.timeout = Infinity;
-  return bot;
-};
+  reproducible?: Parameters<typeof createBot>[7],
+) => createBot(
+  runner.game, RaceGame, 'race', seat, runner.actionHistory, difficulty, botStrategy as never, reproducible,
+);
 
 describe('createBot', () => {
   it('builds an MCTS bot', () => {
@@ -136,11 +133,30 @@ describe('createBot', () => {
     expect(runner.game.scores[2]).toBeGreaterThan(0);
   });
 
-  it('is reproducible for the same seed when the clock cannot cut search short', async () => {
-    // Without `timeout: Infinity` the wall-clock budget ends the search at
-    // whatever iteration the machine happened to reach, so two runs diverge.
-    const move = async () => deterministic(botFor(newRunner('fixed'), 1, 30)).play();
-    expect(await move()).toEqual(await move());
+  it('is reproducible for the same bot seed', async () => {
+    // The GAME seed is fixed too, but that is not what makes this pass: the
+    // bot draws from its own random source, and only its own seed fixes it.
+    const move = async () => botFor(newRunner('fixed'), 1, 30, undefined, { seed: 'bot-fixed' }).play();
+    const first = await move();
+    for (let run = 0; run < 3; run++) {
+      expect(await move()).toEqual(first);
+    }
+  });
+
+  it('bounds a seeded search by iterations alone, so the clock cannot cut it short', () => {
+    for (const level of ['easy', 'medium', 'hard', 30] as const) {
+      const bot = botFor(newRunner(), 1, level, undefined, { seed: 'bot-fixed' }) as unknown as {
+        config: { seed?: string; timeout?: number };
+      };
+      expect(bot.config.seed, String(level)).toBe('bot-fixed');
+      expect(bot.config.timeout, String(level)).toBe(Infinity);
+    }
+  });
+
+  it('keeps the difficulty\'s own clock when no seed is given', () => {
+    const bot = botFor(newRunner(), 1, 'easy') as unknown as { config: { seed?: string; timeout?: number } };
+    expect(bot.config.seed).toBeUndefined();
+    expect(bot.config.timeout).toBe(DIFFICULTY_PRESETS.easy.timeout);
   });
 
   it('accepts a bot config with objectives and still returns a move', async () => {
@@ -160,7 +176,7 @@ describe('createBot', () => {
     runner.performAction('take', 2, { value: 1 });
     expect(runner.game.scores[1]).toBe(3);
 
-    const move = (await deterministic(botFor(runner, 1, 200)).play())!;
+    const move = (await botFor(runner, 1, 200, undefined, { seed: 'winning-move' }).play())!;
     runner.performAction(move.action, 1, move.args);
 
     expect(runner.game.isFinished()).toBe(true);

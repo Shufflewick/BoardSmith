@@ -22,6 +22,8 @@ it there.
    merge and `main` is left as it was. Because it checks the merged tree, a
    branch that was clean on its own but conflicts in types with something that
    landed since is refused too.
+   Merges run one at a time (#333): a second run started while one is in
+   flight waits for it, then tests its own merged tree.
 
 A plain `npx vitest run` does not type-check. Use `boardsmith test`.
 

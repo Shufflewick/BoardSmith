@@ -140,6 +140,13 @@ export class LocalWorldHost {
   readonly #attached = new Map<string, number>();
   /** Departure timers, one per seat, for a bundle that declares `onDepart`. */
   readonly #departing = new Map<number, ReturnType<typeof setTimeout>>();
+  /**
+   * THE SEATS THE WORLD HAS BEEN TOLD ARE PRESENT, and not since told they
+   * left (#331) -- the platform's "informed" record. `closedAt` is written only
+   * for a bundle with no `onDepart`, where no departure timer carries the
+   * instant, so a return can tell a flap from a genuine absence.
+   */
+  readonly #told = new Map<number, { closedAt: number | null }>();
   /** The one shutdown, once it has been asked for. */
   #closing: Promise<void> | null = null;
 
@@ -241,7 +248,7 @@ export class LocalWorldHost {
     await this.#world.run(async () => {
       const seat = this.#attached.get(clientId);
       this.#attached.delete(clientId);
-      if (seat !== undefined && !this.#seatIsOpen(seat)) this.#armDeparture(seat);
+      if (seat !== undefined && !this.#seatIsOpen(seat)) this.#seatBecameAbsent(seat);
       await this.#pushViews();
     });
   }
@@ -272,7 +279,7 @@ export class LocalWorldHost {
 
   async #hello(clientId: string): Promise<void> {
     if (!this.#attached.has(clientId)) {
-      await this.#attach(clientId, this.#firstFreeSeat(), { announce: true });
+      await this.#attach(clientId, this.#firstFreeSeat());
       return;
     }
     await this.#pushViews();
@@ -287,11 +294,7 @@ export class LocalWorldHost {
     return 1;
   }
 
-  async #attach(
-    clientId: string,
-    seat: number,
-    options: { announce?: boolean } = {},
-  ): Promise<void> {
+  async #attach(clientId: string, seat: number): Promise<void> {
     const player = devWorldPlayer(seat);
     try {
       // THE LIBRARY'S OWN DOOR, before anything durable is written. A seat past
@@ -305,16 +308,14 @@ export class LocalWorldHost {
       return;
     }
     const previous = this.#attached.get(clientId);
+    // Asked BEFORE this page counts: a second tab, or a page re-attaching to
+    // the seat it already holds, finds the seat open and is no arrival (#331).
+    const arriving = !this.#seatIsOpen(seat);
     this.#attached.set(clientId, seat);
-    const departing = this.#departing.get(seat);
-    if (departing !== undefined) {
-      clearTimeout(departing);
-      this.#departing.delete(seat);
-    }
     if (previous !== undefined && previous !== seat && !this.#seatIsOpen(previous)) {
-      this.#armDeparture(previous);
+      this.#seatBecameAbsent(previous);
     }
-    if (options.announce !== false) await this.#announceArrival(seat);
+    if (arriving) await this.#seatBecamePresent(seat);
     await this.#pushViews();
   }
 
@@ -340,17 +341,62 @@ export class LocalWorldHost {
   // ── presence hooks, which are this host's lifecycle policy ─────────────────
 
   /**
-   * A SEAT ARRIVED, and the world is told through its own command table.
+   * A SEAT GAINED ITS FIRST OPEN SOCKET, and the world may be told it arrived.
    *
-   * The declaration names a `worldClockAction()` verb, so a transition is the CLOCK
-   * issuing one of the world's verbs and a world still has exactly one way to
-   * change. What is the host's is when: on a laptop an attach is an arrival the
-   * instant it happens, because a socket here is unambiguous.
+   * The declaration names a `worldClockAction()` verb, so a transition is the
+   * CLOCK issuing one of the world's verbs and a world still has exactly one
+   * way to change. WHEN is the platform's rule, matched exactly (#331,
+   * ShufflewickPub `seatBecamePresent` in `games/src/world-presence-policy.ts`),
+   * so an author's `onArrive` runs as often here as it does in production:
+   *
+   *   A DEPARTURE STILL WAITING OUT ITS GRACE is a flap caught in time: it is
+   *     cancelled and nobody is told anything.
+   *   A SEAT THE WORLD ALREADY BELIEVES PRESENT is announced only when it was
+   *     gone for at least the grace (the no-`onDepart` road, which records when
+   *     its last socket closed).
+   *   ANY OTHER SEAT is an arrival.
+   *
+   * On a laptop the announcement runs the instant it is decided, because a
+   * socket here is unambiguous.
    */
-  async #announceArrival(seat: number): Promise<void> {
-    const command = this.#world.presenceHooks?.onArrive;
-    if (command === undefined) return;
-    await this.#clockCommand(command, { seat, present: true });
+  async #seatBecamePresent(seat: number): Promise<void> {
+    const hooks = this.#world.presenceHooks;
+    if (hooks === undefined) return;
+    const departing = this.#departing.get(seat);
+    if (departing !== undefined) {
+      clearTimeout(departing);
+      this.#departing.delete(seat);
+      return;
+    }
+    const told = this.#told.get(seat);
+    this.#told.set(seat, { closedAt: null });
+    if (told !== undefined) {
+      if (told.closedAt === null) return;
+      if (this.#clock.now() - told.closedAt < this.#departGraceMs()) return;
+    }
+    if (hooks.onArrive !== undefined) {
+      await this.#clockCommand(hooks.onArrive, { seat, present: true });
+    }
+  }
+
+  /**
+   * A SEAT LOST ITS LAST OPEN SOCKET. The platform's `seatBecameAbsent`: a seat
+   * the world was never told about owes it nothing; otherwise the departure
+   * waits out the grace, or, with no `onDepart` declared, the instant is
+   * written down for {@link LocalWorldHost.#seatBecamePresent} to read.
+   */
+  #seatBecameAbsent(seat: number): void {
+    const hooks = this.#world.presenceHooks;
+    if (hooks === undefined || !this.#told.has(seat)) return;
+    if (hooks.onDepart === undefined) {
+      this.#told.set(seat, { closedAt: this.#clock.now() });
+      return;
+    }
+    this.#armDeparture(seat, hooks.onDepart);
+  }
+
+  #departGraceMs(): number {
+    return this.#world.presenceHooks?.departGraceMs ?? 0;
   }
 
   /**
@@ -375,6 +421,8 @@ export class LocalWorldHost {
       clearTimeout(departing);
       this.#departing.delete(vacancy.seat);
     }
+    // The chair's next page holds a new player, and a new player arrives.
+    this.#told.delete(vacancy.seat);
     for (const [clientId, seat] of [...this.#attached]) {
       if (seat !== vacancy.seat) continue;
       this.#attached.delete(clientId);
@@ -389,22 +437,25 @@ export class LocalWorldHost {
     }
   }
 
-  #armDeparture(seat: number): void {
-    const command = this.#world.presenceHooks?.onDepart;
-    if (command === undefined) return;
-    const grace = this.#world.presenceHooks?.departGraceMs ?? 0;
-    const existing = this.#departing.get(seat);
-    if (existing !== undefined) clearTimeout(existing);
+  /**
+   * A DEPARTURE, due once the grace is over. Whether it is still true is asked
+   * again INSIDE the world lock, because a page may have taken the seat back
+   * between the timer firing and the lock coming free: then the world goes on
+   * believing the seat present, and is told nothing.
+   */
+  #armDeparture(seat: number, command: string): void {
     this.#departing.set(
       seat,
       setTimeout(() => {
         this.#departing.delete(seat);
-        if (this.#seatIsOpen(seat) || this.#world.closed) return;
+        if (this.#world.closed) return;
         void this.#world.run(async () => {
+          if (this.#seatIsOpen(seat)) return;
+          this.#told.delete(seat);
           await this.#clockCommand(command, { seat, present: false });
           await this.#pushViews();
         });
-      }, grace),
+      }, this.#departGraceMs()),
     );
   }
 
