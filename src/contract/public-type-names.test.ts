@@ -94,13 +94,6 @@ const KNOWN_COLLISIONS: Record<string, { issue: number; declarations: string[] }
   ActionMetadata: { issue: 374, declarations: ['src/types/protocol.ts:ActionMetadata', 'src/ui/composables/useActionControllerTypes.ts:ActionMetadata'] },
   PickStepResult: { issue: 374, declarations: ['src/session/pending-action-manager.ts:PickStepResult', 'src/ui/composables/useActionControllerTypes.ts:PickStepResult'] },
   HexOrientation: { issue: 374, declarations: ['src/engine/element/hex-grid.ts:HexOrientation', 'src/ui/composables/useHexGrid.ts:HexOrientation'] },
-  CreateGameRequest: { issue: 375, declarations: ['src/session/types.ts:CreateGameRequest', 'src/types/protocol.ts:CreateGameRequest'] },
-  PlayerConfig: { issue: 375, declarations: ['src/bot-trainer/benchmark.ts:PlayerConfig', 'src/session/types.ts:PlayerConfig', 'src/types/protocol.ts:PlayerConfig'] },
-  ClaimSeatRequest: { issue: 375, declarations: ['src/session/types.ts:ClaimSeatRequest', 'src/types/protocol.ts:ClaimSeatRequest'] },
-  ClaimSeatResponse: { issue: 375, declarations: ['src/session/types.ts:ClaimSeatResponse', 'src/types/protocol.ts:ClaimSeatResponse'] },
-  JoinLobbyRequest: { issue: 375, declarations: ['src/session/types.ts:JoinLobbyRequest', 'src/types/protocol.ts:JoinLobbyRequest'] },
-  JoinLobbyResponse: { issue: 375, declarations: ['src/session/types.ts:JoinLobbyResponse', 'src/types/protocol.ts:JoinLobbyResponse'] },
-  GameClass: { issue: 375, declarations: ['src/bot-trainer/types.ts:GameClass', 'src/session/types.ts:GameClass'] },
 };
 
 // Built once, here, because compiling every entry point is slow one-time setup.

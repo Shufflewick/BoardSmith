@@ -9,11 +9,11 @@
  * no memory between calls.
  */
 
-import type { Game, GameCommand, TutorialDefinition, Annotation, FlowState } from '../engine/index.js';
+import type { Game, GameClass, GameCommand, TutorialDefinition, Annotation, FlowState } from '../engine/index.js';
 import { ErrorCode } from '../types/protocol.js';
 import { executeCommand, dueSeats, canSeatAct, availableActionsForSeat, flowBoundaryKey } from '../engine/index.js';
 import type { BoundaryKeyState } from '../engine/index.js';
-import type { GameClass, HeatmapEntry, SerializedFlowDebugInfo, SerializedPendingActionState, WarningEntry } from './types.js';
+import type { HeatmapEntry, SerializedFlowDebugInfo, SerializedPendingActionState, WarningEntry } from './types.js';
 import { validateTutorialDefinition, initialProgress, autoAdvanceTutorial } from '../engine/tutorial/progress.js';
 import {
   GameRunner,

@@ -6,7 +6,8 @@ import { dueSeats, canSeatAct, type Game, type SerializedAction } from '../engin
 import type { GameRunner } from '../runtime/index.js';
 import { createBot, parseBotLevel } from '../bot/index.js';
 import type { BotStrategy } from '../bot/index.js';
-import type { GameClass, BotSeatConfig } from './types.js';
+import type { GameClass } from '../engine/index.js';
+import type { BotSeatConfig } from './types.js';
 
 /**
  * Controller for bot player moves

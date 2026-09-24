@@ -9,11 +9,10 @@
  * - rewindToAction(): Rewind to arbitrary point
  */
 
-import { canSeatAct, availableActionsForSeat, type FlowState, type Game } from '../engine/index.js';
+import { canSeatAct, availableActionsForSeat, type FlowState, type Game, type GameClass } from '../engine/index.js';
 import { GameRunner, describeCheckpointAbsence } from '../runtime/index.js';
 import {
   ErrorCode,
-  type GameClass,
   type StoredGameState,
   type PlayerGameState,
 } from './types.js';

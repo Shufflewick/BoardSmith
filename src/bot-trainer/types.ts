@@ -1,7 +1,4 @@
-import type { Game, GameOptions, FlowState, SerializedAction } from '../engine/index.js';
-
-/** Game class constructor type */
-export type GameClass<G extends Game = Game> = new (options: GameOptions) => G;
+import type { Game, FlowState, SerializedAction } from '../engine/index.js';
 
 /**
  * Game type classification based on win condition patterns.

@@ -16,7 +16,7 @@
  * - bot scheduling
  */
 
-import type { FlowState, SerializedAction, Game, PendingActionState, GameCommand, FollowUpOffer, GameStateSnapshot, PlayerStateView, FlowDebugInfo, Player } from '../engine/index.js';
+import type { FlowState, SerializedAction, Game, GameClass, PendingActionState, GameCommand, FollowUpOffer, GameStateSnapshot, PlayerStateView, FlowDebugInfo, Player } from '../engine/index.js';
 import { canSeatAct } from '../engine/index.js';
 import type { TutorialDefinition } from '../engine/tutorial/types.js';
 import type { Annotation } from '../engine/tutorial/types.js';
@@ -24,7 +24,6 @@ import type { HeatmapEntry, SerializedFlowDebugInfo } from './types.js';
 import { GameRunner, type CheckpointPolicy, type UndoPolicy } from '../runtime/index.js';
 import {
   ErrorCode,
-  type GameClass,
   type StoredGameState,
   type PlayerGameState,
   type SessionInfo,

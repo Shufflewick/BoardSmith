@@ -290,6 +290,12 @@ export type GameOptions = {
 };
 
 /**
+ * A game's class, as the session, the runner's callers and the bots take it:
+ * something to construct a fresh `G` from {@link GameOptions}.
+ */
+export type GameClass<G extends Game = Game> = new (options: GameOptions) => G;
+
+/**
  * Whether a session may consume randomness at all.
  *
  * `'forbidden'` is the order-entry / intent-capture policy: every draw throws

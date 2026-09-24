@@ -52,6 +52,7 @@ export type {
   SeatAttributeDerivation,
   Sorter,
   GameOptions,
+  GameClass,
   RandomnessPolicy,
   GamePhase,
   PlayerViewFunction,
