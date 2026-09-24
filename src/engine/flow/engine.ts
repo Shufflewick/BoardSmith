@@ -25,6 +25,7 @@ import type {
   PhaseConfig,
   PlayerAwaitingState,
 } from './types.js';
+import { resolveTimeLimit } from './step-time-limit.js';
 
 /**
  * Maximum iterations for safety (prevent infinite loops)
@@ -965,6 +966,16 @@ export class FlowEngine<G extends Game = Game> {
       }
     }
 
+    // The open step's window, resolved when it was entered and kept on its
+    // frame (see `openStepWindow`), so every restore path that rebuilds the
+    // frame from `position.frameData` publishes the same number.
+    if (this.awaitingInput) {
+      const timeLimitMs = this.stack[this.stack.length - 1]?.data?.timeLimitMs;
+      if (typeof timeLimitMs === 'number') {
+        state.timeLimitMs = timeLimitMs;
+      }
+    }
+
     // Include action error if present
     if (this.actionError) {
       state.actionError = this.actionError;
@@ -1819,6 +1830,29 @@ export class FlowEngine<G extends Game = Game> {
     return 0;
   }
 
+  /**
+   * Resolve a step's declared time limit ONCE, as it starts awaiting input, and
+   * keep the number on its frame (#300).
+   *
+   * Once per frame: an action step re-runs this executor after every move while
+   * it stays open (`repeatUntil`, `maxMoves`), and a seat's move must not move
+   * the window it is acting inside. A fresh frame -- the next round of a loop,
+   * the next seat of an `eachPlayer` -- resolves its own. The frame is the
+   * durable home because `getPosition`/`restore` round-trip `frame.data`, so a
+   * snapshot restore, an undo checkpoint and an MCTS clone all carry the value
+   * rather than re-resolving it against later state.
+   */
+  private openStepWindow(
+    frame: ExecutionFrame<G>,
+    config: ActionStepConfig<G> | SimultaneousActionStepConfig<G>,
+    context: FlowContext<G>,
+    stepType: 'action-step' | 'simultaneous-action-step',
+  ): void {
+    if (config.timeLimitMs === undefined || frame.data?.timeLimitMs !== undefined) return;
+    const timeLimitMs = resolveTimeLimit(config.timeLimitMs, context, config.name ?? stepType);
+    frame.data = { ...frame.data, timeLimitMs };
+  }
+
   private executeActionStep(
     frame: ExecutionFrame<G>,
     config: ActionStepConfig<G>,
@@ -1898,6 +1932,8 @@ export class FlowEngine<G extends Game = Game> {
     if (available.length === 0 && !minMovesMet) {
       throw new Error(`ActionStep requires ${config.minMoves} moves but only ${moveCount} were possible`);
     }
+
+    this.openStepWindow(frame, config, context, 'action-step');
 
     // Store config for getState() move count tracking
     this.currentActionConfig = config;
@@ -2000,11 +2036,14 @@ export class FlowEngine<G extends Game = Game> {
     if (this.awaitingPlayers.length === 0) {
       if (config.allDone) {
         this.warnIfDeadlockedSimultaneousStep(config);
+        this.openStepWindow(frame, config, context, 'simultaneous-action-step');
         return { continue: false, awaitingInput: true };
       }
       frame.completed = true;
       return { continue: true, awaitingInput: false };
     }
+
+    this.openStepWindow(frame, config, context, 'simultaneous-action-step');
 
     // Don't mark completed - waiting for all players
     return {

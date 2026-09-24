@@ -230,6 +230,7 @@ export type {
   ForEachConfig,
   ActionStepConfig,
   TurnScope,
+  StepTimeLimit,
   TurnRun,
   SimultaneousActionStepConfig,
   SwitchConfig,

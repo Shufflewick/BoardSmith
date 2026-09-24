@@ -203,7 +203,30 @@ export interface ActionStepConfig<G extends Game = Game> extends BaseFlowConfig 
    * `session/testing/solo-undo-authoritative.test.ts`.
    */
   turnScope?: TurnScope;
+  /**
+   * How long this step stays open once it is entered, in milliseconds.
+   *
+   * A number, or a function of the flow context resolved ONCE when the step is
+   * entered; the resolved value is fixed for as long as the step stays open, so
+   * a seat submitting mid-round cannot move it. It is a duration, never an
+   * instant: the engine keeps no clock and never closes the step itself. It
+   * publishes the value as {@link FlowState.timeLimitMs} and on the host's turn
+   * boundary, and the HOST closes the step when the window elapses by
+   * submitting the game's `idleAction` for every seat that has not acted.
+   * A game that declares one must therefore declare `idleAction` in
+   * `boardsmith.json` -- `boardsmith validate` and `boardsmith build` refuse it
+   * otherwise. See docs/simultaneous-and-interrupt-semantics.md section 5.
+   *
+   * Must be a positive whole number of milliseconds.
+   */
+  timeLimitMs?: StepTimeLimit<G>;
 }
+
+/**
+ * A step's declared time limit: a fixed number of milliseconds, or a function
+ * resolved when the step is entered. See {@link ActionStepConfig.timeLimitMs}.
+ */
+export type StepTimeLimit<G extends Game = Game> = number | ((context: FlowContext<G>) => number);
 
 /**
  * Whether a fresh entry into an action step continues the acting seat's
@@ -243,6 +266,12 @@ export interface SimultaneousActionStepConfig<G extends Game = Game> extends Bas
   allDone?: (context: FlowContext<G>) => boolean;
   /** Skip this player if returns true */
   skipPlayer?: (context: FlowContext<G>, player: PlayerOf<G>) => boolean;
+  /**
+   * How long this step stays open once it is entered, in milliseconds. Resolved
+   * once, at entry, and fixed while the step is open. See
+   * {@link ActionStepConfig.timeLimitMs}.
+   */
+  timeLimitMs?: StepTimeLimit<G>;
 }
 
 /**
@@ -376,6 +405,14 @@ export interface FlowState {
    * undo" that made the defect look like a design decision.
    */
   turnScopeUndeclared?: string;
+  /**
+   * How long the open step stays open, in milliseconds, as the step declared it
+   * ({@link ActionStepConfig.timeLimitMs}) and resolved when it was entered.
+   * Present only while a step that declared a limit is awaiting input; absent
+   * otherwise. A duration, never an instant: the host that receives it owns the
+   * clock and closes the step.
+   */
+  timeLimitMs?: number;
   /** Moves remaining until maxMoves (if configured) */
   movesRemaining?: number;
   /** Moves required until minMoves met (if configured) */
