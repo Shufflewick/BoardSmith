@@ -223,17 +223,22 @@ describe('scripts/merge-branch.sh serialises merges (#333)', () => {
     throw new Error(`the merge logging to ${log} never reached boardsmith test`);
   }
 
+  const logFor = (repo, branch) => path.join(repo, '.git', `${branch}.log`);
+
+  /** Starts merging `alpha` and resolves once its `boardsmith test` is running. */
+  async function alphaTesting(repo, summary, sleep) {
+    const first = startMerge(repo, 'alpha', summary, { log: logFor(repo, 'alpha'), sleep });
+    await untilTesting(logFor(repo, 'alpha'));
+    return first;
+  }
+
   const lockPath = (repo) => path.join(realpathSync(repo), '.git', 'merge-branch.lock');
   const mainSubjects = (repo) => git(repo, 'log', '--first-parent', '--format=%s', 'main').split('\n');
 
   it('makes a second merge wait for the first, then test and land its OWN merged result', async () => {
     const repo = fixtureRepo();
-    const alphaLog = path.join(repo, '.git', 'alpha.log');
-    const betaLog = path.join(repo, '.git', 'beta.log');
-
-    const first = startMerge(repo, 'alpha', 'adds alpha (#1)', { log: alphaLog, sleep: 3 });
-    await untilTesting(alphaLog);
-    const second = startMerge(repo, 'beta', 'adds beta (#2)', { log: betaLog });
+    const first = await alphaTesting(repo, 'adds alpha (#1)', 3);
+    const second = startMerge(repo, 'beta', 'adds beta (#2)', { log: logFor(repo, 'beta') });
 
     const alpha = await first.done;
     const beta = await second.done;
@@ -248,8 +253,8 @@ describe('scripts/merge-branch.sh serialises merges (#333)', () => {
     ]);
     // Each run tested its own merge result: alpha's tree cannot hold beta's
     // file, and beta's must hold alpha's, because beta merged after alpha landed.
-    expect(testedTrees(alphaLog)).toEqual(['alpha.txt']);
-    expect(testedTrees(betaLog)).toEqual(['alpha.txt,beta.txt']);
+    expect(testedTrees(logFor(repo, 'alpha'))).toEqual(['alpha.txt']);
+    expect(testedTrees(logFor(repo, 'beta'))).toEqual(['alpha.txt,beta.txt']);
 
     // The second run said it was waiting, and for which branch.
     expect(beta.output).toContain('Waiting for the merge lock');
@@ -259,17 +264,13 @@ describe('scripts/merge-branch.sh serialises merges (#333)', () => {
 
   it('refuses when it will not wait, naming the branch that holds the lock, and touches nothing', async () => {
     const repo = fixtureRepo();
-    const alphaLog = path.join(repo, '.git', 'alpha.log');
-    const betaLog = path.join(repo, '.git', 'beta.log');
+    const first = await alphaTesting(repo, 'adds alpha', 3);
 
-    const first = startMerge(repo, 'alpha', 'adds alpha', { log: alphaLog, sleep: 3 });
-    await untilTesting(alphaLog);
-
-    const refused = mergeWith(repo, 'beta', 'adds beta', { wait: 0, log: betaLog });
+    const refused = mergeWith(repo, 'beta', 'adds beta', { wait: 0, log: logFor(repo, 'beta') });
     expect(refused.status).not.toBe(0);
     expect(refused.output).toContain("Another merge holds the merge lock: 'alpha'");
     expect(refused.output).toContain('run this merge again');
-    expect(testedTrees(betaLog)).toEqual([]);
+    expect(testedTrees(logFor(repo, 'beta'))).toEqual([]);
 
     const alpha = await first.done;
     expect(alpha.status, alpha.output).toBe(0);
@@ -304,11 +305,9 @@ describe('scripts/merge-branch.sh serialises merges (#333)', () => {
 
   it('aborts its merge and releases the lock when interrupted', async () => {
     const repo = fixtureRepo();
-    const alphaLog = path.join(repo, '.git', 'alpha.log');
     const before = git(repo, 'rev-parse', 'HEAD');
 
-    const first = startMerge(repo, 'alpha', 'adds alpha', { log: alphaLog, sleep: 30 });
-    await untilTesting(alphaLog);
+    const first = await alphaTesting(repo, 'adds alpha', 30);
     process.kill(-first.child.pid, 'SIGINT');
     const alpha = await first.done;
     expect(alpha.status).not.toBe(0);
@@ -321,10 +320,7 @@ describe('scripts/merge-branch.sh serialises merges (#333)', () => {
 
   it('releases the lock when killed outright, even while its test run lives on, and the next merge names the half-done merge it left', async () => {
     const repo = fixtureRepo();
-    const alphaLog = path.join(repo, '.git', 'alpha.log');
-
-    const first = startMerge(repo, 'alpha', 'adds alpha', { log: alphaLog, sleep: 30 });
-    await untilTesting(alphaLog);
+    const first = await alphaTesting(repo, 'adds alpha', 30);
     // The script alone, not its process group: its `boardsmith test` keeps
     // running, as it would after a closed terminal or a stray kill. It must
     // not be holding the lock.
