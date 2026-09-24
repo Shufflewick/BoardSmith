@@ -727,15 +727,16 @@ describe('validate.ts choice cardinality (#172)', () => {
   });
 
   it('reports a pass when nothing offers too much', () => {
-    const result = buildChoiceCardinalityResult([]);
+    const result = buildChoiceCardinalityResult([], 'table');
     expect(result.passed).toBe(true);
     expect(result.details ?? []).toEqual([]);
   });
 
-  it('reports each unbounded step as a warning with the count and both fixes', () => {
-    const result = buildChoiceCardinalityResult([
-      { action: 'shout', selection: 'verb', maxCandidates: 40 },
-    ]);
+  it('reports each unbounded table step as a warning with the count and both fixes', () => {
+    const result = buildChoiceCardinalityResult(
+      [{ action: 'shout', selection: 'verb', maxCandidates: 40 }],
+      'table',
+    );
     expect(result.passed).toBe(false);
     expect(result.severity).toBe('warning');
     expect(result.details).toHaveLength(1);
@@ -754,9 +755,9 @@ describe('validateChoiceCardinality runs in a checkout with no .boardsmith (#306
   const fixture = resolve(dirname(fileURLToPath(import.meta.url)), '../lib/choice-cardinality.fixture.ts');
 
   /** A game project whose rules re-export a real fixture game, and no `.boardsmith/`. */
-  function freshProject(rulesIndex: string | null): string {
+  function freshProject(rulesIndex: string | null, backend: 'table' | 'world' = 'table'): string {
     const cwd = tempTree('bs-validate-cardinality-');
-    writeFileSync(join(cwd, 'boardsmith.json'), JSON.stringify({ name: 'fixture', backend: 'table' }));
+    writeFileSync(join(cwd, 'boardsmith.json'), JSON.stringify({ name: 'fixture', backend }));
     if (rulesIndex !== null) {
       mkdirSync(join(cwd, 'src', 'rules'), { recursive: true });
       writeFileSync(join(cwd, 'src', 'rules', 'index.ts'), rulesIndex);
@@ -812,11 +813,34 @@ describe('validateChoiceCardinality runs in a checkout with no .boardsmith (#306
     expectNotRun(result, /could not run.*minPlayers/is);
   }, 30_000);
 
-  it('says it did not run for a world, which the random simulator cannot play', async () => {
-    const result = await validateChoiceCardinality(freshProject(wideRules), true);
+  /** A rules index exporting a fixture world offering the named actions. */
+  function worldRulesFor(actions: string[]): string {
+    return [
+      `import { cardinalityWorld } from ${JSON.stringify(fixture)};`,
+      `export const gameDefinition = cardinalityWorld(${JSON.stringify(actions)});`,
+    ].join('\n');
+  }
 
-    expectNotRun(result, /not checked.*world/is);
-  });
+  // #323: a world gets a real verdict, driven the way a host drives it.
+  it('drives a world and reports the flat list it offers, with a world’s way out', async () => {
+    const result = await validateChoiceCardinality(freshProject(worldRulesFor(['shout', 'mark']), 'world'), true);
+
+    expect(result).toMatchObject({ passed: false, severity: 'warning' });
+    expect(result.details).toEqual([expect.stringContaining("'shout' step 'verb' offered 40")]);
+    expect(result.details![0]).not.toContain('dependsOn');
+  }, 30_000);
+
+  it('passes a world whose every list is short', async () => {
+    const result = await validateChoiceCardinality(freshProject(worldRulesFor(['nod']), 'world'), true);
+
+    expect(result.passed).toBe(true);
+  }, 30_000);
+
+  it('says it could not run when a world offers nothing it could drive', async () => {
+    const result = await validateChoiceCardinality(freshProject(worldRulesFor(['say']), 'world'), true);
+
+    expectNotRun(result, /could not run.*no seat was offered/is);
+  }, 30_000);
 
   it('does not report a pass when the check could not run, and says why', async () => {
     const result = await validateChoiceCardinality(freshProject(null), false);

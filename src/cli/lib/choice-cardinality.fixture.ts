@@ -12,8 +12,11 @@ import {
   loop,
   eachPlayer,
   actionStep,
+  Space,
+  Piece,
   type GameOptions,
 } from '../../engine/index.js';
+import { worldAction, worldClockAction, type WorldDefinition } from '../../world/index.js';
 
 const VERBS = Array.from({ length: 40 }, (_, i) => `verb-${i}`);
 
@@ -119,4 +122,137 @@ export class TypedNameGame extends Game<TypedNameGame, Player> {
 
     this.setFlow(shortFlow(['name']));
   }
+}
+
+// ---------------------------------------------------------------------------
+// Worlds (#323). A world has no flow; its verbs are world actions, offered per
+// seat, and what they offer depends on who has arrived, what has been done and
+// what the clock has run.
+// ---------------------------------------------------------------------------
+
+/** The one partition every fixture world keeps. */
+class Commons extends Space<CardinalityWorld> {
+  /** Shoots the clock has grown, read by `harvest`. */
+  sprouted = 0;
+}
+
+/** A lantern hung for each seat that arrives, read by `light`. */
+class Lantern extends Piece<CardinalityWorld> {}
+
+class CardinalityWorld extends Game<CardinalityWorld, Player> {
+  constructor(options: GameOptions) {
+    super(options);
+    this.registerElements([Commons, Lantern]);
+  }
+}
+
+const COMMONS = 'commons';
+const commonsOf = (ctx: { world: { partition(name: string): unknown } }): Commons =>
+  ctx.world.partition(COMMONS) as Commons;
+const inCommons = () => [COMMONS];
+const range = (n: number): number[] => Array.from({ length: n }, (_, i) => i + 1);
+
+/** Forty flat choices with nothing shaping them: the wall of buttons. */
+const shout = worldAction<CardinalityWorld>('shout')
+  .needs(inCommons)
+  .chooseFrom('verb', { choices: VERBS })
+  .execute(() => {});
+
+/** The same forty, anchored on the board: the correct shape. */
+const mark = worldAction<CardinalityWorld>('mark')
+  .needs(inCommons)
+  .chooseFrom('square', {
+    choices: VERBS,
+    boardRefs: (choice) => ({ refs: [{ role: 'target', ref: { notation: String(choice) } }] }),
+  })
+  .execute(() => {});
+
+/** Three choices. Nothing to report. */
+const nod = worldAction<CardinalityWorld>('nod')
+  .needs(inCommons)
+  .chooseFrom('how', { choices: ['slowly', 'twice', 'gravely'] })
+  .execute(() => {});
+
+/**
+ * Its SECOND question offers forty once the first is answered, and nothing
+ * before: the offer is enumerated with no answers bound, so only a re-asked
+ * pick ever sees the forty.
+ */
+const pair = worldAction<CardinalityWorld>('pair')
+  .needs(inCommons)
+  .chooseFrom('first', { choices: ['left', 'right'] })
+  .chooseFrom('second', { choices: ({ args }) => (args.first === undefined ? [] : VERBS) })
+  .execute(() => {});
+
+/** Asks for ten lanterns to be hung for every seat that arrives. */
+const hang = worldClockAction<CardinalityWorld>('hang')
+  .needs(inCommons)
+  .execute((args, ctx) => {
+    for (let i = 0; i < 10; i++) commonsOf(ctx).create(Lantern, `lantern-${String(args.seat)}-${i}`);
+  });
+
+/** One lantern, off the board, from every lantern hung: ten per arrival. */
+const light = worldAction<CardinalityWorld>('light')
+  .needs(inCommons)
+  .chooseElement('lantern', { elements: (ctx) => commonsOf(ctx).all(Lantern) })
+  .execute(() => {});
+
+/** Plants a shoot that the clock grows a minute later. */
+const plant = worldAction<CardinalityWorld>('plant')
+  .needs(inCommons)
+  .execute((_args, ctx) => {
+    ctx.world.schedule({ delayMs: 60_000, action: 'sprout', args: {} });
+  });
+
+/** The clock's: ten shoots grow, up to forty. */
+const sprout = worldClockAction<CardinalityWorld>('sprout')
+  .needs(inCommons)
+  .execute((_args, ctx) => {
+    commonsOf(ctx).sprouted = Math.min(40, commonsOf(ctx).sprouted + 10);
+  });
+
+/** One shoot from every shoot grown, so it widens only as the world is played. */
+const harvest = worldAction<CardinalityWorld>('harvest')
+  .needs(inCommons)
+  .chooseFrom('shoot', { choices: (ctx) => range(commonsOf(ctx).sprouted) })
+  .execute(() => {});
+
+/** Asks for words, which a random driver cannot type. */
+const say = worldAction<CardinalityWorld>('say')
+  .needs(inCommons)
+  .enterText('line', {})
+  .execute(() => {});
+
+/** Writes to a partition it never declared, which the world refuses. */
+const trespass = worldAction<CardinalityWorld>('trespass')
+  .needs(inCommons)
+  .chooseFrom('how', { choices: ['quietly'] })
+  .execute((_args, ctx) => {
+    ctx.world.partition('elsewhere');
+  });
+
+/** More choices than a host lets one selection offer, so the offer itself is refused. */
+const flood = worldAction<CardinalityWorld>('flood')
+  .needs(inCommons)
+  .chooseFrom('drop', { choices: range(250) })
+  .execute(() => {});
+
+const WORLD_ACTIONS = { shout, mark, nod, pair, hang, light, plant, sprout, harvest, say, trespass, flood };
+
+/**
+ * A three-seat world bundle offering the named actions. `onArrive` names the
+ * clock verb a host issues when a seat attaches.
+ */
+export function cardinalityWorld(
+  actions: readonly (keyof typeof WORLD_ACTIONS)[],
+  onArrive?: keyof typeof WORLD_ACTIONS,
+) {
+  const world: WorldDefinition = {
+    maxPlayers: 3,
+    actions: actions.map((name) => WORLD_ACTIONS[name]),
+    view: () => [COMMONS],
+    genesis: (game: Game) => ({ [COMMONS]: game.create(Commons, COMMONS) }),
+    ...(onArrive === undefined ? {} : { presence: { onArrive } }),
+  };
+  return { gameClass: CardinalityWorld, gameType: 'cardinality-world', displayName: 'Cardinality World', world };
 }

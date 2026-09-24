@@ -2710,8 +2710,14 @@ import GameBoard from '../src/ui/GameBoard.vue';
 const world = await createTestWorld({ definition: gameDefinition });
 
 // Genesis has run and every seat is on the roster by the time this resolves.
+// Nobody has ARRIVED yet: that is the host announcing a player attaching, and
+// it runs your `presence.onArrive` verb as the clock (a no-op without one).
+await world.arrive(1);
 await world.take(1, 'tend', { neighbour: 7 });
 await world.advanceClock(600_000); // and whatever falls due runs, at its own due
+
+// A later question, re-asked with the earlier answers bound, as the panel asks it.
+const crew = await world.resolvePick(1, 'deploy', 'crew', { ship: 4 });
 
 const seen = await world.getPlayerView(2);
 seen.state;             // the pruned tree this seat's board is handed

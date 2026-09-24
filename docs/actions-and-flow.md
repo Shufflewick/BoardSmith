@@ -894,8 +894,20 @@ candidate count does not exist until a game is running. It plays them at your
 `minPlayers`. If the random simulator cannot play your game through (it crashes
 or gets stuck), the check says it could not run and names the `boardsmith
 simulate` command that shows the same failure; it never reports an unplayed game
-as clean. It does not run for a world, which has no table flow to play, and says
-so.
+as clean.
+
+A world has no flow to play, so `boardsmith validate` drives it the way a host
+does instead. Three seats (or every seat of a smaller world) arrive through your
+`presence.onArrive` verb. Then, for ten rounds, each seat's offers are
+enumerated, every enabled offer is answered at random question by question (a
+later question re-asked with the earlier answers bound, exactly as the panel
+re-asks it), one of them is taken, and whatever the clock has due is fired. The
+counts are the candidates those offers and re-asked picks carried. A world
+action cannot declare `dependsOn`, so a world finding tells you to anchor the
+step on the board or to ask an earlier question whose answer narrows the list.
+If no seat is ever offered something it could take, or the world itself refuses
+a move (a partition the action never declared, a selection past the host's
+candidate cap), the check says it could not run and why.
 
 The one thing you may remove is a **redundant start button**, below. Note what
 that is not: it hides one button while the panel keeps rendering everything
