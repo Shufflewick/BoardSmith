@@ -5,7 +5,7 @@
  * and custom UIs can use:
  * - Auto-fill behavior (single-choice selections auto-fill)
  * - Validation (checks choices against available options)
- * - Server communication (returns actual ActionResult from server)
+ * - Server communication (returns actual ControllerActionResult from server)
  * - State management (currentAction, currentArgs, isExecuting, etc.)
  *
  * ## Usage Patterns
@@ -111,10 +111,9 @@ export type {
   PickSnapshot,
   CollectedPick,
   ActionMetadata,
-  FollowUpAction,
-  ActionResult,
+  ControllerActionResult,
   ResolvedAction,
-  ValidationResult,
+  PickValidationResult,
   ActionStateSnapshot,
   UseActionControllerOptions,
   RepeatingState,
@@ -130,9 +129,9 @@ import type {
   PickSnapshot,
   CollectedPick,
   ActionMetadata,
-  ActionResult,
+  ControllerActionResult,
   ResolvedAction,
-  ValidationResult,
+  PickValidationResult,
   ActionStateSnapshot,
   UseActionControllerOptions,
   RepeatingState,
@@ -204,7 +203,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   // signals end-of-chain auto-advance only, and is dev-gated (erased in
   // production builds). `lastActionResult` is NOT dev-gated: it carries the
   // action's return value to the board, which is a shipped feature.
-  function resolveAction(action: string, seat: number, result: ActionResult): void {
+  function resolveAction(action: string, seat: number, result: ControllerActionResult): void {
     // A fresh object every time, so a watcher fires even on two identical results.
     lastActionResult.value = { action, seat, result };
 
@@ -448,7 +447,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
    * Queue a follow-up action after reactive state has settled.
    * Uses a microtask + Vue tick instead of timers to avoid timing fragility.
    */
-  function queueFollowUp(result: NonNullable<ActionResult['followUp']>): void {
+  function queueFollowUp(result: NonNullable<ControllerActionResult['followUp']>): void {
     pendingFollowUp.value = true;
     const { action: followUpAction, args: followUpArgs, metadata: followUpMetadata, display: followUpDisplay } = result;
 
@@ -638,7 +637,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     return typeof obj === 'object' && obj !== null && 'value' in obj;
   }
 
-  function validateSelection(selection: PickMetadata, value: unknown): ValidationResult {
+  function validateSelection(selection: PickMetadata, value: unknown): PickValidationResult {
     // For repeating selections, validation is done by the server
     if (selection.repeat) {
       return { valid: true };
@@ -1445,7 +1444,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
    * order is validated against the world it finds, and a refusal on arrival is the
    * ordinary outcome it has always been.
    */
-  async function confirm(): Promise<ActionResult> {
+  async function confirm(): Promise<ControllerActionResult> {
     const refusal = confirmDisabledReason.value;
     if (refusal !== null) {
       setError(refusal);
@@ -1454,7 +1453,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     return executeCurrentAction();
   }
 
-  async function executeCurrentAction(): Promise<ActionResult> {
+  async function executeCurrentAction(): Promise<ControllerActionResult> {
     if (!currentAction.value) {
       return { success: false, error: 'No action in progress' };
     }
@@ -1519,7 +1518,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     }
   }
 
-  async function execute(actionName: string, args: Record<string, unknown> = {}): Promise<ActionResult> {
+  async function execute(actionName: string, args: Record<string, unknown> = {}): Promise<ControllerActionResult> {
     if (!isMyTurn.value) {
       return { success: false, error: 'Not your turn' };
     }
@@ -1779,7 +1778,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   /**
    * Begin wizard mode for an action (fetches the first selection's choices).
    *
-   * The returned ActionResult reflects ONLY start()'s two synchronous pre-checks
+   * The returned ControllerActionResult reflects ONLY start()'s two synchronous pre-checks
    * (action availability, action metadata presence) — a `{ success: true }` result
    * means wizard mode began, NOT that the action has been (or ever will be)
    * executed on the server. The eventual server outcome arrives later via the
@@ -1789,7 +1788,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   async function start(
     actionName: string,
     startOptions?: { args?: Record<string, unknown>; prefill?: Record<string, unknown> }
-  ): Promise<ActionResult> {
+  ): Promise<ControllerActionResult> {
     const initialArgs = startOptions?.args ?? {};
     const prefillArgs = startOptions?.prefill ?? {};
 
@@ -1884,7 +1883,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     return { success: true };
   }
 
-  async function fill(selectionName: string, rawValue: unknown): Promise<ValidationResult> {
+  async function fill(selectionName: string, rawValue: unknown): Promise<PickValidationResult> {
     // CR-02: EVERY fill() failure path must setError() — GameShell's UIX-01
     // watch is the only place a failed action surfaces (ActionPanel's direct
     // toasts were removed), so a silent return here means the user's click
@@ -2000,7 +1999,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   }
 
   /** Handle fill for repeating picks */
-  async function handleRepeatingFill(selection: PickMetadata, value: unknown): Promise<ValidationResult> {
+  async function handleRepeatingFill(selection: PickMetadata, value: unknown): Promise<PickValidationResult> {
     const stepFn = options.pickStep;
     if (!stepFn || !currentAction.value) {
       const error = 'pickStep function not provided for repeating pick';
@@ -2121,7 +2120,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
    * Handle fill for selections with onSelect callbacks.
    * Routes through pickStep so the server fires onSelect per-step (with correct timing).
    */
-  async function handleOnSelectFill(selection: PickMetadata, value: unknown): Promise<ValidationResult> {
+  async function handleOnSelectFill(selection: PickMetadata, value: unknown): Promise<PickValidationResult> {
     const stepFn = options.pickStep;
     if (!stepFn || !currentAction.value) {
       const error = 'pickStep function not provided for onSelect routing';
@@ -2521,7 +2520,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
    * existing fill() path (currentArgs → readiness → auto-execute) with the COMPLETE
    * array.
    */
-  async function confirmMultiSelect(): Promise<ValidationResult | void> {
+  async function confirmMultiSelect(): Promise<PickValidationResult | void> {
     const draft = multiSelectDraft.value;
     if (!draft) return;
 

@@ -54,7 +54,7 @@ import type { WorldActionOffer } from './worldProtocol.js';
 import type {
   ActionMetadata,
   ActionQuoteResult,
-  ActionResult,
+  ControllerActionResult,
   PickChoicesResult,
 } from '../composables/useActionControllerTypes.js';
 import type { GameContextPlayer } from '../composables/useGameContext.js';
@@ -80,7 +80,7 @@ export interface WorldPlay {
   /** The lines the game asked the shell to say. */
   messages: ComputedRef<HistoryMessage[]>;
   /** Take an action. Single-shot: every selection's value at once. */
-  sendAction: (actionName: string, args: Record<string, unknown>) => Promise<ActionResult>;
+  sendAction: (actionName: string, args: Record<string, unknown>) => Promise<ControllerActionResult>;
   /**
    * Resolve one pick's candidates and its bounds.
    *
@@ -204,7 +204,7 @@ export function useWorldPlay(host: WorldHost): WorldPlay {
   async function sendAction(
     actionName: string,
     args: Record<string, unknown>,
-  ): Promise<ActionResult> {
+  ): Promise<ControllerActionResult> {
     const outcome = await host.act(actionName, args);
     if (outcome.ok) return { success: true, message: outcome.message };
     return { success: false, error: outcome.message ?? 'The world refused that, and did not say why.' };

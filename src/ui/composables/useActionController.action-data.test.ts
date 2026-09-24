@@ -10,7 +10,7 @@
  * a host calls — and asserts on what a board component can actually read.
  *
  * That boundary is where the fix was initially incomplete. `execute()` returns
- * its `ActionResult` verbatim, so single-step actions looked fine. A pick-driven
+ * its `ControllerActionResult` verbatim, so single-step actions looked fine. A pick-driven
  * action (an `onSelect` selection, or a repeating one) completes INSIDE `fill()`,
  * usually from an ActionPanel click no board code called, so there is no caller
  * to return to: the controller has to publish the result, and it did not. The
@@ -39,7 +39,7 @@ import { executeOp, type GameDefinitionLike, type OpResult } from '../../session
 import { boundaryKeyOf } from '../../session/testing/boundary-stamp.js';
 import { shapeResult } from '../../cli/dev-host/bridge.js';
 import { useActionController } from './useActionController.js';
-import type { ActionMetadata, ActionResult, PickStepResult, PickChoicesResult } from './useActionControllerTypes.js';
+import type { ActionMetadata, ControllerActionResult, PickStepResult, PickChoicesResult } from './useActionControllerTypes.js';
 
 const CARTOGRAPHY = { sectors: ['a1', 'b2', 'c3'], gps: false };
 const NARRATION = 'You recall the shape of the coastline.';
@@ -156,7 +156,7 @@ function createHost() {
       const result = await executeOp(gameDef, gameOptions, null, null, { type: 'start' });
       absorb(result);
     },
-    async sendAction(actionName: string, args: Record<string, unknown>): Promise<ActionResult> {
+    async sendAction(actionName: string, args: Record<string, unknown>): Promise<ControllerActionResult> {
       const result = await executeOp(gameDef, gameOptions, snapshot, pendingState, {
         type: 'action',
         actionName,
@@ -165,7 +165,7 @@ function createHost() {
         boundaryKey: boundaryKeyOf(snapshot),
       });
       absorb(result);
-      return shapeResult('action', result) as unknown as ActionResult;
+      return shapeResult('action', result) as unknown as ControllerActionResult;
     },
     async pickStep(
       player: number,
