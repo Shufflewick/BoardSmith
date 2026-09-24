@@ -15,11 +15,6 @@ export default defineConfig({
     exclude: [
       'node_modules',
       'dist',
-      // Exclude tests that depend on external game packages not in this repo
-      'src/bot/mcts-bot.test.ts',
-      'src/bot/mcts-cache.test.ts',
-      'src/bot/mcts-stats-checkers.test.ts',
-      'src/bot/cribbage-bot.test.ts',
     ],
   },
   resolve: {

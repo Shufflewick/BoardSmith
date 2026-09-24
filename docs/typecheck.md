@@ -62,11 +62,6 @@ in every game.
 
 ## What it does NOT cover
 
-- **Four bot tests** that import `@boardsmith/checkers-rules` and
-  `@boardsmith/cribbage-rules`, which are not in this repository:
-  `src/bot/mcts-bot.test.ts`, `mcts-cache.test.ts`, `mcts-stats-checkers.test.ts`
-  and `cribbage-bot.test.ts`. They can neither compile nor run, and
-  `vitest.config.ts` excludes the same four.
 - **The `.mjs` scripts** under `scripts/` and `bin/`. They are JavaScript and
   are not type-checked.
 - **What a consumer's install lacks.** This check runs inside this checkout,
@@ -100,3 +95,10 @@ prove and move it to the current API, so it still proves that.
   since #195, and the prompt meant to put the activity watermark in the payload
   hash was a function on an action prompt, which only takes a string, so JSON
   dropped it. Neither moved the contract's hash.
+- Until #314 four bot tests imported `@boardsmith/checkers-rules` and
+  `@boardsmith/cribbage-rules`, packages this repository does not contain, so
+  both this check and `vitest.config.ts` excluded them and nothing ran them.
+  Three were deleted because other bot tests already cover what they checked,
+  and the fourth, a simultaneous multi-card discard, became
+  `src/bot/simultaneous-discard.test.ts` against an in-repo game. Nothing is
+  excluded now.

@@ -1,8 +1,6 @@
 /**
- * `createBot` is the documented entry point for bot opponents. Its existing
- * tests live in files vitest EXCLUDES (they need the external
- * `@boardsmith/checkers-rules` package), so within the suite that actually runs
- * it was never called. This file exercises it against a local test game.
+ * `createBot` is the documented entry point for bot opponents. This file
+ * exercises it against a local test game.
  *
  * Driven through `GameRunner` — the same path `benchmark.ts` uses — because the
  * runner is what owns seat handling and action history; `game.performAction`
