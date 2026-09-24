@@ -554,6 +554,9 @@ export function createGameFlow(game: ${pascal}Game): FlowDefinition {
     actionStep({
       name: 'play-step',
       actions: ['play'],
+      // The same seat acts again right after drawing. 'continue' says this is
+      // still that seat's turn, so undo can reach back over the draw too.
+      turnScope: 'continue',
       skipIf: (ctx) => {
         const player = ctx.player as ${pascal}Player;
         return player.hand.count(Card) === 0;
