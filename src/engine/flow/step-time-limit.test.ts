@@ -42,7 +42,7 @@ describe('a step declares how long it stays open', () => {
     expect(runner.getFlowState()!.currentPlayer).toBe(1);
     expect(runner.getFlowState()!.timeLimitMs).toBe(45_000);
 
-    expect(runner.performAction('pass', 1, {}).success).toBe(true);
+    expect(runner.performAction('commit', 1, {}).success).toBe(true);
     expect(runner.getFlowState()!.currentPlayer).toBe(2);
     expect(runner.getFlowState()!.timeLimitMs).toBe(45_000);
   });

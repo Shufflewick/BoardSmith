@@ -5,6 +5,8 @@
  * closes when both have committed, and the round loops. Its limit is a
  * constructor argument so the same flow can be declared with a number, with a
  * function, or with no limit at all, and nothing else differs between them.
+ * `TimedTurnGame` is the same game played one seat after another, so the
+ * sequential `actionStep` is covered by the same fixture.
  *
  * `GrowingDeployGame`'s function answers 30 s plus one second per commit EVER
  * made, so a limit that was re-resolved after a seat submitted mid-round would
@@ -26,9 +28,33 @@ import {
   actionStep,
   simultaneousActionStep,
   type FlowContext,
+  type FlowNode,
   type GameOptions,
 } from '../../../engine/index.js';
 import type { GameDefinitionLike } from '../../stateless-ops.js';
+
+type Limit = number | ((ctx: FlowContext<DeployGame>) => number);
+
+/** The step a round is made of: every seat at once, or one seat after another. */
+type Shape = 'simultaneous' | 'sequential';
+
+function roundStep(shape: Shape, limit: Limit | undefined): FlowNode<DeployGame> {
+  const timeLimitMs = limit === undefined ? {} : { timeLimitMs: limit };
+  if (shape === 'sequential') {
+    return eachPlayer<DeployGame>({ do: actionStep<DeployGame>({ name: 'turn', actions: ['commit'], ...timeLimitMs }) });
+  }
+  return simultaneousActionStep<DeployGame>({
+    name: 'deploy',
+    actions: ['commit'],
+    playerDone: (ctx, player) => ctx.game.committed.includes(player.seat),
+    allDone: (ctx) => {
+      if (ctx.game.committed.length < 2) return false;
+      ctx.game.committed = [];
+      return true;
+    },
+    ...timeLimitMs,
+  });
+}
 
 export class DeployGame extends Game<DeployGame, Player> {
   /** Every commit ever made. */
@@ -36,7 +62,7 @@ export class DeployGame extends Game<DeployGame, Player> {
   /** Seats that committed in the current round. */
   committed: number[] = [];
 
-  constructor(options: GameOptions, limit?: number | ((ctx: FlowContext<DeployGame>) => number)) {
+  constructor(options: GameOptions, limit?: Limit, shape: Shape = 'simultaneous') {
     super(options);
     this.registerAction(
       Action.create('commit').execute((_args, ctx) => {
@@ -48,21 +74,7 @@ export class DeployGame extends Game<DeployGame, Player> {
     );
     this.setFlow(
       defineFlow<DeployGame>({
-        root: loop({
-          name: 'rounds',
-          maxIterations: 3,
-          do: simultaneousActionStep<DeployGame>({
-            name: 'deploy',
-            actions: ['commit'],
-            playerDone: (ctx, player) => ctx.game.committed.includes(player.seat),
-            allDone: (ctx) => {
-              if (ctx.game.committed.length < 2) return false;
-              ctx.game.committed = [];
-              return true;
-            },
-            ...(limit === undefined ? {} : { timeLimitMs: limit }),
-          }),
-        }),
+        root: loop({ name: 'rounds', maxIterations: 3, do: roundStep(shape, limit) }),
       }),
     );
   }
@@ -89,22 +101,10 @@ export class UntimedDeployGame extends DeployGame {
   }
 }
 
-/** Sequential turns, each open for 45 s. */
-export class TimedTurnGame extends Game<TimedTurnGame, Player> {
+/** Sequential turns, one seat after another, each open for 45 s. */
+export class TimedTurnGame extends DeployGame {
   constructor(options: GameOptions) {
-    super(options);
-    this.registerAction(Action.create('pass').execute(() => ({ success: true })));
-    this.setFlow(
-      defineFlow({
-        root: loop({
-          name: 'rounds',
-          maxIterations: 3,
-          do: eachPlayer({
-            do: actionStep({ name: 'turn', actions: ['pass'], timeLimitMs: 45_000 }),
-          }),
-        }),
-      }),
-    );
+    super(options, 45_000, 'sequential');
   }
 }
 
