@@ -1,5 +1,5 @@
 import { DESIGN_DIR } from '../lib/project-paths.js';
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
@@ -319,6 +319,64 @@ describe('ingest-archive --additional-source (#305)', () => {
     expect(after.replace(/## Additional Sources[\s\S]*?<!-- boardsmith:additional-sources:end -->\n\n/, '')).toBe(
       before,
     );
+  });
+
+  describe('the primary keeps its Transcribed date unless the primary itself changed (#351)', () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    /** Runs `ingest-archive` as though it were `day` (YYYY-MM-DD, local noon). */
+    async function archiveOn(day: string, project: string, additionalSource?: string[]) {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date(`${day}T12:00:00`));
+      try {
+        await ingestArchiveCommand(rulesPath, { project, json: true, additionalSource });
+      } finally {
+        vi.useRealTimers();
+      }
+    }
+    const transcribedOf = async (project: string) =>
+      /^Transcribed:\s*(.*)$/m.exec(await indexOf(project))![1].trim();
+
+    it('adding an additional source a day later leaves the primary header byte-identical', async () => {
+      const project = await freshProject();
+      await archiveOn('2026-09-23', project);
+      const before = await indexOf(project);
+
+      await archiveOn('2026-09-24', project, [companionPath]);
+
+      expect(await transcribedOf(project)).toBe('2026-09-23');
+      const after = await indexOf(project);
+      expect(after.replace(/## Additional Sources[\s\S]*?<!-- boardsmith:additional-sources:end -->\n\n/, '')).toBe(
+        before,
+      );
+    });
+
+    it('re-running on the unchanged primary a day later does not touch INDEX.md', async () => {
+      const project = await freshProject();
+      await archiveOn('2026-09-23', project);
+      const before = await indexOf(project);
+
+      await archiveOn('2026-09-24', project);
+
+      expect(await indexOf(project)).toBe(before);
+    });
+
+    it('a primary whose recorded hash no longer matches is re-dated when its hash is rewritten', async () => {
+      const project = await freshProject();
+      await archiveOn('2026-09-23', project);
+      const indexPath = join(project, DESIGN_DIR, 'rulebook', 'INDEX.md');
+      await fs.writeFile(
+        indexPath,
+        (await indexOf(project)).replace(`Source hash: ${RULES_HASH}`, `Source hash: ${'0'.repeat(64)}`),
+      );
+
+      await archiveOn('2026-09-24', project);
+
+      expect(await transcribedOf(project)).toBe('2026-09-24');
+      expect(/^Source hash:\s*(.*)$/m.exec(await indexOf(project))![1].trim()).toBe(RULES_HASH);
+    });
   });
 
   it('re-running the same call is a byte-identical no-op', async () => {

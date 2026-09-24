@@ -1060,9 +1060,18 @@ async function repairExistingIndex(
     text = text.slice(0, pos) + `Source hash: ${sourceHash}\n` + text.slice(pos);
   }
 
-  // 4. Transcribed: — insert-if-absent, immediately after Source hash:, never blind-replace.
+  // 4. Transcribed: — insert-if-absent, immediately after Source hash:, never blind-replace. It
+  //    dates the primary's transcription, so it moves only when the primary record itself changed
+  //    (#351): re-running on the same document, or adding an --additional-source, keeps it.
   const transcribedLine = findLabelLine(text, 'Transcribed:');
-  if (transcribedLine) {
+  const priorPrimary = readCanonicalPrimarySource(before);
+  const primaryUnchanged =
+    priorPrimary !== undefined &&
+    priorPrimary.path === relArchivePath &&
+    priorPrimary.hash === sourceHash;
+  if (transcribedLine && primaryUnchanged) {
+    // The primary is the one already recorded: its transcription date stands.
+  } else if (transcribedLine) {
     text =
       text.slice(0, transcribedLine.start) + `Transcribed: ${transcribed}` + text.slice(transcribedLine.end);
   } else {
