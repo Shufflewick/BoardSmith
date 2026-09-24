@@ -3,7 +3,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { createHash } from 'node:crypto';
 import { dirname, join } from 'node:path';
-import { renderIndex, EDITION_UNKNOWN } from './ingest-archive.js';
+import { renderIndex, EDITION_UNKNOWN, ingestArchiveCommand } from './ingest-archive.js';
 import {
   computeVerificationScope,
   resolveCitedSlices,
@@ -209,16 +209,101 @@ describe('computeVerificationScope — scope', () => {
     expect(result.edition).toBe('First Printing 2020');
   });
 
-  it('SCOPE_REASONS carries exactly the five enumerated codes', () => {
+  it('SCOPE_REASONS carries exactly the seven enumerated codes', () => {
     expect([...SCOPE_REASONS].sort()).toEqual(
       [
         'source-missing',
         'source-hash-mismatch',
+        'additional-source-missing',
+        'additional-source-hash-mismatch',
         'index-missing',
         'no-rulebook-project',
         'pre-provenance-project',
       ].sort(),
     );
+  });
+});
+
+/**
+ * #305: an additional source (a companion document the rules incorporate by reference) is part of
+ * the rules. When it changes or disappears, the slices transcribed from it no longer have a
+ * verified source — and slices do not record which document produced them, so no slice can be
+ * vouched for. Dropping the entry silently, as this used to, left the scope `full` and every
+ * slice looking verified against a document that had moved underneath it.
+ */
+describe('computeVerificationScope — additional sources (#305)', () => {
+  const REFERENCE_BYTES = Buffer.from('# Reference\n\nUnit stats.\n');
+  const REFERENCE_HASH = createHash('sha256').update(REFERENCE_BYTES).digest('hex');
+  const REL_REFERENCE = 'rulebook/source/REFERENCE.md';
+
+  async function projectWithReference(): Promise<string> {
+    const project = join(dir, 'windup');
+    await fs.mkdir(project, { recursive: true });
+    const rules = join(dir, 'RULES.md');
+    const reference = join(dir, 'REFERENCE.md');
+    await fs.writeFile(rules, '# Rules\n\nBattles follow the reference.\n');
+    await fs.writeFile(reference, REFERENCE_BYTES);
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      await ingestArchiveCommand(rules, { project, json: true, additionalSource: [reference] });
+    } finally {
+      vi.restoreAllMocks();
+    }
+    return project;
+  }
+
+  it('every recorded source present and matching → full, each additional source listed', async () => {
+    const project = await projectWithReference();
+    const result = await computeVerificationScope(project);
+    expect(result.scope).toBe(SCOPE_FULL);
+    expect(result.additionalSources).toEqual([{ sourcePath: REL_REFERENCE, sourceHash: REFERENCE_HASH }]);
+    expect(result.failedAdditionalSources).toEqual([]);
+  });
+
+  it('an additional source whose archived copy is gone → additional-source-missing, naming it', async () => {
+    const project = await projectWithReference();
+    await fs.rm(join(project, DESIGN_DIR, REL_REFERENCE));
+    const result = await computeVerificationScope(project);
+    expect(result.scope).toBe(SCOPE_CODE_ONLY);
+    expect(result.reason).toBe('additional-source-missing');
+    expect(result.additionalSources).toEqual([]);
+    expect(result.failedAdditionalSources).toEqual([
+      { sourcePath: REL_REFERENCE, sourceHash: REFERENCE_HASH, reason: 'additional-source-missing' },
+    ]);
+  });
+
+  it('an additional source whose archived bytes changed → additional-source-hash-mismatch, naming it', async () => {
+    const project = await projectWithReference();
+    await fs.writeFile(join(project, DESIGN_DIR, REL_REFERENCE), '# Reference\n\nUnit stats, rebalanced.\n');
+    const result = await computeVerificationScope(project);
+    expect(result.scope).toBe(SCOPE_CODE_ONLY);
+    expect(result.reason).toBe('additional-source-hash-mismatch');
+    expect(result.failedAdditionalSources).toEqual([
+      { sourcePath: REL_REFERENCE, sourceHash: REFERENCE_HASH, reason: 'additional-source-hash-mismatch' },
+    ]);
+  });
+
+  it('a primary-source problem takes precedence, and the additional-source failure is still reported', async () => {
+    const project = await projectWithReference();
+    await fs.writeFile(join(project, DESIGN_DIR, 'rulebook/source/RULES.md'), 'rewritten rules\n');
+    await fs.rm(join(project, DESIGN_DIR, REL_REFERENCE));
+    const result = await computeVerificationScope(project);
+    expect(result.reason).toBe('source-hash-mismatch');
+    expect(result.failedAdditionalSources).toEqual([
+      { sourcePath: REL_REFERENCE, sourceHash: REFERENCE_HASH, reason: 'additional-source-missing' },
+    ]);
+  });
+
+  it('chunk-check records the reduced scope, and the record parses back', async () => {
+    const project = await projectWithReference();
+    await fs.writeFile(join(project, DESIGN_DIR, REL_REFERENCE), 'changed\n');
+    await writeChunk(project, 'battle', withInterpretation(await readChunkTemplate(), 'Cites rulebook/INDEX.md.'));
+    await recordVerifiedAgainst('battle', { project });
+    const chunkText = await fs.readFile(join(project, DESIGN_DIR, 'chunks', 'battle', 'CHUNK.md'), 'utf-8');
+    const parsed = parseVerifiedAgainst(chunkText);
+    expect(parsed.blockMalformed).toBe(false);
+    expect(parsed.state).toBe(SCOPE_CODE_ONLY);
+    expect(parsed.reason).toBe('additional-source-hash-mismatch');
   });
 });
 
@@ -1209,8 +1294,8 @@ describe('VERIFIED_AGAINST_LABELS — Re-verified (no code change) append (175-0
     expect(VERIFIED_AGAINST_LABELS.slice(0, 8)).toEqual(PRE_CHANGE_EIGHT_LABELS);
   });
 
-  it('SCOPE_REASONS is unchanged: 5 members, none mentioning "code change"', () => {
-    expect(SCOPE_REASONS).toHaveLength(5);
+  it('SCOPE_REASONS holds its 7 members, none mentioning "code change"', () => {
+    expect(SCOPE_REASONS).toHaveLength(7);
     expect(SCOPE_REASONS.some((r) => r.includes('code change'))).toBe(false);
   });
 
