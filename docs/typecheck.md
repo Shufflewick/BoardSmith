@@ -65,7 +65,9 @@ in every game.
 ## What it does NOT cover
 
 - **The `.mjs` scripts** under `scripts/` and `bin/`. They are JavaScript and
-  are not type-checked.
+  are not type-checked. So a script that calls into the library should do it
+  through a `.ts` module under `src/`, as the browser regressions reach the
+  world dev host through `src/cli/commands/fixture-world.test-helper.ts` (#357).
 - **What a consumer's install lacks.** This check runs inside this checkout,
   where every devDependency is installed. `src/contract/dev-host-typecheck.test.ts`
   and `src/contract/dice-typecheck.test.ts` compile the modules consumers import
