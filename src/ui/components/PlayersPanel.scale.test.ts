@@ -59,7 +59,7 @@ describe('R1: the seat list is bounded by default', () => {
   });
 
   it('always keeps the acting seat', () => {
-    const wrapper = mountPanel({ players: seats(500), playerSeat: 0, currentPlayerSeat: 400 });
+    const wrapper = mountPanel({ players: seats(500), playerSeat: 0, dueSeats: [400] });
     expect(wrapper.text()).toContain('Player 400');
   });
 
@@ -67,14 +67,14 @@ describe('R1: the seat list is bounded by default', () => {
     const wrapper = mountPanel({
       players: seats(500),
       playerSeat: 0,
-      awaitingPlayerSeats: [310, 320],
+      dueSeats: [310, 320],
     });
     expect(wrapper.text()).toContain('Player 310');
     expect(wrapper.text()).toContain('Player 320');
   });
 
   it('keeps the rows in the order it was given them', () => {
-    const wrapper = mountPanel({ players: seats(500), playerSeat: 40, currentPlayerSeat: 12 });
+    const wrapper = mountPanel({ players: seats(500), playerSeat: 40, dueSeats: [12] });
     const shownSeats = wrapper.findAll('.player-card .player-name').map(n => Number(n.text().split(' ')[1]));
     expect([...shownSeats].sort((a, b) => a - b)).toEqual(shownSeats);
   });

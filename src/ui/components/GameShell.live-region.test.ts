@@ -13,15 +13,15 @@ import {
   announceTurnChange,
   announceConnectionChange,
   announceGameOver,
-  announceOpponentTurn,
+  describePlaying,
   deriveWinnerState,
 } from '../composables/liveRegionAnnouncer.js';
 
 // ── isMyTurn → polite region ─────────────────────────────────────────────────
 
 describe('announceTurnChange', () => {
-  it('returns "Your turn" when isMyTurn becomes true', () => {
-    expect(announceTurnChange(true)).toBe('Your turn');
+  it('returns "Your move", the words the players panel prints, when isMyTurn becomes true', () => {
+    expect(announceTurnChange(true)).toBe('Your move');
   });
 
   it('returns empty string when isMyTurn becomes false (turn passed)', () => {
@@ -85,19 +85,20 @@ describe('announceGameOver — draw vs unknown (D10)', () => {
   });
 });
 
-// ── awaitingPlayers → polite region (opponent turn) ──────────────────────────
+// ── other acting seats → polite region and players panel ─────────────────────
 
-describe('announceOpponentTurn', () => {
-  it('announces the first waiting player by name', () => {
-    expect(announceOpponentTurn(['Bob'])).toBe('Bob is playing…');
+describe('describePlaying', () => {
+  it('names one acting player', () => {
+    expect(describePlaying(['Bob'])).toBe('Bob is playing');
   });
 
-  it('announces the first name even when multiple players are waiting', () => {
-    expect(announceOpponentTurn(['Carol', 'Dave'])).toBe('Carol is playing…');
+  it('names every acting player, not only the first', () => {
+    expect(describePlaying(['Carol', 'Dave'])).toBe('Carol and Dave are playing');
+    expect(describePlaying(['Bob', 'Carol', 'Dave'])).toBe('Bob, Carol and Dave are playing');
   });
 
-  it('returns empty string when nobody is waiting', () => {
-    expect(announceOpponentTurn([])).toBe('');
+  it('returns empty string when nobody else is acting', () => {
+    expect(describePlaying([])).toBe('');
   });
 });
 

@@ -41,6 +41,7 @@ function notRunRecord(lineNumber: number, testCode: string, provenance = 'quote-
     exampleId: `${SLICE_PATH}:${lineNumber}`,
     slicePath: SLICE_PATH,
     lineNumber,
+    lineText: SLICE_TEXT.split('\n')[lineNumber - 1],
     kind: 'transition',
     verdict: 'not-run',
     reason: 'Translated into a test that has not been run yet.',

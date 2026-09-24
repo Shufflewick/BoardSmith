@@ -142,6 +142,7 @@ function observeExample(
     exampleId: record.exampleId,
     slicePath: record.slicePath,
     lineNumber: record.lineNumber,
+    lineText: record.lineText,
     kind: record.kind,
     expected: record.expected,
     supportingQuoteLines: [...record.supportingQuoteLines],

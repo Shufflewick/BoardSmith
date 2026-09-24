@@ -12,8 +12,6 @@ import {
   ADDITIONAL_SOURCES_END,
   ADDITIONAL_SOURCES_HEADING,
   type AdditionalSourceRecord,
-  checkSliceSources,
-  describeSliceSourceProblems,
   parseAdditionalSources,
 } from './rulebook-sources.js';
 
@@ -534,100 +532,6 @@ export async function ingestRelabelCommand(
   return result;
 }
 
-/**
- * `boardsmith ingest-check` — repair ingest synthesis, and FAIL if repair was needed.
- *
- * The gap this closes: `boardsmith init` installs a pre-commit hook that runs synthesis, and the
- * bs- build protocol commits at every chunk step — but `/bs-ingest-rules` itself never commits.
- * The 2026-07-28 human gate found the hook had therefore never run at the end of a real ingest:
- * `## Open Rules Gaps` held 2 of 5 gaps, and not one `Derived (p.N):` line had been separated
- * from presentation. `/bs-build-chunk` reads `rulebook/INDEX.md` during investigate, before it
- * commits anything, so chunk 1 gets planned against that broken index.
- *
- * It repairs first and fails second, on purpose. A check that only reports leaves the caller to
- * remember a follow-up command, and this pipeline's entire history is of follow-up commands not
- * being run. A check that repairs silently is worse: the session carries on holding the stale
- * `INDEX.md` it already read into its context. So the repair lands on disk AND the non-zero exit
- * forces a re-read — the one mechanism this phase proved survives contact with a live session.
- * Re-running immediately afterwards exits 0, so it can never wedge a project.
- *
- * The one thing it checks without repairing is that every slice names the document it was
- * transcribed from (#311, `rulebook-sources.ts`): that is a fact only the transcription knows. A
- * slice that names none, or names a document `INDEX.md` does not record, fails the check with the
- * `boardsmith ingest-slice-source` command that records it.
- */
-export async function ingestCheckCommand(
-  options: { project?: string; json?: boolean } = {},
-): Promise<void> {
-  const projectDir = resolve(options.project ?? process.cwd());
-  const relabel = await ingestRelabelCommand({ project: projectDir, quiet: true });
-  const gaps = await ingestGapsCommand({ project: projectDir, skipRelabel: true, quiet: true });
-  const repaired = relabel.relabelled > 0 || gaps.changed;
-  // Which document a slice came from is a fact only the transcription knows, so a slice that does
-  // not say is reported, never repaired by guessing (#311).
-  const sources = await checkSliceSources(projectDir);
-  const sourcesMissing = sources.unattributed.length > 0 || sources.unrecorded.length > 0;
-
-  if (options.json) {
-    const result = {
-      repaired,
-      relabelled: relabel.relabelled,
-      gapsWritten: gaps.gapsWritten,
-      unattributedSlices: sources.unattributed,
-      unrecordedSliceSources: sources.unrecorded,
-    };
-    console.log(JSON.stringify(result, null, 2));
-  } else {
-    reportIngestCheck(relabel, gaps, sourcesMissing ? describeSliceSourceProblems(sources) : []);
-  }
-
-  // Set the exit code rather than throwing: `program.parse()` does not await action handlers, so a
-  // rejection surfaces as an unhandled-rejection stack trace. The caller here is a git hook or a
-  // build session, both of which need the non-zero status and neither of which should be shown
-  // this repo's internal paths.
-  if (repaired || sourcesMissing) process.exitCode = 1;
-}
-
-/** `ingest-check`'s human-readable report: what it repaired, and what it could not. */
-function reportIngestCheck(
-  relabel: Awaited<ReturnType<typeof ingestRelabelCommand>>,
-  gaps: Awaited<ReturnType<typeof ingestGapsCommand>>,
-  sourceProblems: string[],
-): void {
-  const plural = (n: number, one: string, many: string) => (n === 1 ? one : many);
-  if (relabel.relabelled === 0 && !gaps.changed && sourceProblems.length === 0) {
-    console.log(
-      chalk.green(
-        `✓ Ingest synthesis up to date — ${gaps.gapsWritten} open rules ${plural(gaps.gapsWritten, 'gap', 'gaps')}, no Derived/Visual misfiling`,
-      ),
-    );
-    return;
-  }
-  if (relabel.relabelled > 0 || gaps.changed) {
-    console.error(chalk.yellow('rulebook/ was out of sync with its slices. It has been REPAIRED:'));
-    if (relabel.relabelled) {
-      console.error(
-        `  • relabelled ${relabel.relabelled} presentation ${plural(relabel.relabelled, 'line', 'lines')} Derived → Visual`,
-      );
-      for (const c of relabel.changes) {
-        console.error(`      ${chalk.gray(`${c.file}:${c.line}`)} matched "${c.matched}"`);
-      }
-    }
-    if (gaps.changed) {
-      console.error(
-        `  • rewrote ## Open Rules Gaps from the slices — ${gaps.gapsWritten} ${plural(gaps.gapsWritten, 'entry', 'entries')}`,
-      );
-    }
-    console.error('');
-    console.error(chalk.yellow('Re-read rulebook/INDEX.md before continuing — the copy you have is stale.'));
-    console.error(chalk.dim('Then re-run `boardsmith ingest-check`; it will pass once nothing below is left.'));
-  }
-  if (sourceProblems.length > 0) {
-    console.error(chalk.red('rulebook/ slices do not all say which document they came from. NOT repaired:'));
-    for (const line of sourceProblems) console.error(line);
-  }
-}
-
 /** One source file as read from the designer's path, with where it will be archived. */
 interface SourceToArchive {
   /** Absolute path the designer supplied, resolved. */
@@ -1060,9 +964,18 @@ async function repairExistingIndex(
     text = text.slice(0, pos) + `Source hash: ${sourceHash}\n` + text.slice(pos);
   }
 
-  // 4. Transcribed: — insert-if-absent, immediately after Source hash:, never blind-replace.
+  // 4. Transcribed: — insert-if-absent, immediately after Source hash:, never blind-replace. It
+  //    dates the primary's transcription, so it moves only when the primary record itself changed
+  //    (#351): re-running on the same document, or adding an --additional-source, keeps it.
   const transcribedLine = findLabelLine(text, 'Transcribed:');
-  if (transcribedLine) {
+  const priorPrimary = readCanonicalPrimarySource(before);
+  const primaryUnchanged =
+    priorPrimary !== undefined &&
+    priorPrimary.path === relArchivePath &&
+    priorPrimary.hash === sourceHash;
+  if (transcribedLine && primaryUnchanged) {
+    // The primary is the one already recorded: its transcription date stands.
+  } else if (transcribedLine) {
     text =
       text.slice(0, transcribedLine.start) + `Transcribed: ${transcribed}` + text.slice(transcribedLine.end);
   } else {
