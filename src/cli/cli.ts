@@ -65,6 +65,7 @@ import {
 import { verifySourceFreeCheckCommand } from './commands/verify-source-free.js';
 import { verifyCloseRecordCommand } from './commands/verify-close-record.js';
 import { verifyExampleEmitCommand } from './commands/example-test-emit.js';
+import { verifyExampleRunCommand } from './commands/example-test-run.js';
 import { evolveBotWeightsCommand } from './commands/evolve-bot-weights.js';
 import { packCommand } from './commands/pack.js';
 import { doctorCommand } from './commands/doctor.js';
@@ -714,18 +715,18 @@ program
 
 // CHECK-06 (178-CONTEXT.md decision 12): worked-example replay — an extractor turns a rulebook
 // slice's worked examples into structured specs, a translator turns each spec into a runnable
-// test against the real engine, and the CLI records one of four verdicts (agrees / disagrees /
-// example-inconsistent / unexecutable) per example. A `disagrees` verdict is gated on quote
-// provenance (`QuoteVerifiedProvenance`): only when the example's supporting quotes are verified
-// against an archived, hash-verified source is a mismatch reported as a genuine code defect —
-// otherwise it is downgraded to an explicitly lower-confidence finding, never a confident
-// accusation against the code. `verify-example-replay` is advisory on the verify side (always
-// exits 0); the build side's own consumer (`build/test.md`) treats a mismatch as build-blocking.
-// Both commands are project-level and source-free BY CONSTRUCTION — neither registers a run
-// identifier flag or any bypass option of any kind. `verify-example-record` is the ONLY write
-// surface for CHECK-06's ledger. `verify-example-translate` produces the SECOND dispatch's
-// payload from the FIRST dispatch's return; it writes nothing, and it is what skill prose cites
-// instead of describing the game's API surface.
+// test against the real engine, and each example ends with one verdict: example-inconsistent
+// (extractor), unexecutable (translator), or agrees/disagrees, observed by running the test
+// (`verify-example-run`). A `disagrees` verdict is gated on quote provenance
+// (`QuoteVerifiedProvenance`): only when the example's supporting quotes are verified against an
+// archived, hash-verified source is a mismatch reported as a genuine code defect — otherwise it
+// is downgraded to an explicitly lower-confidence finding. `verify-example-replay` is advisory on
+// the verify side (always exits 0); the build side's own consumer (`build/test.md`) treats a
+// mismatch as build-blocking. None of these commands registers a run identifier flag or any
+// bypass option. `verify-example-translate` produces the SECOND dispatch's payload from the
+// FIRST dispatch's return; it writes nothing, and it is what skill prose cites instead of
+// describing the game's API surface. `verify-example-record` and `verify-example-run` are the
+// only ledger writers; `verify-example-emit` is the only test-file writer.
 program
   .command('verify-example-replay')
   .description(
@@ -741,14 +742,18 @@ program
 program
   .command('verify-example-record')
   .description(
-    "Read one slice's extractor and translator structured JSON returns, gate every mismatch on " +
-      "quote provenance, and atomically upsert-append every worked-example verdict into the " +
-      "project-level ledger (the ONLY write surface for CHECK-06)",
+    "Read one slice's extractor and translator returns and record each worked example in the " +
+      'project-level ledger: example-inconsistent, unexecutable, or not-run with its translated ' +
+      'test (verify-example-run later observes agrees/disagrees)',
   )
   .option('--project <dir>', 'Project directory (defaults to cwd)')
   .requiredOption('--slice-path <path>', 'The rulebook/ slice the worked examples live in')
-  .requiredOption('--extraction <file>', "The extractor's structured JSON return")
-  .requiredOption('--translation <file>', "The translator's structured JSON return")
+  .requiredOption('--extraction <file>', "The extractor's return, { \"examples\": [...] }, unchanged")
+  .requiredOption(
+    '--translations <file>',
+    'One JSON object mapping each exampleId verify-example-translate printed to that ' +
+      "example's translator return, unchanged",
+  )
   .option('--json', 'Emit JSON instead of human-readable output')
   .action(discardResult(verifyExampleRecordCommand));
 
@@ -761,7 +766,7 @@ program
   )
   .option('--project <dir>', 'Project directory (defaults to cwd)')
   .requiredOption('--slice-path <path>', 'The rulebook/ slice the worked examples live in')
-  .requiredOption('--extraction <file>', "The extractor's structured JSON return")
+  .requiredOption('--extraction <file>', "The extractor's return, { \"examples\": [...] }, unchanged")
   .option('--json', 'Emit JSON instead of human-readable output')
   .action(discardResult(verifyExampleTranslateCommand));
 
@@ -820,32 +825,37 @@ program
   .action(discardResult(verifyCloseRecordCommand));
 
 // TEST-01 (178-CONTEXT.md decision 8): the build-side write surface — one generated example-test
-// file per chunk (`tests/examples/<chunk>.examples.test.ts`), written idempotently and atomically.
-// Reads the CHECK-06 ledger to learn which worked examples a chunk's cited slices carry and each
-// one's verdict; `unexecutable`/`example-inconsistent` records are named-reason comments, never a
-// test (decision 7). Every OTHER record's translated test code — carried on `--translated`, the
-// third dispatch's structured return — is scanned against the measured GENERATED_TEST_SANDBOX_
-// RULES subset (`example-test-emit.ts`, `178-06-MEASUREMENT/RESULTS.md`) before it ever reaches
-// disk; a violation anywhere rejects the WHOLE emission. This command never writes the ledger —
-// `verify-example-record` is the only write surface for that — and `verify-example-record` never
-// writes a test file; the two write surfaces are disjoint by construction.
+// file per chunk (`tests/examples/<chunk>.examples.test.ts`), written idempotently and atomically
+// from the CHECK-06 ledger alone: every translated example's stored test, and a named-reason
+// comment for each unexecutable/example-inconsistent one (decision 7). Every translated snippet
+// is scanned against the measured GENERATED_TEST_SANDBOX_RULES subset (`example-test-emit.ts`)
+// before anything is written; a violation anywhere rejects the WHOLE emission. This command never
+// writes the ledger.
 program
   .command('verify-example-emit')
   .description(
     "Write the one generated example-test file for --chunk from the CHECK-06 ledger's " +
-      "recorded verdicts plus the third dispatch's translated test code, scanned against the " +
-      'measured generated-test sandbox rule subset before it is ever written (idempotent, ' +
-      'atomic, one file per chunk)',
+      'translated tests, scanned against the measured generated-test sandbox rule subset before ' +
+      'it is ever written (idempotent, atomic, one file per chunk)',
   )
   .option('--project <dir>', 'Project directory (defaults to cwd)')
   .requiredOption('--chunk <slug>', "The chunk whose cited slices' worked examples to emit")
-  .option(
-    '--translated <file>',
-    "The translator's (third dispatch's) structured JSON return — required only when the " +
-      'chunk has at least one example recorded agrees/disagrees',
-  )
   .option('--json', 'Emit JSON instead of human-readable output')
   .action(discardResult(verifyExampleEmitCommand));
+
+// The only source of an agrees/disagrees verdict: runs --chunk's emitted example-test file with
+// the project's own vitest and records each translated example's observed result. Refuses to run
+// a file that no longer matches what verify-example-emit would write from the ledger.
+program
+  .command('verify-example-run')
+  .description(
+    "Run --chunk's emitted example-test file with the project's vitest and record each " +
+      'translated worked example as agrees (its test passed) or disagrees (it failed)',
+  )
+  .option('--project <dir>', 'Project directory (defaults to cwd)')
+  .requiredOption('--chunk <slug>', "The chunk whose emitted example tests to run")
+  .option('--json', 'Emit JSON instead of human-readable output')
+  .action(discardResult(verifyExampleRunCommand));
 
 // Claude Code integration
 const claudeCmd = // Live-agent ingest harness (BoardSmith repo only, operator-invoked)
