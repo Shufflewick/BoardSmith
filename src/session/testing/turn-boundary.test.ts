@@ -254,26 +254,25 @@ describe('meta.turnBoundary — the engine states the turn boundary', () => {
   // ── 7. The restore hazard ──────────────────────────────────────────────────
 
   describe('case 7 — a host with a snapshot but NO flow state cannot publish a lie', () => {
-    /** A minimal set of adapters that records every broadcast's meta. */
-    function makeAdapters() {
+    /**
+     * A fresh host that records every broadcast's meta and holds nothing yet,
+     * plus a started game it has NOT been given -- what a restore starts from.
+     */
+    async function freshHostAndStartedGame() {
       const metas: Array<{ turnBoundary: { key: string; dueSeats: number[] } }> = [];
-      return {
-        metas,
-        adapters: {
-          playerCount: 2,
-          executeOp: (snap: unknown, pend: Record<string, unknown> | null, op: never) =>
-            executeOp(simultaneousRoundsFixtureDefinition, twoSeats, snap, pend, op),
-          broadcast: (_views: unknown[], meta: { turnBoundary: { key: string; dueSeats: number[] } }) => {
-            metas.push(meta);
-          },
+      const host = new SnapshotSessionHost({
+        playerCount: 2,
+        executeOp: (snap, pend, op) => executeOp(simultaneousRoundsFixtureDefinition, twoSeats, snap, pend, op),
+        broadcast: (_views, meta) => {
+          metas.push(meta);
         },
-      };
+      });
+      const started = await executeOp(simultaneousRoundsFixtureDefinition, twoSeats, null, null, { type: 'start' });
+      return { host, metas, started };
     }
 
     it('the platform\'s old restore shape -- assigning `snapshot` alone -- is not spellable', async () => {
-      const { adapters } = makeAdapters();
-      const host = new SnapshotSessionHost(adapters as never);
-      const started = await executeOp(simultaneousRoundsFixtureDefinition, twoSeats, null, null, { type: 'start' });
+      const { host, started } = await freshHostAndStartedGame();
 
       // This is verbatim what the platform's `reconstructHostIfNeeded` does
       // after a Durable Object eviction: hand the host a snapshot and NOTHING
@@ -283,31 +282,27 @@ describe('meta.turnBoundary — the engine states the turn boundary', () => {
       // strict-mode, so it also throws at runtime rather than silently no-opping
       // in a build that skipped typechecking.
       expect(() => {
-        // @ts-expect-error -- `snapshot` has no setter; use restoreFrom({ snapshot, flowState }).
+        // @ts-expect-error -- `snapshot` has no setter; use restoreFrom({ snapshot, flowState, pendingStates }).
         host.snapshot = started.snapshot;
       }).toThrow(/only a getter/);
       expect(host.snapshot).toBeNull();
 
       // The sanctioned path takes the pair, so the flow state cannot go missing.
-      host.restoreFrom({ snapshot: started.snapshot, flowState: started.flowState });
+      host.restoreFrom({ snapshot: started.snapshot, flowState: started.flowState, pendingStates: {} });
       expect(host.snapshot).toBe(started.snapshot);
       expect(host.flowState).toBe(started.flowState);
     });
 
     it('restoreFrom REFUSES a snapshot without a flow state, naming what to do', async () => {
-      const { adapters } = makeAdapters();
-      const host = new SnapshotSessionHost(adapters as never);
-      const started = await executeOp(simultaneousRoundsFixtureDefinition, twoSeats, null, null, { type: 'start' });
+      const { host, started } = await freshHostAndStartedGame();
 
-      expect(() => host.restoreFrom({ snapshot: started.snapshot, flowState: null })).toThrow(
+      expect(() => host.restoreFrom({ snapshot: started.snapshot, flowState: null, pendingStates: {} })).toThrow(
         /flowState/i,
       );
     });
 
     it('broadcastCurrent() REFUSES rather than publishing dueSeats: [] for a snapshot it holds no flow state for', async () => {
-      const { adapters, metas } = makeAdapters();
-      const host = new SnapshotSessionHost(adapters as never);
-      const started = await executeOp(simultaneousRoundsFixtureDefinition, twoSeats, null, null, { type: 'start' });
+      const { host, metas, started } = await freshHostAndStartedGame();
 
       // Force the hazardous state past the type system, the way only a bug
       // inside this class could now reach it. The second enforcement point has
@@ -320,13 +315,12 @@ describe('meta.turnBoundary — the engine states the turn boundary', () => {
     });
 
     it('a restored host then broadcasts the REAL boundary, not an empty one', async () => {
-      const { adapters, metas } = makeAdapters();
-      const host = new SnapshotSessionHost(adapters as never);
-      const started = await executeOp(simultaneousRoundsFixtureDefinition, twoSeats, null, null, { type: 'start' });
+      const { host, metas, started } = await freshHostAndStartedGame();
 
       host.restoreFrom({
         snapshot: started.snapshot,
         flowState: started.flowState,
+        pendingStates: {},
         playerViews: started.playerViews,
       });
       host.broadcastCurrent();

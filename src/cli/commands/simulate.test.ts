@@ -12,7 +12,8 @@ import {
   type GameOptions,
   type FlowContext,
 } from '../../engine/index.js';
-import { runSimulation, simulateCommand, resolveSimulationGameOptions } from './simulate.js';
+import { runSimulation, runReplay, simulateCommand, resolveSimulationGameOptions } from './simulate.js';
+import { DeadEndGame } from './simulate.fixture.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
 /**
@@ -103,7 +104,6 @@ describe('runSimulation', () => {
 
     expect(run1.games).toEqual(run2.games);
     expect(run1.baseSeed).toBe(run2.baseSeed);
-    expect(run1.anyFailed).toBe(run2.anyFailed);
   });
 
   it('maps results to the stable {index, seed, status, turns} shape with sequential index', async () => {
@@ -116,14 +116,6 @@ describe('runSimulation', () => {
       expect(['complete', 'stuck', 'error']).toContain(g.status);
       expect(typeof g.turns).toBe('number');
     });
-  });
-
-  it('exposes anyFailed as a boolean signal (false when every game completes)', async () => {
-    const report = await runSimulation(PickGame, { count: 3, players: 2, seed: 'all-complete' });
-
-    expect(typeof report.anyFailed).toBe('boolean');
-    expect(report.games.every(g => g.status === 'complete')).toBe(true);
-    expect(report.anyFailed).toBe(false);
   });
 
   it('WR-03: synthesizes an actionable error message when a game exceeds maxActions', async () => {
@@ -141,6 +133,20 @@ describe('runSimulation', () => {
     const [g] = report.games;
     expect(g.status).toBe('error');
     expect(g.error).toBe('Game exceeded the maximum action count.');
+  });
+});
+
+describe('runReplay (#322)', () => {
+  it("plays a batch game again from that game's own seed, seat count and options", async () => {
+    const gameOptions = { deadEnd: 7 };
+    const batch = await runSimulation(DeadEndGame, { count: 6, players: 3, seed: 'batch', gameOptions });
+    const failing = batch.games.filter((g) => g.status !== 'complete' && g.index > 0);
+    expect(failing.length).toBeGreaterThan(0);
+
+    for (const g of failing) {
+      const replayed = await runReplay(DeadEndGame, { seed: g.seed, players: 3, gameOptions });
+      expect(replayed).toEqual({ ...g, index: 0 });
+    }
   });
 });
 

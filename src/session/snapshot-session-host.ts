@@ -74,6 +74,24 @@ export interface TurnBoundary {
   timeLimitMs?: number;
 }
 
+/**
+ * Everything a host needs to come back after its process dies, as ONE value.
+ * The `persist` adapter receives it, {@link SnapshotSessionHost.durableState}
+ * returns it, and {@link SnapshotSessionHost.restoreFrom} requires it: store
+ * what you were handed and pass it back whole.
+ *
+ * `pendingStates` is each seat's half-finished multi-step selection, keyed by
+ * seat number (a string key, because this value crosses JSON). It is part of
+ * the durable state rather than UI state: a repeating selection's picks exist
+ * only here, and its `onEach` has already changed `snapshot`, so a snapshot
+ * restored without them holds a move that no selection owns (#320).
+ */
+export interface SnapshotHostState {
+  snapshot: unknown;
+  flowState: unknown;
+  pendingStates: Record<string, Record<string, unknown>>;
+}
+
 export interface SnapshotSessionAdapters {
   playerCount: number;
   executeOp: (snapshot: unknown, pendingState: Record<string, unknown> | null, op: Op) => Promise<OpResult>;
@@ -115,7 +133,11 @@ export interface SnapshotSessionAdapters {
    * as true to every seat. Set once at session creation; never toggled mid-session.
    */
   teachingDisabled?: boolean;
-  persist?: (state: { snapshot: unknown; pendingStates: Record<string, Record<string, unknown>> }) => void | Promise<void>;
+  /**
+   * Called after every state-mutating op with the host's whole durable state.
+   * Store it as given; {@link SnapshotSessionHost.restoreFrom} takes it back.
+   */
+  persist?: (state: SnapshotHostState) => void | Promise<void>;
   /**
    * Injectable hook invoked whenever `persist()` fails (ERR-03). Never
    * rethrown — a throwing hook is swallowed and echoed via `console.error`
@@ -404,7 +426,7 @@ export class SnapshotSessionHost {
       throw new Error(
         'SnapshotSessionHost holds a snapshot but no flow state, so it cannot state a turn ' +
           'boundary — broadcasting one now would tell every seat that nobody owes a move. ' +
-          'Restore both halves together with restoreFrom({ snapshot, flowState }).',
+          'Restore the whole persisted state with restoreFrom({ snapshot, flowState, pendingStates }).',
       );
     }
     const mergedViews = this.mergeTransientState(this.lastPlayerViews);
@@ -417,18 +439,34 @@ export class SnapshotSessionHost {
   }
 
   /**
+   * The host's whole durable state -- the same value the `persist` adapter is
+   * handed. For a platform that persists at moments of its own (a roster
+   * change, say) as well as from the adapter.
+   */
+  durableState(): SnapshotHostState {
+    return {
+      snapshot: this._snapshot,
+      flowState: this._flowState,
+      pendingStates: Object.fromEntries(this.pendingStates),
+    };
+  }
+
+  /**
    * Restore a host from persisted state after its process died (a Durable Object
-   * eviction, a worker restart). Takes the snapshot and its flow state TOGETHER
-   * because they are one value: a host given only a snapshot would answer "who
-   * owes a move?" with the empty set and broadcast that as the truth.
+   * eviction, a worker restart). Takes the {@link SnapshotHostState} WHOLE:
    *
-   * @param state.snapshot   The persisted game snapshot.
-   * @param state.flowState  The whole-game flow state captured with it. Persist
-   *   it alongside the snapshot; there is nothing to recompute it from here.
+   * - `snapshot` and `flowState` are one value. A host given only a snapshot
+   *   would answer "who owes a move?" with the empty set and broadcast that as
+   *   the truth.
+   * - `pendingStates` is each seat's in-progress selection, captured with that
+   *   snapshot. Without it a player who paused mid-action loses their picks,
+   *   and a repeating selection's `onEach` moves stay on the board with no
+   *   action left to finish (#320).
+   *
    * @param state.playerViews Optional last-known player views, so a
    *   `broadcastCurrent()` before the next op still carries board state.
    */
-  restoreFrom(state: { snapshot: unknown; flowState: unknown; playerViews?: unknown[] }): void {
+  restoreFrom(state: SnapshotHostState & { playerViews?: unknown[] }): void {
     if (state.flowState === null || state.flowState === undefined) {
       throw new Error(
         'restoreFrom requires the flowState that was captured with this snapshot: without it the ' +
@@ -436,9 +474,36 @@ export class SnapshotSessionHost {
           'the answer. Persist flowState alongside snapshot and pass both.',
       );
     }
+    const pendingStates = this.restorablePendingStates(state.pendingStates);
     this._snapshot = state.snapshot;
     this._flowState = state.flowState;
+    this.pendingStates = pendingStates;
     if (state.playerViews) this.lastPlayerViews = state.playerViews;
+  }
+
+  /** `restoreFrom`'s check that every pending selection names a seat of this table. */
+  private restorablePendingStates(
+    pendingStates: SnapshotHostState['pendingStates'] | undefined,
+  ): Map<number, Record<string, unknown>> {
+    if (pendingStates === null || typeof pendingStates !== 'object') {
+      throw new Error(
+        'restoreFrom requires the pendingStates that were persisted with this snapshot (an ' +
+          'empty object when no seat was mid-action). Store the whole value the persist ' +
+          'adapter hands you and pass it back.',
+      );
+    }
+    const restored = new Map<number, Record<string, unknown>>();
+    for (const [key, pending] of Object.entries(pendingStates)) {
+      const seat = Number(key);
+      if (!Number.isInteger(seat) || String(seat) !== key || seat < 1 || seat > this.adapters.playerCount) {
+        throw new Error(
+          `restoreFrom was given a pending selection for seat "${key}", but this table has seats ` +
+            `1 to ${this.adapters.playerCount}. The persisted state does not belong to this table.`,
+        );
+      }
+      restored.set(seat, pending);
+    }
+    return restored;
   }
 
   /**
@@ -491,13 +556,20 @@ export class SnapshotSessionHost {
       // expression broadcastCurrent() will republish.
       turnBoundary: this.turnBoundary(),
     });
-    // Routed through persistSafely (ERR-03) — a persist() failure must never
-    // throw out of apply() and must be observable via onPersistenceError /
-    // lastPersistenceError / persistenceHealthy. No-op when no persist
-    // adapter is configured (the dev host's default today).
+    await this.persistDurableState();
+  }
+
+  /**
+   * Hand the whole durable state to the `persist` adapter. Routed through
+   * persistSafely (ERR-03): a persist() failure must never throw out of an op
+   * and must be observable via onPersistenceError / lastPersistenceError /
+   * persistenceHealthy. No-op when no persist adapter is configured (the dev
+   * host's default today).
+   */
+  private async persistDurableState(): Promise<void> {
     if (this.adapters.persist) {
       const persist = this.adapters.persist;
-      await this.persistSafely(() => persist({ snapshot: this.snapshot, pendingStates: Object.fromEntries(this.pendingStates) }));
+      await this.persistSafely(() => persist(this.durableState()));
     }
   }
 
@@ -680,9 +752,14 @@ export class SnapshotSessionHost {
     // Clear pending state BEFORE executing so a failed superseding action
     // doesn't leave stale selection state behind (matches the old DO's
     // applyHumanAction, which deleted pending state before a direct action).
-    if (op.type === 'action') this.pendingStates.delete(seat);
+    const supersededSelection = op.type === 'action' && this.pendingStates.delete(seat);
     const res = await this.adapters.executeOp(this.snapshot, this.pendingStates.get(seat) ?? null, op);
-    if (!res.success) return res;
+    if (!res.success) {
+      // The refused op changed nothing else, but it did drop this seat's
+      // selection, and storage must agree or a restore would bring it back.
+      if (supersededSelection) await this.persistDurableState();
+      return res;
+    }
 
     // Clear hint for the acting seat on successful action/selectionStep (completion).
     // Mirrors GameSession.performAction: this.#hint.delete(player).
