@@ -167,7 +167,7 @@ export async function auditChoiceCardinality<G extends Game>(
 ): Promise<UnboundedChoiceStep[]> {
   const observations: ChoiceStepObservation[] = [];
 
-  await simulateRandomGames(gameClass, {
+  const results = await simulateRandomGames(gameClass, {
     count: options.games ?? 3,
     playerCounts: [options.players ?? 2],
     seed: options.seed,
@@ -177,6 +177,18 @@ export async function auditChoiceCardinality<G extends Game>(
       observations.push(observeChoiceStep(action, selection as ObservableSelection, candidateCount));
     },
   });
+
+  // A game the simulator could not play offered no choice steps to count, so
+  // returning findings from it would call an unchecked game clean (#306).
+  const unplayed = results.games.find((game) => game.crashed || game.stuck);
+  if (unplayed) {
+    const what = unplayed.crashed ? 'crashed' : 'got stuck';
+    throw new Error(
+      `the random simulator ${what} after ${unplayed.actionCount} move(s) in the game with seed ${unplayed.seed}: ` +
+        `${unplayed.error?.replace(/\.$/, '')}. ` +
+        `"boardsmith simulate --games ${results.total} --players ${unplayed.playerCount} --seed ${results.seed}" shows the same failure`,
+    );
+  }
 
   return findUnboundedChoiceSteps(observations, options.threshold);
 }

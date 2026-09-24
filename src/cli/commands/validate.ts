@@ -97,7 +97,7 @@ export async function validateCommand(): Promise<void> {
   results.push(await validateRequiredFiles(cwd, worldMode));
 
   // 7. Choice cardinality — the panel offers hierarchy, never free text (#172).
-  results.push(await validateChoiceCardinality(cwd));
+  results.push(await validateChoiceCardinality(cwd, worldMode));
 
   // 8. The compiled rules agree with boardsmith.json, exactly as build requires.
   results.push(await validateRulesAgreement(cwd));
@@ -108,7 +108,8 @@ export async function validateCommand(): Promise<void> {
     process.exit(1);
   }
 
-  for (const line of successGuidance(worldMode)) console.log(line);
+  const warnings = results.filter((r) => !r.passed && r.severity === 'warning').length;
+  for (const line of successGuidance(worldMode, warnings)) console.log(line);
 }
 
 /** One check's icon and status word: pass, advisory warning, or failure. */
@@ -148,12 +149,21 @@ function printResults(results: ValidationResult[]): void {
  * the table's "play through your game, watch for flow-step warnings" advice
  * names diagnostics that world can never produce.
  *
+ * `warnings` is how many checks ended in a warning. A warning does not block,
+ * but it can be a check that could not run, so a run with any is never summed
+ * up as every check having passed (#306).
+ *
  * Returned as lines rather than printed so the two backends' guidance is
  * assertable without capturing stdout.
  */
-export function successGuidance(isWorld: boolean): string[] {
+export function successGuidance(isWorld: boolean, warnings: number): string[] {
   const lines = [
-    chalk.green('All validation checks passed!\n'),
+    warnings === 0
+      ? chalk.green('All validation checks passed!\n')
+      : chalk.yellow(
+          `Validation passed with ${warnings} warning(s). They do not block publishing, but read them above: ` +
+            'a warning is either something to fix or a check that could not run.\n',
+        ),
     chalk.cyan('Next steps:'),
   ];
   if (isWorld) {
@@ -1123,29 +1133,35 @@ export function buildChoiceCardinalityResult(
  * The counts here come from the engine's own move enumeration, which is the
  * same enumeration the panel, the board and the bots read.
  *
- * It never blocks. A game that cannot be loaded or randomly driven reports a
- * pass with a note, because "the random simulator could not play your game" is
- * a fact about the simulator, not a cardinality defect.
+ * It plays at the definition's `minPlayers`, a seat count the game supports.
+ *
+ * It never blocks. A game that cannot be loaded or randomly played through is
+ * reported as a warning that the check could not run, never as a pass: a check
+ * that did not run has not found the game clean (#306). A world is reported the
+ * same way, because the random simulator plays table flows and a world has none.
  */
-async function validateChoiceCardinality(cwd: string): Promise<ValidationResult> {
+export async function validateChoiceCardinality(cwd: string, isWorld: boolean): Promise<ValidationResult> {
+  if (isWorld) {
+    return {
+      name: 'Choice cardinality',
+      passed: false,
+      severity: 'warning',
+      message:
+        'Not checked: this check plays random table games, and a world has no table flow to play. ' +
+        'Check the size of your world commands\' choice lists by hand in boardsmith dev.',
+    };
+  }
+
   const spinner = ora('Checking choice cardinality...').start();
 
-  const configPath = join(cwd, 'boardsmith.json');
-  const config = JSON.parse(readFileSync(configPath, 'utf-8')) as { paths?: { rules?: string } };
-  const rulesPath = resolveRulesDir(cwd, config);
-
-  const tempDir = join(cwd, '.boardsmith');
   try {
-    const { loadGameDefinition, getProjectContext } = await import('./game-runtime.js');
-    const { gameDefinition } = await loadGameDefinition(
-      rulesPath,
-      tempDir,
-      getProjectContext(cwd),
-    );
-
+    const gameDefinition = await loadProjectRules(cwd);
+    if (gameDefinition.minPlayers === undefined) {
+      throw new Error('your gameDefinition declares no minPlayers, so there is no seat count to play it at');
+    }
     const findings = await auditChoiceCardinality(
       gameDefinition.gameClass as new (options: GameOptions) => Game,
-      { seed: 'choice-cardinality', games: 2, timeout: 5000 },
+      { seed: 'choice-cardinality', games: 2, players: gameDefinition.minPlayers, timeout: 5000 },
     );
 
     const result = buildChoiceCardinalityResult(findings);
@@ -1153,12 +1169,36 @@ async function validateChoiceCardinality(cwd: string): Promise<ValidationResult>
     else spinner.warn('Choice cardinality: large flat choice lists found');
     return result;
   } catch (error) {
-    spinner.info('Choice cardinality: skipped');
+    spinner.warn('Choice cardinality: could not run');
     return {
       name: 'Choice cardinality',
-      passed: true,
-      message: `Skipped — the game could not be driven headlessly: ${(error as Error).message}`,
+      passed: false,
+      severity: 'warning',
+      message:
+        `This check could not run, so your choice lists were not checked. Reason: ` +
+        `${(error as Error).message.replace(/\.$/, '')}. Fix that and run boardsmith validate again.`,
     };
+  }
+}
+
+/**
+ * Bundle and load the project's compiled rules for a validate check.
+ *
+ * The temp dir is command-scoped, like build's `build-tmp`: `.boardsmith` is
+ * shared with a running dev server and may not exist yet in a fresh checkout,
+ * so this creates only the directory it owns and removes it when done.
+ */
+async function loadProjectRules(cwd: string): Promise<GameDefinition> {
+  const config = JSON.parse(readFileSync(join(cwd, 'boardsmith.json'), 'utf-8')) as { paths?: { rules?: string } };
+  const rulesPath = resolveRulesDir(cwd, config);
+  const tempDir = join(cwd, '.boardsmith', 'validate-tmp');
+  mkdirSync(tempDir, { recursive: true });
+  try {
+    const { loadGameDefinition, getProjectContext } = await import('./game-runtime.js');
+    const { gameDefinition } = await loadGameDefinition(rulesPath, tempDir, getProjectContext(cwd));
+    return gameDefinition;
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
   }
 }
 
@@ -1208,17 +1248,10 @@ export function checkRulesAgreement(
 async function validateRulesAgreement(cwd: string): Promise<ValidationResult> {
   const spinner = ora('Checking rules against boardsmith.json...').start();
   const config = JSON.parse(readFileSync(join(cwd, 'boardsmith.json'), 'utf-8')) as Record<string, unknown>;
-  const rulesPath = resolveRulesDir(cwd, config as { paths?: { rules?: string } });
-
-  // Command-scoped, like build's `build-tmp`: `.boardsmith` is shared with a
-  // running dev server, so only ever create and delete what this check owns.
-  const tempDir = join(cwd, '.boardsmith', 'validate-tmp');
-  mkdirSync(tempDir, { recursive: true });
 
   let result: ValidationResult;
   try {
-    const { loadGameDefinition, getProjectContext } = await import('./game-runtime.js');
-    const { gameDefinition } = await loadGameDefinition(rulesPath, tempDir, getProjectContext(cwd));
+    const gameDefinition = await loadProjectRules(cwd);
     // Constructs the game at every seat count to read its flow, so a
     // constructor that throws is reported here too.
     result = checkRulesAgreement(config, gameDefinition);
@@ -1229,8 +1262,6 @@ async function validateRulesAgreement(cwd: string): Promise<ValidationResult> {
       passed: false,
       message: `Your rules could not be loaded and constructed, so they could not be checked against boardsmith.json: ${(error as Error).message}. Fix that error and run boardsmith validate again.`,
     };
-  } finally {
-    rmSync(tempDir, { recursive: true, force: true });
   }
 
   if (result.passed) spinner.succeed('Rules agree with boardsmith.json');

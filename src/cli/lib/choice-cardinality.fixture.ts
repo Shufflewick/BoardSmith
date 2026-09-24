@@ -90,3 +90,33 @@ export class NarrowGame extends Game<NarrowGame, Player> {
     this.setFlow(shortFlow(['pick']));
   }
 }
+
+/**
+ * WideGame for three or more seats: it refuses to be built for fewer, as a
+ * real game dealing a three-hand layout would. The audit must play it at a seat
+ * count it supports, and must not call a two-seat crash a clean result.
+ */
+export class ThreeSeatWideGame extends WideGame {
+  constructor(options: GameOptions) {
+    if ((options.playerCount ?? 0) < 3) {
+      throw new Error(`Three Seat Wide needs at least 3 players, got ${options.playerCount}.`);
+    }
+    super(options);
+  }
+}
+
+/** Its only move asks for free text, which the random simulator cannot type, so every game gets stuck. */
+export class TypedNameGame extends Game<TypedNameGame, Player> {
+  // fallow-ignore-next-line unused-class-member
+  turns = 0;
+
+  constructor(options: GameOptions) {
+    super(options);
+
+    this.registerAction(
+      Action.create<TypedNameGame>('name').enterText('nickname', {}).execute(burnTurn),
+    );
+
+    this.setFlow(shortFlow(['name']));
+  }
+}
