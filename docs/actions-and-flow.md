@@ -170,6 +170,43 @@ element that a later selection of the same action then picks: a whole move
 cannot name something that exists only after part of it has run, and
 enumeration says so by name. World actions cannot repeat at all.
 
+#### Work a `disabled` rule shares across every choice: `prepare`
+
+A choice's `disabled(choice, ctx)` runs once per choice, every time the engine
+evaluates the choices. A rule that reads the board, such as "is this space
+covered by a pack already placed", would redo the same board reading for every
+one of thousands of candidates. `prepare(ctx)` is where that shared work goes
+(#334):
+
+```typescript
+.chooseFrom('space', {
+  choices: (ctx) => spacesFor(ctx.player.seat),        // 3,720 spaces
+  prepare: (ctx) => coveredSpaces(ctx.game.all(Pack)), // once per evaluation
+  disabled: (space, ctx, covered) =>                   // covered: what prepare returned
+    covered.has(space) ? 'A pack already stands there' : false,
+})
+```
+
+- **Once per evaluation.** `prepare` runs once each time the engine evaluates
+  the choices, before the first `disabled` call, and its return value is
+  `disabled`'s third argument for every choice in that evaluation. It is typed:
+  `covered` above is whatever `prepare` returns.
+- **Never kept between evaluations.** The engine evaluates a pick several times
+  per move (to resolve the submitted value, to validate it, to decide whether
+  the action is still available afterwards), and each of those runs `prepare`
+  again. So it always sees the game as it is at that moment, and a move that
+  changes the board is reflected in the next evaluation. Do not cache its
+  result yourself.
+- **Only for `disabled`.** It is on `chooseFrom`, `chooseElement` and
+  `chooseElements` (and the world facade's versions of them), and a `prepare`
+  declared without a `disabled` rule is refused where the action is declared.
+- `ctx` is the same one `disabled` receives, so earlier picks are in
+  `ctx.args`. Like `choices`, it must not change the game.
+
+Measured on a 3,720-space `chooseFrom` with 300 packs on the board: reading the
+packs inside `disabled` cost about 1,600 ms per evaluation; reading them once in
+`prepare` and checking a set of covered spaces cost about 7 ms.
+
 #### On-Demand Choices
 
 Choices are always evaluated on-demand when the player needs to make a selection. This means the `choices` callback runs at the moment the player is presented with the selection, not when the action metadata is built.
@@ -844,7 +881,8 @@ Three things worth knowing:
 The same `string | false` contract disables individual choices inside an
 action — `chooseFrom({ disabled })`, `chooseElement({ disabled })` — so a
 reason is mandatory at every level, from the action's button down to a single
-card in a hand.
+card in a hand. Work every choice's rule needs goes in the selection's
+`prepare` (see [`prepare`](#work-a-disabled-rule-shares-across-every-choice-prepare)).
 
 The reason is not a `title` tooltip. It renders in a shared popover on hover, on
 focus, and **on tap** — the native `title` this replaced showed nothing at all on

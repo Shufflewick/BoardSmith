@@ -20,6 +20,7 @@ import type {
   ConditionConfig,
   ConditionDetail,
   AnnotatedChoice,
+  DisabledRule,
   OnSelectContext,
 } from './types.js';
 import { wrapFilterWithHelpfulErrors } from './helpers.js';
@@ -620,6 +621,24 @@ export class ActionExecutor {
       ? getActiveStep(this.game, player.seat)
       : null;
 
+    // Each candidate annotated with why it is not selectable, or `false`.
+    // `prepare` runs once for this evaluation, never per candidate and never
+    // kept past it (#334), so every `disabled` call shares its result and a
+    // later evaluation sees the game as it is then.
+    const annotate = <T>(rule: DisabledRule<T>, candidates: T[]): AnnotatedChoice<unknown>[] => {
+      const { disabled } = rule;
+      const prepared = disabled && rule.prepare ? rule.prepare(context) : undefined;
+      return candidates.map(value => {
+        const gameDisabled = disabled ? disabled(value, context, prepared) : false;
+        // OR-in gate reason: only when no game-defined reason already applies.
+        if (tutorialStep && gameDisabled === false) {
+          const gateReason = getGateReasonForValue(tutorialStep, actionName!, value, selection.name);
+          if (gateReason) return { value, disabled: gateReason };
+        }
+        return { value, disabled: gameDisabled };
+      });
+    };
+
     switch (selection.type) {
       case 'choice': {
         const choiceSel = selection as ChoiceSelection;
@@ -654,15 +673,7 @@ export class ActionExecutor {
           }
         }
 
-        return choices.map(choice => {
-          const gameDisabled = choiceSel.disabled ? choiceSel.disabled(choice, context) : false;
-          // OR-in gate reason: only when no game-defined reason already applies.
-          if (tutorialStep && gameDisabled === false) {
-            const gateReason = getGateReasonForValue(tutorialStep, actionName!, choice, selection.name);
-            if (gateReason) return { value: choice, disabled: gateReason };
-          }
-          return { value: choice, disabled: gameDisabled };
-        });
+        return annotate(choiceSel, choices);
       }
 
       case 'element': {
@@ -704,17 +715,7 @@ export class ActionExecutor {
           }
         }
 
-        return elements.map(el => {
-          const gameDisabled = elementSel.disabled
-            ? elementSel.disabled(el, context)
-            : false;
-          // OR-in gate reason: only when no game-defined reason already applies.
-          if (tutorialStep && gameDisabled === false) {
-            const gateReason = getGateReasonForValue(tutorialStep, actionName!, el, selection.name);
-            if (gateReason) return { value: el, disabled: gateReason };
-          }
-          return { value: el, disabled: gameDisabled };
-        });
+        return annotate(elementSel, elements);
       }
 
       case 'elements': {
@@ -724,17 +725,7 @@ export class ActionExecutor {
           ? elementsSel.elements(context)
           : [...elementsSel.elements];
 
-        return elements.map(el => {
-          const gameDisabled = elementsSel.disabled
-            ? elementsSel.disabled(el, context)
-            : false;
-          // OR-in gate reason: only when no game-defined reason already applies.
-          if (tutorialStep && gameDisabled === false) {
-            const gateReason = getGateReasonForValue(tutorialStep, actionName!, el, selection.name);
-            if (gateReason) return { value: el, disabled: gateReason };
-          }
-          return { value: el, disabled: gameDisabled };
-        });
+        return annotate(elementsSel, elements);
       }
 
       case 'text':
