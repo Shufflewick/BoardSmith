@@ -1,11 +1,21 @@
 import { describe, it, expect } from 'vitest';
 import {
   MAX_FLAT_CHOICE_CANDIDATES,
+  auditChoiceCardinality,
+  auditWorldChoiceCardinality,
   observeChoiceStep,
   findUnboundedChoiceSteps,
   describeUnboundedChoiceStep,
   type ChoiceStepObservation,
 } from './choice-cardinality.js';
+import {
+  NarrowGame,
+  ThreeSeatWideGame,
+  TypedNameGame,
+  UnfinishedWideGame,
+  WideGame,
+  cardinalityWorld,
+} from './choice-cardinality.fixture.js';
 
 function obs(over: Partial<ChoiceStepObservation> = {}): ChoiceStepObservation {
   return {
@@ -148,9 +158,6 @@ describe('describeUnboundedChoiceStep', () => {
 
 describe('auditChoiceCardinality', () => {
   it('flags a flat unanchored step and leaves a board-anchored one alone', async () => {
-    const { WideGame } = await import('./choice-cardinality.fixture.js');
-    const { auditChoiceCardinality } = await import('./choice-cardinality.js');
-
     const findings = await auditChoiceCardinality(WideGame, { seed: 'audit', games: 1 });
 
     expect(findings).toEqual([
@@ -159,27 +166,18 @@ describe('auditChoiceCardinality', () => {
   });
 
   it('finds nothing in a game whose steps are all small', async () => {
-    const { NarrowGame } = await import('./choice-cardinality.fixture.js');
-    const { auditChoiceCardinality } = await import('./choice-cardinality.js');
-
     expect(await auditChoiceCardinality(NarrowGame, { seed: 'audit', games: 1 })).toEqual([]);
   });
 
   // #306: a game the simulator could not play offers no choice steps to count,
   // so an empty findings list from it would read as a clean game.
   it('refuses to report a game that crashed as having no findings', async () => {
-    const { ThreeSeatWideGame } = await import('./choice-cardinality.fixture.js');
-    const { auditChoiceCardinality } = await import('./choice-cardinality.js');
-
     await expect(
       auditChoiceCardinality(ThreeSeatWideGame, { seed: 'audit', games: 1, players: 2 }),
     ).rejects.toThrow(/crashed.*seed audit-2-0.*needs at least 3 players.*boardsmith simulate --replay audit-2-0 --players 2"/s);
   });
 
   it('refuses to report a game that got stuck as having no findings', async () => {
-    const { TypedNameGame } = await import('./choice-cardinality.fixture.js');
-    const { auditChoiceCardinality } = await import('./choice-cardinality.js');
-
     await expect(auditChoiceCardinality(TypedNameGame, { seed: 'audit', games: 1 })).rejects.toThrow(
       /got stuck.*seed audit-2-0.*text input 'nickname'/s,
     );
@@ -189,18 +187,12 @@ describe('auditChoiceCardinality', () => {
   // that ends it exists. Every choice it offered was counted, so that stop is
   // a finished walk, not a game the simulator could not play.
   it('counts a game whose ending is not built yet, which stops with no move left', async () => {
-    const { UnfinishedWideGame } = await import('./choice-cardinality.fixture.js');
-    const { auditChoiceCardinality } = await import('./choice-cardinality.js');
-
     expect(await auditChoiceCardinality(UnfinishedWideGame, { seed: 'audit', games: 2 })).toEqual([
       { action: 'shout', selection: 'verb', maxCandidates: 40 },
     ]);
   });
 
   it('plays at the seat count it is given', async () => {
-    const { ThreeSeatWideGame } = await import('./choice-cardinality.fixture.js');
-    const { auditChoiceCardinality } = await import('./choice-cardinality.js');
-
     expect(await auditChoiceCardinality(ThreeSeatWideGame, { seed: 'audit', games: 1, players: 3 })).toEqual([
       { action: 'shout', selection: 'verb', maxCandidates: 40 },
     ]);
@@ -215,34 +207,22 @@ describe('auditChoiceCardinality', () => {
 
 describe('auditWorldChoiceCardinality', () => {
   it('flags a flat unanchored step and leaves a board-anchored one alone', async () => {
-    const { cardinalityWorld } = await import('./choice-cardinality.fixture.js');
-    const { auditWorldChoiceCardinality } = await import('./choice-cardinality.js');
-
     expect(await auditWorldChoiceCardinality(cardinalityWorld(['shout', 'mark']), { seed: 'audit' })).toEqual([
       { action: 'shout', selection: 'verb', maxCandidates: 40 },
     ]);
   });
 
   it('finds nothing in a world whose steps are all small', async () => {
-    const { cardinalityWorld } = await import('./choice-cardinality.fixture.js');
-    const { auditWorldChoiceCardinality } = await import('./choice-cardinality.js');
-
     expect(await auditWorldChoiceCardinality(cardinalityWorld(['nod']), { seed: 'audit' })).toEqual([]);
   });
 
   it('counts a later question with the earlier answers bound, as the panel re-asks it', async () => {
-    const { cardinalityWorld } = await import('./choice-cardinality.fixture.js');
-    const { auditWorldChoiceCardinality } = await import('./choice-cardinality.js');
-
     expect(await auditWorldChoiceCardinality(cardinalityWorld(['pair']), { seed: 'audit' })).toEqual([
       { action: 'pair', selection: 'second', maxCandidates: 40 },
     ]);
   });
 
   it('announces each driven seat’s arrival, so what arrivals build is counted', async () => {
-    const { cardinalityWorld } = await import('./choice-cardinality.fixture.js');
-    const { auditWorldChoiceCardinality } = await import('./choice-cardinality.js');
-
     // Ten lanterns per arrival: thirty once all three seats are here.
     expect(
       await auditWorldChoiceCardinality(cardinalityWorld(['light', 'hang', 'nod'], 'hang'), { seed: 'audit' }),
@@ -250,9 +230,6 @@ describe('auditWorldChoiceCardinality', () => {
   });
 
   it('takes offers and fires what falls due, so a list that only grows in play is counted', async () => {
-    const { cardinalityWorld } = await import('./choice-cardinality.fixture.js');
-    const { auditWorldChoiceCardinality, MAX_FLAT_CHOICE_CANDIDATES } = await import('./choice-cardinality.js');
-
     const findings = await auditWorldChoiceCardinality(cardinalityWorld(['plant', 'sprout', 'harvest']), {
       seed: 'audit',
     });
@@ -264,35 +241,24 @@ describe('auditWorldChoiceCardinality', () => {
   });
 
   it('is reproducible from its seed', async () => {
-    const { cardinalityWorld } = await import('./choice-cardinality.fixture.js');
-    const { auditWorldChoiceCardinality } = await import('./choice-cardinality.js');
     const run = () => auditWorldChoiceCardinality(cardinalityWorld(['plant', 'sprout', 'harvest']), { seed: 'same' });
 
     expect(await run()).toEqual(await run());
   });
 
   it('refuses to call a world clean when no seat was offered anything it could take', async () => {
-    const { cardinalityWorld } = await import('./choice-cardinality.fixture.js');
-    const { auditWorldChoiceCardinality } = await import('./choice-cardinality.js');
-
     await expect(auditWorldChoiceCardinality(cardinalityWorld(['say']), { seed: 'audit' })).rejects.toThrow(
       /no seat was offered an action it could take.*'say' asks for text input 'line'/s,
     );
   });
 
   it('stops and names the seat when the world refuses to enumerate its offers', async () => {
-    const { cardinalityWorld } = await import('./choice-cardinality.fixture.js');
-    const { auditWorldChoiceCardinality } = await import('./choice-cardinality.js');
-
     await expect(auditWorldChoiceCardinality(cardinalityWorld(['flood']), { seed: 'audit' })).rejects.toThrow(
       /seat 1's offers.*250 candidates.*200/s,
     );
   });
 
   it('stops and names the move when the world itself refuses one', async () => {
-    const { cardinalityWorld } = await import('./choice-cardinality.fixture.js');
-    const { auditWorldChoiceCardinality } = await import('./choice-cardinality.js');
-
     await expect(auditWorldChoiceCardinality(cardinalityWorld(['trespass']), { seed: 'audit' })).rejects.toThrow(
       /seat 1's 'trespass'.*"how":"quietly".*elsewhere/s,
     );

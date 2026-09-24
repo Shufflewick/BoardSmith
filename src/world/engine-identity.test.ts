@@ -65,16 +65,19 @@ async function rulesOnTheirOwnEngine(): Promise<{ gameClass: unknown; world: unk
     outfile,
     logLevel: "silent",
   });
+  // Dynamic import: the bundle is built above, at run time.
   const module = (await import(pathToFileURL(outfile).href)) as {
     gameDefinition: { gameClass: unknown; world: unknown };
   };
   return module.gameDefinition;
 }
 
-describe("a world and its rules share one engine (#283)", () => {
-  it("refuses rules built on a different copy of the engine, and says why", async () => {
-    const definition = await rulesOnTheirOwnEngine();
+// Built once, while the file is collected: an esbuild bundle and its import
+// are slow one-time setup, and no test timeout applies here (#354, #365).
+const definition = await rulesOnTheirOwnEngine();
 
+describe("a world and its rules share one engine (#283)", () => {
+  it("refuses rules built on a different copy of the engine, and says why", () => {
     let refusal: unknown;
     try {
       createWorld({

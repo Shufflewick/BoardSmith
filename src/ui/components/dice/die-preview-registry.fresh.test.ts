@@ -15,6 +15,7 @@ describe('die preview registry on a fresh module graph', () => {
   it('starts empty, and importing the dice module registers the renderer', async () => {
     vi.resetModules();
 
+    // Dynamic import: after vi.resetModules(), so both modules load fresh in this test.
     const registry = await import('./die-preview-registry.js');
     expect(registry.getDiePreviewComponent()).toBeNull();
 
@@ -25,6 +26,7 @@ describe('die preview registry on a fresh module graph', () => {
   it('registers the async wrapper, so three.js stays in its own lazy chunk', async () => {
     vi.resetModules();
 
+    // Dynamic import: after vi.resetModules(), so both modules load fresh in this test.
     const registry = await import('./die-preview-registry.js');
     await import('./index.js');
 

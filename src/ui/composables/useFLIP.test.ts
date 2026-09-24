@@ -61,6 +61,7 @@ vi.mock('../../utils/dev.js', async (importOriginal) => {
 const { useFLIP } = await import('./useFLIP.js');
 const { enableAnimationTestMode, disableAnimationTestMode, getAnimationTrace, clearAnimationTrace } =
   await import('./useAnimationTestMode.js');
+const { prefersReducedMotion } = await import('./useElementAnimation.js');
 
 function makeContainer(): HTMLElement {
   const container = document.createElement('div');
@@ -142,7 +143,6 @@ describe('useFLIP', () => {
 
   describe('auto mode (auto: true)', () => {
     it('records a flip trace in test mode even when reduced motion is preferred (CR-02)', async () => {
-      const { prefersReducedMotion } = await import('./useElementAnimation.js');
       prefersReducedMotion.value = true;
 
       const container = makeContainer();

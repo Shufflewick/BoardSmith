@@ -13,6 +13,7 @@
  * These pin the wire contract as it shipped, before the extraction moved it.
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { reactive, ref } from 'vue';
 import { usePlatformTransport } from './usePlatformTransport.js';
 
 function makeTransport(overrides: Partial<Parameters<typeof usePlatformTransport>[0]> = {}) {
@@ -127,9 +128,8 @@ describe('usePlatformTransport', () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 
-  it('strips Vue reactivity so a natural someRef.value argument survives the clone', async () => {
+  it('strips Vue reactivity so a natural someRef.value argument survives the clone', () => {
     const { transport, posted } = makeTransport();
-    const { ref, reactive } = await import('vue');
 
     void transport.request('action', {
       actionName: 'play',

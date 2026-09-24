@@ -944,15 +944,12 @@ describe('SC-3 — both pipeline sides derive from one module', () => {
       'second module, even if that second module also imports the original (duplication, not ' +
       'reuse, is what this assertion catches)',
     async () => {
-      const { readdir } = await import('node:fs/promises');
-      const { join: pathJoin } = await import('node:path');
-
       async function walk(dir: string): Promise<string[]> {
-        const entries = await readdir(dir, { withFileTypes: true });
+        const entries = await fs.readdir(dir, { withFileTypes: true });
         const files: string[] = [];
         for (const entry of entries) {
           if (entry.name === 'node_modules' || entry.name.startsWith('.')) continue;
-          const full = pathJoin(dir, entry.name);
+          const full = join(dir, entry.name);
           if (entry.isDirectory()) {
             files.push(...(await walk(full)));
           } else if (entry.name.endsWith('.ts') && !entry.name.endsWith('.d.ts')) {
