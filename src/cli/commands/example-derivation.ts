@@ -1,5 +1,5 @@
 import { promises as fs } from 'node:fs';
-import { dirname, join, relative, sep } from 'node:path';
+import { dirname, join, relative, resolve, sep } from 'node:path';
 import {
   annotationBody,
   EXAMPLE_LINE_RE,
@@ -457,46 +457,140 @@ export interface GameApiSurface {
 /** A top-level `export function|const|class Name` declaration, anchored at line start. */
 const TOP_LEVEL_DECLARATION_RE = /^export\s+(function|const|class)\s+(\w+)/gm;
 
-/** A one-level `export * from './module.js'` re-export, anchored at line start. */
-const STAR_REEXPORT_RE = /^export\s+\*\s+from\s+['"]\.\/([\w.-]+)\.js['"]/gm;
+/**
+ * An `export * from '<relative path>'` or `export { a, b as c } from '<relative path>'` re-export,
+ * anchored at line start. Group 1 is `*` for the star form, group 2 the braced name list for the
+ * named form, group 3 the specifier (any depth, `./` or `../`). `export type { ... }` and
+ * re-exports from packages do not match: neither names a runtime symbol the project declares.
+ */
+const RELATIVE_REEXPORT_RE = /^export\s*(?:(\*)|\{([^}]*)\})\s*from\s*['"](\.{1,2}\/[^'"]*)['"]/gm;
 
-/** A one-level `export { A, B as C } from './module.js'` named re-export, anchored at line start. */
-const NAMED_REEXPORT_RE = /^export\s*\{([^}]+)\}\s*from\s*['"]\.\/([\w.-]+)\.js['"]/gm;
+/** A symbol a module exports, located at the module that declares it. */
+interface DeclaredExport {
+  declaredName: string;
+  kind: GameApiSymbol['kind'];
+  absolutePath: string;
+}
 
 function toProjectRelativeModule(projectDir: string, absolutePath: string): string {
   return relative(projectDir, absolutePath).split(sep).join('/');
 }
 
-async function readOptional(path: string): Promise<string | undefined> {
+async function isFile(path: string): Promise<boolean> {
   try {
-    return await fs.readFile(path, 'utf-8');
+    return (await fs.stat(path)).isFile();
   } catch {
-    return undefined;
+    return false;
   }
 }
 
 /**
+ * Resolves a relative re-export specifier the way a generated game's TypeScript does
+ * (`moduleResolution: 'bundler'`): `./x.js` names `x.ts` or `x.tsx`, and an extensionless `./x`
+ * names `x.ts`, `x.tsx`, `x/index.ts` or `x/index.tsx`. Throws, naming every path it tried, when
+ * none exists, and refuses a target outside `src/`.
+ */
+async function resolveReexport(
+  projectDir: string,
+  importerPath: string,
+  specifier: string,
+): Promise<string> {
+  const importer = toProjectRelativeModule(projectDir, importerPath);
+  const base = resolve(dirname(importerPath), specifier);
+  const srcDir = join(projectDir, 'src');
+  if (!base.startsWith(srcDir + sep)) {
+    throw new Error(
+      `${importer} re-exports '${specifier}', which is outside src/.\n` +
+        `The worked-example API surface lists only the game's own rules under src/. Move that ` +
+        `module under src/, or stop re-exporting it from ${importer}.`,
+    );
+  }
+  const candidates = base.endsWith('.js')
+    ? [`${base.slice(0, -3)}.ts`, `${base.slice(0, -3)}.tsx`]
+    : [`${base}.ts`, `${base}.tsx`, join(base, 'index.ts'), join(base, 'index.tsx')];
+  for (const candidate of candidates) {
+    if (await isFile(candidate)) return candidate;
+  }
+  throw new Error(
+    `${importer} re-exports '${specifier}', but no file exists there. Tried: ` +
+      `${candidates.map((c) => toProjectRelativeModule(projectDir, c)).join(', ')}.\n` +
+      `Fix the path in ${importer}; the game will not compile with it either.`,
+  );
+}
+
+/**
+ * Every symbol `absolutePath` exports, keyed by its exported name, following its re-exports to
+ * any depth. `onPath` holds the modules whose exports are being collected above this call: a
+ * re-export back into one of them adds nothing that module is not already collecting, so the
+ * walk stops there, which is how a cycle of `export *` terminates.
+ */
+async function collectModuleExports(
+  projectDir: string,
+  absolutePath: string,
+  onPath: ReadonlySet<string>,
+): Promise<Map<string, DeclaredExport>> {
+  const exports = new Map<string, DeclaredExport>();
+  if (onPath.has(absolutePath)) return exports;
+  const path = new Set(onPath).add(absolutePath);
+  const text = await fs.readFile(absolutePath, 'utf-8');
+
+  for (const m of text.matchAll(TOP_LEVEL_DECLARATION_RE)) {
+    exports.set(m[2], { declaredName: m[2], kind: m[1] as GameApiSymbol['kind'], absolutePath });
+  }
+
+  for (const m of text.matchAll(RELATIVE_REEXPORT_RE)) {
+    const targetPath = await resolveReexport(projectDir, absolutePath, m[3]);
+    const targetExports = await collectModuleExports(projectDir, targetPath, path);
+    if (m[1] === '*') {
+      // As in TypeScript: `export *` never carries `default`, and a name this module already
+      // exports takes precedence over one it would pull in.
+      for (const [name, declared] of targetExports) {
+        if (name !== 'default' && !exports.has(name)) exports.set(name, declared);
+      }
+      continue;
+    }
+    const entries = m[2]
+      .split(',')
+      .map((entry) => entry.trim())
+      .filter((entry) => entry.length > 0 && !/^type\s/.test(entry));
+    for (const entry of entries) {
+      const [importedName, exportedName = importedName] = entry.split(/\s+as\s+/).map((n) => n.trim());
+      exports.set(
+        exportedName,
+        targetExports.get(importedName) ?? {
+          declaredName: importedName,
+          kind: 'const',
+          absolutePath: targetPath,
+        },
+      );
+    }
+  }
+
+  return exports;
+}
+
+/**
  * Produces a generated game project's exported rules API surface MECHANICALLY — a listing, not
- * an inference — by scanning `src/rules/index.ts` and following its re-export chain ONE level
- * deep (both `export * from './x.js'` and named `export { a, b } from './x.js'` forms), plus any
- * declaration made directly in `index.ts` itself.
+ * an inference — by scanning `src/rules/index.ts` and following its re-exports to any depth and
+ * into any subfolder of `src/`: `export * from '<path>'` and named
+ * `export { a, b as c } from '<path>'`, with each relative path resolved as the game's TypeScript
+ * resolves it (#359). Each symbol is listed at the module that DECLARES it, under the name it is
+ * declared with there, because that is the pair a translated example imports.
  *
  * Documented limits, so a caller never over-trusts this surface:
  *
- *   - It does NOT resolve `export *` transitively beyond one level. A symbol that `index.ts`
- *     re-exports from a module which itself only re-exports (or merely imports-and-uses, never
- *     re-exports) a THIRD module's symbol is invisible here. Measured live (2026-07-31) against
- *     `one-two-punch`: `punch.ts` exports `exhaustCorneredPuncher`/`resolvePunch`, but `index.ts`
- *     never re-exports `punch.js` (directly or via `game.js`, which only imports from it
- *     internally) — those two symbols are correctly absent from the collected surface, and that
- *     absence is this documented limitation in action, not a bug.
+ *   - A symbol is found only through `export ... from` chains. A module `index.ts` reaches only by
+ *     importing it (never re-exporting it) contributes nothing, and neither does a local export
+ *     list such as `import { a } from './a.js'; export { a };`.
  *   - It does NOT know whether a symbol is pure, side-effecting, or even callable with the shape
  *     a translator might assume — `kind` is a syntactic classification only (`function`/`const`/
  *     `class`), not a semantic guarantee.
- *   - A named re-export's `kind` is resolved by re-scanning its target module for a matching
- *     `export function|const|class Name` declaration; if none is found (e.g. the name is
- *     re-exported from a module this function could not read), it is recorded as `const` — the
- *     least-specific, least-presumptuous default.
+ *   - A named re-export whose name the chain never finds declared as `export function|const|class`
+ *     (another declaration form) is recorded as `const` at the module it was re-exported from —
+ *     the least-specific, least-presumptuous default.
+ *
+ * A re-export that resolves to no file, or to a file outside `src/`, throws with the module and
+ * specifier named, so a broken chain is never reported as a smaller surface.
  *
  * Reads only under `${projectDir}/src/` — never `testDir`. `buildExampleTranslationPayload`'s
  * "never contains the project's existing test files" guarantee (178-CONTEXT.md decision 6) holds
@@ -506,51 +600,25 @@ async function readOptional(path: string): Promise<string | undefined> {
 export async function collectGameApiSurface(projectDir: string): Promise<GameApiSurface> {
   const testDir = join(projectDir, 'tests');
   const indexPath = join(projectDir, 'src', 'rules', 'index.ts');
-  const indexText = await fs.readFile(indexPath, 'utf-8').catch((err: NodeJS.ErrnoException) => {
+  if (!(await isFile(indexPath))) {
     throw new Error(
-      `No src/rules/index.ts in ${projectDir} (${err.code ?? 'unknown error'}).\n` +
+      `No src/rules/index.ts in ${projectDir}.\n` +
         `collectGameApiSurface reads the generated game's rules re-export chain; pass the ` +
         `generated project's root directory.`,
     );
-  });
+  }
 
-  const rulesDir = dirname(indexPath);
   const symbols: GameApiSymbol[] = [];
   const seen = new Set<string>();
-
-  const addSymbol = (name: string, kind: GameApiSymbol['kind'], absoluteModulePath: string) => {
-    const key = `${name}:${absoluteModulePath}`;
-    if (seen.has(key)) return;
+  for (const declared of (await collectModuleExports(projectDir, indexPath, new Set())).values()) {
+    const key = `${declared.declaredName}:${declared.absolutePath}`;
+    if (seen.has(key)) continue;
     seen.add(key);
-    symbols.push({ name, kind, module: toProjectRelativeModule(projectDir, absoluteModulePath) });
-  };
-
-  for (const m of indexText.matchAll(TOP_LEVEL_DECLARATION_RE)) {
-    addSymbol(m[2], m[1] as GameApiSymbol['kind'], indexPath);
-  }
-
-  for (const m of indexText.matchAll(STAR_REEXPORT_RE)) {
-    const targetPath = join(rulesDir, `${m[1]}.ts`);
-    const targetText = await readOptional(targetPath);
-    if (targetText === undefined) continue;
-    for (const dm of targetText.matchAll(TOP_LEVEL_DECLARATION_RE)) {
-      addSymbol(dm[2], dm[1] as GameApiSymbol['kind'], targetPath);
-    }
-  }
-
-  for (const m of indexText.matchAll(NAMED_REEXPORT_RE)) {
-    const names = m[1]
-      .split(',')
-      .map((entry) => entry.trim().split(/\s+as\s+/)[0].trim())
-      .filter((name) => name.length > 0);
-    const targetPath = join(rulesDir, `${m[2]}.ts`);
-    const targetText = (await readOptional(targetPath)) ?? '';
-    for (const name of names) {
-      const isFunction = new RegExp(`^export\\s+function\\s+${name}\\b`, 'm').test(targetText);
-      const isClass = new RegExp(`^export\\s+class\\s+${name}\\b`, 'm').test(targetText);
-      const kind: GameApiSymbol['kind'] = isFunction ? 'function' : isClass ? 'class' : 'const';
-      addSymbol(name, kind, targetPath);
-    }
+    symbols.push({
+      name: declared.declaredName,
+      kind: declared.kind,
+      module: toProjectRelativeModule(projectDir, declared.absolutePath),
+    });
   }
 
   return { projectDir, testDir, exportedSymbols: symbols };
