@@ -64,5 +64,6 @@ export * from './engine.js';
 export * from './rekey.js';
 export * from './runner.js';
 export * from './definition.js';
+export * from './presence.js';
 export * from './orders.js';
 export * from './migration.js';

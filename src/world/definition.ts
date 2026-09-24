@@ -315,6 +315,8 @@ export interface WorldDefinition {
 export interface WorldPresenceDeclaration {
   readonly onArrive?: string;
   readonly onDepart?: string;
+  /** How long a seat's last socket may be gone before `onDepart` runs.
+   *  Defaulted and bounded by `presenceDepartGraceMs` (#338). */
   readonly departGraceMs?: number;
 }
 
@@ -329,10 +331,11 @@ export interface WorldReferralDeclaration {
 /**
  * The world half of a bundle's definition, or a refusal naming what is missing.
  *
- * `presence` is returned as the bundle wrote it. Validating it needs the host's
- * own grace bounds and its own answer to what a departure is, so the host
- * checks it; what cannot be left to the host is the SHAPE, which is why the
- * field is typed here.
+ * `presence` is returned as the bundle wrote it. Validating its hooks needs the
+ * host's own answer to what a departure is, so the host checks it; what cannot
+ * be left to the host is the SHAPE, which is why the field is typed here, and
+ * the grace's default and bounds, which every host reads through
+ * `presenceDepartGraceMs` (#338).
  *
  * `referral` is returned the same way and for the same reason: whether a
  * founding is worth a reward, and which verbs a host may issue, is that host's
