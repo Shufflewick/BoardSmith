@@ -185,6 +185,18 @@ describe('auditChoiceCardinality', () => {
     );
   });
 
+  // #317: a game built chunk by chunk stops with no move left until the chunk
+  // that ends it exists. Every choice it offered was counted, so that stop is
+  // a finished walk, not a game the simulator could not play.
+  it('counts a game whose ending is not built yet, which stops with no move left', async () => {
+    const { UnfinishedWideGame } = await import('./choice-cardinality.fixture.js');
+    const { auditChoiceCardinality } = await import('./choice-cardinality.js');
+
+    expect(await auditChoiceCardinality(UnfinishedWideGame, { seed: 'audit', games: 2 })).toEqual([
+      { action: 'shout', selection: 'verb', maxCandidates: 40 },
+    ]);
+  });
+
   it('plays at the seat count it is given', async () => {
     const { ThreeSeatWideGame } = await import('./choice-cardinality.fixture.js');
     const { auditChoiceCardinality } = await import('./choice-cardinality.js');

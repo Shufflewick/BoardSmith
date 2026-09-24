@@ -158,6 +158,21 @@ describe('validateFlowPosition', () => {
     expect(result.recoveryPosition?.iterations).toEqual({ __iter_0: 4, __iter_1: 2 });
   });
 
+  it('keeps the frame data (an if/switch branch taken) that lies inside the surviving prefix (#330)', () => {
+    const pos = position({
+      frameData: {
+        __frame_0: { iteration: 0 },
+        __frame_1: { branchPushed: true, branchIndex: 1 },
+        __frame_2: { branchPushed: true, branchKey: 'c', branchIndex: 2 },
+      },
+    });
+    const result = validateFlowPosition(snapshotWith(pos), engineThatRejects([0, 1]));
+    expect(result.recoveryPosition?.frameData).toEqual({
+      __frame_0: { iteration: 0 },
+      __frame_1: { branchPushed: true, branchIndex: 1 },
+    });
+  });
+
   it('drops the player index, which may name a seat the truncated flow never reaches', () => {
     const pos = position({ playerIndex: 2 });
     const result = validateFlowPosition(snapshotWith(pos), engineThatRejects([0]));

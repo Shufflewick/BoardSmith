@@ -198,6 +198,45 @@ here.
    `timedOut` or `exceededMaxActions`. This is the real API — do not reimplement a hand-rolled
    random-play loop in its place.
 
+   The simulator plays only moves a player could make: it never submits an action its `.disabled()`
+   rule refuses (or a tutorial gate refuses). A seat whose actions are all refused waits while
+   another seat plays, and a game where no seat has an enabled action stops with "no player has an
+   enabled action to take", naming each refused action and its reason. So `.disabled()` is never a
+   reason to reshape a rule or this test.
+
+   **A chunk whose game cannot end yet declares its rest with `isResting`.** Before the chunk that
+   builds the ending, every random game stops with no move left, and by default that stop is
+   `stuck`, the same as a deadlock. Pass `isResting`: it is handed the stopped game and returns the
+   reason the game rests there, or `false`. Check the final state inside it, so a game that stopped
+   anywhere else stays `stuck`:
+
+   ```typescript
+   const results = await simulateRandomGames(MyGame, {
+     count: 50,
+     playerCounts: [2],
+     // Deployment ends at check-in, which chunk `check-in` builds. Remove this then.
+     isResting: (game) =>
+       game.players.every((p) => p.supply < CHEAPEST_PACK)
+         ? 'every player has spent their supply; check-in is not built yet'
+         : false,
+   });
+
+   expect(results.crashed).toBe(0);
+   expect(results.stuck).toBe(0);
+   expect(results.timedOut).toBe(0);
+   expect(results.exceededMaxActions).toBe(0);
+   expect(results.resting).toBe(results.total);
+   ```
+
+   Never relax `results.stuck` instead (no `toBe(results.total)`, no replaying stuck games to excuse
+   them): `isResting` is only asked about a game that stopped because no seat had an enabled
+   action, so a crash, a rejected move or a move the simulator cannot build still fails. Record the
+   rest and the chunk that removes it in DECISIONS.md, and delete `isResting` in that chunk, so the
+   game's `stuck` check is a plain zero again. `boardsmith simulate` has no `isResting`: it reports
+   every game of such a chunk stuck, so it is not this chunk's gate. `boardsmith validate`'s choice
+   cardinality check still counts such a game, because every choice it offered before stopping was
+   counted.
+
    **Fail-loud: the sim must have EXERCISED this chunk's new actions (SKILLAUTO-08).** The four
    zero-checks above prove the run didn't crash, stall, or run away — they do NOT prove the run
    ever actually reached this chunk's new action(s). Passing all four zero-checks while never once

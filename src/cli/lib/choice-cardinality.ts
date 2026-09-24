@@ -192,6 +192,11 @@ export async function auditChoiceCardinality<G extends Game>(
     seed: options.seed,
     timeout: options.timeout,
     gameOptions: options.gameOptions,
+    // A game that stops because no seat has an enabled action offered every
+    // choice step it had before it stopped, and each was counted. Whether that
+    // stop is the game's unbuilt ending or a deadlock is for its own
+    // simulateRandomGames test to say (#317); here it is a finished walk.
+    isResting: () => 'no seat had an enabled action left, after every choice it offered was counted',
     onSelectionChoices: ({ action, selection, candidateCount }) => {
       observations.push(observeChoiceStep(action, selection as ObservableSelection, candidateCount));
     },

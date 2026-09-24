@@ -4,6 +4,7 @@
  */
 
 import type { ChoiceWithRefs, ValidElement } from '../../composables/useActionControllerTypes.js';
+import { choiceBoardTarget } from '../../composables/actionControllerHelpers.js';
 import { MAX_FLAT_CHOICE_CANDIDATES } from '../../../engine/element/action-metadata.js';
 
 /**
@@ -75,9 +76,9 @@ export function splitAnchoredChoices(
  * hands keyboard focus to the board, instead of fifty buttons.
  *
  * Two conditions are strict, and both are about not losing a choice:
- * - Only element / elements picks. A `choice` pick's values are not board
- *   elements; `splitAnchoredChoices` handles those, and it partitions rather
- *   than defers precisely so nothing is dropped.
+ * - Only element / elements picks. A `choice` pick has its own rule,
+ *   `shouldDeferChoicePickToBoard`, because its candidates are values that
+ *   point at the board rather than board elements themselves.
  * - EVERY candidate must carry a ref. One candidate without one would be
  *   reachable from neither surface, which is the divergence bug this rule
  *   exists to forbid, not a rounding error.
@@ -94,6 +95,38 @@ export function shouldDeferElementPickToBoard(
   if (pickType !== 'element' && pickType !== 'elements') return false;
   if (validElements.length <= threshold) return false;
   return validElements.every((e) => (e.refs ?? []).length > 0);
+}
+
+/**
+ * #313 — should the panel hand this `chooseFrom` pick to the board?
+ *
+ * The same handoff as `shouldDeferElementPickToBoard`, for a choice pick whose
+ * candidates are board spaces: Windup Warfare offers 3,720 of them for where a
+ * pack goes, each with a notation `boardRefs`, and listing them is no more
+ * readable than listing Hex's cells.
+ *
+ * A choice is on the board when its board target (`choiceBoardTarget`, the ref
+ * the board bridge routes a click by) carries a NOTATION. That is what makes a
+ * board space pickable; an id-only ref highlights an element and is not a pick
+ * surface (see `splitAnchoredChoices`). The conditions are about not losing a
+ * choice, as for elements:
+ * - EVERY candidate must have such a target, or the one without would be
+ *   reachable from neither surface.
+ * - No two candidates may share a space. The board picks by space, so of two
+ *   choices on one space only the first could ever be chosen there.
+ */
+export function shouldDeferChoicePickToBoard(
+  choices: ChoiceWithRefs[],
+  threshold: number = MAX_FLAT_CHOICE_CANDIDATES,
+): boolean {
+  if (choices.length <= threshold) return false;
+  const spaces = new Set<string>();
+  for (const choice of choices) {
+    const notation = choiceBoardTarget(choice)?.notation;
+    if (notation === undefined || spaces.has(notation)) return false;
+    spaces.add(notation);
+  }
+  return true;
 }
 
 /**

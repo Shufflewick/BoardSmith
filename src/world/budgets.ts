@@ -266,7 +266,7 @@ export function worldBudgets(overrides: WorldBudgetOverrides = {}): WorldBudgets
  * `MAX_FLAT_CHOICE_CANDIDATES` is the Action Panel's READING threshold: past it
  * a wrapping row of pills stops being a sentence and becomes an unlabelled grid,
  * so the panel renders the prompt and one control that hands focus to the board
- * (`shouldDeferElementPickToBoard`). `maxCandidatesPerSelection` is the host's
+ * (`shouldDeferElementPickToBoard`, `shouldDeferChoicePickToBoard`). `maxCandidatesPerSelection` is the host's
  * SAFETY NET: past it the offer's size is a function of the resident tree rather
  * than of the declaration, which is the O(world) read the partitioned model
  * exists to delete, so the world is refused when it is built.
