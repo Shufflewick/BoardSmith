@@ -450,12 +450,22 @@ instead. A subject that holds no elements at all is refused for the same reason:
 a diff with nothing on one side of it cannot fail.
 
 ```typescript
-import { assertNoHiddenInfoLeak } from 'boardsmith/testing';
+import { assertNoHiddenInfoLeak, preloadSeatRenderer } from 'boardsmith/testing';
+
+await preloadSeatRenderer();
 
 test('opponent card rank/suit never appears in the DOM for seat 2', async () => {
   await assertNoHiddenInfoLeak(testGame, 2);
 });
 ```
+
+**Put `await preloadSeatRenderer()` at the top of a test file that renders**
+(#354). The first render in a file loads `@vue/test-utils` and compiles
+AutoUI's Vue components, which takes seconds on a busy machine, while a render
+after that takes milliseconds. At the top level that load happens while Vitest
+collects the file, where no test timeout applies; without it the first test
+pays for it and can time out under load. It loads once per file, and it throws
+the same jsdom message a render does.
 
 **`subject` is a `TestGame` or a `TestWorld`.** Both answer the same two
 questions -- what this seat is SENT, and what the game or world HOLDS -- and the

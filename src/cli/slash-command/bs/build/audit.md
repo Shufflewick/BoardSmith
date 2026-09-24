@@ -251,7 +251,8 @@ The visibility lens must cite the real functions, not describe the check in pros
   a hidden card's identity) that a pure JSON-view diff would miss. **For any chunk whose game has
   a custom board, pass `{ component: <the game's root UI component> }`** — the default renders
   AutoUI, so without it the check scans markup the players never see and a green result does not
-  cover the game's own board.
+  cover the game's own board. Put `await preloadSeatRenderer()` (same package) at the top of the
+  test file, so the one-time Vue module load does not land inside the first test's timeout.
 
 ## Persisting the Round — Write to the Findings Ledger BEFORE Repair Starts
 

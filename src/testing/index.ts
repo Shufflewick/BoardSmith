@@ -110,6 +110,7 @@ export {
 export {
   renderAsSeat,
   assertNoHiddenInfoLeak,
+  preloadSeatRenderer,
   type HiddenInfoSubject,
   type SeatProjection,
   type HiddenInfoGameView,
