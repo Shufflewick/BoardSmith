@@ -406,6 +406,11 @@ const WORLD_WIRE_FIXTURE = {
     source: 'shufflewick-world-ui',
     type: 'world_command',
     requestId: 'wc-1',
+    // A PAID ORDER'S IDENTITY (#195). Required on the wire since the order
+    // receipt landed, and missing here until #312: this file was type-checked
+    // by nothing, so the `satisfies` below never refused it and the field
+    // moved no hash.
+    order: { id: 'order-1', at: 1_700_000_000_000 },
     action: 'move',
     args: { to: 7 },
   },
@@ -951,6 +956,7 @@ function assertCoversWorldOffer(facts: {
   menuPlacements: readonly { group?: readonly string[]; order?: number }[];
   multilineTextIsOffered: boolean;
   prefilledLabelledNumberIsOffered: boolean;
+  activityWatermarkIsRendered: boolean;
   ownLandIsBare: boolean;
   everyNeighbourIsGreyed: boolean;
 }): void {
@@ -970,6 +976,9 @@ function assertCoversWorldOffer(facts: {
       'an action whose number selection opens pre-filled and labelled',
       facts.prefilledLabelledNumberIsOffered,
     ],
+    // ShufflewickPub #383. A stamp field is a TYPE, so only a prompt that
+    // renders it puts it on the wire; a prompt that never ran puts nothing there.
+    ["a prompt that renders the watching seat's activity watermark", facts.activityWatermarkIsRendered],
     // The action panel's hierarchy (#228). All three states, because all three
     // are bytes on the offer: a nested path, an order standing alone, and the
     // absence that a game declaring no hierarchy sends.
@@ -1162,7 +1171,12 @@ async function declarationRefusal(built: any, player: string): Promise<string> {
   }
 }
 
-async function computeWorldFixture(): Promise<{ view: unknown; offer: unknown }> {
+async function computeWorldFixture(): Promise<{
+  view: unknown;
+  audience: unknown;
+  rounds: (readonly string[])[];
+  offer: unknown;
+}> {
   const engine = await import('../engine/index.js');
   const { BoardSmithWorldEngine, worldAction } = await import('../world/index.js');
   const { Game, Player, Space } = engine as any;
@@ -1216,18 +1230,7 @@ async function computeWorldFixture(): Promise<{ view: unknown; offer: unknown }>
   // FOUR VERBS, ONE FOR EACH DECISION `offerOf` MAKES. See
   // `assertCoversWorldOffer` for what each is standing in for.
   const look = worldAction<any>('look')
-    // THE PROMPT READS THE ACTIVITY WATERMARK (ShufflewickPub #383), which is
-    // what puts the field inside the payload hash. A stamp field is a TYPE, and
-    // a type moves neither fingerprint on its own -- see the KNOWN LIMIT above
-    // -- so a host that stopped sending `activity`, or an engine that stopped
-    // deriving `inactiveSince` from it, would change what every world prompt
-    // says with nothing to record it. Rendering it here is also the real use:
-    // "you have been away N days" is a sentence an OFFER has to be able to make.
-    .prompt(({ world }: any) =>
-      world.activity === null
-        ? 'Look about you'
-        : `Look about you (away ${world.now - world.activity.inactiveSince}ms)`,
-    )
+    .prompt('Look about you')
     .needs(({ player }: any) => [holdingPartition(player.seat)])
     // ROUND TWO READS WHAT ROUND ONE LOADED, THROUGH THE INDEXED ACCESSOR
     // (ShufflewickPub#374). Before this the fixture's two-round shape was two
@@ -1289,7 +1292,22 @@ async function computeWorldFixture(): Promise<{ view: unknown; offer: unknown }>
     });
 
   const neighbourPick = {
-    prompt: "Whose land?",
+    // THE PROMPT READS THE ACTIVITY WATERMARK (ShufflewickPub #383), which is
+    // what puts the field inside the payload hash. A stamp field is a TYPE, and
+    // a type moves neither fingerprint on its own -- see the KNOWN LIMIT above
+    // -- so a host that stopped sending `activity`, or an engine that stopped
+    // deriving `inactiveSince` from it, would change what every world prompt
+    // says with nothing to record it. Rendering it here is also the real use:
+    // "you have been away N days" is a sentence an OFFER has to be able to make.
+    //
+    // ON A PICK, because a pick's prompt may be a function and an ACTION's may
+    // not: until #312 this sat on `look`'s action prompt, which takes a string,
+    // so the offer carried the function itself, JSON dropped it, and the
+    // watermark moved no hash. `activityWatermarkIsRendered` now holds it.
+    prompt: ({ world }: any) =>
+      world.activity === null
+        ? "Whose land?"
+        : `Whose land? (away ${world.now - world.activity.inactiveSince}ms)`,
     needs: ({ player }: any) => neighboursOf(player.seat).map(holdingPartition),
     elements: ({ game, player }: any) =>
       neighboursOf(player.seat).map((seat: number) => holdingOf(game, seat)),
@@ -1501,6 +1519,16 @@ async function computeWorldFixture(): Promise<{ view: unknown; offer: unknown }>
         );
       }),
     ),
+    // OFF THE OFFER, because a prompt the offer never evaluated is not on the
+    // wire at all: JSON drops a function, so the watermark would move no hash.
+    activityWatermarkIsRendered: offer.some(
+      (verb: { prompt?: unknown; selections?: readonly { prompt?: unknown }[] }) =>
+        [verb.prompt, ...(verb.selections ?? []).map((pick) => pick.prompt)].some(
+          (text) =>
+            typeof text === 'string' &&
+            text.includes(`away ${OFFER_STAMP.now - OFFER_STAMP.activity.at}ms`),
+        ),
+    ),
     // OFF THE OFFER FOR #229's REASON, AND FOR A SHARPER ONE (#228). A
     // placement dropped by `offerOf` would leave the panel flat with the
     // declaration still reading correctly -- and reading the DECLARATIONS here
@@ -1562,7 +1590,7 @@ export async function computePayloadHash(): Promise<string> {
   const {
     Game, Space, Piece, Player, Deck, Hand, Action,
     defineFlow, actionStep, simultaneousActionStep, sequence, eachPlayer,
-  } = engine as any;
+  } = engine;
 
   class FixturePlayer extends Player<any, any> {
     hasBid = false;
@@ -1858,7 +1886,7 @@ async function formatFixtureWorld(options: {
 }): Promise<any> {
   const engineModule = await import('../engine/index.js');
   const { BoardSmithWorldEngine } = await import('../world/index.js');
-  const { Game, Player, Space, Piece } = engineModule as any;
+  const { Game, Player, Space, Piece } = engineModule;
 
   class FormatFixturePlayer extends Player<any, any> {}
 
