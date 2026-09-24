@@ -37,6 +37,13 @@
       ]
     },
     {
+      "content": "020a5b48fa179504",
+      "lines": 26,
+      "files": [
+        "src/ui/composables/interaction-integration.test.ts"
+      ]
+    },
+    {
       "content": "021065be73155da2",
       "lines": 27,
       "files": [
@@ -543,6 +550,13 @@
       ]
     },
     {
+      "content": "11b5d0f1b87ebf76",
+      "lines": 12,
+      "files": [
+        "src/ui/composables/useBoardActionBridge.test.ts"
+      ]
+    },
+    {
       "content": "11b8d871b6c19e7d",
       "lines": 7,
       "files": [
@@ -724,6 +738,13 @@
       ]
     },
     {
+      "content": "175bd776e87d6c57",
+      "lines": 31,
+      "files": [
+        "src/ui/composables/interaction-integration.test.ts"
+      ]
+    },
+    {
       "content": "1784dab72184ccca",
       "lines": 37,
       "files": [
@@ -842,13 +863,6 @@
       ]
     },
     {
-      "content": "1d50d64d8e980b54",
-      "lines": 10,
-      "files": [
-        "src/ui/composables/useBoardActionBridge.test.ts"
-      ]
-    },
-    {
       "content": "1d9b4d4490603442",
       "lines": 26,
       "files": [
@@ -922,13 +936,6 @@
       ]
     },
     {
-      "content": "1fdc58ed16a1c5aa",
-      "lines": 31,
-      "files": [
-        "src/ui/composables/interaction-integration.test.ts"
-      ]
-    },
-    {
       "content": "1ff709ee28f21349",
       "lines": 5,
       "files": [
@@ -964,6 +971,13 @@
       "lines": 13,
       "files": [
         "src/ui/composables/useActionController.test.ts"
+      ]
+    },
+    {
+      "content": "2150991e216a107a",
+      "lines": 16,
+      "files": [
+        "src/ui/composables/useBoardActionBridge.test.ts"
       ]
     },
     {
@@ -1073,6 +1087,13 @@
       "files": [
         "src/ui/components/ControlsMenu.action-help.test.ts",
         "src/ui/components/ControlsMenu.tutorial-toggle.test.ts"
+      ]
+    },
+    {
+      "content": "250f7fe15be32758",
+      "lines": 22,
+      "files": [
+        "src/ui/composables/useBoardActionBridge.test.ts"
       ]
     },
     {
@@ -1280,13 +1301,6 @@
       ]
     },
     {
-      "content": "3072de1276373b54",
-      "lines": 18,
-      "files": [
-        "src/ui/composables/useBoardActionBridge.test.ts"
-      ]
-    },
-    {
       "content": "30c85a8623220c35",
       "lines": 21,
       "files": [
@@ -1368,6 +1382,13 @@
       ]
     },
     {
+      "content": "3340a6c61e184855",
+      "lines": 27,
+      "files": [
+        "src/ui/composables/useBoardActionBridge.test.ts"
+      ]
+    },
+    {
       "content": "3372d78df7df957b",
       "lines": 5,
       "files": [
@@ -1393,6 +1414,13 @@
       "lines": 8,
       "files": [
         "src/cli/commands/verify-enumerate.test.ts"
+      ]
+    },
+    {
+      "content": "3552d540c11b96c9",
+      "lines": 17,
+      "files": [
+        "src/ui/composables/useBoardActionBridge.test.ts"
       ]
     },
     {
@@ -1494,6 +1522,13 @@
       "lines": 5,
       "files": [
         "src/ui/components/ControlsMenu.action-help.test.ts"
+      ]
+    },
+    {
+      "content": "3982e17e1be869da",
+      "lines": 21,
+      "files": [
+        "src/ui/composables/useBoardActionBridge.test.ts"
       ]
     },
     {
@@ -1873,17 +1908,17 @@
       ]
     },
     {
+      "content": "45d14bcbaabd9d80",
+      "lines": 10,
+      "files": [
+        "src/ui/composables/useBoardActionBridge.test.ts"
+      ]
+    },
+    {
       "content": "4689c6e249f97bf0",
       "lines": 5,
       "files": [
         "src/cli/dev-host/multiplayer-host.gameoptions.test.ts"
-      ]
-    },
-    {
-      "content": "472877741e343bdc",
-      "lines": 10,
-      "files": [
-        "src/ui/composables/useBoardActionBridge.test.ts"
       ]
     },
     {
@@ -2161,6 +2196,13 @@
       ]
     },
     {
+      "content": "506be4190b242189",
+      "lines": 30,
+      "files": [
+        "src/ui/composables/interaction-integration.test.ts"
+      ]
+    },
+    {
       "content": "50b1501b0593ac85",
       "lines": 15,
       "files": [
@@ -2174,13 +2216,6 @@
       "lines": 30,
       "files": [
         "src/cli/commands/verify-derive-check.test.ts"
-      ]
-    },
-    {
-      "content": "51fc536c9e23fb4a",
-      "lines": 12,
-      "files": [
-        "src/ui/composables/useBoardActionBridge.test.ts"
       ]
     },
     {
@@ -2371,13 +2406,6 @@
       "lines": 8,
       "files": [
         "src/testing/simulate-action.ts"
-      ]
-    },
-    {
-      "content": "584a993a504f7335",
-      "lines": 22,
-      "files": [
-        "src/ui/composables/useBoardActionBridge.test.ts"
       ]
     },
     {
@@ -2616,6 +2644,13 @@
       "lines": 8,
       "files": [
         "src/cli/commands/verify-run.test.ts"
+      ]
+    },
+    {
+      "content": "5f9c17f47665f54e",
+      "lines": 16,
+      "files": [
+        "src/ui/composables/useBoardActionBridge.test.ts"
       ]
     },
     {
@@ -3305,13 +3340,6 @@
       ]
     },
     {
-      "content": "7630a3b04611ac20",
-      "lines": 30,
-      "files": [
-        "src/ui/composables/interaction-integration.test.ts"
-      ]
-    },
-    {
       "content": "7667c2ebaec2cb3b",
       "lines": 13,
       "files": [
@@ -3466,13 +3494,6 @@
       "lines": 9,
       "files": [
         "src/world/declaration.test.ts"
-      ]
-    },
-    {
-      "content": "7bfa81c9f05584ce",
-      "lines": 17,
-      "files": [
-        "src/ui/composables/useBoardActionBridge.test.ts"
       ]
     },
     {
@@ -3914,13 +3935,6 @@
       ]
     },
     {
-      "content": "8a6d0bfdfe644736",
-      "lines": 17,
-      "files": [
-        "src/ui/composables/useBoardActionBridge.test.ts"
-      ]
-    },
-    {
       "content": "8aae67804df0e444",
       "lines": 10,
       "files": [
@@ -4331,24 +4345,10 @@
       ]
     },
     {
-      "content": "96e83ce59fdfcd39",
-      "lines": 12,
-      "files": [
-        "src/ui/composables/useBoardActionBridge.test.ts"
-      ]
-    },
-    {
       "content": "970ecc553ab030ae",
       "lines": 7,
       "files": [
         "src/session/stateless-ops.test.ts"
-      ]
-    },
-    {
-      "content": "978c5f10c23e73d0",
-      "lines": 26,
-      "files": [
-        "src/ui/composables/interaction-integration.test.ts"
       ]
     },
     {
@@ -4399,13 +4399,6 @@
       "lines": 12,
       "files": [
         "src/engine/action/action.test.ts"
-      ]
-    },
-    {
-      "content": "9a8edc106c8fb17c",
-      "lines": 24,
-      "files": [
-        "src/ui/composables/useBoardActionBridge.test.ts"
       ]
     },
     {
@@ -4816,13 +4809,6 @@
       ]
     },
     {
-      "content": "a8f837b9fbfe7d1d",
-      "lines": 27,
-      "files": [
-        "src/ui/composables/interaction-integration.test.ts"
-      ]
-    },
-    {
       "content": "a9049e5f94c0f5c7",
       "lines": 19,
       "files": [
@@ -4917,6 +4903,13 @@
       ]
     },
     {
+      "content": "acf783f6a8b7cdba",
+      "lines": 17,
+      "files": [
+        "src/ui/composables/useBoardActionBridge.test.ts"
+      ]
+    },
+    {
       "content": "ad3e58fc48f80dd1",
       "lines": 10,
       "files": [
@@ -4976,13 +4969,6 @@
         "src/ui/components/auto-ui/AutoRenderer.vue",
         "src/ui/components/auto-ui/renderers/CardRenderer.vue",
         "src/ui/components/auto-ui/renderers/HandRenderer.vue"
-      ]
-    },
-    {
-      "content": "ae80ce88f28812de",
-      "lines": 21,
-      "files": [
-        "src/ui/composables/useBoardActionBridge.test.ts"
       ]
     },
     {
@@ -5072,6 +5058,13 @@
       ]
     },
     {
+      "content": "b16c33da4a11f498",
+      "lines": 10,
+      "files": [
+        "src/ui/composables/useBoardActionBridge.test.ts"
+      ]
+    },
+    {
       "content": "b19c5070e12313d8",
       "lines": 6,
       "files": [
@@ -5102,6 +5095,13 @@
       ]
     },
     {
+      "content": "b1fe4199fdd9dcb4",
+      "lines": 27,
+      "files": [
+        "src/ui/composables/interaction-integration.test.ts"
+      ]
+    },
+    {
       "content": "b22b67d4bb536bfb",
       "lines": 11,
       "files": [
@@ -5114,13 +5114,6 @@
       "files": [
         "src/ui/components/auto-ui/renderers/GridBoardRenderer.a11y.test.ts",
         "src/ui/components/auto-ui/renderers/HexBoardRenderer.a11y.test.ts"
-      ]
-    },
-    {
-      "content": "b2fb15654e5b87cc",
-      "lines": 16,
-      "files": [
-        "src/ui/composables/useBoardActionBridge.test.ts"
       ]
     },
     {
@@ -5228,6 +5221,13 @@
       "files": [
         "src/session/snapshot-session-host.test.ts",
         "src/session/testing/mid-game-bot-takeover.test.ts"
+      ]
+    },
+    {
+      "content": "b61547b372fc4780",
+      "lines": 18,
+      "files": [
+        "src/ui/composables/useBoardActionBridge.test.ts"
       ]
     },
     {
@@ -5351,6 +5351,13 @@
       "lines": 13,
       "files": [
         "src/engine/action/action.test.ts"
+      ]
+    },
+    {
+      "content": "ba1104d7757fc829",
+      "lines": 16,
+      "files": [
+        "src/ui/composables/useBoardActionBridge.test.ts"
       ]
     },
     {
@@ -5831,24 +5838,10 @@
       ]
     },
     {
-      "content": "cc3a7f1f58d35443",
-      "lines": 16,
-      "files": [
-        "src/ui/composables/useBoardActionBridge.test.ts"
-      ]
-    },
-    {
       "content": "cc4b80e4df3636ec",
       "lines": 20,
       "files": [
         "src/session/pending-action-manager.test.ts"
-      ]
-    },
-    {
-      "content": "cc5789c3c8403b20",
-      "lines": 16,
-      "files": [
-        "src/ui/composables/useBoardActionBridge.test.ts"
       ]
     },
     {
@@ -5880,6 +5873,13 @@
       "lines": 6,
       "files": [
         "src/world/action.ts"
+      ]
+    },
+    {
+      "content": "cd674844fa87d88d",
+      "lines": 24,
+      "files": [
+        "src/ui/composables/useBoardActionBridge.test.ts"
       ]
     },
     {
@@ -6004,6 +6004,14 @@
       "files": [
         "src/eslint-plugin/rules/no-element-array-state.ts",
         "src/eslint-plugin/rules/no-element-identity-comparison.ts"
+      ]
+    },
+    {
+      "content": "d07d78c54ed7b2a4",
+      "lines": 24,
+      "files": [
+        "src/ui/components/auto-ui/ActionPanel.board-bridge.test.ts",
+        "src/ui/components/auto-ui/renderers/candidate-hook.test.ts"
       ]
     },
     {
@@ -6530,13 +6538,6 @@
       ]
     },
     {
-      "content": "e5e5b9625efcdcb9",
-      "lines": 27,
-      "files": [
-        "src/ui/composables/useBoardActionBridge.test.ts"
-      ]
-    },
-    {
       "content": "e5ffcb18682f6f37",
       "lines": 9,
       "files": [
@@ -6647,6 +6648,13 @@
       ]
     },
     {
+      "content": "e9b25cc8e9a720ad",
+      "lines": 17,
+      "files": [
+        "src/ui/composables/useBoardActionBridge.test.ts"
+      ]
+    },
+    {
       "content": "ea18858ea8d3da58",
       "lines": 14,
       "files": [
@@ -6695,13 +6703,6 @@
       "files": [
         "src/session/restore-snapshot-authoritative.test.ts",
         "src/session/testing/rewind-animation-watermark.test.ts"
-      ]
-    },
-    {
-      "content": "ead5d13cc139a02a",
-      "lines": 17,
-      "files": [
-        "src/ui/composables/useBoardActionBridge.test.ts"
       ]
     },
     {
@@ -6815,14 +6816,6 @@
       ]
     },
     {
-      "content": "ef9bb5d12096eaf1",
-      "lines": 24,
-      "files": [
-        "src/ui/components/auto-ui/ActionPanel.board-bridge.test.ts",
-        "src/ui/components/auto-ui/renderers/candidate-hook.test.ts"
-      ]
-    },
-    {
       "content": "f08fd7c45837979f",
       "lines": 23,
       "files": [
@@ -6878,6 +6871,13 @@
       "lines": 8,
       "files": [
         "src/ui/composables/useAnnouncer.test.ts"
+      ]
+    },
+    {
+      "content": "f2e050370dbce79a",
+      "lines": 12,
+      "files": [
+        "src/ui/composables/useBoardActionBridge.test.ts"
       ]
     },
     {

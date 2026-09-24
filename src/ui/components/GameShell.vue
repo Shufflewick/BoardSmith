@@ -1113,9 +1113,14 @@ useBoardActionBridge({
   // panel refuse exactly the same actions.
   disabledActions,
   isViewingHistory,
-  // "The runner was replaced" (undo / rewind / host restore). The bridge cancels
-  // the open pick on a change — see BoardActionBridgeOptions.restoreEpoch.
-  restoreEpoch: computed(() => state.value?.state?.restoreEpoch),
+  // Which game tree this is: a change means the runner was replaced (undo /
+  // rewind) or the game was (New game, #356). The bridge cancels the open pick
+  // on either — see BoardActionBridgeOptions.runnerIdentity.
+  runnerIdentity: computed(() => {
+    const published = state.value?.state;
+    if (published?.gameInstanceId === undefined || published.restoreEpoch === undefined) return undefined;
+    return { gameInstanceId: published.gameInstanceId, restoreEpoch: published.restoreEpoch };
+  }),
 });
 
 // ── DEV-02: devtools postMessage bridge ──────────────────────────────────────

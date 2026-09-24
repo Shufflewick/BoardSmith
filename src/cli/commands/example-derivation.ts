@@ -465,6 +465,28 @@ const TOP_LEVEL_DECLARATION_RE = /^export\s+(function|const|class)\s+(\w+)/gm;
  */
 const RELATIVE_REEXPORT_RE = /^export\s*(?:(\*)|\{([^}]*)\})\s*from\s*['"](\.{1,2}\/[^'"]*)['"]/gm;
 
+/**
+ * A local export list, `export { a, b as c }` with no `from`, anchored at line start. Group 1 is
+ * the braced name list. `export type { ... }` does not match: it names no runtime symbol.
+ */
+const LOCAL_EXPORT_LIST_RE = /^export\s*\{([^}]*)\}(?!\s*from\b)/gm;
+
+/**
+ * A value import with a `from` clause, anchored at line start: `import a from`,
+ * `import { a, b as c } from`, `import * as ns from`, or a default with either of the last two.
+ * Group 1 is the default binding, group 2 the braced name list, group 3 the namespace binding,
+ * group 4 the specifier. `import type ...` does not match.
+ */
+const IMPORT_RE =
+  /^import\s+(?!type\s)(?:(\w+)\s*,?\s*)?(?:\{([^}]*)\}|\*\s*as\s+(\w+))?\s*from\s*['"]([^'"]+)['"]/gm;
+
+/** Where a module's local binding comes from: the module it imports from, and the name there. */
+interface ImportedBinding {
+  specifier: string;
+  /** The name the source module exports, `default` for a default import, `*` for a namespace. */
+  importedName: string;
+}
+
 /** A symbol a module exports, located at the module that declares it. */
 interface DeclaredExport {
   declaredName: string;
@@ -519,6 +541,92 @@ async function resolveReexport(
 }
 
 /**
+ * The value entries of a braced name list (`a, b as c, type T`), as `[localName, exportedName]`
+ * pairs. Type-only entries are dropped: they name no runtime symbol.
+ */
+function parseNameList(list: string): Array<[string, string]> {
+  return list
+    .split(',')
+    .map((entry) => entry.trim())
+    .filter((entry) => entry.length > 0 && !/^type\s/.test(entry))
+    .map((entry) => {
+      const [localName, exportedName = localName] = entry.split(/\s+as\s+/).map((n) => n.trim());
+      return [localName, exportedName];
+    });
+}
+
+/** Every value binding `text` imports, keyed by the local name it is bound to. */
+function collectImportedBindings(text: string): Map<string, ImportedBinding> {
+  const bindings = new Map<string, ImportedBinding>();
+  for (const m of text.matchAll(IMPORT_RE)) {
+    const specifier = m[4];
+    if (m[1]) bindings.set(m[1], { specifier, importedName: 'default' });
+    if (m[3]) bindings.set(m[3], { specifier, importedName: '*' });
+    for (const [importedName, localName] of parseNameList(m[2] ?? '')) {
+      bindings.set(localName, { specifier, importedName });
+    }
+  }
+  return bindings;
+}
+
+/**
+ * The kind of a top-level declaration of `name` in `text`, exported or not. A name declared in
+ * another form (`let`, `enum`, ...) is classed `const`, the least-specific default.
+ */
+function localDeclarationKind(text: string, name: string): GameApiSymbol['kind'] {
+  const m = new RegExp(`^(?:export\\s+)?(function|const|class)\\s+${name}\\b`, 'm').exec(text);
+  return m ? (m[1] as GameApiSymbol['kind']) : 'const';
+}
+
+/**
+ * The declaration a module's `importedName` resolves to, given the exports collected from it.
+ * A name the chain never finds declared as `export function|const|class` is recorded as `const`
+ * at that module.
+ */
+function declaredIn(
+  targetExports: ReadonlyMap<string, DeclaredExport>,
+  importedName: string,
+  targetPath: string,
+): DeclaredExport {
+  return (
+    targetExports.get(importedName) ?? { declaredName: importedName, kind: 'const', absolutePath: targetPath }
+  );
+}
+
+/**
+ * What the local export lists (`export { a, b as c }`, no `from`) of the module at
+ * `absolutePath` export, keyed by exported name (#368). A name the module imported from a
+ * relative path is followed to the module that declares it, exactly as a named re-export is. One
+ * imported from a package is not the game's own and is skipped, as a package re-export is. A name
+ * declared here, or bound here by a default or namespace import, is listed at this module, which
+ * is where it can be imported by name.
+ */
+async function collectLocalExportLists(
+  projectDir: string,
+  absolutePath: string,
+  text: string,
+  onPath: ReadonlySet<string>,
+): Promise<Map<string, DeclaredExport>> {
+  const exports = new Map<string, DeclaredExport>();
+  const imports = collectImportedBindings(text);
+  for (const m of text.matchAll(LOCAL_EXPORT_LIST_RE)) {
+    for (const [localName, exportedName] of parseNameList(m[1])) {
+      const binding = imports.get(localName);
+      if (binding && !binding.specifier.startsWith('.')) continue;
+      if (!binding || binding.importedName === '*' || binding.importedName === 'default') {
+        const kind = binding ? 'const' : localDeclarationKind(text, localName);
+        exports.set(exportedName, { declaredName: exportedName, kind, absolutePath });
+        continue;
+      }
+      const targetPath = await resolveReexport(projectDir, absolutePath, binding.specifier);
+      const targetExports = await collectModuleExports(projectDir, targetPath, onPath);
+      exports.set(exportedName, declaredIn(targetExports, binding.importedName, targetPath));
+    }
+  }
+  return exports;
+}
+
+/**
  * Every symbol `absolutePath` exports, keyed by its exported name, following its re-exports to
  * any depth. `onPath` holds the modules whose exports are being collected above this call: a
  * re-export back into one of them adds nothing that module is not already collecting, so the
@@ -549,21 +657,13 @@ async function collectModuleExports(
       }
       continue;
     }
-    const entries = m[2]
-      .split(',')
-      .map((entry) => entry.trim())
-      .filter((entry) => entry.length > 0 && !/^type\s/.test(entry));
-    for (const entry of entries) {
-      const [importedName, exportedName = importedName] = entry.split(/\s+as\s+/).map((n) => n.trim());
-      exports.set(
-        exportedName,
-        targetExports.get(importedName) ?? {
-          declaredName: importedName,
-          kind: 'const',
-          absolutePath: targetPath,
-        },
-      );
+    for (const [importedName, exportedName] of parseNameList(m[2])) {
+      exports.set(exportedName, declaredIn(targetExports, importedName, targetPath));
     }
+  }
+
+  for (const [exportedName, declared] of await collectLocalExportLists(projectDir, absolutePath, text, path)) {
+    exports.set(exportedName, declared);
   }
 
   return exports;
@@ -572,16 +672,19 @@ async function collectModuleExports(
 /**
  * Produces a generated game project's exported rules API surface MECHANICALLY — a listing, not
  * an inference — by scanning `src/rules/index.ts` and following its re-exports to any depth and
- * into any subfolder of `src/`: `export * from '<path>'` and named
- * `export { a, b as c } from '<path>'`, with each relative path resolved as the game's TypeScript
- * resolves it (#359). Each symbol is listed at the module that DECLARES it, under the name it is
- * declared with there, because that is the pair a translated example imports.
+ * into any subfolder of `src/`: `export * from '<path>'`, named
+ * `export { a, b as c } from '<path>'`, and a local `export { a, b as c }` of names the module
+ * imported, with each relative path resolved as the game's TypeScript resolves it (#359, #368).
+ * Each symbol is listed at the module that DECLARES it, under the name it is declared with there,
+ * because that is the pair a translated example imports. A name a module declares, or binds by a
+ * default or namespace import, and exports only through a local list is listed at that module.
  *
  * Documented limits, so a caller never over-trusts this surface:
  *
- *   - A symbol is found only through `export ... from` chains. A module `index.ts` reaches only by
- *     importing it (never re-exporting it) contributes nothing, and neither does a local export
- *     list such as `import { a } from './a.js'; export { a };`.
+ *   - A symbol is found only through export chains: `export ... from`, and local export lists
+ *     such as `import { a } from './a.js'; export { a as b };`, whose imported names are followed
+ *     the same way (#368). A module `index.ts` reaches only by importing it (never exporting
+ *     what it imported) contributes nothing.
  *   - It does NOT know whether a symbol is pure, side-effecting, or even callable with the shape
  *     a translator might assume — `kind` is a syntactic classification only (`function`/`const`/
  *     `class`), not a semantic guarantee.

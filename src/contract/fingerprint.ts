@@ -43,8 +43,9 @@
  *
  *   COVERED, TABLE SIDE: board serialization, every visibility mode the
  *   platform depends on, flow state, available actions, both sequential and
- *   simultaneous turns, and the serialized flow POSITION with its element
- *   bindings.
+ *   simultaneous turns, the serialized flow POSITION with its element
+ *   bindings, and the NAMES of the fields a seat's broadcast state carries
+ *   (#356), though not their values.
  *
  *   COVERED, WORLD SIDE -- BOTH HALVES OF WHAT A SEAT RECEIVES, and no more.
  *
@@ -1594,6 +1595,7 @@ function throughStorage(json: unknown): unknown {
 export async function computePayloadHash(): Promise<string> {
   const engine = await import('../engine/index.js');
   const { GameRunner } = await import('../runtime/index.js');
+  const { buildPlayerState } = await import('../session/utils.js');
   const {
     Game, Space, Piece, Player, Deck, Hand, Action,
     defineFlow, actionStep, simultaneousActionStep, sequence, eachPlayer,
@@ -1734,6 +1736,16 @@ export async function computePayloadHash(): Promise<string> {
   // `currentPlayer` / `availableActions` left over from before it.
   const openingFlowState = runner.getFlowState();
 
+  // WHICH FIELDS A SEAT'S BROADCAST STATE CARRIES (#356). The session layer
+  // wraps each view in a `PlayerGameState`, and GameShell reads fields of it
+  // the views do not have: `restoreEpoch` and `gameInstanceId` together are
+  // how it knows the element ids behind an open pick went stale. A field there
+  // is a TYPE, so on its own it moved neither hash -- the KNOWN LIMIT above --
+  // and an engine that stopped sending one would silently leave every open pick
+  // standing across an undo or a new game. The NAMES are hashed, not the
+  // values: a game instance id is random by design.
+  const publishedStateFields = Object.keys(buildPlayerState(runner, ['Alice', 'Bob'], 1)).sort();
+
   // Views are captured at the SIMULTANEOUS step, where both seats are on the
   // clock — that is the coverage assertCoversFlowLayer pins, and advancing
   // first would quietly drop it. The flow POSITION is captured one step later,
@@ -1752,7 +1764,8 @@ export async function computePayloadHash(): Promise<string> {
   const flowPosition = game.getFlowState()?.position;
   assertCoversElementBindings(flowPosition);
 
-  // Seven parts hashed together: the per-player payload the platform ships, the
+  // The parts hashed together: the per-player payload the platform ships, the
+  // names of the fields the session layer wraps it in (#356, above), the
   // serialized flow position the platform STORES and restores (not reachable
   // from the views — createPlayerView omits `position` — so a
   // flow-serialization regression was previously invisible here), the world
@@ -1779,6 +1792,7 @@ export async function computePayloadHash(): Promise<string> {
     canonicalize({
       views,
       openingFlowState,
+      publishedStateFields,
       flowPosition,
       worldWire: WORLD_WIRE_FIXTURE,
       // What a host must land in one transaction (#224). Types only, so
