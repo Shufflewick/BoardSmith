@@ -22,7 +22,9 @@
  *   - the host runs rules it bundled once at startup, so a saved edit that
  *     reached only the browser left new UI acting on old rules, on either road
  *     (#201 for worlds, #343 for tables) -- which is why both reload through
- *     `reloadOnRulesEdit`.
+ *     `reloadOnRulesEdit`;
+ *   - a Vite server whose listen was refused still holds the process open, so
+ *     a run refused its port never exited (#345).
  *
  * Two copies of any of those is how they come to disagree, and a disagreement
  * here is invisible until somebody's asset 404s or their HMR dies.
@@ -34,7 +36,7 @@ import { join, relative } from 'node:path';
 import type { Duplex } from 'node:stream';
 
 import chalk from 'chalk';
-import type { Connect, Plugin as VitePlugin, ViteDevServer } from 'vite';
+import { createServer as createViteServer, type Connect, type InlineConfig, type Plugin as VitePlugin, type ViteDevServer } from 'vite';
 import { WebSocketServer, type WebSocket } from 'ws';
 
 import { boardsmithSourceEntries } from './game-runtime.js';
@@ -285,4 +287,30 @@ export function reloadOnRulesEdit<R>(args: {
     if (!changed.startsWith(args.rulesDir)) return;
     reloading = reloading.then(() => reload(relative(args.cwd, changed)));
   });
+}
+
+/**
+ * A Vite dev server, listening, or nothing left open.
+ *
+ * `release` is whatever the caller opened for this server before asking for
+ * it (its socket, its world). It is required because a failure here has to
+ * give those back: if Vite cannot be built or its listen is refused (the port
+ * taken after `devCommand` checked it), the server is closed, `release` runs,
+ * and only then is the error rethrown. An unlistened Vite server, or a world
+ * left open, keeps the process alive after the refusal is printed (#345).
+ */
+export async function listeningViteServer(
+  config: InlineConfig,
+  release: () => Promise<void> | void,
+): Promise<ViteDevServer> {
+  let vite: ViteDevServer | undefined;
+  try {
+    vite = await createViteServer(config);
+    await vite.listen();
+    return vite;
+  } catch (error) {
+    await vite?.close();
+    await release();
+    throw error;
+  }
 }

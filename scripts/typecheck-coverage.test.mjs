@@ -15,8 +15,11 @@ import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+// The compiler comes from where Node resolves this checkout's packages, which in
+// a worktree is the main checkout's install, not `<checkout>/node_modules` (#344).
+import { VUE_TSC } from '../src/contract/vue-tsc-run.test-helper.ts';
+
 const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const VUE_TSC = path.join(PROJECT_ROOT, 'node_modules/vue-tsc/bin/vue-tsc.js');
 
 function lines(command, args) {
   const result = spawnSync(command, args, { cwd: PROJECT_ROOT, encoding: 'utf8' });

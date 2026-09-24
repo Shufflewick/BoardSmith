@@ -316,9 +316,9 @@ describe('dev-host integration: createDevHostClient against a real in-process WS
     // NOT fall through to the (much longer) generic timeout.
     const unseatedClient = createDevHostClient(`ws://localhost:${port}`, { requestTimeoutMs: 5000 });
     await unseatedClient.opened;
-    const start = Date.now();
+    // The host's own words prove the path: the timeout path rejects with
+    // "timed out after ...", never with them. No wall-clock budget needed.
     await expect(unseatedClient.getState()).rejects.toThrow(/not seated in this game/);
-    expect(Date.now() - start).toBeLessThan(1000); // rejected fast, not via the 5s timeout
     unseatedClient.close();
   });
 

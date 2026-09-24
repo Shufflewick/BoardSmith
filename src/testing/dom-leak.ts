@@ -169,6 +169,45 @@ function loadMount(): Promise<typeof import('@vue/test-utils').mount> {
   return mountFnPromise;
 }
 
+/** Every entry point that renders needs jsdom; say so rather than fail inside Vue. */
+function requireDom(): void {
+  if (typeof document === 'undefined') {
+    throw new Error(
+      'renderAsSeat/assertNoHiddenInfoLeak require a DOM environment. ' +
+        'Add `// @vitest-environment jsdom` as the first line of this test file.',
+    );
+  }
+}
+
+let seatRendererPromise: Promise<void> | undefined;
+
+/**
+ * Load everything `renderAsSeat` and `assertNoHiddenInfoLeak` render with:
+ * `@vue/test-utils`, AutoUI's module graph and the board-interaction module.
+ *
+ * Call it with a top-level `await` in a test file that renders:
+ *
+ * ```ts
+ * await preloadSeatRenderer();
+ * ```
+ *
+ * Loading AutoUI compiles and evaluates its Vue components the first time, and
+ * that is by far the slowest part of a render: seconds on a busy machine,
+ * against a render of a few milliseconds (#354). Without this call the first
+ * test in the file pays it inside its own timeout. At the top level it runs
+ * while Vitest collects the file, where no test timeout applies. It loads once
+ * per test file, and every later call returns the same promise.
+ *
+ * @throws Outside a jsdom test environment, with the same message a render gives.
+ */
+export function preloadSeatRenderer(): Promise<void> {
+  requireDom();
+  seatRendererPromise ??= Promise.all([loadMount(), loadAutoUI(), loadBoardInteractionModule()]).then(
+    () => undefined,
+  );
+  return seatRendererPromise;
+}
+
 /**
  * What to render for a seat. `component` is the seam that lets this utility
  * check a game's OWN board instead of AutoUI — see {@link renderAsSeat}.
@@ -310,12 +349,7 @@ async function mountForSeat<C extends Component = typeof AutoUIComponent>(
   seat: number,
   options: RenderAsSeatOptions<C> = {},
 ): Promise<MountedForSeat<C>> {
-  if (typeof document === 'undefined') {
-    throw new Error(
-      'renderAsSeat/assertNoHiddenInfoLeak require a DOM environment. ' +
-        'Add `// @vitest-environment jsdom` as the first line of this test file.',
-    );
-  }
+  requireDom();
 
   const mount = await loadMount();
   const component: Component = options.component ?? (await loadAutoUI());

@@ -132,7 +132,27 @@ A repeat means the same thing however the move arrives (#325). A player clicking
 picks, a whole `action` submission, a bot's move, the random simulator and
 `enumerateLegalMoves` all go through the one protocol in
 `ActionExecutor.processRepeatingStep`: each pick is checked against the choices
-the previous pick's `onEach` left, `onEach` runs for it, and `until` is tested.
+the previous pick's `onEach` left, then against the selection's own `validate`,
+then `onEach` runs for it, and `until` is tested.
+
+- **The selection's `validate` judges one pick at a time** (#352). It is called
+  with the pick (an element for `chooseElement`), `args` holding the picks made
+  before it under the selection's name (elements for `chooseElement`), and the
+  context, and it follows the usual contract: `true`, `false`, or a message. A
+  refused pick runs no `onEach` and leaves the repeat open, so a player can pick
+  again; a whole submission containing it is refused as
+  `Pick 2 of "rune": <your message>`; bots, the simulator and
+  `enumerateLegalMoves` never offer it. A rule about the finished array belongs
+  in the action-level `.validate()`, which sees `args.rune` as the whole array.
+
+  ```typescript
+  .chooseFrom('rune', {
+    choices: ['ice', 'fire', 'stop'],
+    repeatUntil: 'stop',
+    validate: (pick, args) =>                          // pick: string
+      !(pick === 'fire' && (args.rune as string[]).includes('ice')) || 'Fire cannot follow ice.',
+  })
+  ```
 
 - **A whole submission is the picks as an array**, in order, ending with the
   pick that ends the repeat. A single value, an array that never reaches the
@@ -149,6 +169,44 @@ the previous pick's `onEach` left, `onEach` runs for it, and `until` is tested.
 element that a later selection of the same action then picks: a whole move
 cannot name something that exists only after part of it has run, and
 enumeration says so by name. World actions cannot repeat at all.
+
+#### Work a `disabled` rule shares across every choice: `prepare`
+
+A choice's `disabled(choice, ctx)` runs once per choice, every time the engine
+evaluates the choices. A rule that reads the board, such as "is this space
+covered by a pack already placed", would redo the same board reading for every
+one of thousands of candidates. `prepare(ctx)` is where that shared work goes
+(#334):
+
+```typescript
+.chooseFrom('space', {
+  choices: (ctx) => spacesFor(ctx.player.seat),        // 3,720 spaces
+  prepare: (ctx) => coveredSpaces(ctx.game.all(Pack)), // once per evaluation
+  disabled: (space, ctx, covered) =>                   // covered: what prepare returned
+    covered.has(space) ? 'A pack already stands there' : false,
+})
+```
+
+- **Once per evaluation.** `prepare` runs once each time the engine evaluates
+  the choices, before the first `disabled` call, and its return value is
+  `disabled`'s third argument for every choice in that evaluation. It is typed:
+  `covered` above is whatever `prepare` returns.
+- **Never kept between evaluations.** The engine evaluates a pick several times
+  per move (to validate the submission, to decide whether the action is still
+  available afterwards, to build the player's view), and each of those runs
+  `prepare` again. Mapping a submitted id or display string onto a choice
+  judges nothing, so it runs neither `prepare` nor `disabled` (#364). So it always sees the game as it is at that moment, and a move that
+  changes the board is reflected in the next evaluation. Do not cache its
+  result yourself.
+- **Only for `disabled`.** It is on `chooseFrom`, `chooseElement` and
+  `chooseElements` (and the world facade's versions of them), and a `prepare`
+  declared without a `disabled` rule is refused where the action is declared.
+- `ctx` is the same one `disabled` receives, so earlier picks are in
+  `ctx.args`. Like `choices`, it must not change the game.
+
+Measured on a 3,720-space `chooseFrom` with 300 packs on the board: reading the
+packs inside `disabled` cost about 1,600 ms per evaluation; reading them once in
+`prepare` and checking a set of covered spaces cost about 7 ms.
 
 #### On-Demand Choices
 
@@ -824,7 +882,8 @@ Three things worth knowing:
 The same `string | false` contract disables individual choices inside an
 action — `chooseFrom({ disabled })`, `chooseElement({ disabled })` — so a
 reason is mandatory at every level, from the action's button down to a single
-card in a hand.
+card in a hand. Work every choice's rule needs goes in the selection's
+`prepare` (see [`prepare`](#work-a-disabled-rule-shares-across-every-choice-prepare)).
 
 The reason is not a `title` tooltip. It renders in a shared popover on hover, on
 focus, and **on tap** — the native `title` this replaced showed nothing at all on

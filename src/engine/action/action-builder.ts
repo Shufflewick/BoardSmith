@@ -65,7 +65,39 @@ type RepeatingOptions<T> =
 /** A selection that does not repeat names neither repeat option. */
 type NonRepeatingOptions = { repeat?: undefined; repeatUntil?: undefined };
 
-/** Every `chooseFrom` option except the repeat options ({@link RepeatingOptions}). */
+/**
+ * A selection's per-choice `disabled` rule, and the work every call of it
+ * shares within one evaluation of the choices (#334).
+ *
+ * `prepare` runs once each time the engine evaluates the choices, before the
+ * first `disabled` call, and what it returns is `disabled`'s third argument. It
+ * is never kept between evaluations, so it always sees the game as it is now.
+ * Use it for anything a rule would otherwise recompute for every candidate,
+ * such as the set of spaces the pieces on the board already cover.
+ */
+type DisabledOptions<G extends Game, T, P> = {
+  /** Work shared by every `disabled` call of one evaluation; its result is `disabled`'s `prepared`. */
+  prepare?: (context: ActionContext<G>) => P;
+  /** Check if a choice should be disabled. Returns reason string or false. */
+  disabled?: (choice: T, context: ActionContext<G>, prepared: P) => string | false;
+};
+
+/**
+ * A `prepare` feeds `disabled` and nothing else, so one declared alone is a
+ * mistake (most likely a misspelt or forgotten `disabled`). Refused where the
+ * action is declared, rather than silently computing work nobody reads.
+ */
+function assertPrepareHasDisabled(method: string, name: string, options: { prepare?: unknown; disabled?: unknown }): void {
+  if (options.prepare !== undefined && options.disabled === undefined) {
+    throw new Error(
+      `${method}('${name}') declares prepare but no disabled rule. prepare's result is handed only ` +
+      `to disabled(choice, ctx, prepared), once per evaluation of the choices. Add the disabled ` +
+      `rule that reads it, or remove prepare.`
+    );
+  }
+}
+
+/** Every `chooseFrom` option except the repeat options ({@link RepeatingOptions}) and the disabled rule ({@link DisabledOptions}). */
 type ChooseFromOptions<G extends Game, T> = {
   prompt?: string | ((context: ActionContext<G>) => string);
   choices: T[] | ((context: ActionContext<G>) => T[]);
@@ -94,15 +126,13 @@ type ChooseFromOptions<G extends Game, T> = {
    * `multiSelect`.
    */
   orderedList?: number | OrderedListConfig | ((context: ActionContext<G>) => number | OrderedListConfig | undefined);
-  /** Check if choice should be disabled. Returns reason string or false. */
-  disabled?: (choice: T, context: ActionContext<G>) => string | false;
   /** Called after this step is resolved. Receives the resolved value and a restricted context. */
   onSelect?: (value: T, context: OnSelectContext) => void;
   /** Called if the action is cancelled after onSelect fired but before execute(). */
   onCancel?: (context: OnSelectContext) => void;
 };
 
-/** Every `chooseElement` option except the repeat options ({@link RepeatingOptions}). */
+/** Every `chooseElement` option except the repeat options ({@link RepeatingOptions}) and the disabled rule ({@link DisabledOptions}). */
 type ChooseElementOptions<G extends Game, T extends GameElement> = {
   prompt?: string | ((context: ActionContext<G>) => string);
   elementClass?: ElementClass<T>;
@@ -128,8 +158,6 @@ type ChooseElementOptions<G extends Game, T extends GameElement> = {
    * choice from the dependency leads to valid choices for this selection.
    */
   dependsOn?: string;
-  /** Check if element should be disabled. Returns reason string or false. */
-  disabled?: (element: T, context: ActionContext<G>) => string | false;
   /** Called after this step is resolved. Receives the resolved value and a restricted context. */
   onSelect?: (value: T, context: OnSelectContext) => void;
   /** Called if the action is cancelled after onSelect fired but before execute(). */
@@ -573,18 +601,19 @@ export class Action<
    *   });
    * ```
    */
-  chooseFrom<K extends string, T>(
+  chooseFrom<K extends string, T, P = undefined>(
     name: K,
-    options: ChooseFromOptions<G, T> & RepeatingOptions<T>
+    options: ChooseFromOptions<G, T> & DisabledOptions<G, T, P> & RepeatingOptions<T>
   ): Action<G, AddArg<A, K, T[]>>;
-  chooseFrom<K extends string, T>(
+  chooseFrom<K extends string, T, P = undefined>(
     name: K,
-    options: ChooseFromOptions<G, T> & NonRepeatingOptions
+    options: ChooseFromOptions<G, T> & DisabledOptions<G, T, P> & NonRepeatingOptions
   ): Action<G, AddArg<A, K, T>>;
-  chooseFrom<K extends string, T>(
+  chooseFrom<K extends string, T, P = undefined>(
     name: K,
-    options: ChooseFromOptions<G, T> & Partial<RepeatingOptions<T>>
+    options: ChooseFromOptions<G, T> & DisabledOptions<G, T, P> & Partial<RepeatingOptions<T>>
   ): Action<G, AddArg<A, K, T>> | Action<G, AddArg<A, K, T[]>> {
+    assertPrepareHasDisabled('chooseFrom', name, options);
     // A SET AND A SEQUENCE ARE DIFFERENT QUESTIONS (#249), and a selection that
     // asked both would have to pick one silently: the set refuses the repeat the
     // list exists to allow. Refused at declaration time, where the author is
@@ -612,6 +641,7 @@ export class Action<
       repeatUntil: options.repeatUntil,
       multiSelect: options.multiSelect,
       orderedList: options.orderedList,
+      prepare: options.prepare,
       disabled: options.disabled,
       onSelect: options.onSelect,
       onCancel: options.onCancel,
@@ -680,18 +710,19 @@ export class Action<
    *   });
    * ```
    */
-  chooseElement<K extends string, T extends GameElement>(
+  chooseElement<K extends string, T extends GameElement, P = undefined>(
     name: K,
-    options: ChooseElementOptions<G, T> & RepeatingOptions<T>
+    options: ChooseElementOptions<G, T> & DisabledOptions<G, T, P> & RepeatingOptions<T>
   ): Action<G, AddArg<A, K, T[]>>;
-  chooseElement<K extends string, T extends GameElement>(
+  chooseElement<K extends string, T extends GameElement, P = undefined>(
     name: K,
-    options?: ChooseElementOptions<G, T> & NonRepeatingOptions
+    options?: ChooseElementOptions<G, T> & DisabledOptions<G, T, P> & NonRepeatingOptions
   ): Action<G, AddArg<A, K, T>>;
-  chooseElement<K extends string, T extends GameElement>(
+  chooseElement<K extends string, T extends GameElement, P = undefined>(
     name: K,
-    options: ChooseElementOptions<G, T> & Partial<RepeatingOptions<T>> = {}
+    options: ChooseElementOptions<G, T> & DisabledOptions<G, T, P> & Partial<RepeatingOptions<T>> = {}
   ): Action<G, AddArg<A, K, T>> | Action<G, AddArg<A, K, T[]>> {
+    assertPrepareHasDisabled('chooseElement', name, options);
     const selection = {
       type: 'element',
       name,
@@ -707,6 +738,7 @@ export class Action<
       dependsOn: options.dependsOn,
       repeat: options.repeat,
       repeatUntil: options.repeatUntil,
+      prepare: options.prepare,
       disabled: options.disabled,
       onSelect: options.onSelect,
       onCancel: options.onCancel,
@@ -753,9 +785,9 @@ export class Action<
    *   });
    * ```
    */
-  chooseElements<K extends string, T extends GameElement>(
+  chooseElements<K extends string, T extends GameElement, P = undefined>(
     name: K,
-    options: {
+    options: DisabledOptions<G, T, P> & {
       prompt?: string | ((context: ActionContext<G>) => string);
       /**
        * Elements to choose from - can be static array or function.
@@ -793,14 +825,13 @@ export class Action<
        * Equivalent to: repeat: { until: (ctx, el) => el === repeatUntil }
        */
       repeatUntil?: T;
-      /** Check if element should be disabled. Returns reason string or false. */
-      disabled?: (element: T, context: ActionContext<G>) => string | false;
       /** Called after this step is resolved. Receives the resolved value and a restricted context. */
       onSelect?: (value: T[], context: OnSelectContext) => void;
       /** Called if the action is cancelled after onSelect fired but before execute(). */
       onCancel?: (context: OnSelectContext) => void;
     }
   ): Action<G, AddArg<A, K, T[]>> {
+    assertPrepareHasDisabled('chooseElements', name, options);
     const selection = {
       type: 'elements',
       name,
@@ -815,6 +846,7 @@ export class Action<
       dependsOn: options.dependsOn,
       repeat: options.repeat,
       repeatUntil: options.repeatUntil,
+      prepare: options.prepare,
       disabled: options.disabled,
       onSelect: options.onSelect as ElementsSelection<T>['onSelect'],
       onCancel: options.onCancel,

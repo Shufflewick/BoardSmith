@@ -28,7 +28,11 @@ import {
   type ViewNode,
 } from './dom-leak.test-helper.js';
 import type { TestGame } from './test-game.js';
-import { assertNoHiddenInfoLeak } from './dom-leak.js';
+import { assertNoHiddenInfoLeak, preloadSeatRenderer } from './dom-leak.js';
+
+// #354: this file renders AutoUI too, so its module graph loads while the file
+// is collected rather than inside the first test's timeout.
+await preloadSeatRenderer();
 
 // The fixture (two seats, one owner-only secret card each) lives in
 // ./dom-leak.test-helper.ts, shared with dom-leak-board-interaction.test.ts.
