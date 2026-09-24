@@ -83,7 +83,7 @@ describe('two-level slot forwarding reaches the real PlayersPanel', () => {
       <PlayersPanel
         :players="players"
         :player-seat="0"
-        :current-player-seat="0"
+        :due-seats="[0]"
         :show-turn-status="showTurnStatus"
       >
         <template #player-token-extra="{ player }">

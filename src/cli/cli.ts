@@ -17,10 +17,10 @@ import { simulateCommand } from './commands/simulate.js';
 import { installClaudeCommand, uninstallClaudeCommand } from './commands/install-claude-command.js';
 import {
   ingestArchiveCommand,
-  ingestCheckCommand,
   ingestGapsCommand,
   ingestRelabelCommand,
 } from './commands/ingest-archive.js';
+import { ingestCheckCommand } from './commands/ingest-check.js';
 import { chunkCheckCommand, chunkProvenanceStatusCommand } from './commands/chunk-provenance.js';
 import { testStepCheckCommand } from './commands/test-step-check.js';
 import { claimQuoteCheckCommand } from './commands/claim-quotes.js';
@@ -281,7 +281,7 @@ export function createProgram(): Command {
 
   program
     .command('ingest-check')
-    .description('Repair ingest synthesis (gaps + Derived/Visual) and exit non-zero if it was stale')
+    .description('Repair ingest synthesis (gaps, Derived/Visual, worked examples whose slice line moved) and exit non-zero if it was stale')
     .option('--project <dir>', 'Project directory (defaults to cwd)')
     .option('--json', 'Emit JSON instead of human-readable output')
     .action(ingestCheckCommand);

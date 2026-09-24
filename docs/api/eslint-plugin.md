@@ -141,6 +141,39 @@ function doSomething() {
 }
 ```
 
+### no-engine-field-shadow
+
+Disallows a Game subclass from using the name of a field the engine owns on
+every Game: `pile`, `random`, `phase`, `settings`, `messages`,
+`commandHistory`, `tutorialProgress`, `tutorialDefinition`, and the internal
+`_`-prefixed fields. The full list is `ENGINE_OWNED_GAME_FIELDS` in
+`src/engine/element/engine-owned-fields.ts`.
+
+**Why:** The engine sets those fields and rebuilds them on every save, restore,
+undo and bot search. A game's own value under one of those names works in a
+fresh game and is silently replaced after the first restore.
+
+It reports a field (including `declare`), method or accessor with that name in
+a class that extends `Game` (or a same-file subclass of one), and an assignment
+`this.<name> = ...` inside it. Reading or mutating an engine field
+(`this.settings.variant = 'short'`, `this.pile.all()`) is not reported.
+
+```typescript
+// Bad
+class MyGame extends Game {
+  pile!: Pile; // Error: MyGame uses the name "pile", which the BoardSmith engine already uses ...
+}
+
+// Good
+class MyGame extends Game {
+  discardPile!: Pile;
+}
+```
+
+The engine checks the same thing at runtime: every engine path builds a game
+through `constructGame`, which refuses a game whose class changed one of the
+engine fields it can check, with the same message.
+
 ## Configuration Presets
 
 ### recommended
@@ -171,6 +204,10 @@ Equivalent to (ESLint 9+ flat-config shape):
     'boardsmith/no-timers': 'error',
     'boardsmith/no-nondeterministic': 'error',
     'boardsmith/no-eval': 'error',
+    'boardsmith/no-element-identity-comparison': 'error',
+    'boardsmith/no-element-array-state': 'error',
+    'boardsmith/no-silent-dispatch-fallthrough': 'error',
+    'boardsmith/no-engine-field-shadow': 'error',
   },
 }
 ```

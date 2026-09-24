@@ -72,6 +72,7 @@ function translatedRecord(
     reason: 'Translated into a test that has not been run yet.',
     expected: 'Guard becomes EXHAUSTED.',
     provenance: 'quote-verified',
+    lineText: 'If you are punched while READY, you become EXHAUSTED.',
     translation: {
       pageCitation: 'p.2, Punch Examples',
       sourceText: 'If you are punched while READY, you become EXHAUSTED.',
@@ -306,15 +307,19 @@ describe('verifyExampleEmitCommand', () => {
         testCode: "it('asserts strictly using the shared import', () => {\n  strictEqual(1 + 1, 2);\n});",
         imports: ["import { strictEqual } from 'node:assert';"],
       }),
-      translatedRecord(4, {
-        sourceText: 'A second example, also about Guards.',
-        testCode:
-          "it('uses a second, distinct import', () => {\n  strictEqual(basename('/a/b.ts'), 'b.ts');\n});",
-        imports: [
-          "import { strictEqual } from 'node:assert';", // duplicate of example 1's import
-          "import { basename } from 'node:path';",
-        ],
-      }),
+      translatedRecord(
+        4,
+        {
+          sourceText: 'A second example, also about Guards.',
+          testCode:
+            "it('uses a second, distinct import', () => {\n  strictEqual(basename('/a/b.ts'), 'b.ts');\n});",
+          imports: [
+            "import { strictEqual } from 'node:assert';", // duplicate of example 1's import
+            "import { basename } from 'node:path';",
+          ],
+        },
+        { lineText: 'A second example, also about Guards.' },
+      ),
     ]);
 
     const result = await verifyExampleEmitCommand({ project, chunk: 'chunk-imports' });
@@ -426,12 +431,16 @@ describe('verifyExampleEmitCommand', () => {
       translatedRecord(2, { testCode: "it('becomes EXHAUSTED', () => {\n  expect(true).toBe(true);\n});" }),
       // One snippet, two tests — the ledger says "1 example" but the FILE carries two `it`s,
       // which is exactly the gap the old `N test(s)` (a ledger count) hid.
-      translatedRecord(4, {
-        sourceText: 'A second example, also about Guards.',
-        testCode:
-          "it('first half', () => {\n  expect(true).toBe(true);\n});\n" +
-          "it('second half', () => {\n  expect(true).toBe(true);\n});",
-      }),
+      translatedRecord(
+        4,
+        {
+          sourceText: 'A second example, also about Guards.',
+          testCode:
+            "it('first half', () => {\n  expect(true).toBe(true);\n});\n" +
+            "it('second half', () => {\n  expect(true).toBe(true);\n});",
+        },
+        { lineText: 'A second example, also about Guards.' },
+      ),
     ]);
 
     const result = await verifyExampleEmitCommand({ project, chunk: 'chunk-counted' });
@@ -464,6 +473,7 @@ describe('verifyExampleEmitCommand', () => {
         exampleId: 'rulebook/03-seven.md:1',
         slicePath: 'rulebook/03-seven.md',
         lineNumber: 1,
+        lineText: 'example: 5, 6, 7',
         kind: 'predicate',
         verdict: 'example-inconsistent',
         reason: 'Printed text says 5,6,7 but the card images show 1,2,3 (INDEX.md gap #4).',
@@ -475,6 +485,7 @@ describe('verifyExampleEmitCommand', () => {
         exampleId: 'rulebook/03-seven.md:2',
         slicePath: 'rulebook/03-seven.md',
         lineNumber: 2,
+        lineText: 'example: image-only',
         kind: 'predicate',
         verdict: 'unexecutable',
         reason: 'Image-derived and indeterminate — no assertable outcome.',
@@ -510,6 +521,7 @@ describe('verifyExampleEmitCommand', () => {
         exampleId: 'rulebook/03-seven.md:1',
         slicePath: 'rulebook/03-seven.md',
         lineNumber: 1,
+        lineText: 'example: 5, 6, 7',
         kind: 'predicate',
         verdict: 'example-inconsistent',
         reason: 'Printed text says 5,6,7 but the card images show 1,2,3 (INDEX.md gap #4).',
@@ -554,6 +566,7 @@ describe('verifyExampleEmitCommand', () => {
         exampleId: 'rulebook/02-punch.md:2',
         slicePath: 'rulebook/02-punch.md',
         lineNumber: 2,
+        lineText: 'If you are punched while READY, you become EXHAUSTED.',
         kind: 'predicate',
         verdict: 'unexecutable',
         reason: hostileReason,
@@ -612,6 +625,35 @@ describe('verifyExampleEmitCommand', () => {
     // And the injected `require('node:child_process').execSync(...)` payload the hostile
     // pageCitation carried must never actually have run as code.
     await expect(fs.access('/tmp/pwned')).rejects.toThrow();
+  });
+
+  it('refuses to emit while a recorded example no longer sits on its line, naming the fix (#350)', async () => {
+    const project = await mkProject(dir, {
+      chunkSlug: 'chunk-moved',
+      slicePath: 'rulebook/02-punch.md',
+      // A Source line was inserted above the example, which the ledger recorded at line 2.
+      sliceText:
+        'Source: rulebook/source/rules.pdf\n\np.2, Punch Examples:\nIf you are punched while READY, you become EXHAUSTED.\n',
+    });
+    await recordExampleReplayVerdicts(project, [translatedRecord(2)]);
+
+    await expect(verifyExampleEmitCommand({ project, chunk: 'chunk-moved' })).rejects.toThrow(
+      /rulebook\/02-punch\.md:2.*now on line 4.*npx boardsmith ingest-check/s,
+    );
+    await expect(fs.access(generatedTestFilePath(project, 'chunk-moved'))).rejects.toThrow();
+  });
+
+  it('refuses to emit when a recorded example\'s line is gone from its slice, naming the slice to record again (#350)', async () => {
+    const project = await mkProject(dir, {
+      chunkSlug: 'chunk-gone',
+      slicePath: 'rulebook/02-punch.md',
+      sliceText: 'p.2, Punch Examples:\nIf you are punched while READY, you become TIRED.\n',
+    });
+    await recordExampleReplayVerdicts(project, [translatedRecord(2)]);
+
+    await expect(verifyExampleEmitCommand({ project, chunk: 'chunk-gone' })).rejects.toThrow(
+      /rulebook\/02-punch\.md:2.*no longer in the slice.*verify-example-replay/s,
+    );
   });
 
   it('the emitter never writes the ledger, and the ledger writer never writes a test file', async () => {

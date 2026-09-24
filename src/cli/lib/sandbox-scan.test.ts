@@ -147,6 +147,20 @@ describe('scanSandboxViolations', () => {
     );
   });
 
+  // #346: a Game subclass naming its own zone `pile` loses it on every restore.
+  // `boardsmith validate` (and so `boardsmith publish`) is where a game finds out.
+  it('flags a Game subclass that shadows an engine-owned field', () => {
+    write(
+      'src/rules/game.ts',
+      'export class MyGame extends Game {\n' +
+        '  pile!: Pile;\n' +
+        '}\n'
+    );
+    const violations = scanSandboxViolations(dir);
+    expect(violations.map((v) => v.ruleId)).toEqual(['boardsmith/no-engine-field-shadow']);
+    expect(violations[0].line).toBe(2);
+  });
+
   // 178-06 Task 1: scanSourceForSandboxViolations is the per-file body scanSandboxViolations now
   // delegates to — one lint implementation, two entry points. They must agree on one fixture.
   it('scanSourceForSandboxViolations agrees with scanSandboxViolations on one fixture file', () => {
