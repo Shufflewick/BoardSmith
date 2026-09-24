@@ -113,13 +113,6 @@ import {
 - `createSnapshot()` - Create game state snapshot
 - `createPlayerView()` - Create player-specific view
 - `createAllPlayerViews()` - Create all player views
-- `captureDevState()` - Capture state for HMR
-- `restoreDevState()` - Restore state after HMR
-- `validateDevSnapshot()` - Validate dev snapshot
-- `formatValidationErrors()` - Format validation errors
-- `getSnapshotElementCount()` - Count elements in snapshot
-- `createDevCheckpoint()` - Create dev HMR checkpoint
-- `restoreFromDevCheckpoint()` - Restore from dev checkpoint
 
 ### Types
 

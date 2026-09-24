@@ -1,7 +1,7 @@
 {
-  "revision": 105,
+  "revision": 106,
   "bundleProtocol": 2,
-  "surfaceHash": "422710ae33cff3b6",
+  "surfaceHash": "027e9a92e73de675",
   "payloadHash": "5bfe87a6bf117444",
   "formatHash": "0058593e7cc80205",
   "history": [
@@ -885,7 +885,16 @@
       "revision": 105,
       "date": "2026-09-24",
       "bundleProtocol": 2,
-      "surfaceHash": "422710ae33cff3b6",
+      "surfaceHash": "027e9a92e73de675",
+      "payloadHash": "8052a5ba1e4f48d4",
+      "formatHash": "0058593e7cc80205",
+      "summary": "boardsmith and boardsmith/session no longer export the dev state-transfer API (captureDevState, restoreDevState, validateDevSnapshot, formatValidationErrors, getSnapshotElementCount, createDevCheckpoint, restoreFromDevCheckpoint, DevCheckpointManager); nothing called it after boardsmith dev began reloading table rules through a snapshot restore or replay (#343, #362)."
+    },
+    {
+      "revision": 106,
+      "date": "2026-09-24",
+      "bundleProtocol": 2,
+      "surfaceHash": "027e9a92e73de675",
       "payloadHash": "5bfe87a6bf117444",
       "formatHash": "0058593e7cc80205",
       "summary": "PlayerGameState gains gameInstanceId (and GameStateSnapshot carries it): a random id minted when a game starts, kept across undo and every stateless op, and new on every start including a start from a --seed position. GameShell tears down an open pick when it or restoreEpoch changes, so a new game at the same step no longer offers the previous game's element ids (#356). The payload fixture now hashes the names of the fields a seat's broadcast state carries. Not breaking for built bundles, but a game built on this BoardSmith needs the re-vendored engine: its GameShell reads gameInstanceId, and without it no replacement (undo included) tears down an open pick."

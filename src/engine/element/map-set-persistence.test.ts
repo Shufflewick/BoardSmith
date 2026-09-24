@@ -5,10 +5,9 @@ import {
   Piece,
   Player,
   PersistentMap,
-  captureDevState,
-  restoreDevState,
 } from '../index.js';
-import type { GameOptions, ElementClass } from '../index.js';
+import type { GameOptions } from '../index.js';
+import { serializedRoundTrip } from './serialized-round-trip.test-helper.js';
 
 /**
  * Map / Set persistence across a snapshot round-trip.
@@ -24,17 +23,6 @@ async function createTestGame<G extends Game>(GameClass: new (o: GameOptions) =>
   return new GameClass({ playerCount: 2, playerNames: ['P1', 'P2'] }).ready();
 }
 
-async function simulateHMR<G extends Game>(original: G, GameClass: new (o: GameOptions) => G): Promise<G> {
-  const devState = captureDevState(original);
-  const classRegistry = new Map<string, ElementClass>();
-  for (const [name, cls] of original._ctx.classRegistry) classRegistry.set(name, cls);
-  const restored = restoreDevState(devState, GameClass, {
-    gameOptions: { playerCount: original.players.length, playerNames: original.players.map(p => p.name) },
-    classRegistry,
-  });
-  await Promise.resolve();
-  return restored;
-}
 
 class Token extends Piece<TestGame> {}
 class TestGame extends Game<TestGame, Player> {}
@@ -48,7 +36,7 @@ describe('Map/Set persistence', () => {
     game.decisions.set('1', { action: 'continue' });
     game.decisions.set('2', { action: 'retreat' });
 
-    const restored = await simulateHMR(game, MapGame);
+    const restored = await serializedRoundTrip(game, MapGame);
 
     expect(restored.decisions).toBeInstanceOf(Map);
     expect(restored.decisions.get('1')).toEqual({ action: 'continue' });
@@ -66,7 +54,7 @@ describe('Map/Set persistence', () => {
     game.processed.add('a');
     game.processed.add('b');
 
-    const restored = await simulateHMR(game, SetGame);
+    const restored = await serializedRoundTrip(game, SetGame);
 
     expect(restored.processed).toBeInstanceOf(Set);
     expect(restored.processed.has('a')).toBe(true);
@@ -81,7 +69,7 @@ describe('Map/Set persistence', () => {
     const game = await createTestGame(CombatGame);
     game.activeCombat = { round: 1, decisions: new Map([['1', 'continue']]) };
 
-    const restored = await simulateHMR(game, CombatGame);
+    const restored = await serializedRoundTrip(game, CombatGame);
 
     expect(restored.activeCombat?.decisions).toBeInstanceOf(Map);
     expect(restored.activeCombat?.decisions.get('1')).toBe('continue');
@@ -100,7 +88,7 @@ describe('Map/Set persistence', () => {
       }
     }
     const game = await createTestGame(RefGame);
-    const restored = await simulateHMR(game, RefGame);
+    const restored = await serializedRoundTrip(game, RefGame);
 
     expect(restored.byId).toBeInstanceOf(Map);
     const tok = restored.byId.get('tok');
@@ -116,7 +104,7 @@ describe('Map/Set persistence', () => {
     const game = await createTestGame(LootGame);
     game.pendingLoot.set('sector1', ['gold']);
 
-    const restored = await simulateHMR(game, LootGame);
+    const restored = await serializedRoundTrip(game, LootGame);
 
     // The field must still be the live view onto settings, not the `{}` the
     // attribute bag used to carry back over it.

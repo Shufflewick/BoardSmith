@@ -19,7 +19,6 @@
 import { describe, it, expect } from 'vitest';
 import { Game, Player, Action, defineFlow, actionStep, loop, eachPlayer, type GameOptions } from '../engine/index.js';
 import { GameSession } from './game-session.js';
-import type { GameDefinition } from './types.js';
 
 class CounterGame extends Game<CounterGame, Player> {
   constructor(options: GameOptions) {
@@ -36,13 +35,6 @@ class CounterGame extends Game<CounterGame, Player> {
     );
   }
 }
-
-const definition: GameDefinition = {
-  gameType: 'counter',
-  gameClass: CounterGame,
-  minPlayers: 2,
-  maxPlayers: 2,
-};
 
 function makeSession() {
   return GameSession.create({
@@ -75,20 +67,6 @@ describe('action history has one owner (#48)', () => {
   it('still serves the runner\'s live array after actions are recorded', async () => {
     const session = makeSession();
     await session.performAction('bump', 1, {});
-    await session.performAction('bump', 2, {});
-    expect(session.getHistory().actionHistory).toHaveLength(2);
-    expectSingleOwner(session);
-  });
-
-  it('re-points at the replacement runner when a hot reload swaps one in', async () => {
-    const session = makeSession();
-    await session.performAction('bump', 1, {});
-
-    session.reloadWithCurrentRules(definition);
-
-    // The pre-fix bug: the session kept serving the OLD runner's array, so a
-    // later action landed somewhere getHistory() could not see.
-    expectSingleOwner(session);
     await session.performAction('bump', 2, {});
     expect(session.getHistory().actionHistory).toHaveLength(2);
     expectSingleOwner(session);

@@ -12,14 +12,14 @@
  * in what Vite does to itself: a fake server that kept its `httpServer` would
  * pass either implementation.
  */
-import { describe, it, expect, afterEach } from 'vitest';
-import { writeFileSync } from 'node:fs';
+import { describe, it, expect, afterEach, vi } from 'vitest';
+import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { createServer as createViteServer, type ViteDevServer } from 'vite';
 import { WebSocket as WsClient } from 'ws';
 
-import { claimWebSocketPath } from './dev-server.js';
+import { claimWebSocketPath, reloadOnRulesEdit } from './dev-server.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
 const TEST_WS_PATH = '/__boardsmith/test-ws';
@@ -125,5 +125,133 @@ describe('a dev host socket survives what Vite does on restart (#214)', () => {
     expect(hmr).toBe(true);
 
     claimed.close();
+  }, 30000);
+});
+
+/**
+ * #201 / #343: ONE WAY A SAVED RULES FILE REACHES THE HOST, FOR BOTH ROADS.
+ *
+ * The browser gets an author's edit through Vite; the host only ever gets it
+ * through this watcher. It runs a REAL Vite watcher over a REAL file write,
+ * because "the host never heard about the save" is the whole of the bug.
+ */
+describe('a rules edit reloads the rules on the server (#201, #343)', () => {
+  async function watchedProject() {
+    dir = tempTree('bs-dev-rules-watch-');
+    const rulesDir = join(dir, 'src', 'rules');
+    mkdirSync(rulesDir, { recursive: true });
+    writeFileSync(join(dir, 'index.html'), '<!doctype html><title>t</title>');
+    writeFileSync(join(rulesDir, 'index.ts'), 'export const version = 1;');
+    vite = await createViteServer({
+      root: dir,
+      configFile: false,
+      logLevel: 'silent',
+      // Polled, because a native file-event stream can start late on a loaded
+      // machine and drop the one write a test makes. What is under test is what
+      // the host does with a change event, not how the OS delivers one.
+      server: { port: 0, host: '127.0.0.1', open: false, watch: { usePolling: true, interval: 50 } },
+    });
+    await vite.listen();
+    return { root: dir, rulesDir, server: vite };
+  }
+
+  /** Wait until the watcher is looking at the rules, as it is long before an author's first save. */
+  async function watching(server: ViteDevServer, rulesDir: string): Promise<void> {
+    await vi.waitFor(() => expect(server.watcher.getWatched()[rulesDir]).toContain('index.ts'), {
+      timeout: 10000,
+    });
+  }
+
+  /** Resolves on the next call of the returned function, with its argument. */
+  function nextCall<T>() {
+    let settle: (value: T) => void = () => {};
+    const called = new Promise<T>((resolve) => (settle = resolve));
+    return { called, fn: (value: T) => settle(value) };
+  }
+
+  it('loads the edited rules and hands them to the host', async () => {
+    const { root, rulesDir, server } = await watchedProject();
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    const adopted = nextCall<number>();
+    let loads = 0;
+    reloadOnRulesEdit({
+      vite: server,
+      rulesDir,
+      cwd: root,
+      what: 'table',
+      load: async () => ++loads,
+      adopt: async (rules) => adopted.fn(rules),
+    });
+
+    await watching(server, rulesDir);
+    writeFileSync(join(rulesDir, 'index.ts'), 'export const version = 2;');
+
+    expect(await adopted.called).toBe(1);
+    expect(console.log).toHaveBeenCalledWith(expect.stringContaining(join('src', 'rules', 'index.ts')));
+    vi.restoreAllMocks();
+  }, 30000);
+
+  it('keeps the rules it had when the edited ones do not load, and says why', async () => {
+    const { root, rulesDir, server } = await watchedProject();
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    const printed = nextCall<string>();
+    vi.spyOn(console, 'error').mockImplementation((...parts: unknown[]) => printed.fn(parts.join(' ')));
+    const adopt = vi.fn(async () => {});
+    reloadOnRulesEdit({
+      vite: server,
+      rulesDir,
+      cwd: root,
+      what: 'table',
+      load: async () => {
+        throw new Error('Expected ";" but found "}"');
+      },
+      adopt,
+    });
+
+    await watching(server, rulesDir);
+    writeFileSync(join(rulesDir, 'index.ts'), 'export const version = ;');
+
+    const said = await printed.called;
+    expect(said).toContain('this table is still running the ones it had');
+    expect(said).toContain('Expected ";" but found "}"');
+    expect(adopt).not.toHaveBeenCalled();
+    vi.restoreAllMocks();
+  }, 30000);
+
+  it('reloads one save at a time, in order, so a save-all never overlaps itself', async () => {
+    const { root, rulesDir, server } = await watchedProject();
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    writeFileSync(join(rulesDir, 'other.ts'), 'export const other = 1;');
+    const events: string[] = [];
+    const second = nextCall<void>();
+    let release: () => void = () => {};
+    const firstHeld = new Promise<void>((resolve) => (release = resolve));
+    let loads = 0;
+    reloadOnRulesEdit({
+      vite: server,
+      rulesDir,
+      cwd: root,
+      what: 'table',
+      load: async () => ++loads,
+      adopt: async (rules) => {
+        events.push(`start ${rules}`);
+        if (rules === 1) await firstHeld;
+        events.push(`end ${rules}`);
+        if (rules === 2) second.fn();
+      },
+    });
+
+    await watching(server, rulesDir);
+    writeFileSync(join(rulesDir, 'index.ts'), 'export const version = 2;');
+    await vi.waitFor(() => expect(events).toEqual(['start 1']), { timeout: 10000 });
+    writeFileSync(join(rulesDir, 'other.ts'), 'export const other = 2;');
+    // The second save waits for the first reload, however long it takes.
+    await new Promise((resolve) => setTimeout(resolve, 300));
+    expect(events).toEqual(['start 1']);
+    release();
+
+    await second.called;
+    expect(events).toEqual(['start 1', 'end 1', 'start 2', 'end 2']);
+    vi.restoreAllMocks();
   }, 30000);
 });

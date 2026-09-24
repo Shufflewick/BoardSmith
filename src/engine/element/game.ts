@@ -533,8 +533,8 @@ export interface FormattedMessage {
  * `settings`/`messages` with the snapshot it restored from) and the F-01 MCTS
  * undo-soundness fix that depends on it.
  *
- * The restore paths skip these same keys in their attribute loops — see
- * `loadSerializedState` and `restoreDevState`, which both import this constant.
+ * The restore path skips these same keys in its attribute loop — see
+ * `loadSerializedState`.
  */
 /**
  * WHERE A WORLD'S OWN ELEMENTS START (#218).
@@ -5180,7 +5180,7 @@ export class Game<
  * (#346).
  *
  * This is how the engine constructs every game: the runner, a world, a bot's
- * search copy, a dev-state restore, the capability and introspection passes.
+ * search copy, the capability and introspection passes.
  * `engine-owned-fields.test.ts` holds that there is no other construction site.
  * The check has to run here rather than in `Game`'s constructor, because a
  * subclass's field declarations and constructor body run only after that

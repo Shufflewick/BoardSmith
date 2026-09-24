@@ -414,14 +414,6 @@
         "count": 1
       }
     },
-    "src/engine/utils/dev-state.ts": {
-      "complexity_high": {
-        "count": 1
-      },
-      "complexity_moderate": {
-        "count": 2
-      }
-    },
     "src/engine/utils/serializer.ts": {
       "complexity_moderate": {
         "count": 2
@@ -467,10 +459,10 @@
         "count": 1
       },
       "complexity_high": {
-        "count": 2
+        "count": 1
       },
       "complexity_moderate": {
-        "count": 7
+        "count": 6
       }
     },
     "src/session/lobby-manager.ts": {
