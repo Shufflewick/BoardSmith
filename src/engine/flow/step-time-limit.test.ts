@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { Game, actionStep, simultaneousActionStep, createSnapshot, type GameOptions } from '../index.js';
+import {
+  Game,
+  MIN_STEP_TIME_LIMIT_MS,
+  actionStep,
+  simultaneousActionStep,
+  createSnapshot,
+  type GameOptions,
+} from '../index.js';
 import { GameRunner } from '../../runtime/runner.js';
 import { MCTSBot } from '../../bot/mcts-bot.js';
 import {
@@ -74,7 +81,7 @@ describe('a step declares how long it stays open', () => {
     expect('timeLimitMs' in runner.getFlowState()!).toBe(false);
   });
 
-  it('refuses a limit that is not a positive whole number of milliseconds, naming the step', () => {
+  it('refuses a limit that is not a whole number of milliseconds, naming the step', () => {
     for (const bad of [0, -5, 1.5, Number.NaN, Number.POSITIVE_INFINITY]) {
       expect(() =>
         simultaneousActionStep({ name: 'deploy', actions: ['commit'], timeLimitMs: bad }),
@@ -83,6 +90,38 @@ describe('a step declares how long it stays open', () => {
         /'turn'.*timeLimitMs/s,
       );
     }
+  });
+
+  it('sets the floor at ten seconds', () => {
+    expect(MIN_STEP_TIME_LIMIT_MS).toBe(10_000);
+  });
+
+  it('refuses a declared limit under the floor when the flow is built, naming the step and the floor', () => {
+    const under = MIN_STEP_TIME_LIMIT_MS - 1;
+    expect(() => simultaneousActionStep({ name: 'deploy', actions: ['commit'], timeLimitMs: under })).toThrow(
+      /'deploy'.*timeLimitMs: 9999.*at least 10000/s,
+    );
+    expect(() => actionStep({ name: 'turn', actions: ['pass'], timeLimitMs: under })).toThrow(
+      /'turn'.*timeLimitMs: 9999.*at least 10000/s,
+    );
+  });
+
+  it('accepts a declared limit exactly at the floor', () => {
+    class FloorGame extends DeployGame {
+      constructor(options: GameOptions) {
+        super(options, MIN_STEP_TIME_LIMIT_MS);
+      }
+    }
+    expect(runnerFor(FloorGame).getFlowState()!.timeLimitMs).toBe(MIN_STEP_TIME_LIMIT_MS);
+  });
+
+  it('refuses a function limit that answers under the floor, when the step is entered', () => {
+    class QuickGame extends DeployGame {
+      constructor(options: GameOptions) {
+        super(options, () => 2_000);
+      }
+    }
+    expect(() => runnerFor(QuickGame)).toThrow(/'deploy'.*returned 2000.*at least 10000/s);
   });
 
   it('refuses a function limit that answers something unusable, when the step is entered', () => {

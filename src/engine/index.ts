@@ -211,6 +211,7 @@ export {
   turnSequence,
   orderSeatsByTurn,
   flowBoundaryKey,
+  MIN_STEP_TIME_LIMIT_MS,
 } from './flow/index.js';
 
 export type {

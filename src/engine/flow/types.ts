@@ -217,7 +217,7 @@ export interface ActionStepConfig<G extends Game = Game> extends BaseFlowConfig 
    * `boardsmith.json` -- `boardsmith validate` and `boardsmith build` refuse it
    * otherwise. See docs/simultaneous-and-interrupt-semantics.md section 5.
    *
-   * Must be a positive whole number of milliseconds.
+   * Must be a whole number of milliseconds, at least `MIN_STEP_TIME_LIMIT_MS` (ten seconds).
    */
   timeLimitMs?: StepTimeLimit<G>;
 }
