@@ -1494,6 +1494,8 @@ Common tokens (the full set lives in `src/ui/theme.ts`, the single source of tru
 | `--bsg-accent`, `--bsg-accent-2`, `--bsg-accent-ink` | Accent, hover accent, text on accent |
 | `--bsg-danger`, `--bsg-ok`, `--bsg-warn` | Status colors |
 | `--bsg-seat-1` … `--bsg-seat-6` | Per-seat player colors |
+| `--bsg-cell`, `--bsg-cell-line` | Board cell fill and gridline colors |
+| `--bsg-cell-size`, `--bsg-card-w` | Natural size of a grid cell edge and of a card's width (lengths, not colors) |
 | `--bsg-font`, `--bsg-display`, `--bsg-mono` | Font stacks |
 | `--bsg-r-sm/md/lg/pill`, `--bsg-s1`…`--bsg-s6` | Radii and spacing steps |
 
