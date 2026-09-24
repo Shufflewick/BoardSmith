@@ -480,13 +480,6 @@
       ]
     },
     {
-      "content": "103f43d310cad331",
-      "lines": 26,
-      "files": [
-        "src/engine/action/action-builder.ts"
-      ]
-    },
-    {
       "content": "1053edde4cf26d05",
       "lines": 15,
       "files": [
@@ -524,6 +517,15 @@
         "src/cli/dev-host/multiplayer-host.test.ts",
         "src/session/seat-activity-canonical.test.ts",
         "src/session/stateless-ops-debug.test.ts"
+      ]
+    },
+    {
+      "content": "114509550506cb58",
+      "lines": 38,
+      "files": [
+        "src/cli/commands/verify-derive-check.ts",
+        "src/cli/commands/verify-example-replay.ts",
+        "src/cli/commands/verify-ruling-recheck.ts"
       ]
     },
     {
@@ -5434,15 +5436,6 @@
       "lines": 10,
       "files": [
         "src/client/client.ts"
-      ]
-    },
-    {
-      "content": "b8607a1856cb1d9c",
-      "lines": 37,
-      "files": [
-        "src/cli/commands/verify-derive-check.ts",
-        "src/cli/commands/verify-example-replay.ts",
-        "src/cli/commands/verify-ruling-recheck.ts"
       ]
     },
     {

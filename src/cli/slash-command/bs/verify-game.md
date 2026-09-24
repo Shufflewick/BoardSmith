@@ -306,9 +306,16 @@ JSON object filing each return unchanged under the `exampleId` its payload came 
 reads them from the extraction file, never re-judged here.
 
 Record through exactly ONE `boardsmith verify-example-record --slice-path <p> --extraction <f>
---translations <f>` invocation per SLICE — an atomic upsert-append, never a whole-ledger rewrite.
-Provenance gating, spec validation, and classification all happen INSIDE that command, never in
-this skill. A translated example is recorded `not-run`, carrying its test.
+--translations <f>` invocation per SLICE. It replaces everything the ledger held for that slice and
+leaves every other slice's records alone. Provenance gating, spec validation, and classification
+all happen INSIDE that command, never in this skill. A translated example is recorded `not-run`,
+carrying its test, and every record keeps the text of the slice line it cites.
+
+A slice is also reported pending when one of its recorded examples' text is no longer in it
+(`unanchored[]`, reason `text-gone` or `text-ambiguous`): record it again the same way. An example
+whose text merely moved to another line (reason `moved`) is not re-recorded: `npx boardsmith
+ingest-check` moves it to that line, and `verify-example-emit`/`verify-example-run` refuse to run
+until it has.
 
 Then, for each chunk that cites a slice you recorded, run `boardsmith verify-example-emit --chunk
 <slug>` and `boardsmith verify-example-run --chunk <slug>`. The run executes the emitted tests with
