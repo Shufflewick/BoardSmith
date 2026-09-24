@@ -8,6 +8,7 @@ import { WORLD_HOST_SOURCE, WORLD_UI_SOURCE } from './worldProtocol.js';
 import { orderBookKey } from './orderBook.js';
 import { defineGameUIs, defaultUI } from '../game-uis.js';
 import { useToast } from '../composables/useToast.js';
+import { countPageSingletons, unresolvedComponents } from '../components/page-singletons.test-helper.js';
 
 /**
  * THE SHELL A BUNDLE MOUNTS FOR A RESIDENT WORLD (ShufflewickPub #128).
@@ -930,6 +931,40 @@ describe('WorldShell — the panel says when the verbs are still arriving (#282)
     // And at NO reading was the panel an empty list with nothing said about it.
     expect(readings.every((r) => r.verbs.length > 0 || r.arriving)).toBe(true);
 
+    wrapper.unmount();
+  });
+});
+
+/**
+ * #308: THE TOAST AND THE DISABLED-REASON TOOLTIP ARE THE ROOT SHELL'S.
+ *
+ * They used to live in `PlayShell`, which this shell renders only once it has
+ * a view -- so the silent, refused and waiting states had neither. Mounted at
+ * the root they exist in every state, exactly once, and resolve.
+ */
+describe('WorldShell — the page\'s singletons are mounted at its root (#308)', () => {
+  function mountWatchingWarnings(warnings: string[]) {
+    return mount(WorldShell, {
+      props: { uis: ROOMS_REGISTRY, displayName: 'Gloamhall' },
+      global: { config: { warnHandler: (msg) => { warnings.push(msg); } } },
+    });
+  }
+
+  it('has both before the host has said anything, when there is no PlayShell yet', async () => {
+    const warnings: string[] = [];
+    const wrapper = mountWatchingWarnings(warnings);
+    await nextTick();
+    expect(countPageSingletons(wrapper)).toEqual({ toast: 1, tooltip: 1 });
+    expect(unresolvedComponents(warnings)).toEqual([]);
+    wrapper.unmount();
+  });
+
+  it('has exactly one of each once the chrome is drawn', async () => {
+    const warnings: string[] = [];
+    const wrapper = mountWatchingWarnings(warnings);
+    await drawn(wrapper, stateFrame());
+    expect(countPageSingletons(wrapper)).toEqual({ toast: 1, tooltip: 1 });
+    expect(unresolvedComponents(warnings)).toEqual([]);
     wrapper.unmount();
   });
 });

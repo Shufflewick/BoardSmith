@@ -173,12 +173,16 @@ describe('what is the adapter\'s and not the shell\'s', () => {
   });
 });
 
-describe('refusals are one voice', () => {
-  it('mounts the toast every refusal is spoken through', () => {
-    expect(mountShell().findComponent(Toast).exists()).toBe(true);
+describe('the page\'s singletons belong to the root shell, not to PlayShell (#308)', () => {
+  // GameShell and WorldShell each mount the toast and the disabled-reason
+  // tooltip at their root, so they exist on screens PlayShell is not part of
+  // (a table's lobby, a world with no view yet). PlayShell mounting a second
+  // copy would put every toast on screen twice.
+  it('mounts no toast of its own', () => {
+    expect(mountShell().findComponent(Toast).exists()).toBe(false);
   });
 
-  it('mounts the one tooltip a greyed control borrows to say why', () => {
-    expect(mountShell().findComponent(DisabledReasonTooltip).exists()).toBe(true);
+  it('mounts no disabled-reason tooltip of its own', () => {
+    expect(mountShell().findComponent(DisabledReasonTooltip).exists()).toBe(false);
   });
 });
