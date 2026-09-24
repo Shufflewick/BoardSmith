@@ -12,6 +12,7 @@ import { lintCommand } from './commands/lint.js';
 import { auditCommand } from './commands/audit.js';
 import { contractCommand } from './commands/contract.js';
 import { harnessIngestCommand } from './commands/harness-ingest.js';
+import { ingestSliceSourceCommand } from './commands/rulebook-sources.js';
 import { analyzeCommand } from './commands/analyze.js';
 import { simulateCommand } from './commands/simulate.js';
 import { installClaudeCommand, uninstallClaudeCommand } from './commands/install-claude-command.js';
@@ -275,6 +276,15 @@ program
   .action(ingestCheckCommand);
 
 program
+  .command('ingest-slice-source <document> <slices...>')
+  .description('Record in each slice which archived document it was transcribed from (a rulebook/source/ path INDEX.md records)')
+  .option('--project <dir>', 'Project directory (defaults to cwd)')
+  .option('--json', 'Emit JSON instead of human-readable output')
+  .action(async (document: string, slices: string[], options) => {
+    await ingestSliceSourceCommand(document, slices, options);
+  });
+
+program
   .command('ingest-relabel')
   .description('Relabel Derived (p. lines that are pure presentation descriptions as Visual (p.')
   .option('--project <dir>', 'Project directory (defaults to cwd)')
@@ -439,25 +449,31 @@ program
   .option('--run-id <id>', 'Resume an existing run instead of minting a fresh one')
   .option(
     '--ranges <json>',
-    'JSON array of page-range ids to persist as this run\'s dispatch-plan manifest, ' +
-      'e.g. \'["1-1","2-2"]\' (decided once at first init; ignored when resuming an existing run)',
+    'JSON object of page ranges keyed by archived document, covering every document rulebook/INDEX.md records, ' +
+      'e.g. \'{"rulebook/source/rules.pdf":["1-8","9-16"]}\' (decided once at first init; ignored when resuming an existing run)',
   )
   .option('--json', 'Emit JSON instead of human-readable output')
   .action(async (options) => {
-    let ranges: string[] | undefined;
+    let ranges: Record<string, string[]> | undefined;
     if (options.ranges !== undefined) {
+      const example = '--ranges \'{"rulebook/source/rules.pdf":["1-8","9-16"]}\'';
       let parsed: unknown;
       try {
         parsed = JSON.parse(options.ranges);
       } catch {
-        console.error('--ranges must be valid JSON, e.g. --ranges \'["1-1","2-2"]\'');
-        process.exit(1);
+        throw new Error(`--ranges must be valid JSON, e.g. ${example}`);
       }
-      if (!Array.isArray(parsed) || !parsed.every((r) => typeof r === 'string')) {
-        console.error('--ranges must be a JSON array of strings, e.g. --ranges \'["1-1","2-2"]\'');
-        process.exit(1);
+      const isRangeMap =
+        typeof parsed === 'object' &&
+        parsed !== null &&
+        !Array.isArray(parsed) &&
+        Object.values(parsed).every((v) => Array.isArray(v) && v.every((r) => typeof r === 'string'));
+      if (!isRangeMap) {
+        throw new Error(
+          `--ranges must map each archived document to its page ranges, e.g. ${example}`,
+        );
       }
-      ranges = parsed as string[];
+      ranges = parsed as Record<string, string[]>;
     }
     await verifyRunInitCommand({ ...options, ranges });
   });

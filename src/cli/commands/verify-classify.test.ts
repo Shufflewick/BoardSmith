@@ -385,7 +385,7 @@ describe('pairing — m:n page-overlap group join, over REAL archived fixtures',
           text: await readFixture(`${game}/staged/${name}`),
         })),
       );
-      const pairs = pairSlices({ liveSlices, stagedUnits });
+      const pairs = pairSlices({ liveSlices, stagedUnits, sources: [] });
       const paired = pairs.filter((p) => p.kind === 'paired');
       expect(paired).toHaveLength(1);
       expect(paired[0].liveSlices).toHaveLength(liveNames.length);
@@ -424,7 +424,7 @@ describe('pairing — m:n page-overlap group join, over REAL archived fixtures',
       { unit: 'u1', slicePath: 'u1.md', text: 'p.1, A:\n"one restated"\n' },
       { unit: 'u2', slicePath: 'u2.md', text: 'p.2, B:\n"two restated"\n' },
     ];
-    const pairs = pairSlices({ liveSlices, stagedUnits });
+    const pairs = pairSlices({ liveSlices, stagedUnits, sources: [] });
     const paired = pairs.filter((p) => p.kind === 'paired');
     expect(paired).toHaveLength(2);
     expect(paired.map((p) => p.span).sort((a, b) => a.first - b.first)).toEqual([
@@ -440,7 +440,7 @@ describe('pairing — m:n page-overlap group join, over REAL archived fixtures',
     const stagedUnits = [
       { unit: '09-only-staged', slicePath: '09-only-staged.md', rangeId: '9-9', text: 'p.9, Something else:\n"A staged-only rule."\n' },
     ];
-    const pairs = pairSlices({ liveSlices, stagedUnits });
+    const pairs = pairSlices({ liveSlices, stagedUnits, sources: [] });
     expect(pairs).toHaveLength(2);
     const staleFinding = pairs.find((p) => p.liveSlices.length > 0);
     const liveMissing = pairs.find((p) => p.stagedUnits.length > 0);
@@ -458,13 +458,14 @@ describe('pairing — m:n page-overlap group join, over REAL archived fixtures',
       { unit: 'u2', slicePath: 'u2.md', rangeId: '2-2', text: 'p.2, B:\n"two restated"\n' },
     ];
 
-    const first = pairSlices({ liveSlices, stagedUnits });
-    const second = pairSlices({ liveSlices, stagedUnits });
+    const first = pairSlices({ liveSlices, stagedUnits, sources: [] });
+    const second = pairSlices({ liveSlices, stagedUnits, sources: [] });
     expect(first.map((p) => p.pairId).sort()).toEqual(second.map((p) => p.pairId).sort());
 
     const shuffled = pairSlices({
       liveSlices: [liveSlices[1], liveSlices[0]],
       stagedUnits: [stagedUnits[1], stagedUnits[0]],
+      sources: [],
     });
     expect(shuffled.map((p) => p.pairId).sort()).toEqual(first.map((p) => p.pairId).sort());
 
@@ -493,7 +494,7 @@ describe('pairing — m:n page-overlap group join, over REAL archived fixtures',
         text: 'p.4, Cover:\nVisual (p.4): The same purely decorative layout, restated.\n',
       },
     ];
-    const pairs = pairSlices({ liveSlices, stagedUnits });
+    const pairs = pairSlices({ liveSlices, stagedUnits, sources: [] });
     expect(pairs).toHaveLength(1);
     expect(pairs[0]).toMatchObject({
       kind: 'presentation-only',
@@ -508,7 +509,7 @@ describe('pairing — m:n page-overlap group join, over REAL archived fixtures',
       { unit: 'u1', slicePath: 'u1.md', rangeId: '1-1', text: 'p.1, A:\n"one restated"\n' },
       { unit: 'orphan', slicePath: 'orphan.md', rangeId: '1-1', text: 'Some content with no p.N citation at all.\n' },
     ];
-    const pairs = pairSlices({ liveSlices, stagedUnits });
+    const pairs = pairSlices({ liveSlices, stagedUnits, sources: [] });
     const orphanGroup = pairs.find((p) => p.stagedUnits.includes('orphan'));
     expect(orphanGroup).toMatchObject({ kind: 'unpaired-slice', missingSide: 'live-missing' });
     expect(orphanGroup!.stagedUnits).toEqual(['orphan']);
@@ -582,6 +583,55 @@ async function writeCitingChunk(
   await fs.writeFile(join(chunkDir, 'CHUNK.md'), chunkText);
 }
 
+
+/**
+ * #311: a slice's `p.N` is a page of the document it names, so two documents' page 1s are
+ * different pages. Pairing by page overlap happens only within one document.
+ */
+describe('pairing — within one document only (#311)', () => {
+  const RULES = 'rulebook/source/rules.pdf';
+  const CARDS = 'rulebook/source/cards.pdf';
+  const slice = (source: string | undefined, body: string) =>
+    `# S\n\n${source ? `Source: ${source}\n\n` : ''}${body}`;
+
+  it('a rulebook p.1 slice never pairs with a card list p.1 slice, and pair ids name the document', () => {
+    const pairs = pairSlices({
+      sources: [RULES, CARDS],
+      liveSlices: [
+        { path: 'rulebook/01-setup.md', text: slice(RULES, 'p.1, Setup:\n"Deal six."\n') },
+        { path: 'rulebook/01-cards-anatomy.md', text: slice(CARDS, 'p.1, Anatomy:\n"A cost."\n') },
+      ],
+      stagedUnits: [
+        { unit: 'u1', slicePath: '01-setup.md', text: slice(RULES, 'p.1, Setup:\n"Deal six."\n') },
+        { unit: 'u2', slicePath: '01-cards-anatomy.md', text: slice(CARDS, 'p.1, Anatomy:\n"A cost."\n') },
+      ],
+    });
+    expect(pairs.map((p) => [p.pairId, p.liveSlices, p.stagedUnits])).toEqual([
+      ['cards.pdf:pages-1-1', ['rulebook/01-cards-anatomy.md'], ['u2']],
+      ['rules.pdf:pages-1-1', ['rulebook/01-setup.md'], ['u1']],
+    ]);
+  });
+
+  it('a live slice naming no document pairs with its only possible one in a single-source project', () => {
+    const pairs = pairSlices({
+      sources: [RULES],
+      liveSlices: [{ path: 'rulebook/01-setup.md', text: slice(undefined, 'p.1, Setup:\n"Deal six."\n') }],
+      stagedUnits: [{ unit: 'u1', slicePath: '01-setup.md', text: slice(RULES, 'p.1, Setup:\n"Deal six."\n') }],
+    });
+    expect(pairs).toHaveLength(1);
+    expect(pairs[0]).toMatchObject({ pairId: 'pages-1-1', kind: 'paired' });
+  });
+
+  it('refuses a slice naming no document when the project has several, naming the slice and the fix', () => {
+    expect(() =>
+      pairSlices({
+        sources: [RULES, CARDS],
+        liveSlices: [{ path: 'rulebook/01-setup.md', text: slice(undefined, 'p.1, Setup:\n"Deal six."\n') }],
+        stagedUnits: [],
+      }),
+    ).toThrow(/rulebook\/01-setup\.md[\s\S]*ingest-slice-source/);
+  });
+});
 
 describe('provenance — three states, hash-only, never the subagent\'s opinion', () => {
   it('provenance-1: a chunk recording the CURRENT hash resolves to source-unchanged', async () => {
@@ -674,7 +724,7 @@ describe('provenance — three states, hash-only, never the subagent\'s opinion'
 
       const result = await resolveProvenance(project, [liveSliceRel]);
       expect(result.provenance).toBe('source-unchanged');
-      expect(result.changedAdditionalSources).toEqual([]);
+      expect(result.changedSources).toEqual([]);
     });
 
     it('a chunk verified against an older version of the additional source resolves to source-changed, naming it', async () => {
@@ -686,8 +736,8 @@ describe('provenance — three states, hash-only, never the subagent\'s opinion'
 
       const result = await resolveProvenance(project, [liveSliceRel]);
       expect(result.provenance).toBe('source-changed');
-      expect(result.changedAdditionalSources).toEqual([REFERENCE]);
-      expect(result.reason).toMatch(/additional source/);
+      expect(result.changedSources).toEqual([REFERENCE]);
+      expect(result.reason).toContain(REFERENCE);
     });
 
     it('a chunk verified before the additional source was recorded resolves to source-changed', async () => {
@@ -697,7 +747,76 @@ describe('provenance — three states, hash-only, never the subagent\'s opinion'
 
       const result = await resolveProvenance(project, [liveSliceRel]);
       expect(result.provenance).toBe('source-changed');
-      expect(result.changedAdditionalSources).toEqual([REFERENCE]);
+      expect(result.changedSources).toEqual([REFERENCE]);
+    });
+  });
+
+  describe('narrowed to the documents the pair\'s slices came from (#311)', () => {
+    const REFERENCE = 'rulebook/source/REFERENCE.md';
+    const RULES = 'rulebook/source/rules.pdf';
+
+    /** `provenanceProject()` with `REFERENCE.md` recorded, and the live slice naming `source`. */
+    async function attributed(source: string, referenceOnDisk: string) {
+      const setup = await provenanceProject();
+      const recordedReference = '# Reference v1\n';
+      const referenceHash = sha256(Buffer.from(recordedReference));
+      await fs.writeFile(join(setup.project, DESIGN_DIR, REFERENCE), referenceOnDisk);
+      const indexPath = join(setup.project, DESIGN_DIR, 'rulebook', 'INDEX.md');
+      const index = await fs.readFile(indexPath, 'utf-8');
+      await fs.writeFile(
+        indexPath,
+        index.replace(
+          '## Open Rules Gaps',
+          '## Additional Sources\n\n<!-- boardsmith:additional-sources:begin -->\n| file | sha256 |\n|------|--------|\n' +
+            `| ${REFERENCE} | ${referenceHash} |\n<!-- boardsmith:additional-sources:end -->\n\n## Open Rules Gaps`,
+        ),
+      );
+      const slicePath = join(setup.project, DESIGN_DIR, setup.liveSliceRel);
+      await fs.writeFile(slicePath, `Source: ${source}\n\n${await fs.readFile(slicePath, 'utf-8')}`);
+      return { ...setup, referenceHash };
+    }
+
+    it('a companion the chunk saw an older version of does not touch a pair transcribed from the rulebook', async () => {
+      const { project, liveSliceRel, sourceHash } = await attributed(RULES, '# Reference v1\n');
+      await writeCitingChunk(project, 'setup', liveSliceRel, sourceHash, [
+        { sourcePath: REFERENCE, sourceHash: 'c'.repeat(64) },
+      ]);
+      const result = await resolveProvenance(project, [liveSliceRel]);
+      expect(result.provenance).toBe('source-unchanged');
+      expect(result.sources).toEqual([RULES]);
+    });
+
+    it('a companion whose archive changed on disk does not make a rulebook pair unknown', async () => {
+      const { project, liveSliceRel, sourceHash } = await attributed(RULES, '# Reference v2\n');
+      await writeCitingChunk(project, 'setup', liveSliceRel, sourceHash);
+      const result = await resolveProvenance(project, [liveSliceRel]);
+      expect(result.provenance).toBe('source-unchanged');
+    });
+
+    it('a pair transcribed from the companion is compared against the companion only', async () => {
+      const { project, liveSliceRel, referenceHash } = await attributed(REFERENCE, '# Reference v1\n');
+      // The rulebook hash this chunk recorded is stale, and does not matter to this pair.
+      await writeCitingChunk(project, 'battle', liveSliceRel, 'stalehash0000000', [
+        { sourcePath: REFERENCE, sourceHash: referenceHash },
+      ]);
+      const unchanged = await resolveProvenance(project, [liveSliceRel]);
+      expect(unchanged.provenance).toBe('source-unchanged');
+
+      await writeCitingChunk(project, 'battle', liveSliceRel, 'stalehash0000000', [
+        { sourcePath: REFERENCE, sourceHash: 'c'.repeat(64) },
+      ]);
+      const changed = await resolveProvenance(project, [liveSliceRel]);
+      expect(changed.provenance).toBe('source-changed');
+      expect(changed.changedSources).toEqual([REFERENCE]);
+    });
+
+    it('a pair from a companion whose archive changed on disk is unknown, naming the document', async () => {
+      const { project, liveSliceRel, referenceHash } = await attributed(REFERENCE, '# Reference v2\n');
+      await writeCitingChunk(project, 'battle', liveSliceRel, 'x', [{ sourcePath: REFERENCE, sourceHash: referenceHash }]);
+      const result = await resolveProvenance(project, [liveSliceRel]);
+      expect(result.provenance).toBe('unknown');
+      expect(result.reason).toContain('additional-source-hash-mismatch');
+      expect(result.reason).toContain(REFERENCE);
     });
   });
 

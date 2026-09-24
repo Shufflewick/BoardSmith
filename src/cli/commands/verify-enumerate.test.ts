@@ -1044,63 +1044,66 @@ async function buildProjectWithSources(
   return { project, provenance };
 }
 
-describe('QuoteVerifiedProvenance.covers() — multi-source honesty (177-19)', () => {
-  it('case 1 — genuinely single-source: unarchivedSources is [] and every slice is covered', async () => {
-    const { provenance } = await buildProjectWithSources('single-source', 'rules.pdf', []);
+/** Writes `rulebook/<name>` naming `source` as its document, or naming none. */
+async function writeSlice(project: string, name: string, source: string | undefined): Promise<void> {
+  await fs.writeFile(
+    join(project, DESIGN_DIR, 'rulebook', name),
+    `# ${name}\n\n${source ? `Source: ${source}\n\n` : ''}p.1, Rule:\n"Something."\n`,
+  );
+}
+
+describe('QuoteVerifiedProvenance.covers() — multi-source honesty (177-19, #311)', () => {
+  it('genuinely single-source: unarchivedSources is [] and every slice is covered, named or not', async () => {
+    const { project } = await buildProjectWithSources('single-source', 'rules.pdf', []);
+    await writeSlice(project, '02-turn.md', 'rulebook/source/rules.pdf');
+    const provenance = (await QuoteVerifiedProvenance.obtain(project))!;
     expect(provenance.unarchivedSources).toEqual([]);
     expect(provenance.covers('rulebook/01-objective-and-setup.md')).toBe(true);
+    expect(provenance.covers('rulebook/02-turn.md')).toBe(true);
+  });
+
+  it('the doom-machine shape: a slice naming the archived document is covered; one naming none is not, since it may come from the unarchived one', async () => {
+    const { project } = await buildProjectWithSources('two-source-doom-machine', 'rules.pdf', ['cards.pdf']);
+    await writeSlice(project, '01-objective-and-setup.md', 'rulebook/source/rules.pdf');
+    await writeSlice(project, 'CARDS.md', undefined);
+    const provenance = (await QuoteVerifiedProvenance.obtain(project))!;
+    expect(provenance.unarchivedSources).toEqual(['cards.pdf']);
+    expect(provenance.covers('rulebook/01-objective-and-setup.md')).toBe(true);
+    expect(provenance.covers('rulebook/CARDS.md')).toBe(false);
+    const coverage = provenance.coverage('rulebook/CARDS.md');
+    expect(coverage.covered === false && coverage.why).toMatch(/cards\.pdf/);
+  });
+
+  it('never guesses from a file name: a slice named like the unarchived document but naming the archived one is covered', async () => {
+    const { project } = await buildProjectWithSources('no-name-guess', 'rules.pdf', ['cards.pdf']);
+    await writeSlice(project, 'CARDS.md', 'rulebook/source/rules.pdf');
+    const provenance = (await QuoteVerifiedProvenance.obtain(project))!;
     expect(provenance.covers('rulebook/CARDS.md')).toBe(true);
   });
 
-  it('case 3 (the doom-machine shape) — one unarchived source: a name-matching slice is NOT covered, an unrelated one is', async () => {
-    const { provenance } = await buildProjectWithSources('two-source-doom-machine', 'rules.pdf', [
-      'cards.pdf',
-    ]);
-    expect(provenance.unarchivedSources).toEqual(['cards.pdf']);
-    // CARDS.md's stem ("cards") matches cards.pdf's stem ("cards") — not covered.
-    expect(provenance.covers('rulebook/CARDS.md')).toBe(false);
-    // An ordinary rules.pdf-sourced slice shares no name with cards.pdf — covered.
+  it('a changed companion leaves the rulebook\'s slices covered and its own not', async () => {
+    const { project } = await buildProjectWithSources('changed-companion', 'rules.pdf', ['cards.pdf']);
+    await ingestArchiveCommand(join(project, 'cards.pdf'), { project, json: true });
+    await fs.writeFile(join(project, DESIGN_DIR, 'rulebook/source/cards.pdf'), 'reprinted\n');
+    await writeSlice(project, '01-objective-and-setup.md', 'rulebook/source/rules.pdf');
+    await writeSlice(project, '01-cards-anatomy.md', 'rulebook/source/cards.pdf');
+    const provenance = (await QuoteVerifiedProvenance.obtain(project))!;
     expect(provenance.covers('rulebook/01-objective-and-setup.md')).toBe(true);
-    expect(provenance.covers('rulebook/02-machine-phase.md')).toBe(true);
+    expect(provenance.covers('rulebook/01-cards-anatomy.md')).toBe(false);
+    const coverage = provenance.coverage('rulebook/01-cards-anatomy.md');
+    expect(coverage.covered === false && coverage.why).toMatch(/additional-source-hash-mismatch/);
   });
 
-  it('case 2 — two or more unarchived candidates: refuses to vouch for ANY slice (too ambiguous to attempt the heuristic)', async () => {
-    const { provenance } = await buildProjectWithSources('three-source', 'rules.pdf', [
-      'cards.pdf',
-      'appendix.pdf',
-    ]);
-    expect([...provenance.unarchivedSources].sort()).toEqual(['appendix.pdf', 'cards.pdf']);
-    expect(provenance.covers('rulebook/CARDS.md')).toBe(false);
-    expect(provenance.covers('rulebook/01-objective-and-setup.md')).toBe(false);
-  });
-
-  it('short stems (below MIN_STEM_MATCH_LENGTH) fail closed rather than risk an unreliable match', async () => {
-    const { provenance } = await buildProjectWithSources('short-stem', 'rules.pdf', ['faq.pdf']);
-    expect(provenance.unarchivedSources).toEqual(['faq.pdf']);
-    // "faq" (3 chars) and the slice's own short stem are both below the trust threshold —
-    // conservative default is uncovered, not a risky match attempt.
-    expect(provenance.covers('rulebook/faq.md')).toBe(false);
-  });
-
-  it('the loop closes: once the SECOND source is genuinely archived via `boardsmith ingest-archive`, covers() resolves true without any filename heuristic at all', async () => {
-    // First build the two-source project the ordinary way (root files present, only rules.pdf
-    // archived) — same starting shape as the doom-machine measurement.
-    const { project } = await buildProjectWithSources('closes-the-loop', 'rules.pdf', [
-      'cards.pdf',
-    ]);
+  it('the loop closes: once the SECOND source is archived via `boardsmith ingest-archive`, a slice naming none is covered again', async () => {
+    const { project } = await buildProjectWithSources('closes-the-loop', 'rules.pdf', ['cards.pdf']);
     const before = await QuoteVerifiedProvenance.obtain(project);
     expect(before!.unarchivedSources).toEqual(['cards.pdf']);
     expect(before!.covers('rulebook/CARDS.md')).toBe(false);
 
-    // Now actually archive cards.pdf too, via the real ingest-archive command (177-19's
-    // multi-source fix) — no test-only shortcut, the same command a real ingest session runs.
     await ingestArchiveCommand(join(project, 'cards.pdf'), { project, json: true });
 
     const after = await QuoteVerifiedProvenance.obtain(project);
     expect(after!.unarchivedSources).toEqual([]);
-    // Covered unconditionally now (case 1: genuinely zero unarchived sources) — not because the
-    // filename heuristic happened to match, but because both sources are independently archived
-    // and hash-verified.
     expect(after!.covers('rulebook/CARDS.md')).toBe(true);
     expect(after!.covers('rulebook/01-objective-and-setup.md')).toBe(true);
   });
@@ -1108,11 +1111,10 @@ describe('QuoteVerifiedProvenance.covers() — multi-source honesty (177-19)', (
 
 describe('classifyDerivedLines — provenance gated per-slice, not per-project (177-19)', () => {
   it('EMPIRICAL PROOF the gap existed and is now closed: a CARDS.md-shaped uncorroborated claim downgrades to quote-unverified even though the project has non-null provenance, while a rules.pdf-shaped claim in the SAME project does not', async () => {
-    const { provenance } = await buildProjectWithSources(
-      'classify-multi-source',
-      'rules.pdf',
-      ['cards.pdf'],
-    );
+    const { project } = await buildProjectWithSources('classify-multi-source', 'rules.pdf', ['cards.pdf']);
+    // The rules slice says which document it came from (#311); CARDS.md says nothing.
+    await writeSlice(project, '01-objective-and-setup.md', 'rulebook/source/rules.pdf');
+    const provenance = await QuoteVerifiedProvenance.obtain(project);
 
     const cardsClaim: ReconcilerDerivedLineClaim = {
       slicePath: 'rulebook/CARDS.md',

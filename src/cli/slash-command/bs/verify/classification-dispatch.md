@@ -64,7 +64,7 @@ Staged slices: {stagedSlicePaths}
 
 **The `BS-CLASSIFY-V1` token is required and the subagent validates it.** A dispatch without it is
 rejected unread, before the subagent opens either slice — the same reasoning
-`staging-dispatch.md`'s `BS-DISPATCH-V2` handshake rests on: you cannot produce this token from
+`staging-dispatch.md`'s `BS-DISPATCH-V3` handshake rests on: you cannot produce this token from
 memory, so carrying it is proof the pointer block was copied rather than composed from what a
 classification prompt is remembered to look like. Copy the block; do not retype it.
 

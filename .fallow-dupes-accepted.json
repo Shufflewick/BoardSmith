@@ -2783,13 +2783,6 @@
       ]
     },
     {
-      "content": "6005011ea958d379",
-      "lines": 6,
-      "files": [
-        "src/cli/commands/verify-run.test.ts"
-      ]
-    },
-    {
       "content": "60140980bca16c35",
       "lines": 17,
       "files": [

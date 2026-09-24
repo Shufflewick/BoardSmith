@@ -8,9 +8,16 @@ import {
 import { assertBareName } from '../lib/user-name.js';
 import { createHash } from 'node:crypto';
 import { promises as fs } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { basename, join, resolve } from 'node:path';
 import chalk from 'chalk';
-import { normalizeEdition, parseAdditionalSources } from './ingest-archive.js';
+import { normalizeEdition } from './ingest-archive.js';
+import {
+  NON_SLICE_FILES,
+  parseAdditionalSources,
+  parseSliceSource,
+  readRecordedSourcePaths,
+  sliceDocuments,
+} from './rulebook-sources.js';
 import { readBoardsmithVersion } from '../lib/boardsmith-version.js';
 import { hashSkillsTree } from '../lib/skills-tree-hash.js';
 import { findHeadingIndex } from './build-manifest.js';
@@ -36,7 +43,7 @@ export const SCOPE_FULL = 'full';
 export const SCOPE_CODE_ONLY = 'code-conformance-only';
 
 /**
- * The seven reasons a verification's scope is reduced from `full`. Each fires from ONE specific
+ * The eight reasons a verification's scope is reduced from `full`. Each fires from ONE specific
  * disk state, and the precedence order below (checked top to bottom, first match wins) is part
  * of the contract:
  *
@@ -46,8 +53,7 @@ export const SCOPE_CODE_ONLY = 'code-conformance-only';
  *     project predates Phase 170's ingest contract entirely (no `rulebook/source/`, no recorded
  *     hash) — DISTINCT from `source-missing` on purpose. Conflating "never had provenance" with
  *     "had it and lost it" would report every pre-170 project as damaged rather than simply older
- *     (171-CONTEXT.md decision 10). Both reference games (`seven`, `one-two-punch`) are real,
- *     live examples of this state as of 2026-07-28.
+ *     (171-CONTEXT.md decision 10).
  *  4. `source-missing`         — `INDEX.md` records a `Source:` path and a `Source hash:`, but no
  *     file exists at that path. Provenance was recorded and the archive is now gone.
  *  5. `source-hash-mismatch`   — the archived file exists, but its SHA-256 does not match the
@@ -56,13 +62,15 @@ export const SCOPE_CODE_ONLY = 'code-conformance-only';
  *     that no longer exists (#305).
  *  7. `additional-source-hash-mismatch` — a row's archived file exists but its SHA-256 no longer
  *     matches the recorded one (#305).
+ *  8. `slice-source-unrecorded` — a slice names, as the document it was transcribed from, a file
+ *     `INDEX.md` does not record (#311). Only `scopeForDocuments` returns it: the project as a
+ *     whole cannot have it, since the project-level check reads no slice.
  *
- * An additional source is part of the rules (a companion document the rulebook incorporates, a
- * separate card list), and slices do not record which document produced them, so one that fails
- * its check leaves NO slice verifiable — the scope drops, rather than the row being set aside
- * while every slice goes on looking verified against a document that moved underneath it.
- *
- * `full` is everything past all seven checks: every recorded source exists AND its hash matches.
+ * `computeVerificationScope` is the PROJECT's scope: every recorded document exists and matches.
+ * A chunk's scope is narrower (#311): each slice names the document it came from
+ * (`rulebook-sources.ts`), so `scopeForDocuments` reduces a chunk only for a failure in a document
+ * its own slices came from. A changed companion document no longer reduces a chunk built on the
+ * rulebook alone.
  */
 export const SCOPE_REASONS = Object.freeze([
   'source-missing',
@@ -72,6 +80,7 @@ export const SCOPE_REASONS = Object.freeze([
   'pre-provenance-project',
   'additional-source-missing',
   'additional-source-hash-mismatch',
+  'slice-source-unrecorded',
 ] as const);
 
 export type ScopeReason = (typeof SCOPE_REASONS)[number];
@@ -94,9 +103,9 @@ export interface VerificationScope {
    */
   additionalSources?: Array<{ sourcePath: string; sourceHash: string }>;
   /**
-   * The rows that FAILED that check, each naming why (#305). Any entry here reduces `scope`, so a
-   * changed companion document can never leave a verification looking full; the list is what lets
-   * a report say which document moved. Always present (possibly `[]`) alongside
+   * The rows that FAILED that check, each naming why (#305). Any entry here reduces the project's
+   * `scope`, and the scope of every chunk whose slices came from that document
+   * (`scopeForDocuments`); the list is what lets a report say which document moved. Always present (possibly `[]`) alongside
    * `additionalSources`.
    */
   failedAdditionalSources?: Array<{
@@ -216,6 +225,61 @@ export async function computeVerificationScope(projectDir: string): Promise<Veri
   return { scope: SCOPE_FULL, edition, sourcePath, sourceHash, ...additional };
 }
 
+/** The reasons that describe the project rather than one document, so no narrowing escapes them. */
+const PROJECT_WIDE_REASONS: ReadonlySet<ScopeReason> = new Set([
+  'no-rulebook-project',
+  'index-missing',
+  'pre-provenance-project',
+]);
+
+/** Which of two per-document failures a narrowed scope reports: the same order as the project's. */
+const DOCUMENT_REASON_PRECEDENCE: readonly ScopeReason[] = [
+  'source-missing',
+  'source-hash-mismatch',
+  'additional-source-missing',
+  'additional-source-hash-mismatch',
+  'slice-source-unrecorded',
+];
+
+/**
+ * Why `document` cannot be verified against, or `undefined` when it can: it is a document
+ * `INDEX.md` records, its archived copy exists, and its SHA-256 matches. Read from `scope`, which
+ * `computeVerificationScope` computed from disk — this re-reads nothing.
+ */
+export function documentFailure(scope: VerificationScope, document: string): ScopeReason | undefined {
+  if (scope.reason && PROJECT_WIDE_REASONS.has(scope.reason)) return scope.reason;
+  if (document === scope.sourcePath) {
+    return scope.reason === 'source-missing' || scope.reason === 'source-hash-mismatch'
+      ? scope.reason
+      : undefined;
+  }
+  const failed = scope.failedAdditionalSources?.find((f) => f.sourcePath === document);
+  if (failed) return failed.reason;
+  if (scope.additionalSources?.some((a) => a.sourcePath === document)) return undefined;
+  return 'slice-source-unrecorded';
+}
+
+/**
+ * The scope of a verification against `documents` only — the documents a chunk's cited slices
+ * came from (`rulebook-sources.ts`'s `sliceDocuments`). `full` when every one of them is verified,
+ * whatever has happened to the project's other documents; otherwise reduced with the reason of the
+ * first failure, in the project's own precedence order. With no documents to narrow to (a chunk
+ * citing no slice) the project's scope applies unchanged.
+ *
+ * Like `computeVerificationScope`, this takes no caller-declared scope: `scope` must be that
+ * function's result, and `documents` are read from the slices, never supplied by a session.
+ */
+export function scopeForDocuments(scope: VerificationScope, documents: readonly string[]): VerificationScope {
+  if (documents.length === 0) return scope;
+  if (scope.reason && PROJECT_WIDE_REASONS.has(scope.reason)) return scope;
+  const failures = new Set(documents.map((d) => documentFailure(scope, d)).filter((r) => r !== undefined));
+  const reason = DOCUMENT_REASON_PRECEDENCE.find((r) => failures.has(r));
+  if (reason) return { ...scope, scope: SCOPE_CODE_ONLY, reason };
+  const full: VerificationScope = { ...scope, scope: SCOPE_FULL };
+  delete full.reason;
+  return full;
+}
+
 /**
  * Checks every `## Additional Sources` row the same way the primary source is checked: the
  * archived file at `path` (relative to `design/`) must exist AND its SHA-256 must match the
@@ -305,6 +369,27 @@ export function resolveCitedSlices(
   }
 
   return { resolved: [...resolved].sort(), unresolved: [...unresolved].sort() };
+}
+
+/**
+ * Each cited slice's hash, and the documents the slices came from (`rulebook-sources.ts`'s
+ * `sliceDocuments`): what a chunk's `## Verified Against` block records, and what its scope
+ * narrows to.
+ */
+async function readCitedSlices(
+  projectDir: string,
+  resolved: string[],
+): Promise<{ citedSlices: Array<{ path: string; hash: string }>; documents: string[] }> {
+  const recorded = await readRecordedSourcePaths(projectDir);
+  const citedSlices: Array<{ path: string; hash: string }> = [];
+  const documents = new Set<string>();
+  for (const rel of resolved) {
+    const bytes = await fs.readFile(join(designDir(projectDir), rel));
+    citedSlices.push({ path: rel, hash: sha256(bytes) });
+    const sliceSource = NON_SLICE_FILES.includes(basename(rel)) ? undefined : parseSliceSource(bytes.toString('utf-8'));
+    for (const d of sliceDocuments(sliceSource, recorded)) documents.add(d);
+  }
+  return { citedSlices, documents: [...documents] };
 }
 
 /**
@@ -545,7 +630,7 @@ export async function recordVerifiedAgainst(
     );
   }
 
-  const scope = await computeVerificationScope(projectDir);
+  const projectScope = await computeVerificationScope(projectDir);
 
   const rulebookDir = designRulebookDir(projectDir);
   let sliceFilenames: string[] = [];
@@ -576,11 +661,9 @@ export async function recordVerifiedAgainst(
   // citation and never letting `changed` settle to false on a second identical run.
   const citableText = headingIdx === -1 ? chunkText : chunkText.slice(0, headingIdx);
   const { resolved, unresolved } = resolveCitedSlices(citableText, sliceFilenames);
-  const citedSlices: Array<{ path: string; hash: string }> = [];
-  for (const rel of resolved) {
-    const bytes = await fs.readFile(join(designDir(projectDir), rel));
-    citedSlices.push({ path: rel, hash: sha256(bytes) });
-  }
+  const { citedSlices, documents } = await readCitedSlices(projectDir, resolved);
+  // The chunk is verified against the documents its slices came from, not the whole project (#311).
+  const scope = scopeForDocuments(projectScope, documents);
 
   const record: VerifiedAgainstRecord = {
     scope: scope.scope,

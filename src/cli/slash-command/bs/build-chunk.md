@@ -126,6 +126,12 @@ npx boardsmith ingest-check
 `rulebook/INDEX.md` and any slice it names before continuing, then re-run the command — it will
 pass. Do not proceed to the consistency check on a non-zero exit.
 
+The one thing it reports without repairing is a slice that does not say which document it was
+transcribed from (its `Source: rulebook/source/<file>` line), because only the transcription
+knows. Run the `npx boardsmith ingest-slice-source` line it prints. In a project with one document
+that line is complete. With several, ask the designer which document each listed slice came from
+(never infer it from the file name), then run it once per document, and re-run `ingest-check`.
+
 Why this is here: `/bs-ingest-rules` never commits, so the pre-commit hook that performs ingest
 synthesis has never run when you arrive. On 2026-07-28 a real ingest run ended with
 `## Open Rules Gaps` holding 2 of the 5 gaps its own slices recorded, and zero `Derived (p.N):`

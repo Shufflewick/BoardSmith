@@ -75,11 +75,14 @@ An archived source already exists at `rulebook/source/`, but its hash does not m
 `rulebook/INDEX.md`'s `Source hash:` line — or a document in `rulebook/INDEX.md`'s
 `## Additional Sources` table (a companion the rulebook incorporates, a card list) is missing or
 no longer matches its recorded hash. The verification scope drops to `code-conformance-only`
-with reason `additional-source-missing` or `additional-source-hash-mismatch` (what `chunk-check`
-and the verify Close record), and every chunk verified against an older version of that document
-reads as `source-changed`. Name the
-document in the report: slices do not say which document they came from, so none of them can be
-treated as verified until it is resolved. This is the `source-changed` SIGNAL, not an error —
+with reason `additional-source-missing` or `additional-source-hash-mismatch` (what the verify
+Close records). Each slice names the document it was transcribed from on its `Source:` line, so
+the reduction reaches only what came from the document that moved: `chunk-check` reduces the
+scope of a chunk whose cited slices came from it, and a pair of its slices whose chunks were
+verified against an older version reads as `source-changed`. Chunks and pairs built only on the
+other documents are unaffected. Name the document in the report. A slice that names no document
+may have come from any of them, so it is treated as coming from all; `boardsmith ingest-check`
+lists such slices. This is the `source-changed` SIGNAL, not an error —
 re-verifying against a new edition of the rulebook is the entire point of this pipeline. Record
 the mismatch and PROCEED with the current archived copy. **Never overwrite the archived file on
 this signal** — the old archive is what the previous verdict was made against, and overwriting it

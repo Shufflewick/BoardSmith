@@ -17,11 +17,13 @@ import {
   GAPS_EMPTY,
   GAPS_BEGIN,
   GAPS_END,
+} from './ingest-archive.js';
+import {
   ADDITIONAL_SOURCES_HEADING,
   ADDITIONAL_SOURCES_BEGIN,
   ADDITIONAL_SOURCES_END,
   parseAdditionalSources,
-} from './ingest-archive.js';
+} from './rulebook-sources.js';
 import { computeVerificationScope } from './chunk-provenance.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { rejectionMessage } from '../../testing/rejection.test-helper.js';
@@ -549,10 +551,13 @@ describe('v4.9 — machine-owned gaps section and ingest-check (170-PROOF-RUN-2)
     const project = await run();
     await fs.writeFile(
       join(project, DESIGN_DIR, 'rulebook', '01-core.md'),
-      ['# Core', '', ...entries, '', ...derivedLines, ''].join('\n'),
+      ['# Core', '', `Source: ${PRIMARY}`, '', ...entries, '', ...derivedLines, ''].join('\n'),
     );
     return project;
   }
+
+  /** Where `run()` archives the rulebook, as INDEX.md and every slice record it. */
+  const PRIMARY = 'rulebook/source/src-rules.pdf';
 
   const readIndex = (project: string) =>
     fs.readFile(join(project, DESIGN_DIR, 'rulebook', 'INDEX.md'), 'utf-8');
@@ -666,10 +671,87 @@ describe('v4.9 — machine-owned gaps section and ingest-check (170-PROOF-RUN-2)
       // Re-introduce the misfiled line after the section is already current.
       await fs.writeFile(
         join(project, DESIGN_DIR, 'rulebook', '01-core.md'),
-        'Derived (p.1): The page is set in a bold sans-serif with four columns.\n',
+        `Source: ${PRIMARY}\n\nDerived (p.1): The page is set in a bold sans-serif with four columns.\n`,
       );
       await ingestCheckCommand({ project, json: true });
       expect(process.exitCode).toBe(1);
+    });
+
+    describe('every slice names the document it was transcribed from (#311)', () => {
+      const slicePath = (project: string, name: string) =>
+        join(project, DESIGN_DIR, 'rulebook', name);
+
+      async function check(project: string): Promise<{ output: string; exitCode: typeof process.exitCode }> {
+        const lines: string[] = [];
+        const log = console.log;
+        const error = console.error;
+        console.log = (...args: unknown[]) => lines.push(args.join(' '));
+        console.error = (...args: unknown[]) => lines.push(args.join(' '));
+        try {
+          await ingestCheckCommand({ project });
+        } finally {
+          console.log = log;
+          console.error = error;
+        }
+        return { output: lines.join('\n'), exitCode: process.exitCode };
+      }
+
+      it('fails on a slice with no Source line, naming it and the exact command that records it', async () => {
+        const project = await withSlices([]);
+        await ingestGapsCommand({ project, quiet: true });
+        await fs.writeFile(slicePath(project, '02-turn.md'), '# Turn\n\np.2, Turn:\n"Draw a card."\n');
+        process.exitCode = undefined;
+
+        const { output, exitCode } = await check(project);
+        expect(exitCode).toBe(1);
+        expect(output).toContain('rulebook/02-turn.md');
+        expect(output).not.toContain('rulebook/01-core.md');
+        expect(output).toContain(`npx boardsmith ingest-slice-source ${PRIMARY} 02-turn.md`);
+        // Nothing is guessed: the slice is left exactly as it was.
+        expect(await fs.readFile(slicePath(project, '02-turn.md'), 'utf-8')).not.toContain('Source:');
+      });
+
+      it('fails on a slice naming a document INDEX.md does not record', async () => {
+        const project = await withSlices([]);
+        await ingestGapsCommand({ project, quiet: true });
+        await fs.writeFile(
+          slicePath(project, '02-cards.md'),
+          '# Cards\n\nSource: rulebook/source/cards.pdf\n\np.1, Cards:\n"Six cards."\n',
+        );
+        process.exitCode = undefined;
+
+        const { output, exitCode } = await check(project);
+        expect(exitCode).toBe(1);
+        expect(output).toContain('rulebook/02-cards.md → rulebook/source/cards.pdf');
+      });
+
+      it('passes once every slice names a recorded document', async () => {
+        const project = await withSlices([]);
+        await ingestGapsCommand({ project, quiet: true });
+        process.exitCode = undefined;
+        const { exitCode } = await check(project);
+        expect(exitCode).toBeUndefined();
+      });
+
+      it('checks nothing on the interview path, where no document was archived', async () => {
+        const project = join(dir, 'interview');
+        await fs.mkdir(join(project, DESIGN_DIR, 'rulebook'), { recursive: true });
+        await fs.writeFile(
+          join(project, DESIGN_DIR, 'rulebook', 'INDEX.md'),
+          renderIndex({
+            gameName: 'interview',
+            edition: 'unpublished — designer statement',
+            archivedPath: 'not applicable — no source rulebook (interview path)',
+            sourceHash: 'not applicable — no source rulebook (interview path)',
+            transcribed: '2026-09-24',
+          }),
+        );
+        await fs.writeFile(slicePath(project, '01-core.md'), '# Core\n\nDerived (p.1): Two players.\n');
+        await ingestGapsCommand({ project, quiet: true });
+        process.exitCode = undefined;
+        const { exitCode } = await check(project);
+        expect(exitCode).toBeUndefined();
+      });
     });
   });
 

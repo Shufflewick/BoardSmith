@@ -2,7 +2,10 @@
 
 This is `verify-game.md` Step 2's delegate — the verify-side sibling of
 `${CLAUDE_SKILL_DIR}/../bs-shared/ingest/transcription.md`. By the time this file runs, Step 1
-has already resolved which archived source (`rulebook/source/<file>`) this pass verifies against.
+has already resolved the archived sources (`rulebook/source/<file>`) this pass verifies against:
+the rulebook on `rulebook/INDEX.md`'s `Source:` line, plus each document in its
+`## Additional Sources` table. **This pass re-transcribes every one of them** — a companion's
+slices are compared against a fresh transcription of the companion, never left out.
 
 ## Context-Economics Hard Rule (restated here — this is where the temptation is strongest)
 
@@ -16,15 +19,20 @@ failure `ingest/transcription.md` names for the live-slice case, applying here t
 
 ## Run Allocation
 
-Divide the rulebook into page ranges the same way `${CLAUDE_SKILL_DIR}/../bs-shared/ingest/
+Divide EACH archived document into page ranges the same way `${CLAUDE_SKILL_DIR}/../bs-shared/ingest/
 transcription.md`'s Fan-Out Dispatch section already does (page-count metadata only — never by
-opening the rulebook content). Then run:
+opening the document's content). Then run, keying each document's ranges by its path exactly as
+`rulebook/INDEX.md` records it:
 
 ```
-boardsmith verify-run-init --project <dir> --ranges '["{N}-{M}", ...]' --json
+boardsmith verify-run-init --project <dir> --ranges '{"rulebook/source/<rulebook>": ["1-8", ...], "rulebook/source/<companion>": ["1-4", ...]}' --json
 ```
 
-Take `runId`, `stagingDir`, and `ranges` from its JSON output. **The run-id is minted BY THE
+The command refuses a document `INDEX.md` does not record, and a manifest that leaves out one it
+does. Take `runId`, `stagingDir`, and `ranges` from its JSON output. Each entry of `ranges` is
+`{ rangeId, source, pages }`: `pages` of the archived document `source`, identified by `rangeId`
+everywhere below (in a project with several documents the id leads with the document's file
+name, e.g. `cards.pdf:1-3`, since each document has its own page 1). **The run-id is minted BY THE
 COMMAND — it is never composed, estimated, or typed by this session.** This is the same discipline
 `${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md` applies to the session-lock timestamp
 (`date -u +%Y-%m-%dT%H:%M:%SZ`, never fabricated), and it is the reason `verify-run-init` exists
@@ -64,7 +72,7 @@ For each range in `rangesPending`:
   instead of 2. Instead, first supersede the stale units:
 
   ```
-  boardsmith verify-run-record --run-id <runId> --reset-range {N}-{M} --project <dir> --json
+  boardsmith verify-run-record --run-id <runId> --reset-range <rangeId> --project <dir> --json
   ```
 
   This appends a tombstone marker (never rewrites or deletes the stale lines — the ledger stays
@@ -98,26 +106,29 @@ with the run's `stagingDir` (an absolute path the run-init CLI returns) instead 
 path's `design/rulebook/`:
 
 ```
-BS-DISPATCH-V2
+BS-DISPATCH-V3
 
 Read `${CLAUDE_SKILL_DIR}/../bs-shared/ingest/transcription-subagent.md` in full and follow it
 exactly.
 
-Your page range: {N}-{M}
-Rulebook path:   {rulebookPath}
+Your page range: {pages}
+Rulebook path:   design/{source}
+Source record:   {source}
 Write slices to: {stagingDir}
 ```
 
-**The `BS-DISPATCH-V2` token is required and the subagent validates it.** A dispatch without it is
+**The `BS-DISPATCH-V3` token is required and the subagent validates it.** A dispatch without it is
 rejected unread. This is not ceremony: sessions reliably read the pointer, then send a prompt
 composed from memory instead — one that reproduces a superseded, shorter version of the contract.
 You cannot produce the token from memory, so carrying it is the proof you copied this block rather
 than recalled one. Copy the block; do not retype it from what you remember a transcription prompt
 looking like.
 
-Fill `{rulebookPath}` with the path recorded at `design/rulebook/source/<file>` (Step 1's resolved
-archive) and `{N}`-`{M}` with the range being dispatched — a fresh-context Task subagent has no
-inherited knowledge of where the source lives or which run it belongs to.
+Fill `{pages}` and `{source}` from the `ranges` entry being dispatched: `{source}` is the
+archived document exactly as `INDEX.md` records it (`rulebook/source/<file>`), so `Rulebook path:`
+is that file under `design/` and `Source record:` is the value each staged slice writes as its
+`Source:` line. A fresh-context Task subagent has no inherited knowledge of where the source lives
+or which run it belongs to.
 
 ## Recording
 
@@ -125,11 +136,13 @@ After each subagent returns its structured summary, record EVERY unit its return
 each with the range you just dispatched:
 
 ```
-boardsmith verify-run-record --run-id <runId> --unit <unitId> --slice <slicePath> --range {N}-{M} --project <dir> --json
+boardsmith verify-run-record --run-id <runId> --unit <unitId> --slice <slicePath> --range <rangeId> --project <dir> --json
 ```
 
 using the `slicePath` field the subagent's return carries — the orchestrator records from that
-returned field, it does not open the file to check it.
+returned field, it does not open the file to check it. The command does: it refuses a staged
+slice whose `Source:` line names a different document than its range's (or none, in a project
+with several documents). On that refusal, reset and re-dispatch the range with the block above.
 
 **Ordering rule and its reason:** `verify-run-record` itself refuses to record a slice it cannot
 find, non-empty, on disk inside the staging directory — so a record can never precede the
@@ -139,7 +152,7 @@ instruction this file is trusting the session to follow correctly.
 **Once every unit the subagent's return named has been recorded, mark the range complete:**
 
 ```
-boardsmith verify-run-record --run-id <runId> --complete-range {N}-{M} --project <dir> --json
+boardsmith verify-run-record --run-id <runId> --complete-range <rangeId> --project <dir> --json
 ```
 
 Do this immediately, in the same turn — before dispatching the next range. A range with recorded
