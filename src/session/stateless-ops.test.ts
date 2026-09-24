@@ -3,6 +3,7 @@ import { Game, Player, Action, defineFlow, actionStep, loop, type GameOptions, t
 import type { BotStrategy } from '../bot/types.js';
 import { executeOp, type GameDefinitionLike } from './stateless-ops.js';
 import { boundaryKeyOf } from './testing/boundary-stamp.js';
+import { playThenAcknowledgeFixtureDefinition } from './testing/fixtures/play-then-acknowledge-fixture.js';
 import { ErrorCode } from '../types/protocol.js';
 import { PickHandler } from './pick-handler.js';
 
@@ -1608,6 +1609,26 @@ describe('executeOp', () => {
       expect(result.flowDebugInfo!.description.length).toBeGreaterThan(0);
       expect(Array.isArray(result.flowDebugInfo!.path)).toBe(true);
       expect(result.flowDebugInfo!.awaiting).toBeDefined();
+    });
+
+    it('names the step a restored snapshot is at, not the next sibling in its sequence (#324)', async () => {
+      // playThenAcknowledge's root is sequence(eachPlayer(playCard), scoring):
+      // after both cards the snapshot is at `scoring`, the sequence's last child.
+      const options = { playerCount: 2, seed: 'x' };
+      let result = await startGame(playThenAcknowledgeFixtureDefinition, options);
+      for (const [player, card] of [[1, 1], [2, 2]]) {
+        result = await executeOp(playThenAcknowledgeFixtureDefinition, options, result.snapshot, null, {
+          type: 'action', actionName: 'playCard', player, args: { card }, boundaryKey: boundaryKeyOf(result.snapshot),
+        });
+        expect(result.success).toBe(true);
+      }
+
+      const debug = await executeOp(playThenAcknowledgeFixtureDefinition, options, result.snapshot, null, {
+        type: 'debugFlowState', player: 1,
+      });
+
+      expect(debug.flowDebugInfo!.step).toBe('scoring');
+      expect(debug.flowDebugInfo!.description).toBe('step *scoring*, waiting on seats 1, 2');
     });
 
     it('returns an error result (no throw) for an out-of-range seat', async () => {
