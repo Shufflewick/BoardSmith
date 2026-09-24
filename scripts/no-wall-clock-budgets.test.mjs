@@ -70,7 +70,9 @@ describe('the test suite (#360)', () => {
   it('holds no wall-clock budget assertion', () => {
     const tracked = execFileSync('git', ['ls-files', 'src', 'docs', 'scripts'], { cwd: ROOT, encoding: 'utf-8' })
       .split('\n')
-      .filter((path) => /\.test\.(?:ts|mjs)$/.test(path));
+      .filter((path) => /\.test\.(?:ts|mjs)$/.test(path))
+      // This file's own examples above are budgets on purpose.
+      .filter((path) => path !== 'scripts/no-wall-clock-budgets.test.mjs');
     const findings = tracked.flatMap((path) =>
       wallClockBudgets(readFileSync(join(ROOT, path), 'utf-8')).map(
         ({ line, text }) => `${path}:${line}  ${text}`,
