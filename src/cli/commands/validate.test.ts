@@ -1,5 +1,6 @@
-import { mkdirSync, writeFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, it, expect, beforeEach } from 'vitest';
 import {
   ALLOWED_TOP_LEVEL_KEYS,
@@ -17,6 +18,7 @@ import {
   findUntypedTestFiles,
   hasBlockingFailure,
   buildChoiceCardinalityResult,
+  validateChoiceCardinality,
   checkRulesAgreement,
   validateRequiredFiles,
   successGuidance,
@@ -741,6 +743,58 @@ describe('validate.ts choice cardinality (#172)', () => {
     expect(result.details![0]).toContain('boardRef');
     expect(result.details![0]).toContain('dependsOn');
   });
+});
+
+/**
+ * #306: the check loads the game through a temp dir it owns. It used to write
+ * into `.boardsmith/` without creating it, so a fresh checkout that had never
+ * run `dev` or `build` got ENOENT, and the catch reported that as a PASS.
+ */
+describe('validateChoiceCardinality runs in a checkout with no .boardsmith (#306)', () => {
+  const fixture = resolve(dirname(fileURLToPath(import.meta.url)), '../lib/choice-cardinality.fixture.ts');
+
+  /** A game project whose rules re-export a real fixture game, and no `.boardsmith/`. */
+  function freshProject(rulesIndex: string | null): string {
+    const cwd = tempTree('bs-validate-cardinality-');
+    writeFileSync(join(cwd, 'boardsmith.json'), JSON.stringify({ name: 'fixture', backend: 'table' }));
+    if (rulesIndex !== null) {
+      mkdirSync(join(cwd, 'src', 'rules'), { recursive: true });
+      writeFileSync(join(cwd, 'src', 'rules', 'index.ts'), rulesIndex);
+    }
+    return cwd;
+  }
+
+  const wideRules = [
+    `import { WideGame } from ${JSON.stringify(fixture)};`,
+    `export const gameDefinition = { gameClass: WideGame, gameType: 'wide', displayName: 'Wide', minPlayers: 2, maxPlayers: 2 };`,
+  ].join('\n');
+
+  it('plays the game and reports what it found, instead of skipping', async () => {
+    const cwd = freshProject(wideRules);
+    expect(existsSync(join(cwd, '.boardsmith'))).toBe(false);
+
+    const result = await validateChoiceCardinality(cwd);
+
+    expect(result.passed).toBe(false);
+    expect(result.severity).toBe('warning');
+    expect(result.details!.join('\n')).toContain('shout');
+  }, 30_000);
+
+  it('removes the temp dir it made once the check is done', async () => {
+    const cwd = freshProject(wideRules);
+    await validateChoiceCardinality(cwd);
+    expect(existsSync(join(cwd, '.boardsmith', 'validate-tmp'))).toBe(false);
+  }, 30_000);
+
+  it('does not report a pass when the check could not run, and says why', async () => {
+    const cwd = freshProject(null);
+
+    const result = await validateChoiceCardinality(cwd);
+
+    expect(result.passed).toBe(false);
+    expect(result.severity).toBe('warning');
+    expect(result.message).toMatch(/could not (be )?run/i);
+  }, 30_000);
 });
 
 /**
