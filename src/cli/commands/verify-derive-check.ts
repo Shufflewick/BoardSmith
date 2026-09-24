@@ -1274,7 +1274,7 @@ function stripSurroundingProse(text: string): string | null {
  * Parses one subagent-return JSON input file's already-read text, throwing ONE actionable
  * message naming the flag and the file path on failure — never a raw `SyntaxError`. Shared by
  * `verifyDeriveRecordCommand`/`verifyExampleRecordCommand`/`verifyExampleTranslateCommand` for
- * every `--enumerator-a`/`--enumerator-b`/`--reconciler`/`--extraction`/`--translation` file
+ * every `--enumerator-a`/`--enumerator-b`/`--reconciler`/`--extraction`/`--translations` file
  * input, so no call site can drift on error shape or repair behavior (SC-3: exactly one export
  * site — `example-derivation.test.ts`'s own duplicate-export guard covers this module too).
  *
@@ -1333,6 +1333,46 @@ export function parseSubagentJsonInput(
       `even after stripping a wrapping markdown code fence and surrounding prose.\n` +
       `Re-dispatch the subagent and write its structured return to this file, unmodified.`,
   );
+}
+
+/**
+ * Reads the slice a `--slice-path` argument names, for `command`, after checking it stays inside
+ * `design/rulebook` — the one guard every command that takes `--slice-path` uses
+ * (`verify-derive-record`, `verify-example-translate`, `verify-example-record`).
+ *
+ * CR-04 (177.1 code review): `--slice-path` reaches `fs.readFile` directly off disk, and
+ * `resolve()` collapses `..` segments — without this guard, `--slice-path
+ * rulebook/../../../../etc/passwd` (or any path escaping `design/rulebook`) is read without
+ * complaint. `slicePath` is a citation, `rulebook/<file>`, and citations are relative to
+ * `design/` — so this resolves against the DESIGN directory and requires the result stay inside
+ * `design/rulebook`, BEFORE any read. Mirrors `verify-classify.ts`'s `--live-slice` guard
+ * (T-174-14).
+ */
+export async function readSliceArgument(
+  projectDir: string,
+  slicePath: string,
+  command: string,
+): Promise<string> {
+  const rulebookDir = designRulebookDir(projectDir);
+  const sliceAbsPath = resolve(designDir(projectDir), slicePath);
+  const sliceRelToRulebook = relative(rulebookDir, sliceAbsPath);
+  if (
+    sliceRelToRulebook === '' ||
+    sliceRelToRulebook.startsWith('..') ||
+    isAbsolute(sliceRelToRulebook)
+  ) {
+    throw new Error(
+      `--slice-path "${slicePath}" resolves outside ${relative(projectDir, rulebookDir)}.\n` +
+        `Pass a path of the form "rulebook/<file>.md", relative to ${DESIGN_DIR}/.`,
+    );
+  }
+  try {
+    return await fs.readFile(sliceAbsPath, 'utf-8');
+  } catch {
+    throw new Error(
+      `${command} could not read --slice-path "${slicePath}" (looked for it at ${sliceAbsPath}).`,
+    );
+  }
 }
 
 // -------------------------------------------------------------------------------------------
@@ -1415,37 +1455,7 @@ export async function verifyDeriveRecordCommand(
 
   const slicePath = options.slicePath;
 
-  // CR-04 (177.1 code review): `--slice-path` reaches `fs.readFile` directly off disk, and
-  // `join()` collapses `..` segments — without this guard, `--slice-path
-  // rulebook/../../../../etc/passwd` (or any path escaping `projectDir/rulebook`) is read without
-  // complaint. `slicePath` is always caller-supplied as `rulebook/<file>` (the exact shape
-  // `readLiveSlices`/`enumerateDerivedLines` report) — a citation, and citations are relative to
-  // `design/` — so this resolves against the DESIGN directory (not `rulebook/` — that segment is
-  // already part of `slicePath`) and requires the result stay inside `design/rulebook`. Mirrors
-  // `verify-classify.ts`'s `--live-slice` guard (T-174-14), validated BEFORE any read.
-  const rulebookDir = designRulebookDir(projectDir);
-  const sliceAbsPath = resolve(designDir(projectDir), slicePath);
-  const sliceRelToRulebook = relative(rulebookDir, sliceAbsPath);
-  if (
-    sliceRelToRulebook === '' ||
-    sliceRelToRulebook.startsWith('..') ||
-    isAbsolute(sliceRelToRulebook)
-  ) {
-    throw new Error(
-      `--slice-path "${slicePath}" resolves outside ${relative(projectDir, rulebookDir)}.\n` +
-        `Pass a path of the form "rulebook/<file>.md", relative to ${DESIGN_DIR}/.`,
-    );
-  }
-
-  let sliceText: string;
-  try {
-    sliceText = await fs.readFile(sliceAbsPath, 'utf-8');
-  } catch {
-    throw new Error(
-      `verify-derive-record could not read --slice-path "${slicePath}" (looked for it at ` +
-        `${sliceAbsPath}).`,
-    );
-  }
+  const sliceText = await readSliceArgument(projectDir, slicePath, 'verify-derive-record');
 
   const enumeratorAParsed = await readRequiredJsonFile(options.enumeratorA, '--enumerator-a');
   const enumeratorBParsed = await readRequiredJsonFile(options.enumeratorB, '--enumerator-b');

@@ -143,7 +143,9 @@ persisted state (mirror the surrounding project's own patterns for referencing e
 
 ## RETURN a structured object only
 
-Return exactly one object:
+Return exactly one JSON object, and nothing else. You never return an id or a line number: the
+orchestrator files your return, unchanged, under the `exampleId` it dispatched you for, and
+`boardsmith verify-example-record --translations` reads it from there. Its shape:
 
 ```
 {
@@ -175,6 +177,37 @@ Return exactly one object:
   three named reasons above — never omitted, never a free-form string in its place.
 - **Never return the spec's fields back verbatim, and never return the project's exported-symbol
   listing back.** Return only the code, its imports, and your hint.
+
+---
+
+## Example
+
+For the transition example at `rulebook/02-guards.md:2` ("your Guards are READY, EXHAUSTED,
+EXHAUSTED and you are punched"; expected: all three EXHAUSTED), in a project whose surface lists
+`punch (function, src/rules/guards.ts)`, the return is exactly:
+
+```json
+{
+  "testCode": "it('a punch exhausts the READY Guard', () => {\n  expect(punch(['READY', 'EXHAUSTED', 'EXHAUSTED'])).toEqual(['EXHAUSTED', 'EXHAUSTED', 'EXHAUSTED']);\n});",
+  "imports": ["import { punch } from '../../src/rules/guards.js';"],
+  "verdictHint": "agrees"
+}
+```
+
+For the predicate example at `rulebook/02-guards.md:6` ("example: 5, 5, 5" illustrating a Set),
+in the same project, where no exported symbol decides whether cards form a Set:
+
+```json
+{
+  "testCode": "",
+  "imports": [],
+  "verdictHint": "unexecutable",
+  "unexecutableReason": "no-matching-symbol"
+}
+```
+
+`src/cli/commands/example-contracts.test.ts` feeds these exact returns through the commands they
+go to, so they are working examples, not illustrations.
 
 ---
 

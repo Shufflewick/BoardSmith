@@ -30,6 +30,7 @@ import DoneButton from './DoneButton.vue';
 import {
   splitAnchoredChoices,
   shouldDeferElementPickToBoard,
+  shouldDeferChoicePickToBoard,
   textLengthHint,
   numberRangeHint,
 } from './action-panel-helpers.js';
@@ -823,13 +824,10 @@ const displayableArgs = computed(() => {
   return result;
 });
 
-// Split choices into primary (unanchored) and anchored (notation-anchored) sets.
-// Delegates to controller for base choices, then applies ActionPanel-specific filtering
-// and D-03 partitioning (splitAnchoredChoices). Primary choices render as normal
-// choice buttons; anchored choices render as a secondary focusable button list so
-// keyboard/SR users always have an operable control even when all picks are board-anchored.
-const _splitChoices = computed<{ primary: ChoiceWithRefs[]; anchored: ChoiceWithRefs[] }>(() => {
-  if (!currentPick.value) return { primary: [], anchored: [] };
+// The choices the current pick still offers: the controller's base choices, less
+// any value an earlier choice step of this action already took.
+const offeredChoices = computed<ChoiceWithRefs[]>(() => {
+  if (!currentPick.value) return [];
 
   // Get base choices from controller (handles repeating, dependsOn, filterBy).
   // PIT OF SUCCESS: read the REACTIVE computed (currentChoices.value tracks snapshotVersion)
@@ -854,11 +852,15 @@ const _splitChoices = computed<{ primary: ChoiceWithRefs[]; anchored: ChoiceWith
       choices = choices.filter(choice => !alreadySelectedValues.has(choice.value));
     }
   }
-
-  // D-03: Partition choices — notation-anchored choices go to the secondary list,
-  // never dropped. splitAnchoredChoices applies only for 'choice' picks.
-  return splitAnchoredChoices(choices, currentPick.value?.type);
+  return choices;
 });
+
+// D-03: Partition the offered choices into primary (unanchored) and anchored
+// (notation-anchored) sets, never dropping one. Primary choices render as normal
+// choice buttons; anchored choices render as a secondary focusable button list so
+// keyboard/SR users always have an operable control even when all picks are
+// board-anchored. splitAnchoredChoices applies only for 'choice' picks.
+const _splitChoices = computed(() => splitAnchoredChoices(offeredChoices.value, currentPick.value?.type));
 
 // Primary (unanchored) choices: rendered as the main choice buttons in the panel.
 const filteredChoices = computed(() => _splitChoices.value.primary);
@@ -906,19 +908,32 @@ const filteredValidElements = computed(() => {
 });
 
 /**
- * #172: a candidate set too large for the panel to read, every one of which the
- * board is already drawing. The panel keeps the prompt and offers ONE control
+ * #172 / #313: a candidate set too large for the panel to read, every one of
+ * which the board is already drawing -- an element pick, or a `chooseFrom` whose
+ * candidates are board spaces. The panel keeps the prompt and offers ONE control
  * that hands keyboard focus to the board, instead of a wall of buttons nobody
  * can scan.
  *
  * This is a change of SURFACE, not of content: the board offers the identical
  * enumeration, and requestBoardFocus() carries focus across so the keyboard path
  * is continuous. It is emphatically not a filter — see
- * shouldDeferElementPickToBoard for why every candidate must be board-drawable
- * before the panel will yield.
+ * shouldDeferElementPickToBoard and shouldDeferChoicePickToBoard for why every
+ * candidate must be reachable on the board before the panel will yield.
  */
-const deferPickToBoard = computed(() =>
-  shouldDeferElementPickToBoard(currentPick.value?.type, filteredValidElements.value),
+const deferPickToBoard = computed(() => {
+  const type = currentPick.value?.type;
+  if (type === 'choice') return shouldDeferChoicePickToBoard(offeredChoices.value);
+  return shouldDeferElementPickToBoard(type, filteredValidElements.value);
+});
+
+/** How many candidates the board handoff sends the player to. */
+const boardCandidateCount = computed(() =>
+  currentPick.value?.type === 'choice' ? offeredChoices.value.length : filteredValidElements.value.length,
+);
+
+/** The handoff control's accessible name: the gesture, the size, and how to move. */
+const boardHandoffLabel = computed(() =>
+  `Choose on the board — ${boardCandidateCount.value} options. Use the arrow keys to move between them and Enter to choose.`,
 );
 
 /** Send keyboard focus to the board's first valid target for this pick. */
@@ -1796,9 +1811,11 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
 
       <!-- Current selection input -->
       <div v-if="currentPick" class="selection-input">
-        <!-- #172: too many candidates to read as a list, and the board draws every
-             one of them. Prompt + a single control that hands focus to the board. -->
-        <template v-if="deferPickToBoard">
+        <!-- #172 / #313: too many candidates to read as a list, and the board draws
+             every one of them. Prompt + a single control that hands focus to the
+             board. An ordered list keeps its own block below, because its entries
+             and their Remove buttons stay in the panel. -->
+        <template v-if="deferPickToBoard && !currentOrderedList">
           <div class="selection-prompt">
             {{ currentPick.prompt || `Select ${currentPick.elementClassName || currentPick.name}` }}
             <span v-if="currentMultiSelect" class="multi-select-count">{{ multiSelectCountDisplay }}</span>
@@ -1807,10 +1824,10 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
           <div class="choice-buttons board-handoff">
             <button
               class="choice-btn board-handoff-btn"
-              :aria-label="`Choose on the board — ${filteredValidElements.length} options. Use the arrow keys to move between them and Enter to choose.`"
+              :aria-label="boardHandoffLabel"
               @click="handOffToBoard"
             >
-              Choose on the board ({{ filteredValidElements.length }})
+              Choose on the board ({{ boardCandidateCount }})
             </button>
             <DoneButton
               v-if="showMultiSelectDoneButton"
@@ -1928,7 +1945,7 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
              template because the two are mutually exclusive and this one is the
              more specific. A checkbox cannot express "again", which is why this
              pick gets its own control rather than a flag on that one. -->
-        <template v-else-if="currentPick.type === 'choice' && currentOrderedList && filteredChoices.length">
+        <template v-else-if="currentPick.type === 'choice' && currentOrderedList && (filteredChoices.length || deferPickToBoard)">
           <div class="selection-prompt">
             {{ currentPick.prompt || `Select ${currentPick.name}` }}
             <!-- SPOKEN, because nothing else about an Add is (#252): focus stays
@@ -1961,6 +1978,16 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
             </li>
           </ol>
           <div ref="orderedChoiceRow" class="choice-buttons ordered-list-choices">
+            <!-- #313: the candidates are on the board (so none is in filteredChoices);
+                 the entries above stay here. -->
+            <button
+              v-if="deferPickToBoard"
+              class="choice-btn board-handoff-btn"
+              :aria-label="boardHandoffLabel"
+              @click="handOffToBoard"
+            >
+              Choose on the board ({{ boardCandidateCount }})
+            </button>
             <!-- The visible label is the choice; the ACCESSIBLE name carries the
                  gesture (#252). Announced on its own, "University" says neither
                  what pressing it does nor that pressing it again repeats it, and
@@ -2213,7 +2240,7 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
              route through triggerElementSelect on a notation: a destination choice's
              first notation ref is its SOURCE square, which is shared by every
              destination from the same piece and so cannot disambiguate the target.) -->
-        <template v-if="anchoredChoices.length">
+        <template v-if="anchoredChoices.length && !deferPickToBoard">
           <button
             v-for="choice in anchoredChoices"
             :key="String(choice.value)"

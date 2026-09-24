@@ -2,8 +2,6 @@ import { DESIGN_DIR } from '../lib/project-paths.js';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -48,6 +46,8 @@ import {
   RUN_LEDGER_END,
 } from './verify-run.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
+import { createProgram } from '../cli.js';
+import { spawnCli } from '../spawn-cli.test-helper.js';
 
 /**
  * `verify-classify.ts` is the mechanical core of VERIFY-03. Every fixture here is either a real
@@ -2162,41 +2162,30 @@ describe('decision-19 — wiring into computeChunkVerdicts: per-citation narrowi
 });
 
 describe('CLI registration — real entry point', () => {
-  const execFileAsync = promisify(execFile);
-  const __filename2 = fileURLToPath(import.meta.url);
-  const REPO_ROOT = join(dirname(__filename2), '..', '..', '..');
-  const CLI_BIN = join(REPO_ROOT, 'bin', 'boardsmith.js');
+  // Registration is read from the command tree itself, in-process: a `--help` spawn per command
+  // proved the same thing at several seconds of Node and tsx start-up each, which a loaded machine
+  // stretched past any timeout (#340). cli-2 below is the one real spawn, and it covers the entry
+  // point's wiring.
+  it('cli-1: all three commands are registered and name their documented options', () => {
+    const program = createProgram();
+    const help = (name: string): string => {
+      const command = program.commands.find((c) => c.name() === name);
+      expect(command, `${name} is not registered`).toBeDefined();
+      return command!.helpInformation();
+    };
 
-  async function spawnCli(
-    args: string[],
-    cwd: string = REPO_ROOT,
-  ): Promise<{ code: number; stdout: string; stderr: string }> {
-    try {
-      const { stdout, stderr } = await execFileAsync(process.execPath, [CLI_BIN, ...args], { cwd });
-      return { code: 0, stdout, stderr };
-    } catch (err) {
-      const e = err as { code?: number; stdout?: string; stderr?: string };
-      return { code: e.code ?? 1, stdout: e.stdout ?? '', stderr: e.stderr ?? '' };
-    }
-  }
+    const pairs = help('verify-classify-pairs');
+    expect(pairs).toMatch(/--run-id/);
+    expect(pairs).toMatch(/--json/);
 
-  it('cli-1: all three commands\' --help exits 0 through the real entry point and names their documented options', async () => {
-    const pairs = await spawnCli(['verify-classify-pairs', '--help']);
-    expect(pairs.code).toBe(0);
-    expect(pairs.stdout).toMatch(/--run-id/);
-    expect(pairs.stdout).toMatch(/--json/);
+    const record = help('verify-classify-record');
+    expect(record).toMatch(/--pair-id/);
+    expect(record).toMatch(/--label/);
+    expect(record).toMatch(/--quoted-pass1/);
+    expect(record).toMatch(/--quoted-pass2/);
 
-    const record = await spawnCli(['verify-classify-record', '--help']);
-    expect(record.code).toBe(0);
-    expect(record.stdout).toMatch(/--pair-id/);
-    expect(record.stdout).toMatch(/--label/);
-    expect(record.stdout).toMatch(/--quoted-pass1/);
-    expect(record.stdout).toMatch(/--quoted-pass2/);
-
-    const status = await spawnCli(['verify-classify-status', '--help']);
-    expect(status.code).toBe(0);
-    expect(status.stdout).toMatch(/--run-id/);
-  }, 30000);
+    expect(help('verify-classify-status')).toMatch(/--run-id/);
+  });
 
   it('cli-2: verify-classify-status --json run as a real child process prints parseable JSON and exits 0', async () => {
     const { project, runId } = await threeGroupProject();

@@ -933,6 +933,15 @@ option; nothing is dropped. If even one candidate has no board ref the panel
 keeps every button, because deferring would leave that candidate reachable from
 neither surface.
 
+This holds for `chooseFrom` as well as element picks. For a `chooseFrom`, a
+candidate's board ref is the one `boardRefs` gives it with role `target` (or its
+first ref when none is marked target), and it counts only if it names a board
+space by `notation`: that is what the board picks by, while an id-only ref just
+highlights an element. Every candidate needs one, and no two candidates may name
+the same space, since the board could reach only one of them there. A
+multi-select keeps its count and Done button beside the control, and an ordered
+list keeps its numbered entries and their Remove buttons.
+
 `boardsmith validate` reports a step that has neither answer: more than 24
 candidates, no board anchor, no dependent narrowing. It finds them by playing a
 few seeded random games and reading the engine's own move enumeration, because a
@@ -940,7 +949,11 @@ candidate count does not exist until a game is running. It plays them at your
 `minPlayers`. If the random simulator cannot play your game through (it crashes
 or gets stuck), the check says it could not run and names the `boardsmith
 simulate` command that shows the same failure; it never reports an unplayed game
-as clean.
+as clean. A game that stops because no seat has an enabled action left, as a
+game built chunk by chunk does before the chunk that ends it, has been played:
+every choice it offered before stopping was counted, so the check reports on it.
+Whether that stop is a planned rest or a deadlock is for your own
+`simulateRandomGames` test to say, with `isResting`.
 
 A world has no flow to play, so `boardsmith validate` drives it the way a host
 does instead. Three seats (or every seat of a smaller world) arrive through your

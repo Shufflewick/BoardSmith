@@ -30,8 +30,8 @@
  *    when rank choices arrived. Panel showed "No options available" (or blank if the
  *    regular-choice template's `filteredChoices.length > 0` gate was false).
  *
- *    Nothing ever suppressed the footer here: the rank pick is a choice pick, so it
- *    contributes no board element candidates and is never deferred to the board. The
+ *    Nothing ever suppressed the footer here: the rank pick is a small choice pick with
+ *    id-only refs, so it is never handed to the board. The
  *    footer was PRESENT but empty (no choices). "Footer suppressed" in CONTEXT was
  *    inaccurate; the footer was present but showed nothing actionable. Candidate
  *    cause (2) was real.
@@ -161,9 +161,9 @@ describe('GoFish ask interaction tests', () => {
     expect(controller.currentPick.value?.name).toBe('rank');
     // — rank choices are in currentChoices (tracks snapshotVersion)
     expect(controller.currentChoices.value.length).toBe(3);
-    // — a choice pick offers no board element candidates and is never deferred to the
-    //   board (shouldDeferElementPickToBoard('choice', ...) === false — see
-    //   action-panel-helpers.test.ts), so the panel must render the ranks itself
+    // — a choice pick offers no board element candidates, and three ranks with
+    //   id-only refs are never handed to the board (see action-panel-helpers.test.ts),
+    //   so the panel must render the ranks itself
     expect(controller.validElements.value).toEqual([]);
 
     // Mount ActionPanel with rank as active pick and choices populated.

@@ -1,7 +1,7 @@
 {
-  "revision": 99,
+  "revision": 100,
   "bundleProtocol": 2,
-  "surfaceHash": "94910dd64381f024",
+  "surfaceHash": "4d2a0af2b2a62394",
   "payloadHash": "80aba5002803deaa",
   "formatHash": "0058593e7cc80205",
   "history": [
@@ -835,6 +835,15 @@
       "payloadHash": "80aba5002803deaa",
       "formatHash": "0058593e7cc80205",
       "summary": "getFlowDebugInfo names the step the engine is actually at; FlowEngine's private path-navigation helpers moved to one shared rule (#324)"
+    },
+    {
+      "revision": 100,
+      "date": "2026-09-24",
+      "bundleProtocol": 2,
+      "surfaceHash": "4d2a0af2b2a62394",
+      "payloadHash": "80aba5002803deaa",
+      "formatHash": "0058593e7cc80205",
+      "summary": "Removed validateFlowPosition and formatFlowRecovery from 'boardsmith': nothing called them, and no dev host recovers a truncated flow position that way (#342)"
     }
   ]
 }
