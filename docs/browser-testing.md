@@ -275,7 +275,15 @@ disposable world project to a temp directory, installs this checkout into it the
 way a real game does, starts the real `boardsmith dev` world server on a free
 port, stops that host before removing the project, and only then lets the process
 exit (#231). A script's own file is therefore nothing but its fixture world and
-its checks. `scripts/*-browser.mjs` is the set — no list here, because a count in
+its checks. They run from any checkout, a worktree included: the fixture links
+its packages from wherever Node resolves this checkout's install (#358).
+
+The fixture world's lifetime (write, serve, stop, remove) is
+`withFixtureWorld` in `src/cli/commands/fixture-world.test-helper.ts`, not in
+the harness. It is TypeScript so `boardsmith typecheck` compiles its call to the
+world dev host, and `src/cli/commands/fixture-world.test.ts` starts and stops one
+in the ordinary suite with no browser. Nothing runs the scripts themselves, so
+before #357 a change to that call broke all of them and nobody noticed. `scripts/*-browser.mjs` is the set — no list here, because a count in
 a doc goes stale the next time one is added.
 
 Two of them read as the worked examples:

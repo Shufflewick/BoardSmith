@@ -75,20 +75,27 @@ describe('#231: the fixture world has one owner', () => {
   });
 });
 
-describe('#231: the harness stops the host before it removes the project', () => {
+describe('#231: the fixture world stops the host before it removes the project', () => {
+  // The lifetime lives in TypeScript so `boardsmith typecheck` compiles its
+  // call to the world dev host (#357); the harness reaches it only through
+  // `runBrowserRegression`.
   const harness = readFileSync(join(SCRIPTS, 'browser-harness.mjs'), 'utf8');
+  const lifetime = readFileSync(
+    join(REPO, 'src', 'cli', 'commands', 'fixture-world.test-helper.ts'),
+    'utf8',
+  );
 
   it('exports no piece of the lifetime on its own', () => {
-    // Exporting `writeWorldFixture`, `startWorldHost` or `withFixtureWorld` is
-    // what let three scripts each own the order and each get it wrong.
-    expect(harness).not.toMatch(
-      /export (async )?function (writeWorldFixture|startWorldHost|withFixtureWorld)\b/,
-    );
+    // Exporting `writeWorldFixture` or `startWorldHost` is what let three
+    // scripts each own the order and each get it wrong.
+    expect(lifetime).not.toMatch(/export (async )?function (writeWorldFixture|startWorldHost)\b/);
+    expect(lifetime).toMatch(/export async function withFixtureWorld\b/);
+    expect(harness).not.toMatch(/export (async )?function withFixtureWorld\b/);
     expect(harness).toMatch(/export async function runBrowserRegression\b/);
   });
 
   it('awaits the stop inside the guard that removes the project', () => {
-    const body = harness.slice(harness.indexOf('async function withFixtureWorld'));
+    const body = lifetime.slice(lifetime.indexOf('async function withFixtureWorld'));
     const stop = body.indexOf('await stop()');
     const remove = body.indexOf('rmSync(fixture');
     expect(stop, 'withFixtureWorld must await the host stop').toBeGreaterThan(-1);
