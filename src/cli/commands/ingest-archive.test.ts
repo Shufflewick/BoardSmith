@@ -24,6 +24,7 @@ import {
   parseAdditionalSources,
 } from './rulebook-sources.js';
 import { computeVerificationScope } from './chunk-provenance.js';
+import { initCommand } from './init.js';
 import { ingestCheckCommand } from './ingest-check.js';
 import { ingestSliceSourceCommand } from './rulebook-sources.js';
 import {
@@ -531,7 +532,6 @@ describe('init --rulebook — the archive rides on a command that is never skipp
     const cwd = process.cwd();
     try {
       process.chdir(parent);
-      const { initCommand } = await import('./init.js');
       await initCommand('archived-game', { rulebook: sourcePath });
 
       const archived = await fs.readFile(
@@ -555,7 +555,6 @@ describe('init --rulebook — the archive rides on a command that is never skipp
     const cwd = process.cwd();
     try {
       process.chdir(parent);
-      const { initCommand } = await import('./init.js');
       await initCommand('plain-game', { withoutRulebook: true });
       // No rulebook path means no archive and no INDEX.md — the interview path writes those.
       await expect(
@@ -578,8 +577,6 @@ describe('init — an explicit rulebook decision is required', () => {
     const cwd = process.cwd();
     try {
       process.chdir(parent);
-      const { initCommand } = await import('./init.js');
-
       // THROWN rather than printed-and-exited (#240), so `cli.ts`'s top-level handler renders
       // it -- which is also what makes the message assertable here at all.
       const message = await rejectionMessage(initCommand('undeclared'));

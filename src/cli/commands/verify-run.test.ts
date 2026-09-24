@@ -4,6 +4,7 @@ import { promises as fs } from 'node:fs';
 import { execSync, spawn } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { join, relative } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   verifyRunInitCommand,
   verifyRunRecordCommand,
@@ -1082,7 +1083,6 @@ function adjudicationFixture(overrides: Partial<AdjudicationRecord> = {}): Adjud
 
 describe('verify-run.ts — impact/adjudication record kinds (175-02)', () => {
   it('grep guard: no second RUN_LEDGER_BEGIN fence pair was introduced', async () => {
-    const { fileURLToPath } = await import('node:url');
     const srcPath = join(fileURLToPath(new URL('.', import.meta.url)), 'verify-run.ts');
     const src = await fs.readFile(srcPath, 'utf-8');
     const declarations = (src.match(/RUN_LEDGER_BEGIN/g) ?? []).length;

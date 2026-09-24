@@ -9,6 +9,7 @@ import {
   createDieAnimationContext,
 } from './die3d-state.js';
 import { getDiePreviewComponent, setDiePreviewComponent } from './die-preview-registry.js';
+import { Die3D } from './index.js';
 
 describe('createDieAnimationContext', () => {
   it('starts with no dice recorded as animated', () => {
@@ -46,6 +47,8 @@ describe('DIE_ANIMATION_CONTEXT_KEY', () => {
     // die-preview-registry.fresh.test.ts, because resetting the registry makes
     // every later dynamic import in the same file return a fresh module, which
     // turned this assertion into an order-dependent flake.
+    //
+    // Dynamic import: the second import of the module is what is under test.
     const again = await import('./die3d-state.js');
     expect(again.DIE_ANIMATION_CONTEXT_KEY).toBe(DIE_ANIMATION_CONTEXT_KEY);
   });
@@ -77,9 +80,8 @@ describe('die preview registry', () => {
     expect(getDiePreviewComponent()).toBe(second);
   });
 
-  it('exposes Die3D as an async component, so three.js stays in its own chunk', async () => {
-    const dice = await import('./index.js');
-    expect(dice.Die3D).toBeTypeOf('object');
-    expect((dice.Die3D as { __asyncLoader?: unknown }).__asyncLoader).toBeTypeOf('function');
+  it('exposes Die3D as an async component, so three.js stays in its own chunk', () => {
+    expect(Die3D).toBeTypeOf('object');
+    expect((Die3D as { __asyncLoader?: unknown }).__asyncLoader).toBeTypeOf('function');
   });
 });

@@ -113,8 +113,7 @@ describe('ingest harness checker — conforming fixture', () => {
     expect(findCheck(result, id).pass).toBe(true);
   });
 
-  it('00-visual-survey.md contains a Derived (p. line matching the presentation lexicon, yet derived-purity still passes (the booby trap)', async () => {
-    const fs = await import('node:fs');
+  it('00-visual-survey.md contains a Derived (p. line matching the presentation lexicon, yet derived-purity still passes (the booby trap)', () => {
     const surveyPath = path.join(CONFORMING_DIR, 'rulebook', '00-visual-survey.md');
     const surveyText = fs.readFileSync(surveyPath, 'utf8');
     const hasDerivedLine = /^Derived \(p\.\d+/m.test(surveyText);

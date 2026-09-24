@@ -3,7 +3,8 @@ import { Game, Player, Action, defineFlow, actionStep, loop, type GameOptions } 
 import { executeOp, type GameDefinitionLike, type OpResult } from '../../session/index.js';
 import { createDevSession, translateOp, shapeResult } from './bridge.js';
 import { boundaryKeyOfHost } from '../../session/testing/boundary-stamp.js';
-import { getEntries, clearEntries } from './log-capture.js';
+import { getEntries, clearEntries, record } from './log-capture.js';
+import { READ_ONLY_OP_TYPES } from '../../session/stateless-ops.js';
 
 // ---------------------------------------------------------------------------
 // Inline game: seat 1 repeatedly takes a "pass" action in a loop.
@@ -564,7 +565,6 @@ describe('dev host bridge', () => {
       const stateBefore = session.viewForSeat(1);
 
       // Seed the ring buffer directly (bypassing gameplay).
-      const { record } = await import('./log-capture.js');
       record('warning', 'a captured warning', 'test');
 
       await session.handleServerRequest(1, 'l1', 'debug:logs', {});
@@ -590,9 +590,8 @@ describe('dev host bridge', () => {
       });
     });
 
-    it('regression: debugLogs is never added to the executeOp Op union / READ_ONLY_OP_TYPES (purity contract)', async () => {
-      const stateless = await import('../../session/stateless-ops.js');
-      expect(stateless.READ_ONLY_OP_TYPES.has('debugLogs' as never)).toBe(false);
+    it('regression: debugLogs is never added to the executeOp Op union / READ_ONLY_OP_TYPES (purity contract)', () => {
+      expect(READ_ONLY_OP_TYPES.has('debugLogs' as never)).toBe(false);
     });
   });
 

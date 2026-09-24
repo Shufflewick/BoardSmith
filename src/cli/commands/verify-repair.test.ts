@@ -2,6 +2,7 @@ import { DESIGN_DIR } from '../lib/project-paths.js';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { execSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { basename, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -42,7 +43,6 @@ const FIXTURE_ROOT = join(
 );
 
 async function fixtureSha256Tree(dir: string): Promise<Record<string, string>> {
-  const { createHash } = await import('node:crypto');
   const map: Record<string, string> = {};
   async function walk(current: string, prefix: string): Promise<void> {
     const entries = await fs.readdir(current, { withFileTypes: true });

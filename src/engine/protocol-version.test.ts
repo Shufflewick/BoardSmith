@@ -8,6 +8,7 @@
 import { describe, it, expect } from 'vitest';
 import { BUNDLE_PROTOCOL_VERSION, ENGINE_REVISION, ENGINE_CONTRACT, Game, Player } from './index.js';
 import contract from '../contract/engine-contract.json' with { type: 'json' };
+import { deriveManifest } from '../cli/commands/build.js';
 
 describe('BUNDLE_PROTOCOL_VERSION', () => {
   it('is the bundleProtocol recorded in engine-contract.json', () => {
@@ -47,8 +48,7 @@ describe('ENGINE_REVISION', () => {
 });
 
 describe('the pair the build stamps', () => {
-  it('are the two numbers a published manifest carries', async () => {
-    const { deriveManifest } = await import('../cli/commands/build.js');
+  it('are the two numbers a published manifest carries', () => {
     const manifest = deriveManifest(
       { name: 'test-game', backend: 'table' },
       { name: 'test-game', version: '1.0.0' },
