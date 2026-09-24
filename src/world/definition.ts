@@ -23,6 +23,7 @@
  */
 import { DEFAULT_COLOR_PALETTE, Game, WORLD_PARTITION_ID_FLOOR } from "../engine/index.js";
 import type { ElementJSON, GameElement } from "../engine/index.js";
+import { constructGame } from "../engine/element/game.js";
 import { BoardSmithWorldEngine } from "./engine.js";
 import type { WorldViewDeclaration } from "./engine.js";
 import type { ActionDefinition } from "../engine/index.js";
@@ -877,7 +878,7 @@ export function createWorld(options: WorldRunnerOptions): WorldRunner {
   }
 
   const buildGame = () => {
-    const built = new options.definition.gameClass({
+    const built = constructGame(options.definition.gameClass, {
       playerCount: seatCount,
       seed: options.seed,
       colors: worldColorPalette(seatCount),

@@ -29,6 +29,7 @@ import {
 } from '../engine/index.js';
 import { ErrorCode } from '../types/protocol.js';
 import { PlayerFacingError } from '../engine/errors.js';
+import { constructGame } from '../engine/element/game.js';
 import { isDevThrowEnabled } from '../utils/dev.js';
 import type { MessageEntry } from '../engine/index.js';
 
@@ -330,7 +331,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     // constructor every runner path funnels through, so a draw is impossible
     // from the game's first instruction — including anything setup does before
     // `start()` returns.
-    this.game = new options.GameClass({
+    this.game = constructGame(options.GameClass, {
       ...options.gameOptions,
       randomness: options.randomness,
     });

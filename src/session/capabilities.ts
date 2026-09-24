@@ -35,6 +35,7 @@
 import type { FlowNode } from '../engine/flow/types.js';
 import type { GameClass } from './types.js';
 import { timedStepNames } from '../engine/flow/step-time-limit.js';
+import { constructGame } from '../engine/element/game.js';
 
 /** The backends one engine runs. A third would be added here and nowhere else. */
 export const GAME_BACKENDS = ['table', 'world'] as const;
@@ -195,7 +196,7 @@ function compiledFlowRoots(backend: GameBackend, definition: CapabilityInputs['d
   if (!Number.isInteger(minPlayers) || !Number.isInteger(maxPlayers)) return [];
   const roots: FlowNode[] = [];
   for (let playerCount = minPlayers as number; playerCount <= (maxPlayers as number); playerCount++) {
-    const root = new gameClass({ playerCount, seed: 'compiled-flow' }).getFlow()?.root;
+    const root = constructGame(gameClass, { playerCount, seed: 'compiled-flow' }).getFlow()?.root;
     if (root) roots.push(root);
   }
   return roots;

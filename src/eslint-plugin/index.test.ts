@@ -19,6 +19,7 @@ const RULE_NAMES = [
   'no-element-identity-comparison',
   'no-element-array-state',
   'no-silent-dispatch-fallthrough',
+  'no-engine-field-shadow',
 ];
 
 const recommended = () => configs.recommended;

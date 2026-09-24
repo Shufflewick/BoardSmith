@@ -1,6 +1,7 @@
 import { Player } from '../player/player.js';
 import { readDynamicAttribute } from './game-element.js';
 import { PersistentMap } from './persistent-map.js';
+import { isEngineOwnedGameField } from './engine-owned-fields.js';
 import type { Game } from './game.js';
 
 /**
@@ -25,25 +26,6 @@ import type { Game } from './game.js';
  */
 
 /**
- * Game-internal property names that should never trigger HMR warnings when
- * scanning for volatile state.
- */
-const SAFE_PROPERTIES: ReadonlySet<string> = new Set([
-  // Base GameElement properties
-  '_t', '_ctx', 'game', 'name', 'player',
-  // Game internal properties
-  'pile', 'phase', 'random', 'messages', 'settings',
-  'commandHistory', '_actions', '_actionExecutor', '_flowDefinition',
-  '_flowEngine', '_debugRegistry', '_persistentMaps',
-  '_animationEvents', '_animationEventSeq', '_constructorOptions',
-  // Tutorial substrate (Phase 104): serialized correctly via __map encoding in
-  // toJSON / serializeValue, so it DOES survive HMR (loadSerializedState restores
-  // it). Framework-managed, not user-defined volatile state.
-  'tutorialProgress',
-  'tutorialDefinition',
-]);
-
-/**
  * Warn about Map/Set properties that won't survive HMR (or any
  * toJSON-based round-trip). Runs after construction in development mode.
  *
@@ -55,8 +37,8 @@ export function checkForVolatileState(game: Game): void {
   const warnings: string[] = [];
 
   for (const key of Object.keys(game)) {
-    // Skip safe/internal properties
-    if (SAFE_PROPERTIES.has(key)) continue;
+    // The engine's own fields are not the game's state to warn about.
+    if (isEngineOwnedGameField(key)) continue;
     if (key.startsWith('_')) continue; // Private by convention
 
     const value = readDynamicAttribute(game, key);
