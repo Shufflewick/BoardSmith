@@ -92,7 +92,10 @@ export function createProgram(): Command {
   program
     .name('boardsmith')
     .description('BoardSmith CLI - Build and run board games')
-    .version(readBoardsmithVersion());
+    .version(readBoardsmithVersion())
+    // A command's options stop at its subcommand, so a subcommand can reuse a
+    // parent's option name and still receive it (`claude uninstall --local`, #348).
+    .enablePositionalOptions();
 
   // Project initialization
   program
@@ -863,8 +866,7 @@ export function createProgram(): Command {
     .option('--json', 'Emit JSON instead of human-readable output')
     .action(discardResult(verifyExampleRunCommand));
 
-  // Claude Code integration
-  const claudeCmd = // Live-agent ingest harness (BoardSmith repo only, operator-invoked)
+  // Live-agent ingest harness (BoardSmith repo only, operator-invoked)
   program
     .command('harness-ingest')
     .description('Drive the live-agent /bs-ingest-rules produced-artifact harness (BoardSmith repo only)')
@@ -873,11 +875,15 @@ export function createProgram(): Command {
     .helpOption(false)
     .action(harnessIngestCommand);
 
-  program
+  // Claude Code integration. `claude` and `claude uninstall` both take `--local`,
+  // so `claude`'s options stop at the subcommand too: otherwise `claude uninstall
+  // --local` hands `--local` to `claude` and the uninstall runs globally (#348).
+  const claudeCmd = program
     .command('claude')
     .description('Install BoardSmith bs- skills for Claude Code')
     .option('--force', 'Overwrite existing skills')
     .option('--local', 'Install to current project instead of globally')
+    .enablePositionalOptions()
     .action(installClaudeCommand);
 
   claudeCmd
