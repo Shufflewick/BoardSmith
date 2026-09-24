@@ -1023,16 +1023,25 @@ export class ResidentWorld {
    * A presence transition is the clock issuing one of the world's own verbs, so
    * a world still has exactly one way to change. Narrated through `onEvents`
    * and answered to nobody.
+   *
+   * RE-ARMED HERE, as `command` is (#327). A clock-issued verb can schedule --
+   * an `onArrive` that books a welcome or a timeout is the ordinary case -- and
+   * an event written to the store with no timer behind it waits for whatever
+   * the world does next.
    */
   // fallow-ignore-next-line unused-class-member
   async clockCommand(name: string, args: Record<string, unknown>): Promise<void> {
-    const events = await this.#dispatch({
-      player: null,
-      command: { name, args },
-      timing: { due: this.now(), missedCount: 0 },
-      arrivedAt: this.now(),
-    });
-    this.#onEvents(events);
+    try {
+      const events = await this.#dispatch({
+        player: null,
+        command: { name, args },
+        timing: { due: this.now(), missedCount: 0 },
+        arrivedAt: this.now(),
+      });
+      this.#onEvents(events);
+    } finally {
+      this.rearm();
+    }
   }
 
   /** The bundle's own presence declaration, which is what a host's arrival and

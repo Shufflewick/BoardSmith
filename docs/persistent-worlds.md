@@ -2762,18 +2762,3 @@ sockets are open, when it checkpoints, and the two controls a watching person
 needs, and the library owns everything else. That is what makes "the same world
 here and in production" a property of the code rather than a promise on this
 page.
-
-**On a hosting platform.** The world runtime a published world runs under is the
-host's, built over this module.
-
-**Under `boardsmith dev`.** The same module, driven by `ResidentWorld`
-(`src/world/host/resident-world.ts`) over the durable store in
-`src/cli/dev-host/world-store.ts`. `ResidentWorld` is the loop every host runs --
-genesis, migration, declare-then-run-then-checkpoint, the per-seat projection,
-the offer walk, the drain -- written against a clock and a store it is handed;
-`src/cli/dev-host/world-host.ts` is the transport over it, and `TestWorld` is the
-other driver. Nothing about a world is decided in either: a host owns which
-sockets are open, when it checkpoints, and the two controls a watching person
-needs, and the library owns everything else. That is what makes "the same world
-here and in production" a property of the code rather than a promise on this
-page.
