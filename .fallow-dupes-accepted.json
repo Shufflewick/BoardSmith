@@ -1035,16 +1035,6 @@
       ]
     },
     {
-      "content": "22b101799bad8449",
-      "lines": 17,
-      "files": [
-        "src/testing/assertions.test.ts",
-        "src/testing/dom-leak.test-helper.ts",
-        "src/testing/test-game.test.ts",
-        "src/testing/visibility.test.ts"
-      ]
-    },
-    {
       "content": "22f354caf22c32d4",
       "lines": 10,
       "files": [
@@ -1479,14 +1469,6 @@
       "lines": 8,
       "files": [
         "src/cli/commands/verify-enumerate.test.ts"
-      ]
-    },
-    {
-      "content": "35889b593e413fa6",
-      "lines": 30,
-      "files": [
-        "src/testing/test-game.test.ts",
-        "src/testing/visibility.test.ts"
       ]
     },
     {
@@ -2052,6 +2034,15 @@
       "files": [
         "src/cli/commands/derived-line-pattern.test.ts",
         "src/cli/commands/verify-example-replay.test.ts"
+      ]
+    },
+    {
+      "content": "488bc885d3286c03",
+      "lines": 16,
+      "files": [
+        "src/testing/assertions.test.ts",
+        "src/testing/dom-leak.test-helper.ts",
+        "src/testing/visibility.test.ts"
       ]
     },
     {
@@ -2649,6 +2640,14 @@
       "lines": 5,
       "files": [
         "src/cli/commands/install-claude-command.test.ts"
+      ]
+    },
+    {
+      "content": "5da540e8257f0871",
+      "lines": 11,
+      "files": [
+        "src/testing/assertions.test.ts",
+        "src/testing/test-game.test.ts"
       ]
     },
     {
@@ -4213,15 +4212,6 @@
       ]
     },
     {
-      "content": "8e92316cc4271fcd",
-      "lines": 30,
-      "files": [
-        "src/testing/dom-leak.test.ts",
-        "src/testing/test-game.test.ts",
-        "src/testing/visibility.test.ts"
-      ]
-    },
-    {
       "content": "8efae06bc0391114",
       "lines": 6,
       "files": [
@@ -4519,6 +4509,14 @@
       "lines": 10,
       "files": [
         "src/cli/slash-command/bs/verify.test.ts"
+      ]
+    },
+    {
+      "content": "96cc2aa7befb6ebf",
+      "lines": 25,
+      "files": [
+        "src/testing/dom-leak.test.ts",
+        "src/testing/visibility.test.ts"
       ]
     },
     {
@@ -5767,6 +5765,14 @@
       "files": [
         "src/bot/create-bot.test.ts",
         "src/testing/assert-game-finished.test.ts"
+      ]
+    },
+    {
+      "content": "c0a509af6e70ab42",
+      "lines": 22,
+      "files": [
+        "src/testing/assertions.test.ts",
+        "src/testing/visibility.test.ts"
       ]
     },
     {
@@ -7159,14 +7165,6 @@
       "lines": 8,
       "files": [
         "src/ui/components/ControlsMenu.tutorial-toggle.test.ts"
-      ]
-    },
-    {
-      "content": "f14f1d0b86afc3fa",
-      "lines": 30,
-      "files": [
-        "src/testing/assertions.test.ts",
-        "src/testing/test-game.test.ts"
       ]
     },
     {
