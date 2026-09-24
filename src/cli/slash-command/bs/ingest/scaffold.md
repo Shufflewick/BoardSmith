@@ -117,6 +117,9 @@ Each one is archived to `rulebook/source/<filename>` and recorded with its own S
 provenance record: a later verify pass reduces its scope when any recorded document is missing
 or has changed, and a chunk records the version of each one it was verified against. Never copy a
 second document into `rulebook/source/` by hand or note its hash in prose — nothing reads either.
+Transcription then dispatches each document separately, and every slice records the document it
+came from on its `Source:` line (`ingest/transcription.md`), so a changed companion reduces only
+the chunks built on it.
 If the second document only turns up after `init`, run
 `npx boardsmith ingest-archive <rulebookPath> --additional-source <path>` from inside the project;
 the primary is left as it is.

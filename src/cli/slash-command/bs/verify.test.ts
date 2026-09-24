@@ -211,9 +211,17 @@ describe('verify/staging-dispatch.md — run allocation, resume, dispatch, recor
     expect(doc).toContain('verify-run-record');
   });
 
-  it('carries the BS-DISPATCH-V2 token', () => {
+  it('carries the BS-DISPATCH-V3 token', () => {
     const doc = read('verify/staging-dispatch.md');
-    expect(doc).toContain('BS-DISPATCH-V2');
+    expect(doc).toContain('BS-DISPATCH-V3');
+  });
+
+  it('re-transcribes every archived document, with a per-document manifest and Source record (#311)', () => {
+    const doc = flat(read('verify/staging-dispatch.md'));
+    expect(doc).toMatch(/This pass re-transcribes every one of them/);
+    expect(doc).toContain('--ranges \'{"rulebook/source/<rulebook>"');
+    expect(doc).toContain('Source record: {source}');
+    expect(doc).toContain('--range <rangeId>');
   });
 
   it('fills Write slices to: with the staging directory, not a hardcoded rulebook/', () => {

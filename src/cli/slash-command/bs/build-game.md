@@ -88,7 +88,8 @@ npx boardsmith ingest-check
 `doctor` is the layout gate: on a non-zero exit run `npx boardsmith doctor --fix` (it moves design
 artifacts under `design/` with `git mv` and deletes nothing) and continue; never proceed against a
 project that failed it. `ingest-check` repairs `rulebook/` synthesis when needed: on a non-zero exit
-re-read `rulebook/INDEX.md`, re-run it, and only then continue. Then run the consistency check in
+re-read `rulebook/INDEX.md`, re-run it, and only then continue. A slice it reports as not naming its
+document is not repaired; handle it as `/bs-build-chunk` Step 0 says before continuing. Then run the consistency check in
 `${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md` "Consistency Check", using literal `ls <file>`
 checks, and resolve the session lock per that file's "Session Lock" — all three outcomes (same-chunk
 resume refreshes silently, a different live lock warns and stops, a stale lock is reported for the

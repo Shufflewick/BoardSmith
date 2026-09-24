@@ -431,16 +431,17 @@ describe('transcription-subagent.md — output directory is a dispatch input (VE
     expect(contract).not.toMatch(/`slicePath`\*\* — the `rulebook\//);
   });
 
-  it('the ## Your inputs block still enumerates exactly three dispatch inputs', () => {
+  it('the ## Your inputs block enumerates exactly four dispatch inputs (Source record added by #311)', () => {
     const contract = read('ingest/transcription-subagent.md');
     const inputsIdx = contract.indexOf('## Your inputs');
     expect(inputsIdx).toBeGreaterThan(-1);
     const nextSectionIdx = contract.indexOf('---', inputsIdx);
     const inputsSection = contract.slice(inputsIdx, nextSectionIdx);
     const bulletCount = (inputsSection.match(/^- \*\*/gm) ?? []).length;
-    expect(bulletCount).toBe(3);
+    expect(bulletCount).toBe(4);
     expect(inputsSection).toContain('**Page range**');
     expect(inputsSection).toContain('**Rulebook path**');
+    expect(inputsSection).toContain('**Source record**');
     expect(inputsSection).toContain('**Output directory**');
   });
 
@@ -466,7 +467,7 @@ describe('transcription-subagent.md — output directory is a dispatch input (VE
   it('no verify-side fork exists: no file under bs/verify/ restates the transcription contract body', () => {
     // Structural guard, not a comment asking people to be careful. Runs whether or not
     // bs/verify/ exists yet (it does not, until plan 173-04). If plan 173-04 ever adds a file
-    // there that pastes in the BS-DISPATCH-V2 contract body instead of pointing at
+    // there that pastes in the BS-DISPATCH-V3 contract body instead of pointing at
     // ingest/transcription-subagent.md, this must fail loudly -- a fork here silently
     // reintroduces the copy-drift trap (f73153a3 and its Phase 172 recurrence) at the exact
     // point decision 15 forbids it.
@@ -631,7 +632,7 @@ describe('v4.9 INGEST-02 — inline transcription path is contract-bound', () =>
   });
 });
 
-describe('v4.9 INGEST-02 — BS-DISPATCH-V2 handshake', () => {
+describe('v4.9 INGEST-02 — BS-DISPATCH-V3 handshake', () => {
   // Root cause, observed directly via stream-json tool-call capture: the orchestrator reads
   // transcription.md, sees the pointer block, and then dispatches a prompt it composed from
   // memory -- reproducing the superseded inline contract that opened "Slice text is made of
@@ -645,7 +646,7 @@ describe('v4.9 INGEST-02 — BS-DISPATCH-V2 handshake', () => {
 
   it('the pointer block carries the token', () => {
     const transcription = read('ingest/transcription.md');
-    expect(transcription).toContain('BS-DISPATCH-V2');
+    expect(transcription).toContain('BS-DISPATCH-V3');
   });
 
   it('transcription.md explains why the token cannot be produced from memory', () => {
@@ -656,7 +657,7 @@ describe('v4.9 INGEST-02 — BS-DISPATCH-V2 handshake', () => {
 
   it('the subagent validates the token before transcribing anything', () => {
     const contract = read('ingest/transcription-subagent.md');
-    expect(contract).toContain('BS-DISPATCH-V2');
+    expect(contract).toContain('BS-DISPATCH-V3');
     expect(flat(contract)).toMatch(/FIRST: validate your dispatch prompt/);
     expect(flat(contract)).toMatch(/DISPATCH REJECTED/);
   });
@@ -671,6 +672,35 @@ describe('v4.9 INGEST-02 — BS-DISPATCH-V2 handshake', () => {
   it('the rejection message names the two-kinds-of-line signature of a stale prompt', () => {
     const contract = flat(read('ingest/transcription-subagent.md'));
     expect(contract).toMatch(/TWO kinds of slice line/);
+  });
+});
+
+describe('#311 — every slice records the document it was transcribed from', () => {
+  // With a rulebook plus a companion document, `p.3` is ambiguous and the verify pass could
+  // re-transcribe only the rulebook. The dispatch names the document, and the slice records it.
+
+  it('the dispatch block carries the Source record substitution', () => {
+    const transcription = read('ingest/transcription.md');
+    expect(transcription).toContain('Source record:   {sourceRecord}');
+    expect(flat(transcription)).toMatch(/divide and dispatch EACH document/);
+  });
+
+  it('the contract puts the Source line directly under the title and scopes p.N to that document', () => {
+    const contract = flat(read('ingest/transcription-subagent.md'));
+    expect(contract).toMatch(/The first line under the slice's `# ` title is its source record/);
+    expect(contract).toContain('Source: rulebook/source/<file>');
+    expect(contract).toMatch(/Every `p\.N` in the slice is a page of THAT document/);
+  });
+
+  it('the contract names a non-rulebook document\'s slices so two documents\' page 1s cannot collide', () => {
+    const contract = flat(read('ingest/transcription-subagent.md'));
+    expect(contract).toContain('`01-cards-anatomy.md` for `rulebook/source/cards.pdf`');
+  });
+
+  it('build-chunk tells a session how to record a missing Source line, and never to guess it', () => {
+    const buildChunk = flat(read('build-chunk.md'));
+    expect(buildChunk).toContain('npx boardsmith ingest-slice-source');
+    expect(buildChunk).toMatch(/never infer it from the file name/);
   });
 });
 

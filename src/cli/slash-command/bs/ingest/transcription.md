@@ -49,7 +49,10 @@ not the failure that rule guards against — accumulating slice text across a lo
 ## Fan-Out Dispatch (4+ pages)
 
 Divide the rulebook into page ranges (e.g. pp. 1-8, 9-16, 17-24, ...) sized so each subagent's
-read stays bounded regardless of total rulebook length. The total page count needed to divide
+read stays bounded regardless of total rulebook length. **When `rulebook/INDEX.md` records more
+than one document** (the `Source:` header plus each row of `## Additional Sources`: a companion
+reference, a separate card list), divide and dispatch EACH document the same way. A range is
+always pages of one document, and every dispatch names that one document. The total page count needed to divide
 the ranges comes from the user or from file metadata (a file listing for page images, PDF
 metadata for a PDF) — never from opening the rulebook content itself; that would violate the
 Hard Rule above. Dispatch one Task-tool subagent per page range, in parallel where the harness
@@ -58,17 +61,18 @@ back through the orchestrator's context.
 
 **Do not compose, restate, or summarize the transcription contract in the dispatch prompt.** The
 contract lives in `${CLAUDE_SKILL_DIR}/../bs-shared/ingest/transcription-subagent.md`; the
-subagent reads it directly. Each dispatch prompt is short, and carries only the three
+subagent reads it directly. Each dispatch prompt is short, and carries only the four
 substitutions the subagent cannot know on its own:
 
 ```
-BS-DISPATCH-V2
+BS-DISPATCH-V3
 
 Read `${CLAUDE_SKILL_DIR}/../bs-shared/ingest/transcription-subagent.md` in full and follow it
 exactly.
 
 Your page range: {N}-{M}
 Rulebook path:   {rulebookPath}
+Source record:   {sourceRecord}
 Write slices to: design/rulebook/
 ```
 
@@ -78,7 +82,7 @@ context to resolve it against. This ingest path always fills it with `design/rul
 same contract and fills it with a staging path instead. The contract in
 `transcription-subagent.md` treats it as an input either way.
 
-**The `BS-DISPATCH-V2` token is required and the subagent validates it.** A dispatch without it is
+**The `BS-DISPATCH-V3` token is required and the subagent validates it.** A dispatch without it is
 rejected unread. This is not ceremony: sessions reliably read this file, see this block, and then
 send a prompt they composed from memory instead — one that reproduces a superseded version of the
 contract describing only two kinds of slice line, silently dropping `Visual (p.N):`. You cannot
@@ -87,7 +91,12 @@ recalled one. Copy the block; do not retype it from what you remember a transcri
 looking like.
 
 Fill `{rulebookPath}` with the actual path to the PDF/image files/text and `{N}`-`{M}` with the
-range — a fresh-context Task subagent has no inherited knowledge of where the source lives.
+range — a fresh-context Task subagent has no inherited knowledge of where the source lives. Fill
+`{sourceRecord}` with that same document as `rulebook/INDEX.md` records it: the `Source:` header
+value for the rulebook, or the `## Additional Sources` row for any other document
+(`rulebook/source/<file>`). The subagent writes it as each slice's `Source:` line, which is how
+every later step knows which document a slice's `p.N` citations belong to. If you transcribe a
+short document inline instead, you write that line yourself, per the contract.
 
 This indirection is load-bearing; do not "simplify" it back into an inline block. When the
 contract was inline, composing each dispatch prompt silently dropped parts of it — most
@@ -112,7 +121,8 @@ orchestrator records it as a header line in `rulebook/INDEX.md` (e.g. `Edition: 
 the interview path the line reads `Edition: unpublished — designer statement`.
 
 **Slice numbering is page-anchored** (`NN` = the section's zero-padded starting page number,
-specified in `ingest/transcription-subagent.md`) precisely because it is self-allocating: a subagent needs no
+specified in `ingest/transcription-subagent.md`, with a document's own name after `NN` for any
+document other than the rulebook, so two documents' page 1s cannot collide) precisely because it is self-allocating: a subagent needs no
 knowledge of how many sections any other range produced, so parallel ranges can never collide
 on a prefix and the files sort in page order with zero coordination between subagents. Do not
 substitute a sequential "numbering base" scheme — the orchestrator cannot know a range's
