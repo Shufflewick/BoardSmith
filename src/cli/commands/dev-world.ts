@@ -31,7 +31,7 @@
  */
 
 import { existsSync, readFileSync, rmSync } from 'node:fs';
-import { dirname, join, relative, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import chalk from 'chalk';
@@ -53,6 +53,7 @@ import {
   devNotFoundMiddleware,
   listeningViteServer,
   monorepoBoardsmithResolvePlugin,
+  reloadOnRulesEdit,
   resolveDevHostDir,
   serveDevDocuments,
 } from './dev-server.js';
@@ -393,48 +394,34 @@ export async function startWorldDevServer(
   // new shape of one they did, and the world committed the result. A durable
   // world made of two versions is the one thing it must never be.
   //
-  // So the two halves switch TOGETHER, and the order below is the whole of the
-  // safety:
+  // `reloadOnRulesEdit` loads the new rules FIRST, so a broken edit leaves this
+  // world running on the ones it had, and queues saves one at a time; the table
+  // road reloads through the same function (#343). What this road adds is the
+  // swap, and the order below is the rest of the safety:
   //
-  //   1. LOAD THE NEW RULES FIRST. A broken edit -- a syntax error, a bundle
-  //      that will not build -- throws here, and the world is still the old
-  //      one, still running, still playable.
-  //   2. STOP THE OLD WORLD. `close` checkpoints whatever the resident tree
+  //   1. STOP THE OLD WORLD. `close` checkpoints whatever the resident tree
   //      holds, so nothing a command left in memory is lost with the isolate.
-  //   3. OPEN THE SAME WORLD AGAIN, on the new rules. Genesis does not re-run
+  //   2. OPEN THE SAME WORLD AGAIN, on the new rules. Genesis does not re-run
   //      (`start` runs it only for a world that has never launched), and a
   //      `stateVersion` bump is migrated or refused there (#200) -- the same
   //      path a fresh `boardsmith dev` takes.
-  //   4. TELL EVERY PAGE. Vite is hot-reloading the bundle's UI in the same
+  //   3. TELL EVERY PAGE. Vite is hot-reloading the bundle's UI in the same
   //      moment; a page that kept its socket would be new UI holding a seat in
   //      a world that has just been rebuilt.
   //
-  // A FAILURE AT ANY STEP LEAVES THE WORLD IT COULD NOT REPLACE. Step 1 leaves
-  // the old host untouched; 2-3 can only fail on rules that already loaded, and
-  // the refusal is printed with the world durable on disk, exactly where the
-  // old host checkpointed it.
-  const rulesDir = join(options.cwd, 'src', 'rules');
-  let reloading: Promise<void> = Promise.resolve();
-  vite.watcher.add(rulesDir);
-  vite.watcher.on('change', (changed: string) => {
-    if (!changed.startsWith(rulesDir)) return;
-    // QUEUED, so a save-all across four files is one reload rather than four
-    // overlapping ones tearing down each other's world.
-    reloading = reloading.then(() => reloadWorld(relative(options.cwd, changed)));
+  // Steps 1-2 can only fail on rules that already loaded, and the refusal is
+  // printed with the world durable on disk, exactly where the old host
+  // checkpointed it.
+  reloadOnRulesEdit({
+    vite,
+    rulesDir: join(options.cwd, 'src', 'rules'),
+    cwd: options.cwd,
+    what: 'world',
+    load: options.reloadRules,
+    adopt: reloadWorld,
   });
 
-  async function reloadWorld(named: string): Promise<void> {
-    console.log(chalk.dim(`\n  ${named} changed -- reloading the world's rules...`));
-    let rules: WorldRuntime;
-    try {
-      rules = await options.reloadRules();
-    } catch (error) {
-      console.error(
-        chalk.red('  Those rules did not load, so this world is still running the ones it had:'),
-        error instanceof Error ? error.message : String(error),
-      );
-      return;
-    }
+  async function reloadWorld(rules: WorldRuntime): Promise<void> {
     try {
       await worldHost.close();
       worldHost = hostOver(rules, rules.openWorldStore(worldStorePath(options.cwd), budgets));

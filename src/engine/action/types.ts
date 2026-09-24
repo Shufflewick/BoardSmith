@@ -66,6 +66,10 @@ export interface BaseSelection<T = unknown> {
    * For a rule that spans SELECTIONS, use the action-level `.validate()`
    * instead: hanging a whole-submission rule on one field breaks the moment the
    * selection order changes or that selection is optional and skipped.
+   *
+   * On a REPEATING selection (`repeat`/`repeatUntil`) it judges one pick at a
+   * time (#352): `value` is the pick, and `args[name]` holds the picks made
+   * before it. A refused pick runs no `onEach`.
    */
   validate?: (value: T, args: Record<string, unknown>, context: ActionContext) => boolean | string;
   /** Called after this step is resolved. Receives the resolved value and a restricted context. */
@@ -196,9 +200,32 @@ export interface PendingActionState {
 }
 
 /**
+ * Which of a selection's choices are offered but not selectable, and why
+ * (`chooseFrom`, `chooseElement`, `chooseElements`).
+ */
+export interface DisabledRule<T> {
+  /**
+   * Work shared by every `disabled` call of ONE evaluation of the choices
+   * (#334). Runs once each time the engine evaluates them, before the first
+   * `disabled` call, and its result is passed to each `disabled` call as
+   * `prepared`. It is never kept between evaluations, so it always sees the
+   * game as it is now. Only meaningful alongside `disabled`; the builder
+   * refuses one without the other.
+   */
+  prepare?: (context: ActionContext) => unknown;
+  /**
+   * Check if a choice should be disabled (visible but not selectable).
+   * Returns a reason string if disabled, or false if selectable.
+   * Only runs on items that passed filter (filter = visibility, disabled = selectability).
+   * `prepared` is what `prepare` returned for this evaluation (undefined without one).
+   */
+  disabled?: (choice: T, context: ActionContext, prepared: unknown) => string | false;
+}
+
+/**
  * Select from a list of choices
  */
-export interface ChoiceSelection<T = unknown> extends BaseSelection<T> {
+export interface ChoiceSelection<T = unknown> extends BaseSelection<T>, DisabledRule<T> {
   type: 'choice';
   /** Choices - can be static array or function */
   choices: T[] | ((context: ActionContext) => T[]);
@@ -276,18 +303,12 @@ export interface ChoiceSelection<T = unknown> extends BaseSelection<T> {
    * orderedList: (ctx) => ({ min: 1, max: Number(ctx.args.budget) })
    */
   orderedList?: number | OrderedListConfig | ((context: ActionContext) => number | OrderedListConfig | undefined);
-  /**
-   * Check if a choice should be disabled (visible but not selectable).
-   * Returns a reason string if disabled, or false if selectable.
-   * Only runs on items that passed filter (filter = visibility, disabled = selectability).
-   */
-  disabled?: (choice: T, context: ActionContext) => string | false;
 }
 
 /**
  * Select an element from the board
  */
-export interface ElementSelection<T extends GameElement = GameElement> extends BaseSelection<T> {
+export interface ElementSelection<T extends GameElement = GameElement> extends BaseSelection<T>, DisabledRule<T> {
   type: 'element';
   /**
    * Elements to choose from (alternative to filter/from pattern).
@@ -327,12 +348,6 @@ export interface ElementSelection<T extends GameElement = GameElement> extends B
    * Equivalent to: repeat: { until: (ctx, el) => el === repeatUntil }
    */
   repeatUntil?: T;
-  /**
-   * Check if an element should be disabled (visible but not selectable).
-   * Returns a reason string if disabled, or false if selectable.
-   * Only runs on elements that passed filter (filter = visibility, disabled = selectability).
-   */
-  disabled?: (element: T, context: ActionContext) => string | false;
 }
 
 /**
@@ -354,7 +369,7 @@ export interface ElementSelection<T extends GameElement = GameElement> extends B
  *   });
  * ```
  */
-export interface ElementsSelection<T extends GameElement = GameElement> extends BaseSelection<T> {
+export interface ElementsSelection<T extends GameElement = GameElement> extends BaseSelection<T>, DisabledRule<T> {
   type: 'elements';
   /**
    * Elements to choose from - can be static array or function.
@@ -391,11 +406,6 @@ export interface ElementsSelection<T extends GameElement = GameElement> extends 
    * Equivalent to: repeat: { until: (ctx, el) => el === repeatUntil }
    */
   repeatUntil?: T;
-  /**
-   * Check if an element should be disabled (visible but not selectable).
-   * Returns a reason string if disabled, or false if selectable.
-   */
-  disabled?: (element: T, context: ActionContext) => string | false;
 }
 
 /**

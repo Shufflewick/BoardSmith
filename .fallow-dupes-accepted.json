@@ -630,13 +630,6 @@
       ]
     },
     {
-      "content": "13d5a7b0c6b70d4a",
-      "lines": 12,
-      "files": [
-        "src/session/game-session.ts"
-      ]
-    },
-    {
       "content": "13e87c53103cf029",
       "lines": 10,
       "files": [
@@ -922,13 +915,6 @@
       ]
     },
     {
-      "content": "1f62ac58ab16832d",
-      "lines": 7,
-      "files": [
-        "src/session/dev-checkpoint-manager.test.ts"
-      ]
-    },
-    {
       "content": "1f8f08cdd7e9fa24",
       "lines": 10,
       "files": [
@@ -1072,13 +1058,6 @@
       "files": [
         "src/ui/composables/useElementAnimation.ts",
         "src/ui/composables/useFLIP.ts"
-      ]
-    },
-    {
-      "content": "2493b151afb9b7aa",
-      "lines": 7,
-      "files": [
-        "src/world/action.test.ts"
       ]
     },
     {
@@ -1386,13 +1365,6 @@
       "lines": 11,
       "files": [
         "src/session/testing/random-scumming.test.ts"
-      ]
-    },
-    {
-      "content": "3333fc654c954431",
-      "lines": 20,
-      "files": [
-        "src/session/game-session.ts"
       ]
     },
     {
@@ -2010,13 +1982,6 @@
       "lines": 14,
       "files": [
         "src/cli/commands/verify-derive-check.test.ts"
-      ]
-    },
-    {
-      "content": "49fb311e8acad55a",
-      "lines": 9,
-      "files": [
-        "src/session/dev-checkpoint-manager.test.ts"
       ]
     },
     {
@@ -3073,13 +3038,6 @@
       ]
     },
     {
-      "content": "6d4be827851f8a08",
-      "lines": 16,
-      "files": [
-        "src/cli/dev-host/multiplayer-host.ts"
-      ]
-    },
-    {
       "content": "6d4d9cc2afeee92b",
       "lines": 13,
       "files": [
@@ -3865,13 +3823,6 @@
       ]
     },
     {
-      "content": "879d0000f2bab5a7",
-      "lines": 6,
-      "files": [
-        "src/session/dev-checkpoint-manager.test.ts"
-      ]
-    },
-    {
       "content": "87a3bee4712f1041",
       "lines": 31,
       "files": [
@@ -3988,14 +3939,6 @@
       "lines": 5,
       "files": [
         "src/cli/commands/verify-run.test.ts"
-      ]
-    },
-    {
-      "content": "8b2db370e760f91d",
-      "lines": 8,
-      "files": [
-        "src/engine/utils/dev-state.ts",
-        "src/session/game-session.ts"
       ]
     },
     {
@@ -4141,20 +4084,6 @@
       "lines": 11,
       "files": [
         "src/session/snapshot-session-host.test.ts"
-      ]
-    },
-    {
-      "content": "91b4b8e5da24ec67",
-      "lines": 11,
-      "files": [
-        "src/engine/utils/dev-state.test.ts"
-      ]
-    },
-    {
-      "content": "91c67f18222bd870",
-      "lines": 9,
-      "files": [
-        "src/session/dev-checkpoint-manager.test.ts"
       ]
     },
     {
@@ -4463,14 +4392,6 @@
       "lines": 14,
       "files": [
         "src/ui/composables/useAnimationEvents.test.ts"
-      ]
-    },
-    {
-      "content": "99deb718c71472de",
-      "lines": 6,
-      "files": [
-        "src/engine/element/game-element.ts",
-        "src/engine/utils/dev-state.ts"
       ]
     },
     {
@@ -5076,13 +4997,6 @@
       "lines": 15,
       "files": [
         "src/cli/commands/verify-impact.ts"
-      ]
-    },
-    {
-      "content": "aef53680c99807e4",
-      "lines": 6,
-      "files": [
-        "src/engine/utils/dev-state.test.ts"
       ]
     },
     {
@@ -5969,14 +5883,6 @@
       ]
     },
     {
-      "content": "cdbb356de42fd27c",
-      "lines": 10,
-      "files": [
-        "src/engine/element/map-set-persistence.test.ts",
-        "src/engine/element/typed-array-persistence.test.ts"
-      ]
-    },
-    {
       "content": "ce13d23982c417d5",
       "lines": 9,
       "files": [
@@ -6302,14 +6208,6 @@
       "lines": 7,
       "files": [
         "src/world/engine.test.ts"
-      ]
-    },
-    {
-      "content": "d7b1ed65abeaa444",
-      "lines": 7,
-      "files": [
-        "src/engine/utils/dev-state.test.ts",
-        "src/session/dev-checkpoint-manager.test.ts"
       ]
     },
     {

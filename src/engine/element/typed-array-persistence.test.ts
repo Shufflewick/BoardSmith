@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { Game, Player, captureDevState, restoreDevState } from '../index.js';
-import type { GameOptions, ElementClass } from '../index.js';
+import { Game, Player } from '../index.js';
+import { serializedRoundTrip } from './serialized-round-trip.test-helper.js';
 
 /**
  * Typed-array persistence across a snapshot round-trip.
@@ -21,17 +21,6 @@ import type { GameOptions, ElementClass } from '../index.js';
  * with a compact base64 payload, and that the shapes we deliberately do NOT
  * support fail loudly instead of silently flattening to `{}`.
  */
-async function simulateHMR<G extends Game>(original: G, GameClass: new (o: GameOptions) => G): Promise<G> {
-  const devState = captureDevState(original);
-  const classRegistry = new Map<string, ElementClass>();
-  for (const [name, cls] of original._ctx.classRegistry) classRegistry.set(name, cls);
-  const restored = restoreDevState(devState, GameClass, {
-    gameOptions: { playerCount: original.players.length, playerNames: original.players.map(p => p.name) },
-    classRegistry,
-  });
-  await Promise.resolve();
-  return restored;
-}
 
 describe('typed array persistence', () => {
   it('a Uint8Array survives as a real Uint8Array with its bytes intact', async () => {
@@ -41,7 +30,7 @@ describe('typed array persistence', () => {
     const game = await new TerrainGame({ playerCount: 2 }).ready();
     game.terrain = new Uint8Array([0, 1, 200, 255, 42]);
 
-    const restored = await simulateHMR(game, TerrainGame);
+    const restored = await serializedRoundTrip(game, TerrainGame);
 
     expect(restored.terrain).toBeInstanceOf(Uint8Array);
     expect([...restored.terrain]).toEqual([0, 1, 200, 255, 42]);
@@ -80,7 +69,7 @@ describe('typed array persistence', () => {
       u64 = new BigUint64Array([0n, 1n, 18446744073709551615n]);
     }
     const game = await new AllTypesGame({ playerCount: 2 }).ready();
-    const restored = await simulateHMR(game, AllTypesGame);
+    const restored = await serializedRoundTrip(game, AllTypesGame);
 
     expect(restored.i8).toBeInstanceOf(Int8Array);
     expect([...restored.i8]).toEqual([-128, 0, 127]);
@@ -121,7 +110,7 @@ describe('typed array persistence', () => {
       empty = new Uint8Array(0);
     }
     const game = await new EmptyGame({ playerCount: 2 }).ready();
-    const restored = await simulateHMR(game, EmptyGame);
+    const restored = await serializedRoundTrip(game, EmptyGame);
 
     expect(restored.empty).toBeInstanceOf(Uint8Array);
     expect(restored.empty.length).toBe(0);
@@ -135,7 +124,7 @@ describe('typed array persistence', () => {
       masks: Set<Uint8Array> = new Set([new Uint8Array([7, 8])]);
     }
     const game = await new NestedGame({ playerCount: 2 }).ready();
-    const restored = await simulateHMR(game, NestedGame);
+    const restored = await serializedRoundTrip(game, NestedGame);
 
     expect(restored.wrapper.mask).toBeInstanceOf(Uint8Array);
     expect([...restored.wrapper.mask]).toEqual([1, 2]);
@@ -156,7 +145,7 @@ describe('typed array persistence', () => {
     const backing = new Uint8Array([1, 2, 3, 4, 5, 6]);
     game.window = backing.subarray(2, 4);
 
-    const restored = await simulateHMR(game, ViewGame);
+    const restored = await serializedRoundTrip(game, ViewGame);
 
     expect(restored.window).toBeInstanceOf(Uint8Array);
     expect([...restored.window]).toEqual([3, 4]);

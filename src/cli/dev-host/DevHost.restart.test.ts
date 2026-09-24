@@ -240,6 +240,27 @@ describe('DevHost — broadcast toast on restart', () => {
   });
 });
 
+// ── A new game clears an error about the old one (#343) ──────────────────────
+//
+// A rules reload that cannot carry a game across tells every page, and the way
+// forward is "New game". The host re-seats every page into the new game with an
+// `init`, and the banner about the game that could not continue must go with
+// it on EVERY page, not only the one that pressed the button.
+describe('DevHost — an error about the previous game', () => {
+  it('is cleared when the page is seated into a new game', async () => {
+    const wrapper = await mountAndActivate();
+    const ws = mockWsInstance!;
+
+    ws.simulateMessage({ type: 'error', message: 'This game cannot continue on your edited rules: x.' });
+    await wrapper.vm.$nextTick();
+    expect(wrapper.find('.dev-chrome__error').exists()).toBe(true);
+
+    ws.simulateMessage({ type: 'init', seat: 1 });
+    await wrapper.vm.$nextTick();
+    expect(wrapper.find('.dev-chrome__error').exists()).toBe(false);
+  });
+});
+
 // ── debug:restart postMessage routing (D11 / ENDGAME-02 — the real RED) ──────
 //
 // GameShell's GameOverCard "Rematch" (and, after the GameShell fix, "New Game")

@@ -219,7 +219,10 @@ export async function importRuntimeBundle(args: {
   });
 
   const moduleUrl = pathToFileURL(bundlePath).href;
-  const module = (await import(`${moduleUrl}?t=${Date.now()}`)) as Record<string, unknown>;
+  // The cache-bust is `load`, not `t`: Vite strips a `t=` query as its own HMR
+  // timestamp, so under any Vite-based module runner (the test suite's) a `t`
+  // bust answered the first bundle again and a rules reload re-ran the old rules.
+  const module = (await import(`${moduleUrl}?load=${Date.now()}`)) as Record<string, unknown>;
 
   if (!module.gameDefinition) {
     throw new Error('Rules module must export a gameDefinition');
