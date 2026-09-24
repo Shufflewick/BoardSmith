@@ -81,6 +81,7 @@ This library is developed alongside two sibling repos. When a BoardSmith change 
 - Trace at least one real value through the full stack (config → engine → session → UI) to confirm data survives every layer boundary.
 - Treat identified test gaps as blockers, not observations. If verification flags untested code within the scope of the change, address it before completion.
 - Write at least one integration test per cross-layer boundary the change touches.
+- Never assert how long something took. `boardsmith test` runs on a busy machine during merges, so a wall-clock budget fails with nothing wrong. Assert the work done (calls, reads, timers scheduled) or the path taken; `scripts/no-wall-clock-budgets.test.mjs` refuses a budget (#360). Do slow one-time setup (a heavy module import, a bundle) at the top of the test file, where no test timeout applies, not inside the first test (#354, #355, #363).
 
 # Typechecking and Merging
 - **`boardsmith typecheck` is the one type check.** It runs `vue-tsc` over the whole package (every `.ts` and `.vue` file under `src/` and `docs/`), and `main` is at zero errors. `docs/typecheck.md` says exactly what it covers. Plain `tsc` cannot read `.vue` files, so it is not a substitute.
