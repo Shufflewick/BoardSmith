@@ -14,7 +14,6 @@ import type {
   FlowDefinition,
   PhaseConfig,
   TurnScope,
-  StepTimeLimit,
 } from './types.js';
 import { checkDeclaredTimeLimit } from './step-time-limit.js';
 
@@ -247,17 +246,7 @@ export function forEach<
  * })
  * ```
  */
-export function actionStep<G extends Game = Game>(config: {
-  name?: string;
-  player?: (context: FlowContext<G>) => PlayerOf<G>;
-  actions: string[] | ((context: FlowContext<G>) => string[]);
-  repeatUntil?: (context: FlowContext<G>) => boolean;
-  skipIf?: (context: FlowContext<G>) => boolean;
-  minMoves?: number;
-  maxMoves?: number;
-  turnScope?: TurnScope;
-  timeLimitMs?: StepTimeLimit<G>;
-}): FlowNode<G> {
+export function actionStep<G extends Game = Game>(config: ActionStepConfig<G>): FlowNode<G> {
   checkDeclaredTimeLimit(config.timeLimitMs, config.name ?? 'action-step');
   return {
     type: 'action-step',
@@ -356,15 +345,7 @@ export function playerActions<G extends Game = Game>(config: {
  * })
  * ```
  */
-export function simultaneousActionStep<G extends Game = Game>(config: {
-  name?: string;
-  players?: (context: FlowContext<G>) => PlayerOf<G>[];
-  actions: string[] | ((context: FlowContext<G>, player: PlayerOf<G>) => string[]);
-  playerDone?: (context: FlowContext<G>, player: PlayerOf<G>) => boolean;
-  allDone?: (context: FlowContext<G>) => boolean;
-  skipPlayer?: (context: FlowContext<G>, player: PlayerOf<G>) => boolean;
-  timeLimitMs?: StepTimeLimit<G>;
-}): FlowNode<G> {
+export function simultaneousActionStep<G extends Game = Game>(config: SimultaneousActionStepConfig<G>): FlowNode<G> {
   checkDeclaredTimeLimit(config.timeLimitMs, config.name ?? 'simultaneous-action-step');
   return {
     type: 'simultaneous-action-step',
