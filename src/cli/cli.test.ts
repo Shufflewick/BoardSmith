@@ -186,7 +186,6 @@ describe('verify-example-translate — registration (CHECK-06, the second dispat
     const project = join(dir, 'project');
     await fs.mkdir(join(project, DESIGN_DIR, 'rulebook'), { recursive: true });
     await fs.mkdir(join(project, 'src', 'rules'), { recursive: true });
-    await fs.writeFile(join(project, 'tsconfig.json'), generateTsConfig());
     await fs.writeFile(
       join(project, DESIGN_DIR, 'rulebook', '02-punch.md'),
       'p.2, Punch Examples:\n"If you are punched while READY, you become EXHAUSTED."\n',
@@ -197,6 +196,8 @@ describe('verify-example-translate — registration (CHECK-06, the second dispat
         '  return input.ready;\n' +
         '}\n',
     );
+    // Every generated game has one; the API surface resolves modules with it.
+    await fs.writeFile(join(project, 'tsconfig.json'), generateTsConfig());
     const extraction = {
       examples: [
         {
