@@ -154,6 +154,29 @@ export function worldResetNotice(removed: boolean, dir: string): string {
 export interface LocalWorldStore extends WorldStore {
   /** The database file this store is open on. */
   readonly path: string;
+
+  /**
+   * THE PRESENCE LEDGER (#339): which seats the world has been told are
+   * present, and not since told they left. The platform keeps the same record
+   * (ShufflewickPub `games/src/world-presence-ledger.ts`), and it is kept here
+   * for the platform's reason: a rule reload or a restart builds a new host
+   * over this store, and a host that forgot what the world was told announces
+   * every open page as a new arrival.
+   *
+   * `closedAt` is when the seat's last socket went, written only for a bundle
+   * with no `onDepart`, so a return can tell a flap from a genuine absence.
+   * A chair the world's clock hands on leaves the ledger in the checkpoint
+   * that releases it, because its next holder arrives.
+   */
+  presenceTold(): readonly { readonly seat: number; readonly closedAt: number | null }[];
+  /** One seat's entry, or `undefined` when the world believes it absent. */
+  presenceOf(seat: number): { readonly closedAt: number | null } | undefined;
+  /** The world was told this seat is present. Clears any `closedAt`. */
+  tellPresent(seat: number): void;
+  /** The world was told this seat left. */
+  untellPresent(seat: number): void;
+  /** Still told present, and this is when its last socket went. */
+  stampPresenceClosedAt(seat: number, closedAt: number): void;
 }
 
 /**
@@ -255,6 +278,13 @@ export function openWorldStore(path: string, budgets: WorldBudgets): LocalWorldS
     // person in the chair has been away. Left behind, it would report the next
     // occupant as idle since before they arrived.
     deleteSeatActivity: db.prepare('DELETE FROM seat_activity WHERE seat = ?'),
+    listPresence: db.prepare('SELECT seat, closed_at FROM presence_told ORDER BY seat'),
+    readPresence: db.prepare('SELECT closed_at FROM presence_told WHERE seat = ?'),
+    writePresence: db.prepare(
+      'INSERT INTO presence_told (seat, closed_at) VALUES (?, ?) ' +
+        'ON CONFLICT(seat) DO UPDATE SET closed_at = excluded.closed_at',
+    ),
+    deletePresence: db.prepare('DELETE FROM presence_told WHERE seat = ?'),
     readMeta: db.prepare('SELECT value FROM meta WHERE key = ?'),
     writeMeta: db.prepare(
       'INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
@@ -422,6 +452,29 @@ export function openWorldStore(path: string, budgets: WorldBudgets): LocalWorldS
 
     seat(player: string, seat: number, seatedAt: number): void {
       stmt.writeSeat.run(player, seat, seatedAt);
+    },
+
+    presenceTold() {
+      return (stmt.listPresence.all() as { seat: number; closed_at: number | null }[]).map(
+        (row) => ({ seat: row.seat, closedAt: row.closed_at }),
+      );
+    },
+
+    presenceOf(seat: number) {
+      const row = stmt.readPresence.get(seat) as { closed_at: number | null } | undefined;
+      return row === undefined ? undefined : { closedAt: row.closed_at };
+    },
+
+    tellPresent(seat: number): void {
+      stmt.writePresence.run(seat, null);
+    },
+
+    untellPresent(seat: number): void {
+      stmt.deletePresence.run(seat);
+    },
+
+    stampPresenceClosedAt(seat: number, closedAt: number): void {
+      stmt.writePresence.run(seat, closedAt);
     },
 
     activitySince(openedAt: number): number {
@@ -617,7 +670,12 @@ export function openWorldStore(path: string, budgets: WorldBudgets): LocalWorldS
     // THE WATERMARK FOLLOWS THE ROW AND NEVER LEADS IT. A release that matched
     // no row freed nobody, and clearing the chair's mark anyway would reset the
     // idleness of whoever is still sitting in it.
-    if (Number(released.changes) > 0) stmt.deleteSeatActivity.run(extras.vacate.seat);
+    // So does what the world was told about the chair (#339): its next holder
+    // is a new player, and a new player arrives.
+    if (Number(released.changes) > 0) {
+      stmt.deleteSeatActivity.run(extras.vacate.seat);
+      stmt.deletePresence.run(extras.vacate.seat);
+    }
   }
 
   /** The partition rows of a write, and the dirty marks they satisfy. Shared by
@@ -730,6 +788,15 @@ const SEAT_ACTIVITY_TABLE = `CREATE TABLE IF NOT EXISTS seat_activity (
 );`;
 
 /**
+ * The one table layout 6 added (#339), named apart for `SEAT_ACTIVITY_TABLE`'s
+ * reason: the upgrade from layout 5 writes exactly this.
+ */
+const PRESENCE_TOLD_TABLE = `CREATE TABLE IF NOT EXISTS presence_told (
+  seat INTEGER PRIMARY KEY,
+  closed_at INTEGER
+);`;
+
+/**
  * The layout this file owns.
  *
  * ONE ROW PER PARTITION, and that IS the cost argument rather than a tidiness
@@ -765,6 +832,7 @@ CREATE TABLE IF NOT EXISTS seats (
   seated_at INTEGER
 );
 ${SEAT_ACTIVITY_TABLE}
+${PRESENCE_TOLD_TABLE}
 CREATE TABLE IF NOT EXISTS receipts (
   player TEXT NOT NULL,
   order_id TEXT NOT NULL,
@@ -786,14 +854,14 @@ CREATE INDEX IF NOT EXISTS receipts_at ON receipts (at);
  * Silently READING a store this code does not understand stays forbidden -- an
  * upgrade is a deliberate, atomic rewrite, never a hopeful reinterpretation.
  */
-const SCHEMA_VERSION = '5';
+const SCHEMA_VERSION = '6';
 
 /**
  * THE LAYOUTS THIS CODE CAN CARRY A WORLD FORWARD FROM, and the step each one
  * takes.
  *
  * A CHAIN AND NOT A SINGLE SOURCE LAYOUT, because a world sitting on 3 has to
- * be able to reach 5: the alternative is telling an author whose store is two
+ * be able to reach the current layout: the alternative is telling an author whose store is two
  * upgrades old to reset it, which is offering to delete a world five hundred
  * seats deep. Each step is applied in order until the stamp is current.
  *
@@ -813,6 +881,7 @@ interface LayoutUpgrade {
 const LAYOUT_UPGRADES: readonly LayoutUpgrade[] = [
   { from: '3', to: '4', apply: upgradeToLayout4 },
   { from: '4', to: '5', apply: upgradeToLayout5 },
+  { from: '5', to: '6', apply: upgradeToLayout6 },
 ];
 
 /**
@@ -924,6 +993,21 @@ function upgradeToLayout5(db: SqliteDatabase): void {
   transactOn(db, () => {
     db.exec('ALTER TABLE seats ADD COLUMN seated_at INTEGER');
     db.prepare('UPDATE meta SET value = ? WHERE key = ?').run('5', SCHEMA_VERSION_KEY);
+  });
+}
+
+/**
+ * LAYOUT 5 TO LAYOUT 6: the presence ledger (#339).
+ *
+ * One new table, and empty is the honest answer: a store written before the
+ * ledger existed kept no record of what the world was told, so the host's
+ * start reconciles from nobody told present, and every seat's next page is an
+ * arrival, as it was under layout 5.
+ */
+function upgradeToLayout6(db: SqliteDatabase): void {
+  transactOn(db, () => {
+    db.exec(PRESENCE_TOLD_TABLE);
+    db.prepare('UPDATE meta SET value = ? WHERE key = ?').run('6', SCHEMA_VERSION_KEY);
   });
 }
 
