@@ -612,12 +612,13 @@ describe('BUILD-06 / TEST-01 — worked-example step (178-08)', () => {
     expect(items[workedExampleIdx].n).toBe(4);
   });
 
-  it('names all four real commands, including verify-example-translate as the cited producer of the translation dispatch bytes', () => {
+  it('names all five real commands, including verify-example-translate as the cited producer of the translation dispatch bytes', () => {
     const test = read('build/test.md');
     expect(test).toContain('boardsmith verify-example-replay');
     expect(test).toContain('boardsmith verify-example-translate');
     expect(test).toContain('boardsmith verify-example-record');
     expect(test).toContain('boardsmith verify-example-emit');
+    expect(test).toContain('boardsmith verify-example-run');
     expect(test).toMatch(/verify-example-translate.{0,260}ONLY source of those bytes/s);
   });
 
@@ -647,6 +648,13 @@ describe('BUILD-06 / TEST-01 — worked-example step (178-08)', () => {
     expect(test).toMatch(
       /zero worked examples SKIPS this step and names the\s+exemption explicitly in the generated test file/,
     );
+  });
+
+  it('says how each subagent return is saved: the extractor\'s object unchanged, translator returns filed by exampleId (#319)', () => {
+    const test = read('build/test.md');
+    expect(test).toMatch(/save its return to a file UNCHANGED.{0,40}`\{ "examples": \[\.\.\.\] \}`/s);
+    expect(test).toContain('`{ "<exampleId>": <that example\'s return>, ... }`');
+    expect(test).toContain('--translations <f>');
   });
 
   it('states the recorded verdict comes from running the emitted test, never from the translator\'s verdictHint', () => {

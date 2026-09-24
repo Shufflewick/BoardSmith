@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 import { Command, Option } from 'commander';
 import { readBoardsmithVersion } from './lib/boardsmith-version.js';
 import { initCommand } from './commands/init.js';
@@ -65,6 +64,7 @@ import {
 import { verifySourceFreeCheckCommand } from './commands/verify-source-free.js';
 import { verifyCloseRecordCommand } from './commands/verify-close-record.js';
 import { verifyExampleEmitCommand } from './commands/example-test-emit.js';
+import { verifyExampleRunCommand } from './commands/example-test-run.js';
 import { evolveBotWeightsCommand } from './commands/evolve-bot-weights.js';
 import { packCommand } from './commands/pack.js';
 import { doctorCommand } from './commands/doctor.js';
@@ -80,795 +80,814 @@ function discardResult<A extends unknown[]>(command: (...args: A) => Promise<unk
   };
 }
 
-const program = new Command();
+/**
+ * The whole `boardsmith` command tree. It registers every command and parses
+ * nothing, so a test can read a command's registration (its options, its help)
+ * in-process instead of spawning the CLI. `runCli` is what the real entry point
+ * runs.
+ */
+export function createProgram(): Command {
+  const program = new Command();
 
-program
-  .name('boardsmith')
-  .description('BoardSmith CLI - Build and run board games')
-  .version(readBoardsmithVersion());
+  program
+    .name('boardsmith')
+    .description('BoardSmith CLI - Build and run board games')
+    .version(readBoardsmithVersion());
 
-// Project initialization
-program
-  .command('init <name>')
-  .description('Create a new BoardSmith game project')
-  .option('--rulebook <path>', 'Archive this source rulebook into the new project and write rulebook/INDEX.md provenance')
-  .option('--edition <edition>', 'Edition string as stated in the rulebook (used with --rulebook)')
-  .option('--additional-source <paths...>', 'Also archive these documents the rules incorporate (a companion reference, a card list), each with its own hash (used with --rulebook)')
-  .option('--without-rulebook', 'Explicitly declare no rulebook exists (the interview path supplies rulebook/ content)')
-  .option('--world', 'Scaffold a persistent world (named partitions, a clock, no turn order) instead of a table game')
-  .option('--into-existing', 'Scaffold into the git repository you run this from instead of creating <name>/ (refuses to overwrite any file)')
-  .action(initCommand);
+  // Project initialization
+  program
+    .command('init <name>')
+    .description('Create a new BoardSmith game project')
+    .option('--rulebook <path>', 'Archive this source rulebook into the new project and write rulebook/INDEX.md provenance')
+    .option('--edition <edition>', 'Edition string as stated in the rulebook (used with --rulebook)')
+    .option('--additional-source <paths...>', 'Also archive these documents the rules incorporate (a companion reference, a card list), each with its own hash (used with --rulebook)')
+    .option('--without-rulebook', 'Explicitly declare no rulebook exists (the interview path supplies rulebook/ content)')
+    .option('--world', 'Scaffold a persistent world (named partitions, a clock, no turn order) instead of a table game')
+    .option('--into-existing', 'Scaffold into the git repository you run this from instead of creating <name>/ (refuses to overwrite any file)')
+    .action(initCommand);
 
-// Development
-program
-  .command('dev')
-  .description('Start local development server')
-  .option('-p, --port <port>', 'Dev host server port', '5173')
-  .option('--host <host>', 'Host to bind the server to (default: 127.0.0.1, local-only; pass 0.0.0.0 or --lan to serve to your whole network; cannot be combined with --lan)')
-  .option('--lan', 'Shorthand for --host 0.0.0.0 -- serves to your whole network (cannot be combined with --host)')
-  .option('--players <count>', 'Initial number of players (default: the game\'s minPlayers)')
-  .option('--bot <players...>', 'Player positions to be bot (e.g., --bot 1 or --bot 2 4)')
-  .option('--bot-level <level>', 'Bot difficulty: easy, medium, hard, or an explicit iteration count', 'medium')
-  .option('--game-option <kv...>', 'Select a declared game option as key=value (repeatable, e.g. --game-option difficulty=hard rounds=5)')
-  .option('--preset <name>', 'Apply a declared preset\'s whole bundle of game option values (and player count, if the preset declares one)')
-  .option('--lock-teaching', 'Disable bot hint, move-quality heatmap, bot-vs-bot demo, and tutorial (action help stays enabled)')
-  .option('--seed <file>', 'Seed the initial game state from a recorded GameStateSnapshot JSON file instead of a fresh start (FEAT-01)')
-  .option('--no-open', 'Do not auto-launch a browser tab (use when driving the dev host from a script/CI, so an uncontrolled tab does not claim seat 1)')
-  .option('--reset', 'Delete this persistent world\'s local store (partitions, schedule and roster) and start it again from genesis. Never happens on shutdown -- a world is only erased by asking.')
-  .action(devCommand);
+  // Development
+  program
+    .command('dev')
+    .description('Start local development server')
+    .option('-p, --port <port>', 'Dev host server port', '5173')
+    .option('--host <host>', 'Host to bind the server to (default: 127.0.0.1, local-only; pass 0.0.0.0 or --lan to serve to your whole network; cannot be combined with --lan)')
+    .option('--lan', 'Shorthand for --host 0.0.0.0 -- serves to your whole network (cannot be combined with --host)')
+    .option('--players <count>', 'Initial number of players (default: the game\'s minPlayers)')
+    .option('--bot <players...>', 'Player positions to be bot (e.g., --bot 1 or --bot 2 4)')
+    .option('--bot-level <level>', 'Bot difficulty: easy, medium, hard, or an explicit iteration count', 'medium')
+    .option('--game-option <kv...>', 'Select a declared game option as key=value (repeatable, e.g. --game-option difficulty=hard rounds=5)')
+    .option('--preset <name>', 'Apply a declared preset\'s whole bundle of game option values (and player count, if the preset declares one)')
+    .option('--lock-teaching', 'Disable bot hint, move-quality heatmap, bot-vs-bot demo, and tutorial (action help stays enabled)')
+    .option('--seed <file>', 'Seed the initial game state from a recorded GameStateSnapshot JSON file instead of a fresh start (FEAT-01)')
+    .option('--no-open', 'Do not auto-launch a browser tab (use when driving the dev host from a script/CI, so an uncontrolled tab does not claim seat 1)')
+    .option('--reset', 'Delete this persistent world\'s local store (partitions, schedule and roster) and start it again from genesis. Never happens on shutdown -- a world is only erased by asking.')
+    .action(devCommand);
 
-// Testing
-program
-  .command('test [patterns...]')
-  .description('Run this workspace\'s tests (the game\'s, or BoardSmith\'s own after a type check)')
-  .option('-w, --watch', 'Watch mode - re-run tests on changes')
-  .option('--coverage', 'Generate coverage report')
-  .action(testCommand);
+  // Testing
+  program
+    .command('test [patterns...]')
+    .description('Run this workspace\'s tests (the game\'s, or BoardSmith\'s own after a type check)')
+    .option('-w, --watch', 'Watch mode - re-run tests on changes')
+    .option('--coverage', 'Generate coverage report')
+    .action(testCommand);
 
-program
-  .command('typecheck')
-  .description("Type-check this workspace's tsconfig.json with vue-tsc (BoardSmith's own tests run it first)")
-  .action(typecheckCommand);
+  program
+    .command('typecheck')
+    .description("Type-check this workspace's tsconfig.json with vue-tsc (BoardSmith's own tests run it first)")
+    .action(typecheckCommand);
 
-// Building
-program
-  .command('build')
-  .description('Build this workspace for distribution (a game bundle, or BoardSmith\'s CLI)')
-  .option('-o, --out-dir <dir>', 'Output directory', 'dist')
-  .action(buildCommand);
+  // Building
+  program
+    .command('build')
+    .description('Build this workspace for distribution (a game bundle, or BoardSmith\'s CLI)')
+    .option('-o, --out-dir <dir>', 'Output directory', 'dist')
+    .action(buildCommand);
 
-// Packing for local development
-program
-  .command('pack')
-  .description('Create tarballs of all public packages for local installation')
-  .option('-o, --out-dir <dir>', 'Output directory for tarballs', '.boardsmith/tarballs')
-  .option(
-    '-t, --target <path>',
-    'Copy tarballs to a target project and update its dependencies (repeatable — '
-    + 'all targets receive the same tarball)',
-    (value: string, previous: string[] = []) => [...previous, value],
-  )
-  .action(packCommand);
+  // Packing for local development
+  program
+    .command('pack')
+    .description('Create tarballs of all public packages for local installation')
+    .option('-o, --out-dir <dir>', 'Output directory for tarballs', '.boardsmith/tarballs')
+    .option(
+      '-t, --target <path>',
+      'Copy tarballs to a target project and update its dependencies (repeatable — '
+      + 'all targets receive the same tarball)',
+      (value: string, previous: string[] = []) => [...previous, value],
+    )
+    .action(packCommand);
 
-// Validation
-program
-  .command('validate')
-  .description('Validate game before publishing')
-  .action(validateCommand);
+  // Validation
+  program
+    .command('validate')
+    .description('Validate game before publishing')
+    .action(validateCommand);
 
-// Linting
-program
-  .command('lint')
-  .description('Run every lint check this workspace configures (ESLint, Stylelint, BoardSmith pitfalls)')
-  .option('--fix', 'Auto-fix what the underlying linters can fix')
-  .option('--eslint', 'Run only ESLint')
-  .option('--css', 'Run only Stylelint')
-  .option('--pitfalls', 'Run only the BoardSmith pitfall checks')
-  .action(lintCommand);
+  // Linting
+  program
+    .command('lint')
+    .description('Run every lint check this workspace configures (ESLint, Stylelint, BoardSmith pitfalls)')
+    .option('--fix', 'Auto-fix what the underlying linters can fix')
+    .option('--eslint', 'Run only ESLint')
+    .option('--css', 'Run only Stylelint')
+    .option('--pitfalls', 'Run only the BoardSmith pitfall checks')
+    .action(lintCommand);
 
-// Code-quality audits
-program
-  .command('audit')
-  .description("Audit what this branch changed (fallow), plus duplication and baseline drift")
-  .option('--changes', 'Run only the changed-files audit (fallow, baseline-aware)')
-  .option('--duplication', 'Run only the duplication audit')
-  .option('--health-baseline', 'Run only the health-baseline drift check')
-  .option(
-    '--dupes-baseline',
-    'Run only the duplication-baseline check — content, then addresses, re-addressing what matches',
-  )
-  .option('--since <ref>', "Diff against this git ref instead of fallow's detected base branch")
-  .option('--backlog', "Report the whole repository's dead code instead — informational, never a gate")
-  .option(
-    '--sweep',
-    "Sweep the whole repository for duplicate exports no baseline accepts — files tickets, never gates",
-  )
-  .option('--file-issue', 'Open a GitHub issue for each finding --sweep reports, one per finding, once')
-  .option(
-    '--rekey-dupes',
-    "Record this tree's duplication as accepted from scratch — refuses on any content mismatch",
-  )
-  .action(auditCommand);
+  // Code-quality audits
+  program
+    .command('audit')
+    .description("Audit what this branch changed (fallow), plus duplication and baseline drift")
+    .option('--changes', 'Run only the changed-files audit (fallow, baseline-aware)')
+    .option('--duplication', 'Run only the duplication audit')
+    .option('--health-baseline', 'Run only the health-baseline drift check')
+    .option(
+      '--dupes-baseline',
+      'Run only the duplication-baseline check — content, then addresses, re-addressing what matches',
+    )
+    .option('--since <ref>', "Diff against this git ref instead of fallow's detected base branch")
+    .option('--backlog', "Report the whole repository's dead code instead — informational, never a gate")
+    .option(
+      '--sweep',
+      "Sweep the whole repository for duplicate exports no baseline accepts — files tickets, never gates",
+    )
+    .option('--file-issue', 'Open a GitHub issue for each finding --sweep reports, one per finding, once')
+    .option(
+      '--rekey-dupes',
+      "Record this tree's duplication as accepted from scratch — refuses on any content mismatch",
+    )
+    .action(auditCommand);
 
-// The engine contract — what the platform is promised, and how it learns the
-// promise changed. See docs/engine-contract.md.
-program
-  .command('contract')
-  .description("Check (or record) the engine contract the game platform vendors against")
-  .option('--update', 'Record a new contract revision from the current engine')
-  .option('--summary <text>', 'One sentence describing the change, for the platform team (required with --update)')
-  .option('--breaking', 'Also bump bundleProtocol — invalidates every published bundle')
-  .option(
-    '--adopt',
-    'Record a revision for a change no fingerprint can see — a performance fix the platform must still archive and run',
-  )
-  .option(
-    '--regenerate-format',
-    'Rewrite the committed world-format corpus — a deliberate format break that ends every live world holding the old bytes',
-  )
-  .action(contractCommand);
+  // The engine contract — what the platform is promised, and how it learns the
+  // promise changed. See docs/engine-contract.md.
+  program
+    .command('contract')
+    .description("Check (or record) the engine contract the game platform vendors against")
+    .option('--update', 'Record a new contract revision from the current engine')
+    .option('--summary <text>', 'One sentence describing the change, for the platform team (required with --update)')
+    .option('--breaking', 'Also bump bundleProtocol — invalidates every published bundle')
+    .option(
+      '--adopt',
+      'Record a revision for a change no fingerprint can see — a performance fix the platform must still archive and run',
+    )
+    .option(
+      '--regenerate-format',
+      'Rewrite the committed world-format corpus — a deliberate format break that ends every live world holding the old bytes',
+    )
+    .action(contractCommand);
 
-// Analysis
-program
-  .command('analyze')
-  .description('Analyze game complexity and structure')
-  .option('--json', 'Output results as JSON')
-  .option('-v, --verbose', 'Show detailed information')
-  .action(analyzeCommand);
+  // Analysis
+  program
+    .command('analyze')
+    .description('Analyze game complexity and structure')
+    .option('--json', 'Output results as JSON')
+    .option('-v, --verbose', 'Show detailed information')
+    .action(analyzeCommand);
 
-// Headless simulation
-program
-  .command('simulate')
-  .description('Run seeded headless batch simulation and report pass/stuck/error per game')
-  .option('--games <count>', 'Number of games to simulate', '10')
-  .option('--seed <seed>', 'Base seed (per-game seeds derived and recorded in output)')
-  .addOption(
-    new Option('--replay <game seed>', "Play one game again by its own seed, as a failing game's Replay line prints it")
-      .conflicts(['games', 'seed']),
-  )
-  .option('--players <count>', 'Player count for each simulated game', '2')
-  .option('--game-option <kv...>', 'Select a declared game option as key=value (repeatable, e.g. --game-option difficulty=hard) so option-gated configurations are simulated too')
-  .option('--json', 'Output results as JSON')
-  .action(simulateCommand);
+  // Headless simulation
+  program
+    .command('simulate')
+    .description('Run seeded headless batch simulation and report pass/stuck/error per game')
+    .option('--games <count>', 'Number of games to simulate', '10')
+    .option('--seed <seed>', 'Base seed (per-game seeds derived and recorded in output)')
+    .addOption(
+      new Option('--replay <game seed>', "Play one game again by its own seed, as a failing game's Replay line prints it")
+        .conflicts(['games', 'seed']),
+    )
+    .option('--players <count>', 'Player count for each simulated game', '2')
+    .option('--game-option <kv...>', 'Select a declared game option as key=value (repeatable, e.g. --game-option difficulty=hard) so option-gated configurations are simulated too')
+    .option('--json', 'Output results as JSON')
+    .action(simulateCommand);
 
-// Bot Weight Evolution (new focused command)
-program
-  .command('evolve-bot-weights')
-  .description('Optimize bot weights through evolutionary self-play (requires existing bot.ts)')
-  .option('--generations <count>', 'Evolution generations (default: 5)')
-  .option('--population <count>', 'Population size per generation (default: 20)')
-  .option('-m, --mcts <iterations>', 'MCTS iterations for benchmarking (default: 100)')
-  .option('--workers <count>', 'Number of worker threads (default: CPU cores - 1)')
-  .option('-v, --verbose', 'Show detailed progress')
-  .action(evolveBotWeightsCommand);
+  // Bot Weight Evolution (new focused command)
+  program
+    .command('evolve-bot-weights')
+    .description('Optimize bot weights through evolutionary self-play (requires existing bot.ts)')
+    .option('--generations <count>', 'Evolution generations (default: 5)')
+    .option('--population <count>', 'Population size per generation (default: 20)')
+    .option('-m, --mcts <iterations>', 'MCTS iterations for benchmarking (default: 100)')
+    .option('--workers <count>', 'Number of worker threads (default: CPU cores - 1)')
+    .option('-v, --verbose', 'Show detailed progress')
+    .action(evolveBotWeightsCommand);
 
-// Publishing
-program
-  .command('publish')
-  .description('Publish game to shufflewick.pub')
-  .option('--api-key <key>', 'API key (saved for future use)')
-  .option('--publisher <slug>', 'Publisher slug that owns this game (required for a new game)')
-  .option('--dry-run', 'Show what would be published without uploading')
-  .option('--dev', 'Publish to the local dev platform (http://localhost:3006)')
-  .option('--prod', 'Publish to the LIVE platform (shufflewick.pub) -- required, there is no default target')
-  .action(publishCommand);
+  // Publishing
+  program
+    .command('publish')
+    .description('Publish game to shufflewick.pub')
+    .option('--api-key <key>', 'API key (saved for future use)')
+    .option('--publisher <slug>', 'Publisher slug that owns this game (required for a new game)')
+    .option('--dry-run', 'Show what would be published without uploading')
+    .option('--dev', 'Publish to the local dev platform (http://localhost:3006)')
+    .option('--prod', 'Publish to the LIVE platform (shufflewick.pub) -- required, there is no default target')
+    .action(publishCommand);
 
-// Ingest: deterministic archive + hash + INDEX provenance header.
-// Mechanical work belongs in code, not in skill text an agent executes from recall.
-program
-  .command('ingest-archive <rulebook>')
-  .description('Archive a source rulebook, hash it, and write rulebook/INDEX.md provenance header')
-  .option('--project <dir>', 'Project directory (defaults to cwd)')
-  .option('--edition <edition>', 'Edition string as stated in the rulebook')
-  .option('--additional-source <paths...>', 'Also archive these documents the rules incorporate (a companion reference, a card list), each with its own hash')
-  .option('--json', 'Emit JSON instead of human-readable output')
-  .action(ingestArchiveCommand);
+  // Ingest: deterministic archive + hash + INDEX provenance header.
+  // Mechanical work belongs in code, not in skill text an agent executes from recall.
+  program
+    .command('ingest-archive <rulebook>')
+    .description('Archive a source rulebook, hash it, and write rulebook/INDEX.md provenance header')
+    .option('--project <dir>', 'Project directory (defaults to cwd)')
+    .option('--edition <edition>', 'Edition string as stated in the rulebook')
+    .option('--additional-source <paths...>', 'Also archive these documents the rules incorporate (a companion reference, a card list), each with its own hash')
+    .option('--json', 'Emit JSON instead of human-readable output')
+    .action(ingestArchiveCommand);
 
-program
-  .command('ingest-gaps')
-  .description('Relabel presentation-only Derived lines, then fill Open Rules Gaps from the slices')
-  .option('--project <dir>', 'Project directory (defaults to cwd)')
-  .option('--skip-relabel', 'Do not relabel presentation-only Derived lines first')
-  .option('--json', 'Emit JSON instead of human-readable output')
-  .action(discardResult(ingestGapsCommand));
+  program
+    .command('ingest-gaps')
+    .description('Relabel presentation-only Derived lines, then fill Open Rules Gaps from the slices')
+    .option('--project <dir>', 'Project directory (defaults to cwd)')
+    .option('--skip-relabel', 'Do not relabel presentation-only Derived lines first')
+    .option('--json', 'Emit JSON instead of human-readable output')
+    .action(discardResult(ingestGapsCommand));
 
-program
-  .command('ingest-check')
-  .description('Repair ingest synthesis (gaps + Derived/Visual) and exit non-zero if it was stale')
-  .option('--project <dir>', 'Project directory (defaults to cwd)')
-  .option('--json', 'Emit JSON instead of human-readable output')
-  .action(ingestCheckCommand);
+  program
+    .command('ingest-check')
+    .description('Repair ingest synthesis (gaps + Derived/Visual) and exit non-zero if it was stale')
+    .option('--project <dir>', 'Project directory (defaults to cwd)')
+    .option('--json', 'Emit JSON instead of human-readable output')
+    .action(ingestCheckCommand);
 
-program
-  .command('ingest-slice-source <document> <slices...>')
-  .description('Record in each slice which archived document it was transcribed from (a rulebook/source/ path INDEX.md records)')
-  .option('--project <dir>', 'Project directory (defaults to cwd)')
-  .option('--json', 'Emit JSON instead of human-readable output')
-  .action(async (document: string, slices: string[], options) => {
-    await ingestSliceSourceCommand(document, slices, options);
-  });
+  program
+    .command('ingest-slice-source <document> <slices...>')
+    .description('Record in each slice which archived document it was transcribed from (a rulebook/source/ path INDEX.md records)')
+    .option('--project <dir>', 'Project directory (defaults to cwd)')
+    .option('--json', 'Emit JSON instead of human-readable output')
+    .action(async (document: string, slices: string[], options) => {
+      await ingestSliceSourceCommand(document, slices, options);
+    });
 
-program
-  .command('ingest-relabel')
-  .description('Relabel Derived (p. lines that are pure presentation descriptions as Visual (p.')
-  .option('--project <dir>', 'Project directory (defaults to cwd)')
-  .option('--dry-run', 'Report what would change without writing')
-  .option('--json', 'Emit JSON instead of human-readable output')
-  .action(discardResult(ingestRelabelCommand));
+  program
+    .command('ingest-relabel')
+    .description('Relabel Derived (p. lines that are pure presentation descriptions as Visual (p.')
+    .option('--project <dir>', 'Project directory (defaults to cwd)')
+    .option('--dry-run', 'Report what would change without writing')
+    .option('--json', 'Emit JSON instead of human-readable output')
+    .action(discardResult(ingestRelabelCommand));
 
-// Provenance: record or repair a chunk's `## Verified Against` block. Same mechanical-work-
-// belongs-in-code rationale as the ingest-* family above (171-CONTEXT.md).
-program
-  .command('chunk-check <slug>')
-  .description("Record or repair a chunk's Verified Against provenance block, and exit non-zero if it was stale")
-  .option('--project <dir>', 'Project directory (defaults to cwd)')
-  .option(
-    '--reverified-no-code-change <range>',
-    'Record a re-verification that found no code change (e.g. <verified-hash>..<head> — 0 manifest files changed)',
-  )
-  .option('--json', 'Emit JSON instead of human-readable output')
-  .action(chunkCheckCommand);
+  // Provenance: record or repair a chunk's `## Verified Against` block. Same mechanical-work-
+  // belongs-in-code rationale as the ingest-* family above (171-CONTEXT.md).
+  program
+    .command('chunk-check <slug>')
+    .description("Record or repair a chunk's Verified Against provenance block, and exit non-zero if it was stale")
+    .option('--project <dir>', 'Project directory (defaults to cwd)')
+    .option(
+      '--reverified-no-code-change <range>',
+      'Record a re-verification that found no code change (e.g. <verified-hash>..<head> — 0 manifest files changed)',
+    )
+    .option('--json', 'Emit JSON instead of human-readable output')
+    .action(chunkCheckCommand);
 
-// The build skill's test-step gate (#290): the Spec Manifest maps to real tests, every verb the
-// chunk added runs through the engine, no guard is called unreachable, and a mutation run shows
-// every claim's tests can fail. Exits non-zero on any finding.
-program
-  .command('test-step-check <slug>')
-  .description(
-    "Check that a chunk's tests can fail: Spec Manifest claims have tests, new verbs are dispatched through the engine, and mutating the chunk's code breaks every test",
-  )
-  .option('--project <dir>', 'Project directory (defaults to cwd)')
-  .option('--json', 'Emit JSON instead of human-readable output')
-  .action(testStepCheckCommand);
+  // The build skill's test-step gate (#290): the Spec Manifest maps to real tests, every verb the
+  // chunk added runs through the engine, no guard is called unreachable, and a mutation run shows
+  // every claim's tests can fail. Exits non-zero on any finding.
+  program
+    .command('test-step-check <slug>')
+    .description(
+      "Check that a chunk's tests can fail: Spec Manifest claims have tests, new verbs are dispatched through the engine, and mutating the chunk's code breaks every test",
+    )
+    .option('--project <dir>', 'Project directory (defaults to cwd)')
+    .option('--json', 'Emit JSON instead of human-readable output')
+    .action(testStepCheckCommand);
 
-// Issue #289: every Interpretation claim carries an exact quote and its location, and the quote
-// must be there. Read-only; exits non-zero on any refused claim so a build session cannot pass it.
-program
-  .command('claim-quote-check <slug>')
-  .description("Refuse a chunk's Interpretation claims that carry no exact source quote, or whose quote is not at its cited location")
-  .option('--project <dir>', 'Project directory (defaults to cwd)')
-  .option('--json', 'Emit JSON (the quotes and their sources, without the claim text) instead of human-readable output')
-  .action(claimQuoteCheckCommand);
+  // Issue #289: every Interpretation claim carries an exact quote and its location, and the quote
+  // must be there. Read-only; exits non-zero on any refused claim so a build session cannot pass it.
+  program
+    .command('claim-quote-check <slug>')
+    .description("Refuse a chunk's Interpretation claims that carry no exact source quote, or whose quote is not at its cited location")
+    .option('--project <dir>', 'Project directory (defaults to cwd)')
+    .option('--json', 'Emit JSON (the quotes and their sources, without the claim text) instead of human-readable output')
+    .action(claimQuoteCheckCommand);
 
-// #288: the project's hard constraints and every growing structure, checked as code. With no
-// slug it checks the whole tree, which is what a merge re-runs on the combined result.
-program
-  .command('constraint-check [slug]')
-  .description(
-    'Refuse uncapped growing state, hard constraints missing from design/CONSTRAINTS.md, and a failing measurement test; with a slug, also that chunk\'s constraints review',
-  )
-  .option('--project <dir>', 'Project directory (defaults to cwd)')
-  .option('--json', 'Emit JSON instead of human-readable output')
-  .action(constraintCheckCommand);
+  // #288: the project's hard constraints and every growing structure, checked as code. With no
+  // slug it checks the whole tree, which is what a merge re-runs on the combined result.
+  program
+    .command('constraint-check [slug]')
+    .description(
+      'Refuse uncapped growing state, hard constraints missing from design/CONSTRAINTS.md, and a failing measurement test; with a slug, also that chunk\'s constraints review',
+    )
+    .option('--project <dir>', 'Project directory (defaults to cwd)')
+    .option('--json', 'Emit JSON instead of human-readable output')
+    .action(constraintCheckCommand);
 
-// #291: a chunk's verified status is derived from a recorded sign-off, and a playtest waiver is
-// scoped to the chunks it names and expires. Both are written here and nowhere else, so
-// `chunk-check` can refuse a verified status these did not produce.
-program
-  .command('chunk-signoff <slug>')
-  .description(
-    "Record who signed a built chunk off, when, and on what basis, and derive its verified Status from it",
-  )
-  .option('--project <dir>', 'Project directory (defaults to cwd)')
-  .option('--by <designer>', "The designer's name (with --observed)")
-  .option('--observed <items>', 'Every Verified Checklist item the designer confirmed, e.g. 1,2,3')
-  .option('--waiver <id>', 'A designer waiver from design/WAIVERS.md that names this chunk, e.g. W2')
-  .option('--automated <evidence>', 'For a chunk with no designer playtest: the test and sim pass that stands in')
-  .action(chunkSignoffCommand);
+  // #291: a chunk's verified status is derived from a recorded sign-off, and a playtest waiver is
+  // scoped to the chunks it names and expires. Both are written here and nowhere else, so
+  // `chunk-check` can refuse a verified status these did not produce.
+  program
+    .command('chunk-signoff <slug>')
+    .description(
+      "Record who signed a built chunk off, when, and on what basis, and derive its verified Status from it",
+    )
+    .option('--project <dir>', 'Project directory (defaults to cwd)')
+    .option('--by <designer>', "The designer's name (with --observed)")
+    .option('--observed <items>', 'Every Verified Checklist item the designer confirmed, e.g. 1,2,3')
+    .option('--waiver <id>', 'A designer waiver from design/WAIVERS.md that names this chunk, e.g. W2')
+    .option('--automated <evidence>', 'For a chunk with no designer playtest: the test and sim pass that stands in')
+    .action(chunkSignoffCommand);
 
-program
-  .command('chunk-reopen <slug>')
-  .description('Send a verified chunk back to built for rework, voiding its sign-off')
-  .option('--project <dir>', 'Project directory (defaults to cwd)')
-  .requiredOption('--reason <text>', 'Why the chunk goes back for rework')
-  .action(chunkReopenCommand);
+  program
+    .command('chunk-reopen <slug>')
+    .description('Send a verified chunk back to built for rework, voiding its sign-off')
+    .option('--project <dir>', 'Project directory (defaults to cwd)')
+    .requiredOption('--reason <text>', 'Why the chunk goes back for rework')
+    .action(chunkReopenCommand);
 
-program
-  .command('chunk-waiver')
-  .description('Record a designer waiver of playtesting for the named chunks, until it expires')
-  .option('--project <dir>', 'Project directory (defaults to cwd)')
-  .requiredOption('--chunks <slugs>', 'Comma-separated chunk slugs the waiver covers, each one by name')
-  .requiredOption('--by <designer>', "The designer's name")
-  .requiredOption('--expires <date>', 'YYYY-MM-DD; the waiver ends after this day')
-  .requiredOption('--reason <text>', 'Why the designer waived these chunks')
-  .action(chunkWaiverCommand);
+  program
+    .command('chunk-waiver')
+    .description('Record a designer waiver of playtesting for the named chunks, until it expires')
+    .option('--project <dir>', 'Project directory (defaults to cwd)')
+    .requiredOption('--chunks <slugs>', 'Comma-separated chunk slugs the waiver covers, each one by name')
+    .requiredOption('--by <designer>', "The designer's name")
+    .requiredOption('--expires <date>', 'YYYY-MM-DD; the waiver ends after this day')
+    .requiredOption('--reason <text>', 'Why the designer waived these chunks')
+    .action(chunkWaiverCommand);
 
-program
-  .command('chunk-provenance-status')
-  .description('Report per-chunk verification provenance and drift (read-only)')
-  .option('--project <dir>', 'Project directory (defaults to cwd)')
-  .option('--json', 'Emit JSON instead of human-readable output')
-  .action(discardResult(chunkProvenanceStatusCommand));
+  program
+    .command('chunk-provenance-status')
+    .description('Report per-chunk verification provenance and drift (read-only)')
+    .option('--project <dir>', 'Project directory (defaults to cwd)')
+    .option('--json', 'Emit JSON instead of human-readable output')
+    .action(discardResult(chunkProvenanceStatusCommand));
 
-// CHECK-03/CHECK-05: the two source-free conformance sweeps (172-CONTEXT.md decisions 5-6).
-// Unlike chunk-check above, these never write a file and never repair anything — there is
-// nothing to repair, only findings to report — so they never exit non-zero for a finding.
-// Non-zero is reserved for a TOOL failure (not a bs- project, not a git repo, etc.).
-// `doctor` is the layout's migration path (issue #6): every design artifact belongs under
-// `design/`, every throwaway script under `.boardsmith/scratch/`. Report-by-default so a bare run
-// is safe to script, non-zero when anything is out of place so a skill notices without parsing
-// output, and idempotent so every bs- skill can open with it.
-program
-  .command('doctor')
-  .description("Check a game project's layout (design/ artifacts, stray scratch files) and optionally repair it")
-  .option('--project <dir>', 'Project directory (defaults to cwd)')
-  .option('--fix', 'Move misplaced files into place instead of only reporting them')
-  .option('--json', 'Emit JSON instead of human-readable output')
-  .option('--quiet', 'Suppress the human-readable report')
-  .action(discardResult(doctorCommand));
+  // CHECK-03/CHECK-05: the two source-free conformance sweeps (172-CONTEXT.md decisions 5-6).
+  // Unlike chunk-check above, these never write a file and never repair anything — there is
+  // nothing to repair, only findings to report — so they never exit non-zero for a finding.
+  // Non-zero is reserved for a TOOL failure (not a bs- project, not a git repo, etc.).
+  // `doctor` is the layout's migration path (issue #6): every design artifact belongs under
+  // `design/`, every throwaway script under `.boardsmith/scratch/`. Report-by-default so a bare run
+  // is safe to script, non-zero when anything is out of place so a skill notices without parsing
+  // output, and idempotent so every bs- skill can open with it.
+  program
+    .command('doctor')
+    .description("Check a game project's layout (design/ artifacts, stray scratch files) and optionally repair it")
+    .option('--project <dir>', 'Project directory (defaults to cwd)')
+    .option('--fix', 'Move misplaced files into place instead of only reporting them')
+    .option('--json', 'Emit JSON instead of human-readable output')
+    .option('--quiet', 'Suppress the human-readable report')
+    .action(discardResult(doctorCommand));
 
-program
-  .command('trace-check')
-  .description('Report traceability gaps between Interpretation claims, rulings, and tests (read-only)')
-  .option('--project <dir>', 'Project directory (defaults to cwd)')
-  .option('--json', 'Emit JSON instead of human-readable output')
-  .action(discardResult(traceCheckCommand));
+  program
+    .command('trace-check')
+    .description('Report traceability gaps between Interpretation claims, rulings, and tests (read-only)')
+    .option('--project <dir>', 'Project directory (defaults to cwd)')
+    .option('--json', 'Emit JSON instead of human-readable output')
+    .action(discardResult(traceCheckCommand));
 
-// #293: ledger integrity (duplicate numbers, supersession pointers, filing status, run-log
-// timestamps against the commits that recorded them). Unlike the report-only sweeps above, a
-// finding exits non-zero: close runs it as a gate. It reads the tree as it stands, so the same
-// command checks a combined tree at merge time.
-program
-  .command('ledger-check')
-  .description('Check the design ledgers and the run log for numbering, supersession, status and timestamp errors, and that every script or capture a ledger or verified chunk cites is committed')
-  .option('--project <dir>', 'Project directory (defaults to cwd)')
-  .option('--json', 'Emit JSON instead of human-readable output')
-  .action(ledgerCheckCommand);
+  // #293: ledger integrity (duplicate numbers, supersession pointers, filing status, run-log
+  // timestamps against the commits that recorded them). Unlike the report-only sweeps above, a
+  // finding exits non-zero: close runs it as a gate. It reads the tree as it stands, so the same
+  // command checks a combined tree at merge time.
+  program
+    .command('ledger-check')
+    .description('Check the design ledgers and the run log for numbering, supersession, status and timestamp errors, and that every script or capture a ledger or verified chunk cites is committed')
+    .option('--project <dir>', 'Project directory (defaults to cwd)')
+    .option('--json', 'Emit JSON instead of human-readable output')
+    .action(ledgerCheckCommand);
 
-// #294: chunks built at the same time. `parallel-check` decides, from the sketch's dependency
-// graph and the chunks' rulebook citations, whether they may be; `chunk-merge` is the serial gate
-// every such chunk's branch reaches the main line through, re-running the tree-wide checks on the
-// combined tree and refusing (leaving the main line unchanged) when it fails one.
-program
-  .command('parallel-check <slugs...>')
-  .description('Decide whether these chunks may be built at the same time: no dependency between them and no shared rulebook citation')
-  .option('--project <dir>', 'Project directory (defaults to cwd)')
-  .option('--json', 'Emit JSON instead of human-readable output')
-  .action(parallelCheckCommand);
+  // #294: chunks built at the same time. `parallel-check` decides, from the sketch's dependency
+  // graph and the chunks' rulebook citations, whether they may be; `chunk-merge` is the serial gate
+  // every such chunk's branch reaches the main line through, re-running the tree-wide checks on the
+  // combined tree and refusing (leaving the main line unchanged) when it fails one.
+  program
+    .command('parallel-check <slugs...>')
+    .description('Decide whether these chunks may be built at the same time: no dependency between them and no shared rulebook citation')
+    .option('--project <dir>', 'Project directory (defaults to cwd)')
+    .option('--json', 'Emit JSON instead of human-readable output')
+    .action(parallelCheckCommand);
 
-program
-  .command('chunk-merge <slug>')
-  .description(
-    "Merge a chunk's branch into the main line, one merge at a time: allocate ledger numbers, re-run every tree-wide check on the combined tree, and record cross-chunk references for the audit",
-  )
-  .option('--project <dir>', 'Project directory (defaults to cwd)')
-  .option('--branch <name>', "The chunk's branch (defaults to chunk/<slug>)")
-  .option('--json', 'Emit JSON instead of human-readable output')
-  .action(chunkMergeCommand);
+  program
+    .command('chunk-merge <slug>')
+    .description(
+      "Merge a chunk's branch into the main line, one merge at a time: allocate ledger numbers, re-run every tree-wide check on the combined tree, and record cross-chunk references for the audit",
+    )
+    .option('--project <dir>', 'Project directory (defaults to cwd)')
+    .option('--branch <name>', "The chunk's branch (defaults to chunk/<slug>)")
+    .option('--json', 'Emit JSON instead of human-readable output')
+    .action(chunkMergeCommand);
 
-program
-  .command('drift-check')
-  .description('Report chunks whose Build Manifest files changed since their verified commit (read-only)')
-  .option('--project <dir>', 'Project directory (defaults to cwd)')
-  .option('--json', 'Emit JSON instead of human-readable output')
-  .action(discardResult(driftCheckCommand));
+  program
+    .command('drift-check')
+    .description('Report chunks whose Build Manifest files changed since their verified commit (read-only)')
+    .option('--project <dir>', 'Project directory (defaults to cwd)')
+    .option('--json', 'Emit JSON instead of human-readable output')
+    .action(discardResult(driftCheckCommand));
 
-// Verify: staging-tree allocation + the append-only RUN.md resume ledger (VERIFY-02/VERIFY-08,
-// 173-CONTEXT.md decisions 5/9/11). Mechanical work belongs in code, not in skill text a session
-// executes from recall — same rationale as the ingest-*/chunk-check families above.
-program
-  .command('verify-run-init')
-  .description("Allocate (or resume) a verify pass's non-destructive staging tree and RUN.md resume ledger")
-  .option('--project <dir>', 'Project directory (defaults to cwd)')
-  .option('--run-id <id>', 'Resume an existing run instead of minting a fresh one')
-  .option(
-    '--ranges <json>',
-    'JSON object of page ranges keyed by archived document, covering every document rulebook/INDEX.md records, ' +
-      'e.g. \'{"rulebook/source/rules.pdf":["1-8","9-16"]}\' (decided once at first init; ignored when resuming an existing run)',
-  )
-  .option('--json', 'Emit JSON instead of human-readable output')
-  .action(async (options) => {
-    let ranges: Record<string, string[]> | undefined;
-    if (options.ranges !== undefined) {
-      const example = '--ranges \'{"rulebook/source/rules.pdf":["1-8","9-16"]}\'';
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(options.ranges);
-      } catch {
-        throw new Error(`--ranges must be valid JSON, e.g. ${example}`);
+  // Verify: staging-tree allocation + the append-only RUN.md resume ledger (VERIFY-02/VERIFY-08,
+  // 173-CONTEXT.md decisions 5/9/11). Mechanical work belongs in code, not in skill text a session
+  // executes from recall — same rationale as the ingest-*/chunk-check families above.
+  program
+    .command('verify-run-init')
+    .description("Allocate (or resume) a verify pass's non-destructive staging tree and RUN.md resume ledger")
+    .option('--project <dir>', 'Project directory (defaults to cwd)')
+    .option('--run-id <id>', 'Resume an existing run instead of minting a fresh one')
+    .option(
+      '--ranges <json>',
+      'JSON object of page ranges keyed by archived document, covering every document rulebook/INDEX.md records, ' +
+        'e.g. \'{"rulebook/source/rules.pdf":["1-8","9-16"]}\' (decided once at first init; ignored when resuming an existing run)',
+    )
+    .option('--json', 'Emit JSON instead of human-readable output')
+    .action(async (options) => {
+      let ranges: Record<string, string[]> | undefined;
+      if (options.ranges !== undefined) {
+        const example = '--ranges \'{"rulebook/source/rules.pdf":["1-8","9-16"]}\'';
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(options.ranges);
+        } catch {
+          throw new Error(`--ranges must be valid JSON, e.g. ${example}`);
+        }
+        const isRangeMap =
+          typeof parsed === 'object' &&
+          parsed !== null &&
+          !Array.isArray(parsed) &&
+          Object.values(parsed).every((v) => Array.isArray(v) && v.every((r) => typeof r === 'string'));
+        if (!isRangeMap) {
+          throw new Error(
+            `--ranges must map each archived document to its page ranges, e.g. ${example}`,
+          );
+        }
+        ranges = parsed as Record<string, string[]>;
       }
-      const isRangeMap =
-        typeof parsed === 'object' &&
-        parsed !== null &&
-        !Array.isArray(parsed) &&
-        Object.values(parsed).every((v) => Array.isArray(v) && v.every((r) => typeof r === 'string'));
-      if (!isRangeMap) {
-        throw new Error(
-          `--ranges must map each archived document to its page ranges, e.g. ${example}`,
-        );
-      }
-      ranges = parsed as Record<string, string[]>;
-    }
-    await verifyRunInitCommand({ ...options, ranges });
-  });
+      await verifyRunInitCommand({ ...options, ranges });
+    });
 
-program
-  .command('verify-run-record')
-  .description(
-    "Record a completed slice-unit, or a range-level marker, in a verify run's RUN.md ledger " +
-      '(idempotent). Exactly one of --unit (with --slice), --complete-range, or --reset-range.',
-  )
-  .requiredOption('--run-id <id>', 'The run to record against')
-  .option('--unit <unit-id>', 'The slice-unit id being recorded')
-  .option('--slice <path>', "Path to the written slice, relative to the run's staging dir")
-  .option('--range <range-id>', 'Tag this unit record with the manifest range it belongs to')
-  .option('--complete-range <range-id>', 'Mark a manifest range as fully recorded')
-  .option(
-    '--reset-range <range-id>',
-    'Supersede a partially-recorded range\'s prior units before redispatching it fresh',
-  )
-  .option('--project <dir>', 'Project directory (defaults to cwd)')
-  .option('--json', 'Emit JSON instead of human-readable output')
-  .action(discardResult(verifyRunRecordCommand));
+  program
+    .command('verify-run-record')
+    .description(
+      "Record a completed slice-unit, or a range-level marker, in a verify run's RUN.md ledger " +
+        '(idempotent). Exactly one of --unit (with --slice), --complete-range, or --reset-range.',
+    )
+    .requiredOption('--run-id <id>', 'The run to record against')
+    .option('--unit <unit-id>', 'The slice-unit id being recorded')
+    .option('--slice <path>', "Path to the written slice, relative to the run's staging dir")
+    .option('--range <range-id>', 'Tag this unit record with the manifest range it belongs to')
+    .option('--complete-range <range-id>', 'Mark a manifest range as fully recorded')
+    .option(
+      '--reset-range <range-id>',
+      'Supersede a partially-recorded range\'s prior units before redispatching it fresh',
+    )
+    .option('--project <dir>', 'Project directory (defaults to cwd)')
+    .option('--json', 'Emit JSON instead of human-readable output')
+    .action(discardResult(verifyRunRecordCommand));
 
-program
-  .command('verify-run-status')
-  .description('Report which slice-units are recorded for a verify run (read-only, machine-readable)')
-  .option('--project <dir>', 'Project directory (defaults to cwd)')
-  .option('--run-id <id>', 'Report on a specific run instead of the most recent')
-  .option('--json', 'Emit JSON instead of human-readable output')
-  .action(discardResult(verifyRunStatusCommand));
+  program
+    .command('verify-run-status')
+    .description('Report which slice-units are recorded for a verify run (read-only, machine-readable)')
+    .option('--project <dir>', 'Project directory (defaults to cwd)')
+    .option('--run-id <id>', 'Report on a specific run instead of the most recent')
+    .option('--json', 'Emit JSON instead of human-readable output')
+    .action(discardResult(verifyRunStatusCommand));
 
-// Verify classification: VERIFY-03's recordable, resumable verdicts on top of the same run-scoped
-// ledger (174-CONTEXT.md decision 5). Findings exit 0 (decision 7) — only a tool failure (unknown
-// run, no rulebook/) is non-zero.
-program
-  .command('verify-classify-pairs')
-  .description(
-    "Enumerate a verify run's live/staged slice pairs with provenance and rule-bearing line " +
-      'counts (read-only, machine-readable)',
-  )
-  .option('--project <dir>', 'Project directory (defaults to cwd)')
-  .option('--run-id <id>', 'Report on a specific run instead of the most recent')
-  .option('--live-slice <path>', 'Restrict the report to pairs containing this rulebook/ slice')
-  .option('--json', 'Emit JSON instead of human-readable output')
-  .action(discardResult(verifyClassifyPairsCommand));
+  // Verify classification: VERIFY-03's recordable, resumable verdicts on top of the same run-scoped
+  // ledger (174-CONTEXT.md decision 5). Findings exit 0 (decision 7) — only a tool failure (unknown
+  // run, no rulebook/) is non-zero.
+  program
+    .command('verify-classify-pairs')
+    .description(
+      "Enumerate a verify run's live/staged slice pairs with provenance and rule-bearing line " +
+        'counts (read-only, machine-readable)',
+    )
+    .option('--project <dir>', 'Project directory (defaults to cwd)')
+    .option('--run-id <id>', 'Report on a specific run instead of the most recent')
+    .option('--live-slice <path>', 'Restrict the report to pairs containing this rulebook/ slice')
+    .option('--json', 'Emit JSON instead of human-readable output')
+    .action(discardResult(verifyClassifyPairsCommand));
 
-program
-  .command('verify-classify-record')
-  .description(
-    'Record one classification verdict for a pair, atomically appended to the run\'s ledger ' +
-      '(stale and provenance are derived, never supplied)',
-  )
-  .option('--project <dir>', 'Project directory (defaults to cwd)')
-  .requiredOption('--run-id <id>', 'The run to record against')
-  .requiredOption('--pair-id <id>', 'The pair id to classify (see verify-classify-pairs)')
-  .option(
-    '--label <value>',
-    'cosmetic | sharper | contradictory — missing or unrecognized records "unclassified"',
-  )
-  .option('--evidence <text>', 'Free-prose evidence — nothing parses this')
-  .option(
-    '--quoted-pass1 <text>',
-    'Verbatim quote from the live (pass-1) slice — required for sharper/contradictory',
-  )
-  .option(
-    '--quoted-pass2 <text>',
-    'Verbatim quote from the staged (pass-2) slice — required for sharper/contradictory',
-  )
-  .option('--json', 'Emit JSON instead of human-readable output')
-  .action(discardResult(verifyClassifyRecordCommand));
+  program
+    .command('verify-classify-record')
+    .description(
+      'Record one classification verdict for a pair, atomically appended to the run\'s ledger ' +
+        '(stale and provenance are derived, never supplied)',
+    )
+    .option('--project <dir>', 'Project directory (defaults to cwd)')
+    .requiredOption('--run-id <id>', 'The run to record against')
+    .requiredOption('--pair-id <id>', 'The pair id to classify (see verify-classify-pairs)')
+    .option(
+      '--label <value>',
+      'cosmetic | sharper | contradictory — missing or unrecognized records "unclassified"',
+    )
+    .option('--evidence <text>', 'Free-prose evidence — nothing parses this')
+    .option(
+      '--quoted-pass1 <text>',
+      'Verbatim quote from the live (pass-1) slice — required for sharper/contradictory',
+    )
+    .option(
+      '--quoted-pass2 <text>',
+      'Verbatim quote from the staged (pass-2) slice — required for sharper/contradictory',
+    )
+    .option('--json', 'Emit JSON instead of human-readable output')
+    .action(discardResult(verifyClassifyRecordCommand));
 
-program
-  .command('verify-classify-status')
-  .description(
-    'Report which pairs still need classifying, summary counts, and per-chunk staleness ' +
-      'verdicts (read-only, machine-readable)',
-  )
-  .option('--project <dir>', 'Project directory (defaults to cwd)')
-  .option('--run-id <id>', 'Report on a specific run instead of the most recent')
-  .option('--json', 'Emit JSON instead of human-readable output')
-  .action(discardResult(verifyClassifyStatusCommand));
+  program
+    .command('verify-classify-status')
+    .description(
+      'Report which pairs still need classifying, summary counts, and per-chunk staleness ' +
+        'verdicts (read-only, machine-readable)',
+    )
+    .option('--project <dir>', 'Project directory (defaults to cwd)')
+    .option('--run-id <id>', 'Report on a specific run instead of the most recent')
+    .option('--json', 'Emit JSON instead of human-readable output')
+    .action(discardResult(verifyClassifyStatusCommand));
 
-// Verify impact / repair gating: VERIFY-04's contradiction gate, VERIFY-05's staleness write, and
-// VERIFY-06's repair-gate disposition (175-CONTEXT.md). Findings exit 0 (172-CONTEXT.md decision
-// 6) — only a tool failure (unknown run, no chunks/, missing RULINGS.md) is non-zero. None of
-// these commands registers a bypass option of any kind (decision 9) — a contradictory finding
-// always stops the pass and a stale write always refuses while any contradiction is pending.
-program
-  .command('verify-impact-gate')
-  .description(
-    'Report every contradictory verdict awaiting human adjudication, with both readings ' +
-      'quoted side by side (read-only, machine-readable)',
-  )
-  .option('--project <dir>', 'Project directory (defaults to cwd)')
-  .option('--run-id <id>', 'Report on a specific run instead of the most recent')
-  .option('--json', 'Emit JSON instead of human-readable output')
-  .action(discardResult(verifyImpactGateCommand));
+  // Verify impact / repair gating: VERIFY-04's contradiction gate, VERIFY-05's staleness write, and
+  // VERIFY-06's repair-gate disposition (175-CONTEXT.md). Findings exit 0 (172-CONTEXT.md decision
+  // 6) — only a tool failure (unknown run, no chunks/, missing RULINGS.md) is non-zero. None of
+  // these commands registers a bypass option of any kind (decision 9) — a contradictory finding
+  // always stops the pass and a stale write always refuses while any contradiction is pending.
+  program
+    .command('verify-impact-gate')
+    .description(
+      'Report every contradictory verdict awaiting human adjudication, with both readings ' +
+        'quoted side by side (read-only, machine-readable)',
+    )
+    .option('--project <dir>', 'Project directory (defaults to cwd)')
+    .option('--run-id <id>', 'Report on a specific run instead of the most recent')
+    .option('--json', 'Emit JSON instead of human-readable output')
+    .action(discardResult(verifyImpactGateCommand));
 
-program
-  .command('verify-impact-adjudicate')
-  .description(
-    "Record the human's resolution of one contradictory finding: append a RULINGS.md entry, " +
-      'or record it UNADJUDICATED',
-  )
-  .option('--project <dir>', 'Project directory (defaults to cwd)')
-  .option('--run-id <id>', 'Report on a specific run instead of the most recent')
-  .requiredOption('--pair-id <id>', 'The contradictory pair id to adjudicate (see the pending-adjudication report)')
-  .requiredOption('--outcome <resolved|UNADJUDICATED>', 'The recorded adjudication outcome')
-  .option('--decision <text>', "The human's decision, required for --outcome resolved")
-  .option('--citation <text>', 'Citation interpreted or overridden, required for --outcome resolved')
-  .option('--rationale <text>', 'Rationale, required for --outcome resolved')
-  .option('--json', 'Emit JSON instead of human-readable output')
-  .action(discardResult(verifyImpactAdjudicateCommand));
+  program
+    .command('verify-impact-adjudicate')
+    .description(
+      "Record the human's resolution of one contradictory finding: append a RULINGS.md entry, " +
+        'or record it UNADJUDICATED',
+    )
+    .option('--project <dir>', 'Project directory (defaults to cwd)')
+    .option('--run-id <id>', 'Report on a specific run instead of the most recent')
+    .requiredOption('--pair-id <id>', 'The contradictory pair id to adjudicate (see the pending-adjudication report)')
+    .requiredOption('--outcome <resolved|UNADJUDICATED>', 'The recorded adjudication outcome')
+    .option('--decision <text>', "The human's decision, required for --outcome resolved")
+    .option('--citation <text>', 'Citation interpreted or overridden, required for --outcome resolved')
+    .option('--rationale <text>', 'Rationale, required for --outcome resolved')
+    .option('--json', 'Emit JSON instead of human-readable output')
+    .action(discardResult(verifyImpactAdjudicateCommand));
 
-program
-  .command('verify-impact-apply')
-  .description(
-    "Write the rules-staleness marker into every affected chunk's CHUNK.md then SKETCH.md, and " +
-      "record the run's impact map (refuses while any contradiction is un-adjudicated)",
-  )
-  .option('--project <dir>', 'Project directory (defaults to cwd)')
-  .option('--run-id <id>', 'Report on a specific run instead of the most recent')
-  .option('--json', 'Emit JSON instead of human-readable output')
-  .action(discardResult(verifyImpactApplyCommand));
+  program
+    .command('verify-impact-apply')
+    .description(
+      "Write the rules-staleness marker into every affected chunk's CHUNK.md then SKETCH.md, and " +
+        "record the run's impact map (refuses while any contradiction is un-adjudicated)",
+    )
+    .option('--project <dir>', 'Project directory (defaults to cwd)')
+    .option('--run-id <id>', 'Report on a specific run instead of the most recent')
+    .option('--json', 'Emit JSON instead of human-readable output')
+    .action(discardResult(verifyImpactApplyCommand));
 
-program
-  .command('verify-impact-status')
-  .description(
-    "Report the run's impact map: which chunks are rules-stale, each one's line-level " +
-      "attributions, and whether repair re-opens its playtest gate (read-only, machine-readable)",
-  )
-  .option('--project <dir>', 'Project directory (defaults to cwd)')
-  .option('--run-id <id>', 'Report on a specific run instead of the most recent')
-  .option('--json', 'Emit JSON instead of human-readable output')
-  .action(discardResult(verifyImpactStatusCommand));
+  program
+    .command('verify-impact-status')
+    .description(
+      "Report the run's impact map: which chunks are rules-stale, each one's line-level " +
+        "attributions, and whether repair re-opens its playtest gate (read-only, machine-readable)",
+    )
+    .option('--project <dir>', 'Project directory (defaults to cwd)')
+    .option('--run-id <id>', 'Report on a specific run instead of the most recent')
+    .option('--json', 'Emit JSON instead of human-readable output')
+    .action(discardResult(verifyImpactStatusCommand));
 
-// CHECK-01 / CHECK-02 (176-CONTEXT.md): re-checking every RULINGS.md entry against the fresh
-// staged transcription, and reporting each rules-stale chunk's next repair step. Neither command
-// registers a bypass option of any kind — the same no-bypass discipline verify-impact-* holds.
-program
-  .command('verify-ruling-recheck')
-  .description(
-    "Re-check every RULINGS.md entry against the fresh staged transcription, reporting one of " +
-      'four verdicts (still-needed / resolved-by-source / contradicted / undetermined) per ' +
-      'non-superseded ruling (read-only, machine-readable)',
-  )
-  .option('--project <dir>', 'Project directory (defaults to cwd)')
-  .option('--run-id <id>', 'Report against a specific verify run instead of the most recent')
-  .option('--json', 'Emit JSON instead of human-readable output')
-  .action(discardResult(verifyRulingRecheckCommand));
+  // CHECK-01 / CHECK-02 (176-CONTEXT.md): re-checking every RULINGS.md entry against the fresh
+  // staged transcription, and reporting each rules-stale chunk's next repair step. Neither command
+  // registers a bypass option of any kind — the same no-bypass discipline verify-impact-* holds.
+  program
+    .command('verify-ruling-recheck')
+    .description(
+      "Re-check every RULINGS.md entry against the fresh staged transcription, reporting one of " +
+        'four verdicts (still-needed / resolved-by-source / contradicted / undetermined) per ' +
+        'non-superseded ruling (read-only, machine-readable)',
+    )
+    .option('--project <dir>', 'Project directory (defaults to cwd)')
+    .option('--run-id <id>', 'Report against a specific verify run instead of the most recent')
+    .option('--json', 'Emit JSON instead of human-readable output')
+    .action(discardResult(verifyRulingRecheckCommand));
 
-// `verify-ruling-record` is the ONLY write surface for CHECK-01's ledger, mirroring the
-// check/record pairing every sibling already had (verify-classify-record, verify-derive-record,
-// verify-example-record). Without it a dispatched ruling's verdict could be judged but never
-// recorded, so `verify-ruling-recheck` reported `pending` forever. Deliberately unlike
-// `verify-classify-record`, an unrecognized `--verdict` is NOT softened to a catch-all member:
-// CHECK-01's enum has none, and `undetermined` is a real judgment a subagent must choose, never a
-// coercion target. No bypass option of any kind, per the discipline noted above.
-program
-  .command('verify-ruling-record')
-  .description(
-    "Record one dispatched ruling's re-check verdict, atomically upsert-appended into the run's " +
-      'RULING-VERDICTS ledger (the ONLY write surface for CHECK-01)',
-  )
-  .option('--project <dir>', 'Project directory (defaults to cwd)')
-  .requiredOption('--run-id <id>', 'The verify run this verdict was judged against')
-  .requiredOption('--number <n>', 'The RULINGS.md entry number this verdict is for')
-  .requiredOption(
-    '--verdict <v>',
-    'still-needed | resolved-by-source | contradicted | undetermined',
-  )
-  .requiredOption(
-    '--reasoning <text>',
-    "The judgment's reasoning — the artifact this check exists to produce",
-  )
-  .option('--json', 'Emit JSON instead of human-readable output')
-  .action(discardResult(verifyRulingRecordCommand));
+  // `verify-ruling-record` is the ONLY write surface for CHECK-01's ledger, mirroring the
+  // check/record pairing every sibling already had (verify-classify-record, verify-derive-record,
+  // verify-example-record). Without it a dispatched ruling's verdict could be judged but never
+  // recorded, so `verify-ruling-recheck` reported `pending` forever. Deliberately unlike
+  // `verify-classify-record`, an unrecognized `--verdict` is NOT softened to a catch-all member:
+  // CHECK-01's enum has none, and `undetermined` is a real judgment a subagent must choose, never a
+  // coercion target. No bypass option of any kind, per the discipline noted above.
+  program
+    .command('verify-ruling-record')
+    .description(
+      "Record one dispatched ruling's re-check verdict, atomically upsert-appended into the run's " +
+        'RULING-VERDICTS ledger (the ONLY write surface for CHECK-01)',
+    )
+    .option('--project <dir>', 'Project directory (defaults to cwd)')
+    .requiredOption('--run-id <id>', 'The verify run this verdict was judged against')
+    .requiredOption('--number <n>', 'The RULINGS.md entry number this verdict is for')
+    .requiredOption(
+      '--verdict <v>',
+      'still-needed | resolved-by-source | contradicted | undetermined',
+    )
+    .requiredOption(
+      '--reasoning <text>',
+      "The judgment's reasoning — the artifact this check exists to produce",
+    )
+    .option('--json', 'Emit JSON instead of human-readable output')
+    .action(discardResult(verifyRulingRecordCommand));
 
-program
-  .command('verify-repair')
-  .description(
-    "Report each rules-stale chunk's fresh staged slice paths and its next verify-episode audit " +
-      'round plan (read-only, machine-readable) — dispatching the audit lenses and the repair ' +
-      'loop itself is verify/repair-dispatch.md\'s job, never this command\'s',
-  )
-  .option('--project <dir>', 'Project directory (defaults to cwd)')
-  .option('--run-id <id>', 'Report against a specific verify run instead of the most recent')
-  .option('--json', 'Emit JSON instead of human-readable output')
-  .action(discardResult(verifyRepairStatusCommand));
+  program
+    .command('verify-repair')
+    .description(
+      "Report each rules-stale chunk's fresh staged slice paths and its next verify-episode audit " +
+        'round plan (read-only, machine-readable) — dispatching the audit lenses and the repair ' +
+        'loop itself is verify/repair-dispatch.md\'s job, never this command\'s',
+    )
+    .option('--project <dir>', 'Project directory (defaults to cwd)')
+    .option('--run-id <id>', 'Report against a specific verify run instead of the most recent')
+    .option('--json', 'Emit JSON instead of human-readable output')
+    .action(discardResult(verifyRepairStatusCommand));
 
-// CHECK-04 (177.1-CONTEXT.md decision 2): dual-enumeration derived-line check — two
-// independently-dispatched enumerators (claude-opus-5, claude-haiku-4-5-20251001) each read a
-// slice's quote lines, a reconciler (claude-sonnet-5) grounds their overlap and cross-checks it
-// against every `Derived (p.N):` line, and the CLI classifies each into one of eight verdicts
-// (corroborated / corroborated-by-composition / uncorroborated / contradicted /
-// quote-unverified / absence-corroborated / absence-contradicted / absence-unverifiable). Advisory
-// — the check always exits 0; a non-corroboration is worth a human glance, never a build gate.
-// Both commands are project-level and source-free BY CONSTRUCTION — neither registers --run-id
-// or any bypass option of any kind. `verify-derive-record` is the ONLY write surface for
-// CHECK-04's ledger (carried forward from CR-05).
-program
-  .command('verify-derive-check')
-  .description(
-    'Enumerate every rule-bearing Derived line project-wide, join each to its recorded ' +
-      'dual-enumeration verdict, and hand back the exact enumerator dispatch payload for every ' +
-      'slice still pending (read-only, project-level, source-free, machine-readable, exits 0 ' +
-      'unconditionally)',
-  )
-  .option('--project <dir>', 'Project directory (defaults to cwd)')
-  .option('--json', 'Emit JSON instead of human-readable output')
-  .action(discardResult(verifyDeriveCheckCommand));
+  // CHECK-04 (177.1-CONTEXT.md decision 2): dual-enumeration derived-line check — two
+  // independently-dispatched enumerators (claude-opus-5, claude-haiku-4-5-20251001) each read a
+  // slice's quote lines, a reconciler (claude-sonnet-5) grounds their overlap and cross-checks it
+  // against every `Derived (p.N):` line, and the CLI classifies each into one of eight verdicts
+  // (corroborated / corroborated-by-composition / uncorroborated / contradicted /
+  // quote-unverified / absence-corroborated / absence-contradicted / absence-unverifiable). Advisory
+  // — the check always exits 0; a non-corroboration is worth a human glance, never a build gate.
+  // Both commands are project-level and source-free BY CONSTRUCTION — neither registers --run-id
+  // or any bypass option of any kind. `verify-derive-record` is the ONLY write surface for
+  // CHECK-04's ledger (carried forward from CR-05).
+  program
+    .command('verify-derive-check')
+    .description(
+      'Enumerate every rule-bearing Derived line project-wide, join each to its recorded ' +
+        'dual-enumeration verdict, and hand back the exact enumerator dispatch payload for every ' +
+        'slice still pending (read-only, project-level, source-free, machine-readable, exits 0 ' +
+        'unconditionally)',
+    )
+    .option('--project <dir>', 'Project directory (defaults to cwd)')
+    .option('--json', 'Emit JSON instead of human-readable output')
+    .action(discardResult(verifyDeriveCheckCommand));
 
-program
-  .command('verify-derive-record')
-  .description(
-    "Read one slice's two enumerator returns and its reconciler return, classify every " +
-      "Derived line into one of CHECK-04's eight dual-enumeration verdicts, and atomically " +
-      'upsert-append every classification into the project-level ledger (the ONLY write ' +
-      'surface for CHECK-04)',
-  )
-  .option('--project <dir>', 'Project directory (defaults to cwd)')
-  .requiredOption('--slice-path <path>', 'The rulebook/ slice the Derived lines live in')
-  .requiredOption('--enumerator-a <file>', "Enumerator A's structured JSON return (claude-opus-5)")
-  .requiredOption(
-    '--enumerator-b <file>',
-    "Enumerator B's structured JSON return (claude-haiku-4-5-20251001)",
-  )
-  .requiredOption(
-    '--reconciler <file>',
-    "The reconciler's structured JSON return (claude-sonnet-5)",
-  )
-  .option('--json', 'Emit JSON instead of human-readable output')
-  .action(discardResult(verifyDeriveRecordCommand));
+  program
+    .command('verify-derive-record')
+    .description(
+      "Read one slice's two enumerator returns and its reconciler return, classify every " +
+        "Derived line into one of CHECK-04's eight dual-enumeration verdicts, and atomically " +
+        'upsert-append every classification into the project-level ledger (the ONLY write ' +
+        'surface for CHECK-04)',
+    )
+    .option('--project <dir>', 'Project directory (defaults to cwd)')
+    .requiredOption('--slice-path <path>', 'The rulebook/ slice the Derived lines live in')
+    .requiredOption('--enumerator-a <file>', "Enumerator A's structured JSON return (claude-opus-5)")
+    .requiredOption(
+      '--enumerator-b <file>',
+      "Enumerator B's structured JSON return (claude-haiku-4-5-20251001)",
+    )
+    .requiredOption(
+      '--reconciler <file>',
+      "The reconciler's structured JSON return (claude-sonnet-5)",
+    )
+    .option('--json', 'Emit JSON instead of human-readable output')
+    .action(discardResult(verifyDeriveRecordCommand));
 
-// CHECK-06 (178-CONTEXT.md decision 12): worked-example replay — an extractor turns a rulebook
-// slice's worked examples into structured specs, a translator turns each spec into a runnable
-// test against the real engine, and the CLI records one of four verdicts (agrees / disagrees /
-// example-inconsistent / unexecutable) per example. A `disagrees` verdict is gated on quote
-// provenance (`QuoteVerifiedProvenance`): only when the example's supporting quotes are verified
-// against an archived, hash-verified source is a mismatch reported as a genuine code defect —
-// otherwise it is downgraded to an explicitly lower-confidence finding, never a confident
-// accusation against the code. `verify-example-replay` is advisory on the verify side (always
-// exits 0); the build side's own consumer (`build/test.md`) treats a mismatch as build-blocking.
-// Both commands are project-level and source-free BY CONSTRUCTION — neither registers a run
-// identifier flag or any bypass option of any kind. `verify-example-record` is the ONLY write
-// surface for CHECK-06's ledger. `verify-example-translate` produces the SECOND dispatch's
-// payload from the FIRST dispatch's return; it writes nothing, and it is what skill prose cites
-// instead of describing the game's API surface.
-program
-  .command('verify-example-replay')
-  .description(
-    'Enumerate every live rulebook slice project-wide, join each to its recorded worked-example ' +
-      'replay verdicts, and hand back the extraction dispatch payload for every slice still ' +
-      'pending (read-only, project-level, source-free, machine-readable, exits 0 unconditionally)',
-  )
-  .option('--project <dir>', 'Project directory (defaults to cwd)')
-  .option('--json', 'Emit JSON instead of human-readable output')
-  .option('--chunk <slug>', 'Scope the report to exactly one chunk\'s cited slices')
-  .action(discardResult(verifyExampleReplayCommand));
+  // CHECK-06 (178-CONTEXT.md decision 12): worked-example replay — an extractor turns a rulebook
+  // slice's worked examples into structured specs, a translator turns each spec into a runnable
+  // test against the real engine, and each example ends with one verdict: example-inconsistent
+  // (extractor), unexecutable (translator), or agrees/disagrees, observed by running the test
+  // (`verify-example-run`). A `disagrees` verdict is gated on quote provenance
+  // (`QuoteVerifiedProvenance`): only when the example's supporting quotes are verified against an
+  // archived, hash-verified source is a mismatch reported as a genuine code defect — otherwise it
+  // is downgraded to an explicitly lower-confidence finding. `verify-example-replay` is advisory on
+  // the verify side (always exits 0); the build side's own consumer (`build/test.md`) treats a
+  // mismatch as build-blocking. None of these commands registers a run identifier flag or any
+  // bypass option. `verify-example-translate` produces the SECOND dispatch's payload from the
+  // FIRST dispatch's return; it writes nothing, and it is what skill prose cites instead of
+  // describing the game's API surface. `verify-example-record` and `verify-example-run` are the
+  // only ledger writers; `verify-example-emit` is the only test-file writer.
+  program
+    .command('verify-example-replay')
+    .description(
+      'Enumerate every live rulebook slice project-wide, join each to its recorded worked-example ' +
+        'replay verdicts, and hand back the extraction dispatch payload for every slice still ' +
+        'pending (read-only, project-level, source-free, machine-readable, exits 0 unconditionally)',
+    )
+    .option('--project <dir>', 'Project directory (defaults to cwd)')
+    .option('--json', 'Emit JSON instead of human-readable output')
+    .option('--chunk <slug>', 'Scope the report to exactly one chunk\'s cited slices')
+    .action(discardResult(verifyExampleReplayCommand));
 
-program
-  .command('verify-example-record')
-  .description(
-    "Read one slice's extractor and translator structured JSON returns, gate every mismatch on " +
-      "quote provenance, and atomically upsert-append every worked-example verdict into the " +
-      "project-level ledger (the ONLY write surface for CHECK-06)",
-  )
-  .option('--project <dir>', 'Project directory (defaults to cwd)')
-  .requiredOption('--slice-path <path>', 'The rulebook/ slice the worked examples live in')
-  .requiredOption('--extraction <file>', "The extractor's structured JSON return")
-  .requiredOption('--translation <file>', "The translator's structured JSON return")
-  .option('--json', 'Emit JSON instead of human-readable output')
-  .action(discardResult(verifyExampleRecordCommand));
+  program
+    .command('verify-example-record')
+    .description(
+      "Read one slice's extractor and translator returns and record each worked example in the " +
+        'project-level ledger: example-inconsistent, unexecutable, or not-run with its translated ' +
+        'test (verify-example-run later observes agrees/disagrees)',
+    )
+    .option('--project <dir>', 'Project directory (defaults to cwd)')
+    .requiredOption('--slice-path <path>', 'The rulebook/ slice the worked examples live in')
+    .requiredOption('--extraction <file>', "The extractor's return, { \"examples\": [...] }, unchanged")
+    .requiredOption(
+      '--translations <file>',
+      'One JSON object mapping each exampleId verify-example-translate printed to that ' +
+        "example's translator return, unchanged",
+    )
+    .option('--json', 'Emit JSON instead of human-readable output')
+    .action(discardResult(verifyExampleRecordCommand));
 
-program
-  .command('verify-example-translate')
-  .description(
-    "Read one slice's extractor structured JSON return, assign every surviving example's " +
-      'identity itself, and emit its translation dispatch payload built from the generated ' +
-      "project's real exported API surface (read-only, writes nothing, exits 0 unconditionally)",
-  )
-  .option('--project <dir>', 'Project directory (defaults to cwd)')
-  .requiredOption('--slice-path <path>', 'The rulebook/ slice the worked examples live in')
-  .requiredOption('--extraction <file>', "The extractor's structured JSON return")
-  .option('--json', 'Emit JSON instead of human-readable output')
-  .action(discardResult(verifyExampleTranslateCommand));
+  program
+    .command('verify-example-translate')
+    .description(
+      "Read one slice's extractor structured JSON return, assign every surviving example's " +
+        'identity itself, and emit its translation dispatch payload built from the generated ' +
+        "project's real exported API surface (read-only, writes nothing, exits 0 unconditionally)",
+    )
+    .option('--project <dir>', 'Project directory (defaults to cwd)')
+    .requiredOption('--slice-path <path>', 'The rulebook/ slice the worked examples live in')
+    .requiredOption('--extraction <file>', "The extractor's return, { \"examples\": [...] }, unchanged")
+    .option('--json', 'Emit JSON instead of human-readable output')
+    .action(discardResult(verifyExampleTranslateCommand));
 
-// VERIFY-09 (179-CONTEXT.md decision 1/4): source-free mode's one read-only CLI surface, over the
-// step -> defect-class mapping and computation `verify-source-free.ts` owns. This command RENDERS
-// `computeSourceFreeReport`'s pure result; it computes nothing itself.
-//
-// NO `--source-free`, no forcing flag, no `--assume-full`, and no scope-override option is
-// registered here, now or ever: source-free is entered from disk state alone (the same
-// `computeVerificationScope` every sibling provenance path already uses), never declared by a
-// caller. A scope-declaring flag here is exactly how a project that HAS source could claim a
-// reduced pass while still looking verified.
-//
-// Exit code is always 0 absent a genuine tool failure (an unreadable `--project` directory) —
-// a reduced, honestly-degraded pass is a SUCCESSFUL pass, never a failure.
-program
-  .command('verify-source-free-check')
-  .description(
-    "Report a project's verification mode (full or source-free), its reduced scope and reason " +
-      'when reduced, and every designer-facing defect class that goes unchecked as a result ' +
-      '(read-only, source-free by construction, machine-readable, exits 0 unconditionally)',
-  )
-  .option('--project <dir>', 'Project directory (defaults to cwd)')
-  .option('--json', 'Emit JSON instead of human-readable output')
-  .action(discardResult(verifySourceFreeCheckCommand));
+  // VERIFY-09 (179-CONTEXT.md decision 1/4): source-free mode's one read-only CLI surface, over the
+  // step -> defect-class mapping and computation `verify-source-free.ts` owns. This command RENDERS
+  // `computeSourceFreeReport`'s pure result; it computes nothing itself.
+  //
+  // NO `--source-free`, no forcing flag, no `--assume-full`, and no scope-override option is
+  // registered here, now or ever: source-free is entered from disk state alone (the same
+  // `computeVerificationScope` every sibling provenance path already uses), never declared by a
+  // caller. A scope-declaring flag here is exactly how a project that HAS source could claim a
+  // reduced pass while still looking verified.
+  //
+  // Exit code is always 0 absent a genuine tool failure (an unreadable `--project` directory) —
+  // a reduced, honestly-degraded pass is a SUCCESSFUL pass, never a failure.
+  program
+    .command('verify-source-free-check')
+    .description(
+      "Report a project's verification mode (full or source-free), its reduced scope and reason " +
+        'when reduced, and every designer-facing defect class that goes unchecked as a result ' +
+        '(read-only, source-free by construction, machine-readable, exits 0 unconditionally)',
+    )
+    .option('--project <dir>', 'Project directory (defaults to cwd)')
+    .option('--json', 'Emit JSON instead of human-readable output')
+    .action(discardResult(verifySourceFreeCheckCommand));
 
-// VERIFY-09/PROV-02 (179-CONTEXT.md decision "WIRE IT"): a verify pass's Close durably records
-// `## Verified Against` provenance for exactly the chunks it evaluated, reusing the ONE fenced
-// writer (`recordVerifiedAgainst`, `chunk-provenance.ts`) `chunk-check` itself calls — never a
-// second write path. The touched set is derived from `drift-check`'s own evaluated set, plus a
-// staging run's ledger impact records when `--run` names one; this command never lists `chunks/`
-// itself, so it can only ever record what a check actually looked at.
-//
-// NO scope-declaring option of any kind is registered here, now or ever: scope comes only from
-// `computeVerificationScope(projectDir)` and disk state, per 171-CONTEXT.md decision 1 — no
-// forcing flag, no `--source-free`, no `--assume-full`, no scope-override option.
-//
-// Exit code is ALWAYS 0 absent a genuine tool failure (an unreadable `--project`, a `--run` naming
-// a run whose ledger does not exist) — deliberately UNLIKE `chunk-check`, which repairs-then-fails.
-// A Close reports; it does not gate. A per-chunk write failure lands in `errors[]`, is printed
-// loudly to stderr, and does not abort the remaining chunks or set a non-zero exit code.
-program
-  .command('verify-close-record')
-  .description(
-    "Durably record a verify pass's `## Verified Against` provenance for exactly the chunks it " +
-      'evaluated, through the same fenced writer chunk-check uses (never a gate — exits 0 even ' +
-      'when an individual chunk fails, reporting the failure loudly instead)',
-  )
-  .option('--project <dir>', 'Project directory (defaults to cwd)')
-  .option(
-    '--run <run-id>',
-    "The staging run whose impact-record affected slugs to include (optional — absent in " +
-      'source-free mode, where no run ledger exists)',
-  )
-  .option('--json', 'Emit JSON instead of human-readable output')
-  .action(discardResult(verifyCloseRecordCommand));
+  // VERIFY-09/PROV-02 (179-CONTEXT.md decision "WIRE IT"): a verify pass's Close durably records
+  // `## Verified Against` provenance for exactly the chunks it evaluated, reusing the ONE fenced
+  // writer (`recordVerifiedAgainst`, `chunk-provenance.ts`) `chunk-check` itself calls — never a
+  // second write path. The touched set is derived from `drift-check`'s own evaluated set, plus a
+  // staging run's ledger impact records when `--run` names one; this command never lists `chunks/`
+  // itself, so it can only ever record what a check actually looked at.
+  //
+  // NO scope-declaring option of any kind is registered here, now or ever: scope comes only from
+  // `computeVerificationScope(projectDir)` and disk state, per 171-CONTEXT.md decision 1 — no
+  // forcing flag, no `--source-free`, no `--assume-full`, no scope-override option.
+  //
+  // Exit code is ALWAYS 0 absent a genuine tool failure (an unreadable `--project`, a `--run` naming
+  // a run whose ledger does not exist) — deliberately UNLIKE `chunk-check`, which repairs-then-fails.
+  // A Close reports; it does not gate. A per-chunk write failure lands in `errors[]`, is printed
+  // loudly to stderr, and does not abort the remaining chunks or set a non-zero exit code.
+  program
+    .command('verify-close-record')
+    .description(
+      "Durably record a verify pass's `## Verified Against` provenance for exactly the chunks it " +
+        'evaluated, through the same fenced writer chunk-check uses (never a gate — exits 0 even ' +
+        'when an individual chunk fails, reporting the failure loudly instead)',
+    )
+    .option('--project <dir>', 'Project directory (defaults to cwd)')
+    .option(
+      '--run <run-id>',
+      "The staging run whose impact-record affected slugs to include (optional — absent in " +
+        'source-free mode, where no run ledger exists)',
+    )
+    .option('--json', 'Emit JSON instead of human-readable output')
+    .action(discardResult(verifyCloseRecordCommand));
 
-// TEST-01 (178-CONTEXT.md decision 8): the build-side write surface — one generated example-test
-// file per chunk (`tests/examples/<chunk>.examples.test.ts`), written idempotently and atomically.
-// Reads the CHECK-06 ledger to learn which worked examples a chunk's cited slices carry and each
-// one's verdict; `unexecutable`/`example-inconsistent` records are named-reason comments, never a
-// test (decision 7). Every OTHER record's translated test code — carried on `--translated`, the
-// third dispatch's structured return — is scanned against the measured GENERATED_TEST_SANDBOX_
-// RULES subset (`example-test-emit.ts`, `178-06-MEASUREMENT/RESULTS.md`) before it ever reaches
-// disk; a violation anywhere rejects the WHOLE emission. This command never writes the ledger —
-// `verify-example-record` is the only write surface for that — and `verify-example-record` never
-// writes a test file; the two write surfaces are disjoint by construction.
-program
-  .command('verify-example-emit')
-  .description(
-    "Write the one generated example-test file for --chunk from the CHECK-06 ledger's " +
-      "recorded verdicts plus the third dispatch's translated test code, scanned against the " +
-      'measured generated-test sandbox rule subset before it is ever written (idempotent, ' +
-      'atomic, one file per chunk)',
-  )
-  .option('--project <dir>', 'Project directory (defaults to cwd)')
-  .requiredOption('--chunk <slug>', "The chunk whose cited slices' worked examples to emit")
-  .option(
-    '--translated <file>',
-    "The translator's (third dispatch's) structured JSON return — required only when the " +
-      'chunk has at least one example recorded agrees/disagrees',
-  )
-  .option('--json', 'Emit JSON instead of human-readable output')
-  .action(discardResult(verifyExampleEmitCommand));
+  // TEST-01 (178-CONTEXT.md decision 8): the build-side write surface — one generated example-test
+  // file per chunk (`tests/examples/<chunk>.examples.test.ts`), written idempotently and atomically
+  // from the CHECK-06 ledger alone: every translated example's stored test, and a named-reason
+  // comment for each unexecutable/example-inconsistent one (decision 7). Every translated snippet
+  // is scanned against the measured GENERATED_TEST_SANDBOX_RULES subset (`example-test-emit.ts`)
+  // before anything is written; a violation anywhere rejects the WHOLE emission. This command never
+  // writes the ledger.
+  program
+    .command('verify-example-emit')
+    .description(
+      "Write the one generated example-test file for --chunk from the CHECK-06 ledger's " +
+        'translated tests, scanned against the measured generated-test sandbox rule subset before ' +
+        'it is ever written (idempotent, atomic, one file per chunk)',
+    )
+    .option('--project <dir>', 'Project directory (defaults to cwd)')
+    .requiredOption('--chunk <slug>', "The chunk whose cited slices' worked examples to emit")
+    .option('--json', 'Emit JSON instead of human-readable output')
+    .action(discardResult(verifyExampleEmitCommand));
 
-// Claude Code integration
-const claudeCmd = // Live-agent ingest harness (BoardSmith repo only, operator-invoked)
-program
-  .command('harness-ingest')
-  .description('Drive the live-agent /bs-ingest-rules produced-artifact harness (BoardSmith repo only)')
-  .argument('[args...]', 'Flags forwarded verbatim to the harness (pass --help for its options)')
-  .allowUnknownOption()
-  .helpOption(false)
-  .action(harnessIngestCommand);
+  // The only source of an agrees/disagrees verdict: runs --chunk's emitted example-test file with
+  // the project's own vitest and records each translated example's observed result. Refuses to run
+  // a file that no longer matches what verify-example-emit would write from the ledger.
+  program
+    .command('verify-example-run')
+    .description(
+      "Run --chunk's emitted example-test file with the project's vitest and record each " +
+        'translated worked example as agrees (its test passed) or disagrees (it failed)',
+    )
+    .option('--project <dir>', 'Project directory (defaults to cwd)')
+    .requiredOption('--chunk <slug>', "The chunk whose emitted example tests to run")
+    .option('--json', 'Emit JSON instead of human-readable output')
+    .action(discardResult(verifyExampleRunCommand));
 
-program
-  .command('claude')
-  .description('Install BoardSmith bs- skills for Claude Code')
-  .option('--force', 'Overwrite existing skills')
-  .option('--local', 'Install to current project instead of globally')
-  .action(installClaudeCommand);
+  // Claude Code integration
+  const claudeCmd = // Live-agent ingest harness (BoardSmith repo only, operator-invoked)
+  program
+    .command('harness-ingest')
+    .description('Drive the live-agent /bs-ingest-rules produced-artifact harness (BoardSmith repo only)')
+    .argument('[args...]', 'Flags forwarded verbatim to the harness (pass --help for its options)')
+    .allowUnknownOption()
+    .helpOption(false)
+    .action(harnessIngestCommand);
 
-claudeCmd
-  .command('uninstall')
-  .description('Remove BoardSmith bs- skills')
-  .option('--local', 'Uninstall from current project instead of globally')
-  .action(uninstallClaudeCommand);
+  program
+    .command('claude')
+    .description('Install BoardSmith bs- skills for Claude Code')
+    .option('--force', 'Overwrite existing skills')
+    .option('--local', 'Install to current project instead of globally')
+    .action(installClaudeCommand);
+
+  claudeCmd
+    .command('uninstall')
+    .description('Remove BoardSmith bs- skills')
+    .option('--local', 'Uninstall from current project instead of globally')
+    .action(uninstallClaudeCommand);
+
+  return program;
+}
 
 // `program.parse()` does not await async action handlers — a rejection from one (any command
 // that throws, e.g. an unreadable rulebook path or a missing chunk slug) would otherwise surface
@@ -877,9 +896,11 @@ claudeCmd
 // and this is the same guarantee `ingestCheckCommand`/`chunkCheckCommand` already give on their
 // own repair-then-fail terminal paths. `parseAsync()` awaits the action, so a thrown Error can be
 // caught here once, for every command, and reported as a clean one-line message instead.
-try {
-  await program.parseAsync();
-} catch (err) {
-  console.error(err instanceof Error ? err.message : String(err));
-  process.exitCode = 1;
+export async function runCli(): Promise<void> {
+  try {
+    await createProgram().parseAsync();
+  } catch (err) {
+    console.error(err instanceof Error ? err.message : String(err));
+    process.exitCode = 1;
+  }
 }

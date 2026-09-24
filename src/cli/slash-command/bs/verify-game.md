@@ -288,7 +288,8 @@ staleness verdicts and is not scoped to the chunks Step 6 touched. Run
 For each slice the command reports pending, dispatch that slice's `slices[].extractionPayload`
 UNCHANGED to a subagent carrying
 `${CLAUDE_SKILL_DIR}/../bs-shared/verify/extract-example.md`'s `BS-EXAMPLE-EXTRACT-V1` handshake,
-and save the returned structured object to a file.
+and save its return to a file UNCHANGED — the one `{ "examples": [...] }` object that contract
+returns.
 
 Obtain the SECOND dispatch's bytes from `boardsmith verify-example-translate --slice-path <p>
 --extraction <that return file> --json`, and dispatch each returned `payloads[].translationPayload`
@@ -298,18 +299,22 @@ handshake. Two dispatches, never one combined pass — a combined pass would let
 backward from code it can already see, producing agreement with itself rather than a real test of
 the printed example. This skill never composes a translation prompt itself: the game's exported
 API surface is collected mechanically by `verify-example-translate`, and restating it here would
-be the duplication this step exists to avoid. Entries the command reports under `notTranslated[]`
-(an `example-inconsistent` extraction) are passed straight through to the record command, never
-re-judged here.
+be the duplication this step exists to avoid. Save the slice's translator returns to ONE file, a
+JSON object filing each return unchanged under the `exampleId` its payload came with:
+`{ "<exampleId>": <that example's return>, ... }`. Entries the command reports under
+`notTranslated[]` (an `example-inconsistent` extraction) need no translation; the record command
+reads them from the extraction file, never re-judged here.
 
 Record through exactly ONE `boardsmith verify-example-record --slice-path <p> --extraction <f>
---translation <f>` invocation per SLICE — an atomic upsert-append, never a whole-ledger rewrite.
-Provenance gating, spec validation, and verdict classification all happen INSIDE that command,
-never in this skill.
+--translations <f>` invocation per SLICE — an atomic upsert-append, never a whole-ledger rewrite.
+Provenance gating, spec validation, and classification all happen INSIDE that command, never in
+this skill. A translated example is recorded `not-run`, carrying its test.
 
-Execute each translated test with the project's own test runner; the recorded verdict comes from
-actually running it and observing its pass/fail result — never from the translator's own
-`verdictHint`, which is a model's guess, not an observation.
+Then, for each chunk that cites a slice you recorded, run `boardsmith verify-example-emit --chunk
+<slug>` and `boardsmith verify-example-run --chunk <slug>`. The run executes the emitted tests with
+the project's own vitest and records `agrees` or `disagrees` from what actually happened — never
+from the translator's own `verdictHint`, which is a model's guess, not an observation. An example
+in a slice no chunk cites stays `not-run`, and the report says so.
 
 Report by formatting `boardsmith verify-example-replay --json`'s output — **formatted, never
 computed** by this skill, the same discipline Step 7 and Step 9's Close already hold. Report raw

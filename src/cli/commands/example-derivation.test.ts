@@ -625,6 +625,7 @@ describe('SC-3 — both pipeline sides derive from one module', () => {
   const VERIFY_GAME_MD_PATH = fileURLToPath(new URL('../slash-command/bs/verify-game.md', import.meta.url));
   const REPLAY_PATH = fileURLToPath(new URL('./verify-example-replay.ts', import.meta.url));
   const EMIT_PATH = fileURLToPath(new URL('./example-test-emit.ts', import.meta.url));
+  const RUN_PATH = fileURLToPath(new URL('./example-test-run.ts', import.meta.url));
   const SRC_DIR = fileURLToPath(new URL('../../', import.meta.url)); // src/
 
   // Every `.command('...')` registration in cli.ts, mapped to the source file its `.action(...)`
@@ -635,6 +636,7 @@ describe('SC-3 — both pipeline sides derive from one module', () => {
     'verify-example-record': './commands/verify-example-replay.js',
     'verify-example-translate': './commands/verify-example-replay.js',
     'verify-example-emit': './commands/example-test-emit.js',
+    'verify-example-run': './commands/example-test-run.js',
   };
 
   async function readAll(path: string): Promise<string> {
@@ -643,32 +645,42 @@ describe('SC-3 — both pipeline sides derive from one module', () => {
 
   it(
     '(a) every verify-example-* command cited by build/test.md and verify-game.md is registered ' +
-      "in cli.ts, and each registration's handler module transitively imports example-derivation.ts " +
+      "in cli.ts, and each registration's handler module reaches example-derivation.ts, directly or " +
+      'through verify-example-replay.ts (which test (b) pins to it) ' +
       '— fails the moment a skill cites a command that is never registered, or whose handler module ' +
       'stops importing example-derivation.ts',
     async () => {
-      const [buildTestMd, verifyGameMd, cliSource, replaySource, emitSource] = await Promise.all([
-        readAll(BUILD_TEST_MD_PATH),
-        readAll(VERIFY_GAME_MD_PATH),
-        readAll(CLI_PATH),
-        readAll(REPLAY_PATH),
-        readAll(EMIT_PATH),
-      ]);
+      const [buildTestMd, verifyGameMd, cliSource, replaySource, emitSource, runSource] =
+        await Promise.all([
+          readAll(BUILD_TEST_MD_PATH),
+          readAll(VERIFY_GAME_MD_PATH),
+          readAll(CLI_PATH),
+          readAll(REPLAY_PATH),
+          readAll(EMIT_PATH),
+          readAll(RUN_PATH),
+        ]);
 
       const citedCommands = new Set(
         [...buildTestMd.matchAll(/verify-example-[a-z]+/g), ...verifyGameMd.matchAll(/verify-example-[a-z]+/g)].map(
           (m) => m[0],
         ),
       );
-      // Both skills together must cite all four commands this milestone shipped — a citation
-      // going stale (e.g. a skill rewrite silently dropping one) fails here first.
+      // Both skills together must cite all five commands — a citation going stale (e.g. a skill
+      // rewrite silently dropping one) fails here first.
       expect([...citedCommands].sort()).toEqual(
-        ['verify-example-emit', 'verify-example-record', 'verify-example-replay', 'verify-example-translate'].sort(),
+        [
+          'verify-example-emit',
+          'verify-example-record',
+          'verify-example-replay',
+          'verify-example-run',
+          'verify-example-translate',
+        ].sort(),
       );
 
       const moduleSourceByPath: Record<string, string> = {
         './commands/verify-example-replay.js': replaySource,
         './commands/example-test-emit.js': emitSource,
+        './commands/example-test-run.js': runSource,
       };
 
       for (const command of citedCommands) {
@@ -679,12 +691,15 @@ describe('SC-3 — both pipeline sides derive from one module', () => {
         // Handler module resolves (mapping above is exact — derived from cli.ts's own imports).
         const handlerModule = COMMAND_TO_HANDLER_MODULE[command];
         expect(handlerModule, `no known handler module mapping for ${command}`).toBeDefined();
-        // That handler module transitively imports example-derivation.ts in ONE hop.
+        // That handler module reaches example-derivation.ts: directly, or through
+        // verify-example-replay.ts, which imports the shared builders from it (test (b)).
         const handlerSource = moduleSourceByPath[handlerModule];
         expect(
-          handlerSource,
-          `${command}'s handler module (${handlerModule}) must import from './example-derivation.js'`,
-        ).toContain("from './example-derivation.js'");
+          handlerSource.includes("from './example-derivation.js'") ||
+            handlerSource.includes("from './verify-example-replay.js'"),
+          `${command}'s handler module (${handlerModule}) must import from './example-derivation.js' ` +
+            `or './verify-example-replay.js'`,
+        ).toBe(true);
       }
     },
   );

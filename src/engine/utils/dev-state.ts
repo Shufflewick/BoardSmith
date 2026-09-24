@@ -28,7 +28,6 @@ import type { Game, GameOptions, MessageEntry } from '../element/game.js';
 import type { GameElement } from '../element/game-element.js';
 import type { ElementJSON, ElementClass, ElementContext } from '../element/types.js';
 import type { FlowPosition, FlowState } from '../flow/types.js';
-import { flowPositionPrefix } from '../flow/flow-navigation.js';
 import type { Player } from '../player/player.js';
 
 /**
@@ -526,78 +525,6 @@ export function formatValidationErrors(result: ValidationResult): string {
     }
   }
 
-  return lines.join('\n');
-}
-
-// ============================================================================
-// SECTION: Flow Position Validation
-// ============================================================================
-
-/**
- * Result of validating a flow position.
- */
-export interface FlowPositionValidation {
-  valid: boolean;
-  reason?: string;
-  /** Recovery position if the original position is invalid but recoverable */
-  recoveryPosition?: FlowPosition;
-}
-
-/**
- * Validate a flow position and compute a recovery position if invalid.
- * Uses the FlowEngine's tryRestore method to validate the path.
- *
- * @param snapshot - The dev snapshot containing the flow position
- * @param flowEngine - The flow engine to validate against
- * @returns Validation result with optional recovery position
- */
-export function validateFlowPosition(
-  snapshot: DevSnapshot,
-  flowEngine: { tryRestore: (pos: FlowPosition) => { success: true } | { success: false; error: string; validPath: number[] } }
-): FlowPositionValidation {
-  const flowPosition = snapshot.flowPosition;
-
-  // No flow position to validate
-  if (!flowPosition) {
-    return { valid: true };
-  }
-
-  // Empty path is always valid
-  if (flowPosition.path.length === 0) {
-    return { valid: true };
-  }
-
-  // Try to restore and check if it succeeds
-  const result = flowEngine.tryRestore(flowPosition);
-
-  if (result.success) {
-    return { valid: true };
-  }
-
-  return {
-    valid: false,
-    reason: result.error,
-    recoveryPosition: result.validPath.length > 0
-      ? flowPositionPrefix(flowPosition, result.validPath.length)
-      : undefined,
-  };
-}
-
-/**
- * Format flow recovery details for console output.
- */
-export function formatFlowRecovery(
-  original: FlowPosition,
-  recovery: FlowPosition,
-  reason: string
-): string {
-  const lines: string[] = [
-    '[HMR] Flow position recovery:',
-    `  Original position: [${original.path.join(', ')}]`,
-    `  ${reason}`,
-    `  Recovering to: [${recovery.path.join(', ')}]`,
-    `  Note: Game may need manual action to resume`,
-  ];
   return lines.join('\n');
 }
 
