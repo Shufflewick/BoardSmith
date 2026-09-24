@@ -1,4 +1,5 @@
 import { Player, type Game, type GameElement } from '../engine/index.js';
+import { constructGame } from '../engine/element/game.js';
 import type {
   GameStructure,
   ElementTypeInfo,
@@ -553,7 +554,7 @@ export function createIntrospectionGame<G extends Game>(
   GameClass: GameClass<G>,
   playerCount: number = 2
 ): G {
-  return new GameClass({
+  return constructGame(GameClass, {
     playerCount,
     seed: 'introspection',
   });

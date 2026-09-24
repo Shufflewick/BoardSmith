@@ -7,6 +7,7 @@ import noEval from './rules/no-eval.js';
 import noElementIdentityComparison from './rules/no-element-identity-comparison.js';
 import noElementArrayState from './rules/no-element-array-state.js';
 import noSilentDispatchFallthrough from './rules/no-silent-dispatch-fallthrough.js';
+import noEngineFieldShadow from './rules/no-engine-field-shadow.js';
 
 const base = {
   meta: {
@@ -23,6 +24,7 @@ const base = {
     'no-element-identity-comparison': noElementIdentityComparison,
     'no-element-array-state': noElementArrayState,
     'no-silent-dispatch-fallthrough': noSilentDispatchFallthrough,
+    'no-engine-field-shadow': noEngineFieldShadow,
   },
 };
 
@@ -44,6 +46,7 @@ const plugin = Object.assign(base, {
         'boardsmith/no-element-identity-comparison': 'error',
         'boardsmith/no-element-array-state': 'error',
         'boardsmith/no-silent-dispatch-fallthrough': 'error',
+        'boardsmith/no-engine-field-shadow': 'error',
       } satisfies Linter.RulesRecord,
     } satisfies Linter.Config,
   },
