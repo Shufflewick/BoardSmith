@@ -1800,10 +1800,41 @@ export class ActionExecutor {
     pendingState: PendingActionState,
     selectionName: string
   ): Record<string, unknown> {
+    const selection = action.selections.find(s => s.name === selectionName);
+    const picks = pendingState.repeating?.accumulated ?? [];
     return {
       ...this.resolveArgs(action, pendingState.collectedArgs, player),
-      [selectionName]: pendingState.repeating?.accumulated ?? [],
+      // A repeating chooseElement's picks are held as ids; its callbacks see
+      // the elements, as `execute` does.
+      [selectionName]: selection?.type === 'element' || selection?.type === 'elements'
+        ? picks.map(p => this.resolveElementItem(p))
+        : [...picks],
     };
+  }
+
+  /**
+   * Why a repeating selection's own `validate` refuses one pick, or `null` when
+   * it accepts it or there is none (#352). It is called with the pick (an
+   * element for an element selection), `args` holding the picks made before it
+   * under the selection's name, and the action context. A rule about the
+   * finished array belongs in the action-level `.validate()`.
+   */
+  private repeatPickRefusal(
+    action: ActionDefinition,
+    selection: Selection,
+    pick: unknown,
+    context: ActionContext
+  ): string | null {
+    if (!selection.validate) return null;
+    const value = selection.type === 'element' || selection.type === 'elements'
+      ? this.resolveElementItem(pick)
+      : pick;
+    const validate = selection.validate as (v: unknown, a: Record<string, unknown>, c: ActionContext) => boolean | string;
+    return interpretValidateResult(
+      validate(value, context.args, context),
+      `validate for selection '${selection.name}' of action '${action.name}'`,
+      `Invalid ${selection.name}`,
+    );
   }
 
   /**
@@ -1938,6 +1969,14 @@ export class ActionExecutor {
       if (disabledMatch) {
         return { done: false, error: `Selection disabled: ${disabledMatch.disabled}` };
       }
+    }
+
+    // The selection's own `validate` judges this ONE pick (#352), with the
+    // picks made before it in `args`, before anything can change the game: a
+    // refused pick leaves the repeat open and runs no onSelect/onEach.
+    const validateError = this.repeatPickRefusal(action, selection, value, context);
+    if (validateError) {
+      return { done: false, error: validateError };
     }
 
     // Add to accumulated values

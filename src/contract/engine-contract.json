@@ -1,7 +1,7 @@
 {
-  "revision": 101,
+  "revision": 102,
   "bundleProtocol": 2,
-  "surfaceHash": "b6a7dd54c9cc1432",
+  "surfaceHash": "a58f0fd492604bcc",
   "payloadHash": "80aba5002803deaa",
   "formatHash": "0058593e7cc80205",
   "history": [
@@ -853,6 +853,15 @@
       "payloadHash": "80aba5002803deaa",
       "formatHash": "0058593e7cc80205",
       "summary": "A repeating selection (chooseFrom/chooseElement with repeat or repeatUntil) now means one thing on every path that submits a move (#325): a whole 'action' op, a bot's move (botTurn), the random simulator and enumerateLegalMoves run each pick through onEach exactly as step-by-step picks do, and execute receives the picks as an array ending at the terminator (a repeating chooseElement's picks arrive as elements). A whole submission must send that array; a scalar or an unfinished repeat is refused by name, and a refusal after onEach ran is rolled back (ActionResult.threw and FlowState.actionThrew are renamed partiallyApplied and actionPartiallyApplied). ActionExecutor gains repeatingPickCandidates and pendingActionRefusal. The argument is now typed as an array (#347). Not breaking for built bundles: re-vendor so bots on the platform play repeats like humans."
+    },
+    {
+      "revision": 102,
+      "date": "2026-09-24",
+      "bundleProtocol": 2,
+      "surfaceHash": "a58f0fd492604bcc",
+      "payloadHash": "80aba5002803deaa",
+      "formatHash": "0058593e7cc80205",
+      "summary": "A repeating selection's own validate now runs, once per pick, on every path that submits a move (#352): it receives the pick (an element for chooseElement) with the picks made before it in args, a refused pick runs no onEach, a whole submission containing one is refused as 'Pick N of \"name\": <message>', and bots, the simulator and enumerateLegalMoves never offer it. A repeating chooseElement's callbacks now see its earlier picks as elements. Re-vendor so bots on the platform honour the rule."
     }
   ]
 }

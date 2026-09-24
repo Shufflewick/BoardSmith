@@ -132,7 +132,27 @@ A repeat means the same thing however the move arrives (#325). A player clicking
 picks, a whole `action` submission, a bot's move, the random simulator and
 `enumerateLegalMoves` all go through the one protocol in
 `ActionExecutor.processRepeatingStep`: each pick is checked against the choices
-the previous pick's `onEach` left, `onEach` runs for it, and `until` is tested.
+the previous pick's `onEach` left, then against the selection's own `validate`,
+then `onEach` runs for it, and `until` is tested.
+
+- **The selection's `validate` judges one pick at a time** (#352). It is called
+  with the pick (an element for `chooseElement`), `args` holding the picks made
+  before it under the selection's name (elements for `chooseElement`), and the
+  context, and it follows the usual contract: `true`, `false`, or a message. A
+  refused pick runs no `onEach` and leaves the repeat open, so a player can pick
+  again; a whole submission containing it is refused as
+  `Pick 2 of "rune": <your message>`; bots, the simulator and
+  `enumerateLegalMoves` never offer it. A rule about the finished array belongs
+  in the action-level `.validate()`, which sees `args.rune` as the whole array.
+
+  ```typescript
+  .chooseFrom('rune', {
+    choices: ['ice', 'fire', 'stop'],
+    repeatUntil: 'stop',
+    validate: (pick, args) =>                          // pick: string
+      !(pick === 'fire' && (args.rune as string[]).includes('ice')) || 'Fire cannot follow ice.',
+  })
+  ```
 
 - **A whole submission is the picks as an array**, in order, ending with the
   pick that ends the repeat. A single value, an array that never reaches the

@@ -66,6 +66,10 @@ export interface BaseSelection<T = unknown> {
    * For a rule that spans SELECTIONS, use the action-level `.validate()`
    * instead: hanging a whole-submission rule on one field breaks the moment the
    * selection order changes or that selection is optional and skipped.
+   *
+   * On a REPEATING selection (`repeat`/`repeatUntil`) it judges one pick at a
+   * time (#352): `value` is the pick, and `args[name]` holds the picks made
+   * before it. A refused pick runs no `onEach`.
    */
   validate?: (value: T, args: Record<string, unknown>, context: ActionContext) => boolean | string;
   /** Called after this step is resolved. Receives the resolved value and a restricted context. */
