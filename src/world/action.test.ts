@@ -478,6 +478,7 @@ describe("who may issue what", () => {
         allowance: STAMP.allowance,
         presence: [],
         activity: null,
+        declaredActivity: [],
       }),
     ).rejects.toThrow(/a due event has no player/);
   });
