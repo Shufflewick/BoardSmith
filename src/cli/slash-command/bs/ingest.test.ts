@@ -140,11 +140,38 @@ describe('INGEST-04 — scaffold with compile+serve verification', () => {
     expect(ingestRules).toContain('ingest/scaffold.md');
   });
 
-  it('scaffold.md names boardsmith init, tsc --noEmit, and an explicit kill instruction', () => {
+  it('scaffold.md names boardsmith init, vue-tsc --noEmit, and an explicit kill instruction', () => {
     const scaffold = read('ingest/scaffold.md');
     expect(scaffold).toContain('boardsmith init');
-    expect(scaffold).toContain('tsc --noEmit');
+    expect(scaffold).toContain('npx vue-tsc --noEmit');
     expect(scaffold).toMatch(/kill/i);
+  });
+});
+
+// #303: plain `tsc` cannot type a `.vue` import, so on a freshly scaffolded game it reports
+// TS2307 for every single-file component (the game's own and BoardSmith's) and can never be
+// clean. `vue-tsc` is the checker `boardsmith validate` runs and the one a scaffold installs.
+// A skill that names plain `tsc --noEmit` as a gate sends a session into a loop it cannot win.
+describe('#303 — every compile gate in the skill text is vue-tsc', () => {
+  const skillRoot = join(__dirname, '..');
+
+  function markdownFiles(dir: string): string[] {
+    return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) return markdownFiles(full);
+      return entry.name.endsWith('.md') ? [full] : [];
+    });
+  }
+
+  it('no skill file names plain `tsc --noEmit`', () => {
+    const offenders = markdownFiles(skillRoot).flatMap((file) =>
+      readFileSync(file, 'utf-8')
+        .split('\n')
+        .map((line, i) => ({ line, at: `${file.slice(skillRoot.length + 1)}:${i + 1}` }))
+        .filter(({ line }) => /(?<!vue-)\btsc --noEmit/.test(line))
+        .map(({ at }) => at),
+    );
+    expect(offenders).toEqual([]);
   });
 });
 
