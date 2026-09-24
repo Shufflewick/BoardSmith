@@ -310,6 +310,7 @@ async function combinedTreeProblems(ctx: MergeContext, alongside: string[], runT
   ];
   if (problems.length > 0) return problems;
   const suite = await runTests(ctx.projectDir, []);
+  if ('refused' in suite) return [suite.refused];
   return suite.ok ? [] : [`The project's test suite fails on the combined tree:\n${tail(suite.output)}`];
 }
 

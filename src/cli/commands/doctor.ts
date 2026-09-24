@@ -9,6 +9,13 @@ import {
   RULEBOOK_DIR,
   SCRATCH_DIR,
 } from '../lib/project-paths.js';
+import {
+  VITEST_CONFIG_FILE,
+  findViteConfig,
+  findVitestConfig,
+  generateVitestConfig,
+  testRunScopeProblem,
+} from '../lib/test-run-scope.js';
 
 /**
  * `boardsmith doctor` — the one place that knows what a bs-built project's layout is supposed to
@@ -32,6 +39,11 @@ import {
  * Bare `doctor` reports and exits non-zero when anything is out of place — a non-zero exit is the
  * signal that reliably gets acted on. `--fix` performs the moves.
  *
+ * TEST RUNS COVER THIS CHECKOUT ONLY (#298). Chunk worktrees live under `.boardsmith/worktrees/`,
+ * inside the project, and the project's vitest config is the one place that leaves them out of a
+ * test run. A project with no vitest config gets the one `init` writes; a `vitest.config.*` the
+ * designer wrote is reported with the line to add, never edited.
+ *
  * NOTHING IS EVER DELETED. Stray scratch is MOVED into `.boardsmith/scratch/`, not removed: a file
  * whose only evidence of value is that someone wrote it is not this command's to throw away. Moves
  * use `git mv` for tracked paths so history survives, and a plain rename otherwise. A move whose
@@ -46,6 +58,10 @@ export type DoctorFindingKind =
   | 'scratch-in-root'
   /** `.gitignore` does not ignore `.boardsmith/`, so scratch written there would be committed. */
   | 'scratch-dir-not-ignored'
+  /** Test runs would also collect the chunk worktrees under `.boardsmith/worktrees/`; `--fix` writes `vitest.config.ts`. */
+  | 'test-run-collects-worktrees'
+  /** The project's own `vitest.config.*` does not leave `.boardsmith/` out; only a person should edit it. */
+  | 'test-config-needs-edit'
   /** Both the root and the `design/` copy exist — a human has to decide which one is real. */
   | 'move-conflict';
 
@@ -57,7 +73,7 @@ export interface DoctorFinding {
   to: string;
   /** True once `--fix` has actually performed the move. */
   fixed: boolean;
-  /** Set only for `move-conflict` — why the move was skipped. */
+  /** Set for the findings `--fix` does not resolve itself, and for the ignore and test-run rules — what is wrong. */
   detail?: string;
 }
 
@@ -79,6 +95,9 @@ export interface DoctorResult {
  * whole value is that it can be run blind.
  */
 const SCRATCH_FILE_RE = /^_.*\.(mjs|cjs|js|ts)$/;
+
+/** Findings `--fix` leaves alone because only a person can resolve them; counted as conflicts. */
+const NEEDS_A_PERSON: ReadonlySet<DoctorFindingKind> = new Set(['move-conflict', 'test-config-needs-edit']);
 
 /** The design artifacts `design/` owns, in the order `doctor` reports them. */
 const DESIGN_ENTRIES: readonly string[] = [...DESIGN_LEDGERS, RULEBOOK_DIR, CHUNKS_DIR];
@@ -174,28 +193,9 @@ async function gitMv(projectDir: string, from: string, to: string): Promise<bool
   return ok;
 }
 
-/**
- * Inspect a project's layout, and with `fix` move everything into place.
- *
- * Idempotent by construction: it reports what is out of place RIGHT NOW, so a second run on a
- * healthy project finds nothing. That is what lets every bs- skill open with it unconditionally.
- */
-export async function doctorCommand(
-  options: { project?: string; fix?: boolean; json?: boolean; quiet?: boolean } = {},
-): Promise<DoctorResult> {
-  const projectDir = resolve(options.project ?? process.cwd());
-
-  if (!(await exists(join(projectDir, 'boardsmith.json')))) {
-    throw new Error(
-      `No boardsmith.json in ${projectDir}.\n` +
-        `boardsmith doctor checks a game project's layout — run it from inside a project\n` +
-        `created by "boardsmith init", or pass --project <dir>.`,
-    );
-  }
-
+/** Design artifacts stranded in the project root. */
+async function strandedDesignFindings(projectDir: string): Promise<DoctorFinding[]> {
   const findings: DoctorFinding[] = [];
-
-  // --- Design artifacts stranded in the project root ---
   for (const entry of DESIGN_ENTRIES) {
     const from = entry;
     const to = join(DESIGN_DIR, entry);
@@ -215,14 +215,18 @@ export async function doctorCommand(
     }
     findings.push({ kind: 'design-artifact-in-root', from, to, fixed: false });
   }
+  return findings;
+}
 
-  // --- Throwaway scripts stranded in the project root ---
+/** Throwaway scripts stranded in the project root. */
+async function strandedScratchFindings(projectDir: string): Promise<DoctorFinding[]> {
   let rootEntries: Array<{ name: string; isFile(): boolean }> = [];
   try {
     rootEntries = await fs.readdir(projectDir, { withFileTypes: true });
   } catch {
     rootEntries = [];
   }
+  const findings: DoctorFinding[] = [];
   for (const e of rootEntries.filter((e) => e.isFile() && SCRATCH_FILE_RE.test(e.name))) {
     const to = join(SCRATCH_DIR, e.name);
     if (await exists(join(projectDir, to))) {
@@ -237,48 +241,99 @@ export async function doctorCommand(
     }
     findings.push({ kind: 'scratch-in-root', from: e.name, to, fixed: false });
   }
+  return findings;
+}
 
-  // --- `.gitignore` must actually ignore the scratch tree ---
-  // Checked unconditionally, not only when scratch exists: the point is that the NEXT script a
-  // session writes lands somewhere git will not pick up.
-  if (!(await gitignoreCovers(projectDir))) {
-    findings.push({
+/**
+ * `.gitignore` must actually ignore the scratch tree. Checked unconditionally, not only when
+ * scratch exists: the point is that the NEXT script a session writes lands somewhere git will not
+ * pick up.
+ */
+async function gitignoreFindings(projectDir: string): Promise<DoctorFinding[]> {
+  if (await gitignoreCovers(projectDir)) return [];
+  return [
+    {
       kind: 'scratch-dir-not-ignored',
       from: '.gitignore',
       to: '.gitignore',
       fixed: false,
       detail: `.gitignore does not list ${GITIGNORE_ENTRY} — scratch written there would be committed.`,
-    });
+    },
+  ];
+}
+
+/** Test runs must cover this checkout only, not the chunk worktrees inside it (#298). */
+async function testScopeFindings(projectDir: string): Promise<DoctorFinding[]> {
+  const problem = await testRunScopeProblem(projectDir);
+  if (problem === undefined) return [];
+  const config = await findVitestConfig(projectDir);
+  // A vitest.config.* the designer wrote is theirs to edit; doctor only writes one where none exists.
+  if (config !== undefined && !config.startsWith('vite.config.')) {
+    return [{ kind: 'test-config-needs-edit', from: config, to: config, fixed: false, detail: problem }];
+  }
+  return [
+    { kind: 'test-run-collects-worktrees', from: VITEST_CONFIG_FILE, to: VITEST_CONFIG_FILE, fixed: false, detail: problem },
+  ];
+}
+
+/**
+ * Resolve every finding `--fix` is allowed to resolve. `design/` and the scratch dir are created
+ * lazily, so a healthy project that needs no moves does not grow empty directories.
+ */
+async function fixAll(projectDir: string, findings: DoctorFinding[]): Promise<void> {
+  for (const f of findings) {
+    if (NEEDS_A_PERSON.has(f.kind)) continue;
+    await fix(projectDir, f);
+    f.fixed = true;
+  }
+}
+
+/** Resolve one finding `--fix` is allowed to resolve. */
+async function fix(projectDir: string, f: DoctorFinding): Promise<void> {
+  if (f.kind === 'test-run-collects-worktrees') {
+    await fs.writeFile(join(projectDir, VITEST_CONFIG_FILE), generateVitestConfig(await findViteConfig(projectDir)));
+    return;
+  }
+  if (f.kind === 'scratch-dir-not-ignored') {
+    await appendGitignoreEntry(projectDir);
+    return;
+  }
+  await move(projectDir, f.from, f.to);
+  // Scratch moved into the gitignored tree must also stop being tracked, or it stays
+  // committed at its new path. Ordered after the move so the untrack names the final path.
+  if (f.kind === 'scratch-in-root') await untrack(projectDir, f.to);
+}
+
+/**
+ * Inspect a project's layout, and with `fix` move everything into place.
+ *
+ * Idempotent by construction: it reports what is out of place RIGHT NOW, so a second run on a
+ * healthy project finds nothing. That is what lets every bs- skill open with it unconditionally.
+ */
+export async function doctorCommand(
+  options: { project?: string; fix?: boolean; json?: boolean; quiet?: boolean } = {},
+): Promise<DoctorResult> {
+  const projectDir = resolve(options.project ?? process.cwd());
+
+  if (!(await exists(join(projectDir, 'boardsmith.json')))) {
+    throw new Error(
+      `No boardsmith.json in ${projectDir}.\n` +
+        `boardsmith doctor checks a game project's layout — run it from inside a project\n` +
+        `created by "boardsmith init", or pass --project <dir>.`,
+    );
   }
 
-  if (options.fix) {
-    // `design/` and the scratch dir are created lazily — a healthy project that needs no moves
-    // should not grow empty directories just because doctor ran.
-    for (const f of findings) {
-      if (f.kind === 'move-conflict') continue;
-      if (f.kind === 'scratch-dir-not-ignored') {
-        await appendGitignoreEntry(projectDir);
-        f.fixed = true;
-        continue;
-      }
-      await move(projectDir, f.from, f.to);
-      // Scratch moved into the gitignored tree must also stop being tracked, or it stays
-      // committed at its new path. Ordered after the move so the untrack names the final path.
-      if (f.kind === 'scratch-in-root') await untrack(projectDir, f.to);
-      f.fixed = true;
-    }
-  }
+  const findings: DoctorFinding[] = [
+    ...(await strandedDesignFindings(projectDir)),
+    ...(await strandedScratchFindings(projectDir)),
+    ...(await gitignoreFindings(projectDir)),
+    ...(await testScopeFindings(projectDir)),
+  ];
 
-  const moved = findings.filter((f) => f.fixed).length;
-  const conflicts = findings.filter((f) => f.kind === 'move-conflict').length;
-  const pending = findings.length - moved - conflicts;
+  if (options.fix) await fixAll(projectDir, findings);
 
-  const result: DoctorResult = {
-    projectDir,
-    findings,
-    counts: { moved, pending, conflicts },
-    healthy: findings.length === 0,
-  };
+  const result = summarize(projectDir, findings);
+  const { pending, conflicts } = result.counts;
 
   // A project needing work exits non-zero so a skill or a CI step notices without parsing output.
   // `--fix` that resolved everything is a success; unresolved conflicts are not.
@@ -292,6 +347,30 @@ export async function doctorCommand(
   return result;
 }
 
+/** The result `doctor` returns: its findings and how many were fixed, remain, or need a person. */
+function summarize(projectDir: string, findings: DoctorFinding[]): DoctorResult {
+  const moved = findings.filter((f) => f.fixed).length;
+  const conflicts = findings.filter((f) => NEEDS_A_PERSON.has(f.kind)).length;
+  const pending = findings.length - moved - conflicts;
+  return { projectDir, findings, counts: { moved, pending, conflicts }, healthy: findings.length === 0 };
+}
+
+/** One finding as a report line; `rel` makes a project path relative to where doctor was run. */
+function reportLine(f: DoctorFinding, rel: (p: string) => string): string {
+  switch (f.kind) {
+    case 'move-conflict':
+      return `${chalk.red('conflict')} ${rel(f.from)}\n          ${f.detail}`;
+    case 'test-config-needs-edit':
+      return `${chalk.red('edit    ')} ${rel(f.from)}\n          ${f.detail}`;
+    case 'test-run-collects-worktrees':
+      return `${f.fixed ? chalk.green('wrote   ') : chalk.yellow('missing ')} ${rel(f.from)} ${chalk.dim('->')} leaves .boardsmith/ out of test runs`;
+    case 'scratch-dir-not-ignored':
+      return `${f.fixed ? chalk.green('ignored ') : chalk.yellow('untracked')} ${rel(f.from)} ${chalk.dim('->')} adds ${GITIGNORE_ENTRY}`;
+    default:
+      return `${f.fixed ? chalk.green('moved   ') : chalk.yellow('misplaced')} ${rel(f.from)} ${chalk.dim('->')} ${rel(f.to)}`;
+  }
+}
+
 function printReport(result: DoctorResult, fixed: boolean): void {
   const rel = (p: string) => relative(process.cwd(), join(result.projectDir, p)) || p;
 
@@ -300,19 +379,7 @@ function printReport(result: DoctorResult, fixed: boolean): void {
     return;
   }
 
-  for (const f of result.findings) {
-    if (f.kind === 'move-conflict') {
-      console.log(`${chalk.red('conflict')} ${rel(f.from)}\n          ${f.detail}`);
-      continue;
-    }
-    if (f.kind === 'scratch-dir-not-ignored') {
-      const verb = f.fixed ? chalk.green('ignored ') : chalk.yellow('untracked');
-      console.log(`${verb} ${rel(f.from)} ${chalk.dim('->')} adds ${GITIGNORE_ENTRY}`);
-      continue;
-    }
-    const verb = f.fixed ? chalk.green('moved   ') : chalk.yellow('misplaced');
-    console.log(`${verb} ${rel(f.from)} ${chalk.dim('->')} ${rel(f.to)}`);
-  }
+  for (const f of result.findings) console.log(reportLine(f, rel));
 
   const { moved, pending, conflicts } = result.counts;
   console.log('');
@@ -325,4 +392,3 @@ function printReport(result: DoctorResult, fixed: boolean): void {
     );
   }
 }
-

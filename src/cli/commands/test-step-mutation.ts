@@ -24,6 +24,7 @@ import { join, relative, sep } from 'node:path';
 import { parseSource, walk, findTestBlocks, type AstNode, type ParsedSource, type TestBlock } from './test-step-ast.js';
 import type { ChunkTestFile, TestStepFinding } from './test-step-check.js';
 import { scratchDir } from '../lib/project-paths.js';
+import { VITEST_CONFIG_NAMES } from '../lib/test-run-scope.js';
 
 // -------------------------------------------------------------------------------------------
 // generateMutants
@@ -167,10 +168,6 @@ export function generateMutants(file: string, source: string, addedLines: Readon
 // Running vitest with one mutant in place
 // -------------------------------------------------------------------------------------------
 
-const CONFIG_NAMES = ['vitest.config', 'vite.config'].flatMap((base) =>
-  ['ts', 'mts', 'cts', 'js', 'mjs', 'cjs'].map((ext) => `${base}.${ext}`),
-);
-
 /** The project's own vitest config, extended with the mutant loader and test locations. */
 function wrapperConfig(workDir: string, projectConfig: string | undefined): string {
   const importBase = projectConfig
@@ -231,7 +228,7 @@ async function createRunner(projectDir: string, testFiles: ChunkTestFile[]): Pro
   const configPath = join(workDir, 'vitest.config.mts');
   const mutantPath = join(workDir, 'mutant.json');
   const reportPath = join(workDir, 'report.json');
-  const projectConfig = CONFIG_NAMES.map((n) => join(projectDir, n)).find((p) => existsSync(p));
+  const projectConfig = VITEST_CONFIG_NAMES.map((n) => join(projectDir, n)).find((p) => existsSync(p));
   await fs.writeFile(configPath, wrapperConfig(workDir, projectConfig));
 
   const byRealPath = new Map(testFiles.map((f) => [realpathSync(f.absPath), f.path]));
