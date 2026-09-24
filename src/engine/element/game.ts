@@ -532,8 +532,8 @@ export interface FormattedMessage {
  * `settings`/`messages` with the snapshot it restored from) and the F-01 MCTS
  * undo-soundness fix that depends on it.
  *
- * The restore paths skip these same keys in their attribute loops — see
- * `loadSerializedState` and `restoreDevState`, which both import this constant.
+ * The restore path skips these same keys in its attribute loop — see
+ * `loadSerializedState`.
  */
 /**
  * WHERE A WORLD'S OWN ELEMENTS START (#218).

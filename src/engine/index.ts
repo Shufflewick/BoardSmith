@@ -259,15 +259,6 @@ export {
   checkpointCount,
   createPlayerView,
   createAllPlayerViews,
-  // Dev state transfer (for HMR)
-  captureDevState,
-  restoreDevState,
-  validateDevSnapshot,
-  formatValidationErrors,
-  getSnapshotElementCount,
-  // Dev checkpoints for fast HMR recovery
-  createDevCheckpoint,
-  restoreFromDevCheckpoint,
 } from './utils/index.js';
 
 export type {
@@ -281,16 +272,6 @@ export type {
   CheckpointPolicy,
   UndoPolicy,
   PlayerStateView,
-  // Dev state types
-  DevSnapshot,
-  RestoreDevStateOptions,
-  ValidationResult as DevValidationResult,
-  ValidationError as DevValidationError,
-  ValidationWarning as DevValidationWarning,
-  // Dev checkpoint types
-  DevCheckpoint,
-  RestoreFromDevCheckpointOptions,
-  DevCheckpointRestoreResult,
 } from './utils/index.js';
 
 // Tutorial predicate helpers (TUT-03)

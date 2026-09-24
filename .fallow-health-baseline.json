@@ -414,14 +414,6 @@
         "count": 1
       }
     },
-    "src/engine/utils/dev-state.ts": {
-      "complexity_high": {
-        "count": 1
-      },
-      "complexity_moderate": {
-        "count": 2
-      }
-    },
     "src/engine/utils/serializer.ts": {
       "complexity_moderate": {
         "count": 2

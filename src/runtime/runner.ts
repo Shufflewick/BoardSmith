@@ -1032,7 +1032,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     // The fromJSON tree rebuild in loadSerializedState advances _ctx.sequence, so
     // without this reset the next element created after restore would get an id
     // that drifts from what dev assigns (a parity bug) and can trip the
-    // deletion-detector console.warn. Mirrors restoreDevState.
+    // deletion-detector console.warn.
     if (snapshot.sequence !== undefined) {
       runner.game._ctx.sequence = snapshot.sequence;
     }

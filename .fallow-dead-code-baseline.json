@@ -198,8 +198,6 @@
     "src/engine/element/game-element.ts:ZoneVisibilityOwner",
     "src/engine/element/index.ts:ImageRef",
     "src/engine/element/typed-array-codec.ts:SerializedTypedArray",
-    "src/engine/utils/dev-state.ts:ValidationErrorType",
-    "src/engine/utils/dev-state.ts:ValidationWarningType",
     "src/engine/utils/index.ts:ValidationErrorType",
     "src/engine/utils/index.ts:ValidationWarningType",
     "src/session/debug-controller.ts:DebugControllerCallbacks",
