@@ -94,7 +94,7 @@ class StuckGame extends Game<StuckGame, Player> {
             name: 'stuck',
             actions: ['wait'],
             playerDone: () => false,
-            timeLimitMs: 5_000,
+            timeLimitMs: 10_000,
           }),
         }),
       }),
@@ -280,7 +280,7 @@ describe('MultiplayerHost step deadlines (#302)', () => {
     const h = makeHost(stuckDefinition, { idleAction: { name: 'wait' } });
     await h.seatBoth();
 
-    h.clock.advance(5_000);
+    h.clock.advance(10_000);
 
     expect(await h.reported()).toMatch(/did not move/);
     expect(h.actionsFor(1)).toHaveLength(1);
