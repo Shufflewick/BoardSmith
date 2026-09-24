@@ -18,7 +18,7 @@
 // twice, plus `index -> utils/index -> enumerate-moves -> index`). Breaking it
 // here breaks all three, because a barrel import is never load-bearing: every
 // name below has exactly one defining module.
-import type { Game, GameOptions } from '../element/game.js';
+import { constructGame, type Game, type GameOptions } from '../element/game.js';
 import type { Player } from '../player/player.js';
 import type { ActionDefinition, PendingActionState, Selection } from '../action/types.js';
 import { isElement } from '../element/game-element.js';
@@ -350,7 +350,7 @@ function liveElement(game: Game, selection: Selection, ref: { id: number }): unk
  */
 function scratchCopy(source: Game) {
   const GameClass = source.constructor as new (options: GameOptions) => Game;
-  const game = new GameClass(source.getConstructorOptions() as GameOptions);
+  const game = constructGame(GameClass, source.getConstructorOptions() as GameOptions);
   const state = source.toJSON();
   const messageLog = source.serializeMessageLog();
   const sequence = source._ctx.sequence;

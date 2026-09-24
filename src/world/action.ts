@@ -375,7 +375,7 @@ export type WorldOrderedList<G extends Game = Game> =
  * `orderedList`, which are split out because they are what decide whether the
  * argument is a `T` or a `T[]` and therefore have to live in the overloads.
  */
-export interface WorldChoiceOptions<G extends Game, T> {
+export interface WorldChoiceOptions<G extends Game, T, P = undefined> {
   prompt?: WorldPrompt<G>;
   needs?: (context: WorldNeedsContext<G>) => readonly string[];
   choices: T[] | ((context: WorldActionContext<G>) => T[]);
@@ -387,7 +387,9 @@ export interface WorldChoiceOptions<G extends Game, T> {
     context: WorldActionContext<G>,
   ) => boolean | string;
   boardRefs?: (choice: T, context: WorldActionContext<G>) => ChoiceBoardRefs;
-  disabled?: (choice: T, context: WorldActionContext<G>) => string | false;
+  /** Work every `disabled` call of one evaluation shares; see the engine's `chooseFrom` (#334). */
+  prepare?: (context: WorldActionContext<G>) => P;
+  disabled?: (choice: T, context: WorldActionContext<G>, prepared: P) => string | false;
 }
 
 /**
@@ -396,14 +398,16 @@ export interface WorldChoiceOptions<G extends Game, T> {
  * `multiSelect`. The same split `WorldChoiceOptions` makes, for the same
  * reason: what differs is exactly what decides the argument's type.
  */
-export interface WorldElementOptions<G extends Game, T extends GameElement> {
+export interface WorldElementOptions<G extends Game, T extends GameElement, P = undefined> {
   prompt?: WorldPrompt<G>;
   needs?: (context: WorldNeedsContext<G>) => readonly string[];
   elements: T[] | ((context: WorldActionContext<G>) => T[]);
   optional?: boolean | string;
   display?: (element: T, context: WorldActionContext<G>, all: T[]) => string;
   boardRef?: (element: T, context: WorldActionContext<G>) => BoardElementRef;
-  disabled?: (element: T, context: WorldActionContext<G>) => string | false;
+  /** Work every `disabled` call of one evaluation shares; see the engine's `chooseFrom` (#334). */
+  prepare?: (context: WorldActionContext<G>) => P;
+  disabled?: (element: T, context: WorldActionContext<G>, prepared: P) => string | false;
 }
 
 /** What a seated step's declaration may read: the seat, and whatever earlier
@@ -693,8 +697,8 @@ function forwardPrompt<G extends Game>(
  * release was already drifting: `chooseElements` is where `multiSelect` had to
  * be remembered and `chooseElement` is where it must not appear.
  */
-function forwardElementOptions<G extends Game, T extends GameElement>(
-  options: WorldElementOptions<G, T>,
+function forwardElementOptions<G extends Game, T extends GameElement, P>(
+  options: WorldElementOptions<G, T, P>,
 ) {
   return {
     prompt: forwardPrompt<G>(options.prompt),
@@ -711,8 +715,12 @@ function forwardElementOptions<G extends Game, T extends GameElement>(
     boardRef: options.boardRef
       ? (element: T, context: AnyContext) => options.boardRef!(element, withWorld<G>(context))
       : undefined,
+    prepare: options.prepare
+      ? (context: AnyContext) => options.prepare!(withWorld<G>(context))
+      : undefined,
     disabled: options.disabled
-      ? (element: T, context: AnyContext) => options.disabled!(element, withWorld<G>(context))
+      ? (element: T, context: AnyContext, prepared: P) =>
+          options.disabled!(element, withWorld<G>(context), prepared)
       : undefined,
   };
 }
@@ -966,9 +974,9 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
   // signature is a "member" to the dead-code pass and each is reached only by
   // games, so all three carry the same marker the other verbs do.
   // fallow-ignore-next-line unused-class-member
-  chooseFrom<K extends string, T>(
+  chooseFrom<K extends string, T, P = undefined>(
     name: K,
-    options: WorldChoiceOptions<G, T> & {
+    options: WorldChoiceOptions<G, T, P> & {
       multiSelect: WorldMultiSelect<G>;
       orderedList?: never;
     },
@@ -977,28 +985,28 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
   // the other two is what makes "both" a compile error at the call site rather
   // than a refusal the author meets at the first submission that repeats.
   // fallow-ignore-next-line unused-class-member
-  chooseFrom<K extends string, T>(
+  chooseFrom<K extends string, T, P = undefined>(
     name: K,
-    options: WorldChoiceOptions<G, T> & {
+    options: WorldChoiceOptions<G, T, P> & {
       orderedList: WorldOrderedList<G>;
       multiSelect?: never;
     },
   ): WorldAction<G, AddArg<A, K, T[]>>;
   // fallow-ignore-next-line unused-class-member
-  chooseFrom<K extends string, T>(
+  chooseFrom<K extends string, T, P = undefined>(
     name: K,
-    options: WorldChoiceOptions<G, T> & { multiSelect?: undefined; orderedList?: undefined },
+    options: WorldChoiceOptions<G, T, P> & { multiSelect?: undefined; orderedList?: undefined },
   ): WorldAction<G, AddArg<A, K, T>>;
   // fallow-ignore-next-line unused-class-member
-  chooseFrom<K extends string, T>(
+  chooseFrom<K extends string, T, P = undefined>(
     name: K,
-    options: WorldChoiceOptions<G, T> & {
+    options: WorldChoiceOptions<G, T, P> & {
       multiSelect?: WorldMultiSelect<G>;
       orderedList?: WorldOrderedList<G>;
     },
   ): WorldAction<G, AddArg<A, K, T | T[]>> {
     this.declareSelection(options.needs);
-    this.inner.chooseFrom<K, T>(name, {
+    this.inner.chooseFrom<K, T, P>(name, {
       // AN ORDINARY `ChoiceSelection` FIELD the facade had stopped passing on
       // (#376).
       multiSelect: forwardCount<G, number | MultiSelectConfig>(options.multiSelect),
@@ -1018,8 +1026,11 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
       boardRefs: options.boardRefs
         ? (choice, context) => options.boardRefs!(choice, withWorld<G>(context))
         : undefined,
+      prepare: options.prepare
+        ? (context) => options.prepare!(withWorld<G>(context))
+        : undefined,
       disabled: options.disabled
-        ? (choice, context) => options.disabled!(choice, withWorld<G>(context))
+        ? (choice, context, prepared) => options.disabled!(choice, withWorld<G>(context), prepared)
         : undefined,
     });
     return this as unknown as WorldAction<G, AddArg<A, K, T | T[]>>;
@@ -1035,9 +1046,9 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
    * choice list would.
    */
   // fallow-ignore-next-line unused-class-member
-  chooseElement<K extends string, T extends GameElement>(
+  chooseElement<K extends string, T extends GameElement, P = undefined>(
     name: K,
-    options: WorldElementOptions<G, T> & {
+    options: WorldElementOptions<G, T, P> & {
       validate?: (
         value: T,
         args: Record<string, unknown>,
@@ -1046,8 +1057,8 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
     },
   ): WorldAction<G, AddArg<A, K, T>> {
     this.declareSelection(options.needs);
-    this.inner.chooseElement<K, T>(name, {
-      ...forwardElementOptions<G, T>(options),
+    this.inner.chooseElement<K, T, P>(name, {
+      ...forwardElementOptions<G, T, P>(options),
       validate: options.validate
         ? (value, args, context) => options.validate!(value, args, withWorld<G>(context))
         : undefined,
@@ -1071,9 +1082,9 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
    * candidates are authored; the count is `multiSelect`.
    */
   // fallow-ignore-next-line unused-class-member
-  chooseElements<K extends string, T extends GameElement>(
+  chooseElements<K extends string, T extends GameElement, P = undefined>(
     name: K,
-    options: WorldElementOptions<G, T> & {
+    options: WorldElementOptions<G, T, P> & {
       multiSelect?: WorldMultiSelect<G>;
       validate?: (
         value: T[],
@@ -1083,8 +1094,8 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
     },
   ): WorldAction<G, AddArg<A, K, T[]>> {
     this.declareSelection(options.needs);
-    this.inner.chooseElements<K, T>(name, {
-      ...forwardElementOptions<G, T>(options),
+    this.inner.chooseElements<K, T, P>(name, {
+      ...forwardElementOptions<G, T, P>(options),
       multiSelect: forwardCount<G, number | MultiSelectConfig>(options.multiSelect),
       validate: options.validate
         ? (value, args, context) => options.validate!(value, args, withWorld<G>(context))

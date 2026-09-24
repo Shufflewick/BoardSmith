@@ -10,6 +10,7 @@ import type {
 } from '../engine/index.js';
 import { createSnapshot, canSeatAct, availableActionsForSeat } from '../engine/index.js';
 import { enumerateActionMoves } from '../engine/utils/enumerate-moves.js';
+import { constructGame } from '../engine/element/game.js';
 import type {
   BotConfig, BotMove, BotMoveStats, MCTSNode, BotStrategy, Objective, ThreatResponse,
   DeterminizeSampler,
@@ -1323,7 +1324,7 @@ export class MCTSBot<G extends Game = Game> {
       seed: snapshot.seed,
     };
 
-    const game = new this.GameClass(gameOptions as any);
+    const game = constructGame(this.GameClass, gameOptions as any);
 
     // Adopt the authoritative element tree (clears + rebuilds children, re-points
     // the game's own serialized refs, resolves element references).

@@ -20,6 +20,12 @@ import { readFileSync, readdirSync, rmSync, existsSync, mkdirSync } from 'node:f
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
+import { EXAMPLE_EXTRACTION_TOKEN, EXAMPLE_TRANSLATION_TOKEN } from '../../commands/example-derivation.js';
+import { GENERATED_TEST_SANDBOX_RULES } from '../../commands/example-test-emit.js';
+import { installClaudeCommand } from '../../commands/install-claude-command.js';
+import { PRESENTATION_EXCLUSION_MARKERS, isPresentationLine } from '../../commands/verify-classify.js';
+import { ENUMERATE_TOKEN } from '../../commands/verify-enumerate.js';
+import { VERIFY_PIPELINE_STEPS } from '../../commands/verify-source-free.js';
 import { installedSkillsTree } from '../../commands/installed-skills.test-helper.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -509,7 +515,7 @@ describe('SC-4 — no skill file derives staleness in prose', () => {
 });
 
 describe('PRESENTATION_EXCLUSION_MARKERS — cross-file lexicon pin (decision 12b)', () => {
-  it('every marker declared in verify-classify.ts appears verbatim in classification-subagent.md', async () => {
+  it('every marker declared in verify-classify.ts appears verbatim in classification-subagent.md', () => {
     // Two representations exist for the same lexicon: a regex-source array in code, and its
     // literal prefix forms quoted in skill prose. A divergence here would mean the classifier's
     // code excludes a presentation form the prose never tells the subagent about, or vice versa.
@@ -519,8 +525,7 @@ describe('PRESENTATION_EXCLUSION_MARKERS — cross-file lexicon pin (decision 12
     // to zero markers the moment a marker contained a `[^:]` character class — the pin passed
     // vacuously instead of failing. Importing is also what the sibling ENUMERATE_TOKEN pin
     // below already does.
-    const { PRESENTATION_EXCLUSION_MARKERS } = await import('../../commands/verify-classify.js');
-    const markers = [...PRESENTATION_EXCLUSION_MARKERS];
+        const markers = [...PRESENTATION_EXCLUSION_MARKERS];
     expect(markers.length).toBeGreaterThan(0);
 
     // Each regex-source marker names a literal prefix once its regex escaping is undone — assert
@@ -545,9 +550,8 @@ describe('PRESENTATION_EXCLUSION_MARKERS — cross-file lexicon pin (decision 12
     }
   });
 
-  it('the qualified-parenthetical form named in the prose is itself matched by isPresentationLine (decision 13)', async () => {
-    const { isPresentationLine } = await import('../../commands/verify-classify.js');
-    const doc = read('verify/classification-subagent.md');
+  it('the qualified-parenthetical form named in the prose is itself matched by isPresentationLine (decision 13)', () => {
+        const doc = read('verify/classification-subagent.md');
     expect(doc).toContain('Plan phase');
     const line =
       'Derived (p.1) — diagram description (Plan phase): Two boxer cards are shown at top...';
@@ -574,9 +578,8 @@ describe('enumerate-facts.md / reconcile-facts.md — CHECK-04\'s replacement ju
     expect(doc).not.toContain('BS-ENUMERATE-V1');
   });
 
-  it('enumerate-facts.md\'s ENUMERATE_TOKEN pin matches the real exported constant (cross-file lexicon pin)', async () => {
-    const { ENUMERATE_TOKEN } = await import('../../commands/verify-enumerate.js');
-    expect(ENUMERATE_TOKEN).toBe('BS-ENUMERATE-V1');
+  it('enumerate-facts.md\'s ENUMERATE_TOKEN pin matches the real exported constant (cross-file lexicon pin)', () => {
+        expect(ENUMERATE_TOKEN).toBe('BS-ENUMERATE-V1');
     const doc = read('verify/enumerate-facts.md');
     expect(doc).toContain(ENUMERATE_TOKEN);
   });
@@ -671,7 +674,7 @@ describe('enumerate-facts.md / reconcile-facts.md — CHECK-04\'s replacement ju
     expect(doc).toContain('DISPATCH REJECTED');
   });
 
-  it('reconcile-facts.md names every member of the real exported ArithmeticOp union (cross-file lexicon pin)', async () => {
+  it('reconcile-facts.md names every member of the real exported ArithmeticOp union (cross-file lexicon pin)', () => {
     // ArithmeticOp is not itself exported as a runtime value (it is a type), so this pins the
     // literal string union declared in verify-enumerate.ts against the contract's own prose,
     // rather than importing a type at runtime (which is not possible).
@@ -758,8 +761,7 @@ describe('enumerate-facts.md / reconcile-facts.md — CHECK-04\'s replacement ju
     });
 
     it('deleting one installed contract file flips the installer to report a partial (not complete) install', async () => {
-      const { installClaudeCommand } = await import('../../commands/install-claude-command.js');
-      rmSync(join(skills.root, 'bs-shared', 'verify', 'enumerate-facts.md'), { force: true });
+            rmSync(join(skills.root, 'bs-shared', 'verify', 'enumerate-facts.md'), { force: true });
       await installClaudeCommand({ local: true, force: false, skipLink: true });
       expect(existsSync(join(skills.root, 'bs-shared', 'verify', 'enumerate-facts.md'))).toBe(true);
     });
@@ -782,9 +784,8 @@ describe('extract-example.md — CHECK-06/TEST-01\'s first judgment contract (17
     expect(doc).toContain('DISPATCH REJECTED');
   });
 
-  it('its EXAMPLE_EXTRACTION_TOKEN pin matches the real exported constant (cross-file lexicon pin)', async () => {
-    const { EXAMPLE_EXTRACTION_TOKEN } = await import('../../commands/example-derivation.js');
-    expect(EXAMPLE_EXTRACTION_TOKEN).toBe('BS-EXAMPLE-EXTRACT-V1');
+  it('its EXAMPLE_EXTRACTION_TOKEN pin matches the real exported constant (cross-file lexicon pin)', () => {
+        expect(EXAMPLE_EXTRACTION_TOKEN).toBe('BS-EXAMPLE-EXTRACT-V1');
     const doc = read('verify/extract-example.md');
     expect(doc).toContain(EXAMPLE_EXTRACTION_TOKEN);
   });
@@ -829,9 +830,8 @@ describe('translate-example.md — CHECK-06/TEST-01\'s second judgment contract 
     expect(doc).toContain('DISPATCH REJECTED');
   });
 
-  it('its EXAMPLE_TRANSLATION_TOKEN pin matches the real exported constant (cross-file lexicon pin)', async () => {
-    const { EXAMPLE_TRANSLATION_TOKEN } = await import('../../commands/example-derivation.js');
-    expect(EXAMPLE_TRANSLATION_TOKEN).toBe('BS-EXAMPLE-TRANSLATE-V1');
+  it('its EXAMPLE_TRANSLATION_TOKEN pin matches the real exported constant (cross-file lexicon pin)', () => {
+        expect(EXAMPLE_TRANSLATION_TOKEN).toBe('BS-EXAMPLE-TRANSLATE-V1');
     const doc = read('verify/translate-example.md');
     expect(doc).toContain(EXAMPLE_TRANSLATION_TOKEN);
   });
@@ -866,9 +866,8 @@ describe('translate-example.md — CHECK-06/TEST-01\'s second judgment contract 
     );
   });
 
-  it('names GENERATED_TEST_SANDBOX_RULES\' five rules explicitly', async () => {
-    const { GENERATED_TEST_SANDBOX_RULES } = await import('../../commands/example-test-emit.js');
-    const doc = read('verify/translate-example.md');
+  it('names GENERATED_TEST_SANDBOX_RULES\' five rules explicitly', () => {
+        const doc = read('verify/translate-example.md');
     expect(GENERATED_TEST_SANDBOX_RULES.length).toBeGreaterThan(0);
     for (const rule of GENERATED_TEST_SANDBOX_RULES) {
       expect(doc).toContain(rule.replace('boardsmith/', ''));
@@ -1356,12 +1355,11 @@ describe('verify/source-free-mode.md — the reduced pass (decisions 1-8) (179-0
     expect(step9).toMatch(/WITHOUT `--run`/);
   });
 
-  it('the single-definition rule (decision 5): no defectClass string from VERIFY_PIPELINE_STEPS appears in any .md under src/cli/slash-command/', async () => {
+  it('the single-definition rule (decision 5): no defectClass string from VERIFY_PIPELINE_STEPS appears in any .md under src/cli/slash-command/', () => {
     // Cross-file negation pin, enforced across the code/prose boundary — a second, hand-authored
     // copy of the step-to-defect-class mapping anywhere in skill prose is exactly the
     // drift-by-duplication failure this milestone has hit repeatedly.
-    const { VERIFY_PIPELINE_STEPS } = await import('../../commands/verify-source-free.js');
-    const skillDir = join(__dirname, '..');
+        const skillDir = join(__dirname, '..');
     function allMarkdownFiles(dir: string): string[] {
       const out: string[] = [];
       for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -1385,13 +1383,12 @@ describe('verify/source-free-mode.md — the reduced pass (decisions 1-8) (179-0
     }
   });
 
-  it('the negation pin is a real regression detector: pasting a defectClass string into source-free-mode.md fails it', async () => {
+  it('the negation pin is a real regression detector: pasting a defectClass string into source-free-mode.md fails it', () => {
     // Mirrors the pin's own logic (imported, not restated): the CLEAN file must contain none of the
     // defect-class strings; a copy with one pasted in must fail the identical assertion. This is
     // the in-suite proof; the SUMMARY records the verbatim failure from doing this against the real
     // file on disk (temporarily edited, observed, and reverted) per this task's own instruction.
-    const { VERIFY_PIPELINE_STEPS } = await import('../../commands/verify-source-free.js');
-    const defectClass = VERIFY_PIPELINE_STEPS.flatMap((step) =>
+        const defectClass = VERIFY_PIPELINE_STEPS.flatMap((step) =>
       step.unchecked.map((u) => u.defectClass),
     )[0];
     const clean = read('verify/source-free-mode.md');

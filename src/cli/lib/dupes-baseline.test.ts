@@ -206,6 +206,17 @@ describe('#232: what the reports tell a person to do', () => {
     expect(newDrift).toContain('NOT the ordinary remedy');
   });
 
+  // #353: dropping an allowance whose duplication is gone narrows the record,
+  // so unlike new duplication it has a safe command, and the report names it.
+  it('names the command that drops an allowance whose duplication is gone (#353)', () => {
+    const goneDrift = describeDupesDrift([
+      { direction: 'gone', content: '103f43d310cad331', lines: 26, files: ['src/engine/action/action-builder.ts'] },
+    ]);
+    expect(goneDrift).toContain('103f43d310cad331');
+    expect(goneDrift).toContain('src/engine/action/action-builder.ts');
+    expect(goneDrift).toContain('boardsmith audit --rekey-dupes');
+  });
+
   // #256: a content-matched address move is not a decision, so the report for
   // one is in the PAST tense -- the audit re-addressed them and is saying so,
   // rather than failing and asking a human to run a command.

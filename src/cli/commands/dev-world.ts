@@ -36,7 +36,7 @@ import { fileURLToPath } from 'node:url';
 
 import chalk from 'chalk';
 import open from 'open';
-import { createServer as createViteServer, type Plugin as VitePlugin } from 'vite';
+import type { Plugin as VitePlugin } from 'vite';
 
 import { worldBudgets } from '../../world/index.js';
 import type { WorldLiftOutcome, WorldMigrationOutcome } from '../../world/host/index.js';
@@ -51,6 +51,7 @@ import { importRuntimeBundle, toPosix } from './game-runtime.js';
 import {
   claimWebSocketPath,
   devNotFoundMiddleware,
+  listeningViteServer,
   monorepoBoardsmithResolvePlugin,
   resolveDevHostDir,
   serveDevDocuments,
@@ -350,19 +351,39 @@ export async function startWorldDevServer(
   ];
   if (options.context === 'monorepo') plugins.unshift(monorepoBoardsmithResolvePlugin());
 
-  const vite = await createViteServer({
-    root: options.uiPath,
-    server: {
-      port: options.port,
-      host: options.host,
-      strictPort: true,
-      open: false,
-      fs: { allow: [options.uiPath, options.cwd, boardsmithRoot] },
+  // Everything the world half holds, released in the order the full teardown
+  // below releases it. `close` drains the world lock before it touches the
+  // store, so an in-flight disconnect or command is finished rather than
+  // abandoned -- and the checkpoint it writes on the way out is the last write
+  // there is.
+  //
+  // THE WORLD IS CLOSED, NOT DELETED. A persistent world that erased itself
+  // when its host stopped would be a session; `--reset` is the only thing that
+  // removes one.
+  const releaseWorld = async (): Promise<void> => {
+    worldSocket.close();
+    connections.forgetAll();
+    await worldHost.close();
+  };
+
+  // A HOST THAT CANNOT SERVE HOLDS NOTHING (#345). `devCommand` refuses a taken
+  // port before the world is opened, but the port can still be taken between
+  // that check and this listen, so a refusal here closes the world too.
+  const vite = await listeningViteServer(
+    {
+      root: options.uiPath,
+      server: {
+        port: options.port,
+        host: options.host,
+        strictPort: true,
+        open: false,
+        fs: { allow: [options.uiPath, options.cwd, boardsmithRoot] },
+      },
+      plugins,
+      optimizeDeps: { exclude: ['boardsmith', 'boardsmith/ui', 'boardsmith/client', 'boardsmith/session'] },
     },
-    plugins,
-    optimizeDeps: { exclude: ['boardsmith', 'boardsmith/ui', 'boardsmith/client', 'boardsmith/session'] },
-  });
-  await vite.listen();
+    releaseWorld,
+  );
 
   // A RULE EDIT IS A COORDINATED WORLD RELOAD (#201).
   //
@@ -454,16 +475,7 @@ export async function startWorldDevServer(
   // again.
   let stopping: Promise<void> | null = null;
   const teardown = async (): Promise<void> => {
-    worldSocket.close();
-    connections.forgetAll();
-    // `close` drains the world lock before it touches the store, so an
-    // in-flight disconnect or command is finished rather than abandoned -- and
-    // the checkpoint it writes on the way out is the last write there is.
-    //
-    // THE WORLD IS CLOSED, NOT DELETED. A persistent world that erased itself
-    // when its host stopped would be a session; `--reset` is the only thing
-    // that removes one.
-    await worldHost.close();
+    await releaseWorld();
     // AFTER the world, because Vite's own watcher and dep optimiser write into
     // the project too, and a caller about to remove that project needs both
     // writers stopped before it does.

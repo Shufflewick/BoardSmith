@@ -327,7 +327,7 @@ candidates — three things read it: this panel, `boardsmith validate`, and
 candidates ALL carry a board ref is handed to the board: the panel keeps the
 prompt and renders one control, "Choose on the board (N)", instead of N buttons.
 That is an `element`/`elements` pick, or a `chooseFrom` whose every candidate
-names its own board space by `notation` (see `docs/actions-and-flow.md`).
+names its own board element by `id` or `notation` (see `docs/actions-and-flow.md`).
 The board is the better surface for a set that size — it draws the candidates in
 the geometry the choice actually has.
 
@@ -343,7 +343,7 @@ This is a change of surface, not of content, and three things keep it honest:
   just unmounted.
 
 A `choice` pick below the threshold, or one with a candidate that names no board
-space of its own, is partitioned by `splitAnchoredChoices` instead, which keeps
+element of its own, is partitioned by `splitAnchoredChoices` instead, which keeps
 every choice in the panel.
 
 #### Text and number picks are editors, not buttons

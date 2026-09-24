@@ -247,18 +247,20 @@ describe('useFlyingElements', () => {
       const { flyMultiple } = useFlyingElements();
 
       enableAnimationTestMode();
-      const start = Date.now();
+      // The stagger is a timer, so the proof is that none was scheduled for it,
+      // not how long the call took: a wall-clock budget fails on a busy machine
+      // with nothing wrong (#360's class).
+      const timers = vi.spyOn(globalThis, 'setTimeout');
       await flyMultiple(
         [
           { id: 'stagger-1', startRect: makeRect(), endRect: makeRect(), elementData: {} },
           { id: 'stagger-2', startRect: makeRect(), endRect: makeRect(), elementData: {} },
           { id: 'stagger-3', startRect: makeRect(), endRect: makeRect(), elementData: {} },
         ],
-        1000, // large stagger: if not skipped, this alone would exceed the test timeout
+        1234,
       );
-      const elapsed = Date.now() - start;
 
-      expect(elapsed).toBeLessThan(500);
+      expect(timers.mock.calls.filter(([, delay]) => delay === 1234)).toEqual([]);
       expect(getAnimationTrace()).toHaveLength(3);
     });
   });

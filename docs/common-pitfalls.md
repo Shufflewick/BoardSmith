@@ -2018,6 +2018,52 @@ an outcome — verify that test fails when a branch is removed.
 
 ---
 
+## 23. Naming Your Own Field After an Engine Field
+
+### The Problem
+
+Every `Game` already has fields the engine owns: `pile`, `random`, `phase`,
+`settings`, `messages`, `commandHistory`, `tutorialProgress`, and the internal
+`_`-prefixed ones. A game that reuses one of those names for its own state
+replaces the engine's value:
+
+```typescript
+// PROBLEMATIC - `pile` is the engine's container for removed elements
+class MyGame extends Game<MyGame, MyPlayer> {
+  pile!: Pile;
+  constructor(options: GameOptions) {
+    super(options);
+    this.pile = this.create(Pile, 'pile');
+  }
+}
+```
+
+This type-checks and works in a fresh game. But the engine never saves `pile`
+and rebuilds it on every restore, so after the first undo, reload or bot search
+`game.pile` points at the engine's container again while your real zone sits in
+the tree. Choices read one board and moves change the other.
+
+### The Solution
+
+Give your field a name that says what it holds:
+
+```typescript
+class MyGame extends Game<MyGame, MyPlayer> {
+  discardPile!: Pile;
+  constructor(options: GameOptions) {
+    super(options);
+    this.discardPile = this.create(Pile, 'discardPile');
+  }
+}
+```
+
+> **Guards:** the `no-engine-field-shadow` ESLint rule flags a Game subclass
+> member, or a `this.<name> = ...` assignment, that uses an engine field's name.
+> `boardsmith validate` (and so `boardsmith publish`) enforces it. The engine
+> also refuses such a game when it is constructed, naming the field.
+
+---
+
 ## Quick Reference
 
 | Pitfall | Wrong | Right |
@@ -2047,6 +2093,7 @@ an outcome — verify that test fails when a branch is removed.
 | **Element identity (lint)** | `el1 === el2` / `arr.includes(el)` | `no-element-identity-comparison` ESLint rule auto-fixes simple cases to `.id` |
 | **Element array state (lint)** | `class X { items: Card[] = game.all(Card); }` | `no-element-array-state` ESLint rule flags it — query at point of use or store ids |
 | **Silent dispatch (lint)** | `if (a) {...; continue} if (b) {...; continue}` and nothing after | `switch` returning an outcome; `no-silent-dispatch-fallthrough` flags the chain |
+| **Engine field names** | `pile!: Pile` on your Game | `discardPile!: Pile`; `no-engine-field-shadow` flags it and construction refuses it |
 
 ---
 

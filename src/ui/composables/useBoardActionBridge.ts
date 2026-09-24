@@ -611,6 +611,10 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
         for (const choice of choicesWithRefs) {
           const ref = choiceBoardTarget(choice);
           if (!ref) continue;
+          // Two choices on one element: the first is the one the board picks
+          // there, for an id as for a notation (#341), so a later one never
+          // replaces it.
+          if (ref.id !== undefined && refToChoice.has(ref.id)) continue;
           const key = ref.id ?? syntheticKey--;
           refToChoice.set(key, { value: choice.value, ref, disabled: choice.disabled, display: choice.display });
         }

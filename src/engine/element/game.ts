@@ -92,6 +92,7 @@ import { FlowEngine } from '../flow/engine.js';
 import { canSeatAct } from '../flow/seat-activity.js';
 import { checkForVolatileState } from './volatile-state.js';
 import { PersistentMap } from './persistent-map.js';
+import { ENGINE_OWNED_GAME_FIELDS, describeEngineFieldShadow } from './engine-owned-fields.js';
 
 /**
  * Default player color palette, used when a game doesn't pass `GameOptions.colors`.
@@ -547,6 +548,30 @@ export interface FormattedMessage {
 export const WORLD_PARTITION_ID_FLOOR = 1_000_000;
 
 export const GAME_SELF_SERIALIZED_FIELDS = ['phase', 'messages', 'settings'] as const;
+
+/**
+ * What each `'fixed'` engine field held when `Game`'s own constructor finished,
+ * kept on the game until `constructGame` has checked it (#346).
+ *
+ * UNDER `Symbol.for`, for the reason `FACILITIES_KEY` in `world/action.ts` gives:
+ * the engine that constructs a game is not always the copy the game's class
+ * extends. `boardsmith validate` and `simulate` load rules bundled with the
+ * engine inlined and drive them with the CLI's own engine, so a module-scope
+ * WeakMap written by one copy is read, empty, by the other. The global symbol
+ * is the same in both, and the game object is what they share. It is defined
+ * non-enumerable, so nothing that walks a game's keys sees it.
+ */
+const CONSTRUCTION_BASELINE = Symbol.for('boardsmith.game.constructionBaseline');
+
+type BaselineHolder = { [CONSTRUCTION_BASELINE]?: ReadonlyMap<string, unknown> };
+
+function recordFixedEngineFields(game: Game): ReadonlyMap<string, unknown> {
+  const values = new Map<string, unknown>();
+  for (const [name, kind] of Object.entries(ENGINE_OWNED_GAME_FIELDS)) {
+    if (kind === 'fixed') values.set(name, readDynamicAttribute(game, name));
+  }
+  return values;
+}
 
 /**
  * The own-field names of `game` that are currently bound to a
@@ -1155,6 +1180,14 @@ export class Game<
 
     // Initialize action executor
     this._actionExecutor = new ActionExecutor(this);
+
+    // Recorded LAST, so it holds exactly what the engine's constructor left in
+    // each fixed engine field. `constructGame` compares against it once the
+    // subclass constructor has run (#346).
+    Object.defineProperty(this, CONSTRUCTION_BASELINE, {
+      value: recordFixedEngineFields(this),
+      configurable: true,
+    });
 
     // Schedule HMR warning check after subclass constructor completes
     // Uses queueMicrotask so it runs after the full constructor chain
@@ -5126,7 +5159,7 @@ export class Game<
     const playerCount = playerChildren.length;
     const playerNames = playerChildren.map(p => p.name as string);
 
-    const game = new GameClass({
+    const game = constructGame(GameClass, {
       playerCount,
       playerNames,
     });
@@ -5140,4 +5173,45 @@ export class Game<
 
     return game;
   }
+}
+
+/**
+ * Build a game, and refuse it if its class took over a field the engine owns
+ * (#346).
+ *
+ * This is how the engine constructs every game: the runner, a world, a bot's
+ * search copy, a dev-state restore, the capability and introspection passes.
+ * `engine-owned-fields.test.ts` holds that there is no other construction site.
+ * The check has to run here rather than in `Game`'s constructor, because a
+ * subclass's field declarations and constructor body run only after that
+ * constructor has returned.
+ *
+ * It compares each `'fixed'` field in {@link ENGINE_OWNED_GAME_FIELDS} with what
+ * the engine's constructor left there. A subclass that declared, assigned or
+ * defined a member of that name has changed it, and without this the game would
+ * work until its first restore and then silently read the engine's value again.
+ * The `boardsmith/no-engine-field-shadow` lint rule catches the same mistake,
+ * and the `'engine-set'` fields as well, at `boardsmith validate`.
+ */
+export function constructGame<G extends Game, O extends GameOptions>(
+  GameClass: new (options: O) => G,
+  options: O,
+): G {
+  const game = new GameClass(options);
+  const holder = game as unknown as BaselineHolder;
+  const baseline = holder[CONSTRUCTION_BASELINE];
+  if (!baseline) {
+    throw new Error(
+      `${GameClass.name}'s constructor returned something other than the game the Game ` +
+        `constructor built. A game class must extend Game, call super(options), and not return ` +
+        `a different object from its constructor.`,
+    );
+  }
+  delete holder[CONSTRUCTION_BASELINE];
+  for (const [name, value] of baseline) {
+    if (readDynamicAttribute(game, name) !== value) {
+      throw new Error(describeEngineFieldShadow(GameClass.name, name));
+    }
+  }
+  return game;
 }

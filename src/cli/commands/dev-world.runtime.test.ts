@@ -23,7 +23,7 @@ import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { loadWorldRuntime } from './dev-world.js';
 
 /** A one-room world project, written the way an author writes one. */
-function worldProject(): { rulesPath: string; tempDir: string; storePath: string } {
+function worldProject(): { rulesPath: string; tempDir: string } {
   const dir = tempTree('bs-dev-world-runtime-');
   const rulesPath = join(dir, 'src', 'rules');
   mkdirSync(rulesPath, { recursive: true });
@@ -53,7 +53,19 @@ function worldProject(): { rulesPath: string; tempDir: string; storePath: string
   );
   const tempDir = join(dir, '.boardsmith');
   mkdirSync(tempDir, { recursive: true });
-  return { rulesPath, tempDir, storePath: join(dir, '.boardsmith-dev-world', 'world.db') };
+  return { rulesPath, tempDir };
+}
+
+// #363: bundling the rules with the engine and the world host is the slow part
+// of these tests, seconds on a busy machine. Both tests read the same runtime,
+// so it is built once, here, while the file is collected and no test timeout
+// applies. Each test still opens its own store.
+const project = worldProject();
+const runtime = await loadWorldRuntime(project.rulesPath, project.tempDir, 'monorepo');
+
+/** A fresh store path per test, so no test sees another's world. */
+function storePath(): string {
+  return join(tempTree('bs-dev-world-store-'), 'world.db');
 }
 
 const closing: Array<() => Promise<void>> = [];
@@ -63,9 +75,6 @@ afterEach(async () => {
 
 describe('loadWorldRuntime (#283)', () => {
   it('builds the world host into the same bundle as the rules, so a world runs on one engine', async () => {
-    const { rulesPath, tempDir, storePath } = worldProject();
-    const runtime = await loadWorldRuntime(rulesPath, tempDir, 'monorepo');
-
     const frames: Array<{ clientId: string; message: { type: string; actions?: unknown } }> = [];
     const budgets = worldBudgets();
     const host = new runtime.LocalWorldHost({
@@ -75,7 +84,7 @@ describe('loadWorldRuntime (#283)', () => {
       worldName: 'Yard',
       seed: 'world:dev-world-runtime',
       budgets,
-      store: runtime.openWorldStore(storePath, budgets),
+      store: runtime.openWorldStore(storePath(), budgets),
       send: (clientId, message) =>
         frames.push({ clientId, message: message as { type: string; actions?: unknown } }),
       isOpen: () => true,
@@ -92,13 +101,11 @@ describe('loadWorldRuntime (#283)', () => {
     ]);
   });
 
-  it("is needed: the CLI's own host refuses rules bundled on their own engine", async () => {
+  it("is needed: the CLI's own host refuses rules bundled on their own engine", () => {
     // What `boardsmith dev` used to do, which the world now refuses by name
     // rather than running slowly on two engines.
-    const { rulesPath, tempDir, storePath } = worldProject();
-    const runtime = await loadWorldRuntime(rulesPath, tempDir, 'monorepo');
     const budgets = worldBudgets();
-    const store = openWorldStore(storePath, budgets);
+    const store = openWorldStore(storePath(), budgets);
     closing.push(async () => store.close());
 
     expect(

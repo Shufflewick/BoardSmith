@@ -13,7 +13,12 @@
 // (docs/TEST-FIXTURES.md).
 import { describe, expect, it } from "vitest";
 import { BoardSmithWorldEngine } from "./engine.js";
-import { worldAction, worldClockAction } from "./action.js";
+import {
+  worldAction,
+  worldClockAction,
+  type WorldActionContext,
+  type WorldNeedsContext,
+} from "./action.js";
 import { worldBudgets } from "./budgets.js";
 import type { ActionDefinition, GameElement } from "../engine/index.js";
 import {
@@ -69,6 +74,13 @@ const tend = worldAction<VillageFixture>("tend")
     neighbour.standing += 2;
     ctx.world.emit(holdingPartition(neighbour.seat), { tended: 2 });
   });
+
+/** A pick of the seat's two neighbouring holdings: the round that names them, and the candidates. */
+const neighbourPick = {
+  needs: ({ player }: WorldNeedsContext<VillageFixture>) => neighbourSeats(player.seat).map(holdingPartition),
+  elements: ({ game, player }: WorldActionContext<VillageFixture>) =>
+    neighbourSeats(player.seat).map((s) => game.holdingOf(s)),
+};
 
 const gather = worldAction<VillageFixture>("gather")
   .needs(({ player }) => [holdingPartition(player.seat)])
@@ -190,14 +202,36 @@ describe("a world action's offer", () => {
     // DISABLED action is no longer dropped for the same reason.
     const nothingToTake = worldAction<VillageFixture>("nothingToTake")
       .needs(({ player }) => [holdingPartition(player.seat)])
-      .chooseElement("neighbour", {
-        needs: ({ player }) => neighbourSeats(player.seat).map(holdingPartition),
-        elements: ({ game, player }) => neighbourSeats(player.seat).map((s) => game.holdingOf(s)),
-        disabled: () => "Not this one",
-      })
+      .chooseElement("neighbour", { ...neighbourPick, disabled: () => "Not this one" })
       .execute(() => {});
     const { engine } = newEngine([nothingToTake]);
     expect((await engine.offersFor("p3", OFFER)).map((offer) => offer.name)).toEqual([]);
+  });
+
+  it("hands a selection's prepared value to every disabled call, prepared once per evaluation (#334)", async () => {
+    let prepares = 0;
+    let disabledCalls = 0;
+    const tendTallest = worldAction<VillageFixture>("tendTallest")
+      .needs(({ player }) => [holdingPartition(player.seat)])
+      .chooseElement("neighbour", {
+        ...neighbourPick,
+        prepare: ({ game, player }) => {
+          prepares++;
+          return Math.max(...neighbourSeats(player.seat).map((s) => game.holdingOf(s).standing));
+        },
+        disabled: (holding, _ctx, tallest) => {
+          disabledCalls++;
+          return holding.standing < tallest ? "Tend the tallest neighbour" : false;
+        },
+      })
+      .execute(() => {});
+    const { engine } = newEngine([tendTallest]);
+    const offer = (await engine.offersFor("p3", OFFER)).find((o) => o.name === "tendTallest");
+    expect(offer).toBeDefined();
+    expect(offer!.selections[0]!.validElements).toHaveLength(2);
+    // Every evaluation prepared once and then judged both candidates with it.
+    expect(prepares).toBeGreaterThan(0);
+    expect(disabledCalls).toBe(prepares * 2);
   });
 
   it("loads nothing beyond what the seat's own view already names", async () => {

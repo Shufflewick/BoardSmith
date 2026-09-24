@@ -34,7 +34,16 @@ import {
   type ElementJSON,
 } from '../engine/index.js';
 import { TestGame } from './test-game.js';
-import { assertNoHiddenInfoLeak, renderAsSeat, type HiddenInfoGameView } from './dom-leak.js';
+import {
+  assertNoHiddenInfoLeak,
+  preloadSeatRenderer,
+  renderAsSeat,
+  type HiddenInfoGameView,
+} from './dom-leak.js';
+
+// #354: loading AutoUI's module graph is the one slow thing a render does. Done
+// here, while the file is collected, so no test's timeout pays for it.
+await preloadSeatRenderer();
 
 // ---------------------------------------------------------------------------
 // Fixture: two players, each with an owner-only Hand holding one secret card.
@@ -393,6 +402,27 @@ describe('renderAsSeat / assertNoHiddenInfoLeak — WR-03: actionable error outs
       await expect(
         assertNoHiddenInfoLeak(tg, 1, { gameViewOverride: unfilteredView }),
       ).rejects.toThrow(/@vitest-environment jsdom/);
+    } finally {
+      globalThis.document = originalDocument;
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// #354: the module load a render needs is paid once, where the caller chooses.
+// ---------------------------------------------------------------------------
+
+describe('preloadSeatRenderer (#354)', () => {
+  it('loads the renderer once: every call returns the same promise', () => {
+    expect(preloadSeatRenderer()).toBe(preloadSeatRenderer());
+  });
+
+  it('throws the same actionable error as a render when document is undefined', () => {
+    const originalDocument = globalThis.document;
+    // @ts-expect-error -- deliberately simulating a non-DOM environment
+    delete globalThis.document;
+    try {
+      expect(() => preloadSeatRenderer()).toThrow(/@vitest-environment jsdom/);
     } finally {
       globalThis.document = originalDocument;
     }
