@@ -16,7 +16,7 @@
  * - bot scheduling
  */
 
-import type { FlowState, SerializedAction, Game, PendingActionState, GameCommand, FollowUpAction, GameStateSnapshot, PlayerStateView, FlowDebugInfo, Player } from '../engine/index.js';
+import type { FlowState, SerializedAction, Game, PendingActionState, GameCommand, FollowUpOffer, GameStateSnapshot, PlayerStateView, FlowDebugInfo, Player } from '../engine/index.js';
 import { canSeatAct } from '../engine/index.js';
 import type { TutorialDefinition } from '../engine/tutorial/types.js';
 import type { Annotation } from '../engine/tutorial/types.js';
@@ -172,9 +172,11 @@ export interface GameSessionOptions<G extends Game = Game> {
 }
 
 /**
- * Result of performing an action
+ * What {@link GameSession.performAction} returns: the engine's
+ * `ActionResult` as the session reports it, with the acting seat's new
+ * state and flow state, and a follow-up carrying its action's metadata.
  */
-export interface ActionResult {
+export interface SessionActionResult {
   success: boolean;
   error?: string;
   /** Programmatic error code for switch statements. See ErrorCode enum. */
@@ -186,11 +188,8 @@ export interface ActionResult {
   data?: Record<string, unknown>;
   /** Message from the action (for logging/display) */
   message?: string;
-  /** Optional follow-up action to chain after this action */
-  followUp?: {
-    action: string;
-    args?: Record<string, unknown>;
-  };
+  /** Follow-up action to chain after this action, with the metadata a client needs to start it */
+  followUp?: FollowUpOffer;
 }
 
 // UndoResult and ElementDiff are now exported from state-history.ts
@@ -1481,7 +1480,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     action: string,
     player: number,
     args: Record<string, unknown>
-  ): Promise<ActionResult> {
+  ): Promise<SessionActionResult> {
     if (player < 1 || player > this.#storedState.playerCount) {
       return { success: false, error: `Invalid player: ${player}. Player positions are 1-indexed (1 to ${this.#storedState.playerCount}).`, errorCode: ErrorCode.INVALID_PLAYER };
     }
@@ -1551,7 +1550,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
 
     // Build followUp with metadata if present
     const followUp = result.flowState?.followUp;
-    let followUpWithMetadata: typeof followUp & { metadata?: ReturnType<typeof buildSingleActionMetadata> } | undefined;
+    let followUpWithMetadata: FollowUpOffer | undefined;
     if (followUp) {
       const playerObj = this.#runner.game.getPlayer(player);
       // Pass followUp.args so dynamic prompts can access them (e.g., showing sector name)
@@ -1722,9 +1721,9 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     done?: boolean;
     nextChoices?: unknown[];
     actionComplete?: boolean;
-    actionResult?: ActionResult;
+    actionResult?: SessionActionResult;
     state?: PlayerGameState;
-    followUp?: FollowUpAction & { metadata?: ReturnType<typeof buildSingleActionMetadata> };
+    followUp?: FollowUpOffer;
     /** `ActionResult.data` from the action this step completed (BUG-017). */
     data?: Record<string, unknown>;
     /** `ActionResult.message` from the action this step completed (BUG-012). */

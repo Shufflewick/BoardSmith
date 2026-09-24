@@ -12,7 +12,7 @@ import type {
   ConnectionCallback,
   WebSocketOutgoingMessage,
   WebSocketIncomingMessage,
-  ActionResult,
+  ActionResponse,
   LobbyInfo,
 } from './types.js';
 import { resolveWsCtor } from './ws-ctor.js';
@@ -45,7 +45,7 @@ export class GameConnection {
   private pendingActions: Map<
     string,
     {
-      resolve: (result: ActionResult) => void;
+      resolve: (result: ActionResponse) => void;
       reject: (error: Error) => void;
       timeout: ReturnType<typeof setTimeout>;
     }
@@ -181,7 +181,7 @@ export class GameConnection {
     return this.status === 'connected';
   }
 
-  async action(actionName: string, args: Record<string, unknown> = {}): Promise<ActionResult> {
+  async action(actionName: string, args: Record<string, unknown> = {}): Promise<ActionResponse> {
     if (this.config.spectator) {
       return { success: false, error: 'Spectators cannot perform actions' };
     }
@@ -235,7 +235,7 @@ export class GameConnection {
     };
 
     // Create promise that will be resolved when server responds
-    return new Promise<ActionResult>((resolve, reject) => {
+    return new Promise<ActionResponse>((resolve, reject) => {
       const timeout = setTimeout(() => {
         this.pendingActions.delete(requestId);
         reject(

@@ -9,6 +9,7 @@ import type { Ref, ComputedRef } from 'vue';
 import type { GameElement } from '../types.js';
 import type { UseAnimationEventsReturn } from './useAnimationEvents.js';
 import type { TutorialStepView } from '../../engine/tutorial/types.js';
+import type { FollowUpOffer } from '../../engine/action/types.js';
 
 // Re-export GameElement as GameViewElement for external use
 export type { GameElement as GameViewElement };
@@ -58,28 +59,21 @@ export type PickMetadata = WirePickMetadata<ValidElement>;
 /** Metadata for an available action, carrying picks over ENRICHED elements. */
 export type ActionMetadata = WireActionMetadata<ValidElement>;
 
-/** Follow-up action to chain after an action completes */
-export interface FollowUpAction {
-  /** Name of the action to chain to */
-  action: string;
-  /** Args to pre-fill in the follow-up action */
-  args?: Record<string, unknown>;
-  /** Display strings for args (use instead of { id, name } objects) */
-  display?: Record<string, string>;
-  /** Metadata for the follow-up action (for actions not in availableActions) */
-  metadata?: ActionMetadata;
-}
-
-export interface ActionResult {
+/**
+ * What the action controller resolves an action to: the server's answer, with
+ * the follow-up's picks over enriched elements.
+ */
+export interface ControllerActionResult {
   success: boolean;
   error?: string;
   data?: Record<string, unknown>;
   message?: string;
   /** Follow-up action to automatically start after this action completes */
-  followUp?: FollowUpAction;
+  followUp?: FollowUpOffer<ValidElement>;
 }
 
-export interface ValidationResult {
+/** Whether a value filled into a pick was accepted, and why not when it was not. */
+export interface PickValidationResult {
   valid: boolean;
   error?: string;
 }
@@ -99,19 +93,14 @@ export interface PickStepResult {
   data?: Record<string, unknown>;
   /** `ActionResult.message` from the action this step completed (BUG-012). */
   message?: string;
-  followUp?: {
-    action: string;
-    args?: Record<string, unknown>;
-    metadata?: ActionMetadata;
-    display?: Record<string, string>;
-  };
+  followUp?: FollowUpOffer<ValidElement>;
 }
 
 /**
  * An action that has just resolved on the server, with the result verbatim.
  *
  * This is the ONE place a UI reads an action's return value, whichever transport
- * carried it: `execute()`/`executeCurrentAction()` return their `ActionResult`
+ * carried it: `execute()`/`executeCurrentAction()` return their `ControllerActionResult`
  * to their caller, but a pick-driven action (an `onSelect` selection, or a
  * repeating one) completes inside `fill()` — often triggered by an ActionPanel
  * click that no board code called at all — so a return value would reach nobody.
@@ -126,7 +115,7 @@ export interface ResolvedAction {
   /** Seat that took it. */
   seat: number;
   /** The server's result, verbatim — including `data` (BUG-017) and `message`. */
-  result: ActionResult;
+  result: ControllerActionResult;
 }
 
 /** Result from fetching pick choices */
@@ -215,7 +204,7 @@ export interface ActionStateSnapshot {
 
 export interface UseActionControllerOptions {
   /** Function to send action to server */
-  sendAction: (actionName: string, args: Record<string, unknown>) => Promise<ActionResult>;
+  sendAction: (actionName: string, args: Record<string, unknown>) => Promise<ControllerActionResult>;
   /** Available actions (from game state). Accepts Ref with potentially undefined value for test compatibility. */
   availableActions: Ref<string[] | undefined> | Ref<string[]>;
   /** Action metadata (from game state) */
@@ -440,7 +429,7 @@ export interface UseActionControllerReturn {
    * - Auto-fills single-choice selections
    * - Returns actual server result
    */
-  execute: (actionName: string, args?: Record<string, unknown>) => Promise<ActionResult>;
+  execute: (actionName: string, args?: Record<string, unknown>) => Promise<ControllerActionResult>;
 
   // === Step-by-step Methods (wizard mode) ===
   /**
@@ -461,7 +450,7 @@ export interface UseActionControllerReturn {
    * ```
    */
   /**
-   * Begin wizard mode for an action. The resolved ActionResult reflects ONLY
+   * Begin wizard mode for an action. The resolved ControllerActionResult reflects ONLY
    * start()'s synchronous pre-checks (action availability, metadata presence) —
    * `{ success: true }` means wizard mode began, NOT that the action has been
    * executed. The eventual server outcome arrives later via the auto-execute
@@ -470,9 +459,9 @@ export interface UseActionControllerReturn {
   start: (actionName: string, options?: {
     args?: Record<string, unknown>;
     prefill?: Record<string, unknown>;
-  }) => Promise<ActionResult>;
+  }) => Promise<ControllerActionResult>;
   /** Fill a selection with a value (async for repeating selections) */
-  fill: (selectionName: string, value: unknown) => Promise<ValidationResult>;
+  fill: (selectionName: string, value: unknown) => Promise<PickValidationResult>;
   /** Skip an optional selection */
   skip: (selectionName: string) => void;
   /** Clear a selection's value */
@@ -553,7 +542,7 @@ export interface UseActionControllerReturn {
    * the price on screen is the price of that draft -- a confirmation of something
    * nobody was shown is the defect this whole road exists to close.
    */
-  confirm: () => Promise<ActionResult>;
+  confirm: () => Promise<ControllerActionResult>;
 
   // === The action list's open level ===
   /**
@@ -580,7 +569,7 @@ export interface UseActionControllerReturn {
    * the multiSelect array (via the existing fill() path). Returns the fill result, or
    * void if there is no draft.
    */
-  confirmMultiSelect: () => Promise<ValidationResult | void>;
+  confirmMultiSelect: () => Promise<PickValidationResult | void>;
   /** Whether a value is currently in the multiSelect draft for the given selection. */
   isMultiSelectSelected: (selectionName: string, value: unknown) => boolean;
 

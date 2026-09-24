@@ -387,7 +387,7 @@ describe('useActionController', () => {
       warnSpy.mockRestore();
     });
 
-    it('start() resolves to a failure ActionResult and devWarns for an unavailable action', async () => {
+    it('start() resolves to a failure ControllerActionResult and devWarns for an unavailable action', async () => {
       const controller = useActionController({
         sendAction,
         availableActions,
@@ -404,7 +404,7 @@ describe('useActionController', () => {
       expect(warnSpy.mock.calls[0][0]).toContain("start('invalidAction')");
     });
 
-    it('start() resolves to a failure ActionResult for an action with no metadata (D26/SPACE-05 defense-in-depth: no-op, not a hard error)', async () => {
+    it('start() resolves to a failure ControllerActionResult for an action with no metadata (D26/SPACE-05 defense-in-depth: no-op, not a hard error)', async () => {
       availableActions.value = [...(availableActions.value ?? []), 'actionWithNoMetadata'];
 
       const controller = useActionController({
