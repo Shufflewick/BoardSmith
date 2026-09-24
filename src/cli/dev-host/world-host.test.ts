@@ -501,6 +501,131 @@ describe('#167: presence is the seats this host has open', () => {
 });
 
 /**
+ * #331: AN ARRIVAL IS A SEAT GOING FROM NO OPEN SOCKET TO ONE.
+ *
+ * The platform's rule, which this host must match so an author's `onArrive`
+ * runs as often here as it does in production (ShufflewickPub
+ * `games/src/world-presence-policy.ts`): the world is told a seat arrived only
+ * when the seat had no other socket, a return within the departure grace is a
+ * flap nobody is told about, and per seat arrivals and departures alternate.
+ * `greet` and `farewell` write down every transition the world was told.
+ */
+describe('#331: an arrival is a seat going from no open socket to one', () => {
+  function presenceWorld(presence: WorldDefinition['presence']) {
+    const told: string[] = [];
+    const transition = (name: string) =>
+      worldClockAction<Village>(name)
+        .prompt(`The clock tells the world a seat ${name === 'greet' ? 'arrived' : 'left'}`)
+        .needs(() => [HEARTH])
+        .execute((args) => {
+          told.push(`${args.present === true ? 'arrive' : 'depart'}:${String(args.seat)}`);
+        });
+    const definition = bundle({
+      world: worldBlock({
+        actions: [...VILLAGE_ACTIONS, transition('greet'), transition('farewell')],
+        presence,
+      }),
+    });
+    return { told, definition };
+  }
+
+  /** Lets a departure timer that is already due fire, then waits for what it
+   *  queued behind the world lock. */
+  async function afterDueDepartures(host: LocalWorldHost): Promise<void> {
+    await new Promise<void>((resolve) => {
+      setTimeout(resolve, 0);
+    });
+    await host.settled();
+  }
+
+  it('a page that says hello and then attaches to the seat it holds arrives once', async () => {
+    const { told, definition } = presenceWorld({ onArrive: 'greet' });
+    const { host } = await attached({ dir, definition });
+
+    await host.handleMessage('c1', { type: 'attach', seat: 1 });
+    expect(told).toEqual(['arrive:1']);
+    await host.close();
+  });
+
+  it('a second tab on an open seat is not an arrival, and its closing is not a departure', async () => {
+    const { told, definition } = presenceWorld({ onArrive: 'greet', onDepart: 'farewell' });
+    const { host, drop } = await attached({ dir, definition });
+
+    await host.handleMessage('c2', { type: 'attach', seat: 1 });
+    await drop('c2');
+    await afterDueDepartures(host);
+    expect(told).toEqual(['arrive:1']);
+    await host.close();
+  });
+
+  it('a tab moving onto a seat another tab holds is not an arrival there', async () => {
+    const { told, definition } = presenceWorld({ onArrive: 'greet' });
+    const { host } = await attached({ dir, definition });
+    await host.handleMessage('c2', { type: 'hello' });
+
+    await host.handleMessage('c2', { type: 'attach', seat: 1 });
+    expect(told).toEqual(['arrive:1', 'arrive:2']);
+    await host.close();
+  });
+
+  it('the last socket leaving and returning within the grace is a flap: no departure, no second arrival', async () => {
+    const { told, definition } = presenceWorld({
+      onArrive: 'greet',
+      onDepart: 'farewell',
+      departGraceMs: 60_000,
+    });
+    const { host, drop } = await attached({ dir, definition });
+
+    await drop('c1');
+    await host.handleMessage('c2', { type: 'hello' });
+    await afterDueDepartures(host);
+    expect(told).toEqual(['arrive:1']);
+    await host.close();
+  });
+
+  it('a return already queued when the departure comes due is a flap, whichever reaches the lock first', async () => {
+    const { told, definition } = presenceWorld({ onArrive: 'greet', onDepart: 'farewell' });
+    const { host, drop } = await attached({ dir, definition });
+
+    // A zero grace, and the return queued behind the close: the departure's
+    // timer may fire before or after the return is seated, and neither order
+    // may tell the world the seat left while a page holds it.
+    await Promise.all([drop('c1'), host.handleMessage('c2', { type: 'hello' })]);
+    await afterDueDepartures(host);
+    expect(told).toEqual(['arrive:1']);
+    await host.close();
+  });
+
+  it('a return after the departure was delivered is a new arrival', async () => {
+    const { told, definition } = presenceWorld({ onArrive: 'greet', onDepart: 'farewell' });
+    const { host, drop } = await attached({ dir, definition });
+
+    await drop('c1');
+    await afterDueDepartures(host);
+    await host.handleMessage('c2', { type: 'hello' });
+    expect(told).toEqual(['arrive:1', 'depart:1', 'arrive:1']);
+    await host.close();
+  });
+
+  it('with no onDepart, a return is an arrival only once the seat was gone for the grace', async () => {
+    const { told, definition } = presenceWorld({ onArrive: 'greet', departGraceMs: 60_000 });
+    const clock = testClock();
+    const { host, drop } = await attached({ dir, definition, clock });
+
+    await drop('c1');
+    clock.advance(59_999);
+    await host.handleMessage('c2', { type: 'hello' });
+    expect(told).toEqual(['arrive:1']);
+
+    await drop('c2');
+    clock.advance(60_000);
+    await host.handleMessage('c3', { type: 'hello' });
+    expect(told).toEqual(['arrive:1', 'arrive:1']);
+    await host.close();
+  });
+});
+
+/**
  * #284: A SOCKET THAT DIED ABRUPTLY COSTS THE SEATS THAT REMAIN NOTHING.
  *
  * The reported wedge: driver processes killed mid-command left a dev host whose

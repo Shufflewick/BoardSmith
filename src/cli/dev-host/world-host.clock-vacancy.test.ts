@@ -126,9 +126,20 @@ const reap = worldClockAction<Homestead>('reap')
     world.vacate(seat);
   });
 
-const HOMESTEAD_ACTIONS: readonly ActionDefinition[] = [build, abandon, reap];
+/** Every arrival the world was told about, by seat (#331). */
+const arrivals: number[] = [];
+const greet = worldClockAction<Homestead>('greet')
+  .prompt('The clock tells the world a seat arrived')
+  .needs(({ args }) => [estate(Number(args.seat))])
+  .execute((args) => {
+    arrivals.push(Number(args.seat));
+  });
 
-function bundle(): ConstructorParameters<typeof LocalWorldHost>[0]['definition'] {
+const HOMESTEAD_ACTIONS: readonly ActionDefinition[] = [build, abandon, reap, greet];
+
+function bundle(
+  presence?: WorldDefinition['presence'],
+): ConstructorParameters<typeof LocalWorldHost>[0]['definition'] {
   return {
     gameClass: Homestead,
     gameType: 'homestead',
@@ -143,6 +154,7 @@ function bundle(): ConstructorParameters<typeof LocalWorldHost>[0]['definition']
       view: (seat: number) => [estate(seat)],
       actions: HOMESTEAD_ACTIONS,
       vacateByClock: 'reap',
+      presence,
     } as WorldDefinition,
   } as ConstructorParameters<typeof LocalWorldHost>[0]['definition'];
 }
@@ -183,10 +195,14 @@ function nextOrder(): { id: string; at: number } {
 let dir: string;
 beforeEach(() => {
   dir = tempTree('bs-world-vacancy-');
+  arrivals.length = 0;
 });
 
 /** A launched world with one client watching through seat 1. */
-async function opened(budgets: WorldBudgets = worldBudgets()): Promise<{
+async function opened(
+  budgets: WorldBudgets = worldBudgets(),
+  presence?: WorldDefinition['presence'],
+): Promise<{
   host: LocalWorldHost;
   store: LocalWorldStore;
   sent: Sent[];
@@ -196,7 +212,7 @@ async function opened(budgets: WorldBudgets = worldBudgets()): Promise<{
   const sent: Sent[] = [];
   const clock = testClock();
   const host = new LocalWorldHost({
-    definition: bundle(),
+    definition: bundle(presence),
     worldName: 'Homestead',
     seed: 'seed',
     budgets,
@@ -340,6 +356,18 @@ describe('#278: a scheduled vacancy releases the seat it finalized', () => {
       .filter((one) => one.clientId === 'c1' && one.message.type === 'world_notice')
       .map((one) => String(one.message.message));
     expect(told.some((message) => message.includes('seat 1'))).toBe(true);
+    await host.close();
+  });
+
+  it('announces the next page to take the freed chair as an arrival, because it holds a new player (#331)', async () => {
+    const { host, clock } = await opened(worldBudgets(), { onArrive: 'greet' });
+
+    await send(host, 'abandon');
+    clock.advance(DAY);
+    await host.settled();
+    await host.handleMessage('c1', { type: 'attach', seat: 1 });
+
+    expect(arrivals).toEqual([1, 1]);
     await host.close();
   });
 });

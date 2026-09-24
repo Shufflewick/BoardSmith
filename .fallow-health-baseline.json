@@ -380,7 +380,7 @@
     },
     "src/engine/flow/describe-flow-position.ts": {
       "complexity_moderate": {
-        "count": 2
+        "count": 1
       }
     },
     "src/engine/flow/engine.ts": {
@@ -388,7 +388,7 @@
         "count": 1
       },
       "complexity_moderate": {
-        "count": 16
+        "count": 12
       }
     },
     "src/engine/flow/seat-activity.ts": {
