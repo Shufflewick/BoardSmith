@@ -8,7 +8,7 @@ import type {
   Selection,
   GameStateSnapshot,
 } from '../engine/index.js';
-import { createSnapshot, canSeatAct } from '../engine/index.js';
+import { createSnapshot, canSeatAct, availableActionsForSeat } from '../engine/index.js';
 import { enumerateActionMoves } from '../engine/utils/enumerate-moves.js';
 import type {
   BotConfig, BotMove, BotMoveStats, MCTSNode, BotStrategy, Objective, ThreatResponse,
@@ -964,31 +964,12 @@ export class MCTSBot<G extends Game = Game> {
   }
 
   /**
-   * Get available actions for the bot player from flow state
+   * The actions the bot's own seat may take: its entry in a simultaneous step,
+   * or the action step's actions when that step is its turn. Never another
+   * seat's actions, which would be enumerated as if the bot could take them.
    */
   private getAvailableActionsForBot(flowState: FlowState): string[] {
-    // Simultaneous action step - check awaitingPlayers first (takes priority)
-    if (flowState.awaitingPlayers) {
-      const playerState = flowState.awaitingPlayers.find(
-        p => p.playerIndex === this.playerIndex && !p.completed
-      );
-      if (playerState && playerState.availableActions.length > 0) {
-        return playerState.availableActions;
-      }
-    }
-
-    // Regular action step - use availableActions if currentPlayer matches
-    if (flowState.availableActions && flowState.availableActions.length > 0 &&
-        flowState.currentPlayer === this.playerIndex) {
-      return flowState.availableActions;
-    }
-
-    // Fallback to availableActions if currentPlayer matches or is undefined
-    if (flowState.availableActions && flowState.availableActions.length > 0) {
-      return flowState.availableActions;
-    }
-
-    return [];
+    return availableActionsForSeat(flowState, this.playerIndex);
   }
 
   // ============================================================================
@@ -1451,8 +1432,8 @@ export class MCTSBot<G extends Game = Game> {
       untriedMoves,
       visits: 0,
       value: 0,
-      // Not `flowState.currentPlayer` directly: inside a simultaneous step that field never
-      // advances (the engine tracks per-seat progress in `awaitingPlayers` instead), so every
+      // Not `flowState.currentPlayer` directly: inside a simultaneous step that field is absent
+      // (the engine tracks per-seat progress in `awaitingPlayers` instead, #321), so every
       // co-decider node was attributed to the bot's own seat. `selectChild`/`backpropagate` then
       // read the OPPONENT's simultaneous decision as the bot's own, making the search max-max
       // optimistic -- it assumed the opponent would pick whatever suited the bot, and never
