@@ -154,7 +154,7 @@ parseBotLevel('easy');    // 'easy'
 parseBotLevel('medium');  // 'medium'
 parseBotLevel('hard');    // 'hard'
 parseBotLevel('1000');    // 1000 (custom iteration ceiling)
-parseBotLevel('invalid'); // 'medium' (default fallback)
+parseBotLevel('invalid'); // throws: Unknown bot level "invalid". Use one of: easy, medium, hard, or a positive iteration count such as 750.
 ```
 
 ### Using MCTSBot Directly
