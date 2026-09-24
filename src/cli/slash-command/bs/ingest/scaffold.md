@@ -103,6 +103,24 @@ both options. That is deliberate: this flag was documented here first and a live
 ran the bare `npx boardsmith init <name>`, reproducing the command line from memory rather than
 from this file. An error is the one signal that reliably gets acted on.
 
+**When the rules live in more than one document, pass each other one with
+`--additional-source <path>`** on the same line (it takes several paths). That covers a
+companion document the rulebook incorporates by reference ("battles follow MECHCORE_REFERENCE.md")
+and a separate component document such as a card list:
+
+```bash
+npx boardsmith init <name> --rulebook <absolute-rulebookPath> --additional-source <absolute-companionPath>
+```
+
+Each one is archived to `rulebook/source/<filename>` and recorded with its own SHA-256 in
+`rulebook/INDEX.md`'s machine-owned `## Additional Sources` table. That table is part of the
+provenance record: a later verify pass reduces its scope when any recorded document is missing
+or has changed, and a chunk records the version of each one it was verified against. Never copy a
+second document into `rulebook/source/` by hand or note its hash in prose — nothing reads either.
+If the second document only turns up after `init`, run
+`npx boardsmith ingest-archive <rulebookPath> --additional-source <path>` from inside the project;
+the primary is left as it is.
+
 When no rulebook path exists, pass `--without-rulebook` instead. Drop `--rulebook` only when no
 path exists at this point: the designer has no rulebook (the
 interview path writes the header values itself, per `ingest/interview-fallback.md`), or they will

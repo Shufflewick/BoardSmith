@@ -553,12 +553,16 @@ async function provenanceProject(): Promise<{ project: string; liveSliceRel: str
   return { project, liveSliceRel: `rulebook/${liveSliceName}`, sourceHash };
 }
 
-/** Writes `chunks/<slug>/CHUNK.md` citing `citedSlice` and recording `recordedSourceHash` (or none). */
+/**
+ * Writes `chunks/<slug>/CHUNK.md` citing `citedSlice` and recording `recordedSourceHash` (or
+ * none), plus any additional-source hashes the chunk was verified against.
+ */
 async function writeCitingChunk(
   project: string,
   slug: string,
   citedSlice: string,
   recordedSourceHash: string | undefined,
+  additionalSources: Array<{ sourcePath: string; sourceHash: string }> = [],
 ): Promise<void> {
   const chunkDir = join(project, DESIGN_DIR, 'chunks', slug);
   await fs.mkdir(chunkDir, { recursive: true });
@@ -566,6 +570,7 @@ async function writeCitingChunk(
     scope: SCOPE_FULL,
     edition: 'none recorded',
     sourceHash: recordedSourceHash,
+    additionalSources,
     boardsmithVersion: '9.9.9',
     skillsTreeHash: 'deadbeef',
     citedSlices: [],
@@ -637,6 +642,63 @@ describe('provenance — three states, hash-only, never the subagent\'s opinion'
 
     const src = await fs.readFile(join(__dirname, 'verify-classify.ts'), 'utf-8');
     expect(src).not.toMatch(/deriveStale\([^)]*provenance/i);
+  });
+
+  describe('additional sources (#305)', () => {
+    const REFERENCE = 'rulebook/source/REFERENCE.md';
+
+    /** `provenanceProject()` plus an archived, recorded companion document. */
+    async function withReference(bytes: string): Promise<{ referenceHash: string }> {
+      const project = join(dir, 'game');
+      const referenceHash = sha256(Buffer.from(bytes));
+      await fs.writeFile(join(project, DESIGN_DIR, REFERENCE), bytes);
+      const indexPath = join(project, DESIGN_DIR, 'rulebook', 'INDEX.md');
+      const index = await fs.readFile(indexPath, 'utf-8');
+      await fs.writeFile(
+        indexPath,
+        index.replace(
+          '## Open Rules Gaps',
+          '## Additional Sources\n\n<!-- boardsmith:additional-sources:begin -->\n| file | sha256 |\n|------|--------|\n' +
+            `| ${REFERENCE} | ${referenceHash} |\n<!-- boardsmith:additional-sources:end -->\n\n## Open Rules Gaps`,
+        ),
+      );
+      return { referenceHash };
+    }
+
+    it('a chunk recording the current primary AND additional hashes resolves to source-unchanged', async () => {
+      const { project, liveSliceRel, sourceHash } = await provenanceProject();
+      const { referenceHash } = await withReference('# Reference v1\n');
+      await writeCitingChunk(project, 'battle', liveSliceRel, sourceHash, [
+        { sourcePath: REFERENCE, sourceHash: referenceHash },
+      ]);
+
+      const result = await resolveProvenance(project, [liveSliceRel]);
+      expect(result.provenance).toBe('source-unchanged');
+      expect(result.changedAdditionalSources).toEqual([]);
+    });
+
+    it('a chunk verified against an older version of the additional source resolves to source-changed, naming it', async () => {
+      const { project, liveSliceRel, sourceHash } = await provenanceProject();
+      await withReference('# Reference v2, rebalanced\n');
+      await writeCitingChunk(project, 'battle', liveSliceRel, sourceHash, [
+        { sourcePath: REFERENCE, sourceHash: sha256(Buffer.from('# Reference v1\n')) },
+      ]);
+
+      const result = await resolveProvenance(project, [liveSliceRel]);
+      expect(result.provenance).toBe('source-changed');
+      expect(result.changedAdditionalSources).toEqual([REFERENCE]);
+      expect(result.reason).toMatch(/additional source/);
+    });
+
+    it('a chunk verified before the additional source was recorded resolves to source-changed', async () => {
+      const { project, liveSliceRel, sourceHash } = await provenanceProject();
+      await withReference('# Reference v1\n');
+      await writeCitingChunk(project, 'battle', liveSliceRel, sourceHash);
+
+      const result = await resolveProvenance(project, [liveSliceRel]);
+      expect(result.provenance).toBe('source-changed');
+      expect(result.changedAdditionalSources).toEqual([REFERENCE]);
+    });
   });
 
   it('PROVENANCE_KINDS is the frozen three-state enum', () => {

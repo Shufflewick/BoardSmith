@@ -415,8 +415,37 @@ export interface ProvenanceResult {
   currentHash?: string;
   /** Every recorded `Source hash:` value found across chunks citing this pair's live slices. */
   recordedHashes: string[];
+  /**
+   * `## Additional Sources` paths that at least one citing chunk was NOT verified against in their
+   * current version (#305): it recorded a different hash, or none because it predates the row.
+   */
+  changedAdditionalSources: string[];
   /** A short, enumerated, machine-stable phrase — never free prose a human report re-derives. */
   reason: string;
+}
+
+/** Every `.md` file directly in the project's `rulebook/` — `[]` when there is no such directory. */
+async function rulebookSliceFilenames(projectDir: string): Promise<string[]> {
+  try {
+    const entries = await fs.readdir(designRulebookDir(projectDir), { withFileTypes: true });
+    return entries.filter((e) => e.isFile() && e.name.endsWith('.md')).map((e) => e.name);
+  } catch {
+    return [];
+  }
+}
+
+/** Each chunk's `CHUNK.md` text, in `chunkSlugs` order; a chunk directory without one is skipped. */
+async function readChunkTexts(projectDir: string): Promise<Array<{ slug: string; chunkText: string }>> {
+  const chunksDir = designChunksDir(projectDir);
+  const chunks: Array<{ slug: string; chunkText: string }> = [];
+  for (const slug of await chunkSlugs(projectDir)) {
+    try {
+      chunks.push({ slug, chunkText: await fs.readFile(join(chunksDir, slug, 'CHUNK.md'), 'utf-8') });
+    } catch {
+      // No CHUNK.md in this directory — not a chunk to scan.
+    }
+  }
+  return chunks;
 }
 
 /** Strips a leading `rulebook/` prefix, if present, for comparing citation names uniformly. */
@@ -441,7 +470,11 @@ function bareSliceName(path: string): string {
  *     pre-provenance project — the actual current state of both reference games — has no prior
  *     hash, and both populated states would be claims the tool cannot support). Any recorded hash
  *     differing from current → `source-changed` (any disagreement is a change the designer must
- *     see). Otherwise (at least one recorded hash, all equal to current) → `source-unchanged`.
+ *     see). So is a citing chunk that did not record the current hash of every `## Additional
+ *     Sources` row (#305): slices do not say which document they came from, so a companion
+ *     document that changed may be the one this pair was transcribed from. Otherwise (at least
+ *     one recorded hash, all equal to current, every additional source current) →
+ *     `source-unchanged`.
  *
  * No branch of this function can return `source-unchanged` when `recordedHashes` is empty —
  * pinned directly by `provenance-3`.
@@ -457,6 +490,7 @@ export async function resolveProvenance(
     return {
       provenance: 'unknown',
       recordedHashes: [],
+      changedAdditionalSources: [],
       reason:
         `no archived source available to compare against ` +
         `(${scope.reason ?? 'verification scope is not full'}) — cannot compute a provenance verdict`,
@@ -481,33 +515,23 @@ export async function resolveProvenance(
     }),
   );
 
-  const chunksDir = designChunksDir(dir);
-  const slugs = await chunkSlugs(dir);
-
-  const rulebookDir = designRulebookDir(dir);
-  let sliceFilenames: string[] = [];
-  try {
-    const entries = await fs.readdir(rulebookDir, { withFileTypes: true });
-    sliceFilenames = entries
-      .filter((e) => e.isFile() && e.name.endsWith('.md'))
-      .map((e) => e.name);
-  } catch {
-    sliceFilenames = [];
-  }
-
+  const sliceFilenames = await rulebookSliceFilenames(dir);
+  const currentAdditional = scope.additionalSources ?? [];
   const recordedHashes = new Set<string>();
-  for (const slug of slugs) {
-    let chunkText: string;
-    try {
-      chunkText = await fs.readFile(join(chunksDir, slug, 'CHUNK.md'), 'utf-8');
-    } catch {
-      continue;
-    }
+  const changedAdditionalSources = new Set<string>();
+  for (const { chunkText } of await readChunkTexts(dir)) {
     const { resolved } = resolveCitedSlices(chunkText, sliceFilenames);
     const citesThisPair = resolved.some((r) => wantedNames.has(bareSliceName(r)));
     if (!citesThisPair) continue;
     const parsed = parseVerifiedAgainst(chunkText);
-    if (parsed.sourceHash) recordedHashes.add(parsed.sourceHash);
+    if (!parsed.sourceHash) continue;
+    recordedHashes.add(parsed.sourceHash);
+    // Every additional source is part of the rules, and slices do not say which document they
+    // came from, so a citing chunk must have been verified against each one's current version.
+    for (const current of currentAdditional) {
+      const recorded = parsed.additionalSources.find((a) => a.sourcePath === current.sourcePath);
+      if (recorded?.sourceHash !== current.sourceHash) changedAdditionalSources.add(current.sourcePath);
+    }
   }
 
   if (recordedHashes.size === 0) {
@@ -515,6 +539,7 @@ export async function resolveProvenance(
       provenance: 'unknown',
       currentHash,
       recordedHashes: [],
+      changedAdditionalSources: [],
       reason:
         'no chunk citing these live slices records a Source hash — a first-ever verify pass, ' +
         'not a claim this tool can support',
@@ -522,12 +547,14 @@ export async function resolveProvenance(
   }
 
   const recordedHashesArr = [...recordedHashes].sort();
+  const changedAdditionalArr = [...changedAdditionalSources].sort();
   const allMatchCurrent = recordedHashesArr.every((h) => h === currentHash);
-  if (allMatchCurrent) {
+  if (allMatchCurrent && changedAdditionalArr.length === 0) {
     return {
       provenance: 'source-unchanged',
       currentHash,
       recordedHashes: recordedHashesArr,
+      changedAdditionalSources: [],
       reason: 'every citing chunk\'s recorded Source hash matches the current archived source',
     };
   }
@@ -536,9 +563,12 @@ export async function resolveProvenance(
     provenance: 'source-changed',
     currentHash,
     recordedHashes: recordedHashesArr,
-    reason:
-      'at least one citing chunk\'s recorded Source hash differs from the current archived ' +
-      'source — any disagreement is a change the designer must see',
+    changedAdditionalSources: changedAdditionalArr,
+    reason: allMatchCurrent
+      ? 'at least one citing chunk was not verified against the current version of an additional ' +
+        `source (${changedAdditionalArr.join(', ')}) — any disagreement is a change the designer must see`
+      : 'at least one citing chunk\'s recorded Source hash differs from the current archived ' +
+        'source — any disagreement is a change the designer must see',
   };
 }
 
@@ -1220,17 +1250,8 @@ async function computeChunkVerdicts(
   pairs: SlicePair[],
   classifications: ClassificationRecord[],
 ): Promise<{ verdicts: ChunkVerdict[]; warnings: string[] }> {
-  const chunksDir = designChunksDir(projectDir);
-  const slugs = await chunkSlugs(projectDir);
-
   const rulebookDir = designRulebookDir(projectDir);
-  let sliceFilenames: string[] = [];
-  try {
-    const entries = await fs.readdir(rulebookDir, { withFileTypes: true });
-    sliceFilenames = entries.filter((e) => e.isFile() && e.name.endsWith('.md')).map((e) => e.name);
-  } catch {
-    sliceFilenames = [];
-  }
+  const sliceFilenames = await rulebookSliceFilenames(projectDir);
 
   // `null` means "could not be read" — NEVER collapsed to `''`. A live slice cached as `''` on a
   // read failure would match no quote by construction, which is indistinguishable from "read fine,
@@ -1252,13 +1273,7 @@ async function computeChunkVerdicts(
   const warningSet = new Set<string>();
 
   const results: ChunkVerdict[] = [];
-  for (const slug of slugs) {
-    let chunkText: string;
-    try {
-      chunkText = await fs.readFile(join(chunksDir, slug, 'CHUNK.md'), 'utf-8');
-    } catch {
-      continue;
-    }
+  for (const { slug, chunkText } of await readChunkTexts(projectDir)) {
     const { resolved } = resolveCitedSlices(chunkText, sliceFilenames);
     if (resolved.length === 0) continue;
     const citedBare = new Set(resolved.map((r) => bareSliceName(r)));

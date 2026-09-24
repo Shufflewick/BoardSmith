@@ -53,6 +53,12 @@ export interface InitOptions {
   /** Edition string as stated in the rulebook, passed through to the provenance header. */
   edition?: string;
   /**
+   * Further documents the rules incorporate (`--additional-source`, repeatable), archived beside
+   * the rulebook and recorded with their own hashes. Passed straight to `ingest-archive`; needs
+   * `rulebook`, since an additional source is additional to a primary one.
+   */
+  additionalSource?: string[];
+  /**
    * Explicit "there is no rulebook" acknowledgement. Required when `rulebook` is absent, so a
    * missing archive is always a deliberate choice rather than an omission nobody noticed.
    */
@@ -334,6 +340,13 @@ export async function initCommand(name: string, options: InitOptions = {}): Prom
     );
   }
 
+  if (options.additionalSource?.length && !options.rulebook) {
+    throw new Error(
+      '--additional-source needs --rulebook: it records a document alongside the primary rulebook.\n' +
+        `Pass the rulebook too, e.g. boardsmith init ${name} --rulebook ~/path/to/rules.md --additional-source ~/path/to/reference.md`,
+    );
+  }
+
   const scaffold: ProjectScaffold = options.world ? WORLD_SCAFFOLD : TABLE_SCAFFOLD;
   const projectPath = options.intoExisting ? process.cwd() : join(process.cwd(), name);
 
@@ -353,12 +366,15 @@ export async function initCommand(name: string, options: InitOptions = {}): Prom
   const config = scaffold.config(name);
   const files = [...generateScaffoldFiles(config, projectPath), ...scaffold.sources(config)];
   const archive = options.rulebook
-    ? { rulebook: options.rulebook, ...rulebookArchivePaths(projectPath, options.rulebook) }
+    ? {
+        rulebook: options.rulebook,
+        ...rulebookArchivePaths(projectPath, options.rulebook, options.additionalSource),
+      }
     : undefined;
   if (options.intoExisting) {
     refuseConflicts(projectPath, name, [
       ...files.map((file) => join(projectPath, file.path)),
-      ...(archive ? [archive.archivePath, archive.indexPath] : []),
+      ...(archive ? [...archive.archivePaths, archive.indexPath] : []),
     ]);
   }
 
@@ -411,11 +427,12 @@ export async function initCommand(name: string, options: InitOptions = {}): Prom
       // project` on an unreadable rulebook (#242). A command that says both is
       // worse than one that says neither.
       spinner.stop();
-      await makeDir(dirname(archive.archivePath));
-      created.push(archive.archivePath, archive.indexPath);
+      await makeDir(dirname(archive.archivePaths[0]));
+      created.push(...archive.archivePaths, archive.indexPath);
       await ingestArchiveCommand(archive.rulebook, {
         project: projectPath,
         edition: options.edition,
+        additionalSource: options.additionalSource,
         gameName: name,
       });
     }

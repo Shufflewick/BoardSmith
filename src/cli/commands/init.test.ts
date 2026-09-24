@@ -161,6 +161,38 @@ describe('init command — no -t/--template surface (CLIX-05 / F33)', () => {
   });
 });
 
+/**
+ * #305: a rulebook that incorporates a second document by reference needs that document archived
+ * with the same provenance guarantees, and `init` is the one command no ingest run skips.
+ */
+describe('initCommand --additional-source (#305)', () => {
+  const originalCwd = process.cwd();
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    process.chdir(originalCwd);
+  });
+
+  it('archives the rulebook and each additional source, recording both in rulebook/INDEX.md', async () => {
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    const sourcesDir = tempTree('bs-init-305-sources-');
+    const rules = join(sourcesDir, 'REQUIREMENTS.md');
+    const reference = join(sourcesDir, 'REFERENCE.md');
+    writeFileSync(rules, '# Requirements\n\nBattles follow the reference.\n');
+    writeFileSync(reference, '# Reference\n\nUnit stats.\n');
+
+    const { projectPath } = await scaffoldProject('bs-init-305-', 'windup', {
+      rulebook: rules,
+      additionalSource: [reference],
+    });
+
+    const index = readFileSync(join(projectPath, 'design', 'rulebook', 'INDEX.md'), 'utf-8');
+    expect(index).toMatch(/^Source: rulebook\/source\/REQUIREMENTS\.md$/m);
+    expect(index).toMatch(/^\| rulebook\/source\/REFERENCE\.md \| [0-9a-f]{64} \|$/m);
+    expect(existsSync(join(projectPath, 'design', 'rulebook', 'source', 'REFERENCE.md'))).toBe(true);
+  });
+});
+
 // Phase 149 dry-run Finding 1: `build-chunk.md`'s Git Protocol commits at
 // every step, but a freshly-scaffolded project had no git repository at all
 // (`npx boardsmith init` never ran `git init`), so the very first commit that
@@ -533,6 +565,17 @@ describe('init command — <name> is a name, and a failure is one clean line (#2
     expect(exitSpy).not.toHaveBeenCalled();
   });
 
+  it('refuses --additional-source without --rulebook, before anything is created (#305)', async () => {
+    const parentDir = tempTree('bs-init-305-no-primary-');
+    process.chdir(parentDir);
+
+    const message = await rejectionMessage(
+      initCommand('mygame', { withoutRulebook: true, additionalSource: [join(parentDir, 'ref.md')] }),
+    );
+    expect(message).toMatch(/--additional-source needs --rulebook/);
+    expect(readdirSync(parentDir)).toEqual([]);
+  });
+
   it('refuses a missing rulebook decision by throwing, so the message survives to the terminal', async () => {
     const parentDir = tempTree('bs-init-240-rulebook-');
     process.chdir(parentDir);
@@ -716,6 +759,23 @@ describe('initCommand --into-existing — scaffold into the repository you are i
     expect(message).toContain('tsconfig.json');
     expect(message).toContain(join('design', 'rulebook', 'INDEX.md'));
     expect(message).not.toContain('package.json');
+    expect(snapshot(repo)).toEqual(before);
+  });
+
+  it('treats an additional source already archived in the repository as a conflict, changing nothing (#305)', async () => {
+    const repo = researchRepo('bs-init-305-conflict-');
+    mkdirSync(join(repo, 'design', 'rulebook', 'source'), { recursive: true });
+    writeFileSync(join(repo, 'design', 'rulebook', 'source', 'reference.txt'), 'copied by hand\n');
+    const before = snapshot(repo);
+    const reference = join(tempTree('bs-init-305-reference-'), 'reference.txt');
+    writeFileSync(reference, 'Battles follow this reference.\n');
+    process.chdir(repo);
+
+    const message = await rejectionMessage(
+      initCommand('sample-game', { rulebook: rulebook(), additionalSource: [reference], intoExisting: true }),
+    );
+
+    expect(message).toContain(join('design', 'rulebook', 'source', 'reference.txt'));
     expect(snapshot(repo)).toEqual(before);
   });
 
