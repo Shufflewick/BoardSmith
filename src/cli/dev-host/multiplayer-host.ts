@@ -21,6 +21,7 @@ import {
   type Op,
   type OpResult,
   type GamePreset,
+  type RulesReload,
   type TurnBoundary,
 } from '../../session/index.js';
 import { createNodeWorldClock, type WorldHostClock } from './node-world-clock.js';
@@ -233,6 +234,24 @@ export interface MultiplayerHostOptions {
 }
 
 /**
+ * THE RULES A TABLE RUNS, AS `boardsmith dev` LOADED THEM (#343).
+ *
+ * Both halves come out of one bundle of the author's rules, so they run on the
+ * engine those rules were built with. A rules edit hands the host a new pair
+ * through `MultiplayerHost.reloadRules`.
+ */
+export interface TableRules {
+  /** Runs one op, exactly as `MultiplayerHostOptions.executeOp` does. */
+  readonly executeOp: MultiplayerHostOptions['executeOp'];
+  /** Re-derives a running game's snapshot under these rules (see `RulesReload`). */
+  readonly carry: (
+    gameOptions: { playerCount: number },
+    snapshot: unknown,
+    hostOptions: { teachingDisabled?: boolean },
+  ) => Promise<RulesReload>;
+}
+
+/**
  * The open step's window: the boundary it belongs to, the session that
  * broadcast it, and when it closes on the host clock (null when the step
  * declared no window). One at a time, replaced whole when the boundary key
@@ -403,9 +422,21 @@ export class MultiplayerHost {
   private readonly clock: WorldHostClock;
   /** The open step's window, or null before the first broadcast of a session. */
   private window: StepWindow | null = null;
+  /**
+   * The rules every op runs on. Starts as `opts.executeOp` and is replaced by
+   * `reloadRules` when the author saves an edit (#343).
+   */
+  private executeOp: MultiplayerHostOptions['executeOp'];
+  /**
+   * Set when a rules reload could not carry the running game across: the
+   * instruction every move is answered with until a new game starts, so the
+   * table never plays on quietly in a state its rules do not fit.
+   */
+  private stranded: string | null = null;
 
   constructor(private readonly opts: MultiplayerHostOptions) {
     this.clock = opts.clock ?? createNodeWorldClock();
+    this.executeOp = opts.executeOp;
     for (let seat = 1; seat <= opts.playerCount; seat++) {
       this.seats.set(seat, { seat, clientId: null, name: `Player ${seat}`, connected: false });
     }
@@ -770,21 +801,30 @@ export class MultiplayerHost {
       this.send(clientId, { type: 'error', message: 'Game has not started.', requestId: msg.requestId ?? null });
       return;
     }
-    // A follower acts as whichever seat is currently due, not its own seat.
-    const seat =
-      clientId === this.followerClientId ? this.effectiveActiveSeat() : this.clientSeat.get(clientId);
-    if (seat === undefined) {
-      this.send(clientId, {
-        type: 'error',
-        message: 'You are not seated in this game.',
-        requestId: msg.requestId ?? null,
-      });
+    if (this.stranded !== null) {
+      this.send(clientId, { type: 'error', message: this.stranded, requestId: msg.requestId ?? null });
       return;
     }
+    const seat = this.seatOf(clientId, msg.requestId);
+    if (seat === undefined) return;
     // Remember who asked so the response routes back to THIS client, even when a
     // follower is acting as a seat it does not occupy.
     if (msg.requestId) this.requestOrigin.set(msg.requestId, clientId);
     await this.session.handleServerRequest(seat, msg.requestId, msg.op, msg.payload);
+  }
+
+  /**
+   * The seat `clientId` acts as and sees: a follower is whichever seat is
+   * currently due, anyone else is their own seat. A client holding no seat is
+   * told so, correlated to `requestId`, and gets undefined.
+   */
+  private seatOf(clientId: string, requestId: string | undefined): number | undefined {
+    const seat =
+      clientId === this.followerClientId ? this.effectiveActiveSeat() : this.clientSeat.get(clientId);
+    if (seat === undefined) {
+      this.send(clientId, { type: 'error', message: 'You are not seated in this game.', requestId: requestId ?? null });
+    }
+    return seat;
   }
 
   /**
@@ -804,16 +844,8 @@ export class MultiplayerHost {
       this.send(clientId, { type: 'error', message: 'Game has not started.', requestId: msg.requestId ?? null });
       return;
     }
-    const seat =
-      clientId === this.followerClientId ? this.effectiveActiveSeat() : this.clientSeat.get(clientId);
-    if (seat === undefined) {
-      this.send(clientId, {
-        type: 'error',
-        message: 'You are not seated in this game.',
-        requestId: msg.requestId ?? null,
-      });
-      return;
-    }
+    const seat = this.seatOf(clientId, msg.requestId);
+    if (seat === undefined) return;
     this.send(clientId, {
       ...this.gameStateFrame(this.session.viewForSeat(seat), this.session.meta()),
       requestId: msg.requestId ?? null,
@@ -1085,7 +1117,7 @@ export class MultiplayerHost {
       pendingState: Record<string, unknown> | null,
       op: Op,
     ) => {
-      const raw = await this.opts.executeOp(
+      const raw = await this.executeOp(
         op.type === 'start' ? startGameOptions : baseOptions,
         snapshot,
         pendingState,
@@ -1123,6 +1155,7 @@ export class MultiplayerHost {
     this.session = session;
     this.phase = 'playing';
     this.starting = false;
+    this.stranded = null;
 
     // D15/DEVHOST-03: reconcile against `this.connected` — a seat captured as
     // human in `humanSeats` (above, BEFORE the await) whose client disconnected
@@ -1161,6 +1194,62 @@ export class MultiplayerHost {
       const clientId = this.seats.get(seat)?.clientId;
       if (clientId) this.reinitSeat(clientId, seat);
     }
+  }
+
+  // ── Rules reload (#343) ───────────────────────────────────────────────────
+
+  /**
+   * RUN THE GAME ON EDITED RULES, from where it stands.
+   *
+   * `boardsmith dev` calls this with the rules it has just loaded again after a
+   * save. With no game running the new rules are simply the ones the next start
+   * uses, and this answers null.
+   *
+   * With a game running, the swap happens on the session's op chain: every op
+   * before it ran on the old rules and every op after runs on the new ones. The
+   * game is carried across by `TableRules.carry` (restored, or replayed when the
+   * saved position no longer fits the edited flow), and the step's deadline is
+   * cleared and armed again from the boundary the carried state reports, so an
+   * edited time limit applies at once.
+   *
+   * When it cannot be carried across, every connected client and the terminal
+   * are told, and every move is refused with the same instruction until a new
+   * game starts. It never goes on quietly in a state its rules do not fit.
+   */
+  async reloadRules(rules: TableRules): Promise<RulesReload | null> {
+    const session = this.session;
+    if (this.phase !== 'playing' || session === null) {
+      this.executeOp = rules.executeOp;
+      return null;
+    }
+    const outcome = await session.host.adoptReloadedRules(async (snapshot) => {
+      this.executeOp = rules.executeOp;
+      const carried = await rules.carry(
+        { playerCount: this.opts.playerCount },
+        snapshot,
+        { teachingDisabled: this.opts.teachingDisabled },
+      );
+      // The old window belonged to the old rules. Whatever happens next, it
+      // does not fire; a carried game arms its own from its first broadcast.
+      this.disarm();
+      this.window = null;
+      if (carried.kind === 'failed') return carried;
+      const stripped = stripPrivateChannel(carried.result);
+      if (!stripped.success) {
+        return { kind: 'failed', reason: stripped.error ?? 'its private record could not be separated from the views' };
+      }
+      return { ...carried, result: stripped };
+    });
+    if (outcome.kind === 'failed') {
+      this.stranded =
+        `This game cannot continue on your edited rules: ${outcome.reason}. ` +
+        'Press "New game" to start a game on them.';
+      console.error(`[boardsmith dev] ${this.stranded}`);
+      for (const clientId of this.connected) this.send(clientId, { type: 'error', message: this.stranded });
+    } else {
+      this.stranded = null;
+    }
+    return outcome;
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────────

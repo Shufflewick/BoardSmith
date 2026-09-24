@@ -114,10 +114,12 @@ describe('#201: reloading a world\'s rules', () => {
     return index;
   };
 
-  it('reads the new rules before it stops the old world', () => {
+  it('reloads through the watcher the table road shares, which loads the new rules first', () => {
     // A broken edit -- a syntax error, a bundle that will not build -- must
-    // leave the world running. That is only true if the load comes first.
-    expect(at('await options.reloadRules()')).toBeLessThan(at('await worldHost.close()'));
+    // leave the world running. `reloadOnRulesEdit` loads before it adopts, and
+    // queues saves one at a time; `dev-server.test.ts` holds both by driving it.
+    expect(at('reloadOnRulesEdit({')).toBeLessThan(at('load: options.reloadRules'));
+    expect(source).toContain('adopt: reloadWorld');
   });
 
   it('reopens the same world on the new rules, and only then tells the pages', () => {
@@ -126,11 +128,6 @@ describe('#201: reloading a world\'s rules', () => {
   });
 
   it('keeps the world when the new rules cannot run it, and says so', () => {
-    expect(source).toContain('still running the ones it had');
     expect(source).toContain('nothing was changed on disk');
-  });
-
-  it('queues reloads, so a save-all is one reload and not four', () => {
-    expect(source).toContain('reloading = reloading.then(');
   });
 });

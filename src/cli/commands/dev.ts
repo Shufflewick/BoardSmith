@@ -7,15 +7,16 @@ import { WebSocket } from 'ws';
 import chalk from 'chalk';
 import open from 'open';
 
-import type { GameDefinition, Op, OpResult } from '../../session/index.js';
+import type { GameDefinition, RulesReload } from '../../session/index.js';
 import { DEFAULT_COLOR_PALETTE, type GameStateSnapshot } from '../../engine/index.js';
-import { MultiplayerHost } from '../dev-host/multiplayer-host.js';
+import { MultiplayerHost, type TableRules } from '../dev-host/multiplayer-host.js';
 import { createDevHostConnectionHandler } from '../dev-host/connection-handler.js';
 import { devStorePath, loadDevStore } from '../dev-host/persistence-file-store.js';
 import { resetWorldStore, worldResetNotice, worldStoreDir } from '../dev-host/world-store.js';
 import { announceHost, onShutdown } from '../dev-host/shutdown.js';
 import type { PersistenceStore } from '../../persistence/index.js';
-import { getProjectContext, importRuntimeBundle, toPosix } from './game-runtime.js';
+import { getProjectContext, toPosix } from './game-runtime.js';
+import { loadTableRuntime } from './dev-table-runtime.js';
 import { findUnknownKeys } from '../lib/config-schema.js';
 import { requireGameProject, resolveRulesDir, requireRulesIndex } from '../lib/game-project.js';
 import { resolveWorldMode } from '../lib/world-project.js';
@@ -25,23 +26,15 @@ import {
   claimWebSocketPath,
   devNotFoundMiddleware,
   monorepoBoardsmithResolvePlugin,
+  reloadOnRulesEdit,
   resolveDevHostDir,
   serveDevDocuments,
 } from './dev-server.js';
 import { parseBotLevel } from '../../bot/index.js';
 
-/** executeOp bundled from the SAME module graph as the rules (one engine). */
-type RuntimeExecuteOp = (
-  def: { gameClass: GameClass; gameType: string; minPlayers: number; maxPlayers: number },
-  gameOptions: { playerCount: number; [key: string]: unknown },
-  snapshot: unknown,
-  pendingState: Record<string, unknown> | null,
-  op: Op,
-  hostOptions?: { teachingDisabled?: boolean; seedSnapshot?: GameStateSnapshot },
-) => Promise<OpResult>;
 import type { DevHostConfig, DevOptionDef } from '../dev-host/config-types.js';
 import { validateGameOptionSelection } from '../dev-host/config-types.js';
-import type { GameClass, GameOptionDefinition, GamePreset } from '../../session/types.js';
+import type { GameOptionDefinition, GamePreset } from '../../session/types.js';
 
 interface DevOptions {
   port: string;
@@ -450,34 +443,6 @@ function optionRecordToList(record: Record<string, unknown> | undefined): DevOpt
 // whether the CLI runs from source (tsx) or from the bundled `dist/cli.js`.
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-/**
- * Bundle and load the game runtime (Node side): the author's `gameDefinition`
- * AND `executeOp`, from ONE esbuild bundle so they share a single engine
- * instance. This matters because the Node multiplayer host runs the game with
- * `executeOp(gameDefinition.gameClass, …)`; if `executeOp` came from the CLI's
- * own bundle instead, it would be a different engine module than the rules'
- * base classes and cross-instance identity (instanceof, registries) would break
- * — the same reason production externalizes a single boardsmith for the executor.
- */
-async function loadGameRuntime(
-  rulesPath: string,
-  tempDir: string,
-  context: 'monorepo' | 'standalone',
-): Promise<{ gameDefinition: GameDefinition; executeOp: RuntimeExecuteOp }> {
-  const module = await importRuntimeBundle({
-    rulesPath,
-    tempDir,
-    name: 'runtime',
-    context,
-    exports: [`export { executeOp } from 'boardsmith/session';`],
-  });
-  if (typeof module.executeOp !== 'function') {
-    throw new Error("Could not load executeOp from 'boardsmith/session'.");
-  }
-
-  return { gameDefinition: module.gameDefinition, executeOp: module.executeOp as RuntimeExecuteOp };
-}
-
 // Ports blocked by browsers for security (Chrome's restricted port list)
 const UNSAFE_PORTS = new Set([
   1, 7, 9, 11, 13, 15, 17, 19, 20, 21, 22, 23, 25, 37, 42, 43, 53, 69, 77, 79,
@@ -654,6 +619,53 @@ function openDevStore(
   return devStore;
 }
 
+/**
+ * What a rules edit changed that a running table host cannot take (#343).
+ *
+ * The seat range and the game type were read once at startup: the lobby, the
+ * seat map and every start op were built from them. An edit that changes one is
+ * refused by name, and the table keeps the rules it had, because running new
+ * rules against a table shaped for the old ones fails somewhere much less clear.
+ * Returns null when the edit is one the host can take.
+ */
+export function tableShapeChange(
+  running: Pick<GameDefinition, 'gameType' | 'minPlayers' | 'maxPlayers'>,
+  edited: Pick<GameDefinition, 'gameType' | 'minPlayers' | 'maxPlayers'>,
+): string | null {
+  const changed: string[] = [];
+  if (edited.gameType !== running.gameType) {
+    changed.push(`gameType (from "${running.gameType}" to "${edited.gameType}")`);
+  }
+  if (edited.minPlayers !== running.minPlayers || edited.maxPlayers !== running.maxPlayers) {
+    changed.push(
+      `the seat range (from ${running.minPlayers}-${running.maxPlayers} to ${edited.minPlayers}-${edited.maxPlayers})`,
+    );
+  }
+  if (changed.length === 0) return null;
+  return (
+    `This edit changes ${changed.join(' and ')}, which the running table was set up from, so it ` +
+    'is still running the rules it had. Stop `boardsmith dev` and start it again to use them.'
+  );
+}
+
+/** The terminal's line for a rules reload the table took, or null when there was no game to carry. */
+export function describeTableReload(outcome: RulesReload | null): string | null {
+  if (outcome === null) return 'Reloaded. The next game starts on the edited rules.';
+  switch (outcome.kind) {
+    case 'restored':
+      return 'Reloaded. The game goes on from where it was, on the edited rules.';
+    case 'replayed':
+      return (
+        `Reloaded. The game's saved position does not fit the edited rules (${outcome.restoreError}), ` +
+        `so it was rebuilt by replaying its ${outcome.moves} move${outcome.moves === 1 ? '' : 's'} on them. ` +
+        'Any half-finished selection was dropped.'
+      );
+    case 'failed':
+      // MultiplayerHost has already said so, to the terminal and every page.
+      return null;
+  }
+}
+
 // a 460-line entrypoint over every threshold before #41 added the dev store;
 // the wiring it gained lives in `openDevStore` rather than inline. Splitting
 // the command itself is its own change.
@@ -812,16 +824,16 @@ export async function devCommand(options: DevOptions): Promise<void> {
     return;
   }
 
-  // Load the game runtime (Node side): gameDefinition + executeOp, one engine.
+  // Load the game runtime (Node side): gameDefinition + the rules that run it, one engine.
   let gameDefinition: GameDefinition;
-  let runExecuteOp: RuntimeExecuteOp;
+  let tableRules: TableRules;
   let minPlayers: number;
   let maxPlayers: number;
   let colorPalette: Array<{ value: string; label: string }> = [];
   try {
-    const runtime = await loadGameRuntime(rulesPath, tempDir, context);
+    const runtime = await loadTableRuntime(rulesPath, tempDir, context);
     gameDefinition = runtime.gameDefinition;
-    runExecuteOp = runtime.executeOp;
+    tableRules = runtime.rules;
   } catch (error) {
     throw rulesFailed(error);
   }
@@ -953,19 +965,6 @@ export async function devCommand(options: DevOptions): Promise<void> {
     // the authoritative SnapshotSessionHost (the local stand-in for the
     // ShufflewickPub game DO) and every browser is a WebSocket client. A solo
     // dev is just one client; others on the LAN join the same game.
-    const gameDef = {
-      gameClass: gameDefinition.gameClass,
-      gameType: gameDefinition.gameType,
-      minPlayers,
-      maxPlayers,
-      // Thread tutorial definition un-serialized (mirrors game-session.ts).
-      // Required so buildPlayerState emits hasTutorial in all state broadcasts
-      // and the startTutorial op can access it from def.tutorial.
-      tutorial: gameDefinition.tutorial,
-      // Thread bot config (hintTargetFromMove + objectives) into the stateless executor.
-      // Required so hint/heatmapToggle ops can run MCTS and extract board targets.
-      bot: gameDefinition.bot,
-    };
     // D13/DEVHOST-01: defaults, overlaid by the resolved --preset bundle, then
     // by --game-option flags (flag beats preset beats default) — replaces the
     // frozen `.default`-only computation.
@@ -1008,8 +1007,7 @@ export async function devCommand(options: DevOptions): Promise<void> {
             },
           }
         : {}),
-      executeOp: (gameOptions, snapshot, pendingState, op, hostOptions) =>
-        runExecuteOp(gameDef, gameOptions, snapshot, pendingState, op, hostOptions),
+      executeOp: tableRules.executeOp,
       send: (clientId, message) => {
         const sock = clients.get(clientId);
         if (sock && sock.readyState === WebSocket.OPEN) sock.send(JSON.stringify(message));
@@ -1065,6 +1063,26 @@ export async function devCommand(options: DevOptions): Promise<void> {
     });
 
     await vite.listen();
+
+    // A SAVED RULES EDIT REACHES THE HOST TOO (#343), the same way it reaches a
+    // world (#201): the browser gets it through Vite, and the host through this.
+    reloadOnRulesEdit({
+      vite,
+      rulesDir: rulesPath,
+      cwd,
+      what: 'table',
+      load: () => loadTableRuntime(rulesPath, tempDir, context),
+      adopt: async (runtime) => {
+        const refusal = tableShapeChange(gameDefinition, runtime.gameDefinition);
+        if (refusal !== null) {
+          console.error(chalk.red(`  ${refusal}`));
+          return;
+        }
+        const outcome = await mpHost.reloadRules(runtime.rules);
+        const said = describeTableReload(outcome);
+        if (said !== null) console.log(chalk.green(`  ${said}\n`));
+      },
+    });
 
     const resolvedUrl = vite.resolvedUrls?.local[0];
     const uiPort = resolvedUrl ? parseInt(new URL(resolvedUrl).port || '5173', 10) : port;

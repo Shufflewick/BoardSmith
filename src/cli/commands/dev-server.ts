@@ -18,17 +18,22 @@
  *   - editing `vite.config.ts` makes Vite replace its own HTTP server, so a
  *     socket registered once at startup is left on a closed object and every
  *     page afterwards loads but never connects (issue 214) -- which is why the
- *     claim below is a PLUGIN rather than a call.
+ *     claim below is a PLUGIN rather than a call;
+ *   - the host runs rules it bundled once at startup, so a saved edit that
+ *     reached only the browser left new UI acting on old rules, on either road
+ *     (#201 for worlds, #343 for tables) -- which is why both reload through
+ *     `reloadOnRulesEdit`.
  *
  * Two copies of any of those is how they come to disagree, and a disagreement
  * here is invisible until somebody's asset 404s or their HMR dies.
  */
 
 import { existsSync } from 'node:fs';
-import { join } from 'node:path';
+import { join, relative } from 'node:path';
 
 import type { Duplex } from 'node:stream';
 
+import chalk from 'chalk';
 import type { Connect, Plugin as VitePlugin, ViteDevServer } from 'vite';
 import { WebSocketServer, type WebSocket } from 'ws';
 
@@ -218,4 +223,66 @@ export function monorepoBoardsmithResolvePlugin(): VitePlugin {
       return boardsmithSourceEntries().get(source) ?? null;
     },
   };
+}
+
+/**
+ * A SAVED RULES FILE RELOADS THE RULES THE HOST RUNS (#201, #343).
+ *
+ * The host bundles the project's rules once, at startup, and the browser gets
+ * every later edit through Vite. Without this the page ran the edited rules and
+ * the host kept the old ones until `boardsmith dev` was restarted.
+ *
+ * What both roads share is the order, and the order is the safety:
+ *
+ *   1. LOAD THE NEW RULES FIRST. A broken edit (a syntax error, a bundle that
+ *      will not build) throws here, and the host is left exactly as it was,
+ *      still running the rules it had. The terminal says why.
+ *   2. HAND THEM TO THE HOST. What that means is the road's own business: a
+ *      world reopens itself on them, a table carries its game across.
+ *
+ * Reloads are QUEUED, one save at a time: a save-all across four files is four
+ * reloads in order, never four overlapping ones tearing each other down.
+ * `adopt` reports its own failures; a throw from it is printed and the queue
+ * carries on, so one bad reload never stops the next save from being heard.
+ */
+export function reloadOnRulesEdit<R>(args: {
+  vite: Pick<ViteDevServer, 'watcher'>;
+  /** The project's rules directory. Only a change under it reloads. */
+  rulesDir: string;
+  /** The project root, so the terminal names the file the way the author does. */
+  cwd: string;
+  /** What is running the rules, for the terminal: "this table", "this world". */
+  what: 'table' | 'world';
+  /** Bundle and load the rules again. Must re-read the source, not a cached module. */
+  load: () => Promise<R>;
+  /** Give the loaded rules to the host. */
+  adopt: (rules: R) => Promise<void>;
+}): void {
+  let reloading: Promise<void> = Promise.resolve();
+  const reload = async (named: string): Promise<void> => {
+    console.log(chalk.dim(`\n  ${named} changed -- reloading the ${args.what}'s rules...`));
+    let rules: R;
+    try {
+      rules = await args.load();
+    } catch (error) {
+      console.error(
+        chalk.red(`  Those rules did not load, so this ${args.what} is still running the ones it had:`),
+        error instanceof Error ? error.message : String(error),
+      );
+      return;
+    }
+    try {
+      await args.adopt(rules);
+    } catch (error) {
+      console.error(
+        chalk.red(`  The ${args.what} could not take the reloaded rules:`),
+        error instanceof Error ? error.message : String(error),
+      );
+    }
+  };
+  args.vite.watcher.add(args.rulesDir);
+  args.vite.watcher.on('change', (changed: string) => {
+    if (!changed.startsWith(args.rulesDir)) return;
+    reloading = reloading.then(() => reload(relative(args.cwd, changed)));
+  });
 }

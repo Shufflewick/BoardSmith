@@ -92,6 +92,21 @@ export interface SnapshotHostState {
   pendingStates: Record<string, Record<string, unknown>>;
 }
 
+/**
+ * What became of a game when the rules it runs on were replaced underneath it
+ * (`boardsmith dev` reloading a table's rules on a save, #343).
+ *
+ * - `restored`: the saved state fits the new rules and was kept as it was.
+ * - `replayed`: the saved position did not fit (`restoreError` says why), so
+ *   the game was rebuilt by replaying its `moves` on the new rules.
+ * - `failed`: neither worked, and `reason` says what went wrong with each. The
+ *   game cannot go on under these rules.
+ */
+export type RulesReload =
+  | { kind: 'restored'; result: OpResult }
+  | { kind: 'replayed'; restoreError: string; moves: number; result: OpResult }
+  | { kind: 'failed'; reason: string };
+
 export interface SnapshotSessionAdapters {
   playerCount: number;
   executeOp: (snapshot: unknown, pendingState: Record<string, unknown> | null, op: Op) => Promise<OpResult>;
@@ -895,6 +910,37 @@ export class SnapshotSessionHost {
       success: true,
       convertedSeat: seat,
     };
+  }
+
+  /**
+   * ADOPT THIS GAME AS RE-DERIVED UNDER RULES THAT CHANGED BENEATH IT (#343).
+   *
+   * `boardsmith dev` swaps the rules its `executeOp` runs when an author saves,
+   * and `carry` re-derives the current snapshot under them (see `RulesReload`).
+   * It runs ON THE OP CHAIN, like every mutation: an op already in flight
+   * finishes on the old rules first, and nothing reads the snapshot between
+   * `carry` and the broadcast of what it produced.
+   *
+   * What goes with the old rules:
+   * - transient teaching state (a hint or a heatmap was computed by them);
+   * - on a REPLAY, every seat's half-finished selection too. It was made against
+   *   a game tree the replay has just rebuilt, exactly as on an undo. A plain
+   *   restore keeps them: the tree they point into is the one that was saved.
+   *
+   * A `failed` carry changes nothing here; the caller reports it.
+   */
+  async adoptReloadedRules(carry: (snapshot: unknown) => Promise<RulesReload>): Promise<RulesReload> {
+    return this.enqueue(async () => {
+      const outcome = await carry(this._snapshot);
+      if (outcome.kind === 'failed') return outcome;
+      this.transientTeachingState.clear();
+      this.narrationText = null;
+      if (outcome.kind === 'replayed') this.pendingStates.clear();
+      await this.apply(outcome.result);
+      // The new rules may hand the turn to a bot seat, and no op will wake it.
+      if (!this.isComplete) await this.runBotTurnsInner();
+      return outcome;
+    });
   }
 
   /**
