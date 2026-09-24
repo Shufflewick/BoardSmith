@@ -82,6 +82,7 @@ program
   .option('--edition <edition>', 'Edition string as stated in the rulebook (used with --rulebook)')
   .option('--without-rulebook', 'Explicitly declare no rulebook exists (the interview path supplies rulebook/ content)')
   .option('--world', 'Scaffold a persistent world (named partitions, a clock, no turn order) instead of a table game')
+  .option('--into-existing', 'Scaffold into the git repository you run this from instead of creating <name>/ (refuses to overwrite any file)')
   .action(initCommand);
 
 // Development

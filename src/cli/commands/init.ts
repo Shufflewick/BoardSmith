@@ -1,6 +1,6 @@
 import { mkdir, writeFile } from 'node:fs/promises';
-import { existsSync, rmSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, rmSync, statSync } from 'node:fs';
+import { dirname, join, relative } from 'node:path';
 import { execSync } from 'node:child_process';
 import chalk from 'chalk';
 import ora from 'ora';
@@ -10,6 +10,7 @@ import {
   getDependencyPaths,
   toPascalCase,
   toDisplayName,
+  type GeneratedFile,
   type ProjectConfig,
 } from '../lib/project-scaffold.js';
 import {
@@ -25,8 +26,8 @@ import {
   generateWorldTs,
   worldScaffoldStatus,
 } from '../lib/world-scaffold.js';
-import { ensureWorldEntry } from '../lib/world-entry.js';
-import { ingestArchiveCommand } from './ingest-archive.js';
+import { worldEntryFiles } from '../lib/world-entry.js';
+import { ingestArchiveCommand, rulebookArchivePaths } from './ingest-archive.js';
 import { installIngestHook } from '../lib/ingest-hook.js';
 import { assertGameName } from '../lib/user-name.js';
 
@@ -79,6 +80,18 @@ export interface InitOptions {
    * declaration every later command reads.
    */
   world?: boolean;
+  /**
+   * Scaffold into the git repository `init` is run from instead of creating `<name>/`.
+   *
+   * A game often starts as a repository of design research, with history and a remote, before
+   * anyone runs BoardSmith (#304). Copying a scaffold in by hand drops what `init` does to
+   * `.git`, most importantly the ingest `pre-commit` hook. So this mode writes the same files,
+   * archive and hook a fresh `init` does, and never touches the designer's own work: it refuses
+   * to run anywhere but the top folder of a git repository, refuses to overwrite any file
+   * (naming every one), and leaves `git init` and the scaffold commit out, because the
+   * repository and its history already exist.
+   */
+  intoExisting?: boolean;
 }
 
 /**
@@ -95,9 +108,9 @@ interface ProjectScaffold {
   /** The `boardsmith.json` this kind of project declares. */
   config(name: string): ProjectConfig;
   /** The rules, tests and UI that make it that kind of project. */
-  writeSources(projectPath: string, config: ProjectConfig): Promise<void>;
-  /** What to run next, which is not the same command for both. */
-  printNextSteps(name: string): void;
+  sources(config: ProjectConfig): GeneratedFile[];
+  /** What to run next, which is not the same command for both. `firstSteps` opens the list. */
+  printNextSteps(firstSteps: string[]): void;
 }
 
 const TABLE_SCAFFOLD: ProjectScaffold = {
@@ -111,21 +124,22 @@ const TABLE_SCAFFOLD: ProjectScaffold = {
     tags: ['card-game'],
   }),
 
-  writeSources: async (projectPath, config) => {
+  sources: (config) => {
     const pascal = toPascalCase(config.name);
-    await writeFile(join(projectPath, 'src', 'rules', 'game.ts'), generateGameTs(pascal));
-    await writeFile(join(projectPath, 'src', 'rules', 'elements.ts'), generateElementsTs());
-    await writeFile(join(projectPath, 'src', 'rules', 'actions.ts'), generateActionsTs(pascal));
-    await writeFile(join(projectPath, 'src', 'rules', 'flow.ts'), generateFlowTs(pascal));
-    await writeFile(join(projectPath, 'tests', 'game.test.ts'), generateTestTs(pascal));
+    return [
+      { path: join('src', 'rules', 'game.ts'), content: generateGameTs(pascal) },
+      { path: join('src', 'rules', 'elements.ts'), content: generateElementsTs() },
+      { path: join('src', 'rules', 'actions.ts'), content: generateActionsTs(pascal) },
+      { path: join('src', 'rules', 'flow.ts'), content: generateFlowTs(pascal) },
+      { path: join('tests', 'game.test.ts'), content: generateTestTs(pascal) },
+    ];
   },
 
-  printNextSteps: (name) => {
+  printNextSteps: (firstSteps) => {
     console.log(`
 ${chalk.cyan('Next steps:')}
 
-  cd ${name}
-  npm install
+${firstSteps.map((step) => `  ${step}`).join('\n')}
   boardsmith dev
 
 ${chalk.dim('This will start the development server and open player tabs in your browser.')}
@@ -154,27 +168,26 @@ const WORLD_SCAFFOLD: ProjectScaffold = {
     tags: ['persistent-world'],
   }),
 
-  writeSources: async (projectPath, config) => {
+  sources: (config) => {
     // A world has no actions and no flow: its verbs are a command table and
     // its clock is a schedule, so there is nothing for either file to hold.
     const pascal = toPascalCase(config.name);
-    await writeFile(join(projectPath, 'src', 'rules', 'game.ts'), generateWorldGameTs(pascal));
-    await writeFile(join(projectPath, 'src', 'rules', 'elements.ts'), generateWorldElementsTs());
-    await writeFile(join(projectPath, 'src', 'rules', 'world.ts'), generateWorldTs(pascal));
-    await writeFile(join(projectPath, 'src', 'rules', 'index.ts'), generateWorldRulesIndexTs(config));
-    await writeFile(join(projectPath, 'tests', 'world.test.ts'), generateWorldTestTs());
-    await writeFile(join(projectPath, 'tests', 'a11y.example.test.ts'), generateWorldA11yTestTs());
-    // The world entry is the SAME pair `boardsmith build` and `boardsmith dev`
-    // write for a world project that has none (#170), from the same generator:
-    // one definition of what a world's entry is, so a scaffolded project and a
-    // rescued one are the same project.
-    await ensureWorldEntry(projectPath, String(config.displayName || config.name));
-    await writeFile(join(projectPath, 'src', 'ui', 'uis.ts'), generateWorldUisTs());
-    await writeFile(
-      join(projectPath, 'src', 'ui', 'components', 'WorldBoard.vue'),
-      generateWorldBoardVue(),
-    );
-    await writeFile(join(projectPath, 'README.md'), generateWorldReadme(config));
+    return [
+      { path: join('src', 'rules', 'game.ts'), content: generateWorldGameTs(pascal) },
+      { path: join('src', 'rules', 'elements.ts'), content: generateWorldElementsTs() },
+      { path: join('src', 'rules', 'world.ts'), content: generateWorldTs(pascal) },
+      { path: join('src', 'rules', 'index.ts'), content: generateWorldRulesIndexTs(config) },
+      { path: join('tests', 'world.test.ts'), content: generateWorldTestTs() },
+      { path: join('tests', 'a11y.example.test.ts'), content: generateWorldA11yTestTs() },
+      // The world entry is the SAME pair `boardsmith build` and `boardsmith dev`
+      // write for a world project that has none (#170), from the same generator:
+      // one definition of what a world's entry is, so a scaffolded project and a
+      // rescued one are the same project.
+      ...worldEntryFiles(String(config.displayName || config.name)),
+      { path: join('src', 'ui', 'uis.ts'), content: generateWorldUisTs() },
+      { path: join('src', 'ui', 'components', 'WorldBoard.vue'), content: generateWorldBoardVue() },
+      { path: 'README.md', content: generateWorldReadme(config) },
+    ];
   },
 
   // THE FIRST COMMAND IS THE ONE THAT OPENS THE WORLD. Until #167 it could not
@@ -182,12 +195,11 @@ const WORLD_SCAFFOLD: ProjectScaffold = {
   // an author was sent to `boardsmith test` instead. The status below lists
   // both, and the README the scaffold wrote keeps listing them after this
   // scrolls away.
-  printNextSteps: (name) => {
+  printNextSteps: (firstSteps) => {
     console.log(`
 ${chalk.cyan('Next steps:')}
 
-  cd ${name}
-  npm install
+${firstSteps.map((step) => `  ${step}`).join('\n')}
   boardsmith dev
 
 ${worldScaffoldStatus()
@@ -200,8 +212,7 @@ ${worldScaffoldStatus()
 };
 
 /**
- * Give the new project a git repo, an initial commit, and the ingest synthesis
- * hook.
+ * Give a new project directory a git repo and an initial commit.
  *
  * The `/bs-build-chunk` skill's Git Protocol commits at every step
  * (chunk-<slug>/step-<name>) — without a repo here, the very first commit that
@@ -216,7 +227,7 @@ ${worldScaffoldStatus()
  * configured" case), the repo already exists and staging succeeded — telling
  * the user to run `git init` again would be misleading.
  */
-async function initVersionControl(projectPath: string): Promise<void> {
+function initVersionControl(projectPath: string): void {
   try {
     execSync('git init', { cwd: projectPath, stdio: 'ignore' });
     execSync('git add -A', { cwd: projectPath, stdio: 'ignore' });
@@ -238,13 +249,55 @@ async function initVersionControl(projectPath: string): Promise<void> {
     );
   }
 
-  // Install the ingest synthesis hook BEFORE the archive, so it exists for every subsequent
-  // commit including the ones the bs- build protocol makes during chunk work.
-  if ((await installIngestHook(projectPath)) === 'skipped-existing') {
+}
+
+/**
+ * Install the ingest synthesis `pre-commit` hook, for a fresh project and an existing
+ * repository alike, and say so whenever it was not installed.
+ *
+ * It runs on every commit after this one, including the ones the bs- build protocol makes during
+ * chunk work, and is what sweeps `## Open Rules Gaps` once transcription has produced slices.
+ */
+async function installHookAndReport(projectPath: string): Promise<void> {
+  const result = await installIngestHook(projectPath);
+  if (result === 'skipped-existing') {
     console.log(
       chalk.dim('  (left your existing .git/hooks/pre-commit alone — run `boardsmith ingest-gaps` manually after transcription)'),
     );
+  } else if (result === 'skipped-no-git') {
+    console.log(
+      chalk.yellow('  Could not install the ingest pre-commit hook into .git/hooks — run `boardsmith ingest-gaps` manually after transcription.'),
+    );
   }
+}
+
+/**
+ * `--into-existing` scaffolds into the repository it is run from, so that folder must BE the top
+ * of a git repository: the hook is installed into its `.git/hooks`, and the hook reads
+ * `design/rulebook/` relative to the folder git runs it from, which is the top folder.
+ */
+function assertGitTopFolder(projectPath: string): void {
+  if (statSync(join(projectPath, '.git'), { throwIfNoEntry: false })?.isDirectory() === true) return;
+  throw new Error(
+    '--into-existing scaffolds into the git repository you run it from, and this folder is ' +
+      'not the top folder of a git repository (it has no .git folder).\n' +
+      "Run init from the repository's top folder, or run `git init` here first.",
+  );
+}
+
+/**
+ * Refuse, before anything is written, when any file the scaffold would write already exists.
+ * Every conflict is named at once, so one pass of moving files is enough.
+ */
+function refuseConflicts(projectPath: string, name: string, paths: string[]): void {
+  const conflicts = paths.filter((path) => existsSync(path)).map((path) => relative(projectPath, path));
+  if (conflicts.length === 0) return;
+  throw new Error(
+    `${conflicts.length === 1 ? 'A file' : `${conflicts.length} files`} that scaffolding "${name}" ` +
+      'writes already exist here, so nothing was changed:\n' +
+      conflicts.map((path) => `  ${path}`).join('\n') +
+      '\nMove or rename them, run init again, then merge anything you still need back in.',
+  );
 }
 
 export async function initCommand(name: string, options: InitOptions = {}): Promise<void> {
@@ -283,41 +336,60 @@ export async function initCommand(name: string, options: InitOptions = {}): Prom
   }
 
   const scaffold: ProjectScaffold = options.world ? WORLD_SCAFFOLD : TABLE_SCAFFOLD;
-  const projectPath = join(process.cwd(), name);
+  const projectPath = options.intoExisting ? process.cwd() : join(process.cwd(), name);
 
-  if (existsSync(projectPath)) {
+  if (options.intoExisting) {
+    assertGitTopFolder(projectPath);
+  } else if (existsSync(projectPath)) {
     throw new Error(
       `Directory "${name}" already exists in the directory you ran init from.\n` +
-        'Pass a different name, or remove that directory first.',
+        'Pass a different name, remove that directory first, or run init from inside it with ' +
+        '--into-existing if it is a git repository the game should live in.',
     );
+  }
+
+  // EVERYTHING THIS RUN WILL WRITE, decided before anything is. That is what lets
+  // `--into-existing` refuse a conflict with nothing changed, rather than discovering it
+  // halfway through someone's repository.
+  const config = scaffold.config(name);
+  const files = [...generateScaffoldFiles(config, projectPath), ...scaffold.sources(config)];
+  const archive = options.rulebook
+    ? { rulebook: options.rulebook, ...rulebookArchivePaths(projectPath, options.rulebook) }
+    : undefined;
+  if (options.intoExisting) {
+    refuseConflicts(projectPath, name, [
+      ...files.map((file) => join(projectPath, file.path)),
+      ...(archive ? [archive.archivePath, archive.indexPath] : []),
+    ]);
   }
 
   const spinner = ora(`Creating ${name}...`).start();
 
-  // The topmost directory this run had to create, or undefined when the path
-  // already existed. It is what the cleanup below is allowed to remove, and
-  // the only way to tell a directory this run made from one that was already
-  // the user's -- the same distinction `packAll` draws (#239). The
-  // `existsSync` refusal above answers that too, but only until two inits race
-  // each other for the same name.
-  let createdRoot: string | undefined;
+  // Every path this run created, which is exactly what the cleanup below may remove (#242). A
+  // directory counts only when this run's `mkdir` created it, and a file only once it was checked
+  // absent: the directory a fresh init is refused on, and every file `--into-existing` found
+  // there, stay the user's. `mkdir` reports the topmost directory it created, the same
+  // distinction `packAll` draws (#239).
+  const created: string[] = [];
+  const makeDir = async (dir: string): Promise<void> => {
+    const first = await mkdir(dir, { recursive: true });
+    if (first !== undefined) created.push(first);
+  };
 
   try {
-    // Create directory structure
-    createdRoot = await mkdir(projectPath, { recursive: true });
+    await makeDir(projectPath);
     for (const dir of getRequiredDirectories()) {
-      await mkdir(join(projectPath, dir), { recursive: true });
+      await makeDir(join(projectPath, dir));
     }
 
-    const config = scaffold.config(name);
-
-    // Files every project gets, from the manifest down.
-    for (const file of generateScaffoldFiles(config, projectPath)) {
-      await writeFile(join(projectPath, file.path), file.content);
+    // The manifest down, then the files that are the whole difference between the two kinds of
+    // project.
+    for (const file of files) {
+      const path = join(projectPath, file.path);
+      await makeDir(dirname(path));
+      created.push(path);
+      await writeFile(path, file.content);
     }
-
-    // Files that are the whole difference between the two kinds of project.
-    await scaffold.writeSources(projectPath, config);
 
     // Log if using local dev
     const deps = getDependencyPaths(projectPath);
@@ -325,9 +397,11 @@ export async function initCommand(name: string, options: InitOptions = {}): Prom
       console.log(chalk.dim(`  Using local BoardSmith from monorepo`));
     }
 
-    await initVersionControl(projectPath);
+    // An existing repository already has its history, so it gets no `git init` and no scaffold
+    // commit: the designer reviews the scaffold beside their own work and commits it.
+    if (!options.intoExisting) initVersionControl(projectPath);
 
-    if (options.rulebook) {
+    if (archive) {
       // Archive inside init so it cannot be a step the session skips. A failure here is loud:
       // a scaffolded project whose provenance header describes an archive that does not exist
       // is worse than a failed init, because the gap only surfaces at a later verify pass.
@@ -338,15 +412,24 @@ export async function initCommand(name: string, options: InitOptions = {}): Prom
       // project` on an unreadable rulebook (#242). A command that says both is
       // worse than one that says neither.
       spinner.stop();
-      await ingestArchiveCommand(options.rulebook, {
+      await makeDir(dirname(archive.archivePath));
+      created.push(archive.archivePath, archive.indexPath);
+      await ingestArchiveCommand(archive.rulebook, {
         project: projectPath,
         edition: options.edition,
+        gameName: name,
       });
     }
 
+    // Last, so a failed init never leaves a hook behind in a repository it did not create.
+    await installHookAndReport(projectPath);
+
     spinner.succeed(chalk.green(`Created ${name} successfully!`));
 
-    scaffold.printNextSteps(name);
+    if (options.intoExisting) {
+      console.log(chalk.dim('  The scaffold is not committed: review it beside your own files, then commit it.'));
+    }
+    scaffold.printNextSteps(options.intoExisting ? ['npm install'] : [`cd ${name}`, 'npm install']);
   } catch (error) {
     // THROWN, NOT PRINTED (#240). `console.error(error)` here printed the whole
     // Error object -- stack frames, `src/cli/commands/init.ts:290:5`, the
@@ -362,7 +445,7 @@ export async function initCommand(name: string, options: InitOptions = {}): Prom
     // shape the `existsSync` refusal above rejects, so the retry the user
     // reaches for failed on a second, different error. Only what this run
     // created is removed.
-    if (createdRoot !== undefined) rmSync(createdRoot, { recursive: true, force: true });
+    for (const path of created.reverse()) rmSync(path, { recursive: true, force: true });
 
     throw new Error(
       `Could not create the project "${name}": ${error instanceof Error ? error.message : String(error)}`,
