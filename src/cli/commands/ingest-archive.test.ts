@@ -232,6 +232,168 @@ describe('ingest-archive — multiple sources (177-19)', () => {
   });
 });
 
+// ===========================================================================================
+// ingest-archive --additional-source (#305)
+//
+// A rulebook can incorporate a second document by reference ("battle rules follow
+// MECHCORE_REFERENCE.md"). Nothing in `--help` said a second source could be recorded, so the
+// session that met one copied it into rulebook/source/ by hand and wrote its hash in prose that
+// nothing parses. The flag names the case where the designer is looking for it.
+// ===========================================================================================
+
+describe('ingest-archive --additional-source (#305)', () => {
+  let rulesPath: string;
+  let companionPath: string;
+  let appendixPath: string;
+  const RULES_BYTES = Buffer.from('# Requirements\n\nBattles follow the companion reference.\n');
+  const COMPANION_BYTES = Buffer.from('# Reference\n\nUnit stats live here.\n');
+  const APPENDIX_BYTES = Buffer.from('# Appendix\n\nCard list.\n');
+  const RULES_HASH = createHash('sha256').update(RULES_BYTES).digest('hex');
+  const COMPANION_HASH = createHash('sha256').update(COMPANION_BYTES).digest('hex');
+  const APPENDIX_HASH = createHash('sha256').update(APPENDIX_BYTES).digest('hex');
+
+  beforeEach(async () => {
+    rulesPath = join(dir, 'REQUIREMENTS.md');
+    companionPath = join(dir, 'REFERENCE.md');
+    appendixPath = join(dir, 'APPENDIX.md');
+    await fs.writeFile(rulesPath, RULES_BYTES);
+    await fs.writeFile(companionPath, COMPANION_BYTES);
+    await fs.writeFile(appendixPath, APPENDIX_BYTES);
+  });
+
+  async function freshProject(name = 'windup'): Promise<string> {
+    const project = join(dir, name);
+    await fs.mkdir(project, { recursive: true });
+    return project;
+  }
+
+  const indexOf = (project: string) =>
+    fs.readFile(join(project, DESIGN_DIR, 'rulebook', 'INDEX.md'), 'utf-8');
+
+  it('archives the primary and every additional source in one call, each with its own hash', async () => {
+    const project = await freshProject();
+    await ingestArchiveCommand(rulesPath, {
+      project,
+      json: true,
+      additionalSource: [companionPath, appendixPath],
+    });
+
+    const index = await indexOf(project);
+    expect(/^Source:\s*(.*)$/m.exec(index)![1].trim()).toBe('rulebook/source/REQUIREMENTS.md');
+    expect(/^Source hash:\s*(.*)$/m.exec(index)![1].trim()).toBe(RULES_HASH);
+    expect(parseAdditionalSources(index)).toEqual([
+      { path: 'rulebook/source/APPENDIX.md', sourceHash: APPENDIX_HASH },
+      { path: 'rulebook/source/REFERENCE.md', sourceHash: COMPANION_HASH },
+    ]);
+    const archived = await fs.readFile(join(project, DESIGN_DIR, 'rulebook', 'source', 'REFERENCE.md'));
+    expect(archived.equals(COMPANION_BYTES)).toBe(true);
+  });
+
+  it('the verify pass reads each additional source as a hash-verified provenance record', async () => {
+    const project = await freshProject();
+    await ingestArchiveCommand(rulesPath, { project, json: true, additionalSource: [companionPath] });
+
+    const scope = await computeVerificationScope(project);
+    expect(scope.scope).toBe('full');
+    expect(scope.sourceHash).toBe(RULES_HASH);
+    expect(scope.additionalSources).toEqual([
+      { sourcePath: 'rulebook/source/REFERENCE.md', sourceHash: COMPANION_HASH },
+    ]);
+  });
+
+  it('adds an additional source to a project whose primary is already archived, leaving the primary alone', async () => {
+    const project = await freshProject();
+    await ingestArchiveCommand(rulesPath, { project, json: true });
+    const before = await indexOf(project);
+
+    await ingestArchiveCommand(rulesPath, { project, json: true, additionalSource: [companionPath] });
+
+    const after = await indexOf(project);
+    expect(/^Source hash:\s*(.*)$/m.exec(after)![1].trim()).toBe(RULES_HASH);
+    expect(parseAdditionalSources(after)).toEqual([
+      { path: 'rulebook/source/REFERENCE.md', sourceHash: COMPANION_HASH },
+    ]);
+    // Only the new section was added; the header and every other section are byte-identical.
+    expect(after.replace(/## Additional Sources[\s\S]*?<!-- boardsmith:additional-sources:end -->\n\n/, '')).toBe(
+      before,
+    );
+  });
+
+  it('re-running the same call is a byte-identical no-op', async () => {
+    const project = await freshProject();
+    await ingestArchiveCommand(rulesPath, { project, json: true, additionalSource: [companionPath] });
+    const before = await indexOf(project);
+    await ingestArchiveCommand(rulesPath, { project, json: true, additionalSource: [companionPath] });
+    expect(await indexOf(project)).toBe(before);
+  });
+
+  it('reports every additional source in the JSON result', async () => {
+    const project = await freshProject();
+    const out: string[] = [];
+    const origLog = console.log;
+    console.log = (s: string) => out.push(s);
+    try {
+      await ingestArchiveCommand(rulesPath, { project, json: true, additionalSource: [companionPath] });
+    } finally {
+      console.log = origLog;
+    }
+    expect(JSON.parse(out[0]).additionalSources).toEqual([
+      { archivedPath: 'rulebook/source/REFERENCE.md', sourceHash: COMPANION_HASH },
+    ]);
+  });
+
+  it('refuses an unreadable additional source BEFORE archiving anything', async () => {
+    const project = await freshProject();
+    const message = await rejectionMessage(
+      ingestArchiveCommand(rulesPath, {
+        project,
+        json: true,
+        additionalSource: [join(dir, 'missing-reference.md')],
+      }),
+    );
+    expect(message).toMatch(/Additional source not found or unreadable: .*missing-reference\.md/);
+    // Nothing was written: a half-recorded provenance header is worse than none.
+    await expect(fs.access(join(project, DESIGN_DIR, 'rulebook'))).rejects.toThrow();
+  });
+
+  it('refuses an additional source that is the primary source itself', async () => {
+    const project = await freshProject();
+    const message = await rejectionMessage(
+      ingestArchiveCommand(rulesPath, { project, json: true, additionalSource: [rulesPath] }),
+    );
+    expect(message).toMatch(/REQUIREMENTS\.md is already the primary source/);
+    await expect(fs.access(join(project, DESIGN_DIR, 'rulebook'))).rejects.toThrow();
+  });
+
+  it('refuses two sources that would archive to the same file name', async () => {
+    const project = await freshProject();
+    const otherDir = join(dir, 'other');
+    await fs.mkdir(otherDir);
+    const sameName = join(otherDir, 'REFERENCE.md');
+    await fs.writeFile(sameName, 'a different reference document\n');
+
+    const message = await rejectionMessage(
+      ingestArchiveCommand(rulesPath, {
+        project,
+        json: true,
+        additionalSource: [companionPath, sameName],
+      }),
+    );
+    expect(message).toMatch(/both archive to rulebook\/source\/REFERENCE\.md/);
+    await expect(fs.access(join(project, DESIGN_DIR, 'rulebook'))).rejects.toThrow();
+  });
+
+  it('refuses to clobber a different archived copy of an additional source', async () => {
+    const project = await freshProject();
+    await ingestArchiveCommand(rulesPath, { project, json: true, additionalSource: [companionPath] });
+    await fs.writeFile(join(project, DESIGN_DIR, 'rulebook', 'source', 'REFERENCE.md'), 'edited by hand');
+
+    await expect(
+      ingestArchiveCommand(rulesPath, { project, json: true, additionalSource: [companionPath] }),
+    ).rejects.toThrow(/rulebook\/source\/REFERENCE\.md already exists .* and differs/);
+  });
+});
+
 describe('ingest-archive — INDEX.md contract', () => {
   it('writes all four header labels, in order, with non-empty values', async () => {
     const project = await run({ edition: '2nd edition, 2019 printing' });

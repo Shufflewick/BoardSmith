@@ -80,6 +80,7 @@ program
   .description('Create a new BoardSmith game project')
   .option('--rulebook <path>', 'Archive this source rulebook into the new project and write rulebook/INDEX.md provenance')
   .option('--edition <edition>', 'Edition string as stated in the rulebook (used with --rulebook)')
+  .option('--additional-source <paths...>', 'Also archive these documents the rules incorporate (a companion reference, a card list), each with its own hash (used with --rulebook)')
   .option('--without-rulebook', 'Explicitly declare no rulebook exists (the interview path supplies rulebook/ content)')
   .option('--world', 'Scaffold a persistent world (named partitions, a clock, no turn order) instead of a table game')
   .action(initCommand);
@@ -236,6 +237,7 @@ program
   .description('Archive a source rulebook, hash it, and write rulebook/INDEX.md provenance header')
   .option('--project <dir>', 'Project directory (defaults to cwd)')
   .option('--edition <edition>', 'Edition string as stated in the rulebook')
+  .option('--additional-source <paths...>', 'Also archive these documents the rules incorporate (a companion reference, a card list), each with its own hash')
   .option('--json', 'Emit JSON instead of human-readable output')
   .action(ingestArchiveCommand);
 

@@ -52,6 +52,12 @@ export interface InitOptions {
   /** Edition string as stated in the rulebook, passed through to the provenance header. */
   edition?: string;
   /**
+   * Further documents the rules incorporate (`--additional-source`, repeatable), archived beside
+   * the rulebook and recorded with their own hashes. Passed straight to `ingest-archive`; needs
+   * `rulebook`, since an additional source is additional to a primary one.
+   */
+  additionalSource?: string[];
+  /**
    * Explicit "there is no rulebook" acknowledgement. Required when `rulebook` is absent, so a
    * missing archive is always a deliberate choice rather than an omission nobody noticed.
    */
@@ -282,6 +288,13 @@ export async function initCommand(name: string, options: InitOptions = {}): Prom
     );
   }
 
+  if (options.additionalSource?.length && !options.rulebook) {
+    throw new Error(
+      '--additional-source needs --rulebook: it records a document alongside the primary rulebook.\n' +
+        `Pass the rulebook too, e.g. boardsmith init ${name} --rulebook ~/path/to/rules.md --additional-source ~/path/to/reference.md`,
+    );
+  }
+
   const scaffold: ProjectScaffold = options.world ? WORLD_SCAFFOLD : TABLE_SCAFFOLD;
   const projectPath = join(process.cwd(), name);
 
@@ -341,6 +354,7 @@ export async function initCommand(name: string, options: InitOptions = {}): Prom
       await ingestArchiveCommand(options.rulebook, {
         project: projectPath,
         edition: options.edition,
+        additionalSource: options.additionalSource,
       });
     }
 

@@ -36,6 +36,12 @@ export interface IngestArchiveOptions {
   edition?: string;
   /** Emit machine-readable JSON instead of human output. */
   json?: boolean;
+  /**
+   * Further documents the rules incorporate (`--additional-source`, repeatable): a companion
+   * reference the rulebook defers to, a separate card list. Each is archived beside the primary
+   * and recorded with its own SHA-256 in `## Additional Sources`, which the verify pass checks.
+   */
+  additionalSource?: string[];
 }
 
 /** The exact strings downstream tooling parses. Changing one is a breaking change. */
@@ -608,58 +614,138 @@ export async function ingestCheckCommand(
   process.exitCode = 1;
 }
 
+/** One source file as read from the designer's path, with where it will be archived. */
+interface SourceToArchive {
+  /** Absolute path the designer supplied, resolved. */
+  sourcePath: string;
+  bytes: Buffer;
+  /** Absolute path of the archived copy under `rulebook/source/`. */
+  archivePath: string;
+  /** The same, relative to `design/` -- the form every `Source:` and table row records. */
+  relArchivePath: string;
+}
+
+/**
+ * Reads one source the designer named. A supplied-but-unreadable path fails loudly: falling
+ * through would produce an INDEX.md with a provenance record describing a file that was never
+ * archived. `role` names which argument was wrong in the message.
+ */
+async function readSourceToArchive(
+  projectDir: string,
+  userPath: string,
+  role: 'Rulebook' | 'Additional source',
+): Promise<SourceToArchive> {
+  const sourcePath = resolveUserPath(process.cwd(), userPath);
+  let bytes: Buffer;
+  try {
+    bytes = await fs.readFile(sourcePath);
+  } catch {
+    throw new Error(
+      `${role} not found or unreadable: ${sourcePath}\n` +
+        (role === 'Rulebook'
+          ? 'Pass the path to the rulebook file (PDF, images, or text) as the first argument.'
+          : 'Pass the path to a document the rules incorporate (PDF, images, or text) to --additional-source.'),
+    );
+  }
+  const fileName = basename(sourcePath);
+  return {
+    sourcePath,
+    bytes,
+    archivePath: join(designRulebookDir(projectDir), 'source', fileName),
+    relArchivePath: `rulebook/source/${fileName}`,
+  };
+}
+
+/**
+ * Never clobber: ingest does not overwrite a designer's archived source. A byte-identical copy
+ * already in place is fine (a re-run); a different one is refused before anything is written.
+ */
+async function assertArchiveSlotFree(source: SourceToArchive): Promise<void> {
+  let existing: Buffer;
+  try {
+    existing = await fs.readFile(source.archivePath);
+  } catch {
+    return; // Not archived yet -- the normal path.
+  }
+  if (sha256(existing) !== sha256(source.bytes)) {
+    throw new Error(
+      `${source.relArchivePath} already exists in this project and differs from ${source.sourcePath}.\n` +
+        `Remove or rename the archived copy and re-run, or pass --project to target a different project.`,
+    );
+  }
+}
+
+/** Copies (never moves) one source into `rulebook/source/` and returns the archived copy's hash. */
+async function archiveSource(source: SourceToArchive): Promise<string> {
+  await fs.mkdir(dirname(source.archivePath), { recursive: true });
+  await fs.writeFile(source.archivePath, source.bytes);
+  const sourceHash = sha256(await fs.readFile(source.archivePath));
+  if (sourceHash !== sha256(source.bytes)) {
+    throw new Error(`Archived copy at ${source.relArchivePath} does not match the source. Aborting.`);
+  }
+  return sourceHash;
+}
+
+/**
+ * Reads and checks every source this call names BEFORE anything is written, so a bad
+ * `--additional-source` never leaves a primary archived with its companion missing. Refuses an
+ * additional source that is the primary itself (by the path it would archive to, or by the
+ * primary INDEX.md already records) and two sources that would archive to the same file name.
+ */
+async function readAllSources(
+  projectDir: string,
+  rulebook: string,
+  additional: readonly string[],
+  indexPath: string,
+): Promise<{ primary: SourceToArchive; additional: SourceToArchive[] }> {
+  const primary = await readSourceToArchive(projectDir, rulebook, 'Rulebook');
+  const extras: SourceToArchive[] = [];
+  for (const path of additional) {
+    extras.push(await readSourceToArchive(projectDir, path, 'Additional source'));
+  }
+
+  let recordedPrimary: string | undefined;
+  try {
+    recordedPrimary = readCanonicalPrimarySource(await fs.readFile(indexPath, 'utf-8'))?.path;
+  } catch {
+    recordedPrimary = undefined; // No INDEX.md yet.
+  }
+
+  const claimed = new Map<string, string>([[primary.relArchivePath, primary.sourcePath]]);
+  for (const extra of extras) {
+    if (extra.relArchivePath === primary.relArchivePath || extra.relArchivePath === recordedPrimary) {
+      throw new Error(
+        `${basename(extra.sourcePath)} is already the primary source (${extra.relArchivePath}).\n` +
+          'Pass it once, as the first argument; --additional-source is for the other documents the rules incorporate.',
+      );
+    }
+    const other = claimed.get(extra.relArchivePath);
+    if (other !== undefined) {
+      throw new Error(
+        `${other} and ${extra.sourcePath} both archive to ${extra.relArchivePath}.\n` +
+          'Rename one of them so every archived source has its own file name, then re-run.',
+      );
+    }
+    claimed.set(extra.relArchivePath, extra.sourcePath);
+  }
+
+  for (const source of [primary, ...extras]) await assertArchiveSlotFree(source);
+  return { primary, additional: extras };
+}
+
 export async function ingestArchiveCommand(
   rulebook: string,
   options: IngestArchiveOptions = {},
 ): Promise<void> {
   const projectDir = resolve(options.project ?? process.cwd());
-  const sourcePath = resolveUserPath(process.cwd(), rulebook);
+  const indexPath = join(designRulebookDir(projectDir), 'INDEX.md');
+  const sources = await readAllSources(projectDir, rulebook, options.additionalSource ?? [], indexPath);
 
-  let sourceBuf: Buffer;
-  try {
-    sourceBuf = await fs.readFile(sourcePath);
-  } catch {
-    // A supplied-but-unreadable path must fail loudly. Falling through would produce an INDEX.md
-    // with a provenance block describing a file that was never archived.
-    throw new Error(
-      `Rulebook not found or unreadable: ${sourcePath}\n` +
-        `Pass the path to the rulebook file (PDF, images, or text) as the first argument.`,
-    );
-  }
-
-  const fileName = basename(sourcePath);
-  const archiveDir = join(designRulebookDir(projectDir), 'source');
-  const archivePath = join(archiveDir, fileName);
-  const relArchivePath = `rulebook/source/${fileName}`;
-
-  // Never clobber. Ingest does not overwrite a designer's archived source.
-  try {
-    await fs.access(archivePath);
-    const existing = await fs.readFile(archivePath);
-    if (sha256(existing) !== sha256(sourceBuf)) {
-      throw new Error(
-        `An archived rulebook already exists at ${relArchivePath} and differs from the source.\n` +
-          `Remove or rename it and re-run, or pass --project to target a different project.`,
-      );
-    }
-  } catch (err) {
-    if (err instanceof Error && err.message.startsWith('An archived rulebook')) throw err;
-    // Not present — the normal path.
-  }
-
-  await fs.mkdir(archiveDir, { recursive: true });
-  // Copy, never move: the designer's original stays exactly where it is.
-  await fs.writeFile(archivePath, sourceBuf);
-
-  const archivedBuf = await fs.readFile(archivePath);
-  const sourceHash = sha256(archivedBuf);
-  if (sourceHash !== sha256(sourceBuf)) {
-    throw new Error(`Archived copy at ${relArchivePath} does not match the source. Aborting.`);
-  }
+  const relArchivePath = sources.primary.relArchivePath;
+  const sourceHash = await archiveSource(sources.primary);
 
   const gameName = basename(projectDir);
   const transcribed = isoDate(new Date());
-  const indexPath = join(designRulebookDir(projectDir), 'INDEX.md');
 
   // Decide the branch BEFORE any try/catch that performs a write. Today's bug (T-173-01): the
   // existence probe and the real repair write shared one try, with a catch that overwrote a real
@@ -717,6 +803,16 @@ export async function ingestArchiveCommand(
     }
   }
 
+  // Every source named by --additional-source, archived and recorded in `## Additional Sources`
+  // once the primary header exists to hold that section. All of them were already read and
+  // checked by `readAllSources`, so nothing below can fail on a bad argument half-way through.
+  const additionalSources: Array<{ archivedPath: string; sourceHash: string }> = [];
+  for (const extra of sources.additional) {
+    const extraHash = await archiveSource(extra);
+    await addAdditionalSource(indexPath, { path: extra.relArchivePath, sourceHash: extraHash });
+    additionalSources.push({ archivedPath: extra.relArchivePath, sourceHash: extraHash });
+  }
+
   if (options.json) {
     console.log(
       JSON.stringify(
@@ -726,6 +822,7 @@ export async function ingestArchiveCommand(
           indexPath: 'rulebook/INDEX.md',
           wroteIndex,
           recordedAsAdditionalSource,
+          additionalSources,
         },
         null,
         2,
@@ -741,27 +838,33 @@ export async function ingestArchiveCommand(
     console.log(
       `  ${chalk.gray('index:')} rulebook/INDEX.md's "${ADDITIONAL_SOURCES_HEADING}" section updated (primary Source:/Source hash: untouched)`,
     );
-    return;
-  }
-
-  console.log(chalk.green('✓ Archived source rulebook'));
-  console.log(`  ${chalk.gray('path:')} ${relArchivePath}`);
-  console.log(`  ${chalk.gray('sha256:')} ${sourceHash}`);
-  // Only report the header as updated when it was actually brought to the four-line contract —
-  // the unconditional "provenance header updated" message is what hid this defect (T-173-03).
-  if (wroteIndex) {
-    console.log(
-      `  ${chalk.gray('index:')} rulebook/INDEX.md written with provenance header + section scaffolding`,
-    );
-  } else if (headerBroughtToContract) {
-    console.log(
-      `  ${chalk.gray('index:')} rulebook/INDEX.md provenance header updated (existing sections untouched)`,
-    );
   } else {
-    console.log(
-      `  ${chalk.gray('index:')} rulebook/INDEX.md was NOT updated — its provenance header was already at contract`,
-    );
+    console.log(chalk.green('✓ Archived source rulebook'));
+    console.log(`  ${chalk.gray('path:')} ${relArchivePath}`);
+    console.log(`  ${chalk.gray('sha256:')} ${sourceHash}`);
+    // Only report the header as updated when it was actually brought to the four-line contract —
+    // the unconditional "provenance header updated" message is what hid this defect (T-173-03).
+    if (wroteIndex) {
+      console.log(
+        `  ${chalk.gray('index:')} rulebook/INDEX.md written with provenance header + section scaffolding`,
+      );
+    } else if (headerBroughtToContract) {
+      console.log(
+        `  ${chalk.gray('index:')} rulebook/INDEX.md provenance header updated (existing sections untouched)`,
+      );
+    } else {
+      console.log(
+        `  ${chalk.gray('index:')} rulebook/INDEX.md was NOT updated — its provenance header was already at contract`,
+      );
+    }
   }
+  for (const extra of additionalSources) {
+    console.log(chalk.green('✓ Archived additional source'));
+    console.log(`  ${chalk.gray('path:')} ${extra.archivedPath}`);
+    console.log(`  ${chalk.gray('sha256:')} ${extra.sourceHash}`);
+    console.log(`  ${chalk.gray('index:')} recorded in rulebook/INDEX.md's "${ADDITIONAL_SOURCES_HEADING}" section`);
+  }
+  if (recordedAsAdditionalSource) return;
   console.log();
   console.log(chalk.gray('Fill the scaffolded sections from the transcription summaries.'));
   console.log(chalk.gray('Keep every heading exactly as written — downstream tooling parses them.'));
