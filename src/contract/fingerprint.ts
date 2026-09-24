@@ -1719,6 +1719,14 @@ export async function computePayloadHash(): Promise<string> {
   const views = runner.getAllPlayerViews();
   assertCoversFlowLayer(views);
 
+  // The whole-game flow state at the same point. The executor hands it to the
+  // platform beside the views, the platform stores it, and the session layer
+  // sends it to every seat, where GameShell reads `availableActions` from it.
+  // The per-seat views above resolve turns through `awaitingPlayers` and so
+  // could not see #321: a simultaneous step also published a single-seat
+  // `currentPlayer` / `availableActions` left over from before it.
+  const openingFlowState = runner.getFlowState();
+
   // Views are captured at the SIMULTANEOUS step, where both seats are on the
   // clock — that is the coverage assertCoversFlowLayer pins, and advancing
   // first would quietly drop it. The flow POSITION is captured one step later,
@@ -1763,6 +1771,7 @@ export async function computePayloadHash(): Promise<string> {
   return sha256(
     canonicalize({
       views,
+      openingFlowState,
       flowPosition,
       worldWire: WORLD_WIRE_FIXTURE,
       // What a host must land in one transaction (#224). Types only, so
