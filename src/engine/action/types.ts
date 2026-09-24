@@ -6,6 +6,7 @@ import type { Game, PlayerOf } from '../element/game.js';
 // `ActionDefinition.world`.
 import type { WorldActionBlock } from '../../world/action.js';
 import type { ElementClass } from '../element/types.js';
+import type { ActionMetadata, ValidElement } from '../../types/protocol.js';
 
 /**
  * Selection types for action arguments
@@ -743,6 +744,21 @@ export interface FollowUpAction {
    * ```
    */
   display?: Record<string, string>;
+}
+
+/**
+ * A follow-up as a player's client receives it: the {@link FollowUpAction} the
+ * game returned, plus the metadata of the action it names.
+ *
+ * The session attaches `metadata` because a follow-up action is usually not in
+ * the player's available actions (it is gated by the chain), so the client has
+ * nowhere else to read its picks from. `TElement` is the element shape inside
+ * those picks: the wire shape by default, the UI's enriched shape once the
+ * action controller has resolved it.
+ */
+export interface FollowUpOffer<TElement extends ValidElement = ValidElement> extends FollowUpAction {
+  /** Metadata for the follow-up action, absent when it could not be built for this player. */
+  metadata?: ActionMetadata<TElement>;
 }
 
 /**

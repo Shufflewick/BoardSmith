@@ -362,9 +362,8 @@ export {
   type CollectedPick,
   type PickStepFn,
   // Other types
-  type ActionResult as ControllerActionResult,
-  type FollowUpAction,
-  type ValidationResult,
+  type ControllerActionResult,
+  type PickValidationResult,
   type RepeatingState,
   type ActionStateSnapshot,
   type UseActionControllerOptions,

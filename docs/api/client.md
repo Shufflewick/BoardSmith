@@ -39,7 +39,7 @@ import { MeepleClient, GameConnection, audioService } from 'boardsmith/client';
 - `PlayerState` - Player-specific state
 - `GameState` - Combined game state
 - `ConnectionStatus` - Connection status enum
-- `ActionResult` - Action execution result
+- `ActionResponse` - The server's answer to an action this client sent (`GameConnection.action()`)
 - `StateChangeCallback` - State change handler
 - `ErrorCallback` - Error handler
 - `ConnectionCallback` - Connection status handler
