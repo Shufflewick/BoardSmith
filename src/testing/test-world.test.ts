@@ -186,6 +186,20 @@ describe('TestWorld: arrivals and re-asked picks, as a host drives them', () => 
     await world.close();
   });
 
+  it('arms the timer for an event the arrival verb schedules, so it fires on time (#327)', async () => {
+    const ran: number[] = [];
+    const world = await createTestWorld({ definition: bundle(welcomingVaultWorld(ran)), now: 0 });
+
+    await world.arrive(1);
+    // Nothing else happens in this world: no command, no "fire due events
+    // now". The only thing that can run `welcome` is the timer the arrival
+    // armed.
+    await world.advanceClock(5_000);
+
+    expect(ran).toEqual([1_000]);
+    await world.close();
+  });
+
   it('refuses an arrival for a seat that is not watching, and says how to make it one', async () => {
     const world = await createTestWorld({ definition: bundle(greetedVaultWorld()), watching: [1] });
 
@@ -238,6 +252,29 @@ function greetedVaultWorld(): WorldDefinition {
     ...base,
     actions: [...base.actions, greet],
     presence: { onArrive: 'greet' },
+  } as WorldDefinition;
+}
+
+/** The vault world whose arrival hook schedules a welcome one second later,
+ *  which reports the instant it ran into `ran`. */
+function welcomingVaultWorld(ran: number[]): WorldDefinition {
+  const base = vaultWorldBlock();
+  const hello = worldClockAction<VaultWorld>('hello')
+    .prompt('The platform: a seat arriving')
+    .needs(() => ['commons'])
+    .execute((_args, ctx) => {
+      ctx.world.schedule({ delayMs: 1_000, action: 'welcome', args: {} });
+    });
+  const welcome = worldClockAction<VaultWorld>('welcome')
+    .prompt('The welcome')
+    .needs(() => ['commons'])
+    .execute((_args, ctx) => {
+      ran.push(ctx.world.now);
+    });
+  return {
+    ...base,
+    actions: [...base.actions, hello, welcome],
+    presence: { onArrive: 'hello' },
   } as WorldDefinition;
 }
 
