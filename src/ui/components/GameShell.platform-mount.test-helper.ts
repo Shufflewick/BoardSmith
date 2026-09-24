@@ -86,8 +86,6 @@ export function mountPlatformShell(options: PlatformShellOptions) {
     },
     global: {
       stubs: {
-        DisabledReasonTooltip: true,
-        Toast: true,
         ...(options.stubLobby ? { GameLobby: true } : {}),
       },
     },

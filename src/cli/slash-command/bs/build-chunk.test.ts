@@ -520,7 +520,7 @@ describe('BUILD-05 — build step', () => {
 describe('BUILD-06 — test step', () => {
   it('names the exact command tokens', () => {
     const test = read('build/test.md');
-    expect(test).toContain('tsc --noEmit');
+    expect(test).toContain('npx vue-tsc --noEmit');
     expect(test).toContain('boardsmith lint');
     expect(test).toMatch(/full.{0,20}(accumulated )?suite|regression/i);
     expect(test).toContain('simulateRandomGames');

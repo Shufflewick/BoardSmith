@@ -252,7 +252,7 @@ export function generateTsConfig(): string {
       // `./ui` export resolves to raw source, so tsc must fully type-check
       // that module graph — which reaches `useActionController.ts`'s
       // `import.meta.env.DEV` (a Vite-ambient global). Without this, a
-      // freshly-scaffolded, unmodified project fails `tsc --noEmit` out of
+      // freshly-scaffolded, unmodified project fails `vue-tsc --noEmit` out of
       // the box with TS2339 on `ImportMeta.env` (Phase 149 dry-run Defect 1).
       //
       // COUPLING (WR-04): listing `types` at all switches tsc from

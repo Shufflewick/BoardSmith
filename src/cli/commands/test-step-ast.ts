@@ -50,7 +50,7 @@ export function parseSource(source: string, file = 'this file'): ParsedSource {
     }
     throw new Error(
       `Could not parse ${file} as TypeScript: ${(err as Error).message}\n` +
-        'Fix the syntax error (run `tsc --noEmit`) and run this check again.',
+        'Fix the syntax error (run `npx vue-tsc --noEmit`) and run this check again.',
     );
   }
   return {

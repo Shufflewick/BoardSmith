@@ -15,6 +15,7 @@ import {
   findTestBlocks,
   findUnreachableGuards,
   findVerbWrappers,
+  parseSource,
 } from './test-step-ast.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { INSTALLED_MODULES } from '../../testing/installed-modules.test-helper.js';
@@ -174,6 +175,16 @@ const notAVerb = standingVerb;
     const wrappers = findVerbWrappers([{ path: 'src/rules/world.ts', text: rules }]);
     expect([...wrappers.entries()]).toEqual([['standingVerb', 0], ['counter', 0]]);
     expect(findDefinedVerbs(rules, 'world.ts', wrappers)).toEqual(['look', 'bidOnItem', 'auctionOffItem']);
+  });
+});
+
+describe('parseSource on a file that does not parse', () => {
+  // #303: plain `tsc` cannot type a `.vue` import, so pointing a game author at it buries the
+  // real syntax error under a TS2307 for every single-file component.
+  it('sends the author to vue-tsc, the checker a game installs, never plain tsc', () => {
+    expect(() => parseSource('export const = ;', 'src/rules/game.ts')).toThrow(
+      /Fix the syntax error \(run `npx vue-tsc --noEmit`\)/,
+    );
   });
 });
 
