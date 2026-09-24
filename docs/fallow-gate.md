@@ -322,7 +322,7 @@ A `duplicate_exports` baseline key is the exported name followed by **every
 file that exports it**:
 
 ```
-ActionResult|src/client/types.ts|src/engine/action/types.ts|src/session/game-session.ts|src/ui/composables/useActionControllerTypes.ts
+ElementDiff|src/session/state-history.ts|src/session/utils.ts|src/ui/composables/useDebugBridge.ts
 ```
 
 The two sides of the comparison are built differently. The baseline is saved by
