@@ -35,69 +35,10 @@ import { GameRunner } from '../runtime/index.js';
 import { GameSession } from './game-session.js';
 import type { StorageAdapter, StoredGameState } from './types.js';
 import type { TutorialDefinition } from '../engine/tutorial/types.js';
-
-// ---------------------------------------------------------------------------
-// Test game: a repeating-selection action whose onEach moves pieces. The moves
+// The test game is a repeating selection whose onEach moves pieces. The moves
 // happen DURING the multi-step selection (not in execute), so they are exactly
 // the kind of "pending mutation" that action-history replay cannot reproduce.
-// ---------------------------------------------------------------------------
-
-class Token extends Piece<CollectGame> {}
-class Stash extends Space<CollectGame> {}
-class Hand extends Space<CollectGame> {}
-
-class CollectGame extends Game<CollectGame, Player> {
-  stash!: Stash;
-  hand!: Hand;
-
-  constructor(options: GameOptions) {
-    super(options);
-
-    this.stash = this.create(Stash, 'stash');
-    this.hand = this.create(Hand, 'hand');
-    this.stash.create(Token, 'p1');
-    this.stash.create(Token, 'p2');
-    this.stash.create(Token, 'p3');
-
-    this.registerAction(
-      Action.create('collect')
-        .chooseFrom('token', {
-          // Choices are the remaining stash token names plus the 'stop' terminator.
-          choices: (ctx) => [
-            ...(ctx.game as CollectGame).stash.all(Token).map((t) => t.name),
-            'stop',
-          ],
-          repeat: {
-            until: (_ctx, last) => last === 'stop',
-            onEach: (ctx, choice) => {
-              if (choice === 'stop') return;
-              // Pending mutation: move the chosen token from the stash to the hand.
-              // Recorded in neither command nor action history — only the final
-              // 'collect' entry (with collected args) lands in actionHistory.
-              const game = ctx.game as CollectGame;
-              const token = game.stash.all(Token).find((t) => t.name === choice);
-              if (token) token.putInto(game.hand);
-            },
-          },
-        })
-        .execute(() => ({ success: true }))
-    );
-
-    // Single action-step that lets player 1 keep taking 'collect' turns. Staying
-    // on player 1 (currentPlayer === 1, moveCount > 0) is what makes undo
-    // available after restore.
-    this.setFlow(
-      defineFlow({
-        root: actionStep({
-          actions: ['collect'],
-          player: (ctx) => ctx.game.getPlayer(1)!,
-          repeatUntil: () => false,
-          maxMoves: 10,
-        }),
-      })
-    );
-  }
-}
+import { RepeatingCollectGame as CollectGame, Token } from './testing/fixtures/repeating-collect-fixture.js';
 
 /**
  * In-memory storage that simulates a real cold restart: it persists a JSON

@@ -26,6 +26,7 @@ import { createTestWorld, type TestWorld, type TestWorldOptions } from '../../te
 import { MAX_FLAT_CHOICE_CANDIDATES } from '../../engine/element/action-metadata.js';
 import { WorldRefusal, type WorldActionOffer } from '../../world/index.js';
 import { SeededRandom } from '../../utils/random.js';
+import { simulateReplayCommand } from './replay-command.js';
 
 // The threshold is a fact about what one selection can present as a readable
 // sentence, so it lives beside the code that builds a pick's candidates and is
@@ -204,7 +205,7 @@ export async function auditChoiceCardinality<G extends Game>(
     throw new Error(
       `the random simulator ${what} after ${unplayed.actionCount} move(s) in the game with seed ${unplayed.seed}: ` +
         `${unplayed.error?.replace(/\.$/, '')}. ` +
-        `"boardsmith simulate --games ${results.total} --players ${unplayed.playerCount} --seed ${results.seed}" shows the same failure`,
+        `"${simulateReplayCommand(unplayed, options.gameOptions ?? {})}" shows the same failure`,
     );
   }
 

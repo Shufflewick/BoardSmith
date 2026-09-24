@@ -173,7 +173,7 @@ describe('auditChoiceCardinality', () => {
 
     await expect(
       auditChoiceCardinality(ThreeSeatWideGame, { seed: 'audit', games: 1, players: 2 }),
-    ).rejects.toThrow(/crashed.*seed audit-2-0.*needs at least 3 players.*boardsmith simulate --games 1 --players 2 --seed audit"/s);
+    ).rejects.toThrow(/crashed.*seed audit-2-0.*needs at least 3 players.*boardsmith simulate --replay audit-2-0 --players 2"/s);
   });
 
   it('refuses to report a game that got stuck as having no findings', async () => {
