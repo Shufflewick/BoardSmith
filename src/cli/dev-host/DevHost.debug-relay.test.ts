@@ -210,3 +210,58 @@ describe('DevHost — game_state isDraw relay (D10)', () => {
     expect(gameStateCalls[gameStateCalls.length - 1][0]).toMatchObject({ isDraw: false });
   });
 });
+
+// #302: the dev host is the parent page of the platform contract (#301). It
+// relays the host's deadline stamps, adds its own receipt time, and forwards
+// all three unchanged on every replay.
+describe('DevHost — game_state deadline relay (#302)', () => {
+  afterEach(() => vi.restoreAllMocks());
+  const lastGameState = (spy: ReturnType<typeof vi.fn>) =>
+    spy.mock.calls.map((c) => c[0] as Record<string, unknown>).filter((m) => m.type === 'game_state').at(-1);
+
+  it('relays deadlineAt and serverNow, and stamps receivedAt when the frame comes off the socket', async () => {
+    const wrapper = await mountAndActivate();
+    const ws = mockWsInstance!;
+    const postSpy = spyOnIframePostMessage(wrapper);
+    vi.spyOn(Date, 'now').mockReturnValue(5_000);
+
+    ws.simulateMessage({ type: 'game_state', view: {}, isComplete: false, winners: [], isDraw: false, deadlineAt: 9_000, serverNow: 4_000 });
+    await wrapper.vm.$nextTick();
+
+    expect(lastGameState(postSpy)).toMatchObject({ deadlineAt: 9_000, serverNow: 4_000, receivedAt: 5_000 });
+  });
+
+  it('forwards the original receivedAt when the frame is replayed on request-state', async () => {
+    const wrapper = await mountAndActivate();
+    const ws = mockWsInstance!;
+    const postSpy = spyOnIframePostMessage(wrapper);
+    const now = vi.spyOn(Date, 'now').mockReturnValue(5_000);
+    ws.simulateMessage({ type: 'game_state', view: {}, isComplete: false, winners: [], isDraw: false, deadlineAt: 9_000, serverNow: 4_000 });
+    await wrapper.vm.$nextTick();
+
+    now.mockReturnValue(7_000);
+    window.dispatchEvent(new MessageEvent('message', { data: { source: 'shufflewick-game', type: 'request-state' } }));
+    await wrapper.vm.$nextTick();
+
+    expect(lastGameState(postSpy)).toMatchObject({ deadlineAt: 9_000, serverNow: 4_000, receivedAt: 5_000 });
+  });
+
+  it('offers "End step" only while a deadline is open, and it asks the host to fire it', async () => {
+    const wrapper = await mountAndActivate();
+    const ws = mockWsInstance!;
+    const endStep = () => wrapper.findAll('[data-testid="fire-deadline"]');
+
+    ws.simulateMessage({ type: 'game_state', view: {}, isComplete: false, winners: [], isDraw: false, deadlineAt: null, serverNow: 4_000 });
+    await wrapper.vm.$nextTick();
+    expect(endStep()).toHaveLength(0);
+
+    ws.simulateMessage({ type: 'game_state', view: {}, isComplete: false, winners: [], isDraw: false, deadlineAt: 9_000, serverNow: 4_000 });
+    await wrapper.vm.$nextTick();
+    expect(endStep().length).toBeGreaterThan(0);
+
+    ws.send.mockClear();
+    await endStep()[0].trigger('click');
+    const frames = ws.send.mock.calls.map((c) => JSON.parse(c[0] as string));
+    expect(frames).toEqual([{ type: 'fireDeadline' }]);
+  });
+});
