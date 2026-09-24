@@ -1612,6 +1612,15 @@ actionStep({
   never handed to a bot.
 - `boardsmith build` stamps `capabilities.timedSteps: true` into the manifest
   when any step of the compiled flow declares a limit.
+- `boardsmith dev` enforces the window locally, the same way the platform
+  does. The dev host starts one timer when the step opens, sends the deadline
+  on every `game_state` frame (so `turnDeadline` and the Action Panel count
+  down), and when it runs out submits `idleAction` for every human seat still
+  due. A bot seat is left to its bot. If the game refuses the idle action, or
+  the idle action does not move the round on, the terminal and every browser
+  show an error saying so. **End step** in the Dev bar closes the open step
+  straight away, so you do not have to wait out a long window. New game, and
+  applying lobby options, clear the timer.
 
 See [simultaneous-and-interrupt-semantics.md](./simultaneous-and-interrupt-semantics.md)
 section 5 for who enforces what.

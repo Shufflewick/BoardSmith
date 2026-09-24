@@ -300,7 +300,7 @@
     "src/cli/dev-host/multiplayer-host.test.ts:661-665|src/cli/dev-host/multiplayer-host.test.ts:677-681",
     "src/cli/dev-host/multiplayer-host.test.ts:680-684|src/cli/dev-host/multiplayer-host.test.ts:689-694",
     "src/cli/dev-host/multiplayer-host.test.ts:746-750|src/cli/dev-host/multiplayer-host.test.ts:757-761",
-    "src/cli/dev-host/multiplayer-host.ts:716-731|src/cli/dev-host/multiplayer-host.ts:750-764",
+    "src/cli/dev-host/multiplayer-host.ts:768-783|src/cli/dev-host/multiplayer-host.ts:802-816",
     "src/cli/dev-host/world-host.test.ts:50-56|src/cli/dev-host/world-host.test.ts:72-80",
     "src/cli/dev-host/world-host.test.ts:1030-1037|src/cli/dev-host/world-host.test.ts:2678-2686",
     "src/cli/dev-host/world-host.test.ts:1438-1442|src/cli/dev-host/world-host.test.ts:1483-1487",

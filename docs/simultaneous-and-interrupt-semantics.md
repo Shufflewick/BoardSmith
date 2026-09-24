@@ -177,7 +177,9 @@ Which means, precisely:
   host real time, so a shorter window would be over before the host could close
   it. The engine refuses a fixed number under it when the flow is built and a
   function's answer under it when the step is entered, and since a host runs its
-  own copy of the engine, no host ever sees a shorter window.
+  own copy of the engine, no host ever sees a shorter window. The
+  `boardsmith dev` host (`MultiplayerHost`) is a host in this sense and does
+  exactly the same, so a timed game can be played end to end locally.
 - **Un-takeover / seat reclamation** — what happens to a seat that a caretaker
   bot acted for, when the human returns — is deferred and is deliberately not
   specified here.
