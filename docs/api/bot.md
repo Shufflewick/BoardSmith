@@ -176,7 +176,7 @@ const bot = new MCTSBot(
 const move = await bot.play();
 ```
 
-`BotConfig` in full: `iterations`, `playoutDepth`, `seed`, `async`, `timeout`, `useTranspositionTable`, `parallel`, `useRAVE`, `raveK`, `uctC`, `usePNS`, `debug`. See `src/bot/types.ts` for per-field defaults and semantics.
+`BotConfig` in full: `iterations`, `playoutDepth`, `seed`, `async`, `timeout`, `parallel`, `useRAVE`, `raveK`, `uctC`, `usePNS`, `debug`. See `src/bot/types.ts` for per-field defaults and semantics.
 
 ### Search Statistics (hints and heatmaps)
 

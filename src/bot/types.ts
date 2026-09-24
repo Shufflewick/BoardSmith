@@ -64,8 +64,6 @@ export interface BotConfig {
    * `Infinity` to disable it and make the search depend only on `iterations`.
    */
   timeout?: number;
-  /** Enable transposition table caching for position evaluations. Default: true */
-  useTranspositionTable?: boolean;
   /** Number of parallel ensemble searches. Default: 1 */
   parallel?: number;
   /** Enable RAVE (Rapid Action Value Estimation) for faster move learning. Default: true */
@@ -311,10 +309,9 @@ export interface BotStrategy {
    * see, and drops the rest (`NotSimulableError`). That stays the default, and
    * a game with no hidden state pays nothing for this hook existing.
    *
-   * Two costs come with declaring it, both inherent rather than incidental:
-   * the transposition table is off (it keys on flow position, which means the
-   * same key in two different worlds), and the root searches the UNION of the
-   * moves every sampled world offers rather than a capped sample of one world's.
+   * One cost comes with declaring it, and it is inherent rather than
+   * incidental: the root searches the UNION of the moves every sampled world
+   * offers rather than a capped sample of one world's.
    *
    * @see DeterminizeSampler for the contract every sampler must keep.
    */

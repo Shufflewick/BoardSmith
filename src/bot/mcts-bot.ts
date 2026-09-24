@@ -84,8 +84,6 @@ export class MCTSBot<G extends Game = Game> {
    * refresh must not widen past it. Undefined for every other search.
    */
   private forcedRootMoveKeys?: Set<string>;
-  /** Transposition table for caching position evaluations */
-  private transpositionTable: Map<string, { value: number; visits: number }> = new Map();
   /** RAVE table for move value estimation across all playouts */
   private raveTable: Map<string, { visits: number; value: number }> = new Map();
 
@@ -340,8 +338,7 @@ export class MCTSBot<G extends Game = Game> {
       moves = allMoves.length > 20 ? this.sampleMovesWithPreserved(allMoves, 20, []) : allMoves;
     }
 
-    // Clear transposition table and RAVE table for fresh search
-    this.transpositionTable.clear();
+    // Clear the RAVE table for a fresh search
     this.raveTable.clear();
 
     // rootCommandCount tracks the command baseline on `searchGame` (built
@@ -777,8 +774,10 @@ export class MCTSBot<G extends Game = Game> {
       depth++;
     }
 
-    // Evaluate using the final game state (with transposition table caching)
-    const score = this.evaluateWithCache(this.searchGame, flowState);
+    // Evaluate the position the playout reached. There is no evaluation cache
+    // (#315): a key correct for every game has to cover the whole board, and
+    // building one cost more than the evaluations it saved in every example game.
+    const score = this.evaluateTerminalFromGame(this.searchGame, flowState);
     return { score, playoutMoves };
   }
 
@@ -1521,54 +1520,6 @@ export class MCTSBot<G extends Game = Game> {
     // Update solved status
     node.isProven = node.proofNumber === 0;
     node.isDisproven = node.disproofNumber === 0;
-  }
-
-  /**
-   * Hash a position for transposition table lookup.
-   * Uses flow state position as unique identifier (tracks game progression).
-   */
-  private hashPosition(game: Game, flowState: FlowState): string {
-    // Flow state position changes as the game progresses through flow nodes
-    // It uniquely identifies where we are in the game flow
-    return JSON.stringify(flowState.position);
-  }
-
-  /**
-   * Evaluate position with transposition table caching.
-   * Caches evaluation results to avoid redundant computation for positions
-   * reached via different move orders.
-   */
-  private evaluateWithCache(game: Game, flowState: FlowState): number {
-    // Skip caching if disabled, or under determinization (#73): the table keys
-    // on flow position alone, and under a sampler the same flow position is
-    // reached in many different worlds with different outcomes. Caching there
-    // freezes the first world's verdict and destroys the averaging the whole
-    // feature exists to do.
-    if (this.config.useTranspositionTable === false || this.determinize) {
-      return this.evaluateTerminalFromGame(game, flowState);
-    }
-
-    const hash = this.hashPosition(game, flowState);
-    const cached = this.transpositionTable.get(hash);
-
-    // Return cached value if we have enough confidence (3+ visits)
-    if (cached && cached.visits >= 3) {
-      return cached.value;
-    }
-
-    // Evaluate the position
-    const value = this.evaluateTerminalFromGame(game, flowState);
-
-    // Update cache with running average
-    if (cached) {
-      const newVisits = cached.visits + 1;
-      const newValue = (cached.value * cached.visits + value) / newVisits;
-      this.transpositionTable.set(hash, { value: newValue, visits: newVisits });
-    } else {
-      this.transpositionTable.set(hash, { value, visits: 1 });
-    }
-
-    return value;
   }
 
   /**

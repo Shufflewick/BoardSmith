@@ -114,7 +114,6 @@ function searchPayoffMatrix() {
     seed: 'payoff-matrix',
     timeout: Infinity,
     async: false,
-    useTranspositionTable: false,
   });
 
   // `runSearch` is the shared primitive behind play()/playWithStats(); it also

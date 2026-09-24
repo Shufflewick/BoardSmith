@@ -13,21 +13,18 @@ import { newScoreRace, scoreRaceBot } from './score-race.test-helper.js';
 
 const SEEDS = Array.from({ length: 20 }, (_, i) => `rank-${i}`);
 
-// The transposition table has its own bug (#315), which hides this one.
-const config = { useTranspositionTable: false };
-
 describe('move choice in a game that does not end inside the search', () => {
-  it('picks the scoring move for every seed', async () => {
+  it('picks the scoring move for every seed, with default settings', async () => {
     const picks: string[] = [];
     for (const seed of SEEDS) {
-      const move = await scoreRaceBot(newScoreRace(), seed, config).play();
+      const move = await scoreRaceBot(newScoreRace(), seed).play();
       picks.push(String(move!.args.option));
     }
     expect(picks).toEqual(SEEDS.map(() => 'good'));
   });
 
   it('spends most of its visits on the scoring move', async () => {
-    const { stats } = await scoreRaceBot(newScoreRace(), 'visits', config).playWithStats();
+    const { stats } = await scoreRaceBot(newScoreRace(), 'visits').playWithStats();
     const total = stats.reduce((sum, s) => sum + s.visits, 0);
     const good = stats.find((s) => s.move.args.option === 'good')!;
     expect(good.visits / total).toBeGreaterThan(0.5);
