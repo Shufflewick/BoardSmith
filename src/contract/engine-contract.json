@@ -1,7 +1,7 @@
 {
-  "revision": 94,
+  "revision": 95,
   "bundleProtocol": 2,
-  "surfaceHash": "b86dd32bdce805ae",
+  "surfaceHash": "9bf56c556e696f03",
   "payloadHash": "9721d8a867285784",
   "formatHash": "0058593e7cc80205",
   "history": [
@@ -790,6 +790,15 @@
       "payloadHash": "9721d8a867285784",
       "formatHash": "0058593e7cc80205",
       "summary": "A flow step can declare how long it stays open (#300). actionStep and simultaneousActionStep accept timeLimitMs (a number, or a function resolved once at step entry); the resolved duration is kept in the step's position.frameData, rides FlowState.timeLimitMs, and SnapshotSessionHost broadcast meta carries turnBoundary.timeLimitMs (absent for an untimed step; the boundary key is unchanged). payloadHash moved only because the contract fixture now declares a window. boardsmith build stamps a NEW capability, capabilities.timedSteps, from the compiled flow, and build and validate refuse a timed game without idleAction. The platform must add timedSteps to GameCapabilities/CAPABILITY_KEYS when it vendors this revision, or validateCapabilities refuses every bundle built on it (ShufflewickPub #505). Not breaking: no existing field moved."
+    },
+    {
+      "revision": 95,
+      "date": "2026-09-24",
+      "bundleProtocol": 2,
+      "surfaceHash": "9bf56c556e696f03",
+      "payloadHash": "9721d8a867285784",
+      "formatHash": "0058593e7cc80205",
+      "summary": "A step's timeLimitMs has a floor of ten seconds (#307). boardsmith exports MIN_STEP_TIME_LIMIT_MS (10000); a fixed limit under it is refused when the flow is built (so build and validate refuse it) and a function's answer under it is refused when the step is entered, naming the step. The platform runs its own copy of the engine, so no table can arm a shorter window and the platform can hold its round-expiry budget against this constant (ShufflewickPub #505). Not breaking: no existing field moved."
     }
   ]
 }

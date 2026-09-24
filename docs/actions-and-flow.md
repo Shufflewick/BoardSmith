@@ -1596,9 +1596,11 @@ actionStep({
 - It is resolved **once, when the step is entered**, and fixed while the step
   stays open: a seat submitting mid-round does not move it. The next entry (the
   next round of a `loop`, the next seat of an `eachPlayer`) resolves its own.
-- It must be a positive whole number of milliseconds. A bad number is refused
-  when the flow is built; a function that answers one is refused when the step
-  is entered. Both errors name the step.
+- It must be a whole number of milliseconds, and at least
+  `MIN_STEP_TIME_LIMIT_MS` (10 000, ten seconds). The host needs time to close
+  a step, so a shorter window would be over before it could. A bad number is
+  refused when the flow is built; a function that answers one is refused when
+  the step is entered. Both errors name the step.
 - It is a **duration, never an instant**. The engine keeps no clock and never
   closes the step itself. It publishes the value as `FlowState.timeLimitMs` and
   on the host's turn boundary (`meta.turnBoundary.timeLimitMs`), and the host

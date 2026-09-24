@@ -12,21 +12,36 @@ import type { FlowContext, FlowNode, StepTimeLimit } from './types.js';
 import { walkFlowNodes } from './walk-flow-nodes.js';
 
 /**
- * Refuse a limit that is not a positive whole number of milliseconds.
+ * The shortest window a step may declare: ten seconds (#307).
+ *
+ * A host closes a timed step by submitting the idle action for every seat
+ * still due, and that takes real time -- the platform loads the table and gives
+ * the idle action a few seconds per seat. A window shorter than that is over
+ * before the host can close it. It is enforced here because this is the one
+ * place that sees every window, a function's answer included, and a host runs
+ * its own copy of the engine, so the floor holds whatever engine a game was
+ * built with.
+ */
+export const MIN_STEP_TIME_LIMIT_MS = 10_000;
+
+/**
+ * Refuse a limit that is not a whole number of milliseconds at or above
+ * {@link MIN_STEP_TIME_LIMIT_MS}.
  *
  * `source` says where the value came from, so the message points at the code
  * to change: the step's own declaration, or the function it declared.
  */
 function requireUsableLimit(value: unknown, stepName: string, source: 'declared' | 'returned'): number {
-  if (typeof value === 'number' && Number.isInteger(value) && value > 0) return value;
+  if (typeof value === 'number' && Number.isInteger(value) && value >= MIN_STEP_TIME_LIMIT_MS) return value;
   const got = typeof value === 'number' ? String(value) : JSON.stringify(value) ?? String(value);
   const where = source === 'declared'
     ? `declares timeLimitMs: ${got}`
     : `has a timeLimitMs function that returned ${got}`;
   throw new Error(
     `Flow step '${stepName}' ${where}. A step's time limit is how long it stays open, in ` +
-      'milliseconds, and must be a positive whole number, e.g. timeLimitMs: 120_000 for two ' +
-      'minutes. Leave timeLimitMs out for a step that stays open until every seat has acted.',
+      `milliseconds, and must be a whole number of at least ${MIN_STEP_TIME_LIMIT_MS} (ten seconds, ` +
+      'the time a host needs to close the step), e.g. timeLimitMs: 120_000 for two minutes. ' +
+      'Leave timeLimitMs out for a step that stays open until every seat has acted.',
   );
 }
 

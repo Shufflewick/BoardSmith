@@ -172,7 +172,12 @@ Which means, precisely:
   current one). A timed step is always resolved by `idleAction`, never by a
   bot: the player is present and slow, not absent. `boardsmith build` stamps
   `capabilities.timedSteps` from the compiled flow, and `boardsmith validate`
-  and `build` refuse a timed game that declares no `idleAction`. The
+  and `build` refuse a timed game that declares no `idleAction`. A window is at
+  least `MIN_STEP_TIME_LIMIT_MS` (ten seconds, #307): closing a step takes the
+  host real time, so a shorter window would be over before the host could close
+  it. The engine refuses a fixed number under it when the flow is built and a
+  function's answer under it when the step is entered, and since a host runs its
+  own copy of the engine, no host ever sees a shorter window. The
   `boardsmith dev` host (`MultiplayerHost`) is a host in this sense and does
   exactly the same, so a timed game can be played end to end locally.
 - **Un-takeover / seat reclamation** — what happens to a seat that a caretaker

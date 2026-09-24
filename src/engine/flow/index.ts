@@ -35,6 +35,9 @@ export type { SeatActivityState } from './seat-activity.js';
 export { flowBoundaryKey } from './boundary-key.js';
 export type { BoundaryKeyState } from './boundary-key.js';
 
+// The shortest window a step's timeLimitMs may declare.
+export { MIN_STEP_TIME_LIMIT_MS } from './step-time-limit.js';
+
 // Types
 export type {
   FlowNodeType,
