@@ -853,12 +853,20 @@ describe('collectGameApiSurface — reads the source as TypeScript does (#372)',
 
   it('refuses a named re-export of a name the target module does not export', async () => {
     await writeParsedFixtureProject(projectDir, {
-      'index.ts': ["export { missing } from './dice.js';"],
+      'index.ts': ["export { missing as found } from './dice.js';"],
       'dice.ts': ['export function roll(): number {', '  return 4;', '}'],
     });
 
     await expect(collectGameApiSurface(projectDir)).rejects.toThrow(
-      /src\/rules\/index\.ts exports 'missing'.*src\/rules\/dice\.ts/s,
+      "src/rules/index.ts exports 'found' from './dice.js', but src/rules/dice.ts exports no 'missing'.",
+    );
+  });
+
+  it('refuses a local export list naming something the module does not declare', async () => {
+    await writeParsedFixtureProject(projectDir, { 'index.ts': ['export { undeclared as shown };'] });
+
+    await expect(collectGameApiSurface(projectDir)).rejects.toThrow(
+      "src/rules/index.ts exports 'shown', but declares no 'undeclared'.",
     );
   });
 
