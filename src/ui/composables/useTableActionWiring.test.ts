@@ -18,68 +18,11 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { computed, defineComponent, h, nextTick, ref, type Ref } from 'vue';
 import { mount, type VueWrapper } from '@vue/test-utils';
-import {
-  Game,
-  Player,
-  Piece,
-  Space,
-  Action,
-  defineFlow,
-  actionStep,
-  type GameOptions,
-} from '../../engine/index.js';
 import { GameSession } from '../../session/game-session.js';
 import type { PlayerGameState } from '../../session/types.js';
+import { MoveGame } from '../../session/move-game.test-helper.js';
 import { createBoardInteraction, type BoardInteraction } from './useBoardInteraction.js';
 import { useTableActionWiring, type TableActionWiring } from './useTableActionWiring.js';
-
-class Pawn extends Piece<MoveGame> {}
-class Room extends Space<MoveGame> {}
-
-/** One pawn, three rooms; seat 1 moves it to any room it is not already in. */
-class MoveGame extends Game<MoveGame, Player> {
-  rooms: Room[] = [];
-
-  constructor(options: GameOptions) {
-    super(options);
-    this.rooms = ['bridge', 'engine', 'hold'].map((n) => this.create(Room, n));
-    this.rooms[0].create(Pawn, 'pawn');
-
-    this.registerAction(
-      Action.create('move')
-        .chooseElement('destination', {
-          elements: (ctx) => {
-            const game = ctx.game as MoveGame;
-            const pawn = game.first(Pawn)!;
-            return game.rooms.filter((r) => r !== pawn.parent);
-          },
-        })
-        .disabled((ctx) => ((ctx.game as MoveGame).tired ? 'The crew is resting' : false))
-        .execute((args, ctx) => {
-          (ctx.game as MoveGame).first(Pawn)!.putInto(args.destination as Room);
-          return { success: true };
-        }),
-    );
-
-    this.setFlow(
-      defineFlow({
-        root: actionStep({
-          actions: ['move'],
-          player: (ctx) => ctx.game.getPlayer(1)!,
-          repeatUntil: () => false,
-          maxMoves: 20,
-        }),
-      }),
-    );
-  }
-
-  /** Set by a test to make `move` disabled with a reason. */
-  tired = false;
-
-  roomIds(...names: string[]): number[] {
-    return names.map((n) => this.rooms.find((r) => r.name === n)!.id);
-  }
-}
 
 const SEAT = 1;
 
@@ -109,6 +52,10 @@ interface Table {
   broadcast: () => void;
   /** Replaces the game, as the dev host's New game does. */
   newGame: (seed: string) => void;
+  /** The live game. */
+  game: () => MoveGame;
+  /** Clicks a room on the board, then delivers the broadcast that follows the move. */
+  moveTo: (room: string) => Promise<void>;
   /** Room ids the board currently offers, sorted. */
   offered: () => number[];
 }
@@ -155,8 +102,21 @@ function mountTable(): Table {
       session = newSession(seed);
       seatState.value = session.buildPlayerState(SEAT);
     },
+    game: () => session.runner.game,
+    moveTo: async (room) => {
+      board.triggerElementSelect({ id: session.runner.game.roomIds(room)[0] });
+      await settle();
+      seatState.value = session.buildPlayerState(SEAT);
+      await settle();
+    },
     offered: () => board.validElements.map((t) => t.id).sort((a, b) => a - b),
   };
+}
+
+/** The pawn is back in the bridge, so the open pick offers the other two rooms. */
+function expectOfferedFromTheStart(table: Table): void {
+  expect(table.game().pawnRoom()).toBe('bridge');
+  expect(table.offered()).toEqual(table.game().roomIds('engine', 'hold'));
 }
 
 describe('useTableActionWiring drives the board from the seat state alone (#378)', () => {
@@ -164,67 +124,49 @@ describe('useTableActionWiring drives the board from the seat state alone (#378)
     const table = mountTable();
     await settle();
 
-    const game = table.session.runner.game;
     expect(table.wiring.controller.currentAction.value).toBe('move');
-    expect(table.offered()).toEqual(game.roomIds('engine', 'hold').sort((a, b) => a - b));
+    expect(table.offered()).toEqual(table.game().roomIds('engine', 'hold'));
 
-    table.board.triggerElementSelect({ id: game.roomIds('hold')[0] });
-    await settle();
-    table.broadcast();
-    await settle();
+    await table.moveTo('hold');
 
-    expect(game.first(Pawn)!.parent!.name).toBe('hold');
+    expect(table.game().pawnRoom()).toBe('hold');
     // The next move reopens against the new position.
-    expect(table.offered()).toEqual(game.roomIds('bridge', 'engine').sort((a, b) => a - b));
+    expect(table.offered()).toEqual(table.game().roomIds('bridge', 'engine'));
   });
 
   it('re-deals the open pick after an undo, with no restoreEpoch passed by the caller', async () => {
     const table = mountTable();
     await settle();
-    const game = () => table.session.runner.game;
-
-    table.board.triggerElementSelect({ id: game().roomIds('engine')[0] });
-    await settle();
-    table.broadcast();
-    await settle();
-    expect(table.offered()).toEqual(game().roomIds('bridge', 'hold').sort((a, b) => a - b));
+    await table.moveTo('engine');
+    expect(table.offered()).toEqual(table.game().roomIds('bridge', 'hold'));
 
     const undo = await table.session.undoToTurnStart(SEAT);
     expect(undo.success).toBe(true);
     table.broadcast();
     await settle();
 
-    // The pawn is back in the bridge, so the open pick must offer the other two.
-    expect(game().first(Pawn)!.parent!.name).toBe('bridge');
-    expect(table.offered()).toEqual(game().roomIds('engine', 'hold').sort((a, b) => a - b));
+    expectOfferedFromTheStart(table);
   });
 
   it('re-deals the open pick after a new game, with no gameInstanceId passed by the caller', async () => {
     const table = mountTable();
     await settle();
-    const game = () => table.session.runner.game;
-
     // Move the pawn so the open pick is computed from a position the new game
     // does not share. Element ids are the same in both games (same setup), so
     // only the position tells them apart.
-    table.board.triggerElementSelect({ id: game().roomIds('engine')[0] });
-    await settle();
-    table.broadcast();
-    await settle();
-    expect(table.offered()).toEqual(game().roomIds('bridge', 'hold').sort((a, b) => a - b));
+    await table.moveTo('engine');
 
     // A new game opens at the same step with the same actions, and the same
     // restoreEpoch (0): only the game's identity moved.
     table.newGame('bs378-second');
     await settle();
 
-    expect(game().first(Pawn)!.parent!.name).toBe('bridge');
-    expect(table.offered()).toEqual(game().roomIds('engine', 'hold').sort((a, b) => a - b));
+    expectOfferedFromTheStart(table);
   });
 
   it('refuses a disabled action on the board, reading the reason from the seat state', async () => {
     const table = mountTable();
-    table.session.runner.game.tired = true;
+    table.game().tired = true;
     table.broadcast();
     await settle();
 
