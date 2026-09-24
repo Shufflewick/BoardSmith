@@ -1,4 +1,4 @@
-import type { Game } from '../engine/index.js';
+import { dueSeats, type Game } from '../engine/index.js';
 import { GameRunner, type GameRunnerOptions } from '../runtime/index.js';
 import { createBot, type BotStrategy } from '../bot/index.js';
 import { SeededRandom } from '../utils/random.js';
@@ -248,15 +248,12 @@ async function runBenchmarkGame<G extends Game>(
         return incomplete('A game stopped awaiting input before it completed.');
       }
 
+      // The first seat that is due: the one seat of an action step, or the
+      // first co-decider still owing a move in a simultaneous step (#321).
       // currentPlayer is a POSITION (1-indexed), trainedPlayerIndex is an INDEX (0-indexed)
-      const currentPlayer = flowState.currentPlayer;
+      const currentPlayer = dueSeats(flowState)[0];
       if (currentPlayer === undefined) {
-        return incomplete('A game was awaiting input with no current player.');
-      }
-
-      const availableActions = flowState.availableActions ?? [];
-      if (availableActions.length === 0) {
-        return incomplete(`No action was available to seat ${currentPlayer}, and the game was not over.`);
+        return incomplete('A game was awaiting input with no seat able to act, and the game was not over.');
       }
 
       // The trained bot searches; the opponent is the same bot at one

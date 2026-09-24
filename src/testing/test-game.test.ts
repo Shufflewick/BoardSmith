@@ -73,11 +73,7 @@ class FixtureGame extends Game<FixtureGame, Player> {
 
     this.setFlow(
       defineFlow({
-        root: loop({
-          while: () => false, // single pass-through then complete
-          maxIterations: 10,
-          do: eachPlayer({ do: actionStep({ actions: ['pass'] }) }),
-        }),
+        root: eachPlayer({ do: actionStep({ actions: ['pass'] }) }),
       }),
     );
   }
@@ -276,10 +272,9 @@ describe('TestGame.getPlayerView — TEST-01: typed observable state', () => {
 // ---------------------------------------------------------------------------
 
 /**
- * Minimal single-actionStep game fixture for TST-01. FixtureGame's `pass`
- * flow (a `loop({ while: () => false, ... })`) completes on construction
- * before any action can be submitted, so a dedicated always-awaiting fixture
- * is used here to exercise the doAction success path.
+ * Minimal single-actionStep game fixture for TST-01: one step that is always
+ * awaiting `pass`, with none of FixtureGame's hands, to exercise the doAction
+ * success and failure paths.
  */
 class TST01Game extends Game<TST01Game, Player> {
   constructor(options: GameOptions) {

@@ -17,6 +17,8 @@ import {
   defineFlow,
   eachPlayer,
   actionStep,
+  sequence,
+  simultaneousActionStep,
   type GameOptions,
 } from '../engine/index.js';
 import type { LearnedObjective } from './types.js';
@@ -74,6 +76,52 @@ class DecisiveGame extends Game<DecisiveGame, Player> {
     this.setFlow(
       defineFlow({
         root: eachPlayer({ do: actionStep({ actions: ['move'] }) }),
+      }),
+    );
+  }
+}
+
+class AcknowledgingPlayer extends Player<ActThenAcknowledgeGame, AcknowledgingPlayer> {
+  acknowledged = false;
+}
+
+/**
+ * Each seat moves in turn, then both seats acknowledge in ONE simultaneous
+ * step, and seat 1 wins. No seat is "the" current player during that step,
+ * so the benchmark has to find the seats that are due from the step itself
+ * (#321).
+ */
+class ActThenAcknowledgeGame extends Game<ActThenAcknowledgeGame, AcknowledgingPlayer> {
+  static PlayerClass = AcknowledgingPlayer;
+
+  constructor(options: GameOptions) {
+    super(options);
+
+    this.registerActions(
+      Action.create<ActThenAcknowledgeGame>('move')
+        .chooseFrom('value', { choices: [1, 2] })
+        .execute(() => ({ success: true })),
+      Action.create<ActThenAcknowledgeGame>('acknowledge')
+        .condition({
+          'has not acknowledged yet': (ctx) => !(ctx.player as AcknowledgingPlayer).acknowledged,
+        })
+        .execute((_args, ctx) => {
+          (ctx.player as AcknowledgingPlayer).acknowledged = true;
+          const game = ctx.game as ActThenAcknowledgeGame;
+          if (game.players.every((p) => p.acknowledged)) game.finish([game.players[0]]);
+          return { success: true };
+        }),
+    );
+
+    this.setFlow(
+      defineFlow({
+        root: sequence(
+          eachPlayer({ do: actionStep({ actions: ['move'] }) }),
+          simultaneousActionStep({
+            actions: ['acknowledge'],
+            playerDone: (_ctx, player) => (player as AcknowledgingPlayer).acknowledged,
+          }),
+        ),
       }),
     );
   }
@@ -189,6 +237,21 @@ describe('benchmarkBot', () => {
     expect(result.gamesPlayed).toBe(2);
     expect(result.draws).toBe(2);
     expect(result.incomplete).toBe(0);
+  });
+
+  it('plays through a simultaneous step, acting for each seat that is due', async () => {
+    const result = await benchmarkBot(ActThenAcknowledgeGame, 'act-then-acknowledge', noObjectives, {
+      gameCount: 2,
+      mctsIterations: 1,
+      maxActions: 10,
+      timeout: 5000,
+      seed: 'simultaneous',
+    });
+    expect(result.failures).toEqual([]);
+    expect(result.incomplete).toBe(0);
+    expect(result.gamesPlayed).toBe(2);
+    expect(result.winRateAsPlayer0).toBe(1);
+    expect(result.winRateAsPlayer1).toBe(0);
   });
 
   it('keeps every reported rate inside 0..1', async () => {
