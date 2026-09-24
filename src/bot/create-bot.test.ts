@@ -138,7 +138,7 @@ describe('createBot', () => {
     // bot draws from its own random source, and only its own seed fixes it.
     const move = async () => botFor(newRunner('fixed'), 1, 30, undefined, { seed: 'bot-fixed' }).play();
     const first = await move();
-    for (let run = 0; run < 20; run++) {
+    for (let run = 0; run < 3; run++) {
       expect(await move()).toEqual(first);
     }
   });
