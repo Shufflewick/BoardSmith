@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { Command } from 'commander';
+import { Command, Option } from 'commander';
 import { readBoardsmithVersion } from './lib/boardsmith-version.js';
 import { initCommand } from './commands/init.js';
 import { devCommand } from './commands/dev.js';
@@ -222,6 +222,10 @@ program
   .description('Run seeded headless batch simulation and report pass/stuck/error per game')
   .option('--games <count>', 'Number of games to simulate', '10')
   .option('--seed <seed>', 'Base seed (per-game seeds derived and recorded in output)')
+  .addOption(
+    new Option('--replay <game seed>', "Play one game again by its own seed, as a failing game's Replay line prints it")
+      .conflicts(['games', 'seed']),
+  )
   .option('--players <count>', 'Player count for each simulated game', '2')
   .option('--game-option <kv...>', 'Select a declared game option as key=value (repeatable, e.g. --game-option difficulty=hard) so option-gated configurations are simulated too')
   .option('--json', 'Output results as JSON')
