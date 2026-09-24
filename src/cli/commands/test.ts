@@ -4,6 +4,7 @@ import chalk from 'chalk';
 import { getProjectContext } from '../lib/project-context.js';
 import { runTool } from '../lib/run-tool.js';
 import { requireGameProject } from '../lib/game-project.js';
+import { testRunScopeProblem } from '../lib/test-run-scope.js';
 
 interface TestOptions {
   watch?: boolean;
@@ -20,6 +21,9 @@ interface TestOptions {
  *
  * `patterns` are forwarded to vitest as filename filters, e.g.
  * `boardsmith test mcts` runs only test files matching "mcts".
+ *
+ * In a game project it refuses to start when the project's vitest config would
+ * also collect the chunk worktrees under `.boardsmith/worktrees/` (#298).
  */
 export async function testCommand(patterns: string[], options: TestOptions): Promise<void> {
   const cwd = process.cwd();
@@ -32,6 +36,12 @@ export async function testCommand(patterns: string[], options: TestOptions): Pro
       console.log(chalk.yellow('No tests directory found.'));
       console.log(chalk.dim('Create tests in the tests/ directory'));
       process.exit(0);
+    }
+
+    const problem = await testRunScopeProblem(cwd);
+    if (problem !== undefined) {
+      console.error(chalk.red(problem));
+      process.exit(1);
     }
   }
 

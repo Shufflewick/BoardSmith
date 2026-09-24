@@ -11,6 +11,7 @@ import {
   relChunkMdPath,
 } from '../lib/project-paths.js';
 import { assertBareName } from '../lib/user-name.js';
+import { testRunScopeProblem } from '../lib/test-run-scope.js';
 import { extractSection, parseRulings } from './build-manifest.js';
 import { ENTRY_NUMBER, NUMBERED_LEDGER_SPECS, provisionalHeadings } from '../lib/ledger-allocation.js';
 
@@ -66,11 +67,11 @@ interface GrowingStructure {
   ruling: string;
 }
 
-/** What a test run reports back: whether it passed, and its output for the refusal. */
-interface TestRunResult {
-  ok: boolean;
-  output: string;
-}
+/**
+ * What a test run reports back: whether it passed and its output for the refusal, or, when the
+ * tests could not be run as asked, the sentence that says why.
+ */
+type TestRunResult = { ok: boolean; output: string } | { refused: string };
 
 /** Runs the named test files (relative to the project) and reports whether they all passed. */
 export type TestRunner = (projectDir: string, files: readonly string[]) => Promise<TestRunResult>;
@@ -366,22 +367,23 @@ async function reviewRefusals(projectDir: string, slug: string, constraints: Har
 }
 
 /**
- * Chunks built at the same time live in worktrees under `.boardsmith/worktrees/<slug>`, inside the
- * project (#294), and Vitest's discovery walks into dot-directories, so every run leaves them out:
- * a run in the main checkout checks the main checkout's code only.
+ * Runs the project's own vitest over the named files, or its whole suite when none are named.
+ *
+ * Refuses a project whose vitest config would also collect the chunk worktrees under
+ * `.boardsmith/worktrees/`: that config is the one place the exclusion lives (`test-run-scope.ts`).
  */
-const OUTSIDE_THE_CHECKOUT = ['--exclude', '.boardsmith/**'];
-
-/** Runs the project's own vitest over the named files, or its whole suite when none are named. */
-export const runVitest: TestRunner = (projectDir, files) =>
-  new Promise((done) => {
-    const child = spawn('npx', ['vitest', 'run', ...OUTSIDE_THE_CHECKOUT, ...files], { cwd: projectDir, shell: process.platform === 'win32' });
+export const runVitest: TestRunner = async (projectDir, files) => {
+  const problem = await testRunScopeProblem(projectDir);
+  if (problem !== undefined) return { refused: problem };
+  return new Promise((done) => {
+    const child = spawn('npx', ['vitest', 'run', ...files], { cwd: projectDir, shell: process.platform === 'win32' });
     let output = '';
     child.stdout.on('data', (d: Buffer) => (output += d.toString()));
     child.stderr.on('data', (d: Buffer) => (output += d.toString()));
     child.on('error', (error) => done({ ok: false, output: error.message }));
     child.on('close', (code) => done({ ok: code === 0, output }));
   });
+};
 
 /** The last lines of a test run, which is where vitest says what failed. */
 function tail(output: string, lines = 25): string {
@@ -423,7 +425,9 @@ export async function checkConstraints(
   ];
   if (options.runTests && refusals.length === 0 && tests.length) {
     const run = await options.runTests(dir, tests);
-    if (!run.ok) {
+    if ('refused' in run) {
+      refusals.push(run.refused);
+    } else if (!run.ok) {
       refusals.push(`The constraint tests failed (${tests.join(', ')}). A measured constraint does not hold:\n${tail(run.output)}`);
     }
   }

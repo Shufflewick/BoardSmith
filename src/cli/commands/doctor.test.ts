@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { doctorCommand } from './doctor.js';
 import { DESIGN_DIR, SCRATCH_DIR } from '../lib/project-paths.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
+import { generateVitestConfig, VITEST_CONFIG_FILE } from '../lib/test-run-scope.js';
 
 /**
  * `doctor` is issue #6's migration path: design artifacts belong under `design/`, throwaway
@@ -33,19 +34,22 @@ afterEach(async () => {
 /**
  * A minimal project: just enough for `doctor` to accept it.
  *
- * It gets a `.gitignore` that already covers `.boardsmith/` by default, so the ignore-rule
- * finding does not show up as noise in every other test. The tests that exercise that rule pass
- * their own `.gitignore` (or `{ gitignore: false }` for none at all).
+ * It gets a `.gitignore` that already covers `.boardsmith/`, and the vitest config `init` writes,
+ * by default, so neither finding shows up as noise in every other test. The tests that exercise
+ * those rules pass their own files (or `{ gitignore: false }` / `{ testConfig: false }` for none).
  */
 async function project(
   files: Record<string, string> = {},
-  opts: { gitignore?: boolean } = {},
+  opts: { gitignore?: boolean; testConfig?: boolean } = {},
 ): Promise<string> {
   const projectDir = join(dir, 'game');
   await fs.mkdir(projectDir, { recursive: true });
   await fs.writeFile(join(projectDir, 'boardsmith.json'), '{"name":"game"}\n');
   if (opts.gitignore !== false && !('.gitignore' in files)) {
     await fs.writeFile(join(projectDir, '.gitignore'), 'node_modules/\n.boardsmith/\n');
+  }
+  if (opts.testConfig !== false && !(VITEST_CONFIG_FILE in files)) {
+    await fs.writeFile(join(projectDir, VITEST_CONFIG_FILE), generateVitestConfig(undefined));
   }
   for (const [path, content] of Object.entries(files)) {
     await fs.mkdir(join(projectDir, path, '..'), { recursive: true });
@@ -313,5 +317,40 @@ describe('boardsmith doctor', () => {
     expect(JSON.parse(logSpy.mock.calls[0][0] as string)).toEqual(
       JSON.parse(JSON.stringify(result)),
     );
+  });
+
+  // #298: chunk worktrees live under .boardsmith/worktrees/, inside the project, and a test run
+  // that does not leave that directory out runs their unfinished tests too.
+  it('reports and writes a vitest config for a project whose test runs would collect chunk worktrees', async () => {
+    const viteConfig = "import { defineConfig } from 'vite';\nexport default defineConfig({});\n";
+    const projectDir = await project({ 'vite.config.ts': viteConfig }, { testConfig: false });
+
+    const before = await doctorCommand({ project: projectDir });
+    expect(before.findings.map((f) => f.kind)).toEqual(['test-run-collects-worktrees']);
+    expect(process.exitCode).toBe(1);
+
+    process.exitCode = undefined;
+    const fixed = await doctorCommand({ project: projectDir, fix: true });
+    expect(fixed.counts).toEqual({ moved: 1, pending: 0, conflicts: 0 });
+    expect(process.exitCode).toBeUndefined();
+
+    expect(await read(join(projectDir, VITEST_CONFIG_FILE))).toBe(generateVitestConfig('vite.config.ts'));
+    // The vite config the dev server and build read is left exactly as it was.
+    expect(await read(join(projectDir, 'vite.config.ts'))).toBe(viteConfig);
+    expect((await doctorCommand({ project: projectDir })).healthy).toBe(true);
+  });
+
+  it('asks for a hand edit, and changes nothing, when an existing vitest config lacks the exclusion', async () => {
+    const own = 'export default { test: { globals: true } };\n';
+    const projectDir = await project({ [VITEST_CONFIG_FILE]: own });
+
+    const result = await doctorCommand({ project: projectDir, fix: true });
+
+    expect(result.findings).toMatchObject([
+      { kind: 'test-config-needs-edit', from: VITEST_CONFIG_FILE, fixed: false, detail: expect.stringMatching(/configDefaults\.exclude, '\.boardsmith\/\*\*'/) },
+    ]);
+    expect(result.counts).toEqual({ moved: 0, pending: 0, conflicts: 1 });
+    expect(process.exitCode).toBe(1);
+    expect(await read(join(projectDir, VITEST_CONFIG_FILE))).toBe(own);
   });
 });

@@ -5,6 +5,7 @@ import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { spawnCli } from '../spawn-cli.test-helper.js';
 import { checkConstraints, constraintCheckCommand, runVitest, type TestRunner } from './constraint-check.js';
 import { INSTALLED_MODULES } from '../../testing/installed-modules.test-helper.js';
+import { generateVitestConfig, VITEST_CONFIG_FILE } from '../lib/test-run-scope.js';
 
 /**
  * #288: four sotf chunks closed with state that grew without limit against a 512 KiB partition
@@ -332,22 +333,31 @@ describe('provisional ids on a parallel branch, and ids used twice', () => {
 });
 
 /**
- * #294: chunks built at the same time live in worktrees under `.boardsmith/worktrees/<slug>`,
- * inside the project. Vitest's default discovery walks into dot-directories, so without an
- * exclusion a run in the main checkout would also run every in-progress chunk's tests.
+ * #294/#298: chunks built at the same time live in worktrees under `.boardsmith/worktrees/<slug>`,
+ * inside the project, and vitest's discovery walks into dot-directories. The project's own vitest
+ * config leaves them out (`test-run-scope.ts`), and runVitest refuses a project whose config does not.
  */
 describe('runVitest leaves chunk worktrees out of the run', () => {
+  const WIP = {
+    'tests/ok.test.ts': "import { it } from 'vitest';\nit('holds', () => {});\n",
+    '.boardsmith/worktrees/quests/tests/wip.test.ts':
+      "import { it, expect } from 'vitest';\nit('is still being built', () => { expect(1).toBe(2); });\n",
+  };
+
   it('passes a project whose only failing test is inside .boardsmith/worktrees', async () => {
-    const project = await makeProject({
-      'vitest.config.mjs': 'export default { test: {} };\n',
-      'tests/ok.test.ts': "import { it } from 'vitest';\nit('holds', () => {});\n",
-      '.boardsmith/worktrees/quests/tests/wip.test.ts':
-        "import { it, expect } from 'vitest';\nit('is still being built', () => { expect(1).toBe(2); });\n",
-    });
+    const project = await makeProject({ ...WIP, [VITEST_CONFIG_FILE]: generateVitestConfig(undefined) });
     await fs.symlink(INSTALLED_MODULES, join(project, 'node_modules'), 'dir');
     const run = await runVitest(project, []);
-    expect(run.output).toContain('ok.test.ts');
-    expect(run.output).not.toContain('wip.test.ts');
-    expect(run.ok).toBe(true);
+    expect(run).toMatchObject({ ok: true });
+    const { output } = run as { output: string };
+    expect(output).toContain('ok.test.ts');
+    expect(output).not.toContain('wip.test.ts');
   }, 60_000);
+
+  it('refuses to run a project whose vitest config would collect the worktrees', async () => {
+    const project = await makeProject({ ...WIP, 'vitest.config.mjs': 'export default { test: {} };\n' });
+    await fs.symlink(INSTALLED_MODULES, join(project, 'node_modules'), 'dir');
+    const run = await runVitest(project, []);
+    expect(run).toEqual({ refused: expect.stringMatching(/vitest\.config\.mjs does not leave \.boardsmith\/ out of test runs/) });
+  });
 });

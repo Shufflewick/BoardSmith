@@ -6,6 +6,7 @@
  */
 
 import { DESIGN_DIR, SCRATCH_DIR } from './project-paths.js';
+import { generateVitestConfig, VITEST_CONFIG_FILE } from './test-run-scope.js';
 import { existsSync } from 'node:fs';
 import { join, dirname, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -682,6 +683,7 @@ export function generateScaffoldFiles(config: ProjectConfig, projectPath: string
     { path: 'package.json', content: generatePackageJson(config, projectPath) },
     { path: 'tsconfig.json', content: generateTsConfig() },
     { path: 'vite.config.ts', content: generateViteConfig() },
+    { path: VITEST_CONFIG_FILE, content: generateVitestConfig('vite.config.ts') },
     { path: '.gitignore', content: generateGitignore() },
   ];
 
