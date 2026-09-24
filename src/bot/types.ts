@@ -80,10 +80,14 @@ export interface BotConfig {
    * Typical range: 0.5 (very exploitative) to 2.0 (very explorative).
    */
   uctC?: number;
-  /** Enable Proof Number Search for detecting forced wins/losses. Default: true */
+  /**
+   * Track proof and disproof numbers so the search recognises forced wins and
+   * losses among the positions it reaches. Selection then skips a solved
+   * child that is a known loss for the side to move, and the final choice takes
+   * a proven win and avoids a proven loss. Until something is solved it has no
+   * effect on which move is chosen. Default: true
+   */
   usePNS?: boolean;
-  /** Weight for proof number ranking in UCB formula (0-1). Default: 0.5 */
-  pnWeight?: number;
   /** Enable debug logging for proof number statistics. Default: false */
   debug?: boolean;
 }
