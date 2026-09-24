@@ -7,6 +7,7 @@
 
 import { describe, it, expect } from 'vitest';
 import { lightenColor, darkenColor, isLightColor } from './color.js';
+import { contrastInk } from './color-contrast.js';
 import * as ui from '../index.js';
 
 describe('lightenColor', () => {
@@ -83,8 +84,7 @@ describe('isLightColor', () => {
     expect(isLightColor('#000000')).toBe(false);
   });
 
-  it('agrees with the library contrast helper about which ink to use', async () => {
-    const { contrastInk } = await import('./color-contrast.js');
+  it('agrees with the library contrast helper about which ink to use', () => {
     for (const seat of ['#e74c3c', '#2c3e50', '#ecf0f1', '#e67e22', '#f1c40f', '#8e44ad']) {
       expect(isLightColor(seat), seat).toBe(contrastInk(seat).ink === '#000000');
     }

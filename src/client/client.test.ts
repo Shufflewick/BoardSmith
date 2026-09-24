@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { MeepleClient, MeepleClientError } from './client.js';
 import { GameConnection } from './game-connection.js';
 import { ErrorCode } from '../types/protocol.js';
+import { generatePlayerId } from './index.js';
 
 /**
  * Fetch-mocked contract sweep for MeepleClient (SDK-03, PROC-02
@@ -237,8 +238,7 @@ describe('MeepleClient identity & connection surface (SDK-01/SDK-06)', () => {
 });
 
 describe('generatePlayerId (CR-01: single secure minting path)', () => {
-  it('is exported standalone and mints a crypto-strength id (UUID on this runtime)', async () => {
-    const { generatePlayerId } = await import('./index.js');
+  it('is exported standalone and mints a crypto-strength id (UUID on this runtime)', () => {
     const id = generatePlayerId();
     // Node has crypto.randomUUID, so the UUID branch is taken.
     expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);

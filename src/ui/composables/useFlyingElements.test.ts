@@ -60,6 +60,7 @@ vi.mock('../../utils/dev.js', async (importOriginal) => {
 const { useFlyingElements } = await import('./useFlyingElements.js');
 const { enableAnimationTestMode, disableAnimationTestMode, getAnimationTrace, clearAnimationTrace } =
   await import('./useAnimationTestMode.js');
+const { prefersReducedMotion } = await import('./useElementAnimation.js');
 type AutoWatchGameElement = import('./useFlyingElements.js').AutoWatchGameElement;
 
 function makeContainer(): HTMLElement {
@@ -266,7 +267,8 @@ describe('useFlyingElements', () => {
   });
 
   describe('flyOnAppear', () => {
-    it('records a {kind:"fly"} trace in test mode even when reduced motion is preferred (CR-01)', async () => {
+    /** A source and a target 200px apart, the pair every flyOnAppear test flies between. */
+    function sourceAndTarget() {
       const sourceEl = makeContainer();
       const targetEl = makeContainer();
       vi.spyOn(sourceEl, 'getBoundingClientRect').mockReturnValue(
@@ -275,11 +277,15 @@ describe('useFlyingElements', () => {
       vi.spyOn(targetEl, 'getBoundingClientRect').mockReturnValue(
         makeRect({ left: 200, top: 0, width: 60, height: 84 })
       );
+      return { sourceEl, targetEl };
+    }
+
+    it('records a {kind:"fly"} trace in test mode even when reduced motion is preferred (CR-01)', async () => {
+      const { sourceEl, targetEl } = sourceAndTarget();
 
       // Reduced motion preferred: without CR-01's fix, flyOnAppear's own
       // early-return would bypass fly()/flyCardInternal entirely and no
       // trace would ever be recorded, regardless of test mode.
-      const { prefersReducedMotion } = await import('./useElementAnimation.js');
       prefersReducedMotion.value = true;
 
       const { flyOnAppear } = useFlyingElements();
@@ -304,16 +310,8 @@ describe('useFlyingElements', () => {
     });
 
     it('skips the real animation (does not throw, resolves) when reduced motion is preferred and test mode is off', async () => {
-      const sourceEl = makeContainer();
-      const targetEl = makeContainer();
-      vi.spyOn(sourceEl, 'getBoundingClientRect').mockReturnValue(
-        makeRect({ left: 0, top: 0, width: 60, height: 84 })
-      );
-      vi.spyOn(targetEl, 'getBoundingClientRect').mockReturnValue(
-        makeRect({ left: 200, top: 0, width: 60, height: 84 })
-      );
+      const { sourceEl, targetEl } = sourceAndTarget();
 
-      const { prefersReducedMotion } = await import('./useElementAnimation.js');
       prefersReducedMotion.value = true;
 
       const { flyOnAppear, isAnimating } = useFlyingElements();
