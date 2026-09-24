@@ -16,7 +16,7 @@
     "src/bot/create-bot.test.ts:25-33|src/testing/assert-game-finished.test.ts:26-34",
     "src/bot/create-bot.test.ts:39-50|src/testing/assert-game-finished.test.ts:40-51",
     "src/bot/determinization.test.ts:199-210|src/bot/determinization.test.ts:214-222",
-    "src/bot/mcts-bot.ts:1110-1115|src/bot/mcts-bot.ts:1181-1185",
+    "src/bot/mcts-bot.ts:1065-1070|src/bot/mcts-bot.ts:1136-1140",
     "src/bot/mcts-clone-options.test.ts:39-55|src/session/restore-player-configs.test.ts:34-49",
     "src/bot/mcts-clone-options.test.ts:190-205|src/bot/mcts-clone-options.test.ts:77-92",
     "src/bot/mcts-multiselect.test.ts:165-175|src/engine/utils/enumerate-moves.test.ts:225-235",
