@@ -6,15 +6,14 @@ import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import chalk from 'chalk';
 import { parse as parseTypeScript } from '@typescript-eslint/parser';
 import { atomicWriteFile } from './verify-run.js';
-import {
-  readLiveSlices,
-  parseSubagentJsonInput,
-  type SubagentJsonParseResult,
-} from './verify-derive-check.js';
+import { readLiveSlices } from './verify-derive-check.js';
 import { resolveCitedSlices } from './chunk-provenance.js';
 import { scanSourceForSandboxViolations, type SandboxViolation } from '../lib/sandbox-scan.js';
-import { workedExampleId } from './example-derivation.js';
-import { readExampleReplayVerdicts, type ExampleReplayRecord } from './verify-example-replay.js';
+import {
+  readExampleReplayVerdicts,
+  type ExampleReplayRecord,
+  type ExampleTranslation,
+} from './verify-example-replay.js';
 
 /**
  * `example-test-emit.ts` — TEST-01's build-side write surface (178-CONTEXT.md decision 8): one
@@ -23,19 +22,15 @@ import { readExampleReplayVerdicts, type ExampleReplayRecord } from './verify-ex
  *
  * This is the FIRST check in the milestone that writes AND then executes generated code inside a
  * real project (178-RESEARCH Pitfall 6) — every prior CHECK-0x only ever reported. The
- * model-generated test code that lands here has already been through two prior dispatches
- * (`example-derivation.ts`'s extraction/translation payload builders, `verify-example-replay.ts`'s
- * `verifyExampleTranslateCommand`), but NEITHER of those steps writes anything: this module is
- * where the third dispatch's actual runnable test CODE — carried on `--translated`, keyed by the
- * SAME `workedExampleId({ slicePath, lineNumber })` every other CHECK-06 command uses — first
- * touches disk, and only after it survives `scanGeneratedTestCode`.
+ * translator's test code reaches the ledger through `verify-example-record`, which stores it on
+ * the example's record (`ExampleReplayRecord.translation`); this module is where that code first
+ * touches a test file, and only after it survives `scanGeneratedTestCode`.
  *
- * This command reads the CHECK-06 ledger (`readExampleReplayVerdicts`) to learn WHICH worked
- * examples exist for a chunk's cited slices and what verdict/reason each already carries — it
+ * This command reads the CHECK-06 ledger (`readExampleReplayVerdicts`) and nothing else — it
  * never re-judges `unexecutable`/`example-inconsistent` (178-CONTEXT.md decision 7: those are
- * first-class, never a failing test, never silently dropped) and never writes the ledger itself.
- * `verify-example-record` (plan 178-04) is the ONLY ledger write surface; this module writes ONLY
- * under `tests/examples/` — the two write surfaces never overlap, enforced by test.
+ * first-class, never a failing test, never silently dropped) and never writes the ledger.
+ * `verify-example-record` and `verify-example-run` write the ledger; this module writes ONLY
+ * under `tests/examples/` — the write surfaces never overlap, enforced by test.
  */
 
 // -------------------------------------------------------------------------------------------
@@ -76,12 +71,12 @@ export function scanGeneratedTestCode(code: string, relPath: string): SandboxVio
 // -------------------------------------------------------------------------------------------
 
 /**
- * B19: `renderExampleTestFile` renders a translated snippet VERBATIM into the chunk's
- * `describe()` body. Bare statements there execute at collect time and register no test, so
- * vitest reports `Error: No test found in suite` for a file whose assertions all "passed" — a run
- * that is simultaneously green and empty. The emitter is a pure transport of the translator's
- * bytes (it never wraps, so it can never double-wrap), which makes the self-contained
- * `it(...)`/`test(...)` block the ONE shape that can work. This check is what makes that the
+ * B19: `renderExampleTestFile` renders a translated snippet VERBATIM inside a `describe()`
+ * block named for its example. Bare statements there execute at collect time and register no
+ * test, so vitest reports `Error: No test found in suite` for a file whose assertions all
+ * "passed" — a run that is simultaneously green and empty. The emitter never adds a test of its
+ * own around the translator's bytes, which makes the self-contained `it(...)`/`test(...)` block
+ * the ONE shape that can work. This check is what makes that the
  * contract instead of a hope: anything else is rejected before a byte is written, exactly like a
  * malformed hoisted import (`collectHoistedImports`).
  */
@@ -162,34 +157,7 @@ export function generatedTestFilePath(projectDir: string, chunkSlug: string): st
 export interface VerifyExampleEmitOptions {
   project?: string;
   chunk?: string;
-  /** Path to the third dispatch's structured JSON return — required only when the chunk has at
-   * least one example recorded `agrees`/`disagrees` (i.e. needs real runnable code). */
-  translated?: string;
   json?: boolean;
-}
-
-/**
- * One entry of the third dispatch's raw JSON return — the translator turned a `WorkedExampleSpec`
- * into runnable test code, and this is that code plus the citation fields
- * (`buildExampleTranslationPayload`'s prompt already carries `pageCitation`/`sourceText`, so the
- * model producing code has them in context) a header comment needs to trace a failing test back to
- * its rulebook line without opening the ledger.
- */
-interface RawExampleEmitEntry {
-  slicePath: string;
-  lineNumber: number;
-  pageCitation: string;
-  sourceText: string;
-  code: string;
-  /**
-   * Import statements `code` depends on (the translator's `imports` field,
-   * `translate-example.md`'s own return shape) — kept separate from `code` so they can be
-   * hoisted to the top of the generated file, deduplicated across every example in the chunk,
-   * rather than emitted per-example where they would land inside a `describe()` body and be a
-   * syntax error. Optional for backward compatibility with a hand-built `--translated` entry
-   * that needs no project imports (e.g. `expect(true).toBe(true)`).
-   */
-  imports?: string[];
 }
 
 /**
@@ -202,6 +170,13 @@ interface RawExampleEmitEntry {
  */
 const SINGLE_IMPORT_STATEMENT_RE = /^import\s[^\n;]+;\s*$/;
 
+/** A record the emitter turns into a test: one whose translator wrote one. */
+type TranslatedRecord = ExampleReplayRecord & { translation: ExampleTranslation };
+
+function isTranslatedRecord(record: ExampleReplayRecord): record is TranslatedRecord {
+  return record.translation !== undefined;
+}
+
 /**
  * Validates and deduplicates the hoisted import statements for ONE chunk's generated file.
  * Every string must be a single well-formed `import ... ;` statement (`SINGLE_IMPORT_STATEMENT_RE`)
@@ -209,16 +184,14 @@ const SINGLE_IMPORT_STATEMENT_RE = /^import\s[^\n;]+;\s*$/;
  * written (the same validate-everything-then-write discipline this module holds everywhere
  * else). Deduplicated and sorted for a deterministic, byte-identical re-emission.
  */
-function collectHoistedImports(
-  entries: readonly { imports?: string[]; slicePath: string; lineNumber: number }[],
-): string[] {
+function collectHoistedImports(records: readonly TranslatedRecord[]): string[] {
   const seen = new Set<string>();
-  for (const entry of entries) {
-    for (const imp of entry.imports ?? []) {
+  for (const record of records) {
+    for (const imp of record.translation.imports) {
       const trimmed = imp.trim();
       if (!SINGLE_IMPORT_STATEMENT_RE.test(trimmed)) {
         throw new Error(
-          `Translated import for ${entry.slicePath}:${entry.lineNumber} is not a single ` +
+          `Translated import for ${record.slicePath}:${record.lineNumber} is not a single ` +
             `well-formed "import ... ;" statement: ${JSON.stringify(imp)}\n` +
             `Re-dispatch the translator; writing nothing.`,
         );
@@ -234,7 +207,7 @@ export interface VerifyExampleEmitResult {
   chunk: string;
   testFilePath: string;
   relTestFilePath: string;
-  /** Records with verdict `agrees`/`disagrees` — emitted as real, runnable tests. */
+  /** Records carrying a translated test — emitted as real, runnable tests. */
   emittedCount: number;
   /**
    * How many `it(...)`/`test(...)` blocks the emitted FILE actually declares — i.e. what vitest
@@ -249,22 +222,6 @@ export interface VerifyExampleEmitResult {
   exemptCount: number;
   /** True when the chunk's cited slices carry zero recorded worked examples at all. */
   chunkExempt: boolean;
-  /**
-   * Every JSON-transport repair `parseSubagentJsonInput` performed on `--translated` (180-01
-   * finding 5) — logged, never silent. Empty when the file parsed as bare JSON, or when no
-   * `--translated` file was read at all (nothing to translate).
-   */
-  repairs: string[];
-}
-
-async function readRequiredTranslatedJsonFile(filePath: string): Promise<SubagentJsonParseResult> {
-  let text: string;
-  try {
-    text = await fs.readFile(filePath, 'utf-8');
-  } catch {
-    throw new Error(`verify-example-emit could not read --translated at "${filePath}".`);
-  }
-  return parseSubagentJsonInput(text, '--translated', filePath);
 }
 
 /**
@@ -282,8 +239,7 @@ function commentSafeLine(text: string): string {
  * CR-02 (178-REVIEW.md) fix: makes a piece of model/caller-controlled text safe to interpolate
  * inside a single-quoted JS string literal (e.g. a `describe('...')` title) — escapes backslashes
  * and single quotes so the value cannot break out of the string literal, and strips newlines so it
- * cannot otherwise smuggle live code onto a new line. Supersedes the never-called
- * `escapeTestTitle` this replaced (dead code sitting beside the exact gap it was written for).
+ * cannot otherwise smuggle live code onto a new line.
  */
 function stringLiteralSafe(text: string): string {
   return text.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/\r?\n/g, ' ');
@@ -296,30 +252,34 @@ function indentCode(code: string, prefix: string): string {
     .join('\n');
 }
 
-function renderCitationComment(entry: RawExampleEmitEntry): string[] {
+function renderCitationComment(record: TranslatedRecord): string[] {
   const lines: string[] = [];
   lines.push(
-    `  // ${commentSafeLine(entry.slicePath)}:${entry.lineNumber} ` +
-      `(${commentSafeLine(entry.pageCitation)})`,
+    `  // ${commentSafeLine(record.slicePath)}:${record.lineNumber} ` +
+      `(${commentSafeLine(record.translation.pageCitation)})`,
   );
-  const sourceLines = entry.sourceText.split('\n');
+  const sourceLines = record.translation.sourceText.split('\n');
   lines.push(`  // Source: ${commentSafeLine(sourceLines[0])}`);
   for (const extra of sourceLines.slice(1)) lines.push(`  //         ${commentSafeLine(extra)}`);
   return lines;
+}
+
+/** The title of the chunk-level `describe(...)` every emitted file opens with. */
+export function chunkDescribeTitle(chunkSlug: string): string {
+  return `${chunkSlug} — worked examples`;
 }
 
 function renderExampleTestFile(input: {
   chunkSlug: string;
   citedSlicePaths: string[];
   exempt: ExampleReplayRecord[];
-  executable: ExampleReplayRecord[];
-  codeByExampleId: Map<string, RawExampleEmitEntry>;
-  /** Deduplicated, sorted `import ... ;` statements every executable example's `code` may use —
-   * hoisted to file scope (`collectHoistedImports`). Never rendered per-example: an `import`
-   * statement inside a `describe()` body is a syntax error. */
+  executable: TranslatedRecord[];
+  /** Deduplicated, sorted `import ... ;` statements every executable example's `testCode` may
+   * use — hoisted to file scope (`collectHoistedImports`). Never rendered per-example: an
+   * `import` statement inside a `describe()` body is a syntax error. */
   hoistedImports: string[];
 }): string {
-  const { chunkSlug, citedSlicePaths, exempt, executable, codeByExampleId, hoistedImports } = input;
+  const { chunkSlug, citedSlicePaths, exempt, executable, hoistedImports } = input;
   const lines: string[] = [];
 
   lines.push('// GENERATED FILE — do not hand-edit. Regenerate with:');
@@ -333,13 +293,15 @@ function renderExampleTestFile(input: {
   for (const imp of hoistedImports) lines.push(imp);
   lines.push('');
 
+  const describeOpen = `describe('${stringLiteralSafe(chunkDescribeTitle(chunkSlug))}', () => {`;
+
   if (executable.length === 0 && exempt.length === 0) {
     lines.push(
       `// EXEMPT: chunk "${commentSafeLine(chunkSlug)}" cites ${citedSlicePaths.length} ` +
         `rulebook slice(s) (${citedSlicePaths.map(commentSafeLine).join(', ') || 'none'}) and no ` +
         `worked examples were found in any of them — this chunk has no worked examples to test.`,
     );
-    lines.push(`describe('${stringLiteralSafe(chunkSlug)} — worked examples', () => {`);
+    lines.push(describeOpen);
     lines.push(
       `  it('names its exemption: no worked examples in this chunk\\'s cited slices', () => {`,
     );
@@ -350,7 +312,7 @@ function renderExampleTestFile(input: {
     return lines.join('\n');
   }
 
-  lines.push(`describe('${stringLiteralSafe(chunkSlug)} — worked examples', () => {`);
+  lines.push(describeOpen);
 
   for (const record of exempt) {
     lines.push(
@@ -380,11 +342,13 @@ function renderExampleTestFile(input: {
     return lines.join('\n');
   }
 
+  // Each example's test sits in a describe() titled with its exampleId, so a test result names
+  // the example it belongs to (`verify-example-run` reads the verdict back that way).
   for (const record of executable) {
-    const entry = codeByExampleId.get(record.exampleId);
-    if (!entry) continue; // unreachable — validated by the caller before this function runs.
-    lines.push(...renderCitationComment(entry));
-    lines.push(indentCode(entry.code, '  '));
+    lines.push(...renderCitationComment(record));
+    lines.push(`  describe('${stringLiteralSafe(record.exampleId)}', () => {`);
+    lines.push(indentCode(record.translation.testCode, '    '));
+    lines.push('  });');
     lines.push('');
   }
 
@@ -393,39 +357,79 @@ function renderExampleTestFile(input: {
   return lines.join('\n');
 }
 
+/** What a chunk's generated example-test file is, computed from the ledger without writing it. */
+export interface ChunkExampleTests {
+  testFilePath: string;
+  relTestFilePath: string;
+  fileText: string;
+  /** Records carrying a translated test, in file order. */
+  executable: TranslatedRecord[];
+  exempt: ExampleReplayRecord[];
+  testBlockCount: number;
+  /** True when the chunk's cited slices carry zero recorded worked examples at all. */
+  chunkExempt: boolean;
+}
+
 /**
- * `boardsmith verify-example-emit` — writes the ONE generated example-test file for `--chunk`.
+ * Computes `--chunk`'s generated example-test file from the CHECK-06 ledger — the ONE rendering
+ * both `verify-example-emit` (which writes it) and `verify-example-run` (which checks the file on
+ * disk is still this before running it) use.
  *
- * 1. Resolves `--chunk` to the rulebook slices its `CHUNK.md` cites (`resolveCitedSlices`, the
- *    SAME mechanism `verifyExampleReplayCommand`'s own `--chunk` option uses).
- * 2. Reads every recorded `ExampleReplayRecord` for those slices from the CHECK-06 ledger
- *    (`readExampleReplayVerdicts`) — this command never dispatches a subagent and never writes
- *    the ledger.
- * 3. Splits records into EXEMPT (`unexecutable`/`example-inconsistent` — named reason, never a
- *    test, decision 7) and EXECUTABLE (`agrees`/`disagrees` — needs real translated code).
- * 4. For every executable record, requires a matching `--translated` entry (keyed by
- *    `workedExampleId`, never by prose) and scans its code via `scanGeneratedTestCode` — a
- *    violation of `GENERATED_TEST_SANDBOX_RULES` anywhere REJECTS THE WHOLE EMISSION (validate-
- *    everything-then-write; nothing is written), as does a snippet that declares no top-level
- *    `it(...)`/`test(...)` block of its own (`checkTopLevelTestBlock` — B19).
- * 5. Composes the one file deterministically (slices/examples sorted by slicePath+lineNumber) and
- *    writes it via `atomicWriteFile` — the ONLY write this command performs. Re-running for the
- *    same chunk with the same ledger/`--translated` input reproduces byte-identical output;
- *    re-running for a DIFFERENT chunk never touches this chunk's file.
- * 6. A chunk with no executable examples — zero recorded worked examples at all, or only
- *    exempt ones — still gets a file, and that file still declares one test: the exemption is
- *    named explicitly and ASSERTED, never a silently absent file and never an uncollectable one.
+ * 1. Resolves `--chunk` to the rulebook slices its `CHUNK.md` cites (`resolveCitedSlices`).
+ * 2. Reads every recorded `ExampleReplayRecord` for those slices.
+ * 3. Splits them into EXEMPT (`unexecutable`/`example-inconsistent` — a named-reason comment,
+ *    never a test, decision 7) and EXECUTABLE (every record carrying a translated test).
+ * 4. Scans every translated snippet via `scanGeneratedTestCode`, and requires it to declare a
+ *    top-level `it(...)`/`test(...)` (`checkTopLevelTestBlock` — B19). Any violation throws,
+ *    naming the example.
  */
-export async function verifyExampleEmitCommand(
-  options: VerifyExampleEmitOptions = {},
-): Promise<VerifyExampleEmitResult> {
-  const projectDir = resolve(options.project ?? process.cwd());
+export async function renderChunkExampleTests(
+  projectDir: string,
+  chunkSlug: string,
+): Promise<ChunkExampleTests> {
+  const citedSlicePaths = await readChunkCitedSlices(projectDir, chunkSlug);
+  const citedSet = new Set(citedSlicePaths);
 
-  if (!options.chunk) {
-    throw new Error('verify-example-emit requires --chunk <slug>.');
-  }
-  const chunkSlug = options.chunk;
+  const allVerdicts = await readExampleReplayVerdicts(projectDir);
+  const records = allVerdicts
+    .filter((v) => citedSet.has(v.slicePath))
+    .slice()
+    .sort((a, b) => a.slicePath.localeCompare(b.slicePath) || a.lineNumber - b.lineNumber);
 
+  const executable = records.filter(isTranslatedRecord);
+  const exempt = records.filter((r) => !isTranslatedRecord(r));
+
+  // Hoisted imports (collectHoistedImports validates shape and rejects the whole emission on a
+  // malformed entry — before any scan or write) — computed once, over every executable record.
+  const hoistedImports = collectHoistedImports(executable);
+
+  const testFilePath = generatedTestFilePath(projectDir, chunkSlug);
+  const relTestFilePath = relative(projectDir, testFilePath);
+  const snippetTestCount = countTranslatedTests(executable, relTestFilePath);
+
+  const fileText = renderExampleTestFile({
+    chunkSlug,
+    citedSlicePaths: [...citedSet].sort(),
+    exempt,
+    executable,
+    hoistedImports,
+  });
+
+  return {
+    testFilePath,
+    relTestFilePath,
+    fileText,
+    executable,
+    exempt,
+    // An exemption file — no executable records, whether or not any exempt ones exist — is the
+    // one file whose single test the renderer writes itself (the named-exemption `it(...)`).
+    testBlockCount: executable.length === 0 ? 1 : snippetTestCount,
+    chunkExempt: records.length === 0,
+  };
+}
+
+/** The rulebook slices `--chunk`'s CHUNK.md cites, after checking the slug stays in chunks/. */
+async function readChunkCitedSlices(projectDir: string, chunkSlug: string): Promise<string[]> {
   // Path containment guard for `--chunk` reads — mirrors `verifyExampleReplayCommand`'s own
   // `--chunk` guard verbatim in shape and message.
   const chunksDir = designChunksDir(projectDir);
@@ -452,128 +456,80 @@ export async function verifyExampleEmitCommand(
 
   const liveSlices = await readLiveSlices(projectDir);
   const sliceFilenames = liveSlices.map((s) => s.path.slice('rulebook/'.length));
-  const { resolved: citedSlicePaths } = resolveCitedSlices(chunkText, sliceFilenames);
-  const citedSet = new Set(citedSlicePaths);
+  return resolveCitedSlices(chunkText, sliceFilenames).resolved;
+}
 
-  const allVerdicts = await readExampleReplayVerdicts(projectDir);
-  const records = allVerdicts
-    .filter((v) => citedSet.has(v.slicePath))
-    .slice()
-    .sort((a, b) => a.slicePath.localeCompare(b.slicePath) || a.lineNumber - b.lineNumber);
-
-  const exempt = records.filter(
-    (r) => r.verdict === 'unexecutable' || r.verdict === 'example-inconsistent',
-  );
-  const executable = records.filter((r) => r.verdict === 'agrees' || r.verdict === 'disagrees');
-
-  const codeByExampleId = new Map<string, RawExampleEmitEntry>();
-  let repairs: string[] = [];
-  if (executable.length > 0) {
-    if (!options.translated) {
-      throw new Error(
-        `verify-example-emit requires --translated <file>: ${executable.length} example(s) in ` +
-          `chunk "${chunkSlug}" are recorded agrees/disagrees and need translated test code to ` +
-          `emit. Writing nothing.`,
-      );
-    }
-    const parsed = await readRequiredTranslatedJsonFile(options.translated);
-    const raw = parsed.value;
-    repairs = parsed.repairs;
-    if (!Array.isArray(raw)) {
-      throw new Error(`--translated at "${options.translated}" must contain a JSON array.`);
-    }
-    for (const entry of raw as RawExampleEmitEntry[]) {
-      const id = workedExampleId({ slicePath: entry.slicePath, lineNumber: entry.lineNumber });
-      const existing = codeByExampleId.get(id);
-      if (existing) {
-        throw new Error(
-          `--translated contains two entries resolving to the same slicePath+lineNumber ` +
-            `("${id}"). Entries are keyed by slicePath+lineNumber, never by prose — remove or ` +
-            `merge the duplicate. Writing nothing.`,
-        );
-      }
-      codeByExampleId.set(id, entry);
-    }
-    for (const record of executable) {
-      if (!codeByExampleId.has(record.exampleId)) {
-        throw new Error(
-          `No --translated entry for the worked example at ${record.slicePath}:` +
-            `${record.lineNumber} (id "${record.exampleId}").\n` +
-            `Every recorded example with verdict "${record.verdict}" needs translated code ` +
-            `before emitting. Writing nothing.`,
-        );
-      }
-    }
-  }
-
-  // Hoisted imports (collectHoistedImports validates shape and rejects the whole emission on a
-  // malformed entry — before any scan or write) — computed once, over every executable entry's
-  // own `.imports`, never per-example.
-  const executableEntries = executable.map((record) => codeByExampleId.get(record.exampleId)!);
-  const hoistedImports = collectHoistedImports(executableEntries);
-
-  // Validate-everything-then-write: scan EVERY translated code snippet, AND the hoisted imports
-  // that will sit at top-of-file alongside it, against GENERATED_TEST_SANDBOX_RULES before
-  // composing or writing anything. A single violation rejects the whole emission.
-  const testFilePath = generatedTestFilePath(projectDir, chunkSlug);
-  const relTestFilePath = relative(projectDir, testFilePath);
+/**
+ * Scans every translated snippet (imports and test code) against `GENERATED_TEST_SANDBOX_RULES`
+ * and requires it to declare a top-level `it(...)`/`test(...)` (B19), throwing on the first that
+ * fails, naming its example. Returns how many tests the snippets declare between them.
+ */
+function countTranslatedTests(executable: readonly TranslatedRecord[], relTestFilePath: string): number {
   let testBlockCount = 0;
   for (const record of executable) {
-    const entry = codeByExampleId.get(record.exampleId)!;
-    const scanned = [...(entry.imports ?? []), entry.code].join('\n');
-    const violations = scanGeneratedTestCode(scanned, relTestFilePath);
+    const { testCode, imports } = record.translation;
+    const violations = scanGeneratedTestCode([...imports, testCode].join('\n'), relTestFilePath);
     if (violations.length > 0) {
       const v = violations[0];
       throw new Error(
         `Translated test code for ${record.slicePath}:${record.lineNumber} (id ` +
           `"${record.exampleId}") violates ${v.ruleId} at line ${v.line} of its own translated ` +
-          `snippet (imports+code): ${v.message}\nRe-dispatch the translator; writing nothing.`,
+          `snippet (imports+code): ${v.message}\nRe-dispatch the translator and record its ` +
+          `return again; writing nothing.`,
       );
     }
 
-    // B19: the snippet is rendered verbatim into the chunk's describe() body, so a snippet that
-    // declares no test of its own produces a suite vitest refuses to collect ("No test found in
-    // suite") while every assertion in it still runs and "passes".
-    const shape = checkTopLevelTestBlock(entry.code);
+    // B19: a snippet that declares no test of its own produces a suite vitest refuses to collect
+    // ("No test found in suite") while every assertion in it still runs and "passes".
+    const shape = checkTopLevelTestBlock(testCode);
     if (!shape.ok) {
       throw new Error(
         `Translated test code for ${record.slicePath}:${record.lineNumber} (id ` +
           `"${record.exampleId}") is not a self-contained test: ${shape.problem}.\n` +
-          `The emitter renders your code verbatim inside this chunk's describe() block and never ` +
-          `wraps it, so bare statements would run at collect time and register no test — vitest ` +
+          `The emitter renders your code inside a describe() block and never adds a test of its ` +
+          `own, so bare statements would run at collect time and register no test — vitest ` +
           `reports "No test found in suite" for a file whose assertions all passed. Return the ` +
           `whole example inside a single self-contained it('...', () => { ... }) block.\n` +
-          `Re-dispatch the translator; writing nothing.`,
+          `Re-dispatch the translator and record its return again; writing nothing.`,
       );
     }
     testBlockCount += shape.count;
   }
+  return testBlockCount;
+}
 
-  const fileText = renderExampleTestFile({
-    chunkSlug,
-    citedSlicePaths: [...citedSet].sort(),
-    exempt,
-    executable,
-    codeByExampleId,
-    hoistedImports,
-  });
+/**
+ * `boardsmith verify-example-emit` — writes the ONE generated example-test file for `--chunk`,
+ * exactly as `renderChunkExampleTests` computes it from the ledger, via `atomicWriteFile` — the
+ * ONLY write this command performs. It never dispatches a subagent and never writes the ledger.
+ * Re-running for the same chunk with the same ledger reproduces byte-identical output;
+ * re-running for a DIFFERENT chunk never touches this chunk's file. A chunk with no executable
+ * examples still gets a file, and that file still declares one test: the exemption is named
+ * explicitly and ASSERTED.
+ */
+export async function verifyExampleEmitCommand(
+  options: VerifyExampleEmitOptions = {},
+): Promise<VerifyExampleEmitResult> {
+  const projectDir = resolve(options.project ?? process.cwd());
 
-  await fs.mkdir(dirname(testFilePath), { recursive: true });
-  await atomicWriteFile(testFilePath, fileText);
+  if (!options.chunk) {
+    throw new Error('verify-example-emit requires --chunk <slug>.');
+  }
+  const chunkSlug = options.chunk;
+  const tests = await renderChunkExampleTests(projectDir, chunkSlug);
+
+  await fs.mkdir(dirname(tests.testFilePath), { recursive: true });
+  await atomicWriteFile(tests.testFilePath, tests.fileText);
 
   const result: VerifyExampleEmitResult = {
     projectDir,
     chunk: chunkSlug,
-    testFilePath,
-    relTestFilePath,
-    emittedCount: executable.length,
-    // An exemption file — no executable records, whether or not any exempt ones exist — is the
-    // one file whose single test the renderer writes itself (the named-exemption `it(...)`)
-    // rather than transporting it from a translated snippet.
-    testBlockCount: executable.length === 0 ? 1 : testBlockCount,
-    exemptCount: exempt.length,
-    chunkExempt: records.length === 0,
-    repairs,
+    testFilePath: tests.testFilePath,
+    relTestFilePath: tests.relTestFilePath,
+    emittedCount: tests.executable.length,
+    testBlockCount: tests.testBlockCount,
+    exemptCount: tests.exempt.length,
+    chunkExempt: tests.chunkExempt,
   };
 
   if (options.json) {
@@ -583,12 +539,12 @@ export async function verifyExampleEmitCommand(
 
   console.log(
     chalk.green(
-      `✓ Emitted ${relTestFilePath} — ${result.testBlockCount} test(s), ` +
+      `✓ Emitted ${result.relTestFilePath} — ${result.testBlockCount} test(s), ` +
         `${result.exemptCount} exempt example(s)${result.chunkExempt ? ' (chunk-wide exemption)' : ''}.`,
     ),
   );
-  for (const repair of repairs) {
-    console.log(chalk.yellow(`  ⚠ JSON transport repair — ${repair}`));
+  if (result.emittedCount > 0) {
+    console.log(`  Run boardsmith verify-example-run --chunk ${chunkSlug} to record their verdicts.`);
   }
   return result;
 }

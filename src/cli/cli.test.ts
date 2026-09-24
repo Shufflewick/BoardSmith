@@ -98,18 +98,31 @@ describe('verify-derive-record — retargeted registration', () => {
   });
 });
 
+/**
+ * `<command> --help` exits 0 and lists every one of `flags`, and none of the bypass flags a
+ * CHECK-06 command must never grow. Returns the help text for a case's own extra checks.
+ */
+async function expectHelpWithoutBypass(command: string, flags: string[]): Promise<string> {
+  const result = await spawnCli([command, '--help']);
+  expect(result.code).toBe(0);
+  expect(result.stdout).toContain(command);
+  for (const flag of flags) {
+    expect(result.stdout).toContain(flag);
+  }
+  for (const bypassFlag of ['--run-id', '--force', '--skip', '--overwrite']) {
+    expect(result.stdout).not.toContain(bypassFlag);
+  }
+  return result.stdout;
+}
+
 describe('verify-example-replay — registration (CHECK-06)', () => {
   it('is registered: --help exits 0 and lists exactly --project, --json, --chunk (plus -h), never --run-id or a bypass flag', async () => {
-    const result = await spawnCli(['verify-example-replay', '--help']);
-    expect(result.code).toBe(0);
-    expect(result.stdout).toContain('verify-example-replay');
-
-    for (const flag of ['--project <dir>', '--json', '--chunk <slug>', '-h, --help']) {
-      expect(result.stdout).toContain(flag);
-    }
-    for (const bypassFlag of ['--run-id', '--force', '--skip', '--overwrite']) {
-      expect(result.stdout).not.toContain(bypassFlag);
-    }
+    await expectHelpWithoutBypass('verify-example-replay', [
+      '--project <dir>',
+      '--json',
+      '--chunk <slug>',
+      '-h, --help',
+    ]);
   });
 
   it('runs end-to-end against a real project and emits parseable, non-empty JSON, exit 0', async () => {
@@ -131,25 +144,16 @@ describe('verify-example-replay — registration (CHECK-06)', () => {
   });
 });
 
-describe('verify-example-record — registration (CHECK-06, the ONLY write surface)', () => {
-  it('is registered: --help exits 0 and lists --slice-path, --extraction, --translation as required, never --run-id or a bypass flag', async () => {
-    const result = await spawnCli(['verify-example-record', '--help']);
-    expect(result.code).toBe(0);
-    expect(result.stdout).toContain('verify-example-record');
-
-    for (const flag of [
+describe('verify-example-record — registration (CHECK-06, the extraction/translation write surface)', () => {
+  it('is registered: --help exits 0 and lists --slice-path, --extraction, --translations as required, never --run-id or a bypass flag', async () => {
+    await expectHelpWithoutBypass('verify-example-record', [
       '--project <dir>',
       '--slice-path <path>',
       '--extraction <file>',
-      '--translation <file>',
+      '--translations <file>',
       '--json',
       '-h, --help',
-    ]) {
-      expect(result.stdout).toContain(flag);
-    }
-    for (const bypassFlag of ['--run-id', '--force', '--skip', '--overwrite']) {
-      expect(result.stdout).not.toContain(bypassFlag);
-    }
+    ]);
   });
 
   it('exits non-zero with a message naming the missing required options when none are supplied', async () => {
@@ -161,22 +165,13 @@ describe('verify-example-record — registration (CHECK-06, the ONLY write surfa
 
 describe('verify-example-translate — registration (CHECK-06, the second dispatch\'s byte source)', () => {
   it('is registered: --help exits 0 and lists exactly --project, --slice-path, --extraction, --json (plus -h), never --run-id or a bypass flag', async () => {
-    const result = await spawnCli(['verify-example-translate', '--help']);
-    expect(result.code).toBe(0);
-    expect(result.stdout).toContain('verify-example-translate');
-
-    for (const flag of [
+    await expectHelpWithoutBypass('verify-example-translate', [
       '--project <dir>',
       '--slice-path <path>',
       '--extraction <file>',
       '--json',
       '-h, --help',
-    ]) {
-      expect(result.stdout).toContain(flag);
-    }
-    for (const bypassFlag of ['--run-id', '--force', '--skip', '--overwrite']) {
-      expect(result.stdout).not.toContain(bypassFlag);
-    }
+    ]);
   });
 
   it('exits non-zero with a message naming the missing required options when none are supplied', async () => {
@@ -200,19 +195,20 @@ describe('verify-example-translate — registration (CHECK-06, the second dispat
         '  return input.ready;\n' +
         '}\n',
     );
-    const extraction = [
-      {
-        slicePath: 'rulebook/02-punch.md',
-        lineNumber: 2,
-        pageCitation: 'p.2, Punch Examples',
-        kind: 'transition',
-        sourceText: 'If you are punched while READY, you become EXHAUSTED.',
-        setup: 'Guard is READY.',
-        action: 'Guard is punched.',
-        expected: 'Guard becomes EXHAUSTED.',
-        supportingQuoteLines: ['If you are punched while READY, you become EXHAUSTED.'],
-      },
-    ];
+    const extraction = {
+      examples: [
+        {
+          lineNumber: 2,
+          pageCitation: 'p.2, Punch Examples',
+          kind: 'transition',
+          sourceText: 'If you are punched while READY, you become EXHAUSTED.',
+          setup: 'Guard is READY.',
+          action: 'Guard is punched.',
+          expected: 'Guard becomes EXHAUSTED.',
+          supportingQuoteLines: ['If you are punched while READY, you become EXHAUSTED.'],
+        },
+      ],
+    };
     const extractionPath = join(dir, 'extraction.json');
     await fs.writeFile(extractionPath, JSON.stringify(extraction, null, 2));
 
@@ -237,23 +233,15 @@ describe('verify-example-translate — registration (CHECK-06, the second dispat
 });
 
 describe('verify-example-emit — registration (TEST-01, the build-side write surface)', () => {
-  it('is registered: --help exits 0 and lists exactly --project, --chunk (required), --translated, --json (plus -h), never --run-id or a bypass flag', async () => {
-    const result = await spawnCli(['verify-example-emit', '--help']);
-    expect(result.code).toBe(0);
-    expect(result.stdout).toContain('verify-example-emit');
-
-    for (const flag of [
+  it('is registered: --help exits 0 and lists exactly --project, --chunk (required), --json (plus -h), never --run-id or a bypass flag', async () => {
+    const help = await expectHelpWithoutBypass('verify-example-emit', [
       '--project <dir>',
       '--chunk <slug>',
-      '--translated <file>',
       '--json',
       '-h, --help',
-    ]) {
-      expect(result.stdout).toContain(flag);
-    }
-    for (const bypassFlag of ['--run-id', '--force', '--skip', '--overwrite']) {
-      expect(result.stdout).not.toContain(bypassFlag);
-    }
+    ]);
+    // The translated tests come from the ledger (#319); there is no side input to pass.
+    expect(help).not.toContain('--translated');
   });
 
   it('exits non-zero naming --chunk as required when it is not supplied', async () => {
@@ -292,6 +280,23 @@ describe('verify-example-emit — registration (TEST-01, the build-side write su
       'utf-8',
     );
     expect(bytes).toContain('chunk-a');
+  });
+});
+
+describe('verify-example-run — registration (the only source of agrees/disagrees)', () => {
+  it('is registered: --help exits 0 and lists --project, --chunk (required), --json, never --run-id or a bypass flag', async () => {
+    await expectHelpWithoutBypass('verify-example-run', [
+      '--project <dir>',
+      '--chunk <slug>',
+      '--json',
+      '-h, --help',
+    ]);
+  });
+
+  it('exits non-zero naming --chunk as required when it is not supplied', async () => {
+    const result = await spawnCli(['verify-example-run', '--project', '/tmp']);
+    expect(result.code).not.toBe(0);
+    expect(result.stderr).toContain('--chunk');
   });
 });
 
