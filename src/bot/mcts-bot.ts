@@ -170,7 +170,7 @@ export class MCTSBot<G extends Game = Game> {
   }
 
   /**
-   * Run multiple independent MCTS searches with different seeds,
+   * Run multiple independent MCTS searches, each with its own random source,
    * then aggregate results by voting on the best move.
    *
    * This provides diversity benefit: each search explores different
@@ -184,10 +184,13 @@ export class MCTSBot<G extends Game = Game> {
     const moveVotes = new Map<string, { count: number; move: BotMove }>();
 
     for (let i = 0; i < parallelCount; i++) {
-      // Create sub-bot with unique seed for diversity
+      // Each sub-search needs its own random source for diversity. A seeded
+      // bot derives each sub-seed from its own seed, so the ensemble stays
+      // reproducible; an unseeded one leaves them unseeded, so each draws a
+      // fresh random seed and never warns about a seed nobody set (#329).
       const subConfig: Partial<BotConfig> = {
         ...this.config,
-        seed: `${this.seed ?? 'default'}-parallel-${i}`,
+        seed: this.seed === undefined ? undefined : `${this.seed}-parallel-${i}`,
         iterations: iterationsPerSearch,
         parallel: 1, // Prevent recursion
       };

@@ -1033,7 +1033,7 @@ describe('verify-game.md — CHECK-06 routing and Reference Files (178-09)', () 
     expect(skill).toContain('Step 9, below');
   });
 
-  it('Step 8 names both handshake tokens and all three commands, including verify-example-translate as the cited producer of the translation bytes', () => {
+  it('Step 8 names both handshake tokens and all five commands, including verify-example-translate as the cited producer of the translation bytes', () => {
     const skill = read('verify-game.md');
     const step8 = skill.slice(
       skill.indexOf('## Step 8: Worked-Example Replay'),
@@ -1044,6 +1044,8 @@ describe('verify-game.md — CHECK-06 routing and Reference Files (178-09)', () 
     expect(step8).toContain('boardsmith verify-example-replay --json');
     expect(step8).toContain('boardsmith verify-example-translate');
     expect(step8).toContain('boardsmith verify-example-record');
+    expect(step8).toContain('boardsmith verify-example-emit');
+    expect(step8).toContain('boardsmith verify-example-run');
   });
 
   it('Step 8 states exit 0 and never-gates-the-Close, deliberately asymmetric with build/test.md\'s build-blocking TEST-01', () => {

@@ -12,6 +12,7 @@ import {
   loop,
   eachPlayer,
   actionStep,
+  simultaneousActionStep,
   Space,
   Piece,
   type GameOptions,
@@ -121,6 +122,30 @@ export class TypedNameGame extends Game<TypedNameGame, Player> {
     );
 
     this.setFlow(shortFlow(['name']));
+  }
+}
+
+/**
+ * WideGame's flat step, in a game whose ending is not built yet: the step never
+ * ends, and the one move is disabled after four turns, so every game stops with
+ * no move left for anyone (#317). It still offered its forty choices first.
+ */
+export class UnfinishedWideGame extends Game<UnfinishedWideGame, Player> {
+  // Read through `burnTurn`'s ctx.game and the disabled rule; fallow cannot follow either.
+  // fallow-ignore-next-line unused-class-member
+  turns = 0;
+
+  constructor(options: GameOptions) {
+    super(options);
+
+    this.registerAction(
+      Action.create<UnfinishedWideGame>('shout')
+        .chooseFrom('verb', { choices: VERBS })
+        .disabled((ctx) => (ctx.game.turns >= 4 ? 'Four shouts is all this chunk allows.' : false))
+        .execute(burnTurn),
+    );
+
+    this.setFlow(defineFlow({ root: simultaneousActionStep({ actions: ['shout'], playerDone: () => false }) }));
   }
 }
 

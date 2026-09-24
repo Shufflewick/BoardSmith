@@ -42,7 +42,7 @@ import { nextTick, ref } from 'vue';
 import { useActionController } from './useActionController.js';
 import { useBoardActionBridge } from './useBoardActionBridge.js';
 import { createBoardInteraction } from './useBoardInteraction.js';
-import { shouldDeferElementPickToBoard } from '../components/auto-ui/action-panel-helpers.js';
+import { shouldDeferChoicePickToBoard } from '../components/auto-ui/action-panel-helpers.js';
 import type { ActionMetadata } from './useActionControllerTypes.js';
 
 // ── Flush helper ────────────────────────────────────────────────────────────
@@ -54,6 +54,32 @@ async function flush(n = 6): Promise<void> {
     await nextTick();
     await Promise.resolve();
   }
+}
+
+/**
+ * The real controller and bridge over a fresh board, offering one action whose
+ * picks `fetchPickChoices` answers. Nothing is auto-filled or auto-executed, so a
+ * test drives each pick itself.
+ */
+function wireActionToBoard(
+  action: ActionMetadata,
+  fetchPickChoices: NonNullable<Parameters<typeof useActionController>[0]['fetchPickChoices']>,
+  restoreEpoch = ref<number | undefined>(0),
+) {
+  const isMyTurn = ref<boolean | undefined>(true);
+  const availableActions = ref([action.name]);
+  const actionMetadata = ref({ [action.name]: action });
+  const controller = useActionController({
+    sendAction: vi.fn().mockResolvedValue({ success: true }),
+    availableActions, actionMetadata, isMyTurn,
+    autoFill: false, autoExecute: false, fetchPickChoices,
+  });
+  const board = createBoardInteraction();
+  useBoardActionBridge({
+    controller, boardInteraction: board, isMyTurn, autoEndTurn: ref(true), actionMetadata, availableActions,
+    disabledActions: ref(undefined), isViewingHistory: ref(false), restoreEpoch,
+  });
+  return { controller, board };
 }
 
 // ── Fixtures (test-local — DO NOT import from ~/BoardSmithGames) ─────────────
@@ -212,13 +238,11 @@ describe('Board + controller interaction integration', () => {
     expect(board.isSelectableElement({ notation: 'c5' })).toBe(true);
 
     // (c) Parity: the same two destinations the board just made selectable are the
-    // ones the panel offers. A choice pick contributes no board element candidates
-    // (validElements is [] for choice types) and is never deferred to the board
-    // (shouldDeferElementPickToBoard('choice', ...) === false — see
-    // action-panel-helpers.test.ts), so the panel stays the keyboard-reachable
-    // surface for exactly these choices.
+    // ones the panel offers. Two is well under the reading threshold, so the pick
+    // is not handed to the board (see action-panel-helpers.test.ts) and the panel
+    // stays a keyboard-reachable surface for exactly these choices.
     expect(controller.validElements.value).toEqual([]);
-    expect(shouldDeferElementPickToBoard('choice', controller.validElements.value)).toBe(false);
+    expect(shouldDeferChoicePickToBoard(controller.currentChoices.value)).toBe(false);
     expect(controller.currentChoices.value.map((c) => c.display)).toEqual(['a5', 'c5']);
   });
 
@@ -517,27 +541,12 @@ describe('Board + controller interaction integration', () => {
   it('B17: the first observed epoch is not a restore, and an unchanged epoch never tears down a pick', async () => {
     // Guard the two ways a naive watcher would fire spuriously: on the first
     // broadcast (no prior runner to be stale) and on ordinary re-broadcasts.
-    const isMyTurn = ref<boolean | undefined>(true);
-    const availableActions = ref(['place']);
-    const actionMetadata = ref({ place: hexPlacementAction });
-    const sendAction = vi.fn().mockResolvedValue({ success: true });
     const restoreEpoch = ref<number | undefined>(undefined);
     const fetchPickChoices = vi.fn(async () => ({
       success: true,
       validElements: [{ id: 10, display: 'a1' }, { id: 11, display: 'a2' }],
     }));
-
-    const controller = useActionController({
-      sendAction, availableActions, actionMetadata, isMyTurn,
-      autoFill: false, autoExecute: false, fetchPickChoices,
-    });
-    const board = createBoardInteraction();
-    useBoardActionBridge({
-      controller, boardInteraction: board, isMyTurn, autoEndTurn: ref(true), actionMetadata, availableActions,
-      disabledActions: ref(undefined),
-      isViewingHistory: ref(false),
-      restoreEpoch,
-    });
+    const { controller, board } = wireActionToBoard(hexPlacementAction, fetchPickChoices, restoreEpoch);
 
     await flush();
     // First state arrives carrying epoch 7 (a session that was undone before
@@ -554,6 +563,45 @@ describe('Board + controller interaction integration', () => {
     restoreEpoch.value = 7;
     await flush();
     expect(controller.currentAction.value).toBe('place');
+  });
+
+
+  // ── #313: a large board-anchored chooseFrom ─────────────────────────────────
+
+  it('a 3,720-space chooseFrom the panel hands over is reachable, space by space, on the board', async () => {
+    // Windup Warfare's placePack `space` step: every space offered, each with a
+    // notation boardRef. The panel shows one "Choose on the board" control for it
+    // (#313), which is only honest if the board really offers every one of them.
+    const placePack: ActionMetadata = {
+      name: 'placePack',
+      prompt: 'Buy and place a pack',
+      selections: [{ name: 'space', type: 'choice', prompt: 'Choose where the pack goes' }],
+    };
+    const spaceChoices = Array.from({ length: 3720 }, (_, i) => ({
+      value: `s${i}`,
+      display: `Space ${i}`,
+      refs: [{ ref: { notation: `s${i}` }, role: 'target' as const }],
+      ...(i === 5 ? { disabled: 'Too close to the enemy' } : {}),
+    }));
+    const { controller, board } = wireActionToBoard(
+      placePack,
+      vi.fn(async () => ({ success: true, choices: spaceChoices })),
+    );
+    await flush();
+
+    expect(controller.currentPick.value?.name).toBe('space');
+    // The panel's rule, applied to what the controller holds, says hand it over...
+    expect(shouldDeferChoicePickToBoard(controller.currentChoices.value)).toBe(true);
+    // ...and the board offers every one of those candidates, disabled ones as disabled.
+    for (let i = 0; i < 3720; i++) {
+      expect(board.isSelectableElement({ notation: `s${i}` })).toBe(true);
+    }
+    expect(board.isDisabledElement({ notation: 's5' })).toBe('Too close to the enemy');
+
+    // Choosing a space on the board answers the step with that space.
+    board.triggerElementSelect({ notation: 's3000' });
+    await flush();
+    expect(controller.currentArgs.value.space).toBe('s3000');
   });
 
 });

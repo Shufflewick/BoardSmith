@@ -1,5 +1,5 @@
 import type { Game } from '../element/game.js';
-import type { FlowNode, SwitchConfig } from './types.js';
+import type { FlowNode, FlowPosition, SwitchConfig } from './types.js';
 
 /**
  * The one rule for "which child of this flow node does a serialized frame
@@ -90,6 +90,28 @@ function navigationIndex<G extends Game>(
       // Iterating nodes: the frame index is the iteration count.
       return 0;
   }
+}
+
+/**
+ * The position of the first `depth` frames of `position`: its path, and every
+ * per-frame record (`__iter_<i>`, `__frame_<i>`) for `i < depth`. The frame
+ * data must travel with the path because an `if`/`switch` frame's path entry
+ * is always 0 and {@link resolveFlowChild} finds the branch it took only in
+ * that data (#330). Flow variables are kept; `playerIndex` and `turnRun` are
+ * not, because they belong to the step being cut off and may name a seat the
+ * shorter position never reaches.
+ */
+export function flowPositionPrefix(position: FlowPosition, depth: number): FlowPosition {
+  const path = position.path.slice(0, depth);
+  const iterations: FlowPosition['iterations'] = {};
+  const frameData: NonNullable<FlowPosition['frameData']> = {};
+  for (let i = 0; i < path.length; i++) {
+    const iteration = position.iterations[`__iter_${i}`];
+    if (iteration !== undefined) iterations[`__iter_${i}`] = iteration;
+    const frame = position.frameData?.[`__frame_${i}`];
+    if (frame !== undefined) frameData[`__frame_${i}`] = { ...frame };
+  }
+  return { path, iterations, frameData, variables: { ...position.variables } };
 }
 
 /**

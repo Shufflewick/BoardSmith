@@ -238,7 +238,7 @@ interface BotConfig {
 
 - **No learning**: The bot doesn't learn from past games. Each game starts fresh.
 - **Text/number inputs**: The bot can't handle actions that require text or number input (it can only choose from discrete options).
-- **Determinism**: The bot has its own random source, separate from the game's. A fixed game seed does not fix it. Pass `createBot`'s `reproducible: { seed }` (or `{ seed, timeout: Infinity }` to `MCTSBot`) for a deterministic search. Without a seed, the bot starts from a fresh random seed every time.
+- **Determinism**: The bot has its own random source, separate from the game's. A fixed game seed does not fix it. Pass `createBot`'s `reproducible: { seed }` (or `{ seed, timeout: Infinity }` to `MCTSBot`) for a deterministic search. Without a seed, the bot starts from a fresh random seed every time. A parallel bot (`parallel > 1`, as in `hard`) follows the same rule for each sub-search: seeded, their seeds derive from the bot's seed; unseeded, each gets a fresh random seed.
 
 ## Hidden information: enumeration and simulation are not the same thing
 

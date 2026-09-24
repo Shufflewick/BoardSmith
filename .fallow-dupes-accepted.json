@@ -1181,13 +1181,6 @@
       ]
     },
     {
-      "content": "28b644298d8bf0a0",
-      "lines": 20,
-      "files": [
-        "src/cli/commands/verify-example-replay.test.ts"
-      ]
-    },
-    {
       "content": "28dcec9a49e4775c",
       "lines": 21,
       "files": [
@@ -1676,13 +1669,6 @@
       ]
     },
     {
-      "content": "3cc76f2cd1542c44",
-      "lines": 8,
-      "files": [
-        "src/cli/commands/verify-example-replay.test.ts"
-      ]
-    },
-    {
       "content": "3cf25a56a37f0d6c",
       "lines": 8,
       "files": [
@@ -1945,14 +1931,6 @@
       "lines": 9,
       "files": [
         "src/ui/components/HamburgerMenu.test.ts"
-      ]
-    },
-    {
-      "content": "4426f2be13944f28",
-      "lines": 13,
-      "files": [
-        "src/cli/commands/verify-derive-check.ts",
-        "src/cli/commands/verify-example-replay.ts"
       ]
     },
     {
@@ -2429,13 +2407,6 @@
       ]
     },
     {
-      "content": "56c6f1f61c4fb940",
-      "lines": 25,
-      "files": [
-        "src/cli/commands/example-test-emit.test.ts"
-      ]
-    },
-    {
       "content": "56dbec15a80fdfed",
       "lines": 12,
       "files": [
@@ -2749,13 +2720,6 @@
       "lines": 17,
       "files": [
         "src/bot-trainer/feature-templates.ts"
-      ]
-    },
-    {
-      "content": "602c35da18160c94",
-      "lines": 14,
-      "files": [
-        "src/cli/commands/verify-example-replay.test.ts"
       ]
     },
     {
@@ -3413,13 +3377,6 @@
       "lines": 6,
       "files": [
         "src/ui/composables/useBoardActionBridge.ts"
-      ]
-    },
-    {
-      "content": "7555e04b37e09fb9",
-      "lines": 19,
-      "files": [
-        "src/cli/commands/verify-example-replay.ts"
       ]
     },
     {
@@ -4195,13 +4152,6 @@
       "lines": 21,
       "files": [
         "src/ui/composables/useElementAnimation.test.ts"
-      ]
-    },
-    {
-      "content": "8e8adea5259e8e5f",
-      "lines": 10,
-      "files": [
-        "src/cli/cli.test.ts"
       ]
     },
     {
@@ -5045,13 +4995,6 @@
       ]
     },
     {
-      "content": "a9fa8baab0afc61e",
-      "lines": 11,
-      "files": [
-        "src/cli/commands/verify-example-replay.test.ts"
-      ]
-    },
-    {
       "content": "aa2b925cd4ec75dc",
       "lines": 10,
       "files": [
@@ -5103,13 +5046,6 @@
         "src/ui/composables/useElementAnimation.test.ts",
         "src/ui/composables/useFLIP.test.ts",
         "src/ui/composables/useFlyingElements.test.ts"
-      ]
-    },
-    {
-      "content": "aca5f9778f895d0a",
-      "lines": 12,
-      "files": [
-        "src/cli/cli.test.ts"
       ]
     },
     {
@@ -5516,6 +5452,15 @@
       ]
     },
     {
+      "content": "b8607a1856cb1d9c",
+      "lines": 37,
+      "files": [
+        "src/cli/commands/verify-derive-check.ts",
+        "src/cli/commands/verify-example-replay.ts",
+        "src/cli/commands/verify-ruling-recheck.ts"
+      ]
+    },
+    {
       "content": "b862e24a50f50cff",
       "lines": 41,
       "files": [
@@ -5653,13 +5598,6 @@
       ]
     },
     {
-      "content": "bd345055ee5b444f",
-      "lines": 17,
-      "files": [
-        "src/cli/commands/verify-example-replay.test.ts"
-      ]
-    },
-    {
       "content": "bd941497021bc01b",
       "lines": 18,
       "files": [
@@ -5707,13 +5645,6 @@
       "files": [
         "src/cli/dev-host/multiplayer-host.palette.test.ts",
         "src/session/seat-activity-canonical.test.ts"
-      ]
-    },
-    {
-      "content": "bf389b69b2308cde",
-      "lines": 18,
-      "files": [
-        "src/cli/commands/verify-example-replay.ts"
       ]
     },
     {
@@ -6151,15 +6082,6 @@
       "lines": 5,
       "files": [
         "src/cli/dev-host/multiplayer-host.test.ts"
-      ]
-    },
-    {
-      "content": "ce42d1c4d1f62ddd",
-      "lines": 36,
-      "files": [
-        "src/cli/commands/verify-derive-check.ts",
-        "src/cli/commands/verify-example-replay.ts",
-        "src/cli/commands/verify-ruling-recheck.ts"
       ]
     },
     {
@@ -6636,13 +6558,6 @@
       ]
     },
     {
-      "content": "ddfdfbca166a4ea5",
-      "lines": 16,
-      "files": [
-        "src/cli/commands/verify-example-replay.test.ts"
-      ]
-    },
-    {
       "content": "de9ffe0e6711830c",
       "lines": 10,
       "files": [
@@ -7086,14 +7001,6 @@
       ]
     },
     {
-      "content": "ef14fcb4866a7e0e",
-      "lines": 10,
-      "files": [
-        "src/cli/commands/verify-derive-check.ts",
-        "src/cli/commands/verify-example-replay.ts"
-      ]
-    },
-    {
       "content": "ef92e234f56eddc2",
       "lines": 8,
       "files": [
@@ -7107,13 +7014,6 @@
       "files": [
         "src/ui/components/auto-ui/ActionPanel.board-bridge.test.ts",
         "src/ui/components/auto-ui/renderers/candidate-hook.test.ts"
-      ]
-    },
-    {
-      "content": "f0061676e7097185",
-      "lines": 11,
-      "files": [
-        "src/cli/cli.test.ts"
       ]
     },
     {

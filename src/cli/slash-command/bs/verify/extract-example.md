@@ -139,7 +139,10 @@ worth reporting about that example.
 
 ## RETURN a structured object only
 
-Return exactly one object:
+Return exactly one JSON object, and nothing else — the orchestrator saves it to a file unchanged
+and hands that file to `boardsmith verify-example-translate --extraction` and
+`boardsmith verify-example-record --extraction`, which accept this object and nothing else (a
+bare array is refused). Its shape:
 
 ```
 {
@@ -185,6 +188,72 @@ Return exactly one object:
   ever deciding which excerpt is correct.
 - **Never return the whole payload text back.** Cite only the specific lines each example actually
   draws on.
+
+---
+
+## Example
+
+For this dispatch payload:
+
+```text
+BS-EXAMPLE-EXTRACT-V1
+Slice: rulebook/02-guards.md
+
+1: p.2, Punch Examples:
+2: "Example: your Guards are READY, EXHAUSTED, EXHAUSTED and you are punched."
+3: "After the punch your Guards are EXHAUSTED, EXHAUSTED, EXHAUSTED."
+5: p.3, Sets and Runs:
+6: "Set: 3+ cards of the same number. example: 5, 5, 5"
+7: "Run: 3+ cards in numeric order. example: 5, 6, 7"
+8: Visual (p.3): The Run example is illustrated by three cards: a red 1, a blue 2, and a red 3.
+```
+
+the return is exactly this JSON (a transition, a predicate, and an example that contradicts its
+own Visual line):
+
+```json
+{
+  "examples": [
+    {
+      "lineNumber": 2,
+      "pageCitation": "p.2, Punch Examples",
+      "kind": "transition",
+      "sourceText": "Example: your Guards are READY, EXHAUSTED, EXHAUSTED and you are punched.",
+      "setup": "Your three Guards are READY, EXHAUSTED, EXHAUSTED.",
+      "action": "You are punched.",
+      "expected": "Your three Guards are EXHAUSTED, EXHAUSTED, EXHAUSTED.",
+      "supportingQuoteLines": [
+        "\"Example: your Guards are READY, EXHAUSTED, EXHAUSTED and you are punched.\"",
+        "\"After the punch your Guards are EXHAUSTED, EXHAUSTED, EXHAUSTED.\""
+      ]
+    },
+    {
+      "lineNumber": 6,
+      "pageCitation": "p.3, Sets and Runs",
+      "kind": "predicate",
+      "sourceText": "example: 5, 5, 5",
+      "setup": "Three cards numbered 5, 5 and 5.",
+      "expected": "The three cards form a Set.",
+      "supportingQuoteLines": [
+        "\"Set: 3+ cards of the same number. example: 5, 5, 5\""
+      ]
+    },
+    {
+      "lineNumber": 7,
+      "pageCitation": "p.3, Sets and Runs",
+      "kind": "example-inconsistent",
+      "reason": "The quoted Run example reads 5, 6, 7, but the Visual line describing the same example shows cards numbered 1, 2 and 3.",
+      "supportingQuoteLines": [
+        "\"Run: 3+ cards in numeric order. example: 5, 6, 7\"",
+        "Visual (p.3): The Run example is illustrated by three cards: a red 1, a blue 2, and a red 3."
+      ]
+    }
+  ]
+}
+```
+
+`src/cli/commands/example-contracts.test.ts` feeds this exact return through the commands it goes
+to, so it is a working example, not an illustration.
 
 ---
 

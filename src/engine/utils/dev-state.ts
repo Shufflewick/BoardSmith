@@ -28,6 +28,7 @@ import type { Game, GameOptions, MessageEntry } from '../element/game.js';
 import type { GameElement } from '../element/game-element.js';
 import type { ElementJSON, ElementClass, ElementContext } from '../element/types.js';
 import type { FlowPosition, FlowState } from '../flow/types.js';
+import { flowPositionPrefix } from '../flow/flow-navigation.js';
 import type { Player } from '../player/player.js';
 
 /**
@@ -573,26 +574,12 @@ export function validateFlowPosition(
     return { valid: true };
   }
 
-  // Build recovery position from valid path prefix
-  const recoveryPosition: FlowPosition = {
-    path: result.validPath,
-    iterations: {},
-    variables: { ...flowPosition.variables },
-    // Don't preserve playerIndex if we're truncating - might be invalid
-  };
-
-  // Copy over iterations that are still valid
-  for (let i = 0; i < result.validPath.length; i++) {
-    const iterKey = `__iter_${i}`;
-    if (flowPosition.iterations[iterKey] !== undefined) {
-      recoveryPosition.iterations[iterKey] = flowPosition.iterations[iterKey];
-    }
-  }
-
   return {
     valid: false,
     reason: result.error,
-    recoveryPosition: result.validPath.length > 0 ? recoveryPosition : undefined,
+    recoveryPosition: result.validPath.length > 0
+      ? flowPositionPrefix(flowPosition, result.validPath.length)
+      : undefined,
   };
 }
 

@@ -108,7 +108,8 @@ here.
 
    (b) For each pending slice, dispatch that slice's `extractionPayload` UNCHANGED to a subagent
        carrying `${CLAUDE_SKILL_DIR}/../bs-shared/verify/extract-example.md`'s
-       `BS-EXAMPLE-EXTRACT-V1` handshake, and save the returned structured object to a file.
+       `BS-EXAMPLE-EXTRACT-V1` handshake, and save its return to a file UNCHANGED — the one
+       `{ "examples": [...] }` object that contract returns. Never unwrap it or rebuild it.
 
    (c) Run `boardsmith verify-example-translate --project <dir> --slice-path <that slice>
        --extraction <that return file> --json` to obtain one translation dispatch payload per
@@ -118,27 +119,37 @@ here.
        never duplicated in this skill's text.
 
    (d) Dispatch each returned `payloads[].translationPayload` UNCHANGED and SEPARATELY to a
-       second subagent carrying `translate-example.md`'s `BS-EXAMPLE-TRANSLATE-V1` handshake, and
-       save the returns to a file. Two separate dispatches, never one combined pass — a combined
-       pass would let the model work backward from code it can already see, producing agreement
-       with itself rather than a real test of the printed example.
+       second subagent carrying `translate-example.md`'s `BS-EXAMPLE-TRANSLATE-V1` handshake.
+       Two separate dispatches, never one combined pass — a combined pass would let the model
+       work backward from code it can already see, producing agreement with itself rather than a
+       real test of the printed example. Save the slice's returns to ONE file: a JSON object
+       that files each return, unchanged, under the `exampleId` its payload came with —
+       `{ "<exampleId>": <that example's return>, ... }`.
 
-   (e) Record both returns through exactly ONE `boardsmith verify-example-record --project <dir>
-       --slice-path <p> --extraction <f> --translation <f>` invocation per SLICE — an atomic
-       upsert-append, never a whole-ledger rewrite.
+   (e) Record both files through exactly ONE `boardsmith verify-example-record --project <dir>
+       --slice-path <p> --extraction <f> --translations <f>` invocation per SLICE — an atomic
+       upsert-append, never a whole-ledger rewrite. It records each example as
+       `example-inconsistent`, `unexecutable` (with the translator's named reason), or `not-run`
+       carrying the test the translator wrote.
 
    (f) Run `boardsmith verify-example-emit --project <dir> --chunk <slug>` to write this chunk's
-       single generated test file, then RUN that file with the project's own test runner. The
-       recorded verdict comes from actually running the emitted test and observing its pass/fail
-       result — never from the translator's own `verdictHint`, which is a model's guess, not an
-       observation.
+       single generated test file from the ledger, then `boardsmith verify-example-run --project
+       <dir> --chunk <slug>`, which runs that file with the project's own vitest and records each
+       `not-run` example as `agrees` (its test passed) or `disagrees` (it failed, with the failure
+       as the observed outcome).
+       The recorded verdict comes from actually running the emitted test,
+       never from the translator's own `verdictHint`, which is a model's guess, not an observation. A test that
+       is skipped or a file that fails to load is refused, not recorded: re-dispatch that
+       example's translator, record again, emit, and run again.
 
    (g) A `disagrees` result is BUILD-BLOCKING and routes this chunk back to `build`, the same way
        every other step in this ordered sequence does (see "Failures Loop Back to `build`"
        below) — this is deliberately asymmetric with `/bs-verify-game`'s own worked-example check,
        which is advisory: in build, the chunk was JUST written to satisfy those exact slices, so a
        mismatch here is precisely the drift this step exists to catch, not a staleness question a
-       verify pass has to weigh separately.
+       verify pass has to weigh separately. Once `build` has fixed the code, run
+       `boardsmith verify-example-run` again; the emitted file does not change, so it needs no
+       re-emit.
 
    (h) An `unexecutable` or `example-inconsistent` result is NOT a build failure. Route an
        `example-inconsistent` finding to the designer via `## Open Rules Gaps`; record an
@@ -186,6 +197,45 @@ here.
    is neither `crashed` nor `stuck` (stuck = "could not produce a valid move") — it surfaces as
    `timedOut` or `exceededMaxActions`. This is the real API — do not reimplement a hand-rolled
    random-play loop in its place.
+
+   The simulator plays only moves a player could make: it never submits an action its `.disabled()`
+   rule refuses (or a tutorial gate refuses). A seat whose actions are all refused waits while
+   another seat plays, and a game where no seat has an enabled action stops with "no player has an
+   enabled action to take", naming each refused action and its reason. So `.disabled()` is never a
+   reason to reshape a rule or this test.
+
+   **A chunk whose game cannot end yet declares its rest with `isResting`.** Before the chunk that
+   builds the ending, every random game stops with no move left, and by default that stop is
+   `stuck`, the same as a deadlock. Pass `isResting`: it is handed the stopped game and returns the
+   reason the game rests there, or `false`. Check the final state inside it, so a game that stopped
+   anywhere else stays `stuck`:
+
+   ```typescript
+   const results = await simulateRandomGames(MyGame, {
+     count: 50,
+     playerCounts: [2],
+     // Deployment ends at check-in, which chunk `check-in` builds. Remove this then.
+     isResting: (game) =>
+       game.players.every((p) => p.supply < CHEAPEST_PACK)
+         ? 'every player has spent their supply; check-in is not built yet'
+         : false,
+   });
+
+   expect(results.crashed).toBe(0);
+   expect(results.stuck).toBe(0);
+   expect(results.timedOut).toBe(0);
+   expect(results.exceededMaxActions).toBe(0);
+   expect(results.resting).toBe(results.total);
+   ```
+
+   Never relax `results.stuck` instead (no `toBe(results.total)`, no replaying stuck games to excuse
+   them): `isResting` is only asked about a game that stopped because no seat had an enabled
+   action, so a crash, a rejected move or a move the simulator cannot build still fails. Record the
+   rest and the chunk that removes it in DECISIONS.md, and delete `isResting` in that chunk, so the
+   game's `stuck` check is a plain zero again. `boardsmith simulate` has no `isResting`: it reports
+   every game of such a chunk stuck, so it is not this chunk's gate. `boardsmith validate`'s choice
+   cardinality check still counts such a game, because every choice it offered before stopping was
+   counted.
 
    **Fail-loud: the sim must have EXERCISED this chunk's new actions (SKILLAUTO-08).** The four
    zero-checks above prove the run didn't crash, stall, or run away — they do NOT prove the run

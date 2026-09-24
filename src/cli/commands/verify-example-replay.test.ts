@@ -6,6 +6,7 @@ import { dirname, join, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   EXAMPLE_REPLAY_VERDICTS,
+  EXAMPLE_REPLAY_LEDGER_END,
   createExampleReplayRecord,
   exampleReplayLedgerPath,
   replaceExampleReplayVerdicts,
@@ -27,24 +28,98 @@ import { renderIndex } from './ingest-archive.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { archiveRulebookSource, designProjectFixtures } from './design-project.test-helper.js';
 
+/**
+ * Writes the two subagent returns in the shapes the contracts give them (#319): the extractor's
+ * `{ "examples": [...] }`, and the translator returns filed in one object under the exampleId
+ * each was dispatched for. A translation entry names its slice and line only so this helper can
+ * compute that id; neither field is part of the translator's return.
+ */
+function exampleReturnWriters(writeJson: (name: string, value: unknown) => Promise<string>) {
+  return {
+    writeExtraction(name: string, examples: unknown[]) {
+      return writeJson(name, { examples });
+    },
+    writeTranslations(name: string, entries: Record<string, unknown>[]) {
+      const byId: Record<string, unknown> = {};
+      for (const { slicePath, lineNumber, ...translatorReturn } of entries) {
+        byId[workedExampleId({ slicePath: String(slicePath), lineNumber: Number(lineNumber) })] =
+          translatorReturn;
+      }
+      return writeJson(name, byId);
+    },
+  };
+}
+
+/**
+ * `verify-example-record` on rulebook/02-punch.md refuses these returns with `message`, and the
+ * ledger stays empty.
+ */
+async function expectRecordRefused(
+  project: string,
+  extraction: string,
+  translations: string,
+  message: string | RegExp,
+): Promise<void> {
+  await expect(
+    verifyExampleRecordCommand({
+      project,
+      slicePath: 'rulebook/02-punch.md',
+      extraction,
+      translations,
+    }),
+  ).rejects.toThrow(message);
+  expect(await readExampleReplayVerdicts(project)).toEqual([]);
+}
+
+/** The source text of the module under test. */
+function replayModuleSource(): string {
+  return readFileSync(fileURLToPath(new URL('./verify-example-replay.ts', import.meta.url)), 'utf-8');
+}
+
+/** What `verify-example-replay` prints for `project`, as one string. */
+async function printedReport(project: string): Promise<string> {
+  const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+  try {
+    await verifyExampleReplayCommand({ project });
+    return logSpy.mock.calls.map((c) => c.join(' ')).join('\n');
+  } finally {
+    logSpy.mockRestore();
+  }
+}
+
 // -------------------------------------------------------------------------------------------
 // Task 1 — verdict set + createExampleReplayRecord (the record choke point)
 // -------------------------------------------------------------------------------------------
 
 describe('EXAMPLE_REPLAY_VERDICTS', () => {
-  it('is exactly the four-member frozen set', () => {
+  it('is exactly the five-member frozen set', () => {
     expect([...EXAMPLE_REPLAY_VERDICTS]).toEqual([
       'agrees',
       'disagrees',
       'example-inconsistent',
       'unexecutable',
+      'not-run',
     ]);
     expect(Object.isFrozen(EXAMPLE_REPLAY_VERDICTS)).toBe(true);
   });
 });
 
+/** The test a translated record carries (not-run, agrees, disagrees). */
+const TRANSLATION = {
+  pageCitation: 'p.2, Punch Examples',
+  sourceText: 'If you are punched while READY, you become EXHAUSTED.',
+  testCode: "it('a READY guard becomes EXHAUSTED', () => {\n  expect(true).toBe(true);\n});",
+  imports: [] as string[],
+};
+
+const TRANSLATED_VERDICTS = ['not-run', 'agrees', 'disagrees'];
+
+/**
+ * A valid record input. A translated verdict gets `TRANSLATION` unless the case passes its own
+ * `translation` (including `undefined`, to prove it is required).
+ */
 function validAgreesInput(overrides: Partial<Parameters<typeof createExampleReplayRecord>[0]> = {}) {
-  return {
+  const input = {
     exampleId: 'rulebook/02-punch.md:84',
     slicePath: 'rulebook/02-punch.md',
     lineNumber: 84,
@@ -54,6 +129,9 @@ function validAgreesInput(overrides: Partial<Parameters<typeof createExampleRepl
     provenance: 'quote-verified',
     ...overrides,
   };
+  return TRANSLATED_VERDICTS.includes(input.verdict) && !('translation' in overrides)
+    ? { ...input, translation: TRANSLATION }
+    : input;
 }
 
 describe('createExampleReplayRecord — verdict', () => {
@@ -73,7 +151,7 @@ describe('createExampleReplayRecord — verdict', () => {
 
   it('throws on a verdict outside EXAMPLE_REPLAY_VERDICTS, naming the set', () => {
     expect(() => createExampleReplayRecord(validAgreesInput({ verdict: 'banana' }))).toThrow(
-      /Invalid verdict "banana".*agrees, disagrees, example-inconsistent, unexecutable/s,
+      /Invalid verdict "banana".*agrees, disagrees, example-inconsistent, unexecutable, not-run/s,
     );
   });
 
@@ -195,6 +273,43 @@ describe('createExampleReplayRecord — verdict', () => {
     expect(() => createExampleReplayRecord(validAgreesInput({ kind: 'narrative' }))).toThrow(
       /Invalid kind "narrative".*transition, predicate/s,
     );
+  });
+
+  it.each(['not-run', 'agrees', 'disagrees'])(
+    'a "%s" record must carry its translated test',
+    (verdict) => {
+      expect(() =>
+        createExampleReplayRecord(
+          validAgreesInput({ verdict, expected: 'X', observed: 'Y', translation: undefined }),
+        ),
+      ).toThrow(/carries no translated test/);
+    },
+  );
+
+  it.each(['unexecutable', 'example-inconsistent'])(
+    'a "%s" record never carries a translated test',
+    (verdict) => {
+      expect(() =>
+        createExampleReplayRecord(
+          validAgreesInput({
+            verdict,
+            contradictionA: 'a',
+            contradictionB: 'b',
+            translation: TRANSLATION,
+          }),
+        ),
+      ).toThrow(/carries a translated test/);
+    },
+  );
+
+  it('a fence marker inside the translated test throws (fence injection)', () => {
+    expect(() =>
+      createExampleReplayRecord(
+        validAgreesInput({
+          translation: { ...TRANSLATION, testCode: `// ${EXAMPLE_REPLAY_LEDGER_END}` },
+        }),
+      ),
+    ).toThrow(/translation\.testCode contains a ledger fence marker/);
   });
 
   it('throws on an invalid provenance value', () => {
@@ -336,10 +451,7 @@ describe('exampleReplayLedgerPath / replaceExampleReplayVerdicts / recordExample
   });
 
   it('writes go through atomicWriteFile — no direct fs.writeFile/writeFileSync in the module', () => {
-    const source = readFileSync(
-      fileURLToPath(new URL('./verify-example-replay.ts', import.meta.url)),
-      'utf-8',
-    );
+    const source = replayModuleSource();
     expect(/\bfs\.writeFile\(|\bwriteFileSync\(/.test(source)).toBe(false);
   });
 });
@@ -489,17 +601,39 @@ describe('verifyExampleReplayCommand — command', () => {
         expected: 'X',
         observed: 'Y',
       }),
+      recordFor('rulebook/01-x.md', 4, { verdict: 'not-run', reason: 'Not run yet.' }),
     ]);
 
     const result = await verifyExampleReplayCommand({ project });
     expect(result.counts.agrees).toBe(1);
     expect(result.counts.disagrees).toBe(1);
+    expect(result.counts['not-run']).toBe(1);
     expect(result.perGameBreakdown).toEqual([
       {
         slicePath: 'rulebook/01-x.md',
-        verdictCounts: { agrees: 1, disagrees: 1, 'example-inconsistent': 0, unexecutable: 0 },
+        verdictCounts: {
+          agrees: 1,
+          disagrees: 1,
+          'example-inconsistent': 0,
+          unexecutable: 0,
+          'not-run': 1,
+        },
       },
     ]);
+  });
+
+  it('names each translated example that has not been run, and the two commands that run it', async () => {
+    const project = await makeProject({
+      'rulebook/01-x.md': 'p.1, Definitions:\n"A worked example lives here."\n',
+    });
+    await recordExampleReplayVerdicts(project, [
+      recordFor('rulebook/01-x.md', 2, { verdict: 'not-run', reason: 'Not run yet.' }),
+    ]);
+
+    const printed = await printedReport(project);
+    expect(printed).toMatch(/not run yet.*verify-example-emit.*verify-example-run/s);
+    expect(printed).toContain('rulebook/01-x.md:2');
+    expect(printed).not.toContain('never a verdict');
   });
 });
 
@@ -515,6 +649,7 @@ describe('verifyExampleRecordCommand — record', () => {
   });
 
   const { makeProject, writeJson } = designProjectFixtures(() => dir);
+  const { writeExtraction, writeTranslations } = exampleReturnWriters(writeJson);
 
   const SLICE_TEXT =
     'p.2, Punch Examples:\n' +
@@ -523,7 +658,6 @@ describe('verifyExampleRecordCommand — record', () => {
 
   function extractionEntry(overrides: Partial<Record<string, unknown>> = {}) {
     return {
-      slicePath: 'rulebook/02-punch.md',
       lineNumber: 2,
       pageCitation: 'p.2, Punch Examples',
       kind: 'transition',
@@ -540,8 +674,9 @@ describe('verifyExampleRecordCommand — record', () => {
     return {
       slicePath: 'rulebook/02-punch.md',
       lineNumber: 2,
-      verdict: 'agrees',
-      reason: 'The generated test executed and matched the expected outcome.',
+      testCode: TRANSLATION.testCode,
+      imports: [],
+      verdictHint: 'agrees',
       ...overrides,
     };
   }
@@ -550,8 +685,8 @@ describe('verifyExampleRecordCommand — record', () => {
     const project = await makeProject({
       'rulebook/02-punch.md': SLICE_TEXT,
     });
-    const extractionPath = await writeJson('extraction.json', [extractionEntry()]);
-    const translationPath = await writeJson('translation.json', [translationEntry()]);
+    const extractionPath = await writeExtraction('extraction.json', [extractionEntry()]);
+    const translationPath = await writeTranslations('translations.json', [translationEntry()]);
     const ledgerPath = exampleReplayLedgerPath(project);
     expect(
       await fs.readFile(ledgerPath, 'utf-8').catch(() => null),
@@ -562,7 +697,7 @@ describe('verifyExampleRecordCommand — record', () => {
         project,
         slicePath: '../../../../etc/passwd',
         extraction: extractionPath,
-        translation: translationPath,
+        translations: translationPath,
       }),
     ).rejects.toThrow(/rulebook/);
 
@@ -573,53 +708,35 @@ describe('verifyExampleRecordCommand — record', () => {
     const project = await makeProject({
       'rulebook/02-punch.md': SLICE_TEXT,
     });
-    const extractionPath = await writeJson('extraction.json', [
+    const extractionPath = await writeExtraction('extraction.json', [
       extractionEntry({ sourceText: 'If you are punched while READY, you become EXHAUSTED.' }),
       extractionEntry({
         sourceText: 'If you are punched while EXHAUSTED, you stay EXHAUSTED.',
         expected: 'Guard stays EXHAUSTED.',
       }),
     ]);
-    const translationPath = await writeJson('translation.json', [translationEntry()]);
+    const translationPath = await writeTranslations('translations.json', [translationEntry()]);
 
-    await expect(
-      verifyExampleRecordCommand({
-        project,
-        slicePath: 'rulebook/02-punch.md',
-        extraction: extractionPath,
-        translation: translationPath,
-      }),
-    ).rejects.toThrow(/two entries resolving to the same slicePath\+lineNumber/);
-
-    expect(await readExampleReplayVerdicts(project)).toEqual([]);
+    await expectRecordRefused(project, extractionPath, translationPath, /two entries resolving to the same slicePath\+lineNumber/);
   });
 
   it('a sourceText absent from the slice is rejected, quoting the offending text, writing nothing', async () => {
     const project = await makeProject({
       'rulebook/02-punch.md': SLICE_TEXT,
     });
-    const extractionPath = await writeJson('extraction.json', [
+    const extractionPath = await writeExtraction('extraction.json', [
       extractionEntry({ sourceText: 'This sentence does not appear in the slice at all.' }),
     ]);
-    const translationPath = await writeJson('translation.json', [translationEntry()]);
+    const translationPath = await writeTranslations('translations.json', [translationEntry()]);
 
-    await expect(
-      verifyExampleRecordCommand({
-        project,
-        slicePath: 'rulebook/02-punch.md',
-        extraction: extractionPath,
-        translation: translationPath,
-      }),
-    ).rejects.toThrow(/This sentence does not appear in the slice at all\./);
-
-    expect(await readExampleReplayVerdicts(project)).toEqual([]);
+    await expectRecordRefused(project, extractionPath, translationPath, /This sentence does not appear in the slice at all\./);
   });
 
   it('records two examples and readExampleReplayVerdicts returns exactly those two, each with the id workedExampleId computes', async () => {
     const project = await makeProject({
       'rulebook/02-punch.md': SLICE_TEXT,
     });
-    const extractionPath = await writeJson('extraction.json', [
+    const extractionPath = await writeExtraction('extraction.json', [
       extractionEntry({
         lineNumber: 2,
         sourceText: 'If you are punched while READY, you become EXHAUSTED.',
@@ -630,7 +747,7 @@ describe('verifyExampleRecordCommand — record', () => {
         expected: 'Guard stays EXHAUSTED.',
       }),
     ]);
-    const translationPath = await writeJson('translation.json', [
+    const translationPath = await writeTranslations('translations.json', [
       translationEntry({ lineNumber: 2 }),
       translationEntry({ lineNumber: 3 }),
     ]);
@@ -639,7 +756,7 @@ describe('verifyExampleRecordCommand — record', () => {
       project,
       slicePath: 'rulebook/02-punch.md',
       extraction: extractionPath,
-      translation: translationPath,
+      translations: translationPath,
     });
     expect(result.records).toHaveLength(2);
 
@@ -662,23 +779,14 @@ describe('verifyExampleRecordCommand — record', () => {
       'rulebook/02-punch.md': SLICE_TEXT,
     });
     // SLICE_TEXT has only 3 lines; 99 was never a retained extraction line.
-    const extractionPath = await writeJson('extraction.json', [
+    const extractionPath = await writeExtraction('extraction.json', [
       extractionEntry({ lineNumber: 99 }),
     ]);
-    const translationPath = await writeJson('translation.json', [
+    const translationPath = await writeTranslations('translations.json', [
       translationEntry({ lineNumber: 99 }),
     ]);
 
-    await expect(
-      verifyExampleRecordCommand({
-        project,
-        slicePath: 'rulebook/02-punch.md',
-        extraction: extractionPath,
-        translation: translationPath,
-      }),
-    ).rejects.toThrow(/rulebook\/02-punch\.md:99.*never retained/s);
-
-    expect(await readExampleReplayVerdicts(project)).toEqual([]);
+    await expectRecordRefused(project, extractionPath, translationPath, /rulebook\/02-punch\.md:99.*never retained/s);
   });
 
   it('a fabricated lineNumber cannot silently overwrite a genuine, different example already in the ledger', async () => {
@@ -686,21 +794,21 @@ describe('verifyExampleRecordCommand — record', () => {
       'rulebook/02-punch.md': SLICE_TEXT,
     });
     // First, record a genuine example at line 3.
-    const extractionPath1 = await writeJson('extraction1.json', [
+    const extractionPath1 = await writeExtraction('extraction1.json', [
       extractionEntry({
         lineNumber: 3,
         sourceText: 'If you are punched while EXHAUSTED, you stay EXHAUSTED.',
         expected: 'Guard stays EXHAUSTED.',
       }),
     ]);
-    const translationPath1 = await writeJson('translation1.json', [
+    const translationPath1 = await writeTranslations('translations1.json', [
       translationEntry({ lineNumber: 3 }),
     ]);
     await verifyExampleRecordCommand({
       project,
       slicePath: 'rulebook/02-punch.md',
       extraction: extractionPath1,
-      translation: translationPath1,
+      translations: translationPath1,
     });
     const before = await readExampleReplayVerdicts(project);
     expect(before).toHaveLength(1);
@@ -710,10 +818,10 @@ describe('verifyExampleRecordCommand — record', () => {
     // slice) that, absent the CR-03 fix, would still compose a workedExampleId and reach the
     // upsert path — this must fail closed BEFORE any write, never silently coexist with or
     // overwrite the genuine entry above.
-    const extractionPath2 = await writeJson('extraction2.json', [
+    const extractionPath2 = await writeExtraction('extraction2.json', [
       extractionEntry({ lineNumber: 50, sourceText: 'A sentence never present in this slice.' }),
     ]);
-    const translationPath2 = await writeJson('translation2.json', [
+    const translationPath2 = await writeTranslations('translations2.json', [
       translationEntry({ lineNumber: 50 }),
     ]);
     await expect(
@@ -721,7 +829,7 @@ describe('verifyExampleRecordCommand — record', () => {
         project,
         slicePath: 'rulebook/02-punch.md',
         extraction: extractionPath2,
-        translation: translationPath2,
+        translations: translationPath2,
       }),
     ).rejects.toThrow(/rulebook\/02-punch\.md:50.*never retained/s);
 
@@ -729,14 +837,14 @@ describe('verifyExampleRecordCommand — record', () => {
     expect(after).toEqual(before);
   });
 
-  it('requires --project/--extraction/--translation via a matching --slice-path, --extraction, --translation error respectively', async () => {
+  it('requires --slice-path, --extraction and --translations, each named in its own error', async () => {
     await expect(verifyExampleRecordCommand({})).rejects.toThrow(/--slice-path/);
     await expect(
       verifyExampleRecordCommand({ slicePath: 'rulebook/x.md' }),
     ).rejects.toThrow(/--extraction/);
     await expect(
       verifyExampleRecordCommand({ slicePath: 'rulebook/x.md', extraction: '/tmp/x.json' }),
-    ).rejects.toThrow(/--translation/);
+    ).rejects.toThrow(/--translations/);
   });
 
   // -----------------------------------------------------------------------------------------
@@ -756,7 +864,6 @@ describe('verifyExampleRecordCommand — record', () => {
 
   function inconsistentEntry(overrides: Partial<Record<string, unknown>> = {}) {
     return {
-      slicePath: 'rulebook/01-definitions.md',
       lineNumber: 3,
       pageCitation: 'p.1, Definitions',
       kind: 'example-inconsistent',
@@ -773,17 +880,17 @@ describe('verifyExampleRecordCommand — record', () => {
     const project = await makeProject({
       'rulebook/01-definitions.md': SEVEN_SLICE_TEXT,
     });
-    const extractionPath = await writeJson('extraction.json', [inconsistentEntry()]);
-    // No --translation entry: extract-example.md's example-inconsistent rule means this example
+    const extractionPath = await writeExtraction('extraction.json', [inconsistentEntry()]);
+    // No --translations entry: extract-example.md's example-inconsistent rule means this example
     // was never dispatched for translation in the first place (verifyExampleTranslateCommand
-    // routes it to notTranslated[] instead) — an empty --translation array is the honest input.
-    const translationPath = await writeJson('translation.json', []);
+    // routes it to notTranslated[] instead) — an empty --translations object is the honest input.
+    const translationPath = await writeTranslations('translations.json', []);
 
     const result = await verifyExampleRecordCommand({
       project,
       slicePath: 'rulebook/01-definitions.md',
       extraction: extractionPath,
-      translation: translationPath,
+      translations: translationPath,
     });
 
     expect(result.records).toHaveLength(1);
@@ -805,33 +912,33 @@ describe('verifyExampleRecordCommand — record', () => {
     const project = await makeProject({
       'rulebook/01-definitions.md': SEVEN_SLICE_TEXT,
     });
-    const extractionPath = await writeJson('extraction.json', [
+    const extractionPath = await writeExtraction('extraction.json', [
       inconsistentEntry({ reason: '' }),
     ]);
-    const translationPath = await writeJson('translation.json', []);
+    const translationPath = await writeTranslations('translations.json', []);
 
     await expect(
       verifyExampleRecordCommand({
         project,
         slicePath: 'rulebook/01-definitions.md',
         extraction: extractionPath,
-        translation: translationPath,
+        translations: translationPath,
       }),
     ).rejects.toThrow(/example-inconsistent.*no reason/s);
 
     expect(await readExampleReplayVerdicts(project)).toEqual([]);
   });
 
-  it('a mixed --extraction array (one transition, one example-inconsistent) records both, keeping the transition example paired with its --translation entry and the inconsistent one standing alone', async () => {
+  it('a mixed extraction (one transition, one example-inconsistent) records both, keeping the transition example paired with its --translations entry and the inconsistent one standing alone', async () => {
     const project = await makeProject({
       'rulebook/01-definitions.md':
         SEVEN_SLICE_TEXT + '"If you are punched while READY, you become EXHAUSTED."\n',
     });
-    const extractionPath = await writeJson('extraction.json', [
+    const extractionPath = await writeExtraction('extraction.json', [
       inconsistentEntry({ lineNumber: 3 }),
-      extractionEntry({ slicePath: 'rulebook/01-definitions.md', lineNumber: 6 }),
+      extractionEntry({ lineNumber: 6 }),
     ]);
-    const translationPath = await writeJson('translation.json', [
+    const translationPath = await writeTranslations('translations.json', [
       translationEntry({ slicePath: 'rulebook/01-definitions.md', lineNumber: 6 }),
     ]);
 
@@ -839,21 +946,159 @@ describe('verifyExampleRecordCommand — record', () => {
       project,
       slicePath: 'rulebook/01-definitions.md',
       extraction: extractionPath,
-      translation: translationPath,
+      translations: translationPath,
     });
 
     expect(result.records).toHaveLength(2);
     const byLine = new Map(result.records.map((r) => [r.lineNumber, r]));
     expect(byLine.get(3)?.verdict).toBe('example-inconsistent');
-    expect(byLine.get(6)?.verdict).toBe('agrees');
+    expect(byLine.get(6)?.verdict).toBe('not-run');
     expect(byLine.get(6)?.kind).toBe('transition');
   });
 
-  it('registers no run-id/force/skip/overwrite bypass option anywhere in the module', () => {
-    const source = readFileSync(
-      fileURLToPath(new URL('./verify-example-replay.ts', import.meta.url)),
-      'utf-8',
+  // #319: the command reads exactly what the contracts return. `example-contracts.test.ts`
+  // carries the contracts' own documented examples through; these cases pin each refusal.
+
+  it('refuses a bare extraction array, naming the { "examples": [...] } shape, writing nothing', async () => {
+    const project = await makeProject({ 'rulebook/02-punch.md': SLICE_TEXT });
+    const extractionPath = await writeJson('extraction.json', [extractionEntry()]);
+    const translationPath = await writeTranslations('translations.json', [translationEntry()]);
+
+    await expectRecordRefused(project, extractionPath, translationPath, /\{ "examples": \[ \.\.\. \] \}/);
+  });
+
+  it('refuses a translations file that is not an object keyed by exampleId', async () => {
+    const project = await makeProject({ 'rulebook/02-punch.md': SLICE_TEXT });
+    const extractionPath = await writeExtraction('extraction.json', [extractionEntry()]);
+    const translationPath = await writeJson('translations.json', [translationEntry()]);
+
+    await expectRecordRefused(project, extractionPath, translationPath, /keyed by exampleId/);
+  });
+
+  it('a translated example is recorded not-run, carrying its test and the spec it came from', async () => {
+    const project = await makeProject({ 'rulebook/02-punch.md': SLICE_TEXT });
+    const extractionPath = await writeExtraction('extraction.json', [extractionEntry()]);
+    const translationPath = await writeTranslations('translations.json', [
+      translationEntry({ imports: ["import { strictEqual } from 'node:assert';"] }),
+    ]);
+
+    const result = await verifyExampleRecordCommand({
+      project,
+      slicePath: 'rulebook/02-punch.md',
+      extraction: extractionPath,
+      translations: translationPath,
+    });
+
+    const [recorded] = await readExampleReplayVerdicts(project);
+    expect(recorded).toEqual(result.records[0]);
+    expect(recorded.verdict).toBe('not-run');
+    expect(recorded.expected).toBe('Guard becomes EXHAUSTED.');
+    expect(recorded.translation).toEqual({
+      pageCitation: 'p.2, Punch Examples',
+      sourceText: 'If you are punched while READY, you become EXHAUSTED.',
+      testCode: TRANSLATION.testCode,
+      imports: ["import { strictEqual } from 'node:assert';"],
+    });
+  });
+
+  it('never takes agrees/disagrees from verdictHint: a "disagrees" hint is still recorded not-run', async () => {
+    const project = await makeProject({ 'rulebook/02-punch.md': SLICE_TEXT });
+    const extractionPath = await writeExtraction('extraction.json', [extractionEntry()]);
+    const translationPath = await writeTranslations('translations.json', [
+      translationEntry({ verdictHint: 'disagrees' }),
+    ]);
+
+    const result = await verifyExampleRecordCommand({
+      project,
+      slicePath: 'rulebook/02-punch.md',
+      extraction: extractionPath,
+      translations: translationPath,
+    });
+    expect(result.records[0].verdict).toBe('not-run');
+  });
+
+  it('an unexecutable translator return is recorded unexecutable with its named reason and no test', async () => {
+    const project = await makeProject({ 'rulebook/02-punch.md': SLICE_TEXT });
+    const extractionPath = await writeExtraction('extraction.json', [extractionEntry()]);
+    const translationPath = await writeTranslations('translations.json', [
+      translationEntry({
+        testCode: '',
+        verdictHint: 'unexecutable',
+        unexecutableReason: 'unmodeled-component-state',
+      }),
+    ]);
+
+    const result = await verifyExampleRecordCommand({
+      project,
+      slicePath: 'rulebook/02-punch.md',
+      extraction: extractionPath,
+      translations: translationPath,
+    });
+    expect(result.records[0].verdict).toBe('unexecutable');
+    expect(result.records[0].reason).toMatch(/^unmodeled-component-state: /);
+    expect(result.records[0].translation).toBeUndefined();
+  });
+
+  it.each([
+    [
+      'an unexecutable return without a named reason',
+      { testCode: '', verdictHint: 'unexecutable' },
+      /without a named reason.*no-matching-symbol/s,
+    ],
+    [
+      'an unexecutable return with a reason outside the list',
+      { testCode: '', verdictHint: 'unexecutable', unexecutableReason: 'too-hard' },
+      /without a named reason/,
+    ],
+    [
+      'an unexecutable return that carries testCode',
+      { verdictHint: 'unexecutable', unexecutableReason: 'no-matching-symbol' },
+      /carries testCode/,
+    ],
+    ['a translated return with empty testCode', { testCode: '  ' }, /no testCode/],
+    [
+      'a translated return that names an unexecutableReason',
+      { unexecutableReason: 'no-matching-symbol' },
+      /names an unexecutableReason/,
+    ],
+    ['a return with an unknown verdictHint', { verdictHint: 'maybe' }, /return shape/],
+    ['a return with no imports array', { imports: undefined }, /return shape/],
+  ])('refuses %s, writing nothing', async (_label, overrides, message) => {
+    const project = await makeProject({ 'rulebook/02-punch.md': SLICE_TEXT });
+    const extractionPath = await writeExtraction('extraction.json', [extractionEntry()]);
+    const translationPath = await writeTranslations('translations.json', [
+      translationEntry(overrides),
+    ]);
+
+    await expect(
+      verifyExampleRecordCommand({
+        project,
+        slicePath: 'rulebook/02-punch.md',
+        extraction: extractionPath,
+        translations: translationPath,
+      }),
+    ).rejects.toThrow(message);
+  });
+
+  it('refuses a translations entry keyed by an id no translatable example has', async () => {
+    const project = await makeProject({ 'rulebook/02-punch.md': SLICE_TEXT });
+    const extractionPath = await writeExtraction('extraction.json', [extractionEntry()]);
+    const translationPath = await writeTranslations('translations.json', [
+      translationEntry(),
+      translationEntry({ lineNumber: 3 }),
+    ]);
+
+    await expectRecordRefused(
+      project,
+      extractionPath,
+      translationPath,
+      /"rulebook\/02-punch\.md:3" with no matching translatable --extraction entry/,
     );
+  });
+
+  // One module holds both verify-example-record and verify-example-translate, so this covers both.
+  it('registers no run-id/force/skip/overwrite bypass option anywhere in the module', () => {
+    const source = replayModuleSource();
     expect(/run-id|force|--skip|overwrite/.test(source)).toBe(false);
   });
 });
@@ -874,7 +1119,6 @@ describe('verifyExampleRecordCommand / verifyExampleReplayCommand — provenance
 
   function extractionEntry() {
     return {
-      slicePath: 'rulebook/02-punch.md',
       lineNumber: 2,
       pageCitation: 'p.2, Punch Examples',
       kind: 'transition' as const,
@@ -886,18 +1130,37 @@ describe('verifyExampleRecordCommand / verifyExampleReplayCommand — provenance
     };
   }
 
-  function disagreesTranslationEntry() {
-    return {
-      slicePath: 'rulebook/02-punch.md',
-      lineNumber: 2,
-      verdict: 'disagrees' as const,
-      reason: 'The generated test failed to match the expected outcome.',
-      expected: 'Guard becomes EXHAUSTED.',
-      observed: 'Guard remained READY.',
-    };
-  }
-
   const { writeJson } = designProjectFixtures(() => dir);
+  const { writeExtraction, writeTranslations } = exampleReturnWriters(writeJson);
+
+  /**
+   * Records the example through verify-example-record, then stands in for verify-example-run
+   * observing a failure: the run keeps every field of the recorded example, provenance
+   * included, and changes only the verdict (`example-test-run.test.ts` proves that on a real run).
+   */
+  async function recordThenObserveFailure(project: string, slicePath: string) {
+    const extractionPath = await writeExtraction('extraction.json', [extractionEntry()]);
+    const translationPath = await writeTranslations('translations.json', [
+      { slicePath, lineNumber: 2, testCode: TRANSLATION.testCode, imports: [], verdictHint: 'agrees' },
+    ]);
+    const result = await verifyExampleRecordCommand({
+      project,
+      slicePath,
+      extraction: extractionPath,
+      translations: translationPath,
+    });
+    const [notRun] = result.records;
+    await recordExampleReplayVerdicts(project, [
+      createExampleReplayRecord({
+        ...notRun,
+        supportingQuoteLines: [...notRun.supportingQuoteLines],
+        verdict: 'disagrees',
+        reason: 'The emitted test failed against the game.',
+        observed: 'Guard remained READY.',
+      }),
+    ]);
+    return result;
+  }
 
   /** No INDEX.md at all — computeVerificationScope never reaches "full"; provenance is null. */
   async function makeUnverifiedProject(): Promise<string> {
@@ -932,73 +1195,34 @@ describe('verifyExampleRecordCommand / verifyExampleReplayCommand — provenance
 
   it('no archived source at all — every recorded "disagrees" carries quote-unverified, and the report never accuses the code', async () => {
     const project = await makeUnverifiedProject();
-    const extractionPath = await writeJson('extraction.json', [extractionEntry()]);
-    const translationPath = await writeJson('translation.json', [disagreesTranslationEntry()]);
-
-    const result = await verifyExampleRecordCommand({
-      project,
-      slicePath: 'rulebook/02-punch.md',
-      extraction: extractionPath,
-      translation: translationPath,
-    });
+    const result = await recordThenObserveFailure(project, 'rulebook/02-punch.md');
     expect(result.provenance).toBe('quote-unverified');
     expect(result.records[0].provenance).toBe('quote-unverified');
-    expect(result.records[0].verdict).toBe('disagrees');
+    expect((await readExampleReplayVerdicts(project))[0].verdict).toBe('disagrees');
 
-    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
-    try {
-      await verifyExampleReplayCommand({ project });
-      const printed = logSpy.mock.calls.map((c) => c.join(' ')).join('\n');
-      expect(printed).toContain('not an accusation against the code');
-    } finally {
-      logSpy.mockRestore();
-    }
+    const printed = await printedReport(project);
+    expect(printed).toContain('not an accusation against the code');
   });
 
   it('archived source does not cover this slice — the same downgrade applies, and the report names the slice', async () => {
     const project = await makeUncoveredSliceProject();
-    const extractionPath = await writeJson('extraction.json', [
-      { ...extractionEntry(), slicePath: 'rulebook/CARDS.md' },
-    ]);
-    const translationPath = await writeJson('translation.json', [
-      { ...disagreesTranslationEntry(), slicePath: 'rulebook/CARDS.md' },
-    ]);
-
-    const result = await verifyExampleRecordCommand({
-      project,
-      slicePath: 'rulebook/CARDS.md',
-      extraction: extractionPath,
-      translation: translationPath,
-    });
+    const result = await recordThenObserveFailure(project, 'rulebook/CARDS.md');
     expect(result.provenance).toBe('quote-unverified');
-    expect(result.records[0].verdict).toBe('disagrees');
 
-    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
-    try {
-      await verifyExampleReplayCommand({ project });
-      const printed = logSpy.mock.calls.map((c) => c.join(' ')).join('\n');
-      expect(printed).toContain('rulebook/CARDS.md');
-      expect(printed).toContain('not an accusation against the code');
-    } finally {
-      logSpy.mockRestore();
-    }
+    const printed = await printedReport(project);
+    expect(printed).toContain('rulebook/CARDS.md');
+    expect(printed).toContain('not an accusation against the code');
   });
 
-  it('a fully-verified project records "disagrees" as quote-verified, and the verdict string stays "disagrees" in both cases', async () => {
+  it('a fully-verified project records the example as quote-verified, and a later "disagrees" keeps both', async () => {
     const project = await makeVerifiedProject();
-    const extractionPath = await writeJson('extraction.json', [extractionEntry()]);
-    const translationPath = await writeJson('translation.json', [disagreesTranslationEntry()]);
-
-    const result = await verifyExampleRecordCommand({
-      project,
-      slicePath: 'rulebook/02-punch.md',
-      extraction: extractionPath,
-      translation: translationPath,
-    });
+    const result = await recordThenObserveFailure(project, 'rulebook/02-punch.md');
     expect(result.provenance).toBe('quote-verified');
     expect(result.records[0].provenance).toBe('quote-verified');
     // The downgrade never rewrites the verdict itself — it stays "disagrees" in every case.
-    expect(result.records[0].verdict).toBe('disagrees');
+    const [observed] = await readExampleReplayVerdicts(project);
+    expect(observed.verdict).toBe('disagrees');
+    expect(observed.provenance).toBe('quote-verified');
   });
 
   it('createExampleReplayRecord throws when provenance is omitted', () => {
@@ -1066,10 +1290,10 @@ describe('verifyExampleTranslateCommand — translate', () => {
   }
 
   const { writeJson } = designProjectFixtures(() => dir);
+  const { writeExtraction } = exampleReturnWriters(writeJson);
 
   function extractionEntry(overrides: Partial<Record<string, unknown>> = {}) {
     return {
-      slicePath: 'rulebook/02-punch.md',
       lineNumber: 2,
       pageCitation: 'p.2, Punch Examples',
       kind: 'transition',
@@ -1084,7 +1308,7 @@ describe('verifyExampleTranslateCommand — translate', () => {
 
   it('rejects a --slice-path that escapes rulebook/, naming rulebook, and emits no payload', async () => {
     const project = await makeProject();
-    const extractionPath = await writeJson('extraction.json', [extractionEntry()]);
+    const extractionPath = await writeExtraction('extraction.json', [extractionEntry()]);
 
     await expect(
       verifyExampleTranslateCommand({
@@ -1097,7 +1321,7 @@ describe('verifyExampleTranslateCommand — translate', () => {
 
   it('each emitted exampleId deep-equals workedExampleId for its own entry, unaffected by changing the model-supplied text', async () => {
     const project = await makeProject();
-    const extractionPath = await writeJson('extraction.json', [extractionEntry()]);
+    const extractionPath = await writeExtraction('extraction.json', [extractionEntry()]);
 
     const result = await verifyExampleTranslateCommand({
       project,
@@ -1110,7 +1334,7 @@ describe('verifyExampleTranslateCommand — translate', () => {
     );
 
     // Changing the model-supplied prose (expected outcome) must not change the id.
-    const extractionPath2 = await writeJson('extraction2.json', [
+    const extractionPath2 = await writeExtraction('extraction2.json', [
       extractionEntry({ expected: 'A totally different worded outcome.' }),
     ]);
     const result2 = await verifyExampleTranslateCommand({
@@ -1123,7 +1347,7 @@ describe('verifyExampleTranslateCommand — translate', () => {
 
   it('each emitted translationPayload is byte-equal to buildExampleTranslationPayload called directly with the same spec and surface', async () => {
     const project = await makeProject();
-    const extractionPath = await writeJson('extraction.json', [extractionEntry()]);
+    const extractionPath = await writeExtraction('extraction.json', [extractionEntry()]);
 
     const result = await verifyExampleTranslateCommand({
       project,
@@ -1135,7 +1359,7 @@ describe('verifyExampleTranslateCommand — translate', () => {
     const spec = createWorkedExampleSpec({
       id: workedExampleId({ slicePath: 'rulebook/02-punch.md', lineNumber: 2 }),
       sliceText: SLICE_TEXT,
-      returned: { ...extractionEntry(), kind: 'transition' } as Parameters<
+      returned: { ...extractionEntry(), slicePath: 'rulebook/02-punch.md', kind: 'transition' } as Parameters<
         typeof createWorkedExampleSpec
       >[0]['returned'],
     });
@@ -1145,7 +1369,7 @@ describe('verifyExampleTranslateCommand — translate', () => {
 
   it('two returned entries sharing lineNumber throw naming both, emitting nothing', async () => {
     const project = await makeProject();
-    const extractionPath = await writeJson('extraction.json', [
+    const extractionPath = await writeExtraction('extraction.json', [
       extractionEntry({ sourceText: 'If you are punched while READY, you become EXHAUSTED.' }),
       extractionEntry({
         sourceText: 'If you are punched while EXHAUSTED, you stay EXHAUSTED.',
@@ -1167,7 +1391,7 @@ describe('verifyExampleTranslateCommand — translate', () => {
   it('a fabricated --extraction lineNumber not among the slice\'s retained lines is rejected, naming the slice and value, emitting no payload', async () => {
     const project = await makeProject();
     // SLICE_TEXT has only 3 lines; 99 was never a retained extraction line.
-    const extractionPath = await writeJson('extraction.json', [
+    const extractionPath = await writeExtraction('extraction.json', [
       extractionEntry({ lineNumber: 99 }),
     ]);
 
@@ -1182,9 +1406,8 @@ describe('verifyExampleTranslateCommand — translate', () => {
 
   it('an example-inconsistent entry appears in notTranslated[] with its reason, builds no payload, and exit stays clean', async () => {
     const project = await makeProject();
-    const extractionPath = await writeJson('extraction.json', [
+    const extractionPath = await writeExtraction('extraction.json', [
       {
-        slicePath: 'rulebook/02-punch.md',
         lineNumber: 3,
         kind: 'example-inconsistent',
         reason: 'The printed text and the card art disagree about the resulting state.',
@@ -1206,9 +1429,22 @@ describe('verifyExampleTranslateCommand — translate', () => {
     expect(process.exitCode === undefined || process.exitCode === 0).toBe(true);
   });
 
+  it('refuses a bare extraction array, naming the { "examples": [...] } shape (#319)', async () => {
+    const project = await makeProject();
+    const extractionPath = await writeJson('extraction.json', [extractionEntry()]);
+
+    await expect(
+      verifyExampleTranslateCommand({
+        project,
+        slicePath: 'rulebook/02-punch.md',
+        extraction: extractionPath,
+      }),
+    ).rejects.toThrow(/\{ "examples": \[ \.\.\. \] \}/);
+  });
+
   it('a zero-example extraction return produces zero payloads and exit stays clean', async () => {
     const project = await makeProject();
-    const extractionPath = await writeJson('extraction.json', []);
+    const extractionPath = await writeExtraction('extraction.json', []);
 
     const result = await verifyExampleTranslateCommand({
       project,
@@ -1222,7 +1458,7 @@ describe('verifyExampleTranslateCommand — translate', () => {
 
   it('writes nothing: the ledger file bytes/mtime are unchanged and no file is created under the project', async () => {
     const project = await makeProject();
-    const extractionPath = await writeJson('extraction.json', [extractionEntry()]);
+    const extractionPath = await writeExtraction('extraction.json', [extractionEntry()]);
 
     const ledgerPath = exampleReplayLedgerPath(project);
     expect(await fs.readFile(ledgerPath, 'utf-8').catch(() => null)).toBeNull();
@@ -1242,14 +1478,6 @@ describe('verifyExampleTranslateCommand — translate', () => {
       (await fs.readdir(project, { recursive: true } as { recursive: true })) as string[],
     );
     expect(afterFiles).toEqual(beforeFiles);
-  });
-
-  it('registers no run-id/force/skip/overwrite bypass option anywhere in the module', () => {
-    const source = readFileSync(
-      fileURLToPath(new URL('./verify-example-replay.ts', import.meta.url)),
-      'utf-8',
-    );
-    expect(/run-id|force|--skip|overwrite/.test(source)).toBe(false);
   });
 });
 

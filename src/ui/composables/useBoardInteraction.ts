@@ -10,7 +10,7 @@
  * choice values using regex. This makes the system work with any notation
  * format, not just chess-style notation.
  */
-import { reactive, provide, inject, type InjectionKey } from 'vue';
+import { computed, reactive, provide, inject, type InjectionKey } from 'vue';
 import { devWarn } from '../../utils/dev.js';
 
 // THE ELEMENT REFERENCE SHAPE IS OWNED BY ../../types/protocol.js (#263).
@@ -276,6 +276,43 @@ export function createBoardInteraction(): BoardInteraction {
     return refs.some(ref => matchesRef(element, ref));
   }
 
+  // #313: a board asks about every element it draws -- is it a candidate, is it
+  // disabled, what is it called. Scanning validElements for each question is
+  // quadratic in the size of the pick: a 3,720-space pick took tens of seconds
+  // per render of the board. So the list is indexed once each time it changes,
+  // keyed exactly the way matchesRef matches a ref (by its id if it has one,
+  // else its notation, else its name), and each lookup is a few map reads.
+  const candidateIndex = computed(() => {
+    const byId = new Map<number, number>();
+    const byNotation = new Map<string, number>();
+    const byName = new Map<string, number>();
+    const list = state.validElements;
+    list.forEach((ve, position) => {
+      const { id, notation, name } = ve.ref;
+      // The first candidate that matches an element is THE candidate, as it was
+      // when every lookup was a scan, so a later duplicate never replaces it.
+      if (id !== undefined) {
+        if (!byId.has(id)) byId.set(id, position);
+      } else if (notation !== undefined) {
+        if (!byNotation.has(notation)) byNotation.set(notation, position);
+      } else if (name !== undefined) {
+        if (!byName.has(name)) byName.set(name, position);
+      }
+    });
+    return { list, byId, byNotation, byName };
+  });
+
+  /** The candidate of the current pick that `element` is, or undefined. */
+  function findCandidate(element: { id?: number; name?: string; notation?: string }): BoardTarget | undefined {
+    const { list, byId, byNotation, byName } = candidateIndex.value;
+    const positions = [
+      element.id !== undefined ? byId.get(element.id) : undefined,
+      element.notation !== undefined ? byNotation.get(element.notation) : undefined,
+      element.name !== undefined ? byName.get(element.name) : undefined,
+    ].filter((p): p is number => p !== undefined);
+    return positions.length === 0 ? undefined : list[Math.min(...positions)];
+  }
+
   const actions: BoardInteractionActions = {
     setHoveredChoice(choice) {
       state.hoveredChoice = choice;
@@ -328,25 +365,24 @@ export function createBoardInteraction(): BoardInteraction {
     },
 
     isSelectableElement(element) {
-      // Check if this element is in the valid elements list
-      return state.validElements.some(ve => matchesRef(element, ve.ref));
+      return findCandidate(element) !== undefined;
     },
 
     isDisabledElement(element) {
-      const validElem = state.validElements.find(ve => matchesRef(element, ve.ref));
+      const validElem = findCandidate(element);
       if (!validElem) return false;
       return validElem.disabled || false;
     },
 
     candidateLabel(element) {
-      const validElem = state.validElements.find(ve => matchesRef(element, ve.ref));
+      const validElem = findCandidate(element);
       if (!validElem) return null;
       return validElem.display ?? String(validElem.id);
     },
 
     triggerElementSelect(element) {
       // Find the matching valid element and trigger the callback (skip disabled elements)
-      const validElem = state.validElements.find(ve => matchesRef(element, ve.ref));
+      const validElem = findCandidate(element);
       if (validElem && !validElem.disabled && state.onElementSelect) {
         state.onElementSelect(validElem.id);
       }

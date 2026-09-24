@@ -15,6 +15,7 @@ import {
   createExampleReplayRecord,
   recordExampleReplayVerdicts,
   exampleReplayLedgerPath,
+  type ExampleTranslation,
 } from './verify-example-replay.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { INSTALLED_MODULES } from '../../testing/installed-modules.test-helper.js';
@@ -51,15 +52,29 @@ async function mkProject(dir: string, opts: { chunkSlug: string; slicePath: stri
   return project;
 }
 
-function agreesRecord(overrides: Partial<Parameters<typeof createExampleReplayRecord>[0]> = {}) {
+/** A translated example's record, as verify-example-record writes it, on rulebook/02-punch.md. */
+function translatedRecord(
+  lineNumber: number,
+  translation: Partial<ExampleTranslation> = {},
+  overrides: Partial<Parameters<typeof createExampleReplayRecord>[0]> = {},
+) {
   return createExampleReplayRecord({
-    exampleId: 'rulebook/02-punch.md:2',
+    exampleId: `rulebook/02-punch.md:${lineNumber}`,
     slicePath: 'rulebook/02-punch.md',
-    lineNumber: 2,
+    lineNumber,
     kind: 'transition',
-    verdict: 'agrees',
-    reason: 'The generated test executed and matched the expected outcome.',
+    verdict: 'not-run',
+    reason: 'Translated into a test that has not been run yet.',
+    expected: 'Guard becomes EXHAUSTED.',
     provenance: 'quote-verified',
+    translation: {
+      pageCitation: 'p.2, Punch Examples',
+      sourceText: 'If you are punched while READY, you become EXHAUSTED.',
+      testCode:
+        "it('a READY guard becomes EXHAUSTED when punched', () => {\n  expect(true).toBe(true);\n});",
+      imports: [],
+      ...translation,
+    },
     ...overrides,
   });
 }
@@ -230,38 +245,15 @@ describe('verifyExampleEmitCommand', () => {
     expect(bytes2).toBe(bytes1);
   });
 
-  it('emits a real runnable test for an agrees-verdict example, citing slicePath/lineNumber/pageCitation/sourceText', async () => {
+  it('emits a real runnable test for a translated example, citing slicePath/lineNumber/pageCitation/sourceText', async () => {
     const project = await mkProject(dir, {
       chunkSlug: 'chunk-punch',
       slicePath: 'rulebook/02-punch.md',
       sliceText: 'p.2, Punch Examples:\nIf you are punched while READY, you become EXHAUSTED.\n',
     });
-    await recordExampleReplayVerdicts(project, [
-      agreesRecord({
-        exampleId: 'rulebook/02-punch.md:2',
-        slicePath: 'rulebook/02-punch.md',
-        lineNumber: 2,
-      }),
-    ]);
+    await recordExampleReplayVerdicts(project, [translatedRecord(2)]);
 
-    const translated = [
-      {
-        slicePath: 'rulebook/02-punch.md',
-        lineNumber: 2,
-        pageCitation: 'p.2, Punch Examples',
-        sourceText: 'If you are punched while READY, you become EXHAUSTED.',
-        code:
-          "it('a READY guard becomes EXHAUSTED when punched', () => {\n  expect(true).toBe(true);\n});",
-      },
-    ];
-    const translatedPath = join(dir, 'translated.json');
-    await fs.writeFile(translatedPath, JSON.stringify(translated, null, 2));
-
-    const result = await verifyExampleEmitCommand({
-      project,
-      chunk: 'chunk-punch',
-      translated: translatedPath,
-    });
+    const result = await verifyExampleEmitCommand({ project, chunk: 'chunk-punch' });
     expect(result.emittedCount).toBe(1);
 
     const bytes = await fs.readFile(result.testFilePath, 'utf-8');
@@ -269,14 +261,34 @@ describe('verifyExampleEmitCommand', () => {
     expect(bytes).toContain('p.2, Punch Examples');
     expect(bytes).toContain('If you are punched while READY, you become EXHAUSTED.');
     expect(bytes).toContain('a READY guard becomes EXHAUSTED when punched');
+    // Its test sits in a describe() named for the example, which is how a result names it.
+    expect(bytes).toContain("  describe('rulebook/02-punch.md:2', () => {");
   });
 
+  it.each(['not-run', 'agrees', 'disagrees'])(
+    'emits the stored test of a %s record, so re-emitting after a run reproduces the same file',
+    async (verdict) => {
+      const project = await mkProject(dir, {
+        chunkSlug: 'chunk-any-verdict',
+        slicePath: 'rulebook/02-punch.md',
+        sliceText: 'p.2, Punch Examples:\nIf you are punched while READY, you become EXHAUSTED.\n',
+      });
+      await recordExampleReplayVerdicts(project, [
+        translatedRecord(2, {}, { verdict, observed: verdict === 'disagrees' ? 'Y' : '' }),
+      ]);
+
+      const result = await verifyExampleEmitCommand({ project, chunk: 'chunk-any-verdict' });
+      expect(result.emittedCount).toBe(1);
+      expect(result.testBlockCount).toBe(1);
+    },
+  );
+
   it('hoists translated imports to file scope, deduplicated across examples, and the emitted file actually executes them (178-11 fix)', async () => {
-    // Regression for a live-proof finding (178-11): `code` alone has nowhere to put an `import`
-    // statement — putting one inside a `describe()` body is a syntax error — so a translated
-    // example that needs a project import could never actually run once emitted. This proves the
-    // hoisted-imports path fixes that: two examples share one duplicate import, plus each has its
-    // own distinct import, and the emitted file is executed by a real vitest process.
+    // Regression for a live-proof finding (178-11): test code alone has nowhere to put an
+    // `import` statement — putting one inside a `describe()` body is a syntax error — so a
+    // translated example that needs a project import could never actually run once emitted. This
+    // proves the hoisted-imports path fixes that: two examples share one duplicate import, plus
+    // each has its own distinct import, and the emitted file is executed by a real vitest process.
     const project = await mkProject(dir, {
       chunkSlug: 'chunk-imports',
       slicePath: 'rulebook/02-punch.md',
@@ -285,47 +297,22 @@ describe('verifyExampleEmitCommand', () => {
         'p.2, Punch Examples:\nA second example, also about Guards.\n',
     });
     await recordExampleReplayVerdicts(project, [
-      agreesRecord({
-        exampleId: 'rulebook/02-punch.md:2',
-        slicePath: 'rulebook/02-punch.md',
-        lineNumber: 2,
-      }),
-      agreesRecord({
-        exampleId: 'rulebook/02-punch.md:4',
-        slicePath: 'rulebook/02-punch.md',
-        lineNumber: 4,
-      }),
-    ]);
-
-    const translated = [
-      {
-        slicePath: 'rulebook/02-punch.md',
-        lineNumber: 2,
-        pageCitation: 'p.2, Punch Examples',
-        sourceText: 'If you are punched while READY, you become EXHAUSTED.',
-        code: "it('asserts strictly using the shared import', () => {\n  strictEqual(1 + 1, 2);\n});",
+      translatedRecord(2, {
+        testCode: "it('asserts strictly using the shared import', () => {\n  strictEqual(1 + 1, 2);\n});",
         imports: ["import { strictEqual } from 'node:assert';"],
-      },
-      {
-        slicePath: 'rulebook/02-punch.md',
-        lineNumber: 4,
-        pageCitation: 'p.2, Punch Examples',
+      }),
+      translatedRecord(4, {
         sourceText: 'A second example, also about Guards.',
-        code: "it('uses a second, distinct import', () => {\n  strictEqual(basename('/a/b.ts'), 'b.ts');\n});",
+        testCode:
+          "it('uses a second, distinct import', () => {\n  strictEqual(basename('/a/b.ts'), 'b.ts');\n});",
         imports: [
           "import { strictEqual } from 'node:assert';", // duplicate of example 1's import
           "import { basename } from 'node:path';",
         ],
-      },
-    ];
-    const translatedPath = join(dir, 'translated.json');
-    await fs.writeFile(translatedPath, JSON.stringify(translated, null, 2));
+      }),
+    ]);
 
-    const result = await verifyExampleEmitCommand({
-      project,
-      chunk: 'chunk-imports',
-      translated: translatedPath,
-    });
+    const result = await verifyExampleEmitCommand({ project, chunk: 'chunk-imports' });
     expect(result.emittedCount).toBe(2);
 
     const bytes = await fs.readFile(result.testFilePath, 'utf-8');
@@ -345,27 +332,11 @@ describe('verifyExampleEmitCommand', () => {
       sliceText: 'p.2, Punch Examples:\nIf you are punched while READY, you become EXHAUSTED.\n',
     });
     await recordExampleReplayVerdicts(project, [
-      agreesRecord({
-        exampleId: 'rulebook/02-punch.md:2',
-        slicePath: 'rulebook/02-punch.md',
-        lineNumber: 2,
-      }),
+      translatedRecord(2, { imports: ["import { x } from 'y'; process.exit(1);"] }),
     ]);
-    const translated = [
-      {
-        slicePath: 'rulebook/02-punch.md',
-        lineNumber: 2,
-        pageCitation: 'p.2, Punch Examples',
-        sourceText: 'If you are punched while READY, you become EXHAUSTED.',
-        code: "it('bad', () => { expect(true).toBe(true); });",
-        imports: ["import { x } from 'y'; process.exit(1);"],
-      },
-    ];
-    const translatedPath = join(dir, 'translated.json');
-    await fs.writeFile(translatedPath, JSON.stringify(translated, null, 2));
 
     await expect(
-      verifyExampleEmitCommand({ project, chunk: 'chunk-bad-import', translated: translatedPath }),
+      verifyExampleEmitCommand({ project, chunk: 'chunk-bad-import' }),
     ).rejects.toThrow(/not a single well-formed "import ... ;" statement/);
 
     await expect(fs.access(generatedTestFilePath(project, 'chunk-bad-import'))).rejects.toThrow();
@@ -378,26 +349,11 @@ describe('verifyExampleEmitCommand', () => {
       sliceText: 'p.2, Punch Examples:\nIf you are punched while READY, you become EXHAUSTED.\n',
     });
     await recordExampleReplayVerdicts(project, [
-      agreesRecord({
-        exampleId: 'rulebook/02-punch.md:2',
-        slicePath: 'rulebook/02-punch.md',
-        lineNumber: 2,
-      }),
+      translatedRecord(2, { testCode: "it('bad', async () => { await fetch('/x'); });" }),
     ]);
-    const translated = [
-      {
-        slicePath: 'rulebook/02-punch.md',
-        lineNumber: 2,
-        pageCitation: 'p.2, Punch Examples',
-        sourceText: 'If you are punched while READY, you become EXHAUSTED.',
-        code: "it('bad', async () => { await fetch('/x'); });",
-      },
-    ];
-    const translatedPath = join(dir, 'translated.json');
-    await fs.writeFile(translatedPath, JSON.stringify(translated, null, 2));
 
     await expect(
-      verifyExampleEmitCommand({ project, chunk: 'chunk-net', translated: translatedPath }),
+      verifyExampleEmitCommand({ project, chunk: 'chunk-net' }),
     ).rejects.toThrow('boardsmith/no-network');
 
     await expect(
@@ -409,9 +365,9 @@ describe('verifyExampleEmitCommand', () => {
   // B19 — a translated snippet that declares no test of its own once produced a file that was
   // simultaneously "everything passed" and "there are no tests": the assertions ran at collect
   // time inside the describe() body, registered nothing, and vitest failed the file with
-  // `No test found in suite` while the command printed `✓ … 1 test(s)`. The emitter transports
-  // the translator's bytes verbatim and never wraps them, so the self-contained `it(...)` block
-  // is the ONE shape that can work — anything else is rejected before a byte is written.
+  // `No test found in suite` while the command printed `✓ … 1 test(s)`. The emitter never adds a
+  // test of its own around the translator's bytes, so the self-contained `it(...)` block is the
+  // ONE shape that can work — anything else is rejected before a byte is written.
   // -----------------------------------------------------------------------------------------
 
   it('rejects translated code with no top-level it()/test(), naming the example; writes nothing (B19)', async () => {
@@ -421,30 +377,15 @@ describe('verifyExampleEmitCommand', () => {
       sliceText: 'p.2, Punch Examples:\nIf you are punched while READY, you become EXHAUSTED.\n',
     });
     await recordExampleReplayVerdicts(project, [
-      agreesRecord({
-        exampleId: 'rulebook/02-punch.md:2',
-        slicePath: 'rulebook/02-punch.md',
-        lineNumber: 2,
-      }),
+      // The exact shape translate-example.md used to bless: bare statements, no `it(...)`.
+      translatedRecord(2, { testCode: "const state = 'READY';\nexpect(state).toBe('READY');" }),
     ]);
-    const translated = [
-      {
-        slicePath: 'rulebook/02-punch.md',
-        lineNumber: 2,
-        pageCitation: 'p.2, Punch Examples',
-        sourceText: 'If you are punched while READY, you become EXHAUSTED.',
-        // The exact shape translate-example.md used to bless: bare statements, no `it(...)`.
-        code: "const state = 'READY';\nexpect(state).toBe('READY');",
-      },
-    ];
-    const translatedPath = join(dir, 'translated.json');
-    await fs.writeFile(translatedPath, JSON.stringify(translated, null, 2));
 
     await expect(
-      verifyExampleEmitCommand({ project, chunk: 'chunk-bare', translated: translatedPath }),
+      verifyExampleEmitCommand({ project, chunk: 'chunk-bare' }),
     ).rejects.toThrow(/rulebook\/02-punch\.md:2/);
     await expect(
-      verifyExampleEmitCommand({ project, chunk: 'chunk-bare', translated: translatedPath }),
+      verifyExampleEmitCommand({ project, chunk: 'chunk-bare' }),
     ).rejects.toThrow(/declares no top-level `it\(\.\.\.\)` or `test\(\.\.\.\)` block/);
 
     // Nothing written: the file that would have collected zero tests never reaches disk.
@@ -458,26 +399,11 @@ describe('verifyExampleEmitCommand', () => {
       sliceText: 'p.2, Punch Examples:\nIf you are punched while READY, you become EXHAUSTED.\n',
     });
     await recordExampleReplayVerdicts(project, [
-      agreesRecord({
-        exampleId: 'rulebook/02-punch.md:2',
-        slicePath: 'rulebook/02-punch.md',
-        lineNumber: 2,
-      }),
+      translatedRecord(2, { testCode: "it('never closes its brace', () => {\n  expect(true).toBe(true);" }),
     ]);
-    const translated = [
-      {
-        slicePath: 'rulebook/02-punch.md',
-        lineNumber: 2,
-        pageCitation: 'p.2, Punch Examples',
-        sourceText: 'If you are punched while READY, you become EXHAUSTED.',
-        code: "it('never closes its brace', () => {\n  expect(true).toBe(true);",
-      },
-    ];
-    const translatedPath = join(dir, 'translated.json');
-    await fs.writeFile(translatedPath, JSON.stringify(translated, null, 2));
 
     await expect(
-      verifyExampleEmitCommand({ project, chunk: 'chunk-unparseable', translated: translatedPath }),
+      verifyExampleEmitCommand({ project, chunk: 'chunk-unparseable' }),
     ).rejects.toThrow(/rulebook\/02-punch\.md:2.*does not parse as TypeScript/s);
 
     await expect(fs.access(generatedTestFilePath(project, 'chunk-unparseable'))).rejects.toThrow();
@@ -492,45 +418,18 @@ describe('verifyExampleEmitCommand', () => {
         'p.2, Punch Examples:\nA second example, also about Guards.\n',
     });
     await recordExampleReplayVerdicts(project, [
-      agreesRecord({
-        exampleId: 'rulebook/02-punch.md:2',
-        slicePath: 'rulebook/02-punch.md',
-        lineNumber: 2,
-      }),
-      agreesRecord({
-        exampleId: 'rulebook/02-punch.md:4',
-        slicePath: 'rulebook/02-punch.md',
-        lineNumber: 4,
-      }),
-    ]);
-    const translated = [
-      {
-        slicePath: 'rulebook/02-punch.md',
-        lineNumber: 2,
-        pageCitation: 'p.2, Punch Examples',
-        sourceText: 'If you are punched while READY, you become EXHAUSTED.',
-        code: "it('becomes EXHAUSTED', () => {\n  expect(true).toBe(true);\n});",
-      },
-      {
-        // One snippet, two tests — the ledger says "1 example" but the FILE carries two `it`s,
-        // which is exactly the gap the old `N test(s)` (a ledger count) hid.
-        slicePath: 'rulebook/02-punch.md',
-        lineNumber: 4,
-        pageCitation: 'p.2, Punch Examples',
+      translatedRecord(2, { testCode: "it('becomes EXHAUSTED', () => {\n  expect(true).toBe(true);\n});" }),
+      // One snippet, two tests — the ledger says "1 example" but the FILE carries two `it`s,
+      // which is exactly the gap the old `N test(s)` (a ledger count) hid.
+      translatedRecord(4, {
         sourceText: 'A second example, also about Guards.',
-        code:
+        testCode:
           "it('first half', () => {\n  expect(true).toBe(true);\n});\n" +
           "it('second half', () => {\n  expect(true).toBe(true);\n});",
-      },
-    ];
-    const translatedPath = join(dir, 'translated.json');
-    await fs.writeFile(translatedPath, JSON.stringify(translated, null, 2));
+      }),
+    ]);
 
-    const result = await verifyExampleEmitCommand({
-      project,
-      chunk: 'chunk-counted',
-      translated: translatedPath,
-    });
+    const result = await verifyExampleEmitCommand({ project, chunk: 'chunk-counted' });
     expect(result.emittedCount).toBe(2); // ledger records
     expect(result.testBlockCount).toBe(3); // tests the file actually declares
 
@@ -689,39 +588,15 @@ describe('verifyExampleEmitCommand', () => {
     // A real, executable entry, so the `it(...)` this file carries is a TRANSPORTED one — the
     // path where a hostile pageCitation is actually interpolated (an exempt-only file would
     // instead carry the renderer's own named-exemption test, which never touches a citation) —
-    // its pageCitation is the hostile WR-03 payload: a newline followed by a `require(...)` call that
-    // would run as live code if `commentSafeLine` did not strip the newline first.
-    await recordExampleReplayVerdicts(project, [
-      createExampleReplayRecord({
-        exampleId: 'rulebook/02-punch.md:2',
-        slicePath: 'rulebook/02-punch.md',
-        lineNumber: 2,
-        kind: 'transition',
-        verdict: 'agrees',
-        reason: 'The generated test executed and matched the expected outcome.',
-        provenance: 'quote-verified',
-      }),
-    ]);
+    // its pageCitation is the hostile WR-03 payload: a newline followed by a `require(...)` call
+    // that would run as live code if `commentSafeLine` did not strip the newline first.
     const hostilePageCitation =
       "p.2\n'); require('node:child_process').execSync('touch /tmp/pwned'); //";
-    const translated = [
-      {
-        slicePath: 'rulebook/02-punch.md',
-        lineNumber: 2,
-        pageCitation: hostilePageCitation,
-        sourceText: 'If you are punched while READY, you become EXHAUSTED.',
-        code:
-          "it('a READY guard becomes EXHAUSTED when punched', () => {\n  expect(true).toBe(true);\n});",
-      },
-    ];
-    const translatedPath = join(dir, 'translated.json');
-    await fs.writeFile(translatedPath, JSON.stringify(translated, null, 2));
+    await recordExampleReplayVerdicts(project, [
+      translatedRecord(2, { pageCitation: hostilePageCitation }),
+    ]);
 
-    const result = await verifyExampleEmitCommand({
-      project,
-      chunk: hostileChunkSlug,
-      translated: translatedPath,
-    });
+    const result = await verifyExampleEmitCommand({ project, chunk: hostileChunkSlug });
     expect(result.emittedCount).toBe(1);
 
     // runVitestIn REJECTS on a non-zero exit code — a syntax error (from an unescaped
@@ -732,25 +607,6 @@ describe('verifyExampleEmitCommand', () => {
     // And the injected `require('node:child_process').execSync(...)` payload the hostile
     // pageCitation carried must never actually have run as code.
     await expect(fs.access('/tmp/pwned')).rejects.toThrow();
-  });
-
-  it('requires --translated when at least one example needs it, naming the count', async () => {
-    const project = await mkProject(dir, {
-      chunkSlug: 'chunk-needs-code',
-      slicePath: 'rulebook/02-punch.md',
-      sliceText: 'p.2, Punch Examples:\nIf you are punched while READY, you become EXHAUSTED.\n',
-    });
-    await recordExampleReplayVerdicts(project, [
-      agreesRecord({
-        exampleId: 'rulebook/02-punch.md:2',
-        slicePath: 'rulebook/02-punch.md',
-        lineNumber: 2,
-      }),
-    ]);
-
-    await expect(
-      verifyExampleEmitCommand({ project, chunk: 'chunk-needs-code' }),
-    ).rejects.toThrow('--translated');
   });
 
   it('the emitter never writes the ledger, and the ledger writer never writes a test file', async () => {
@@ -774,13 +630,7 @@ describe('verifyExampleEmitCommand', () => {
     }
 
     // recordExampleReplayVerdicts (the write surface's own primitive) never writes a test file.
-    await recordExampleReplayVerdicts(project, [
-      agreesRecord({
-        exampleId: 'rulebook/02-punch.md:99',
-        slicePath: 'rulebook/02-punch.md',
-        lineNumber: 99,
-      }),
-    ]);
+    await recordExampleReplayVerdicts(project, [translatedRecord(99)]);
     await expect(
       fs.access(join(project, 'tests', 'examples', 'chunk-boundary.examples.test.ts', '..', 'phantom')),
     ).rejects.toThrow();

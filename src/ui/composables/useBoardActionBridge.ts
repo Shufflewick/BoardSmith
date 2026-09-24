@@ -33,7 +33,7 @@ import type {
   ChoiceWithRefs,
   ValidElement,
 } from './useActionControllerTypes.js';
-import { devWarn, resolvePickCounts } from './actionControllerHelpers.js';
+import { choiceBoardTarget, devWarn, resolvePickCounts } from './actionControllerHelpers.js';
 
 export interface BoardActionBridgeOptions {
   controller: UseActionControllerReturn;
@@ -303,10 +303,8 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
     // Keep the chosen board element visually selected/highlighted.
     if (selection?.type === 'choice' && choicesSnapshot.length > 0) {
       const choice = choicesSnapshot.find((c: ChoiceWithRefs) => c.value === value);
-      if (choice?.refs?.length) {
-        const ref = choice.refs.find(r => r.role === 'target')?.ref ?? choice.refs[0]?.ref;
-        if (ref) board.selectElement(ref);
-      }
+      const ref = choice && choiceBoardTarget(choice);
+      if (ref) board.selectElement(ref);
     }
   }
 
@@ -593,7 +591,7 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
         // with real positive element ids.
         let syntheticKey = -1;
         for (const choice of choicesWithRefs) {
-          const ref = (choice.refs ?? []).find(r => r.role === 'target')?.ref ?? (choice.refs ?? [])[0]?.ref;
+          const ref = choiceBoardTarget(choice);
           if (!ref) continue;
           const key = ref.id ?? syntheticKey--;
           refToChoice.set(key, { value: choice.value, ref, disabled: choice.disabled, display: choice.display });
