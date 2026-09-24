@@ -353,4 +353,39 @@ describe('boardsmith doctor', () => {
     expect(process.exitCode).toBe(1);
     expect(await read(join(projectDir, VITEST_CONFIG_FILE))).toBe(own);
   });
+  describe('closing advice (#299)', () => {
+    /** Everything the human report printed, with colour codes stripped. */
+    const printed = () =>
+      logSpy.mock.calls
+        .map((c) => String(c[0]))
+        .join('\n')
+        .replace(/\u001b\[[0-9;]*m/g, '');
+    const ownConfig = { [VITEST_CONFIG_FILE]: 'export default { test: { globals: true } };\n' };
+
+    it('offers --fix when every finding is fixable', async () => {
+      const projectDir = await project({ 'SKETCH.md': 'x\n' });
+
+      await doctorCommand({ project: projectDir });
+
+      expect(printed()).toMatch(/1 to fix\.\nRun boardsmith doctor --fix to put them right\./);
+      expect(printed()).not.toMatch(/hand edit/);
+    });
+
+    it('does not offer --fix when only conflicts remain, and points at the per-conflict instructions', async () => {
+      const projectDir = await project(ownConfig);
+
+      await doctorCommand({ project: projectDir });
+
+      expect(printed()).not.toMatch(/--fix to put/);
+      expect(printed()).toMatch(/1 conflict\(s\) need a hand edit; --fix cannot resolve them\. Follow the instructions printed under each one above\./);
+    });
+
+    it('says what --fix handles and what needs a hand edit when both kinds exist', async () => {
+      const projectDir = await project({ 'SKETCH.md': 'x\n', ...ownConfig });
+
+      await doctorCommand({ project: projectDir });
+
+      expect(printed()).toMatch(/1 to fix, 1 conflict\(s\)\.\nRun boardsmith doctor --fix to put the 1 fixable finding\(s\) right\. The conflict\(s\) need a hand edit; --fix cannot resolve them\. Follow the instructions printed under each one above\./);
+    });
+  });
 });
