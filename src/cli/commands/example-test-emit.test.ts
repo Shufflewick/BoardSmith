@@ -1,5 +1,5 @@
 import { DESIGN_DIR } from '../lib/project-paths.js';
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { join } from 'node:path';
 import { execFile } from 'node:child_process';
@@ -21,6 +21,11 @@ import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { INSTALLED_MODULES } from '../../testing/installed-modules.test-helper.js';
 
 const execFileAsync = promisify(execFile);
+
+// Running an emitted file in a real vitest process is what several tests here prove, and that
+// process can take longer than vitest's 5s default on a loaded machine (#340). This is a hang
+// guard, not a performance budget; spawn-cli.test-helper.ts says why.
+vi.setConfig({ testTimeout: 60_000 });
 
 /**
  * Run a generated project's tests with a real vitest process and return what it printed.

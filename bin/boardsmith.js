@@ -15,8 +15,10 @@ if (isDevRepo) {
   // bundle. `dist/cli.js` is produced explicitly by `boardsmith build` and
   // `boardsmith pack`; it is never what this repo executes.
   await import('tsx');
-  await import('../src/cli/cli.ts');
+  const { runCli } = await import('../src/cli/cli.ts');
+  await runCli();
 } else {
   // Installed package: run the pre-compiled bundle.
-  await import('../dist/cli.js');
+  const { runCli } = await import('../dist/cli.js');
+  await runCli();
 }
