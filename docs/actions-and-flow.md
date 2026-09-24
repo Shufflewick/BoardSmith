@@ -894,7 +894,11 @@ candidate count does not exist until a game is running. It plays them at your
 `minPlayers`. If the random simulator cannot play your game through (it crashes
 or gets stuck), the check says it could not run and names the `boardsmith
 simulate` command that shows the same failure; it never reports an unplayed game
-as clean.
+as clean. A game that stops because no seat has an enabled action left, as a
+game built chunk by chunk does before the chunk that ends it, has been played:
+every choice it offered before stopping was counted, so the check reports on it.
+Whether that stop is a planned rest or a deadlock is for your own
+`simulateRandomGames` test to say, with `isResting`.
 
 A world has no flow to play, so `boardsmith validate` drives it the way a host
 does instead. Three seats (or every seat of a smaller world) arrive through your
