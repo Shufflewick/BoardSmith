@@ -183,6 +183,10 @@ function onHostMessage(msg: Record<string, unknown>): void {
       errorMsg.value = msg.message as string;
       break;
     case 'init':
+      // Being seated into a game is a fresh start for this page: an error about
+      // the game before it (one a rules reload could not carry across, say) no
+      // longer describes anything on screen.
+      errorMsg.value = null;
       lastInitSeat = msg.seat as number;
       mySeat.value = msg.seat as number;
       postToGame({ type: 'init', seat: msg.seat, teachingDisabled: cfg.teachingDisabled === true });

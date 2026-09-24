@@ -1,7 +1,7 @@
 {
-  "revision": 104,
+  "revision": 105,
   "bundleProtocol": 2,
-  "surfaceHash": "422710ae33cff3b6",
+  "surfaceHash": "027e9a92e73de675",
   "payloadHash": "8052a5ba1e4f48d4",
   "formatHash": "0058593e7cc80205",
   "history": [
@@ -880,6 +880,15 @@
       "payloadHash": "8052a5ba1e4f48d4",
       "formatHash": "0058593e7cc80205",
       "summary": "Mapping a submitted value onto a choice (ActionExecutor.resolveArgs, resolveSelectionValue) no longer evaluates the selection's disabled rule or prepare for every candidate (#364): it reads the candidates through the new candidatesOf, so a whole move judges a chooseFrom's choices three times instead of five. No change to what is accepted or refused."
+    },
+    {
+      "revision": 105,
+      "date": "2026-09-24",
+      "bundleProtocol": 2,
+      "surfaceHash": "027e9a92e73de675",
+      "payloadHash": "8052a5ba1e4f48d4",
+      "formatHash": "0058593e7cc80205",
+      "summary": "boardsmith and boardsmith/session no longer export the dev state-transfer API (captureDevState, restoreDevState, validateDevSnapshot, formatValidationErrors, getSnapshotElementCount, createDevCheckpoint, restoreFromDevCheckpoint, DevCheckpointManager); nothing called it after boardsmith dev began reloading table rules through a snapshot restore or replay (#343, #362)."
     }
   ]
 }

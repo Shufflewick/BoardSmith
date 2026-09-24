@@ -12,7 +12,6 @@ Import from `boardsmith/session` when managing game sessions, handling bot oppon
 import {
   GameSession,
   BotController,
-  DevCheckpointManager,
   generateGameId,
   type GameDefinition,
   type StorageAdapter,
@@ -25,7 +24,6 @@ import {
 
 - `GameSession` - Main session manager for game state
 - `BotController` - Manages bot player turns
-- `DevCheckpointManager` - Manages dev state checkpoints for HMR recovery
 
 ### Utilities
 
@@ -77,7 +75,6 @@ import {
 - `GameSessionOptions` - Session constructor options
 - `ActionResult` - Action execution result
 - `UndoResult` - Undo operation result
-- `DevCheckpointManagerOptions` - Dev checkpoint manager options
 - `ColorChoice` - Color choice option
 - `ColorOptionDefinition` - Color option definition
 

@@ -124,11 +124,6 @@ export {
 
 export { BotController } from './bot-controller.js';
 
-export {
-  DevCheckpointManager,
-  type DevCheckpointManagerOptions,
-} from './dev-checkpoint-manager.js';
-
 export { PickHandler } from './pick-handler.js';
 
 export type { PickStepResult } from './pending-action-manager.js';
