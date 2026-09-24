@@ -75,19 +75,12 @@ afterEach(() => {
 });
 
 describe('GameShell turnDeadline (#301)', () => {
-  it('is null for a frame that carries none of the fields, and the panel draws no countdown', async () => {
+  it.each([
+    ['a frame that carries none of the fields (a host that sends no deadlines)', {}],
+    ['a frame whose host says there is no deadline', { deadlineAt: null, serverNow: T0, receivedAt: T0 }],
+  ])('is null for %s, and the panel draws no countdown', async (_label, fields) => {
     const wrapper = await mountAtTable();
-    post(gameState({}));
-    await nextTick();
-
-    expect(boardText(wrapper)).toBe('none');
-    expect(wrapper.find('[data-testid="bs-turn-deadline"]').exists()).toBe(false);
-    wrapper.unmount();
-  });
-
-  it('is null when the host says there is no deadline', async () => {
-    const wrapper = await mountAtTable();
-    post(gameState({ deadlineAt: null, serverNow: T0, receivedAt: T0 }));
+    post(gameState(fields));
     await nextTick();
 
     expect(boardText(wrapper)).toBe('none');
