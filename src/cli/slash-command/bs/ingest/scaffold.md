@@ -130,13 +130,17 @@ error, and what to fix) — never proceed past a failing step assuming it will "
 
    ```bash
    cd <name>
-   npx tsc --noEmit
+   npx vue-tsc --noEmit
    ```
+
+   Use `vue-tsc`, never plain `tsc`: plain `tsc` cannot type a `.vue` import, so on a fresh
+   scaffold it reports TS2307 for every single-file component and can never come back clean.
+   `vue-tsc` is installed by `init` and is the same checker `boardsmith validate` runs.
 
    If errors occur:
    1. Read the error message carefully.
    2. Fix the specific issue.
-   3. Run `tsc --noEmit` again.
+   3. Run `npx vue-tsc --noEmit` again.
    4. Repeat until clean.
 
    Do not proceed to step 2 until this is clean.

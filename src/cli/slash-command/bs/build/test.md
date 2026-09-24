@@ -16,7 +16,9 @@ error, what to fix) — never proceed past a failing step assuming a later step 
 anyway." A failing step routes this chunk to `repair`; it does not get silently worked around
 here.
 
-1. **Compile gate** — `tsc --noEmit`. Catches type errors before anything else runs.
+1. **Compile gate** — `npx vue-tsc --noEmit`. Catches type errors before anything else runs.
+   Never plain `tsc`: it cannot type a `.vue` import, so it fails on every game whatever the
+   chunk did. `vue-tsc` is the checker `boardsmith validate` runs.
 
 2. **Sandbox lint** — `boardsmith lint`. This command surfaces two different kinds of finding
    from one invocation, and only one kind is build-blocking here: the AST-based sandbox rules
