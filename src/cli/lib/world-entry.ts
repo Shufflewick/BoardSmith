@@ -25,6 +25,7 @@
 import { existsSync } from 'fs';
 import { mkdir, writeFile } from 'fs/promises';
 import { dirname, join } from 'path';
+import type { GeneratedFile } from './project-scaffold.js';
 
 /** The bundle-root filename a world's surface is served from. */
 export const WORLD_ENTRY_HTML = 'world.html';
@@ -73,6 +74,14 @@ createApp({
 `;
 }
 
+/** The two files a world entry is, relative to the project root. */
+export function worldEntryFiles(displayName: string): GeneratedFile[] {
+  return [
+    { path: WORLD_ENTRY_HTML, content: generateWorldHtml(displayName) },
+    { path: WORLD_ENTRY_MAIN, content: generateWorldMainTs(displayName) },
+  ];
+}
+
 /**
  * Make sure this project has a world entry, writing one if it has none.
  *
@@ -85,19 +94,12 @@ export async function ensureWorldEntry(
   displayName: string,
 ): Promise<{ created: string[] }> {
   const created: string[] = [];
-
-  const html = join(cwd, WORLD_ENTRY_HTML);
-  if (!existsSync(html)) {
-    await writeFile(html, generateWorldHtml(displayName));
-    created.push(WORLD_ENTRY_HTML);
+  for (const file of worldEntryFiles(displayName)) {
+    const full = join(cwd, file.path);
+    if (existsSync(full)) continue;
+    await mkdir(dirname(full), { recursive: true });
+    await writeFile(full, file.content);
+    created.push(file.path);
   }
-
-  const main = join(cwd, WORLD_ENTRY_MAIN);
-  if (!existsSync(main)) {
-    await mkdir(dirname(main), { recursive: true });
-    await writeFile(main, generateWorldMainTs(displayName));
-    created.push(WORLD_ENTRY_MAIN);
-  }
-
   return { created };
 }
