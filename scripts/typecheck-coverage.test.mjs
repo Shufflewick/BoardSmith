@@ -1,6 +1,6 @@
 /**
- * `npm run typecheck` compiles every TypeScript and Vue file in the package
- * (#312).
+ * `boardsmith typecheck` compiles every TypeScript and Vue file in the
+ * package (#312).
  *
  * A type check is only as wide as its tsconfig's `include`. This repository has
  * had two checks that looked green while checking far less than they seemed to:
@@ -36,7 +36,7 @@ function lines(command, args) {
   return result.stdout.split('\n').filter(Boolean);
 }
 
-describe('npm run typecheck covers the whole package (#312)', () => {
+describe('boardsmith typecheck covers the whole package (#312)', () => {
   it('compiles every tracked .ts and .vue file under src/ and docs/', () => {
     const tracked = lines('git', ['ls-files', 'src/**.ts', 'src/**.vue', 'docs/**.ts']);
     const compiled = new Set(
@@ -50,7 +50,7 @@ describe('npm run typecheck covers the whole package (#312)', () => {
     expect(tracked.length).toBeGreaterThan(900);
     expect(
       missing,
-      `npm run typecheck does not compile these files, so a type error in them would pass the gate. ` +
+      `boardsmith typecheck does not compile these files, so a type error in them would pass the gate. ` +
         `Widen "include" in tsconfig.json:\n${missing.join('\n')}`,
     ).toEqual([]);
     expect(EXCLUDED.filter((file) => compiled.has(file))).toEqual([]);

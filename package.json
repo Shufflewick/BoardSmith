@@ -80,11 +80,7 @@
     "./ui/animation/card-flip.css": "./src/ui/animation/card-flip.css"
   },
   "scripts": {
-    "setup": "npm link",
-    "typecheck": "vue-tsc --noEmit -p tsconfig.json",
-    "pretest": "npm run typecheck",
-    "test": "vitest run",
-    "merge": "bash ./scripts/merge-branch.sh"
+    "setup": "npm link"
   },
   "files": [
     "dist",

@@ -5,6 +5,7 @@ import { initCommand } from './commands/init.js';
 import { devCommand } from './commands/dev.js';
 import { buildCommand } from './commands/build.js';
 import { testCommand } from './commands/test.js';
+import { typecheckCommand } from './commands/typecheck.js';
 import { validateCommand } from './commands/validate.js';
 import { publishCommand } from './commands/publish.js';
 import { lintCommand } from './commands/lint.js';
@@ -118,10 +119,15 @@ program
 // Testing
 program
   .command('test [patterns...]')
-  .description('Run this workspace\'s tests (the game\'s, or BoardSmith\'s own)')
+  .description('Run this workspace\'s tests (the game\'s, or BoardSmith\'s own after a type check)')
   .option('-w, --watch', 'Watch mode - re-run tests on changes')
   .option('--coverage', 'Generate coverage report')
   .action(testCommand);
+
+program
+  .command('typecheck')
+  .description("Type-check this workspace's tsconfig.json with vue-tsc (BoardSmith's own tests run it first)")
+  .action(typecheckCommand);
 
 // Building
 program

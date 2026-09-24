@@ -1,8 +1,8 @@
 /**
  * THE DEVELOPMENT HOST, COMPILED WITH ONLY WHAT WE SHIP (BoardSmith #273).
  *
- * `src/contract/public-typecheck.test.ts` performs a game's compilation of our
- * public entry points, and it is the right gate for the errors a game sees. It
+ * `boardsmith typecheck` compiles this whole package under a game's compiler
+ * options, and it is the right gate for the errors a game sees. It
  * structurally cannot see the error class BELOW, because it runs INSIDE this
  * checkout: every `devDependency` is installed here, so a declaration file that
  * never reaches a consumer resolves perfectly while the gate is looking.
@@ -38,9 +38,9 @@ import { VUE_TSC, vueTscErrors } from './vue-tsc-run.test-helper.js';
  * THE MODULES A NATIVE-HOST HARNESS IMPORTS, and the reason this list is short.
  *
  * Not the whole CLI: the rest of it is reached through `bin/boardsmith.js` as a
- * PROGRAM, never compiled by anyone downstream, and `docs/typecheck.md` records
- * the backlog it carries. These three are imported as source by consumers, so
- * these three are held to a consumer's compilation.
+ * PROGRAM, never compiled by anyone downstream, and `boardsmith typecheck`
+ * checks it in this checkout. These three are imported as source by consumers,
+ * so these three are also held to a consumer's compilation.
  */
 const DEV_HOST_ENTRY_POINTS = [
   'src/cli/dev-host/world-host.ts',

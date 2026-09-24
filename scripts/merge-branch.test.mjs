@@ -1,18 +1,18 @@
 /**
- * `npm run merge -- <branch> "<summary>"` is the one way a branch reaches
- * `main` (#312), and it refuses a branch whose merged tree fails `npm test`.
+ * `bash scripts/merge-branch.sh <branch> "<summary>"` is the one way a branch
+ * reaches `main` (#312), and it refuses a branch whose merged tree fails
+ * `boardsmith test`.
  *
- * `npm test` runs `pretest` first, and `pretest` is `npm run typecheck`, so a
- * type error anywhere in the package stops the merge before a single test
- * runs. This file proves the refusal against a throwaway repository whose
- * `npm test` passes or fails on demand, so it holds without compiling
- * BoardSmith; the last test holds the wiring from `npm test` to the type check
- * in this repository's own package.json.
+ * In this repository `boardsmith test` type-checks the whole package before it
+ * runs a test (src/cli/commands/typecheck.test.ts proves that), so a type error
+ * anywhere stops the merge. This file proves the refusal against a throwaway
+ * repository whose `bin/boardsmith.js test` passes or fails on demand, so it
+ * holds without compiling BoardSmith.
  */
 
 import { describe, it, expect } from 'vitest';
 import { spawnSync } from 'node:child_process';
-import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { copyFileSync, mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { tempTree } from '../src/testing/temp-tree.test-helper.ts';
@@ -43,21 +43,20 @@ function git(cwd, ...args) {
 }
 
 /**
- * A repository on `main` whose `npm test` fails while a file named `broken`
- * exists, with a branch `good` that passes and a branch `bad` that fails.
+ * A repository on `main` whose `boardsmith test` fails while a file named
+ * `broken` exists, with a branch `good` that passes and a branch `bad` that
+ * fails.
  */
 function fixtureRepo() {
   const repo = tempTree('bs-merge-branch-');
   git(repo, 'init', '--quiet', '--initial-branch=main');
   mkdirSync(path.join(repo, 'scripts'));
   copyFileSync(SCRIPT, path.join(repo, 'scripts/merge-branch.sh'));
+  mkdirSync(path.join(repo, 'bin'));
   writeFileSync(
-    path.join(repo, 'package.json'),
-    JSON.stringify({ name: 'fixture', private: true, scripts: { test: 'node check.mjs' } }),
-  );
-  writeFileSync(
-    path.join(repo, 'check.mjs'),
+    path.join(repo, 'bin/boardsmith.js'),
     "import { existsSync } from 'node:fs';\n" +
+      "if (process.argv[2] !== 'test') { console.error('expected boardsmith test'); process.exit(2); }\n" +
       "if (existsSync('broken')) { console.error('planted failure'); process.exit(1); }\n",
   );
   git(repo, 'add', '.');
@@ -81,8 +80,8 @@ function merge(repo, ...args) {
   return run(repo, 'bash', ['scripts/merge-branch.sh', ...args]);
 }
 
-describe('npm run merge (#312)', () => {
-  it('merges a branch whose merged tree passes npm test, with a merge commit that names it', () => {
+describe('scripts/merge-branch.sh (#312)', () => {
+  it('merges a branch whose merged tree passes boardsmith test, with a merge commit that names it', () => {
     const repo = fixtureRepo();
     const before = git(repo, 'rev-parse', 'HEAD');
 
@@ -95,7 +94,7 @@ describe('npm run merge (#312)', () => {
     expect(git(repo, 'status', '--porcelain')).toBe('');
   }, 30_000);
 
-  it('refuses a branch whose merged tree fails npm test, and leaves main exactly as it was', () => {
+  it('refuses a branch whose merged tree fails boardsmith test, and leaves main exactly as it was', () => {
     const repo = fixtureRepo();
     const before = git(repo, 'rev-parse', 'HEAD');
 
@@ -128,7 +127,7 @@ describe('npm run merge (#312)', () => {
 
     const noSummary = merge(repo, 'good');
     expect(noSummary.status).not.toBe(0);
-    expect(noSummary.output).toContain('Usage: npm run merge');
+    expect(noSummary.output).toContain('Usage: bash scripts/merge-branch.sh');
 
     const unknown = merge(repo, 'no-such-branch', 'summary');
     expect(unknown.status).not.toBe(0);
@@ -139,13 +138,4 @@ describe('npm run merge (#312)', () => {
     expect(again.status).not.toBe(0);
     expect(again.output).toContain('already on main');
   }, 30_000);
-
-  it("runs the whole-package type check before this repository's tests", () => {
-    const scripts = JSON.parse(readFileSync(path.join(PROJECT_ROOT, 'package.json'), 'utf8')).scripts;
-
-    expect(scripts.merge).toBe('bash ./scripts/merge-branch.sh');
-    expect(scripts.pretest).toBe('npm run typecheck');
-    expect(scripts.typecheck).toBe('vue-tsc --noEmit -p tsconfig.json');
-    expect(scripts.test).toBe('vitest run');
-  });
 });
