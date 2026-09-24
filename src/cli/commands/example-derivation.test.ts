@@ -485,6 +485,18 @@ describe('collectGameApiSurface — translation (Task 3)', () => {
   });
 });
 
+/** Writes each `file: lines` entry under `rules`, one line per element, ending in a newline. */
+async function writeRulesFiles(rules: string, files: Record<string, string[]>): Promise<void> {
+  for (const [file, lines] of Object.entries(files)) {
+    await fs.writeFile(join(rules, file), [...lines, ''].join('\n'));
+  }
+}
+
+/** A surface's symbols in name order, so a listing compares without depending on walk order. */
+function symbolsByName(surface: GameApiSurface): GameApiSurface['exportedSymbols'] {
+  return [...surface.exportedSymbols].sort((a, b) => a.name.localeCompare(b.name));
+}
+
 /**
  * A project whose rules API lives in subfolders of `src/rules/` and is reached only through
  * chains of re-exports (#359): `export *` and named re-exports into subfolders, a `../` hop back
@@ -520,9 +532,7 @@ async function writeNestedFixtureProject(root: string): Promise<string> {
     // On disk in a subfolder, but no re-export chain reaches it.
     'sim/unlisted.ts': ['export function neverReached(): void {}'],
   };
-  for (const [file, lines] of Object.entries(files)) {
-    await fs.writeFile(join(rules, file), [...lines, ''].join('\n'));
-  }
+  await writeRulesFiles(rules, files);
   return root;
 }
 
@@ -537,7 +547,7 @@ describe('collectGameApiSurface — re-exports through subfolders, at any depth 
   it('lists every symbol a chain of re-exports reaches, each at the module that declares it', async () => {
     const surface = await collectGameApiSurface(projectDir);
 
-    expect([...surface.exportedSymbols].sort((a, b) => a.name.localeCompare(b.name))).toEqual([
+    expect(symbolsByName(surface)).toEqual([
       { name: 'Grid', kind: 'class', module: 'src/rules/shared/grid.ts' },
       { name: 'GRID_SIZE', kind: 'const', module: 'src/rules/shared/grid.ts' },
       { name: 'roll', kind: 'function', module: 'src/rules/sim/dice/roll.ts' },
@@ -568,6 +578,109 @@ describe('collectGameApiSurface — re-exports through subfolders, at any depth 
     await expect(collectGameApiSurface(projectDir)).rejects.toThrow(
       /src\/rules\/world\/index\.ts re-exports '\.\.\/\.\.\/\.\.\/tests\/helpers\.js', which is outside src\//,
     );
+  });
+});
+
+/**
+ * A project whose `index.ts` reaches `game.ts` by `export *`, and `game.ts` exports names through
+ * plain local export lists (`export { a }`, `export { a as b }`) rather than `export ... from`
+ * (#368): names it imported from sibling modules, one of which only re-exports it again, names it
+ * declared without `export`, a package import, and a type.
+ */
+async function writeLocalExportListFixtureProject(root: string): Promise<string> {
+  const rules = join(root, 'src', 'rules');
+  await fs.mkdir(join(rules, 'pieces'), { recursive: true });
+  const files: Record<string, string[]> = {
+    'index.ts': ["export * from './game.js';"],
+    'game.ts': [
+      "import { Game } from 'boardsmith';",
+      "import { Piece, type PieceKind } from './pieces/piece.js';",
+      'import {',
+      '  roll,',
+      '  DIE_FACES,',
+      "} from './dice.js';",
+      "import { Board } from './board.js';",
+      'export { Piece };',
+      'export { roll as rollDie, DIE_FACES };',
+      'export { Board as GameBoard };',
+      'export { Game };',
+      'export type { PieceKind };',
+      'function setupHelper(): void {}',
+      'export { setupHelper };',
+      'export class MyGame {}',
+    ],
+    'pieces/piece.ts': ['export class Piece {}', "export type PieceKind = 'man' | 'king';"],
+    'dice.ts': ['export function roll(): number {', '  return 4;', '}', 'export const DIE_FACES = 6;'],
+    // Only re-exports the name again: the surface must follow it to where it is declared.
+    'board.ts': ["export { Board } from './pieces/board.js';"],
+    'pieces/board.ts': ['export class Board {}'],
+  };
+  await writeRulesFiles(rules, files);
+  return root;
+}
+
+describe('collectGameApiSurface — names imported and then exported by a local export list (#368)', () => {
+  let projectDir: string;
+
+  beforeEach(async () => {
+    projectDir = tempTree('bs-example-derivation-local-export-');
+    await writeLocalExportListFixtureProject(projectDir);
+  });
+
+  it('lists `import { a } ...; export { a }` and `export { a as b }` at the module that declares each name', async () => {
+    const surface = await collectGameApiSurface(projectDir);
+
+    expect(symbolsByName(surface)).toEqual([
+      { name: 'Board', kind: 'class', module: 'src/rules/pieces/board.ts' },
+      { name: 'DIE_FACES', kind: 'const', module: 'src/rules/dice.ts' },
+      { name: 'MyGame', kind: 'class', module: 'src/rules/game.ts' },
+      { name: 'Piece', kind: 'class', module: 'src/rules/pieces/piece.ts' },
+      { name: 'roll', kind: 'function', module: 'src/rules/dice.ts' },
+      { name: 'setupHelper', kind: 'function', module: 'src/rules/game.ts' },
+    ]);
+  });
+
+  it('refuses an exported import that resolves to no file, naming the module and the path it tried', async () => {
+    await fs.writeFile(
+      join(projectDir, 'src', 'rules', 'game.ts'),
+      "import { Piece } from './pieces/missing.js';\nexport { Piece };\n",
+    );
+
+    await expect(collectGameApiSurface(projectDir)).rejects.toThrow(
+      /src\/rules\/game\.ts re-exports '\.\/pieces\/missing\.js'.*src\/rules\/pieces\/missing\.ts/s,
+    );
+  });
+
+  it('lists a default or namespace import exported by a local list at the module that binds it', async () => {
+    await fs.writeFile(
+      join(projectDir, 'src', 'rules', 'game.ts'),
+      [
+        "import rollDefault from './dice.js';",
+        "import * as pieces from './pieces/piece.js';",
+        'export { rollDefault, pieces as allPieces };',
+        '',
+      ].join('\n'),
+    );
+
+    const surface = await collectGameApiSurface(projectDir);
+
+    expect(symbolsByName(surface)).toEqual([
+      { name: 'allPieces', kind: 'const', module: 'src/rules/game.ts' },
+      { name: 'rollDefault', kind: 'const', module: 'src/rules/game.ts' },
+    ]);
+  });
+
+  it('does not resolve an import the module never exports', async () => {
+    await fs.writeFile(
+      join(projectDir, 'src', 'rules', 'game.ts'),
+      "import { Piece } from './pieces/missing.js';\nexport class MyGame extends Piece {}\n",
+    );
+
+    const surface = await collectGameApiSurface(projectDir);
+
+    expect(surface.exportedSymbols).toEqual([
+      { name: 'MyGame', kind: 'class', module: 'src/rules/game.ts' },
+    ]);
   });
 });
 
