@@ -144,8 +144,8 @@ const STATIC_TOKENS = `
   /* Board element natural sizes. Boards render at these intrinsic sizes (NOT fit to
      the viewport); the board area scrolls when larger, and zoom multiplies them.
      Games/themes can override per board. */
-  --bsg-cell: 64px;     /* grid/space cell edge */
-  --bsg-card-w: 72px;   /* hand/deck card width (height via aspect-ratio) */
+  --bsg-cell-size: 64px; /* grid/space cell edge (the cell's colours are --bsg-cell and --bsg-cell-line) */
+  --bsg-card-w: 72px;    /* hand/deck card width (height via aspect-ratio) */
 
   /* Type scale (1.25 ratio, 16px body) */
   --bsg-text-xs: .75rem;
