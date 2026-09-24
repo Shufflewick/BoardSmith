@@ -26,6 +26,7 @@ import type {
   PlayerAwaitingState,
 } from './types.js';
 import { resolveTimeLimit } from './step-time-limit.js';
+import { flowChildCount, resolveFlowChild } from './flow-navigation.js';
 
 /**
  * Maximum iterations for safety (prevent infinite loops)
@@ -1039,10 +1040,9 @@ export class FlowEngine<G extends Game = Game> {
       });
 
       // Navigate to child node for next level
-      const navIndex = this.getNavigationIndex(currentNode, index, restoredFrameData);
-      const childCount = this.getChildCount(currentNode);
-      if (navIndex >= 0 && navIndex < childCount) {
-        currentNode = this.getChildNode(currentNode, navIndex);
+      const child = resolveFlowChild(currentNode, index, restoredFrameData);
+      if (child) {
+        currentNode = child;
       }
     }
 
@@ -1161,7 +1161,7 @@ export class FlowEngine<G extends Game = Game> {
                          nodeType === 'execute';
 
       if (!isIteratingNode && !isLeafNode) {
-        const childCount = this.getChildCount(currentNode);
+        const childCount = flowChildCount(currentNode);
         // For sequences: index can equal childCount (next step position after pushing child)
         if (index > childCount) {
           const nodeName = currentNode.config?.name ?? currentNode.type;
@@ -1176,54 +1176,13 @@ export class FlowEngine<G extends Game = Game> {
       validPath.push(index);
 
       // Navigate to the child node for next iteration
-      const navIndex = this.getNavigationIndex(currentNode, index, frameDataAtDepth);
-
-      const childCount = this.getChildCount(currentNode);
-      if (navIndex >= 0 && navIndex < childCount) {
-        try {
-          currentNode = this.getChildNode(currentNode, navIndex);
-        } catch {
-          return {
-            valid: false,
-            error: `Failed to navigate to child ${navIndex} at depth ${i}`,
-            validPath: validPath.slice(0, -1),
-          };
-        }
+      const child = resolveFlowChild(currentNode, index, frameDataAtDepth);
+      if (child) {
+        currentNode = child;
       }
     }
 
     return { valid: true };
-  }
-
-  /**
-   * Get the number of valid child indices for a flow node.
-   */
-  private getChildCount(node: FlowNode<G>): number {
-    switch (node.type) {
-      case 'sequence':
-        return node.config.steps.length;
-      case 'loop':
-      case 'repeat':
-      case 'each-player':
-      case 'for-each':
-      case 'phase':
-        // These nodes only have a single 'do' child
-        return 1;
-      case 'if':
-        // 0 = then, 1 = else
-        return node.config.else ? 2 : 1;
-      case 'switch': {
-        const cases = Object.values(node.config.cases);
-        return cases.length + (node.config.default ? 1 : 0);
-      }
-      case 'action-step':
-      case 'simultaneous-action-step':
-      case 'execute':
-        // Leaf nodes - no children
-        return 0;
-      default:
-        return 0;
-    }
   }
 
   /**
@@ -1292,7 +1251,7 @@ export class FlowEngine<G extends Game = Game> {
         // `iteration`, `eligibleSeats: number[]`, `branchIndex`, the
         // deliberately pre-tagged `forEachItems`) pass through untouched, which
         // is what `turnSequence`/`dueSeats` (seat-activity.ts) and
-        // `getNavigationIndex` read back out. Do NOT "simplify" this to a
+        // `resolveFlowChild` read back out. Do NOT "simplify" this to a
         // spread: that is the asymmetry this replaced.
         const serializedData = serializeFlowVariables({ ...frame.data }) as Record<string, unknown>;
         frameData[`__frame_${i}`] = serializedData;
@@ -1313,85 +1272,6 @@ export class FlowEngine<G extends Game = Game> {
       // Plain seat number and count, so it needs no relinking on the way back.
       turnRun: this.turnRun ? { ...this.turnRun } : undefined,
     };
-  }
-
-  private getSwitchBranchIndex(config: SwitchConfig<G>, branchKey: string): number | undefined {
-    const caseKeys = Object.keys(config.cases);
-    if (branchKey === '__default') {
-      return config.default ? caseKeys.length : undefined;
-    }
-    const index = caseKeys.indexOf(branchKey);
-    return index >= 0 ? index : undefined;
-  }
-
-  private getNavigationIndex(
-    node: FlowNode<G>,
-    frameIndex: number,
-    frameData?: Record<string, unknown>
-  ): number {
-    const isIteratingNode =
-      node.type === 'loop' ||
-      node.type === 'repeat' ||
-      node.type === 'each-player' ||
-      node.type === 'for-each' ||
-      node.type === 'phase';
-
-    if (isIteratingNode) {
-      return 0;
-    }
-
-    if (node.type === 'if' && typeof frameData?.branchIndex === 'number') {
-      return frameData.branchIndex as number;
-    }
-
-    if (node.type === 'switch') {
-      if (typeof frameData?.branchKey === 'string') {
-        const branchIndex = this.getSwitchBranchIndex(node.config, frameData.branchKey);
-        if (branchIndex !== undefined) {
-          return branchIndex;
-        }
-      }
-      if (typeof frameData?.branchIndex === 'number') {
-        return frameData.branchIndex as number;
-      }
-    }
-
-    // Sequence: reconstruct the child that is currently IN PROGRESS on the stack.
-    // executeSequence pushes child `k` and THEN does `frame.index++`, so a live
-    // sequence frame's index always points ONE PAST the in-progress child (k+1).
-    // Navigating back to that child therefore requires `index - 1` for EVERY
-    // position, not only the last one. The previous `=== childCount` special case
-    // only corrected the final child; a non-last awaiting child (e.g. a landing
-    // phase that is step 0 of a multi-step root sequence) mis-navigated to the
-    // NEXT sibling, corrupting the restored flow position. Clamp at 0 so a leaf
-    // (childCount 0, index 0 — navIndex is unused there) stays in range.
-    if (node.type === 'sequence') {
-      return Math.max(0, frameIndex - 1);
-    }
-
-    const childCount = this.getChildCount(node);
-    return frameIndex === childCount ? frameIndex - 1 : frameIndex;
-  }
-
-  private getChildNode(node: FlowNode<G>, index: number): FlowNode<G> {
-    switch (node.type) {
-      case 'sequence':
-        return node.config.steps[index];
-      case 'loop':
-      case 'repeat':
-      case 'each-player':
-      case 'for-each':
-      case 'phase':
-        return node.config.do;
-      case 'if':
-        return index === 0 ? node.config.then : (node.config.else ?? node.config.then);
-      case 'switch': {
-        const cases = Object.values(node.config.cases);
-        return cases[index] ?? node.config.default ?? cases[0];
-      }
-      default:
-        return node;
-    }
   }
 
   /**

@@ -1,7 +1,7 @@
 {
-  "revision": 98,
+  "revision": 99,
   "bundleProtocol": 2,
-  "surfaceHash": "04a06b3cf015340d",
+  "surfaceHash": "94910dd64381f024",
   "payloadHash": "80aba5002803deaa",
   "formatHash": "0058593e7cc80205",
   "history": [
@@ -826,6 +826,15 @@
       "payloadHash": "80aba5002803deaa",
       "formatHash": "0058593e7cc80205",
       "summary": "The flow state no longer reports a leftover single-seat prompt during a simultaneous step (#321): FlowState.currentPlayer and availableActions are published only while an action step is awaiting input, so they are absent in a simultaneous step and once the game is complete. Before this, a simultaneous step entered after an action step kept that step's seat and actions, so GameShell showed a seat that had already acted in the step (or had no entry) the previous step's actions, and the random simulator got stuck on every cribbage game. The contract fixture now also hashes the whole-game flow state the executor returns, which is what made this visible. Not breaking: re-vendor to pick up the fix."
+    },
+    {
+      "revision": 99,
+      "date": "2026-09-24",
+      "bundleProtocol": 2,
+      "surfaceHash": "94910dd64381f024",
+      "payloadHash": "80aba5002803deaa",
+      "formatHash": "0058593e7cc80205",
+      "summary": "getFlowDebugInfo names the step the engine is actually at; FlowEngine's private path-navigation helpers moved to one shared rule (#324)"
     }
   ]
 }
