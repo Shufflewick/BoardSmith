@@ -1,6 +1,5 @@
 import { existsSync, readFileSync, mkdirSync, rmSync } from 'node:fs';
 import { join, resolve, relative, dirname } from 'node:path';
-import { createServer as createViteServer } from 'vite';
 import type { Plugin as VitePlugin } from 'vite';
 import { fileURLToPath } from 'node:url';
 import { WebSocket } from 'ws';
@@ -14,6 +13,7 @@ import { createDevHostConnectionHandler } from '../dev-host/connection-handler.j
 import { devStorePath, loadDevStore } from '../dev-host/persistence-file-store.js';
 import { resetWorldStore, worldResetNotice, worldStoreDir } from '../dev-host/world-store.js';
 import { announceHost, onShutdown } from '../dev-host/shutdown.js';
+import { requireFreePort } from '../dev-host/port.js';
 import type { PersistenceStore } from '../../persistence/index.js';
 import { getProjectContext, importRuntimeBundle, toPosix } from './game-runtime.js';
 import { findUnknownKeys } from '../lib/config-schema.js';
@@ -24,6 +24,7 @@ import { loadWorldRuntime, startWorldDevServer, type WorldRuntime } from './dev-
 import {
   claimWebSocketPath,
   devNotFoundMiddleware,
+  listeningViteServer,
   monorepoBoardsmithResolvePlugin,
   resolveDevHostDir,
   serveDevDocuments,
@@ -679,6 +680,11 @@ export async function devCommand(options: DevOptions): Promise<void> {
     process.exit(1);
   }
 
+  // A TAKEN PORT IS REFUSED BEFORE ANYTHING IS OPENED (#345): before `--reset`
+  // deletes a world, before the rules are bundled, and before either road opens
+  // a store another run of this project may be holding.
+  await requireFreePort(port, host);
+
   const botLevel = options.botLevel ?? 'medium';
   validateBotLevel(botLevel);
   // Single source of truth for the teaching lockout — passed into both the server
@@ -1042,7 +1048,9 @@ export async function devCommand(options: DevOptions): Promise<void> {
     );
     vitePlugins.push(hostSocket.plugin);
 
-    const vite = await createViteServer({
+    // A refused listen closes Vite and this host's socket before the error
+    // reaches the catch below, which is what lets a refused run exit (#345).
+    const vite = await listeningViteServer({
       root: uiPath,
       // `appType` is NOT set here: boardsmithDevHostPlugin sets 'custom' from
       // its own `config` hook, so no call site can reintroduce the SPA
@@ -1062,9 +1070,7 @@ export async function devCommand(options: DevOptions): Promise<void> {
       optimizeDeps: {
         exclude: optimizeDepsExclude,
       },
-    });
-
-    await vite.listen();
+    }, () => hostSocket.close());
 
     const resolvedUrl = vite.resolvedUrls?.local[0];
     const uiPort = resolvedUrl ? parseInt(new URL(resolvedUrl).port || '5173', 10) : port;
