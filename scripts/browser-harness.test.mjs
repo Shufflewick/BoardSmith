@@ -22,6 +22,7 @@
  * a fourth must not be able to reintroduce it.
  */
 import { describe, it, expect } from 'vitest';
+import { spawnSync } from 'node:child_process';
 import { readFileSync, readdirSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -97,6 +98,25 @@ describe('#231: the harness stops the host before it removes the project', () =>
       'the stop must be awaited BEFORE the fixture is removed, or the removal races ' +
         'the host it never stopped (#231)',
     ).toBeLessThan(remove);
+  });
+});
+
+describe('#358: a browser regression finds the packages where Node does', () => {
+  it('gets past the install check in any checkout, a worktree included', () => {
+    // A worktree has no `node_modules` of its own: Node resolves its packages
+    // from the main checkout's install. The harness used to look for
+    // `<checkout>/node_modules/vue` and refused every run in a worktree. With
+    // no Playwright reachable, a run that got past the install check stops at
+    // the Playwright refusal, before any fixture or browser exists.
+    const run = spawnSync(process.execPath, [join(SCRIPTS, 'world-offers-latch-browser.mjs')], {
+      cwd: REPO,
+      encoding: 'utf8',
+      env: { ...process.env, BOARDSMITH_PLAYWRIGHT_MODULE: join(REPO, 'no-playwright-here') },
+    });
+    const output = `${run.stdout}${run.stderr}`;
+    expect(run.status).toBe(1);
+    expect(output).not.toContain('no node_modules/vue');
+    expect(output).toContain('No Playwright chromium is reachable');
   });
 });
 

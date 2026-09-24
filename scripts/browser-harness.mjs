@@ -27,7 +27,6 @@
  * @module
  */
 import {
-  existsSync,
   mkdirSync,
   mkdtempSync,
   realpathSync,
@@ -46,8 +45,8 @@ const HERE = dirname(fileURLToPath(import.meta.url));
  * This checkout, which is the library every fixture resolves against.
  *
  * Module-private, like `freePort`: the three things that need it -- the
- * symlinked install, the dev host's own TypeScript, and the guard that refuses
- * an uninstalled checkout -- are all in here.
+ * symlinked library, the dev host's own TypeScript, and the guard that finds
+ * the install -- are all in here.
  */
 const REPO = resolve(HERE, '..');
 
@@ -155,9 +154,11 @@ export default defineConfig({
  * @param spec.rules       the whole of `src/rules/index.ts`
  * @param spec.boardFile   the board component's basename, e.g. `FleetBoard`
  * @param spec.board       the whole of that component
+ * @param installedModules the `node_modules` Node resolves this checkout's
+ *                         packages from, which a worktree does not have (#358)
  * @returns the project directory
  */
-function writeWorldFixture(spec) {
+function writeWorldFixture(spec, installedModules) {
   // `realpathSync`: on macOS the temp root is a symlink (`/var` -> `/private/var`),
   // and Vite resolves a module id to its real path -- so a root given in the
   // symlinked form puts every one of the project's own files outside it.
@@ -185,13 +186,14 @@ function writeWorldFixture(spec) {
   // this checkout, exactly what `"boardsmith": "file:../../BoardSmith"` leaves
   // behind in `~/BoardSmithGames/*` -- so the fixture runs in STANDALONE context
   // and resolves the library through its package exports, which is the path an
-  // author's own project takes. Its build-time packages come from here too.
+  // author's own project takes. Its build-time packages come from this
+  // checkout's install, wherever Node finds it (#358).
   mkdirSync(join(dir, 'node_modules'), { recursive: true });
   symlinkSync(REPO, join(dir, 'node_modules', 'boardsmith'), 'dir');
   for (const name of ['vue', 'vite', '@vitejs/plugin-vue']) {
     const at = join(dir, 'node_modules', name);
     mkdirSync(dirname(at), { recursive: true });
-    symlinkSync(join(REPO, 'node_modules', name), at, 'dir');
+    symlinkSync(join(installedModules, name), at, 'dir');
   }
   return dir;
 }
@@ -199,14 +201,13 @@ function writeWorldFixture(spec) {
 /**
  * Serve a fixture through the CLI's own world dev host, on a free port.
  *
- * `tsx` first, exactly as `bin/boardsmith.js` does it: everything reached from
- * here is the CLI's own TypeScript, run from source with no build step.
+ * `requireInstalledModules` has already loaded `tsx`, so the CLI's own
+ * TypeScript is imported from source.
  *
  * @returns the host, whose `stop()` is the only thing that ends it
  */
 async function startWorldHost({ fixture, displayName }) {
   const port = await freePort();
-  await import('tsx');
   const { startWorldDevServer } = await import(join(REPO, 'src/cli/commands/dev-world.ts'));
   const { loadGameDefinition } = await import(join(REPO, 'src/cli/commands/game-runtime.ts'));
 
@@ -257,10 +258,11 @@ async function startWorldHost({ fixture, displayName }) {
  * this function returns before any script exits.
  *
  * @param spec the fixture project, as `writeWorldFixture` takes it
+ * @param installedModules where this checkout's packages are installed
  * @param body called with `{ hostUrl, fixture }`; its return value is passed on
  */
-async function withFixtureWorld(spec, body) {
-  const fixture = writeWorldFixture(spec);
+async function withFixtureWorld(spec, installedModules, body) {
+  const fixture = writeWorldFixture(spec, installedModules);
   try {
     const { hostUrl, stop } = await startWorldHost({ fixture, displayName: spec.displayName });
     try {
@@ -367,22 +369,38 @@ export function summarise(what) {
 // ── One whole run ────────────────────────────────────────────────────────────
 
 /**
- * Refuse before doing anything expensive if this checkout cannot serve a world.
+ * Where this checkout's packages are installed, or an exit that says how to
+ * install them.
  *
- * The fixture resolves the library by symlink, so a checkout with nothing
- * installed cannot serve one. Said before Chromium is looked for, because it is
- * the cheaper answer and the likelier mistake.
+ * The fixture links its build-time packages from that install, so a checkout
+ * with nothing installed cannot serve one. It is found the way Node finds it
+ * (#358): a worktree under `.worktrees/<name>` has no `node_modules` of its
+ * own and resolves the main checkout's, which `installed-modules.test-helper.ts`
+ * already answers for the test suite. Said before Chromium is looked for,
+ * because it is the cheaper answer and the likelier mistake.
+ *
+ * `tsx` first, exactly as `bin/boardsmith.js` does it: everything reached from
+ * here is the library's own TypeScript, run from source with no build step.
  *
  * @param script the script's own filename, for the copy-pasteable command line
  */
-function requireInstalledCheckout(script) {
-  if (existsSync(join(REPO, 'node_modules', 'vue'))) return;
-  console.error(
-    'This checkout has no node_modules/vue, so the fixture world cannot be served.\n' +
-      '  Run `npm install` in the repository root first, then:\n\n' +
-      `    node scripts/${script}`,
-  );
-  process.exit(1);
+async function requireInstalledModules(script) {
+  try {
+    await import('tsx');
+    const { INSTALLED_MODULES } = await import(
+      join(REPO, 'src/testing/installed-modules.test-helper.ts')
+    );
+    return INSTALLED_MODULES;
+  } catch (thrown) {
+    console.error(
+      'BoardSmith\'s packages cannot be found from this checkout, so the fixture world cannot be served.\n' +
+        `  ${reason(thrown)}\n\n` +
+        '  Run `npm install` in the BoardSmith checkout (for a worktree, in the main\n' +
+        '  checkout it was made from), then:\n\n' +
+        `    node scripts/${script}`,
+    );
+    process.exit(1);
+  }
 }
 
 /**
@@ -406,7 +424,11 @@ function requireInstalledCheckout(script) {
  * @param body        called with `{ chromium, hostUrl }`; returns `summarise`
  */
 export async function runBrowserRegression(run, body) {
-  requireInstalledCheckout(run.script);
+  const installedModules = await requireInstalledModules(run.script);
   const chromium = await loadChromium(run.script);
-  process.exit(await withFixtureWorld(run.fixture, ({ hostUrl }) => body({ chromium, hostUrl })));
+  process.exit(
+    await withFixtureWorld(run.fixture, installedModules, ({ hostUrl }) =>
+      body({ chromium, hostUrl }),
+    ),
+  );
 }
