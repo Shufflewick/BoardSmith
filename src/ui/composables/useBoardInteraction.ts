@@ -23,6 +23,41 @@ import { devWarn } from '../../utils/dev.js';
 import type { ElementRef } from '../../types/protocol.js';
 export type { ElementRef };
 
+/** Which of its identities the board matches a ref by. */
+type BoardRefKind = 'id' | 'notation' | 'name';
+
+/** The identity the board matches a ref by: its kind, and a key unique across kinds. */
+interface BoardRefKey {
+  kind: BoardRefKind;
+  key: string;
+}
+
+/**
+ * How the board matches a ref, in the one place that says it: by its id if it
+ * carries one, else its notation, else its name. A precise id wins outright, so a
+ * ref carrying both an id and a name ({ id: 5, name: 'Militia' }) never matches a
+ * different element that happens to share the name.
+ *
+ * Every question the board answers about a ref goes through this: whether an
+ * element matches one, the candidate index a board's lookups read (#313), and
+ * the Action Panel's rule for handing a large choice to the board (#341), which
+ * must count a candidate as on the board exactly when the board can find it.
+ */
+export function boardRefKey(ref: ElementRef): BoardRefKey | undefined {
+  if (ref.id !== undefined) return { kind: 'id', key: `id:${ref.id}` };
+  if (ref.notation !== undefined) return { kind: 'notation', key: `notation:${ref.notation}` };
+  if (ref.name !== undefined) return { kind: 'name', key: `name:${ref.name}` };
+  return undefined;
+}
+
+/** Every key a ref could match `element` by: one for each identity it has. */
+function elementKeys(element: { id?: number; name?: string; notation?: string }): string[] {
+  return [{ id: element.id }, { notation: element.notation }, { name: element.name }]
+    .map(boardRefKey)
+    .filter((k): k is BoardRefKey => k !== undefined)
+    .map(k => k.key);
+}
+
 /**
  * A choice that can be highlighted on the board
  */
@@ -261,15 +296,8 @@ export function createBoardInteraction(): BoardInteraction {
   let onDropCallback: ((elementId: number) => void) | null = null;
 
   function matchesRef(element: { id?: number; name?: string; notation?: string }, ref: ElementRef): boolean {
-    // Precedence-based matching: a precise id wins outright. name/notation are
-    // only fallbacks when the ref carries no id. Without this, a ref that
-    // carries BOTH id and name (e.g. { id: 5, name: 'Militia' }) would also
-    // match a DIFFERENT element with a colliding name (id: 8, name: 'Militia'),
-    // causing the wrong element to be selected/highlighted.
-    if (ref.id !== undefined) return element.id === ref.id;
-    if (ref.notation !== undefined) return element.notation === ref.notation;
-    if (ref.name !== undefined) return element.name === ref.name;
-    return false;
+    const key = boardRefKey(ref);
+    return key !== undefined && elementKeys(element).includes(key.key);
   }
 
   function matchesAnyRef(element: { id?: number; name?: string; notation?: string }, refs: ElementRef[]): boolean {
@@ -280,36 +308,26 @@ export function createBoardInteraction(): BoardInteraction {
   // disabled, what is it called. Scanning validElements for each question is
   // quadratic in the size of the pick: a 3,720-space pick took tens of seconds
   // per render of the board. So the list is indexed once each time it changes,
-  // keyed exactly the way matchesRef matches a ref (by its id if it has one,
-  // else its notation, else its name), and each lookup is a few map reads.
+  // by boardRefKey -- the same key matchesRef matches by -- and each lookup is a
+  // few map reads.
   const candidateIndex = computed(() => {
-    const byId = new Map<number, number>();
-    const byNotation = new Map<string, number>();
-    const byName = new Map<string, number>();
+    const byKey = new Map<string, number>();
     const list = state.validElements;
     list.forEach((ve, position) => {
-      const { id, notation, name } = ve.ref;
+      const key = boardRefKey(ve.ref);
       // The first candidate that matches an element is THE candidate, as it was
       // when every lookup was a scan, so a later duplicate never replaces it.
-      if (id !== undefined) {
-        if (!byId.has(id)) byId.set(id, position);
-      } else if (notation !== undefined) {
-        if (!byNotation.has(notation)) byNotation.set(notation, position);
-      } else if (name !== undefined) {
-        if (!byName.has(name)) byName.set(name, position);
-      }
+      if (key !== undefined && !byKey.has(key.key)) byKey.set(key.key, position);
     });
-    return { list, byId, byNotation, byName };
+    return { list, byKey };
   });
 
   /** The candidate of the current pick that `element` is, or undefined. */
   function findCandidate(element: { id?: number; name?: string; notation?: string }): BoardTarget | undefined {
-    const { list, byId, byNotation, byName } = candidateIndex.value;
-    const positions = [
-      element.id !== undefined ? byId.get(element.id) : undefined,
-      element.notation !== undefined ? byNotation.get(element.notation) : undefined,
-      element.name !== undefined ? byName.get(element.name) : undefined,
-    ].filter((p): p is number => p !== undefined);
+    const { list, byKey } = candidateIndex.value;
+    const positions = elementKeys(element)
+      .map(key => byKey.get(key))
+      .filter((p): p is number => p !== undefined);
     return positions.length === 0 ? undefined : list[Math.min(...positions)];
   }
 

@@ -935,12 +935,16 @@ neither surface.
 
 This holds for `chooseFrom` as well as element picks. For a `chooseFrom`, a
 candidate's board ref is the one `boardRefs` gives it with role `target` (or its
-first ref when none is marked target), and it counts only if it names a board
-space by `notation`: that is what the board picks by, while an id-only ref just
-highlights an element. Every candidate needs one, and no two candidates may name
-the same space, since the board could reach only one of them there. A
-multi-select keeps its count and Done button beside the control, and an ordered
-list keeps its numbered entries and their Remove buttons.
+first ref when none is marked target). It counts if it names one element: by
+its element `id` (natural for a piece or a card) or by its `notation` (natural
+for a space). The board picks by either, and when a ref carries both it matches
+by the id. A ref that gives only a `name` does not count, because a name need not
+belong to one element. Every candidate needs such a ref, and no two candidates
+may name the same element, since the board chooses the first candidate on an
+element and the second could never be reached there. The kinds can be mixed:
+some candidates by id and others by notation is fine. A multi-select keeps its
+count and Done button beside the control, and an ordered list keeps its
+numbered entries and their Remove buttons.
 
 `boardsmith validate` reports a step that has neither answer: more than 24
 candidates, no board anchor, no dependent narrowing. It finds them by playing a
@@ -1333,7 +1337,7 @@ export function createAskAction(game: GoFishGame): ActionDefinition {
       choices: (ctx) => game.playerChoices({ excludeSelf: true, currentPlayer: ctx.player }),
       boardRefs: (choice: { value: number; display: string }, ctx) => {
         const targetPlayer = game.getPlayer(choice.value) as GoFishPlayer;
-        return { targetRef: { id: game.getPlayerHand(targetPlayer).id } };
+        return { refs: [{ ref: { id: game.getPlayerHand(targetPlayer).id }, role: 'target' as const }] };
       },
     })
     .chooseFrom('rank', {

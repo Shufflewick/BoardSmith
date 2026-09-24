@@ -861,3 +861,58 @@ describe('ActionPanel large board-anchored choice picks (#313)', () => {
     expect(wrapper.find('.done-button').exists()).toBe(true);
   });
 });
+
+// ---------------------------------------------------------------------------
+// #341 — a large chooseFrom anchored on elements by id is handed over as well
+// ---------------------------------------------------------------------------
+
+describe('ActionPanel large element-id-anchored choice picks (#341)', () => {
+  /** N chooseFrom candidates, each on its own board element by id (`boardRefs` with an id). */
+  function pieces(n: number): ChoiceWithRefs[] {
+    return Array.from({ length: n }, (_, i) => ({
+      value: `p${i}`,
+      display: `Piece ${i}`,
+      refs: [{ ref: { id: 1000 + i }, role: 'target' as const }],
+    }));
+  }
+
+  function mountPiecePick(choices: ChoiceWithRefs[]) {
+    const controller = stubActionController({
+      currentAction: ref('recruit'),
+      currentPick: ref({ name: 'piece', type: 'choice', prompt: 'Choose a piece to recruit' }),
+      currentChoices: ref(choices),
+    });
+    return mountWithBoard(controller, createBoardInteraction());
+  }
+
+  it('renders one board handoff control instead of 3,720 buttons', () => {
+    const wrapper = mountPiecePick(pieces(3720));
+
+    const handoff = wrapper.find('.board-handoff-btn');
+    expect(handoff.exists()).toBe(true);
+    expect(handoff.text()).toBe('Choose on the board (3720)');
+    expect(handoff.attributes('aria-label')).toContain('3720 options');
+    expect(wrapper.findAll('.choice-btn:not(.board-handoff-btn)')).toHaveLength(0);
+    expect(wrapper.text()).toContain('Choose a piece to recruit');
+  });
+
+  it('keeps every button when two candidates name the same element', () => {
+    const twin: ChoiceWithRefs = {
+      value: 'p0-again',
+      display: 'Piece 0, again',
+      refs: [{ ref: { id: 1000 }, role: 'target' }],
+    };
+    const wrapper = mountPiecePick([...pieces(50), twin]);
+
+    expect(wrapper.find('.board-handoff-btn').exists()).toBe(false);
+    expect(wrapper.findAll('.choice-btn')).toHaveLength(51);
+  });
+
+  it('keeps every button when a candidate has no board ref', () => {
+    const wrapper = mountPiecePick([...pieces(50), { value: 'none', display: 'Recruit nobody' }]);
+
+    expect(wrapper.find('.board-handoff-btn').exists()).toBe(false);
+    expect(wrapper.findAll('.choice-btn')).toHaveLength(51);
+    expect(wrapper.text()).toContain('Recruit nobody');
+  });
+});
