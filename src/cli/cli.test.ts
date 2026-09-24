@@ -1,4 +1,5 @@
 import { DESIGN_DIR } from './lib/project-paths.js';
+import { generateTsConfig } from './lib/project-scaffold.js';
 import { describe, it, expect, vi } from 'vitest';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -185,6 +186,7 @@ describe('verify-example-translate — registration (CHECK-06, the second dispat
     const project = join(dir, 'project');
     await fs.mkdir(join(project, DESIGN_DIR, 'rulebook'), { recursive: true });
     await fs.mkdir(join(project, 'src', 'rules'), { recursive: true });
+    await fs.writeFile(join(project, 'tsconfig.json'), generateTsConfig());
     await fs.writeFile(
       join(project, DESIGN_DIR, 'rulebook', '02-punch.md'),
       'p.2, Punch Examples:\n"If you are punched while READY, you become EXHAUSTED."\n',
