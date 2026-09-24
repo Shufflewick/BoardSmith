@@ -13,13 +13,15 @@
  * pin that pattern so the template can't regress to the crashing shape.
  */
 import { describe, it, expect, afterEach, beforeEach, vi, type MockInstance } from 'vitest';
-import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import { execSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { generateGameTs, generateTestTs, initCommand, type InitOptions } from './init.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { rejectionMessage } from '../../testing/rejection.test-helper.js';
+import { createTestGame, playUntilComplete } from '../../testing/index.js';
+import { _clearShownWarnings } from '../../utils/dev.js';
 
 /**
  * Scaffold a real project into a fresh temp directory and chdir into its
@@ -656,5 +658,67 @@ describe('initCommand — a failed init leaves nothing behind (#242)', () => {
     ).rejects.toThrow(/already exists/);
 
     expect(existsSync(join(parentDir, 'mygame', 'the-users-file.txt'))).toBe(true);
+  });
+});
+
+/**
+ * BoardSmith #309: A FRESHLY SCAFFOLDED GAME PLAYS WITHOUT A WARNING.
+ *
+ * The scaffold's turn is two same-seat action steps, draw then play. With no
+ * `turnScope` on the second, the engine cannot tell whether the seat is still
+ * taking the same turn, so the first draw printed a dev warning and left undo
+ * off for the rest of that turn. The scaffold is the template every author
+ * copies, so its first run must not tell them their game is wrong.
+ *
+ * This drives the real scaffolded rules, not the template text: it links the
+ * project's `boardsmith` dependency the way `npm install` does and plays the
+ * game the command wrote.
+ */
+describe('initCommand — a scaffolded game plays with no warnings (#309)', () => {
+  const { scaffold } = scaffoldSuite('bs-init-309-', 'warning-free-game', {
+    withoutRulebook: true,
+  });
+  const repoRoot = join(__dirname, '..', '..', '..');
+  let warn: MockInstance<typeof console.warn>;
+
+  beforeEach(() => {
+    // Warnings are shown once per key per process; start from none shown so an
+    // earlier test cannot have used up the one this test is looking for.
+    _clearShownWarnings();
+    warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    warn.mockRestore();
+  });
+
+  async function loadScaffoldedGame() {
+    const projectPath = await scaffold();
+    // `"boardsmith": "file:..."` installs as a symlink to the checkout.
+    mkdirSync(join(projectPath, 'node_modules'));
+    symlinkSync(repoRoot, join(projectPath, 'node_modules', 'boardsmith'), 'dir');
+    const rules = await import(join(projectPath, 'src', 'rules', 'index.ts'));
+    return createTestGame(rules.gameDefinition.gameClass, { playerCount: 2, seed: 'issue-309' });
+  }
+
+  const warnings = () => warn.mock.calls.map((call) => String(call[0]));
+
+  it("plays the first turn, draw then play, without a warning", async () => {
+    const game = await loadScaffoldedGame();
+
+    game.doAction(1, 'draw');
+    const [card] = game.action('play', 1).getChoices('card');
+    game.action('play', 1).select('card', card).execute();
+
+    expect(warnings()).toEqual([]);
+  });
+
+  it('plays to the end without a warning', async () => {
+    const game = await loadScaffoldedGame();
+
+    playUntilComplete(game);
+
+    expect(game.isComplete()).toBe(true);
+    expect(warnings()).toEqual([]);
   });
 });

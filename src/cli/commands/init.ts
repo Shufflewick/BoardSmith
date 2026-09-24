@@ -40,7 +40,7 @@ export interface InitOptions {
    * Eleven mechanisms were tried to get an ingest session to archive the source. Ten lived in
    * skill text at various points in the flow and none ever executed across ten measured live
    * runs. The eleventh added it as item 4 of the Step 1 verification sequence, whose items 1-3
-   * (`init`, `tsc --noEmit`, serve-check + kill) execute correctly in every run — and the
+   * (`init`, the compile gate, serve-check + kill) execute correctly in every run — and the
    * session performed items 1-3 and skipped the newly added item 4, from a file it had just
    * read. The model's prior for "the scaffold sequence is three steps" overrode the file.
    *
@@ -568,6 +568,9 @@ export function createGameFlow(game: ${pascal}Game): FlowDefinition {
     actionStep({
       name: 'play-step',
       actions: ['play'],
+      // The same seat acts again right after drawing. 'continue' says this is
+      // still that seat's turn, so undo can reach back over the draw too.
+      turnScope: 'continue',
       skipIf: (ctx) => {
         const player = ctx.player as ${pascal}Player;
         return player.hand.count(Card) === 0;

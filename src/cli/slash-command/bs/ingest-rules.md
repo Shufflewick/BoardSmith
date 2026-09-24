@@ -130,7 +130,7 @@ checks in the current directory, never `**/glob` patterns that search subfolders
 
 Delegate the entire scaffold-and-verify sequence to `${CLAUDE_SKILL_DIR}/../bs-shared/ingest/scaffold.md`: deriving
 display/project/class names, running `boardsmith init`, verifying the empty skeleton compiles
-(`tsc --noEmit`) and serves, and killing any server this skill starts before returning. Chunk 1
+(`npx vue-tsc --noEmit`) and serves, and killing any server this skill starts before returning. Chunk 1
 must start from a known-good, verified-compiling baseline.
 
 This step deliberately runs **before** transcription/interview: every artifact the later steps

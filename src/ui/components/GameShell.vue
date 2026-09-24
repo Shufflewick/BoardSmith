@@ -38,6 +38,8 @@ import TutorialOverlay from './helpers/TutorialOverlay.vue';
 import HintOverlay from './helpers/HintOverlay.vue';
 import HeatmapOverlay from './helpers/HeatmapOverlay.vue';
 import BoardMessage from './helpers/BoardMessage.vue';
+import DisabledReasonTooltip from './helpers/DisabledReasonTooltip.vue';
+import Toast from './Toast.vue';
 import { createBoardInteraction, provideBoardInteraction } from '../composables/useBoardInteraction';
 import { setupDragDropOrchestration } from '../composables/useDragDropTargets';
 import { useBoardActionBridge } from '../composables/useBoardActionBridge';
@@ -2215,12 +2217,12 @@ if ((import.meta as any).hot) {
     </div>
     <ZoomPreviewOverlay :preview-state="previewState" />
 
-    <!-- The single tooltip every dimmed control borrows to explain itself.
-         Mounted once here rather than per-button: at most one shows at a time,
-         and a teleported node per compass point / card / option is waste. -->
+    <!-- The page's two singletons, mounted by the ROOT shell so they exist on
+         every screen: the lobby and the waiting room toast too, and neither is
+         inside PlayShell (#308). WorldShell mounts its own pair the same way.
+         The tooltip is the one every dimmed control borrows to explain itself;
+         the toast is where a refusal you only discover by trying is spoken. -->
     <DisabledReasonTooltip />
-
-    <!-- Toast notifications -->
     <Toast />
   </div>
 </template>

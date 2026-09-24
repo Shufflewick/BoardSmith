@@ -2,7 +2,7 @@
 /**
  * DisabledReasonTooltip — the single tooltip that explains every dimmed control.
  *
- * Rendered ONCE by GameShell. Controls do not render their own; they mark
+ * Rendered ONCE per page, by the root shell (GameShell or WorldShell). Controls do not render their own; they mark
  * themselves with `v-disabled-reason` and this borrows their anchor rect.
  *
  * Why not the native `title` attribute, which this replaces:

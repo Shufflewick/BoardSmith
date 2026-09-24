@@ -110,6 +110,12 @@
         </div>
       </template>
     </PlayShell>
+
+    <!-- The page's two singletons, mounted by the ROOT shell so they exist in
+         every state above, not only while PlayShell is mounted (#308).
+         GameShell mounts its own pair the same way. -->
+    <DisabledReasonTooltip />
+    <Toast />
   </div>
 </template>
 
@@ -120,6 +126,8 @@ import { useWorldPlay } from './useWorldPlay.js';
 import { WORLD_CONTEXT_KEY } from './useWorld.js';
 import { provide } from 'vue';
 import PlayShell, { type PlayConnection } from '../components/PlayShell.vue';
+import Toast from '../components/Toast.vue';
+import DisabledReasonTooltip from '../components/helpers/DisabledReasonTooltip.vue';
 import { resolveUiComponent, type GameUIRegistry } from '../game-uis.js';
 import { useActionController } from '../composables/useActionController.js';
 import { createBoardInteraction, provideBoardInteraction } from '../composables/useBoardInteraction.js';
