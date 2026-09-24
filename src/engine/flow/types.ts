@@ -425,12 +425,13 @@ export interface FlowState {
   /** Error from last action if it failed (cleared on success) */
   actionError?: string;
   /**
-   * True when `actionError` came from author code THROWING inside `execute()`,
-   * rather than from a clean refusal or a validation rejection (#44). The
-   * runner rolls the game back to the pre-action checkpoint when it sees this,
-   * because a throw may have applied part of its changes.
+   * True when the failed action may have changed the game before it stopped:
+   * author code THREW inside `execute()` (#44), or a whole submission of a
+   * repeating selection was refused after `onEach` ran for some picks (#325).
+   * A clean refusal or a validation rejection never sets it. The runner rolls
+   * the game back to the pre-action checkpoint when it sees this.
    */
-  actionThrew?: boolean;
+  actionPartiallyApplied?: boolean;
   /**
    * Follow-up action to chain after the last action completed.
    * When present, the client should automatically start this action

@@ -18,9 +18,10 @@
 // twice, plus `index -> utils/index -> enumerate-moves -> index`). Breaking it
 // here breaks all three, because a barrel import is never load-bearing: every
 // name below has exactly one defining module.
-import type { Game } from '../element/game.js';
+import type { Game, GameOptions } from '../element/game.js';
 import type { Player } from '../player/player.js';
-import type { ActionDefinition, Selection } from '../action/types.js';
+import type { ActionDefinition, PendingActionState, Selection } from '../action/types.js';
+import { isElement } from '../element/game-element.js';
 import { availableActionsForSeat } from '../flow/seat-activity.js';
 import { resolveMultiSelect, resolveOrderedList } from './resolve-multiselect.js';
 import { NotSimulableError } from '../errors.js';
@@ -147,15 +148,11 @@ export function enumerateActionMoves(
       return [];
     }
 
-    const combos = enumerateSelections(game, actionDef, player);
-
-    // #19: an action-level `.validate()` refuses a SUBMISSION, and enumeration
-    // never called it — so a bot enumerated moves the engine then rejected, and
-    // the pump halted on the rejection with the round never closing for any
-    // seat. Every move handed back must be one `performAction` would accept.
-    const legal = actionDef.validate
-      ? combos.filter((args) => executor.validateAction(actionDef, player, args).valid)
-      : combos;
+    // #325: a repeating selection's picks change the game (`onEach`) while
+    // they are being made, so its moves can only be found by making them.
+    const legal = executor.hasRepeatingSelections(actionDef)
+      ? enumerateThroughSelectionSteps(game, actionDef, player)
+      : enumerateGatedSelections(game, actionDef, player);
 
     // Apply maxPerAction truncation only when caller opts in (D-07: full enumeration default)
     return options?.maxPerAction !== undefined ? legal.slice(0, options.maxPerAction) : legal;
@@ -177,6 +174,219 @@ export function enumerateActionMoves(
     );
     return [];
   }
+}
+
+/**
+ * Every combination of selection values that also passes the action-level
+ * `validate` gate.
+ */
+function enumerateGatedSelections(
+  game: Game,
+  actionDef: ActionDefinition,
+  player: Player,
+): Record<string, unknown>[] {
+  const combos = enumerateSelections(game, actionDef, player);
+  // #19: an action-level `.validate()` refuses a SUBMISSION, and enumeration
+  // never called it — so a bot enumerated moves the engine then rejected, and
+  // the pump halted on the rejection with the round never closing for any
+  // seat. Every move handed back must be one `performAction` would accept.
+  if (!actionDef.validate) return combos;
+  const executor = game.getActionExecutor();
+  return combos.filter((args) => executor.validateAction(actionDef, player, args).valid);
+}
+
+// ─── Repeating selections ────────────────────────────────────────────────────
+
+/**
+ * How many partial moves enumeration of an action with a repeating selection
+ * will build before it stops (#325). Each one restores a scratch copy of the
+ * game and replays its picks, because a pick's `onEach` changes what the next
+ * pick may be. A repeat whose picks rarely end it is an unbounded space, so the
+ * shortest moves are found first and the walk stops, loudly, at this budget.
+ */
+const MAX_REPEAT_ENUMERATION_STEPS = 500;
+
+/** One answer on the way to a move, in a form that survives a tree rebuild. */
+interface EnumerationStep {
+  selection: Selection;
+  /** Element objects are held as `{ id, className }`, never as live objects. */
+  value: unknown;
+}
+
+/**
+ * Every legal move of an action that has a repeating selection, found by
+ * making its picks on a scratch copy of the game (#325).
+ *
+ * A repeat's value is its picks in order, ending with the one that ends it, and
+ * what each pick may be depends on what the previous pick's `onEach` did. So
+ * the moves are found through the executor's own selection steps
+ * (`processSelectionStep`, `processRepeatingStep`), the same ones a whole
+ * submission and a player's picks go through, and never on the game that was
+ * asked about: its state is untouched. Moves are breadth-first, shortest first,
+ * and bounded by {@link MAX_REPEAT_ENUMERATION_STEPS}.
+ */
+function enumerateThroughSelectionSteps(
+  game: Game,
+  actionDef: ActionDefinition,
+  player: Player,
+): Record<string, unknown>[] {
+  const scratch = scratchCopy(game);
+  const moves: Record<string, unknown>[] = [];
+  const queue: EnumerationStep[][] = [[]];
+  let built = 0;
+
+  while (queue.length > 0 && built < MAX_REPEAT_ENUMERATION_STEPS) {
+    const steps = queue.shift()!;
+    built++;
+    const at = scratch.replay(actionDef.name, player.seat, steps);
+    // A value the selection offered can still be refused by its own
+    // `validate`: that path is simply not a move.
+    if (!at) continue;
+    const { action, seatPlayer, pending } = at;
+    const executor = scratch.game.getActionExecutor();
+
+    if (executor.isPendingActionComplete(action, pending)) {
+      if (executor.pendingActionRefusal(action, seatPlayer, pending) === null) {
+        moves.push(liveArgs(game, steps));
+      }
+      continue;
+    }
+
+    const selection = action.selections[pending.currentSelectionIndex];
+    const values = executor.isRepeatingSelection(selection)
+      ? executor.repeatingPickCandidates(action, seatPlayer, pending)
+      : nextStepValues(scratch.game, action, seatPlayer, pending, selection);
+    for (const value of values) {
+      queue.push([...steps, { selection, value: stableValue(value) }]);
+    }
+  }
+
+  if (queue.length > 0) {
+    devWarn(
+      `repeat-enumeration-capped:${actionDef.name}`,
+      `Enumerating action "${actionDef.name}" built ${MAX_REPEAT_ENUMERATION_STEPS} partial moves ` +
+        `and stopped with more unexplored, so only its ${moves.length} shortest move(s) are offered. ` +
+        `Its repeating selection rarely ends: give its \`until\` a pick that ends it sooner, or offer ` +
+        `fewer choices per pick, so the moves stay tractable.`,
+    );
+  }
+  return moves;
+}
+
+/**
+ * The values a non-repeating selection may take at this point of a pending
+ * action: the same candidates, by the same rules, as {@link _enumerateRecursive}
+ * tries. An optional selection with nothing to offer is skipped (`null`).
+ */
+function nextStepValues(
+  game: Game,
+  action: ActionDefinition,
+  player: Player,
+  pending: PendingActionState,
+  selection: Selection,
+): unknown[] {
+  const args = game.getActionExecutor().resolveArgs(action, pending.collectedArgs, player);
+  if (selection.type === 'text' || selection.type === 'number') {
+    return selection.optional ? [null] : [];
+  }
+  const choices = _getChoices(game, action.name, selection, player, args);
+  if (choices.length === 0) return selection.optional ? [null] : [];
+  return _valuesToTry(game, action, player, selection, choices, args);
+}
+
+/** An element (or a list of them) as `{ id, className }`, which a selection step resolves by id. */
+function stableValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(stableValue);
+  if (isElement(value)) return { id: value.id, className: value.constructor.name };
+  return value;
+}
+
+/**
+ * A move's args bound to the LIVE game's own objects: element references are
+ * looked up there by id, and a repeating selection's value is its picks as an
+ * array. A skipped optional selection is left out, as a player's skip is.
+ */
+function liveArgs(game: Game, steps: EnumerationStep[]): Record<string, unknown> {
+  const args: Record<string, unknown> = {};
+  const executor = game.getActionExecutor();
+  for (const { selection, value } of steps) {
+    if (value === null) continue;
+    if (executor.isRepeatingSelection(selection)) {
+      const picks = (args[selection.name] as unknown[] | undefined) ?? [];
+      const isElementPick = selection.type === 'element' || selection.type === 'elements';
+      picks.push(isElementPick ? liveElement(game, selection, { id: value as number }) : liveValue(game, selection, value));
+      args[selection.name] = picks;
+    } else {
+      args[selection.name] = liveValue(game, selection, value);
+    }
+  }
+  return args;
+}
+
+function liveValue(game: Game, selection: Selection, value: unknown): unknown {
+  if (Array.isArray(value)) return value.map((v) => liveValue(game, selection, v));
+  if (typeof value === 'object' && value !== null && 'className' in value && 'id' in value) {
+    return liveElement(game, selection, value as { id: number });
+  }
+  return value;
+}
+
+function liveElement(game: Game, selection: Selection, ref: { id: number }): unknown {
+  const element = game.getElementById(ref.id);
+  if (!element) {
+    throw new Error(
+      `Enumerating moves for "${selection.name}" reached element ${ref.id}, which this game does not ` +
+        `have: an earlier pick's onEach created it. A move cannot name an element that exists only ` +
+        `after part of the move has run. Offer an element that already exists, or split the action ` +
+        `in two so the created element is chosen by the second.`,
+    );
+  }
+  return element;
+}
+
+/**
+ * An independent copy of a game that can be put back to the moment it was
+ * copied, for trying picks whose callbacks change the game.
+ */
+function scratchCopy(source: Game) {
+  const GameClass = source.constructor as new (options: GameOptions) => Game;
+  const game = new GameClass(source.getConstructorOptions() as GameOptions);
+  const state = source.toJSON();
+  const messageLog = source.serializeMessageLog();
+  const sequence = source._ctx.sequence;
+  const randomState = source.getRandomState();
+  const flowState = source.getFlowState();
+
+  const reset = (): void => {
+    game.loadSerializedState(state, { messageLog });
+    game._ctx.sequence = sequence;
+    game.setRandomState(randomState);
+  };
+  reset();
+  if (flowState) game.restoreFlowState(flowState);
+
+  return {
+    game,
+    /**
+     * Put the copy back, then make `steps` as a player would. Returns where
+     * that left the pending action, or `null` if a step was refused.
+     */
+    replay(actionName: string, seat: number, steps: EnumerationStep[]) {
+      reset();
+      const action = game.getAction(actionName)!;
+      const seatPlayer = game.getPlayer(seat)!;
+      const executor = game.getActionExecutor();
+      const pending = executor.createPendingActionState(actionName, seat);
+      for (const { selection, value } of steps) {
+        if (executor.isRepeatingSelection(selection)) {
+          if (executor.processRepeatingStep(action, seatPlayer, pending, value).error) return null;
+        } else if (!executor.processSelectionStep(action, seatPlayer, pending, selection.name, value).success) {
+          return null;
+        }
+      }
+      return { action, seatPlayer, pending };
+    },
+  };
 }
 
 // ─── Selection combinatorics ─────────────────────────────────────────────────
