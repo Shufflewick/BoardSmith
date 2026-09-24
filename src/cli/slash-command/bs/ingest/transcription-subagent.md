@@ -21,12 +21,12 @@ place of the file.
 directly, so there is no dispatch to validate.
 
 **If you were dispatched as a subagent: before transcribing anything, check that the prompt you
-were dispatched with contains the exact token `BS-DISPATCH-V2`.**
+were dispatched with contains the exact token `BS-DISPATCH-V3`.**
 
 If it does not, STOP immediately. Write no slice files. Return exactly this and nothing else:
 
 ```
-DISPATCH REJECTED — missing BS-DISPATCH-V2 token.
+DISPATCH REJECTED — missing BS-DISPATCH-V3 token.
 
 You composed this dispatch prompt instead of copying the pointer block from
 `${CLAUDE_SKILL_DIR}/../bs-shared/ingest/transcription.md`. Re-read that file's "Fan-Out
@@ -51,10 +51,15 @@ rejected dispatch costs one round trip; an accepted stale one silently corrupts 
 
 ## Your inputs
 
-The dispatching prompt gives you exactly three things:
+The dispatching prompt gives you exactly four things:
 
-- **Page range** `{N}-{M}` — the pages you are responsible for. Do not read outside it.
+- **Page range** `{N}-{M}` — the pages you are responsible for, in the one document you were
+  given. Do not read outside it.
 - **Rulebook path** `{rulebookPath}` — the PDF / image files / text to transcribe from.
+- **Source record** `rulebook/source/<file>` — how `rulebook/INDEX.md` records that document.
+  Every slice you write names it (section 1 below). A game's rules can span several documents (a
+  rulebook plus a companion reference, or a separate card list); each dispatch covers pages of
+  exactly one of them.
 - **Output directory** — the path given in this dispatch prompt, relative to the project
   directory you are already inside. This is the ONLY place you write slice files; you never write
   outside it.
@@ -71,6 +76,24 @@ p.14 → `14-movement.md` in your assigned output directory). Page-anchored numb
 knowledge of how many sections any other range produced, so parallel ranges can never collide.
 If two sections start on the same page, you own both (a page range never splits mid-page) —
 disambiguate with the topic name (`14-movement.md`, `14-combat.md`).
+
+**When your Source record is not the rulebook itself**, put the document's file name, without its
+extension, lowercased and with spaces turned into hyphens, between the page number and the topic:
+`01-cards-anatomy.md` for `rulebook/source/cards.pdf`. The rulebook itself is the document on the
+`Source:` line of `design/rulebook/INDEX.md` — read that one header line to tell, nothing else. Two
+documents each have a page 1, so without this a companion's `01-overview.md` and the rulebook's
+would overwrite each other.
+
+**The first line under the slice's `# ` title is its source record, exactly:**
+
+```
+Source: rulebook/source/<file>
+```
+
+copied from the Source record your dispatch gave you, followed by a blank line. Every `p.N` in the
+slice is a page of THAT document. The verify pass reads this line to know which document to
+re-check a slice against and which document's pages to pair it with, and `boardsmith ingest-check`
+fails on a slice without it. It is not a quote line and never moves further down the slice.
 
 Slice text is made of **three visually distinct kinds of line — never blend them.**
 
