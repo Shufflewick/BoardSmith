@@ -36,6 +36,28 @@ export interface IngestArchiveOptions {
   edition?: string;
   /** Emit machine-readable JSON instead of human output. */
   json?: boolean;
+  /**
+   * The game's name for the index title. `boardsmith init` passes the `<name>` it was given,
+   * because `init --into-existing` scaffolds into a directory named anything. Without it the
+   * project directory's name is used.
+   */
+  gameName?: string;
+}
+
+/**
+ * The two files archiving `rulebook` into `projectDir` writes: the archived copy and the index.
+ * `boardsmith init --into-existing` checks both for conflicts before writing anything, so this is
+ * the one statement of where they go.
+ */
+export function rulebookArchivePaths(
+  projectDir: string,
+  rulebook: string,
+): { archivePath: string; indexPath: string } {
+  const rulebookDir = designRulebookDir(resolve(projectDir));
+  return {
+    archivePath: join(rulebookDir, 'source', basename(resolveUserPath(process.cwd(), rulebook))),
+    indexPath: join(rulebookDir, 'INDEX.md'),
+  };
 }
 
 /** The exact strings downstream tooling parses. Changing one is a breaking change. */
@@ -628,8 +650,8 @@ export async function ingestArchiveCommand(
   }
 
   const fileName = basename(sourcePath);
-  const archiveDir = join(designRulebookDir(projectDir), 'source');
-  const archivePath = join(archiveDir, fileName);
+  const { archivePath, indexPath } = rulebookArchivePaths(projectDir, rulebook);
+  const archiveDir = dirname(archivePath);
   const relArchivePath = `rulebook/source/${fileName}`;
 
   // Never clobber. Ingest does not overwrite a designer's archived source.
@@ -657,9 +679,8 @@ export async function ingestArchiveCommand(
     throw new Error(`Archived copy at ${relArchivePath} does not match the source. Aborting.`);
   }
 
-  const gameName = basename(projectDir);
+  const gameName = options.gameName ?? basename(projectDir);
   const transcribed = isoDate(new Date());
-  const indexPath = join(designRulebookDir(projectDir), 'INDEX.md');
 
   // Decide the branch BEFORE any try/catch that performs a write. Today's bug (T-173-01): the
   // existence probe and the real repair write shared one try, with a catch that overwrote a real

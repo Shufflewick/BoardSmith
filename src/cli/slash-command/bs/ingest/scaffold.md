@@ -38,9 +38,9 @@ kebab-casing itself is entirely your job, and the CLI's Display Name derivation 
 after `init` — see "Display Name correction" below. Use the derived Project Name (kebab-case)
 as `<name>` in every command below.
 
-## Directory Framing — `init` Always Creates a New Subdirectory
+## Directory Framing — A New Subdirectory, or the Repository You Are In
 
-`npx boardsmith init <name> --rulebook <path>` **unconditionally creates `<cwd>/<name>`** and
+`npx boardsmith init <name> --rulebook <path>` **creates `<cwd>/<name>`** and
 **errors** if that path already exists (`Directory "<name>" already exists` —
 `src/cli/commands/init.ts`).
 
@@ -53,18 +53,38 @@ given; there is no bare `init`. The flag is written into every occurrence of thi
 this file on purpose — two live runs (2026-07-27 and 2026-07-28) reported the bare form as "what
 the doc says" while later paragraphs specified the flag, so the first occurrence is the one that
 gets copied.
-There is no in-place mode and no "use the current directory if it's empty" mode — do not instruct
-a session to run `init` inside an existing directory expecting it to scaffold that directory in
-place. This corrects the old skill's stale Phase 1B framing, which conditionally used the current
-directory; that directory-choice logic does not apply to `init` and must not be carried forward.
+There is no "use the current directory if it's empty" mode. Scaffolding in place happens only
+when you pass `--into-existing`, described below; without it `init` never touches an existing
+directory.
 
-Run `init` from the **parent** directory of where the game project should live, using the derived
-kebab-case Project Name:
+**A new game** — run `init` from the **parent** directory of where the game project should live,
+using the derived kebab-case Project Name:
 
 ```bash
 cd <parent-of-where-the-project-should-live>
-npx boardsmith init <name> --rulebook <absolute-rulebookPath>   # ALWAYS creates ./<name>/ ; errors if it already exists
+npx boardsmith init <name> --rulebook <absolute-rulebookPath>   # creates ./<name>/ ; errors if it already exists
 ```
+
+**A game that already lives in a git repository** (design research, notes, a requirements
+document, with its own history and remote) — run `init` from that repository's **top folder**
+with `--into-existing`:
+
+```bash
+cd <the-repository's-top-folder>
+npx boardsmith init <name> --rulebook <absolute-rulebookPath> --into-existing
+```
+
+It writes the same files, rulebook archive and `pre-commit` hook a fresh `init` does, into the
+current folder, and it leaves out `git init` and the scaffold commit because the repository and
+its history already exist. Commit the scaffold yourself once it is verified. Never scaffold
+elsewhere and copy the tree in: that drops the `pre-commit` hook, and nothing reports it missing.
+It refuses, with nothing changed, in two cases:
+
+- the folder is not the top folder of a git repository (`not the top folder of a git repository`).
+  Run it from the top folder, or ask the designer before running `git init` there;
+- any file it would write is already there (`already exist here, so nothing was changed`, followed
+  by every conflicting path, commonly `.gitignore` or `README.md`). Stop and show the designer the
+  list; do not move or delete their files yourself.
 
 **`--rulebook` is part of this command line whenever a rulebook path is known** — i.e. whenever
 the designer passed one to `/bs-ingest-rules` (see its "Invocation" section). It is not a separate
@@ -98,8 +118,9 @@ four. What no run has ever skipped is `boardsmith init <name>` itself, because i
 command to create the directory. A flag on a command already being invoked survives where a new
 step does not. Do not split this back out into its own step.
 
-If the directory already exists, stop and ask the designer how to proceed (rename, or confirm the
-existing directory should be reused via a different flow) rather than guessing.
+If the directory already exists, stop and ask the designer how to proceed (a different name, or
+`--into-existing` from inside it when it is the git repository the game should live in) rather
+than guessing.
 
 **`init` also installs a `pre-commit` hook** in the new project that runs
 `boardsmith ingest-gaps` — filling `rulebook/INDEX.md`'s `## Open Rules Gaps` from the slices and
@@ -126,10 +147,10 @@ do not reorder them, and do not treat "it compiled" as sufficient without also c
 serves. Failures at any step STOP the sequence with an actionable message (what failed, the exact
 error, and what to fix) — never proceed past a failing step assuming it will "work once deployed."
 
-1. **Compile gate** — from inside `<name>/`:
+1. **Compile gate** — from inside the project:
 
    ```bash
-   cd <name>
+   cd <name>   # skip this line after --into-existing: you are already in the project
    npx vue-tsc --noEmit
    ```
 
@@ -174,8 +195,8 @@ error, and what to fix) — never proceed past a failing step assuming it will "
    required by the plan itself: any server this skill starts must be killed before it returns.
 
 Only once all three steps have completed (compile clean, serve confirmed, process killed) is the
-scaffold considered verified and chunk 1 work may begin against it. The session stays inside
-`<name>/` from here on — every subsequent ingest step (transcription/interview, synthesis,
+scaffold considered verified and chunk 1 work may begin against it. The session stays inside the
+project (`<name>/`, or the repository's top folder after `--into-existing`) from here on — every subsequent ingest step (transcription/interview, synthesis,
 sketch writing) writes its artifacts into this directory, never the parent.
 
 ## Required Reading Pointer
