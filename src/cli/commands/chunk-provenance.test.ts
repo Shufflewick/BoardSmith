@@ -1285,9 +1285,10 @@ describe('VERIFIED_AGAINST_LABELS — Re-verified (no code change) append (175-0
     };
   }
 
-  it('has exactly nine members, with the new one appended last', () => {
-    expect(VERIFIED_AGAINST_LABELS).toHaveLength(9);
+  it('has exactly ten members: Re-verified appended ninth, Additional source hash tenth (#305)', () => {
+    expect(VERIFIED_AGAINST_LABELS).toHaveLength(10);
     expect(VERIFIED_AGAINST_LABELS[8]).toBe('Re-verified (no code change):');
+    expect(VERIFIED_AGAINST_LABELS[9]).toBe('Additional source hash:');
   });
 
   it('the first eight members deep-equal the pre-change label set, byte-for-byte', () => {
@@ -1353,5 +1354,94 @@ describe('VERIFIED_AGAINST_LABELS — Re-verified (no code change) append (175-0
     expect(parsed.blockMalformed).toBe(false);
     expect(parsed.state).toBe(SCOPE_FULL);
     expect(parsed.reverifiedNoCodeChange).toBeUndefined();
+  });
+});
+
+/**
+ * #305: a chunk built from slices of a companion document must record which version of that
+ * document it was verified against, or re-archiving a changed companion leaves every chunk
+ * reading as verified against the current rules.
+ */
+describe('## Verified Against — additional source hashes (#305)', () => {
+  const HASH_A = 'a'.repeat(64);
+  const HASH_B = 'b'.repeat(64);
+
+  function record(overrides: Partial<VerifiedAgainstRecord> = {}): VerifiedAgainstRecord {
+    return {
+      scope: SCOPE_FULL,
+      edition: 'First Printing 2020',
+      sourceHash: 'deadbeef',
+      boardsmithVersion: '4.7.0',
+      skillsTreeHash: 'cafef00d',
+      citedSlices: [],
+      unresolved: [],
+      ...overrides,
+    };
+  }
+
+  function asChunk(rendered: string): string {
+    return `# Chunk: x\n\n${VERIFIED_AGAINST_HEADING}\n\n${VERIFIED_AGAINST_BEGIN}${rendered}${VERIFIED_AGAINST_END}\n`;
+  }
+
+  it('renders one line per additional source, right after the rulebook source hash', () => {
+    const rendered = renderVerifiedAgainst(
+      record({
+        additionalSources: [
+          { sourcePath: 'rulebook/source/REFERENCE.md', sourceHash: HASH_A },
+          { sourcePath: 'rulebook/source/cards.pdf', sourceHash: HASH_B },
+        ],
+      }),
+    );
+    expect(rendered).toContain(
+      'Rulebook source hash: deadbeef\n' +
+        `Additional source hash: ${HASH_A} rulebook/source/REFERENCE.md\n` +
+        `Additional source hash: ${HASH_B} rulebook/source/cards.pdf\n` +
+        'BoardSmith version: 4.7.0\n',
+    );
+  });
+
+  it('a single-source record renders no such line, byte-identical to before', () => {
+    expect(renderVerifiedAgainst(record({ additionalSources: [] }))).toBe(renderVerifiedAgainst(record()));
+    expect(renderVerifiedAgainst(record())).not.toContain('Additional source hash:');
+  });
+
+  it('round-trips through parseVerifiedAgainst', () => {
+    const additionalSources = [{ sourcePath: 'rulebook/source/REFERENCE.md', sourceHash: HASH_A }];
+    const parsed = parseVerifiedAgainst(asChunk(renderVerifiedAgainst(record({ additionalSources }))));
+    expect(parsed.blockMalformed).toBe(false);
+    expect(parsed.additionalSources).toEqual(additionalSources);
+  });
+
+  it('a block without the line parses as valid, with no additional sources recorded', () => {
+    const parsed = parseVerifiedAgainst(asChunk(renderVerifiedAgainst(record())));
+    expect(parsed.blockMalformed).toBe(false);
+    expect(parsed.additionalSources).toEqual([]);
+  });
+
+  it('chunk-check records each additional source the project has', async () => {
+    const project = join(dir, 'windup');
+    await fs.mkdir(project, { recursive: true });
+    const rules = join(dir, 'RULES.md');
+    const reference = join(dir, 'REFERENCE.md');
+    await fs.writeFile(rules, '# Rules\n');
+    await fs.writeFile(reference, '# Reference\n');
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      await ingestArchiveCommand(rules, { project, json: true, additionalSource: [reference] });
+    } finally {
+      vi.restoreAllMocks();
+    }
+    await writeChunk(project, 'battle', withInterpretation(await readChunkTemplate(), 'Cites rulebook/INDEX.md.'));
+    await recordVerifiedAgainst('battle', { project });
+
+    const parsed = parseVerifiedAgainst(
+      await fs.readFile(join(project, DESIGN_DIR, 'chunks', 'battle', 'CHUNK.md'), 'utf-8'),
+    );
+    expect(parsed.additionalSources).toEqual([
+      {
+        sourcePath: 'rulebook/source/REFERENCE.md',
+        sourceHash: createHash('sha256').update('# Reference\n').digest('hex'),
+      },
+    ]);
   });
 });

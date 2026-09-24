@@ -351,6 +351,7 @@ export const VERIFIED_AGAINST_LABELS = Object.freeze([
   'Cited slices:',
   'Unresolved citations:',
   'Re-verified (no code change):',
+  'Additional source hash:',
 ] as const);
 
 const [
@@ -363,7 +364,20 @@ const [
   LABEL_CITED,
   LABEL_UNRESOLVED,
   LABEL_REVERIFIED,
+  LABEL_ADDITIONAL_SOURCE,
 ] = VERIFIED_AGAINST_LABELS;
+
+/**
+ * One `Additional source hash: <sha256> <path>` line per `## Additional Sources` row the chunk was
+ * verified against (#305), rendered right after `Rulebook source hash:`. Hash first because it is
+ * fixed-width, so a path containing spaces still parses. Absent for a single-source project, so
+ * those blocks are byte-identical to before; a block without the line records no additional
+ * source, which `resolveProvenance` reads as "not verified against the current one".
+ */
+const ADDITIONAL_SOURCE_LINE_RE = new RegExp(
+  `^${LABEL_ADDITIONAL_SOURCE}\\s+([0-9a-f]{64})\\s+(\\S.*)$`,
+  'gm',
+);
 
 /**
  * The placeholder body a freshly scaffolded CHUNK.md carries before its first `chunk-check` —
@@ -380,6 +394,8 @@ export interface VerifiedAgainstRecord {
   edition?: string;
   /** The edition anchor (171-CONTEXT.md decision 4) — `INDEX.md`'s own `Source hash:` value. */
   sourceHash?: string;
+  /** The hash-verified `## Additional Sources` rows, anchoring the rest of the rules (#305). */
+  additionalSources?: Array<{ sourcePath: string; sourceHash: string }>;
   boardsmithVersion: string;
   skillsTreeHash: string;
   citedSlices: Array<{ path: string; hash: string }>;
@@ -407,6 +423,9 @@ export function renderVerifiedAgainst(record: VerifiedAgainstRecord): string {
   }
   lines.push(`${LABEL_EDITION} ${record.edition ?? 'none recorded'}`);
   lines.push(`${LABEL_SOURCE_HASH} ${record.sourceHash ?? 'none recorded'}`);
+  for (const additional of record.additionalSources ?? []) {
+    lines.push(`${LABEL_ADDITIONAL_SOURCE} ${additional.sourceHash} ${additional.sourcePath}`);
+  }
   lines.push(`${LABEL_VERSION} ${record.boardsmithVersion}`);
   lines.push(`${LABEL_SKILLS_HASH} ${record.skillsTreeHash}`);
   if (record.reverifiedNoCodeChange) {
@@ -568,6 +587,7 @@ export async function recordVerifiedAgainst(
     reason: scope.reason,
     edition: scope.edition,
     sourceHash: scope.sourceHash,
+    additionalSources: scope.additionalSources ?? [],
     boardsmithVersion: readBoardsmithVersion(),
     skillsTreeHash: await hashSkillsTree(projectDir),
     citedSlices,
@@ -788,6 +808,8 @@ export interface ParsedVerifiedAgainst {
   /** The RAW recorded edition string (not yet normalised) — undefined when `state` is `unknown` or the block recorded no edition. */
   edition?: string;
   sourceHash?: string;
+  /** Each `Additional source hash:` line (#305); `[]` when the block records none. */
+  additionalSources: Array<{ sourcePath: string; sourceHash: string }>;
   boardsmithVersion?: string;
   skillsTreeHash?: string;
   citedSlices: string[];
@@ -809,7 +831,13 @@ export interface ParsedVerifiedAgainst {
 }
 
 function unparsed(blockMalformed: boolean): ParsedVerifiedAgainst {
-  return { state: PROVENANCE_UNKNOWN, citedSlices: [], unresolved: [], blockMalformed };
+  return {
+    state: PROVENANCE_UNKNOWN,
+    additionalSources: [],
+    citedSlices: [],
+    unresolved: [],
+    blockMalformed,
+  };
 }
 
 /**
@@ -903,6 +931,10 @@ export function parseVerifiedAgainst(chunkText: string): ParsedVerifiedAgainst {
     reason,
     edition: editionRaw === 'none recorded' ? undefined : editionRaw,
     sourceHash: sourceHashRaw === 'none recorded' ? undefined : sourceHashRaw,
+    additionalSources: [...body.matchAll(ADDITIONAL_SOURCE_LINE_RE)].map((m) => ({
+      sourcePath: m[2].trim(),
+      sourceHash: m[1],
+    })),
     boardsmithVersion: versionRaw,
     skillsTreeHash: skillsHashRaw,
     citedSlices,

@@ -415,6 +415,11 @@ export interface ProvenanceResult {
   currentHash?: string;
   /** Every recorded `Source hash:` value found across chunks citing this pair's live slices. */
   recordedHashes: string[];
+  /**
+   * `## Additional Sources` paths that at least one citing chunk was NOT verified against in their
+   * current version (#305): it recorded a different hash, or none because it predates the row.
+   */
+  changedAdditionalSources: string[];
   /** A short, enumerated, machine-stable phrase — never free prose a human report re-derives. */
   reason: string;
 }
@@ -441,7 +446,11 @@ function bareSliceName(path: string): string {
  *     pre-provenance project — the actual current state of both reference games — has no prior
  *     hash, and both populated states would be claims the tool cannot support). Any recorded hash
  *     differing from current → `source-changed` (any disagreement is a change the designer must
- *     see). Otherwise (at least one recorded hash, all equal to current) → `source-unchanged`.
+ *     see). So is a citing chunk that did not record the current hash of every `## Additional
+ *     Sources` row (#305): slices do not say which document they came from, so a companion
+ *     document that changed may be the one this pair was transcribed from. Otherwise (at least
+ *     one recorded hash, all equal to current, every additional source current) →
+ *     `source-unchanged`.
  *
  * No branch of this function can return `source-unchanged` when `recordedHashes` is empty —
  * pinned directly by `provenance-3`.
@@ -457,6 +466,7 @@ export async function resolveProvenance(
     return {
       provenance: 'unknown',
       recordedHashes: [],
+      changedAdditionalSources: [],
       reason:
         `no archived source available to compare against ` +
         `(${scope.reason ?? 'verification scope is not full'}) — cannot compute a provenance verdict`,
@@ -495,7 +505,9 @@ export async function resolveProvenance(
     sliceFilenames = [];
   }
 
+  const currentAdditional = scope.additionalSources ?? [];
   const recordedHashes = new Set<string>();
+  const changedAdditionalSources = new Set<string>();
   for (const slug of slugs) {
     let chunkText: string;
     try {
@@ -507,7 +519,14 @@ export async function resolveProvenance(
     const citesThisPair = resolved.some((r) => wantedNames.has(bareSliceName(r)));
     if (!citesThisPair) continue;
     const parsed = parseVerifiedAgainst(chunkText);
-    if (parsed.sourceHash) recordedHashes.add(parsed.sourceHash);
+    if (!parsed.sourceHash) continue;
+    recordedHashes.add(parsed.sourceHash);
+    // Every additional source is part of the rules, and slices do not say which document they
+    // came from, so a citing chunk must have been verified against each one's current version.
+    for (const current of currentAdditional) {
+      const recorded = parsed.additionalSources.find((a) => a.sourcePath === current.sourcePath);
+      if (recorded?.sourceHash !== current.sourceHash) changedAdditionalSources.add(current.sourcePath);
+    }
   }
 
   if (recordedHashes.size === 0) {
@@ -515,6 +534,7 @@ export async function resolveProvenance(
       provenance: 'unknown',
       currentHash,
       recordedHashes: [],
+      changedAdditionalSources: [],
       reason:
         'no chunk citing these live slices records a Source hash — a first-ever verify pass, ' +
         'not a claim this tool can support',
@@ -522,12 +542,14 @@ export async function resolveProvenance(
   }
 
   const recordedHashesArr = [...recordedHashes].sort();
+  const changedAdditionalArr = [...changedAdditionalSources].sort();
   const allMatchCurrent = recordedHashesArr.every((h) => h === currentHash);
-  if (allMatchCurrent) {
+  if (allMatchCurrent && changedAdditionalArr.length === 0) {
     return {
       provenance: 'source-unchanged',
       currentHash,
       recordedHashes: recordedHashesArr,
+      changedAdditionalSources: [],
       reason: 'every citing chunk\'s recorded Source hash matches the current archived source',
     };
   }
@@ -536,9 +558,12 @@ export async function resolveProvenance(
     provenance: 'source-changed',
     currentHash,
     recordedHashes: recordedHashesArr,
-    reason:
-      'at least one citing chunk\'s recorded Source hash differs from the current archived ' +
-      'source — any disagreement is a change the designer must see',
+    changedAdditionalSources: changedAdditionalArr,
+    reason: allMatchCurrent
+      ? 'at least one citing chunk was not verified against the current version of an additional ' +
+        `source (${changedAdditionalArr.join(', ')}) — any disagreement is a change the designer must see`
+      : 'at least one citing chunk\'s recorded Source hash differs from the current archived ' +
+        'source — any disagreement is a change the designer must see',
   };
 }
 
