@@ -118,11 +118,6 @@
         "count": 1
       }
     },
-    "src/cli/commands/doctor.ts": {
-      "complexity_high": {
-        "count": 1
-      }
-    },
     "src/cli/commands/drift-check.ts": {
       "complexity_high": {
         "count": 1

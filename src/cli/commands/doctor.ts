@@ -276,6 +276,18 @@ async function testScopeFindings(projectDir: string): Promise<DoctorFinding[]> {
   ];
 }
 
+/**
+ * Resolve every finding `--fix` is allowed to resolve. `design/` and the scratch dir are created
+ * lazily, so a healthy project that needs no moves does not grow empty directories.
+ */
+async function fixAll(projectDir: string, findings: DoctorFinding[]): Promise<void> {
+  for (const f of findings) {
+    if (NEEDS_A_PERSON.has(f.kind)) continue;
+    await fix(projectDir, f);
+    f.fixed = true;
+  }
+}
+
 /** Resolve one finding `--fix` is allowed to resolve. */
 async function fix(projectDir: string, f: DoctorFinding): Promise<void> {
   if (f.kind === 'test-run-collects-worktrees') {
@@ -318,15 +330,7 @@ export async function doctorCommand(
     ...(await testScopeFindings(projectDir)),
   ];
 
-  if (options.fix) {
-    // `design/` and the scratch dir are created lazily — a healthy project that needs no moves
-    // should not grow empty directories just because doctor ran.
-    for (const f of findings) {
-      if (NEEDS_A_PERSON.has(f.kind)) continue;
-      await fix(projectDir, f);
-      f.fixed = true;
-    }
-  }
+  if (options.fix) await fixAll(projectDir, findings);
 
   const result = summarize(projectDir, findings);
   const { pending, conflicts } = result.counts;
