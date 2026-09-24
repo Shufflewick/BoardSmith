@@ -20,7 +20,6 @@ export default defineConfig({
       'src/bot/mcts-cache.test.ts',
       'src/bot/mcts-stats-checkers.test.ts',
       'src/bot/cribbage-bot.test.ts',
-      'src/bot-trainer/parallel-simulator.test.ts',
     ],
   },
   resolve: {
