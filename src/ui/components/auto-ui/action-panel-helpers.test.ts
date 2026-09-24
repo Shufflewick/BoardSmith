@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   splitAnchoredChoices,
   shouldDeferElementPickToBoard,
+  shouldDeferChoicePickToBoard,
   textLengthHint,
   numberRangeHint,
 } from './action-panel-helpers.js';
@@ -91,7 +92,7 @@ describe('shouldDeferElementPickToBoard', () => {
     expect(shouldDeferElementPickToBoard('elements', anchored(40), 24)).toBe(true);
   });
 
-  it('never defers a choice pick — choice values are not board elements', () => {
+  it('leaves a choice pick to its own rule — its candidates are values, not elements', () => {
     expect(shouldDeferElementPickToBoard('choice', anchored(40), 24)).toBe(false);
   });
 
@@ -102,6 +103,72 @@ describe('shouldDeferElementPickToBoard', () => {
 
   it('never defers an empty candidate list', () => {
     expect(shouldDeferElementPickToBoard('element', [], 0)).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// #313 — the same handoff for a large board-anchored chooseFrom
+// ---------------------------------------------------------------------------
+
+describe('shouldDeferChoicePickToBoard', () => {
+  /** N choices, each on its own board space, the way `boardRefs` declares one. */
+  const onTheBoard = (n: number): ChoiceWithRefs[] =>
+    Array.from({ length: n }, (_, i) => ({
+      value: `s${i}`,
+      display: `Space ${i}`,
+      refs: [{ ref: { notation: `s${i}` }, role: 'target' as const }],
+    }));
+
+  it('defers a choice pick larger than the threshold when every candidate is a board space', () => {
+    expect(shouldDeferChoicePickToBoard(onTheBoard(25), 24)).toBe(true);
+  });
+
+  it('defers at the real threshold, for a pick the size of Windup Warfare\'s placePack', () => {
+    expect(shouldDeferChoicePickToBoard(onTheBoard(3720))).toBe(true);
+  });
+
+  it('keeps a pick at the threshold in the panel', () => {
+    expect(shouldDeferChoicePickToBoard(onTheBoard(24), 24)).toBe(false);
+  });
+
+  it('reads the space a move lands on, not the one it starts from', () => {
+    // A Checkers destination names its source square first. Every destination
+    // shares that source, so it is the TARGET that says which space is which.
+    const moves: ChoiceWithRefs[] = Array.from({ length: 30 }, (_, i) => ({
+      value: { to: `t${i}` },
+      display: `t${i}`,
+      refs: [
+        { ref: { notation: 'from' }, role: 'source' as const },
+        { ref: { notation: `t${i}` }, role: 'target' as const },
+      ],
+    }));
+    expect(shouldDeferChoicePickToBoard(moves, 24)).toBe(true);
+  });
+
+  it('never defers when a candidate carries no board ref — that one would vanish', () => {
+    const mixed = [...onTheBoard(40), { value: 'pass', display: 'Pass' }];
+    expect(shouldDeferChoicePickToBoard(mixed, 24)).toBe(false);
+  });
+
+  it('never defers id-only refs — they highlight an element, the board does not pick by them', () => {
+    const highlights: ChoiceWithRefs[] = Array.from({ length: 40 }, (_, i) => ({
+      value: `r${i}`,
+      display: `Rank ${i}`,
+      refs: [{ ref: { id: i }, role: 'target' as const }],
+    }));
+    expect(shouldDeferChoicePickToBoard(highlights, 24)).toBe(false);
+  });
+
+  it('never defers when two candidates land on one space — the board can reach only one of them', () => {
+    const shared = [
+      ...onTheBoard(40),
+      { value: 'other', display: 'Something else on s0', refs: [{ ref: { notation: 's0' }, role: 'target' as const }] },
+    ];
+    expect(shouldDeferChoicePickToBoard(shared, 24)).toBe(false);
+  });
+
+  it('never defers an empty candidate list', () => {
+    expect(shouldDeferChoicePickToBoard([], 0)).toBe(false);
   });
 });
 

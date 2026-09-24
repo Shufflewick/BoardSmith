@@ -5,7 +5,7 @@
  * They handle development warnings, value display extraction, and action analysis.
  */
 
-import type { ActionMetadata, PickMetadata, PickSnapshot } from './useActionControllerTypes.js';
+import type { ActionMetadata, ChoiceWithRefs, ElementRef, PickMetadata, PickSnapshot } from './useActionControllerTypes.js';
 import { isDevMode, devWarn } from '../../utils/dev.js';
 
 // Re-export for backwards compatibility during transition
@@ -111,6 +111,24 @@ export function resolvePickCounts(
     multiSelect: resolveMultiSelectConfig(selection, currentArgs, pickSnapshot),
     orderedList: resolveOrderedListConfig(selection, pickSnapshot),
   };
+}
+
+// ============================================
+// Board target of a choice
+// ============================================
+
+/**
+ * The board element a choice is picked by: its `target` ref, else its first ref.
+ *
+ * One rule for the two places that need it. The board bridge routes a click on
+ * this element to the choice, and the Action Panel hands a large choice pick to
+ * the board only when every candidate has a distinct one (#313). If they read
+ * different refs, the panel could send a player to a board that cannot reach
+ * what the panel stopped listing.
+ */
+export function choiceBoardTarget(choice: ChoiceWithRefs): ElementRef | undefined {
+  const refs = choice.refs ?? [];
+  return refs.find(r => r.role === 'target')?.ref ?? refs[0]?.ref;
 }
 
 // ============================================

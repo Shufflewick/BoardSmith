@@ -887,6 +887,15 @@ option; nothing is dropped. If even one candidate has no board ref the panel
 keeps every button, because deferring would leave that candidate reachable from
 neither surface.
 
+This holds for `chooseFrom` as well as element picks. For a `chooseFrom`, a
+candidate's board ref is the one `boardRefs` gives it with role `target` (or its
+first ref when none is marked target), and it counts only if it names a board
+space by `notation`: that is what the board picks by, while an id-only ref just
+highlights an element. Every candidate needs one, and no two candidates may name
+the same space, since the board could reach only one of them there. A
+multi-select keeps its count and Done button beside the control, and an ordered
+list keeps its numbered entries and their Remove buttons.
+
 `boardsmith validate` reports a step that has neither answer: more than 24
 candidates, no board anchor, no dependent narrowing. It finds them by playing a
 few seeded random games and reading the engine's own move enumeration, because a
