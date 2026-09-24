@@ -1,7 +1,7 @@
 {
-  "revision": 96,
+  "revision": 97,
   "bundleProtocol": 2,
-  "surfaceHash": "9bf56c556e696f03",
+  "surfaceHash": "04a06b3cf015340d",
   "payloadHash": "6b3277c32a0ec8d0",
   "formatHash": "0058593e7cc80205",
   "history": [
@@ -808,6 +808,15 @@
       "payloadHash": "6b3277c32a0ec8d0",
       "formatHash": "0058593e7cc80205",
       "summary": "The contract fixture now produces two world facts it had missed, found when #312 type-checked it for the first time: world_command carries order (a paid order's id and instant, #195), and the watching seat's activity watermark is rendered by a pick prompt (an action prompt takes only a string, so the old one was a function JSON dropped and the watermark moved no hash). payloadHash moved only because the fixture now produces these bytes; no engine behavior changed. Not breaking."
+    },
+    {
+      "revision": 97,
+      "date": "2026-09-24",
+      "bundleProtocol": 2,
+      "surfaceHash": "04a06b3cf015340d",
+      "payloadHash": "6b3277c32a0ec8d0",
+      "formatHash": "0058593e7cc80205",
+      "summary": "SnapshotSessionHost persists and restores each seat's in-progress multi-step selection (#320). New exported type SnapshotHostState { snapshot, flowState, pendingStates } is what the persist adapter now receives, what the new durableState() method returns, and what restoreFrom() now REQUIRES (pendingStates is no longer optional to omit; pass {} when no seat is mid-action). restoreFrom refuses pending states keyed by anything but a seat of this table. A failed action that cleared a seat's pending selection now persists that change. Platforms must store pendingStates with the snapshot and pass them back on restore, or a player who pauses mid-action loses their picks."
     }
   ]
 }
