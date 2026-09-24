@@ -43,7 +43,12 @@ import { useActionController } from './useActionController.js';
 import { useBoardActionBridge } from './useBoardActionBridge.js';
 import { createBoardInteraction } from './useBoardInteraction.js';
 import { shouldDeferChoicePickToBoard } from '../components/auto-ui/action-panel-helpers.js';
-import type { ActionMetadata } from './useActionControllerTypes.js';
+import type { ActionMetadata, ChoiceWithRefs } from './useActionControllerTypes.js';
+import GridBoardRenderer from '../components/auto-ui/renderers/GridBoardRenderer.vue';
+import {
+  mountBoardRenderer,
+  type GameElement,
+} from '../components/auto-ui/renderers/board-renderer-a11y.test-helper.js';
 
 // ── Flush helper ────────────────────────────────────────────────────────────
 // Drains Vue's watcher queue + microtask queue multiple times.
@@ -602,6 +607,115 @@ describe('Board + controller interaction integration', () => {
     board.triggerElementSelect({ notation: 's3000' });
     await flush();
     expect(controller.currentArgs.value.space).toBe('s3000');
+  });
+
+
+  // ── #341: the same, anchored on elements by id ─────────────────────────────
+
+  /** A one-step chooseFrom action, `recruit`, whose `piece` step is answered by `choices`. */
+  function wireRecruit(choices: ChoiceWithRefs[]) {
+    const recruit: ActionMetadata = {
+      name: 'recruit',
+      prompt: 'Recruit a piece',
+      selections: [{ name: 'piece', type: 'choice', prompt: 'Choose a piece to recruit' }],
+    };
+    return wireActionToBoard(recruit, vi.fn(async () => ({ success: true, choices })));
+  }
+
+  it('a 3,720-piece chooseFrom anchored by element id is reachable, piece by piece, on the board', async () => {
+    const pieceChoices = Array.from({ length: 3720 }, (_, i) => ({
+      value: `p${i}`,
+      display: `Piece ${i}`,
+      refs: [{ ref: { id: 1000 + i }, role: 'target' as const }],
+      ...(i === 5 ? { disabled: 'Already recruited' } : {}),
+    }));
+    const { controller, board } = wireRecruit(pieceChoices);
+    await flush();
+
+    expect(controller.currentPick.value?.name).toBe('piece');
+    expect(shouldDeferChoicePickToBoard(controller.currentChoices.value)).toBe(true);
+    for (let i = 0; i < 3720; i++) {
+      expect(board.isSelectableElement({ id: 1000 + i })).toBe(true);
+    }
+    expect(board.isDisabledElement({ id: 1005 })).toBe('Already recruited');
+    expect(board.candidateLabel({ id: 1300 })).toBe('Piece 300');
+
+    board.triggerElementSelect({ id: 4000 });
+    await flush();
+    expect(controller.currentArgs.value.piece).toBe('p3000');
+  });
+
+  it.each([
+    ['an element id', { id: 1000 }],
+    ['a notation', { notation: 'a1' }],
+  ])('two candidates naming one element by %s: the board chooses the first, whichever kind', async (_kind, shared) => {
+    const { controller, board } = wireRecruit([
+      { value: 'first', display: 'First', refs: [{ ref: shared, role: 'target' }] },
+      { value: 'second', display: 'Second', refs: [{ ref: shared, role: 'target' }] },
+    ]);
+    await flush();
+
+    const element = { id: 1000, notation: 'a1' };
+    expect(board.candidateLabel(element)).toBe('First');
+    board.triggerElementSelect(element);
+    await flush();
+    expect(controller.currentArgs.value.piece).toBe('first');
+  });
+
+  /** A 3x2 grid of cells with ids 100..105 and notations a1..c2. */
+  function gridBoard(): GameElement {
+    const cells: GameElement[] = [];
+    for (let r = 0; r < 2; r++) {
+      for (let c = 0; c < 3; c++) {
+        cells.push({
+          id: 100 + r * 3 + c,
+          className: 'Space',
+          name: `cell-${r * 3 + c}`,
+          attributes: { row: r, col: c, notation: String.fromCharCode(97 + c) + (r + 1) },
+          children: [],
+        });
+      }
+    }
+    return {
+      id: 1,
+      className: 'Board',
+      name: 'Board',
+      attributes: { $layout: 'grid', $rowCoord: 'row', $colCoord: 'col' },
+      children: cells,
+    };
+  }
+
+  it.each([
+    ['element id', (cell: number) => ({ id: 100 + cell })],
+    ['notation', (cell: number) => ({ notation: String.fromCharCode(97 + (cell % 3)) + (Math.floor(cell / 3) + 1) })],
+  ])('the keyboard walks a chooseFrom anchored by %s on the board and Enter chooses', async (_kind, refOf) => {
+    // Candidates on cells 1, 2 and 4 of the grid (b1, c1, b2).
+    const { controller, board } = wireRecruit(
+      [1, 2, 4].map((cell) => ({
+        value: `cell${cell}`,
+        display: `Cell ${cell}`,
+        refs: [{ ref: refOf(cell), role: 'target' as const }],
+      })),
+    );
+    await flush();
+    const { wrapper } = mountBoardRenderer(GridBoardRenderer, gridBoard(), board);
+    await nextTick();
+    const cells = wrapper.findAll('[role="gridcell"]');
+
+    // The handoff lands focus on the first candidate, not on cell 0.
+    board.requestBoardFocus();
+    await nextTick();
+    await nextTick();
+    expect(document.activeElement).toBe(cells[1].element);
+
+    // Arrow keys move the cursor; Enter chooses the candidate under it.
+    await wrapper.find('[role="grid"]').trigger('keydown', { key: 'ArrowRight' });
+    await nextTick();
+    expect(document.activeElement).toBe(cells[2].element);
+    await wrapper.find('[role="grid"]').trigger('keydown', { key: 'Enter' });
+    await flush();
+    expect(controller.currentArgs.value.piece).toBe('cell2');
+    wrapper.unmount();
   });
 
 });

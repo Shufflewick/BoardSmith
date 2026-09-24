@@ -23,7 +23,7 @@
  * - Derived state - recalculated from stored properties
  */
 
-import { GAME_SELF_SERIALIZED_FIELDS } from '../element/game.js';
+import { GAME_SELF_SERIALIZED_FIELDS, constructGame } from '../element/game.js';
 import type { Game, GameOptions, MessageEntry } from '../element/game.js';
 import type { GameElement } from '../element/game-element.js';
 import type { ElementJSON, ElementClass, ElementContext } from '../element/types.js';
@@ -155,7 +155,7 @@ export function restoreDevState<G extends Game>(
   // Create new game instance
   // Note: This creates new players and basic structure
   // The constructor runs registerElements() which populates the class registry with NEW classes
-  const game = new GameClass(options.gameOptions);
+  const game = constructGame(GameClass, options.gameOptions);
 
   // Merge class registry from options, but DON'T overwrite classes already registered by constructor
   // This is critical for HMR: the constructor registers NEW classes, but options.classRegistry

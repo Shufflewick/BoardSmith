@@ -908,9 +908,9 @@ const filteredValidElements = computed(() => {
 });
 
 /**
- * #172 / #313: a candidate set too large for the panel to read, every one of
- * which the board is already drawing -- an element pick, or a `chooseFrom` whose
- * candidates are board spaces. The panel keeps the prompt and offers ONE control
+ * #172 / #313 / #341: a candidate set too large for the panel to read, every
+ * one of which the board is already drawing -- an element pick, or a `chooseFrom`
+ * whose candidates each name their own board element by id or notation. The panel keeps the prompt and offers ONE control
  * that hands keyboard focus to the board, instead of a wall of buttons nobody
  * can scan.
  *
