@@ -30,6 +30,7 @@ import GameLobby from './GameLobby.vue';
 import PlayShell, { type PlayConnection } from './PlayShell.vue';
 import WaitingRoom from './WaitingRoom.vue';
 import { provideGameContext } from '../composables/useGameContext.js';
+import { readTurnDeadlineFrame, useTurnDeadline, type TurnDeadlineFrame } from '../composables/useTurnDeadline.js';
 import { useTeachingActions } from '../composables/useTeachingActions.js';
 import ZoomPreviewOverlay from './helpers/ZoomPreviewOverlay.vue';
 import GameOverCard from './GameOverCard.vue';
@@ -385,6 +386,12 @@ const winnerSeats = ref<number[]>([]);
 // the frame (or platformMode not used) -> stays false ("unknown", not a draw) —
 // never inferred from a bare empty winnerSeats, which also occurs pre-completion.
 const isDraw = ref(false);
+
+// The host's deadline for the current step (#301), read off every game_state
+// frame: null when the frame carries none. Published as `turnDeadline` on the
+// game context, so the Action Panel and a custom UI draw one countdown.
+const turnDeadlineFrame = ref<TurnDeadlineFrame | null>(null);
+const turnDeadline = useTurnDeadline(turnDeadlineFrame);
 
 // Game-over card/slot dismissed by the player (D10). Reset when a new game
 // starts (flowState.complete transitions back to false) so the next completion
@@ -1333,6 +1340,7 @@ provideGameContext({
   platformRequest,
   presentation: toRef(props, 'presentation'),
   debugHighlight: debugHighlightedElementId,
+  turnDeadline,
 });
 
 // Gate for the game UI (the registry's board component): it must
@@ -1497,6 +1505,11 @@ if (typeof window !== 'undefined' && window.parent !== window) {
       // Explicit draw signal (D10/ENDGAME-01): absent/malformed on the frame
       // -> false ("unknown"), never fabricated from the winners array above.
       isDraw.value = data.isDraw === true;
+
+      // Every frame states the deadline afresh; one without the fields has none.
+      const deadline = readTurnDeadlineFrame(data);
+      if (deadline.error) console.error(deadline.error);
+      turnDeadlineFrame.value = deadline.frame;
     }
 
     // Heartbeat: host pings periodically to prove the connection is live (IA-01).
