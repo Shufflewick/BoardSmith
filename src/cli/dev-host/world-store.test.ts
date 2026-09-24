@@ -117,6 +117,19 @@ function tablesOf(path: string): string[] {
 }
 
 /**
+ * THE SAME WORLD, AS LAYOUT 5 LEFT IT (#339).
+ *
+ * Layout 6 added one table, the presence ledger, and changed nothing else.
+ */
+function rewindToLayout5(path: string): void {
+  rawExec(
+    path,
+    'DROP TABLE presence_told',
+    "UPDATE meta SET value = '5' WHERE key = 'schemaVersion'",
+  );
+}
+
+/**
  * THE SAME WORLD, AS LAYOUT 4 LEFT IT (#225, ShufflewickPub #423).
  *
  * Layout 5 added one nullable column to `seats` -- when each chair was granted
@@ -125,6 +138,7 @@ function tablesOf(path: string): string[] {
  * depend on which SQLite the test host happens to ship.
  */
 function rewindToLayout4(path: string): void {
+  rewindToLayout5(path);
   rawExec(
     path,
     'CREATE TABLE seats_old (player TEXT PRIMARY KEY, seat INTEGER NOT NULL)',
@@ -594,6 +608,64 @@ describe('the local world store', () => {
   });
 
   /**
+   * #339: WHICH SEATS THE WORLD WAS TOLD ARE PRESENT, KEPT ON DISK.
+   *
+   * The platform's "told present" record (ShufflewickPub
+   * `games/src/world-presence-ledger.ts`): a rule reload or a restart builds a
+   * new host over this store, and a host that forgot what the world was told
+   * announced every open page as a new arrival.
+   */
+  describe('the presence ledger (#339)', () => {
+    it('starts with nobody told present', () => {
+      expect(store.presenceTold()).toEqual([]);
+    });
+
+    it('records a seat told present, the instant its last socket went, and a seat told it left', () => {
+      store.tellPresent(1);
+      store.tellPresent(2);
+      store.stampPresenceClosedAt(2, 40_000);
+      store.tellPresent(3);
+      store.untellPresent(3);
+
+      expect(store.presenceTold()).toEqual([
+        { seat: 1, closedAt: null },
+        { seat: 2, closedAt: 40_000 },
+      ]);
+      expect(store.presenceOf(2)).toEqual({ closedAt: 40_000 });
+      expect(store.presenceOf(3)).toBeUndefined();
+    });
+
+    it('clears the stamp when the seat is told present again', () => {
+      store.tellPresent(1);
+      store.stampPresenceClosedAt(1, 40_000);
+      store.tellPresent(1);
+      expect(store.presenceOf(1)).toEqual({ closedAt: null });
+    });
+
+    it('is still there for the next host to open this world', () => {
+      store.tellPresent(1);
+      store.stampPresenceClosedAt(1, 40_000);
+      store.close();
+
+      const reopened = openWorldStore(worldStorePath(root), BUDGETS);
+      expect(reopened.presenceTold()).toEqual([{ seat: 1, closedAt: 40_000 }]);
+      reopened.close();
+    });
+
+    it('forgets a chair the clock hands on, in the same checkpoint, because its next holder arrives', async () => {
+      store.seat('player-a', 1, SEATED_AT);
+      store.tellPresent(1);
+      store.tellPresent(2);
+
+      await store.writeCheckpoint(cp({}), { vacate: { seat: 1, player: 'player-a' } });
+      // Seat 2's release matched nobody, so what the world was told about it stands.
+      await store.writeCheckpoint(cp({}), { vacate: { seat: 2, player: 'player-b' } });
+
+      expect(store.presenceTold()).toEqual([{ seat: 2, closedAt: null }]);
+    });
+  });
+
+  /**
    * #225: A WORLD SOMEBODY IS PLAYING, WRITTEN UNDER AN OLDER LAYOUT.
    *
    * The fixture is a layout-4 store written through the real doors and then
@@ -643,17 +715,24 @@ describe('the local world store', () => {
       expect(reopened.partitionNames()).toEqual(['room/aster', 'world']);
     }
 
+    /** The occupied world, wound back by `rewind` and opened again: upgraded
+     *  to the current layout with nothing lost, or the case fails here. The
+     *  caller closes what it is handed. */
+    async function upgradedFrom(rewind: (path: string) => void): Promise<LocalWorldStore> {
+      await anOccupiedWorld();
+      rewind(worldStorePath(root));
+      const reopened = openWorldStore(worldStorePath(root), BUDGETS);
+      await expectNothingLost(reopened);
+      expect(layoutOf(worldStorePath(root))).toBe('6');
+      return reopened;
+    }
+
     it('carries layout 3 all the way to the current layout on open, losing nothing', async () => {
       // A CHAIN AND NOT ONE STEP (ShufflewickPub #423): a store two upgrades
       // old has to arrive, or the only thing left to tell an author is to reset
       // a world five hundred seats deep.
-      await anOccupiedWorld();
-      rewindToLayout3(worldStorePath(root));
-
-      const reopened = openWorldStore(worldStorePath(root), BUDGETS);
+      const reopened = await upgradedFrom(rewindToLayout3);
       try {
-        await expectNothingLost(reopened);
-        expect(layoutOf(worldStorePath(root))).toBe('5');
         // The table the upgrade exists to add, in use rather than merely
         // present: an upgraded world can record activity from here on.
         reopened.activitySince(5_000);
@@ -672,14 +751,22 @@ describe('the local world store', () => {
       }
     });
 
-    it('upgrades layout 4 to layout 5 without inventing when a chair was granted', async () => {
-      await anOccupiedWorld();
-      rewindToLayout4(worldStorePath(root));
-
-      const reopened = openWorldStore(worldStorePath(root), BUDGETS);
+    it('upgrades layout 5 to layout 6 with nobody told present, losing nothing', async () => {
+      const reopened = await upgradedFrom(rewindToLayout5);
       try {
-        await expectNothingLost(reopened);
-        expect(layoutOf(worldStorePath(root))).toBe('5');
+        // Nobody was told present under a layout that kept no record, and the
+        // host's start reconciles from exactly this: an empty ledger.
+        expect(reopened.presenceTold()).toEqual([]);
+        reopened.tellPresent(7);
+        expect(reopened.presenceOf(7)).toEqual({ closedAt: null });
+      } finally {
+        reopened.close();
+      }
+    });
+
+    it('upgrades layout 4 to the current layout without inventing when a chair was granted', async () => {
+      const reopened = await upgradedFrom(rewindToLayout4);
+      try {
         // NOT BACKFILLED. This store does not know when a chair it already held
         // was handed out, and a guessed instant is a floor somebody's empire
         // would be measured against.
@@ -702,7 +789,7 @@ describe('the local world store', () => {
       const reopened = openWorldStore(worldStorePath(root), BUDGETS);
       try {
         await expectNothingLost(reopened);
-        expect(layoutOf(worldStorePath(root))).toBe('5');
+        expect(layoutOf(worldStorePath(root))).toBe('6');
       } finally {
         reopened.close();
       }
@@ -746,7 +833,7 @@ describe('the local world store', () => {
       const retried = openWorldStore(worldStorePath(root), BUDGETS);
       try {
         await expectNothingLost(retried);
-        expect(layoutOf(worldStorePath(root))).toBe('5');
+        expect(layoutOf(worldStorePath(root))).toBe('6');
       } finally {
         retried.close();
       }
@@ -758,7 +845,7 @@ describe('the local world store', () => {
       rawExec(worldStorePath(root), "UPDATE meta SET value = '2' WHERE key = 'schemaVersion'");
 
       expect(() => openWorldStore(worldStorePath(root), BUDGETS)).toThrow(
-        /layout 2, and this BoardSmith reads layout 5.*no upgrade/s,
+        /layout 2, and this BoardSmith reads layout 6.*no upgrade/s,
       );
       expect(layoutOf(worldStorePath(root))).toBe('2');
       // The bug that made a refusal destructive: the schema was created before
@@ -826,12 +913,12 @@ describe('the local world store', () => {
 
     it('refuses a store written by a NEWER BoardSmith, and says which way to move', async () => {
       store.close();
-      rawExec(worldStorePath(root), "UPDATE meta SET value = '6' WHERE key = 'schemaVersion'");
+      rawExec(worldStorePath(root), "UPDATE meta SET value = '7' WHERE key = 'schemaVersion'");
 
       expect(() => openWorldStore(worldStorePath(root), BUDGETS)).toThrow(
-        /layout 6, and this BoardSmith reads layout 5.*newer BoardSmith/s,
+        /layout 7, and this BoardSmith reads layout 6.*newer BoardSmith/s,
       );
-      expect(layoutOf(worldStorePath(root))).toBe('6');
+      expect(layoutOf(worldStorePath(root))).toBe('7');
     });
 
     it('closes the database when it refuses to open one', async () => {
