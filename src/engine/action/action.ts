@@ -354,8 +354,8 @@ export class ActionExecutor {
         if (this.isSerializedElement(value)) {
           return this.game.getElementById((value as { id: number }).id) ?? value;
         }
-        const choices = this.getChoices(selection, player, {});
-        let resolved = this.smartResolveChoiceValue(value, choices);
+        const candidates = this.candidatesOf(selection, { game: this.game, player, args: {} });
+        let resolved = this.smartResolveChoiceValue(value, candidates);
         resolved = this.extractChoiceValue(resolved);
         return resolved !== value ? resolved : value;
       }
@@ -441,21 +441,21 @@ export class ActionExecutor {
             // being configured so a single choice whose VALUE is itself an
             // array is never corrupted by per-item resolution.
             if ((selection as ChoiceSelection).multiSelect !== undefined) {
-              const choices = this.getChoices(selection, player, resolved);
+              const candidates = this.candidatesOf(selection, { game: this.game, player, args: resolved });
               resolved[selection.name] = value.map((item) => {
                 if (this.isSerializedElement(item)) {
                   const element = this.game.getElementById((item as { id: number }).id);
                   return element ?? item;
                 }
-                const smartResolved = this.smartResolveChoiceValue(item, choices);
+                const smartResolved = this.smartResolveChoiceValue(item, candidates);
                 return this.extractChoiceValue(smartResolved);
               });
             }
           } else if (player) {
             // Try smart resolution: element ID or display string → actual choice
             // This supports custom UIs sending element IDs for chooseFrom selections
-            const choices = this.getChoices(selection, player, resolved);
-            let resolvedValue = this.smartResolveChoiceValue(value, choices);
+            const candidates = this.candidatesOf(selection, { game: this.game, player, args: resolved });
+            let resolvedValue = this.smartResolveChoiceValue(value, candidates);
 
             // Extract just the 'value' property from {value, label/display} pattern choices
             // This makes chooseFrom with simple value objects work intuitively:
@@ -587,7 +587,9 @@ export class ActionExecutor {
    * @param actionName - When provided, tutorial gate evaluation is applied:
    *   choices not permitted by the active tutorial step for the player's seat
    *   are annotated with a gate reason. Pass `undefined` for internal calls
-   *   that should not trigger tutorial gating (e.g. resolveArgs, debug traces).
+   *   that should not trigger tutorial gating (e.g. debug traces). A caller
+   *   that only maps a value onto a choice wants `candidatesOf`, which judges
+   *   nothing (#364).
    */
   getChoices(
     selection: Selection,
@@ -625,20 +627,32 @@ export class ActionExecutor {
     // `prepare` runs once for this evaluation, never per candidate and never
     // kept past it (#334), so every `disabled` call shares its result and a
     // later evaluation sees the game as it is then.
-    const annotate = <T>(rule: DisabledRule<T>, candidates: T[]): AnnotatedChoice<unknown>[] => {
-      const { disabled } = rule;
-      const prepared = disabled && rule.prepare ? rule.prepare(context) : undefined;
-      return candidates.map(value => {
-        const gameDisabled = disabled ? disabled(value, context, prepared) : false;
-        // OR-in gate reason: only when no game-defined reason already applies.
-        if (tutorialStep && gameDisabled === false) {
-          const gateReason = getGateReasonForValue(tutorialStep, actionName!, value, selection.name);
-          if (gateReason) return { value, disabled: gateReason };
-        }
-        return { value, disabled: gameDisabled };
-      });
-    };
+    const candidates = this.candidatesOf(selection, context);
+    const rule: DisabledRule<unknown> =
+      selection.type === 'choice' || selection.type === 'element' || selection.type === 'elements'
+        ? (selection as DisabledRule<unknown>)
+        : {};
+    const { disabled } = rule;
+    const prepared = disabled && rule.prepare ? rule.prepare(context) : undefined;
+    return candidates.map(value => {
+      const gameDisabled = disabled ? disabled(value, context, prepared) : false;
+      // OR-in gate reason: only when no game-defined reason already applies.
+      if (tutorialStep && gameDisabled === false) {
+        const gateReason = getGateReasonForValue(tutorialStep, actionName!, value, selection.name);
+        if (gateReason) return { value, disabled: gateReason };
+      }
+      return { value, disabled: gameDisabled };
+    });
+  }
 
+  /**
+   * A selection's candidates, UNJUDGED: the values `choices` (after `filterBy`)
+   * or the element options produce, with no `disabled` rule, `prepare` or
+   * tutorial gate run. What `getChoices` annotates, and all that mapping a
+   * submitted value onto a choice needs (#364): resolving an id or a display
+   * string must not pay for a verdict on every candidate.
+   */
+  private candidatesOf(selection: Selection, context: ActionContext): unknown[] {
     switch (selection.type) {
       case 'choice': {
         const choiceSel = selection as ChoiceSelection;
@@ -649,7 +663,7 @@ export class ActionExecutor {
         // Apply filterBy if present and the dependent selection has a value
         if (choiceSel.filterBy) {
           const { key, selectionName } = choiceSel.filterBy;
-          const previousValue = args[selectionName];
+          const previousValue = context.args[selectionName];
 
           if (previousValue !== undefined) {
             // Extract the filter value from the previous selection
@@ -673,7 +687,7 @@ export class ActionExecutor {
           }
         }
 
-        return annotate(choiceSel, choices);
+        return choices;
       }
 
       case 'element': {
@@ -715,7 +729,7 @@ export class ActionExecutor {
           }
         }
 
-        return annotate(elementSel, elements);
+        return elements;
       }
 
       case 'elements': {
@@ -725,7 +739,7 @@ export class ActionExecutor {
           ? elementsSel.elements(context)
           : [...elementsSel.elements];
 
-        return annotate(elementsSel, elements);
+        return elements;
       }
 
       case 'text':
@@ -852,8 +866,8 @@ export class ActionExecutor {
    *
    * @returns The resolved choice value, or the original value if no match found
    */
-  private smartResolveChoiceValue(value: unknown, choices: AnnotatedChoice<unknown>[]): unknown {
-    const match = findMatchingChoice(value, choices);
+  private smartResolveChoiceValue(value: unknown, candidates: unknown[]): unknown {
+    const match = findMatchingChoice(value, candidates.map(candidate => ({ value: candidate })));
     return match === undefined ? value : match.value;
   }
 

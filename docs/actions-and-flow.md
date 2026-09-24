@@ -192,9 +192,10 @@ one of thousands of candidates. `prepare(ctx)` is where that shared work goes
   `disabled`'s third argument for every choice in that evaluation. It is typed:
   `covered` above is whatever `prepare` returns.
 - **Never kept between evaluations.** The engine evaluates a pick several times
-  per move (to resolve the submitted value, to validate it, to decide whether
-  the action is still available afterwards), and each of those runs `prepare`
-  again. So it always sees the game as it is at that moment, and a move that
+  per move (to validate the submission, to decide whether the action is still
+  available afterwards, to build the player's view), and each of those runs
+  `prepare` again. Mapping a submitted id or display string onto a choice
+  judges nothing, so it runs neither `prepare` nor `disabled` (#364). So it always sees the game as it is at that moment, and a move that
   changes the board is reflected in the next evaluation. Do not cache its
   result yourself.
 - **Only for `disabled`.** It is on `chooseFrom`, `chooseElement` and

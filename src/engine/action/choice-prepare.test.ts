@@ -97,14 +97,20 @@ function runner() {
   return r;
 }
 
+/** A started game whose prepare/disabled counters start at zero now, not at genesis. */
+function countedGame() {
+  const r = runner();
+  const game = r.game;
+  game.prepareCalls = 0;
+  game.disabledCalls = 0;
+  return { r, game };
+}
+
 describe('prepare: per-evaluation shared work for a per-choice disabled rule (#334)', () => {
   it('runs prepare once per evaluation, never once per choice', () => {
-    const r = runner();
-    const game = r.game;
+    const { game } = countedGame();
     const executor = game.getActionExecutor();
     const selection = game.getAction('place')!.selections[0];
-    game.prepareCalls = 0;
-    game.disabledCalls = 0;
 
     const choices = executor.getChoices(selection, game.getPlayer(1)!, {});
 
@@ -112,18 +118,6 @@ describe('prepare: per-evaluation shared work for a per-choice disabled rule (#3
     expect(game.disabledCalls).toBe(SPACES.length);
     expect(choices.filter((c) => c.disabled !== false).map((c) => c.value)).toEqual(['s1', 's2']);
     expect(choices.find((c) => c.value === 's1')!.disabled).toBe(OCCUPIED);
-  });
-
-  it('a whole move evaluates the pick a few times, and each evaluation prepares once', () => {
-    const r = runner();
-    const game = r.game;
-    game.prepareCalls = 0;
-    game.disabledCalls = 0;
-
-    expect(r.performAction('place', 1, { space: 's500' }).error).toBeUndefined();
-
-    expect(game.prepareCalls).toBeGreaterThan(0);
-    expect(game.disabledCalls).toBe(game.prepareCalls * SPACES.length);
   });
 
   it('is never cached across a change of state: the next evaluation sees the new board', () => {
@@ -196,5 +190,33 @@ describe('prepare: per-evaluation shared work for a per-choice disabled rule (#3
     expect(() =>
       Action.create('pointless').chooseElements('markers', { elements: [], prepare: () => 1 }),
     ).toThrow(/chooseElements\('markers'\) declares prepare but no disabled rule/);
+  });
+});
+
+describe('mapping a submitted value does not judge the candidates (#364)', () => {
+  it('resolveArgs and resolveSelectionValue run no disabled rule and no prepare', () => {
+    const { game } = countedGame();
+    const executor = game.getActionExecutor();
+    const action = game.getAction('place')!;
+    const player = game.getPlayer(1)!;
+
+    expect(executor.resolveArgs(action, { space: 's7' }, player)).toEqual({ space: 's7' });
+    expect(executor.resolveSelectionValue(action.selections[0], 's7', player)).toBe('s7');
+
+    expect({ prepareCalls: game.prepareCalls, disabledCalls: game.disabledCalls }).toEqual({
+      prepareCalls: 0,
+      disabledCalls: 0,
+    });
+  });
+
+  it('a whole move judges the candidates only where a verdict is needed', () => {
+    const { r, game } = countedGame();
+    expect(r.performAction('place', 1, { space: 's500' }).error).toBeUndefined();
+
+    // Validating the submission, the next step's availability, and the
+    // player view's disabled actions: three evaluations, each one prepare and
+    // one disabled call per choice. Mapping the value adds none.
+    expect(game.prepareCalls).toBe(3);
+    expect(game.disabledCalls).toBe(3 * SPACES.length);
   });
 });

@@ -1,7 +1,7 @@
 {
-  "revision": 103,
+  "revision": 104,
   "bundleProtocol": 2,
-  "surfaceHash": "35bc796118b2edfa",
+  "surfaceHash": "422710ae33cff3b6",
   "payloadHash": "8052a5ba1e4f48d4",
   "formatHash": "0058593e7cc80205",
   "history": [
@@ -871,6 +871,15 @@
       "payloadHash": "8052a5ba1e4f48d4",
       "formatHash": "0058593e7cc80205",
       "summary": "Two engine changes (#352, #334). A repeating selection's own validate now runs once per pick on every path that submits a move: it receives the pick (an element for chooseElement) with the picks made before it in args, a refused pick runs no onEach, a whole submission containing one is refused as 'Pick N of \"name\": <message>', and bots, the simulator and enumerateLegalMoves never offer it; a repeating chooseElement's callbacks now see earlier picks as elements. And chooseFrom, chooseElement and chooseElements (and the world facade's versions) take prepare(ctx), run once per evaluation of the choices, whose result is disabled's third argument, disabled(choice, ctx, prepared); a prepare without a disabled rule is refused at declaration. Re-vendor before running a game that uses prepare: an older engine ignores it and hands disabled undefined."
+    },
+    {
+      "revision": 104,
+      "date": "2026-09-24",
+      "bundleProtocol": 2,
+      "surfaceHash": "422710ae33cff3b6",
+      "payloadHash": "8052a5ba1e4f48d4",
+      "formatHash": "0058593e7cc80205",
+      "summary": "Mapping a submitted value onto a choice (ActionExecutor.resolveArgs, resolveSelectionValue) no longer evaluates the selection's disabled rule or prepare for every candidate (#364): it reads the candidates through the new candidatesOf, so a whole move judges a chooseFrom's choices three times instead of five. No change to what is accepted or refused."
     }
   ]
 }
