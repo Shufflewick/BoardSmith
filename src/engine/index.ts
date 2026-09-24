@@ -264,8 +264,6 @@ export {
   restoreDevState,
   validateDevSnapshot,
   formatValidationErrors,
-  validateFlowPosition,
-  formatFlowRecovery,
   getSnapshotElementCount,
   // Dev checkpoints for fast HMR recovery
   createDevCheckpoint,
@@ -289,7 +287,6 @@ export type {
   ValidationResult as DevValidationResult,
   ValidationError as DevValidationError,
   ValidationWarning as DevValidationWarning,
-  FlowPositionValidation,
   // Dev checkpoint types
   DevCheckpoint,
   RestoreFromDevCheckpointOptions,

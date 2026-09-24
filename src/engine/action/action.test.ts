@@ -1165,9 +1165,9 @@ describe('Action Executor', () => {
       });
       const refused = Action.create('refused').execute(() => ({ success: false, error: 'no' }));
 
-      expect(executor.executeAction(threw, game.getPlayer(1)!, {}).threw).toBe(true);
+      expect(executor.executeAction(threw, game.getPlayer(1)!, {}).partiallyApplied).toBe(true);
       // A clean refusal mutated nothing, so it carries no such mark.
-      expect(executor.executeAction(refused, game.getPlayer(1)!, {}).threw).toBeUndefined();
+      expect(executor.executeAction(refused, game.getPlayer(1)!, {}).partiallyApplied).toBeUndefined();
     });
 
     it('refuses a `{ success: false }` that named no error, and says which field to set (#90)', () => {
@@ -1206,7 +1206,7 @@ describe('Action Executor', () => {
       const result = executor.executeAction(action, game.getPlayer(1)!, {});
 
       expect(result.error).toBe('Your woodpile holds 2.');
-      expect(result.threw).toBeUndefined();
+      expect(result.partiallyApplied).toBeUndefined();
     });
 
     it('should treat null as skipped for optional selections', () => {

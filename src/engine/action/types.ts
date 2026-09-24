@@ -744,16 +744,18 @@ export interface ActionResult {
   /** Error message if failed */
   error?: string;
   /**
-   * Set by the engine when the failure came from `execute()` THROWING rather
-   * than from the action refusing cleanly (#44).
+   * Set by the engine when the action failed AFTER it may have changed the
+   * game: `execute()` threw (#44), or a whole submission of a repeating
+   * selection was refused after `onEach` had already run for some of its picks
+   * (#325).
    *
    * The distinction is the whole point: a clean refusal mutated nothing, so
-   * there is nothing to undo, while a throw may have landed part of its
-   * changes before it stopped. The runner reads this to roll the game back to
-   * the pre-action checkpoint, so a failed action really did do nothing.
-   * Never set by game code.
+   * there is nothing to undo, while these failures may have landed part of
+   * their changes before they stopped. The runner reads this to roll the game
+   * back to the pre-action checkpoint, so a failed action really did do
+   * nothing. Never set by game code.
    */
-  threw?: boolean;
+  partiallyApplied?: boolean;
   /**
    * Set when the failure was a {@link NotSimulableError} — the game saying this
    * move is legal but cannot be resolved from the information state it has

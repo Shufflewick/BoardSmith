@@ -323,17 +323,13 @@ describe('claimQuoteCheckCommand', () => {
 describe('claim-quote-check through the real CLI entry point', () => {
   vi.setConfig({ testTimeout: 60_000 });
 
-  it('is registered and exits 1 on an unquoted claim, 0 once it is quoted', async () => {
+  // One spawn: the refusal is what has to survive the real entry point. The exit-0 path is the
+  // same command function, and the in-process tests above prove it (#340).
+  it('is registered and exits 1 on an unquoted claim', async () => {
     await writeChunk(`1. **Ties go against combatant 1.**`);
     const refused = await spawnCli(['claim-quote-check', 'combat', '--project', project]);
     expect(refused.code).toBe(1);
     expect(refused.stderr).toMatch(/Claim 1 has no quoted passage/);
-
-    await writeChunk(`1. **Ties go against combatant 1.**
-   > Ties favour combatant 2
-   Source: rulebook/08-combat.md §"The exchange"`);
-    const passed = await spawnCli(['claim-quote-check', 'combat', '--project', project]);
-    expect(passed.code).toBe(0);
   });
 });
 
