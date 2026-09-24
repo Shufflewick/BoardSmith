@@ -20,7 +20,7 @@ import type {
   UpdatePlayerOptionsRequest,
   WebSocketMessage,
 } from '../types/protocol.js';
-import type { AnimationEvent, TutorialStepView } from '../engine/index.js';
+import type { AnimationEvent, FollowUpOffer, TutorialStepView } from '../engine/index.js';
 // Type-only (erased at runtime, no client -> session coupling in the emitted
 // code). `PlayerState` below is the wire shape of the server's
 // `PlayerGameState`, so borrowing the server's own payload types is what keeps
@@ -192,6 +192,13 @@ export interface PlayerState {
    */
   restoreEpoch?: number;
 
+  /**
+   * Which game this is -- see `PlayerGameState.gameInstanceId`
+   * (`src/session/types.ts`). A CHANGE means a different game replaced this
+   * one; GameShell feeds it to `useBoardActionBridge` with `restoreEpoch`.
+   */
+  gameInstanceId?: string;
+
   // The fields below are sent by the server (`PlayerGameState`, session/types.ts)
   // and consumed by GameShell, but were never declared here. Nothing caught the
   // drift because the `*.vue` shim typed every component as
@@ -300,30 +307,20 @@ export interface GameConnectionConfig {
   connectionTimeout?: number;
 }
 
-export interface ActionResult {
+/**
+ * The server's answer to an action this client sent, as `GameConnection.action()`
+ * resolves it. The game's own `ActionResult` is what `execute()` returns inside
+ * the engine; this is the part of it that reaches the acting player.
+ */
+export interface ActionResponse {
   success: boolean;
   error?: string;
   /** Additional data returned by the action's execute() */
   data?: Record<string, unknown>;
   /** Message from the action (for logging/display) */
   message?: string;
-  /** Follow-up action to chain to (for action chaining) */
-  followUp?: {
-    action: string;
-    args?: Record<string, unknown>;
-    /** Metadata for the followUp action (so client can execute without it being in availableActions) */
-    metadata?: {
-      name: string;
-      prompt?: string;
-      selections: Array<{
-        name: string;
-        type: string;
-        prompt?: string;
-        optional?: boolean;
-        [key: string]: unknown;
-      }>;
-    };
-  };
+  /** Follow-up action to chain to, with the metadata to start it (it is usually not in availableActions) */
+  followUp?: FollowUpOffer;
 }
 
 // ============================================
@@ -351,24 +348,6 @@ export type WebSocketOutgoingMessage = Extract<
   WebSocketMessage,
   { type: 'action' | 'ping' | 'getState' }
 >;
-
-/** Follow-up action metadata shared by the actionResult incoming message. */
-export interface FollowUpAction {
-  action: string;
-  args?: Record<string, unknown>;
-  /** Metadata for the followUp action (so client can execute without it being in availableActions) */
-  metadata?: {
-    name: string;
-    prompt?: string;
-    selections: Array<{
-      name: string;
-      type: string;
-      prompt?: string;
-      optional?: boolean;
-      [key: string]: unknown;
-    }>;
-  };
-}
 
 /** Server pushed a fresh game state (initial state or a mid-game update). */
 export interface StateIncomingMessage {
@@ -408,7 +387,7 @@ export interface ActionResultIncomingMessage {
   error?: string;
   data?: Record<string, unknown>;
   message?: string;
-  followUp?: FollowUpAction;
+  followUp?: FollowUpOffer;
 }
 
 /** Server's reply to a client `ping` heartbeat. */

@@ -114,7 +114,7 @@ export {
 export {
   GameSession,
   type GameSessionOptions,
-  type ActionResult,
+  type SessionActionResult,
   type UndoResult,
   type ElementDiff,
   // Public return type of `session.runner` (SESS-01 read-only facade) — external

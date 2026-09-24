@@ -62,9 +62,12 @@ function playTwoActions(seed: string): GameRunner<ClockGame> {
 
 describe('engine-owned state carries no wall-clock time (#54)', () => {
   it('produces byte-identical snapshots for two runs of the same seed', () => {
-    const a = playTwoActions('same-seed');
-    const b = playTwoActions('same-seed');
-    expect(JSON.stringify(a.getSnapshot())).toBe(JSON.stringify(b.getSnapshot()));
+    const { gameInstanceId: gameA, ...a } = playTwoActions('same-seed').getSnapshot();
+    const { gameInstanceId: gameB, ...b } = playTwoActions('same-seed').getSnapshot();
+    expect(JSON.stringify(a)).toBe(JSON.stringify(b));
+    // Everything but WHICH game it is: two runs are two games, and their ids
+    // say so on purpose (#356). An id is random, not a clock reading.
+    expect(gameA).not.toBe(gameB);
   });
 
   it('records no timestamp on a history entry — that is the session\'s to add', () => {

@@ -163,6 +163,7 @@ export type {
   ActionDefinition,
   ActionResult,
   FollowUpAction,
+  FollowUpOffer,
   SerializedAction,
   ValidationResult,
   BoardElementRef,

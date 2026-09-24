@@ -13,7 +13,7 @@ import { audioService } from './audio.js';
 import type {
   GameState,
   ConnectionStatus,
-  ActionResult,
+  ActionResponse,
 } from './types.js';
 
 // ============================================
@@ -41,7 +41,7 @@ export interface UseGameReturn {
   /** Last error (reactive) */
   error: Ref<Error | null>;
   /** Perform an action */
-  action: (actionName: string, args?: Record<string, unknown>) => Promise<ActionResult>;
+  action: (actionName: string, args?: Record<string, unknown>) => Promise<ActionResponse>;
   /** Manually connect */
   connect: () => void;
   /** Disconnect */
@@ -212,7 +212,7 @@ export function useGame(
   });
 
   // Action methods
-  const action = async (actionName: string, args: Record<string, unknown> = {}): Promise<ActionResult> => {
+  const action = async (actionName: string, args: Record<string, unknown> = {}): Promise<ActionResponse> => {
     if (!connection) {
       return { success: false, error: 'Not connected' };
     }

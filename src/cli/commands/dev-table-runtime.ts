@@ -14,7 +14,7 @@
  * re-read of the author's edited source.
  */
 import type { GameStateSnapshot } from '../../engine/index.js';
-import type { executeOp as sessionExecuteOp, GameDefinition, GameDefinitionLike } from '../../session/index.js';
+import type { executeOp as sessionExecuteOp, GameDefinition } from '../../session/index.js';
 import type { TableRules } from '../dev-host/multiplayer-host.js';
 import type { reloadTableRules } from '../dev-host/table-rules-reload.js';
 import { cliSourceFile, importRuntimeBundle, toPosix } from './game-runtime.js';
@@ -51,24 +51,17 @@ export async function loadTableRuntime(
   const reload = module.reloadTableRules as typeof reloadTableRules;
   const { gameDefinition } = module;
 
-  const def: GameDefinitionLike = {
-    gameClass: gameDefinition.gameClass,
-    gameType: gameDefinition.gameType,
-    minPlayers: gameDefinition.minPlayers,
-    maxPlayers: gameDefinition.maxPlayers,
-    // Threaded un-serialized (mirrors game-session.ts): buildPlayerState emits
-    // hasTutorial from it, and the startTutorial op reads def.tutorial.
-    tutorial: gameDefinition.tutorial,
-    // hint/heatmapToggle run MCTS with the game's bot config.
-    bot: gameDefinition.bot,
-  };
+  // Ops get the WHOLE definition, exactly as the platform's executor hands it
+  // over, so every field an op reads (undo and checkpoint policy, tutorial,
+  // bot) holds here as it does there. A hand-picked copy drops whatever it
+  // does not name (#361).
   return {
     gameDefinition,
     rules: {
       executeOp: (gameOptions, snapshot, pendingState, op, hostOptions) =>
-        executeOp(def, gameOptions, snapshot, pendingState, op, hostOptions),
+        executeOp(gameDefinition, gameOptions, snapshot, pendingState, op, hostOptions),
       carry: (gameOptions, snapshot, hostOptions) =>
-        reload(def, gameOptions, snapshot as GameStateSnapshot, hostOptions),
+        reload(gameDefinition, gameOptions, snapshot as GameStateSnapshot, hostOptions),
     },
   };
 }
