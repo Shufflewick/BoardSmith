@@ -54,12 +54,6 @@ function createThreeChoiceGame(): ThreeChoiceGame {
   return game;
 }
 
-// ============================================================================
-// Unit tests — no external dependencies, always included in vitest.
-// Checkers-bot integration test lives in src/bot/mcts-stats-checkers.test.ts
-// (excluded from vitest when @boardsmith/checkers-rules symlink is absent).
-// ============================================================================
-
 describe('MCTSBot.playWithStats()', () => {
   it('returns a move and a non-empty stats array for a 3-choice game', async () => {
     const game = createThreeChoiceGame();

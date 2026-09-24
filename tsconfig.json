@@ -29,14 +29,5 @@
   // documentation tests, and the vitest config. `vue-tsc` checks `.vue` SFC
   // scripts AND templates; plain `tsc` sees neither.
   "include": ["src/**/*.ts", "src/**/*.vue", "docs/**/*.ts", "vitest.config.ts"],
-  // These four tests import `@boardsmith/checkers-rules` and
-  // `@boardsmith/cribbage-rules`, which are not in this repository, so they
-  // can neither compile nor run. vitest.config.ts excludes the same four.
-  "exclude": [
-    "node_modules",
-    "src/bot/mcts-bot.test.ts",
-    "src/bot/mcts-cache.test.ts",
-    "src/bot/mcts-stats-checkers.test.ts",
-    "src/bot/cribbage-bot.test.ts"
-  ]
+  "exclude": ["node_modules"]
 }
