@@ -27,8 +27,10 @@ import { GAME_BACKENDS, capabilityContradictions, isGameBackend } from '../../se
 import type { GameDefinition } from '../../session/index.js';
 import {
   auditChoiceCardinality,
+  auditWorldChoiceCardinality,
   describeUnboundedChoiceStep,
   MAX_FLAT_CHOICE_CANDIDATES,
+  type ChoiceCardinalityBackend,
   type UnboundedChoiceStep,
 } from '../lib/choice-cardinality.js';
 import type { Game, GameOptions } from '../../engine/index.js';
@@ -1102,6 +1104,7 @@ function formatBytes(bytes: number): string {
 /** Turn the audit's findings into a validation result. Pure — the report shape only. */
 export function buildChoiceCardinalityResult(
   findings: UnboundedChoiceStep[],
+  backend: ChoiceCardinalityBackend,
 ): ValidationResult {
   if (findings.length === 0) {
     return {
@@ -1119,13 +1122,13 @@ export function buildChoiceCardinalityResult(
       `${findings.length} choice step(s) offer more than ${MAX_FLAT_CHOICE_CANDIDATES} options ` +
       `as one flat list. The Action Panel presents choices as a hierarchy a person walks — ` +
       `it has no search box and no typed input, so a list this long has no way to be read.`,
-    details: findings.map(describeUnboundedChoiceStep),
+    details: findings.map((step) => describeUnboundedChoiceStep(step, backend)),
   };
 }
 
 /**
- * Play a few seeded random games and report any choice step that presents a
- * large flat list with no board anchor and no dependent narrowing.
+ * Run the game and report any choice step that presents a large flat list with
+ * no board anchor and no dependent narrowing.
  *
  * This check runs the game because a candidate count does not exist until a
  * game is running: the source text of `chooseElement('cell', { elementClass:
@@ -1133,38 +1136,22 @@ export function buildChoiceCardinalityResult(
  * The counts here come from the engine's own move enumeration, which is the
  * same enumeration the panel, the board and the bots read.
  *
- * It plays at the definition's `minPlayers`, a seat count the game supports.
+ * A table is played as a few seeded random games at the definition's
+ * `minPlayers`, a seat count the game supports. A world has no flow to play, so
+ * it is driven the way a host drives it (#323): seats arrive, their offers are
+ * enumerated and taken at random, and the clock fires what falls due.
  *
- * It never blocks. A game that cannot be loaded or randomly played through is
- * reported as a warning that the check could not run, never as a pass: a check
- * that did not run has not found the game clean (#306). A world is reported the
- * same way, because the random simulator plays table flows and a world has none.
+ * It never blocks. A game that cannot be loaded or driven is reported as a
+ * warning that the check could not run, never as a pass: a check that did not
+ * run has not found the game clean (#306).
  */
 export async function validateChoiceCardinality(cwd: string, isWorld: boolean): Promise<ValidationResult> {
-  if (isWorld) {
-    return {
-      name: 'Choice cardinality',
-      passed: false,
-      severity: 'warning',
-      message:
-        'Not checked: this check plays random table games, and a world has no table flow to play. ' +
-        'Check the size of your world commands\' choice lists by hand in boardsmith dev.',
-    };
-  }
-
   const spinner = ora('Checking choice cardinality...').start();
 
   try {
-    const gameDefinition = await loadProjectRules(cwd);
-    if (gameDefinition.minPlayers === undefined) {
-      throw new Error('your gameDefinition declares no minPlayers, so there is no seat count to play it at');
-    }
-    const findings = await auditChoiceCardinality(
-      gameDefinition.gameClass as new (options: GameOptions) => Game,
-      { seed: 'choice-cardinality', games: 2, players: gameDefinition.minPlayers, timeout: 5000 },
-    );
+    const findings = isWorld ? await auditWorld(cwd) : await auditTable(await loadProjectRules(cwd));
 
-    const result = buildChoiceCardinalityResult(findings);
+    const result = buildChoiceCardinalityResult(findings, isWorld ? 'world' : 'table');
     if (result.passed) spinner.succeed('Choice cardinality OK');
     else spinner.warn('Choice cardinality: large flat choice lists found');
     return result;
@@ -1182,6 +1169,41 @@ export async function validateChoiceCardinality(cwd: string, isWorld: boolean): 
 }
 
 /**
+ * Drive a world project's rules with the audit built INTO THE SAME BUNDLE.
+ *
+ * The rules are bundled with the engine inlined, and a world runner refuses
+ * rules built on another copy of the engine (#283). So the audit, and the
+ * world host inside it, come out of the rules' own bundle, exactly as
+ * `boardsmith dev` takes its world host from there.
+ */
+function auditWorld(cwd: string): Promise<UnboundedChoiceStep[]> {
+  return withProjectBundle(
+    cwd,
+    'world-cardinality',
+    (cliSourceFile) => [
+      `export { auditWorldChoiceCardinality } from ${JSON.stringify(cliSourceFile('lib/choice-cardinality.ts'))};`,
+    ],
+    (bundle) => {
+      const audit = bundle.auditWorldChoiceCardinality as typeof auditWorldChoiceCardinality;
+      return audit(bundle.gameDefinition, { seed: 'choice-cardinality' });
+    },
+  );
+}
+
+/** Play a table game's seeded random games at its `minPlayers`. */
+function auditTable(gameDefinition: GameDefinition): Promise<UnboundedChoiceStep[]> {
+  if (gameDefinition.minPlayers === undefined) {
+    throw new Error('your gameDefinition declares no minPlayers, so there is no seat count to play it at');
+  }
+  return auditChoiceCardinality(gameDefinition.gameClass as new (options: GameOptions) => Game, {
+    seed: 'choice-cardinality',
+    games: 2,
+    players: gameDefinition.minPlayers,
+    timeout: 5000,
+  });
+}
+
+/**
  * Bundle and load the project's compiled rules for a validate check.
  *
  * The temp dir is command-scoped, like build's `build-tmp`: `.boardsmith` is
@@ -1189,14 +1211,36 @@ export async function validateChoiceCardinality(cwd: string, isWorld: boolean): 
  * so this creates only the directory it owns and removes it when done.
  */
 async function loadProjectRules(cwd: string): Promise<GameDefinition> {
+  return withProjectBundle(cwd, 'simulate', () => [], async (bundle) => bundle.gameDefinition);
+}
+
+/**
+ * Bundle the project's rules with the extra `exports` lines, hand the loaded
+ * module to `use`, and remove the temp dir once `use` is done.
+ *
+ * `exports` is given `cliSourceFile`, which turns a path under `src/cli` into
+ * the absolute, forward-slashed path an `export ... from` line needs.
+ */
+async function withProjectBundle<T>(
+  cwd: string,
+  name: string,
+  exports: (cliSourceFile: (pathUnderCli: string) => string) => string[],
+  use: (bundle: { gameDefinition: GameDefinition } & Record<string, unknown>) => Promise<T>,
+): Promise<T> {
   const config = JSON.parse(readFileSync(join(cwd, 'boardsmith.json'), 'utf-8')) as { paths?: { rules?: string } };
   const rulesPath = resolveRulesDir(cwd, config);
   const tempDir = join(cwd, '.boardsmith', 'validate-tmp');
   mkdirSync(tempDir, { recursive: true });
   try {
-    const { loadGameDefinition, getProjectContext } = await import('./game-runtime.js');
-    const { gameDefinition } = await loadGameDefinition(rulesPath, tempDir, getProjectContext(cwd));
-    return gameDefinition;
+    const { importRuntimeBundle, getProjectContext, cliSourceFile, toPosix } = await import('./game-runtime.js');
+    const bundle = await importRuntimeBundle({
+      rulesPath,
+      tempDir,
+      name,
+      context: getProjectContext(cwd),
+      exports: exports((pathUnderCli) => toPosix(cliSourceFile(pathUnderCli))),
+    });
+    return await use(bundle);
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
