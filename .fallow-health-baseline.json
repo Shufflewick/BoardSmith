@@ -133,11 +133,6 @@
         "count": 2
       }
     },
-    "src/cli/commands/example-test-emit.ts": {
-      "complexity_high": {
-        "count": 1
-      }
-    },
     "src/cli/commands/game-runtime.ts": {
       "complexity_moderate": {
         "count": 1
@@ -217,7 +212,7 @@
     },
     "src/cli/commands/verify-derive-check.ts": {
       "complexity_moderate": {
-        "count": 5
+        "count": 4
       }
     },
     "src/cli/commands/verify-enumerate.ts": {

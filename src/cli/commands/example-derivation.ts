@@ -617,9 +617,9 @@ export function buildExampleTranslationPayload(
       'Getting this prefix wrong is the single most common way an otherwise-correct translation ' +
       'fails to even load.',
     '',
-    'If no viable target exists in the exported surface above for this example, return verdict ' +
-      '"unexecutable" with a named reason — never force a mismatched target and never silently ' +
-      'drop the example.',
+    'If no viable target exists in the exported surface above for this example, return ' +
+      'verdictHint "unexecutable" with a named unexecutableReason — never force a mismatched ' +
+      'target and never silently drop the example.',
   ];
 
   return lines.join('\n');
