@@ -1,8 +1,8 @@
 {
-  "revision": 102,
+  "revision": 103,
   "bundleProtocol": 2,
   "surfaceHash": "263276230a5e853a",
-  "payloadHash": "80aba5002803deaa",
+  "payloadHash": "9ca0c44a4f8de2df",
   "formatHash": "0058593e7cc80205",
   "history": [
     {
@@ -862,6 +862,15 @@
       "payloadHash": "80aba5002803deaa",
       "formatHash": "0058593e7cc80205",
       "summary": "boardsmith/world exports the presence departure grace: WORLD_PRESENCE_DEFAULT_GRACE_MS (60s), WORLD_PRESENCE_MIN_GRACE_MS (1s), WORLD_PRESENCE_MAX_GRACE_MS (24h) and presenceDepartGraceMs(), so the platform and boardsmith dev share one default and range (#338)."
+    },
+    {
+      "revision": 103,
+      "date": "2026-09-24",
+      "bundleProtocol": 2,
+      "surfaceHash": "263276230a5e853a",
+      "payloadHash": "9ca0c44a4f8de2df",
+      "formatHash": "0058593e7cc80205",
+      "summary": "PlayerGameState gains gameInstanceId (and GameStateSnapshot carries it): a random id minted when a game starts, kept across undo and every stateless op, and new on every start including a start from a --seed position. GameShell tears down an open pick when it or restoreEpoch changes, so a new game at the same step no longer offers the previous game's element ids (#356). The payload fixture now hashes the names of the fields a seat's broadcast state carries. Not breaking for built bundles, but a game built on this BoardSmith needs the re-vendored engine: its GameShell reads gameInstanceId, and without it no replacement (undo included) tears down an open pick."
     }
   ]
 }

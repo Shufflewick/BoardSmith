@@ -20,6 +20,9 @@ import { useActionController } from './useActionController.js';
 import { _clearShownWarnings } from '../../utils/dev.js';
 import type { PickMetadata, ValidElement } from './useActionControllerTypes.js';
 
+/** The one game every test here plays: nothing in this file replaces it. */
+const A_GAME = { gameInstanceId: 'game-a', restoreEpoch: 0 };
+
 
 const cellPick: PickMetadata = { name: 'cell', type: 'element', prompt: 'Select a cell' };
 
@@ -42,7 +45,7 @@ describe('useBoardActionBridge', () => {
       actionMetadata: ref({ placeStone: { name: 'placeStone', selections: [cellPick] } }),
       availableActions: ref(['placeStone']),
       disabledActions: ref(undefined),
-      isViewingHistory: ref(false), restoreEpoch: ref(0),
+      isViewingHistory: ref(false), runnerIdentity: ref(A_GAME),
     });
 
     // The board cell (client identity has no notation — getter not serialized)
@@ -67,7 +70,7 @@ describe('useBoardActionBridge', () => {
       actionMetadata: ref({ placeStone: { name: 'placeStone', selections: [cellPick] } }),
       availableActions: ref(['placeStone']),
       disabledActions: ref(undefined),
-      isViewingHistory: ref(false), restoreEpoch: ref(0),
+      isViewingHistory: ref(false), runnerIdentity: ref(A_GAME),
     });
 
     board.triggerElementSelect({ id: 5, name: 'A1' });
@@ -91,7 +94,7 @@ describe('useBoardActionBridge', () => {
       actionMetadata: ref({ move: { name: 'move', selections: [cellPick] } }),
       availableActions: ref(['move']),
       disabledActions: ref(undefined),
-      isViewingHistory: ref(false), restoreEpoch: ref(0),
+      isViewingHistory: ref(false), runnerIdentity: ref(A_GAME),
     });
 
     // The rendered square (its own id is 7, notation 'd4') is selectable by notation.
@@ -123,7 +126,7 @@ describe('useBoardActionBridge', () => {
       actionMetadata: ref({ move: { name: 'move', selections: [destPick] } }),
       availableActions: ref(['move']),
       disabledActions: ref(undefined),
-      isViewingHistory: ref(false), restoreEpoch: ref(0),
+      isViewingHistory: ref(false), runnerIdentity: ref(A_GAME),
     });
 
     expect(board.isSelectableElement({ id: 21, name: 'e5', notation: 'e5' })).toBe(true);
@@ -149,7 +152,7 @@ describe('useBoardActionBridge', () => {
       actionMetadata: ref({ move: { name: 'move', selections: [destPick] } }),
       availableActions: ref(['move']),
       disabledActions: ref(undefined),
-      isViewingHistory: ref(false), restoreEpoch: ref(0),
+      isViewingHistory: ref(false), runnerIdentity: ref(A_GAME),
     });
 
     // Before the fetch lands, the destination square is NOT selectable.
@@ -176,7 +179,7 @@ describe('useBoardActionBridge', () => {
       actionMetadata: ref({ placeStone: { name: 'placeStone', selections: [cellPick] } }),
       availableActions: ref(['placeStone']),
       disabledActions: ref(undefined),
-      isViewingHistory: ref(false), restoreEpoch: ref(0),
+      isViewingHistory: ref(false), runnerIdentity: ref(A_GAME),
     });
 
     // Auto-start is coalesced onto a settled-state nextTick (see scheduleAutoStart),
@@ -205,7 +208,7 @@ describe('useBoardActionBridge', () => {
       actionMetadata: ref({ endTurn: { name: 'endTurn', selections: [] } }),
       availableActions: ref(['endTurn']),
       disabledActions: ref(undefined),
-      isViewingHistory: ref(false), restoreEpoch: ref(0),
+      isViewingHistory: ref(false), runnerIdentity: ref(A_GAME),
     });
 
     await nextTick(); // settle the initial auto-start evaluation
@@ -239,7 +242,7 @@ describe('useBoardActionBridge', () => {
       actionMetadata: ref({ endTurn: { name: 'endTurn', selections: [] } }),
       availableActions: ref(['endTurn']),
       disabledActions: ref(undefined),
-      isViewingHistory: ref(false), restoreEpoch: ref(0),
+      isViewingHistory: ref(false), runnerIdentity: ref(A_GAME),
     });
 
     await nextTick();
@@ -283,7 +286,7 @@ describe('useBoardActionBridge', () => {
         actionMetadata: ref({ endTurn: { name: 'endTurn', selections: [], manual: true } }),
         availableActions: ref(['endTurn']),
         disabledActions: ref(undefined),
-        isViewingHistory: ref(false), restoreEpoch: ref(0),
+        isViewingHistory: ref(false), runnerIdentity: ref(A_GAME),
       });
 
       await nextTick();
@@ -304,7 +307,7 @@ describe('useBoardActionBridge', () => {
         actionMetadata: ref({ endTurn: { name: 'endTurn', selections: [], manual: true } }),
         availableActions: ref(['endTurn']),
         disabledActions: ref(undefined),
-        isViewingHistory: ref(false), restoreEpoch: ref(0),
+        isViewingHistory: ref(false), runnerIdentity: ref(A_GAME),
       });
 
       await nextTick();
@@ -329,7 +332,7 @@ describe('useBoardActionBridge', () => {
         actionMetadata: ref({ endTurn: { name: 'endTurn', selections: [] } }),
         availableActions: ref(['endTurn']),
         disabledActions: ref(undefined),
-        isViewingHistory: ref(false), restoreEpoch: ref(0),
+        isViewingHistory: ref(false), runnerIdentity: ref(A_GAME),
       });
 
       await nextTick();
@@ -358,7 +361,7 @@ describe('useBoardActionBridge', () => {
         actionMetadata: ref({ draw: { name: 'draw', selections: [], manual: true } }),
         availableActions: ref(['draw']),
         disabledActions: ref(undefined),
-        isViewingHistory: ref(false), restoreEpoch: ref(0),
+        isViewingHistory: ref(false), runnerIdentity: ref(A_GAME),
       });
 
       await nextTick();
@@ -381,7 +384,7 @@ describe('useBoardActionBridge', () => {
         actionMetadata: ref({ draw: { name: 'draw', selections: [], manual: true } }),
         availableActions: ref(['draw']),
         disabledActions: ref(undefined),
-        isViewingHistory: ref(false), restoreEpoch: ref(0),
+        isViewingHistory: ref(false), runnerIdentity: ref(A_GAME),
       });
 
       await nextTick();
@@ -405,7 +408,7 @@ describe('useBoardActionBridge', () => {
       actionMetadata: ref({ endTurn: { name: 'endTurn', selections: [], manual: true } }),
       availableActions: ref(['endTurn']),
       disabledActions: ref(undefined),
-      isViewingHistory: ref(false), restoreEpoch: ref(0),
+      isViewingHistory: ref(false), runnerIdentity: ref(A_GAME),
     });
 
     await nextTick();
@@ -446,7 +449,7 @@ describe('useBoardActionBridge', () => {
         actionMetadata: ref({ endTurn: { name: 'endTurn', selections: [] } }),
         availableActions: ref(['endTurn']),
         disabledActions: ref(undefined),
-        isViewingHistory: ref(false), restoreEpoch: ref(0),
+        isViewingHistory: ref(false), runnerIdentity: ref(A_GAME),
       });
 
       await nextTick();
@@ -473,7 +476,7 @@ describe('useBoardActionBridge', () => {
         actionMetadata: ref({ endTurn: { name: 'endTurn', selections: [] } }),
         availableActions: ref(['endTurn']),
         disabledActions: ref(undefined),
-        isViewingHistory: ref(false), restoreEpoch: ref(0),
+        isViewingHistory: ref(false), runnerIdentity: ref(A_GAME),
       });
 
       await nextTick();
@@ -506,7 +509,7 @@ describe('useBoardActionBridge', () => {
         actionMetadata: ref({ draw: { name: 'draw', selections: [], manual: true } }),
         availableActions: ref(['draw']),
         disabledActions: ref(undefined),
-        isViewingHistory: ref(false), restoreEpoch: ref(0),
+        isViewingHistory: ref(false), runnerIdentity: ref(A_GAME),
       });
 
       await nextTick();
@@ -537,7 +540,7 @@ describe('useBoardActionBridge', () => {
         }),
         availableActions: ref(['play']),
         disabledActions: ref(undefined),
-        isViewingHistory: ref(false), restoreEpoch: ref(0),
+        isViewingHistory: ref(false), runnerIdentity: ref(A_GAME),
       });
 
       await nextTick();
@@ -592,7 +595,7 @@ describe('useBoardActionBridge', () => {
         sendAction,
         availableActions: ref(['commit']),
         disabledActions: ref(undefined),
-        isViewingHistory: ref(false), restoreEpoch: ref(0),
+        isViewingHistory: ref(false), runnerIdentity: ref(A_GAME),
         actionMetadata: ref({}), // no metadata for `commit` -> synthesized 0-selection meta
         isMyTurn: ref(true), // stays true — the bug is that nothing ever re-checks this either
         completed,
@@ -607,7 +610,7 @@ describe('useBoardActionBridge', () => {
         actionMetadata: ref({}),
         availableActions: ref(['commit']),
         disabledActions: ref(undefined),
-        isViewingHistory: ref(false), restoreEpoch: ref(0),
+        isViewingHistory: ref(false), runnerIdentity: ref(A_GAME),
       });
 
       // Initial mount auto-starts + auto-executes the sole no-selection action.
@@ -650,7 +653,7 @@ describe('useBoardActionBridge — disabled actions', () => {
       actionMetadata: ref({ endTurn: { name: 'endTurn', selections: [] } }),
       availableActions: ref(['endTurn']),
       disabledActions: ref({ endTurn: 'You must resolve the storm first.' }),
-      isViewingHistory: ref(false), restoreEpoch: ref(0),
+      isViewingHistory: ref(false), runnerIdentity: ref(A_GAME),
     });
 
     await nextTick();
@@ -671,7 +674,7 @@ describe('useBoardActionBridge — disabled actions', () => {
       actionMetadata: ref({ placeStone: { name: 'placeStone', selections: [cellPick] } }),
       availableActions: ref(['placeStone']),
       disabledActions: ref({ placeStone: 'The board is full.' }),
-      isViewingHistory: ref(false), restoreEpoch: ref(0),
+      isViewingHistory: ref(false), runnerIdentity: ref(A_GAME),
     });
 
     await nextTick();
@@ -692,7 +695,7 @@ describe('useBoardActionBridge — disabled actions', () => {
       actionMetadata: ref({ placeStone: { name: 'placeStone', selections: [cellPick] } }),
       availableActions: ref(['placeStone']),
       disabledActions: ref({ someOtherAction: 'Not now.' }),
-      isViewingHistory: ref(false), restoreEpoch: ref(0),
+      isViewingHistory: ref(false), runnerIdentity: ref(A_GAME),
     });
 
     await nextTick();
@@ -722,7 +725,7 @@ describe('useBoardActionBridge — disabled actions', () => {
       }),
       availableActions: ref(['placeStone']),
       disabledActions: ref({ placeStone: 'The board is full.' }),
-      isViewingHistory: ref(false), restoreEpoch: ref(0),
+      isViewingHistory: ref(false), runnerIdentity: ref(A_GAME),
     });
 
     board.triggerElementSelect({ id: 5, name: 'A1' });
@@ -766,7 +769,7 @@ describe('useBoardActionBridge ordered lists (#249)', () => {
       actionMetadata: ref({ repair: { name: 'repair', selections: [repairPick] } }),
       availableActions: ref(['repair']),
       disabledActions: ref(undefined),
-      isViewingHistory: ref(false), restoreEpoch: ref(0),
+      isViewingHistory: ref(false), runnerIdentity: ref(A_GAME),
     });
     await nextTick();
 

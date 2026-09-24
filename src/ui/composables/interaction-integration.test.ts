@@ -44,6 +44,10 @@ import { useBoardActionBridge } from './useBoardActionBridge.js';
 import { createBoardInteraction } from './useBoardInteraction.js';
 import { shouldDeferChoicePickToBoard } from '../components/auto-ui/action-panel-helpers.js';
 import type { ActionMetadata } from './useActionControllerTypes.js';
+import type { RunnerIdentity } from './useBoardActionBridge.js';
+
+/** The game a test starts in. A test that replaces it says so. */
+const A_GAME: RunnerIdentity = { gameInstanceId: 'game-a', restoreEpoch: 0 };
 
 // ── Flush helper ────────────────────────────────────────────────────────────
 // Drains Vue's watcher queue + microtask queue multiple times.
@@ -64,7 +68,7 @@ async function flush(n = 6): Promise<void> {
 function wireActionToBoard(
   action: ActionMetadata,
   fetchPickChoices: NonNullable<Parameters<typeof useActionController>[0]['fetchPickChoices']>,
-  restoreEpoch = ref<number | undefined>(0),
+  runnerIdentity = ref<RunnerIdentity | undefined>(A_GAME),
 ) {
   const isMyTurn = ref<boolean | undefined>(true);
   const availableActions = ref([action.name]);
@@ -77,7 +81,7 @@ function wireActionToBoard(
   const board = createBoardInteraction();
   useBoardActionBridge({
     controller, boardInteraction: board, isMyTurn, autoEndTurn: ref(true), actionMetadata, availableActions,
-    disabledActions: ref(undefined), isViewingHistory: ref(false), restoreEpoch,
+    disabledActions: ref(undefined), isViewingHistory: ref(false), runnerIdentity,
   });
   return { controller, board };
 }
@@ -195,7 +199,7 @@ describe('Board + controller interaction integration', () => {
       autoEndTurn,
       actionMetadata,
       availableActions,
-      disabledActions: ref(undefined), isViewingHistory: ref(false), restoreEpoch: ref(0),
+      disabledActions: ref(undefined), isViewingHistory: ref(false), runnerIdentity: ref(A_GAME),
     });
 
     // Flush: auto-start → controller.start('move') → fetchChoicesForPick('piece')
@@ -311,7 +315,7 @@ describe('Board + controller interaction integration', () => {
       autoFill: false, autoExecute: false, fetchPickChoices,
     });
     const board = createBoardInteraction();
-    useBoardActionBridge({ controller, boardInteraction: board, isMyTurn, autoEndTurn, actionMetadata, availableActions, disabledActions: ref(undefined), isViewingHistory: ref(false), restoreEpoch: ref(0) });
+    useBoardActionBridge({ controller, boardInteraction: board, isMyTurn, autoEndTurn, actionMetadata, availableActions, disabledActions: ref(undefined), isViewingHistory: ref(false), runnerIdentity: ref(A_GAME) });
     return { isMyTurn, autoEndTurn, availableActions, actionMetadata, sendAction, controller, board };
   }
 
@@ -392,7 +396,7 @@ describe('Board + controller interaction integration', () => {
       fetchPickChoices: vi.fn(async () => ({ success: false, error: 'n/a' })),
     });
     const board = createBoardInteraction();
-    useBoardActionBridge({ controller, boardInteraction: board, isMyTurn, autoEndTurn, actionMetadata, availableActions, disabledActions: ref(undefined), isViewingHistory: ref(false), restoreEpoch: ref(0) });
+    useBoardActionBridge({ controller, boardInteraction: board, isMyTurn, autoEndTurn, actionMetadata, availableActions, disabledActions: ref(undefined), isViewingHistory: ref(false), runnerIdentity: ref(A_GAME) });
     await flush();
 
     // It becomes my turn with a sole no-selection action available.
@@ -443,7 +447,7 @@ describe('Board + controller interaction integration', () => {
       autoEndTurn,
       actionMetadata,
       availableActions,
-      disabledActions: ref(undefined), isViewingHistory: ref(false), restoreEpoch: ref(0),
+      disabledActions: ref(undefined), isViewingHistory: ref(false), runnerIdentity: ref(A_GAME),
     });
 
     // Flush: auto-start 'place' → fetchChoicesForPick('hex') → board shows hexes
@@ -487,7 +491,7 @@ describe('Board + controller interaction integration', () => {
       move: { name: 'move', prompt: 'Move', selections: [{ name: 'destination', type: 'element', prompt: 'Where to?' }] },
     });
     const sendAction = vi.fn().mockResolvedValue({ success: true });
-    const restoreEpoch = ref<number | undefined>(0);
+    const runnerIdentity = ref<RunnerIdentity | undefined>(A_GAME);
 
     // The server's answer set: every room EXCEPT the one the pawn stands in.
     // Rooms are ids 1/2/3; the pawn is in room 2 when the pick opens.
@@ -509,7 +513,7 @@ describe('Board + controller interaction integration', () => {
       controller, boardInteraction: board, isMyTurn, autoEndTurn, actionMetadata, availableActions,
       disabledActions: ref(undefined),
       isViewingHistory: ref(false),
-      restoreEpoch,
+      runnerIdentity,
     });
 
     await flush();
@@ -522,7 +526,7 @@ describe('Board + controller interaction integration', () => {
     // ── The undo lands: the pawn is back in room 1, and the server says so by
     // bumping the epoch. availableActions does NOT change.
     pawnRoom = 1;
-    restoreEpoch.value = 1;
+    runnerIdentity.value = { ...A_GAME, restoreEpoch: 1 };
     await flush();
 
     // Room 1 is now the pawn's OWN room — the 0-space self-move the stale list
@@ -541,17 +545,17 @@ describe('Board + controller interaction integration', () => {
   it('B17: the first observed epoch is not a restore, and an unchanged epoch never tears down a pick', async () => {
     // Guard the two ways a naive watcher would fire spuriously: on the first
     // broadcast (no prior runner to be stale) and on ordinary re-broadcasts.
-    const restoreEpoch = ref<number | undefined>(undefined);
+    const runnerIdentity = ref<RunnerIdentity | undefined>(undefined);
     const fetchPickChoices = vi.fn(async () => ({
       success: true,
       validElements: [{ id: 10, display: 'a1' }, { id: 11, display: 'a2' }],
     }));
-    const { controller, board } = wireActionToBoard(hexPlacementAction, fetchPickChoices, restoreEpoch);
+    const { controller, board } = wireActionToBoard(hexPlacementAction, fetchPickChoices, runnerIdentity);
 
     await flush();
     // First state arrives carrying epoch 7 (a session that was undone before
     // this client ever connected). Not a restore FOR THIS CLIENT.
-    restoreEpoch.value = 7;
+    runnerIdentity.value = { ...A_GAME, restoreEpoch: 7 };
     await flush();
     expect(controller.currentAction.value).toBe('place');
     expect(board.isSelectableElement({ id: 10 })).toBe(true);
@@ -560,9 +564,53 @@ describe('Board + controller interaction integration', () => {
     // opponent move): the in-progress pick survives.
     board.triggerElementSelect({ id: 10 });
     await flush();
-    restoreEpoch.value = 7;
+    // A new object, the same identity: a re-broadcast builds a fresh one each time.
+    runnerIdentity.value = { ...A_GAME, restoreEpoch: 7 };
     await flush();
     expect(controller.currentAction.value).toBe('place');
+    expect(controller.currentArgs.value.hex).toBe(10);
+  });
+
+  // ── #356 ────────────────────────────────────────────────────────────────────
+
+  it('#356: a new game at the same step discards the open multi-select and offers the new deal', async () => {
+    // The reported symptom: seat 1 has the discard multi-select open over its
+    // hand, the host starts a new game, and the new game opens at the same
+    // discard step. `availableActions` is ['discard'] before and after, and a
+    // new game's restoreEpoch is 0 like the old one's, so neither teardown
+    // fired: the panel and the board kept the old hand's cards, and ticking
+    // them submitted ids the new game refuses.
+    const discard: ActionMetadata = {
+      name: 'discard',
+      prompt: 'Discard',
+      selections: [{ name: 'cards', type: 'elements', prompt: 'Select 2 cards', multiSelect: { min: 2, max: 2 } }],
+    };
+    let hand = [11, 12, 13, 14, 15, 16];
+    const fetchPickChoices = vi.fn(async () => ({
+      success: true,
+      validElements: hand.map((id) => ({ id, display: `card ${id}` })),
+      multiSelect: { min: 2, max: 2 },
+    }));
+    const runnerIdentity = ref<RunnerIdentity | undefined>(A_GAME);
+    const { controller, board } = wireActionToBoard(discard, fetchPickChoices, runnerIdentity);
+
+    await flush();
+    expect(controller.currentAction.value).toBe('discard');
+    await controller.toggleMultiSelect('cards', 11);
+    expect(controller.multiSelectDraft.value?.values).toEqual([11]);
+
+    // New game: a different deal, the same step, the same epoch.
+    hand = [41, 42, 43, 44, 45, 46];
+    runnerIdentity.value = { gameInstanceId: 'game-b', restoreEpoch: 0 };
+    await flush();
+
+    // The pick is open again, over the NEW hand, with nothing ticked -- on the
+    // controller the panel reads and on the board a custom UI reads.
+    expect(controller.currentAction.value).toBe('discard');
+    expect(controller.multiSelectDraft.value).toBeNull();
+    expect(controller.validElements.value.map((e) => e.id)).toEqual(hand);
+    expect(board.isSelectableElement({ id: 11 })).toBe(false);
+    expect(board.isSelectableElement({ id: 41 })).toBe(true);
   });
 
 

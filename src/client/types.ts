@@ -192,6 +192,13 @@ export interface PlayerState {
    */
   restoreEpoch?: number;
 
+  /**
+   * Which game this is -- see `PlayerGameState.gameInstanceId`
+   * (`src/session/types.ts`). A CHANGE means a different game replaced this
+   * one; GameShell feeds it to `useBoardActionBridge` with `restoreEpoch`.
+   */
+  gameInstanceId?: string;
+
   // The fields below are sent by the server (`PlayerGameState`, session/types.ts)
   // and consumed by GameShell, but were never declared here. Nothing caught the
   // drift because the `*.vue` shim typed every component as

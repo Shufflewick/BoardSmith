@@ -135,6 +135,16 @@ export interface GameStateSnapshot {
   restoreEpoch?: number;
 
   /**
+   * Which game this is (#356): minted when a runner begins a new game, and the
+   * same for every snapshot of that game, undo included. Published as
+   * `PlayerGameState.gameInstanceId`; see `GameRunner.gameInstanceId`.
+   *
+   * Absent on a snapshot no runner wrote (a hand-built fixture, a saved seed
+   * position from before #356): `fromSnapshot` then names it a new game.
+   */
+  gameInstanceId?: string;
+
+  /**
    * CR-02 (159): `originalId -> syntheticId` remap for fungible hidden-zone
    * children anonymized by `toJSONForPlayer` (populated only when `state` was
    * built via the `opts.forSeat` redacted path below). Carried alongside

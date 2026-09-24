@@ -56,6 +56,18 @@ export type { CheckpointPolicy, UndoPolicy, RandomnessPolicy };
  * inference source: the game class is the one declaration of what this game
  * accepts, and the literal is checked against it rather than widening it.
  */
+/**
+ * A new game's `gameInstanceId`: 128 random bits, as hex.
+ *
+ * `getRandomValues` rather than `randomUUID`, because a browser offers
+ * `randomUUID` only on a secure page and `boardsmith dev --lan` serves plain
+ * http. It never touches the game's seeded RNG, so minting an id moves no draw.
+ */
+function mintGameInstanceId(): string {
+  const bytes = crypto.getRandomValues(new Uint8Array(16));
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
 export interface GameRunnerOptions<G extends Game, O extends GameOptions = GameOptions> {
   /** Game class constructor */
   GameClass: new (options: O) => G;
@@ -235,6 +247,18 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    * stale" signal. See `GameStateSnapshot.restoreEpoch`.
    */
   restoreEpoch = 0;
+
+  /**
+   * WHICH GAME THIS IS (#356). Minted when a runner begins a new game, adopted
+   * from the snapshot by `fromSnapshot`, and carried by `fromCheckpoint` — an
+   * undo is the same game, and `restoreEpoch` is what says it moved.
+   *
+   * Published to every seat as `PlayerGameState.gameInstanceId`. With
+   * `restoreEpoch` it names the game tree a client's element ids came from: a
+   * new game starts at epoch 0 like the one it replaced, so without this a
+   * client could not tell "New game" from an ordinary re-broadcast.
+   */
+  gameInstanceId = mintGameInstanceId();
 
   /**
    * Last-observed value of `game.getIrreversibleCommitCount()` (the live
@@ -845,6 +869,7 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
       actionCheckpoints: this.checkpointWindow(),
       executeBarrierIndex: this.executeBarrierIndex,
       restoreEpoch: this.restoreEpoch,
+      gameInstanceId: this.gameInstanceId,
     };
   }
 
@@ -1009,6 +1034,12 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
     // restore to a client comparing epochs.
     runner.restoreEpoch = snapshot.restoreEpoch ?? 0;
 
+    // Adopt the game's identity. A snapshot that names none -- a hand-built
+    // fixture, or a saved position written before #356 -- has never been
+    // published as any game, so the id this runner minted becomes its name, and
+    // every snapshot it writes from here on carries it.
+    if (snapshot.gameInstanceId !== undefined) runner.gameInstanceId = snapshot.gameInstanceId;
+
     // Adopt the authoritative element tree. loadSerializedState fully clears and
     // rebuilds the tree from snapshot.state on its own (see Game.loadSerializedState
     // / Game.restoreGame), so it stands alone with no prior replay.
@@ -1164,6 +1195,8 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
         // checkpoint-restore site, so no undo/rewind caller has to remember it,
         // and no host can ship a restore that forgets to tell its clients.
         restoreEpoch: (snapshot.restoreEpoch ?? 0) + 1,
+        // The same game, restored: its identity does not change.
+        gameInstanceId: snapshot.gameInstanceId,
       },
       GameClass,
       {
