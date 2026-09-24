@@ -9,7 +9,7 @@
  * injected is the clock, because a test that waited ten real minutes to see a
  * tick is the exact problem the "fire due events now" control exists to solve.
  */
-import { describe, expect, it, beforeEach } from 'vitest';
+import { describe, expect, it, beforeEach, afterEach, vi } from 'vitest';
 
 import { createRequire } from 'node:module';
 
@@ -28,6 +28,7 @@ import {
   worldAction,
   worldBudgets,
   worldClockAction,
+  WORLD_PRESENCE_DEFAULT_GRACE_MS,
   type WorldBudgets,
   type StoredPartition,
   type WorldDefinition,
@@ -501,6 +502,54 @@ describe('#167: presence is the seats this host has open', () => {
 });
 
 /**
+ * A WORLD THAT WRITES DOWN EVERY PRESENCE TRANSITION IT IS TOLD, as
+ * `arrive:<seat>` or `depart:<seat>`. `greet` and `farewell` are the two hooks a
+ * case may name in its declaration.
+ */
+function presenceWorld(presence: WorldDefinition['presence']) {
+  const told: string[] = [];
+  const transition = (name: string) =>
+    worldClockAction<Village>(name)
+      .prompt(`The clock tells the world a seat ${name === 'greet' ? 'arrived' : 'left'}`)
+      .needs(() => [HEARTH])
+      .execute((args) => {
+        told.push(`${args.present === true ? 'arrive' : 'depart'}:${String(args.seat)}`);
+      });
+  const definition = bundle({
+    world: worldBlock({
+      actions: [...VILLAGE_ACTIONS, transition('greet'), transition('farewell')],
+      presence,
+    }),
+  });
+  return { told, definition };
+}
+
+/**
+ * THE DEPARTURE TIMERS, UNDER THE TEST'S HAND. A departure waits out a real
+ * grace (a minute by default, #338), so the cases below fake `setTimeout` and
+ * move it forward rather than waiting. Nothing else is faked: the world's own
+ * clock is `testClock`, and `setImmediate` still turns.
+ */
+function fakeDepartureTimers(): void {
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+}
+
+/** Moves the departure timers `ms` forward (the default grace unless told
+ *  otherwise), then waits for what they queued behind the world lock. */
+async function afterDepartureTimers(
+  host: LocalWorldHost,
+  ms: number = WORLD_PRESENCE_DEFAULT_GRACE_MS,
+): Promise<void> {
+  await vi.advanceTimersByTimeAsync(ms);
+  await host.settled();
+}
+
+/**
  * #331: AN ARRIVAL IS A SEAT GOING FROM NO OPEN SOCKET TO ONE.
  *
  * The platform's rule, which this host must match so an author's `onArrive`
@@ -508,35 +557,9 @@ describe('#167: presence is the seats this host has open', () => {
  * `games/src/world-presence-policy.ts`): the world is told a seat arrived only
  * when the seat had no other socket, a return within the departure grace is a
  * flap nobody is told about, and per seat arrivals and departures alternate.
- * `greet` and `farewell` write down every transition the world was told.
  */
 describe('#331: an arrival is a seat going from no open socket to one', () => {
-  function presenceWorld(presence: WorldDefinition['presence']) {
-    const told: string[] = [];
-    const transition = (name: string) =>
-      worldClockAction<Village>(name)
-        .prompt(`The clock tells the world a seat ${name === 'greet' ? 'arrived' : 'left'}`)
-        .needs(() => [HEARTH])
-        .execute((args) => {
-          told.push(`${args.present === true ? 'arrive' : 'depart'}:${String(args.seat)}`);
-        });
-    const definition = bundle({
-      world: worldBlock({
-        actions: [...VILLAGE_ACTIONS, transition('greet'), transition('farewell')],
-        presence,
-      }),
-    });
-    return { told, definition };
-  }
-
-  /** Lets a departure timer that is already due fire, then waits for what it
-   *  queued behind the world lock. */
-  async function afterDueDepartures(host: LocalWorldHost): Promise<void> {
-    await new Promise<void>((resolve) => {
-      setTimeout(resolve, 0);
-    });
-    await host.settled();
-  }
+  fakeDepartureTimers();
 
   it('a page that says hello and then attaches to the seat it holds arrives once', async () => {
     const { told, definition } = presenceWorld({ onArrive: 'greet' });
@@ -553,7 +576,7 @@ describe('#331: an arrival is a seat going from no open socket to one', () => {
 
     await host.handleMessage('c2', { type: 'attach', seat: 1 });
     await drop('c2');
-    await afterDueDepartures(host);
+    await afterDepartureTimers(host);
     expect(told).toEqual(['arrive:1']);
     await host.close();
   });
@@ -578,7 +601,7 @@ describe('#331: an arrival is a seat going from no open socket to one', () => {
 
     await drop('c1');
     await host.handleMessage('c2', { type: 'hello' });
-    await afterDueDepartures(host);
+    await afterDepartureTimers(host);
     expect(told).toEqual(['arrive:1']);
     await host.close();
   });
@@ -587,11 +610,14 @@ describe('#331: an arrival is a seat going from no open socket to one', () => {
     const { told, definition } = presenceWorld({ onArrive: 'greet', onDepart: 'farewell' });
     const { host, drop } = await attached({ dir, definition });
 
-    // A zero grace, and the return queued behind the close: the departure's
-    // timer may fire before or after the return is seated, and neither order
-    // may tell the world the seat left while a page holds it.
-    await Promise.all([drop('c1'), host.handleMessage('c2', { type: 'hello' })]);
-    await afterDueDepartures(host);
+    // The return is queued as the grace runs out: the departure's timer may
+    // fire before or after the return is seated, and neither order may tell
+    // the world the seat left while a page holds it.
+    await drop('c1');
+    await vi.advanceTimersByTimeAsync(WORLD_PRESENCE_DEFAULT_GRACE_MS - 1);
+    const returning = host.handleMessage('c2', { type: 'hello' });
+    await afterDepartureTimers(host, 1);
+    await returning;
     expect(told).toEqual(['arrive:1']);
     await host.close();
   });
@@ -601,7 +627,7 @@ describe('#331: an arrival is a seat going from no open socket to one', () => {
     const { host, drop } = await attached({ dir, definition });
 
     await drop('c1');
-    await afterDueDepartures(host);
+    await afterDepartureTimers(host);
     await host.handleMessage('c2', { type: 'hello' });
     expect(told).toEqual(['arrive:1', 'depart:1', 'arrive:1']);
     await host.close();
@@ -623,6 +649,57 @@ describe('#331: an arrival is a seat going from no open socket to one', () => {
     expect(told).toEqual(['arrive:1', 'arrive:1']);
     await host.close();
   });
+});
+
+/**
+ * #338: THE DEPARTURE GRACE IS THE PLATFORM'S, DEFAULT AND BOUNDS.
+ *
+ * With no declared grace this host used 0, so a page reload was a departure
+ * and a new arrival locally and a flap in production. example-rts declares
+ * `presence: { onArrive: 'settle' }` with no grace, and re-ran `settle` on
+ * every reload in dev and never on the platform.
+ */
+describe('#338: the departure grace is the platform grace', () => {
+  fakeDepartureTimers();
+
+  it('an undeclared grace is a minute: a departure is delivered only once the seat was empty that long', async () => {
+    const { told, definition } = presenceWorld({ onArrive: 'greet', onDepart: 'farewell' });
+    const { host, drop } = await attached({ dir, definition });
+
+    await drop('c1');
+    await afterDepartureTimers(host, WORLD_PRESENCE_DEFAULT_GRACE_MS - 1);
+    expect(told).toEqual(['arrive:1']);
+    await afterDepartureTimers(host, 1);
+    expect(told).toEqual(['arrive:1', 'depart:1']);
+    await host.close();
+  });
+
+  it('an arrive-only world with no declared grace does not arrive again when a page reloads', async () => {
+    const { told, definition } = presenceWorld({ onArrive: 'greet' });
+    const clock = testClock();
+    const { host, drop } = await attached({ dir, definition, clock });
+
+    // A reload: the socket closes and a new one says hello a moment later.
+    await drop('c1');
+    clock.advance(1_000);
+    await host.handleMessage('c2', { type: 'hello' });
+    expect(told).toEqual(['arrive:1']);
+    await host.close();
+  });
+
+  it.each([0, 500, 24 * 60 * 60 * 1000 + 1])(
+    'refuses a declared grace of %sms at start, as the platform does, before anything is written',
+    async (departGraceMs) => {
+      const { definition } = presenceWorld({ onArrive: 'greet', departGraceMs });
+      const { host, store } = openHost({ dir, definition });
+
+      await expect(host.start()).rejects.toThrow(
+        /world\.presence\.departGraceMs.*1000 through 86400000 milliseconds/s,
+      );
+      expect(store.isLaunched()).toBe(false);
+      await host.close();
+    },
+  );
 });
 
 /**

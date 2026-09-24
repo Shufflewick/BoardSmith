@@ -31,6 +31,7 @@
 import { randomUUID } from 'node:crypto';
 
 import {
+  presenceDepartGraceMs,
   rearmAt,
   WorldRefusal,
   type RoutedEvent,
@@ -191,10 +192,17 @@ export class LocalWorldHost {
     return this.#world.settled();
   }
 
-  /** Launch the world if it has never been launched, migrating and lifting it
-   *  first if these rules need it to be moved (#200, #223). */
-  start(): Promise<WorldStartOutcome> {
-    return this.#world.start();
+  /**
+   * Launch the world if it has never been launched, migrating and lifting it
+   * first if these rules need it to be moved (#200, #223).
+   *
+   * A presence declaration whose grace the platform would refuse is refused
+   * here first, before anything is written (#338), so the author learns it on
+   * the first `boardsmith dev` rather than at publish.
+   */
+  async start(): Promise<WorldStartOutcome> {
+    if (this.#world.presenceHooks !== undefined) this.#departGraceMs();
+    return await this.#world.start();
   }
 
   async handleMessage(clientId: string, message: WorldDevRequest): Promise<void> {
@@ -395,8 +403,9 @@ export class LocalWorldHost {
     this.#armDeparture(seat, hooks.onDepart);
   }
 
+  /** The platform's grace, defaulted and bounded the platform's way (#338). */
   #departGraceMs(): number {
-    return this.#world.presenceHooks?.departGraceMs ?? 0;
+    return presenceDepartGraceMs(this.#world.presenceHooks?.departGraceMs);
   }
 
   /**
