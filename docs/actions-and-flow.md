@@ -104,6 +104,51 @@ entry at a time: with repeats allowed there is no cap that makes "every possible
 list" tractable, so every move offered is a real one and a longer sequence is
 reached by acting again.
 
+#### One pick at a time, until it ends: a repeating selection (`repeat`)
+
+`multiSelect` and `orderedList` take the whole answer at once. A **repeating**
+selection takes it one pick at a time, and each pick can change the game before
+the next is offered:
+
+```typescript
+.chooseFrom('token', {
+  choices: (ctx) => [...ctx.game.stash.all(Token).map((t) => t.name), 'stop'],
+  repeat: {
+    until: (_ctx, last) => last === 'stop',             // the pick that ends it
+    onEach: (ctx, pick) => { /* runs once per pick, before the next is offered */ },
+  },
+})
+.execute((args) => {
+  // Every pick, in order, ending with the one that ended it: ['p2', 'p1', 'stop']
+  const picks = args.token as unknown as string[];
+});
+```
+
+(`repeatUntil: value` is shorthand for an `until` that ends on that value.) For
+`chooseElement`, `execute` receives the picked elements.
+
+A repeat means the same thing however the move arrives (#325). A player clicking
+picks, a whole `action` submission, a bot's move, the random simulator and
+`enumerateLegalMoves` all go through the one protocol in
+`ActionExecutor.processRepeatingStep`: each pick is checked against the choices
+the previous pick's `onEach` left, `onEach` runs for it, and `until` is tested.
+
+- **A whole submission is the picks as an array**, in order, ending with the
+  pick that ends the repeat. A single value, an array that never reaches the
+  end, or picks after the end are refused with a message saying which. When a
+  submission is refused after `onEach` has run for some of its picks, the
+  runner rolls the game back, so a refused move changed nothing.
+- **Bots and the simulator find repeats by making the picks** on a scratch copy
+  of the game, shortest sequences first, up to 500 partial moves (a warning
+  names the action when that budget runs out). The game being searched is
+  never touched.
+
+`onEach` runs once per pick, so it is the wrong place for a once-per-action cost
+(see [common pitfalls](./common-pitfalls.md)). An `onEach` may not create an
+element that a later selection of the same action then picks: a whole move
+cannot name something that exists only after part of it has run, and
+enumeration says so by name. World actions cannot repeat at all.
+
 #### On-Demand Choices
 
 Choices are always evaluated on-demand when the player needs to make a selection. This means the `choices` callback runs at the moment the player is presented with the selection, not when the action metadata is built.

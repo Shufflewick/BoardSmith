@@ -19,6 +19,7 @@ import type {
   Player,
   GameElement,
 } from '../engine/index.js';
+import { enumerateActionMoves } from '../engine/utils/enumerate-moves.js';
 import { createTestGame, type TestGame } from './test-game.js';
 import { SeededRandom } from '../utils/random.js';
 
@@ -78,7 +79,9 @@ export interface SimulateRandomGamesOptions {
   gameOptions?: Record<string, unknown>;
   /**
    * Called for every choice / element / elements selection the simulator
-   * enumerates, with the count of candidates it found. Purely observational —
+   * enumerates, with the count of candidates it found. An action with a
+   * repeating selection is not reported: its moves are found on a scratch copy
+   * of the game, where each pick's `onEach` has run. Purely observational —
    * it cannot affect the run, so a seeded simulation produces the same games
    * with or without it.
    */
@@ -225,10 +228,11 @@ function serializeArgs(
   const out: Record<string, unknown> = {};
   for (const [key, value] of Object.entries(working)) {
     const sel = selections.find(s => s.name === key);
-    if (sel?.type === 'element') {
-      out[key] = (value as GameElement).id;
-    } else if (sel?.type === 'elements') {
-      out[key] = (value as GameElement[]).map(e => e.id);
+    if (sel?.type === 'element' || sel?.type === 'elements') {
+      // An array is a chooseElements pick or a repeating selection's picks.
+      out[key] = Array.isArray(value)
+        ? (value as GameElement[]).map(e => e.id)
+        : (value as GameElement).id;
     } else {
       out[key] = value;
     }
@@ -249,6 +253,22 @@ function buildRandomArgs(
   rng: SeededRandom,
   onSelectionChoices?: (observation: SelectionChoicesObservation) => void
 ): { ok: true; args: Record<string, unknown> } | { ok: false; reason: string } {
+  // A repeating selection's picks change the game (`onEach`) as they are made,
+  // so what each pick may be is only known by making them. The engine's move
+  // enumerator does exactly that on a scratch copy (#325); one of its moves is
+  // the random move. Its selections are not reported to `onSelectionChoices`:
+  // their candidates exist only on that copy.
+  if (game.getActionExecutor().hasRepeatingSelections(actionDef)) {
+    const moves = enumerateActionMoves(game, actionDef, player);
+    if (moves.length === 0) {
+      return {
+        ok: false,
+        reason: `action '${actionDef.name}' has a repeating selection and no sequence of picks that ends it`,
+      };
+    }
+    return { ok: true, args: serializeArgs(rng.pick(moves), actionDef.selections) };
+  }
+
   // Keep element objects in `working` so dependent selections receive proper
   // objects; serialize to IDs only at the end.
   const working: Record<string, unknown> = {};

@@ -10,8 +10,9 @@
  *
  * Player 1 keeps the turn (`repeatUntil: () => false`), so undo stays
  * available after a completed collect. `execute` records the `token` argument
- * it received in `collected`, so a test can see what the finished action was
- * handed.
+ * it received in `collected`, and `onEach` records every pick it was called
+ * with in `eachCalls`, so a test can compare what each path that submits a
+ * move ran (#325).
  */
 import {
   Game,
@@ -34,6 +35,8 @@ export class RepeatingCollectGame extends Game<RepeatingCollectGame, Player> {
   hand!: Hand;
   /** The `token` argument the last completed `collect` was handed, as given. */
   collected: unknown = null;
+  /** Every value `onEach` was called with, in order, across the whole game. */
+  eachCalls: string[] = [];
 
   constructor(options: GameOptions) {
     super(options);
@@ -55,8 +58,9 @@ export class RepeatingCollectGame extends Game<RepeatingCollectGame, Player> {
           repeat: {
             until: (_ctx, last) => last === 'stop',
             onEach: (ctx, choice) => {
-              if (choice === 'stop') return;
               const game = ctx.game as RepeatingCollectGame;
+              game.eachCalls.push(choice);
+              if (choice === 'stop') return;
               game.stash.all(Token).find((t) => t.name === choice)?.putInto(game.hand);
             },
           },

@@ -44,7 +44,7 @@ export { Action };
  *   on the wire (#47). A raw `TypeError: Cannot read properties of undefined
  *   (reading 'suit')` reaching a player leaks implementation detail and tells
  *   them nothing they can act on.
- * - The result is marked `threw`, so the runner knows the action may have
+ * - The result is marked `partiallyApplied`, so the runner knows the action may have
  *   applied part of its changes before it stopped and rolls the game back
  *   (#44). A clean refusal carries no such mark, because it mutated nothing.
  */
@@ -54,7 +54,7 @@ function failedExecute(actionName: string, error: unknown): ActionResult {
   // Logging it printed a stack per rollout — measured at 198 MB in 15 seconds
   // on one game — for a search that was working as designed.
   if (error instanceof NotSimulableError) {
-    return { success: false, error: error.message, threw: true, notSimulable: true };
+    return { success: false, error: error.message, partiallyApplied: true, notSimulable: true };
   }
   console.error(`[BoardSmith] Action '${actionName}' execution failed:`, error);
   // WHERE THE SENTENCE WENT, said once and only where it is news (#191).
@@ -87,7 +87,7 @@ function failedExecute(actionName: string, error: unknown): ActionResult {
     : isDevThrowEnabled()
       ? `${generic} (${error instanceof Error ? error.message : String(error)})`
       : generic;
-  return { success: false, error: message, threw: true };
+  return { success: false, error: message, partiallyApplied: true };
 }
 
 /**
@@ -110,7 +110,7 @@ function failedExecute(actionName: string, error: unknown): ActionResult {
  * An EMPTY `error` counts as none: `if (flowState.actionError)` is the test
  * downstream, and `''` fails it exactly as `undefined` does.
  *
- * Not `threw`. The author believed they were refusing cleanly, and a clean
+ * Not `partiallyApplied`. The author believed they were refusing cleanly, and a clean
  * refusal mutated nothing, so there is nothing for the runner to roll back.
  */
 function acceptExecuteResult(actionName: string, result: ActionResult): ActionResult {
@@ -386,8 +386,15 @@ export class ActionExecutor {
 
       switch (selection.type) {
         case 'element': {
-          // If value is a number, resolve to actual GameElement by ID
-          if (typeof value === 'number') {
+          if (Array.isArray(value)) {
+            // A repeating chooseElement's picks: one element per pick, in the
+            // order they were made (#325). Any other array is left as sent, for
+            // validateSelection to refuse.
+            if (this.isRepeatingSelection(selection)) {
+              resolved[selection.name] = value.map(v => this.resolveElementItem(v));
+            }
+          } else if (typeof value === 'number') {
+            // If value is a number, resolve to actual GameElement by ID
             const element = this.game.getElementById(value);
             if (element) {
               resolved[selection.name] = element;
@@ -412,18 +419,7 @@ export class ActionExecutor {
             }
           } else if (Array.isArray(value)) {
             // Multi-select: array of element IDs or serialized elements.
-            // Keep unresolved IDs (don't silently drop them) so validateSelection
-            // can reject the submission with an actionable error instead of
-            // letting an invalid ID vanish.
-            const elements = value.map(v => {
-              if (typeof v === 'number') {
-                return this.game.getElementById(v) ?? v;
-              } else if (this.looksLikeSerializedElement(v)) {
-                const id = (v as { id: number }).id;
-                return this.game.getElementById(id) ?? id;
-              }
-              return v;
-            });
+            const elements = value.map(v => this.resolveElementItem(v));
             resolved[selection.name] = elements;
           }
           break;
@@ -508,6 +504,21 @@ export class ActionExecutor {
     }
 
     return resolved;
+  }
+
+  /**
+   * One entry of an element array (a chooseElements pick, or one pick of a
+   * repeating chooseElement) resolved to its element. An id that resolves to
+   * nothing is KEPT as its id, not dropped, so validateSelection can refuse the
+   * submission with an actionable error instead of letting it vanish.
+   */
+  private resolveElementItem(item: unknown): unknown {
+    if (typeof item === 'number') return this.game.getElementById(item) ?? item;
+    if (this.looksLikeSerializedElement(item)) {
+      const id = (item as { id: number }).id;
+      return this.game.getElementById(id) ?? id;
+    }
+    return item;
   }
 
   /**
@@ -1234,6 +1245,15 @@ export class ActionExecutor {
     player: Player,
     args: Record<string, unknown>
   ): ActionResult {
+    // A repeating selection is a protocol, not a value: each pick is checked
+    // against the choices the previous pick's onEach left, runs onEach, and is
+    // tested against `until`. That protocol lives in processRepeatingStep, so a
+    // whole submission runs the same selection steps a player's picks do
+    // (#325) rather than a second, repeat-blind validation.
+    if (this.hasRepeatingSelections(action)) {
+      return this.executeThroughSelectionSteps(action, player, args);
+    }
+
     // Resolve serialized args (player indices, element IDs) to actual objects
     const resolvedArgs = this.resolveArgs(action, args, player);
 
@@ -1289,6 +1309,152 @@ export class ActionExecutor {
     } catch (error) {
       return failedExecute(action.name, error);
     }
+  }
+
+  /**
+   * Execute a whole submission of an action that has a repeating selection by
+   * feeding it through the selection steps, one value at a time (#325).
+   *
+   * A repeating selection's value is its picks as an array, in the order they
+   * were made, ending with the pick that ends the repeat: exactly what
+   * `execute` receives when a player makes the picks one by one. Each pick goes
+   * through `processRepeatingStep`, so `onEach` runs for it and the next pick is
+   * checked against the choices that left. Every other selection goes through
+   * `processSelectionStep`, as it does for a player.
+   *
+   * `onEach` changes the game while the picks are still being checked, so a
+   * submission refused after it ran is marked `partiallyApplied` and the runner
+   * rolls the game back.
+   */
+  private executeThroughSelectionSteps(
+    action: ActionDefinition,
+    player: Player,
+    args: Record<string, unknown>
+  ): ActionResult {
+    const context = { game: this.game, player, args: this.resolveArgs(action, args, player) };
+    if (action.condition && !evaluateCondition(action.condition, context, `action '${action.name}'`)) {
+      return { success: false, error: 'Action is not available' };
+    }
+
+    const pendingState = this.createPendingActionState(action.name, player.seat);
+    let applied = false;
+    for (const selection of action.selections) {
+      const step = this.feedSelection(action, player, pendingState, selection, args[selection.name]);
+      applied ||= step.applied;
+      if (step.error !== undefined) {
+        this.fireOnCancelCallbacks(action, pendingState);
+        return { success: false, error: step.error, ...(applied && { partiallyApplied: true }) };
+      }
+    }
+
+    const result = this.executePendingAction(action, player, pendingState);
+    return !result.success && applied ? { ...result, partiallyApplied: true } : result;
+  }
+
+  /**
+   * Feed one selection's whole submitted value through the selection steps.
+   * `applied` says whether a callback that can change the game (`onSelect`,
+   * `onEach`) has run, so a refusal after it must be rolled back.
+   */
+  private feedSelection(
+    action: ActionDefinition,
+    player: Player,
+    pendingState: PendingActionState,
+    selection: Selection,
+    value: unknown
+  ): { error?: string; applied: boolean } {
+    if (!this.isRepeatingSelection(selection)) {
+      const step = this.processSelectionStep(action, player, pendingState, selection.name, value);
+      return { error: step.success ? undefined : step.error, applied: false };
+    }
+    if (value === undefined || value === null) {
+      if (!selection.optional) return { error: `Missing required selection: ${selection.name}`, applied: false };
+      pendingState.currentSelectionIndex++;
+      return { applied: false };
+    }
+    if (!Array.isArray(value) || value.length === 0) {
+      return { error: this.repeatShapeError(selection, value), applied: false };
+    }
+    return this.feedRepeatPicks(action, player, pendingState, selection, value);
+  }
+
+  /**
+   * Feed a repeating selection's picks, in order, through `processRepeatingStep`,
+   * so each pick runs `onEach` and is checked against the choices the previous
+   * one left. The picks must end exactly where the repeat ends.
+   */
+  private feedRepeatPicks(
+    action: ActionDefinition,
+    player: Player,
+    pendingState: PendingActionState,
+    selection: Selection,
+    picks: unknown[]
+  ): { error?: string; applied: boolean } {
+    const index = pendingState.currentSelectionIndex;
+    let applied = false;
+    for (const [pickIndex, pick] of picks.entries()) {
+      if (pendingState.currentSelectionIndex !== index) {
+        return { error: this.repeatEndedEarlyError(selection, pickIndex, picks.length), applied };
+      }
+      const step = this.feedRepeatPick(action, player, pendingState, selection, pick);
+      applied ||= step.applied;
+      if (step.error) return { error: `Pick ${pickIndex + 1} of "${selection.name}": ${step.error}`, applied };
+    }
+    if (pendingState.repeating) {
+      return {
+        error:
+          `Selection "${selection.name}" repeats and its ${picks.length} pick(s) did not end it: the repeat ` +
+          `still expects another pick. End the array with the pick that ends the repeat.`,
+        applied,
+      };
+    }
+    return { applied };
+  }
+
+  /** One pick through `processRepeatingStep`. */
+  private feedRepeatPick(
+    action: ActionDefinition,
+    player: Player,
+    pendingState: PendingActionState,
+    selection: Selection,
+    pick: unknown
+  ): { error?: string; applied: boolean } {
+    const iterationsBefore = pendingState.repeating?.iterationCount ?? 0;
+    const step = this.processRepeatingStep(action, player, pendingState, this.repeatPickValue(selection, pick));
+    // A pick that got past validation has run onSelect/onEach, even when they
+    // then failed, so the game may have changed.
+    const applied = !step.error || (pendingState.repeating?.iterationCount ?? 0) > iterationsBefore;
+    return { error: step.error, applied };
+  }
+
+  private repeatShapeError(selection: Selection, value: unknown): string {
+    const shown = Array.isArray(value) ? value : this.describeSubmittedValue(value);
+    return (
+      `Selection "${selection.name}" repeats, so its value is its picks as an array, in the order ` +
+      `they are made, ending with the pick that ends the repeat (for example [first, second, last]). ` +
+      `Got ${JSON.stringify(shown)}.`
+    );
+  }
+
+  private repeatEndedEarlyError(selection: Selection, pickIndex: number, total: number): string {
+    return (
+      `Selection "${selection.name}" repeats and pick ${pickIndex} of ${total} ended it, so the ` +
+      `${total - pickIndex} pick(s) after the pick that ended it cannot be made. End the array with ` +
+      `the pick that ends the repeat.`
+    );
+  }
+
+  /** A pick in the form processRepeatingStep takes: an element selection's is the element's id. */
+  private repeatPickValue(selection: Selection, pick: unknown): unknown {
+    if (selection.type !== 'element' && selection.type !== 'elements') return pick;
+    if (isElement(pick)) return pick.id;
+    if (this.looksLikeSerializedElement(pick)) return (pick as { id: number }).id;
+    return pick;
+  }
+
+  /** An element is named by its id in an error, not dumped whole. */
+  private describeSubmittedValue(value: unknown): unknown {
+    return isElement(value) ? { id: value.id, name: value.name } : value;
   }
 
   /**
@@ -1622,6 +1788,57 @@ export class ActionExecutor {
   }
 
   /**
+   * The args a repeating selection's callbacks see: the resolved answers so far,
+   * with the repeating selection bound to its picks so far.
+   *
+   * Element/player IDs are resolved first because a choices function (e.g.
+   * equipment) may depend on a previously selected element (e.g. actingMerc).
+   */
+  private repeatingSelectionArgs(
+    action: ActionDefinition,
+    player: Player,
+    pendingState: PendingActionState,
+    selectionName: string
+  ): Record<string, unknown> {
+    return {
+      ...this.resolveArgs(action, pendingState.collectedArgs, player),
+      [selectionName]: pendingState.repeating?.accumulated ?? [],
+    };
+  }
+
+  /**
+   * The values the repeating selection a pending action has reached will accept
+   * as its NEXT pick, in the form `processRepeatingStep` takes them (an element
+   * selection's are element ids).
+   *
+   * This is how move enumeration learns what a repeat offers after the picks
+   * already made (#325): from the same choices `processRepeatingStep` checks a
+   * pick against, not from a copy of that rule.
+   */
+  // Called by enumerate-moves through game.getActionExecutor(), which the
+  // dead-code scan does not follow.
+  // fallow-ignore-next-line unused-class-member
+  repeatingPickCandidates(
+    action: ActionDefinition,
+    player: Player,
+    pendingState: PendingActionState
+  ): unknown[] {
+    const selection = action.selections[pendingState.currentSelectionIndex];
+    if (!selection || !this.isRepeatingSelection(selection)) {
+      throw new Error(
+        `repeatingPickCandidates: action '${action.name}' is not at a repeating selection ` +
+        `(it is at selection ${pendingState.currentSelectionIndex}).`
+      );
+    }
+    const args = this.repeatingSelectionArgs(action, player, pendingState, selection.name);
+    const enabled = this.getChoices(selection, player, args).filter(c => c.disabled === false);
+    if (selection.type === 'element' || selection.type === 'elements') {
+      return enabled.flatMap(c => (isElement(c.value) ? [c.value.id] : []));
+    }
+    return enabled.map(c => c.value);
+  }
+
+  /**
    * Process one step of a repeating selection.
    * This handles adding a value to the accumulated selections, running onEach,
    * and checking the termination condition.
@@ -1681,19 +1898,11 @@ export class ActionExecutor {
     // Capture before accumulation -- onSelect fires on first iteration only
     const isFirstIteration = pendingState.repeating.iterationCount === 0;
 
-    // Resolve element/player IDs to actual objects before validating choices
-    // This is needed because choices functions (e.g., equipment) may depend on
-    // previously selected elements (e.g., actingMerc)
-    const resolvedArgs = this.resolveArgs(action, pendingState.collectedArgs, player);
-
     // Validate the choice is in the available choices
     const context: ActionContext = {
       game: this.game,
       player,
-      args: {
-        ...resolvedArgs,
-        [selection.name]: pendingState.repeating.accumulated,
-      },
+      args: this.repeatingSelectionArgs(action, player, pendingState, selection.name),
     };
 
     const currentChoices = this.getChoices(selection, player, context.args);
@@ -1810,14 +2019,10 @@ export class ActionExecutor {
 
     // Get next choices (choices may have changed after onEach)
     // Re-resolve args in case they changed, and use resolved args for choices
-    const nextResolvedArgs = this.resolveArgs(action, pendingState.collectedArgs, player);
     const nextContext: ActionContext = {
       game: this.game,
       player,
-      args: {
-        ...nextResolvedArgs,
-        [selection.name]: pendingState.repeating.accumulated,
-      },
+      args: this.repeatingSelectionArgs(action, player, pendingState, selection.name),
     };
     const nextAnnotated = this.getChoices(selection, player, nextContext.args);
     const nextEnabled = nextAnnotated.filter(c => c.disabled === false);
@@ -2009,8 +2214,12 @@ export class ActionExecutor {
   fireOnCancelCallbacks(action: ActionDefinition, pendingState: PendingActionState): void {
     if (!pendingState.onSelectFired || pendingState.onSelectFired.size === 0) return;
 
+    // Each selection's onCancel runs once: the set is emptied as it is read, so
+    // a caller that cancels after a step already did cannot compensate twice.
+    const fired = [...pendingState.onSelectFired];
+    pendingState.onSelectFired.clear();
     const ctx = this.createOnSelectContext();
-    for (const index of pendingState.onSelectFired) {
+    for (const index of fired) {
       const selection = action.selections[index];
       if (selection?.onCancel) {
         try {
@@ -2030,7 +2239,32 @@ export class ActionExecutor {
   }
 
   /**
+   * Why the action-level `validate` gate refuses a COMPLETE pending action, or
+   * `null` when it may run. Runs nothing else: move enumeration asks this of a
+   * pending action it assembled so it offers only moves `executePendingAction`
+   * would accept.
+   */
+  // Called by enumerate-moves through game.getActionExecutor(), which the
+  // dead-code scan does not follow.
+  // fallow-ignore-next-line unused-class-member
+  pendingActionRefusal(
+    action: ActionDefinition,
+    player: Player,
+    pendingState: PendingActionState
+  ): string | null {
+    if (!this.isPendingActionComplete(action, pendingState)) {
+      return 'Action is not complete';
+    }
+    const args = this.resolveArgs(action, pendingState.collectedArgs, player);
+    return this.checkActionValidate(action, { game: this.game, player, args });
+  }
+
+  /**
    * Execute a completed pending action.
+   *
+   * The action-level gate applies here too -- this is the interactive path
+   * (choice by choice), and the whole point of the gate is that it sees the
+   * COMPLETE submission, which is exactly what has just been assembled.
    */
   executePendingAction(
     action: ActionDefinition,
@@ -2050,9 +2284,6 @@ export class ActionExecutor {
       args: resolvedArgs,
     };
 
-    // The action-level gate applies here too -- this is the interactive path
-    // (choice by choice), and the whole point of the gate is that it sees the
-    // COMPLETE submission, which is exactly what has just been assembled.
     const validateError = this.checkActionValidate(action, context);
     if (validateError) {
       // The action never runs, so nothing it would have mutated has happened;
