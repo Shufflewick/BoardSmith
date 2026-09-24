@@ -44,9 +44,21 @@ export interface SelectionChoicesObservation {
 const MAX_CONSECUTIVE_FAILURES = 10;
 
 /**
+ * Says whether a game that stopped because no seat has an enabled action is
+ * stopped where it is meant to rest: return the reason it rests there, or
+ * `false` when it is not meant to stop there. It is handed the stopped game, so
+ * it can check the final state as well as name it.
+ *
+ * A game built chunk by chunk has no ending until a later chunk adds one, so
+ * every random game of it stops with no move left. Without this that stop is
+ * `stuck`, the same verdict a flow deadlock gets (#317).
+ */
+export type IsResting<G extends Game> = (game: G) => string | false;
+
+/**
  * Options for {@link simulateRandomGames}.
  */
-export interface SimulateRandomGamesOptions {
+export interface SimulateRandomGamesOptions<G extends Game = Game> {
   /** Number of games to simulate */
   count: number;
   /** Player counts to test (will run games with each count) */
@@ -83,12 +95,20 @@ export interface SimulateRandomGamesOptions {
    * with or without it.
    */
   onSelectionChoices?: (observation: SelectionChoicesObservation) => void;
+  /**
+   * Declares where the game is meant to rest. A game that stops because no
+   * seat has an enabled action is `resting` when this returns a reason, and
+   * `stuck` when it returns `false` or is not given. Only that stop is
+   * referred to it: a crash, a timeout, a rejected move or a move the
+   * simulator cannot build stays a failure whatever this returns.
+   */
+  isResting?: IsResting<G>;
 }
 
 /**
  * Options for {@link replayRandomGame}.
  */
-export interface ReplayRandomGameOptions {
+export interface ReplayRandomGameOptions<G extends Game = Game> {
   /** The exact per-game seed to replay (from {@link SingleGameResult.seed}) */
   seed: string;
   /** Player count the game was run with */
@@ -103,6 +123,8 @@ export interface ReplayRandomGameOptions {
    * repro.
    */
   gameOptions?: Record<string, unknown>;
+  /** The same `isResting` the run used, so the replay gives the same verdict. */
+  isResting?: IsResting<G>;
 }
 
 /**
@@ -118,11 +140,19 @@ export interface SingleGameResult {
   /** Whether the game exceeded max actions */
   exceededMaxActions: boolean;
   /**
-   * Whether the simulation got stuck: it could not produce a valid move
+   * Whether the simulation got stuck: no seat had an enabled action and the
+   * game did not declare that stop a rest, it could not produce a valid move
    * (e.g. an action requires input the random simulator cannot generate),
    * or generated moves were repeatedly rejected. See {@link SingleGameResult.error}.
    */
   stuck: boolean;
+  /**
+   * Whether the game stopped with no seat holding an enabled action, at a
+   * rest its `isResting` declared. See {@link SingleGameResult.restReason}.
+   */
+  resting: boolean;
+  /** The reason `isResting` gave, when the game is resting */
+  restReason?: string;
   /** Error message if crashed, or the reason the simulation got stuck */
   error?: string;
   /** Number of actions taken */
@@ -149,8 +179,10 @@ export interface SimulationResults {
   timedOut: number;
   /** Number of games that exceeded max actions */
   exceededMaxActions: number;
-  /** Number of games that got stuck (no generatable move / repeated rejections) */
+  /** Number of games that got stuck (no generatable move / repeated rejections / an undeclared stop) */
   stuck: number;
+  /** Number of games that stopped at a rest their `isResting` declared */
+  resting: number;
   /** Total games run */
   total: number;
   /** Individual game results */
@@ -195,7 +227,7 @@ function enabledSeats(
     const disabled = game.getDisabledActions(seat);
     const enabled = actionNames.filter((name) => !(name in disabled));
     const blocked = actionNames.filter((name) => name in disabled);
-    refused.push(...blocked.map((name) => `player ${seat}'s '${name}': ${disabled[name]}`));
+    refused.push(...blocked.map((name) => `player ${seat}'s '${name}' (${disabled[name].replace(/\.$/, '')})`));
     if (enabled.length > 0) seats.push({ seat, actionNames: enabled });
   }
   return { seats, refused };
@@ -427,19 +459,44 @@ function assertGameOptionsAreGameSpecific(gameOptions: Record<string, unknown> |
   }
 }
 
+/** What one simulated game is played with. @internal */
+interface SingleGameConfig<G extends Game> {
+  playerCount: number;
+  seed: string;
+  timeout: number;
+  maxActions: number;
+  gameOptions: Record<string, unknown> | undefined;
+  onSelectionChoices: ((observation: SelectionChoicesObservation) => void) | undefined;
+  isResting: IsResting<G> | undefined;
+}
+
+/**
+ * Ask the game's `isResting` about a game that stopped with no enabled action.
+ * Returns the rest reason, or `undefined` when the stop is not a declared rest.
+ * @internal
+ */
+function declaredRest<G extends Game>(isResting: IsResting<G> | undefined, game: G): string | undefined {
+  if (!isResting) return undefined;
+  const reason = isResting(game);
+  if (reason === false) return undefined;
+  if (reason.trim() === '') {
+    throw new Error(
+      'isResting returned an empty reason. Return a sentence saying why the game rests here, ' +
+        'or false when it is not meant to stop here.',
+    );
+  }
+  return reason;
+}
+
 /**
  * Run a single random game simulation.
  * @internal
  */
 async function simulateSingleGame<G extends Game>(
   GameClass: new (options: GameOptions) => G,
-  playerCount: number,
-  seed: string,
-  timeout: number,
-  maxActions: number,
-  gameOptions: Record<string, unknown> | undefined,
-  onSelectionChoices: ((observation: SelectionChoicesObservation) => void) | undefined,
+  config: SingleGameConfig<G>,
 ): Promise<SingleGameResult> {
+  const { playerCount, seed, timeout, maxActions, gameOptions, onSelectionChoices, isResting } = config;
   const startTime = Date.now();
   const rng = new SeededRandom(seed);
 
@@ -449,6 +506,7 @@ async function simulateSingleGame<G extends Game>(
   let exceededMaxActions = false;
   let stuck = false;
   let stuckReason: string | undefined;
+  let restReason: string | undefined;
   let consecutiveFailures = 0;
 
   try {
@@ -490,10 +548,14 @@ async function simulateSingleGame<G extends Game>(
 
       const { seats, refused } = enabledSeats(testGame.game, flowState);
       if (seats.length === 0) {
+        restReason = declaredRest(isResting, testGame.game);
+        if (restReason !== undefined) break;
         stuck = true;
         stuckReason =
           'Game is awaiting input but no player has an enabled action to take.' +
-          (refused.length > 0 ? ` Refused: ${refused.join('; ')}.` : '');
+          (refused.length > 0 ? ` Refused: ${refused.join('; ')}.` : '') +
+          ' If the game is meant to rest here until a rule not built yet ends it, declare that ' +
+          'with isResting in a simulateRandomGames test; otherwise the flow is deadlocked.';
         break;
       }
       const actor = rng.pick(seats);
@@ -550,6 +612,8 @@ async function simulateSingleGame<G extends Game>(
       timedOut,
       exceededMaxActions,
       stuck,
+      resting: restReason !== undefined,
+      ...(restReason !== undefined ? { restReason } : {}),
       error: stuckReason,
       actionCount,
       duration,
@@ -564,6 +628,7 @@ async function simulateSingleGame<G extends Game>(
       timedOut: false,
       exceededMaxActions: false,
       stuck: false,
+      resting: false,
       error: error instanceof Error ? error.message : String(error),
       actionCount,
       duration: Date.now() - startTime,
@@ -594,19 +659,19 @@ async function simulateSingleGame<G extends Game>(
  */
 export async function replayRandomGame<G extends Game>(
   GameClass: new (options: GameOptions) => G,
-  options: ReplayRandomGameOptions
+  options: ReplayRandomGameOptions<G>
 ): Promise<SingleGameResult> {
-  const { seed, playerCount, timeout = 5000, maxActions = 10000, gameOptions } = options;
+  const { seed, playerCount, timeout = 5000, maxActions = 10000, gameOptions, isResting } = options;
   assertGameOptionsAreGameSpecific(gameOptions);
-  return simulateSingleGame(
-    GameClass,
+  return simulateSingleGame(GameClass, {
     playerCount,
     seed,
     timeout,
     maxActions,
     gameOptions,
-    undefined,
-  );
+    onSelectionChoices: undefined,
+    isResting,
+  });
 }
 
 /**
@@ -640,7 +705,7 @@ export async function replayRandomGame<G extends Game>(
  */
 export async function simulateRandomGames<G extends Game>(
   GameClass: new (options: GameOptions) => G,
-  options: SimulateRandomGamesOptions
+  options: SimulateRandomGamesOptions<G>
 ): Promise<SimulationResults> {
   const {
     count,
@@ -667,15 +732,15 @@ export async function simulateRandomGames<G extends Game>(
       // reproduces this exact game; the seed is also replayable on its own.
       const seed = `${baseSeed}-${playerCount}-${i}`;
 
-      const result = await simulateSingleGame(
-        GameClass,
+      const result = await simulateSingleGame(GameClass, {
         playerCount,
         seed,
         timeout,
         maxActions,
         gameOptions,
-        options.onSelectionChoices,
-      );
+        onSelectionChoices: options.onSelectionChoices,
+        isResting: options.isResting,
+      });
 
       games.push(result);
       total++;
@@ -696,6 +761,7 @@ export async function simulateRandomGames<G extends Game>(
   const timedOut = games.filter(g => g.timedOut).length;
   const exceededMaxActions = games.filter(g => g.exceededMaxActions).length;
   const stuck = games.filter(g => g.stuck).length;
+  const resting = games.filter(g => g.resting).length;
 
   const completedGames = games.filter(g => g.completed);
   const averageActions = completedGames.length > 0
@@ -711,6 +777,7 @@ export async function simulateRandomGames<G extends Game>(
     timedOut,
     exceededMaxActions,
     stuck,
+    resting,
     total,
     games,
     averageActions,

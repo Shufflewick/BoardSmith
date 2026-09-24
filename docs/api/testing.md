@@ -71,7 +71,7 @@ import {
 - `TestGameOptions` - Test game creation options (`playerCount`, `playerNames`, `seed`, `autoStart`, `checkpoints`, plus any game-specific constructor options). `checkpoints` is the per-action checkpoint retention policy, applied to the runner rather than passed to the game constructor — without it a test always runs under the unbounded default and cannot exercise the policy the game ships (see `docs/state-size.md`). `seed` defaults to a fixed literal (`'test-seed'`) — never `Date.now()`/`Math.random` — so two seedless `TestGame.create()`/`createTestGame()` calls are deterministic and reproduce identical shuffles/command history. The resolved seed (fixed default or caller-supplied) is exposed via `testGame.seed` and included in `doAction`/`assertActionAvailable`/`playUntilComplete` failure messages so a failing run is one copy-paste from a deterministic repro.
 - `SimulateActionResult` - Action simulation result (extends `ActionExecutionResult` with `action`/`playerSeat`/`args`)
 - `PlayUntilCompleteOptions` - Options for `playUntilComplete()` (`maxMoves`, `strategy`, `rng`)
-- `SimulateRandomGamesOptions`, `ReplayRandomGameOptions`, `SingleGameResult`, `SimulationResults` - Random simulation types
+- `SimulateRandomGamesOptions`, `ReplayRandomGameOptions`, `SingleGameResult`, `SimulationResults`, `IsResting` - Random simulation types
 - `ExpectedFlowState`, `FlowStateAssertionResult` - `assertFlowState()` input/output types
 - `DebugStringOptions`, `ActionTraceResult`, `ActionTraceDetail` - Debug utility types
 - `TutorialScenarioMove`, `SimulateTutorialOptions`, `SimulateTutorialResult` - Tutorial DSL types
@@ -301,6 +301,38 @@ itself, so naming one of those in `gameOptions` is an error rather than a
 silent override. `replayRandomGame` takes the same `gameOptions` — a seed alone
 does not reproduce an option-gated game. From the command line the same thing
 is `boardsmith simulate --game-option difficulty=hard`.
+
+#### A game whose ending is not built yet
+
+A game built chunk by chunk has no ending until a later chunk adds one, so
+every random game of it stops with no move left. By default that stop counts as
+`stuck`, the same as a flow deadlock. Declare where the game is meant to rest
+with `isResting`. It is handed the stopped game and returns the reason the game
+rests there, or `false` when it is not meant to stop there:
+
+```typescript
+const results = await simulateRandomGames(MyGame, {
+  count: 50,
+  playerCounts: [2],
+  isResting: (game) =>
+    game.players.every((p) => p.supply < CHEAPEST_PACK)
+      ? 'every player has spent their supply; check-in ends deployment in a later chunk'
+      : false,
+});
+
+expect(results.resting).toBe(results.total);
+expect(results.stuck).toBe(0);
+expect(results.crashed).toBe(0);
+```
+
+A game it accepts gets `resting: true` and `restReason` (the string it
+returned), and counts toward `results.resting` instead of `results.stuck`.
+Because it sees the game itself, it is also where a test checks the final
+state. It is asked only about a game that stopped because no seat has an
+enabled action. A crash, a timeout, too many actions, a rejected move or a move
+the simulator cannot build stays a failure whatever it would say. Pass the same
+`isResting` to `replayRandomGame` to get the same verdict on a replay. Remove it
+once the game can end, so a stop goes back to being `stuck`.
 
 ### Debugging Test Failures
 
@@ -578,7 +610,10 @@ boardsmith simulate --games 50 --seed ci-run-1 --players 2 --json
 
 Exit code is `0` only if every game reaches `status: 'complete'`; any
 `'stuck'` or `'error'` game sets a non-zero exit code, so `boardsmith
-simulate` can gate CI directly. A failing game's output includes a replay
+simulate` can gate CI directly. The command has no `isResting`: a game whose
+ending is not built yet reports every game stuck here. Gate such a game with a
+`simulateRandomGames` test that declares its rest, and use this command once
+the game can end. A failing game's output includes a replay
 line:
 
 ```
