@@ -121,6 +121,7 @@ async function dispatch(
     allowance: { unkeyed: 0, keys: [], worldPending: 0 },
     presence: [] as readonly number[],
     activity: options.activity,
+    declaredActivity: [],
   });
 }
 

@@ -1,8 +1,8 @@
 {
-  "revision": 95,
+  "revision": 96,
   "bundleProtocol": 2,
   "surfaceHash": "9bf56c556e696f03",
-  "payloadHash": "9721d8a867285784",
+  "payloadHash": "6b3277c32a0ec8d0",
   "formatHash": "0058593e7cc80205",
   "history": [
     {
@@ -799,6 +799,15 @@
       "payloadHash": "9721d8a867285784",
       "formatHash": "0058593e7cc80205",
       "summary": "A step's timeLimitMs has a floor of ten seconds (#307). boardsmith exports MIN_STEP_TIME_LIMIT_MS (10000); a fixed limit under it is refused when the flow is built (so build and validate refuse it) and a function's answer under it is refused when the step is entered, naming the step. The platform runs its own copy of the engine, so no table can arm a shorter window and the platform can hold its round-expiry budget against this constant (ShufflewickPub #505). Not breaking: no existing field moved."
+    },
+    {
+      "revision": 96,
+      "date": "2026-09-24",
+      "bundleProtocol": 2,
+      "surfaceHash": "9bf56c556e696f03",
+      "payloadHash": "6b3277c32a0ec8d0",
+      "formatHash": "0058593e7cc80205",
+      "summary": "The contract fixture now produces two world facts it had missed, found when #312 type-checked it for the first time: world_command carries order (a paid order's id and instant, #195), and the watching seat's activity watermark is rendered by a pick prompt (an action prompt takes only a string, so the old one was a function JSON dropped and the watermark moved no hash). payloadHash moved only because the fixture now produces these bytes; no engine behavior changed. Not breaking."
     }
   ]
 }

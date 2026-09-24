@@ -95,8 +95,8 @@ describe('engine contract', () => {
   describe("the payload fixture's world coverage is measured, not claimed", () => {
     it('classifies every platform-facing world verb as covered or not', () => {
       // `WORLD_ENGINE_METHODS` is `keyof WorldEngine` as values; a verb added to
-      // the interface and not to that list fails to compile inside
-      // `tsconfig.public.json`'s graph. This is the second half: it must also be
+      // the interface and not to that list fails `boardsmith typecheck`.
+      // This is the second half: it must also be
       // CLASSIFIED, and only a human can say which of the two it is.
       expect(
         Object.keys(WORLD_FIXTURE_COVERAGE).sort(),

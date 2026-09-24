@@ -11,7 +11,7 @@ class DiceGame extends Game<DiceGame, Player> {
 
   constructor(options: GameOptions) {
     super(options);
-    this.pool = this.create(DicePool, 'tray');
+    this.pool = this.create(DicePool<DiceGame>, 'tray');
     this.pool.create(Die, 'first', { sides: 6 });
     this.pool.create(Die, 'second', { sides: 6 });
     this.pool.create(Die, 'big', { sides: 20 });

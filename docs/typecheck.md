@@ -1,82 +1,102 @@
 # Typechecking BoardSmith
 
-## `tsc -p tsconfig.json` used to check NOTHING, and exit 0 doing it
+There is one command, and this file states what it covers.
 
-Found 2026-08-25, during ShufflewickPub Phase 68.
-
-`tsconfig.json` had no `include`. TypeScript therefore defaulted to `**/*`,
-which picks up three `docs/*.test.ts` files. Those live outside
-`rootDir: "src"`, so tsc emitted three **TS6059 config errors** and stopped
-**before typechecking a single file** — while exiting **0**.
-
-**Proven, not inferred:** a deliberate type error was planted in `src/` and went
-completely unreported.
-
-That is the same false-green class ShufflewickPub's `CLAUDE.md` documents for
-`npx tsc --noEmit` (it cannot see inside `.vue` files, so it checks about half
-that repo while looking green). A command that reports success while asserting
-nothing is worse than no command, because it is quoted as evidence.
-
-**Fixed** by adding `"include": ["src/**/*"]`. `tsc -p tsconfig.json` now really
-typechecks, and the TS6059 errors are gone.
-
-## Why this matters more here than in an ordinary repo
-
-This package **ships TypeScript source**. `package.json`'s `exports` maps both
-`types` and `import` straight at `src/**/*.ts`:
-
-```json
-".": { "types": "./src/engine/index.ts", "import": "./src/engine/index.ts" }
+```
+boardsmith typecheck     # from the repository root
 ```
 
-There is no build step and no emitted `.d.ts`. So every type error in this repo
-is **inherited by consumers that do typecheck** — ShufflewickPub's `games/` and
-`executor/` both consume this source through the vendored tarball. A type error
-here is not local.
+It runs `vue-tsc --noEmit -p tsconfig.json`. Exit code 0 means clean. `main`
+has been at **zero errors** since #312 (2026-09-24), and the gates below keep
+it there.
 
-## The 213 pre-existing errors
+## Where it runs
 
-With the config fixed, `tsc` reports **213 errors**, none of them new. The
-concentration:
+1. **`boardsmith test`** runs it first in this repository and runs no test at
+   all if it fails. So a type error is found while you are still working, not
+   at merge.
+2. **`bash scripts/merge-branch.sh <branch> "<summary (#issue)>"`** is how a
+   branch reaches `main`. Run it from the main checkout on a clean `main`. It
+   merges the branch without committing, runs `boardsmith test` on the merged
+   tree, and commits the merge only if that passes. Otherwise it aborts the
+   merge and `main` is left as it was. Because it checks the merged tree, a
+   branch that was clean on its own but conflicts in types with something that
+   landed since is refused too.
 
-| File | Errors |
-|---|---|
-| `src/cli/cli.ts` | 27 |
-| `src/ui/composables/actionControllerHelpers.test.ts` | 11 |
-| `src/ui/index.ts` | 10 |
-| `src/engine/element/image-leak.test.ts` | 9 |
-| `src/ui/components/auto-ui/builtin-renderers.ts` | 8 |
-| `src/ui/composables/anchorAttrs.test.ts` | 6 |
-| `src/ui/components/helpers/index.ts` | 6 |
-| `src/session/teaching.test.ts` | 6 |
-| …long tail | rest |
+A plain `npx vitest run` does not type-check. Use `boardsmith test`.
 
-This was **217** until 68-06, which added
-`/// <reference types="vite/client" />` to
-`src/engine/flow/flow-state-clone.test.ts` (that file needs `import.meta.glob`
-to derive its fixture list). A triple-slash reference applies to the whole
-program, so it also resolved four pre-existing `import.meta.env` errors in
-`src/ui/composables/useActionController{,.devtools.test}.ts` and
-`src/ui/game-uis.ts`. Nothing was suppressed and nothing was silenced — the
-types were simply missing.
+It is a CLI command and not an npm script because this repository keeps
+exactly one npm script (`npm link`), and every other capability goes through
+`boardsmith`. `src/cli/cli-single-entry-point.test.ts` holds that rule.
 
-**Phase 68's own files are clean** — zero of the 213 are in
-`boundary-key.ts`, `turn-boundary.test.ts`, `simultaneous-rounds-fixture.ts`,
-`snapshot-session-host.ts` or `headless-session.ts`. Eight errors WERE
-introduced by Phase 68 work and all eight were fixed once the broken config was
-discovered; before that they were invisible.
+## Why `vue-tsc` and not `tsc`
 
-## What has NOT been done, and why
+Plain `tsc` cannot read a `.vue` file. It checks neither an SFC's `<script>`
+nor its template, and it cannot type an import of one. Before #312 part of the
+reported error count was that noise, and the real errors inside the shell's
+SFCs were checked by nobody. `vue-tsc` compiles SFC scripts and templates for
+real.
 
-The 213 are **not** fixed, and no `typecheck` npm script has been added. This
-repo has exactly one script (`setup`), nothing runs tsc automatically, and a
-script that always exits non-zero is a gate that cannot fail meaningfully —
-the same objection this project raises to a vacuous green.
+## What it covers
 
-Paying the 213 down is real work with real risk (`src/cli` and `src/ui` are the
-bulk) and it deserves to be sized on its own merits rather than absorbed by
-whichever change happens to notice it. **This is a decision for the maintainer,
-not for a plan about turn boundaries.**
+`tsconfig.json` includes, explicitly:
 
-The honest interim position: the tool now tells the truth, the number is
-written down, and Phase 68 added nothing to it.
+| Covered | Notes |
+| --- | --- |
+| `src/**/*.ts` | Library, CLI, tests and test helpers |
+| `src/**/*.vue` | SFC scripts and template expressions |
+| `docs/**/*.ts` | The documentation tests |
+| `vitest.config.ts` | |
+
+`scripts/typecheck-coverage.test.mjs` asks `vue-tsc` which files it compiled
+and fails if any tracked `.ts` or `.vue` file under `src/` or `docs/` is
+missing, so narrowing `include` is a failing test rather than a quiet change.
+
+The compiler options are a game's options (compare `generateTsConfig` in
+`src/cli/lib/project-scaffold.ts`), plus `node` in `types` because the CLI and
+the tests use Node globals. That matters because this package ships
+TypeScript source: `exports` points `types` and `import` straight at
+`src/**/*.ts`, and a game's own `vue-tsc` (which `boardsmith validate` runs and
+`boardsmith publish` requires) compiles these files. An error here is an error
+in every game.
+
+## What it does NOT cover
+
+- **Four bot tests** that import `@boardsmith/checkers-rules` and
+  `@boardsmith/cribbage-rules`, which are not in this repository:
+  `src/bot/mcts-bot.test.ts`, `mcts-cache.test.ts`, `mcts-stats-checkers.test.ts`
+  and `cribbage-bot.test.ts`. They can neither compile nor run, and
+  `vitest.config.ts` excludes the same four.
+- **The `.mjs` scripts** under `scripts/` and `bin/`. They are JavaScript and
+  are not type-checked.
+- **What a consumer's install lacks.** This check runs inside this checkout,
+  where every devDependency is installed. `src/contract/dev-host-typecheck.test.ts`
+  and `src/contract/dice-typecheck.test.ts` compile the modules consumers import
+  in a sandbox holding only what we ship.
+- **Anything at runtime.** Types say nothing about a shape crossing a boundary
+  the types do not describe.
+
+## House rules for fixing an error
+
+Fix the code, not the types. No `any`, no `@ts-ignore` or `@ts-expect-error`,
+and no cast added only to make an error go away. When a test fails to compile
+because it passes a field that no longer exists, work out what it was meant to
+prove and move it to the current API, so it still proves that.
+
+## History
+
+- `tsconfig.json` once had no `include`, so TypeScript defaulted to `**/*`,
+  picked up `docs/*.test.ts` outside `rootDir: "src"`, and stopped on TS6059
+  config errors before checking a single file, while exiting 0. Adding an
+  `include` fixed that, and it revealed 213 errors.
+- Nothing ran the check, so the count grew to 289 under `tsc` (#312). Under
+  `vue-tsc` with the current config the starting count was 165. #312 fixed all
+  of them and added the gates above. `tsconfig.public.json` and its test, which
+  checked only the public entry points, were removed because the whole-package
+  check covers them.
+- Two of the errors were real gaps in the engine contract fixture
+  (`src/contract/fingerprint.ts`), which nothing had type-checked. The world
+  wire fixture was missing the `order` field every `world_command` has carried
+  since #195, and the prompt meant to put the activity watermark in the payload
+  hash was a function on an action prompt, which only takes a string, so JSON
+  dropped it. Neither moved the contract's hash.

@@ -1449,9 +1449,8 @@ export interface WorldEngine {
  * classifies every name here as covered by the payload fixture or explicitly
  * not, and `engine-contract.test.ts` proves the covered ones are really called.
  * A verb added to `WorldEngine` and not here fails to COMPILE -- `satisfies`
- * refuses a missing key as it refuses an excess one, and this file is inside
- * `tsconfig.public.json`'s graph, so `public-typecheck.test.ts` fails on it
- * during an ordinary `vitest run`. A verb listed here and not classified fails
+ * refuses a missing key as it refuses an excess one, and `boardsmith test`
+ * runs `boardsmith typecheck` before any test, so the gap stops the run. A verb listed here and not classified fails
  * the contract suite. Neither can be arrived at by forgetting.
  */
 export const WORLD_ENGINE_METHODS = Object.keys({

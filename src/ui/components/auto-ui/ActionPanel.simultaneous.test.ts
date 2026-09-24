@@ -174,7 +174,7 @@ function mountConfirmPanel(opts: { completed: boolean; sendAction: ReturnType<ty
       playerSeat: 0,
       isMyTurn: true,
       completed: opts.completed,
-    } as Record<string, unknown>,
+    },
   });
 
   return { wrapper, controller };

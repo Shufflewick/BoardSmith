@@ -95,9 +95,12 @@ export function stubActionController(overrides: Record<string, unknown> = {}) {
  * are the panel's mounting contract, and a copy of them in a test file goes stale
  * silently the next time the component reads its controller from somewhere else.
  */
+/** The props `ActionPanel` declares, as a mount passes them. */
+export type ActionPanelProps = InstanceType<typeof ActionPanel>['$props'];
+
 export function mountPanel(
   controller: ReturnType<typeof stubActionController>,
-  props: Record<string, unknown> = { availableActions: [], playerSeat: 1, isMyTurn: true },
+  props: ActionPanelProps = { availableActions: [], playerSeat: 1, isMyTurn: true },
   /**
    * `attachTo: document.body` for a test about FOCUS. A detached mount has no
    * `document.activeElement` to speak of, so `el.focus()` is a no-op and a test

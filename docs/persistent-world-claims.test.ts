@@ -430,7 +430,7 @@ describe('#169: a world action is an Action, and the guide teaches the real one'
     // world action at all.
     const needs = tend.world!.needs;
     expect(needs.map((round) => round.before)).toEqual([0, 0]);
-    expect(needs.every((round) => typeof round.declare === 'function')).toBe(true);
+    expect(needs.every((round) => round.kind === 'partitions' && typeof round.declare === 'function')).toBe(true);
     expect(flatGuide).toContain('round one');
     expect(flatGuide).toContain('the execute round');
   });
@@ -469,7 +469,7 @@ describe('#169: a world action is an Action, and the guide teaches the real one'
 
     await engine.hydrate([holdingPartition(2)]);
     // The selection's own round, answered with round one in front of it.
-    expect(engine.commandNeeds('p2', command, arrival(0), []).partitions.sort()).toEqual([
+    expect([...engine.commandNeeds('p2', command, arrival(0), []).partitions].sort()).toEqual([
       holdingPartition(1),
       holdingPartition(3),
     ]);
@@ -775,7 +775,9 @@ describe('#169: a schedule names a seatless action and carries scalars', () => {
     ]);
     // A PARTITION NAME AND NOT AN ELEMENT, which is the whole rule: every value
     // in a schedule row is a JSON scalar.
-    for (const value of Object.values(result.schedules[0]!.args ?? {})) {
+    const [arm] = result.schedules;
+    if (arm === undefined || 'cancel' in arm) throw new Error('expected the burn to arm a timer, not cancel one');
+    for (const value of Object.values(arm.args ?? {})) {
       expect(['string', 'number', 'boolean']).toContain(typeof value);
     }
     expect(guide).toContain('ctx.world.schedule({ delayMs, action, args?, key?, everyMs? })');

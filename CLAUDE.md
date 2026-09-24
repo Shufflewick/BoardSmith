@@ -82,6 +82,11 @@ This library is developed alongside two sibling repos. When a BoardSmith change 
 - Treat identified test gaps as blockers, not observations. If verification flags untested code within the scope of the change, address it before completion.
 - Write at least one integration test per cross-layer boundary the change touches.
 
+# Typechecking and Merging
+- **`boardsmith typecheck` is the one type check.** It runs `vue-tsc` over the whole package (every `.ts` and `.vue` file under `src/` and `docs/`), and `main` is at zero errors. `docs/typecheck.md` says exactly what it covers. Plain `tsc` cannot read `.vue` files, so it is not a substitute.
+- **`boardsmith test` type-checks first** and runs no test if that fails. A bare `npx vitest run` does not type-check.
+- **A branch reaches `main` only through `bash scripts/merge-branch.sh <branch> "<summary (#issue)>"`**, run from the main checkout on a clean `main`. It merges without committing, runs `boardsmith test` on the merged tree, and aborts the merge if that fails. Merge `main` into your branch first so conflicts are resolved there.
+
 # Code Quality Audits
 - Run `boardsmith audit` after significant refactors. **It checks the files your branch changed against its base branch, not the whole repository**, and it subtracts this repo's committed baselines (`.fallow-dead-code-baseline.json`, `.fallow-dupes-baseline.json`, `.fallow-health-baseline.json`). So it reports what your change introduced — unused exports, dead files, circular dependencies, complexity and duplication — and a clean branch passes it. See `docs/fallow-gate.md` for why the baselines exist.
 - It runs four checks: `--dupes-baseline` (duplication recorded by content, #232), `--changes` (Fallow, changed files), `--duplication` (jscpd, whole repo), `--health-baseline` (baseline drift, #159). With no flag, all four run, in that order — the dupes baseline first because `--changes` is what reads the file it re-addresses (#256).

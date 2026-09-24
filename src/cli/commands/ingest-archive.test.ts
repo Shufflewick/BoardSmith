@@ -625,7 +625,7 @@ describe('v4.9 — machine-owned gaps section and ingest-check (170-PROOF-RUN-2)
   });
 
   describe('ingest-check', () => {
-    let exitCode: number | undefined;
+    let exitCode: typeof process.exitCode;
     beforeEach(() => {
       exitCode = process.exitCode;
       process.exitCode = undefined;

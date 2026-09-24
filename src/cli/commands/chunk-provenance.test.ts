@@ -505,7 +505,7 @@ describe('cited slices — resolveCitedSlices', () => {
  * a rejection there would surface as an unhandled-rejection stack trace (CLAUDE.md forbids that).
  */
 describe('chunk-check', () => {
-  let exitCode: number | undefined;
+  let exitCode: typeof process.exitCode;
   beforeEach(() => {
     exitCode = process.exitCode;
     process.exitCode = undefined;
@@ -574,7 +574,7 @@ describe('chunk-check', () => {
       `<!-- required sections: "## Verified Against" must be present -->\n${text}`,
     );
 
-    await chunkCheckCommand('prose-mention', { project, quiet: true }).catch(() => {});
+    await chunkCheckCommand('prose-mention', { project, json: true }).catch(() => {});
 
     const after = await fs.readFile(chunkPath, 'utf-8');
     expect(after).toContain(`| rulebook/01-setup-and-round-structure.md | ${sliceHash} |`);
@@ -917,7 +917,7 @@ describe('chunk-check', () => {
  * `chunk-check` invocation surfaces rather than passing silently.
  */
 describe('chunk-provenance-status', () => {
-  let exitCode: number | undefined;
+  let exitCode: typeof process.exitCode;
   beforeEach(() => {
     exitCode = process.exitCode;
     process.exitCode = undefined;
@@ -1311,7 +1311,7 @@ describe('projectProvenanceState', () => {
   it('classifies a project that records provenance but has a blockless verified chunk as partial', async () => {
     // THIS is the case that indicates a skipped chunk-check, and the only one worth alarming on.
     const withBlock = await projectWithChunks([{ slug: 'has-block', status: 'verified' }]);
-    await chunkCheckCommand('has-block', { project: withBlock, quiet: true }).catch(() => {});
+    await chunkCheckCommand('has-block', { project: withBlock, json: true }).catch(() => {});
     const chunkDir = join(withBlock, DESIGN_DIR, 'chunks', 'skipped');
     await fs.mkdir(chunkDir, { recursive: true });
     await fs.writeFile(join(chunkDir, 'CHUNK.md'), '# Chunk: skipped\n\nStatus: verified\n');

@@ -1402,6 +1402,7 @@ describe("#57 — the clock a handler can trust is the platform's", () => {
         allowance: { unkeyed: 0, keys: [], worldPending: 0 },
         presence: [],
         activity: STAMP.activity,
+        declaredActivity: [],
       },
     );
     expect(result.events[0]!.payload).toEqual({
@@ -1437,6 +1438,7 @@ describe("#57 — the clock a handler can trust is the platform's", () => {
         allowance: { unkeyed: 0, keys: [], worldPending: 0 },
         presence: [2, 1],
         activity: STAMP.activity,
+        declaredActivity: [],
       },
     );
     expect(result.events[0]!.payload).toEqual({ online: [1, 2] });

@@ -334,8 +334,13 @@ describe("#408/#411/#413 -- which seats hold the same projection", () => {
     class Strongbox extends Stall {
       static override visibleAttributes = ['name'];
     }
-    const game = new PlazaGame({ playerCount: SEATS, seed: 'square' });
-    game.registerElements([Strongbox]);
+    class StrongboxPlaza extends PlazaGame {
+      constructor(options: GameOptions) {
+        super(options);
+        this.registerElements([Strongbox]);
+      }
+    }
+    const game = new StrongboxPlaza({ playerCount: SEATS, seed: 'square' });
     const box = game.create(Strongbox, 'box', { goods: 4 });
     box.player = game.players[0];
     const { predicted, observed } = grouping(game);

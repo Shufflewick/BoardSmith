@@ -1,47 +1,42 @@
 {
+  // THE ONE TYPECHECK CONFIG. `boardsmith typecheck` runs `vue-tsc --noEmit`
+  // against it, `boardsmith test` runs that before any test here, and
+  // scripts/merge-branch.sh refuses a branch it fails on. See docs/typecheck.md.
+  //
+  // The options are a game's options (compare `generateTsConfig` in
+  // src/cli/lib/project-scaffold.ts). This package ships TypeScript SOURCE --
+  // `exports` maps `types` and `import` straight at `src/**/*.ts` -- so a game's
+  // own `vue-tsc` compiles these files under its settings, and an error here is
+  // an error in every game. `node` is listed because the CLI and the tests use
+  // Node globals ambiently; a game does not, and nothing a game imports may.
   "compilerOptions": {
     "target": "ES2022",
     "module": "ESNext",
     "moduleResolution": "bundler",
     "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["vite/client", "node"],
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
-    "declaration": true,
-    "declarationMap": true,
-    "sourceMap": true,
-    "outDir": "dist",
-    "rootDir": "src",
     "resolveJsonModule": true,
     "isolatedModules": true,
     "verbatimModuleSyntax": true,
+    "jsx": "preserve",
     "noEmit": true
   },
-  // WITHOUT THIS, `tsc -p tsconfig.json` TYPECHECKS NOTHING AT ALL.
-  //
-  // Absent an `include`, TypeScript defaults to `**/*`, which picks up
-  // `docs/*.test.ts`. Those violate `rootDir: "src"`, so tsc reports three
-  // TS6059 CONFIG errors and stops before checking a single file -- and it
-  // exits 0 while doing it. Measured 2026-08-25 by planting a deliberate type
-  // error and watching it go unreported.
-  //
-  // That is the same false-green class ShufflewickPub's own CLAUDE.md documents
-  // for `npx tsc --noEmit` (which cannot see inside .vue files and so checks
-  // about half that repo while looking green). It matters more here: this
-  // package ships TYPESCRIPT SOURCE -- `exports` maps both `types` and `import`
-  // straight at `src/**/*.ts` -- so every type error in this repo is inherited
-  // by consumers that DO typecheck, via the vendored tarball.
-  //
-  // See docs/typecheck.md for the 217 pre-existing errors this revealed.
-  "include": ["src/**/*"],
+  // The whole package: every `.ts` and `.vue` under src/ (tests included), the
+  // documentation tests, and the vitest config. `vue-tsc` checks `.vue` SFC
+  // scripts AND templates; plain `tsc` sees neither.
+  "include": ["src/**/*.ts", "src/**/*.vue", "docs/**/*.ts", "vitest.config.ts"],
+  // These four tests import `@boardsmith/checkers-rules` and
+  // `@boardsmith/cribbage-rules`, which are not in this repository, so they
+  // can neither compile nor run. vitest.config.ts excludes the same four.
   "exclude": [
     "node_modules",
-    "dist",
-    "vitest.config.ts",
     "src/bot/mcts-bot.test.ts",
     "src/bot/mcts-cache.test.ts",
-    "src/bot/cribbage-bot.test.ts",
-    "src/bot-trainer/parallel-simulator.test.ts"
+    "src/bot/mcts-stats-checkers.test.ts",
+    "src/bot/cribbage-bot.test.ts"
   ]
 }

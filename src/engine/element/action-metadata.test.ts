@@ -404,6 +404,16 @@ function makeDivergenceRunner(): GameRunner<DivergenceGame> {
   return runner;
 }
 
+/**
+ * Seat 1's available actions and the keys of its action metadata, from one
+ * `buildPlayerState`. A state that omits availableActions fails the test here.
+ */
+function seatOneActionSets(runner: GameRunner<DivergenceGame>): { available: string[]; metadataKeys: string[] } {
+  const state = buildPlayerState(runner, ['Alice', 'Bob'], 1, { includeActionMetadata: true });
+  if (!state.availableActions) throw new Error('buildPlayerState returned no availableActions for the seat');
+  return { available: state.availableActions, metadataKeys: Object.keys(state.actionMetadata ?? {}) };
+}
+
 describe('SPACE-05 (D26): availableActions and actionMetadata cannot diverge', () => {
   it('drops a now-false-condition action from BOTH availableActions and actionMetadata (no divergence)', () => {
     const runner = makeDivergenceRunner();
@@ -417,27 +427,22 @@ describe('SPACE-05 (D26): availableActions and actionMetadata cannot diverge', (
     // mid-step state mutation that produces the stale snapshot.
     runner.game.conditionOpen = false;
 
-    const state = buildPlayerState(runner, ['Alice', 'Bob'], 1, { includeActionMetadata: true });
-
-    const metadataKeys = Object.keys(state.actionMetadata ?? {});
+    const { available, metadataKeys } = seatOneActionSets(runner);
 
     // The two sets must agree -- neither contains the now-unavailable action.
-    expect(state.availableActions).not.toContain('conditional');
+    expect(available).not.toContain('conditional');
     expect(metadataKeys).not.toContain('conditional');
-    expect(state.availableActions.slice().sort()).toEqual(metadataKeys.slice().sort());
+    expect(available.slice().sort()).toEqual(metadataKeys.slice().sort());
   });
 
   it('negative control: a condition-true action appears in both sets', () => {
-    const runner = makeDivergenceRunner();
+    const { available, metadataKeys } = seatOneActionSets(makeDivergenceRunner());
 
-    const state = buildPlayerState(runner, ['Alice', 'Bob'], 1, { includeActionMetadata: true });
-    const metadataKeys = Object.keys(state.actionMetadata ?? {});
-
-    expect(state.availableActions).toContain('conditional');
+    expect(available).toContain('conditional');
     expect(metadataKeys).toContain('conditional');
-    expect(state.availableActions).toContain('always');
+    expect(available).toContain('always');
     expect(metadataKeys).toContain('always');
-    expect(state.availableActions.slice().sort()).toEqual(metadataKeys.slice().sort());
+    expect(available.slice().sort()).toEqual(metadataKeys.slice().sort());
   });
 
   it('UI defense-in-depth: start() on a metadata-missing action does not throw and does not strand the board', async () => {

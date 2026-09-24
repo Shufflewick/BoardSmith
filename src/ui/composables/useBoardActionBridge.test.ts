@@ -15,60 +15,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ref, computed, nextTick } from 'vue';
 import { createBoardInteraction } from './useBoardInteraction.js';
 import { useBoardActionBridge } from './useBoardActionBridge.js';
+import { makeController } from './fake-action-controller.test-helper.js';
 import { useActionController } from './useActionController.js';
 import { _clearShownWarnings } from '../../utils/dev.js';
-import type { UseActionControllerReturn, PickMetadata, ValidElement } from './useActionControllerTypes.js';
+import type { PickMetadata, ValidElement } from './useActionControllerTypes.js';
 
-/** Build a minimal fake action controller backed by real refs. */
-function makeController(opts: {
-  pick?: PickMetadata | null;
-  action?: string | null;
-  validElements?: ValidElement[];
-}) {
-  const currentAction = ref<string | null>(opts.action ?? null);
-  const currentPick = computed<PickMetadata | null>(() => opts.pick ?? null);
-  const currentArgs = ref<Record<string, unknown>>({});
-  const isExecuting = ref(false);
-  const actionCompletedTick = ref(0);
-  const multiSelectDraft = ref(null);
-  const actionSnapshot = ref(null);
-  const pendingFollowUp = ref(false);
-  const pendingOnServer = ref(false);
-
-  const fill = vi.fn(async () => ({ valid: true }));
-  const start = vi.fn(async () => {});
-  const execute = vi.fn(async () => ({ success: true }));
-  const cancel = vi.fn(() => {});
-  const toggleMultiSelect = vi.fn(async () => {});
-
-  // Reactive sources the bridge now depends on (mirror the real controller, which
-  // reads snapshotVersion so async-fetched choices/elements surface reactively).
-  const currentChoices = computed(() => opts.pick?.choices ?? []);
-  const validElements = computed(() => opts.validElements ?? []);
-
-  const controller = {
-    currentAction,
-    currentPick,
-    currentArgs,
-    isExecuting,
-    actionCompletedTick,
-    multiSelectDraft,
-    actionSnapshot,
-    pendingFollowUp,
-    pendingOnServer,
-    currentChoices,
-    validElements,
-    getCurrentChoices: () => currentChoices.value,
-    getValidElements: () => opts.validElements ?? [],
-    fill,
-    start,
-    execute,
-    cancel,
-    toggleMultiSelect,
-  } as unknown as UseActionControllerReturn;
-
-  return { controller, fill, start, execute, currentAction, currentPick };
-}
 
 const cellPick: PickMetadata = { name: 'cell', type: 'element', prompt: 'Select a cell' };
 
@@ -582,7 +533,7 @@ describe('useBoardActionBridge', () => {
         isMyTurn: ref(true),
         autoEndTurn: ref(true),
         actionMetadata: ref({
-          play: { name: 'play', selections: [{ name: 'card', type: 'chooseElement' }], manual: true },
+          play: { name: 'play', selections: [{ name: 'card', type: 'element' }], manual: true },
         }),
         availableActions: ref(['play']),
         disabledActions: ref(undefined),

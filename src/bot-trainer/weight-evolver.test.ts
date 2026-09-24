@@ -6,6 +6,7 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { LearnedObjective, TrainingProgress } from './types.js';
+import type { WeightEvolverConfig } from './weight-evolver.js';
 import { Game, Player } from '../engine/index.js';
 
 /** Fitness for each benchmarked population, controlled per test. */
@@ -36,7 +37,7 @@ const objectives = (...weights: number[]): LearnedObjective[] =>
     correlation: 0.5,
   }));
 
-const evolver = (config = {}) =>
+const evolver = (config: Partial<WeightEvolverConfig> = {}) =>
   new WeightEvolver(EvolveGame, 'evolve-game', '/tmp/game.js', {
     evolutionGenerations: 2,
     evolutionMu: 2,

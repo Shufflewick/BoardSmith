@@ -118,11 +118,17 @@ describe('collect-equipment parity contract', () => {
  */
 const undoFenceGameOptions = { playerCount: 2, seed: 't' };
 
-async function statelessLockThenUndo() {
+/** A started stateless session in which seat 1 has taken the notUndoable `lock`. */
+async function statelessAfterLock() {
   const session = createHeadlessSession(undoFenceFixtureDefinition, undoFenceGameOptions);
   await session.start();
   const lock = await session.send(1, { type: 'action', actionName: 'lock', player: 1, args: {} });
   expect(lock.success).toBe(true);
+  return session;
+}
+
+async function statelessLockThenUndo() {
+  const session = await statelessAfterLock();
   return session.send(1, { type: 'undo', player: 1 } as Op);
 }
 
@@ -184,7 +190,7 @@ describe('undo-fence parity: stateless and stateful executors agree', () => {
     await statelessSession.start();
     await statelessSession.send(1, { type: 'action', actionName: 'lock', player: 1, args: {} });
     // One action in history -> index 1 is "forward" for both twins.
-    const statelessRewind = await statelessSession.send(1, { type: 'debugRewind', player: 1, actionIndex: 1 } as Op);
+    const statelessRewind = await statelessSession.send(1, { type: 'debugRewind', actionIndex: 1 });
 
     const statefulSession = newStatefulSession();
     await statefulSession.performAction('lock', 1, {});
@@ -213,10 +219,7 @@ describe('undo-fence parity: stateless and stateful executors agree', () => {
 
 describe('undo-fence adversarial verification (bypassing canUndo)', () => {
   it('a hand-crafted raw {type: "undo"} op sent without ever consulting canUndo is refused', async () => {
-    const session = createHeadlessSession(undoFenceFixtureDefinition, undoFenceGameOptions);
-    await session.start();
-    const lock = await session.send(1, { type: 'action', actionName: 'lock', player: 1, args: {} });
-    expect(lock.success).toBe(true);
+    const session = await statelessAfterLock();
 
     // Never read state.canUndo -- attempt the raw op directly.
     const undoOp: Op = { type: 'undo', player: 1 };
@@ -239,13 +242,10 @@ describe('undo-fence adversarial verification (bypassing canUndo)', () => {
   });
 
   it('debugRewind op crossing a notUndoable action is refused', async () => {
-    const session = createHeadlessSession(undoFenceFixtureDefinition, undoFenceGameOptions);
-    await session.start();
-    const lock = await session.send(1, { type: 'action', actionName: 'lock', player: 1, args: {} });
-    expect(lock.success).toBe(true);
+    const session = await statelessAfterLock();
 
     // Rewind to action index 0 -- discarding the notUndoable `lock` action.
-    const rewindOp: Op = { type: 'debugRewind', player: 1, actionIndex: 0 };
+    const rewindOp: Op = { type: 'debugRewind', actionIndex: 0 };
     const result = await session.send(1, rewindOp);
 
     expect(result.success).toBe(false);
@@ -317,7 +317,7 @@ describe('execute-barrier parity: stateless and stateful executors agree', () =>
     const statelessSession = createHeadlessSession(executeBarrierFixtureDefinition, executeBarrierGameOptions);
     await statelessSession.start();
     await playThroughExecuteBarrierStateless((op) => statelessSession.send(1, op));
-    const statelessRewind = await statelessSession.send(1, { type: 'debugRewind', actionIndex: 0 } as Op);
+    const statelessRewind = await statelessSession.send(1, { type: 'debugRewind', actionIndex: 0 });
 
     const statefulSession = newExecuteBarrierStatefulSession();
     await playThroughExecuteBarrierStateful(statefulSession);
@@ -386,6 +386,14 @@ function newSimultaneousStatelessSession() {
   return createHeadlessSession(simultaneousFixtureDefinition, simultaneousGameOptions);
 }
 
+/** A started simultaneous stateless session in which seat 2 has taken `actionName`. */
+async function simultaneousStatelessAfterSeatTwo(actionName: string) {
+  const session = newSimultaneousStatelessSession();
+  await session.start();
+  expect((await session.send(2, { type: 'action', actionName, player: 2, args: {} })).success).toBe(true);
+  return session;
+}
+
 function newSimultaneousStatefulSession() {
   return GameSession.create<CommitGame>({
     gameType: 'simultaneous',
@@ -414,12 +422,10 @@ describe('simultaneous-undo parity: stateless and stateful executors agree', () 
   });
 
   it('seat-2 undo across a .notUndoable() simultaneous action: same refusal decision and message', async () => {
-    const statelessSession = newSimultaneousStatelessSession();
-    await statelessSession.start();
     // lockCommit is .notUndoable() -- refuses the fence regardless of
     // per-seat boundary (nothing else acted, so the boundary itself would
     // otherwise allow it).
-    expect((await statelessSession.send(2, { type: 'action', actionName: 'lockCommit', player: 2, args: {} })).success).toBe(true);
+    const statelessSession = await simultaneousStatelessAfterSeatTwo('lockCommit');
     const statelessUndo = await statelessSession.send(2, { type: 'undo', player: 2 } as Op);
 
     const statefulSession = newSimultaneousStatefulSession();
@@ -434,9 +440,7 @@ describe('simultaneous-undo parity: stateless and stateful executors agree', () 
   });
 
   it('seat-2 undo once finished: same refusal decision and message', async () => {
-    const statelessSession = newSimultaneousStatelessSession();
-    await statelessSession.start();
-    expect((await statelessSession.send(2, { type: 'action', actionName: 'endGame', player: 2, args: {} })).success).toBe(true);
+    const statelessSession = await simultaneousStatelessAfterSeatTwo('endGame');
     const statelessUndo = await statelessSession.send(2, { type: 'undo', player: 2 } as Op);
 
     const statefulSession = newSimultaneousStatefulSession();
@@ -490,11 +494,9 @@ describe('simultaneous-undo adversarial verification (T-160-04/05/06)', () => {
   });
 
   it('the debugRewind/rewindToAction twins do not become a bypass for the per-seat fence', async () => {
-    const statelessSession = newSimultaneousStatelessSession();
-    await statelessSession.start();
-    expect((await statelessSession.send(2, { type: 'action', actionName: 'lockCommit', player: 2, args: {} })).success).toBe(true);
+    const statelessSession = await simultaneousStatelessAfterSeatTwo('lockCommit');
     // Rewind to action index 0 -- discarding the notUndoable lockCommit action.
-    const statelessRewind = await statelessSession.send(2, { type: 'debugRewind', actionIndex: 0 } as Op);
+    const statelessRewind = await statelessSession.send(2, { type: 'debugRewind', actionIndex: 0 });
     expect(statelessRewind.success).toBe(false);
     expect(statelessRewind.error).toMatch(/lockCommit/i);
 

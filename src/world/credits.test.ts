@@ -61,6 +61,7 @@ const STAMP = {
   allowance: { unkeyed: 0, keys: [], worldPending: 0 },
   presence: [] as readonly number[],
   activity: null,
+  declaredActivity: [],
 };
 
 async function attempt() {
@@ -91,8 +92,8 @@ describe("#382 — converting platform credits is declared, and refuses", () => 
     // The sentence a designer reads at 2am. It has to close off the two
     // questions they will otherwise have to answer by experiment: did a player
     // just lose credits, and did anybody get anything.
-    const refusal = await attempt().catch((error: unknown) => error as WorldRefusal);
-    expect(refusal).toBeInstanceOf(WorldRefusal);
+    const refusal = await attempt().then(() => null, (error: unknown) => error);
+    if (!(refusal instanceof WorldRefusal)) throw new Error(`expected a WorldRefusal, got ${String(refusal)}`);
     expect(refusal.message).toMatch(/not yet implemented/i);
     expect(refusal.message).toMatch(/nothing was charged/i);
   });

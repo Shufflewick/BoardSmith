@@ -1,9 +1,9 @@
 /**
  * ONE WAY TO ASK `vue-tsc` WHAT IT FOUND, for the two contract gates that ask.
  *
- * `public-typecheck.test.ts` compiles a game's view of our public entry points;
- * `dev-host-typecheck.test.ts` compiles the development host in a sandbox that
- * holds only what we ship. They differ in WHERE they run and WHAT they blame a
+ * `dev-host-typecheck.test.ts` compiles the development host, and
+ * `dice-typecheck.test.ts` the dice entry point, each in a sandbox that holds
+ * only what we ship. They differ in WHAT they compile and WHAT they blame a
  * failure on, and in nothing else -- so the run, and the rule for what counts
  * as an error line, live here rather than twice.
  */

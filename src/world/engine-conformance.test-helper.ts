@@ -13,7 +13,7 @@
 // while defeating the entire reason the mode exists -- so the cases below
 // measure that output shrinks with input, which a type cannot express.
 import { expect, it } from "vitest";
-import type { WorldEngine } from "./contract.js";
+import type { WorldCommandStamp, WorldEngine, WorldEventStamp } from "./contract.js";
 
 /** A SEAT'S ARRIVAL, as a declaration is told when it is happening (#271).
  *  The clock's road passes its whole occurrence instead. */
@@ -28,7 +28,7 @@ type WorldEngineFactory = () => Promise<WorldEngine> | WorldEngine;
 /** A stamped arrival instant. Every command carries one -- the PLATFORM's own,
  *  never the caller's (#57) -- so the suite hands one down exactly as the
  *  parent does. */
-const STAMP = {
+const STAMP: WorldCommandStamp = {
   now: 1_700_000_000_000,
   allowance: { unkeyed: 0, keys: [], worldPending: 0 },
   // Nobody connected: the platform's presence stamp is derived from attached
@@ -37,6 +37,9 @@ const STAMP = {
   /** Nobody has acted here before, and this world began watching at `now`
    *  (#383). The cases that are ABOUT a watermark name their own. */
   activity: { seat: 1, at: null, since: 1_700_000_000_000 },
+  // Every action this suite sends is seated, and a seated action declares no
+  // chair (ShufflewickPub #423), so the host hands back none.
+  declaredActivity: [],
 };
 
 const CONFORMANCE_PLAYERS = ["player-a", "player-b"] as const;
@@ -295,7 +298,6 @@ export function assertWorldEngineConformance(makeEngine: WorldEngineFactory): vo
       now: STAMP.now,
       presence: [],
       activity: STAMP.activity,
-      activity: STAMP.activity,
     });
     expect(offers.length).toBeGreaterThan(0);
     // SORTED BY NAME, so a client renders the same list twice: registration
@@ -351,12 +353,12 @@ export function assertWorldEngineConformance(makeEngine: WorldEngineFactory): vo
     const early = await engine.onEvent(
       { name: "tick", args: {} },
       { due: 1_000, missedCount: 0 },
-      { allowance: { unkeyed: 0, keys: [], worldPending: 0 }, presence: [], activity: null },
+      { allowance: { unkeyed: 0, keys: [], worldPending: 0 }, presence: [], activity: null, declaredActivity: [] },
     );
     const late = await engine.onEvent(
       { name: "tick", args: {} },
       { due: 1_000, missedCount: 0 },
-      { allowance: { unkeyed: 0, keys: [], worldPending: 0 }, presence: [], activity: null },
+      { allowance: { unkeyed: 0, keys: [], worldPending: 0 }, presence: [], activity: null, declaredActivity: [] },
     );
 
     expect(late.events).toEqual(early.events);
@@ -375,10 +377,11 @@ export function assertWorldEngineConformance(makeEngine: WorldEngineFactory): vo
     // forbids. The two engines this suite runs against both answer `tick` with
     // its own `due` and `missedCount`, which is the cheapest honest way to
     // make the fold visible from outside.
-    const eventStamp = {
+    const eventStamp: WorldEventStamp = {
       allowance: { unkeyed: 0, keys: [], worldPending: 0 },
       presence: [],
       activity: STAMP.activity,
+      declaredActivity: [],
     };
     // Two FRESH worlds, so the only difference between the two answers is the
     // catch-up itself and not the order the suite drove them in.

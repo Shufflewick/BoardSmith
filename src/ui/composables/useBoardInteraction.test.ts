@@ -4,7 +4,7 @@ import {
   createBoardInteraction,
   useBoardInteraction,
   tryUseBoardInteraction,
-  type ValidElement,
+  type BoardTarget,
 } from './useBoardInteraction.js';
 
 describe('createBoardInteraction', () => {
@@ -12,7 +12,7 @@ describe('createBoardInteraction', () => {
     const interaction = createBoardInteraction();
     const onSelect = vi.fn();
 
-    const validElements: ValidElement[] = [
+    const validElements: BoardTarget[] = [
       { id: 10, ref: { id: 10 }, disabled: 'Blocked' },
     ];
     interaction.setValidElements(validElements, onSelect);
@@ -26,7 +26,7 @@ describe('createBoardInteraction', () => {
     const onSelect = vi.fn();
 
     // The valid element's ref carries BOTH a precise id and a colliding name.
-    const validElements: ValidElement[] = [
+    const validElements: BoardTarget[] = [
       { id: 5, ref: { id: 5, name: 'Militia' } },
     ];
     interaction.setValidElements(validElements, onSelect);

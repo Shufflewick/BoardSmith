@@ -462,6 +462,7 @@ describe("createWorld — one construction, every host", () => {
         allowance: { unkeyed: 0, keys: [], worldPending: 0 },
         presence: [],
         activity: null,
+        declaredActivity: [],
       }),
     ).rejects.toThrow(/already has 1 unkeyed events pending, which is this world's limit/);
   });
@@ -495,6 +496,7 @@ describe("createWorld — one construction, every host", () => {
       allowance: { unkeyed: 0, keys: ["raid"], worldPending: 1 },
       presence: [],
       activity: null,
+      declaredActivity: [],
     });
 
     expect(result.schedules).toEqual([
@@ -524,6 +526,7 @@ describe("createWorld — one construction, every host", () => {
         allowance: { unkeyed: 0, keys: [], worldPending: 0 },
         presence: [],
         activity: null,
+        declaredActivity: [],
       }),
     ).rejects.toThrow(/must name the key its timer was armed under/);
   });
