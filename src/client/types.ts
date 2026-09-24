@@ -19,6 +19,7 @@ import type {
   UpdateGameOptionsRequest,
   UpdatePlayerOptionsRequest,
   WebSocketMessage,
+  ActionMetadata,
 } from '../types/protocol.js';
 import type { AnimationEvent, TutorialStepView } from '../engine/index.js';
 // Type-only (erased at runtime, no client -> session coupling in the emitted
@@ -163,8 +164,8 @@ export interface PlayerState {
   /** ID of the last animation event, for acknowledgment convenience. Only present when events exist. */
   lastAnimationEventId?: number;
 
-  /** Action metadata for auto-UI generation (optional) */
-  actionMetadata?: Record<string, unknown>;
+  /** Action metadata for auto-UI generation, keyed by action name. Mirrors `PlayerGameState.actionMetadata`. */
+  actionMetadata?: Record<string, ActionMetadata>;
 
   /** Whether the player can undo (has made actions this turn) */
   canUndo?: boolean;
@@ -188,14 +189,14 @@ export interface PlayerState {
    * Published unconditionally for every seat -- see
    * `PlayerGameState.restoreEpoch` (`src/session/types.ts`). A CHANGE means
    * every element id captured from the previous runner is stale; GameShell
-   * feeds it to `useBoardActionBridge`, which cancels the open pick.
+   * hands it to `useTableActionWiring`, whose board bridge cancels the open pick.
    */
   restoreEpoch?: number;
 
   /**
    * Which game this is -- see `PlayerGameState.gameInstanceId`
    * (`src/session/types.ts`). A CHANGE means a different game replaced this
-   * one; GameShell feeds it to `useBoardActionBridge` with `restoreEpoch`.
+   * one; GameShell hands it to `useTableActionWiring` with `restoreEpoch`.
    */
   gameInstanceId?: string;
 

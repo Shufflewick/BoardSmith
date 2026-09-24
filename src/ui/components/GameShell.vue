@@ -42,7 +42,7 @@ import DisabledReasonTooltip from './helpers/DisabledReasonTooltip.vue';
 import Toast from './Toast.vue';
 import { createBoardInteraction, provideBoardInteraction } from '../composables/useBoardInteraction';
 import { setupDragDropOrchestration } from '../composables/useDragDropTargets';
-import { useBoardActionBridge } from '../composables/useBoardActionBridge';
+import { useTableActionWiring } from '../composables/useTableActionWiring.js';
 import { useBoardFocusHandoff } from '../composables/useBoardFocusHandoff';
 import { maybePostDevtoolsUpdate } from './GameShell.devtools.js';
 import { createAnimationEvents, provideAnimationEvents } from '../composables/useAnimationEvents';
@@ -50,8 +50,7 @@ import { createAnnouncer, provideAnnouncer } from '../composables/useAnnouncer.j
 import { useZoomPreview } from '../composables/useZoomPreview';
 import { useAutoZoom, SETTLE_MS } from '../composables/useAutoZoom';
 import { useToast } from '../composables/useToast';
-import { useActionController, type ActionResult as ControllerActionResult } from '../composables/useActionController';
-import type { ActionMetadata } from '../composables/useActionControllerTypes';
+import type { ActionResult as ControllerActionResult } from '../composables/useActionController';
 import type { GameState, FlowState } from '../../client/types.js';
 import turnNotificationSound from '../assets/turn-notification.mp3';
 import { usePlatformTransport } from '../composables/usePlatformTransport.js';
@@ -527,22 +526,6 @@ watch(state, (s) => {
   }
 });
 
-// Action metadata for auto-UI (selections, choices).
-// "No metadata" is an EMPTY RECORD, never `undefined`: every consumer -- the
-// panel, the bridge, the drag-drop orchestration -- only ever looks an action
-// name up in it, and a shell with no state yet has no metadata for any of them.
-// Modelling that as absent bought nothing and made the prop `PlayShell`
-// requires unfillable. Matches `useWorldPlay.actionMetadata`, which is the same
-// shape on the world side.
-const actionMetadata = computed<Record<string, ActionMetadata>>(() => {
-  return (state.value?.state?.actionMetadata as Record<string, ActionMetadata> | undefined) ?? {};
-});
-
-// Per-action disabled reasons from PlayerGameState.disabledActions.
-// No cast needed: `PlayerState` (client/types.ts) now declares this field, as
-// the wire shape always carried it.
-const disabledActions = computed(() => state.value?.state?.disabledActions);
-
 // Global "Show action help" preference — persisted to localStorage.
 // Initialized from localStorage on mount (default ON when key is absent).
 // Mutated only by handleTeachingAction('help-toggle'); no server round-trip.
@@ -694,14 +677,24 @@ function platformRequest(op: string, payload: Record<string, unknown>): Promise<
   return platformTransport.request(op, payload);
 }
 
-// MR-01 closure: thread the projected tutorial step into the action controller so
-// suppressAutoFill fires in production (not just in the unit tests that passed it
-// directly). The controller already accepts tutorialStep; this is the missing wire.
-const tutorialStep = computed(() => state.value?.state?.tutorial);
+// Board interaction state (shared between ActionPanel and game board)
+const boardInteraction = createBoardInteraction();
+provideBoardInteraction(boardInteraction);
 
-// Action controller - unified action handling for ActionPanel and custom UIs
-// This provides 100% parity: same auto-fill, validation, and server communication
-const actionController = useActionController({
+// The action controller (one for the ActionPanel and every custom UI: same
+// auto-fill, validation and server communication) and the board bridge that
+// feeds the board from it unconditionally, whether or not the footer panel is
+// mounted (Phase 94 board-centric default). Wired by the same function a game's
+// tests use (#378), which reads the action metadata, disabled reasons, tutorial
+// step and runner identity off this seat's state; see useTableActionWiring.
+// `isViewingHistory` goes to both halves: it is the one chokepoint that keeps
+// every commit path (board clicks, ActionPanel, auto-execute) off the live
+// engine while the debug panel shows history (LIBX-04/CR-01).
+const { controller: actionController, actionMetadata, disabledActions } = useTableActionWiring({
+  seatState: computed(() => state.value?.state),
+  boardInteraction,
+  autoEndTurn,
+  isViewingHistory,
   sendAction: async (actionName, args) => {
     if (platformMode.value) {
       // Request/response so the action RESULT (notably followUp, which chains the
@@ -714,26 +707,14 @@ const actionController = useActionController({
     return result as ControllerActionResult;
   },
   availableActions,
-  actionMetadata,
   isMyTurn,
   // D27 commit-leak gate (T-160-27 / BLOCKER-160): shared chokepoint so
   // ActionPanel AND every custom UI routed through useBoardActionBridge
   // refuse a re-submit once this seat has committed this simultaneous step —
   // see useActionController's `completed` option doc for the full rationale.
   completed: myCompleted,
-  // Disabled-action gate (issue #4): same shared-chokepoint principle — a
-  // disabled action stays available so the panel can explain it, so start()/
-  // execute() are where it gets refused, for every UI at once.
-  disabledActions,
   gameView,
   playerSeat,
-  // Use autoEndTurn ref for both autoFill and autoExecute
-  // When auto mode is OFF, user must manually select each option even if only one choice
-  autoFill: autoEndTurn,
-  autoExecute: true, // Always auto-execute once all selections are manually filled
-  // Tutorial step: gates tryAutoFillSelection when suppressAutoFill is active.
-  // Computed from state so it stays reactive to server-projected step changes.
-  tutorialStep,
   // Animation events for gating (shows "Playing animations..." during playback)
   animationEvents,
   // Selection choices - fetched from server on-demand for each selection
@@ -812,14 +793,6 @@ const actionController = useActionController({
       return { success: false, error: err instanceof Error ? err.message : 'Selection step failed' };
     }
   },
-  // LIBX-04/CR-01: single authoritative chokepoint for "never commit to the live
-  // engine while viewing history". useBoardActionBridge's four mutators already
-  // check this, but ActionPanel talks to the controller directly (fill/toggle/
-  // start), and the controller's own internal auto-execute watch can fire a
-  // commit with NO caller in the loop at all. Passing it here — rather than
-  // re-implementing the guard in every caller — is the one place every commit
-  // path (board clicks, ActionPanel, auto-execute) funnels through.
-  isViewingHistory,
 });
 
 // Read-only action args for display and slot props.
@@ -1076,10 +1049,6 @@ async function handleUndo(): Promise<void> {
   }
 }
 
-// Board interaction state (shared between ActionPanel and game board)
-const boardInteraction = createBoardInteraction();
-provideBoardInteraction(boardInteraction);
-
 // Drag-and-drop orchestration (audit F36): derive drop targets generically from
 // the action controller's current pick for ANY action shape, wired once here so
 // the Action Panel AND custom UIs consume the same targets via useBoardInteraction.
@@ -1095,33 +1064,6 @@ setupDragDropOrchestration({
 // focus onto a real candidate themselves; this catches a CUSTOM board that has
 // not wired anything up, so "Choose on the board" can never leave focus on <body>.
 useBoardFocusHandoff(boardInteraction, zoomContainerEl);
-
-// Board-centric playability bridge (Phase 94): feeds the board-interaction
-// substrate (selectable elements, click dispatch, auto-start, choice callback)
-// from the action controller UNCONDITIONALLY — independent of whether the footer
-// ActionPanel is mounted. This is what makes clicking the board execute actions
-// when the panel is absent (D-02 board-centric default). The ActionPanel is now
-// purely presentational; this is the single source that drives the board.
-useBoardActionBridge({
-  controller: actionController,
-  boardInteraction,
-  isMyTurn,
-  autoEndTurn,
-  actionMetadata,
-  availableActions,
-  // Same source the Action Panel greys its buttons from, so the board and the
-  // panel refuse exactly the same actions.
-  disabledActions,
-  isViewingHistory,
-  // Which game tree this is: a change means the runner was replaced (undo /
-  // rewind) or the game was (New game, #356). The bridge cancels the open pick
-  // on either — see BoardActionBridgeOptions.runnerIdentity.
-  runnerIdentity: computed(() => {
-    const published = state.value?.state;
-    if (published?.gameInstanceId === undefined || published.restoreEpoch === undefined) return undefined;
-    return { gameInstanceId: published.gameInstanceId, restoreEpoch: published.restoreEpoch };
-  }),
-});
 
 // ── DEV-02: devtools postMessage bridge ──────────────────────────────────────
 // In platform mode + dev builds only: broadcast reactive state to window.parent
@@ -1250,7 +1192,7 @@ const teachingDisabledProp = computed<boolean>(
 // is in a running tutorial. When undefined (no tutorial, or exited/completed),
 // the button reverts to "Start tutorial".
 const isTutorialRunningProp = computed(
-  () => tutorialStep.value !== undefined
+  () => state.value?.state?.tutorial !== undefined
 );
 
 // Hint is disabled when the local player is not at a decision point.
