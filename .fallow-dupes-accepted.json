@@ -1274,14 +1274,6 @@
       ]
     },
     {
-      "content": "2d2580dd07d1987a",
-      "lines": 7,
-      "files": [
-        "src/cli/commands/verify-classify.test.ts",
-        "src/cli/spawn-cli.test-helper.ts"
-      ]
-    },
-    {
       "content": "2d25f44b188ca01d",
       "lines": 10,
       "files": [
