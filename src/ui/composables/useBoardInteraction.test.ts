@@ -143,10 +143,24 @@ describe('candidate lookups on a large pick (#313)', () => {
     // disabled and what it is called. Scanning the whole list for every space is
     // 3,720 x 3,720 comparisons through reactive proxies: over forty seconds
     // measured, on every render of the board.
+    //
+    // The proof is the work done, not the time taken (#360): every read of a
+    // candidate's `ref` is counted. Indexing the list reads each one once; a scan
+    // per question would read them millions of times.
+    let refReads = 0;
+    const counted = spaces(3720).map((candidate) => {
+      const { ref, ...rest } = candidate;
+      return Object.defineProperty(rest, 'ref', {
+        enumerable: true,
+        get: () => {
+          refReads++;
+          return ref;
+        },
+      }) as BoardTarget;
+    });
     const interaction = createBoardInteraction();
-    interaction.setValidElements(spaces(3720), () => {});
+    interaction.setValidElements(counted, () => {});
 
-    const started = performance.now();
     let selectable = 0;
     let disabled = 0;
     for (let i = 0; i < 3720; i++) {
@@ -155,11 +169,10 @@ describe('candidate lookups on a large pick (#313)', () => {
       if (interaction.isDisabledElement(cell)) disabled++;
       expect(interaction.candidateLabel(cell)).toBe(`Space ${i}`);
     }
-    const elapsed = performance.now() - started;
 
     expect(selectable).toBe(3720);
     expect(disabled).toBe(1860);
-    expect(elapsed).toBeLessThan(1000);
+    expect(refReads).toBe(3720);
   });
 
   it('keeps the list order when two candidates match one element', () => {
