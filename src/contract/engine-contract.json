@@ -1,8 +1,8 @@
 {
-  "revision": 93,
+  "revision": 94,
   "bundleProtocol": 2,
-  "surfaceHash": "dcaf23b8b8aeaeca",
-  "payloadHash": "c6eff75ba31c903a",
+  "surfaceHash": "b86dd32bdce805ae",
+  "payloadHash": "9721d8a867285784",
   "formatHash": "0058593e7cc80205",
   "history": [
     {
@@ -781,6 +781,15 @@
       "payloadHash": "c6eff75ba31c903a",
       "formatHash": "0058593e7cc80205",
       "summary": "A world's declarations, views and offers read an element's class as that class (#285). The read-only projection used to wrap every function it handed back, classes included, so element.constructor inside a declaration was an anonymous wrapper with no name or static members, and game.first(element.constructor) treated it as a predicate and threw where the same line in execute found the element. Classes now pass through the projection unchanged; methods are still wrapped and a mutating one is still refused. No exported surface, player-view payload or stored byte moves; the platform must run this build for its world runner to get the fix."
+    },
+    {
+      "revision": 94,
+      "date": "2026-09-24",
+      "bundleProtocol": 2,
+      "surfaceHash": "b86dd32bdce805ae",
+      "payloadHash": "9721d8a867285784",
+      "formatHash": "0058593e7cc80205",
+      "summary": "A flow step can declare how long it stays open (#300). actionStep and simultaneousActionStep accept timeLimitMs (a number, or a function resolved once at step entry); the resolved duration is kept in the step's position.frameData, rides FlowState.timeLimitMs, and SnapshotSessionHost broadcast meta carries turnBoundary.timeLimitMs (absent for an untimed step; the boundary key is unchanged). payloadHash moved only because the contract fixture now declares a window. boardsmith build stamps a NEW capability, capabilities.timedSteps, from the compiled flow, and build and validate refuse a timed game without idleAction. The platform must add timedSteps to GameCapabilities/CAPABILITY_KEYS when it vendors this revision, or validateCapabilities refuses every bundle built on it (ShufflewickPub #505). Not breaking: no existing field moved."
     }
   ]
 }

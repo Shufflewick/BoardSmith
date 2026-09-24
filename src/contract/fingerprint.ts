@@ -1620,6 +1620,11 @@ export async function computePayloadHash(): Promise<string> {
               do: actionStep({
                 actions: ['draw'],
                 player: (ctx: any) => ctx.game.getPlayer(2),
+                // A declared window (#300) is resolved at entry and kept on the
+                // step's frame, so it lands in the fingerprinted
+                // `position.frameData` the platform stores and restores. A
+                // change to how it is carried there moves `payloadHash`.
+                timeLimitMs: 90_000,
               }),
             }),
           ),
