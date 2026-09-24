@@ -238,7 +238,7 @@ interface BotConfig {
 
 - **No learning**: The bot doesn't learn from past games. Each game starts fresh.
 - **Text/number inputs**: The bot can't handle actions that require text or number input (it can only choose from discrete options).
-- **Determinism**: With a seed, the bot is deterministic. Without a seed, it uses `Math.random()`.
+- **Determinism**: The bot has its own random source, separate from the game's. A fixed game seed does not fix it. Pass `createBot`'s `reproducible: { seed }` (or `{ seed, timeout: Infinity }` to `MCTSBot`) for a deterministic search. Without a seed, the bot starts from a fresh random seed every time.
 
 ## Hidden information: enumeration and simulation are not the same thing
 
@@ -477,9 +477,15 @@ function createBot<G extends Game>(
   playerIndex: number,
   actionHistory?: SerializedAction[],
   difficulty?: DifficultyLevel | number,
-  botStrategy?: BotStrategy
+  botStrategy?: BotStrategy,
+  reproducible?: { seed: string }
 ): MCTSBot<G>
 ```
+
+Pass `reproducible: { seed }` when the same position must always give the same
+move (tests, tactical fixtures, benchmarks). It seeds the bot's own random
+source and turns off the wall-clock `timeout`, so the search runs exactly the
+difficulty's `iterations`.
 
 ### MCTSBot.play()
 
