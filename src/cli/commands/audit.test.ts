@@ -349,6 +349,50 @@ describe('runDupesBaselineCheck and rekeyDupesBaseline', () => {
     });
   });
 
+  /**
+   * #353: AN ALLOWANCE THAT OUTLIVED ITS DUPLICATION.
+   *
+   * A branch removed the clone in `action-builder.ts` and left its entry in the
+   * record, so every later branch's audit failed on a file it never touched.
+   * The check must name the entry and the one command that drops it, and that
+   * command must drop it -- it only narrows the record, so nothing is forgiven.
+   */
+  const noDuplication = async (baselinePath: string) => {
+    writeFileSync(baselinePath, JSON.stringify({ clone_groups: [] }));
+    return { code: 0, stdout: JSON.stringify({ clone_groups: [] }) };
+  };
+
+  it('fails on an accepted entry that matches no clone, naming it and the fix (#353)', async () => {
+    await withDir(async (dir) => {
+      await rekeyDupesBaseline(dir, scanner([10, 40]));
+      const [entry] = (JSON.parse(readFileSync(join(dir, '.fallow-dupes-accepted.json'), 'utf-8')) as {
+        accepted: { content: string }[];
+      }).accepted;
+
+      const result = await runDupesBaselineCheck(dir, noDuplication);
+
+      expect(result.code).not.toBe(0);
+      expect(result.report).toContain('ACCEPTED DEBT THAT IS GONE');
+      expect(result.report).toContain(entry.content);
+      expect(result.report).toContain('src/probe-0.ts');
+      expect(result.report).toContain('boardsmith audit --rekey-dupes');
+    });
+  });
+
+  it('drops an allowance whose duplication is gone when re-keyed, and then passes (#353)', async () => {
+    await withDir(async (dir) => {
+      await rekeyDupesBaseline(dir, scanner([10, 40]));
+
+      const dropped = await rekeyDupesBaseline(dir, noDuplication);
+
+      expect(dropped.code).toBe(0);
+      expect(dropped.report).toContain('Dropped 1 accepted clone group');
+      expect(dropped.report).toContain('no debt was forgiven');
+      expect(JSON.parse(readFileSync(join(dir, '.fallow-dupes-accepted.json'), 'utf-8'))).toEqual({ accepted: [] });
+      expect((await runDupesBaselineCheck(dir, noDuplication)).code).toBe(0);
+    });
+  });
+
   it('skips a project that keeps no accepted record at all', async () => {
     await withDir(async (dir) => {
       const result = await runDupesBaselineCheck(dir, scanner([10, 40]));

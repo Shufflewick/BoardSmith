@@ -264,13 +264,16 @@ function movedEntries(committed: AcceptedDupes, fresh: AcceptedDupes): number {
 }
 
 /**
- * RE-ADDRESS THE ACCEPTED CLONE GROUPS (#232).
+ * RE-ADDRESS THE ACCEPTED CLONE GROUPS (#232), AND DROP THE ONES THAT ARE GONE (#353).
  *
- * It refuses whenever the content does not match, which is what stops it being
- * a button that turns the board green: new duplication has no entry to
- * re-address, and there is no spelling of this command that accepts it. Only
- * deleting the record and running this again does that, deliberately, as a
- * visible change to a committed file.
+ * It refuses whenever the tree holds duplication the record does not accept,
+ * which is what stops it being a button that turns the board green: new
+ * duplication has no entry to re-address, and there is no spelling of this
+ * command that accepts it. Only deleting the record and running this again
+ * does that, deliberately, as a visible change to a committed file.
+ *
+ * An accepted entry the tree no longer has is dropped. That only narrows the
+ * record: the keys it writes are a subset of the keys it read.
  */
 export async function rekeyDupesBaseline(
   cwd: string,
@@ -281,29 +284,38 @@ export async function rekeyDupesBaseline(
 
   const acceptedPath = join(cwd, ACCEPTED_DUPES_FILE);
   const born = !existsSync(acceptedPath);
-  if (!born) {
-    const committed = JSON.parse(readFileSync(acceptedPath, 'utf-8')) as AcceptedDupes;
-    const drift = compareAcceptedDupes(committed, read.reading.accepted);
-    if (drift.length > 0) {
-      return {
-        code: 1,
-        report:
-          'Nothing was written. Re-keying only re-addresses debt whose CONTENT still '
-          + 'matches, and this tree\'s does not:\n\n'
-          + describeDupesDrift(drift),
-      };
-    }
+  const groups = (n: number): string => `${n} accepted clone ${n === 1 ? 'group' : 'groups'}`;
+  const count = read.reading.accepted.accepted.length;
+  if (born) {
+    writeDerived(cwd, read.reading);
+    return {
+      code: 0,
+      report:
+        `Recorded ${count} clone ${count === 1 ? 'group' : 'groups'} as this tree's accepted `
+        + `duplication, in ${ACCEPTED_DUPES_FILE} and ${DUPES_BASELINE_FILE}.`,
+    };
+  }
+
+  const committed = JSON.parse(readFileSync(acceptedPath, 'utf-8')) as AcceptedDupes;
+  const drift = compareAcceptedDupes(committed, read.reading.accepted);
+  if (drift.some((entry) => entry.direction === 'new')) {
+    return {
+      code: 1,
+      report:
+        'Nothing was written. Re-keying only re-addresses debt whose CONTENT still '
+        + 'matches, and drops accepted debt that is gone. This tree holds duplication '
+        + 'the record does not accept:\n\n'
+        + describeDupesDrift(drift),
+    };
   }
 
   writeDerived(cwd, read.reading);
-  const count = read.reading.accepted.accepted.length;
+  const dropped = drift.length;
   return {
     code: 0,
-    report: born
-      ? `Recorded ${count} clone ${count === 1 ? 'group' : 'groups'} as this tree's accepted `
-        + `duplication, in ${ACCEPTED_DUPES_FILE} and ${DUPES_BASELINE_FILE}.`
-      : `Re-addressed ${count} accepted clone ${count === 1 ? 'group' : 'groups'}; every one `
-        + 'matched by content, so no debt was forgiven.',
+    report:
+      (dropped > 0 ? `Dropped ${groups(dropped)} whose duplication is gone. ` : '')
+      + `Re-addressed ${groups(count)}; every one matched by content, so no debt was forgiven.`,
   };
 }
 
