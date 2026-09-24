@@ -108,9 +108,13 @@ describe('#167: `boardsmith dev` no longer needs a table half to open a world', 
  */
 describe('#201: reloading a world\'s rules', () => {
   const source = readFileSync(join(REPO_ROOT, 'src', 'cli', 'commands', 'dev-world.ts'), 'utf-8');
+  // Positions are read inside `reloadWorld`: the host's own teardown closes the
+  // world too, and its order is not the reload's.
+  const reloadStart = source.indexOf('async function reloadWorld(');
   const at = (needle: string): number => {
-    const index = source.indexOf(needle);
-    expect(index, `dev-world.ts no longer contains ${JSON.stringify(needle)}`).toBeGreaterThan(-1);
+    expect(reloadStart, 'dev-world.ts no longer has a reloadWorld').toBeGreaterThan(-1);
+    const index = source.indexOf(needle, reloadStart);
+    expect(index, `reloadWorld no longer contains ${JSON.stringify(needle)}`).toBeGreaterThan(-1);
     return index;
   };
 
