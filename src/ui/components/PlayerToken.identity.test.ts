@@ -29,7 +29,7 @@ const SEAT_ORDER: Player[] = [
 /** The shape class (`sh-*`) each seat's token renders with, keyed by seat. */
 function shapesBySeat(players: Player[], props: Record<string, unknown> = {}): Record<number, string> {
   const wrapper = mount(PlayersPanel, {
-    props: { players, playerSeat: 0, currentPlayerSeat: 1, ...props },
+    props: { players, playerSeat: 0, dueSeats: [1], ...props },
   });
   const cards = wrapper.findAll('.player-card');
   expect(cards).toHaveLength(players.length);
@@ -68,7 +68,7 @@ describe('PlayerToken shape is derived from seat, not render position', () => {
   it('keeps the seat strip in step with the full cards for the same seat', () => {
     const cardShapes = shapesBySeat(SEAT_ORDER);
     const strip = mount(PlayersPanel, {
-      props: { players: [...SEAT_ORDER].reverse(), playerSeat: 0, currentPlayerSeat: 1, seatStrip: true },
+      props: { players: [...SEAT_ORDER].reverse(), playerSeat: 0, dueSeats: [1], seatStrip: true },
     });
     const toks = strip.findAll('.strip-tokens .tok');
     expect(toks).toHaveLength(SEAT_ORDER.length);

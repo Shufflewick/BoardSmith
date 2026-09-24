@@ -30,13 +30,6 @@
       ]
     },
     {
-      "content": "01910219756dddb5",
-      "lines": 6,
-      "files": [
-        "src/ui/components/GameShell.vue"
-      ]
-    },
-    {
       "content": "01bfa003dc56421f",
       "lines": 31,
       "files": [
@@ -1232,13 +1225,6 @@
       ]
     },
     {
-      "content": "2cd5e43f2872b437",
-      "lines": 9,
-      "files": [
-        "src/ui/components/auto-ui/ActionPanel.simultaneous.test.ts"
-      ]
-    },
-    {
       "content": "2cf31bfa02d984f2",
       "lines": 9,
       "files": [
@@ -1703,13 +1689,6 @@
       "files": [
         "docs/persistent-world-claims.test.ts",
         "src/world/action.test.ts"
-      ]
-    },
-    {
-      "content": "3e0c67ad9ffefb6f",
-      "lines": 6,
-      "files": [
-        "src/ui/components/auto-ui/ActionPanel.simultaneous.test.ts"
       ]
     },
     {
@@ -5576,13 +5555,6 @@
       ]
     },
     {
-      "content": "bd941497021bc01b",
-      "lines": 18,
-      "files": [
-        "src/ui/components/auto-ui/ActionPanel.simultaneous.test.ts"
-      ]
-    },
-    {
       "content": "bdf6d4fcda71d81a",
       "lines": 27,
       "files": [
@@ -6271,13 +6243,6 @@
       "files": [
         "src/cli/dev-host/multiplayer-host.startrace.test.ts",
         "src/cli/dev-host/multiplayer-host.test.ts"
-      ]
-    },
-    {
-      "content": "d411969c36a5621e",
-      "lines": 18,
-      "files": [
-        "src/ui/components/auto-ui/ActionPanel.simultaneous.test.ts"
       ]
     },
     {

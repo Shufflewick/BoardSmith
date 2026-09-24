@@ -10,9 +10,9 @@ import {
   announceConnectionChange,
   announceGameOver,
   deriveWinnerState,
-  announceOpponentTurn,
+  describePlaying,
 } from '../composables/liveRegionAnnouncer.js';
-import { turnSequence, orderSeatsByTurn, type SeatActivityState } from '../../engine/flow/seat-activity.js';
+import { dueSeats, turnSequence, orderSeatsByTurn, type SeatActivityState } from '../../engine/flow/seat-activity.js';
 import { flowBoundaryKey, type BoundaryKeyState } from '../../engine/flow/boundary-key.js';
 import { MeepleClient, MeepleClientError, GameConnection, audioService, generatePlayerId, type LobbyInfo } from '../../client/index.js';
 import { useGame } from '../../client/vue.js';
@@ -934,29 +934,26 @@ const currentPlayerName = computed(() => {
   const player = players.value.find(p => p.seat === currentPos);
   return player?.name || `Player ${currentPos + 1}`;
 });
-// Awaiting player seats during simultaneous action steps — EXCLUDES the
-// viewer's own seat (D27 self-filter, T-160-28): the viewer's own
-// awaiting/not-completed status is already surfaced via `availableActions`
-// (action buttons render), so listing it here too produces the "Your move"
-// + "waiting" contradiction. This list names only co-deciders.
-const awaitingPlayerSeats = computed(() => {
-  const flowState = state.value?.flowState as any;
-  if (!flowState?.awaitingPlayers?.length) return [];
-  return flowState.awaitingPlayers
-    .filter((p: any) => !p.completed && p.availableActions.length > 0 && p.playerIndex !== playerSeat.value)
-    .map((p: any) => p.playerIndex);
-});
+// Every seat that has to act right now, the viewer's own included (#337): the
+// one seat of a turn-based step, or every seat a simultaneous step is still
+// waiting on. The engine's `dueSeats` is the one answer to "who may act", so the
+// players panel, the Action Panel's waiting line, the announcer and a custom UI
+// (`useGameContext().dueSeats`) all read this and cannot disagree. It is the
+// LIVE table, like `isMyTurn`: time travel changes the board, not whose move it is.
+const dueSeatsNow = computed(() => dueSeats(state.value?.flowState as SeatActivityState | null | undefined));
 
-// Awaiting player info for ActionPanel (names + colors for waiting message)
-// — same self-filter as awaitingPlayerSeats above (D27).
+// The OTHER seats a simultaneous step is still waiting on, for the Action
+// Panel's waiting line. The viewer is left out (D27): the panel shows the
+// viewer's own actions while they are due, and "waiting on you" beside them
+// would contradict it. Empty outside a simultaneous step, where the panel names
+// the one acting player from `currentPlayerName` instead.
 const awaitingPlayerNames = computed(() => {
-  const flowState = state.value?.flowState as any;
-  if (!flowState?.awaitingPlayers?.length) return [];
-  return flowState.awaitingPlayers
-    .filter((p: any) => !p.completed && p.availableActions.length > 0 && p.playerIndex !== playerSeat.value)
-    .map((p: any) => {
-      const player = players.value.find(pl => pl.seat === p.playerIndex);
-      return { seat: p.playerIndex, name: player?.name || `Player ${p.playerIndex}`, color: typeof (player as any)?.color === 'string' ? (player as any).color : undefined };
+  if (!isSimultaneous.value) return [];
+  return dueSeatsNow.value
+    .filter((seat) => seat !== playerSeat.value)
+    .map((seat) => {
+      const player = players.value.find(pl => pl.seat === seat);
+      return { seat, name: player?.name || `Player ${seat + 1}`, color: typeof (player as any)?.color === 'string' ? (player as any).color : undefined };
     });
 });
 
@@ -1336,6 +1333,7 @@ provideGameContext({
   myPlayer,
   playerSeat,
   isMyTurn,
+  dueSeats: dueSeatsNow,
   availableActions,
   actionController,
   timeTravelDiff,
@@ -1712,14 +1710,17 @@ watch(
   { immediate: false },
 );
 
-watch(awaitingPlayerNames, (newVal) => {
-  if (newVal.length > 0 && !isMyTurn.value) {
-    const text = announceOpponentTurn(newVal.map((p: any) => p.name));
-    if (text) {
-      announcer.announce(text);
-    }
-  }
-}, { immediate: false });
+// Once the viewer has committed in a simultaneous step, say who is still
+// deciding. Watched as the SENTENCE, not the array: `awaitingPlayerNames` is a
+// new array on every state push, and watching it re-announced the same names
+// on every frame. A string only changes when the words do.
+watch(
+  () => (isMyTurn.value ? '' : describePlaying(awaitingPlayerNames.value.map((p) => p.name))),
+  (text) => {
+    if (text) announcer.announce(text);
+  },
+  { immediate: false },
+);
 
 // UIX-01: single chokepoint for action-failure feedback. actionController is
 // shared by ActionPanel AND every custom UI (via useBoardInteraction/inject),
@@ -1885,8 +1886,7 @@ if ((import.meta as any).hot) {
       ref="playShell"
       :players="playersWithConnection"
       :player-seat="playerSeat"
-      :current-player-seat="state?.state.currentPlayer"
-      :awaiting-player-seats="awaitingPlayerSeats"
+      :due-seats="dueSeatsNow"
       :show-turn-status="props.showTurnStatus"
       :messages="gameMessages"
       :unread-log-count="unreadLogCount"

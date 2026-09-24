@@ -9,11 +9,19 @@
 export type ConnectionStatus = 'connected' | 'disconnected' | 'reconnecting' | string;
 
 /**
- * Returns "Your turn" when isMyTurn becomes true; empty string otherwise.
- * Call from a `watch(isMyTurn, ...)` handler.
+ * What the shell says to the viewer when they have to act, in a turn-based step
+ * or a simultaneous one. The players panel prints it and the live region speaks
+ * it, so a screen-reader user hears the words a sighted player reads.
+ */
+export const YOUR_MOVE = 'Your move';
+
+/**
+ * Returns {@link YOUR_MOVE} when isMyTurn becomes true; empty string otherwise.
+ * Call from a `watch(isMyTurn, ...)` handler, which fires only when the value
+ * changes, so the viewer hears it once per turn and not on every state push.
  */
 export function announceTurnChange(newIsMyTurn: boolean): string {
-  return newIsMyTurn ? 'Your turn' : '';
+  return newIsMyTurn ? YOUR_MOVE : '';
 }
 
 /**
@@ -68,10 +76,12 @@ export function deriveWinnerState(
 }
 
 /**
- * Returns the polite announcement when it becomes an opponent's turn.
- * awaitingNames are the display names of players waiting to act.
+ * The sentence naming every OTHER seat that has to act: "Bob is playing",
+ * "Bob and Carol are playing", "Bob, Carol and Dan are playing". Empty when the
+ * list is. The players panel prints it and the live region speaks it.
  */
-export function announceOpponentTurn(awaitingNames: string[]): string {
-  if (awaitingNames.length === 0) return '';
-  return `${awaitingNames[0]} is playing…`;
+export function describePlaying(names: readonly string[]): string {
+  if (names.length === 0) return '';
+  if (names.length === 1) return `${names[0]} is playing`;
+  return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]} are playing`;
 }
