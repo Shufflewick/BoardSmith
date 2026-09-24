@@ -1784,9 +1784,9 @@ The `actionController` (type: `UseActionControllerReturn`) is the unified interf
 
 | Method | Signature | Description |
 |--------|-----------|-------------|
-| `execute` | `(name: string, args?: Record<string, unknown>) => Promise<ActionResult>` | Execute an action immediately with provided args; resolves to the server `ActionResult` (`.success`/`.error`) |
+| `execute` | `(name: string, args?: Record<string, unknown>) => Promise<ControllerActionResult>` | Execute an action immediately with provided args; resolves to the server's answer as a `ControllerActionResult` (`.success`/`.error`) |
 | `start` | `(name: string, options?: StartOptions) => Promise<void>` | Start wizard mode for a multi-selection action (await before driving further selections) |
-| `fill` | `(name: string, value: unknown) => Promise<ValidationResult>` | Fill a specific selection in wizard mode (async) |
+| `fill` | `(name: string, value: unknown) => Promise<PickValidationResult>` | Fill a specific selection in wizard mode (async) |
 | `skip` | `(selectionName: string) => void` | Skip an optional selection (requires the selection name) |
 | `cancel` | `() => void` | Cancel wizard mode and clear selections |
 

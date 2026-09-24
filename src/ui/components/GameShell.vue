@@ -50,7 +50,7 @@ import { createAnnouncer, provideAnnouncer } from '../composables/useAnnouncer.j
 import { useZoomPreview } from '../composables/useZoomPreview';
 import { useAutoZoom, SETTLE_MS } from '../composables/useAutoZoom';
 import { useToast } from '../composables/useToast';
-import type { ActionResult as ControllerActionResult } from '../composables/useActionController';
+import type { ControllerActionResult } from '../composables/useActionController';
 import type { GameState, FlowState } from '../../client/types.js';
 import turnNotificationSound from '../assets/turn-notification.mp3';
 import { usePlatformTransport } from '../composables/usePlatformTransport.js';
