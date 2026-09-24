@@ -374,3 +374,19 @@ describe('init reports a bad <name> as one clean line (#240)', () => {
     expect(readdirSync(dir)).toEqual([]);
   });
 });
+
+describe('init --into-existing is a flag on the real command (#304)', () => {
+  it('refuses a conflicting scaffold file as one clean line naming it', async () => {
+    const repo = tempTree('bs-cli-init-304-');
+    await fs.mkdir(join(repo, '.git'));
+    await fs.writeFile(join(repo, 'package.json'), '{}\n');
+
+    const result = await spawnCli(['init', 'mygame', '--without-rulebook', '--into-existing'], repo);
+
+    expect(result.code).not.toBe(0);
+    expect(result.stderr).toContain('package.json');
+    expect(result.stderr).not.toMatch(/\n\s+at /);
+    expect(result.stderr).not.toContain(REPO_ROOT);
+    expect(readdirSync(repo).sort()).toEqual(['.git', 'package.json']);
+  });
+});

@@ -943,6 +943,25 @@ describe('CLI string claims in scaffold.md match the CLI source (WR-07)', () => 
     expect(scaffold).toContain('already exists');
   });
 
+  it('scaffold.md offers --into-existing for a game that already lives in a git repo (#304)', () => {
+    // Without it, a research-first project was scaffolded elsewhere and copied in by hand, which
+    // silently drops the ingest pre-commit hook `init` installs into `.git`.
+    const cli = read('../../cli.ts');
+    expect(cli).toContain("'--into-existing'");
+    const scaffold = read('ingest/scaffold.md');
+    expect(scaffold).toContain('npx boardsmith init <name> --rulebook <absolute-rulebookPath> --into-existing');
+    expect(scaffold).not.toContain('There is no in-place mode');
+    // The case check that decides where Step 1 scaffolds has to know the mode exists, or a
+    // session in a research repository scaffolds a nested `<name>/` beside the research.
+    expect(read('ingest-rules.md')).toContain('init --into-existing');
+    // The two refusals the file tells a session to expect are the ones init.ts raises.
+    const initSrc = read('../../commands/init.ts');
+    expect(initSrc).toContain('not the top folder of a git repository');
+    expect(scaffold).toContain('not the top folder of a git repository');
+    expect(initSrc).toContain('already exist here, so nothing was changed');
+    expect(scaffold).toContain('already exist here, so nothing was changed');
+  });
+
   it('scaffold.md states the <name> rule the CLI actually enforces (#240)', () => {
     // The skill text is what a live session reads before typing the command, and #240 was
     // reported by a session typing a path. `init` refuses one now, so the file that tells it

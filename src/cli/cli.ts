@@ -83,6 +83,7 @@ program
   .option('--additional-source <paths...>', 'Also archive these documents the rules incorporate (a companion reference, a card list), each with its own hash (used with --rulebook)')
   .option('--without-rulebook', 'Explicitly declare no rulebook exists (the interview path supplies rulebook/ content)')
   .option('--world', 'Scaffold a persistent world (named partitions, a clock, no turn order) instead of a table game')
+  .option('--into-existing', 'Scaffold into the git repository you run this from instead of creating <name>/ (refuses to overwrite any file)')
   .action(initCommand);
 
 // Development

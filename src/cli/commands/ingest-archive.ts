@@ -42,6 +42,34 @@ export interface IngestArchiveOptions {
    * and recorded with its own SHA-256 in `## Additional Sources`, which the verify pass checks.
    */
   additionalSource?: string[];
+  /**
+   * The game's name for the index title. `boardsmith init` passes the `<name>` it was given,
+   * because `init --into-existing` scaffolds into a directory named anything. Without it the
+   * project directory's name is used.
+   */
+  gameName?: string;
+}
+
+/** Where archiving `userPath` into `projectDir` puts its copy: `rulebook/source/<its file name>`. */
+function archivePathFor(projectDir: string, userPath: string): string {
+  return join(designRulebookDir(resolve(projectDir)), 'source', basename(resolveUserPath(process.cwd(), userPath)));
+}
+
+/**
+ * The files archiving `rulebook` and its `additionalSources` into `projectDir` writes: one
+ * archived copy per source (the rulebook's first) and the index. `boardsmith init
+ * --into-existing` checks all of them for conflicts before writing anything, so this is the one
+ * statement of where they go.
+ */
+export function rulebookArchivePaths(
+  projectDir: string,
+  rulebook: string,
+  additionalSources: readonly string[] = [],
+): { archivePaths: string[]; indexPath: string } {
+  return {
+    archivePaths: [rulebook, ...additionalSources].map((path) => archivePathFor(projectDir, path)),
+    indexPath: join(designRulebookDir(resolve(projectDir)), 'INDEX.md'),
+  };
 }
 
 /** The exact strings downstream tooling parses. Changing one is a breaking change. */
@@ -647,12 +675,11 @@ async function readSourceToArchive(
           : 'Pass the path to a document the rules incorporate (PDF, images, or text) to --additional-source.'),
     );
   }
-  const fileName = basename(sourcePath);
   return {
     sourcePath,
     bytes,
-    archivePath: join(designRulebookDir(projectDir), 'source', fileName),
-    relArchivePath: `rulebook/source/${fileName}`,
+    archivePath: archivePathFor(projectDir, userPath),
+    relArchivePath: `rulebook/source/${basename(sourcePath)}`,
   };
 }
 
@@ -738,13 +765,13 @@ export async function ingestArchiveCommand(
   options: IngestArchiveOptions = {},
 ): Promise<void> {
   const projectDir = resolve(options.project ?? process.cwd());
-  const indexPath = join(designRulebookDir(projectDir), 'INDEX.md');
+  const { indexPath } = rulebookArchivePaths(projectDir, rulebook);
   const sources = await readAllSources(projectDir, rulebook, options.additionalSource ?? [], indexPath);
 
   const relArchivePath = sources.primary.relArchivePath;
   const sourceHash = await archiveSource(sources.primary);
 
-  const gameName = basename(projectDir);
+  const gameName = options.gameName ?? basename(projectDir);
   const transcribed = isoDate(new Date());
 
   // Decide the branch BEFORE any try/catch that performs a write. Today's bug (T-173-01): the
