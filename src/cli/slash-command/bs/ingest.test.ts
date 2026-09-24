@@ -140,11 +140,38 @@ describe('INGEST-04 — scaffold with compile+serve verification', () => {
     expect(ingestRules).toContain('ingest/scaffold.md');
   });
 
-  it('scaffold.md names boardsmith init, tsc --noEmit, and an explicit kill instruction', () => {
+  it('scaffold.md names boardsmith init, vue-tsc --noEmit, and an explicit kill instruction', () => {
     const scaffold = read('ingest/scaffold.md');
     expect(scaffold).toContain('boardsmith init');
-    expect(scaffold).toContain('tsc --noEmit');
+    expect(scaffold).toContain('npx vue-tsc --noEmit');
     expect(scaffold).toMatch(/kill/i);
+  });
+});
+
+// #303: plain `tsc` cannot type a `.vue` import, so on a freshly scaffolded game it reports
+// TS2307 for every single-file component (the game's own and BoardSmith's) and can never be
+// clean. `vue-tsc` is the checker `boardsmith validate` runs and the one a scaffold installs.
+// A skill that names plain `tsc --noEmit` as a gate sends a session into a loop it cannot win.
+describe('#303 — every compile gate in the skill text is vue-tsc', () => {
+  const skillRoot = join(__dirname, '..');
+
+  function markdownFiles(dir: string): string[] {
+    return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+      const full = join(dir, entry.name);
+      if (entry.isDirectory()) return markdownFiles(full);
+      return entry.name.endsWith('.md') ? [full] : [];
+    });
+  }
+
+  it('no skill file names plain `tsc --noEmit`', () => {
+    const offenders = markdownFiles(skillRoot).flatMap((file) =>
+      readFileSync(file, 'utf-8')
+        .split('\n')
+        .map((line, i) => ({ line, at: `${file.slice(skillRoot.length + 1)}:${i + 1}` }))
+        .filter(({ line }) => /(?<!vue-)\btsc --noEmit/.test(line))
+        .map(({ at }) => at),
+    );
+    expect(offenders).toEqual([]);
   });
 });
 
@@ -914,6 +941,25 @@ describe('CLI string claims in scaffold.md match the CLI source (WR-07)', () => 
     expect(initSrc).toContain('Directory "${name}" already exists');
     const scaffold = read('ingest/scaffold.md');
     expect(scaffold).toContain('already exists');
+  });
+
+  it('scaffold.md offers --into-existing for a game that already lives in a git repo (#304)', () => {
+    // Without it, a research-first project was scaffolded elsewhere and copied in by hand, which
+    // silently drops the ingest pre-commit hook `init` installs into `.git`.
+    const cli = read('../../cli.ts');
+    expect(cli).toContain("'--into-existing'");
+    const scaffold = read('ingest/scaffold.md');
+    expect(scaffold).toContain('npx boardsmith init <name> --rulebook <absolute-rulebookPath> --into-existing');
+    expect(scaffold).not.toContain('There is no in-place mode');
+    // The case check that decides where Step 1 scaffolds has to know the mode exists, or a
+    // session in a research repository scaffolds a nested `<name>/` beside the research.
+    expect(read('ingest-rules.md')).toContain('init --into-existing');
+    // The two refusals the file tells a session to expect are the ones init.ts raises.
+    const initSrc = read('../../commands/init.ts');
+    expect(initSrc).toContain('not the top folder of a git repository');
+    expect(scaffold).toContain('not the top folder of a git repository');
+    expect(initSrc).toContain('already exist here, so nothing was changed');
+    expect(scaffold).toContain('already exist here, so nothing was changed');
   });
 
   it('scaffold.md states the <name> rule the CLI actually enforces (#240)', () => {
