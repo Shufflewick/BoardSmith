@@ -904,16 +904,25 @@ describe('#167: scheduled events fire on their due time', () => {
     return { ...opened, clock };
   }
 
-  it('arms a timer for the event a command scheduled, and runs it when it comes due', async () => {
-    const { host, sent, clock } = await banked();
+  /** The ten-minute burn is on the armed timer, and firing that timer -- not
+   *  "fire due events now" -- is what runs it. */
+  async function burnsWhenArmedTimerFires(
+    host: LocalWorldHost,
+    sent: Sent[],
+    clock: ReturnType<typeof testClock>,
+  ): Promise<void> {
     expect(clock.armedDelay).toBe(600_000);
-    expect(JSON.stringify(last(sent, 'c1', 'world_state')?.view)).toContain('"burns":0');
-
     clock.advance(600_000);
     clock.fireArmed();
     await host.settled();
     expect(JSON.stringify(last(sent, 'c1', 'world_state')?.view)).toContain('"burns":1');
     await host.close();
+  }
+
+  it('arms a timer for the event a command scheduled, and runs it when it comes due', async () => {
+    const { host, sent, clock } = await banked();
+    expect(JSON.stringify(last(sent, 'c1', 'world_state')?.view)).toContain('"burns":0');
+    await burnsWhenArmedTimerFires(host, sent, clock);
   });
 
   it('"fire due events now" moves the world\'s clock to the due instant instead of waiting', async () => {
@@ -930,7 +939,7 @@ describe('#167: scheduled events fire on their due time', () => {
 
   it('arms a timer for the event an ARRIVAL scheduled, with no command after it (#327)', async () => {
     // The bundle's `onArrive` verb is issued by the clock, not by a seat, so
-    // this is the road `command`'s own re-arm does not cover.
+    // the re-arm this proves is `clockCommand`'s, not `command`'s.
     const kindle = worldClockAction<Village>('kindle')
       .prompt('A seat arrives and the fire is laid')
       .needs(() => [HEARTH])
@@ -945,13 +954,7 @@ describe('#167: scheduled events fire on their due time', () => {
         world: worldBlock({ actions: [...VILLAGE_ACTIONS, kindle], presence: { onArrive: 'kindle' } }),
       }),
     });
-    expect(clock.armedDelay).toBe(600_000);
-
-    clock.advance(600_000);
-    clock.fireArmed();
-    await host.settled();
-    expect(JSON.stringify(last(sent, 'c1', 'world_state')?.view)).toContain('"burns":1');
-    await host.close();
+    await burnsWhenArmedTimerFires(host, sent, clock);
   });
 
   it('says so rather than pretending when nothing is scheduled', async () => {
