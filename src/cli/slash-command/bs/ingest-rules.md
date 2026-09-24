@@ -216,7 +216,9 @@ create the file.
 3. **If `Edition:` reads `not stated in the rulebook` and the transcription subagent returned an
    actual edition**, update just that line with the returned value. Leave `Source:`,
    `Source hash:`, and `Transcribed:` untouched — those are the provenance record a later verify
-   pass reads, and they describe the archive Step 1 made.
+   pass reads, and they describe the archive Step 1 made. The same goes for
+   `## Additional Sources`, when Step 1 archived more than one document: it is machine-owned,
+   written only by `boardsmith ingest-archive`.
 
 4. **Component inventory + aspect ratio(s)** — every component mentioned, with citations and
    approximate aspect ratios (cards, tiles, board proportions), accumulated from the transcription

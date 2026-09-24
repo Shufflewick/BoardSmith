@@ -72,7 +72,14 @@ citation in this run is anchored to a rulebook the designer never chose.
 ## Case 4 — Archived, but the hash no longer matches: record and proceed
 
 An archived source already exists at `rulebook/source/`, but its hash does not match
-`rulebook/INDEX.md`'s `Source hash:` line. This is the `source-changed` SIGNAL, not an error —
+`rulebook/INDEX.md`'s `Source hash:` line — or a document in `rulebook/INDEX.md`'s
+`## Additional Sources` table (a companion the rulebook incorporates, a card list) is missing or
+no longer matches its recorded hash. The verification scope drops to `code-conformance-only`
+with reason `additional-source-missing` or `additional-source-hash-mismatch` (what `chunk-check`
+and the verify Close record), and every chunk verified against an older version of that document
+reads as `source-changed`. Name the
+document in the report: slices do not say which document they came from, so none of them can be
+treated as verified until it is resolved. This is the `source-changed` SIGNAL, not an error —
 re-verifying against a new edition of the rulebook is the entire point of this pipeline. Record
 the mismatch and PROCEED with the current archived copy. **Never overwrite the archived file on
 this signal** — the old archive is what the previous verdict was made against, and overwriting it
