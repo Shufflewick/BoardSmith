@@ -21,7 +21,8 @@ const CLEAN_VUE = '<script setup lang="ts">\nconst count: number = 1;\n</script>
 const BAD_VUE = '<script setup lang="ts">\nconst count: number = \'one\';\n</script>\n\n<template><p>{{ count }}</p></template>\n';
 
 async function workspace(files: Record<string, string>): Promise<string> {
-  const root = join(tempTree('bs-typecheck-'), 'boardsmith');
+  const tree = tempTree('bs-typecheck-');
+  const root = join(tree, 'boardsmith');
   const all: Record<string, string> = {
     'tsconfig.json': JSON.stringify({
       compilerOptions: {
