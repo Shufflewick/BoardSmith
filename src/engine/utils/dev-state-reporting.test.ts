@@ -1,36 +1,12 @@
 /**
- * The reporting/recovery half of the dev-state (HMR) surface:
- * `formatValidationErrors`, `validateFlowPosition` and `formatFlowRecovery`.
- * `dev-state.test.ts` covers capture/restore; these three are what the dev
- * server actually prints and how it decides where to resume a flow.
+ * The reporting half of the dev-state (HMR) surface: `formatValidationErrors`.
+ * `dev-state.test.ts` covers capture/restore; this is what a rules reload
+ * prints when a snapshot cannot be transferred.
  */
-import { describe, it, expect, vi } from 'vitest';
-import {
-  formatValidationErrors,
-  validateFlowPosition,
-  formatFlowRecovery,
-  type ValidationResult,
-  type DevSnapshot,
-} from './dev-state.js';
-import type { FlowPosition } from '../flow/types.js';
+import { describe, it, expect } from 'vitest';
+import { formatValidationErrors, type ValidationResult } from './dev-state.js';
 
 const clean: ValidationResult = { valid: true, errors: [], warnings: [] };
-
-const snapshotWith = (flowPosition: FlowPosition | undefined): DevSnapshot =>
-  ({ flowPosition }) as DevSnapshot;
-
-const position = (overrides: Partial<FlowPosition> = {}): FlowPosition => ({
-  path: [0, 1, 2],
-  iterations: {},
-  variables: {},
-  ...overrides,
-});
-
-/** A stand-in flow engine whose tryRestore answer the test controls. */
-const engineThatAccepts = () => ({ tryRestore: vi.fn().mockReturnValue({ success: true as const }) });
-const engineThatRejects = (validPath: number[], error = 'node 2 no longer exists') => ({
-  tryRestore: vi.fn().mockReturnValue({ success: false as const, error, validPath }),
-});
 
 describe('formatValidationErrors', () => {
   it('says nothing at all when the result is clean', () => {
@@ -99,111 +75,5 @@ describe('formatValidationErrors', () => {
     });
     expect(output).toContain('ERROR 1');
     expect(output).toContain('Warnings:');
-  });
-});
-
-describe('validateFlowPosition', () => {
-  it('passes a snapshot that carries no flow position', () => {
-    const engine = engineThatAccepts();
-    expect(validateFlowPosition(snapshotWith(undefined), engine)).toEqual({ valid: true });
-    expect(engine.tryRestore).not.toHaveBeenCalled();
-  });
-
-  it('passes an empty path without consulting the flow engine', () => {
-    const engine = engineThatAccepts();
-    expect(validateFlowPosition(snapshotWith(position({ path: [] })), engine)).toEqual({ valid: true });
-    expect(engine.tryRestore).not.toHaveBeenCalled();
-  });
-
-  it('passes when the engine can restore the position', () => {
-    const engine = engineThatAccepts();
-    const pos = position();
-    expect(validateFlowPosition(snapshotWith(pos), engine)).toEqual({ valid: true });
-    expect(engine.tryRestore).toHaveBeenCalledWith(pos);
-  });
-
-  it('reports the engine reason when the position is stale', () => {
-    const result = validateFlowPosition(snapshotWith(position()), engineThatRejects([0]));
-    expect(result.valid).toBe(false);
-    expect(result.reason).toBe('node 2 no longer exists');
-  });
-
-  it('recovers to the deepest still-valid prefix', () => {
-    const result = validateFlowPosition(snapshotWith(position()), engineThatRejects([0, 1]));
-    expect(result.recoveryPosition?.path).toEqual([0, 1]);
-  });
-
-  it('offers no recovery when nothing of the path survives', () => {
-    const result = validateFlowPosition(snapshotWith(position()), engineThatRejects([]));
-    expect(result.valid).toBe(false);
-    expect(result.recoveryPosition).toBeUndefined();
-  });
-
-  it('carries the flow variables into the recovery position', () => {
-    const pos = position({ variables: { round: 3, dealer: 1 } });
-    const result = validateFlowPosition(snapshotWith(pos), engineThatRejects([0]));
-    expect(result.recoveryPosition?.variables).toEqual({ round: 3, dealer: 1 });
-  });
-
-  it('copies the variables rather than aliasing the stale position', () => {
-    const pos = position({ variables: { round: 3 } });
-    const result = validateFlowPosition(snapshotWith(pos), engineThatRejects([0]));
-    (result.recoveryPosition!.variables as Record<string, unknown>).round = 99;
-    expect(pos.variables.round).toBe(3);
-  });
-
-  it('keeps only the loop iteration counts that lie inside the surviving prefix', () => {
-    const pos = position({ iterations: { __iter_0: 4, __iter_1: 2, __iter_2: 7 } });
-    const result = validateFlowPosition(snapshotWith(pos), engineThatRejects([0, 1]));
-    expect(result.recoveryPosition?.iterations).toEqual({ __iter_0: 4, __iter_1: 2 });
-  });
-
-  it('keeps the frame data (an if/switch branch taken) that lies inside the surviving prefix (#330)', () => {
-    const pos = position({
-      frameData: {
-        __frame_0: { iteration: 0 },
-        __frame_1: { branchPushed: true, branchIndex: 1 },
-        __frame_2: { branchPushed: true, branchKey: 'c', branchIndex: 2 },
-      },
-    });
-    const result = validateFlowPosition(snapshotWith(pos), engineThatRejects([0, 1]));
-    expect(result.recoveryPosition?.frameData).toEqual({
-      __frame_0: { iteration: 0 },
-      __frame_1: { branchPushed: true, branchIndex: 1 },
-    });
-  });
-
-  it('drops the player index, which may name a seat the truncated flow never reaches', () => {
-    const pos = position({ playerIndex: 2 });
-    const result = validateFlowPosition(snapshotWith(pos), engineThatRejects([0]));
-    expect(result.recoveryPosition?.playerIndex).toBeUndefined();
-  });
-});
-
-describe('formatFlowRecovery', () => {
-  const original = position({ path: [0, 1, 2] });
-  const recovery = position({ path: [0] });
-  const output = formatFlowRecovery(original, recovery, 'node 2 no longer exists');
-
-  it('labels itself as an HMR flow recovery', () => {
-    expect(output).toContain('[HMR] Flow position recovery:');
-  });
-
-  it('shows where the flow was and where it is resuming', () => {
-    expect(output).toContain('Original position: [0, 1, 2]');
-    expect(output).toContain('Recovering to: [0]');
-  });
-
-  it('includes the reason the original position was rejected', () => {
-    expect(output).toContain('node 2 no longer exists');
-  });
-
-  it('warns that the game may need a manual nudge', () => {
-    expect(output).toContain('manual action to resume');
-  });
-
-  it('renders an empty recovery path without collapsing the line', () => {
-    expect(formatFlowRecovery(original, position({ path: [] }), 'gone'))
-      .toContain('Recovering to: []');
   });
 });

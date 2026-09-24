@@ -117,8 +117,6 @@ import {
 - `restoreDevState()` - Restore state after HMR
 - `validateDevSnapshot()` - Validate dev snapshot
 - `formatValidationErrors()` - Format validation errors
-- `validateFlowPosition()` - Validate flow position
-- `formatFlowRecovery()` - Format flow recovery info
 - `getSnapshotElementCount()` - Count elements in snapshot
 - `createDevCheckpoint()` - Create dev HMR checkpoint
 - `restoreFromDevCheckpoint()` - Restore from dev checkpoint
