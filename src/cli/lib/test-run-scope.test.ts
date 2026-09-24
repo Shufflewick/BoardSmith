@@ -26,7 +26,8 @@ async function writeTree(root: string, files: Record<string, string>): Promise<v
 
 /** Every file `boardsmith init` writes for this config, on disk in a fresh directory. */
 async function scaffold(config: ProjectConfig): Promise<string> {
-  const project = join(tempTree('bs-test-scope-'), config.name);
+  const tree = tempTree('bs-test-scope-');
+  const project = join(tree, config.name);
   await fs.mkdir(project, { recursive: true });
   const files = Object.fromEntries(generateScaffoldFiles(config, project).map((f) => [f.path, f.content]));
   await writeTree(project, files);
@@ -76,7 +77,8 @@ describe('a scaffolded project leaves chunk worktrees out of its default test ru
 
 describe('testRunScopeProblem', () => {
   const project = async (files: Record<string, string>) => {
-    const dir = join(tempTree('bs-test-scope-'), 'game');
+    const tree = tempTree('bs-test-scope-');
+    const dir = join(tree, 'game');
     await fs.mkdir(dir, { recursive: true });
     await writeTree(dir, files);
     return dir;

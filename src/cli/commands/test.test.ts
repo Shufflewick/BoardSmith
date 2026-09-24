@@ -14,7 +14,8 @@ vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
  * project whose config would collect them is refused before vitest starts.
  */
 async function gameProject(files: Record<string, string>): Promise<string> {
-  const project = join(tempTree('bs-test-cmd-'), 'game');
+  const tree = tempTree('bs-test-cmd-');
+  const project = join(tree, 'game');
   const all: Record<string, string> = {
     'boardsmith.json': '{"name":"game"}\n',
     'vite.config.ts': 'export default {};\n',
