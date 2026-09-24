@@ -724,8 +724,9 @@ export function buildPlayerState(
 
 /**
  * The added/removed/changed element IDs between two state views.
+ * `StateHistory`'s `ElementDiff` adds the action indices they were taken at.
  */
-export interface ElementDiff {
+export interface ElementChanges {
   added: number[];
   removed: number[];
   changed: number[];
@@ -787,7 +788,7 @@ function collectElements(
  * This is the single source of truth shared by GameSession's state-history
  * diff and the stateless executor's debug state diff.
  */
-export function computeElementDiff(fromView: unknown, toView: unknown): ElementDiff {
+export function computeElementDiff(fromView: unknown, toView: unknown): ElementChanges {
   const fromElements = new Map<number, ComparableElement>();
   const toElements = new Map<number, ComparableElement>();
   collectElements(fromView, fromElements);
