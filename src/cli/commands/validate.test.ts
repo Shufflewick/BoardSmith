@@ -764,16 +764,28 @@ describe('validateChoiceCardinality runs in a checkout with no .boardsmith (#306
     return cwd;
   }
 
-  const wideRules = [
-    `import { WideGame } from ${JSON.stringify(fixture)};`,
-    `export const gameDefinition = { gameClass: WideGame, gameType: 'wide', displayName: 'Wide', minPlayers: 2, maxPlayers: 2 };`,
-  ].join('\n');
+  /** A rules index exporting the named fixture game with the given seat fields. */
+  function rulesFor(gameClass: string, seats: string): string {
+    return [
+      `import { ${gameClass} } from ${JSON.stringify(fixture)};`,
+      `export const gameDefinition = { gameClass: ${gameClass}, gameType: 'fixture', displayName: 'Fixture'${seats} };`,
+    ].join('\n');
+  }
+
+  /** The check did not produce a verdict: never a pass, always a warning saying why. */
+  function expectNotRun(result: Awaited<ReturnType<typeof validateChoiceCardinality>>, why: RegExp): void {
+    expect(result.passed).toBe(false);
+    expect(result.severity).toBe('warning');
+    expect(result.message).toMatch(why);
+  }
+
+  const wideRules = rulesFor('WideGame', ', minPlayers: 2, maxPlayers: 2');
 
   it('plays the game and reports what it found, instead of skipping', async () => {
     const cwd = freshProject(wideRules);
     expect(existsSync(join(cwd, '.boardsmith'))).toBe(false);
 
-    const result = await validateChoiceCardinality(cwd);
+    const result = await validateChoiceCardinality(cwd, false);
 
     expect(result.passed).toBe(false);
     expect(result.severity).toBe('warning');
@@ -782,18 +794,34 @@ describe('validateChoiceCardinality runs in a checkout with no .boardsmith (#306
 
   it('removes the temp dir it made once the check is done', async () => {
     const cwd = freshProject(wideRules);
-    await validateChoiceCardinality(cwd);
+    await validateChoiceCardinality(cwd, false);
     expect(existsSync(join(cwd, '.boardsmith', 'validate-tmp'))).toBe(false);
   }, 30_000);
 
+  it('plays the game at the seat count its definition starts from', async () => {
+    const cwd = freshProject(rulesFor('ThreeSeatWideGame', ', minPlayers: 3, maxPlayers: 4'));
+
+    const result = await validateChoiceCardinality(cwd, false);
+
+    expect(result.details!.join('\n')).toContain('shout');
+  }, 30_000);
+
+  it('says it could not run when a table game declares no minPlayers to play it at', async () => {
+    const result = await validateChoiceCardinality(freshProject(rulesFor('WideGame', '')), false);
+
+    expectNotRun(result, /could not run.*minPlayers/is);
+  }, 30_000);
+
+  it('says it did not run for a world, which the random simulator cannot play', async () => {
+    const result = await validateChoiceCardinality(freshProject(wideRules), true);
+
+    expectNotRun(result, /not checked.*world/is);
+  });
+
   it('does not report a pass when the check could not run, and says why', async () => {
-    const cwd = freshProject(null);
+    const result = await validateChoiceCardinality(freshProject(null), false);
 
-    const result = await validateChoiceCardinality(cwd);
-
-    expect(result.passed).toBe(false);
-    expect(result.severity).toBe('warning');
-    expect(result.message).toMatch(/could not (be )?run/i);
+    expectNotRun(result, /could not run/i);
   }, 30_000);
 });
 
@@ -885,9 +913,9 @@ describe('validateRequiredFiles — a world has a different entry point (#168)',
 
 describe("#196: what validation tells an author to do next", () => {
   /** Chalk may or may not colour, depending on where the suite runs. */
-  const plain = (isWorld: boolean): string =>
+  const plain = (isWorld: boolean, warnings = 0): string =>
     // eslint-disable-next-line no-control-regex
-    successGuidance(isWorld).join('\n').replace(/\u001B\[[0-9;]*m/g, '');
+    successGuidance(isWorld, warnings).join('\n').replace(/\u001B\[[0-9;]*m/g, '');
 
   it('a world project is told `boardsmith dev` runs the world, not a table half', () => {
     const text = plain(true);
@@ -917,6 +945,14 @@ describe("#196: what validation tells an author to do next", () => {
       expect(plain(isWorld)).toContain('boardsmith build');
       expect(plain(isWorld)).toContain('boardsmith publish');
     }
+  });
+
+  // #306: a warning can be a check that could not run, so a run with one is
+  // never summed up as every check having passed.
+  it('a run with warnings says so instead of claiming every check passed', () => {
+    const text = plain(false, 2);
+    expect(text).not.toContain('All validation checks passed!');
+    expect(text).toContain('2 warning(s)');
   });
 });
 

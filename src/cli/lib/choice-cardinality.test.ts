@@ -156,4 +156,33 @@ describe('auditChoiceCardinality', () => {
 
     expect(await auditChoiceCardinality(NarrowGame, { seed: 'audit', games: 1 })).toEqual([]);
   });
+
+  // #306: a game the simulator could not play offers no choice steps to count,
+  // so an empty findings list from it would read as a clean game.
+  it('refuses to report a game that crashed as having no findings', async () => {
+    const { ThreeSeatWideGame } = await import('./choice-cardinality.fixture.js');
+    const { auditChoiceCardinality } = await import('./choice-cardinality.js');
+
+    await expect(
+      auditChoiceCardinality(ThreeSeatWideGame, { seed: 'audit', games: 1, players: 2 }),
+    ).rejects.toThrow(/crashed.*seed audit-2-0.*needs at least 3 players.*boardsmith simulate --games 1 --players 2 --seed audit"/s);
+  });
+
+  it('refuses to report a game that got stuck as having no findings', async () => {
+    const { TypedNameGame } = await import('./choice-cardinality.fixture.js');
+    const { auditChoiceCardinality } = await import('./choice-cardinality.js');
+
+    await expect(auditChoiceCardinality(TypedNameGame, { seed: 'audit', games: 1 })).rejects.toThrow(
+      /got stuck.*seed audit-2-0.*text input 'nickname'/s,
+    );
+  });
+
+  it('plays at the seat count it is given', async () => {
+    const { ThreeSeatWideGame } = await import('./choice-cardinality.fixture.js');
+    const { auditChoiceCardinality } = await import('./choice-cardinality.js');
+
+    expect(await auditChoiceCardinality(ThreeSeatWideGame, { seed: 'audit', games: 1, players: 3 })).toEqual([
+      { action: 'shout', selection: 'verb', maxCandidates: 40 },
+    ]);
+  });
 });

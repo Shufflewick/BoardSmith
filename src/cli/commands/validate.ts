@@ -97,7 +97,7 @@ export async function validateCommand(): Promise<void> {
   results.push(await validateRequiredFiles(cwd, worldMode));
 
   // 7. Choice cardinality — the panel offers hierarchy, never free text (#172).
-  results.push(await validateChoiceCardinality(cwd));
+  results.push(await validateChoiceCardinality(cwd, worldMode));
 
   // 8. The compiled rules agree with boardsmith.json, exactly as build requires.
   results.push(await validateRulesAgreement(cwd));
@@ -108,7 +108,8 @@ export async function validateCommand(): Promise<void> {
     process.exit(1);
   }
 
-  for (const line of successGuidance(worldMode)) console.log(line);
+  const warnings = results.filter((r) => !r.passed && r.severity === 'warning').length;
+  for (const line of successGuidance(worldMode, warnings)) console.log(line);
 }
 
 /** One check's icon and status word: pass, advisory warning, or failure. */
@@ -148,12 +149,21 @@ function printResults(results: ValidationResult[]): void {
  * the table's "play through your game, watch for flow-step warnings" advice
  * names diagnostics that world can never produce.
  *
+ * `warnings` is how many checks ended in a warning. A warning does not block,
+ * but it can be a check that could not run, so a run with any is never summed
+ * up as every check having passed (#306).
+ *
  * Returned as lines rather than printed so the two backends' guidance is
  * assertable without capturing stdout.
  */
-export function successGuidance(isWorld: boolean): string[] {
+export function successGuidance(isWorld: boolean, warnings: number): string[] {
   const lines = [
-    chalk.green('All validation checks passed!\n'),
+    warnings === 0
+      ? chalk.green('All validation checks passed!\n')
+      : chalk.yellow(
+          `Validation passed with ${warnings} warning(s). They do not block publishing, but read them above: ` +
+            'a warning is either something to fix or a check that could not run.\n',
+        ),
     chalk.cyan('Next steps:'),
   ];
   if (isWorld) {
@@ -1123,18 +1133,35 @@ export function buildChoiceCardinalityResult(
  * The counts here come from the engine's own move enumeration, which is the
  * same enumeration the panel, the board and the bots read.
  *
- * It never blocks. A game that cannot be loaded or randomly driven is reported
- * as a warning that the check could not run, never as a pass: a check that did
- * not run has not found the game clean (#306).
+ * It plays at the definition's `minPlayers`, a seat count the game supports.
+ *
+ * It never blocks. A game that cannot be loaded or randomly played through is
+ * reported as a warning that the check could not run, never as a pass: a check
+ * that did not run has not found the game clean (#306). A world is reported the
+ * same way, because the random simulator plays table flows and a world has none.
  */
-export async function validateChoiceCardinality(cwd: string): Promise<ValidationResult> {
+export async function validateChoiceCardinality(cwd: string, isWorld: boolean): Promise<ValidationResult> {
+  if (isWorld) {
+    return {
+      name: 'Choice cardinality',
+      passed: false,
+      severity: 'warning',
+      message:
+        'Not checked: this check plays random table games, and a world has no table flow to play. ' +
+        'Check the size of your world commands\' choice lists by hand in boardsmith dev.',
+    };
+  }
+
   const spinner = ora('Checking choice cardinality...').start();
 
   try {
     const gameDefinition = await loadProjectRules(cwd);
+    if (gameDefinition.minPlayers === undefined) {
+      throw new Error('your gameDefinition declares no minPlayers, so there is no seat count to play it at');
+    }
     const findings = await auditChoiceCardinality(
       gameDefinition.gameClass as new (options: GameOptions) => Game,
-      { seed: 'choice-cardinality', games: 2, timeout: 5000 },
+      { seed: 'choice-cardinality', games: 2, players: gameDefinition.minPlayers, timeout: 5000 },
     );
 
     const result = buildChoiceCardinalityResult(findings);
@@ -1148,8 +1175,8 @@ export async function validateChoiceCardinality(cwd: string): Promise<Validation
       passed: false,
       severity: 'warning',
       message:
-        `This check could not run, so your choice lists were not checked: the game could not be ` +
-        `loaded and played headlessly (${(error as Error).message}). Fix that and run boardsmith validate again.`,
+        `This check could not run, so your choice lists were not checked. Reason: ` +
+        `${(error as Error).message.replace(/\.$/, '')}. Fix that and run boardsmith validate again.`,
     };
   }
 }
