@@ -386,9 +386,21 @@ function printReport(result: DoctorResult, fixed: boolean): void {
   if (fixed) {
     console.log(`${moved} fixed, ${conflicts} conflict(s) left for you.`);
   } else {
-    console.log(
-      `${pending} to fix, ${conflicts} conflict(s).\n` +
-        `Run ${chalk.cyan('boardsmith doctor --fix')} to put them right.`,
-    );
+    console.log(closingAdvice(pending, conflicts));
   }
+}
+
+/**
+ * What to do next after a report without `--fix`. `--fix` resolves only the fixable findings, so
+ * it is offered only for those; conflicts are sent to the hand-edit instructions printed above.
+ */
+function closingAdvice(pending: number, conflicts: number): string {
+  const fixCommand = chalk.cyan('boardsmith doctor --fix');
+  const handEdit = '--fix cannot resolve them. Follow the instructions printed under each one above.';
+  if (conflicts === 0) return `${pending} to fix.\nRun ${fixCommand} to put them right.`;
+  if (pending === 0) return `${conflicts} conflict(s) need a hand edit; ${handEdit}`;
+  return (
+    `${pending} to fix, ${conflicts} conflict(s).\n` +
+    `Run ${fixCommand} to put the ${pending} fixable finding(s) right. The conflict(s) need a hand edit; ${handEdit}`
+  );
 }
