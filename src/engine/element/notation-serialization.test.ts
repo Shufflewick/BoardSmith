@@ -12,7 +12,7 @@ import { Game, Space, Player } from '../index.js';
 class NotationGame extends Game<NotationGame, Player> {}
 
 class Square extends Space<NotationGame> {
-  row!: number;
+  declare row: number;
   col!: number;
   get notation(): string {
     return `${String.fromCharCode(97 + this.col)}${8 - this.row}`;

@@ -1972,6 +1972,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
   async rewindToAction(targetActionIndex: number): Promise<{
     success: boolean;
     error?: string;
+    errorCode?: ErrorCode;
     actionsDiscarded?: number;
     state?: PlayerGameState;
   }> {

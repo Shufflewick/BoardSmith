@@ -350,7 +350,7 @@ describe('autoAdvanceTutorial', () => {
     const steps = Array.from({ length: 5 }, (_, i) => ({
       id: `step-${i + 1}`,
       gate: { action: 'pass' as const },
-      advanceWhen: { 'always': (_ctx: unknown) => true } as Record<string, () => boolean>,
+      advanceWhen: { always: () => true },
     }));
     runner.game.tutorialDefinition = { steps };
     runner.game.tutorialProgress.set(1, { stepId: 'step-1', status: 'running' });

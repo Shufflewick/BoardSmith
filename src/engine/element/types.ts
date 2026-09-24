@@ -240,5 +240,7 @@ export type ElementAttributes<T extends GameElement> = Partial<
     player?: Player;
     row?: number;
     column?: number;
+    $image?: ImageRef;
+    $images?: Record<string, ImageRef>;
   }
 >;

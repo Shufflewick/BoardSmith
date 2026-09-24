@@ -83,7 +83,7 @@ describe('formatValidationErrors', () => {
     const output = formatValidationErrors({
       valid: true,
       errors: [],
-      warnings: [{ type: 'property-mismatch', message: 'value changed type', path: ['board'] }],
+      warnings: [{ type: 'type-change', message: 'value changed type', path: ['board'] }],
     });
     expect(output).toContain('Warnings:');
     expect(output).toContain('value changed type');
@@ -95,7 +95,7 @@ describe('formatValidationErrors', () => {
     const output = formatValidationErrors({
       valid: false,
       errors: [{ type: 'missing-class', message: 'Unknown class Card', path: [], suggestion: 'Register Card' }],
-      warnings: [{ type: 'property-mismatch', message: 'value changed type', path: [] }],
+      warnings: [{ type: 'type-change', message: 'value changed type', path: [] }],
     });
     expect(output).toContain('ERROR 1');
     expect(output).toContain('Warnings:');

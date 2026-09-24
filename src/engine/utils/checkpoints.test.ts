@@ -97,9 +97,14 @@ describe('createActionCheckpoint', () => {
   });
 
   it('captures the element sequence counter', () => {
-    const before = createActionCheckpoint(runner.game).sequence;
+    const sequenceNow = () => {
+      const { sequence } = createActionCheckpoint(runner.game);
+      if (sequence === undefined) throw new Error('createActionCheckpoint recorded no element sequence counter');
+      return sequence;
+    };
+    const before = sequenceNow();
     runner.performAction('add', 1, { value: 1 });
-    expect(createActionCheckpoint(runner.game).sequence).toBeGreaterThan(before);
+    expect(sequenceNow()).toBeGreaterThan(before);
   });
 
   it('captures the RNG position, so a restore need not replay to re-advance it', () => {

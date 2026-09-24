@@ -21,11 +21,7 @@ const RULE_NAMES = [
   'no-silent-dispatch-fallthrough',
 ];
 
-const recommended = () => configs.recommended as {
-  name: string;
-  plugins: Record<string, unknown>;
-  rules: Record<string, string>;
-};
+const recommended = () => configs.recommended;
 
 describe('plugin metadata', () => {
   it('identifies itself so ESLint can report which plugin flagged a problem', () => {
@@ -91,8 +87,8 @@ describe('recommended config', () => {
 
   it('references only rules that actually exist', () => {
     for (const key of Object.keys(recommended().rules)) {
-      expect(rules[key.replace('boardsmith/', '')], `${key} has no implementation`)
-        .toBeDefined();
+      expect(Object.keys(rules), `${key} has no implementation`)
+        .toContain(key.replace('boardsmith/', ''));
     }
   });
 });
