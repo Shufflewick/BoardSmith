@@ -951,6 +951,9 @@ describe('CLI string claims in scaffold.md match the CLI source (WR-07)', () => 
     const scaffold = read('ingest/scaffold.md');
     expect(scaffold).toContain('npx boardsmith init <name> --rulebook <absolute-rulebookPath> --into-existing');
     expect(scaffold).not.toContain('There is no in-place mode');
+    // The case check that decides where Step 1 scaffolds has to know the mode exists, or a
+    // session in a research repository scaffolds a nested `<name>/` beside the research.
+    expect(read('ingest-rules.md')).toContain('init --into-existing');
     // The two refusals the file tells a session to expect are the ones init.ts raises.
     const initSrc = read('../../commands/init.ts');
     expect(initSrc).toContain('not the top folder of a git repository');

@@ -147,10 +147,10 @@ do not reorder them, and do not treat "it compiled" as sufficient without also c
 serves. Failures at any step STOP the sequence with an actionable message (what failed, the exact
 error, and what to fix) — never proceed past a failing step assuming it will "work once deployed."
 
-1. **Compile gate** — from inside `<name>/`:
+1. **Compile gate** — from inside the project:
 
    ```bash
-   cd <name>
+   cd <name>   # skip this line after --into-existing: you are already in the project
    npx vue-tsc --noEmit
    ```
 
@@ -195,8 +195,8 @@ error, and what to fix) — never proceed past a failing step assuming it will "
    required by the plan itself: any server this skill starts must be killed before it returns.
 
 Only once all three steps have completed (compile clean, serve confirmed, process killed) is the
-scaffold considered verified and chunk 1 work may begin against it. The session stays inside
-`<name>/` from here on — every subsequent ingest step (transcription/interview, synthesis,
+scaffold considered verified and chunk 1 work may begin against it. The session stays inside the
+project (`<name>/`, or the repository's top folder after `--into-existing`) from here on — every subsequent ingest step (transcription/interview, synthesis,
 sketch writing) writes its artifacts into this directory, never the parent.
 
 ## Required Reading Pointer
