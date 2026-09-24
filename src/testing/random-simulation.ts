@@ -165,34 +165,40 @@ export interface SimulationResults {
   seed: string;
 }
 
+/** The seats a flow state is waiting on, each with the actions it offers them. @internal */
+function offeredSeats(flowState: FlowState): Array<{ seat: number; actionNames: string[] }> {
+  if (flowState.currentPlayer !== undefined && flowState.availableActions) {
+    return [{ seat: flowState.currentPlayer, actionNames: flowState.availableActions }];
+  }
+  return (flowState.awaitingPlayers ?? [])
+    .filter((p) => !p.completed)
+    .map((p) => ({ seat: p.playerIndex, actionNames: p.availableActions }));
+}
+
 /**
- * Picks the player who should act and the actions available to them.
- * Handles both single-player action steps and simultaneous-action steps.
+ * The seats that can act right now, each with its ENABLED actions, plus why
+ * every refused action is refused.
+ *
+ * An action's `.disabled()` rule (and a tutorial gate) keeps it in the flow's
+ * available actions so the panel can grey it out and say why, while the
+ * server refuses it. A refused action is not a move, so it is left out here,
+ * through `game.getDisabledActions`, the same channel the panel reads (#318).
  * @internal
  */
-function chooseActor(
-  flowState: FlowState,
-  rng: SeededRandom
-): { seat: number; actionNames: string[] } | undefined {
-  if (
-    flowState.currentPlayer !== undefined &&
-    flowState.availableActions &&
-    flowState.availableActions.length > 0
-  ) {
-    return { seat: flowState.currentPlayer, actionNames: flowState.availableActions };
+function enabledSeats(
+  game: Game,
+  flowState: FlowState
+): { seats: Array<{ seat: number; actionNames: string[] }>; refused: string[] } {
+  const seats: Array<{ seat: number; actionNames: string[] }> = [];
+  const refused: string[] = [];
+  for (const { seat, actionNames } of offeredSeats(flowState)) {
+    const disabled = game.getDisabledActions(seat);
+    const enabled = actionNames.filter((name) => !(name in disabled));
+    const blocked = actionNames.filter((name) => name in disabled);
+    refused.push(...blocked.map((name) => `player ${seat}'s '${name}': ${disabled[name]}`));
+    if (enabled.length > 0) seats.push({ seat, actionNames: enabled });
   }
-
-  if (flowState.awaitingPlayers && flowState.awaitingPlayers.length > 0) {
-    const candidates = flowState.awaitingPlayers.filter(
-      p => !p.completed && p.availableActions.length > 0
-    );
-    if (candidates.length > 0) {
-      const chosen = rng.pick(candidates);
-      return { seat: chosen.playerIndex, actionNames: chosen.availableActions };
-    }
-  }
-
-  return undefined;
+  return { seats, refused };
 }
 
 /**
@@ -482,13 +488,15 @@ async function simulateSingleGame<G extends Game>(
         break;
       }
 
-      const actor = chooseActor(flowState, rng);
-      if (!actor) {
+      const { seats, refused } = enabledSeats(testGame.game, flowState);
+      if (seats.length === 0) {
         stuck = true;
         stuckReason =
-          'Game is awaiting input but no player has any available action to take.';
+          'Game is awaiting input but no player has an enabled action to take.' +
+          (refused.length > 0 ? ` Refused: ${refused.join('; ')}.` : '');
         break;
       }
+      const actor = rng.pick(seats);
 
       const { moves, reasons } = buildRandomMoves(
         testGame,

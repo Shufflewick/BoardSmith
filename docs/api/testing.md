@@ -278,6 +278,13 @@ test('game always terminates', async () => {
 });
 ```
 
+The simulator plays only moves a player could make. An action refused by its
+`.disabled()` rule or by a tutorial gate is still shown to a player, greyed
+out with its reason, but the simulator never submits it. While any seat has an
+enabled action, one of those seats moves. When no seat has one, the game stops
+as stuck with "no player has an enabled action to take", followed by each
+refused action and its reason.
+
 A game whose longest or heaviest configuration sits behind a game option needs
 `gameOptions`, or the run only ever measures the default one:
 
