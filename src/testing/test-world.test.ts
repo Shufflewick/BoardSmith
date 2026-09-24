@@ -171,6 +171,76 @@ describe('TestWorld: a resident world a test can construct', () => {
   });
 });
 
+/**
+ * #323: the two roads a host takes that `take` and `offersFor` do not cover.
+ * An arrival is the platform issuing the bundle's `presence.onArrive` verb as
+ * the clock, and a later pick is re-asked with the earlier answers bound.
+ */
+describe('TestWorld: arrivals and re-asked picks, as a host drives them', () => {
+  it('announces an arrival through the bundle’s own `onArrive` verb, as the clock', async () => {
+    const world = await createTestWorld({ definition: bundle(greetedVaultWorld()) });
+
+    await world.arrive(2);
+
+    expect(bytesOf((await world.getPlayerView(1)).state)).toContain('Seat 2 arrived.');
+    await world.close();
+  });
+
+  it('refuses an arrival for a seat that is not watching, and says how to make it one', async () => {
+    const world = await createTestWorld({ definition: bundle(greetedVaultWorld()), watching: [1] });
+
+    await expect(world.arrive(3)).rejects.toThrow(/seat 3 is not watching.*watching/is);
+    await world.close();
+  });
+
+  it('changes nothing when the bundle declares no `onArrive`, exactly as a host does', async () => {
+    const world = await createTestWorld({ definition: bundle() });
+    const before = world.revision;
+
+    await world.arrive(1);
+
+    expect(world.revision).toBe(before);
+    await world.close();
+  });
+
+  it('re-asks a later pick with the earlier answers bound', async () => {
+    const pair = worldAction<VaultWorld>('pair')
+      .prompt('Pair two things')
+      .needs(() => ['commons'])
+      .chooseFrom('first', { choices: ['a', 'b'] })
+      .chooseFrom('second', {
+        choices: ({ args }) => (args.first === undefined ? [] : [`${String(args.first)}-1`, `${String(args.first)}-2`]),
+      })
+      .execute(() => {});
+    const world = await createTestWorld({
+      definition: bundle({ ...vaultWorldBlock(), actions: [pair] } as WorldDefinition),
+    });
+
+    const pick = await world.resolvePick(1, 'pair', 'second', { first: 'b' });
+
+    expect(pick.choices?.map((choice) => choice.value)).toEqual(['b-1', 'b-2']);
+    await world.close();
+  });
+});
+
+/** The vault world with an arrival hook that writes the arrival on the
+ *  commons, so a test can see that the platform's arrival reached the world. */
+function greetedVaultWorld(): WorldDefinition {
+  const base = vaultWorldBlock();
+  const greet = worldClockAction<VaultWorld>('greet')
+    .prompt('The platform: a seat arriving')
+    .needs(() => ['commons'])
+    .execute((args, ctx) => {
+      const commons = ctx.world.partition('commons') as unknown as { notice: string };
+      commons.notice = `Seat ${String(args.seat)} arrived.`;
+    });
+  return {
+    ...base,
+    actions: [...base.actions, greet],
+    presence: { onArrive: 'greet' },
+  } as WorldDefinition;
+}
+
 /** How many coins this frame says are in the seat's own vault. */
 function coinsIn(view: { state: unknown }): number {
   const found = JSON.stringify(view.state).match(/"tally":"(\**)"/);

@@ -173,10 +173,10 @@ function manualClock(start: number): ManualClock {
  * not launched has no partitions and nothing to look at, and making a caller
  * remember to launch it would be a harness whose easy path is the wrong one.
  *
- * EVERY PUBLIC MEMBER CARRIES A `fallow-ignore-next-line unused-class-member`.
- * They are called from test files and from a game's own suite, neither of which
- * the dead-code scan counts as a consumer -- `ResidentWorld` carries the same
- * note for the same reason.
+ * A PUBLIC MEMBER ONLY TESTS CALL CARRIES A `fallow-ignore-next-line
+ * unused-class-member`. Test files and a game's own suite are not consumers the
+ * dead-code scan counts -- `ResidentWorld` carries the same note for the same
+ * reason. The members `boardsmith validate`'s world audit drives need none.
  */
 export class TestWorld {
   readonly #world: ResidentWorld;
@@ -267,7 +267,6 @@ export class TestWorld {
    * empty frame: on the wire that seat is told its view refused, and a test
    * that quietly scanned nothing would be a gate that cannot fail.
    */
-  // fallow-ignore-next-line unused-class-member
   async getPlayerView(seat: number): Promise<WorldSeatView> {
     return this.#world.run(async () => {
       const player = worldSeatPlayer(seat);
@@ -308,9 +307,48 @@ export class TestWorld {
   }
 
   /** Every action offered to this seat, disabled ones included. */
-  // fallow-ignore-next-line unused-class-member
   async offersFor(seat: number): Promise<readonly WorldActionOffer[]> {
     return this.#world.run(() => this.#world.offersFor(worldSeatPlayer(seat)));
+  }
+
+  /**
+   * ONE SELECTION OF AN OFFER, RE-ASKED WITH THE ANSWERS SO FAR BOUND.
+   *
+   * An offer is enumerated with nothing bound, so a later selection whose
+   * candidates read an earlier answer offers nothing there. The world shell
+   * asks again once the player has answered, and this is that call: the
+   * narrowed list here is the list `take` is validated against.
+   */
+  async resolvePick(
+    seat: number,
+    action: string,
+    selection: string,
+    args: Readonly<Record<string, unknown>>,
+  ): Promise<WorldActionOffer['selections'][number]> {
+    return this.#world.run(() =>
+      this.#world.resolvePick(worldSeatPlayer(seat), action, selection, args),
+    );
+  }
+
+  /**
+   * THIS SEAT ARRIVES, as a host announces it when a player attaches.
+   *
+   * The platform issues the bundle's `world.presence.onArrive` verb as the
+   * clock with `{ seat, present: true }`. A bundle that declares no such verb
+   * is told nothing, exactly as a host tells it nothing. The seat must be one
+   * of `watching`, because an arrival is a player turning up and presence is
+   * who is here.
+   */
+  async arrive(seat: number): Promise<void> {
+    if (!this.#watching.includes(seat)) {
+      throw new Error(
+        `Seat ${seat} is not watching this world, so it cannot arrive in it. Name it in ` +
+          '`watching` when you create the test world.',
+      );
+    }
+    const hook = this.#world.presenceHooks?.onArrive;
+    if (hook === undefined) return;
+    await this.#world.run(() => this.#world.clockCommand(hook, { seat, present: true }));
   }
 
   /**
@@ -320,7 +358,6 @@ export class TestWorld {
    * the road a player's click takes. The refusal a world raises is raised here,
    * unedited, because it is the sentence the author can act on.
    */
-  // fallow-ignore-next-line unused-class-member
   async take(seat: number, action: string, args: Record<string, unknown> = {}): Promise<void> {
     await this.#world.run(() =>
       this.#world.command({
@@ -363,7 +400,6 @@ export class TestWorld {
    * `boardsmith dev`'s "fire due events now" control. Answers false when
    * nothing was scheduled, because there was then nothing to fire.
    */
-  // fallow-ignore-next-line unused-class-member
   async fireDue(): Promise<boolean> {
     return this.#world.run(async () => (await this.#world.fireDue()) !== null);
   }
@@ -408,7 +444,6 @@ export class TestWorld {
   /** Stop, leaving nothing resident that is not durable. A memory store has
    *  nothing to release, so this is here for the shape a host has: a test that
    *  calls it and one that does not get the same world. */
-  // fallow-ignore-next-line unused-class-member
   async close(): Promise<void> {
     await this.#world.close();
   }
