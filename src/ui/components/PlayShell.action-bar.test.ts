@@ -285,6 +285,19 @@ describe('a minimized bar never strands the player', () => {
     expect(collapsed(wrapper)).toBe(false);
   });
 
+  it('opens again when the SAME action starts again inside one flush (#384)', async () => {
+    const { wrapper, controller } = await asked();
+    await pushDownAgain(wrapper);
+
+    // A reply that lands after the new state: the finished `move` clears and the
+    // auto-start opens `move` again before Vue flushes, so the name never
+    // changes between two runs of a watcher.
+    controller.cancel();
+    await controller.start('move');
+    await flush();
+    expect(collapsed(wrapper)).toBe(false);
+  });
+
   it('leaves the bar alone when the player never minimized it', async () => {
     const { wrapper, controller, minimized } = mountDock();
     await flush();

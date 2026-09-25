@@ -412,6 +412,16 @@ export interface UseActionControllerReturn {
   actionCompletedTick: Readonly<Ref<number>>;
 
   /**
+   * Increments each time an action starts (`start()`, or a followUp the server
+   * handed back), including when the action that just finished starts again.
+   * `currentAction` names the action, and this names the start: the same action
+   * can finish and restart inside one Vue flush, so a watch on `currentAction`
+   * alone sees no change. Anything that mirrors the current action (the board
+   * bridge, the action bar) watches both (#384).
+   */
+  actionStartTick: Readonly<Ref<number>>;
+
+  /**
    * The most recently resolved action and its server result — `null` until one
    * resolves. Set at EVERY terminal resolution site (execute, executeCurrentAction,
    * and both pick-driven completion paths), on failure as well as success, so a
