@@ -19,66 +19,10 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import {
-  Game,
-  Player,
-  Piece,
-  Space,
-  Action,
-  defineFlow,
-  actionStep,
-  type GameOptions,
-} from '../engine/index.js';
 import { GameRunner } from '../runtime/index.js';
 import { GameSession } from './game-session.js';
 import type { StorageAdapter, StoredGameState } from './types.js';
-
-class Pawn extends Piece<MoveGame> {}
-class Room extends Space<MoveGame> {}
-
-class MoveGame extends Game<MoveGame, Player> {
-  rooms: Room[] = [];
-
-  constructor(options: GameOptions) {
-    super(options);
-
-    this.rooms = ['bridge', 'engine', 'hold'].map((n) => this.create(Room, n));
-    this.rooms[0].create(Pawn, 'pawn');
-
-    this.registerAction(
-      Action.create('move')
-        .chooseElement('destination', {
-          // Every room but the one the pawn is standing in — the answer set an
-          // undo invalidates.
-          elements: (ctx) => {
-            const game = ctx.game as MoveGame;
-            const pawn = game.first(Pawn)!;
-            return game.rooms.filter((r) => r !== pawn.parent);
-          },
-        })
-        .execute((args, ctx) => {
-          const game = ctx.game as MoveGame;
-          game.first(Pawn)!.putInto(args.destination as Room);
-          return { success: true };
-        })
-    );
-
-    this.setFlow(
-      defineFlow({
-        root: actionStep({
-          actions: ['move'],
-          player: (ctx) => ctx.game.getPlayer(1)!,
-          repeatUntil: () => false,
-          maxMoves: 20,
-        }),
-      })
-    );
-  }
-
-  pawnRoom(): string {
-    return this.first(Pawn)!.parent!.name!;
-  }
-}
+import { MoveGame } from './move-game.test-helper.js';
 
 /** Persists a JSON round-trip, exactly like a real KV/SQLite adapter. */
 class JsonRoundTripStorage implements StorageAdapter {

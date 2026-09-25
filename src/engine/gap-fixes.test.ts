@@ -126,13 +126,17 @@ describe('the root-field audience table is reachable from outside (#32)', () => 
   });
 });
 
-describe('useBoardActionBridge is on the public UI surface (#30)', () => {
-  it('is exported from boardsmith/ui alongside the pieces it pairs with', () => {
+describe('a game wires a table\'s actions through one public function (#30, #378)', () => {
+  it('exports useTableActionWiring from boardsmith/ui alongside the pieces it pairs with', () => {
     // Statically imported: see the note in `src/ui/utils/color.test.ts`
     // (ShufflewickPub #385). The barrel's transform is not this test's cost.
-    expect(ui.useBoardActionBridge).toBeTypeOf('function');
+    expect(ui.useTableActionWiring).toBeTypeOf('function');
     // The two it is useless without, already public.
     expect(ui.createBoardInteraction).toBeTypeOf('function');
     expect(ui.provideBoardInteraction).toBeTypeOf('function');
+  });
+
+  it('does not export the bridge itself, whose options track engine internals (#378)', () => {
+    expect('useBoardActionBridge' in ui).toBe(false);
   });
 });
