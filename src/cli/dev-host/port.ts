@@ -24,18 +24,20 @@ import { createServer } from 'node:net';
 export function requireFreePort(port: number, host: string): Promise<void> {
   return new Promise((resolve, reject) => {
     const probe = createServer();
-    probe.once('error', (error: NodeJS.ErrnoException) => {
-      reject(
-        new Error(
-          error.code === 'EADDRINUSE'
-            ? `Port ${port} is already in use on ${host}, so boardsmith dev did not start. ` +
-                'Stop whatever holds it (often another `boardsmith dev` for this project), ' +
-                'or pick another port with --port <number>.'
-            : `boardsmith dev cannot listen on port ${port} on ${host} (${error.code ?? error.message}). ` +
-                'Pick another port with --port <number>.',
-        ),
-      );
-    });
+    probe.once('error', (error: NodeJS.ErrnoException) => reject(new Error(portRefusal(port, host, error))));
     probe.listen(port, host, () => probe.close(() => resolve()));
   });
+}
+
+/**
+ * Why `port` cannot be listened on, in words that say how to pick another.
+ * The check above and the host's own listen give the same answer.
+ */
+export function portRefusal(port: number, host: string, error: NodeJS.ErrnoException): string {
+  return error.code === 'EADDRINUSE'
+    ? `Port ${port} is already in use on ${host}, so boardsmith dev did not start. ` +
+        'Stop whatever holds it (often another `boardsmith dev` for this project), ' +
+        'or pick another port with --port <number>.'
+    : `boardsmith dev cannot listen on port ${port} on ${host} (${error.code ?? error.message}). ` +
+        'Pick another port with --port <number>.';
 }
