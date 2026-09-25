@@ -337,13 +337,6 @@
       ]
     },
     {
-      "content": "0c6bf5359efd9ffc",
-      "lines": 7,
-      "files": [
-        "src/ui/components/GameShell.time-travel-desync.test.ts"
-      ]
-    },
-    {
       "content": "0c846bab462d5806",
       "lines": 19,
       "files": [
@@ -480,6 +473,13 @@
       ]
     },
     {
+      "content": "108142b300583293",
+      "lines": 7,
+      "files": [
+        "src/ui/components/GameShell.time-travel-desync.test.ts"
+      ]
+    },
+    {
       "content": "1094548a589ae037",
       "lines": 6,
       "files": [
@@ -517,6 +517,13 @@
       "lines": 11,
       "files": [
         "src/engine/flow/engine.test.ts"
+      ]
+    },
+    {
+      "content": "11671720214759be",
+      "lines": 16,
+      "files": [
+        "src/ui/composables/useDragDropTargets.test.ts"
       ]
     },
     {
@@ -690,6 +697,13 @@
       "files": [
         "src/bot/mcts-redaction.test.ts",
         "src/bot/mcts-undo-bookkeeping.test.ts"
+      ]
+    },
+    {
+      "content": "154b3563d8af9ca9",
+      "lines": 28,
+      "files": [
+        "src/session/build-player-state.test.ts"
       ]
     },
     {
@@ -1021,6 +1035,13 @@
       ]
     },
     {
+      "content": "234f79452343bbf1",
+      "lines": 12,
+      "files": [
+        "src/ui/composables/useActionController.ts"
+      ]
+    },
+    {
       "content": "2375f84bcc213aab",
       "lines": 8,
       "files": [
@@ -1166,6 +1187,14 @@
       "lines": 5,
       "files": [
         "src/cli/dev-host/multiplayer-host.test.ts"
+      ]
+    },
+    {
+      "content": "2a8bd3ccdf6e2878",
+      "lines": 6,
+      "files": [
+        "src/ui/components/GameShell.time-travel-desync.test.ts",
+        "src/ui/composables/useBoardActionBridge.test.ts"
       ]
     },
     {
@@ -1436,13 +1465,6 @@
       ]
     },
     {
-      "content": "36d904bdc52a7f6a",
-      "lines": 12,
-      "files": [
-        "src/ui/composables/useActionController.ts"
-      ]
-    },
-    {
       "content": "36e4a55196371800",
       "lines": 10,
       "files": [
@@ -1586,13 +1608,6 @@
       "files": [
         "src/session/lobby-host-authorization.test.ts",
         "src/session/lobby-identity-security.test.ts"
-      ]
-    },
-    {
-      "content": "3bfc9a749d3a9432",
-      "lines": 31,
-      "files": [
-        "src/ui/composables/useActionController.picks.test.ts"
       ]
     },
     {
@@ -1755,14 +1770,6 @@
       ]
     },
     {
-      "content": "408491d2cebdba22",
-      "lines": 40,
-      "files": [
-        "src/ui/composables/useGameGrid.ts",
-        "src/ui/composables/useHexGrid.ts"
-      ]
-    },
-    {
       "content": "40da7028c29db6a6",
       "lines": 6,
       "files": [
@@ -1856,10 +1863,10 @@
       ]
     },
     {
-      "content": "44090da38aa93919",
-      "lines": 27,
+      "content": "43e400cf057b9eb8",
+      "lines": 18,
       "files": [
-        "src/ui/composables/useActionController.test.ts"
+        "src/ui/composables/useDragDropTargets.test.ts"
       ]
     },
     {
@@ -1889,6 +1896,13 @@
       "lines": 13,
       "files": [
         "src/ui/composables/useActionAnimations.test.ts"
+      ]
+    },
+    {
+      "content": "456ea3da7695c17f",
+      "lines": 23,
+      "files": [
+        "src/ui/composables/useActionController.picks.test.ts"
       ]
     },
     {
@@ -1986,14 +2000,6 @@
       "files": [
         "src/ui/components/helpers/HintOverlay.vue",
         "src/ui/components/helpers/TutorialOverlay.vue"
-      ]
-    },
-    {
-      "content": "49246dde8542fbe8",
-      "lines": 6,
-      "files": [
-        "src/ui/components/GameShell.time-travel-desync.test.ts",
-        "src/ui/composables/useBoardActionBridge.test.ts"
       ]
     },
     {
@@ -2680,13 +2686,6 @@
       ]
     },
     {
-      "content": "615ee5926103ee9f",
-      "lines": 7,
-      "files": [
-        "src/ui/components/GameShell.time-travel-desync.test.ts"
-      ]
-    },
-    {
       "content": "61767022c362bc0d",
       "lines": 17,
       "files": [
@@ -2736,13 +2735,6 @@
       "lines": 9,
       "files": [
         "src/ui/composables/useAutoZoom.test.ts"
-      ]
-    },
-    {
-      "content": "62d96b897ea01f5a",
-      "lines": 18,
-      "files": [
-        "src/ui/composables/useDragDropTargets.test.ts"
       ]
     },
     {
@@ -3046,6 +3038,13 @@
       "lines": 6,
       "files": [
         "src/bot-trainer/feature-templates.ts"
+      ]
+    },
+    {
+      "content": "6c2b277066195f33",
+      "lines": 27,
+      "files": [
+        "src/ui/composables/useActionController.picks.test.ts"
       ]
     },
     {
@@ -3466,14 +3465,6 @@
       ]
     },
     {
-      "content": "7b3c1383e45b2297",
-      "lines": 6,
-      "files": [
-        "src/ui/components/GameShell.time-travel-desync.test.ts",
-        "src/ui/composables/useBoardActionBridge.test.ts"
-      ]
-    },
-    {
       "content": "7bae9ac227fe3644",
       "lines": 28,
       "files": [
@@ -3552,6 +3543,13 @@
       "lines": 13,
       "files": [
         "scripts/ingest-harness/check.test.mjs"
+      ]
+    },
+    {
+      "content": "7f190d79bd9269c5",
+      "lines": 51,
+      "files": [
+        "src/ui/composables/useActionController.picks.test.ts"
       ]
     },
     {
@@ -3654,6 +3652,13 @@
       ]
     },
     {
+      "content": "81f9a1b1d7da14fe",
+      "lines": 43,
+      "files": [
+        "src/ui/composables/useActionController.picks.test.ts"
+      ]
+    },
+    {
       "content": "824c5aedf677b4ed",
       "lines": 18,
       "files": [
@@ -3665,13 +3670,6 @@
       "lines": 6,
       "files": [
         "src/session/testing/parity-contract.test.ts"
-      ]
-    },
-    {
-      "content": "82f336dca88adbcd",
-      "lines": 18,
-      "files": [
-        "src/ui/composables/useDragDropTargets.test.ts"
       ]
     },
     {
@@ -4120,13 +4118,6 @@
       "lines": 9,
       "files": [
         "src/cli/dev-host/world-host.test.ts"
-      ]
-    },
-    {
-      "content": "92731e60200765b8",
-      "lines": 43,
-      "files": [
-        "src/ui/composables/useActionController.picks.test.ts"
       ]
     },
     {
@@ -4771,17 +4762,17 @@
       ]
     },
     {
-      "content": "a7a00b0bd25269a5",
-      "lines": 16,
-      "files": [
-        "src/ui/composables/useDragDropTargets.test.ts"
-      ]
-    },
-    {
       "content": "a7ab40fc6ba0df4f",
       "lines": 11,
       "files": [
         "src/cli/commands/verify-enumerate.test.ts"
+      ]
+    },
+    {
+      "content": "a85fc001f8b33cda",
+      "lines": 23,
+      "files": [
+        "src/ui/composables/useActionController.test.ts"
       ]
     },
     {
@@ -4817,6 +4808,14 @@
       ]
     },
     {
+      "content": "a93977e804d09ed4",
+      "lines": 23,
+      "files": [
+        "src/ui/composables/useActionController.devtools.test.ts",
+        "src/ui/composables/useActionController.test.ts"
+      ]
+    },
+    {
       "content": "a9c07f897370671c",
       "lines": 6,
       "files": [
@@ -4843,13 +4842,6 @@
       "files": [
         "src/ui/components/auto-ui/renderers/GridBoardRenderer.a11y.test.ts",
         "src/ui/components/auto-ui/renderers/HexBoardRenderer.a11y.test.ts"
-      ]
-    },
-    {
-      "content": "aac32233caa06d16",
-      "lines": 51,
-      "files": [
-        "src/ui/composables/useActionController.picks.test.ts"
       ]
     },
     {
@@ -4960,6 +4952,20 @@
         "src/ui/components/auto-ui/AutoRenderer.vue",
         "src/ui/components/auto-ui/renderers/CardRenderer.vue",
         "src/ui/components/auto-ui/renderers/HandRenderer.vue"
+      ]
+    },
+    {
+      "content": "ae56fbfd585089c4",
+      "lines": 7,
+      "files": [
+        "src/ui/components/GameShell.time-travel-desync.test.ts"
+      ]
+    },
+    {
+      "content": "ae7822a30dfe1283",
+      "lines": 18,
+      "files": [
+        "src/ui/composables/useDragDropTargets.test.ts"
       ]
     },
     {
@@ -5122,13 +5128,6 @@
       ]
     },
     {
-      "content": "b3fcab1b6e774212",
-      "lines": 23,
-      "files": [
-        "src/ui/composables/useActionController.picks.test.ts"
-      ]
-    },
-    {
       "content": "b465006201ba6f35",
       "lines": 17,
       "files": [
@@ -5195,13 +5194,6 @@
     {
       "content": "b5ae123d2367040d",
       "lines": 14,
-      "files": [
-        "src/ui/composables/useActionController.test.ts"
-      ]
-    },
-    {
-      "content": "b5ec5165624d96f6",
-      "lines": 23,
       "files": [
         "src/ui/composables/useActionController.test.ts"
       ]
@@ -5381,6 +5373,13 @@
       ]
     },
     {
+      "content": "baf705eb5a7ef074",
+      "lines": 27,
+      "files": [
+        "src/ui/composables/useActionController.test.ts"
+      ]
+    },
+    {
       "content": "baf79d23925eeb54",
       "lines": 11,
       "files": [
@@ -5542,6 +5541,13 @@
       ]
     },
     {
+      "content": "c153d91dde1791dc",
+      "lines": 27,
+      "files": [
+        "src/ui/composables/useActionController.picks.test.ts"
+      ]
+    },
+    {
       "content": "c17a32777dbb5329",
       "lines": 11,
       "files": [
@@ -5637,6 +5643,13 @@
       ]
     },
     {
+      "content": "c4b4f05ba9f237f6",
+      "lines": 31,
+      "files": [
+        "src/ui/composables/useActionController.picks.test.ts"
+      ]
+    },
+    {
       "content": "c4b99bad013f2672",
       "lines": 7,
       "files": [
@@ -5701,13 +5714,6 @@
       "lines": 11,
       "files": [
         "src/session/teaching.test.ts"
-      ]
-    },
-    {
-      "content": "c677156f78d65ec6",
-      "lines": 27,
-      "files": [
-        "src/ui/composables/useActionController.picks.test.ts"
       ]
     },
     {
@@ -5781,13 +5787,6 @@
       "lines": 8,
       "files": [
         "src/ui/composables/useHexGrid.ts"
-      ]
-    },
-    {
-      "content": "ca7bbdca37e26800",
-      "lines": 28,
-      "files": [
-        "src/session/build-player-state.test.ts"
       ]
     },
     {
@@ -5916,14 +5915,6 @@
       "lines": 16,
       "files": [
         "src/cli/commands/verify-classify.test.ts"
-      ]
-    },
-    {
-      "content": "cf3f1b787ef41b99",
-      "lines": 23,
-      "files": [
-        "src/ui/composables/useActionController.devtools.test.ts",
-        "src/ui/composables/useActionController.test.ts"
       ]
     },
     {
@@ -6353,6 +6344,14 @@
       ]
     },
     {
+      "content": "dfba236a6f068165",
+      "lines": 6,
+      "files": [
+        "src/ui/components/GameShell.time-travel-desync.test.ts",
+        "src/ui/composables/useBoardActionBridge.test.ts"
+      ]
+    },
+    {
       "content": "dfdd7629371fb179",
       "lines": 13,
       "files": [
@@ -6393,13 +6392,6 @@
       "lines": 12,
       "files": [
         "src/cli/commands/verify-run.test.ts"
-      ]
-    },
-    {
-      "content": "e0d5d09dc2fb2173",
-      "lines": 27,
-      "files": [
-        "src/ui/composables/useActionController.picks.test.ts"
       ]
     },
     {
@@ -6977,6 +6969,13 @@
       ]
     },
     {
+      "content": "f66b52f229319278",
+      "lines": 20,
+      "files": [
+        "src/ui/composables/useDragDropTargets.test.ts"
+      ]
+    },
+    {
       "content": "f6877c85565b366f",
       "lines": 11,
       "files": [
@@ -7169,6 +7168,14 @@
       ]
     },
     {
+      "content": "fd899edcd7857c9a",
+      "lines": 40,
+      "files": [
+        "src/ui/composables/useGameGrid.ts",
+        "src/ui/composables/useHexGrid.ts"
+      ]
+    },
+    {
       "content": "fdbbdd0ef7a968eb",
       "lines": 14,
       "files": [
@@ -7212,13 +7219,6 @@
       "files": [
         "src/ui/composables/useAutoZoom.pinned-board.test.ts",
         "src/ui/composables/useAutoZoom.reproducible.test.ts"
-      ]
-    },
-    {
-      "content": "ff97acc25945fd87",
-      "lines": 20,
-      "files": [
-        "src/ui/composables/useDragDropTargets.test.ts"
       ]
     },
     {

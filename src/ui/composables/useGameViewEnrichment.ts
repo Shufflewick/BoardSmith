@@ -7,8 +7,8 @@
  */
 
 import type { Ref } from 'vue';
-import type { GameElement } from '../types.js';
-import type { ValidElement, PickMetadata } from './useActionControllerTypes.js';
+import type { GameViewElement } from '../types.js';
+import type { EnrichedValidElement, EnrichedPickMetadata } from './useActionControllerTypes.js';
 
 /**
  * Create enrichment functions bound to a gameView and currentArgs.
@@ -18,20 +18,20 @@ import type { ValidElement, PickMetadata } from './useActionControllerTypes.js';
  * @returns Object with enrichment functions
  */
 export function createEnrichment(
-  gameView: Ref<GameElement | null | undefined> | undefined,
+  gameView: Ref<GameViewElement | null | undefined> | undefined,
   currentArgs: Ref<Record<string, unknown>>
 ) {
   // Track which element IDs we've already warned about (to avoid spam)
   const warnedMissingElements = new Set<number>();
-  let indexedRoot: GameElement | null | undefined;
-  let elementIndex = new Map<number, GameElement>();
+  let indexedRoot: GameViewElement | null | undefined;
+  let elementIndex = new Map<number, GameViewElement>();
 
-  function buildElementIndex(root: GameElement | null | undefined): Map<number, GameElement> {
-    if (!root) return new Map<number, GameElement>();
+  function buildElementIndex(root: GameViewElement | null | undefined): Map<number, GameViewElement> {
+    if (!root) return new Map<number, GameViewElement>();
     if (root === indexedRoot) return elementIndex;
 
-    const index = new Map<number, GameElement>();
-    const stack: GameElement[] = [root];
+    const index = new Map<number, GameViewElement>();
+    const stack: GameViewElement[] = [root];
     while (stack.length > 0) {
       const element = stack.pop()!;
       index.set(element.id, element);
@@ -51,7 +51,7 @@ export function createEnrichment(
    * Enrich a list of valid elements with full element data from gameView.
    * When elements are found, they're attached as the `element` property.
    */
-  function enrichElementsList(elements: ValidElement[]): ValidElement[] {
+  function enrichElementsList(elements: EnrichedValidElement[]): EnrichedValidElement[] {
     const root = gameView?.value;
     if (!root) return elements;
     const index = buildElementIndex(root);
@@ -77,7 +77,7 @@ export function createEnrichment(
    * This is the "pit of success" - designers get full element data automatically.
    * Handles both static validElements and dependent elementsByDependentValue.
    */
-  function enrichValidElements(sel: PickMetadata): PickMetadata {
+  function enrichValidElements(sel: EnrichedPickMetadata): EnrichedPickMetadata {
     if (!gameView?.value) return sel;
 
     // Handle elementsByDependentValue (for element selections with dependsOn)

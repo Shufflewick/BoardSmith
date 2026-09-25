@@ -144,14 +144,15 @@ describe('#231: the world dev host hands back an awaitable stop', () => {
   });
 
   it('closes the world, then Vite, and only then lets the process go', () => {
-    // The order is the guarantee. `worldHost.close()` drains the world lock and
+    // The order is the guarantee. `run.close()` (the world host's own close,
+    // through `openWorldRun`, #379) drains the world lock and
     // closes the store handle, so no world write can follow it; Vite is closed
     // after it because Vite's watcher and dep optimiser write into the same
     // project. The teardown is an ordered list (#366), the world's resources
     // first. Ending the process belongs to `onShutdown`, never to this file, so
     // a programmatic stop does not end the process and a signalled one still
     // does.
-    expect(at("{ name: 'the world', close: () => worldHost.close() }")).toBeLessThan(at('...worldResources,'));
+    expect(at("{ name: 'the world', close: () => run.close() }")).toBeLessThan(at('...worldResources,'));
     expect(at('...worldResources,')).toBeLessThan(at('...served.resources,'));
     expect(source).not.toMatch(/process\.exit\(/);
   });

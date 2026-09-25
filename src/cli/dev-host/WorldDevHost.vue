@@ -62,6 +62,8 @@ const connected = ref(false);
 const mySeat = ref<number | null>(null);
 const status = ref<WorldStatus | null>(null);
 const notices = ref<string[]>([]);
+/** True from a saved rules edit until the world runs it (#379): commands wait for it meanwhile. */
+const rulesReloading = ref(false);
 const worldName = ref(cfg.displayName);
 
 /** `shallowRef`: the last state frame is replaced wholesale and re-posted into
@@ -235,6 +237,13 @@ function onHostMessage(message: Record<string, unknown>): void {
       return;
     case 'world_notice':
       note(message.message as string);
+      return;
+    case 'world_rules_reload':
+      // A SAVED RULES EDIT IS BUILDING (#379). The host holds this page's
+      // commands until the world runs it; a successful reload ends in
+      // `world_reload` above, and a failed one says why here.
+      rulesReloading.value = message.state === 'reloading';
+      if (message.state === 'failed') note(message.message as string);
       return;
   }
 }
@@ -412,6 +421,9 @@ onUnmounted(() => {
       <span class="world-dev__field">Resident: {{ status?.resident.length ?? 0 }}</span>
     </header>
 
+    <p v-if="rulesReloading" class="world-dev__notice" role="status" data-testid="rules-reloading">
+      Reloading rules…
+    </p>
     <p v-for="(line, i) in notices" :key="i" class="world-dev__notice" role="status">{{ line }}</p>
 
     <iframe

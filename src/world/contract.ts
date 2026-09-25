@@ -848,7 +848,7 @@ export interface WorldPartitionSource extends WorldPartitionStore {
  * which on the read path means a watcher shown an empty world instead of being
  * told to ask again.
  */
-export type WorldSeatView =
+export type WorldAudienceSeat =
   | { readonly player: string; readonly refused: false; readonly at: number }
   | { readonly player: string; readonly refused: true; readonly failure: unknown };
 
@@ -875,10 +875,10 @@ export type WorldSeatView =
  * would be trying to avoid.
  */
 export interface WorldAudienceViews {
-  /** Each distinct view, once. `WorldSeatView.at` indexes this. */
+  /** Each distinct view, once. `WorldAudienceSeat.at` indexes this. */
   readonly bodies: readonly unknown[];
   /** One entry per player asked, in the order asked, duplicates included. */
-  readonly seats: readonly WorldSeatView[];
+  readonly seats: readonly WorldAudienceSeat[];
 }
 
 /**

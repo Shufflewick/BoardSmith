@@ -3,8 +3,8 @@
  * This is the streamlined replacement for auto-discovery training.
  */
 import type { Game } from '../engine/index.js';
+import type { GameClass } from '../engine/index.js';
 import type {
-  GameClass,
   GameStructure,
   LearnedObjective,
   TrainingProgress,

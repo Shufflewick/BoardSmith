@@ -32,14 +32,14 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ref, nextTick } from 'vue';
-import { useActionController, type ActionMetadata } from './useActionController.js';
+import { useActionController, type EnrichedActionMetadata } from './useActionController.js';
 import type { ActionQuoteResult } from './useActionControllerTypes.js';
 import { _clearShownWarnings } from '../../utils/dev.js';
 
 beforeEach(() => { _clearShownWarnings(); });
 
 /** The reporter's own action: an optional quantity, then a required resource. */
-const BOOST: ActionMetadata = {
+const BOOST: EnrichedActionMetadata = {
   name: 'boost',
   prompt: 'Purchase boost',
   quote: true,
@@ -65,7 +65,7 @@ const BOOST: ActionMetadata = {
 };
 
 /** The same shape with no quote declared, which is every other action. */
-const PLAIN: ActionMetadata = {
+const PLAIN: EnrichedActionMetadata = {
   name: 'plain',
   prompt: 'Plain purchase',
   selections: [
@@ -84,11 +84,11 @@ function priceOf(args: Record<string, unknown>): ActionQuoteResult {
   };
 }
 
-function controllerOver(actions: ActionMetadata[], quote = async (
+function controllerOver(actions: EnrichedActionMetadata[], quote = async (
   _action: string,
   args: Record<string, unknown>,
 ): Promise<ActionQuoteResult> => priceOf(args)) {
-  const metadata: Record<string, ActionMetadata> = {};
+  const metadata: Record<string, EnrichedActionMetadata> = {};
   for (const action of actions) metadata[action.name] = action;
   const sendAction = vi.fn().mockResolvedValue({ success: true });
   const fetchActionQuote = vi.fn(quote);

@@ -9,13 +9,13 @@
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import { ref, nextTick } from 'vue';
-import { useActionController, type ActionMetadata } from './useActionController.js';
+import { useActionController, type EnrichedActionMetadata } from './useActionController.js';
 import { createMockSendAction, createTestMetadata } from './useActionController.helpers.js';
 
 const SKIP_LABEL = 'Keep them all';
 
 /** One action with a single optional selection, whose `optional` we vary. */
-function metaWithOptional(optional: boolean | string): Record<string, ActionMetadata> {
+function metaWithOptional(optional: boolean | string): Record<string, EnrichedActionMetadata> {
   return {
     donate: {
       name: 'donate',
@@ -39,7 +39,7 @@ function metaWithOptional(optional: boolean | string): Record<string, ActionMeta
 describe('skip() with a custom Skip label (#152)', () => {
   let sendAction: ReturnType<typeof createMockSendAction>;
   let availableActions: ReturnType<typeof ref<string[]>>;
-  let actionMetadata: ReturnType<typeof ref<Record<string, ActionMetadata> | undefined>>;
+  let actionMetadata: ReturnType<typeof ref<Record<string, EnrichedActionMetadata> | undefined>>;
   let isMyTurn: ReturnType<typeof ref<boolean>>;
 
   function controllerFor(optional: boolean | string, autoExecute = false) {

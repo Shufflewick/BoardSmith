@@ -43,7 +43,7 @@ import { useActionController } from './useActionController.js';
 import { useBoardActionBridge } from './useBoardActionBridge.js';
 import { createBoardInteraction } from './useBoardInteraction.js';
 import { shouldDeferChoicePickToBoard } from '../components/auto-ui/action-panel-helpers.js';
-import type { ActionMetadata, ChoiceWithRefs } from './useActionControllerTypes.js';
+import type { EnrichedActionMetadata, ChoiceWithRefs } from './useActionControllerTypes.js';
 import type { RunnerIdentity } from './useBoardActionBridge.js';
 import GridBoardRenderer from '../components/auto-ui/renderers/GridBoardRenderer.vue';
 import {
@@ -71,7 +71,7 @@ async function flush(n = 6): Promise<void> {
  * test drives each pick itself.
  */
 function wireActionToBoard(
-  action: ActionMetadata,
+  action: EnrichedActionMetadata,
   fetchPickChoices: NonNullable<Parameters<typeof useActionController>[0]['fetchPickChoices']>,
   runnerIdentity = ref<RunnerIdentity | undefined>(A_GAME),
 ) {
@@ -96,7 +96,7 @@ function wireActionToBoard(
 // Checkers two-step move: piece (element) then destination (choice, dynamically
 // fetched, filtered by pieceId). Mirrors the shape of the real Checkers move
 // action without importing the game package.
-const checkersMoveAction: ActionMetadata = {
+const checkersMoveAction: EnrichedActionMetadata = {
   name: 'move',
   prompt: 'Move',
   selections: [
@@ -147,7 +147,7 @@ const multiJumpChoices = [
 ];
 
 // Hex single-step placement: one element pick, auto-executes on fill
-const hexPlacementAction: ActionMetadata = {
+const hexPlacementAction: EnrichedActionMetadata = {
   name: 'place',
   prompt: 'Place stone',
   selections: [
@@ -305,7 +305,7 @@ describe('Board + controller interaction integration', () => {
     const isMyTurn = ref<boolean | undefined>(true);
     const autoEndTurn = ref(true);
     const availableActions = ref<string[]>(initialActions);
-    const actionMetadata = ref<Record<string, ActionMetadata>>({
+    const actionMetadata = ref<Record<string, EnrichedActionMetadata>>({
       move: checkersMoveAction,
       endTurn: { name: 'endTurn', prompt: 'End Turn', selections: [] },
     });
@@ -383,7 +383,7 @@ describe('Board + controller interaction integration', () => {
     const isMyTurn = ref<boolean | undefined>(false);
     const autoEndTurn = ref(true);
     const availableActions = ref<string[]>([]);
-    const actionMetadata = ref<Record<string, ActionMetadata>>({
+    const actionMetadata = ref<Record<string, EnrichedActionMetadata>>({
       endTurn: { name: 'endTurn', prompt: 'End Turn', selections: [] },
     });
     // Model the turn ending when endTurn executes, so auto-execute fires exactly
@@ -492,7 +492,7 @@ describe('Board + controller interaction integration', () => {
     // Byte-identical across the undo, on purpose — this is what makes the
     // pre-existing teardown watcher blind to it.
     const availableActions = ref(['move']);
-    const actionMetadata = ref<Record<string, ActionMetadata>>({
+    const actionMetadata = ref<Record<string, EnrichedActionMetadata>>({
       move: { name: 'move', prompt: 'Move', selections: [{ name: 'destination', type: 'element', prompt: 'Where to?' }] },
     });
     const sendAction = vi.fn().mockResolvedValue({ success: true });
@@ -585,7 +585,7 @@ describe('Board + controller interaction integration', () => {
     // new game's restoreEpoch is 0 like the old one's, so neither teardown
     // fired: the panel and the board kept the old hand's cards, and ticking
     // them submitted ids the new game refuses.
-    const discard: ActionMetadata = {
+    const discard: EnrichedActionMetadata = {
       name: 'discard',
       prompt: 'Discard',
       selections: [{ name: 'cards', type: 'elements', prompt: 'Select 2 cards', multiSelect: { min: 2, max: 2 } }],
@@ -625,7 +625,7 @@ describe('Board + controller interaction integration', () => {
     // Windup Warfare's placePack `space` step: every space offered, each with a
     // notation boardRef. The panel shows one "Choose on the board" control for it
     // (#313), which is only honest if the board really offers every one of them.
-    const placePack: ActionMetadata = {
+    const placePack: EnrichedActionMetadata = {
       name: 'placePack',
       prompt: 'Buy and place a pack',
       selections: [{ name: 'space', type: 'choice', prompt: 'Choose where the pack goes' }],
@@ -662,7 +662,7 @@ describe('Board + controller interaction integration', () => {
 
   /** A one-step chooseFrom action, `recruit`, whose `piece` step is answered by `choices`. */
   function wireRecruit(choices: ChoiceWithRefs[]) {
-    const recruit: ActionMetadata = {
+    const recruit: EnrichedActionMetadata = {
       name: 'recruit',
       prompt: 'Recruit a piece',
       selections: [{ name: 'piece', type: 'choice', prompt: 'Choose a piece to recruit' }],

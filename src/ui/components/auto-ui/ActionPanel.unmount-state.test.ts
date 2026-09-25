@@ -20,9 +20,9 @@ import { describe, it, expect } from 'vitest';
 import type { mount } from '@vue/test-utils';
 import { nextTick } from 'vue';
 import { panelsOver } from './action-panel-editor.test-helper.js';
-import type { ActionMetadata } from '../../composables/useActionControllerTypes.js';
+import type { EnrichedActionMetadata } from '../../composables/useActionControllerTypes.js';
 
-const DESCRIBE: ActionMetadata = {
+const DESCRIBE: EnrichedActionMetadata = {
   name: 'describeEmpire',
   prompt: 'Describe empire',
   selections: [
@@ -30,20 +30,20 @@ const DESCRIBE: ActionMetadata = {
   ],
 };
 
-const RECYCLE: ActionMetadata = {
+const RECYCLE: EnrichedActionMetadata = {
   name: 'recycle',
   prompt: 'Recycle waste',
   selections: [{ name: 'waste', type: 'number', prompt: 'Waste to recycle', min: 1, integer: true }],
 };
 
-const NICKNAME: ActionMetadata = {
+const NICKNAME: EnrichedActionMetadata = {
   name: 'setNickname',
   prompt: 'Set nickname',
   selections: [{ name: 'description', type: 'text', prompt: 'Nickname', maxLength: 20 }],
 };
 
 /** Two groups, one of them nested, so a level can be navigated into and out of. */
-const LACUNA: ActionMetadata[] = [
+const LACUNA: EnrichedActionMetadata[] = [
   { name: 'construct', prompt: 'Construct building', order: 10, selections: [] },
   { name: 'dumpOre', prompt: 'Dump ore', group: ['Dump'], order: 30, selections: [] },
   { name: 'dumpFood', prompt: 'Dump food', group: ['Dump'], order: 31, selections: [] },

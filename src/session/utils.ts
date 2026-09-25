@@ -2,7 +2,7 @@
  * Shared utility functions for game hosting
  */
 
-import { Player, canSeatAct, availableActionsForSeat, type FlowState, type Game, type ActionDefinition, type ActionTrace, type PendingActionState } from '../engine/index.js';
+import { Player, canSeatAct, availableActionsForSeat, type FlowState, type Game, type ActionDefinition, type ActionTrace, type PendingActionState, type FollowUpAction, type FollowUpOffer } from '../engine/index.js';
 import { buildActionMetadata, buildPickMetadata } from '../engine/element/action-metadata.js';
 import { getActiveTutorialStepView } from '../engine/tutorial/gate.js';
 import { devWarn } from '../utils/dev.js';
@@ -141,6 +141,19 @@ export function buildSingleActionMetadata(
     ...(actionDef.manual ? { manual: true } : {}),
     selections: pickMetas,
   };
+}
+
+/**
+ * The follow-up a game returned, as the seat that took the action receives it:
+ * with the metadata of the action it names, which is usually not in that
+ * seat's available actions. The one place a {@link FollowUpOffer} is built
+ * (#377). `metadata` is absent when `seat` names no player.
+ */
+export function offerFollowUp(game: Game, seat: number, followUp: FollowUpAction): FollowUpOffer {
+  const player = game.getPlayer(seat);
+  // followUp.args reach the metadata so a dynamic prompt can read them (e.g. a sector's name).
+  const metadata = player ? buildSingleActionMetadata(game, player, followUp.action, followUp.args) : undefined;
+  return { ...followUp, metadata };
 }
 
 /**

@@ -16,7 +16,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ref } from 'vue';
 import {
   useActionController,
-  type ActionMetadata,
+  type EnrichedActionMetadata,
 } from './useActionController.js';
 import { createMockSendAction, createTestMetadata } from './useActionController.helpers.js';
 
@@ -44,7 +44,7 @@ function captureActionResolvedEvents(): {
 describe('useActionController devtools CustomEvent (boardsmith:action-resolved)', () => {
   let sendAction: ReturnType<typeof createMockSendAction>;
   let availableActions: ReturnType<typeof ref<string[]>>;
-  let actionMetadata: ReturnType<typeof ref<Record<string, ActionMetadata> | undefined>>;
+  let actionMetadata: ReturnType<typeof ref<Record<string, EnrichedActionMetadata> | undefined>>;
   let isMyTurn: ReturnType<typeof ref<boolean>>;
 
   beforeEach(() => {
@@ -128,7 +128,7 @@ describe('useActionController devtools CustomEvent (boardsmith:action-resolved)'
       actionComplete: true,
     });
 
-    const onSelectMeta: Record<string, ActionMetadata> = {
+    const onSelectMeta: Record<string, EnrichedActionMetadata> = {
       singleStepAction: {
         name: 'singleStepAction',
         prompt: 'Pick a target',
@@ -196,7 +196,7 @@ describe('useActionController devtools CustomEvent (boardsmith:action-resolved)'
       followUp: { action: 'ask', args: {} }, // successful ask → go again
     });
 
-    const askMeta: Record<string, ActionMetadata> = {
+    const askMeta: Record<string, EnrichedActionMetadata> = {
       ask: {
         name: 'ask',
         prompt: 'Ask for a rank',

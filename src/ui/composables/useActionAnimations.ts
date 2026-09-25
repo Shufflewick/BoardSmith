@@ -108,7 +108,7 @@ import { watch, type Ref, type ComputedRef } from 'vue';
 import { useFlyingElements, type FlyingCardData, type FlyingCard } from './useFlyingElements.js';
 import { isAnimationTestModeEnabled, recordTrace } from './useAnimationTestMode.js';
 import { isDevThrowEnabled } from '../../utils/dev.js';
-import type { GameElement } from '../types.js';
+import type { GameViewElement } from '../types.js';
 
 /**
  * Data extracted from an element for rendering during animation.
@@ -278,7 +278,7 @@ export interface UseActionAnimationsOptions {
    * Reactive gameView that triggers animation when it changes.
    * The animation is triggered when gameView updates after action execution.
    */
-  gameView: Ref<GameElement | null | undefined>;
+  gameView: Ref<GameViewElement | null | undefined>;
 
   /**
    * Animation configurations for different actions.

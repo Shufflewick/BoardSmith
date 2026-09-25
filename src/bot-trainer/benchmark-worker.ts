@@ -4,7 +4,8 @@
  */
 import { parentPort } from 'worker_threads';
 import type { Game } from '../engine/index.js';
-import type { GameClass, LearnedObjective, SerializableGameStructure } from './types.js';
+import type { GameClass } from '../engine/index.js';
+import type { LearnedObjective, SerializableGameStructure } from './types.js';
 import { benchmarkBot, type BenchmarkConfig } from './benchmark.js';
 import { deserializeGameStructure } from './simulator.js';
 import { generateCandidateFeatures } from './feature-generator.js';

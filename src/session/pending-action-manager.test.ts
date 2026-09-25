@@ -312,6 +312,9 @@ describe('PendingActionManager', () => {
     expect(step2.followUp).toBeDefined();
     expect(step2.followUp!.action).toBe('reEquipContinue');
     expect(step2.followUp!.args).toEqual({ unitId: 1 });
+    // The follow-up leaves the manager as a client receives it, carrying the
+    // metadata of the action it names (#377): nothing downstream has to add it.
+    expect(step2.followUp!.metadata?.name).toBe('reEquipContinue');
   });
 
   // F43: completed pending/multi-step selection actions must be appended to

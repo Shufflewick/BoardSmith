@@ -25,7 +25,7 @@ import type { TutorialStepView } from '../../engine/index.js';
 import type { ActionMetadata as WireActionMetadata } from '../../types/protocol.js';
 import type { BoardInteraction } from './useBoardInteraction.js';
 import type {
-  ActionMetadata,
+  EnrichedActionMetadata,
   UseActionControllerOptions,
   UseActionControllerReturn,
 } from './useActionControllerTypes.js';
@@ -75,7 +75,7 @@ export interface TableActionWiringOptions extends ControllerTransportOptions {
 export interface TableActionWiring {
   controller: UseActionControllerReturn;
   /** Read off the seat state: an empty record until an action has metadata. Feed the Action Panel this. */
-  actionMetadata: ComputedRef<Record<string, ActionMetadata>>;
+  actionMetadata: ComputedRef<Record<string, EnrichedActionMetadata>>;
   /** Read off the seat state: action name to the reason it is disabled. Feed the Action Panel this. */
   disabledActions: ComputedRef<Record<string, string> | undefined>;
 }
@@ -85,7 +85,7 @@ export function useTableActionWiring(opts: TableActionWiringOptions): TableActio
 
   // "No metadata" is an EMPTY RECORD, never `undefined`: every consumer only
   // ever looks an action name up in it.
-  const actionMetadata = computed<Record<string, ActionMetadata>>(() => seatState.value?.actionMetadata ?? {});
+  const actionMetadata = computed<Record<string, EnrichedActionMetadata>>(() => seatState.value?.actionMetadata ?? {});
   const disabledActions = computed(() => seatState.value?.disabledActions);
   const tutorialStep = computed(() => seatState.value?.tutorial);
   // A change in either field means every element id the client holds is stale:

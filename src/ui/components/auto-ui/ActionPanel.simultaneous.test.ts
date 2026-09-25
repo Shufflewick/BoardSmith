@@ -22,14 +22,14 @@ import { ref, nextTick } from 'vue';
 import { mount } from '@vue/test-utils';
 import ActionPanel from './ActionPanel.vue';
 import { useActionController } from '../../composables/useActionController.js';
-import type { ActionMetadata } from '../../composables/useActionController.js';
+import type { EnrichedActionMetadata } from '../../composables/useActionController.js';
 import { GAME_CONTEXT_KEYS } from '../../composables/useGameContext.js';
 
 // ─────────────────────────────────────────────────────────────────────────
 // Commit leak — ActionPanel executeAction gated on own `completed`
 // ─────────────────────────────────────────────────────────────────────────
 
-const noArgsAction: ActionMetadata = {
+const noArgsAction: EnrichedActionMetadata = {
   name: 'confirm',
   prompt: 'Confirm',
   selections: [],

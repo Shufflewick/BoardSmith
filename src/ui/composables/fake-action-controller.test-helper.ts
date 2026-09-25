@@ -5,15 +5,15 @@
  */
 import { vi } from 'vitest';
 import { ref, computed } from 'vue';
-import type { UseActionControllerReturn, PickMetadata, ValidElement } from './useActionControllerTypes.js';
+import type { UseActionControllerReturn, EnrichedPickMetadata, EnrichedValidElement } from './useActionControllerTypes.js';
 
 export function makeController(opts: {
-  pick?: PickMetadata | null;
+  pick?: EnrichedPickMetadata | null;
   action?: string | null;
-  validElements?: ValidElement[];
+  validElements?: EnrichedValidElement[];
 }) {
   const currentAction = ref<string | null>(opts.action ?? null);
-  const currentPick = computed<PickMetadata | null>(() => opts.pick ?? null);
+  const currentPick = computed<EnrichedPickMetadata | null>(() => opts.pick ?? null);
   const currentArgs = ref<Record<string, unknown>>({});
   const isExecuting = ref(false);
   const actionCompletedTick = ref(0);

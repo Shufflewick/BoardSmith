@@ -6,13 +6,11 @@
  */
 
 import type { Ref, ComputedRef } from 'vue';
-import type { GameElement } from '../types.js';
+import type { GameViewElement } from '../types.js';
 import type { UseAnimationEventsReturn } from './useAnimationEvents.js';
 import type { TutorialStepView } from '../../engine/tutorial/types.js';
 import type { FollowUpOffer } from '../../engine/action/types.js';
 
-// Re-export GameElement as GameViewElement for external use
-export type { GameElement as GameViewElement };
 
 // THE PICK SHAPE IS OWNED BY ../../types/protocol.js (#251).
 //
@@ -45,19 +43,19 @@ export type { ElementRef, RefWithRole, ChoiceWithRefs };
  * That enrichment is the only thing this layer adds, and binding it through
  * `TElement` below is what lets it add it without restating a pick field.
  */
-export interface ValidElement extends WireValidElement {
+export interface EnrichedValidElement extends WireValidElement {
   /** Full element data from gameView (auto-enriched by actionController) */
-  element?: GameElement;
+  element?: GameViewElement;
 }
 
 /**
  * Metadata for a pick (a choice the player must make to complete an action, per
  * nomenclature.md), carrying ENRICHED elements.
  */
-export type PickMetadata = WirePickMetadata<ValidElement>;
+export type EnrichedPickMetadata = WirePickMetadata<EnrichedValidElement>;
 
 /** Metadata for an available action, carrying picks over ENRICHED elements. */
-export type ActionMetadata = WireActionMetadata<ValidElement>;
+export type EnrichedActionMetadata = WireActionMetadata<EnrichedValidElement>;
 
 /**
  * What the action controller resolves an action to: the server's answer, with
@@ -69,7 +67,7 @@ export interface ControllerActionResult {
   data?: Record<string, unknown>;
   message?: string;
   /** Follow-up action to automatically start after this action completes */
-  followUp?: FollowUpOffer<ValidElement>;
+  followUp?: FollowUpOffer<EnrichedValidElement>;
 }
 
 /** Whether a value filled into a pick was accepted, and why not when it was not. */
@@ -79,7 +77,7 @@ export interface PickValidationResult {
 }
 
 /** Result from a pick step (repeating picks) */
-export interface PickStepResult {
+export interface PickStepResponse {
   success: boolean;
   error?: string;
   done?: boolean;
@@ -93,7 +91,7 @@ export interface PickStepResult {
   data?: Record<string, unknown>;
   /** `ActionResult.message` from the action this step completed (BUG-012). */
   message?: string;
-  followUp?: FollowUpOffer<ValidElement>;
+  followUp?: FollowUpOffer<EnrichedValidElement>;
 }
 
 /**
@@ -122,7 +120,7 @@ export interface ResolvedAction {
 export interface PickChoicesResult {
   success: boolean;
   choices?: Array<{ value: unknown; display: string; refs?: RefWithRole[]; disabled?: string }>;
-  validElements?: ValidElement[];
+  validElements?: EnrichedValidElement[];
   multiSelect?: { min: number; max?: number };
   /** Ordered-list entry bounds for this step (#249), resolved server-side */
   orderedList?: { min: number; max?: number };
@@ -155,7 +153,7 @@ export interface PickSnapshot {
   /** Choices for choice picks */
   choices?: Array<{ value: unknown; display: string; refs?: RefWithRole[]; disabled?: string }>;
   /** Valid elements for element picks */
-  validElements?: ValidElement[];
+  validElements?: EnrichedValidElement[];
   /** MultiSelect config (evaluated when fetched) */
   multiSelect?: { min: number; max?: number };
   /** Ordered-list entry bounds (#249), evaluated when fetched */
@@ -184,7 +182,7 @@ export interface ActionStateSnapshot {
   /** Action name */
   actionName: string;
   /** Full action metadata - frozen at start time */
-  metadata: ActionMetadata;
+  metadata: EnrichedActionMetadata;
   /** Pick snapshots indexed by pick name */
   pickSnapshots: Map<string, PickSnapshot>;
   /** Collected picks with value+display stored together */
@@ -208,7 +206,7 @@ export interface UseActionControllerOptions {
   /** Available actions (from game state). Accepts Ref with potentially undefined value for test compatibility. */
   availableActions: Ref<string[] | undefined> | Ref<string[]>;
   /** Action metadata (from game state) */
-  actionMetadata: Ref<Record<string, ActionMetadata> | undefined>;
+  actionMetadata: Ref<Record<string, EnrichedActionMetadata> | undefined>;
   /** Is it this player's turn. Accepts Ref with potentially undefined value for test compatibility. */
   isMyTurn: Ref<boolean | undefined> | Ref<boolean>;
   /**
@@ -238,7 +236,7 @@ export interface UseActionControllerOptions {
    */
   disabledActions?: Ref<Record<string, string> | undefined> | ComputedRef<Record<string, string> | undefined>;
   /** Game view (for enriching validElements with full element data) */
-  gameView?: Ref<GameElement | null | undefined>;
+  gameView?: Ref<GameViewElement | null | undefined>;
   /** Player seat (needed for fetching choices/repeating features) */
   playerSeat?: Ref<number>;
   /** Enable auto-fill for single-choice selections (default: true). Can be reactive. */
@@ -283,7 +281,7 @@ export interface UseActionControllerOptions {
     value: unknown,
     actionName: string,
     initialArgs?: Record<string, unknown>
-  ) => Promise<PickStepResult>;
+  ) => Promise<PickStepResponse>;
   /**
    * Called before auto-execute fires (when all selections are filled).
    * Use this to capture element positions for animations before the DOM updates.
@@ -359,13 +357,13 @@ export interface UseActionControllerReturn {
   /** Args collected so far for current action (read-only; use fill/start/clear to change) */
   currentArgs: Readonly<Ref<Readonly<Record<string, unknown>>>>;
   /** Current pick that needs user input (null if all filled or no action) */
-  currentPick: ComputedRef<PickMetadata | null>;
+  currentPick: ComputedRef<EnrichedPickMetadata | null>;
   /**
    * Valid elements for the current selection (reactive).
    * Use this in custom UIs instead of getValidElements() for automatic reactivity.
    * Returns empty array if current selection is not an element type or choices haven't loaded.
    */
-  validElements: ComputedRef<ValidElement[]>;
+  validElements: ComputedRef<EnrichedValidElement[]>;
   /**
    * Reactive choices for the current pick (re-runs when async-fetched choices arrive).
    * Prefer this over getCurrentChoices() in reactive contexts — the latter does not
@@ -598,13 +596,13 @@ export interface UseActionControllerReturn {
 
   // === Utility ===
   /** Get available choices for a pick (handles filterBy, dependsOn) */
-  getChoices: (pick: PickMetadata) => Array<{ value: unknown; display: string; disabled?: string }>;
+  getChoices: (pick: EnrichedPickMetadata) => Array<{ value: unknown; display: string; disabled?: string }>;
   /** Get filtered choices for current pick (convenience method) */
   getCurrentChoices: () => Array<{ value: unknown; display: string; disabled?: string }>;
   /** Get valid elements for an element/elements pick from cache */
-  getValidElements: (pick: PickMetadata) => ValidElement[];
+  getValidElements: (pick: EnrichedPickMetadata) => EnrichedValidElement[];
   /** Get metadata for an action */
-  getActionMetadata: (actionName: string) => ActionMetadata | undefined;
+  getActionMetadata: (actionName: string) => EnrichedActionMetadata | undefined;
   /** Clear all args (preserves reactivity for external args) */
   clearArgs: () => void;
   /** Fetch choices for a pick from server (called automatically by start/fill) */

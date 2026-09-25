@@ -2,19 +2,8 @@ import { dueSeats, type Game } from '../engine/index.js';
 import { GameRunner, type GameRunnerOptions } from '../runtime/index.js';
 import { createBot, type BotStrategy } from '../bot/index.js';
 import { SeededRandom } from '../utils/random.js';
-import type { GameClass, LearnedObjective, CandidateFeature } from './types.js';
-
-/**
- * Configuration for a single player in a benchmark game
- */
-export interface PlayerConfig {
-  /** Whether to use bot (true) or random moves (false) */
-  useBot: boolean;
-  /** MCTS iterations if using bot */
-  iterations?: number;
-  /** Learned objectives to guide MCTS if using bot */
-  objectives?: LearnedObjective[];
-}
+import type { GameClass } from '../engine/index.js';
+import type { LearnedObjective, CandidateFeature } from './types.js';
 
 /**
  * Benchmark configuration

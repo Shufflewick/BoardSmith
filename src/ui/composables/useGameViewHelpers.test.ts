@@ -27,15 +27,15 @@ import {
   isOpponentElement,
   useGameViewHelpers,
 } from './useGameViewHelpers.js';
-import type { GameElement } from '../types.js';
+import type { GameViewElement } from '../types.js';
 
 const element = (
   id: number,
   className: string,
   attributes: Record<string, unknown> = {},
-  children: GameElement[] = [],
+  children: GameViewElement[] = [],
   name = className.toLowerCase(),
-): GameElement => ({ id, className, name, attributes, children } as unknown as GameElement);
+): GameViewElement => ({ id, className, name, attributes, children } as unknown as GameViewElement);
 
 const owner = (seat: number) => ({ __playerRef: seat, seat });
 
@@ -55,13 +55,13 @@ const HAND_ONE = element(10, 'Hand', { $type: 'hand', player: owner(1) }, [
   card(12, 'K', 'S', 1),
 ]);
 const HAND_TWO = element(20, 'Hand', { $type: 'hand', player: owner(2) }, [card(21, '2', 'C', 2)]);
-const DECK = { ...element(30, 'Deck', { $type: 'deck' }), childCount: 40 } as GameElement;
+const DECK = { ...element(30, 'Deck', { $type: 'deck' }), childCount: 40 } as GameViewElement;
 const PLAYER_ONE = element(40, 'Player', { $type: 'player', seat: 1, score: 7 });
 const PAWN = element(52, 'Pawn', { player: owner(1) });
 const SQUARE = element(51, 'Square', { notation: 'a1' }, [PAWN]);
 const BOARD = element(50, 'Board', {}, [SQUARE]);
 
-const GAME: GameElement = element(1, 'Game', {}, [HAND_ONE, HAND_TWO, DECK, PLAYER_ONE, BOARD], 'game');
+const GAME: GameViewElement = element(1, 'Game', {}, [HAND_ONE, HAND_TWO, DECK, PLAYER_ONE, BOARD], 'game');
 
 describe('findElementById', () => {
   it('finds the root itself', () => {
@@ -327,7 +327,7 @@ describe('getElementCount', () => {
   });
 
   it('prefers the visible children when both are present', () => {
-    const partly = { ...HAND_ONE, childCount: 99 } as GameElement;
+    const partly = { ...HAND_ONE, childCount: 99 } as GameViewElement;
     expect(getElementCount(partly)).toBe(2);
   });
 });
@@ -479,7 +479,7 @@ describe('the helpers as a whole', () => {
   });
 
   it('tolerate an element with no attributes object at all', () => {
-    const bare = { id: 5, className: 'Bare', name: 'bare' } as unknown as GameElement;
+    const bare = { id: 5, className: 'Bare', name: 'bare' } as unknown as GameViewElement;
     expect(getElementOwner(bare)).toBeUndefined();
     expect(getCardData(bare)).toBeUndefined();
     expect(findElement(bare, { type: 'anything' })).toBeUndefined();

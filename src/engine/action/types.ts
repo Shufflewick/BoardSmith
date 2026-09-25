@@ -6,7 +6,9 @@ import type { Game, PlayerOf } from '../element/game.js';
 // `ActionDefinition.world`.
 import type { WorldActionBlock } from '../../world/action.js';
 import type { ElementClass } from '../element/types.js';
-import type { ActionMetadata, ValidElement } from '../../types/protocol.js';
+import type { ActionMetadata, ElementRef, RefWithRole, ValidElement } from '../../types/protocol.js';
+// The protocol owns the element reference shapes; the engine's action API hands them out as they are.
+export type { RefWithRole };
 
 /**
  * Selection types for action arguments
@@ -77,23 +79,6 @@ export interface BaseSelection<T = unknown> {
   onSelect?: (value: T, context: OnSelectContext) => void;
   /** Called if the action is cancelled after onSelect fired but before execute(). */
   onCancel?: (context: OnSelectContext) => void;
-}
-
-/**
- * Reference to a board element for UI highlighting
- */
-export interface BoardElementRef {
-  id?: number;
-  name?: string;
-  notation?: string;
-}
-
-/**
- * A board element reference with a role indicating its highlight purpose.
- */
-export interface RefWithRole {
-  ref: BoardElementRef;
-  role: 'source' | 'target' | 'highlight';
 }
 
 /**
@@ -330,7 +315,7 @@ export interface ElementSelection<T extends GameElement = GameElement> extends B
    */
   display?: (element: T, context: ActionContext, allElements: T[]) => string;
   /** Get board element reference for highlighting */
-  boardRef?: (element: T, context: ActionContext) => BoardElementRef;
+  boardRef?: (element: T, context: ActionContext) => ElementRef;
   /**
    * Name of a previous selection this element selection depends on.
    * When specified, elements are computed for each possible value of the
@@ -383,7 +368,7 @@ export interface ElementsSelection<T extends GameElement = GameElement> extends 
    */
   display?: (element: T, context: ActionContext, allElements: T[]) => string;
   /** Get board element reference for highlighting */
-  boardRef?: (element: T, context: ActionContext) => BoardElementRef;
+  boardRef?: (element: T, context: ActionContext) => ElementRef;
   /**
    * Enable multi-select mode with checkboxes.
    * Result will be an array of elements.

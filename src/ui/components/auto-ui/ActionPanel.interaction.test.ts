@@ -25,7 +25,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { mount } from '@vue/test-utils';
 import { nextTick, ref } from 'vue';
 import { useActionController } from '../../composables/useActionController.js';
-import type { ActionMetadata } from '../../composables/useActionController.js';
+import type { EnrichedActionMetadata } from '../../composables/useActionController.js';
 import ActionPanel from './ActionPanel.vue';
 import { shouldDeferChoicePickToBoard } from './action-panel-helpers.js';
 import { GAME_CONTEXT_KEYS } from '../../composables/useGameContext.js';
@@ -34,7 +34,7 @@ import { GAME_CONTEXT_KEYS } from '../../composables/useGameContext.js';
 // Step 1: element pick (piece)
 // Step 2: choice pick (destination) — choices arrive async, no refs so they
 //         appear in the ActionPanel (not filtered by filterAnchoredChoices).
-const twoStepMoveAction: ActionMetadata = {
+const twoStepMoveAction: EnrichedActionMetadata = {
   name: 'twoStepMove',
   prompt: 'Move',
   selections: [
@@ -51,7 +51,7 @@ const twoStepMoveAction: ActionMetadata = {
 // Fixture: notation-anchored choice action (used for test D1)
 // All destination choices carry notation refs. Two is a set the panel can read,
 // so the panel still offers each of them (a large set is handed to the board, #313).
-const notationChoiceAction: ActionMetadata = {
+const notationChoiceAction: EnrichedActionMetadata = {
   name: 'notationChoice',
   prompt: 'Place',
   selections: [

@@ -39,7 +39,7 @@ import { executeOp, type GameDefinitionLike, type OpResult } from '../../session
 import { boundaryKeyOf } from '../../session/testing/boundary-stamp.js';
 import { shapeResult } from '../../cli/dev-host/bridge.js';
 import { useActionController } from './useActionController.js';
-import type { ActionMetadata, ControllerActionResult, PickStepResult, PickChoicesResult } from './useActionControllerTypes.js';
+import type { EnrichedActionMetadata, ControllerActionResult, PickStepResponse, PickChoicesResult } from './useActionControllerTypes.js';
 
 const CARTOGRAPHY = { sectors: ['a1', 'b2', 'c3'], gps: false };
 const NARRATION = 'You recall the shape of the coastline.';
@@ -121,7 +121,7 @@ const gameOptions = { playerCount: 2, seed: 'bug-017-client' };
 
 interface PlayerView {
   flowState?: { availableActions?: string[] };
-  state?: { actionMetadata?: Record<string, ActionMetadata> };
+  state?: { actionMetadata?: Record<string, EnrichedActionMetadata> };
 }
 
 /**
@@ -134,7 +134,7 @@ function createHost() {
   let pendingState: Record<string, unknown> | null = null;
 
   const availableActions = ref<string[]>([]);
-  const actionMetadata = ref<Record<string, ActionMetadata> | undefined>(undefined);
+  const actionMetadata = ref<Record<string, EnrichedActionMetadata> | undefined>(undefined);
 
   function absorb(result: OpResult): void {
     if (result.snapshot !== undefined) snapshot = result.snapshot;
@@ -173,7 +173,7 @@ function createHost() {
       value: unknown,
       actionName: string,
       initialArgs?: Record<string, unknown>,
-    ): Promise<PickStepResult> {
+    ): Promise<PickStepResponse> {
       const result = await executeOp(gameDef, gameOptions, snapshot, pendingState, {
         type: 'selectionStep',
         actionName,
@@ -184,7 +184,7 @@ function createHost() {
         boundaryKey: boundaryKeyOf(snapshot),
       });
       absorb(result);
-      return shapeResult('selection_step', result) as unknown as PickStepResult;
+      return shapeResult('selection_step', result) as unknown as PickStepResponse;
     },
     async fetchPickChoices(
       actionName: string,

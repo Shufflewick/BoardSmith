@@ -13,7 +13,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ref, nextTick } from 'vue';
 import {
   useActionController,
-  type ActionMetadata,
+  type EnrichedActionMetadata,
 } from './useActionController.js';
 import {
   deriveDropTargetsForPick,
@@ -31,12 +31,12 @@ async function flushAll(): Promise<void> {
 }
 
 function makeController(
-  metadata: Record<string, ActionMetadata>,
+  metadata: Record<string, EnrichedActionMetadata>,
   fetchPickChoices: ReturnType<typeof vi.fn>,
   sendAction = createMockSendAction(),
 ) {
   const availableActions = ref<string[]>(Object.keys(metadata));
-  const actionMetadata = ref<Record<string, ActionMetadata> | undefined>(metadata);
+  const actionMetadata = ref<Record<string, EnrichedActionMetadata> | undefined>(metadata);
   const isMyTurn = ref(true);
   const controller = useActionController({
     sendAction,
@@ -58,7 +58,7 @@ describe('deriveDropTargetsForPick (generic derivation)', () => {
         { value: 'a2', display: 'A2', refs: [{ ref: { id: 101 }, role: 'target' }] },
       ],
     });
-    const metadata: Record<string, ActionMetadata> = {
+    const metadata: Record<string, EnrichedActionMetadata> = {
       place: {
         name: 'place',
         selections: [
@@ -92,7 +92,7 @@ describe('deriveDropTargetsForPick (generic derivation)', () => {
         { value: { pieceId: 2, to: 'y' }, display: 'Y', refs: [{ ref: { id: 200 }, role: 'target' }] },
       ],
     });
-    const metadata: Record<string, ActionMetadata> = {
+    const metadata: Record<string, EnrichedActionMetadata> = {
       move: {
         name: 'move',
         selections: [
@@ -117,7 +117,7 @@ describe('deriveDropTargetsForPick (generic derivation)', () => {
         { id: 11, display: 'Orc', refs: [{ ref: { id: 11 }, role: 'highlight' }] },
       ],
     });
-    const metadata: Record<string, ActionMetadata> = {
+    const metadata: Record<string, EnrichedActionMetadata> = {
       attack: {
         name: 'attack',
         selections: [
@@ -146,7 +146,7 @@ describe('deriveDropTargetsForPick (generic derivation)', () => {
       ],
       multiSelect: { min: 1, max: 2 },
     });
-    const metadata: Record<string, ActionMetadata> = {
+    const metadata: Record<string, EnrichedActionMetadata> = {
       stash: {
         name: 'stash',
         selections: [{ name: 'cards', type: 'elements', multiSelect: { min: 1, max: 2 } }],
@@ -170,7 +170,7 @@ describe('deriveDropTargetsForPick (generic derivation)', () => {
         { value: 'c', display: 'C', refs: [{ ref: { id: 102 }, role: 'target' }], disabled: 'blocked' },
       ],
     });
-    const metadata: Record<string, ActionMetadata> = {
+    const metadata: Record<string, EnrichedActionMetadata> = {
       place: {
         name: 'place',
         selections: [
@@ -210,7 +210,7 @@ describe('setupDragDropOrchestration (shared wiring used by ActionPanel AND cust
         { value: 'a2', display: 'A2', refs: [{ ref: { id: 101 }, role: 'target' }] },
       ],
     });
-    const metadata: Record<string, ActionMetadata> = {
+    const metadata: Record<string, EnrichedActionMetadata> = {
       place: {
         name: 'place',
         selections: [
@@ -242,7 +242,7 @@ describe('setupDragDropOrchestration (shared wiring used by ActionPanel AND cust
         { id: 11, display: 'Orc', refs: [{ ref: { id: 11 }, role: 'highlight' }] },
       ],
     });
-    const metadata: Record<string, ActionMetadata> = {
+    const metadata: Record<string, EnrichedActionMetadata> = {
       attack: {
         name: 'attack',
         selections: [
@@ -270,7 +270,7 @@ describe('setupDragDropOrchestration (shared wiring used by ActionPanel AND cust
         { id: 11, display: 'Orc', refs: [{ ref: { id: 11 }, role: 'highlight' }] },
       ],
     });
-    const metadata: Record<string, ActionMetadata> = {
+    const metadata: Record<string, EnrichedActionMetadata> = {
       attack: {
         name: 'attack',
         selections: [
@@ -319,7 +319,7 @@ describe('setupDragDropOrchestration (shared wiring used by ActionPanel AND cust
         ],
       });
     });
-    const metadata: Record<string, ActionMetadata> = {
+    const metadata: Record<string, EnrichedActionMetadata> = {
       dragDrop: {
         name: 'dragDrop',
         selections: [
@@ -354,7 +354,7 @@ describe('setupDragDropOrchestration (shared wiring used by ActionPanel AND cust
 
   it('does not wire drop targets when it is not the player\'s turn', async () => {
     const fetchPickChoices = vi.fn().mockResolvedValue({ success: true, choices: [] });
-    const metadata: Record<string, ActionMetadata> = {
+    const metadata: Record<string, EnrichedActionMetadata> = {
       place: {
         name: 'place',
         selections: [

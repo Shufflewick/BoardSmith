@@ -113,6 +113,12 @@ edited rules. A rules file that does not load leaves the game running on the
 rules it had, and the terminal says why. An edit that changes `gameType`,
 `minPlayers` or `maxPlayers` needs `boardsmith dev` restarted.
 
+While an edit is still building, the host holds every move and **New game** you
+send, and each page says "Reloading rules…". They run on the edited rules once
+those are in place, so a click right after a save always tests what you saved.
+If the edit does not load, the held moves are refused with the reason, and the
+game stays on the rules it had.
+
 **Building a persistent world?** `boardsmith dev` plays your project's table
 game. The world half of a game definition is run by the hosting platform, not by
 this CLI, so read [Persistent worlds](./persistent-worlds.md) first — it says
