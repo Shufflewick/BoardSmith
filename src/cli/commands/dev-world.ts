@@ -50,13 +50,12 @@ import type { GameDefinition } from '../../session/index.js';
 import { importRuntimeBundle, toPosix } from './game-runtime.js';
 import {
   claimWebSocketPath,
-  closeViteServer,
   devNotFoundMiddleware,
-  listeningViteServer,
   monorepoBoardsmithResolvePlugin,
   reloadOnRulesEdit,
   resolveDevHostDir,
   serveDevDocuments,
+  serveVite,
 } from './dev-server.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -347,9 +346,6 @@ export async function startWorldDevServer(
       surfacePath,
       config,
     }),
-    // The socket is claimed by a PLUGIN so a `vite.config.ts` restart re-claims
-    // it: the HTTP server it was attached to does not survive one (#214).
-    worldSocket.plugin,
   ];
   if (options.context === 'monorepo') plugins.unshift(monorepoBoardsmithResolvePlugin());
 
@@ -372,21 +368,19 @@ export async function startWorldDevServer(
   // A HOST THAT CANNOT SERVE HOLDS NOTHING (#345). `devCommand` refuses a taken
   // port before the world is opened, but the port can still be taken between
   // that check and this listen, so a refusal here closes the world too.
-  const vite = await listeningViteServer(
-    {
+  const served = await serveVite({
+    config: {
       root: options.uiPath,
-      server: {
-        port: options.port,
-        host: options.host,
-        strictPort: true,
-        open: false,
-        fs: { allow: [options.uiPath, options.cwd, boardsmithRoot] },
-      },
+      server: { fs: { allow: [options.uiPath, options.cwd, boardsmithRoot] } },
       plugins,
       optimizeDeps: { exclude: ['boardsmith', 'boardsmith/ui', 'boardsmith/client', 'boardsmith/session'] },
     },
-    () => teardownInOrder(worldResources).run(),
-  );
+    port: options.port,
+    host: options.host,
+    sockets: [worldSocket],
+    release: () => teardownInOrder(worldResources).run(),
+  });
+  const { vite } = served;
 
   // A RULE EDIT IS A COORDINATED WORLD RELOAD (#201).
   //
@@ -442,15 +436,12 @@ export async function startWorldDevServer(
     console.log(chalk.green('  Reloaded. The world is durable and running the new rules.\n'));
   }
 
-  const uiPort = vite.resolvedUrls?.local[0]
-    ? parseInt(new URL(vite.resolvedUrls.local[0]).port || String(options.port), 10)
-    : options.port;
-  const hostUrl = `http://localhost:${uiPort}`;
+  const hostUrl = served.localUrl;
   announceHost({
     hostUrl,
     what: 'World host',
     join: 'others can join this world',
-    networkUrls: vite.resolvedUrls?.network ?? [],
+    networkUrls: served.networkUrls,
     say: (line) => console.log(line),
     green: chalk.green,
     cyan: chalk.cyan,
@@ -467,7 +458,7 @@ export async function startWorldDevServer(
     // AFTER the world, because Vite's own watcher and dep optimiser write into
     // the project too, and a caller about to remove that project needs both
     // writers stopped before it does.
-    { name: 'the Vite dev server', close: () => closeViteServer(vite) },
+    ...served.resources,
     {
       name: `the build directory (${options.tempDir})`,
       close: () => rmSync(options.tempDir, { recursive: true, force: true }),

@@ -24,13 +24,12 @@ import { resolveUserPath } from '../lib/user-path.js';
 import { loadWorldRuntime, startWorldDevServer, type WorldRuntime } from './dev-world.js';
 import {
   claimWebSocketPath,
-  closeViteServer,
   devNotFoundMiddleware,
-  listeningViteServer,
   monorepoBoardsmithResolvePlugin,
   reloadOnRulesEdit,
   resolveDevHostDir,
   serveDevDocuments,
+  serveVite,
 } from './dev-server.js';
 import { parseBotLevel } from '../../bot/index.js';
 
@@ -1023,9 +1022,9 @@ export async function devCommand(options: DevOptions): Promise<void> {
 
     // The `noServer` upgrade routing that leaves Vite's HMR socket alone lives
     // in `dev-server.ts`, shared with the world run: two copies of it is how
-    // one road quietly reacquires the collision the other fixed. It is claimed
-    // BEFORE the server is made, and as a plugin, because a `vite.config.ts`
-    // restart replaces the HTTP server a one-time registration was on (#214).
+    // one road quietly reacquires the collision the other fixed. `serveVite`
+    // attaches it to the HTTP server the host owns, which outlives every
+    // `vite.config.ts` restart (#214).
     const hostSocket = claimWebSocketPath(
       '/__boardsmith/ws',
       // Per-connection WS handling (hello routing + DEF-C stale-close guard)
@@ -1045,31 +1044,33 @@ export async function devCommand(options: DevOptions): Promise<void> {
           ),
       }),
     );
-    vitePlugins.push(hostSocket.plugin);
 
     // A refused listen closes Vite and this host's socket before the error
     // reaches the catch below, which is what lets a refused run exit (#345).
-    const vite = await listeningViteServer({
-      root: uiPath,
-      // `appType` is NOT set here: boardsmithDevHostPlugin sets 'custom' from
-      // its own `config` hook, so no call site can reintroduce the SPA
-      // fallback that turned a missing asset into a 200 of HTML (issue 134).
-      server: {
-        port,
-        host,
-        strictPort: true,
-        open: false,
-        fs: {
-          // Allow serving the dev-host source + boardsmith source (via /@fs/) and
-          // the game project (rules/ui) outside the Vite root.
-          allow: [uiPath, cwd, boardsmithRoot],
+    const served = await serveVite({
+      config: {
+        root: uiPath,
+        // `appType` is NOT set here: boardsmithDevHostPlugin sets 'custom' from
+        // its own `config` hook, so no call site can reintroduce the SPA
+        // fallback that turned a missing asset into a 200 of HTML (issue 134).
+        server: {
+          fs: {
+            // Allow serving the dev-host source + boardsmith source (via /@fs/) and
+            // the game project (rules/ui) outside the Vite root.
+            allow: [uiPath, cwd, boardsmithRoot],
+          },
+        },
+        plugins: vitePlugins,
+        optimizeDeps: {
+          exclude: optimizeDepsExclude,
         },
       },
-      plugins: vitePlugins,
-      optimizeDeps: {
-        exclude: optimizeDepsExclude,
-      },
-    }, () => hostSocket.close());
+      port,
+      host,
+      sockets: [hostSocket],
+      release: () => hostSocket.close(),
+    });
+    const { vite } = served;
 
     // A SAVED RULES EDIT REACHES THE HOST TOO (#343), the same way it reaches a
     // world (#201): the browser gets it through Vite, and the host through this.
@@ -1091,20 +1092,12 @@ export async function devCommand(options: DevOptions): Promise<void> {
       },
     });
 
-    const resolvedUrl = vite.resolvedUrls?.local[0];
-    const uiPort = resolvedUrl ? parseInt(new URL(resolvedUrl).port || '5173', 10) : port;
-
-    if (uiPort !== port) {
-      console.log(chalk.yellow(`  Warning: Vite is using port ${uiPort} instead of requested port ${port}`));
-      console.log(chalk.dim(`  (Check if the game's vite.config.ts has a hardcoded port)`));
-    }
-
-    const hostUrl = `http://localhost:${uiPort}`;
+    const hostUrl = served.localUrl;
     announceHost({
       hostUrl,
       what: 'Dev host',
       join: 'others can join',
-      networkUrls: vite.resolvedUrls?.network ?? [],
+      networkUrls: served.networkUrls,
       say: (line) => console.log(line),
       green: chalk.green,
       cyan: chalk.cyan,
@@ -1140,7 +1133,7 @@ export async function devCommand(options: DevOptions): Promise<void> {
       teardownInOrder([
         { name: "the game's socket", close: () => hostSocket.close() },
         { name: 'the browser connections', close: () => clients.clear() },
-        { name: 'the Vite dev server', close: () => closeViteServer(vite) },
+        ...served.resources,
         { name: `the build directory (${tempDir})`, close: () => rmSync(tempDir, { recursive: true, force: true }) },
       ]),
       { say: (line) => console.log(chalk.dim(line)) },
