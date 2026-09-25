@@ -44,6 +44,8 @@ const connected = ref(false);
 const seats = ref<SeatInfo[]>([]);
 const mySeat = ref<number | null>(null);
 const errorMsg = ref<string | null>(null);
+/** True from a saved rules edit until the host runs it (#379): moves wait for it meanwhile. */
+const rulesReloading = ref(false);
 const followActive = ref(false);
 // Dev-only UI switcher: the list of UIs the game offers (sent by GameShell) and
 // the currently-selected one. Handled inside GameShell; no effect in production.
@@ -229,6 +231,12 @@ function onHostMessage(msg: Record<string, unknown>): void {
     case 'uiSwitch':
       selectedUi.value = msg.name as string;
       onUiSelect();
+      break;
+    case 'rules_reload':
+      // A SAVED RULES EDIT IS BUILDING (#379). The host holds this page's moves
+      // until it runs the new rules, and a failed rebuild says why.
+      rulesReloading.value = msg.state === 'reloading';
+      if (msg.state === 'failed') errorMsg.value = msg.message as string;
       break;
   }
 }
@@ -610,6 +618,9 @@ onUnmounted(() => {
           </template>
         </div>
 
+        <div v-if="rulesReloading" class="dev-chrome__reloading" role="status" data-testid="rules-reloading">
+          Reloading rules…
+        </div>
         <div v-if="errorMsg" class="dev-chrome__error">{{ errorMsg }}</div>
       </div>
     </div>
@@ -823,6 +834,9 @@ onUnmounted(() => {
           </dl>
         </div>
 
+        <div v-if="rulesReloading" class="dev-chrome__reloading" role="status" data-testid="rules-reloading">
+          Reloading rules…
+        </div>
         <div v-if="errorMsg" class="dev-chrome__error">{{ errorMsg }}</div>
       </header>
 
@@ -1210,6 +1224,11 @@ onUnmounted(() => {
   border-radius: 4px;
   padding: 4px 8px;
   margin-left: 6px;
+}
+
+.dev-chrome__reloading {
+  color: var(--bsg-accent);
+  font-size: 0.85rem;
 }
 
 .dev-chrome__error {

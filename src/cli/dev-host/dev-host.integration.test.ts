@@ -375,6 +375,8 @@ describe('dev-host integration: createDevHostClient against a real in-process WS
       const handleConnection = createDevHostConnectionHandler({
         mpHost: staleHost,
         clients: staleClients,
+        // No rules reload in this test, so every message runs as it arrives.
+        queue: { admit: (message) => message.run() },
         onError: (err) => {
           throw err instanceof Error ? err : new Error(String(err));
         },

@@ -2658,13 +2658,20 @@ safety:
    a `stateVersion` bump is migrated or refused exactly as it is on a fresh
    start (see above). Your world, its seats, its holdings and its queue are the
    ones you were just playing.
-4. **Every page reloads**, because Vite has hot-reloaded the UI in the same
+4. **Every page is seated where it was**, and anything it sent while the edit
+   was building runs now, on the new rules (#379). From the save until this
+   point the host holds every command, and each page says "Reloading rules…",
+   so a command sent right after a save never runs on the rules from before it.
+5. **Every page reloads**, because Vite has hot-reloaded the UI in the same
    moment and a page that kept its socket would be new UI holding a seat in a
    world that has just been rebuilt.
 
 If the new rules cannot run the world -- they declare a `stateVersion` with no
 migration, or they are not a world at all -- the refusal is printed and
-**nothing on disk changed**: the world is where the old host checkpointed it.
+**nothing on disk changed**: the world is where the old host checkpointed it,
+and it is opened again on the rules it had, so it goes on running (#381).
+Commands held for that reload, or for one whose rules did not load at all, are
+refused with the same reason.
 
 ## Running a world today
 
