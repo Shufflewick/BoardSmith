@@ -7,6 +7,7 @@ import { promises as fs } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import chalk from 'chalk';
 import { parseRulings } from './build-manifest.js';
+import { readFencedJsonLedger } from '../lib/fenced-json-ledger.js';
 import { atomicWriteFile, RUN_ID_RE, runRootDir, stagingSlicesDir } from './verify-run.js';
 
 /**
@@ -479,57 +480,22 @@ export async function readRulingVerdicts(
   projectDir: string,
   runId: string,
 ): Promise<RulingVerdictRecord[]> {
-  const ledgerPath = rulingVerdictsLedgerPath(projectDir, runId);
-  let text: string;
-  try {
-    text = await fs.readFile(ledgerPath, 'utf-8');
-  } catch {
-    return [];
-  }
-  const relLedgerPath = relative(projectDir, ledgerPath);
-  const beginIdx = text.indexOf(RULING_VERDICTS_LEDGER_BEGIN);
-  const endIdx = text.indexOf(RULING_VERDICTS_LEDGER_END);
-  if (beginIdx === -1 || endIdx === -1) {
-    throw new Error(`Malformed ruling-verdicts ledger at ${relLedgerPath}: missing begin/end fence.`);
-  }
-  if (beginIdx > endIdx) {
-    throw new Error(
-      `Malformed ruling-verdicts ledger at ${relLedgerPath}: the end fence appears before the ` +
-        `begin fence.`,
-    );
-  }
-  const body = text.slice(beginIdx + RULING_VERDICTS_LEDGER_BEGIN.length, endIdx);
-  const rawLines = body
-    .split('\n')
-    .map((l) => l.trim())
-    .filter((l) => l.length > 0);
-
-  return rawLines.map((line, i) => {
-    let raw: unknown;
-    try {
-      raw = JSON.parse(line);
-    } catch {
-      throw new Error(
-        `Malformed ruling-verdicts ledger at ${relLedgerPath} (record ${i + 1}): not valid JSON.\n` +
-          `Delete the file to re-record this run's CHECK-01 verdicts from scratch.`,
-      );
-    }
-    const r = raw as Record<string, unknown>;
-    try {
-      return createRulingVerdictRecord({
-        number: Number(r.number),
-        verdict: String(r.verdict ?? ''),
-        reasoning: String(r.reasoning ?? ''),
-        supersededBy: r.supersededBy !== undefined ? Number(r.supersededBy) : undefined,
-      });
-    } catch (err) {
-      throw new Error(
-        `Malformed ruling-verdicts ledger at ${relLedgerPath} (record ${i + 1}): ` +
-          `${(err as Error).message}\n` +
-          `Delete the file to re-record this run's CHECK-01 verdicts from scratch.`,
-      );
-    }
-  });
+  const file = {
+    projectDir,
+    path: rulingVerdictsLedgerPath(projectDir, runId),
+    begin: RULING_VERDICTS_LEDGER_BEGIN,
+    end: RULING_VERDICTS_LEDGER_END,
+    name: 'ruling-verdicts',
+    remedy: "Delete the file to re-record this run's CHECK-01 verdicts from scratch.",
+  };
+  return readFencedJsonLedger(file, (r) =>
+    createRulingVerdictRecord({
+      number: Number(r.number),
+      verdict: String(r.verdict ?? ''),
+      reasoning: String(r.reasoning ?? ''),
+      supersededBy: r.supersededBy !== undefined ? Number(r.supersededBy) : undefined,
+    }),
+  );
 }
 
 // -------------------------------------------------------------------------------------------

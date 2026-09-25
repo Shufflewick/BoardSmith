@@ -513,15 +513,6 @@
       ]
     },
     {
-      "content": "114509550506cb58",
-      "lines": 38,
-      "files": [
-        "src/cli/commands/verify-derive-check.ts",
-        "src/cli/commands/verify-example-replay.ts",
-        "src/cli/commands/verify-ruling-recheck.ts"
-      ]
-    },
-    {
       "content": "11641fd55ce96441",
       "lines": 11,
       "files": [
@@ -5771,14 +5762,6 @@
       ]
     },
     {
-      "content": "c878520b690b6926",
-      "lines": 17,
-      "files": [
-        "src/cli/commands/verify-example-replay.ts",
-        "src/cli/commands/verify-ruling-recheck.ts"
-      ]
-    },
-    {
       "content": "c922155ef1a83890",
       "lines": 11,
       "files": [
@@ -6335,16 +6318,6 @@
       "lines": 11,
       "files": [
         "src/ui/components/helpers/TutorialOverlay.parity.test.ts"
-      ]
-    },
-    {
-      "content": "dd51ec62374b0dbf",
-      "lines": 5,
-      "files": [
-        "src/cli/commands/verify-derive-check.ts",
-        "src/cli/commands/verify-example-replay.ts",
-        "src/cli/commands/verify-ruling-recheck.ts",
-        "src/cli/commands/verify-run.ts"
       ]
     },
     {
