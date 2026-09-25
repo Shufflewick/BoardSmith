@@ -2668,7 +2668,8 @@ safety:
 
 If the new rules cannot run the world -- they declare a `stateVersion` with no
 migration, or they are not a world at all -- the refusal is printed and
-**nothing on disk changed**: the world is where the old host checkpointed it.
+**nothing on disk changed**: the world is where the old host checkpointed it,
+and it is opened again on the rules it had, so it goes on running (#381).
 Commands held for that reload, or for one whose rules did not load at all, are
 refused with the same reason.
 

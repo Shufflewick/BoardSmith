@@ -98,9 +98,9 @@ describe('#167: `boardsmith dev` no longer needs a table half to open a world', 
  * to reach only the browser: the new UI acted on the old rules and the world
  * committed the result -- a durable world made of two versions.
  *
- * The reload itself needs a Vite server, a socket and a world on disk, which is
- * what `boardsmith dev` is; what a test can hold is the ORDER, because the order
- * is the whole of the safety. Load the new rules FIRST (a broken edit leaves the
+ * The reload is driven end to end over real sockets in
+ * `world-rules-reload.test.ts` (#379, #381); what is read here is the ORDER,
+ * because the order is the whole of the safety. Load the new rules FIRST (a broken edit leaves the
  * running world untouched), then stop the old world (its checkpoint is what
  * makes the swap lossless), then open the same world again on the new rules
  * (genesis does not re-run, and a `stateVersion` bump is migrated or refused
@@ -132,11 +132,8 @@ describe('#201: reloading a world\'s rules', () => {
   });
 
   it('reopens the same world on the new rules, and seats the pages where they were', () => {
-    expect(at('await worldHost.close()')).toBeLessThan(at('worldHost = hostOver(rules,'));
-    expect(at('worldHost = hostOver(rules,')).toBeLessThan(at("type: 'attach'"));
+    expect(at('await worldHost.close()')).toBeLessThan(at('worldHost = await openOn(rules)'));
+    expect(at('worldHost = await openOn(rules)')).toBeLessThan(at("type: 'attach'"));
   });
 
-  it('keeps the world when the new rules cannot run it, and says so', () => {
-    expect(source).toContain('nothing was changed on disk');
-  });
 });

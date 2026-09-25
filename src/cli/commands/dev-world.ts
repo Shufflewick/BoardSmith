@@ -330,32 +330,57 @@ export async function openWorldRun(
   let worldHost: LocalWorldHost = hostOver(options.runtime, store);
   reportMigration(await worldHost.start());
 
+  /** The rules `worldHost` runs, so a reload the new rules refuse can reopen on them (#381). */
+  let running: WorldRuntime = options.runtime;
+
+  /** A host over this world on `rules`, started; nothing is left open when that fails. */
+  async function openOn(rules: WorldRuntime): Promise<LocalWorldHost> {
+    const over = rules.openWorldStore(worldStorePath(options.cwd), budgets);
+    let host: LocalWorldHost;
+    try {
+      host = hostOver(rules, over);
+    } catch (error) {
+      over.close();
+      throw error;
+    }
+    try {
+      reportMigration(await host.start());
+    } catch (error) {
+      await host.close();
+      throw error;
+    }
+    return host;
+  }
+
   //   1. STOP THE OLD WORLD. `close` checkpoints whatever the resident tree
   //      holds, so nothing a command left in memory is lost with the isolate.
   //   2. OPEN THE SAME WORLD AGAIN, on the new rules. Genesis does not re-run
   //      (`start` runs it only for a world that has never launched), and a
   //      `stateVersion` bump is migrated or refused there (#200) -- the same
   //      path a fresh `boardsmith dev` takes.
-  //   3. SEAT EVERY PAGE WHERE IT WAS, so the commands held for this reload
-  //      (#379) are still their seats' commands. The queue runs them next, and
-  //      only then tells the pages to start again.
-  //
-  // Steps 1-2 can only fail on rules that already loaded, and the refusal is
-  // the queue's to print and to answer held commands with, with the world
-  // durable on disk exactly where the old host checkpointed it.
+  //   3. IF THE NEW RULES REFUSE IT, OPEN IT AGAIN ON THE RULES IT HAD (#381).
+  //      The refusal happens before anything is written, so the world on disk
+  //      is exactly where the old host checkpointed it, and it goes on running.
+  //   4. SEAT EVERY PAGE WHERE IT WAS, so the commands held for this reload
+  //      (#379) are still their seats' commands. The queue runs them next (or
+  //      refuses them with the reason, after step 3), and only then tells the
+  //      pages to start again.
   async function reloadWorld(rules: WorldRuntime): Promise<void> {
     const pages = worldHost.attachments();
+    await worldHost.close();
+    let refusal: Error | null = null;
     try {
-      await worldHost.close();
-      worldHost = hostOver(rules, rules.openWorldStore(worldStorePath(options.cwd), budgets));
-      reportMigration(await worldHost.start());
+      worldHost = await openOn(rules);
+      running = rules;
     } catch (error) {
-      throw new Error(
-        'Those rules cannot run this world, so nothing was changed on disk: ' +
-          (error instanceof Error ? error.message : String(error)),
+      refusal = new Error(
+        'Those rules cannot run this world, so it is still running the ones it had, and nothing ' +
+          `was changed on disk: ${error instanceof Error ? error.message : String(error)}`,
       );
+      worldHost = await openOn(running);
     }
     for (const [clientId, seat] of pages) await worldHost.handleMessage(clientId, { type: 'attach', seat });
+    if (refusal !== null) throw refusal;
   }
 
   return {

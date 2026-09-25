@@ -15,7 +15,7 @@ import { openSocketPage, serveSockets } from '../dev-host/socket-page.test-helpe
 import { loadWorldRuntime, openWorldRun, type WorldRuntime } from './dev-world.js';
 
 /** A one-fire world whose `stoke` adds `step` logs, written the way an author writes one. */
-function rulesSource(step: number): string {
+function rulesSource(step: number, stateVersion = 0): string {
   return [
     "import { Game, Space } from 'boardsmith';",
     "import { worldAction } from 'boardsmith/world';",
@@ -31,6 +31,7 @@ function rulesSource(step: number): string {
     "  gameType: 'world-rules-reload',",
     '  world: {',
     '    maxPlayers: 2,',
+    `    stateVersion: ${stateVersion},`,
     "    actions: [worldAction('stoke').needs(() => ['fire'])",
     `      .execute((_args: unknown, ctx: { world: { partition(name: string): unknown } }) => { (ctx.world.partition('fire') as Fire).logs += ${step}; })],`,
     "    view: () => ['fire'],",
@@ -52,6 +53,10 @@ const project = worldRules(rulesSource(1));
 const beforeEdit = await project.load();
 project.save(rulesSource(10));
 const afterEdit = await project.load();
+// Builds, but cannot open a world written under stateVersion 0: it bumps the
+// version and declares no migration (#381).
+project.save(rulesSource(10, 1));
+const unopenableEdit = await project.load();
 const brokenEdit = await buildFailure(worldRules('export const gameDefinition = ;').load);
 
 const closing: Array<() => Promise<void>> = [];
@@ -146,6 +151,32 @@ describe('#379: a world command sent while the edited rules are still building',
     expect(world.page.frames.some((f) => f.type === 'world_reload')).toBe(false);
 
     // The world is where it was, on the rules it had: the next command adds 1.
+    expect(await world.stoke()).toMatchObject({ ok: true });
+    await vi.waitFor(() => expect(world.logs()).toBe(2));
+  }, 30_000);
+});
+
+/**
+ * #381: RULES THAT BUILD BUT CANNOT OPEN THE WORLD LEAVE IT RUNNING.
+ *
+ * The reload closes the running world before it opens it on the new rules, so
+ * a refusal from that open used to leave the dev host holding a closed world:
+ * every later command failed inside a closed store until `boardsmith dev` was
+ * restarted.
+ */
+describe('#381: an edit that builds but cannot open the world', () => {
+  it('refuses the held command, and the world goes on, on the rules it had', async () => {
+    const world = await serveWorld(unopenableEdit);
+    await world.stoke();
+    await vi.waitFor(() => expect(world.logs()).toBe(1));
+
+    const refused = await world.stokeDuringRebuild();
+    expect(refused.ok).toBe(false);
+    expect(refused.message).toContain('Those rules cannot run this world, so it is still running the ones it had');
+    expect(refused.message).toContain('stateVersion');
+    expect(world.page.frames.some((f) => f.type === 'world_reload')).toBe(false);
+
+    // Still open, still seated, still on the old rules: the next command adds 1.
     expect(await world.stoke()).toMatchObject({ ok: true });
     await vi.waitFor(() => expect(world.logs()).toBe(2));
   }, 30_000);
