@@ -287,7 +287,7 @@
     "src/cli/slash-command/bs/build-chunk.test.ts:1586-1591|src/cli/slash-command/bs/build-chunk.test.ts:540-545",
     "src/cli/slash-command/bs/build-chunk.test.ts:1308-1316|src/cli/slash-command/bs/ingest.test.ts:1056-1064",
     "src/cli/slash-command/bs/build-chunk.test.ts:1417-1422|src/cli/slash-command/bs/build-chunk.test.ts:1454-1459",
-    "src/cli/slash-command/bs/build-chunk.test.ts:1823-1827|src/cli/slash-command/bs/verify.test.ts:1363-1367",
+    "src/cli/slash-command/bs/build-chunk.test.ts:1828-1832|src/cli/slash-command/bs/verify.test.ts:1363-1367",
     "src/cli/slash-command/bs/build-game.test.ts:15-36|src/cli/slash-command/bs/ingest.test.ts:26-54",
     "src/cli/slash-command/bs/build-game.test.ts:19-36|src/cli/slash-command/bs/templates.test.ts:45-71",
     "src/cli/slash-command/bs/build-game.test.ts:19-28|src/cli/slash-command/bs/ingest.test.ts:30-46|src/cli/slash-command/bs/templates.test.ts:45-57|src/cli/slash-command/bs/verify.test.ts:31-40",
