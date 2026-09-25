@@ -435,16 +435,24 @@ describe('useBoardActionBridge.ts source: isViewingHistory guard wired at every 
   });
 });
 
-describe('GameShell.vue source: isViewingHistory wired into the useBoardActionBridge call site', () => {
-  const gameShellSource = fs.readFileSync(
-    path.join(path.dirname(fileURLToPath(import.meta.url)), 'GameShell.vue'),
-    'utf-8'
-  );
+describe('GameShell.vue source: isViewingHistory reaches both the controller and the bridge', () => {
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const gameShellSource = fs.readFileSync(path.join(here, 'GameShell.vue'), 'utf-8');
+  const wiringSource = fs.readFileSync(path.join(here, '../composables/useTableActionWiring.ts'), 'utf-8');
 
-  it('passes isViewingHistory into useBoardActionBridge({...})', () => {
-    const callSiteIdx = gameShellSource.indexOf('useBoardActionBridge({');
+  it('passes isViewingHistory into useTableActionWiring({...})', () => {
+    const callSiteIdx = gameShellSource.indexOf('useTableActionWiring({');
     expect(callSiteIdx).toBeGreaterThan(-1);
     const callSiteBlock = gameShellSource.slice(callSiteIdx, callSiteIdx + 400);
     expect(callSiteBlock).toContain('isViewingHistory');
+  });
+
+  it('useTableActionWiring hands it to useActionController and useBoardActionBridge (#378)', () => {
+    for (const call of ['useActionController({', 'useBoardActionBridge({']) {
+      const idx = wiringSource.indexOf(call);
+      expect(idx, call).toBeGreaterThan(-1);
+      const block = wiringSource.slice(idx, wiringSource.indexOf('});', idx));
+      expect(block, call).toContain('isViewingHistory');
+    }
   });
 });

@@ -1,5 +1,49 @@
 # Migration Guide
 
+## Engine contract r106: a test wires a table's actions with `useTableActionWiring`
+
+Contract r106 (#356) replaced `useBoardActionBridge`'s `restoreEpoch` option
+with `runnerIdentity` (`{ gameInstanceId, restoreEpoch }`), so a new game tears
+down an open pick the way an undo does. That change shipped with no note here,
+and every game test that wired `useActionController` and `useBoardActionBridge`
+together stopped type-checking (TS2353, `'restoreEpoch' does not exist`) (#378).
+
+The fix is not the new option name. A game should never have been passing
+either: which state fields the bridge reads is the engine's business. So
+`useBoardActionBridge` is no longer exported from `boardsmith/ui`, and
+`useTableActionWiring` takes its place. It builds the controller and the bridge
+from the seat's `PlayerGameState`, reading the action metadata, disabled
+reasons, tutorial step and runner identity itself, and GameShell wires its own
+actions with the same function.
+
+```diff
+-  const controller = useActionController({
+-    sendAction, availableActions, actionMetadata, isMyTurn, disabledActions,
+-    playerSeat: ref(seat), autoFill: true, autoExecute: true, fetchPickChoices,
+-  });
+-  useBoardActionBridge({
+-    controller, boardInteraction: board, isMyTurn, autoEndTurn: ref(true),
+-    actionMetadata, availableActions, disabledActions, isViewingHistory: ref(false),
+-    restoreEpoch: computed(() => state.value.restoreEpoch),
+-  });
++  const { controller, actionMetadata, disabledActions } = useTableActionWiring({
++    seatState: state,                     // Ref<PlayerGameState>
++    availableActions: computed(() => state.value.availableActions ?? []),
++    isMyTurn: computed(() => state.value.isMyTurn),
++    playerSeat: ref(seat),
++    boardInteraction: board,
++    autoEndTurn: ref(true),
++    isViewingHistory: ref(false),
++    sendAction, fetchPickChoices,
++  });
+```
+
+`autoFill` and `autoExecute` are gone from the call: a table auto-fills when
+`autoEndTurn` is on and always executes once every pick is filled, as GameShell
+always has. Pass the returned `actionMetadata` and `disabledActions` to an
+`ActionPanel` you mount beside the board. `src/cli/slash-command/bs/build/test.md`
+(the a11y floor, item 1) has the whole test shape.
+
 ## Engine contract r17 → r23
 
 A run of upstream fixes. Most need nothing from a game; these four do.

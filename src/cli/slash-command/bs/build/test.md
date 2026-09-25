@@ -294,12 +294,35 @@ tests — never a manual visual pass:
    through the ActionPanel using only keyboard events — no pointer/click simulation. Follow two
    precedents together, one for shape and one for real-wiring: `CardRenderer.a11y.test.ts`'s
    individual-control shape (mount the component, `trigger('keydown', { key: 'Enter' })`, assert
-   the expected handler fired exactly once) for the control-level assertion, and
-   `interaction-integration.test.ts`'s end-to-end shape (`useActionController` +
-   `useBoardActionBridge` + `createBoardInteraction` wired together with no mock controller) for
-   the full completion path — a mocked controller misses the real
+   the expected handler fired exactly once) for the control-level assertion, and the real wiring
+   for the full completion path: a live `GameSession`, and the controller and board bridge built
+   by `useTableActionWiring` from `boardsmith/ui`, the same function GameShell wires them with.
+   A mocked controller misses the real
    `fill → fetchChoicesForPick → snapshotVersion++ → currentChoices` reactive chain, so this test
-   must exercise the real wiring, not a mock.
+   must exercise the real wiring, not a mock. Never call `useActionController` and a board bridge
+   by hand: which state fields the bridge reads is the engine's business, and it changes.
+
+   ```typescript
+   // Inside the test host component's setup().
+   const seatState = ref(session.buildPlayerState(seat));   // re-read after every move
+   const board = createBoardInteraction();
+   provideBoardInteraction(board);
+   const { controller, actionMetadata, disabledActions } = useTableActionWiring({
+     seatState,
+     availableActions: computed(() => seatState.value.availableActions ?? []),
+     isMyTurn: computed(() => seatState.value.isMyTurn),
+     playerSeat: ref(seat),
+     boardInteraction: board,
+     autoEndTurn: ref(true),
+     isViewingHistory: ref(false),
+     sendAction: (name, args) => session.performAction(name, seat, args),
+     fetchPickChoices: async (action, pick, player, args) => session.getPickChoices(action, pick, player, args),
+   });
+   ```
+
+   Re-read `seatState` from the session after each move, the way a broadcast arrives. Undo, rewind
+   and a new game are handled from that state alone: the helper tears down an open pick when the
+   state says the game tree changed, so a test never passes `restoreEpoch` or `gameInstanceId`.
 
 2. **`axe-core` structural/semantic scan.** Mount this chunk's board and ActionPanel components
    and run `axe-core` over the rendered output:
