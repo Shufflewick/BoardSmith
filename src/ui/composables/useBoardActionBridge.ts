@@ -136,7 +136,8 @@ export async function startActionWithBoardReset(
   board?.clear();
   await controller.start(actionName, options);
   // `setCurrentAction` and `setValidElements` are NOT called here: the bridge's
-  // watchers do that reactively off `controller.currentAction` / `snapshotVersion`.
+  // watchers do that reactively off `controller.currentAction` + `actionStartTick`
+  // and `snapshotVersion`.
   // Re-setting them by hand is how a caller ends up restoring one field of four.
 }
 
@@ -652,7 +653,14 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
 
   // Mirror the controller's action into the board substrate + expose the choice
   // callback so custom UIs can trigger non-element choices (e.g. suit selection).
-  watch(currentAction, (action) => {
+  //
+  // Keyed on the START, not only the name (#384). When the new state lands
+  // before the action's reply, the reply clears `move` and the auto-start opens
+  // `move` again in the same flush. A watch on the name sees `move` both times
+  // and never runs, so the board stays cleared by startActionWithBoardReset, and
+  // the external-cancel watcher below reads that empty board as the player
+  // cancelling.
+  watch([currentAction, controller.actionStartTick], ([action]) => {
     if (action) {
       const pickName = currentPick.value?.name ?? null;
       const pickIndex = currentActionMeta.value?.selections.findIndex(s => s.name === pickName) ?? 0;

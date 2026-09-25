@@ -54,18 +54,25 @@ interface Table {
   newGame: (seed: string) => void;
   /** The live game. */
   game: () => MoveGame;
-  /** Clicks a room on the board, then delivers the broadcast that follows the move. */
+  /** Clicks a room on the board; the move's state broadcast lands in the table's delivery order. */
   moveTo: (room: string) => Promise<void>;
   /** Room ids the board currently offers, sorted. */
   offered: () => number[];
 }
+
+/**
+ * The order a move's two messages reach the seat. Over a real transport the
+ * action's reply and the state broadcast travel separately, so either can land
+ * first (#384), and the board must end up the same way both times.
+ */
+type Delivery = 'reply-first' | 'state-first';
 
 const mounted: VueWrapper[] = [];
 afterEach(() => {
   for (const wrapper of mounted.splice(0)) wrapper.unmount();
 });
 
-function mountTable(): Table {
+function mountTable(delivery: Delivery = 'reply-first'): Table {
   let session = newSession('bs378');
   const seatState = ref(session.buildPlayerState(SEAT)) as Ref<PlayerGameState>;
   const board = createBoardInteraction();
@@ -82,9 +89,13 @@ function mountTable(): Table {
         autoEndTurn: ref(true),
         isViewingHistory: ref(false),
         // Exactly the transport build/test.md shows a game. The new state
-        // reaches the seat as a separate broadcast, after the action's own
-        // reply, as it does over the wire: see `broadcast`.
-        sendAction: (name, args) => session.performAction(name, SEAT, args),
+        // reaches the seat as a separate broadcast: after the action's own
+        // reply ('reply-first', see `moveTo`), or before it ('state-first').
+        sendAction: async (name, args) => {
+          const result = await session.performAction(name, SEAT, args);
+          if (delivery === 'state-first') seatState.value = session.buildPlayerState(SEAT);
+          return result;
+        },
         fetchPickChoices: async (action, pick, player, args) => session.getPickChoices(action, pick, player, args),
       });
       return () => h('div');
@@ -106,8 +117,10 @@ function mountTable(): Table {
     moveTo: async (room) => {
       board.triggerElementSelect({ id: session.runner.game.roomIds(room)[0] });
       await settle();
-      seatState.value = session.buildPlayerState(SEAT);
-      await settle();
+      if (delivery === 'reply-first') {
+        seatState.value = session.buildPlayerState(SEAT);
+        await settle();
+      }
     },
     offered: () => board.validElements.map((t) => t.id).sort((a, b) => a - b),
   };
@@ -133,6 +146,23 @@ describe('useTableActionWiring drives the board from the seat state alone (#378)
     // The next move reopens against the new position.
     expect(table.offered()).toEqual(table.game().roomIds('bridge', 'engine'));
   });
+
+  for (const delivery of ['reply-first', 'state-first'] as const) {
+    it(`reopens the sole action for the next move whichever lands first: ${delivery} (#384)`, async () => {
+      const table = mountTable(delivery);
+      await settle();
+
+      await table.moveTo('hold');
+      expect(table.game().pawnRoom()).toBe('hold');
+      expect(table.wiring.controller.currentAction.value).toBe('move');
+      expect(table.offered()).toEqual(table.game().roomIds('bridge', 'engine'));
+
+      // And again, so the reopened pick is itself answerable.
+      await table.moveTo('engine');
+      expect(table.game().pawnRoom()).toBe('engine');
+      expect(table.offered()).toEqual(table.game().roomIds('bridge', 'hold'));
+    });
+  }
 
   it('re-deals the open pick after an undo, with no restoreEpoch passed by the caller', async () => {
     const table = mountTable();
