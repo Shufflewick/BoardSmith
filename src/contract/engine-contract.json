@@ -1,7 +1,7 @@
 {
-  "revision": 106,
+  "revision": 107,
   "bundleProtocol": 2,
-  "surfaceHash": "027e9a92e73de675",
+  "surfaceHash": "7abda4be9833ab31",
   "payloadHash": "5bfe87a6bf117444",
   "formatHash": "0058593e7cc80205",
   "history": [
@@ -898,6 +898,15 @@
       "payloadHash": "5bfe87a6bf117444",
       "formatHash": "0058593e7cc80205",
       "summary": "PlayerGameState gains gameInstanceId (and GameStateSnapshot carries it): a random id minted when a game starts, kept across undo and every stateless op, and new on every start including a start from a --seed position. GameShell tears down an open pick when it or restoreEpoch changes, so a new game at the same step no longer offers the previous game's element ids (#356). The payload fixture now hashes the names of the fields a seat's broadcast state carries. Not breaking for built bundles, but a game built on this BoardSmith needs the re-vendored engine: its GameShell reads gameInstanceId, and without it no replacement (undo included) tears down an open pick."
+    },
+    {
+      "revision": 107,
+      "date": "2026-09-25",
+      "bundleProtocol": 2,
+      "surfaceHash": "7abda4be9833ab31",
+      "payloadHash": "5bfe87a6bf117444",
+      "formatHash": "0058593e7cc80205",
+      "summary": "SnapshotSessionHost takes an optional hostWork gate (new HostWorkGate type): demo moves and bot chains wait on it while the host's rules are being replaced; a host without one runs that work at once"
     }
   ]
 }
