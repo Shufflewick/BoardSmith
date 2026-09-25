@@ -7,6 +7,7 @@ import { promises as fs } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import chalk from 'chalk';
 import { atomicWriteFile } from './verify-run.js';
+import { readFencedJsonLedger } from '../lib/fenced-json-ledger.js';
 import { isPresentationLine } from './verify-classify.js';
 import { DERIVED_LINE_RE, annotationLineStartRe } from './derived-line-pattern.js';
 import {
@@ -589,59 +590,28 @@ export async function recordDeriveCheckVerdicts(
  * the 1-based record index — never a raw `SyntaxError`.
  */
 export async function readDeriveCheckVerdicts(projectDir: string): Promise<DeriveCheckRecord[]> {
-  const ledgerPath = deriveCheckLedgerPath(projectDir);
-  let text: string;
-  try {
-    text = await fs.readFile(ledgerPath, 'utf-8');
-  } catch {
-    return [];
-  }
-  const beginIdx = text.indexOf(DERIVE_CHECK_LEDGER_BEGIN);
-  const endIdx = text.indexOf(DERIVE_CHECK_LEDGER_END);
-  if (beginIdx === -1 || endIdx === -1) {
-    throw new Error(
-      `Malformed derive-check ledger at ${relative(projectDir, ledgerPath)}: missing begin/end ` +
-        `fence.`,
-    );
-  }
-  const relLedgerPath = relative(projectDir, ledgerPath);
-  const body = text.slice(beginIdx + DERIVE_CHECK_LEDGER_BEGIN.length, endIdx);
-  const rawLines = body
-    .split('\n')
-    .map((l) => l.trim())
-    .filter((l) => l.length > 0);
-
-  return rawLines.map((line, i) => {
-    let raw: unknown;
-    try {
-      raw = JSON.parse(line);
-    } catch {
-      throw new Error(
-        `Malformed derive-check ledger at ${relLedgerPath} (record ${i + 1}): not valid JSON.\n` +
-          `Delete the file to re-run CHECK-04 from scratch.`,
-      );
-    }
-    const r = raw as Record<string, unknown>;
-    try {
-      return createDeriveCheckRecord({
-        slicePath: String(r.slicePath ?? ''),
-        lineNumber: Number(r.lineNumber),
-        derivedLineText: String(r.derivedLineText ?? ''),
-        verdict: String(r.verdict ?? ''),
-        reason: String(r.reason ?? ''),
-        citedFactIds: Array.isArray(r.citedFactIds) ? (r.citedFactIds as string[]) : [],
-        groundedQuotes: Array.isArray(r.groundedQuotes)
-          ? (r.groundedQuotes as DeriveCheckGroundedQuote[])
-          : [],
-        recordedAt: r.recordedAt !== undefined ? String(r.recordedAt) : undefined,
-      });
-    } catch (err) {
-      throw new Error(
-        `Malformed derive-check ledger at ${relLedgerPath} (record ${i + 1}): ` +
-          `${(err as Error).message}\nDelete the file to re-run CHECK-04 from scratch.`,
-      );
-    }
-  });
+  const file = {
+    projectDir,
+    path: deriveCheckLedgerPath(projectDir),
+    begin: DERIVE_CHECK_LEDGER_BEGIN,
+    end: DERIVE_CHECK_LEDGER_END,
+    name: 'derive-check',
+    remedy: 'Delete the file to re-run CHECK-04 from scratch.',
+  };
+  return readFencedJsonLedger(file, (r) =>
+    createDeriveCheckRecord({
+      slicePath: String(r.slicePath ?? ''),
+      lineNumber: Number(r.lineNumber),
+      derivedLineText: String(r.derivedLineText ?? ''),
+      verdict: String(r.verdict ?? ''),
+      reason: String(r.reason ?? ''),
+      citedFactIds: Array.isArray(r.citedFactIds) ? (r.citedFactIds as string[]) : [],
+      groundedQuotes: Array.isArray(r.groundedQuotes)
+        ? (r.groundedQuotes as DeriveCheckGroundedQuote[])
+        : [],
+      recordedAt: r.recordedAt !== undefined ? String(r.recordedAt) : undefined,
+    }),
+  );
 }
 
 // -------------------------------------------------------------------------------------------

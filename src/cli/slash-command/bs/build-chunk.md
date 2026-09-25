@@ -130,6 +130,10 @@ It also moves any recorded worked example whose slice line moved (a `Source:` li
 above it, say) to the line its text is now on. An example whose text is no longer in its slice is
 reported, not repaired: the build's test step records that slice's examples again
 (`verify-example-replay` reports it pending).
+If it refuses because the example-replay ledger was written before records carried `lineText`, run
+`npx boardsmith verify-example-ledger-upgrade` once (never delete the ledger), then re-run
+`ingest-check`. The upgrade keeps every verdict it can place and names the slices whose examples
+the build's test step must record again.
 
 The one other thing it reports without repairing is a slice that does not say which document it was
 transcribed from (its `Source: rulebook/source/<file>` line), because only the transcription

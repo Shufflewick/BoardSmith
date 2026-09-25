@@ -5,6 +5,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promises as fs, readdirSync, readFileSync } from 'node:fs';
 import { tempTree } from '../testing/temp-tree.test-helper.js';
+import { renderIndex } from './commands/ingest-archive.js';
 import { REPO_ROOT, spawnCli } from './spawn-cli.test-helper.js';
 
 /**
@@ -161,6 +162,61 @@ describe('verify-example-record — registration (CHECK-06, the extraction/trans
     const result = await spawnCli(['verify-example-record', '--project', '/tmp']);
     expect(result.code).not.toBe(0);
     expect(result.stderr).toContain('required option');
+  });
+});
+
+describe('verify-example-ledger-upgrade — the one-time lineText upgrade (#371)', () => {
+  it('is registered with --project and --json, and no bypass flag', async () => {
+    await expectHelpWithoutBypass('verify-example-ledger-upgrade', ['--project <dir>', '--json', '-h, --help']);
+  });
+
+  it('ingest-check refuses a pre-lineText ledger naming the upgrade, and passes once it has run', async () => {
+    const dir = tempTree('bs-cli-example-ledger-upgrade-');
+    const project = join(dir, 'project');
+    const rulebook = join(project, DESIGN_DIR, 'rulebook');
+    await fs.mkdir(join(rulebook, '.example-replay'), { recursive: true });
+    const line = 'Example (p.2): "Draw a card, then discard one."';
+    await fs.writeFile(join(rulebook, '02-turn.md'), `# Turn\n\np.2, Turn:\n${line}\n`);
+    await fs.writeFile(
+      join(rulebook, 'INDEX.md'),
+      renderIndex({
+        gameName: 'interview',
+        edition: 'unpublished — designer statement',
+        archivedPath: 'not applicable — no source rulebook (interview path)',
+        sourceHash: 'not applicable — no source rulebook (interview path)',
+        transcribed: '2026-09-24',
+      }),
+    );
+    const oldRecord = {
+      exampleId: 'rulebook/02-turn.md:4',
+      slicePath: 'rulebook/02-turn.md',
+      lineNumber: 4,
+      kind: 'transition',
+      verdict: 'unexecutable',
+      reason: 'no-matching-symbol: nothing draws a card yet.',
+      supportingQuoteLines: [line],
+      provenance: 'quote-verified',
+      recordedAt: '2026-09-24T04:02:35.674Z',
+    };
+    await fs.writeFile(
+      join(rulebook, '.example-replay', 'EXAMPLE-VERDICTS.md'),
+      '<!-- boardsmith:example-replay-verdicts:begin -->\n' +
+        `${JSON.stringify(oldRecord)}\n` +
+        '<!-- boardsmith:example-replay-verdicts:end -->\n',
+    );
+
+    const refused = await spawnCli(['ingest-check', '--project', project, '--json']);
+    expect(refused.code).toBe(1);
+    expect(refused.stderr).toContain('npx boardsmith verify-example-ledger-upgrade');
+    expect(refused.stderr).not.toMatch(/\bat \S+\.ts:\d+/);
+
+    const upgraded = await spawnCli(['verify-example-ledger-upgrade', '--project', project, '--json']);
+    expect(upgraded.code).toBe(0);
+    expect(JSON.parse(upgraded.stdout).upgraded).toEqual(['rulebook/02-turn.md:4']);
+
+    const checked = await spawnCli(['ingest-check', '--project', project, '--json']);
+    expect(checked.stderr).not.toContain('example-replay ledger');
+    expect(JSON.parse(checked.stdout).unanchoredExamples).toEqual([]);
   });
 });
 
