@@ -17,12 +17,12 @@
  * @module
  */
 import { mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync, writeFileSync } from 'node:fs';
-import { createServer, type AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { INSTALLED_MODULES } from '../../testing/installed-modules.test-helper.js';
+import { freePort } from './free-port.test-helper.js';
 import { loadWorldRuntime, startWorldDevServer } from './dev-world.js';
 
 /** This checkout, which is the library every fixture resolves against. */
@@ -50,18 +50,6 @@ interface ServedFixture {
   readonly hostUrl: string;
   /** The project directory. */
   readonly fixture: string;
-}
-
-/** A port nobody else is on. */
-function freePort(): Promise<number> {
-  return new Promise((done, fail) => {
-    const probe = createServer();
-    probe.on('error', fail);
-    probe.listen(0, '127.0.0.1', () => {
-      const { port } = probe.address() as AddressInfo;
-      probe.close(() => done(port));
-    });
-  });
 }
 
 const VITE_CONFIG = `import { defineConfig } from 'vite';
