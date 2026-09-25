@@ -140,20 +140,21 @@ describe('#231: the world dev host hands back an awaitable stop', () => {
     // that body ends in `process.exit`. A caller with no signal to send had no
     // orderly stop available at all.
     expect(source).toContain('interface WorldDevServer');
-    expect(source).toMatch(/return \{ hostUrl, stop \}/);
+    expect(source).toMatch(/return \{ hostUrl, stop: \(\) => options\.holdings\.run\(\) \}/);
   });
 
-  it('closes the world, then Vite, and only then lets the process go', () => {
-    // The order is the guarantee. `run.close()` (the world host's own close,
-    // through `openWorldRun`, #379) drains the world lock and
-    // closes the store handle, so no world write can follow it; Vite is closed
-    // after it because Vite's watcher and dep optimiser write into the same
-    // project. The teardown is an ordered list (#366), the world's resources
-    // first. Ending the process belongs to `onShutdown`, never to this file, so
-    // a programmatic stop does not end the process and a signalled one still
-    // does.
-    expect(at("{ name: 'the world', close: () => run.close() }")).toBeLessThan(at('...worldResources,'));
-    expect(at('...worldResources,')).toBeLessThan(at('...served.resources,'));
+  it('closes the pages and Vite, then the world, and only then lets the process go', () => {
+    // The order is the guarantee. What the host holds closes newest first
+    // (#386), and the world is held when it opens, before the pages and Vite
+    // are served in front of it. So a stop forgets the pages, closes Vite and
+    // the HTTP server, after which nothing can reach the world, and then
+    // `run.close()` (the world host's own close, through `openWorldRun`, #379)
+    // drains the world lock and closes the store handle. Vite's watcher and
+    // dep optimiser write into the same project, and both are stopped before
+    // the stop resolves. Ending the process belongs to `onShutdown`, never to
+    // this file, so a programmatic stop does not end the process and a
+    // signalled one still does.
+    expect(at('(opened) => [closesWorld(opened)]')).toBeLessThan(at('(opened) => [...pages, ...opened.resources]'));
     expect(source).not.toMatch(/process\.exit\(/);
   });
 });
