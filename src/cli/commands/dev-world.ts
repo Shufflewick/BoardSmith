@@ -30,7 +30,7 @@
  * surface only `boardsmith dev` could show.
  */
 
-import { existsSync, readFileSync, rmSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -44,7 +44,7 @@ import type { LocalWorldHost } from '../dev-host/world-host.js';
 import { createRulesReloadQueue, type RulesReloadQueue } from '../dev-host/rules-reload-queue.js';
 import { createWorldConnections } from '../dev-host/world-connections.js';
 import { worldStorePath, type LocalWorldStore, type openWorldStore } from '../dev-host/world-store.js';
-import { announceHost, onShutdown, teardownInOrder, type HeldResource } from '../dev-host/shutdown.js';
+import { announceHost, teardownInOrder, type HeldResource, type HostHoldings } from '../dev-host/shutdown.js';
 import type { WorldDevConfig } from '../dev-host/world-config-types.js';
 import { ensureWorldEntry, WORLD_ENTRY_HTML } from '../lib/world-entry.js';
 import type { GameDefinition } from '../../session/index.js';
@@ -217,7 +217,13 @@ interface WorldDevServerOptions {
   readonly context: 'monorepo' | 'standalone';
   readonly port: number;
   readonly host: string;
-  readonly tempDir: string;
+  /**
+   * What this run holds, from before it started (#386). The world and the
+   * server in front of it are added as they are opened, so a stop at any point
+   * releases exactly what exists. Whoever created it owns the signals: `boardsmith dev`
+   * stops it on Ctrl+C.
+   */
+  readonly holdings: HostHoldings;
   readonly openBrowser: boolean;
   /**
    * READ THE PROJECT'S RULES AGAIN (#201).
@@ -260,6 +266,11 @@ interface WorldRun {
    * there is. The pages are the caller's to forget first.
    */
   close(): Promise<void>;
+}
+
+/** The world as a host holds it: closed, never deleted. */
+function closesWorld(run: WorldRun): HeldResource {
+  return { name: 'the world', close: () => run.close() };
 }
 
 /** Open the project's world on `runtime`, and reload it through `reloadRules` on every save. */
@@ -445,7 +456,15 @@ export async function startWorldDevServer(
   const surfacePath = join(options.uiPath, WORLD_ENTRY_HTML);
 
   // The world, its pages and its reloads, opened BEFORE anything is served.
-  const run = await openWorldRun(options);
+  // THE WORLD IS CLOSED, NOT DELETED. A persistent world that erased itself
+  // when its host stopped would be a session; `--reset` is the only thing that
+  // removes one. `close` drains the world lock before it touches the store, so
+  // an in-flight disconnect or command is finished rather than abandoned -- and
+  // the checkpoint it writes on the way out is the last write there is.
+  const run = await options.holdings.acquire(
+    () => openWorldRun(options),
+    (opened) => [closesWorld(opened)],
+  );
 
   const config: WorldDevConfig = {
     displayName: options.displayName,
@@ -478,37 +497,34 @@ export async function startWorldDevServer(
   ];
   if (options.context === 'monorepo') plugins.unshift(monorepoBoardsmithResolvePlugin());
 
-  // Everything the world half holds, in the order it is released: first by
-  // itself if Vite cannot listen, otherwise at the head of the full teardown
-  // below. `close` drains the world lock before it touches the
-  // store, so an in-flight disconnect or command is finished rather than
-  // abandoned -- and the checkpoint it writes on the way out is the last write
-  // there is.
-  //
-  // THE WORLD IS CLOSED, NOT DELETED. A persistent world that erased itself
-  // when its host stopped would be a session; `--reset` is the only thing that
-  // removes one.
-  const worldResources: readonly HeldResource[] = [
+  // The pages in front of the world, released before the server they ride on
+  // closes, so their sockets closing is no departure.
+  const pages: readonly HeldResource[] = [
     { name: "the world's socket", close: () => worldSocket.close() },
     { name: 'the browser connections', close: () => run.connections.forgetAll() },
-    { name: 'the world', close: () => run.close() },
   ];
 
   // A HOST THAT CANNOT SERVE HOLDS NOTHING (#345). `devCommand` refuses a taken
   // port before the world is opened, but the port can still be taken between
   // that check and this listen, so a refusal here closes the world too.
-  const served = await serveVite({
-    config: {
-      root: options.uiPath,
-      server: { fs: { allow: [options.uiPath, options.cwd, boardsmithRoot] } },
-      plugins,
-      optimizeDeps: { exclude: ['boardsmith', 'boardsmith/ui', 'boardsmith/client', 'boardsmith/session'] },
-    },
-    port: options.port,
-    host: options.host,
-    sockets: [worldSocket],
-    release: () => teardownInOrder(worldResources).run(),
-  });
+  const served = await options.holdings.acquire(
+    () =>
+      serveVite({
+        config: {
+          root: options.uiPath,
+          server: { fs: { allow: [options.uiPath, options.cwd, boardsmithRoot] } },
+          plugins,
+          optimizeDeps: { exclude: ['boardsmith', 'boardsmith/ui', 'boardsmith/client', 'boardsmith/session'] },
+        },
+        port: options.port,
+        host: options.host,
+        sockets: [worldSocket],
+        release: () => teardownInOrder([...pages, closesWorld(run)]).run(),
+      }),
+    // Vite's own watcher and dep optimiser write into the project, so they
+    // are stopped, with the world, before the build directory goes.
+    (opened) => [...pages, ...opened.resources],
+  );
   const { vite } = served;
 
   // A RULE EDIT IS A COORDINATED WORLD RELOAD (#201), heard here and carried
@@ -532,21 +548,7 @@ export async function startWorldDevServer(
   // reach the same run, so the two can never run the teardown twice, and the
   // awaited result is the guarantee that nothing this host owns will write
   // again. A stop that cannot finish refuses, naming what is still open (#366).
-  const teardown = teardownInOrder([
-    ...worldResources,
-    // AFTER the world, because Vite's own watcher and dep optimiser write into
-    // the project too, and a caller about to remove that project needs both
-    // writers stopped before it does.
-    ...served.resources,
-    {
-      name: `the build directory (${options.tempDir})`,
-      close: () => rmSync(options.tempDir, { recursive: true, force: true }),
-    },
-  ]);
-  const stop = (): Promise<void> => teardown.run().finally(() => shutdown.cancel());
-  const shutdown = onShutdown(teardown, { say: (line) => console.log(chalk.dim(line)) });
-
-  return { hostUrl, stop };
+  return { hostUrl, stop: () => options.holdings.run() };
 }
 
 /**

@@ -20,7 +20,8 @@ import { join } from 'node:path';
 
 import { devProject, EXIT_WITHIN_MS, spawnDev, type DevRunEnding } from './dev-project.test-helper.js';
 import { freePort } from './free-port.test-helper.js';
-import { worldStorePath } from '../dev-host/world-store.js';
+import { openWorldStore, worldStorePath } from '../dev-host/world-store.js';
+import { worldBudgets } from '../../world/index.js';
 
 // Each run bundles the project's rules and starts Vite, which under full-suite
 // parallelism can take a while. A hang guard, not a budget.
@@ -103,5 +104,66 @@ describe('boardsmith dev stopped with SIGTERM (#382)', () => {
 
   it('a table project: runs the whole teardown before it exits', async () => {
     await expectStoppedWhole(await devProject(false), 'SIGTERM');
+  });
+});
+
+/**
+ * #386: A STOP DURING STARTUP IS THE SAME ORDERLY STOP.
+ *
+ * The shutdown used to be installed only once the host was ready, so a Ctrl+C
+ * while the rules were still bundling, the world store was open or Vite was
+ * starting got Node's default: the process died at once, leaving the build
+ * directory on disk and an opened world store unclosed. Each run below is
+ * stopped the moment it prints the line that says which stage it is in.
+ */
+async function stopDuringStartup(cwd: string, stage: string): Promise<void> {
+  const run = spawnDev(cwd, await freePort());
+  const reached = await new Promise<boolean>((resolve) => {
+    run.child.stdout.on('data', () => {
+      if (run.output().includes(stage)) resolve(true);
+    });
+    run.child.on('exit', () => resolve(false));
+  });
+  expect(reached, `boardsmith dev ended before it printed "${stage}":\n${run.output()}`).toBe(true);
+  run.child.kill('SIGINT');
+  const ended = await run.ended;
+  expect(ended.stuck, `boardsmith dev was still running ${EXIT_WITHIN_MS}ms after it started:\n${ended.output}`).toBe(false);
+  expect(ended.output, 'the stop came after startup, so it tested nothing').not.toContain('Ready!');
+  expect(ended.output).toContain('Shutting down...');
+  expect(ended.output, 'the teardown reported something it could not close').not.toContain('Still open');
+  expect(ended.code, ended.output).toBe(0);
+  expect(existsSync(join(cwd, '.boardsmith')), `the build directory was left behind:\n${ended.output}`).toBe(false);
+}
+
+/** The world a stopped run leaves behind: closed cleanly, and opened again without complaint. */
+function expectWorldOpenable(cwd: string): void {
+  expect(existsSync(`${worldStorePath(cwd)}-wal`), 'the world store was left open').toBe(false);
+  const store = openWorldStore(worldStorePath(cwd), worldBudgets());
+  try {
+    expect(store.isLaunched(), 'the world was opened but genesis never finished').toBe(true);
+  } finally {
+    store.close();
+  }
+}
+
+describe('boardsmith dev stopped before it is ready (#386)', () => {
+  it('a world project, while its rules are bundling', async () => {
+    const cwd = await devProject(true);
+    await stopDuringStartup(cwd, 'Loading game rules');
+    expect(existsSync(`${worldStorePath(cwd)}-wal`), 'the world store was left open').toBe(false);
+  });
+
+  it('a world project, once its store is open and before Vite listens', async () => {
+    const cwd = await devProject(true);
+    await stopDuringStartup(cwd, 'Persistent world:');
+    expectWorldOpenable(cwd);
+  });
+
+  it('a table project, while its rules are bundling', async () => {
+    await stopDuringStartup(await devProject(false), 'Loading game rules');
+  });
+
+  it('a table project, once its rules are loaded and before Vite listens', async () => {
+    await stopDuringStartup(await devProject(false), 'Loaded game:');
   });
 });

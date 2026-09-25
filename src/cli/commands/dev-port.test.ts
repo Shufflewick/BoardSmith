@@ -19,6 +19,7 @@ import { createServer, type AddressInfo, type Server } from 'node:net';
 import { join } from 'node:path';
 
 import { loadWorldRuntime, startWorldDevServer } from './dev-world.js';
+import { hostHoldings } from '../dev-host/shutdown.js';
 import { worldStoreDir, worldStorePath } from '../dev-host/world-store.js';
 import { devProject, EXIT_WITHIN_MS, spawnDev } from './dev-project.test-helper.js';
 
@@ -79,7 +80,7 @@ describe('boardsmith dev on a taken port (#345)', () => {
           context: 'standalone',
           port: held.port,
           host: '127.0.0.1',
-          tempDir,
+          holdings: hostHoldings(),
           openBrowser: false,
           reloadRules: () => loadWorldRuntime(rulesPath, tempDir, 'standalone'),
         }),
