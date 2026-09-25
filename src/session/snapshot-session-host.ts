@@ -5,6 +5,7 @@ import { dueSeats, type SeatActivityState } from '../engine/flow/seat-activity.j
 import { flowBoundaryKey, type BoundaryKeyState } from '../engine/flow/boundary-key.js';
 import { stepTimeLimitMs, type StepTimeLimitState } from '../engine/flow/step-time-limit.js';
 import { describeMoveForNarration } from './move-summary.js';
+import { runsAtOnce, type HostWorkGate } from './host-work-gate.js';
 import type { HeatmapEntry, SerializedFlowDebugInfo, SerializedPendingActionState } from './types.js';
 
 export type { Op, OpResult } from './stateless-ops.js';
@@ -182,6 +183,13 @@ export interface SnapshotSessionAdapters {
    * @returns      a narration string safe to broadcast to all seats
    */
   narrateMove?: (player: number, action: string, args: Record<string, unknown>) => string;
+  /**
+   * How the host holds the work this session starts itself while the rules it
+   * runs on are being replaced (#388). Each demo move goes through it, and a
+   * chain of bot moves stops between moves while a reload is pending and
+   * carries on once it has settled. Without one, that work runs as it comes due.
+   */
+  hostWork?: HostWorkGate;
 }
 
 export class SnapshotSessionHost {
@@ -247,11 +255,7 @@ export class SnapshotSessionHost {
    */
   dispose(): void {
     this.disposed = true;
-    this.demoAbort = true;
-    this.narrationText = null;
-    // Wake the demo pace-gate synchronously so its timer is cleared and the
-    // loop's finally runs without waiting — no timer survives disposal.
-    this.wakeDemo();
+    this.stopDemo();
   }
 
   // Flow-debug snapshot (FLOW-01/03): computed by the pure executor's
@@ -292,6 +296,19 @@ export class SnapshotSessionHost {
   }> = [];
   private _demoWake: (() => void) | null = null;
 
+  /** Cancel the demo loop; its `finally` broadcasts that it has stopped. */
+  private stopDemo(): void {
+    this.demoAbort = true;
+    // CR-01: clear narration immediately so any apply() broadcast during the
+    // stop window does not inject stale narration text into all clients' views.
+    this.narrationText = null;
+    // CR-02: wake the pace-gate synchronously so its timer (if any) is cleared and
+    // the loop continuation is scheduled as a microtask — the finally block then
+    // runs (demoRunning=false + broadcastCurrent) without waiting for the timer.
+    // Guarantees no timer survives after demoStop (CLAUDE.md timer-leak rule).
+    this.wakeDemo();
+  }
+
   // Re-evaluate the pace-gate. Does NOT null _demoWake — the gate's own finish()
   // clears it when it actually resolves. (Nulling here would mean: after a 'pause'
   // re-parks the gate, the next 'play'/'step' wake finds null and no-ops, freezing
@@ -300,7 +317,11 @@ export class SnapshotSessionHost {
     this._demoWake?.();
   }
 
-  constructor(private readonly adapters: SnapshotSessionAdapters) {}
+  private readonly hostWork: HostWorkGate;
+
+  constructor(private readonly adapters: SnapshotSessionAdapters) {
+    this.hostWork = adapters.hostWork ?? runsAtOnce;
+  }
 
   /**
    * Most recent sanitized persist() failure (ERR-03), or `null` if no persist
@@ -632,15 +653,7 @@ export class SnapshotSessionHost {
       };
     }
     if (op.type === 'demoStop') {
-      this.demoAbort = true;
-      // CR-01: clear narration immediately so any apply() broadcast during the
-      // stop window does not inject stale narration text into all clients' views.
-      this.narrationText = null;
-      // CR-02: wake the pace-gate synchronously so its timer (if any) is cleared and
-      // the loop continuation is scheduled as a microtask — the finally block then
-      // runs (demoRunning=false + broadcastCurrent) without waiting for the timer.
-      // Guarantees no timer survives after demoStop (CLAUDE.md timer-leak rule).
-      this.wakeDemo();
+      this.stopDemo();
       // Broadcast the clean state (narration cleared, still shows isDemoRunning=true
       // until the finally block fires in the next microtask drain).
       this.broadcastCurrent();
@@ -927,14 +940,22 @@ export class SnapshotSessionHost {
    *   a game tree the replay has just rebuilt, exactly as on an undo. A plain
    *   restore keeps them: the tree they point into is the one that was saved.
    *
-   * A `failed` carry changes nothing here; the caller reports it.
+   * - the positions a running demo could step back to: the old rules made them
+   *   (#388).
+   *
+   * A `failed` carry leaves the game as it was, and the caller reports it. A
+   * running demo stops, since the game cannot go on under these rules.
    */
   async adoptReloadedRules(carry: (snapshot: unknown) => Promise<RulesReload>): Promise<RulesReload> {
     return this.enqueue(async () => {
       const outcome = await carry(this._snapshot);
-      if (outcome.kind === 'failed') return outcome;
+      if (outcome.kind === 'failed') {
+        this.stopDemo();
+        return outcome;
+      }
       this.transientTeachingState.clear();
       this.narrationText = null;
+      this.demoHistory = [];
       if (outcome.kind === 'replayed') this.pendingStates.clear();
       await this.apply(outcome.result);
       // The new rules may hand the turn to a bot seat, and no op will wake it.
@@ -1010,6 +1031,14 @@ export class SnapshotSessionHost {
     try {
       let moves = 0;
       while (true) {
+        // A save landed while this chain ran (#388). The move under way when it
+        // landed has finished; the rest wait for the reload. The chain gives up
+        // its place on the op chain rather than waiting on it, because adopting
+        // the edited rules is queued there behind it.
+        if (this.hostWork.reloadPending) {
+          this.hostWork.hold(() => this.runBotTurns());
+          break;
+        }
         if (moves >= MAX_BOT_MOVES) {
           console.error('[SnapshotSessionHost] bot pump hit MAX_BOT_MOVES cap (500); stopping to avoid runaway.');
           break;
@@ -1082,8 +1111,9 @@ export class SnapshotSessionHost {
       while (!this.demoAbort && !this.isComplete && moves < this.MAX_DEMO_MOVES) {
         // Capture the snapshot fresh EACH iteration so a 'back' rewind (which restores
         // this.snapshot) is reflected — the re-suggest then runs from the restored
-        // position. botSuggest and the execute op below use this same reference so a
-        // concurrent human handleOp cannot desync narrate vs execute (WR-01).
+        // position. The move is made only if the game still stands on this same
+        // reference, so neither a concurrent op nor a rules reload can desync
+        // narrate vs execute (WR-01, #388).
         const iterSnapshot = this.snapshot;
 
         // Phase 1: Preview the move (read-only — no state mutation).
@@ -1122,52 +1152,17 @@ export class SnapshotSessionHost {
           continue;
         }
 
-        // Record the pre-move state so 'back' can rewind exactly one move.
-        this.demoHistory.push({
-          snapshot: this.snapshot,
-          flowState: this.flowState,
-          isComplete: this.isComplete,
-          winners: this.winners,
-          lastPlayerViews: this.lastPlayerViews,
-        });
-
-        // Phase 4: Execute the EXACT same move via 'action' op.
-        // ANTI-PATTERN AVOIDED: Do NOT re-run botSuggest/botTurn here — a second
-        // MCTS call could produce a different move, making the narration a lie
-        // (RESEARCH: "narrate/execute mismatch" anti-pattern).
-        // WR-01: use iterSnapshot (captured at iteration start) to match the
-        // snapshot that botSuggest used — prevents state desync under concurrent ops.
-        this.narrationText = null;
-        const execRes = await this.adapters.executeOp(iterSnapshot, null, {
-          type: 'action',
-          actionName: suggestedAction,
-          player: botPlayer,
-          args: suggestedArgs as Record<string, unknown>,
-          // A SERVER-COMPOSED op acting NOW: the demo bot chose this move from
-          // `iterSnapshot` in this same iteration, so the boundary it was
-          // composed against is that snapshot's own. Stamping the current key
-          // is correct HERE and would be a silent bypass anywhere a human's
-          // intent is being carried (docs/simultaneous-and-interrupt-semantics.md §7).
-          // Read off iterSnapshot, not `this.flowState`: WR-01 — a concurrent
-          // human op may have moved the host on since the iteration started.
-          boundaryKey: flowBoundaryKey((iterSnapshot as { flowState?: BoundaryKeyState } | null)?.flowState),
-        });
-
-        if (!execRes.success) { this.demoHistory.pop(); break; } // fail-clean: undo the history push
-
-        // Clear the acting seat's hint (mirrors performAction hint.delete(player)).
-        const seatTransient = this.transientTeachingState.get(botPlayer);
-        if (seatTransient?.hint) {
-          const { hint: _h, ...rest } = seatTransient;
-          if (Object.keys(rest).length > 0) {
-            this.transientTeachingState.set(botPlayer, rest);
-          } else {
-            this.transientTeachingState.delete(botPlayer);
-          }
+        // Phases 4 and 5: make the narrated move, once the host lets it run.
+        const made = await this.heldDemoMove(iterSnapshot, botPlayer, suggestedAction, suggestedArgs);
+        if (made === 'stopped' || made === 'failed') break;
+        if (made === 'stale') {
+          // The position the move was chosen from is gone: the rules were
+          // replaced under it (#388), or another op moved the game on. Choose
+          // again from where the game stands.
+          this.narrationText = null;
+          this.broadcastCurrent();
+          continue;
         }
-
-        // Phase 5: Apply (broadcasts updated state; narration is already null).
-        await this.apply(execRes);
         moves++;
 
         // A 'step' releases the gate for exactly one move — re-pause now that it
@@ -1193,6 +1188,89 @@ export class SnapshotSessionHost {
       this.narrationText = null;
       this.broadcastCurrent(); // final broadcast: isDemoRunning=false
     }
+  }
+
+  /**
+   * Make the demo's narrated move, handed to the host's work gate (#388) so a
+   * move that comes due while an edited rules file rebuilds waits for the
+   * reload, and on the op chain so nothing else moves the game while it runs.
+   *
+   * Answers `stale` when the game no longer stands where the move was chosen:
+   * a move chosen by the rules from before a save is never made on the rules
+   * after it.
+   */
+  private heldDemoMove(
+    iterSnapshot: unknown,
+    botPlayer: number,
+    suggestedAction: string,
+    suggestedArgs: Record<string, unknown>,
+  ): Promise<'moved' | 'stale' | 'stopped' | 'failed'> {
+    return new Promise((resolve, reject) => {
+      this.hostWork.hold(() =>
+        this.enqueue(() => this.makeDemoMove(iterSnapshot, botPlayer, suggestedAction, suggestedArgs)).then(
+          resolve,
+          reject,
+        ),
+      );
+    });
+  }
+
+  private async makeDemoMove(
+    iterSnapshot: unknown,
+    botPlayer: number,
+    suggestedAction: string,
+    suggestedArgs: Record<string, unknown>,
+  ): Promise<'moved' | 'stale' | 'stopped' | 'failed'> {
+    if (this.demoAbort) return 'stopped';
+    if (this._snapshot !== iterSnapshot) return 'stale';
+
+    // Record the pre-move state so 'back' can rewind exactly one move.
+    this.demoHistory.push({
+      snapshot: this.snapshot,
+      flowState: this.flowState,
+      isComplete: this.isComplete,
+      winners: this.winners,
+      lastPlayerViews: this.lastPlayerViews,
+    });
+
+    // Phase 4: Execute the EXACT same move via 'action' op.
+    // ANTI-PATTERN AVOIDED: Do NOT re-run botSuggest/botTurn here — a second
+    // MCTS call could produce a different move, making the narration a lie
+    // (RESEARCH: "narrate/execute mismatch" anti-pattern).
+    this.narrationText = null;
+    const execRes = await this.adapters.executeOp(iterSnapshot, null, {
+      type: 'action',
+      actionName: suggestedAction,
+      player: botPlayer,
+      args: suggestedArgs,
+      // A SERVER-COMPOSED op acting NOW: the demo bot chose this move from
+      // `iterSnapshot`, which is still the game's position (checked above, on
+      // the op chain), so the boundary it was composed against is that
+      // snapshot's own. Stamping the current key is correct HERE and would be a
+      // silent bypass anywhere a human's intent is being carried
+      // (docs/simultaneous-and-interrupt-semantics.md §7).
+      boundaryKey: flowBoundaryKey((iterSnapshot as { flowState?: BoundaryKeyState } | null)?.flowState),
+    });
+
+    if (!execRes.success) {
+      this.demoHistory.pop(); // fail-clean: undo the history push
+      return 'failed';
+    }
+
+    // Clear the acting seat's hint (mirrors performAction hint.delete(player)).
+    const seatTransient = this.transientTeachingState.get(botPlayer);
+    if (seatTransient?.hint) {
+      const { hint: _h, ...rest } = seatTransient;
+      if (Object.keys(rest).length > 0) {
+        this.transientTeachingState.set(botPlayer, rest);
+      } else {
+        this.transientTeachingState.delete(botPlayer);
+      }
+    }
+
+    // Phase 5: Apply (broadcasts updated state; narration is already null).
+    await this.apply(execRes);
+    return 'moved';
   }
 
   /**

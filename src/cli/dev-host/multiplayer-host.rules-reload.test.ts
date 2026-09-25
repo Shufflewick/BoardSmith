@@ -15,6 +15,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { WebSocket } from 'ws';
 
 import { tableRulesReloadQueue, type TableRuntime } from '../commands/dev-table-runtime.js';
+import { gateOf } from './rules-reload-queue.js';
 import { boundaryKeyOf } from '../../session/testing/boundary-stamp.js';
 import { createDevHostConnectionHandler } from './connection-handler.js';
 import type { WorldHostClock } from './node-world-clock.js';
@@ -50,8 +51,12 @@ const FLOWS = {
   )`,
 };
 
-/** A counter game whose `bump` adds `step`, written the way an author writes one. One seat unless told otherwise. */
-function rulesSource(args: { step: number; flow: string; seats?: number }): string {
+/**
+ * A counter game whose `bump` adds `step`, written the way an author writes one.
+ * One seat unless told otherwise; `demo` gives it the bot objectives the
+ * narrated demo needs to suggest a move.
+ */
+function rulesSource(args: { step: number; flow: string; seats?: number; demo?: boolean }): string {
   const seats = args.seats ?? 1;
   return [
     "import { Action, Game, Player, actionStep, defineFlow, eachPlayer, loop, sequence, type GameOptions } from 'boardsmith';",
@@ -68,15 +73,16 @@ function rulesSource(args: { step: number; flow: string; seats?: number }): stri
     "  gameType: 'rules-reload-counter',",
     `  minPlayers: ${seats},`,
     `  maxPlayers: ${seats},`,
+    ...(args.demo === true ? ['  bot: { objectives: () => ({}) },'] : []),
     '};',
   ].join('\n');
 }
 
 /** A table project on disk, saved with the rules an author writes. */
-function counterProject(initial: { step: number; flow: string; seats?: number }) {
+function counterProject(initial: Parameters<typeof rulesSource>[0]) {
   const project = tableProject('bs-table-rules-reload-', rulesSource(initial));
   return {
-    save: (rules: { step: number; flow: string; seats?: number }) => project.save(rulesSource(rules)),
+    save: (rules: Parameters<typeof rulesSource>[0]) => project.save(rulesSource(rules)),
     load: project.load,
   };
 }
@@ -304,7 +310,7 @@ async function serveTable(edit: TableRuntime | Error, before: TableRuntime = bef
     makeSeed: () => 'rules-reload',
     clock: fakeClock().clock,
     executeOp: before.rules.executeOp,
-    hostWork: (work) => queue.hold(work),
+    hostWork: gateOf(() => queue),
     send: (clientId, message) => {
       const socket = sockets.get(clientId);
       if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message));
@@ -422,7 +428,7 @@ async function timedTable(edit: TableRuntime | Error) {
     makeSeed: () => 'rules-reload',
     clock: time.clock,
     idleAction: { name: 'bump' },
-    hostWork: (work) => queue.hold(work),
+    hostWork: gateOf(() => queue),
   });
   const queue = tableRulesReloadQueue({
     host: table.host,
@@ -488,5 +494,74 @@ describe('#387: a bot covering a seat whose page closes while the edited rules a
     await reloaded;
     // The bot that took seat 2 over bumps by the step of the rules it ran on.
     await vi.waitFor(() => expect(table.count()).toBe(count));
+  }, 30_000);
+});
+
+/**
+ * #388: THE NARRATED DEMO'S NEXT MOVE WAITS FOR THE EDITED RULES TOO.
+ *
+ * The demo paces its moves with the session's own timer, which nothing in
+ * #387 reached: a move that came due during the rebuild ran on the rules from
+ * before the save. The session hands each demo move to the host's work gate
+ * now, the rules reload queue in `boardsmith dev`.
+ */
+const demoProject = counterProject({ step: 1, flow: FLOWS.looped, demo: true });
+const demoBefore = await demoProject.load();
+demoProject.save({ step: 10, flow: FLOWS.looped, demo: true });
+const demoAfter = await demoProject.load();
+
+describe('#388: a demo move that comes due while the edited rules are still building', () => {
+  quietTerminal();
+
+  it.each([
+    { on: 'the edited rules once they are in place', edit: demoAfter, count: 10 },
+    { on: 'the old rules when the edit does not build', edit: brokenEdit, count: 1 },
+  ])('runs on $on', async ({ edit, count }) => {
+    let handedToGate: () => void = () => {};
+    const handed = new Promise<void>((resolve) => (handedToGate = resolve));
+    const table = await openTable(demoBefore, clients, {
+      makeSeed: () => 'rules-reload',
+      clock: fakeClock().clock,
+      hostWork: {
+        get reloadPending() {
+          return queue.reloadPending;
+        },
+        hold(work) {
+          handedToGate();
+          queue.hold(work);
+        },
+      },
+    });
+    const moved = () => table.frames().some((frame) => shownCount([frame]) > 0);
+    const queue = tableRulesReloadQueue({
+      host: table.host,
+      running: demoBefore.gameDefinition,
+      // The rebuild finishes once the demo's move has come due: handed to the
+      // gate, or made on the spot by a demo nothing holds.
+      load: async () => {
+        await Promise.race([handed, vi.waitFor(() => expect(moved()).toBe(true), { timeout: 10_000 })]);
+        if (edit instanceof Error) throw edit;
+        return edit;
+      },
+    });
+
+    // The demo narrates its first move on the rules from before any edit, and
+    // paces it for an hour.
+    await table.ask('demo-start', { delay: 3_600_000 });
+    await vi.waitFor(() =>
+      expect(table.frames().some((frame) => JSON.stringify(frame.view).includes('"narration"'))).toBe(true),
+    );
+
+    const reloaded = queue.saved('src/rules/index.ts');
+    // The pace runs out during the rebuild. (Sent straight to the host, as the
+    // demo's own timer would fire, and not as a page's message the queue holds.)
+    await table.ask('demo-control', { control: 'play', delay: 0 });
+    await reloaded;
+
+    // The first move the demo made adds the step of the rules it ran on.
+    await vi.waitFor(() => expect(moved()).toBe(true));
+    const first = table.frames().find((frame) => shownCount([frame]) > 0)!;
+    expect(shownCount([first])).toBe(count);
+    await table.ask('demo-stop', {});
   }, 30_000);
 });

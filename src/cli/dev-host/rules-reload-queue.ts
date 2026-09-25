@@ -39,9 +39,14 @@
  * such work to `hold`, usually through `heldClock`. It is never refused: it runs
  * on the edited rules once they are in place, or on the ones the host kept
  * when the rebuild failed.
+ *
+ * The queue is the session's `HostWorkGate` too (#388): the narrated demo's
+ * next move goes through `hold`, and a chain of bot moves reads
+ * `reloadPending` and stops between moves until the reload has settled.
  */
 import chalk from 'chalk';
 
+import type { HostWorkGate } from '../../session/host-work-gate.js';
 import type { WorldHostClock } from './node-world-clock.js';
 
 /** What a page is told about the host's rules while a save is reloading them. */
@@ -62,7 +67,7 @@ interface ReloadAdmission {
   refuse?: (message: string) => void;
 }
 
-export interface RulesReloadQueue {
+export interface RulesReloadQueue extends HostWorkGate {
   /**
    * A rules file was saved: from this call on, messages are held until the
    * rules it makes are in place. Resolves once that reload has settled and
@@ -75,21 +80,30 @@ export interface RulesReloadQueue {
    */
   admit(message: ReloadAdmission): Promise<void>;
   /**
-   * Run work the host started itself (a timer going off) now, or once a
-   * pending reload has settled, in order with the pages' messages. A failure
-   * is reported in the terminal, since nobody asked for it.
+   * Whether a save has been heard and its reload has not settled yet: the
+   * rules the host runs are about to be replaced.
    */
-  hold(work: HostWork): void;
+  readonly reloadPending: boolean;
+  /**
+   * Run work the host started itself (a timer going off, a demo move coming
+   * due) now, or once a pending reload has settled, in order with the pages'
+   * messages. A failure is reported in the terminal, since nobody asked for it.
+   */
+  hold(work: () => void | Promise<void>): void;
 }
 
-/** Work a host starts itself, rather than a page asking for it. */
-type HostWork = () => void | Promise<void>;
-
-/** How a host runs the work it starts itself: `RulesReloadQueue.hold`, in `boardsmith dev`. */
-export type HostWorkGate = (work: HostWork) => void;
-
-/** A host no rules edit can reach, such as one under test, runs its own work as it comes due. */
-export const runsAtOnce: HostWorkGate = (work) => void work();
+/**
+ * The gate of a queue built after the host it gates. The table road builds its
+ * host first, because the queue adopts edited rules into it.
+ */
+export function gateOf(queue: () => RulesReloadQueue): HostWorkGate {
+  return {
+    get reloadPending() {
+      return queue().reloadPending;
+    },
+    hold: (work) => queue().hold(work),
+  };
+}
 
 /**
  * `clock`, with every timer it fires handed to `gate` (#387).
@@ -107,7 +121,7 @@ export function heldClock(clock: WorldHostClock, gate: HostWorkGate): WorldHostC
     arm(delayMs, fire) {
       const timer = ++armed;
       clock.arm(delayMs, () =>
-        gate(() => {
+        gate.hold(() => {
           if (armed === timer) fire();
         }),
       );
@@ -205,6 +219,10 @@ export function createRulesReloadQueue<R>(args: {
   };
 
   return {
+    get reloadPending() {
+      return pending > 0;
+    },
+
     saved(file) {
       pending += 1;
       if (!announced) {

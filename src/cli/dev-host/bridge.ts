@@ -84,6 +84,8 @@ export interface DevSessionOptions {
    * by default (the dev host today has no persistence store).
    */
   persist?: SnapshotSessionAdapters['persist'];
+  /** How the host holds the session's own work during a rules reload (#388). */
+  hostWork?: SnapshotSessionAdapters['hostWork'];
   /**
    * Post a `game_state` frame for one seat's iframe. Called for every seat on
    * each broadcast; the caller decides which seat's iframe actually exists.
@@ -365,6 +367,7 @@ export function createDevSession(opts: DevSessionOptions): DevSession {
     teachingDisabled: opts.teachingDisabled,
     executeOp: opts.executeOp,
     persist: opts.persist,
+    hostWork: opts.hostWork,
     // ERR-04: persistence failures feed the dev-host log-capture ring buffer.
     // Severity escalates to 'error' once persistenceHealthy flips false;
     // otherwise 'warning'. The session layer only ever calls this injected

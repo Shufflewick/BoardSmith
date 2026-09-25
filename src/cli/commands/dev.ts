@@ -17,6 +17,7 @@ import { requireFreePort } from '../dev-host/port.js';
 import type { PersistenceStore } from '../../persistence/index.js';
 import { getProjectContext, toPosix } from './game-runtime.js';
 import { loadTableRuntime, tableRulesReloadQueue } from './dev-table-runtime.js';
+import { gateOf } from '../dev-host/rules-reload-queue.js';
 import { findUnknownKeys } from '../lib/config-schema.js';
 import { requireGameProject, resolveRulesDir, requireRulesIndex } from '../lib/game-project.js';
 import { resolveWorldMode } from '../lib/world-project.js';
@@ -975,9 +976,10 @@ export async function devCommand(options: DevOptions): Promise<void> {
           }
         : {}),
       executeOp: tableRules.executeOp,
-      // A step deadline that runs out while an edited rules file rebuilds
-      // waits in the reload queue below with the pages' messages (#387).
-      hostWork: (work) => rulesReload.hold(work),
+      // A step deadline, a demo move or a bot's next move that comes due while
+      // an edited rules file rebuilds waits in the reload queue below with the
+      // pages' messages (#387, #388).
+      hostWork: gateOf(() => rulesReload),
       send: (clientId, message) => {
         const sock = clients.get(clientId);
         if (sock && sock.readyState === WebSocket.OPEN) sock.send(JSON.stringify(message));

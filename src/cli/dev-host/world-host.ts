@@ -47,7 +47,8 @@ import {
   type WorldStartOutcome,
 } from '../../world/host/index.js';
 import { createNodeWorldClock, type WorldHostClock } from './node-world-clock.js';
-import { heldClock, runsAtOnce, type HostWorkGate } from './rules-reload-queue.js';
+import { runsAtOnce, type HostWorkGate } from '../../session/host-work-gate.js';
+import { heldClock } from './rules-reload-queue.js';
 import type { LocalWorldStore } from './world-store.js';
 
 /**
@@ -506,7 +507,7 @@ export class LocalWorldHost {
       seat,
       setTimeout(
         () =>
-          this.#hostWork(() => {
+          this.#hostWork.hold(() => {
             this.#departing.delete(seat);
             if (this.#world.closed) return;
             void this.#world.run(async () => {
