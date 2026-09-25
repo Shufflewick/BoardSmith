@@ -45,14 +45,16 @@ export interface SelectionChoicesObservation {
 const MAX_CONSECUTIVE_FAILURES = 10;
 
 /**
- * Says whether a game that stopped because no seat has an enabled action is
- * stopped where it is meant to rest: return the reason it rests there, or
- * `false` when it is not meant to stop there. It is handed the stopped game, so
- * it can check the final state as well as name it.
+ * Says whether a game has reached the place it is meant to rest: return the
+ * reason it rests there, or `false` when it is not there. The simulator asks it
+ * after every move it applies to a game that has not ended, handing it the game
+ * as that move left it, and stops the game as `resting` the first time it
+ * returns a reason. So it can check the resting state as well as name it.
  *
- * A game built chunk by chunk has no ending until a later chunk adds one, so
- * every random game of it stops with no move left. Without this that stop is
- * `stuck`, the same verdict a flow deadlock gets (#317).
+ * A game built chunk by chunk has no ending until a later chunk adds one. Its
+ * random games either stop with no move left, which without this is `stuck`,
+ * the same verdict a flow deadlock gets (#317), or keep acting forever, which
+ * without this runs to `timeout` or `maxActions` (#383).
  */
 export type IsResting<G extends Game> = (game: G) => string | false;
 
@@ -99,11 +101,12 @@ export interface SimulateRandomGamesOptions<G extends Game = Game> {
    */
   onSelectionChoices?: (observation: SelectionChoicesObservation) => void;
   /**
-   * Declares where the game is meant to rest. A game that stops because no
-   * seat has an enabled action is `resting` when this returns a reason, and
-   * `stuck` when it returns `false` or is not given. Only that stop is
-   * referred to it: a crash, a timeout, a rejected move or a move the
-   * simulator cannot build stays a failure whatever this returns.
+   * Declares where the game is meant to rest. It is asked after every move the
+   * simulator applies, and the first time it returns a reason the game stops
+   * as `resting`. A game that never reaches its rest ends as it would without
+   * this: `stuck` when no seat has an enabled action, and a crash, a timeout,
+   * too many actions, a rejected move or a move the simulator cannot build
+   * stays a failure.
    */
   isResting?: IsResting<G>;
 }
@@ -150,8 +153,8 @@ export interface SingleGameResult {
    */
   stuck: boolean;
   /**
-   * Whether the game stopped with no seat holding an enabled action, at a
-   * rest its `isResting` declared. See {@link SingleGameResult.restReason}.
+   * Whether the game stopped at a rest its `isResting` declared, after the
+   * move that reached it. See {@link SingleGameResult.restReason}.
    */
   resting: boolean;
   /** The reason `isResting` gave, when the game is resting */
@@ -234,6 +237,16 @@ function enabledSeats(
     if (enabled.length > 0) seats.push({ seat, actionNames: enabled });
   }
   return { seats, refused };
+}
+
+/**
+ * Whether the game is waiting on input that no seat can give: every seat it
+ * waits on has each offered action refused. This is the stop the simulator
+ * reports as "no player has an enabled action to take".
+ */
+export function noSeatHasEnabledAction(game: Game): boolean {
+  const flowState = game.getFlowState();
+  return game.isAwaitingInput() && flowState !== undefined && enabledSeats(game, flowState).seats.length === 0;
 }
 
 /**
@@ -491,8 +504,8 @@ interface SingleGameConfig<G extends Game> {
 }
 
 /**
- * Ask the game's `isResting` about a game that stopped with no enabled action.
- * Returns the rest reason, or `undefined` when the stop is not a declared rest.
+ * Ask the game's `isResting` about the game a move just left.
+ * Returns the rest reason, or `undefined` when the game is not at a declared rest.
  * @internal
  */
 function declaredRest<G extends Game>(isResting: IsResting<G> | undefined, game: G): string | undefined {
@@ -568,8 +581,6 @@ async function simulateSingleGame<G extends Game>(
 
       const { seats, refused } = enabledSeats(testGame.game, flowState);
       if (seats.length === 0) {
-        restReason = declaredRest(isResting, testGame.game);
-        if (restReason !== undefined) break;
         stuck = true;
         stuckReason =
           'Game is awaiting input but no player has an enabled action to take.' +
@@ -606,6 +617,10 @@ async function simulateSingleGame<G extends Game>(
       if (result.success) {
         actionCount++;
         consecutiveFailures = 0;
+        if (!testGame.isComplete()) {
+          restReason = declaredRest(isResting, testGame.game);
+          if (restReason !== undefined) break;
+        }
         continue;
       }
 

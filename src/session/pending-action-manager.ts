@@ -80,6 +80,15 @@ export interface PickStepResult {
  *
  * Handles the state machine for actions with repeating selections,
  * tracking progress through multi-step action flows.
+ *
+ * Every step that changes the game runs in one order: change the game, record
+ * the op's checkpoint (`runner.captureCheckpoint()`), save, broadcast, then
+ * build the state returned to the acting seat. `canUndo` in that state asks the
+ * checkpoint window whether the turn start is still retained (`decideUndo`), so
+ * a state built before the checkpoint is recorded reads the window one step
+ * stale and can offer an undo a small `checkpoints.max` has already dropped
+ * (#385). The manager records the checkpoint itself rather than leaving it to
+ * the broadcast callback, because the stateless `PickHandler` has no broadcast.
  */
 export class PendingActionManager<G extends Game = Game> {
   #runner: GameRunner<G>;
@@ -226,7 +235,10 @@ export class PendingActionManager<G extends Game = Game> {
         return { success: false, error: result.error, nextChoices: result.nextChoices, errorCode: ErrorCode.INVALID_PICK };
       }
 
-      // Persist if storage adapter is provided (onEach may have modified game state)
+      // onEach may have modified game state.
+      this.#runner.captureCheckpoint();
+
+      // Persist if storage adapter is provided
       if (this.#storage) {
         await this.#callbacks.save();
       }
@@ -261,7 +273,10 @@ export class PendingActionManager<G extends Game = Game> {
       return this.#completePendingAction(executor, action, player, pendingState, playerPosition);
     }
 
-    // Broadcast state updates to all clients (e.g. animation events from onSelect)
+    // onSelect may have modified game state (e.g. animation events).
+    this.#runner.captureCheckpoint();
+
+    // Broadcast state updates to all clients
     this.#callbacks.broadcast();
 
     // More selections needed
@@ -354,6 +369,7 @@ export class PendingActionManager<G extends Game = Game> {
       // happened (replay, undo counts, and bot history all read it).
       this.#runner.recordSerializedAction(serializedAction);
       this.#runner.game.continueFlowAfterPendingAction(actionResult);
+      this.#runner.captureCheckpoint();
       this.#storedState.actionHistory = this.#runner.actionHistory;
 
       if (this.#storage) {

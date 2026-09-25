@@ -169,6 +169,10 @@ The player is never offered an undo the window (or `enabled: false`) will
 refuse. A seat's `canUndo` comes from the same decision the undo itself takes
 (`decideUndo` in `src/session/utils.ts`), so the Undo button and the "Undo last
 action" menu item are off whenever the checkpoint the undo needs is missing.
+Every state a seat is sent is built after the checkpoint for the op that
+produced it is recorded, including the state returned to the seat that just
+made a pick, so `canUndo` reads the window as the op left it, not as it was one
+step earlier (#385).
 
 The default is unbounded — every checkpoint retained, forever. That is the right
 default for the ordinary game, which never comes near the ceiling, and it is a

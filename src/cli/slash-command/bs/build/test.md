@@ -214,10 +214,13 @@ here.
    reason to reshape a rule or this test.
 
    **A chunk whose game cannot end yet declares its rest with `isResting`.** Before the chunk that
-   builds the ending, every random game stops with no move left, and by default that stop is
-   `stuck`, the same as a deadlock. Pass `isResting`: it is handed the stopped game and returns the
-   reason the game rests there, or `false`. Check the final state inside it, so a game that stopped
-   anywhere else stays `stuck`:
+   builds the ending, a random game either stops with no move left, which by default is `stuck`,
+   the same as a deadlock, or, when its seats can always act (a seat that has not checked in can
+   always check in), never stops at all and runs to `timedOut` or `exceededMaxActions`. Pass
+   `isResting`: it is asked after every move the simulator applies, handed the game as that move
+   left it, and returns the reason the game rests there, or `false`. The first reason stops the game
+   as `resting`. Check the resting state inside it, so a game that stops anywhere else stays `stuck`
+   and one that never gets there still times out:
 
    ```typescript
    const results = await simulateRandomGames(MyGame, {
@@ -238,8 +241,10 @@ here.
    ```
 
    Never relax `results.stuck` instead (no `toBe(results.total)`, no replaying stuck games to excuse
-   them): `isResting` is only asked about a game that stopped because no seat had an enabled
-   action, so a crash, a rejected move or a move the simulator cannot build still fails. Record the
+   them), and never relax `results.timedOut` or `results.exceededMaxActions` for a game that can
+   always act: its rest is found the same way, because `isResting` is asked after every move. It
+   only turns a game that reached its rest into `resting`, so a crash, a rejected move, a move the
+   simulator cannot build, or a game that never reaches the rest still fails. Record the
    rest and the chunk that removes it in DECISIONS.md, and delete `isResting` in that chunk, so the
    game's `stuck` check is a plain zero again. `boardsmith simulate` has no `isResting`: it reports
    every game of such a chunk stuck, so it is not this chunk's gate. `boardsmith validate`'s choice

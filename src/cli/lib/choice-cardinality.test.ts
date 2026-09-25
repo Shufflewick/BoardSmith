@@ -9,6 +9,7 @@ import {
   type ChoiceStepObservation,
 } from './choice-cardinality.js';
 import {
+  LateWideGame,
   NarrowGame,
   ThreeSeatWideGame,
   TypedNameGame,
@@ -188,6 +189,14 @@ describe('auditChoiceCardinality', () => {
   // a finished walk, not a game the simulator could not play.
   it('counts a game whose ending is not built yet, which stops with no move left', async () => {
     expect(await auditChoiceCardinality(UnfinishedWideGame, { seed: 'audit', games: 2 })).toEqual([
+      { action: 'shout', selection: 'verb', maxCandidates: 40 },
+    ]);
+  });
+
+  // #383: the simulator asks isResting after every move, so the audit's rest
+  // must name only the no-move stop, or the walk would end after one move.
+  it('keeps walking past the first move to a step that opens later', async () => {
+    expect(await auditChoiceCardinality(LateWideGame, { seed: 'audit', games: 2 })).toEqual([
       { action: 'shout', selection: 'verb', maxCandidates: 40 },
     ]);
   });

@@ -3,7 +3,11 @@ import {
   Game,
   Player,
   Action,
+  actionStep,
   defineFlow,
+  execute,
+  loop,
+  sequence,
   simultaneousActionStep,
   type GameOptions,
 } from '../engine/index.js';
@@ -106,7 +110,7 @@ describe('#317: a game can declare where it is meant to rest', () => {
     }
   });
 
-  it('hands isResting the stopped game itself, so a test can check its final state', async () => {
+  it('hands isResting the game itself, so a test can check the state it rests in', async () => {
     const finals: CoinGame[] = [];
     await simulateRandomGames(CoinGame, {
       count: 2,
@@ -114,8 +118,9 @@ describe('#317: a game can declare where it is meant to rest', () => {
       seed: 'rest-317-state',
       gameOptions: { coins: [1, 2] },
       isResting: (game) => {
-        finals.push(game);
-        return broke(game);
+        const reason = broke(game);
+        if (reason) finals.push(game);
+        return reason;
       },
     });
 
@@ -145,7 +150,7 @@ describe('#317: a game can declare where it is meant to rest', () => {
     }
   });
 
-  it('is not asked about a game the simulator could not play, so it cannot hide a real failure', async () => {
+  it('is not asked before a move has been applied, so it cannot hide a game the simulator could not play', async () => {
     class TextGame extends CoinGame {
       constructor(options: GameOptions) {
         super(options);
@@ -190,5 +195,150 @@ describe('#317: a game can declare where it is meant to rest', () => {
     expect(replay.resting).toBe(true);
     expect(replay.restReason).toBe(played.restReason);
     expect(replay.actionCount).toBe(played.actionCount);
+  });
+});
+
+/**
+ * Every seat can always check in, even again, round after round: the flow is
+ * one unbounded loop around a simultaneous step whose action is never refused.
+ * So the game never stops on its own. That is the shape of a game whose seats
+ * always have something to do while the rule that moves it on is not built yet
+ * (#383, found in Windup Warfare's check-in chunk).
+ */
+class CheckInGame extends Game<CheckInGame, Player> {
+  checkedIn: number[] = [];
+  /** Seats that have acted in the current round; each seat acts once a round. */
+  actedThisRound: number[] = [];
+
+  constructor(options: GameOptions) {
+    super(options);
+    this.registerAction(
+      Action.create<CheckInGame>('checkIn').execute((_args, ctx) => {
+        ctx.game.actedThisRound.push(ctx.player.seat);
+        if (!ctx.game.checkedIn.includes(ctx.player.seat)) ctx.game.checkedIn.push(ctx.player.seat);
+      }),
+    );
+    this.setFlow(
+      defineFlow({
+        root: loop({
+          unbounded: true,
+          do: sequence(
+            execute((ctx) => {
+              ctx.game.actedThisRound = [];
+            }),
+            simultaneousActionStep({
+              actions: ['checkIn'],
+              playerDone: (ctx, player) => ctx.game.actedThisRound.includes(player.seat),
+            }),
+          ),
+        }),
+      }),
+    );
+  }
+}
+
+/** The rest CheckInGame is built to reach: every seat has checked in. */
+const allCheckedIn = (game: CheckInGame): string | false =>
+  game.checkedIn.length === game.players.length ? 'every seat has checked in; battle is not built yet' : false;
+
+describe('#383: a game whose seats can always act can still rest', () => {
+  it('without isResting, never stops on its own: it runs to maxActions', async () => {
+    const results = await simulateRandomGames(CheckInGame, {
+      count: 2,
+      playerCounts: [3],
+      seed: 'rest-383-none',
+      maxActions: 40,
+    });
+
+    expect(results.exceededMaxActions).toBe(2);
+    expect(results.resting).toBe(0);
+  });
+
+  it('reports the game resting the moment isResting names a rest, not timed out or over maxActions', async () => {
+    const results = await simulateRandomGames(CheckInGame, {
+      count: 4,
+      playerCounts: [3],
+      seed: 'rest-383',
+      maxActions: 40,
+      isResting: allCheckedIn,
+    });
+
+    expect(results.resting).toBe(4);
+    expect(results.exceededMaxActions).toBe(0);
+    expect(results.timedOut).toBe(0);
+    expect(results.stuck).toBe(0);
+    expect(results.crashed).toBe(0);
+    expect(results.errors).toEqual([]);
+    for (const game of results.games) {
+      expect(game.restReason).toBe('every seat has checked in; battle is not built yet');
+      // Three seats each act once per round, so the third move completes the check-in.
+      expect(game.actionCount).toBe(3);
+    }
+  });
+
+  it('is asked after every applied move, with the game as that move left it', async () => {
+    const seen: number[] = [];
+    const results = await simulateRandomGames(CheckInGame, {
+      count: 1,
+      playerCounts: [3],
+      seed: 'rest-383-asked',
+      maxActions: 40,
+      isResting: (game) => {
+        seen.push(game.checkedIn.length);
+        return allCheckedIn(game);
+      },
+    });
+
+    expect(seen).toEqual([1, 2, 3]);
+    expect(results.games[0].actionCount).toBe(3);
+  });
+
+  it('still reports a game that never reaches its declared rest as over maxActions', async () => {
+    const results = await simulateRandomGames(CheckInGame, {
+      count: 2,
+      playerCounts: [3],
+      seed: 'rest-383-never',
+      maxActions: 40,
+      isResting: () => false,
+    });
+
+    expect(results.exceededMaxActions).toBe(2);
+    expect(results.resting).toBe(0);
+  });
+
+  it('is not asked about a game the move ended, so a finished game is completed, not resting', async () => {
+    class OneMoveGame extends Game<OneMoveGame, Player> {
+      constructor(options: GameOptions) {
+        super(options);
+        this.registerAction(Action.create<OneMoveGame>('finish').execute(() => {}));
+        this.setFlow(defineFlow({ root: actionStep({ actions: ['finish'] }) }));
+      }
+    }
+    let asked = 0;
+    const results = await simulateRandomGames(OneMoveGame, {
+      count: 1,
+      playerCounts: [2],
+      seed: 'rest-383-ended',
+      isResting: () => {
+        asked++;
+        return 'always';
+      },
+    });
+
+    expect(asked).toBe(0);
+    expect(results.completed).toBe(1);
+    expect(results.resting).toBe(0);
+  });
+
+  it('replayRandomGame asks the same isResting the same way, so a replay gives the same verdict', async () => {
+    const replay = await replayRandomGame(CheckInGame, {
+      seed: 'rest-383-replay',
+      playerCount: 2,
+      maxActions: 40,
+      isResting: allCheckedIn,
+    });
+
+    expect(replay.resting).toBe(true);
+    expect(replay.actionCount).toBe(2);
   });
 });

@@ -391,7 +391,9 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
    * pending/selection mutation — makes the head capture the complete
    * turn-boundary state, which undo restores authoritatively. The stateless
    * path calls it via `getSnapshot`; the stateful `GameSession` calls it from
-   * its broadcast funnel.
+   * its broadcast funnel; `PendingActionManager` calls it after every pick
+   * that changes the game, in both paths. Build a seat's state only after it
+   * has run for the op: `canUndo` reads the window it leaves (#385).
    *
    * Then the window is trimmed to `checkpoints.max` (default: unbounded),
    * oldest first — so what remains is the most recent range, which is the

@@ -1614,7 +1614,12 @@ describe('SKILLAUTO-08 — fail-loud sims (sim exercised this chunk\'s new actio
     ['forbids relaxing the stuck check', /never relax `results\.stuck`/i],
     ['says boardsmith simulate cannot declare a rest', /boardsmith simulate` has no `isResting`/],
     ['says a disabled action is never played', /never submits an action its `\.disabled\(\)`\s+rule refuses/],
-  ])('build/test.md %s (#317, #318)', (_claim, pattern) => {
+    // #383: a game whose seats can always act never stops on its own, so the
+    // rest must be found while it can still act, not only once it has stopped.
+    ['says isResting is asked after every move', /asked after every move/],
+    ['says a game that can always act rests too', /can always act/],
+    ['forbids relaxing the timeout checks', /never relax `results\.timedOut` or `results\.exceededMaxActions`/i],
+  ])('build/test.md %s (#317, #318, #383)', (_claim, pattern) => {
     expect(read('build/test.md')).toMatch(pattern);
   });
 

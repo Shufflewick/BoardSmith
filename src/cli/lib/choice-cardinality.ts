@@ -21,7 +21,7 @@
  * the correct shape, not the bug.
  */
 import type { ActionDefinition, Game, GameOptions } from '../../engine/index.js';
-import { simulateRandomGames } from '../../testing/random-simulation.js';
+import { noSeatHasEnabledAction, simulateRandomGames } from '../../testing/random-simulation.js';
 import { createTestWorld, type TestWorld, type TestWorldOptions } from '../../testing/test-world.js';
 import { MAX_FLAT_CHOICE_CANDIDATES } from '../../engine/element/action-metadata.js';
 import { WorldRefusal, type WorldActionOffer } from '../../world/index.js';
@@ -196,7 +196,11 @@ export async function auditChoiceCardinality<G extends Game>(
     // choice step it had before it stopped, and each was counted. Whether that
     // stop is the game's unbuilt ending or a deadlock is for its own
     // simulateRandomGames test to say (#317); here it is a finished walk.
-    isResting: () => 'no seat had an enabled action left, after every choice it offered was counted',
+    // isResting is asked after every move (#383), so it names only that stop.
+    isResting: (game) =>
+      noSeatHasEnabledAction(game)
+        ? 'no seat had an enabled action left, after every choice it offered was counted'
+        : false,
     onSelectionChoices: ({ action, selection, candidateCount }) => {
       observations.push(observeChoiceStep(action, selection as ObservableSelection, candidateCount));
     },

@@ -399,8 +399,11 @@ function stateEnvelope(runner: GameRunner, playerCount: number): {
   pendingState: null;
   flowDebugInfo: SerializedFlowDebugInfo;
 } {
+  // getSnapshot() records the op's checkpoint, so it runs before any view is
+  // built: each view's canUndo reads the settled checkpoint window (#385).
+  const snapshot = runner.getSnapshot();
   return {
-    snapshot: runner.getSnapshot(),
+    snapshot,
     flowState: runner.getFlowState(),
     playerViews: buildViews(runner, playerCount),
     spectatorView: buildSpectatorView(runner),
