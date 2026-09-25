@@ -1480,32 +1480,39 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     }
 
     const actionName = currentAction.value;
-    const args = buildServerArgs();
-    const seq = actionStartTick.value;
+    return sendAndResolve(actionName, buildServerArgs(), actionStartTick.value);
+  }
 
+  /**
+   * Send one action and resolve it: the one send path shared by
+   * executeCurrentAction() and both branches of execute().
+   *
+   * Executing resolves the action, on success or failure, so the in-progress
+   * state is cleared -- otherwise a custom UI that calls execute() while the
+   * panel auto-started the SAME action (cribbage's play card) leaves
+   * currentAction stale and blocks the next auto-start. `seq` is actionStartTick
+   * when the caller began: the clear is skipped if a newer action started during
+   * the await, or it would wipe that freshly started action (the cross-turn
+   * auto-start race). Every result is published through resolveAction, and a
+   * followUp the server hands back is started.
+   */
+  async function sendAndResolve(actionName: string, args: Record<string, unknown>, seq: number): Promise<ControllerActionResult> {
     isExecuting.value = true;
     lastError.value = null;
 
     try {
       const result = await sendAction(actionName, args);
-
       if (!result.success) {
         setError(result.error || 'Action failed');
       }
-
-      // This is a terminal resolution path for multi-step actions submitted via the
-      // wizard/ActionPanel — publish the result here too.
       resolveAction(actionName, playerSeat?.value ?? 0, result);
 
-      // Clear state on success or failure — but only if no NEWER action started
-      // during the await (otherwise we'd clobber a freshly auto-started action).
       if (actionStartTick.value === seq) {
         currentAction.value = null;
         clearArgs();
         clearAdvancedState();
       }
 
-      // Handle followUp: automatically start the next action if specified
       if (result.success && result.followUp) {
         queueFollowUp(result.followUp);
       }
@@ -1564,30 +1571,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
     if (!meta) {
       // No metadata means no selections, execute directly
-      isExecuting.value = true;
-      lastError.value = null;
-      try {
-        const result = await sendAction(actionName, args);
-        if (!result.success) {
-          setError(result.error || 'Action failed');
-        }
-        resolveAction(actionName, playerSeat?.value ?? 0, result);
-        // Executing resolves the action — clear in-progress state, unless a newer
-        // action started during the await (see note below).
-        if (actionStartTick.value === seq) {
-          currentAction.value = null;
-          clearArgs();
-          clearAdvancedState();
-        }
-        return result;
-      } catch (err) {
-        const error = err instanceof Error ? err.message : 'Action failed';
-        setError(error);
-        resolveAction(actionName, playerSeat?.value ?? 0, { success: false, error });
-        return { success: false, error };
-      } finally {
-        isExecuting.value = false;
-      }
+      return sendAndResolve(actionName, args, seq);
     }
 
     // Build final args with auto-fill
@@ -1628,43 +1612,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       }
     }
 
-    // Execute
-    isExecuting.value = true;
-    lastError.value = null;
-
-    try {
-      const result = await sendAction(actionName, finalArgs);
-      if (!result.success) {
-        setError(result.error || 'Action failed');
-      }
-
-      resolveAction(actionName, playerSeat?.value ?? 0, result);
-
-      // Executing an action resolves it — clear any in-progress action state, exactly
-      // like executeCurrentAction(). Without this, a custom UI that calls execute()
-      // while the ActionPanel auto-started the SAME action (e.g. cribbage's play card)
-      // leaves currentAction stale, which blocks the next auto-start. But only clear if
-      // no newer action started during the await, or we'd wipe a freshly-started one.
-      if (actionStartTick.value === seq) {
-        currentAction.value = null;
-        clearArgs();
-        clearAdvancedState();
-      }
-
-      // Handle followUp: automatically start the next action if specified
-      if (result.success && result.followUp) {
-        queueFollowUp(result.followUp);
-      }
-
-      return result;
-    } catch (err) {
-      const error = err instanceof Error ? err.message : 'Action failed';
-      setError(error);
-      resolveAction(actionName, playerSeat?.value ?? 0, { success: false, error });
-      return { success: false, error };
-    } finally {
-      isExecuting.value = false;
-    }
+    return sendAndResolve(actionName, finalArgs, seq);
   }
 
   /**
