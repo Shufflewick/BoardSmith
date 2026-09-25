@@ -5,14 +5,14 @@
  */
 
 import { vi } from 'vitest';
-import type { ActionMetadata, ActionResult } from './useActionController.js';
+import type { ActionMetadata, ControllerActionResult } from './useActionController.js';
 
 /**
  * Creates a mock sendAction function for testing.
  * By default, returns a successful result with the action name and args.
  */
 export function createMockSendAction() {
-  return vi.fn().mockImplementation(async (actionName: string, args: Record<string, unknown>): Promise<ActionResult> => {
+  return vi.fn().mockImplementation(async (actionName: string, args: Record<string, unknown>): Promise<ControllerActionResult> => {
     return { success: true, data: { actionName, args } };
   });
 }

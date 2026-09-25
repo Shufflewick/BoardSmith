@@ -70,7 +70,7 @@ export type {
 
   // Connection
   ConnectionStatus,
-  ActionResult,
+  ActionResponse,
 
   // Events
   StateChangeCallback,
