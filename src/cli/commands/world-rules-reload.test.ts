@@ -87,9 +87,14 @@ async function serveWorld(edit: WorldRuntime | Error) {
       return edit;
     },
   });
-  closing.push(() => run.close());
   const server = await serveSockets(run.connections.accept);
-  closing.push(server.close);
+  // In the dev server's own teardown order: forget the pages, so their sockets
+  // closing is no departure, then the sockets, then the world.
+  closing.push(async () => {
+    run.connections.forgetAll();
+    await server.close();
+    await run.close();
+  });
   const page = await openSocketPage(server.port, 'p1', (f) => f.type === 'world_offers');
   let request = 0;
   /** Stoke as the page; resolves with the host's answer. */
