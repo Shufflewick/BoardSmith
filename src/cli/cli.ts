@@ -21,6 +21,7 @@ import {
   ingestRelabelCommand,
 } from './commands/ingest-archive.js';
 import { ingestCheckCommand } from './commands/ingest-check.js';
+import { exampleLedgerUpgradeCommand } from './commands/example-ledger-upgrade.js';
 import { chunkCheckCommand, chunkProvenanceStatusCommand } from './commands/chunk-provenance.js';
 import { testStepCheckCommand } from './commands/test-step-check.js';
 import { claimQuoteCheckCommand } from './commands/claim-quotes.js';
@@ -765,6 +766,19 @@ export function createProgram(): Command {
     )
     .option('--json', 'Emit JSON instead of human-readable output')
     .action(discardResult(verifyExampleRecordCommand));
+
+  // One-time upgrade of a ledger written before records carried lineText (#371). Every other
+  // reader refuses such a ledger and names this command; the ledger format stays strict.
+  program
+    .command('verify-example-ledger-upgrade')
+    .description(
+      'Upgrade an example-replay ledger written before records carried lineText: fill it in from ' +
+        'the slice line each record names, keep its verdict, and name (and drop) the records ' +
+        'whose line no longer carries their example, so their slices are recorded again',
+    )
+    .option('--project <dir>', 'Project directory (defaults to cwd)')
+    .option('--json', 'Emit JSON instead of human-readable output')
+    .action(discardResult(exampleLedgerUpgradeCommand));
 
   program
     .command('verify-example-translate')

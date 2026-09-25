@@ -399,7 +399,7 @@ function frozenTranslation(translation: ExampleTranslation): ExampleTranslation 
  * gained an example, and `verify-example-replay` reports it pending again. A slice never has both
  * this record and example records.
  */
-interface SliceWithoutExamplesRecord {
+export interface SliceWithoutExamplesRecord {
   readonly slicePath: string;
   readonly noWorkedExamples: true;
   readonly extractionHash: string;
@@ -491,7 +491,7 @@ function assertOneAnswerPerSlice(ledger: ExampleReplayLedger, where: string): vo
  * The ONE durable write: the whole ledger, through `atomicWriteFile`. Example records keep the
  * order given; the no-examples records follow them, in slice order.
  */
-async function writeExampleReplayLedger(
+export async function writeExampleReplayLedger(
   projectDir: string,
   ledger: ExampleReplayLedger,
 ): Promise<{ ledgerPath: string }> {
@@ -586,19 +586,57 @@ async function replaceSliceExampleReplayVerdicts(
  */
 async function readExampleReplayLedger(projectDir: string): Promise<ExampleReplayLedger> {
   const file = exampleReplayLedgerFile(projectDir);
+  const relLedgerPath = relative(projectDir, file.path);
   const lines = await readFencedJsonLedger(file, (r) =>
-    isSliceWithoutExamplesLine(r) ? readSliceWithoutExamplesLine(r) : readExampleRecordLine(r),
+    isPreLineTextRecord(r) ? PRE_LINE_TEXT : readLedgerLine(r),
   );
+  const preLineText = lines.filter((line) => line === PRE_LINE_TEXT).length;
+  if (preLineText > 0) {
+    throw new Error(
+      `The example-replay ledger at ${relLedgerPath} has ${preLineText} record(s) written before ` +
+        `records carried lineText, the text of the slice line each example cites.\n` +
+        `Run \`npx boardsmith verify-example-ledger-upgrade\` once. It fills lineText in from the ` +
+        `slices, keeps every recorded verdict it can, and names the records it cannot, whose slices ` +
+        `you then record again.`,
+    );
+  }
+  return partitionLedgerLines(lines.filter((line) => line !== PRE_LINE_TEXT), relLedgerPath);
+}
+
+/** Stands in for a pre-lineText record while `readExampleReplayLedger` counts them. */
+const PRE_LINE_TEXT = Symbol('pre-lineText record');
+
+/**
+ * A ledger line written before #350 gave every example record its `lineText`. Only
+ * `verify-example-ledger-upgrade` (`example-ledger-upgrade.ts`) reads one; every other reader
+ * refuses the ledger and names that command.
+ */
+export function isPreLineTextRecord(r: Record<string, unknown>): boolean {
+  return !isSliceWithoutExamplesLine(r) && r.lineText === undefined;
+}
+
+/** One validated ledger line: an example record, or a slice recorded as having none. */
+export function readLedgerLine(
+  r: Record<string, unknown>,
+): ExampleReplayRecord | SliceWithoutExamplesRecord {
+  return isSliceWithoutExamplesLine(r) ? readSliceWithoutExamplesLine(r) : readExampleRecordLine(r);
+}
+
+/** Sorts validated ledger lines into an `ExampleReplayLedger`, refusing two answers for a slice. */
+export function partitionLedgerLines(
+  lines: readonly (ExampleReplayRecord | SliceWithoutExamplesRecord)[],
+  relLedgerPath: string,
+): ExampleReplayLedger {
   const ledger: ExampleReplayLedger = { records: [], slicesWithoutExamples: [] };
   for (const line of lines) {
     if ('noWorkedExamples' in line) ledger.slicesWithoutExamples.push(line);
     else ledger.records.push(line);
   }
-  assertOneAnswerPerSlice(ledger, `The example-replay ledger at ${relative(projectDir, file.path)}`);
+  assertOneAnswerPerSlice(ledger, `The example-replay ledger at ${relLedgerPath}`);
   return ledger;
 }
 
-function exampleReplayLedgerFile(projectDir: string): FencedJsonLedgerFile {
+export function exampleReplayLedgerFile(projectDir: string): FencedJsonLedgerFile {
   return {
     projectDir,
     path: exampleReplayLedgerPath(projectDir),
