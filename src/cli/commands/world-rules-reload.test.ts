@@ -117,15 +117,29 @@ async function serveWorld(edit: WorldRuntime | Error) {
     await reloaded;
     return answer;
   };
-  return { page, stoke, stokeDuringRebuild, logs };
+  /**
+   * Stoke while an edit that must not take builds: the command is refused for
+   * `reason`, the pages are not told to reload, and the world goes on, on the
+   * rules it had (the next command adds 1). Resolves with the refusal.
+   */
+  const refusedDuringRebuild = async (reason: string) => {
+    const refused = await stokeDuringRebuild();
+    expect(refused.ok).toBe(false);
+    expect(refused.message).toContain(reason);
+    expect(page.frames.some((f) => f.type === 'world_reload')).toBe(false);
+    expect(await stoke()).toMatchObject({ ok: true });
+    await vi.waitFor(() => expect(logs()).toBe(2));
+    return refused;
+  };
+  // One command made on the rules from before any edit.
+  expect(await stoke()).toMatchObject({ ok: true });
+  await vi.waitFor(() => expect(logs()).toBe(1));
+  return { page, stokeDuringRebuild, refusedDuringRebuild, logs };
 }
 
 describe('#379: a world command sent while the edited rules are still building', () => {
   it('waits for the edited rules and runs on them', async () => {
     const world = await serveWorld(afterEdit);
-    expect(await world.stoke()).toMatchObject({ ok: true });
-    await vi.waitFor(() => expect(world.logs()).toBe(1));
-
     const reloadNow = world.page.next((f) => f.type === 'world_reload');
     expect(await world.stokeDuringRebuild()).toMatchObject({ ok: true });
     await reloadNow;
@@ -140,12 +154,9 @@ describe('#379: a world command sent while the edited rules are still building',
 
   it('refuses the command with the rebuild error when the edit does not build, and stays on the old rules', async () => {
     const world = await serveWorld(brokenEdit);
-    await world.stoke();
-    await vi.waitFor(() => expect(world.logs()).toBe(1));
-
-    const refused = await world.stokeDuringRebuild();
-    expect(refused.ok).toBe(false);
-    expect(refused.message).toContain('Your edited rules did not load, so this world is still running the ones it had');
+    const refused = await world.refusedDuringRebuild(
+      'Your edited rules did not load, so this world is still running the ones it had',
+    );
     expect(refused.message).toContain(brokenEdit.message);
     await vi.waitFor(() =>
       expect(world.page.frames.filter((f) => f.type === 'world_rules_reload').at(-1)).toMatchObject({
@@ -153,11 +164,6 @@ describe('#379: a world command sent while the edited rules are still building',
         message: refused.message,
       }),
     );
-    expect(world.page.frames.some((f) => f.type === 'world_reload')).toBe(false);
-
-    // The world is where it was, on the rules it had: the next command adds 1.
-    expect(await world.stoke()).toMatchObject({ ok: true });
-    await vi.waitFor(() => expect(world.logs()).toBe(2));
   }, 30_000);
 });
 
@@ -172,17 +178,10 @@ describe('#379: a world command sent while the edited rules are still building',
 describe('#381: an edit that builds but cannot open the world', () => {
   it('refuses the held command, and the world goes on, on the rules it had', async () => {
     const world = await serveWorld(unopenableEdit);
-    await world.stoke();
-    await vi.waitFor(() => expect(world.logs()).toBe(1));
-
-    const refused = await world.stokeDuringRebuild();
-    expect(refused.ok).toBe(false);
-    expect(refused.message).toContain('Those rules cannot run this world, so it is still running the ones it had');
+    // Still open, still seated, still on the old rules afterwards.
+    const refused = await world.refusedDuringRebuild(
+      'Those rules cannot run this world, so it is still running the ones it had',
+    );
     expect(refused.message).toContain('stateVersion');
-    expect(world.page.frames.some((f) => f.type === 'world_reload')).toBe(false);
-
-    // Still open, still seated, still on the old rules: the next command adds 1.
-    expect(await world.stoke()).toMatchObject({ ok: true });
-    await vi.waitFor(() => expect(world.logs()).toBe(2));
   }, 30_000);
 });
