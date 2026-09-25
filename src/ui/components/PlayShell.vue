@@ -234,9 +234,13 @@ if (!actionController) {
   );
 }
 
-/** Set while the bar is open over the player's preference, for one action. */
+/**
+ * Set while the bar is open over the player's preference, for one action. Keyed
+ * on the start as well as the name: the action that just finished can start
+ * again inside one flush, and that is a new question too (#384).
+ */
 const barOpenedForAction = ref(false);
-watch(actionController.currentAction, (action) => {
+watch([actionController.currentAction, actionController.actionStartTick], ([action]) => {
   barOpenedForAction.value = action !== null;
 });
 

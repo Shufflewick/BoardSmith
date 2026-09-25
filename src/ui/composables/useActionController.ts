@@ -263,11 +263,15 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
   // === State ===
   const currentAction = ref<string | null>(null);
-  // Monotonic id bumped whenever an action begins. Guards against a stale async
-  // execute()/executeCurrentAction cleanup clearing a NEWER action that was started
-  // during its await — the cross-turn auto-start race that left the started action
-  // (and its fetched choices) wiped, so the panel could never render the picker.
-  let actionStartSeq = 0;
+  // Monotonic id bumped whenever an action begins, so it names one START of an
+  // action where `currentAction` only names the action. Two readers:
+  // - a stale async execute()/executeCurrentAction cleanup compares it so it never
+  //   clears a NEWER action started during its await (the cross-turn auto-start
+  //   race that wiped the started action and its fetched choices);
+  // - anything that mirrors the current action elsewhere watches it alongside
+  //   `currentAction`, because the same action can finish and start again inside
+  //   one flush, and a watch on the name alone sees no change (#384).
+  const actionStartTick = ref(0);
 
   // Monotonic counter pulsed when an action FULLY completes via the selection-step
   // transport (handleOnSelectFill) with no further followUp in the chain. The
@@ -1477,7 +1481,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
     const actionName = currentAction.value;
     const args = buildServerArgs();
-    const seq = actionStartSeq;
+    const seq = actionStartTick.value;
 
     isExecuting.value = true;
     lastError.value = null;
@@ -1495,7 +1499,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
       // Clear state on success or failure — but only if no NEWER action started
       // during the await (otherwise we'd clobber a freshly auto-started action).
-      if (actionStartSeq === seq) {
+      if (actionStartTick.value === seq) {
         currentAction.value = null;
         clearArgs();
         clearAdvancedState();
@@ -1537,7 +1541,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
     // Snapshot the action-start seq so the post-send cleanup below won't clobber a
     // newer action that auto-started during the await (cross-turn race).
-    const seq = actionStartSeq;
+    const seq = actionStartTick.value;
 
     const meta = getActionMetadata(actionName);
 
@@ -1570,7 +1574,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
         resolveAction(actionName, playerSeat?.value ?? 0, result);
         // Executing resolves the action — clear in-progress state, unless a newer
         // action started during the await (see note below).
-        if (actionStartSeq === seq) {
+        if (actionStartTick.value === seq) {
           currentAction.value = null;
           clearArgs();
           clearAdvancedState();
@@ -1641,7 +1645,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
       // while the ActionPanel auto-started the SAME action (e.g. cribbage's play card)
       // leaves currentAction stale, which blocks the next auto-start. But only clear if
       // no newer action started during the await, or we'd wipe a freshly-started one.
-      if (actionStartSeq === seq) {
+      if (actionStartTick.value === seq) {
         currentAction.value = null;
         clearArgs();
         clearAdvancedState();
@@ -1685,7 +1689,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     }
 
     currentAction.value = actionName;
-    actionStartSeq++;
+    actionStartTick.value++;
     clearArgs();
     clearAdvancedState();
     // A followUp action is, by definition, NOT in availableActions (it's gated by
@@ -1834,7 +1838,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     }
 
     currentAction.value = actionName;
-    actionStartSeq++;
+    actionStartTick.value++;
     clearArgs();
     clearAdvancedState();
     Object.assign(currentArgs.value, initialArgs);
@@ -2606,6 +2610,9 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     // the next action (parity with the execute() path's isExecuting toggle), which is
     // what auto-ends the turn after a multi-jump capture chain.
     actionCompletedTick: readonly(actionCompletedTick),
+    // Bumped each time an action starts, including a restart of the action that
+    // just finished. Watch it with currentAction to mirror the action anywhere.
+    actionStartTick: readonly(actionStartTick),
     // The most recently resolved action and its server result, verbatim — the one
     // place to read an action's `data`/`message` regardless of which transport ran
     // it. execute() also returns its own result to its caller; a pick-driven action
