@@ -304,11 +304,14 @@ is `boardsmith simulate --game-option difficulty=hard`.
 
 #### A game whose ending is not built yet
 
-A game built chunk by chunk has no ending until a later chunk adds one, so
-every random game of it stops with no move left. By default that stop counts as
-`stuck`, the same as a flow deadlock. Declare where the game is meant to rest
-with `isResting`. It is handed the stopped game and returns the reason the game
-rests there, or `false` when it is not meant to stop there:
+A game built chunk by chunk has no ending until a later chunk adds one. Its
+random games either stop with no move left, which by default counts as
+`stuck`, the same as a flow deadlock, or, when a seat can always act, never
+stop at all and run to `timeout` or `maxActions`. Declare where the game is
+meant to rest with `isResting`. The simulator asks it after every move it
+applies, handing it the game as that move left it. It returns the reason the
+game rests there, or `false` when the game is not there, and the first reason
+it returns stops the game:
 
 ```typescript
 const results = await simulateRandomGames(MyGame, {
@@ -326,13 +329,38 @@ expect(results.crashed).toBe(0);
 ```
 
 A game it accepts gets `resting: true` and `restReason` (the string it
-returned), and counts toward `results.resting` instead of `results.stuck`.
-Because it sees the game itself, it is also where a test checks the final
-state. It is asked only about a game that stopped because no seat has an
-enabled action. A crash, a timeout, too many actions, a rejected move or a move
-the simulator cannot build stays a failure whatever it would say. Pass the same
-`isResting` to `replayRandomGame` to get the same verdict on a replay. Remove it
-once the game can end, so a stop goes back to being `stuck`.
+returned), and counts toward `results.resting` instead of `results.stuck`,
+`results.timedOut` or `results.exceededMaxActions`. Because it sees the game
+itself, it is also where a test checks the resting state.
+
+It is asked after every applied move, so the same `isResting` serves a game
+whose seats can always act. Where every seat can check in again round after
+round, the game never runs out of moves, and the first move that leaves every
+seat checked in stops it as resting:
+
+```typescript
+const results = await simulateRandomGames(MyGame, {
+  count: 50,
+  playerCounts: [3],
+  isResting: (game) =>
+    game.players.every((p) => p.checkedIn)
+      ? 'every seat has checked in; battle is built in a later chunk'
+      : false,
+});
+
+expect(results.resting).toBe(results.total);
+expect(results.timedOut).toBe(0);
+expect(results.exceededMaxActions).toBe(0);
+```
+
+Return a reason only for the state the game is meant to rest in: a reason
+returned earlier ends the game there, before the moves after it are played. It
+is never asked about a game that has ended or before the first move. A game
+that never reaches its rest ends as it would without `isResting`: stuck when no
+seat has an enabled action, and a crash, a timeout, too many actions, a
+rejected move or a move the simulator cannot build stays a failure. Pass the
+same `isResting` to `replayRandomGame` to get the same verdict on a replay.
+Remove it once the game can end, so a stop goes back to being `stuck`.
 
 ### Debugging Test Failures
 
@@ -621,7 +649,7 @@ boardsmith simulate --games 50 --seed ci-run-1 --players 2 --json
 Exit code is `0` only if every game reaches `status: 'complete'`; any
 `'stuck'` or `'error'` game sets a non-zero exit code, so `boardsmith
 simulate` can gate CI directly. The command has no `isResting`: a game whose
-ending is not built yet reports every game stuck here. Gate such a game with a
+ending is not built yet never reports a game complete here. Gate such a game with a
 `simulateRandomGames` test that declares its rest, and use this command once
 the game can end. A failing game's output includes a replay
 line:

@@ -149,6 +149,41 @@ export class UnfinishedWideGame extends Game<UnfinishedWideGame, Player> {
   }
 }
 
+/**
+ * UnfinishedWideGame whose wide step opens only after a first, narrow move:
+ * `warmUp` is the one move on turn one, `shout` the only move after it, until
+ * four turns have gone and nothing is left (#383). A walk that stopped after
+ * the first move would never see the forty choices.
+ */
+export class LateWideGame extends Game<LateWideGame, Player> {
+  // Read through `burnTurn`'s ctx.game and the disabled rules; fallow cannot follow either.
+  // fallow-ignore-next-line unused-class-member
+  turns = 0;
+
+  constructor(options: GameOptions) {
+    super(options);
+
+    this.registerAction(
+      Action.create<LateWideGame>('warmUp')
+        .chooseFrom('stretch', { choices: [1, 2] })
+        .disabled((ctx) => (ctx.game.turns >= 1 ? 'You have warmed up.' : false))
+        .execute(burnTurn),
+    );
+    this.registerAction(
+      Action.create<LateWideGame>('shout')
+        .chooseFrom('verb', { choices: VERBS })
+        .disabled((ctx) =>
+          ctx.game.turns < 1 ? 'Warm up first.' : ctx.game.turns >= 4 ? 'Four turns is all this chunk allows.' : false,
+        )
+        .execute(burnTurn),
+    );
+
+    this.setFlow(
+      defineFlow({ root: simultaneousActionStep({ actions: ['warmUp', 'shout'], playerDone: () => false }) }),
+    );
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Worlds (#323). A world has no flow; its verbs are world actions, offered per
 // seat, and what they offer depends on who has arrived, what has been done and
