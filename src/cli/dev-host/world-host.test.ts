@@ -3049,7 +3049,7 @@ describe('#387: a departure whose grace runs out is handed to the host', () => {
   async function departedWhileHeld() {
     const { told, definition } = presenceWorld({ onArrive: 'greet', onDepart: 'farewell' });
     const waiting: Array<() => void | Promise<void>> = [];
-    const { host, drop } = await attached({ dir, definition, hostWork: (work) => void waiting.push(work) });
+    const { host, drop } = await attached({ dir, definition, hostWork: { reloadPending: true, hold: (work) => void waiting.push(work) } });
     await drop('c1');
     await afterDepartureTimers(host);
     expect(told).toEqual(['arrive:1']);

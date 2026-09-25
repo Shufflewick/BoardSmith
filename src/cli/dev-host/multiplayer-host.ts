@@ -25,7 +25,8 @@ import {
   type TurnBoundary,
 } from '../../session/index.js';
 import { createNodeWorldClock, type WorldHostClock } from './node-world-clock.js';
-import { heldClock, runsAtOnce, type HostWorkGate, type RulesReloadNotice } from './rules-reload-queue.js';
+import { runsAtOnce, type HostWorkGate } from '../../session/host-work-gate.js';
+import { heldClock, type RulesReloadNotice } from './rules-reload-queue.js';
 import { dueSeats, type SeatActivityState, type GameStateSnapshot } from '../../engine/index.js';
 import { validateGameOptionSelection, type DevOptionDef } from './config-types.js';
 import {
@@ -235,11 +236,12 @@ export interface MultiplayerHostOptions {
    */
   clock?: WorldHostClock;
   /**
-   * How the host runs the work it starts itself: a step's deadline running out
-   * (#387). `boardsmith dev` passes its rules reload queue's `hold`, so a
-   * deadline that runs out while an edited rules file is rebuilding closes the
-   * step on the rules the table runs once the rebuild settles. Without one it
-   * runs the moment it comes due.
+   * How the host runs the work it and its session start themselves: a step's
+   * deadline running out (#387), the narrated demo's next move and a chain of
+   * bot moves (#388). `boardsmith dev` passes its rules reload queue, so work
+   * that comes due while an edited rules file is rebuilding runs on the rules
+   * the table runs once the rebuild settles. Without one it runs the moment it
+   * comes due.
    */
   hostWork?: HostWorkGate;
 }
@@ -1143,6 +1145,7 @@ export class MultiplayerHost {
       botSeats: this.botSeats,
       teachingDisabled: this.opts.teachingDisabled,
       executeOp,
+      hostWork: this.opts.hostWork ?? runsAtOnce,
       postGameState: (seat, view, meta) => {
         this.observeBoundary(session, meta.turnBoundary);
         this.deliverGameState(seat, view, meta);

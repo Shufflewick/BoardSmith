@@ -142,6 +142,8 @@ export * from './stateless-ops.js';
 // ordering, and drives the bot pump. Accepts an injected executeOp adapter so the same
 // host class works in-process (dev) and via remote RPC (production executor worker).
 export * from './snapshot-session-host.js';
+// How a host holds the work a session starts itself while its rules are replaced (#388).
+export type { HostWorkGate } from './host-work-gate.js';
 
 // ============================================
 // Headless Simulation

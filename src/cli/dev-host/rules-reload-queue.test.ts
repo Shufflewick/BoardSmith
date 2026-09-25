@@ -214,6 +214,23 @@ describe('#387: work the host starts itself while the rules are rebuilding', () 
   });
 });
 
+describe('#388: reloadPending, which a chain of bot moves stops on', () => {
+  it('is true from a save until its reload has settled, and false while what it held runs', async () => {
+    const rebuild = deferred<number>();
+    const { queue } = queueOver(() => rebuild.promise);
+    expect(queue.reloadPending).toBe(false);
+    const reloaded = queue.saved('src/rules/index.ts');
+    expect(queue.reloadPending).toBe(true);
+    // Held work runs on the settled rules, so a chain it restarts goes on.
+    const seen: boolean[] = [];
+    queue.hold(() => void seen.push(queue.reloadPending));
+    rebuild.resolve(2);
+    await reloaded;
+    expect(seen).toEqual([false]);
+    expect(queue.reloadPending).toBe(false);
+  });
+});
+
 describe('#387: heldClock', () => {
   /** A clock whose one timer the test sets off, and the fires the gate is holding. */
   function gatedClock() {
@@ -226,7 +243,7 @@ describe('#387: heldClock', () => {
       },
     };
     const holding: Array<() => void | Promise<void>> = [];
-    const held = heldClock(clock, (work) => void holding.push(work));
+    const held = heldClock(clock, { reloadPending: true, hold: (work) => void holding.push(work) });
     return { held, holding, goOff: () => fire?.() };
   }
 

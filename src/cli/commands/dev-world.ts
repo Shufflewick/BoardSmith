@@ -344,7 +344,7 @@ export async function openWorldRun(
       clock,
       // The world's own alarm and a departure's grace wait in the queue with
       // the pages' commands while an edit rebuilds (#387).
-      hostWork: (work) => queue.hold(work),
+      hostWork: queue,
     });
 
   // MUTABLE, because a rule edit replaces the whole world host (#201): the
