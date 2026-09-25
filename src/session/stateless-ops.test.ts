@@ -340,10 +340,9 @@ describe('executeOp', () => {
       );
 
       expect(actionResult.success).toBe(true);
-      expect(actionResult.followUp).toBeDefined();
-      const fu = actionResult.followUp as { action: string; metadata?: unknown };
-      expect(fu.action).toBe('finish');
-      expect(fu.metadata).toBeDefined();
+      // Typed as the FollowUpOffer it is (#377), so no cast is needed to read it.
+      expect(actionResult.followUp?.action).toBe('finish');
+      expect(actionResult.followUp?.metadata?.name).toBe('finish');
     });
   });
 

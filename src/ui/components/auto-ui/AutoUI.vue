@@ -12,7 +12,7 @@
  * />
  */
 import AutoRenderer from './AutoRenderer.vue';
-import type { GameElement } from './index';
+import type { GameViewElement } from './index';
 import type { PresentationOverlay } from './presentation.js';
 
 interface FlowState {
@@ -21,7 +21,7 @@ interface FlowState {
 
 defineProps<{
   /** The game view tree */
-  gameView: GameElement | null | undefined;
+  gameView: GameViewElement | null | undefined;
   /** Flow state (for game complete detection) */
   flowState?: FlowState;
   /** Current player's seat */

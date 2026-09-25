@@ -18,7 +18,7 @@ import { GameSession } from './game-session.js';
 import { TutorialController } from './tutorial-controller.js';
 import { buildPlayerState, buildActionMetadata, buildSingleActionMetadata } from './utils.js';
 import type { TutorialDefinition } from '../engine/tutorial/types.js';
-import { useActionController, type ActionMetadata } from '../ui/composables/useActionController.js';
+import { useActionController, type EnrichedActionMetadata } from '../ui/composables/useActionController.js';
 
 // Test game classes
 class TestGame extends Game<TestGame, Player> {
@@ -490,7 +490,7 @@ describe('end-to-end suppressAutoFill: buildPlayerState projection → useAction
       choices: [{ value: 'a', display: 'A' }], // single enabled choice = would auto-fill
     });
 
-    const actionMeta: ActionMetadata = {
+    const actionMeta: EnrichedActionMetadata = {
       name: 'move',
       prompt: 'Move a piece',
       selections: [
@@ -532,7 +532,7 @@ describe('end-to-end suppressAutoFill: buildPlayerState projection → useAction
       choices: [{ value: 'a', display: 'A' }],
     });
 
-    const actionMeta: ActionMetadata = {
+    const actionMeta: EnrichedActionMetadata = {
       name: 'move',
       prompt: 'Move a piece',
       selections: [

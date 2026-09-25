@@ -6,7 +6,7 @@
  * session surface — they are defined once, in one place.
  */
 
-import type { FlowState, SerializedAction, Game, AnimationEvent, GameStateSnapshot, PendingActionState } from '../engine/index.js';
+import type { FlowState, SerializedAction, Game, GameClass, AnimationEvent, GameStateSnapshot, PendingActionState } from '../engine/index.js';
 import type { BotStrategy } from '../bot/index.js';
 import type { TutorialDefinition, TutorialStepView, Annotation } from '../engine/tutorial/types.js';
 import type { CheckpointPolicy, UndoPolicy } from '../engine/index.js';
@@ -21,6 +21,12 @@ import type {
   BooleanOption,
   GameOptionDefinition,
   WebSocketMessage,
+  PlayerConfig,
+  CreateGameRequest,
+  ClaimSeatRequest,
+  ClaimSeatResponse,
+  JoinLobbyRequest,
+  JoinLobbyResponse,
 } from '../types/protocol.js';
 
 // ============================================
@@ -65,14 +71,6 @@ export type {
 // Game Class Types
 // ============================================
 
-/**
- * Game class constructor type
- */
-export type GameClass<G extends Game = Game> = new (options: {
-  playerCount: number;
-  playerNames?: string[];
-  seed?: string;
-}) => G;
 
 /**
  * Game definition for registering games
@@ -249,17 +247,6 @@ export interface ExclusivePlayerOption {
  * Per-player option definition (shown for each player slot)
  */
 export type PlayerOptionDefinition = StandardPlayerOption | ExclusivePlayerOption;
-
-/**
- * Per-player configuration in requests
- */
-export interface PlayerConfig {
-  name?: string;
-  isBot?: boolean;
-  botLevel?: string;
-  /** Custom player options (color, role, etc.) */
-  [key: string]: unknown;
-}
 
 /**
  * Preset configuration for quick game setup
@@ -704,23 +691,6 @@ export interface BroadcastAdapter<TSession = SessionInfo> {
 // ============================================
 
 /**
- * Request to create a new game
- */
-export interface CreateGameRequest {
-  gameType: string;
-  playerCount: number;
-  playerNames?: string[];
-  playerIds?: string[];
-  seed?: string;
-  botPlayers?: number[];
-  botLevel?: string;
-  /** Game-specific options (boardSize, targetScore, etc.) */
-  gameOptions?: Record<string, unknown>;
-  /** Per-player configurations (for lobby UI) */
-  playerConfigs?: PlayerConfig[];
-}
-
-/**
  * Request to perform an action
  */
 export interface ActionRequest {
@@ -733,53 +703,13 @@ export interface ActionRequest {
 // (single source of truth) and re-exported here for the session surface.
 export type { WebSocketMessage };
 
+// The lobby request and response shapes are owned by ../types/protocol.js
+// (#375); the session serves them, so it hands out the protocol's own.
+export type { PlayerConfig, CreateGameRequest, ClaimSeatRequest, ClaimSeatResponse, JoinLobbyRequest, JoinLobbyResponse };
+
 // ============================================
 // Lobby Request/Response Types
 // ============================================
-
-/**
- * Request to claim a seat in the lobby
- */
-export interface ClaimSeatRequest {
-  /** Seat to claim (1-indexed) */
-  seat: number;
-  /** Player's name */
-  name: string;
-  /** Player's unique ID */
-  playerId: string;
-}
-
-/**
- * Response to claim seat request
- */
-export interface ClaimSeatResponse {
-  success: boolean;
-  error?: string;
-  /** Updated lobby info */
-  lobby?: LobbyInfo;
-}
-
-/**
- * Request to join the lobby (server assigns seat)
- */
-export interface JoinLobbyRequest {
-  /** Player's unique ID */
-  playerId: string;
-  /** Player's display name */
-  name: string;
-}
-
-/**
- * Response to join lobby request
- */
-export interface JoinLobbyResponse {
-  success: boolean;
-  error?: string;
-  /** Updated lobby info */
-  lobby?: LobbyInfo;
-  /** Seat that was assigned by the server */
-  seat?: number;
-}
 
 /**
  * Request to update player name

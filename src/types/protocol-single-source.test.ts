@@ -31,9 +31,9 @@
  * follows the export chain from each public entry point back to the file that
  * declares the interface, and requires all of them to land on this one.
  *
- * `RefWithRole` is deliberately covered by neither half: the engine's is over
- * `BoardElementRef` and the protocol's over `ElementRef`, protocol.ts says in
- * prose why it declares its own, and it is recorded in the dead-code baseline.
+ * `RefWithRole` was the last copy (#376): the engine declared its own over a
+ * `BoardElementRef` that was `ElementRef` under another name. The engine now
+ * imports both from here, so it is in the list below like the rest.
  */
 import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
@@ -57,6 +57,7 @@ const PICK_SHAPE = [
   // which re-export the protocol's now. Which barrel exports which declaration
   // is checked in element-ref-single-source.test.ts.
   'ElementRef',
+  'RefWithRole',
 ] as const;
 
 /** The public entry points in package.json's `exports` that offer `ElementRef`. */

@@ -23,7 +23,7 @@ import { nextTick, ref } from 'vue';
 import ActionPanel from './ActionPanel.vue';
 import { useActionController } from '../../composables/useActionController.js';
 import { GAME_CONTEXT_KEYS } from '../../composables/useGameContext.js';
-import type { ActionMetadata } from '../../composables/useActionControllerTypes.js';
+import type { EnrichedActionMetadata } from '../../composables/useActionControllerTypes.js';
 
 /**
  * ONE CONTROLLER, AND PANELS THAT COME AND GO OVER IT.
@@ -36,8 +36,8 @@ import type { ActionMetadata } from '../../composables/useActionControllerTypes.
  * `autoFill`/`autoExecute` off so an editor stays on screen with its value
  * un-submitted, which is the state most assertions about one are about.
  */
-export function panelsOver(actions: ActionMetadata[]) {
-  const metadata: Record<string, ActionMetadata> = {};
+export function panelsOver(actions: EnrichedActionMetadata[]) {
+  const metadata: Record<string, EnrichedActionMetadata> = {};
   for (const action of actions) metadata[action.name] = action;
   const availableActions = ref(actions.map((a) => a.name));
   const sendAction = vi.fn().mockResolvedValue({ success: true });
@@ -75,7 +75,7 @@ export function panelsOver(actions: ActionMetadata[]) {
  * The one-shot case of `panelsOver`, which is what a test that never collapses
  * the bar wants.
  */
-export async function mountPanelAt(action: ActionMetadata) {
+export async function mountPanelAt(action: EnrichedActionMetadata) {
   const { controller, mountPanel, sendAction } = panelsOver([action]);
   void controller.start(action.name, {});
   await nextTick();

@@ -6,7 +6,7 @@ import {
   textLengthHint,
   numberRangeHint,
 } from './action-panel-helpers.js';
-import type { ChoiceWithRefs, ValidElement } from '../../composables/useActionControllerTypes.js';
+import type { ChoiceWithRefs, EnrichedValidElement } from '../../composables/useActionControllerTypes.js';
 
 describe('splitAnchoredChoices', () => {
   const notationChoice: ChoiceWithRefs = {
@@ -77,7 +77,7 @@ describe('splitAnchoredChoices', () => {
 // ---------------------------------------------------------------------------
 
 describe('shouldDeferElementPickToBoard', () => {
-  const anchored = (n: number): ValidElement[] =>
+  const anchored = (n: number): EnrichedValidElement[] =>
     Array.from({ length: n }, (_, i) => ({ id: i, display: `c${i}`, refs: [{ role: 'target' as const, ref: { id: i, notation: `n${i}` } }] }));
 
   it('defers an element pick larger than the threshold when every candidate is on the board', () => {

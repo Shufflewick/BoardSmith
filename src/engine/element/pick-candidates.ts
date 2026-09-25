@@ -22,8 +22,8 @@
  */
 import { isDevThrowEnabled } from '../../utils/dev.js';
 import { isElement } from './game-element.js';
+import type { ElementRef } from '../../types/protocol.js';
 import type {
-  BoardElementRef,
   ChoiceSelection,
   ElementSelection,
   ElementsSelection,
@@ -214,9 +214,9 @@ function refFor(
   selection: ElementSelection | ElementsSelection,
   ctx: CandidateContext,
   warnings: WarningEntry[],
-): BoardElementRef {
+): ElementRef {
   const boardRef = selection.boardRef as
-    | ((element: never, context: CandidateContext) => BoardElementRef)
+    | ((element: never, context: CandidateContext) => ElementRef)
     | undefined;
   if (!boardRef) {
     return { id: element.id, ...(element.notation ? { notation: element.notation } : {}) };

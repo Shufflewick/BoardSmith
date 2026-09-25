@@ -23,7 +23,7 @@ import type {
   WorldEventStamp,
   WorldOfferStamp,
   WorldAudienceViews,
-  WorldSeatView,
+  WorldAudienceSeat,
 } from "./contract.js";
 
 /** Two partitions, so "only what was asked for" is a distinguishable claim. */
@@ -270,7 +270,7 @@ class ReferenceWorldEngine implements WorldEngine {
     // suite is what holds the two together. An engine WITH a tree is where the
     // saving lives.
     const bodies: unknown[] = [];
-    const seats: WorldSeatView[] = [];
+    const seats: WorldAudienceSeat[] = [];
     for (const player of players) {
       try {
         const view = await this.viewFor(player);

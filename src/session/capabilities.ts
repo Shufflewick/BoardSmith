@@ -33,7 +33,7 @@
  */
 
 import type { FlowNode } from '../engine/flow/types.js';
-import type { GameClass } from './types.js';
+import type { GameClass } from '../engine/index.js';
 import { timedStepNames } from '../engine/flow/step-time-limit.js';
 import { constructGame } from '../engine/element/game.js';
 

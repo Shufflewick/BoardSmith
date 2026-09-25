@@ -73,7 +73,7 @@ export interface BaseElementAttributes {
  * await actionController.execute('drop', { equipment: equipment.id });  // Pass ID
  * ```
  */
-export interface GameElement<TAttributes extends BaseElementAttributes = BaseElementAttributes> {
+export interface GameViewElement<TAttributes extends BaseElementAttributes = BaseElementAttributes> {
   /**
    * Unique identifier for this element instance.
    *
@@ -107,7 +107,7 @@ export interface GameElement<TAttributes extends BaseElementAttributes = BaseEle
    * Use helpers like `findChildByAttribute()` to search children
    * when you need to find an element by its attribute values.
    */
-  children?: GameElement<TAttributes>[];
+  children?: GameViewElement<TAttributes>[];
   /** Count of children (used when contents are hidden from player) */
   childCount?: number;
   /** Internal flag indicating element should be hidden */
@@ -142,7 +142,7 @@ export interface ElementMatchOptions {
 // (`ValidElement` carrying its `gameView` element, and the pick/action types
 // bound to that) lives in `composables/useActionControllerTypes.js`, which is
 // where the rest of the UI already imports it from. It is not re-exported
-// through here: this module declares `GameElement`, so that module imports from
+// through here: this module declares `GameViewElement`, so that module imports from
 // this one, and a re-export in this direction would make the two type modules
 // import each other.
 
@@ -155,7 +155,7 @@ export interface ElementMatchOptions {
  * `position` here for a long time and nothing caught it, because the ambient
  * `*.vue` shim meant no game template was ever type-checked against it.
  */
-export interface Player {
+export interface BoardPlayer {
   seat: number;
   name: string;
 }

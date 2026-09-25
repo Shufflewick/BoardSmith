@@ -106,7 +106,7 @@ import type {
   WorldOfferStamp,
   WorldAudienceViews,
   WorldPartitionSource,
-  WorldSeatView,
+  WorldAudienceSeat,
   RoutedEvent,
   StoredPartition,
 } from "./contract.js";
@@ -1982,7 +1982,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
    * runner's job and doing it here would do it twice.
    */
   async viewsFor(players: readonly string[]): Promise<WorldAudienceViews> {
-    const seats: WorldSeatView[] = [];
+    const seats: WorldAudienceSeat[] = [];
     /** One entry per seat that will be projected, in the order asked. */
     const asking: WorldSeatProjection[] = [];
 

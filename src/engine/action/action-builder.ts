@@ -1,5 +1,6 @@
 import type { GameElement } from '../element/game-element.js';
 import type { Game } from '../element/game.js';
+import type { ElementRef } from '../../types/protocol.js';
 import type {
   ActionDefinition,
   ActionContext,
@@ -12,7 +13,6 @@ import type {
   NumberSelection,
   ChoiceBoardRefs,
   DependentFilter,
-  BoardElementRef,
   RepeatConfig,
   MultiSelectConfig,
   OrderedListConfig,
@@ -151,7 +151,7 @@ type ChooseElementOptions<G extends Game, T extends GameElement> = {
    */
   display?: (element: T, context: ActionContext<G>, allElements: T[]) => string;
   /** Get board element reference for highlighting */
-  boardRef?: (element: T, context: ActionContext<G>) => BoardElementRef;
+  boardRef?: (element: T, context: ActionContext<G>) => ElementRef;
   /**
    * Name of a previous selection this depends on.
    * When specified, availability checking will verify that at least one
@@ -807,7 +807,7 @@ export class Action<
       optional?: boolean | string;
       validate?: (value: T[], args: Record<string, unknown>, context: ActionContext<G>) => boolean | string;
       /** Get board element reference for highlighting */
-      boardRef?: (element: T, context: ActionContext<G>) => BoardElementRef;
+      boardRef?: (element: T, context: ActionContext<G>) => ElementRef;
       /**
        * Name of a previous selection this element selection depends on.
        * When specified, elements are computed for each possible value of the

@@ -20,14 +20,14 @@ import { nextTick } from 'vue';
 import ActionPanel from './ActionPanel.vue';
 import { GAME_CONTEXT_KEYS } from '../../composables/useGameContext.js';
 import { stubActionController, type ActionPanelProps } from './action-panel-controller.test-helper.js';
-import type { ActionMetadata } from '../../composables/useActionControllerTypes.js';
+import type { EnrichedActionMetadata } from '../../composables/useActionControllerTypes.js';
 
 /** An action as this file declares one: a name, and whatever else the test needs. */
-type Meta = Partial<ActionMetadata> & { name: string };
+type Meta = Partial<EnrichedActionMetadata> & { name: string };
 
 function mountPanel(actions: Meta[], extra: Partial<ActionPanelProps> = {}) {
   const controller = stubActionController();
-  const metadata: Record<string, ActionMetadata> = {};
+  const metadata: Record<string, EnrichedActionMetadata> = {};
   for (const action of actions) metadata[action.name] = { selections: [], ...action };
   const wrapper = mount(ActionPanel, {
     global: { provide: { [GAME_CONTEXT_KEYS.actionController as symbol]: controller } },

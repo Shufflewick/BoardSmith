@@ -29,10 +29,10 @@ import { mount } from '@vue/test-utils';
 import ActionPanel from './ActionPanel.vue';
 import { useActionController } from '../../composables/useActionController.js';
 import { GAME_CONTEXT_KEYS } from '../../composables/useGameContext.js';
-import type { ActionMetadata } from '../../composables/useActionControllerTypes.js';
+import type { EnrichedActionMetadata } from '../../composables/useActionControllerTypes.js';
 import type { ActionQuoteResult } from '../../composables/useActionControllerTypes.js';
 
-const BOOST: ActionMetadata = {
+const BOOST: EnrichedActionMetadata = {
   name: 'boost',
   prompt: 'Purchase boost',
   quote: true,
@@ -67,7 +67,7 @@ function panelOver(
     args,
   ) => priceOf(args),
 ) {
-  const metadata: Record<string, ActionMetadata> = { boost: BOOST };
+  const metadata: Record<string, EnrichedActionMetadata> = { boost: BOOST };
   const sendAction = vi.fn().mockResolvedValue({ success: true });
   const controller = useActionController({
     sendAction,
@@ -198,7 +198,7 @@ describe('the price of the draft is on the bar before Done (#248)', () => {
   });
 
   it('draws no quote region at all for an action that does not quote', async () => {
-    const plain: ActionMetadata = {
+    const plain: EnrichedActionMetadata = {
       name: 'plain',
       prompt: 'Plain',
       selections: [{ name: 'weeks', type: 'number', prompt: 'Weeks' }],

@@ -17,11 +17,11 @@
 
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { ref } from 'vue';
-import { useActionController, type ActionMetadata } from './useActionController.js';
+import { useActionController, type EnrichedActionMetadata } from './useActionController.js';
 import { createMockSendAction } from './useActionController.helpers.js';
 
 /** One action: repair up to three buildings, in order, repeats allowed. */
-function repairMetadata(): Record<string, ActionMetadata> {
+function repairMetadata(): Record<string, EnrichedActionMetadata> {
   return {
     repair: {
       name: 'repair',
@@ -45,7 +45,7 @@ function repairMetadata(): Record<string, ActionMetadata> {
 describe('useActionController ordered lists (#249)', () => {
   let sendAction: ReturnType<typeof createMockSendAction>;
   let availableActions: ReturnType<typeof ref<string[]>>;
-  let actionMetadata: ReturnType<typeof ref<Record<string, ActionMetadata> | undefined>>;
+  let actionMetadata: ReturnType<typeof ref<Record<string, EnrichedActionMetadata> | undefined>>;
   let isMyTurn: ReturnType<typeof ref<boolean>>;
 
   beforeEach(() => {

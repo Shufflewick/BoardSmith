@@ -38,7 +38,7 @@ export type {
 } from './types.js';
 
 export type { GameRootFieldAudience, MessageEntry, MessageOptions, FormattedMessage, PlayerOf } from './game.js';
-export type { GameOptions, RandomnessPolicy, GamePhase, PlayerViewFunction, SeededRandom, AnimationEvent, ActionSpaceView, ActionSchemaView, ArgTemplate } from './game.js';
+export type { GameOptions, GameClass, RandomnessPolicy, GamePhase, PlayerViewFunction, GameRandom, AnimationEvent, ActionSpaceView, ActionSchemaView, ArgTemplate } from './game.js';
 export type { ElementLayout } from './grid.js';
 export type { HexOrientation, HexCoordSystem } from './hex-grid.js';
 export type { LayoutDirection, LayoutAlignment } from './space.js';

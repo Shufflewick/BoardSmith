@@ -6,20 +6,20 @@
  */
 import { describe, it, expect } from 'vitest';
 import { actionNeedsWizardMode } from './actionControllerHelpers.js';
-import type { ActionMetadata, ChoiceWithRefs, PickMetadata } from './useActionControllerTypes.js';
+import type { EnrichedActionMetadata, ChoiceWithRefs, EnrichedPickMetadata } from './useActionControllerTypes.js';
 
-const selection = (overrides: Partial<PickMetadata>): PickMetadata => ({
+const selection = (overrides: Partial<EnrichedPickMetadata>): EnrichedPickMetadata => ({
   name: 'pick',
   type: 'choice',
   ...overrides,
-} as PickMetadata);
+} as EnrichedPickMetadata);
 
 /** Static choices as the wire carries them: each value with its display text. */
 const choices = (...values: number[]): ChoiceWithRefs[] =>
   values.map((value) => ({ value, display: String(value) }));
 
-const meta = (...selections: PickMetadata[]): ActionMetadata =>
-  ({ name: 'act', selections } as ActionMetadata);
+const meta = (...selections: EnrichedPickMetadata[]): EnrichedActionMetadata =>
+  ({ name: 'act', selections } as EnrichedActionMetadata);
 
 describe('actionNeedsWizardMode', () => {
   it('says no for an action with no selections', () => {

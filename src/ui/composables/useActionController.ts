@@ -101,16 +101,15 @@ import { findMatchingChoice } from '../../engine/action/choice-matching.js';
 
 // Re-export all types from the types module for consumers
 export type {
-  GameViewElement,
   ElementRef,
   ChoiceWithRefs,
-  ValidElement,
-  PickMetadata,
-  PickStepResult,
+  EnrichedValidElement,
+  EnrichedPickMetadata,
+  PickStepResponse,
   PickChoicesResult,
   PickSnapshot,
   CollectedPick,
-  ActionMetadata,
+  EnrichedActionMetadata,
   ControllerActionResult,
   ResolvedAction,
   PickValidationResult,
@@ -123,12 +122,12 @@ export type {
 import type {
   ElementRef,
   ChoiceWithRefs,
-  ValidElement,
-  PickMetadata,
+  EnrichedValidElement,
+  EnrichedPickMetadata,
   ActionQuoteResult,
   PickSnapshot,
   CollectedPick,
-  ActionMetadata,
+  EnrichedActionMetadata,
   ControllerActionResult,
   ResolvedAction,
   PickValidationResult,
@@ -461,7 +460,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     })();
   }
 
-  function getActionMetadata(actionName: string): ActionMetadata | undefined {
+  function getActionMetadata(actionName: string): EnrichedActionMetadata | undefined {
     return actionMetadata.value?.[actionName];
   }
 
@@ -497,7 +496,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
    * been accepted (capped, because an element pick can offer hundreds).
    */
   function describeRejectedPrefill(
-    selection: PickMetadata,
+    selection: EnrichedPickMetadata,
     value: unknown,
     choices: Array<{ value: unknown; display: string; disabled?: string }>
   ): string {
@@ -524,7 +523,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
    * sent, because the player's next move is to take the action again and a bare
    * exception tells them neither.
    */
-  function describeUndescribablePick(selection: PickMetadata): string {
+  function describeUndescribablePick(selection: EnrichedPickMetadata): string {
     const label = selection.prompt || selection.name;
     return (
       `Could not find out what "${label}" may be, so nothing has been sent. ` +
@@ -536,7 +535,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
    * Get available choices for a pick.
    * Priority: pickSnapshots > static metadata (for execute() and tests)
    */
-  function getChoices(selection: PickMetadata): Array<{ value: unknown; display: string; disabled?: string }> {
+  function getChoices(selection: EnrichedPickMetadata): Array<{ value: unknown; display: string; disabled?: string }> {
     let choices: Array<{ value: unknown; display: string; disabled?: string }> = [];
 
     // For repeating selections with dynamic choices from server
@@ -619,7 +618,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   }
 
   /** Get valid elements for an element/elements pick from snapshot */
-  function getValidElements(selection: PickMetadata): ValidElement[] {
+  function getValidElements(selection: EnrichedPickMetadata): EnrichedValidElement[] {
     if (!actionSnapshot.value) return [];
     if (selection.type !== 'element' && selection.type !== 'elements') return [];
 
@@ -627,7 +626,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     return snapshot?.validElements || [];
   }
 
-  function selectionNeedsInput(selection: PickMetadata): boolean {
+  function selectionNeedsInput(selection: EnrichedPickMetadata): boolean {
     const value = currentArgs.value[selection.name];
     return value === undefined;
   }
@@ -637,7 +636,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     return typeof obj === 'object' && obj !== null && 'value' in obj;
   }
 
-  function validateSelection(selection: PickMetadata, value: unknown): PickValidationResult {
+  function validateSelection(selection: EnrichedPickMetadata, value: unknown): PickValidationResult {
     // For repeating selections, validation is done by the server
     if (selection.repeat) {
       return { valid: true };
@@ -737,7 +736,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
    * The choices must already be loaded when this runs. Judging a prefill against
    * a snapshot a fetch has not written yet discards it.
    */
-  function consumePrefill(selection: PickMetadata): boolean {
+  function consumePrefill(selection: EnrichedPickMetadata): boolean {
     const prefillValue = actionSnapshot.value?.prefills.get(selection.name);
     if (prefillValue === undefined) return false;
 
@@ -773,7 +772,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
    * @param selection - The selection metadata to check for auto-fill
    * @returns true if auto-fill was applied, false otherwise
    */
-  function tryAutoFillSelection(selection: PickMetadata): boolean {
+  function tryAutoFillSelection(selection: EnrichedPickMetadata): boolean {
     if (!getAutoFill() || isExecuting.value) return false;
 
     // AUTOEXEC-01 / F-02 (v4.8): a `.manual()` action must never resolve a
@@ -816,7 +815,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
    *
    * @param selection - The selection to fetch and potentially auto-fill
    */
-  async function fetchAndAutoFill(selection: PickMetadata): Promise<void> {
+  async function fetchAndAutoFill(selection: EnrichedPickMetadata): Promise<void> {
     // Only fetch for types that have choices
     if (selection.type !== 'choice' && selection.type !== 'element' && selection.type !== 'elements') {
       return;
@@ -873,7 +872,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     }
 
     // Get pick metadata - check snapshot first (for followUp actions), then live metadata
-    let meta: ActionMetadata | undefined;
+    let meta: EnrichedActionMetadata | undefined;
     if (actionSnapshot.value?.actionName === currentAction.value) {
       meta = actionSnapshot.value.metadata;
     } else {
@@ -955,7 +954,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
   // === Computed ===
 
-  const currentActionMeta = computed((): ActionMetadata | undefined => {
+  const currentActionMeta = computed((): EnrichedActionMetadata | undefined => {
     if (!currentAction.value) return undefined;
 
     // PIT OF SUCCESS: Use snapshot metadata when available
@@ -969,7 +968,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     return getActionMetadata(currentAction.value);
   });
 
-  const currentPick = computed((): PickMetadata | null => {
+  const currentPick = computed((): EnrichedPickMetadata | null => {
     if (!currentActionMeta.value) return null;
 
     // Find first pick that needs input
@@ -1008,7 +1007,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   }
 
   /** The two pick types the panel draws an editor for, and nothing else. */
-  function editorKindOf(pick: PickMetadata | null): 'text' | 'number' | null {
+  function editorKindOf(pick: EnrichedPickMetadata | null): 'text' | 'number' | null {
     if (pick?.type === 'text') return 'text';
     if (pick?.type === 'number') return 'number';
     return null;
@@ -1033,7 +1032,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
    * either half should not have to read the other to see it.
    */
   function draftRefusal(
-    pick: PickMetadata,
+    pick: EnrichedPickMetadata,
     value: string | number,
   ): { key: string; message: string } | null {
     const kind = editorKindOf(pick);
@@ -1255,7 +1254,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
    * - choices are fetched from server
    * - gameView updates (elements are enriched with full data)
    */
-  const validElements = computed((): ValidElement[] => {
+  const validElements = computed((): EnrichedValidElement[] => {
     // Depend on snapshotVersion to re-run when choices are fetched
     // (Maps aren't reactive, so we use this counter to trigger updates)
     const _version = snapshotVersion.value;
@@ -1675,7 +1674,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   async function startFollowUp(
     actionName: string,
     initialArgs: Record<string, unknown> = {},
-    providedMetadata?: ActionMetadata,
+    providedMetadata?: EnrichedActionMetadata,
     displayOverrides?: Record<string, string>
   ): Promise<void> {
     // Use provided metadata first, then fall back to looking up from actionMetadata
@@ -1740,7 +1739,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
 
     // If we have metadata with selections, fetch choices for the first unfilled selection
     if (meta && meta.selections.length > 0) {
-      let selectionToFetch: PickMetadata | undefined;
+      let selectionToFetch: EnrichedPickMetadata | undefined;
       for (const sel of meta.selections) {
         if (initialArgs[sel.name] === undefined) {
           selectionToFetch = sel;
@@ -1867,7 +1866,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
     // (where we need to fetch choices for the next unfilled selection)
     if (meta.selections.length > 0) {
       // Find first selection that needs input (wasn't pre-filled)
-      let selectionToFetch: PickMetadata | undefined;
+      let selectionToFetch: EnrichedPickMetadata | undefined;
       for (const sel of meta.selections) {
         if (initialArgs[sel.name] === undefined) {
           selectionToFetch = sel;
@@ -1999,7 +1998,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   }
 
   /** Handle fill for repeating picks */
-  async function handleRepeatingFill(selection: PickMetadata, value: unknown): Promise<PickValidationResult> {
+  async function handleRepeatingFill(selection: EnrichedPickMetadata, value: unknown): Promise<PickValidationResult> {
     const stepFn = options.pickStep;
     if (!stepFn || !currentAction.value) {
       const error = 'pickStep function not provided for repeating pick';
@@ -2120,7 +2119,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
    * Handle fill for selections with onSelect callbacks.
    * Routes through pickStep so the server fires onSelect per-step (with correct timing).
    */
-  async function handleOnSelectFill(selection: PickMetadata, value: unknown): Promise<PickValidationResult> {
+  async function handleOnSelectFill(selection: EnrichedPickMetadata, value: unknown): Promise<PickValidationResult> {
     const stepFn = options.pickStep;
     if (!stepFn || !currentAction.value) {
       const error = 'pickStep function not provided for onSelect routing';
@@ -2227,7 +2226,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   }
 
   /** Get the next selection after the given one */
-  function getNextSelection(afterSelectionName: string): PickMetadata | null {
+  function getNextSelection(afterSelectionName: string): EnrichedPickMetadata | null {
     if (!currentActionMeta.value) return null;
 
     const selections = currentActionMeta.value.selections;
@@ -2371,7 +2370,7 @@ export function useActionController(options: UseActionControllerOptions): UseAct
    * and custom UIs can never disagree (v4.8-WR01).
    */
   function resolveMultiSelectConfig(
-    selection: PickMetadata
+    selection: EnrichedPickMetadata
   ): { min?: number; max?: number } | undefined {
     const pickSnapshot = actionSnapshot.value?.pickSnapshots.get(selection.name);
     return resolveEffectiveMultiSelect(selection, currentArgs.value, pickSnapshot);
@@ -2384,14 +2383,14 @@ export function useActionController(options: UseActionControllerOptions): UseAct
    * how many entries the list still has room for.
    */
   function resolveOrderedListConfig(
-    selection: PickMetadata
+    selection: EnrichedPickMetadata
   ): { min: number; max?: number } | undefined {
     const pickSnapshot = actionSnapshot.value?.pickSnapshots.get(selection.name);
     return resolveEffectiveOrderedList(selection, pickSnapshot);
   }
 
   /** The active selection by name, or `undefined` with a devWarn naming the verb. */
-  function selectionForDraft(selectionName: string, verb: string): PickMetadata | undefined {
+  function selectionForDraft(selectionName: string, verb: string): EnrichedPickMetadata | undefined {
     const selection = currentActionMeta.value?.selections.find(s => s.name === selectionName);
     if (selection) return selection;
     devWarn(

@@ -5,7 +5,7 @@
  * Handles the step-by-step processing of actions with repeating selections.
  */
 
-import type { FlowState, PendingActionState, Game, FollowUpAction } from '../engine/index.js';
+import type { FlowState, PendingActionState, Game, FollowUpOffer } from '../engine/index.js';
 import type { GameRunner } from '../runtime/index.js';
 import {
   ErrorCode,
@@ -14,7 +14,7 @@ import {
   type PlayerGameState,
   type WarningEntry,
 } from './types.js';
-import { buildPlayerState } from './utils.js';
+import { buildPlayerState, offerFollowUp } from './utils.js';
 
 /**
  * Callbacks for PendingActionManager to interact with GameSession.
@@ -64,7 +64,8 @@ export interface PickStepResult {
   /** Mirrors `actionResult.message`, hoisted for callers that read the step result directly. */
   message?: string;
   state?: PlayerGameState;
-  followUp?: FollowUpAction;
+  /** The follow-up the completed action chained to, with its action's metadata. */
+  followUp?: FollowUpOffer;
   /**
    * Structured warnings forwarded from an underlying pick response (e.g. a
    * throwing boardRefs()/display()/boardRef() encountered while formatting
@@ -378,7 +379,7 @@ export class PendingActionManager<G extends Game = Game> {
         message: actionResult.message,
       },
       state: buildPlayerState(this.#runner, this.#storedState.playerNames, playerPosition, { includeActionMetadata: true, includeDebugData: this.#debugEnabled }),
-      followUp: flowState?.followUp,
+      followUp: flowState?.followUp && offerFollowUp(this.#runner.game, playerPosition, flowState.followUp),
       // Hoisted beside followUp so a multi-step action's return value reaches
       // the ops layer on the same footing as a single-step one (BUG-017).
       data: actionResult.data,

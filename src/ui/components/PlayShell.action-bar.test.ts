@@ -48,7 +48,7 @@ import { fileURLToPath } from 'node:url';
 import PlayShell from './PlayShell.vue';
 import { GAME_CONTEXT_KEYS } from '../composables/useGameContext.js';
 import { useActionController } from '../composables/useActionController.js';
-import type { ActionMetadata } from '../composables/useActionControllerTypes.js';
+import type { EnrichedActionMetadata } from '../composables/useActionControllerTypes.js';
 import type { UseActionControllerReturn } from '../composables/useActionControllerTypes.js';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -70,7 +70,7 @@ afterEach(() => {
 });
 
 /** One choice pick, so `start()` leaves the action open and awaiting an answer. */
-const MOVE: ActionMetadata = {
+const MOVE: EnrichedActionMetadata = {
   name: 'move',
   prompt: 'Walk one sector',
   selections: [
@@ -87,7 +87,7 @@ const MOVE: ActionMetadata = {
 };
 
 /** A second one, to prove the bar re-opens for the NEXT question and not just once. */
-const REST: ActionMetadata = {
+const REST: EnrichedActionMetadata = {
   name: 'rest',
   prompt: 'Rest here',
   selections: [
@@ -104,7 +104,7 @@ const REST: ActionMetadata = {
 };
 
 const ACTIONS = ['move', 'rest'];
-const METADATA: Record<string, ActionMetadata> = { move: MOVE, rest: REST };
+const METADATA: Record<string, EnrichedActionMetadata> = { move: MOVE, rest: REST };
 
 async function flush(n = 8): Promise<void> {
   for (let i = 0; i < n; i++) {

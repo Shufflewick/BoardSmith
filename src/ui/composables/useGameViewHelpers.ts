@@ -14,14 +14,12 @@
  * ```
  */
 
-import type { GameElement, ElementMatchOptions, BaseElementAttributes } from '../types.js';
+import type { GameViewElement, ElementMatchOptions, BaseElementAttributes } from '../types.js';
 
-// Re-export types
-export type { GameElement };
 export type { ElementMatchOptions as FindElementOptions };
 
 /** Helper to get typed attributes from an element */
-function getAttrs(element: GameElement): BaseElementAttributes & Record<string, unknown> {
+function getAttrs(element: GameViewElement): BaseElementAttributes & Record<string, unknown> {
   return (element.attributes ?? {}) as BaseElementAttributes & Record<string, unknown>;
 }
 
@@ -30,9 +28,9 @@ function getAttrs(element: GameElement): BaseElementAttributes & Record<string, 
  * Performs a recursive depth-first search.
  */
 export function findElementById(
-  gameView: GameElement | null | undefined,
+  gameView: GameViewElement | null | undefined,
   id: number
-): GameElement | undefined {
+): GameViewElement | undefined {
   if (!gameView) return undefined;
 
   // Check if this element matches
@@ -55,9 +53,9 @@ export function findElementById(
  * Prefers $type and name over className since className can be mangled by bundlers.
  */
 export function findElement(
-  gameView: GameElement | null | undefined,
+  gameView: GameViewElement | null | undefined,
   options: ElementMatchOptions
-): GameElement | undefined {
+): GameViewElement | undefined {
   if (!gameView) return undefined;
 
   const { type, name, className } = options;
@@ -84,12 +82,12 @@ export function findElement(
  * Performs a recursive depth-first search.
  */
 export function findElements(
-  gameView: GameElement | null | undefined,
+  gameView: GameViewElement | null | undefined,
   options: ElementMatchOptions
-): GameElement[] {
-  const results: GameElement[] = [];
+): GameViewElement[] {
+  const results: GameViewElement[] = [];
 
-  function search(element: GameElement | null | undefined): void {
+  function search(element: GameViewElement | null | undefined): void {
     if (!element) return;
 
     const { type, name, className } = options;
@@ -116,9 +114,9 @@ export function findElements(
  * Find a player's hand element by seat.
  */
 export function findPlayerHand(
-  gameView: GameElement | null | undefined,
+  gameView: GameViewElement | null | undefined,
   playerSeat: number
-): GameElement | undefined {
+): GameViewElement | undefined {
   if (!gameView?.children) return undefined;
 
   return gameView.children.find((c) => {
@@ -150,10 +148,10 @@ export function findPlayerHand(
  * ```
  */
 export function findPlayerElement(
-  gameView: GameElement | null | undefined,
+  gameView: GameViewElement | null | undefined,
   playerSeat: number
-): GameElement | undefined {
-  function search(element: GameElement | null | undefined): GameElement | undefined {
+): GameViewElement | undefined {
+  function search(element: GameViewElement | null | undefined): GameViewElement | undefined {
     if (!element) return undefined;
 
     // Check if this is a Player element with matching seat
@@ -188,7 +186,7 @@ export function findPlayerElement(
  * ```
  */
 export function getPlayerAttribute<T>(
-  gameView: GameElement | null | undefined,
+  gameView: GameViewElement | null | undefined,
   playerSeat: number,
   attributeName: string,
   defaultValue: T
@@ -205,8 +203,8 @@ export function getPlayerAttribute<T>(
  * Find all hand elements in the game view.
  */
 export function findAllHands(
-  gameView: GameElement | null | undefined
-): GameElement[] {
+  gameView: GameViewElement | null | undefined
+): GameViewElement[] {
   if (!gameView?.children) return [];
 
   return gameView.children.filter((c) => getAttrs(c).$type === 'hand');
@@ -216,7 +214,7 @@ export function findAllHands(
  * Get the count of children in an element, handling hidden contents.
  * For elements with hidden contents (like decks), this returns childCount.
  */
-export function getElementCount(element: GameElement | null | undefined): number {
+export function getElementCount(element: GameViewElement | null | undefined): number {
   if (!element) return 0;
 
   // If there are visible children, count them
@@ -231,7 +229,7 @@ export function getElementCount(element: GameElement | null | undefined): number
 /**
  * Get cards from an element (filters to elements with rank attribute).
  */
-export function getCards(element: GameElement | null | undefined): GameElement[] {
+export function getCards(element: GameViewElement | null | undefined): GameViewElement[] {
   if (!element?.children) return [];
 
   return element.children.filter((c) => getAttrs(c).rank !== undefined);
@@ -240,7 +238,7 @@ export function getCards(element: GameElement | null | undefined): GameElement[]
 /**
  * Get the first card from an element.
  */
-export function getFirstCard(element: GameElement | null | undefined): GameElement | undefined {
+export function getFirstCard(element: GameViewElement | null | undefined): GameViewElement | undefined {
   return getCards(element)[0];
 }
 
@@ -248,7 +246,7 @@ export function getFirstCard(element: GameElement | null | undefined): GameEleme
  * Extract card data (rank, suit) from a game element.
  * Returns undefined if the element has no rank attribute.
  */
-export function getCardData(element: GameElement | null | undefined): { rank: string; suit: string } | undefined {
+export function getCardData(element: GameViewElement | null | undefined): { rank: string; suit: string } | undefined {
   if (!element) return undefined;
 
   const attrs = getAttrs(element);
@@ -264,7 +262,7 @@ export function getCardData(element: GameElement | null | undefined): { rank: st
  * Get the player seat that owns an element.
  * Returns undefined if the element has no player owner.
  */
-export function getElementOwner(element: GameElement | null | undefined): number | undefined {
+export function getElementOwner(element: GameViewElement | null | undefined): number | undefined {
   if (!element) return undefined;
   return getAttrs(element).player?.seat;
 }
@@ -273,7 +271,7 @@ export function getElementOwner(element: GameElement | null | undefined): number
  * Check if an element belongs to a specific player.
  */
 export function isOwnedByPlayer(
-  element: GameElement | null | undefined,
+  element: GameViewElement | null | undefined,
   playerSeat: number
 ): boolean {
   return getElementOwner(element) === playerSeat;
@@ -283,7 +281,7 @@ export function isOwnedByPlayer(
  * Check if an element belongs to the specified player (convenience for "my" checks).
  */
 export function isMyElement(
-  element: GameElement | null | undefined,
+  element: GameViewElement | null | undefined,
   myPlayerSeat: number
 ): boolean {
   return isOwnedByPlayer(element, myPlayerSeat);
@@ -293,7 +291,7 @@ export function isMyElement(
  * Check if an element belongs to an opponent (any player that isn't the specified player).
  */
 export function isOpponentElement(
-  element: GameElement | null | undefined,
+  element: GameViewElement | null | undefined,
   myPlayerSeat: number
 ): boolean {
   const owner = getElementOwner(element);
@@ -317,10 +315,10 @@ export function isOpponentElement(
  * ```
  */
 export function findChildByAttribute(
-  parent: GameElement | null | undefined,
+  parent: GameViewElement | null | undefined,
   attributeName: string,
   attributeValue: unknown
-): GameElement | undefined {
+): GameViewElement | undefined {
   if (!parent?.children) return undefined;
 
   return parent.children.find((child) => {
@@ -340,10 +338,10 @@ export function findChildByAttribute(
  * ```
  */
 export function findElementByAttribute(
-  root: GameElement | null | undefined,
+  root: GameViewElement | null | undefined,
   attributeName: string,
   attributeValue: unknown
-): GameElement | undefined {
+): GameViewElement | undefined {
   if (!root) return undefined;
 
   // Check this element
@@ -366,13 +364,13 @@ export function findElementByAttribute(
  * Performs a recursive depth-first search.
  */
 export function findAllByAttribute(
-  root: GameElement | null | undefined,
+  root: GameViewElement | null | undefined,
   attributeName: string,
   attributeValue: unknown
-): GameElement[] {
-  const results: GameElement[] = [];
+): GameViewElement[] {
+  const results: GameViewElement[] = [];
 
-  function search(element: GameElement | null | undefined): void {
+  function search(element: GameViewElement | null | undefined): void {
     if (!element) return;
 
     const attrs = getAttrs(element);
@@ -404,7 +402,7 @@ export function findAllByAttribute(
  * }
  * ```
  */
-export function getElementId(element: GameElement | null | undefined): number | undefined {
+export function getElementId(element: GameViewElement | null | undefined): number | undefined {
   return element?.id;
 }
 

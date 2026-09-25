@@ -41,7 +41,7 @@ import GameHistory, { type HistoryMessage } from './GameHistory.vue';
 import PlayersPanel, { type Player } from './PlayersPanel.vue';
 import PlayerToken from './PlayerToken.vue';
 import { GAME_CONTEXT_KEYS } from '../composables/useGameContext.js';
-import type { ActionMetadata, UseActionControllerReturn } from '../composables/useActionControllerTypes.js';
+import type { EnrichedActionMetadata, UseActionControllerReturn } from '../composables/useActionControllerTypes.js';
 
 /** What the adapter has to say about its own connection, on whichever axis it
  *  has. A table's is socket health; a world's is an attachment lifecycle. The
@@ -84,7 +84,7 @@ const props = withDefaults(defineProps<{
   /** The actions the backend enumerated for this seat. */
   availableActions: string[];
   /** Those actions' metadata, by name. */
-  actionMetadata: Record<string, ActionMetadata>;
+  actionMetadata: Record<string, EnrichedActionMetadata>;
   /** Action name to why it is offered but cannot be taken. */
   disabledActions?: Record<string, string>;
   /**

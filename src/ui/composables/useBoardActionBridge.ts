@@ -28,14 +28,14 @@ import { computed, watch, nextTick, type Ref, type ComputedRef } from 'vue';
 import type { BoardInteraction, ElementRef } from './useBoardInteraction.js';
 import type {
   UseActionControllerReturn,
-  PickMetadata,
-  ActionMetadata,
+  EnrichedPickMetadata,
+  EnrichedActionMetadata,
   ChoiceWithRefs,
-  ValidElement,
+  EnrichedValidElement,
 } from './useActionControllerTypes.js';
 import { choiceBoardTarget, devWarn, resolvePickCounts } from './actionControllerHelpers.js';
 
-export interface BoardActionBridgeOptions {
+interface BoardActionBridgeOptions {
   controller: UseActionControllerReturn;
   /** Shared board interaction substrate. Undefined outside a GameShell — bridge is a no-op then. */
   boardInteraction: BoardInteraction | undefined;
@@ -44,7 +44,7 @@ export interface BoardActionBridgeOptions {
   /** Reactive: auto mode (auto-start single action / auto-execute no-selection action). */
   autoEndTurn: Ref<boolean> | ComputedRef<boolean>;
   /** Reactive: action metadata keyed by action name. */
-  actionMetadata: Ref<Record<string, ActionMetadata> | undefined> | ComputedRef<Record<string, ActionMetadata> | undefined>;
+  actionMetadata: Ref<Record<string, EnrichedActionMetadata> | undefined> | ComputedRef<Record<string, EnrichedActionMetadata> | undefined>;
   /** Reactive: available action names for the current player. */
   availableActions: Ref<string[]> | ComputedRef<string[]>;
   /**
@@ -104,7 +104,7 @@ function formatActionName(name: string): string {
  * ref, else an id-only ref. matchesRef precedence (F22) makes the id win, so an
  * id-only ref reliably matches the rendered element by its element id.
  */
-function elementClickRef(ve: ValidElement): ElementRef {
+function elementClickRef(ve: EnrichedValidElement): ElementRef {
   const ref =
     ve.refs?.find(r => r.role === 'highlight')?.ref ??
     ve.refs?.[0]?.ref;
@@ -160,13 +160,13 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
   const multiSelectValues = computed<unknown[]>(() => controller.multiSelectDraft.value?.values ?? []);
 
   // Metadata for available actions, with a basic fallback for actions lacking metadata.
-  const actionsWithMetadata = computed<ActionMetadata[]>(() => {
+  const actionsWithMetadata = computed<EnrichedActionMetadata[]>(() => {
     const names = availableActions.value ?? [];
     const meta = actionMetadata.value;
     return names.map(name => {
       const m = meta?.[name];
       if (m) return m;
-      return { name, prompt: formatActionName(name), selections: [] as PickMetadata[] };
+      return { name, prompt: formatActionName(name), selections: [] as EnrichedPickMetadata[] };
     });
   });
 
@@ -183,7 +183,7 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
 
   // Current action metadata — prefer the controller snapshot (handles followUp
   // actions that aren't in availableActions).
-  const currentActionMeta = computed<ActionMetadata | null>(() => {
+  const currentActionMeta = computed<EnrichedActionMetadata | null>(() => {
     if (!currentAction.value) return null;
     const snapshot = controller.actionSnapshot?.value;
     if (snapshot?.actionName === currentAction.value && snapshot.metadata) {
@@ -236,7 +236,7 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
 
   // Valid elements for the current element/elements pick, excluding elements
   // already chosen in OTHER element selections of the same action.
-  const filteredValidElements = computed<ValidElement[]>(() => {
+  const filteredValidElements = computed<EnrichedValidElement[]>(() => {
     const sel = currentPick.value;
     if (!sel || (sel.type !== 'element' && sel.type !== 'elements')) return [];
     // controller.validElements is the REACTIVE source for the current pick (it reads

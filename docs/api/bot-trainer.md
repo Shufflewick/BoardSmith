@@ -101,7 +101,6 @@ import {
 - `WeightEvolutionResult` - Evolution result
 - `BenchmarkConfig` - Benchmark configuration
 - `BenchmarkResult` - Benchmark result
-- `PlayerConfig` - Player configuration
 - `ParallelBenchmarkOptions` - Parallel benchmark options
 - `IndividualFitness` - Individual fitness score
 - `CodeGeneratorOptions` - Code generator options

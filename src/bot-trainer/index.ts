@@ -70,7 +70,6 @@ export {
   benchmarkBot,
   type BenchmarkConfig,
   type BenchmarkResult,
-  type PlayerConfig,
 } from './benchmark.js';
 
 // Evolution (weight optimization)
@@ -83,8 +82,8 @@ export {
 } from './evolution.js';
 
 // Types
+export type { GameClass } from '../engine/index.js';
 export type {
-  GameClass,
   GameStructure,
   ElementTypeInfo,
   PlayerTypeInfo,

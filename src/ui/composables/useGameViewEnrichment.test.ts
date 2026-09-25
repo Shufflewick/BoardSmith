@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach, afterAll } from 'vitest';
 import { ref } from 'vue';
 import { createEnrichment } from './useGameViewEnrichment.js';
-import type { GameElement } from '../types.js';
-import type { PickMetadata, ValidElement } from './useActionControllerTypes.js';
+import type { GameViewElement } from '../types.js';
+import type { EnrichedPickMetadata, EnrichedValidElement } from './useActionControllerTypes.js';
 
-function buildView(): GameElement {
+function buildView(): GameViewElement {
   return {
     id: 1,
     className: 'Game',
@@ -32,11 +32,11 @@ describe('createEnrichment', () => {
   });
 
   it('enriches valid elements with full element data', () => {
-    const gameView = ref<GameElement | null>(buildView());
+    const gameView = ref<GameViewElement | null>(buildView());
     const currentArgs = ref<Record<string, unknown>>({});
     const { enrichElementsList } = createEnrichment(gameView, currentArgs);
 
-    const elements: ValidElement[] = [{ id: 2, display: 'Ace' }];
+    const elements: EnrichedValidElement[] = [{ id: 2, display: 'Ace' }];
     const enriched = enrichElementsList(elements);
 
     expect(enriched[0].element?.id).toBe(2);
@@ -44,11 +44,11 @@ describe('createEnrichment', () => {
   });
 
   it('warns once for missing element ids', () => {
-    const gameView = ref<GameElement | null>(buildView());
+    const gameView = ref<GameViewElement | null>(buildView());
     const currentArgs = ref<Record<string, unknown>>({});
     const { enrichElementsList } = createEnrichment(gameView, currentArgs);
 
-    const missing: ValidElement[] = [{ id: 999, display: 'Missing' }];
+    const missing: EnrichedValidElement[] = [{ id: 999, display: 'Missing' }];
     enrichElementsList(missing);
     enrichElementsList(missing);
 
@@ -56,11 +56,11 @@ describe('createEnrichment', () => {
   });
 
   it('enriches dependsOn element sets using current args', () => {
-    const gameView = ref<GameElement | null>(buildView());
+    const gameView = ref<GameViewElement | null>(buildView());
     const currentArgs = ref<Record<string, unknown>>({ owner: 'p1' });
     const { enrichValidElements } = createEnrichment(gameView, currentArgs);
 
-    const pick: PickMetadata = {
+    const pick: EnrichedPickMetadata = {
       name: 'card',
       type: 'element',
       dependsOn: 'owner',
