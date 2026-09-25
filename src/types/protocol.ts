@@ -557,7 +557,7 @@ export interface ElementRef {
 
 /**
  * A board element reference with a role indicating its highlight purpose.
- * Declared inline (not imported from engine) — protocol.ts is a standalone wire-format module.
+ * The one declaration: the engine's action API imports it from here (#376).
  */
 export interface RefWithRole {
   ref: ElementRef;

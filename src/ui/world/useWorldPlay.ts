@@ -52,7 +52,7 @@ import { deadEndPickMessage } from '../../engine/element/pick-candidates.js';
 import type { WorldHost } from './useWorldHost.js';
 import type { WorldActionOffer } from './worldProtocol.js';
 import type {
-  ActionMetadata,
+  EnrichedActionMetadata,
   ActionQuoteResult,
   ControllerActionResult,
   PickChoicesResult,
@@ -74,7 +74,7 @@ export interface WorldPlay {
   /** The names of the actions the world enumerated for this seat. */
   availableActions: ComputedRef<string[]>;
   /** Those actions' metadata, by name -- the table's own shape, untranslated. */
-  actionMetadata: ComputedRef<Record<string, ActionMetadata>>;
+  actionMetadata: ComputedRef<Record<string, EnrichedActionMetadata>>;
   /** Action name to why it is offered but cannot be taken. */
   disabledActions: ComputedRef<Record<string, string>>;
   /** The lines the game asked the shell to say. */
@@ -121,8 +121,8 @@ export function useWorldPlay(host: WorldHost): WorldPlay {
 
   const availableActions = computed(() => offers.value.map((offer) => offer.name));
 
-  const actionMetadata = computed<Record<string, ActionMetadata>>(() => {
-    const byName: Record<string, ActionMetadata> = {};
+  const actionMetadata = computed<Record<string, EnrichedActionMetadata>>(() => {
+    const byName: Record<string, EnrichedActionMetadata> = {};
     for (const offer of offers.value) byName[offer.name] = offer;
     return byName;
   });

@@ -3,7 +3,7 @@
  * No Vue imports, no DOM access — these are testable pure functions.
  */
 
-import type { ChoiceWithRefs, ValidElement } from '../../composables/useActionControllerTypes.js';
+import type { ChoiceWithRefs, EnrichedValidElement } from '../../composables/useActionControllerTypes.js';
 import { choiceBoardTarget } from '../../composables/actionControllerHelpers.js';
 import { boardRefKey } from '../../composables/useBoardInteraction.js';
 import { MAX_FLAT_CHOICE_CANDIDATES } from '../../../engine/element/action-metadata.js';
@@ -91,7 +91,7 @@ export function splitAnchoredChoices(
  */
 export function shouldDeferElementPickToBoard(
   pickType: string | undefined,
-  validElements: ValidElement[],
+  validElements: EnrichedValidElement[],
   threshold: number = MAX_FLAT_CHOICE_CANDIDATES,
 ): boolean {
   if (pickType !== 'element' && pickType !== 'elements') return false;

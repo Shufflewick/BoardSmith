@@ -343,7 +343,7 @@ re-running draws.
 
 ## Determinism & Seeding
 
-Every `Game` owns a seeded RNG (`game.random`, a `SeededRandom` — a
+Every `Game` owns a seeded RNG (`game.random`, a `GameRandom` — a
 mulberry32 generator whose internal numeric state can be read and
 restored). Games never call `Math.random()` directly; any in-game
 randomness (shuffles, dice rolls, `choices` selection) goes through

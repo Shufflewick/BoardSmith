@@ -18,20 +18,20 @@ import { useBoardActionBridge } from './useBoardActionBridge.js';
 import { makeController } from './fake-action-controller.test-helper.js';
 import { useActionController } from './useActionController.js';
 import { _clearShownWarnings } from '../../utils/dev.js';
-import type { PickMetadata, ValidElement } from './useActionControllerTypes.js';
+import type { EnrichedPickMetadata, EnrichedValidElement } from './useActionControllerTypes.js';
 
 /** The one game every test here plays: nothing in this file replaces it. */
 const A_GAME = { gameInstanceId: 'game-a', restoreEpoch: 0 };
 
 
-const cellPick: PickMetadata = { name: 'cell', type: 'element', prompt: 'Select a cell' };
+const cellPick: EnrichedPickMetadata = { name: 'cell', type: 'element', prompt: 'Select a cell' };
 
 describe('useBoardActionBridge', () => {
   it('populates board validElements for an active element pick (no ActionPanel)', () => {
     const board = createBoardInteraction();
     // Hex-style validElement: boardRef provides { id, notation }; notation comes
     // from a getter so it is NOT serialized client-side — id must carry matching.
-    const validElements: ValidElement[] = [
+    const validElements: EnrichedValidElement[] = [
       { id: 5, refs: [{ ref: { id: 5, notation: '0,0' }, role: 'highlight' }] },
       { id: 6, refs: [{ ref: { id: 6, notation: '1,0' }, role: 'highlight' }] },
     ];
@@ -57,7 +57,7 @@ describe('useBoardActionBridge', () => {
 
   it('dispatches the action when a selectable cell is clicked', () => {
     const board = createBoardInteraction();
-    const validElements: ValidElement[] = [
+    const validElements: EnrichedValidElement[] = [
       { id: 5, refs: [{ ref: { id: 5, notation: '0,0' }, role: 'highlight' }] },
     ];
     const { controller, fill } = makeController({ pick: cellPick, action: 'placeStone', validElements });
@@ -81,7 +81,7 @@ describe('useBoardActionBridge', () => {
     const board = createBoardInteraction();
     // Checkers selects a PIECE but the player clicks the SQUARE it sits on. The
     // boardRef is notation-only (no id) so the square's serialized notation matches.
-    const validElements: ValidElement[] = [
+    const validElements: EnrichedValidElement[] = [
       { id: 42 /* piece id */, refs: [{ ref: { notation: 'd4' }, role: 'highlight' }] },
     ];
     const { controller, fill } = makeController({ pick: cellPick, action: 'move', validElements });
@@ -106,7 +106,7 @@ describe('useBoardActionBridge', () => {
 
   it('makes notation-only target choices clickable on the board (Checkers destination)', () => {
     const board = createBoardInteraction();
-    const destPick: PickMetadata = {
+    const destPick: EnrichedPickMetadata = {
       name: 'destination',
       type: 'choice',
       choices: [
@@ -137,7 +137,7 @@ describe('useBoardActionBridge', () => {
 
   it('registers destination squares when choices arrive reactively after the watcher first ran (async fetch)', async () => {
     const board = createBoardInteraction();
-    const destPick: PickMetadata = { name: 'destination', type: 'choice', choices: [] };
+    const destPick: EnrichedPickMetadata = { name: 'destination', type: 'choice', choices: [] };
     // Reactive choices source that starts EMPTY (as during the async fetch) then fills.
     const lateChoices = ref<unknown[]>([]);
     const { controller } = makeController({ pick: destPick, action: 'move' });
@@ -706,7 +706,7 @@ describe('useBoardActionBridge — disabled actions', () => {
 
   it('does NOT dispatch a disabled action from a board element click', async () => {
     const board = createBoardInteraction();
-    const validElements: ValidElement[] = [
+    const validElements: EnrichedValidElement[] = [
       { id: 5, refs: [{ ref: { id: 5, notation: '0,0' }, role: 'highlight' }] },
     ];
     const { controller, start } = makeController({ pick: null, action: null, validElements });
@@ -741,7 +741,7 @@ describe('useBoardActionBridge — disabled actions', () => {
 
 describe('useBoardActionBridge ordered lists (#249)', () => {
   /** The repair pick, whose choices are anchored to board elements. */
-  const repairPick: PickMetadata = {
+  const repairPick: EnrichedPickMetadata = {
     name: 'buildings',
     type: 'choice',
     prompt: 'Repair, in order',

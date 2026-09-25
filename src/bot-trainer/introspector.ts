@@ -1,11 +1,11 @@
 import { Player, type Game, type GameElement } from '../engine/index.js';
 import { constructGame } from '../engine/element/game.js';
+import type { GameClass } from '../engine/index.js';
 import type {
   GameStructure,
   ElementTypeInfo,
   PlayerTypeInfo,
   SpatialInfo,
-  GameClass,
   WinConditionInfo,
   GameType,
 } from './types.js';

@@ -41,9 +41,9 @@ import { watch, type Ref, type WatchStopHandle } from 'vue';
 import type { BoardInteraction, BoardTarget, ElementRef } from './useBoardInteraction.js';
 import type {
   UseActionControllerReturn,
-  PickMetadata,
+  EnrichedPickMetadata,
   ChoiceWithRefs,
-  ActionMetadata,
+  EnrichedActionMetadata,
 } from './useActionControllerTypes.js';
 import { devWarn } from '../../utils/dev.js';
 
@@ -73,7 +73,7 @@ function matchesDragged(
  */
 export function deriveDropTargetsForPick(
   controller: UseActionControllerReturn,
-  pick: PickMetadata | null,
+  pick: EnrichedPickMetadata | null,
 ): DerivedDropTargets | null {
   if (!pick) return null;
 
@@ -124,7 +124,7 @@ export interface DragDropOrchestrationOptions {
   boardInteraction: BoardInteraction;
   actionController: UseActionControllerReturn;
   availableActions: Ref<string[] | undefined>;
-  actionMetadata: Ref<Record<string, ActionMetadata> | undefined>;
+  actionMetadata: Ref<Record<string, EnrichedActionMetadata> | undefined>;
   isMyTurn: Ref<boolean | undefined> | Ref<boolean>;
 }
 
@@ -142,11 +142,11 @@ export interface DragDropOrchestrationOptions {
 function findDragStartAction(
   dragged: ElementRef,
   availableActions: Ref<string[] | undefined>,
-  actionMetadata: Ref<Record<string, ActionMetadata> | undefined>,
-): { action: ActionMetadata; firstSel: PickMetadata } | null {
+  actionMetadata: Ref<Record<string, EnrichedActionMetadata> | undefined>,
+): { action: EnrichedActionMetadata; firstSel: EnrichedPickMetadata } | null {
   const metas = (availableActions.value ?? [])
     .map(name => actionMetadata.value?.[name])
-    .filter((m): m is ActionMetadata => !!m);
+    .filter((m): m is EnrichedActionMetadata => !!m);
 
   // Pass 1: explicit validElements match.
   for (const action of metas) {
@@ -197,7 +197,7 @@ export function setupDragDropOrchestration(options: DragDropOrchestrationOptions
   }
 
   /** Is the dragged element one of the (enabled) valid elements for this pick? */
-  function pickAcceptsDragged(pick: PickMetadata, dragged: ElementRef): boolean {
+  function pickAcceptsDragged(pick: EnrichedPickMetadata, dragged: ElementRef): boolean {
     return actionController
       .getValidElements(pick)
       .some(el => !el.disabled && matchesDragged({ id: el.id, ref: (el.refs ?? [])[0]?.ref }, dragged));

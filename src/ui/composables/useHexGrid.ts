@@ -17,7 +17,7 @@
  * ```typescript
  * import { useHexGrid } from 'boardsmith/ui';
  *
- * const props = defineProps<{ gameView: GameElement; playerSeat: number }>();
+ * const props = defineProps<{ gameView: GameViewElement; playerSeat: number }>();
  *
  * const {
  *   board,
@@ -45,16 +45,12 @@
 
 import { computed, type ComputedRef } from 'vue';
 import { findElement } from './useGameViewHelpers.js';
-import type { GameElement, BaseElementAttributes } from '../types.js';
-
-// Re-export GameElement
-export type { GameElement };
-
-export type HexOrientation = 'pointy' | 'flat';
+import type { GameViewElement, BaseElementAttributes } from '../types.js';
+import type { HexOrientation } from '../../engine/element/hex-grid.js';
 
 export interface HexGridOptions {
   /** Function that returns the current game view */
-  gameView: () => GameElement | null | undefined;
+  gameView: () => GameViewElement | null | undefined;
   /** Class name of the board element (default: 'Board') */
   boardClassName?: string;
   /** Class name of cell elements (default: 'Cell') */
@@ -81,9 +77,9 @@ export interface HexBounds {
   height: number;
 }
 
-export interface HexGridReturn<TCell = GameElement> {
+export interface HexGridReturn<TCell = GameViewElement> {
   /** The board element */
-  board: ComputedRef<GameElement | null | undefined>;
+  board: ComputedRef<GameViewElement | null | undefined>;
   /** All cell elements */
   cells: ComputedRef<TCell[]>;
   /** Current hex size (from board attributes or default) */
@@ -97,9 +93,9 @@ export interface HexGridReturn<TCell = GameElement> {
   /** Get cell at q/r coordinates */
   getCellAt: (q: number, r: number) => TCell | undefined;
   /** Get first child of a specific class at q/r */
-  getChildAt: (q: number, r: number, className: string) => GameElement | undefined;
+  getChildAt: (q: number, r: number, className: string) => GameViewElement | undefined;
   /** Get all children of a specific class at q/r */
-  getChildrenAt: (q: number, r: number, className: string) => GameElement[];
+  getChildrenAt: (q: number, r: number, className: string) => GameViewElement[];
   /** Convert axial coordinates to pixel position */
   getHexPosition: (q: number, r: number) => HexPosition;
   /** Generate SVG polygon points for a hex (scale 1.0 = full size) */
@@ -135,7 +131,7 @@ const FLAT_NEIGHBORS = POINTY_NEIGHBORS; // Same offsets work for both orientati
 /**
  * Create hex grid utilities for a hexagonal game board.
  */
-export function useHexGrid<TCell = GameElement>(
+export function useHexGrid<TCell = GameViewElement>(
   options: HexGridOptions
 ): HexGridReturn<TCell> {
   const {
@@ -156,7 +152,7 @@ export function useHexGrid<TCell = GameElement>(
   });
 
   /** Helper to get typed attributes */
-  function getAttrs(element: GameElement): BaseElementAttributes & Record<string, unknown> {
+  function getAttrs(element: GameViewElement): BaseElementAttributes & Record<string, unknown> {
     return (element.attributes ?? {}) as BaseElementAttributes & Record<string, unknown>;
   }
 
@@ -185,7 +181,7 @@ export function useHexGrid<TCell = GameElement>(
   const cellMap = computed<Map<string, TCell>>(() => {
     const map = new Map<string, TCell>();
     for (const cell of cells.value) {
-      const attrs = getAttrs(cell as unknown as GameElement);
+      const attrs = getAttrs(cell as unknown as GameViewElement);
       const q = attrs[qAttr as keyof typeof attrs];
       const r = attrs[rAttr as keyof typeof attrs];
       if (q !== undefined && r !== undefined) {
@@ -203,14 +199,14 @@ export function useHexGrid<TCell = GameElement>(
     return cellMap.value.get(getKey(q, r));
   }
 
-  function getChildAt(q: number, r: number, className: string): GameElement | undefined {
-    const cell = getCellAt(q, r) as GameElement | undefined;
+  function getChildAt(q: number, r: number, className: string): GameViewElement | undefined {
+    const cell = getCellAt(q, r) as GameViewElement | undefined;
     if (!cell?.children) return undefined;
     return cell.children.find((c) => c.className === className);
   }
 
-  function getChildrenAt(q: number, r: number, className: string): GameElement[] {
-    const cell = getCellAt(q, r) as GameElement | undefined;
+  function getChildrenAt(q: number, r: number, className: string): GameViewElement[] {
+    const cell = getCellAt(q, r) as GameViewElement | undefined;
     if (!cell?.children) return [];
     return cell.children.filter((c) => c.className === className);
   }
@@ -273,7 +269,7 @@ export function useHexGrid<TCell = GameElement>(
     let maxY = -Infinity;
 
     for (const cell of cellList) {
-      const attrs = getAttrs(cell as unknown as GameElement);
+      const attrs = getAttrs(cell as unknown as GameViewElement);
       const q = (attrs[qAttr as keyof typeof attrs] as number | undefined) ?? 0;
       const r = (attrs[rAttr as keyof typeof attrs] as number | undefined) ?? 0;
       const pos = getHexPosition(q, r);

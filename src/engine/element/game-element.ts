@@ -1440,7 +1440,7 @@ export class GameElement<G extends Game = any, P extends Player = any> {
     }
 
     // Serialize a `notation` getter into attributes. `notation` is a
-    // framework-recognized board-coordinate key (BoardElementRef.notation): the
+    // framework-recognized board-coordinate key (ElementRef.notation): the
     // auto-UI renderers read element.attributes.notation and ref-matching keys on
     // it (Pitfall 6). Getters live on the prototype, so the own-key loop above
     // never captures them — without this, notation-only board refs (e.g. Checkers

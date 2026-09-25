@@ -5,7 +5,7 @@
  * They handle development warnings, value display extraction, and action analysis.
  */
 
-import type { ActionMetadata, ChoiceWithRefs, ElementRef, PickMetadata, PickSnapshot } from './useActionControllerTypes.js';
+import type { EnrichedActionMetadata, ChoiceWithRefs, ElementRef, EnrichedPickMetadata, PickSnapshot } from './useActionControllerTypes.js';
 import { isDevMode, devWarn } from '../../utils/dev.js';
 
 // Re-export for backwards compatibility during transition
@@ -31,7 +31,7 @@ export { isDevMode, devWarn };
  *    `currentArgs` for this selection step (v4.8-WR01). This is what a
  *    *function-valued* `multiSelect` that reads an earlier sibling
  *    selection's value must use — the static `selection.multiSelect` on
- *    `PickMetadata` was resolved once at `buildActionMetadata()` time with
+ *    `EnrichedPickMetadata` was resolved once at `buildActionMetadata()` time with
  *    `knownArgs: {}`, so it's stale for anything but the very first step.
  *    A snapshot entry (even one whose `multiSelect` is `undefined`) means
  *    the server has already answered for THIS state — trust it.
@@ -40,7 +40,7 @@ export { isDevMode, devWarn };
  *    the fetch round-trip).
  */
 export function resolveMultiSelectConfig(
-  selection: PickMetadata,
+  selection: EnrichedPickMetadata,
   currentArgs: Record<string, unknown>,
   pickSnapshot?: PickSnapshot
 ): { min?: number; max?: number } | undefined {
@@ -78,7 +78,7 @@ export function resolveMultiSelectConfig(
  *    has been fetched (`execute()`, tests that skip the round-trip).
  */
 export function resolveOrderedListConfig(
-  selection: PickMetadata,
+  selection: EnrichedPickMetadata,
   pickSnapshot?: PickSnapshot
 ): { min: number; max?: number } | undefined {
   if (pickSnapshot?.orderedList) return pickSnapshot.orderedList;
@@ -95,7 +95,7 @@ export function resolveOrderedListConfig(
  * "toggle" on one surface and "append" on the other.
  */
 export function resolvePickCounts(
-  selection: PickMetadata | null | undefined,
+  selection: EnrichedPickMetadata | null | undefined,
   currentArgs: Record<string, unknown>,
   pickSnapshots?: Map<string, PickSnapshot>
 ): {
@@ -200,7 +200,7 @@ export interface WizardModeCheck {
  * ```
  */
 export function actionNeedsWizardMode(
-  meta: ActionMetadata | undefined,
+  meta: EnrichedActionMetadata | undefined,
   providedArgs: Record<string, unknown>
 ): WizardModeCheck {
   if (!meta) return { needed: false };

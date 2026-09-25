@@ -1,4 +1,4 @@
-import type { Game, GameOptions, SerializedAction } from '../engine/index.js';
+import type { Game, GameClass, SerializedAction } from '../engine/index.js';
 import { MCTSBot } from './mcts-bot.js';
 import type { BotConfig, BotStrategy, DifficultyLevel } from './types.js';
 import { DIFFICULTY_PRESETS } from './types.js';
@@ -21,9 +21,6 @@ export { DIFFICULTY_PRESETS, DEFAULT_CONFIG } from './types.js';
 // is the only way for an author to see "you rewrote something the seat can see"
 // as a test failure instead of as a mid-session throw.
 export { DeterminizationError, applyDeterminization } from './determinization.js';
-
-/** Game class constructor type */
-type GameClass<G extends Game = Game> = new (options: GameOptions) => G;
 
 /**
  * Create an MCTS bot for a game

@@ -1804,8 +1804,8 @@ Use `args` for selections that are already available. Use `prefill` for deferred
 | Property | Type | Description |
 |----------|------|-------------|
 | `currentAction` | `Ref<string \| null>` | Name of action currently in wizard mode (read `.value`) |
-| `currentPick` | `ComputedRef<PickMetadata \| null>` | Metadata for the current pick step (read `.value`) |
-| `validElements` | `ComputedRef<ValidElement[]>` | **Reactive** list of valid elements for current selection |
+| `currentPick` | `ComputedRef<EnrichedPickMetadata \| null>` | Metadata for the current pick step (read `.value`) |
+| `validElements` | `ComputedRef<EnrichedValidElement[]>` | **Reactive** list of valid elements for current selection |
 | `isExecuting` | `Ref<boolean>` | Whether an action is currently executing (read `.value`) |
 | `lastError` | `Ref<string \| null>` | Error message from last failed execution (read `.value`) |
 | `lastActionResult` | `ComputedRef<ResolvedAction \| null>` | The most recently resolved action and its server result — `{ action, seat, result }`. See below. |
@@ -1856,14 +1856,14 @@ const selectableCards = computed(() => {
 });
 ```
 
-Each `ValidElement` includes:
+Each `EnrichedValidElement` includes:
 
 | Property | Type | Description |
 |----------|------|-------------|
 | `id` | `number` | Element ID (for submitting selection) |
 | `display` | `string?` | Display text for UI |
 | `ref` | `{ id: number }?` | Reference for board highlighting |
-| `element` | `GameElement?` | Full element with all attributes |
+| `element` | `GameViewElement?` | Full element with all attributes |
 
 **A large candidate set is a board choice, not a long list.** If a custom UI
 renders one button per `validElement`, decide what it does past a couple of

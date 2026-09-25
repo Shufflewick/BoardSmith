@@ -18,11 +18,11 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { mount } from '@vue/test-utils';
 import { nextTick, ref } from 'vue';
 import { useActionController } from '../../composables/useActionController.js';
-import type { ActionMetadata } from '../../composables/useActionController.js';
+import type { EnrichedActionMetadata } from '../../composables/useActionController.js';
 import ActionPanel from './ActionPanel.vue';
 import { GAME_CONTEXT_KEYS } from '../../composables/useGameContext.js';
 
-const twoChoiceAction: ActionMetadata = {
+const twoChoiceAction: EnrichedActionMetadata = {
   name: 'enterWorld',
   prompt: 'Enter the world',
   selections: [
@@ -159,7 +159,7 @@ describe('focus when the panel returns to its idle list', () => {
 });
 
 describe('a six-selection action, the shape the report measured', () => {
-  const sixStep: ActionMetadata = {
+  const sixStep: EnrichedActionMetadata = {
     name: 'create',
     prompt: 'Create a survivor',
     selections: Array.from({ length: 6 }, (_, i) => ({

@@ -60,7 +60,7 @@ const { useActionAnimations } = await import('./useActionAnimations.js');
 const { enableAnimationTestMode, disableAnimationTestMode, getAnimationTrace, clearAnimationTrace } =
   await import('./useAnimationTestMode.js');
 type ActionAnimationConfig = import('./useActionAnimations.js').ActionAnimationConfig;
-type GameElement = import('../types.js').GameElement;
+type GameElement = import('../types.js').GameViewElement;
 
 function makeElement(attr: string, value: string): HTMLElement {
   const el = document.createElement('div');

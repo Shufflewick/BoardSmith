@@ -58,7 +58,7 @@ export { default as ActionPanel } from './components/auto-ui/ActionPanel.vue';
 // Game UI registry (src/ui/uis.ts) — single source of truth for a game's UIs.
 export { defineGameUIs, defaultUI, devUI } from './game-uis.js';
 export type { GameUIEntry, DefaultGameUIEntry, GameUIRegistry } from './game-uis.js';
-export type { GameElement, Player } from './types.js';
+export type { GameViewElement, BoardPlayer } from './types.js';
 
 // AutoUI/AutoRenderer are deliberately NOT re-exported here — they live behind the
 // `boardsmith/ui/auto-ui` subpath so a game only pays for them when it asks for
@@ -297,7 +297,6 @@ export {
   isOwnedByPlayer,
   isMyElement,
   isOpponentElement,
-  type GameElement as GameViewElement,
   type FindElementOptions,
 } from './composables/useGameViewHelpers.js';
 
@@ -310,13 +309,13 @@ export {
   type GameGridReturn,
 } from './composables/useGameGrid.js';
 
-// Hex grid utilities
+// Hex grid utilities. The orientation is the engine's own type: a board reads it off the grid's `$hexOrientation`.
+export type { HexOrientation } from '../engine/element/hex-grid.js';
 export {
   useHexGrid,
   hexToPixel,
   getHexPolygonPoints,
   calculateHexDistance,
-  type HexOrientation,
   type HexGridOptions,
   type HexPosition,
   type HexBounds,
@@ -357,9 +356,9 @@ export {
   injectPickStepFn,
   injectBoardInteraction,
   // Types
-  type PickMetadata,
-  type ActionMetadata,
-  type PickStepResult,
+  type EnrichedPickMetadata,
+  type EnrichedActionMetadata,
+  type PickStepResponse,
   type PickChoicesResult,
   type PickSnapshot,
   type CollectedPick,
@@ -373,7 +372,7 @@ export {
   type UseActionControllerReturn,
   // Pick-related types
   type ChoiceWithRefs,
-  type ValidElement,
+  type EnrichedValidElement,
 } from './composables/useActionController.js';
 
 // Action controller helpers (for custom UI developers)

@@ -37,8 +37,8 @@ import { createBoardInteraction } from '../composables/useBoardInteraction.js';
 import { useBoardActionBridge } from '../composables/useBoardActionBridge.js';
 import { makeController } from '../composables/fake-action-controller.test-helper.js';
 import type {
-  PickMetadata,
-  ValidElement,
+  EnrichedPickMetadata,
+  EnrichedValidElement,
 } from '../composables/useActionControllerTypes.js';
 
 // ── (1) displayedState computed — both board-render branches ─────────────────
@@ -245,12 +245,12 @@ describe('GameShell.vue source: displayedState wired at every board/sidebar site
 // ── (2) useBoardActionBridge isViewingHistory guard — the REAL composable ────
 
 
-const cellPick: PickMetadata = { name: 'cell', type: 'element', prompt: 'Select a cell' };
+const cellPick: EnrichedPickMetadata = { name: 'cell', type: 'element', prompt: 'Select a cell' };
 
 describe('useBoardActionBridge isViewingHistory guard (LIBX-04, 164-04)', () => {
   it('startAction is an inert no-op while isViewingHistory (board click during history never starts an action)', async () => {
     const board = createBoardInteraction();
-    const validElements: ValidElement[] = [
+    const validElements: EnrichedValidElement[] = [
       { id: 5, refs: [{ ref: { id: 5, notation: '0,0' }, role: 'highlight' }] },
     ];
     const { controller, start } = makeController({ pick: null, action: null, validElements });
@@ -299,7 +299,7 @@ describe('useBoardActionBridge isViewingHistory guard (LIBX-04, 164-04)', () => 
 
   it('setSelectionValue is an inert no-op while isViewingHistory: a click on a valid element does NOT call controller.fill', async () => {
     const board = createBoardInteraction();
-    const validElements: ValidElement[] = [
+    const validElements: EnrichedValidElement[] = [
       { id: 5, refs: [{ ref: { id: 5, notation: '0,0' }, role: 'highlight' }] },
     ];
     const { controller, fill } = makeController({ pick: cellPick, action: 'placeStone', validElements });
@@ -324,12 +324,12 @@ describe('useBoardActionBridge isViewingHistory guard (LIBX-04, 164-04)', () => 
 
   it('toggleMultiSelectValue is an inert no-op while isViewingHistory', async () => {
     const board = createBoardInteraction();
-    const destPick: PickMetadata = {
+    const destPick: EnrichedPickMetadata = {
       name: 'destination',
       type: 'elements',
       multiSelect: { min: 1, max: 3 },
-    } as unknown as PickMetadata;
-    const validElements: ValidElement[] = [
+    } as unknown as EnrichedPickMetadata;
+    const validElements: EnrichedValidElement[] = [
       { id: 21, refs: [{ ref: { id: 21, notation: 'e5' }, role: 'highlight' }] },
     ];
     const { controller, toggleMultiSelect } = makeController({ pick: destPick, action: 'move', validElements });
@@ -354,7 +354,7 @@ describe('useBoardActionBridge isViewingHistory guard (LIBX-04, 164-04)', () => 
 
   it('live behavior unregressed: with isViewingHistory=false, a board click still dispatches setSelectionValue -> controller.fill', async () => {
     const board = createBoardInteraction();
-    const validElements: ValidElement[] = [
+    const validElements: EnrichedValidElement[] = [
       { id: 5, refs: [{ ref: { id: 5, notation: '0,0' }, role: 'highlight' }] },
     ];
     const { controller, fill } = makeController({ pick: cellPick, action: 'placeStone', validElements });
@@ -377,7 +377,7 @@ describe('useBoardActionBridge isViewingHistory guard (LIBX-04, 164-04)', () => 
 
   it('mid-pick-then-time-travel: a selection made after an action was started, then the user time-travels, does NOT commit (setSelectionValue independently guards, not derived from isMyTurn)', async () => {
     const board = createBoardInteraction();
-    const validElements: ValidElement[] = [
+    const validElements: EnrichedValidElement[] = [
       { id: 5, refs: [{ ref: { id: 5, notation: '0,0' }, role: 'highlight' }] },
     ];
     const { controller, fill } = makeController({ pick: cellPick, action: 'placeStone', validElements });

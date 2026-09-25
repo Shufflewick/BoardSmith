@@ -20,10 +20,10 @@ import { resolvePickCounts } from '../../composables/actionControllerHelpers.js'
 import { startActionWithBoardReset } from '../../composables/useBoardActionBridge.js';
 import type {
   UseActionControllerReturn,
-  PickMetadata,
-  ActionMetadata as ControllerActionMetadata,
+  EnrichedPickMetadata,
+  EnrichedActionMetadata,
   ChoiceWithRefs,
-  ValidElement,
+  EnrichedValidElement,
   ElementRef,
 } from '../../composables/useActionController';
 import DoneButton from './DoneButton.vue';
@@ -77,9 +77,9 @@ const turnDeadlineText = computed((): string | null => {
 });
 
 // Re-export types
-export type { ChoiceWithRefs, ValidElement, ElementRef };
+export type { ChoiceWithRefs, ElementRef };
 /** A pick/choice the player must make */
-export type Pick = PickMetadata;
+export type Pick = EnrichedPickMetadata;
 /**
  * A seat the panel names in "waiting for ..." during a simultaneous step.
  *
@@ -100,11 +100,10 @@ export interface AwaitingPlayer { seat: number; name: string; color?: string }
  * `docs/persistent-worlds.md` quotes this sentence as the contract.
  */
 const ACTIONS_PENDING_TEXT = 'Working out what you can do here\u2026';
-export type ActionMetadata = ControllerActionMetadata;
 
 const props = defineProps<{
   availableActions: string[];
-  actionMetadata?: Record<string, ActionMetadata>;
+  actionMetadata?: Record<string, EnrichedActionMetadata>;
   playerSeat: number;
   isMyTurn: boolean;
   /**
@@ -233,17 +232,17 @@ const editorLabelId = `${editorInputId}-value-label`;
 const currentArgs = computed(() => actionController.currentArgs.value);
 
 // Get metadata for available actions
-// Annotated as ActionMetadata[] on purpose: without it the synthesized
+// Annotated as EnrichedActionMetadata[] on purpose: without it the synthesized
 // fallback entries below form a union with the real metadata, and reading an
 // OPTIONAL field (help, suppressFromActionPanel) off that union fails to compile even
 // though it is valid on both arms. The annotation says what this list is — action
 // metadata, with a minimal entry synthesized for actions that have none.
-const actionsWithMetadata = computed<ActionMetadata[]>(() => {
+const actionsWithMetadata = computed<EnrichedActionMetadata[]>(() => {
   if (!props.actionMetadata) {
     return props.availableActions.map(name => ({
       name,
       prompt: formatActionName(name),
-      selections: [] as PickMetadata[],
+      selections: [] as EnrichedPickMetadata[],
     }));
   }
   // Map available actions to their metadata, falling back to a basic entry
@@ -255,7 +254,7 @@ const actionsWithMetadata = computed<ActionMetadata[]>(() => {
     return {
       name,
       prompt: formatActionName(name),
-      selections: [] as PickMetadata[],
+      selections: [] as EnrichedPickMetadata[],
     };
   });
 });
@@ -336,7 +335,7 @@ const backLabel = computed(() => {
 const menuAnnouncement = ref('');
 
 /** How many things are behind a group's button, for its accessible name. */
-function groupContents(group: ActionMenuGroup<ActionMetadata>): string {
+function groupContents(group: ActionMenuGroup<EnrichedActionMetadata>): string {
   const count = group.children.length;
   return `submenu, ${count} ${count === 1 ? 'action' : 'actions'}`;
 }
@@ -359,7 +358,7 @@ function groupButton(root: HTMLElement, label: string): HTMLElement | null {
  * player was going, and Back is one keystroke from undoing the navigation they
  * just performed.
  */
-function enterGroup(group: ActionMenuGroup<ActionMetadata>): void {
+function enterGroup(group: ActionMenuGroup<EnrichedActionMetadata>): void {
   menuAnnouncement.value = '';
   openPath.value = group.path;
   void focusIntoLevel();
@@ -1035,7 +1034,7 @@ function selectElement(elementId: number) {
   const selectionName = currentPick.value.name;
 
   // Look up display from validElements
-  const validElem = currentPick.value.validElements?.find((e: ValidElement) => e.id === elementId);
+  const validElem = currentPick.value.validElements?.find((e: EnrichedValidElement) => e.id === elementId);
   const display = validElem?.display || String(elementId);
 
   // Use setSelectionValue which handles auto-execute
@@ -1067,7 +1066,7 @@ function executeChoice(selectionName: string, choice: ChoiceWithRefs) {
 }
 
 // Hover handlers for element buttons (highlight on board)
-function handleElementHover(element: ValidElement) {
+function handleElementHover(element: EnrichedValidElement) {
   const highlightRef = (element.refs ?? []).find(r => r.role === 'highlight')?.ref;
   if (boardInteraction && highlightRef) {
     boardInteraction.setHoveredChoice({
@@ -1201,7 +1200,7 @@ function getDisplayLabel(value: unknown): string {
 /**
  * Check if a pick is repeating
  */
-function isRepeatingSelection(sel: PickMetadata): boolean {
+function isRepeatingSelection(sel: EnrichedPickMetadata): boolean {
   return sel.repeat !== undefined;
 }
 

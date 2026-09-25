@@ -14,7 +14,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ref, nextTick } from 'vue';
 import {
   useActionController,
-  type ActionMetadata,
+  type EnrichedActionMetadata,
   type PickChoicesResult,
 } from './useActionController.js';
 import { createMockSendAction, createTestMetadata } from './useActionController.helpers.js';
@@ -23,7 +23,7 @@ import type { TutorialStepView } from '../../engine/tutorial/types.js';
 describe('useActionController picks', () => {
   let sendAction: ReturnType<typeof createMockSendAction>;
   let availableActions: ReturnType<typeof ref<string[]>>;
-  let actionMetadata: ReturnType<typeof ref<Record<string, ActionMetadata> | undefined>>;
+  let actionMetadata: ReturnType<typeof ref<Record<string, EnrichedActionMetadata> | undefined>>;
   let isMyTurn: ReturnType<typeof ref<boolean>>;
 
   beforeEach(() => {
@@ -41,7 +41,7 @@ describe('useActionController picks', () => {
         nextChoices: [{ value: 2, display: 'Two' }],
       });
 
-      const repeatMeta: Record<string, ActionMetadata> = {
+      const repeatMeta: Record<string, EnrichedActionMetadata> = {
         repeatAction: {
           name: 'repeatAction',
           prompt: 'Select multiple',
@@ -86,7 +86,7 @@ describe('useActionController picks', () => {
         nextChoices: [{ value: 2, display: 'Two' }, { value: 3, display: 'Three' }],
       });
 
-      const repeatMeta: Record<string, ActionMetadata> = {
+      const repeatMeta: Record<string, EnrichedActionMetadata> = {
         repeatAction: {
           name: 'repeatAction',
           prompt: 'Select multiple',
@@ -132,7 +132,7 @@ describe('useActionController picks', () => {
         .mockResolvedValueOnce({ success: true, done: false })
         .mockResolvedValueOnce({ success: true, actionComplete: true });
 
-      const repeatMeta: Record<string, ActionMetadata> = {
+      const repeatMeta: Record<string, EnrichedActionMetadata> = {
         repeatAction: {
           name: 'repeatAction',
           prompt: 'Select until done',
@@ -181,7 +181,7 @@ describe('useActionController picks', () => {
         .mockResolvedValueOnce({ success: true, done: true })
         .mockResolvedValueOnce({ success: true, actionComplete: true });
 
-      const repeatMeta: Record<string, ActionMetadata> = {
+      const repeatMeta: Record<string, EnrichedActionMetadata> = {
         collectThenPlace: {
           name: 'collectThenPlace',
           prompt: 'Collect, then place',
@@ -232,7 +232,7 @@ describe('useActionController picks', () => {
         nextChoices: [{ value: 'new1', display: 'New 1' }, { value: 'new2', display: 'New 2' }],
       });
 
-      const repeatMeta: Record<string, ActionMetadata> = {
+      const repeatMeta: Record<string, EnrichedActionMetadata> = {
         repeatAction: {
           name: 'repeatAction',
           prompt: 'Select',
@@ -275,7 +275,7 @@ describe('useActionController picks', () => {
         error: 'Invalid selection',
       });
 
-      const repeatMeta: Record<string, ActionMetadata> = {
+      const repeatMeta: Record<string, EnrichedActionMetadata> = {
         repeatAction: {
           name: 'repeatAction',
           prompt: 'Select',
@@ -317,7 +317,7 @@ describe('useActionController picks', () => {
         done: false,
       });
 
-      const repeatMeta: Record<string, ActionMetadata> = {
+      const repeatMeta: Record<string, EnrichedActionMetadata> = {
         repeatAction: {
           name: 'repeatAction',
           prompt: 'Process each',
@@ -355,7 +355,7 @@ describe('useActionController picks', () => {
 
   describe('dependsOn selections', () => {
     it('should return empty choices when dependent selection not yet made', () => {
-      const dependsMeta: Record<string, ActionMetadata> = {
+      const dependsMeta: Record<string, EnrichedActionMetadata> = {
         dependsAction: {
           name: 'dependsAction',
           prompt: 'Select with depends',
@@ -408,7 +408,7 @@ describe('useActionController picks', () => {
     });
 
     it('should return correct choices based on dependent value', async () => {
-      const dependsMeta: Record<string, ActionMetadata> = {
+      const dependsMeta: Record<string, EnrichedActionMetadata> = {
         dependsAction: {
           name: 'dependsAction',
           prompt: 'Select with depends',
@@ -466,7 +466,7 @@ describe('useActionController picks', () => {
     });
 
     it('should update choices when dependent value changes', async () => {
-      const dependsMeta: Record<string, ActionMetadata> = {
+      const dependsMeta: Record<string, EnrichedActionMetadata> = {
         dependsAction: {
           name: 'dependsAction',
           prompt: 'Select with depends',
@@ -524,7 +524,7 @@ describe('useActionController picks', () => {
 
   describe('filterBy selections', () => {
     it('should filter choices based on previous selection value', async () => {
-      const filterMeta: Record<string, ActionMetadata> = {
+      const filterMeta: Record<string, EnrichedActionMetadata> = {
         filterAction: {
           name: 'filterAction',
           prompt: 'Select with filter',
@@ -577,7 +577,7 @@ describe('useActionController picks', () => {
     });
 
     it('should return all choices when filter selection not made', () => {
-      const filterMeta: Record<string, ActionMetadata> = {
+      const filterMeta: Record<string, EnrichedActionMetadata> = {
         filterAction: {
           name: 'filterAction',
           prompt: 'Select with filter',
@@ -623,7 +623,7 @@ describe('useActionController picks', () => {
 
   describe('text and number inputs', () => {
     it('should accept text input for text selection type', async () => {
-      const textMeta: Record<string, ActionMetadata> = {
+      const textMeta: Record<string, EnrichedActionMetadata> = {
         nameAction: {
           name: 'nameAction',
           prompt: 'Enter name',
@@ -656,7 +656,7 @@ describe('useActionController picks', () => {
     });
 
     it('should accept number input for number selection type', async () => {
-      const numberMeta: Record<string, ActionMetadata> = {
+      const numberMeta: Record<string, EnrichedActionMetadata> = {
         bidAction: {
           name: 'bidAction',
           prompt: 'Place bid',
@@ -691,7 +691,7 @@ describe('useActionController picks', () => {
     });
 
     it('should execute text action successfully', async () => {
-      const textMeta: Record<string, ActionMetadata> = {
+      const textMeta: Record<string, EnrichedActionMetadata> = {
         nameAction: {
           name: 'nameAction',
           prompt: 'Enter name',
@@ -776,7 +776,7 @@ describe('useActionController picks', () => {
         actionComplete: false,
       });
 
-      const onSelectMeta: Record<string, ActionMetadata> = {
+      const onSelectMeta: Record<string, EnrichedActionMetadata> = {
         moveWithCallback: {
           name: 'moveWithCallback',
           prompt: 'Move a piece',
@@ -829,7 +829,7 @@ describe('useActionController picks', () => {
         actionComplete: true,
       });
 
-      const onSelectMeta: Record<string, ActionMetadata> = {
+      const onSelectMeta: Record<string, EnrichedActionMetadata> = {
         singleStepOnSelect: {
           name: 'singleStepOnSelect',
           prompt: 'Quick action',
@@ -878,7 +878,7 @@ describe('useActionController picks', () => {
         return { success: true, actionComplete: true };
       });
 
-      const onSelectMeta: Record<string, ActionMetadata> = {
+      const onSelectMeta: Record<string, EnrichedActionMetadata> = {
         twoStepOnSelect: {
           name: 'twoStepOnSelect',
           prompt: 'Two steps',
@@ -937,7 +937,7 @@ describe('useActionController picks', () => {
         actionComplete: false,
       });
 
-      const onSelectMeta: Record<string, ActionMetadata> = {
+      const onSelectMeta: Record<string, EnrichedActionMetadata> = {
         autoExecTest: {
           name: 'autoExecTest',
           prompt: 'Test auto-exec guard',
@@ -983,7 +983,7 @@ describe('useActionController picks', () => {
       });
       const cancelPendingAction = vi.fn().mockResolvedValue(undefined);
 
-      const onSelectMeta: Record<string, ActionMetadata> = {
+      const onSelectMeta: Record<string, EnrichedActionMetadata> = {
         cancelTest: {
           name: 'cancelTest',
           prompt: 'Cancel test',
@@ -1056,7 +1056,7 @@ describe('useActionController picks', () => {
     // A sole selection action with a single enabled choice must NOT silently
     // auto-execute when marked .manual() — the D7 auto-draw. .manual() suppresses
     // auto-fill of the single choice so the player picks deliberately.
-    function makeDrawMeta(name: string, manual: boolean): Record<string, ActionMetadata> {
+    function makeDrawMeta(name: string, manual: boolean): Record<string, EnrichedActionMetadata> {
       return {
         [name]: {
           name,
@@ -1127,7 +1127,7 @@ describe('useActionController picks', () => {
     // selection advances to the next, and THAT advance must honour .manual() too. A manual
     // action whose second pick has a single choice would otherwise resolve and execute on
     // the player's first tap, which is exactly the silent play .manual() exists to stop.
-    function makeTwoStepMeta(manual: boolean): Record<string, ActionMetadata> {
+    function makeTwoStepMeta(manual: boolean): Record<string, EnrichedActionMetadata> {
       const name = manual ? 'allocateManual' : 'allocateAuto';
       return {
         [name]: {
@@ -1228,7 +1228,7 @@ describe('useActionController picks', () => {
 
       // The followUp action: piece is pre-filled by server, destination has exactly ONE
       // legal choice (auto-fills) — mirrors the checkers forced multi-jump scenario.
-      const multiJumpMeta: Record<string, ActionMetadata> = {
+      const multiJumpMeta: Record<string, EnrichedActionMetadata> = {
         jump: {
           name: 'jump',
           prompt: 'Continue jump',
@@ -1306,7 +1306,7 @@ describe('useActionController picks', () => {
         actionComplete: false,
       });
 
-      const multiChoiceMeta: Record<string, ActionMetadata> = {
+      const multiChoiceMeta: Record<string, EnrichedActionMetadata> = {
         jump: {
           name: 'jump',
           prompt: 'Continue jump',
@@ -1392,7 +1392,7 @@ describe('useActionController picks', () => {
 
       // The followUp action: piece pre-filled, destination has exactly ONE legal
       // choice (forces auto-fill) — mirrors the checkers forced multi-jump.
-      const multiJumpMeta: Record<string, ActionMetadata> = {
+      const multiJumpMeta: Record<string, EnrichedActionMetadata> = {
         jump: {
           name: 'jump',
           prompt: 'Continue jump',
@@ -1483,7 +1483,7 @@ describe('useActionController picks', () => {
     it('should NOT change behavior when followUp has no pickStep (sendAction path)', async () => {
       // A followUp without pickStep uses the sendAction path (existing, unmodified behavior).
       // This test ensures the R-04 fix does not break that path.
-      const noPickStepMeta: Record<string, ActionMetadata> = {
+      const noPickStepMeta: Record<string, EnrichedActionMetadata> = {
         collect: {
           name: 'collect',
           prompt: 'Collect item',
@@ -1564,7 +1564,7 @@ describe('useActionController picks', () => {
 
       const fetchPickChoices = vi.fn().mockReturnValueOnce(oldFetchPromise);
 
-      const moveMeta: Record<string, ActionMetadata> = {
+      const moveMeta: Record<string, EnrichedActionMetadata> = {
         move: {
           name: 'move',
           prompt: 'Move piece',
@@ -1620,7 +1620,7 @@ describe('useActionController picks', () => {
         .mockReturnValueOnce(oldFetchPromise)
         .mockResolvedValue({ success: true, choices: [] });
 
-      const moveMeta: Record<string, ActionMetadata> = {
+      const moveMeta: Record<string, EnrichedActionMetadata> = {
         move: {
           name: 'move',
           prompt: 'Move piece',
@@ -1679,7 +1679,7 @@ describe('useActionController picks', () => {
 
       const fetchPickChoices = vi.fn().mockReturnValue(deferredPromise);
 
-      const moveMeta: Record<string, ActionMetadata> = {
+      const moveMeta: Record<string, EnrichedActionMetadata> = {
         move: {
           name: 'move',
           prompt: 'Move piece',
@@ -1788,7 +1788,7 @@ describe('useActionController picks', () => {
         // the WRONG bound { min: 1, max: 1 }. The real per-step server fetch
         // (mocked below) resolves against the REAL 'count' value once it's
         // known, matching what MCTS enumeration would see.
-        const pickByCountMeta: Record<string, ActionMetadata> = {
+        const pickByCountMeta: Record<string, EnrichedActionMetadata> = {
           pickByCount: {
             name: 'pickByCount',
             prompt: 'Pick items by count',

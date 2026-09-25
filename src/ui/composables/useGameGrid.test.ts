@@ -9,27 +9,27 @@ import {
   toAlgebraicNotation,
   fromAlgebraicNotation,
 } from './useGameGrid.js';
-import type { GameElement } from '../types.js';
+import type { GameViewElement } from '../types.js';
 
-const square = (row: number, col: number, children: GameElement[] = []): GameElement =>
+const square = (row: number, col: number, children: GameViewElement[] = []): GameViewElement =>
   ({
     id: row * 10 + col,
     className: 'Square',
     name: `${row}-${col}`,
     attributes: { row, col },
     children,
-  } as unknown as GameElement);
+  } as unknown as GameViewElement);
 
-const piece = (className: string, id: number): GameElement =>
-  ({ id, className, name: className, attributes: {}, children: [] } as GameElement);
+const piece = (className: string, id: number): GameViewElement =>
+  ({ id, className, name: className, attributes: {}, children: [] } as GameViewElement);
 
-const gameView = (squares: GameElement[]): GameElement =>
+const gameView = (squares: GameViewElement[]): GameViewElement =>
   ({
     id: 1, className: 'Game', name: 'game', attributes: {},
     children: [{ id: 2, className: 'Board', name: 'board', attributes: {}, children: squares }],
-  } as unknown as GameElement);
+  } as unknown as GameViewElement);
 
-const grid = (view: GameElement | null, options = {}) =>
+const grid = (view: GameViewElement | null, options = {}) =>
   useGameGrid({ gameView: () => view, ...options });
 
 const SQUARES = [square(0, 0), square(0, 1), square(1, 0), square(1, 1)];
@@ -137,7 +137,7 @@ describe('useGameGrid', () => {
   });
 
   it('skips cells with no coordinates', () => {
-    const nowhere = { id: 7, className: 'Square', name: 'x', attributes: {}, children: [] } as GameElement;
+    const nowhere = { id: 7, className: 'Square', name: 'x', attributes: {}, children: [] } as GameViewElement;
     expect(grid(gameView([...SQUARES, nowhere])).grid.value.size).toBe(4);
   });
 
@@ -148,7 +148,7 @@ describe('useGameGrid', () => {
         id: 2, className: 'Grid', name: 'b', attributes: {},
         children: [{ id: 3, className: 'Cell', name: 'c', attributes: { y: 2, x: 3 }, children: [] }],
       }],
-    } as unknown as GameElement;
+    } as unknown as GameViewElement;
     const board = grid(view, {
       boardClassName: 'Grid', cellClassName: 'Cell', rowAttr: 'y', colAttr: 'x',
     });

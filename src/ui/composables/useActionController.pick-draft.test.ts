@@ -22,14 +22,14 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { ref, nextTick, watch } from 'vue';
-import { useActionController, type ActionMetadata } from './useActionController.js';
+import { useActionController, type EnrichedActionMetadata } from './useActionController.js';
 import { _clearShownWarnings } from '../../utils/dev.js';
 
 // `devWarn` shows each key once per process, so a refusal asserted in one test
 // would go unwarned in the next without this.
 beforeEach(() => { _clearShownWarnings(); });
 
-const DESCRIBE: ActionMetadata = {
+const DESCRIBE: EnrichedActionMetadata = {
   name: 'describeEmpire',
   prompt: 'Describe empire',
   selections: [
@@ -37,19 +37,19 @@ const DESCRIBE: ActionMetadata = {
   ],
 };
 
-const NICKNAME: ActionMetadata = {
+const NICKNAME: EnrichedActionMetadata = {
   name: 'setNickname',
   prompt: 'Set nickname',
   selections: [{ name: 'description', type: 'text', prompt: 'Nickname', maxLength: 20 }],
 };
 
-const RECYCLE: ActionMetadata = {
+const RECYCLE: EnrichedActionMetadata = {
   name: 'recycle',
   prompt: 'Recycle waste',
   selections: [{ name: 'waste', type: 'number', prompt: 'Waste to recycle', min: 1, integer: true }],
 };
 
-const TWO_FIELDS: ActionMetadata = {
+const TWO_FIELDS: EnrichedActionMetadata = {
   name: 'rename',
   prompt: 'Rename and describe',
   selections: [
@@ -58,7 +58,7 @@ const TWO_FIELDS: ActionMetadata = {
   ],
 };
 
-const PICK_A_CARD: ActionMetadata = {
+const PICK_A_CARD: EnrichedActionMetadata = {
   name: 'pickCard',
   prompt: 'Pick a card',
   selections: [
@@ -72,8 +72,8 @@ const PICK_A_CARD: ActionMetadata = {
 };
 
 /** A controller over the given actions, with nothing auto-filled or auto-run. */
-function controllerOver(...actions: ActionMetadata[]) {
-  const metadata: Record<string, ActionMetadata> = {};
+function controllerOver(...actions: EnrichedActionMetadata[]) {
+  const metadata: Record<string, EnrichedActionMetadata> = {};
   for (const action of actions) metadata[action.name] = action;
   const sendAction = vi.fn().mockResolvedValue({ success: true });
   const controller = useActionController({
@@ -181,7 +181,7 @@ describe('the editor draft dies with the question it belonged to', () => {
     // of a draft's identity for exactly this: round two is a fresh question
     // that happens to have round one's name.
     const pickStep = vi.fn().mockResolvedValue({ success: true, done: false, nextChoices: [] });
-    const repeated: ActionMetadata = {
+    const repeated: EnrichedActionMetadata = {
       name: 'stockpile',
       prompt: 'Stockpile',
       selections: [

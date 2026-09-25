@@ -19,7 +19,7 @@ import { useActionController } from '../../composables/useActionController.js';
 import { useBoardActionBridge, type RunnerIdentity } from '../../composables/useBoardActionBridge.js';
 import { createBoardInteraction, provideBoardInteraction } from '../../composables/useBoardInteraction.js';
 import { GAME_CONTEXT_KEYS } from '../../composables/useGameContext.js';
-import type { ActionMetadata } from '../../composables/useActionControllerTypes.js';
+import type { EnrichedActionMetadata } from '../../composables/useActionControllerTypes.js';
 
 async function settle(): Promise<void> {
   for (let i = 0; i < 8; i++) {
@@ -28,7 +28,7 @@ async function settle(): Promise<void> {
   }
 }
 
-const discard: ActionMetadata = {
+const discard: EnrichedActionMetadata = {
   name: 'discard',
   prompt: 'Discard to the crib',
   selections: [{ name: 'cards', type: 'elements', prompt: 'Select 2 cards to discard', multiSelect: { min: 2, max: 2 } }],

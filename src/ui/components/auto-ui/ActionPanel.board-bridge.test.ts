@@ -36,7 +36,7 @@ import {
   type BoardInteraction,
 } from '../../composables/useBoardInteraction.js';
 import { GAME_CONTEXT_KEYS } from '../../composables/useGameContext.js';
-import type { ActionMetadata } from '../../composables/useActionControllerTypes.js';
+import type { EnrichedActionMetadata } from '../../composables/useActionControllerTypes.js';
 
 async function flush(n = 8): Promise<void> {
   for (let i = 0; i < n; i++) {
@@ -53,7 +53,7 @@ const COMPASS = [
   { value: 'south', display: 'South', refs: [{ ref: { notation: 's' }, role: 'target' as const }] },
 ];
 
-const moveAction: ActionMetadata = {
+const moveAction: EnrichedActionMetadata = {
   name: 'move',
   prompt: 'Walk one sector',
   selections: [
@@ -67,7 +67,7 @@ const moveAction: ActionMetadata = {
 };
 
 // example-rts's `tend`: one element pick whose candidates arrive from the server.
-const tendAction: ActionMetadata = {
+const tendAction: EnrichedActionMetadata = {
   name: 'tend',
   prompt: 'Tend',
   selections: [{ name: 'plot', type: 'element', prompt: 'Choose a plot' }],
@@ -76,7 +76,7 @@ const tendAction: ActionMetadata = {
 // Board-startable: its first pick is an element the metadata already names, so
 // clicking that element on the board starts the action through the BRIDGE's own
 // startAction -- the path the panel must not be fixed at the expense of.
-const harvestAction: ActionMetadata = {
+const harvestAction: EnrichedActionMetadata = {
   name: 'harvest',
   prompt: 'Harvest',
   selections: [
@@ -92,7 +92,7 @@ const harvestAction: ActionMetadata = {
 
 // A no-selection action keeps auto-start out of the way, so every start under
 // test is the one the test performed.
-const waitAction: ActionMetadata = { name: 'wait', prompt: 'Wait', selections: [] };
+const waitAction: EnrichedActionMetadata = { name: 'wait', prompt: 'Wait', selections: [] };
 
 const AVAILABLE = ['move', 'tend', 'harvest', 'wait'];
 const METADATA = { move: moveAction, tend: tendAction, harvest: harvestAction, wait: waitAction };

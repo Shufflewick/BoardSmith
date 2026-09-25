@@ -17,7 +17,7 @@
 
 import { describe, it, expect, beforeEach } from 'vitest';
 import { ref } from 'vue';
-import { useActionController, type ActionMetadata } from './useActionController.js';
+import { useActionController, type EnrichedActionMetadata } from './useActionController.js';
 import { createMockSendAction } from './useActionController.helpers.js';
 import { findMatchingChoice } from '../../engine/action/choice-matching.js';
 
@@ -26,7 +26,7 @@ const OPERATIVES = [
   { id: 'operative:1:2', name: 'Agent Vex' },
 ];
 
-function assignSpyMetadata(): Record<string, ActionMetadata> {
+function assignSpyMetadata(): Record<string, EnrichedActionMetadata> {
   return {
     assignSpy: {
       name: 'assignSpy',

@@ -21,6 +21,7 @@
  */
 import { inject } from 'vue';
 import { GAME_CONTEXT_KEYS } from './useGameContext.js';
+import type { ElementDiff } from '../../session/state-history.js';
 
 /** The host bridge GameShell provides in platform mode. */
 export type PlatformRequest = (op: string, payload: Record<string, unknown>) => Promise<Record<string, unknown>>;
@@ -85,14 +86,8 @@ export interface LogEntry {
   timestamp: number;
 }
 
-/** Which elements changed between two points in the action history. */
-export interface ElementDiff {
-  added: number[];
-  removed: number[];
-  changed: number[];
-  fromIndex: number;
-  toIndex: number;
-}
+/** Which elements changed between two points in the action history: the session's own shape. */
+export type { ElementDiff } from '../../session/state-history.js';
 
 /** Where a transferred card lands in its new container. */
 export type TransferPosition = 'first' | 'last';

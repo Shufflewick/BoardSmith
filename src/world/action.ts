@@ -73,8 +73,8 @@ import type {
   ActionContext,
   ActionDefinition,
   ActionResult,
-  BoardElementRef,
   ChoiceBoardRefs,
+  ElementRef,
   Game,
   GameElement,
   Player,
@@ -404,7 +404,7 @@ export interface WorldElementOptions<G extends Game, T extends GameElement, P = 
   elements: T[] | ((context: WorldActionContext<G>) => T[]);
   optional?: boolean | string;
   display?: (element: T, context: WorldActionContext<G>, all: T[]) => string;
-  boardRef?: (element: T, context: WorldActionContext<G>) => BoardElementRef;
+  boardRef?: (element: T, context: WorldActionContext<G>) => ElementRef;
   /** Work every `disabled` call of one evaluation shares; see the engine's `chooseFrom` (#334). */
   prepare?: (context: WorldActionContext<G>) => P;
   disabled?: (element: T, context: WorldActionContext<G>, prepared: P) => string | false;

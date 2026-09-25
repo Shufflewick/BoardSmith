@@ -1,5 +1,5 @@
 /**
- * ONE TYPE NAME, ONE DECLARATION, ACROSS EVERY PUBLIC ENTRY POINT (#367, #369).
+ * ONE TYPE NAME, ONE DECLARATION, ACROSS EVERY PUBLIC ENTRY POINT (#367, #369, #374-#376).
  *
  * `ActionResult` was declared four times: in the engine (what an action's
  * `execute()` returns), in the session (what `GameSession.performAction`
@@ -16,12 +16,6 @@
  * names, and fails when one exported name reaches more than one declaration.
  * A layer that needs a different shape gives it a different name; a layer that
  * needs the same shape imports the one declaration.
- *
- * `KNOWN_COLLISIONS` is the debt that was already in the tree when this guard
- * was added, each entry pinned to its exact set of declarations and to the
- * issue that removes it. It can only shrink: an entry whose collision is gone
- * fails until it is deleted, and a new declaration of a listed name fails like
- * any other collision.
  */
 import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
@@ -82,31 +76,6 @@ function publicEntryPoints(): Record<string, string> {
   return entries;
 }
 
-/**
- * Collisions that predate this guard, each with the issue that removes it. The
- * declarations are exact: another declaration of one of these names fails.
- */
-const KNOWN_COLLISIONS: Record<string, { issue: number; declarations: string[] }> = {
-  GameElement: { issue: 374, declarations: ['src/engine/element/game-element.ts:GameElement', 'src/ui/types.ts:GameElement'] },
-  Player: { issue: 374, declarations: ['src/engine/player/player.ts:Player', 'src/ui/types.ts:Player'] },
-  ValidElement: { issue: 374, declarations: ['src/types/protocol.ts:ValidElement', 'src/ui/composables/useActionControllerTypes.ts:ValidElement'] },
-  PickMetadata: { issue: 374, declarations: ['src/types/protocol.ts:PickMetadata', 'src/ui/composables/useActionControllerTypes.ts:PickMetadata'] },
-  ActionMetadata: { issue: 374, declarations: ['src/types/protocol.ts:ActionMetadata', 'src/ui/composables/useActionControllerTypes.ts:ActionMetadata'] },
-  PickStepResult: { issue: 374, declarations: ['src/session/pending-action-manager.ts:PickStepResult', 'src/ui/composables/useActionControllerTypes.ts:PickStepResult'] },
-  HexOrientation: { issue: 374, declarations: ['src/engine/element/hex-grid.ts:HexOrientation', 'src/ui/composables/useHexGrid.ts:HexOrientation'] },
-  FlowState: { issue: 376, declarations: ['src/client/types.ts:FlowState', 'src/engine/flow/types.ts:FlowState'] },
-  CreateGameRequest: { issue: 375, declarations: ['src/session/types.ts:CreateGameRequest', 'src/types/protocol.ts:CreateGameRequest'] },
-  PlayerConfig: { issue: 375, declarations: ['src/bot-trainer/benchmark.ts:PlayerConfig', 'src/session/types.ts:PlayerConfig', 'src/types/protocol.ts:PlayerConfig'] },
-  ClaimSeatRequest: { issue: 375, declarations: ['src/session/types.ts:ClaimSeatRequest', 'src/types/protocol.ts:ClaimSeatRequest'] },
-  ClaimSeatResponse: { issue: 375, declarations: ['src/session/types.ts:ClaimSeatResponse', 'src/types/protocol.ts:ClaimSeatResponse'] },
-  JoinLobbyRequest: { issue: 375, declarations: ['src/session/types.ts:JoinLobbyRequest', 'src/types/protocol.ts:JoinLobbyRequest'] },
-  JoinLobbyResponse: { issue: 375, declarations: ['src/session/types.ts:JoinLobbyResponse', 'src/types/protocol.ts:JoinLobbyResponse'] },
-  GameClass: { issue: 375, declarations: ['src/bot-trainer/types.ts:GameClass', 'src/session/types.ts:GameClass'] },
-  SeededRandom: { issue: 376, declarations: ['src/engine/element/game.ts:SeededRandom', 'src/utils/random.ts:SeededRandom'] },
-  RefWithRole: { issue: 376, declarations: ['src/engine/action/types.ts:RefWithRole', 'src/types/protocol.ts:RefWithRole'] },
-  WorldSeatView: { issue: 376, declarations: ['src/testing/test-world.ts:WorldSeatView', 'src/world/contract.ts:WorldSeatView'] },
-};
-
 // Built once, here, because compiling every entry point is slow one-time setup.
 const ENTRIES = publicEntryPoints();
 const parsed = ts.getParsedCommandLineOfConfigFile(path.join(ROOT, 'tsconfig.json'), {}, {
@@ -123,28 +92,16 @@ function describeCollision(name: string, declarations: Map<string, string[]>): s
   return `  ${name}\n${lines.join('\n')}`;
 }
 
-describe('every public type name has one declaration (#367, #369)', () => {
+describe('every public type name has one declaration (#367, #369, #374, #375, #376)', () => {
   it('no two entry points export one type name from different declarations', () => {
-    const unexplained = [...COLLISIONS].filter(([name, declarations]) => {
-      const known = KNOWN_COLLISIONS[name];
-      return !known || JSON.stringify([...declarations.keys()].sort()) !== JSON.stringify([...known.declarations].sort());
-    });
     expect(
-      unexplained.map(([name]) => name),
-      unexplained.length === 0
-        ? ''
-        : 'These type names reach more than one declaration across the public entry points, so an importer ' +
-            'gets a different type depending on which entry it imports from. Give each shape its own name, or ' +
-            'import the one declaration everywhere:\n' +
-            unexplained.map(([name, declarations]) => describeCollision(name, declarations)).join('\n'),
+      [...COLLISIONS.keys()],
+      'These type names reach more than one declaration across the public entry points, so an importer ' +
+        'gets a different type depending on which entry it imports from. Give each shape its own name, or ' +
+        'import the one declaration everywhere:\n' +
+        [...COLLISIONS].map(([name, declarations]) => describeCollision(name, declarations)).join('\n'),
     ).toEqual([]);
   });
-
-  it('every known collision still exists, so a fixed one is taken off the list', () => {
-    const fixed = Object.keys(KNOWN_COLLISIONS).filter((name) => !COLLISIONS.has(name));
-    expect(fixed, `No longer collide; delete them from KNOWN_COLLISIONS: ${fixed.join(', ')}`).toEqual([]);
-  });
-
 });
 
 describe('the collision check itself', () => {

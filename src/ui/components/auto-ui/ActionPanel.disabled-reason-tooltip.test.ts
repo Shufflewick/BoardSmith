@@ -19,7 +19,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { mount } from '@vue/test-utils';
 import { defineComponent, nextTick, provide, ref } from 'vue';
 import { useActionController } from '../../composables/useActionController.js';
-import type { ActionMetadata } from '../../composables/useActionController.js';
+import type { EnrichedActionMetadata } from '../../composables/useActionController.js';
 import ActionPanel from './ActionPanel.vue';
 import DisabledReasonTooltip from '../helpers/DisabledReasonTooltip.vue';
 import { GAME_CONTEXT_KEYS } from '../../composables/useGameContext.js';
@@ -33,7 +33,7 @@ import {
 } from '../../composables/useDisabledReasonTooltip.js';
 
 /** Every direction is blocked, so the step the march opens offers nothing operable. */
-const march: ActionMetadata = {
+const march: EnrichedActionMetadata = {
   name: 'march',
   prompt: 'March',
   selections: [
@@ -49,7 +49,7 @@ const march: ActionMetadata = {
   ],
 };
 
-const rest: ActionMetadata = { name: 'rest', prompt: 'Rest', selections: [] };
+const rest: EnrichedActionMetadata = { name: 'rest', prompt: 'Rest', selections: [] };
 
 /** The shell's arrangement: one panel, and the one tooltip every control borrows. */
 function mountShell() {
