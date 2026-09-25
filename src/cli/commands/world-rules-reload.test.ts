@@ -71,8 +71,9 @@ afterEach(async () => {
  */
 async function serveWorld(edit: WorldRuntime | Error) {
   let commandArrived: Promise<void> = Promise.resolve();
+  const cwd = tempTree('bs-world-rules-reload-run-');
   const run = await openWorldRun({
-    cwd: tempTree('bs-world-rules-reload-run-'),
+    cwd,
     displayName: 'Camp',
     runtime: beforeEdit,
     reloadRules: async () => {
