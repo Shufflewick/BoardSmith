@@ -152,7 +152,7 @@ describe('#231: the world dev host hands back an awaitable stop', () => {
     // a programmatic stop does not end the process and a signalled one still
     // does.
     expect(at("{ name: 'the world', close: () => worldHost.close() }")).toBeLessThan(at('...worldResources,'));
-    expect(at('...worldResources,')).toBeLessThan(at('closeViteServer(vite)'));
+    expect(at('...worldResources,')).toBeLessThan(at('...served.resources,'));
     expect(source).not.toMatch(/process\.exit\(/);
   });
 });
