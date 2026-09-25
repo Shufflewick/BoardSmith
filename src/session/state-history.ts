@@ -24,6 +24,7 @@ import {
   computeElementDiff,
   assertUndoAllowed,
   UndoRefusedError,
+  type ElementIdChanges,
 } from './utils.js';
 
 // ============================================
@@ -47,13 +48,7 @@ export interface UndoResult {
 /**
  * Element-level diff between two game states
  */
-export interface ElementDiff {
-  /** Element IDs that were added */
-  added: number[];
-  /** Element IDs that were removed */
-  removed: number[];
-  /** Element IDs that changed (attributes, children, etc.) */
-  changed: number[];
+export interface ElementDiff extends ElementIdChanges {
   /** The from action index */
   fromIndex: number;
   /** The to action index */

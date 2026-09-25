@@ -40,7 +40,7 @@ import {
   type GameOptionDefinition,
   type PickChoicesResponse,
 } from './types.js';
-import { buildPlayerState, buildSingleActionMetadata, serializeFlowDebugInfo, serializePendingActionState } from './utils.js';
+import { buildPlayerState, offerFollowUp, serializeFlowDebugInfo, serializePendingActionState } from './utils.js';
 import { BotController } from './bot-controller.js';
 import type { BotStrategy, BotMove, BotMoveStats } from '../bot/index.js';
 import { createBot, parseBotLevel } from '../bot/index.js';
@@ -1547,26 +1547,13 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     // Check if bot should respond
     this.#scheduleBotCheck();
 
-    // Build followUp with metadata if present
-    const followUp = result.flowState?.followUp;
-    let followUpWithMetadata: FollowUpOffer | undefined;
-    if (followUp) {
-      const playerObj = this.#runner.game.getPlayer(player);
-      // Pass followUp.args so dynamic prompts can access them (e.g., showing sector name)
-      const followUpMetadata = playerObj ? buildSingleActionMetadata(this.#runner.game, playerObj, followUp.action, followUp.args) : undefined;
-      followUpWithMetadata = {
-        ...followUp,
-        metadata: followUpMetadata,
-      };
-    }
-
     return {
       success: true,
       flowState: result.flowState,
       state: buildPlayerState(this.#runner, this.#storedState.playerNames, player, { includeActionMetadata: true, includeDebugData: this.#debugEnabled }),
       serializedAction: result.serializedAction,
-      // Pass through action chaining info from flowState, including metadata for the followUp action
-      followUp: followUpWithMetadata,
+      // The chained action, with the metadata to start it (it is usually not in availableActions).
+      followUp: result.flowState?.followUp && offerFollowUp(this.#runner.game, player, result.flowState.followUp),
       // The action's own return value to the acting seat (BUG-017/BUG-012).
       data: result.data,
       message: result.message,
@@ -1728,22 +1715,7 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
     /** `ActionResult.message` from the action this step completed (BUG-012). */
     message?: string;
   }> {
-    const result = await this.#pendingActionManager.processSelectionStep(playerPosition, selectionName, value, actionName, initialArgs);
-
-    // Build followUp with metadata if present (same pattern as executeAction)
-    if (result.followUp) {
-      const playerObj = this.#runner.game.getPlayer(playerPosition);
-      const followUpMetadata = playerObj ? buildSingleActionMetadata(this.#runner.game, playerObj, result.followUp.action, result.followUp.args) : undefined;
-      return {
-        ...result,
-        followUp: {
-          ...result.followUp,
-          metadata: followUpMetadata,
-        },
-      };
-    }
-
-    return result;
+    return this.#pendingActionManager.processSelectionStep(playerPosition, selectionName, value, actionName, initialArgs);
   }
 
   /**

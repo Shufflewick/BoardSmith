@@ -9,7 +9,7 @@
  * no memory between calls.
  */
 
-import type { Game, GameClass, GameCommand, TutorialDefinition, Annotation, FlowState } from '../engine/index.js';
+import type { Game, GameClass, GameCommand, TutorialDefinition, Annotation, FlowState, FollowUpOffer } from '../engine/index.js';
 import { ErrorCode } from '../types/protocol.js';
 import { executeCommand, dueSeats, canSeatAct, availableActionsForSeat, flowBoundaryKey } from '../engine/index.js';
 import type { BoundaryKeyState } from '../engine/index.js';
@@ -28,7 +28,7 @@ import type { BotMove } from '../bot/types.js';
 import { describeMoveForHint } from './move-summary.js';
 import { PickHandler } from './pick-handler.js';
 import {
-  buildSingleActionMetadata,
+  offerFollowUp,
   buildPlayerState,
   computeUndoEligibility,
   undoUnavailableMessage,
@@ -211,7 +211,8 @@ export interface OpResult {
   message?: string;
 
   // Op-specific fields
-  followUp?: unknown;
+  /** The follow-up the action chained to, with its action's metadata. */
+  followUp?: FollowUpOffer;
   done?: boolean;
   nextChoices?: unknown[];
   actionComplete?: boolean;
@@ -530,6 +531,15 @@ function handleStart(
   };
 }
 
+/** Mirror game-session.ts: advance the tutorial of every seat whose tutorial is running. */
+function advanceRunningTutorials(game: Game): void {
+  for (const [seat, progress] of game.tutorialProgress) {
+    if (progress.status === 'running') {
+      autoAdvanceTutorial(game, seat);
+    }
+  }
+}
+
 function handleAction(
   def: RunnerDef,
   gameOptions: { playerCount: number; [key: string]: unknown },
@@ -544,27 +554,9 @@ function handleAction(
     return errorResult(actionResult.error ?? 'Action failed', 'bundle', actionResult.errorCode);
   }
 
-  // Mirror game-session.ts: advance tutorial for all seats with a running tutorial.
   // This is the CR-01 fix: stateless-ops was the only non-test path missing this pump.
   const game = runner.game as Game;
-  for (const [seat, progress] of game.tutorialProgress) {
-    if (progress.status === 'running') {
-      autoAdvanceTutorial(game, seat);
-    }
-  }
-
-  const rawFollowUp = (
-    actionResult.flowState as { followUp?: { action: string; args?: Record<string, unknown> } } | undefined
-  )?.followUp;
-
-  let followUp: unknown;
-  if (rawFollowUp) {
-    const player = game.getPlayer(op.player);
-    const metadata = player
-      ? buildSingleActionMetadata(game, player, rawFollowUp.action, rawFollowUp.args)
-      : undefined;
-    followUp = { ...rawFollowUp, metadata };
-  }
+  advanceRunningTutorials(game);
 
   return {
     success: true,
@@ -572,7 +564,7 @@ function handleAction(
     // stateEnvelope() re-reads flowState from the runner; actionResult.flowState
     // is the authoritative value returned by performAction — override with it.
     flowState: actionResult.flowState,
-    followUp,
+    followUp: actionResult.flowState?.followUp && offerFollowUp(game, op.player, actionResult.flowState.followUp),
     // The acting seat's return value from execute() (BUG-017/BUG-012).
     data: actionResult.data,
     message: actionResult.message,
@@ -602,15 +594,9 @@ async function handleSelectionStep(
     return errorResult(step.error ?? 'Selection step failed', 'bundle', step.errorCode);
   }
 
-  // Mirror game-session.ts: advance tutorial for all seats with a running tutorial.
   // Fired after every selection step (not just actionComplete) so predicates
   // that depend on mid-action state still evaluate correctly.
-  const game = runner.game as Game;
-  for (const [seat, progress] of game.tutorialProgress) {
-    if (progress.status === 'running') {
-      autoAdvanceTutorial(game, seat);
-    }
-  }
+  advanceRunningTutorials(runner.game as Game);
 
   return {
     success: true,
