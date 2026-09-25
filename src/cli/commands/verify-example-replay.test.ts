@@ -1,4 +1,5 @@
 import { DESIGN_DIR, resolveDesignRelative } from '../lib/project-paths.js';
+import { generateTsConfig } from '../lib/project-scaffold.js';
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { promises as fs, readFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';
@@ -1481,6 +1482,8 @@ describe('verifyExampleTranslateCommand — translate', () => {
     const project = join(dir, 'project');
     const withDefaults = {
       'rulebook/02-punch.md': SLICE_TEXT,
+      // Every generated game has one; the API surface resolves modules with it.
+      'tsconfig.json': generateTsConfig(),
       'src/rules/index.ts':
         "export function checkPunch(input: { ready: boolean }): boolean {\n" +
         '  return input.ready;\n' +

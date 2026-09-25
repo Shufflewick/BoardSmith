@@ -18,6 +18,7 @@ import { readFile } from 'node:fs/promises';
 import { promises as fs } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
+import { generateTsConfig } from '../lib/project-scaffold.js';
 
 /**
  * `example-derivation.ts` is the ONE shared module both TEST-01 (build-side) and CHECK-06
@@ -361,6 +362,20 @@ describe('buildExampleExtractionPayload — extraction (Task 2)', () => {
 // -------------------------------------------------------------------------------------------
 
 /**
+ * Writes the `tsconfig.json` every generated game has (`generateTsConfig`), optionally with
+ * compiler options layered over it. `collectGameApiSurface` resolves modules with the game's own
+ * config, so a fixture without one is not a game.
+ */
+async function writeGameTsConfig(
+  root: string,
+  compilerOptions: Record<string, unknown> = {},
+): Promise<void> {
+  const config = JSON.parse(generateTsConfig()) as { compilerOptions: Record<string, unknown> };
+  config.compilerOptions = { ...config.compilerOptions, ...compilerOptions };
+  await fs.writeFile(join(root, 'tsconfig.json'), JSON.stringify(config, null, 2));
+}
+
+/**
  * A self-contained generated-game project, written to a temp dir. Reproduces the exact re-export
  * shapes this function has to handle — a direct declaration in `index.ts`, a `export *` re-export,
  * a NAMED re-export, and a module that `index.ts` never re-exports at all — plus a `tests/` tree
@@ -375,6 +390,7 @@ async function writeFixtureProject(root: string): Promise<string> {
   const rules = join(root, 'src', 'rules');
   await fs.mkdir(rules, { recursive: true });
   await fs.mkdir(join(root, 'tests'), { recursive: true });
+  await writeGameTsConfig(root);
 
   await fs.writeFile(
     join(rules, 'index.ts'),
@@ -507,6 +523,7 @@ async function writeNestedFixtureProject(root: string): Promise<string> {
   for (const dir of ['sim/dice', 'shared', 'world']) {
     await fs.mkdir(join(rules, dir), { recursive: true });
   }
+  await writeGameTsConfig(root);
   const files: Record<string, string[]> = {
     'index.ts': [
       "export * from './sim/spawn.js';",
@@ -590,6 +607,7 @@ describe('collectGameApiSurface — re-exports through subfolders, at any depth 
 async function writeLocalExportListFixtureProject(root: string): Promise<string> {
   const rules = join(root, 'src', 'rules');
   await fs.mkdir(join(rules, 'pieces'), { recursive: true });
+  await writeGameTsConfig(root);
   const files: Record<string, string[]> = {
     'index.ts': ["export * from './game.js';"],
     'game.ts': [
@@ -681,6 +699,182 @@ describe('collectGameApiSurface — names imported and then exported by a local 
     expect(surface.exportedSymbols).toEqual([
       { name: 'MyGame', kind: 'class', module: 'src/rules/game.ts' },
     ]);
+  });
+});
+
+/**
+ * A project for the source shapes a line-by-line reading of the text gets wrong (#372): exports
+ * inside comments and strings, specifier lists that span lines and carry comments, and the
+ * declaration forms `export function|const|class` does not spell. Each file is written by the test
+ * that needs it.
+ */
+async function writeParsedFixtureProject(root: string, files: Record<string, string[]>): Promise<string> {
+  const rules = join(root, 'src', 'rules');
+  await fs.mkdir(rules, { recursive: true });
+  await writeGameTsConfig(root);
+  await writeRulesFiles(rules, files);
+  return root;
+}
+
+describe('collectGameApiSurface — reads the source as TypeScript does (#372)', () => {
+  let projectDir: string;
+
+  beforeEach(() => {
+    projectDir = tempTree('bs-example-derivation-parsed-');
+  });
+
+  it('does not list an export that is commented out', async () => {
+    await writeParsedFixtureProject(projectDir, {
+      'index.ts': [
+        '// export function lineCommented(): void {}',
+        '/*',
+        'export function blockCommented(): void {}',
+        "export * from './gone.js';",
+        "export { ghost } from './gone.js';",
+        'export { kept as alsoGhost };',
+        '*/',
+        '/** export { kept as docGhost }; */',
+        'export function kept(): void {}',
+      ],
+    });
+
+    const surface = await collectGameApiSurface(projectDir);
+
+    expect(surface.exportedSymbols).toEqual([
+      { name: 'kept', kind: 'function', module: 'src/rules/index.ts' },
+    ]);
+  });
+
+  it('ignores `export` text inside a string literal', async () => {
+    await writeParsedFixtureProject(projectDir, {
+      'index.ts': [
+        'export const SNIPPET = `',
+        "export { ghost } from './gone.js';",
+        'export function phantom(): void {}',
+        'export { SNIPPET as SHADOW };',
+        '`;',
+        "export const QUOTED = 'export { a }';",
+      ],
+    });
+
+    const surface = await collectGameApiSurface(projectDir);
+
+    expect(symbolsByName(surface)).toEqual([
+      { name: 'QUOTED', kind: 'const', module: 'src/rules/index.ts' },
+      { name: 'SNIPPET', kind: 'const', module: 'src/rules/index.ts' },
+    ]);
+  });
+
+  it('parses specifier lists that span lines and carry comments', async () => {
+    await writeParsedFixtureProject(projectDir, {
+      'index.ts': [
+        'export {',
+        '  // the die',
+        '  roll as rollDie, /* faces */ DIE_FACES,',
+        '  type DieFace, // types are not runtime symbols',
+        "} from './dice.js';",
+        'import {',
+        '  Board, // a comment',
+        '  /* another, with a comma */ Piece,',
+        "} from './pieces.js';",
+        'export {',
+        '  Board as GameBoard, // trailing',
+        '  /* leading */ Piece,',
+        '};',
+      ],
+      'dice.ts': [
+        'export function roll(): number {',
+        '  return 4;',
+        '}',
+        'export const DIE_FACES = 6;',
+        'export type DieFace = 1 | 2 | 3 | 4 | 5 | 6;',
+      ],
+      'pieces.ts': ['export class Board {}', 'export class Piece {}'],
+    });
+
+    const surface = await collectGameApiSurface(projectDir);
+
+    expect(symbolsByName(surface)).toEqual([
+      { name: 'Board', kind: 'class', module: 'src/rules/pieces.ts' },
+      { name: 'DIE_FACES', kind: 'const', module: 'src/rules/dice.ts' },
+      { name: 'Piece', kind: 'class', module: 'src/rules/pieces.ts' },
+      { name: 'roll', kind: 'function', module: 'src/rules/dice.ts' },
+    ]);
+  });
+
+  it('lists every runtime declaration form, and no type-only export', async () => {
+    await writeParsedFixtureProject(projectDir, {
+      'index.ts': [
+        'export async function settle(): Promise<void> {}',
+        'export abstract class Unit {}',
+        'export let turnCount = 0;',
+        'export const WIDTH = 8, HEIGHT = 6;',
+        'export enum Phase { Setup, Play }',
+        "export * as dice from './dice.js';",
+        "import type { Piece } from './pieces.js';",
+        'export { Piece };',
+        'export interface Options { fast: boolean }',
+        'export type Seat = number;',
+      ],
+      'dice.ts': ['export function roll(): number {', '  return 4;', '}'],
+      'pieces.ts': ['export class Piece {}'],
+    });
+
+    const surface = await collectGameApiSurface(projectDir);
+
+    expect(symbolsByName(surface)).toEqual([
+      { name: 'dice', kind: 'const', module: 'src/rules/index.ts' },
+      { name: 'HEIGHT', kind: 'const', module: 'src/rules/index.ts' },
+      { name: 'Phase', kind: 'const', module: 'src/rules/index.ts' },
+      { name: 'settle', kind: 'function', module: 'src/rules/index.ts' },
+      { name: 'turnCount', kind: 'const', module: 'src/rules/index.ts' },
+      { name: 'Unit', kind: 'class', module: 'src/rules/index.ts' },
+      { name: 'WIDTH', kind: 'const', module: 'src/rules/index.ts' },
+    ]);
+  });
+
+  it("resolves specifiers with the game's own tsconfig", async () => {
+    await writeParsedFixtureProject(projectDir, {
+      'index.ts': ["export * from '@rules/deep/thing.js';"],
+    });
+    await fs.mkdir(join(projectDir, 'src', 'rules', 'deep'), { recursive: true });
+    await fs.writeFile(
+      join(projectDir, 'src', 'rules', 'deep', 'thing.ts'),
+      'export function deepThing(): void {}\n',
+    );
+    await writeGameTsConfig(projectDir, { paths: { '@rules/*': ['./src/rules/*'] } });
+
+    const surface = await collectGameApiSurface(projectDir);
+
+    expect(surface.exportedSymbols).toEqual([
+      { name: 'deepThing', kind: 'function', module: 'src/rules/deep/thing.ts' },
+    ]);
+  });
+
+  it('refuses a named re-export of a name the target module does not export', async () => {
+    await writeParsedFixtureProject(projectDir, {
+      'index.ts': ["export { missing as found } from './dice.js';"],
+      'dice.ts': ['export function roll(): number {', '  return 4;', '}'],
+    });
+
+    await expect(collectGameApiSurface(projectDir)).rejects.toThrow(
+      "src/rules/index.ts exports 'found' from './dice.js', but src/rules/dice.ts exports no 'missing'.",
+    );
+  });
+
+  it('refuses a local export list naming something the module does not declare', async () => {
+    await writeParsedFixtureProject(projectDir, { 'index.ts': ['export { undeclared as shown };'] });
+
+    await expect(collectGameApiSurface(projectDir)).rejects.toThrow(
+      "src/rules/index.ts exports 'shown', but declares no 'undeclared'.",
+    );
+  });
+
+  it('refuses a project with no tsconfig.json, since its modules cannot be resolved as the game resolves them', async () => {
+    await writeParsedFixtureProject(projectDir, { 'index.ts': ['export function kept(): void {}'] });
+    await fs.rm(join(projectDir, 'tsconfig.json'));
+
+    await expect(collectGameApiSurface(projectDir)).rejects.toThrow(/No tsconfig\.json in /);
   });
 });
 
