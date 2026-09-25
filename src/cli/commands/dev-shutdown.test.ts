@@ -18,7 +18,8 @@ import { describe, it, expect, vi } from 'vitest';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { devProject, EXIT_WITHIN_MS, freePort, spawnDev, type DevRunEnding } from './dev-project.test-helper.js';
+import { devProject, EXIT_WITHIN_MS, spawnDev, type DevRunEnding } from './dev-project.test-helper.js';
+import { freePort } from './free-port.test-helper.js';
 import { worldStorePath } from '../dev-host/world-store.js';
 
 // Each run bundles the project's rules and starts Vite, which under full-suite

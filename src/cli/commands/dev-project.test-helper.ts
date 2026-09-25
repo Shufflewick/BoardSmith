@@ -9,7 +9,6 @@
  */
 import { spawn, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { mkdirSync, symlinkSync } from 'node:fs';
-import { createServer, type AddressInfo } from 'node:net';
 import { join } from 'node:path';
 
 import { vi } from 'vitest';
@@ -45,18 +44,6 @@ export async function devProject(world: boolean): Promise<string> {
     symlinkSync(join(INSTALLED_MODULES, name), join(dir, 'node_modules', name), 'dir');
   }
   return dir;
-}
-
-/** A port nobody else is on. */
-export function freePort(): Promise<number> {
-  return new Promise((done, fail) => {
-    const probe = createServer();
-    probe.on('error', fail);
-    probe.listen(0, '127.0.0.1', () => {
-      const { port } = probe.address() as AddressInfo;
-      probe.close(() => done(port));
-    });
-  });
 }
 
 /** How long a run gets to end by itself, once it should, before it counts as stuck. A hang guard, not a budget. */

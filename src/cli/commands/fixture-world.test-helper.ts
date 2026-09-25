@@ -22,7 +22,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { INSTALLED_MODULES } from '../../testing/installed-modules.test-helper.js';
-import { freePort } from './dev-project.test-helper.js';
+import { freePort } from './free-port.test-helper.js';
 import { loadWorldRuntime, startWorldDevServer } from './dev-world.js';
 
 /** This checkout, which is the library every fixture resolves against. */
