@@ -267,3 +267,15 @@ export const fencedUncheckpointedScumDefinition: GameDefinitionLike = {
   undo: { fenceRandomRewind: true },
   checkpoints: { enabled: false },
 };
+
+/**
+ * Unfenced, with checkpointing off: a game that can never undo. Its seats must
+ * never be offered Undo (#373).
+ */
+export const uncheckpointedScumDefinition: GameDefinitionLike = {
+  gameClass: ScumGame,
+  gameType: 'scum-uncheckpointed',
+  minPlayers: 1,
+  maxPlayers: 1,
+  checkpoints: { enabled: false },
+};

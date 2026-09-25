@@ -17,7 +17,6 @@ import type { GameClass, HeatmapEntry, SerializedFlowDebugInfo, SerializedPendin
 import { validateTutorialDefinition, initialProgress, autoAdvanceTutorial } from '../engine/tutorial/progress.js';
 import {
   GameRunner,
-  describeCheckpointAbsence,
   type GameStateSnapshot,
   type CheckpointPolicy,
   type UndoPolicy,
@@ -30,13 +29,12 @@ import { PickHandler } from './pick-handler.js';
 import {
   buildSingleActionMetadata,
   buildPlayerState,
-  computeUndoEligibility,
-  undoUnavailableMessage,
   buildActionTraces,
   computeElementDiff,
   serializeFlowDebugInfo,
   assertUndoAllowed,
   UndoRefusedError,
+  decideUndo,
 } from './utils.js';
 
 // ---------------------------------------------------------------------------
@@ -327,8 +325,8 @@ export interface GameDefinitionLike {
    */
   checkpoints?: CheckpointPolicy;
   /**
-   * Optional undo policy — threaded into the shared `assertUndoAllowed` guard
-   * by `handleUndo`. Declared on the game definition (never carried in the
+   * Optional undo policy — read off the runner by `decideUndo`, the one undo
+   * rule `handleUndo` and every seat's `canUndo` share. Declared on the game definition (never carried in the
    * snapshot) for the same reason as `checkpoints`: every stateless op rebuilds
    * its runner, and a policy living in the snapshot could be dropped by any op
    * that forgot to copy it forward. Absent: no random fence (the default).
@@ -687,42 +685,14 @@ function handleUndo(
     );
   }
 
-  const flowState = runner.getFlowState() as BotFlowState | undefined;
-
-  // Awaiting-aware eligibility (D4/SIM-02): sequential steps keep the EXACT
-  // `currentPlayer` contract; a simultaneous step allows any seat that is
-  // (or was) awaiting THIS step, with the boundary computed from that
-  // seat's OWN action(s) -- not the turn-wide moveCount. Shared with the
-  // stateful twin (state-history.ts) -- parity, T-160-* drift guard.
-  const { eligible, turnStartActionIndex, actionsThisTurn } = computeUndoEligibility(
-    runner.actionHistory,
-    flowState,
-    op.player,
-  );
-  if (!eligible) {
-    return errorResult("It's not your turn", 'bundle', ErrorCode.NOT_YOUR_TURN);
-  }
-  if (actionsThisTurn === 0) {
-    return errorResult(undoUnavailableMessage(flowState), 'bundle', ErrorCode.NO_ACTIONS_TO_UNDO);
-  }
-
-  // Server-side enforcement (UNDO-01 / UNDO-02 finished-phase fence): refuse
-  // an undo that would cross a `.notUndoable()` action or that is attempted
-  // once the game is finished. This is the single shared guard also called
-  // by `handleDebugRewind` below and by both `state-history.ts` methods --
-  // the client's `canUndo` flag is advisory only and must not be trusted.
-  try {
-    assertUndoAllowed({
-      runner,
-      actionHistory: runner.actionHistory,
-      turnStartActionIndex,
-      fenceRandomRewind: runner.undoPolicy.fenceRandomRewind,
-    });
-  } catch (err) {
-    if (err instanceof UndoRefusedError) {
-      return errorResult(err, 'executor', ErrorCode.UNDO_NOT_ALLOWED);
-    }
-    throw err;
+  // The one undo rule (#373), shared with the stateful twin
+  // (state-history.ts) and with the `canUndo` every seat is sent, so the
+  // offer and this decision cannot disagree. It is also the server-side
+  // enforcement (UNDO-01/UNDO-02): the client's `canUndo` is never trusted.
+  const decision = decideUndo(runner, op.player);
+  if (!decision.allowed) {
+    const category = decision.errorCode === ErrorCode.UNDO_NOT_ALLOWED ? 'executor' : 'bundle';
+    return errorResult(decision.error, category, decision.errorCode);
   }
 
   // Restore the turn-start state AUTHORITATIVELY from the per-action checkpoint
@@ -732,15 +702,14 @@ function handleUndo(
   // history); it loses prior-turn equipment and mis-positions the flow (a later
   // action by another player then throws "Not Player N's turn"). The checkpoint
   // is the exact serialized state at the turn boundary, so restoring it keeps
-  // every prior mutation and the correct flow position.
-  // Restore from the per-action checkpoint authoritatively. fromCheckpoint
-  // rehydrates the lean checkpoint and carries the prefix `[0..turnStartActionIndex]`
-  // forward so further undos (e.g. undoing the now-current turn) still resolve.
-  const restored = runnerFromCheckpoint(def, snapshot, turnStartActionIndex);
+  // every prior mutation and the correct flow position. fromCheckpoint
+  // rehydrates the lean checkpoint and carries the prefix
+  // `[0..turnStartActionIndex]` forward so further undos still resolve.
+  const restored = runnerFromCheckpoint(def, snapshot, decision.turnStartActionIndex);
   if (!restored) {
-    return errorResult(
-      `Cannot undo to the start of this turn: ` +
-      `${describeCheckpointAbsence(snapshot.actionCheckpoints, turnStartActionIndex)}`,
+    throw new Error(
+      `Undo was allowed but no checkpoint exists at action ${decision.turnStartActionIndex}. ` +
+      `decideUndo checks for that checkpoint, so this is a BoardSmith bug; please report it.`,
     );
   }
 
@@ -1288,7 +1257,7 @@ function handleDebugRewind(
     );
   }
 
-  // Same shared guard as handleUndo (T-155-02): the debug rewind twin must
+  // The same fence handleUndo's decision applies (T-155-02): the debug rewind twin must
   // not be a bypass route around the notUndoable/finished-phase fences.
   try {
     assertUndoAllowed({

@@ -44,13 +44,14 @@ import type { LocalWorldHost } from '../dev-host/world-host.js';
 import { createRulesReloadQueue, type RulesReloadQueue } from '../dev-host/rules-reload-queue.js';
 import { createWorldConnections } from '../dev-host/world-connections.js';
 import { worldStorePath, type LocalWorldStore, type openWorldStore } from '../dev-host/world-store.js';
-import { announceHost, onShutdown } from '../dev-host/shutdown.js';
+import { announceHost, onShutdown, teardownInOrder, type HeldResource } from '../dev-host/shutdown.js';
 import type { WorldDevConfig } from '../dev-host/world-config-types.js';
 import { ensureWorldEntry, WORLD_ENTRY_HTML } from '../lib/world-entry.js';
 import type { GameDefinition } from '../../session/index.js';
 import { importRuntimeBundle, toPosix } from './game-runtime.js';
 import {
   claimWebSocketPath,
+  closeViteServer,
   devNotFoundMiddleware,
   listeningViteServer,
   monorepoBoardsmithResolvePlugin,
@@ -254,10 +255,10 @@ interface WorldRun {
   /** Whether this world had already run genesis before this run opened it. */
   readonly launchedBefore: boolean;
   /**
-   * Forget every page and close the world. `close` drains the world lock
-   * before it touches the store, so an in-flight disconnect or command is
-   * finished rather than abandoned -- and the checkpoint it writes on the way
-   * out is the last write there is.
+   * Close the world. `close` drains the world lock before it touches the
+   * store, so an in-flight disconnect or command is finished rather than
+   * abandoned -- and the checkpoint it writes on the way out is the last write
+   * there is. The pages are the caller's to forget first.
    */
   close(): Promise<void>;
 }
@@ -389,10 +390,7 @@ export async function openWorldRun(
     seatCount: worldHost.seatCount,
     storePath: store.path,
     launchedBefore,
-    close: async () => {
-      connections.forgetAll();
-      await worldHost.close();
-    },
+    close: () => worldHost.close(),
   };
 }
 
@@ -484,17 +482,21 @@ export async function startWorldDevServer(
   ];
   if (options.context === 'monorepo') plugins.unshift(monorepoBoardsmithResolvePlugin());
 
-  // Everything the world half holds, released in the order the full teardown
-  // below releases it: the socket first, so no page can queue anything more,
-  // then the world (see `WorldRun.close`).
+  // Everything the world half holds, in the order it is released: first by
+  // itself if Vite cannot listen, otherwise at the head of the full teardown
+  // below. `close` drains the world lock before it touches the
+  // store, so an in-flight disconnect or command is finished rather than
+  // abandoned -- and the checkpoint it writes on the way out is the last write
+  // there is.
   //
   // THE WORLD IS CLOSED, NOT DELETED. A persistent world that erased itself
   // when its host stopped would be a session; `--reset` is the only thing that
   // removes one.
-  const releaseWorld = async (): Promise<void> => {
-    worldSocket.close();
-    await run.close();
-  };
+  const worldResources: readonly HeldResource[] = [
+    { name: "the world's socket", close: () => worldSocket.close() },
+    { name: 'the browser connections', close: () => run.connections.forgetAll() },
+    { name: 'the world', close: () => run.close() },
+  ];
 
   // A HOST THAT CANNOT SERVE HOLDS NOTHING (#345). `devCommand` refuses a taken
   // port before the world is opened, but the port can still be taken between
@@ -512,7 +514,7 @@ export async function startWorldDevServer(
       plugins,
       optimizeDeps: { exclude: ['boardsmith', 'boardsmith/ui', 'boardsmith/client', 'boardsmith/session'] },
     },
-    releaseWorld,
+    () => teardownInOrder(worldResources).run(),
   );
 
   // A RULE EDIT IS A COORDINATED WORLD RELOAD (#201), heard here and carried
@@ -536,26 +538,22 @@ export async function startWorldDevServer(
   console.log(chalk.green('\n  Ready! Press Ctrl+C to stop.\n'));
 
   // ONE ORDERLY STOP, WHOEVER ASKS (#231). A signal and a programmatic caller
-  // reach the same promise, so the two can never run the teardown twice, and
-  // the awaited result is the guarantee that nothing this host owns will write
-  // again.
-  let stopping: Promise<void> | null = null;
-  const teardown = async (): Promise<void> => {
-    await releaseWorld();
+  // reach the same run, so the two can never run the teardown twice, and the
+  // awaited result is the guarantee that nothing this host owns will write
+  // again. A stop that cannot finish refuses, naming what is still open (#366).
+  const teardown = teardownInOrder([
+    ...worldResources,
     // AFTER the world, because Vite's own watcher and dep optimiser write into
     // the project too, and a caller about to remove that project needs both
     // writers stopped before it does.
-    await vite.close();
-    rmSync(options.tempDir, { recursive: true, force: true });
-    shutdown.cancel();
-  };
-  const stop = (): Promise<void> => (stopping ??= teardown());
-
-  const shutdown = onShutdown(async () => {
-    console.log(chalk.dim('\n  Shutting down...'));
-    await stop();
-    process.exit(0);
-  });
+    { name: 'the Vite dev server', close: () => closeViteServer(vite) },
+    {
+      name: `the build directory (${options.tempDir})`,
+      close: () => rmSync(options.tempDir, { recursive: true, force: true }),
+    },
+  ]);
+  const stop = (): Promise<void> => teardown.run().finally(() => shutdown.cancel());
+  const shutdown = onShutdown(teardown, { say: (line) => console.log(chalk.dim(line)) });
 
   return { hostUrl, stop };
 }

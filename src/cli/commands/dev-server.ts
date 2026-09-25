@@ -25,18 +25,21 @@
  *     `reloadOnRulesEdit`, into one `RulesReloadQueue` that holds moves sent
  *     while the edit is still building (#379);
  *   - a Vite server whose listen was refused still holds the process open, so
- *     a run refused its port never exited (#345).
+ *     a run refused its port never exited (#345);
+ *   - Vite's own `close()` never finishes while its dependency optimiser's
+ *     first run is in flight, so a quick "start, look, Ctrl+C" hung (#366) --
+ *     which is why both roads close Vite through `closeViteServer`.
  *
  * Two copies of any of those is how they come to disagree, and a disagreement
  * here is invisible until somebody's asset 404s or their HMR dies.
  */
 
 import { existsSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { join, relative, resolve } from 'node:path';
 
 import type { Duplex } from 'node:stream';
 
-import { createServer as createViteServer, type Connect, type InlineConfig, type Plugin as VitePlugin, type ViteDevServer } from 'vite';
+import { createServer as createViteServer, normalizePath, type Connect, type InlineConfig, type Plugin as VitePlugin, type ViteDevServer } from 'vite';
 import { WebSocketServer, type WebSocket } from 'ws';
 
 import type { RulesReloadQueue } from '../dev-host/rules-reload-queue.js';
@@ -280,4 +283,45 @@ export async function listeningViteServer(
     await release();
     throw error;
   }
+}
+
+/**
+ * CLOSE A VITE DEV SERVER, AFTER THE DEPENDENCY TRANSFORMS IT HAS IN FLIGHT (#366).
+ *
+ * Vite's `close()` shuts its dependency optimiser down and then waits for every
+ * transform still in flight. A transform of a pre-bundled dependency (the
+ * `vue.js` a page imports) waits for the optimiser run that commits it, and a
+ * closed optimiser abandons that run without settling its waiters, so
+ * `close()` never finishes. That happens whenever a host is stopped between a
+ * fresh project's first page and the optimiser's first commit, which is a
+ * quick "start, look, Ctrl+C". Vite 5.4 through 8.3 close the same way.
+ *
+ * So the optimiser is let finish first. Every pre-bundled module the page's
+ * imports put in the module graph and that has not been transformed yet is
+ * requested again, which joins the transform already in flight and settles
+ * when the optimiser commits (or fails). Repeated until none is left, because
+ * a run can discover further dependencies. Each module is waited on once, so a
+ * transform that fails does not keep the loop going. Only then is Vite closed,
+ * with nothing left for it to wait on.
+ */
+export async function closeViteServer(vite: ViteDevServer): Promise<void> {
+  const depsDir = `${normalizePath(resolve(vite.config.cacheDir, 'deps'))}/`;
+  const waited = new Set<string>();
+  for (;;) {
+    const inFlight = [...vite.moduleGraph.urlToModuleMap.values()].filter(
+      (module) =>
+        module.file !== null &&
+        module.file.startsWith(depsDir) &&
+        module.transformResult === null &&
+        !waited.has(module.url),
+    );
+    if (inFlight.length === 0) break;
+    await Promise.allSettled(
+      inFlight.map((module) => {
+        waited.add(module.url);
+        return vite.transformRequest(module.url);
+      }),
+    );
+  }
+  await vite.close();
 }

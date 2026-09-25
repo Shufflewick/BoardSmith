@@ -14,24 +14,17 @@
  * the moment after `devCommand` checked it.
  */
 import { describe, it, expect, vi } from 'vitest';
-import { spawn } from 'node:child_process';
-import { existsSync, mkdirSync, symlinkSync } from 'node:fs';
+import { existsSync, mkdirSync } from 'node:fs';
 import { createServer, type AddressInfo, type Server } from 'node:net';
 import { join } from 'node:path';
 
-import { initCommand } from './init.js';
 import { loadWorldRuntime, startWorldDevServer } from './dev-world.js';
 import { worldStoreDir, worldStorePath } from '../dev-host/world-store.js';
-import { REPO_ROOT } from '../spawn-cli.test-helper.js';
-import { tempTree } from '../../testing/temp-tree.test-helper.js';
-import { INSTALLED_MODULES } from '../../testing/installed-modules.test-helper.js';
+import { devProject, EXIT_WITHIN_MS, spawnDev } from './dev-project.test-helper.js';
 
 // Each run bundles the project's rules first, which under full-suite
 // parallelism can exceed Vitest's default. A hang guard, not a budget.
 vi.setConfig({ testTimeout: 90_000 });
-
-/** How long a refused run gets to end by itself before it counts as stuck. */
-const EXIT_WITHIN_MS = 60_000;
 
 /** A port held open by this test, on the interface `boardsmith dev` binds by default. */
 async function holdPort(): Promise<{ port: number; release: () => Promise<void> }> {
@@ -43,56 +36,11 @@ async function holdPort(): Promise<{ port: number; release: () => Promise<void> 
   };
 }
 
-/** A project scaffolded by `boardsmith init`, installed the way a real game is. */
-async function project(world: boolean): Promise<string> {
-  const parent = tempTree('bs-dev-port-');
-  const cwd = process.cwd();
-  const log = vi.spyOn(console, 'log').mockImplementation(() => {});
-  process.chdir(parent);
-  try {
-    await initCommand('port-game', { withoutRulebook: true, world });
-  } finally {
-    process.chdir(cwd);
-    log.mockRestore();
-  }
-  const dir = join(parent, 'port-game');
-  // `"boardsmith": "file:..."` installs as a symlink to the checkout, and the
-  // project's own vite.config.ts needs its build-time packages beside it.
-  mkdirSync(join(dir, 'node_modules', '@vitejs'), { recursive: true });
-  symlinkSync(REPO_ROOT, join(dir, 'node_modules', 'boardsmith'), 'dir');
-  for (const name of ['vue', 'vite', '@vitejs/plugin-vue']) {
-    symlinkSync(join(INSTALLED_MODULES, name), join(dir, 'node_modules', name), 'dir');
-  }
-  return dir;
-}
-
-/** Run `boardsmith dev` and report how it ended, or that it did not. */
-function runDev(cwd: string, port: number) {
-  return new Promise<{ code: number | null; output: string; stuck: boolean }>((resolve) => {
-    const child = spawn(
-      process.execPath,
-      [join(REPO_ROOT, 'bin', 'boardsmith.js'), 'dev', '--port', String(port), '--no-open'],
-      { cwd },
-    );
-    let output = '';
-    child.stdout.on('data', (chunk) => (output += chunk));
-    child.stderr.on('data', (chunk) => (output += chunk));
-    const timer = setTimeout(() => {
-      child.kill('SIGKILL');
-      resolve({ code: null, output, stuck: true });
-    }, EXIT_WITHIN_MS);
-    child.on('exit', (code) => {
-      clearTimeout(timer);
-      resolve({ code, output, stuck: false });
-    });
-  });
-}
-
 /** Spawn `boardsmith dev` in `cwd` on a taken port, and assert the refusal. */
 async function expectRefused(cwd: string): Promise<void> {
   const held = await holdPort();
   try {
-    const run = await runDev(cwd, held.port);
+    const run = await spawnDev(cwd, held.port).ended;
     expect(run.stuck, `boardsmith dev was still running after ${EXIT_WITHIN_MS}ms:\n${run.output}`).toBe(false);
     expect(run.code).not.toBe(0);
     expect(run.output).toContain(`Port ${held.port} is already in use`);
@@ -104,17 +52,17 @@ async function expectRefused(cwd: string): Promise<void> {
 
 describe('boardsmith dev on a taken port (#345)', () => {
   it('a world project: refuses, exits, and never opens the world', async () => {
-    const cwd = await project(true);
+    const cwd = await devProject(true);
     await expectRefused(cwd);
     expect(existsSync(worldStoreDir(cwd)), 'the refused run opened the world store').toBe(false);
   });
 
   it('a table project: refuses and exits', async () => {
-    await expectRefused(await project(false));
+    await expectRefused(await devProject(false));
   });
 
   it('a world host whose own listen fails closes the world it opened', async () => {
-    const cwd = await project(true);
+    const cwd = await devProject(true);
     const tempDir = join(cwd, '.boardsmith');
     mkdirSync(tempDir, { recursive: true });
     const rulesPath = join(cwd, 'src', 'rules');

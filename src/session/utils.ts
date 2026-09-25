@@ -7,6 +7,7 @@ import { buildActionMetadata, buildPickMetadata } from '../engine/element/action
 import { getActiveTutorialStepView } from '../engine/tutorial/gate.js';
 import { devWarn } from '../utils/dev.js';
 import { describeCheckpointAbsence } from '../runtime/index.js';
+import { ErrorCode } from '../types/protocol.js';
 import type { GameRunner } from '../runtime/index.js';
 import type { PlayerGameState, ActionMetadata, PickMetadata, SerializedFlowDebugInfo, SerializedPendingActionState } from './types.js';
 import type { ElementJSON } from '../engine/index.js';
@@ -222,7 +223,7 @@ export interface UndoFlowState {
  * an undeclared `turnScope` look like a deliberate no-undo design for so long
  * (issues 144/145). When the engine has flagged that case, say so instead.
  */
-export function undoUnavailableMessage(flowState: UndoFlowState | undefined): string {
+function undoUnavailableMessage(flowState: UndoFlowState | undefined): string {
   const step = flowState?.turnScopeUndeclared;
   if (!step) return 'No actions to undo';
   return (
@@ -308,11 +309,10 @@ export function simultaneousUndoBoundary(
 }
 
 /**
- * Single shared "may `seat` undo right now, and if so from where?" answer
- * (D4), consumed by BOTH executors (`state-history.ts`'s `undoToTurnStart`
- * and `stateless-ops.ts`'s `handleUndo`) plus `buildPlayerState`'s advisory
- * `canUndo` -- the parity contract this repo enforces (a change to one
- * executor without its twin is the drift bug T-160-* guards against).
+ * Where `seat`'s undo would rewind to, and whether the seat is the one whose
+ * turn it is (D4). {@link decideUndo} builds the whole undo decision on it,
+ * and `buildPlayerState` reads it for the published `actionsThisTurn` and
+ * `turnStartActionIndex`.
  *
  * Branches on whether the flow is CURRENTLY in a simultaneous step
  * (`flowState.awaitingPlayers?.length > 0`): sequential undo keeps its
@@ -323,23 +323,22 @@ export function simultaneousUndoBoundary(
  *
  * `eligible` is deliberately the SEAT-IDENTITY check only (sequential:
  * `currentPlayer === seat`; simultaneous: seat is a participant of the
- * current step) -- NOT folded together with `actionsThisTurn > 0`. Callers
- * (`undoToTurnStart`/`handleUndo`) check these as two SEPARATE gates with
- * two DIFFERENT refusal messages ("It's not your turn" vs "No actions to
- * undo") -- the same two-step shape those callers have always had. Folding
+ * current step) -- NOT folded together with `actionsThisTurn > 0`.
+ * {@link decideUndo} checks these as two SEPARATE gates with two DIFFERENT
+ * refusal messages ("It's not your turn" vs "No actions to undo"). Folding
  * them into one boolean would report "not your turn" for a seat that IS
  * eligible but simply hasn't acted yet.
  */
-export function computeUndoEligibility(
+function computeUndoEligibility(
   actionHistory: Array<{ player: number; undoable?: boolean }>,
   flowState: UndoFlowState | undefined,
   seat: number,
-): { eligible: boolean; turnStartActionIndex: number; actionsThisTurn: number; hasNonUndoableAction: boolean } {
+): { eligible: boolean; turnStartActionIndex: number; actionsThisTurn: number } {
   const isSimultaneousStep = (flowState?.awaitingPlayers?.length ?? 0) > 0;
 
   if (isSimultaneousStep) {
     if (!isSimultaneousParticipant(flowState, seat)) {
-      return { eligible: false, turnStartActionIndex: actionHistory.length, actionsThisTurn: 0, hasNonUndoableAction: false };
+      return { eligible: false, turnStartActionIndex: actionHistory.length, actionsThisTurn: 0 };
     }
 
     // Participant, but either hasn't acted yet this step OR its own action
@@ -348,30 +347,22 @@ export function computeUndoEligibility(
     // seat unambiguously IS part of this step.
     const boundary = simultaneousUndoBoundary(actionHistory, flowState?.moveCount, seat);
     if (!boundary) {
-      return { eligible: true, turnStartActionIndex: actionHistory.length, actionsThisTurn: 0, hasNonUndoableAction: false };
+      return { eligible: true, turnStartActionIndex: actionHistory.length, actionsThisTurn: 0 };
     }
 
-    let hasNonUndoableAction = false;
-    for (let i = boundary.turnStartActionIndex; i < actionHistory.length; i++) {
-      if (actionHistory[i].undoable === false) {
-        hasNonUndoableAction = true;
-        break;
-      }
-    }
-
-    return { eligible: true, ...boundary, hasNonUndoableAction };
+    return { eligible: true, ...boundary };
   }
 
   // Sequential (UNCHANGED contract, UNDO-03): the same computation
   // `buildPlayerState` has always used, with the seat-identity check kept
   // separate from `actionsThisTurn` exactly as it always was.
-  const { turnStartActionIndex, actionsThisTurn, hasNonUndoableAction } = computeUndoInfo(
+  const { turnStartActionIndex, actionsThisTurn } = computeUndoInfo(
     actionHistory,
     flowState?.currentPlayer,
     flowState?.moveCount,
   );
   const eligible = flowState?.currentPlayer === seat;
-  return { eligible, turnStartActionIndex, actionsThisTurn, hasNonUndoableAction };
+  return { eligible, turnStartActionIndex, actionsThisTurn };
 }
 
 /**
@@ -518,6 +509,73 @@ export function assertUndoAllowed(args: {
 }
 
 /**
+ * The answer to "may `seat` undo right now?", with the refusal it gets if not.
+ */
+type UndoDecision =
+  | { allowed: true; turnStartActionIndex: number; actionsThisTurn: number }
+  | { allowed: false; error: string; errorCode: ErrorCode };
+
+/**
+ * THE undo rule (#373). Both undo executors (`state-history.ts`
+ * `undoToTurnStart` and `stateless-ops.ts` `handleUndo`) call it to decide an
+ * undo, and `buildPlayerState` calls it to set `canUndo`, so the control a
+ * seat is offered and the undo the server takes are one decision and cannot
+ * disagree. A seat is offered Undo exactly when this allows it.
+ *
+ * In order, the undo is refused when:
+ *  1. it is not the seat's turn ({@link computeUndoEligibility});
+ *  2. the seat has nothing to undo this turn ({@link undoUnavailableMessage});
+ *  3. a fence in {@link assertUndoAllowed} refuses it: finished game,
+ *     `.notUndoable()` action, irreversible `execute()`, or the game's
+ *     `undo: { fenceRandomRewind: true }` policy;
+ *  4. the runner holds no checkpoint at the turn start to restore, because
+ *     the game sets `checkpoints: { enabled: false }` or its
+ *     `checkpoints: { max }` window no longer reaches back that far.
+ *
+ * When it is allowed the checkpoint at `turnStartActionIndex` exists, so the
+ * caller's restore from it succeeds.
+ */
+export function decideUndo(runner: GameRunner, seat: number): UndoDecision {
+  const flowState = runner.getFlowState();
+  const { eligible, turnStartActionIndex, actionsThisTurn } = computeUndoEligibility(
+    runner.actionHistory,
+    flowState,
+    seat,
+  );
+  if (!eligible) {
+    return { allowed: false, error: "It's not your turn", errorCode: ErrorCode.NOT_YOUR_TURN };
+  }
+  if (actionsThisTurn === 0) {
+    return { allowed: false, error: undoUnavailableMessage(flowState), errorCode: ErrorCode.NO_ACTIONS_TO_UNDO };
+  }
+
+  try {
+    assertUndoAllowed({
+      runner,
+      actionHistory: runner.actionHistory,
+      turnStartActionIndex,
+      fenceRandomRewind: runner.undoPolicy.fenceRandomRewind,
+    });
+  } catch (err) {
+    if (err instanceof UndoRefusedError) {
+      return { allowed: false, error: err.message, errorCode: ErrorCode.UNDO_NOT_ALLOWED };
+    }
+    throw err;
+  }
+
+  const absence = describeCheckpointAbsence(runner.checkpointWindow(), turnStartActionIndex);
+  if (absence) {
+    return {
+      allowed: false,
+      error: `Cannot undo to the start of this turn: ${absence}`,
+      errorCode: ErrorCode.UNDO_NOT_ALLOWED,
+    };
+  }
+
+  return { allowed: true, turnStartActionIndex, actionsThisTurn };
+}
+
+/**
  * Build a player's view of the game state
  */
 export function buildPlayerState(
@@ -540,21 +598,20 @@ export function buildPlayerState(
   // clients from prematurely starting actions during another player's turn.
   const availableActions = availableActionsForSeat(flowState, playerPosition);
 
-  // Compute undo eligibility -- awaiting-aware (D4/SIM-02): a sequential
-  // step keeps the exact `computeUndoInfo`/`currentPlayer` contract
-  // (UNDO-03); a simultaneous step allows any awaiting-or-completed-this-
-  // step seat, with the boundary from THAT seat's own action(s), not the
-  // turn-wide moveCount. See computeUndoEligibility's doc comment.
-  const { eligible: canUndoEligible, turnStartActionIndex, actionsThisTurn, hasNonUndoableAction } = computeUndoEligibility(
+  // Undo boundary -- awaiting-aware (D4/SIM-02): a sequential step keeps the
+  // exact `computeUndoInfo`/`currentPlayer` contract (UNDO-03); a
+  // simultaneous step allows any awaiting-or-completed-this-step seat, with
+  // the boundary from THAT seat's own action(s), not the turn-wide moveCount.
+  // See computeUndoEligibility's doc comment.
+  const { eligible: canUndoEligible, turnStartActionIndex, actionsThisTurn } = computeUndoEligibility(
     runner.actionHistory,
     flowState,
     playerPosition
   );
 
-  // Can undo if: eligible (my turn, sequential; or my own committed
-  // simultaneous action, bounded per-seat) AND no non-undoable action was
-  // taken within that boundary.
-  const canUndo = canUndoEligible && actionsThisTurn > 0 && !hasNonUndoableAction;
+  // Offered by the same decision the undo executors take (#373), so a game
+  // whose checkpoint or undo policy refuses the undo never shows the control.
+  const canUndo = decideUndo(runner, playerPosition).allowed;
 
   // Get the full player data including custom properties (abilities, score, etc.)
   // for the UI.
@@ -724,8 +781,9 @@ export function buildPlayerState(
 
 /**
  * The added/removed/changed element IDs between two state views.
+ * `StateHistory`'s `ElementDiff` adds the action indices they were taken at.
  */
-export interface ElementDiff {
+export interface ElementChanges {
   added: number[];
   removed: number[];
   changed: number[];
@@ -787,7 +845,7 @@ function collectElements(
  * This is the single source of truth shared by GameSession's state-history
  * diff and the stateless executor's debug state diff.
  */
-export function computeElementDiff(fromView: unknown, toView: unknown): ElementDiff {
+export function computeElementDiff(fromView: unknown, toView: unknown): ElementChanges {
   const fromElements = new Map<number, ComparableElement>();
   const toElements = new Map<number, ComparableElement>();
   collectElements(fromView, fromElements);
