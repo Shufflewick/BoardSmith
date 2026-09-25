@@ -2662,6 +2662,8 @@ safety:
    was building runs now, on the new rules (#379). From the save until this
    point the host holds every command, and each page says "Reloading rules…",
    so a command sent right after a save never runs on the rules from before it.
+   The world's own work waits too: an event that comes due, or a departure
+   whose grace runs out, runs on the new rules once they are in place (#387).
 5. **Every page reloads**, because Vite has hot-reloaded the UI in the same
    moment and a page that kept its socket would be new UI holding a seat in a
    world that has just been rebuilt.
@@ -2671,7 +2673,8 @@ migration, or they are not a world at all -- the refusal is printed and
 **nothing on disk changed**: the world is where the old host checkpointed it,
 and it is opened again on the rules it had, so it goes on running (#381).
 Commands held for that reload, or for one whose rules did not load at all, are
-refused with the same reason.
+refused with the same reason. The world's own work held for it is not refused: it
+runs on the rules the world kept.
 
 ## Running a world today
 

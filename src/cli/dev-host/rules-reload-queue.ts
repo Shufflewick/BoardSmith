@@ -31,8 +31,18 @@
  * four reloads, never four overlapping ones. Held messages wait for the LAST
  * pending reload, so a message sent between two saves runs on the rules the
  * designer saved last.
+ *
+ * WORK THE HOST STARTS ITSELF WAITS IN THE SAME QUEUE (#387). A step deadline
+ * running out, a world's scheduled event or a departure's grace coming due is
+ * not a page's message, but it runs the rules just the same, and it used to
+ * fire during the rebuild on the rules from before the save. Each host hands
+ * such work to `hold`, usually through `heldClock`. It is never refused: it runs
+ * on the edited rules once they are in place, or on the ones the host kept
+ * when the rebuild failed.
  */
 import chalk from 'chalk';
+
+import type { WorldHostClock } from './node-world-clock.js';
 
 /** What a page is told about the host's rules while a save is reloading them. */
 export type RulesReloadNotice =
@@ -64,6 +74,45 @@ export interface RulesReloadQueue {
    * Resolves once it has run or been refused, and rejects when running it does.
    */
   admit(message: ReloadAdmission): Promise<void>;
+  /**
+   * Run work the host started itself (a timer going off) now, or once a
+   * pending reload has settled, in order with the pages' messages. A failure
+   * is reported in the terminal, since nobody asked for it.
+   */
+  hold(work: HostWork): void;
+}
+
+/** Work a host starts itself, rather than a page asking for it. */
+type HostWork = () => void | Promise<void>;
+
+/** How a host runs the work it starts itself: `RulesReloadQueue.hold`, in `boardsmith dev`. */
+export type HostWorkGate = (work: HostWork) => void;
+
+/** A host no rules edit can reach, such as one under test, runs its own work as it comes due. */
+export const runsAtOnce: HostWorkGate = (work) => void work();
+
+/**
+ * `clock`, with every timer it fires handed to `gate` (#387).
+ *
+ * An `arm` still replaces the timer whole, as `WorldHostClock` promises: a
+ * fire that is waiting in the gate when the timer is armed again, or disarmed,
+ * never runs. So a world closed while its alarm waited does not drain, and a
+ * step that moved on while its deadline waited is not closed.
+ */
+export function heldClock(clock: WorldHostClock, gate: HostWorkGate): WorldHostClock {
+  let armed = 0;
+  return {
+    now: () => clock.now(),
+    yieldTurn: () => clock.yieldTurn(),
+    arm(delayMs, fire) {
+      const timer = ++armed;
+      clock.arm(delayMs, () =>
+        gate(() => {
+          if (armed === timer) fire();
+        }),
+      );
+    },
+  };
 }
 
 type Settled = { readonly ok: true } | { readonly ok: false; readonly message: string };
@@ -150,6 +199,11 @@ export function createRulesReloadQueue<R>(args: {
     args.tell(settled.ok ? { state: 'reloaded' } : { state: 'failed', message: settled.message });
   };
 
+  const admit = (message: ReloadAdmission): Promise<void> => {
+    if (pending === 0 && !draining && held.length === 0) return message.run();
+    return new Promise<void>((done, failed) => held.push({ message, done, failed }));
+  };
+
   return {
     saved(file) {
       pending += 1;
@@ -165,9 +219,12 @@ export function createRulesReloadQueue<R>(args: {
       return reloading;
     },
 
-    admit(message) {
-      if (pending === 0 && !draining && held.length === 0) return message.run();
-      return new Promise<void>((done, failed) => held.push({ message, done, failed }));
+    admit,
+
+    hold(work) {
+      admit({ run: async () => work() }).catch((error: unknown) =>
+        console.error(chalk.red(`  [boardsmith dev] the ${args.what}'s own work failed: ${messageOf(error)}`)),
+      );
     },
   };
 }

@@ -23,6 +23,7 @@ import { fileURLToPath } from 'node:url';
 
 import { INSTALLED_MODULES } from '../../testing/installed-modules.test-helper.js';
 import { freePort } from './free-port.test-helper.js';
+import { hostHoldings } from '../dev-host/shutdown.js';
 import { loadWorldRuntime, startWorldDevServer } from './dev-world.js';
 
 /** This checkout, which is the library every fixture resolves against. */
@@ -130,7 +131,9 @@ async function startWorldHost(fixture: string, displayName: string) {
     context: 'standalone',
     port,
     host: '127.0.0.1',
-    tempDir,
+    // The fixture is removed whole once the host has stopped, so the build
+    // directory inside it is not held separately.
+    holdings: hostHoldings(),
     openBrowser: false,
     reloadRules: () => loadWorldRuntime(rulesPath, tempDir, 'standalone'),
   });

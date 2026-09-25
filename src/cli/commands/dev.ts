@@ -12,7 +12,7 @@ import { MultiplayerHost, type TableRules } from '../dev-host/multiplayer-host.j
 import { createDevHostConnectionHandler } from '../dev-host/connection-handler.js';
 import { devStorePath, loadDevStore } from '../dev-host/persistence-file-store.js';
 import { resetWorldStore, worldResetNotice, worldStoreDir } from '../dev-host/world-store.js';
-import { announceHost, onShutdown, teardownInOrder } from '../dev-host/shutdown.js';
+import { announceHost, hostHoldings, onShutdown } from '../dev-host/shutdown.js';
 import { requireFreePort } from '../dev-host/port.js';
 import type { PersistenceStore } from '../../persistence/index.js';
 import { getProjectContext, toPosix } from './game-runtime.js';
@@ -625,6 +625,13 @@ function openDevStore(
 // the command itself is its own change.
 // fallow-ignore-next-line complexity
 export async function devCommand(options: DevOptions): Promise<void> {
+  // ONE ORDERLY STOP, FROM THE FIRST LINE (#366, #386): everything this run
+  // acquires is held here as it is acquired, so a Ctrl+C while the rules are
+  // still bundling or Vite is still starting releases exactly what exists by
+  // then, and one after "Ready!" releases all of it.
+  const holdings = hostHoldings();
+  onShutdown(holdings, { say: (line) => console.log(chalk.dim(line)) });
+
   // Fail-fast on non-numeric --port/--players/--bot (CLIX-06) — actionable
   // errors before any server work, matching simulate.ts's Number.isInteger idiom.
   const port = exitOnDevFlagError(() => parsePositiveInt('port', options.port));
@@ -731,6 +738,7 @@ export async function devCommand(options: DevOptions): Promise<void> {
   if (!existsSync(tempDir)) {
     mkdirSync(tempDir, { recursive: true });
   }
+  holdings.hold([{ name: `the build directory (${tempDir})`, close: () => rmSync(tempDir, { recursive: true, force: true }) }]);
 
   console.log(chalk.dim(`  Loading game rules from ${rulesPath}...`));
 
@@ -759,7 +767,7 @@ export async function devCommand(options: DevOptions): Promise<void> {
   if (worldMode) {
     let runtime: WorldRuntime;
     try {
-      runtime = await loadWorldRuntime(rulesPath, tempDir, context);
+      runtime = await holdings.acquire(() => loadWorldRuntime(rulesPath, tempDir, context), () => []);
     } catch (error) {
       throw rulesFailed(error);
     }
@@ -772,7 +780,7 @@ export async function devCommand(options: DevOptions): Promise<void> {
       context,
       port,
       host,
-      tempDir,
+      holdings,
       openBrowser: shouldOpenBrowser(options),
       // HOW THE WORLD HOST GETS THE RULES AGAIN (#201). `loadWorldRuntime`
       // cache-busts its own import, so re-running it is a genuine re-read of
@@ -790,7 +798,7 @@ export async function devCommand(options: DevOptions): Promise<void> {
   let maxPlayers: number;
   let colorPalette: Array<{ value: string; label: string }> = [];
   try {
-    const runtime = await loadTableRuntime(rulesPath, tempDir, context);
+    const runtime = await holdings.acquire(() => loadTableRuntime(rulesPath, tempDir, context), () => []);
     gameDefinition = runtime.gameDefinition;
     tableRules = runtime.rules;
   } catch (error) {
@@ -967,6 +975,9 @@ export async function devCommand(options: DevOptions): Promise<void> {
           }
         : {}),
       executeOp: tableRules.executeOp,
+      // A step deadline that runs out while an edited rules file rebuilds
+      // waits in the reload queue below with the pages' messages (#387).
+      hostWork: (work) => rulesReload.hold(work),
       send: (clientId, message) => {
         const sock = clients.get(clientId);
         if (sock && sock.readyState === WebSocket.OPEN) sock.send(JSON.stringify(message));
@@ -1012,7 +1023,9 @@ export async function devCommand(options: DevOptions): Promise<void> {
 
     // A refused listen closes Vite and this host's socket before the error
     // reaches the catch below, which is what lets a refused run exit (#345).
-    const served = await serveVite({
+    // What it serves is held with the socket and the pages in front of it,
+    // which close first.
+    const served = await holdings.acquire(() => serveVite({
       config: {
         root: uiPath,
         // `appType` is NOT set here: boardsmithDevHostPlugin sets 'custom' from
@@ -1034,7 +1047,11 @@ export async function devCommand(options: DevOptions): Promise<void> {
       host,
       sockets: [hostSocket],
       release: () => hostSocket.close(),
-    });
+    }), (opened) => [
+      { name: "the game's socket", close: () => hostSocket.close() },
+      { name: 'the browser connections', close: () => clients.clear() },
+      ...opened.resources,
+    ]);
     const { vite } = served;
 
     reloadOnRulesEdit({ vite, rulesDir: rulesPath, cwd, queue: rulesReload });
@@ -1073,19 +1090,6 @@ export async function devCommand(options: DevOptions): Promise<void> {
     }
 
     console.log(chalk.green('\n  Ready! Press Ctrl+C to stop.\n'));
-
-    // ONE ORDERLY STOP (#366): what this host holds, closed in order, and a
-    // stop that cannot finish ends anyway, naming what is still open.
-    onShutdown(
-      teardownInOrder([
-        { name: "the game's socket", close: () => hostSocket.close() },
-        { name: 'the browser connections', close: () => clients.clear() },
-        ...served.resources,
-        { name: `the build directory (${tempDir})`, close: () => rmSync(tempDir, { recursive: true, force: true }) },
-      ]),
-      { say: (line) => console.log(chalk.dim(line)) },
-    );
-
   } catch (error) {
     throw new Error(
       `Failed to start the Vite dev server: ${error instanceof Error ? error.message : String(error)}`,

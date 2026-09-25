@@ -5,7 +5,7 @@
  *
  * `serveSockets` is the server half: a real `ws` server on a free port, each
  * connection handed to the road's own handler, and a way to wait until the
- * host has RECEIVED a message a page sent. That last part is what lets a test
+ * host has RECEIVED a message a page sent, or a page's socket closing. That last part is what lets a test
  * say "this message was already at the host when the rules finished
  * rebuilding" without waiting on a clock (#379).
  */
@@ -26,6 +26,8 @@ interface ServedSockets {
   readonly port: number;
   /** Resolves once the server has handed a message `accept` takes to the handler. */
   received(accept: (message: Frame) => boolean): Promise<void>;
+  /** Resolves once the server has handed a page's socket closing to the handler. */
+  closed(): Promise<void>;
   close(): Promise<void>;
 }
 
@@ -33,8 +35,12 @@ interface ServedSockets {
 export async function serveSockets(onConnection: (socket: WebSocket) => void): Promise<ServedSockets> {
   const wss = new WebSocketServer({ port: 0, host: '127.0.0.1' });
   const waiters: Array<{ accept: (message: Frame) => boolean; resolve: () => void }> = [];
+  const closeWaiters: Array<() => void> = [];
   wss.on('connection', (socket) => {
     onConnection(socket);
+    socket.on('close', () => {
+      for (const resolve of closeWaiters.splice(0)) resolve();
+    });
     // Registered AFTER the road's own handler, so by the time this sees a
     // message the handler has already taken it.
     socket.on('message', (raw) => {
@@ -50,6 +56,7 @@ export async function serveSockets(onConnection: (socket: WebSocket) => void): P
   return {
     port: (wss.address() as { port: number }).port,
     received: (accept) => new Promise((resolve) => waiters.push({ accept, resolve })),
+    closed: () => new Promise((resolve) => closeWaiters.push(resolve)),
     close: async () => {
       for (const client of wss.clients) client.terminate();
       await new Promise<void>((resolve) => wss.close(() => resolve()));

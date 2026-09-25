@@ -315,6 +315,7 @@ function openHost(options: {
   definition?: ConstructorParameters<typeof LocalWorldHost>[0]['definition'];
   clock?: WorldHostClock;
   budgets?: WorldBudgets;
+  hostWork?: ConstructorParameters<typeof LocalWorldHost>[0]['hostWork'];
 }): {
   host: LocalWorldHost;
   store: LocalWorldStore;
@@ -334,6 +335,7 @@ function openHost(options: {
     budgets,
     store,
     clock: options.clock ?? testClock(),
+    ...(options.hostWork === undefined ? {} : { hostWork: options.hostWork }),
     send: (clientId, message) => sent.push({ clientId, message: message as Record<string, unknown> }),
     isOpen: (clientId) => !shut.has(clientId),
   });
@@ -3031,5 +3033,42 @@ describe('#225: a world written under an older store layout', () => {
       tenancy: 'held',
     });
     await second.host.close();
+  });
+});
+
+/**
+ * #387: A DEPARTURE IS WORK THE HOST STARTS ITSELF. While an edited rules file
+ * rebuilds, `boardsmith dev` holds such work until the world runs the rules it
+ * settles on, so a departure whose grace runs out meanwhile waits in the same
+ * gate as the world's alarm, and runs once it is let go.
+ */
+describe('#387: a departure whose grace runs out is handed to the host', () => {
+  fakeDepartureTimers();
+
+  /** Seat 1's page leaves and its grace runs out, with the host's own work held. */
+  async function departedWhileHeld() {
+    const { told, definition } = presenceWorld({ onArrive: 'greet', onDepart: 'farewell' });
+    const waiting: Array<() => void | Promise<void>> = [];
+    const { host, drop } = await attached({ dir, definition, hostWork: (work) => void waiting.push(work) });
+    await drop('c1');
+    await afterDepartureTimers(host);
+    expect(told).toEqual(['arrive:1']);
+    expect(waiting).toHaveLength(1);
+    return { told, host, letGo: () => waiting.shift()!() };
+  }
+
+  it('runs only when the host lets it go', async () => {
+    const { told, host, letGo } = await departedWhileHeld();
+    await letGo();
+    await host.settled();
+    expect(told).toEqual(['arrive:1', 'depart:1']);
+    await host.close();
+  });
+
+  it('is dropped when the world closed while it waited', async () => {
+    const { told, host, letGo } = await departedWhileHeld();
+    await host.close();
+    await letGo();
+    expect(told).toEqual(['arrive:1']);
   });
 });

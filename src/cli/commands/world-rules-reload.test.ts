@@ -12,13 +12,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { buildFailure, rulesProject } from '../dev-host/rules-project.test-helper.js';
 import { openSocketPage, serveSockets } from '../dev-host/socket-page.test-helper.js';
+import type { WorldHostClock } from '../dev-host/node-world-clock.js';
 import { loadWorldRuntime, openWorldRun, type WorldRuntime } from './dev-world.js';
 
-/** A one-fire world whose `stoke` adds `step` logs, written the way an author writes one. */
+/**
+ * A one-fire world whose `stoke` adds `step` logs, written the way an author
+ * writes one. `kindle` schedules a `burn` a second later, which adds `step`
+ * logs too.
+ */
 function rulesSource(step: number, stateVersion = 0): string {
   return [
     "import { Game, Space } from 'boardsmith';",
-    "import { worldAction } from 'boardsmith/world';",
+    "import { worldAction, worldClockAction } from 'boardsmith/world';",
     'class Fire extends Space { logs = 0; }',
     'class Camp extends Game {',
     '  constructor(options: ConstructorParameters<typeof Game>[0]) {',
@@ -33,6 +38,10 @@ function rulesSource(step: number, stateVersion = 0): string {
     '    maxPlayers: 2,',
     `    stateVersion: ${stateVersion},`,
     "    actions: [worldAction('stoke').needs(() => ['fire'])",
+    `      .execute((_args: unknown, ctx: { world: { partition(name: string): unknown } }) => { (ctx.world.partition('fire') as Fire).logs += ${step}; }),`,
+    "      worldAction('kindle').needs(() => ['fire'])",
+    "      .execute((_args: unknown, ctx: { world: { schedule(event: object): void } }) => { ctx.world.schedule({ delayMs: 1_000, action: 'burn', args: {} }); }),",
+    "      worldClockAction('burn').needs(() => ['fire'])",
     `      .execute((_args: unknown, ctx: { world: { partition(name: string): unknown } }) => { (ctx.world.partition('fire') as Fire).logs += ${step}; })],`,
     "    view: () => ['fire'],",
     "    genesis: (game: Camp) => ({ fire: game.create(Fire, 'fire') }),",
@@ -74,13 +83,14 @@ afterEach(async () => {
  * `edit` (or fails with it). The rebuild finishes only once a command has
  * reached the host, so a command sent during it is always held.
  */
-async function serveWorld(edit: WorldRuntime | Error) {
+async function serveWorld(edit: WorldRuntime | Error, clock?: WorldHostClock) {
   let commandArrived: Promise<void> = Promise.resolve();
   const cwd = tempTree('bs-world-rules-reload-run-');
   const run = await openWorldRun({
     cwd,
     displayName: 'Camp',
     runtime: beforeEdit,
+    ...(clock === undefined ? {} : { clock }),
     reloadRules: async () => {
       await commandArrived;
       if (edit instanceof Error) throw edit;
@@ -97,13 +107,14 @@ async function serveWorld(edit: WorldRuntime | Error) {
   });
   const page = await openSocketPage(server.port, 'p1', (f) => f.type === 'world_offers');
   let request = 0;
-  /** Stoke as the page; resolves with the host's answer. */
-  const stoke = () => {
-    const requestId = `stoke-${++request}`;
+  /** Take `action` as the page; resolves with the host's answer. */
+  const act = (action: string) => {
+    const requestId = `${action}-${++request}`;
     const answer = page.next((f) => f.type === 'world_response' && f.requestId === requestId);
-    page.send({ type: 'action', requestId, order: { id: `order-${request}`, at: Date.now() }, action: 'stoke', args: {} });
+    page.send({ type: 'action', requestId, order: { id: `order-${request}`, at: Date.now() }, action, args: {} });
     return answer;
   };
+  const stoke = () => act('stoke');
   /** The fire's logs, as the last state frame the page was sent shows them. */
   const logs = () => {
     const view = JSON.stringify(page.frames.filter((f) => f.type === 'world_state').at(-1)?.view);
@@ -134,7 +145,9 @@ async function serveWorld(edit: WorldRuntime | Error) {
   // One command made on the rules from before any edit.
   expect(await stoke()).toMatchObject({ ok: true });
   await vi.waitFor(() => expect(logs()).toBe(1));
-  return { page, stokeDuringRebuild, refusedDuringRebuild, logs };
+  /** Save an edit; resolves once its reload has settled. */
+  const save = () => run.queue.saved('src/rules/index.ts');
+  return { page, act, save, stokeDuringRebuild, refusedDuringRebuild, logs };
 }
 
 describe('#379: a world command sent while the edited rules are still building', () => {
@@ -183,5 +196,77 @@ describe('#381: an edit that builds but cannot open the world', () => {
       'Those rules cannot run this world, so it is still running the ones it had',
     );
     expect(refused.message).toContain('stateVersion');
+  }, 30_000);
+});
+
+/**
+ * #387: A WORLD'S SCHEDULED EVENT WAITS FOR THE EDITED RULES TOO.
+ *
+ * #379 held the pages' commands while an edit rebuilt, but the world's own
+ * alarm is not a page's command: an event that came due during the rebuild ran
+ * on the rules from before the save. The alarm goes through the same queue now.
+ * The world's clock is driven by hand, so "came due during the rebuild" is a
+ * fact of the test.
+ */
+const START = 1_700_000_000_000;
+
+/** A hand-driven clock, shared by every world host the run opens, as the Node one would be. */
+function handClock() {
+  let now = START;
+  let due: (() => void) | null = null;
+  return {
+    clock: {
+      now: () => now,
+      yieldTurn: async () => {},
+      arm(delayMs: number | null, fire: () => void) {
+        due = delayMs === null ? null : fire;
+      },
+    } satisfies WorldHostClock,
+    advance(ms: number) {
+      now += ms;
+    },
+    /** The armed alarm goes off, as the Node clock's would once its delay had passed. */
+    fire() {
+      const fire = due;
+      due = null;
+      fire?.();
+    },
+  };
+}
+
+/**
+ * A world on `beforeEdit` with a `burn` a second away on a clock the test
+ * drives, whose next reload builds `edit` (or fails with it). The save makes
+ * the reload pending at once, so the burn comes due during it.
+ */
+async function burnDuringRebuild(edit: WorldRuntime | Error) {
+  const time = handClock();
+  const world = await serveWorld(edit, time.clock);
+  expect(await world.act('kindle')).toMatchObject({ ok: true });
+  const reloaded = world.save();
+  time.advance(1_000);
+  time.fire();
+  await reloaded;
+  return { ...world, time };
+}
+
+describe('#387: a scheduled event that comes due while the edited rules are still building', () => {
+  it('runs on the edited rules once they are in place', async () => {
+    const world = await burnDuringRebuild(afterEdit);
+    await vi.waitFor(() => expect(world.page.frames.some((f) => f.type === 'world_reload')).toBe(true));
+    // The page starts again on the reloaded world, as a browser does.
+    const greeted = world.page.next((f) => f.type === 'world_offers');
+    world.page.send({ type: 'hello', clientId: 'p1' });
+    await greeted;
+    // The world reopened on the edited rules found the burn still due, and
+    // armed for it: it runs on them. 1 from the stoke before the save, 10
+    // from the burn.
+    world.time.fire();
+    await vi.waitFor(() => expect(world.logs()).toBe(11));
+  }, 30_000);
+
+  it('runs on the old rules when the edit does not build', async () => {
+    const world = await burnDuringRebuild(brokenEdit);
+    await vi.waitFor(() => expect(world.logs()).toBe(2));
   }, 30_000);
 });

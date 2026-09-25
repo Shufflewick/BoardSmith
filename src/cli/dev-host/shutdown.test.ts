@@ -11,7 +11,14 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { DUPLICATE_SIGNAL_MS, onShutdown, STOP_LIMIT_MS, teardownInOrder, type HeldResource } from './shutdown.js';
+import {
+  DUPLICATE_SIGNAL_MS,
+  hostHoldings,
+  onShutdown,
+  STOP_LIMIT_MS,
+  teardownInOrder,
+  type HeldResource,
+} from './shutdown.js';
 
 /** A resource whose close never finishes, the shape Vite's close had in #366. */
 const neverCloses = (name: string): HeldResource => ({ name, close: () => new Promise<void>(() => {}) });
@@ -76,6 +83,79 @@ describe('teardownInOrder', () => {
       await teardownInOrder([{ name: 'the socket', close: () => {} }]).run();
       expect(vi.getTimerCount()).toBe(0);
     });
+  });
+});
+
+/**
+ * #386: what a dev command holds is held from its first line, so a stop during
+ * startup releases exactly what exists by then.
+ */
+describe('hostHoldings', () => {
+  it('closes what was held last first, each group in its own order', async () => {
+    const closed: string[] = [];
+    const named = (name: string): HeldResource => ({ name, close: () => void closed.push(name) });
+    const holdings = hostHoldings();
+    holdings.hold([named('the build directory')]);
+    await holdings.acquire(async () => 'served', () => [named('the socket'), named('the Vite dev server')]);
+    expect(holdings.stillOpen()).toEqual(['the socket', 'the Vite dev server', 'the build directory']);
+    await holdings.run();
+    expect(closed).toEqual(['the socket', 'the Vite dev server', 'the build directory']);
+  });
+
+  it('a stop while something is opening waits for it, closes it with the rest, and startup goes no further', async () => {
+    const closed: string[] = [];
+    const holdings = hostHoldings();
+    holdings.hold([{ name: 'the build directory', close: () => void closed.push('build') }]);
+    let opened = (): void => {};
+    let startupWentOn = false;
+    void holdings
+      .acquire(
+        () => new Promise<string>((resolve) => (opened = () => resolve('world'))),
+        () => [{ name: 'the world', close: () => void closed.push('world') }],
+      )
+      .then(() => (startupWentOn = true));
+
+    const stopping = holdings.run();
+    await Promise.resolve();
+    // The world is still opening, so nothing is closed under it yet.
+    expect(closed).toEqual([]);
+    opened();
+    await stopping;
+    expect(closed).toEqual(['world', 'build']);
+    expect(startupWentOn).toBe(false);
+  });
+
+  it('a step that fails while the host is stopping ends startup the same way', async () => {
+    const holdings = hostHoldings();
+    let failed = (): void => {};
+    let startupWentOn = false;
+    void holdings
+      .acquire(
+        () => new Promise<never>((_resolve, reject) => (failed = () => reject(new Error('interrupted')))),
+        () => [],
+      )
+      .then(
+        () => (startupWentOn = true),
+        () => (startupWentOn = true),
+      );
+    const stopping = holdings.run();
+    failed();
+    await stopping;
+    expect(startupWentOn).toBe(false);
+  });
+
+  it('opens nothing once a stop has begun', async () => {
+    const holdings = hostHoldings();
+    await holdings.run();
+    const open = vi.fn(async () => 'never');
+    void holdings.acquire(open, () => []);
+    await Promise.resolve();
+    expect(open).not.toHaveBeenCalled();
+  });
+
+  it('passes a failure to open on when nobody asked to stop', async () => {
+    const holdings = hostHoldings();
+    await expect(holdings.acquire(() => Promise.reject(new Error('port taken')), () => [])).rejects.toThrow('port taken');
   });
 });
 

@@ -7,7 +7,8 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { createRulesReloadQueue, type RulesReloadNotice } from './rules-reload-queue.js';
+import type { WorldHostClock } from './node-world-clock.js';
+import { createRulesReloadQueue, heldClock, type RulesReloadNotice } from './rules-reload-queue.js';
 
 beforeEach(() => {
   vi.spyOn(console, 'log').mockImplementation(() => {});
@@ -181,5 +182,71 @@ describe('#379: a message sent while the rules are rebuilding', () => {
     await expect(broken).rejects.toThrow('host failed');
     await Promise.all([reloaded, next]);
     expect(events).toEqual(['adopt 2', 'next on 2']);
+  });
+});
+
+/**
+ * #387: work the host starts itself (a timer going off) waits in the same
+ * queue, and is never refused.
+ */
+describe('#387: work the host starts itself while the rules are rebuilding', () => {
+  it('runs at once when no reload is pending', async () => {
+    const { queue, events } = queueOver(async () => 2);
+    queue.hold(() => void events.push('deadline'));
+    await Promise.resolve();
+    expect(events).toEqual(['deadline']);
+  });
+
+  it.each([
+    { outcome: 'the edited rules, in order with the pages\' messages', built: 2, then: ['adopt 2', 'bump on 2', 'deadline'] },
+    { outcome: 'the old rules, never refused, when the edit does not build', built: null, then: ['bump refused', 'deadline'] },
+  ])('waits for the reload, then runs on $outcome', async ({ built, then }) => {
+    const rebuild = deferred<number>();
+    const { queue, events, move } = queueOver(() => rebuild.promise);
+    const reloaded = queue.saved('src/rules/index.ts');
+    void queue.admit(move('bump'));
+    queue.hold(() => void events.push('deadline'));
+    expect(events).toEqual([]);
+    if (built === null) rebuild.reject(new Error('Unexpected token'));
+    else rebuild.resolve(built);
+    await reloaded;
+    expect(events.map((event) => event.replace(/^(bump refused):.*/, '$1'))).toEqual(then);
+  });
+});
+
+describe('#387: heldClock', () => {
+  /** A clock whose one timer the test sets off, and the fires the gate is holding. */
+  function gatedClock() {
+    let fire: (() => void) | null = null;
+    const clock: WorldHostClock = {
+      now: () => 0,
+      yieldTurn: async () => {},
+      arm: (delayMs, next) => {
+        fire = delayMs === null ? null : next;
+      },
+    };
+    const holding: Array<() => void | Promise<void>> = [];
+    const held = heldClock(clock, (work) => void holding.push(work));
+    return { held, holding, goOff: () => fire?.() };
+  }
+
+  it('hands a timer that goes off to the gate instead of firing it', async () => {
+    const { held, holding, goOff } = gatedClock();
+    const fired = vi.fn();
+    held.arm(1_000, fired);
+    goOff();
+    expect(fired).not.toHaveBeenCalled();
+    await holding.shift()!();
+    expect(fired).toHaveBeenCalledTimes(1);
+  });
+
+  it('drops a held fire once the timer is armed again or disarmed, as a clock replaces its timer', async () => {
+    const { held, holding, goOff } = gatedClock();
+    const stale = vi.fn();
+    held.arm(1_000, stale);
+    goOff();
+    held.arm(null, () => {});
+    await holding.shift()!();
+    expect(stale).not.toHaveBeenCalled();
   });
 });
