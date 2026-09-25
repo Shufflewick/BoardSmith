@@ -11,7 +11,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ref, nextTick } from 'vue';
 import {
   useActionController,
-  type ActionMetadata,
+  type EnrichedActionMetadata,
   type PickChoicesResult,
 } from './useActionController.js';
 import { createMockSendAction } from './useActionController.helpers.js';
@@ -27,7 +27,7 @@ async function flush(): Promise<void> {
  * Metadata shaped like a world-mode broadcast: the selections are declared but
  * every choice list is server-side, so nothing can be resolved without a fetch.
  */
-function buildMetadata(): Record<string, ActionMetadata> {
+function buildMetadata(): Record<string, EnrichedActionMetadata> {
   return {
     build: {
       name: 'build',
@@ -52,7 +52,7 @@ function buildMetadata(): Record<string, ActionMetadata> {
 describe('useActionController prefill', () => {
   let sendAction: ReturnType<typeof createMockSendAction>;
   let availableActions: ReturnType<typeof ref<string[]>>;
-  let actionMetadata: ReturnType<typeof ref<Record<string, ActionMetadata> | undefined>>;
+  let actionMetadata: ReturnType<typeof ref<Record<string, EnrichedActionMetadata> | undefined>>;
   let isMyTurn: ReturnType<typeof ref<boolean>>;
 
   beforeEach(() => {

@@ -20,7 +20,7 @@ import {
   injectPickStepFn,
   injectBoardInteraction,
   ACTION_CONTROLLER_KEY,
-  type ActionMetadata,
+  type EnrichedActionMetadata,
 } from './useActionController.js';
 import { createMockSendAction, createTestMetadata } from './useActionController.helpers.js';
 import type { TutorialStepView } from '../../engine/tutorial/types.js';
@@ -29,7 +29,7 @@ import { _clearShownWarnings } from '../../utils/dev.js';
 describe('useActionController', () => {
   let sendAction: ReturnType<typeof createMockSendAction>;
   let availableActions: ReturnType<typeof ref<string[]>>;
-  let actionMetadata: ReturnType<typeof ref<Record<string, ActionMetadata> | undefined>>;
+  let actionMetadata: ReturnType<typeof ref<Record<string, EnrichedActionMetadata> | undefined>>;
   let isMyTurn: ReturnType<typeof ref<boolean>>;
 
   beforeEach(() => {
@@ -904,7 +904,7 @@ describe('useActionController', () => {
               prompt: 'Pick items',
               repeat: {},
               choices: [{ value: 1, display: 'One' }],
-            } as unknown as ActionMetadata['selections'][number],
+            } as unknown as EnrichedActionMetadata['selections'][number],
           ],
         },
       };
@@ -932,7 +932,7 @@ describe('useActionController', () => {
               prompt: 'Pick a target',
               hasOnSelect: true,
               choices: [{ value: 'a', display: 'A' }],
-            } as unknown as ActionMetadata['selections'][number],
+            } as unknown as EnrichedActionMetadata['selections'][number],
           ],
         },
       };
@@ -1254,7 +1254,7 @@ describe('useActionController', () => {
       });
 
       // Create metadata with choice selection
-      const choiceMeta: Record<string, ActionMetadata> = {
+      const choiceMeta: Record<string, EnrichedActionMetadata> = {
         choiceAction: {
           name: 'choiceAction',
           prompt: 'Select something',
@@ -1292,7 +1292,7 @@ describe('useActionController', () => {
 
       const fetchPickChoices = vi.fn().mockReturnValue(fetchPromise);
 
-      const choiceMeta: Record<string, ActionMetadata> = {
+      const choiceMeta: Record<string, EnrichedActionMetadata> = {
         choiceAction: {
           name: 'choiceAction',
           prompt: 'Select something',
@@ -1335,7 +1335,7 @@ describe('useActionController', () => {
         ],
       });
 
-      const choiceMeta: Record<string, ActionMetadata> = {
+      const choiceMeta: Record<string, EnrichedActionMetadata> = {
         choiceAction: {
           name: 'choiceAction',
           prompt: 'Select something',
@@ -1373,7 +1373,7 @@ describe('useActionController', () => {
         choices: [{ value: 'x', display: 'X' }],
       });
 
-      const twoStepMeta: Record<string, ActionMetadata> = {
+      const twoStepMeta: Record<string, EnrichedActionMetadata> = {
         twoStepAction: {
           name: 'twoStepAction',
           prompt: 'Two step action',
@@ -1531,7 +1531,7 @@ describe('useActionController', () => {
 
   describe('disabled selections', () => {
     it('should reject disabled choice value with reason string', async () => {
-      const disabledMeta: Record<string, ActionMetadata> = {
+      const disabledMeta: Record<string, EnrichedActionMetadata> = {
         selectCard: {
           name: 'selectCard',
           prompt: 'Select a card',
@@ -1570,7 +1570,7 @@ describe('useActionController', () => {
     });
 
     it('should reject disabled value in multiSelect array', async () => {
-      const disabledMultiMeta: Record<string, ActionMetadata> = {
+      const disabledMultiMeta: Record<string, EnrichedActionMetadata> = {
         selectCards: {
           name: 'selectCards',
           prompt: 'Select cards',
@@ -1609,7 +1609,7 @@ describe('useActionController', () => {
     });
 
     it('should auto-fill the single enabled choice when others are disabled', async () => {
-      const disabledAutoFillMeta: Record<string, ActionMetadata> = {
+      const disabledAutoFillMeta: Record<string, EnrichedActionMetadata> = {
         forcedSelect: {
           name: 'forcedSelect',
           prompt: 'Select item',
@@ -1649,7 +1649,7 @@ describe('useActionController', () => {
     });
 
     it('should NOT auto-fill when all choices are disabled', async () => {
-      const allDisabledMeta: Record<string, ActionMetadata> = {
+      const allDisabledMeta: Record<string, EnrichedActionMetadata> = {
         allDisabled: {
           name: 'allDisabled',
           prompt: 'All disabled',
@@ -1689,7 +1689,7 @@ describe('useActionController', () => {
     });
 
     it('should include disabled field in getChoices() return values', async () => {
-      const disabledChoicesMeta: Record<string, ActionMetadata> = {
+      const disabledChoicesMeta: Record<string, EnrichedActionMetadata> = {
         withDisabled: {
           name: 'withDisabled',
           prompt: 'Action with disabled choices',
@@ -1729,7 +1729,7 @@ describe('useActionController', () => {
     });
 
     it('should allow filling enabled choices when disabled ones exist', async () => {
-      const mixedMeta: Record<string, ActionMetadata> = {
+      const mixedMeta: Record<string, EnrichedActionMetadata> = {
         mixedChoices: {
           name: 'mixedChoices',
           prompt: 'Mixed choices',
@@ -1768,7 +1768,7 @@ describe('useActionController', () => {
     });
 
     it('should reject disabled value via execute() validation', async () => {
-      const disabledExecMeta: Record<string, ActionMetadata> = {
+      const disabledExecMeta: Record<string, EnrichedActionMetadata> = {
         execDisabled: {
           name: 'execDisabled',
           prompt: 'Execute with disabled',
@@ -1805,7 +1805,7 @@ describe('useActionController', () => {
 
     describe('disabled element-type selections', () => {
       it('should include disabled field in getChoices() for element-type selections', () => {
-        const disabledElementMeta: Record<string, ActionMetadata> = {
+        const disabledElementMeta: Record<string, EnrichedActionMetadata> = {
           moveWithDisabled: {
             name: 'moveWithDisabled',
             prompt: 'Move piece',
@@ -1852,7 +1852,7 @@ describe('useActionController', () => {
       });
 
       it('should reject disabled element value via fill()', async () => {
-        const disabledElementMeta: Record<string, ActionMetadata> = {
+        const disabledElementMeta: Record<string, EnrichedActionMetadata> = {
           moveWithDisabled: {
             name: 'moveWithDisabled',
             prompt: 'Move piece',
@@ -1894,7 +1894,7 @@ describe('useActionController', () => {
       });
 
       it('should auto-fill single enabled element when others are disabled', async () => {
-        const autoFillElementMeta: Record<string, ActionMetadata> = {
+        const autoFillElementMeta: Record<string, EnrichedActionMetadata> = {
           forcedElement: {
             name: 'forcedElement',
             prompt: 'Select piece',
@@ -1932,7 +1932,7 @@ describe('useActionController', () => {
       });
 
       it('should include disabled in getChoices() for elementsByDependentValue', async () => {
-        const depElementMeta: Record<string, ActionMetadata> = {
+        const depElementMeta: Record<string, EnrichedActionMetadata> = {
           depElementAction: {
             name: 'depElementAction',
             prompt: 'Select with depends',
@@ -1987,7 +1987,7 @@ describe('useActionController', () => {
   describe('followUp + skip + auto-execute', () => {
     it('should preserve followUp pre-filled args when skip triggers auto-execute', async () => {
       // Metadata for the followUp action: one optional selection, no other selections
-      const followUpMeta: Record<string, ActionMetadata> = {
+      const followUpMeta: Record<string, EnrichedActionMetadata> = {
         collectEquipment: {
           name: 'collectEquipment',
           prompt: 'Collect equipment',
@@ -2291,7 +2291,7 @@ describe('useActionController', () => {
   // candidates, and a choice pick produces none no matter what refs its choices
   // carry, so the panel stays the selection surface for choices.
   describe('validElements (the board candidate surface)', () => {
-    let anchoredActionMetadata: ReturnType<typeof ref<Record<string, ActionMetadata> | undefined>>;
+    let anchoredActionMetadata: ReturnType<typeof ref<Record<string, EnrichedActionMetadata> | undefined>>;
 
     beforeEach(() => {
       anchoredActionMetadata = ref({
@@ -2470,7 +2470,7 @@ describe('useActionController', () => {
         };
       });
 
-      const twoStepMeta: Record<string, ActionMetadata> = {
+      const twoStepMeta: Record<string, EnrichedActionMetadata> = {
         twoStepMove: {
           name: 'twoStepMove',
           prompt: 'Move',

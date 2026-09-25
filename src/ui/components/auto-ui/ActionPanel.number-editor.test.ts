@@ -25,9 +25,9 @@ import {
   mountPanelAt as panelAt,
   panelRuleFor as ruleFor,
 } from './action-panel-editor.test-helper.js';
-import type { ActionMetadata } from '../../composables/useActionControllerTypes.js';
+import type { EnrichedActionMetadata } from '../../composables/useActionControllerTypes.js';
 
-const recycle: ActionMetadata = {
+const recycle: EnrichedActionMetadata = {
   name: 'recycle',
   prompt: 'Recycle waste',
   selections: [
@@ -35,7 +35,7 @@ const recycle: ActionMetadata = {
   ],
 };
 
-const anyNumber: ActionMetadata = {
+const anyNumber: EnrichedActionMetadata = {
   name: 'wager',
   prompt: 'Place a wager',
   selections: [
@@ -43,7 +43,7 @@ const anyNumber: ActionMetadata = {
   ],
 };
 
-const rename: ActionMetadata = {
+const rename: EnrichedActionMetadata = {
   name: 'rename',
   prompt: 'Rename the colony',
   selections: [

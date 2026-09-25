@@ -28,11 +28,11 @@ import { describe, it, expect } from 'vitest';
 import { nextTick } from 'vue';
 
 import { panelsOver } from './action-panel-editor.test-helper.js';
-import type { ActionMetadata } from '../../composables/useActionControllerTypes.js';
+import type { EnrichedActionMetadata } from '../../composables/useActionControllerTypes.js';
 import { textRuleErrors } from '../../../engine/action/text-rules.js';
 import { numberRuleErrors } from '../../../engine/action/number-rules.js';
 
-const RECYCLE: ActionMetadata = {
+const RECYCLE: EnrichedActionMetadata = {
   name: 'recycle',
   prompt: 'Recycle waste',
   selections: [
@@ -40,7 +40,7 @@ const RECYCLE: ActionMetadata = {
   ],
 };
 
-const RENAME: ActionMetadata = {
+const RENAME: EnrichedActionMetadata = {
   name: 'rename',
   prompt: 'Rename the colony',
   selections: [
@@ -58,7 +58,7 @@ const RENAME: ActionMetadata = {
  */
 type EditorCase = {
   kind: string;
-  action: ActionMetadata;
+  action: EnrichedActionMetadata;
   editor: string;
   control: string;
   hint: string;
@@ -97,7 +97,7 @@ const CASES: EditorCase[] = [
 ];
 
 /** The panel, mounted with the action already started at its editor. */
-async function atEditor(action: ActionMetadata) {
+async function atEditor(action: EnrichedActionMetadata) {
   const over = panelsOver([action]);
   await over.controller.start(action.name, {});
   await nextTick();

@@ -10,20 +10,20 @@ import {
   getHexPolygonPoints,
   calculateHexDistance,
 } from './useHexGrid.js';
-import type { GameElement } from '../types.js';
+import type { GameViewElement } from '../types.js';
 
-const cell = (q: number, r: number, children: GameElement[] = []): GameElement => ({
+const cell = (q: number, r: number, children: GameViewElement[] = []): GameViewElement => ({
   id: q * 100 + r,
   className: 'Cell',
   name: `${q},${r}`,
   attributes: { q, r },
   children,
-} as GameElement);
+} as GameViewElement);
 
-const piece = (className: string, id: number): GameElement =>
-  ({ id, className, name: className, attributes: {}, children: [] } as GameElement);
+const piece = (className: string, id: number): GameViewElement =>
+  ({ id, className, name: className, attributes: {}, children: [] } as GameViewElement);
 
-const gameView = (cells: GameElement[], boardAttrs: Record<string, unknown> = {}): GameElement =>
+const gameView = (cells: GameViewElement[], boardAttrs: Record<string, unknown> = {}): GameViewElement =>
   ({
     id: 1,
     className: 'Game',
@@ -36,9 +36,9 @@ const gameView = (cells: GameElement[], boardAttrs: Record<string, unknown> = {}
       attributes: boardAttrs,
       children: cells,
     }],
-  } as GameElement);
+  } as GameViewElement);
 
-const grid = (view: GameElement | null, options = {}) =>
+const grid = (view: GameViewElement | null, options = {}) =>
   useHexGrid({ gameView: () => view, ...options });
 
 describe('hexToPixel', () => {
@@ -219,7 +219,7 @@ describe('useHexGrid', () => {
         id: 2, className: 'HexBoard', name: 'b', attributes: {},
         children: [{ id: 3, className: 'Tile', name: 't', attributes: { q: 0, r: 0 }, children: [] }],
       }],
-    } as unknown as GameElement;
+    } as unknown as GameViewElement;
     const hex = grid(view, { boardClassName: 'HexBoard', cellClassName: 'Tile' });
     expect(hex.cells.value).toHaveLength(1);
   });
@@ -253,7 +253,7 @@ describe('useHexGrid', () => {
   });
 
   it('skips cells that carry no coordinates', () => {
-    const nameless = { id: 7, className: 'Cell', name: 'nowhere', attributes: {}, children: [] } as GameElement;
+    const nameless = { id: 7, className: 'Cell', name: 'nowhere', attributes: {}, children: [] } as GameViewElement;
     expect(grid(gameView([...cells, nameless])).cellMap.value.size).toBe(3);
   });
 

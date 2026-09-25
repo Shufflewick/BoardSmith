@@ -51,7 +51,7 @@ import { useZoomPreview } from '../composables/useZoomPreview';
 import { useAutoZoom, SETTLE_MS } from '../composables/useAutoZoom';
 import { useToast } from '../composables/useToast';
 import { useActionController, type ControllerActionResult } from '../composables/useActionController';
-import type { ActionMetadata } from '../composables/useActionControllerTypes';
+import type { EnrichedActionMetadata } from '../composables/useActionControllerTypes';
 import type { GameState, FlowState } from '../../client/types.js';
 import turnNotificationSound from '../assets/turn-notification.mp3';
 import { usePlatformTransport } from '../composables/usePlatformTransport.js';
@@ -534,8 +534,8 @@ watch(state, (s) => {
 // Modelling that as absent bought nothing and made the prop `PlayShell`
 // requires unfillable. Matches `useWorldPlay.actionMetadata`, which is the same
 // shape on the world side.
-const actionMetadata = computed<Record<string, ActionMetadata>>(() => {
-  return (state.value?.state?.actionMetadata as Record<string, ActionMetadata> | undefined) ?? {};
+const actionMetadata = computed<Record<string, EnrichedActionMetadata>>(() => {
+  return (state.value?.state?.actionMetadata as Record<string, EnrichedActionMetadata> | undefined) ?? {};
 });
 
 // Per-action disabled reasons from PlayerGameState.disabledActions.

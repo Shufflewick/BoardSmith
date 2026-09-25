@@ -29,10 +29,10 @@ import {
   mountPanelAt as panelAt,
   panelRuleFor as ruleFor,
 } from './action-panel-editor.test-helper.js';
-import type { ActionMetadata } from '../../composables/useActionControllerTypes.js';
+import type { EnrichedActionMetadata } from '../../composables/useActionControllerTypes.js';
 
 /** Lacuna's own declaration, which is what the ticket is about. */
-const setDescription: ActionMetadata = {
+const setDescription: EnrichedActionMetadata = {
   name: 'setDescription',
   prompt: 'Describe your empire',
   selections: [
@@ -47,7 +47,7 @@ const setDescription: ActionMetadata = {
 };
 
 /** The same field with a floor, so the error path has something to report. */
-const setCreed: ActionMetadata = {
+const setCreed: EnrichedActionMetadata = {
   name: 'setCreed',
   prompt: 'Set your creed',
   selections: [
@@ -62,7 +62,7 @@ const setCreed: ActionMetadata = {
   ],
 };
 
-const setNickname: ActionMetadata = {
+const setNickname: EnrichedActionMetadata = {
   name: 'setNickname',
   prompt: 'Pick a nickname',
   selections: [
@@ -224,7 +224,7 @@ describe('the multiline text editor (#229)', () => {
   it('reports a refused single-line value the same way', async () => {
     // One submit path, one error path. The single-line field silently returned
     // for the same reason, and it is the same handler.
-    const short: ActionMetadata = {
+    const short: EnrichedActionMetadata = {
       name: 'setTag',
       prompt: 'Tag it',
       selections: [
@@ -298,7 +298,7 @@ describe('the multiline text editor (#229)', () => {
  * invisible now, which is the argument for fixing it here rather than filing it.
  */
 describe('an editor opens empty on a new pick', () => {
-  const twoFields: ActionMetadata = {
+  const twoFields: EnrichedActionMetadata = {
     name: 'describeThenName',
     prompt: 'Describe, then name',
     selections: [
@@ -318,7 +318,7 @@ describe('an editor opens empty on a new pick', () => {
   });
 
   it('does not carry a standing error into the next one either', async () => {
-    const floored: ActionMetadata = {
+    const floored: EnrichedActionMetadata = {
       name: 'creedThenName',
       prompt: 'Creed, then name',
       selections: [

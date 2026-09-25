@@ -26,7 +26,7 @@ import { describe, it, expect } from 'vitest';
 import { nextTick } from 'vue';
 
 import { mountPanelAt, panelsOver } from './action-panel-editor.test-helper.js';
-import type { ActionMetadata } from '../../composables/useActionControllerTypes.js';
+import type { EnrichedActionMetadata } from '../../composables/useActionControllerTypes.js';
 import { Action, Game, Player } from '../../../engine/index.js';
 import type { GameOptions } from '../../../engine/index.js';
 import { buildActionMetadata } from '../../../engine/element/action-metadata.js';
@@ -65,7 +65,7 @@ for (let age = 16; age <= 65; age++) {
     age <= 20 ? 'barely grown' : age <= 30 ? 'young' : age <= 50 ? 'in your prime' : 'seasoned';
 }
 
-const ASK_AGE: ActionMetadata = {
+const ASK_AGE: EnrichedActionMetadata = {
   name: 'ask-age',
   prompt: 'Tell the census your age',
   selections: [
@@ -82,7 +82,7 @@ const ASK_AGE: ActionMetadata = {
   ],
 };
 
-const BARE_NUMBER: ActionMetadata = {
+const BARE_NUMBER: EnrichedActionMetadata = {
   name: 'wager',
   prompt: 'Place a wager',
   selections: [{ name: 'amount', type: 'number', prompt: 'How much', min: 1 }],
@@ -203,7 +203,7 @@ describe('#258 — the field says what the value in it means', () => {
 /**
  * THE FIXTURES ABOVE ARE HAND-BUILT, AND THIS IS THE ONE THAT IS NOT.
  *
- * `docs/TEST-FIXTURES.md`: a literal `ActionMetadata` asserts against a shape
+ * `docs/TEST-FIXTURES.md`: a literal `EnrichedActionMetadata` asserts against a shape
  * the engine might have stopped sending, which is twice now how a green suite
  * hid the exact defect it existed to catch. So one case drives the real thing --
  * a real `Action.create(...).enterNumber(...)` declaration, through the real

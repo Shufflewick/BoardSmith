@@ -63,7 +63,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { mount } from '@vue/test-utils';
 import { nextTick, ref } from 'vue';
 import { useActionController } from '../../composables/useActionController.js';
-import type { ActionMetadata } from '../../composables/useActionController.js';
+import type { EnrichedActionMetadata } from '../../composables/useActionController.js';
 import ActionPanel from './ActionPanel.vue';
 import CardRenderer from './renderers/CardRenderer.vue';
 import { GAME_CONTEXT_KEYS } from '../../composables/useGameContext.js';
@@ -76,7 +76,7 @@ import { GAME_CONTEXT_KEYS } from '../../composables/useGameContext.js';
 //
 // Both picks carry id-only refs (no notation) — an id-only ref highlights a card, it
 // is not a board click surface, so the panel must keep offering every rank.
-const goFishAskAction: ActionMetadata = {
+const goFishAskAction: EnrichedActionMetadata = {
   name: 'ask',
   prompt: 'Ask another player for cards',
   selections: [

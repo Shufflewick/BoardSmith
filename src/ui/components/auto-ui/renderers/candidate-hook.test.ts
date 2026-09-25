@@ -30,7 +30,7 @@ import {
   type BoardInteraction,
 } from '../../../composables/useBoardInteraction.js';
 import { GAME_CONTEXT_KEYS } from '../../../composables/useGameContext.js';
-import type { ActionMetadata } from '../../../composables/useActionControllerTypes.js';
+import type { EnrichedActionMetadata } from '../../../composables/useActionControllerTypes.js';
 
 async function flush(n = 10): Promise<void> {
   for (let i = 0; i < n; i++) {
@@ -60,14 +60,14 @@ const GAME_VIEW = {
 
 // `tend` chooses a NEIGHBOURING holding by element (#169), and its candidates
 // arrive from the server, not from the action metadata.
-const tendAction: ActionMetadata = {
+const tendAction: EnrichedActionMetadata = {
   name: 'tend',
   prompt: 'Tend',
   selections: [{ name: 'neighbour', type: 'element', prompt: 'Choose a holding' }],
 };
 
 // A no-selection action keeps auto-start out of the way.
-const waitAction: ActionMetadata = { name: 'wait', prompt: 'Wait', selections: [] };
+const waitAction: EnrichedActionMetadata = { name: 'wait', prompt: 'Wait', selections: [] };
 
 const AVAILABLE = ['tend', 'wait'];
 const METADATA = { tend: tendAction, wait: waitAction };

@@ -25,7 +25,7 @@
 import type { Component } from 'vue';
 import type { VueWrapper } from '@vue/test-utils';
 import type { default as AutoUIComponent } from '../ui/components/auto-ui/AutoUI.vue';
-import type { GameElement as UIGameElement } from '../ui/components/auto-ui/index.js';
+import type { GameViewElement as UIGameElement } from '../ui/components/auto-ui/index.js';
 import type { ElementJSON } from '../engine/index.js';
 
 /**

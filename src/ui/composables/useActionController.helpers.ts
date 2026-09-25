@@ -5,7 +5,7 @@
  */
 
 import { vi } from 'vitest';
-import type { ActionMetadata, ControllerActionResult } from './useActionController.js';
+import type { EnrichedActionMetadata, ControllerActionResult } from './useActionController.js';
 
 /**
  * Creates a mock sendAction function for testing.
@@ -21,7 +21,7 @@ export function createMockSendAction() {
  * Creates a comprehensive set of test action metadata.
  * Includes various selection types and configurations for thorough testing.
  */
-export function createTestMetadata(): Record<string, ActionMetadata> {
+export function createTestMetadata(): Record<string, EnrichedActionMetadata> {
   return {
     // Simple action with no selections
     endTurn: {

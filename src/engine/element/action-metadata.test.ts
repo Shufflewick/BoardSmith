@@ -30,7 +30,7 @@ import {
 } from '../index.js';
 import { buildActionMetadata, buildPickMetadata } from './action-metadata.js';
 import { resolveMultiSelect } from '../utils/resolve-multiselect.js';
-import { useActionController, type ActionMetadata } from '../../ui/composables/useActionController.js';
+import { useActionController, type EnrichedActionMetadata } from '../../ui/composables/useActionController.js';
 import type { ChoiceSelection, ElementsSelection } from '../action/types.js';
 import { GameRunner } from '../../runtime/index.js';
 import { buildPlayerState } from '../../session/utils.js';
@@ -233,7 +233,7 @@ describe('buildPickMetadata: function-valued multiSelect (bot-01 / C.2)', () => 
       // this is exactly what a real server response would send to the client.
       expect(pickMeta.multiSelect).toEqual({ min: 1, max: 3 });
 
-      const actionMetadata = ref<Record<string, ActionMetadata> | undefined>({
+      const actionMetadata = ref<Record<string, EnrichedActionMetadata> | undefined>({
         pickElements: {
           name: 'pickElements',
           prompt: 'Choose one to three tokens',
@@ -446,7 +446,7 @@ describe('SPACE-05 (D26): availableActions and actionMetadata cannot diverge', (
   });
 
   it('UI defense-in-depth: start() on a metadata-missing action does not throw and does not strand the board', async () => {
-    const actionMetadata = ref<Record<string, ActionMetadata> | undefined>({});
+    const actionMetadata = ref<Record<string, EnrichedActionMetadata> | undefined>({});
     const availableActions = ref<string[]>(['ghostAction']);
     const isMyTurn = ref(true);
     const sendAction = vi.fn().mockResolvedValue({ success: true });

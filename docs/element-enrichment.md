@@ -27,16 +27,16 @@ const selectableCards = computed(() => {
 });
 ```
 
-## ValidElement Interface
+## EnrichedValidElement Interface
 
 Each item in `validElements` includes:
 
 ```typescript
-interface ValidElement {
+interface EnrichedValidElement {
   id: number;                    // Element ID (for submitting selection)
   display?: string;              // Display text for UI
   ref?: { id: number };          // Reference for board highlighting
-  element?: GameElement;         // Full element with all attributes!
+  element?: GameViewElement;     // Full element with all attributes!
 }
 ```
 
@@ -132,8 +132,8 @@ const parentContainer = findElementById(gameView, parentId);
 ```typescript
 import type {
   UseActionControllerReturn,
-  ValidElement,
-  PickMetadata,
-  GameViewElement  // Alias for GameElement
+  EnrichedValidElement,   // a pick's valid element, with its gameView element attached
+  EnrichedPickMetadata,   // pick metadata over enriched elements
+  GameViewElement,        // an element in the gameView tree
 } from 'boardsmith/ui';
 ```

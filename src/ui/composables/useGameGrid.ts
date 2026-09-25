@@ -9,7 +9,7 @@
  * ```typescript
  * import { useGameGrid } from 'boardsmith/ui';
  *
- * const props = defineProps<{ gameView: GameElement; playerSeat: number }>();
+ * const props = defineProps<{ gameView: GameViewElement; playerSeat: number }>();
  *
  * const {
  *   grid,
@@ -40,14 +40,11 @@
 
 import { computed, type ComputedRef } from 'vue';
 import { findElement } from './useGameViewHelpers.js';
-import type { GameElement, BaseElementAttributes } from '../types.js';
-
-// Re-export GameElement
-export type { GameElement };
+import type { GameViewElement, BaseElementAttributes } from '../types.js';
 
 export interface GameGridOptions {
   /** Function that returns the current game view */
-  gameView: () => GameElement | null | undefined;
+  gameView: () => GameViewElement | null | undefined;
   /** Class name of the board element (default: 'Board') */
   boardClassName?: string;
   /** Class name of cell elements (default: 'Square') */
@@ -64,9 +61,9 @@ export interface GameGridOptions {
   rowZeroAtTop?: boolean;
 }
 
-export interface GameGridReturn<TCell = GameElement> {
+export interface GameGridReturn<TCell = GameViewElement> {
   /** The board element */
-  board: ComputedRef<GameElement | null | undefined>;
+  board: ComputedRef<GameViewElement | null | undefined>;
   /** Map of cells keyed by "row-col" */
   grid: ComputedRef<Map<string, TCell>>;
   /** Get the key for a row/col position */
@@ -74,9 +71,9 @@ export interface GameGridReturn<TCell = GameElement> {
   /** Get cell at row/col */
   getCellAt: (row: number, col: number) => TCell | undefined;
   /** Get first child of a specific class at row/col */
-  getChildAt: (row: number, col: number, className: string) => GameElement | undefined;
+  getChildAt: (row: number, col: number, className: string) => GameViewElement | undefined;
   /** Get all children of a specific class at row/col */
-  getChildrenAt: (row: number, col: number, className: string) => GameElement[];
+  getChildrenAt: (row: number, col: number, className: string) => GameViewElement[];
   /** Convert row/col to algebraic notation (a1-h8 style) */
   toNotation: (row: number, col: number) => string;
   /** Convert algebraic notation to row/col */
@@ -92,7 +89,7 @@ export interface GameGridReturn<TCell = GameElement> {
 /**
  * Create grid utilities for a 2D game board.
  */
-export function useGameGrid<TCell = GameElement>(
+export function useGameGrid<TCell = GameViewElement>(
   options: GameGridOptions
 ): GameGridReturn<TCell> {
   const {
@@ -114,7 +111,7 @@ export function useGameGrid<TCell = GameElement>(
   });
 
   /** Helper to get typed attributes */
-  function getAttrs(element: GameElement): BaseElementAttributes & Record<string, unknown> {
+  function getAttrs(element: GameViewElement): BaseElementAttributes & Record<string, unknown> {
     return (element.attributes ?? {}) as BaseElementAttributes & Record<string, unknown>;
   }
 
@@ -144,14 +141,14 @@ export function useGameGrid<TCell = GameElement>(
     return grid.value.get(getKey(row, col));
   }
 
-  function getChildAt(row: number, col: number, className: string): GameElement | undefined {
-    const cell = getCellAt(row, col) as GameElement | undefined;
+  function getChildAt(row: number, col: number, className: string): GameViewElement | undefined {
+    const cell = getCellAt(row, col) as GameViewElement | undefined;
     if (!cell?.children) return undefined;
     return cell.children.find((c) => c.className === className);
   }
 
-  function getChildrenAt(row: number, col: number, className: string): GameElement[] {
-    const cell = getCellAt(row, col) as GameElement | undefined;
+  function getChildrenAt(row: number, col: number, className: string): GameViewElement[] {
+    const cell = getCellAt(row, col) as GameViewElement | undefined;
     if (!cell?.children) return [];
     return cell.children.filter((c) => c.className === className);
   }
