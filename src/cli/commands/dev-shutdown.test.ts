@@ -28,13 +28,14 @@ vi.setConfig({ testTimeout: 120_000 });
 
 /**
  * Start `boardsmith dev` in `cwd`, open its first page the way a browser does,
- * and press Ctrl+C the moment the page's module has been served.
+ * and send `signal` (Ctrl+C is SIGINT) the moment the page's module has been
+ * served.
  *
  * The page's module imports Vue, which Vite pre-bundles, so the optimiser's
  * first run is in flight when the signal arrives: it cannot have committed
  * before its crawl of the page's static imports has been idle for a while.
  */
-async function stopWhileOptimising(cwd: string): Promise<DevRunEnding> {
+async function stopWhileOptimising(cwd: string, signal: NodeJS.Signals): Promise<DevRunEnding> {
   const port = await freePort();
   const run = spawnDev(cwd, port);
   const ready = new Promise<boolean>((resolve) => {
@@ -53,13 +54,13 @@ async function stopWhileOptimising(cwd: string): Promise<DevRunEnding> {
   // The page really does start the optimiser: its module imports a
   // pre-bundled dependency.
   expect(module).toContain('/node_modules/.vite/deps/');
-  run.child.kill('SIGINT');
+  run.child.kill(signal);
   return run.ended;
 }
 
 /** Stop a fresh project's first run mid-optimisation, and assert it stopped whole. */
-async function expectStoppedWhole(cwd: string): Promise<void> {
-  const run = await stopWhileOptimising(cwd);
+async function expectStoppedWhole(cwd: string, signal: NodeJS.Signals = 'SIGINT'): Promise<void> {
+  const run = await stopWhileOptimising(cwd, signal);
   expect(run.stuck, `boardsmith dev was still running ${EXIT_WITHIN_MS}ms after it started:\n${run.output}`).toBe(false);
   expect(run.output).toContain('Shutting down...');
   expect(run.output, 'the teardown reported something it could not close').not.toContain('Still open');
@@ -81,5 +82,26 @@ describe('boardsmith dev stopped while Vite optimises its dependencies (#366)', 
 
   it('a table project: closes Vite, removes its build directory, and exits', async () => {
     await expectStoppedWhole(await devProject(false));
+  });
+});
+
+/**
+ * #382: SIGTERM IS THE SAME ORDERLY STOP.
+ *
+ * Vite registers its own SIGTERM handler when it owns the HTTP server, and
+ * that handler closes Vite and exits the process. It used to win the race
+ * against the host's teardown, so a SIGTERM ended `boardsmith dev` with the
+ * rest of the teardown never run. Now the host owns the HTTP server and Vite
+ * runs in middleware mode, where it registers no process handlers at all.
+ */
+describe('boardsmith dev stopped with SIGTERM (#382)', () => {
+  it('a world project: runs the whole teardown before it exits', async () => {
+    const cwd = await devProject(true);
+    await expectStoppedWhole(cwd, 'SIGTERM');
+    expect(existsSync(`${worldStorePath(cwd)}-wal`), 'the world store was left open').toBe(false);
+  });
+
+  it('a table project: runs the whole teardown before it exits', async () => {
+    await expectStoppedWhole(await devProject(false), 'SIGTERM');
   });
 });

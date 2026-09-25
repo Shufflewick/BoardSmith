@@ -25,15 +25,21 @@
  *     `reloadOnRulesEdit`;
  *   - a Vite server whose listen was refused still holds the process open, so
  *     a run refused its port never exited (#345);
+ *   - a Vite that owns the HTTP server registers its own SIGTERM handler,
+ *     which exits the process before the host's teardown finishes (#382) --
+ *     which is why both roads serve Vite in middleware mode through
+ *     `serveVite`;
  *   - Vite's own `close()` never finishes while its dependency optimiser's
  *     first run is in flight, so a quick "start, look, Ctrl+C" hung (#366) --
- *     which is why both roads close Vite through `closeViteServer`.
+ *     which is why `serveVite` closes Vite through `closeViteServer`.
  *
  * Two copies of any of those is how they come to disagree, and a disagreement
  * here is invisible until somebody's asset 404s or their HMR dies.
  */
 
 import { existsSync } from 'node:fs';
+import { createServer as createHttpServer } from 'node:http';
+import { networkInterfaces } from 'node:os';
 import { join, relative, resolve } from 'node:path';
 
 import type { Duplex } from 'node:stream';
@@ -43,6 +49,8 @@ import { createServer as createViteServer, normalizePath, type Connect, type Inl
 import { WebSocketServer, type WebSocket } from 'ws';
 
 import { boardsmithSourceEntries } from './game-runtime.js';
+import type { HeldResource } from '../dev-host/shutdown.js';
+import { portRefusal } from '../dev-host/port.js';
 
 /**
  * The one thing this module needs of an HTTP server: that it emits `upgrade`.
@@ -59,33 +67,29 @@ interface HttpUpgradeServer {
 }
 
 /**
- * A claimed upgrade path: the plugin that keeps it claimed, and the way to
- * close it. There is no third thing to remember, and no way to hold the socket
- * without also holding the plugin that has to be installed for it to work.
+ * A claimed upgrade path, and the way to close it. `serveVite` attaches it to
+ * the HTTP server it owns, so it is claimed for as long as that server runs.
  */
 interface ClaimedWebSocketPath {
-  /** Install in the Vite `plugins` array. Without it nothing is claimed. */
-  readonly plugin: VitePlugin;
+  /** Route this path's upgrades on `httpServer`. `serveVite` calls it. */
+  attach(httpServer: HttpUpgradeServer): void;
   /** Stop accepting connections; called from the run's shutdown. */
   close(): void;
 }
 
 /**
- * Claim ONE upgrade path for our socket, for as long as Vite is serving.
+ * Claim ONE upgrade path for our socket.
  *
  * `noServer` plus our own routing, rather than `new WebSocketServer({ server })`:
  * a second server attached to the same HTTP server competes with Vite's HMR
  * socket for every upgrade, and the visible symptom is a page that reloads
  * forever with no error that names the cause.
  *
- * A PLUGIN, rather than one call against `vite.httpServer` after `listen()`,
- * because a restart replaces that server (#214). Editing `vite.config.ts`
- * makes Vite build a second server, close the first, and `Object.assign` the
- * new one over the old handle -- so a listener registered on the startup
- * server is on a closed object nobody routes to any more. `configureServer`
- * runs again on every restart, which is the only moment the new HTTP server
- * can be reached; the `WebSocketServer` itself is made once and re-bound,
- * since in `noServer` mode it owns no listener of its own.
+ * It is attached to the HTTP server the host owns, not to one Vite made. When
+ * Vite owned it, editing `vite.config.ts` made Vite build a second server and
+ * close the first, so a listener registered at startup was on a closed object
+ * and every page afterwards loaded but never connected (#214). The host's
+ * server outlives every Vite restart.
  */
 export function claimWebSocketPath(
   path: string,
@@ -93,32 +97,18 @@ export function claimWebSocketPath(
 ): ClaimedWebSocketPath {
   const wss = new WebSocketServer({ noServer: true });
   wss.on('connection', onConnection);
-
-  const bind = (httpServer: HttpUpgradeServer): void => {
-    httpServer.on('upgrade', (req, socket, head) => {
-      let pathname: string;
-      try {
-        pathname = new URL(req.url ?? '/', 'http://localhost').pathname;
-      } catch {
-        return;
-      }
-      if (pathname !== path) return; // not ours -- Vite HMR handles it
-      wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req));
-    });
-  };
-
   return {
-    plugin: {
-      name: `boardsmith:websocket-path:${path}`,
-      configureServer(server) {
-        if (!server.httpServer) {
-          throw new Error(
-            `Vite has no HTTP server to attach the dev socket ${path} to. ` +
-              'A dev host cannot run in middleware mode.',
-          );
+    attach(httpServer) {
+      httpServer.on('upgrade', (req, socket, head) => {
+        let pathname: string;
+        try {
+          pathname = new URL(req.url ?? '/', 'http://localhost').pathname;
+        } catch {
+          return;
         }
-        bind(server.httpServer);
-      },
+        if (pathname !== path) return; // not ours -- Vite HMR handles it
+        wss.handleUpgrade(req, socket, head, (ws) => wss.emit('connection', ws, req));
+      });
     },
     close: () => wss.close(),
   };
@@ -292,30 +282,91 @@ export function reloadOnRulesEdit<R>(args: {
   });
 }
 
+/** A dev host's Vite, served over the HTTP server the host owns. */
+interface ServedVite {
+  readonly vite: ViteDevServer;
+  /** Where this machine reaches the host. */
+  readonly localUrl: string;
+  /** Where other machines reach it: empty unless it is bound beyond loopback. */
+  readonly networkUrls: readonly string[];
+  /** What it holds, in the order it closes: Vite, then the HTTP server. */
+  readonly resources: readonly HeldResource[];
+}
+
 /**
- * A Vite dev server, listening, or nothing left open.
+ * A VITE DEV SERVER, SERVED OVER AN HTTP SERVER THE HOST OWNS, OR NOTHING LEFT OPEN.
  *
- * `release` is whatever the caller opened for this server before asking for
- * it (its socket, its world). It is required because a failure here has to
- * give those back: if Vite cannot be built or its listen is refused (the port
- * taken after `devCommand` checked it), the server is closed, `release` runs,
- * and only then is the error rethrown. An unlistened Vite server, or a world
- * left open, keeps the process alive after the refusal is printed (#345).
+ * Vite runs in middleware mode. When Vite owns the HTTP server it also
+ * registers process handlers: on SIGTERM, and when stdin ends, it closes
+ * itself and calls `process.exit()`. That raced the host's own teardown and
+ * usually won, so the rest of it never ran (#382). In middleware mode Vite
+ * registers none, and the process's signals belong to `onShutdown` alone.
+ * Its HMR socket rides on the host's server (`hmr.server`), as do `sockets`.
+ *
+ * `release` is whatever the caller opened before asking for this server (its
+ * socket, its world). It is required because a failure here has to give those
+ * back: if Vite cannot be built or the port is refused (taken after
+ * `devCommand` checked it), everything opened here is closed, `release` runs,
+ * and only then is the error thrown. Anything left open keeps the process
+ * alive after the refusal is printed (#345).
  */
-export async function listeningViteServer(
-  config: InlineConfig,
-  release: () => Promise<void> | void,
-): Promise<ViteDevServer> {
+export async function serveVite(args: {
+  readonly config: InlineConfig;
+  readonly port: number;
+  readonly host: string;
+  readonly sockets: readonly ClaimedWebSocketPath[];
+  readonly release: () => Promise<void> | void;
+}): Promise<ServedVite> {
   let vite: ViteDevServer | undefined;
+  // Through `vite.middlewares` on every request, because a `vite.config.ts`
+  // restart replaces them on the same `vite` object.
+  const httpServer = createHttpServer((req, res) => vite!.middlewares(req, res));
+  for (const socket of args.sockets) socket.attach(httpServer);
   try {
-    vite = await createViteServer(config);
-    await vite.listen();
-    return vite;
+    vite = await createViteServer({
+      ...args.config,
+      server: { ...args.config.server, middlewareMode: true, hmr: { server: httpServer } },
+    });
+    await new Promise<void>((resolve, reject) => {
+      httpServer.once('error', (error: NodeJS.ErrnoException) => reject(new Error(portRefusal(args.port, args.host, error))));
+      httpServer.listen(args.port, args.host, resolve);
+    });
   } catch (error) {
     await vite?.close();
-    await release();
+    await args.release();
     throw error;
   }
+  const served = vite;
+  return {
+    vite: served,
+    localUrl: `http://localhost:${args.port}`,
+    networkUrls: networkUrls(args.host, args.port),
+    resources: [
+      { name: 'the Vite dev server', close: () => closeViteServer(served) },
+      {
+        name: 'the HTTP server',
+        close: () =>
+          new Promise<void>((resolve, reject) => {
+            httpServer.close((error) => (error ? reject(error) : resolve()));
+            httpServer.closeAllConnections();
+          }),
+      },
+    ],
+  };
+}
+
+/**
+ * Where other machines reach a host bound to `host`. A wildcard bind is
+ * reachable at every external IPv4 address this machine has; a loopback bind
+ * at none.
+ */
+function networkUrls(host: string, port: number): string[] {
+  if (host === '127.0.0.1' || host === 'localhost' || host === '::1') return [];
+  if (host !== '0.0.0.0' && host !== '::') return [`http://${host}:${port}`];
+  return Object.values(networkInterfaces())
+    .flatMap((addresses) => addresses ?? [])
+    .filter((address) => address.family === 'IPv4' && !address.internal)
+    .map((address) => `http://${address.address}:${port}`);
 }
 
 /**
@@ -337,7 +388,7 @@ export async function listeningViteServer(
  * transform that fails does not keep the loop going. Only then is Vite closed,
  * with nothing left for it to wait on.
  */
-export async function closeViteServer(vite: ViteDevServer): Promise<void> {
+async function closeViteServer(vite: ViteDevServer): Promise<void> {
   const depsDir = `${normalizePath(resolve(vite.config.cacheDir, 'deps'))}/`;
   const waited = new Set<string>();
   for (;;) {
