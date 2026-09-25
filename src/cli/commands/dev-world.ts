@@ -43,6 +43,7 @@ import type { WorldLiftOutcome, WorldMigrationOutcome } from '../../world/host/i
 import type { LocalWorldHost } from '../dev-host/world-host.js';
 import { createRulesReloadQueue, type RulesReloadQueue } from '../dev-host/rules-reload-queue.js';
 import { createWorldConnections } from '../dev-host/world-connections.js';
+import { createNodeWorldClock, type WorldHostClock } from '../dev-host/node-world-clock.js';
 import { worldStorePath, type LocalWorldStore, type openWorldStore } from '../dev-host/world-store.js';
 import { announceHost, teardownInOrder, type HeldResource, type HostHoldings } from '../dev-host/shutdown.js';
 import type { WorldDevConfig } from '../dev-host/world-config-types.js';
@@ -275,8 +276,15 @@ function closesWorld(run: WorldRun): HeldResource {
 
 /** Open the project's world on `runtime`, and reload it through `reloadRules` on every save. */
 export async function openWorldRun(
-  options: Pick<WorldDevServerOptions, 'cwd' | 'displayName' | 'runtime' | 'reloadRules'>,
+  options: Pick<WorldDevServerOptions, 'cwd' | 'displayName' | 'runtime' | 'reloadRules'> & {
+    /**
+     * The clock every world host this run opens reads and arms. The Node clock
+     * unless given; a test passes one it drives by hand.
+     */
+    readonly clock?: WorldHostClock;
+  },
 ): Promise<WorldRun> {
+  const clock = options.clock ?? createNodeWorldClock();
   // THE ONE PLACE THE BUDGETS ARE DECIDED, and they are the library's defaults
   // rather than numbers this file invents. A laptop running different ceilings
   // from production makes a game's local behaviour a poor guide to its
@@ -333,6 +341,10 @@ export async function openWorldRun(
       store: over,
       send: connections.send,
       isOpen: connections.isOpen,
+      clock,
+      // The world's own alarm and a departure's grace wait in the queue with
+      // the pages' commands while an edit rebuilds (#387).
+      hostWork: (work) => queue.hold(work),
     });
 
   // MUTABLE, because a rule edit replaces the whole world host (#201): the

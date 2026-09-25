@@ -47,6 +47,7 @@ import {
   type WorldStartOutcome,
 } from '../../world/host/index.js';
 import { createNodeWorldClock, type WorldHostClock } from './node-world-clock.js';
+import { heldClock, runsAtOnce, type HostWorkGate } from './rules-reload-queue.js';
 import type { LocalWorldStore } from './world-store.js';
 
 /**
@@ -84,6 +85,14 @@ interface LocalWorldHostOptions {
    */
   readonly isOpen: (clientId: string) => boolean;
   readonly clock?: WorldHostClock;
+  /**
+   * How the host runs the work it starts itself: its schedule's alarm and a
+   * departure whose grace has run out (#387). `boardsmith dev` passes its rules
+   * reload queue's `hold`, so an event that comes due while an edited rules
+   * file is rebuilding runs on the rules the world runs once the rebuild
+   * settles. Without one it runs the moment it comes due.
+   */
+  readonly hostWork?: HostWorkGate;
 }
 
 /** Everything a browser may ask this host to do. */
@@ -133,6 +142,7 @@ export class LocalWorldHost {
   readonly #send: (clientId: string, message: unknown) => void;
   readonly #isOpen: (clientId: string) => boolean;
   readonly #clock: WorldHostClock;
+  readonly #hostWork: HostWorkGate;
   readonly #world: ResidentWorld;
 
   /** Which seat each connection is looking through. A connection whose socket
@@ -149,7 +159,8 @@ export class LocalWorldHost {
     this.#worldName = options.worldName;
     this.#send = options.send;
     this.#isOpen = options.isOpen;
-    this.#clock = options.clock ?? createNodeWorldClock();
+    this.#hostWork = options.hostWork ?? runsAtOnce;
+    this.#clock = heldClock(options.clock ?? createNodeWorldClock(), this.#hostWork);
     this.#world = new ResidentWorld({
       definition: options.definition,
       seed: options.seed,
@@ -493,16 +504,20 @@ export class LocalWorldHost {
   #armDeparture(seat: number, command: string): void {
     this.#departing.set(
       seat,
-      setTimeout(() => {
-        this.#departing.delete(seat);
-        if (this.#world.closed) return;
-        void this.#world.run(async () => {
-          if (this.#seatIsOpen(seat)) return;
-          this.#store.untellPresent(seat);
-          await this.#clockCommand(command, { seat, present: false });
-          await this.#pushViews();
-        });
-      }, this.#departGraceMs()),
+      setTimeout(
+        () =>
+          this.#hostWork(() => {
+            this.#departing.delete(seat);
+            if (this.#world.closed) return;
+            void this.#world.run(async () => {
+              if (this.#seatIsOpen(seat)) return;
+              this.#store.untellPresent(seat);
+              await this.#clockCommand(command, { seat, present: false });
+              await this.#pushViews();
+            });
+          }),
+        this.#departGraceMs(),
+      ),
     );
   }
 

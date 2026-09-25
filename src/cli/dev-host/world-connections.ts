@@ -64,7 +64,8 @@ interface WorldConnections {
  * `host` is asked for on every message rather than captured once, because a
  * rule edit replaces the whole world host (#201) while the pages stay put.
  * Every message is admitted through `queue`, so one sent while a saved rules
- * edit is still building waits for the world to run it (#379).
+ * edit is still building waits for the world to run it (#379), and so is a
+ * page's departure (#387).
  */
 export function createWorldConnections(
   host: () => LocalWorldHost,
@@ -137,8 +138,13 @@ export function createWorldConnections(
         // may be helloed before the old one's close fires, and a stale close
         // would drop the seat the reconnected page just took.
         if (clientId !== null && clients.get(clientId) === socket) {
-          clients.delete(clientId);
-          void host().disconnect(clientId);
+          const gone = clientId;
+          clients.delete(gone);
+          // A departure waits for a pending reload like the page's messages
+          // did (#387): it can start a departure's clock command.
+          queue
+            .admit({ run: () => host().disconnect(gone) })
+            .catch((error: unknown) => console.error(chalk.red(`[boardsmith dev] a page leaving the world failed: ${error instanceof Error ? error.message : String(error)}`)));
         }
       });
     },

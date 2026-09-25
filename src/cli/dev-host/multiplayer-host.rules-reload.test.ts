@@ -42,16 +42,19 @@ const FLOWS = {
   )`,
   /** One move and the game is over, so a history of two moves cannot be replayed. */
   one: `sequence(actionStep({ name: 'a', actions: ['bump'] }))`,
+  /** Each seat bumps in turn, three rounds. */
+  turns: `loop({ name: 'rounds', maxIterations: 3, do: eachPlayer({ name: 'turn', do: actionStep({ name: 'a', actions: ['bump'] }) }) })`,
   /** One timed step, repeated. */
   timed: (limitMs: number) => `sequence(
     loop({ name: 'rounds', maxIterations: 5, do: actionStep({ name: 'a', actions: ['bump'], turnScope: 'restart', timeLimitMs: ${limitMs} }) }),
   )`,
 };
 
-/** A one-seat counter game whose `bump` adds `step`, written the way an author writes one. */
-function rulesSource(args: { step: number; flow: string }): string {
+/** A counter game whose `bump` adds `step`, written the way an author writes one. One seat unless told otherwise. */
+function rulesSource(args: { step: number; flow: string; seats?: number }): string {
+  const seats = args.seats ?? 1;
   return [
-    "import { Action, Game, Player, actionStep, defineFlow, loop, sequence, type GameOptions } from 'boardsmith';",
+    "import { Action, Game, Player, actionStep, defineFlow, eachPlayer, loop, sequence, type GameOptions } from 'boardsmith';",
     'export class CounterGame extends Game<CounterGame, Player> {',
     '  count = 0;',
     '  constructor(options: GameOptions) {',
@@ -63,16 +66,19 @@ function rulesSource(args: { step: number; flow: string }): string {
     'export const gameDefinition = {',
     '  gameClass: CounterGame,',
     "  gameType: 'rules-reload-counter',",
-    '  minPlayers: 1,',
-    '  maxPlayers: 1,',
+    `  minPlayers: ${seats},`,
+    `  maxPlayers: ${seats},`,
     '};',
   ].join('\n');
 }
 
 /** A table project on disk, saved with the rules an author writes. */
-function counterProject(initial: { step: number; flow: string }) {
+function counterProject(initial: { step: number; flow: string; seats?: number }) {
   const project = tableProject('bs-table-rules-reload-', rulesSource(initial));
-  return { save: (rules: { step: number; flow: string }) => project.save(rulesSource(rules)), load: project.load };
+  return {
+    save: (rules: { step: number; flow: string; seats?: number }) => project.save(rulesSource(rules)),
+    load: project.load,
+  };
 }
 
 const START = 1_700_000_000_000;
@@ -81,16 +87,24 @@ const START = 1_700_000_000_000;
 function fakeClock() {
   let now = START;
   const armed: Array<number | null> = [];
+  let due: (() => void) | null = null;
   return {
     clock: {
       now: () => now,
       yieldTurn: async () => {},
-      arm(delayMs: number | null) {
+      arm(delayMs: number | null, fire: () => void) {
         armed.push(delayMs);
+        due = delayMs === null ? null : fire;
       },
     } satisfies WorldHostClock,
     advance(ms: number) {
       now += ms;
+    },
+    /** The armed timer goes off, as the Node clock's would once its delay has passed. */
+    fire() {
+      const fire = due;
+      due = null;
+      fire?.();
     },
     armed,
   };
@@ -191,7 +205,7 @@ describe('#343: a table dev host reloads its rules on the server', () => {
     expect(shownCount(table.frames())).toBe(1);
   }, 30_000);
 
-  it('re-arms a timed step from the restored boundary, and the edited limit from the next step', async () => {
+  it("keeps a timed step's deadline across the reload, and the edited limit from the next step", async () => {
     const project = counterProject({ step: 1, flow: FLOWS.timed(10_000) });
     const time = fakeClock();
     const table = await openCounterTable(await project.load(), time);
@@ -203,11 +217,12 @@ describe('#343: a table dev host reloads its rules on the server', () => {
     const outcome = await table.host.reloadRules((await project.load()).rules);
 
     expect(outcome?.kind).toBe('restored');
-    // The old window was cleared and a new one armed from the moment the table
-    // was carried across. The open step keeps the limit it opened with: a
-    // step's limit is resolved when the step opens, and is part of its state.
-    expect(time.armed).toEqual([null, 10_000]);
-    expect(table.frames().at(-1)?.deadlineAt).toBe(START + 4_000 + 10_000);
+    // The carried game is at the same step, so the step keeps its window: a
+    // save gives nobody more time (#387). The open step keeps the limit it
+    // opened with, too: a step's limit is resolved when the step opens, and is
+    // part of its state.
+    expect(time.armed).toEqual([]);
+    expect(table.frames().at(-1)?.deadlineAt).toBe(START + 10_000);
 
     // The next step opens under the edited rules, with the edited limit.
     await table.bump();
@@ -269,31 +284,33 @@ afterEach(async () => {
 });
 
 /**
- * A table on `beforeEdit` served over a real socket, whose next reload builds
- * `edit` (or fails with it). The rebuild finishes only once a move has reached
- * the host, so a move sent during it is always held.
+ * A table on `before` (the one-seat counter unless told otherwise) served over
+ * a real socket, with `dev` seated, whose next reload builds `edit` (or fails
+ * with it). Each save says what the rebuild waits for, so what a test sends
+ * "during the rebuild" has always reached the host before it finishes.
  */
-async function serveTable(edit: TableRuntime | Error) {
-  let moveArrived: Promise<void> = Promise.resolve();
+async function serveTable(edit: TableRuntime | Error, before: TableRuntime = beforeEdit, seats = 1) {
+  let rebuildWaitsFor: Promise<void> = Promise.resolve();
   const load = async () => {
-    await moveArrived;
+    await rebuildWaitsFor;
     if (edit instanceof Error) throw edit;
     return edit;
   };
   const sockets = new Map<string, WebSocket>();
   const host = new MultiplayerHost({
-    playerCount: 1,
-    minPlayers: 1,
-    maxPlayers: 1,
+    playerCount: seats,
+    minPlayers: seats,
+    maxPlayers: seats,
     makeSeed: () => 'rules-reload',
     clock: fakeClock().clock,
-    executeOp: beforeEdit.rules.executeOp,
+    executeOp: before.rules.executeOp,
+    hostWork: (work) => queue.hold(work),
     send: (clientId, message) => {
       const socket = sockets.get(clientId);
       if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(message));
     },
   });
-  const queue = tableRulesReloadQueue({ host, running: beforeEdit.gameDefinition, load });
+  const queue = tableRulesReloadQueue({ host, running: before.gameDefinition, load });
   const server = await serveSockets(
     createDevHostConnectionHandler({
       mpHost: host,
@@ -321,15 +338,19 @@ async function serveTable(edit: TableRuntime | Error) {
     return answer;
   };
   const count = () => shownCount(page.frames.filter((f) => f.type === 'game_state'));
+  /** Save an edit whose rebuild finishes once `until` has happened; resolves once the reload has settled. */
+  const saveHeldUntil = (until: Promise<void>) => {
+    rebuildWaitsFor = until;
+    return queue.saved('src/rules/index.ts');
+  };
   /** Save an edit and bump while it builds; resolves with the answer once the reload has settled. */
   const bumpDuringRebuild = async () => {
-    moveArrived = server.received((m) => m.type === 'server_request');
-    const reloaded = queue.saved('src/rules/index.ts');
+    const reloaded = saveHeldUntil(server.received((m) => m.type === 'server_request'));
     const answer = bump();
     await reloaded;
     return answer;
   };
-  return { page, bump, bumpDuringRebuild, count };
+  return { page, server, bump, bumpDuringRebuild, saveHeldUntil, count };
 }
 
 describe('#379: a move sent while the edited rules are still building', () => {
@@ -371,5 +392,101 @@ describe('#379: a move sent while the edited rules are still building', () => {
     // The game is where it was, on the rules it had: the next move adds 1.
     expect(await table.bump()).toMatchObject({ type: 'server_response', result: { success: true } });
     await vi.waitFor(() => expect(table.count()).toBe(2));
+  }, 30_000);
+});
+
+/**
+ * #387: WORK THE TABLE STARTS ITSELF WAITS FOR THE EDITED RULES TOO.
+ *
+ * #379 held every page's messages while an edit rebuilt, but a step deadline
+ * running out and a bot covering a seat whose page closed are not messages:
+ * they fired during the rebuild and ran on the rules from before the save. They
+ * go through the same queue now, as the host's own work that cannot be
+ * refused: on the edited rules once they are in place, and on the old ones only
+ * when the edit does not build.
+ */
+const timedProject = counterProject({ step: 1, flow: FLOWS.timed(10_000) });
+const timedBefore = await timedProject.load();
+timedProject.save({ step: 10, flow: FLOWS.timed(10_000) });
+const timedAfter = await timedProject.load();
+
+const turnsProject = counterProject({ step: 1, flow: FLOWS.turns, seats: 2 });
+const turnsBefore = await turnsProject.load();
+turnsProject.save({ step: 10, flow: FLOWS.turns, seats: 2 });
+const turnsAfter = await turnsProject.load();
+
+/** A timed one-seat table on `timedBefore`, whose next reload builds `edit` (or fails with it). */
+async function timedTable(edit: TableRuntime | Error) {
+  const time = fakeClock();
+  const table = await openTable(timedBefore, clients, {
+    makeSeed: () => 'rules-reload',
+    clock: time.clock,
+    idleAction: { name: 'bump' },
+    hostWork: (work) => queue.hold(work),
+  });
+  const queue = tableRulesReloadQueue({
+    host: table.host,
+    running: timedBefore.gameDefinition,
+    load: async () => {
+      if (edit instanceof Error) throw edit;
+      return edit;
+    },
+  });
+  return { ...table, bump: () => table.act('bump'), time, queue };
+}
+
+/**
+ * What each case below edits to, and the count the table then shows: 1 from
+ * the move before the save, plus the step of the rules the host's own move ran
+ * on.
+ */
+const OUTCOMES = [
+  { on: 'the edited rules once they are in place', timed: timedAfter, turns: turnsAfter, count: 11 },
+  { on: 'the old rules when the edit does not build', timed: brokenEdit, turns: brokenEdit, count: 2 },
+];
+
+/** The terminal's reload lines, which these cases do not read. */
+function quietTerminal(): void {
+  beforeEach(() => {
+    vi.spyOn(console, 'log').mockImplementation(() => {});
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+}
+
+describe('#387: a step deadline that runs out while the edited rules are still building', () => {
+  quietTerminal();
+
+  it.each(OUTCOMES)('closes the step on $on', async ({ timed, count }) => {
+    const table = await timedTable(timed);
+    await table.bump();
+    expect(shownCount(table.frames())).toBe(1);
+
+    const reloaded = table.queue.saved('src/rules/index.ts');
+    table.time.advance(10_000);
+    table.time.fire();
+    await reloaded;
+    // The idle action the deadline submitted bumps by the step of the rules it ran on.
+    await vi.waitFor(() => expect(shownCount(table.frames())).toBe(count));
+  }, 30_000);
+});
+
+describe('#387: a bot covering a seat whose page closes while the edited rules are still building', () => {
+  quietTerminal();
+
+  it.each(OUTCOMES)('moves on $on', async ({ turns, count }) => {
+    const table = await serveTable(turns, turnsBefore, 2);
+    const p2 = await openSocketPage(table.server.port, 'p2', (f) => f.type === 'lobby');
+    const joined = p2.next((f) => f.type === 'joined');
+    p2.send({ type: 'join', seat: 2 });
+    await joined;
+    // Seat 1's move, on the rules from before any edit. Seat 2 is due next.
+    await table.bump();
+    await vi.waitFor(() => expect(table.count()).toBe(1));
+
+    const reloaded = table.saveHeldUntil(table.server.closed());
+    p2.socket.close();
+    await reloaded;
+    // The bot that took seat 2 over bumps by the step of the rules it ran on.
+    await vi.waitFor(() => expect(table.count()).toBe(count));
   }, 30_000);
 });

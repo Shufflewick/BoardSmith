@@ -25,7 +25,7 @@ import {
   type TurnBoundary,
 } from '../../session/index.js';
 import { createNodeWorldClock, type WorldHostClock } from './node-world-clock.js';
-import type { RulesReloadNotice } from './rules-reload-queue.js';
+import { heldClock, runsAtOnce, type HostWorkGate, type RulesReloadNotice } from './rules-reload-queue.js';
 import { dueSeats, type SeatActivityState, type GameStateSnapshot } from '../../engine/index.js';
 import { validateGameOptionSelection, type DevOptionDef } from './config-types.js';
 import {
@@ -234,6 +234,14 @@ export interface MultiplayerHostOptions {
    * bounded sleeps; a test passes one it drives by hand.
    */
   clock?: WorldHostClock;
+  /**
+   * How the host runs the work it starts itself: a step's deadline running out
+   * (#387). `boardsmith dev` passes its rules reload queue's `hold`, so a
+   * deadline that runs out while an edited rules file is rebuilding closes the
+   * step on the rules the table runs once the rebuild settles. Without one it
+   * runs the moment it comes due.
+   */
+  hostWork?: HostWorkGate;
 }
 
 /**
@@ -438,7 +446,7 @@ export class MultiplayerHost {
   private stranded: string | null = null;
 
   constructor(private readonly opts: MultiplayerHostOptions) {
-    this.clock = opts.clock ?? createNodeWorldClock();
+    this.clock = heldClock(opts.clock ?? createNodeWorldClock(), opts.hostWork ?? runsAtOnce);
     this.executeOp = opts.executeOp;
     for (let seat = 1; seat <= opts.playerCount; seat++) {
       this.seats.set(seat, { seat, clientId: null, name: `Player ${seat}`, connected: false });
@@ -1211,9 +1219,11 @@ export class MultiplayerHost {
    * With a game running, the swap happens on the session's op chain: every op
    * before it ran on the old rules and every op after runs on the new ones. The
    * game is carried across by `TableRules.carry` (restored, or replayed when the
-   * saved position no longer fits the edited flow), and the step's deadline is
-   * cleared and armed again from the boundary the carried state reports, so an
-   * edited time limit applies at once.
+   * saved position no longer fits the edited flow). A game carried to the same
+   * step keeps that step's window, so a save gives nobody more time and a
+   * deadline that ran out while the edit rebuilt closes the step on the edited
+   * rules (#387); a game carried to a different step arms that step's window
+   * from its first broadcast.
    *
    * When it cannot be carried across, every connected client and the terminal
    * are told, and every move is refused with the same instruction until a new
@@ -1232,10 +1242,6 @@ export class MultiplayerHost {
         snapshot,
         { teachingDisabled: this.opts.teachingDisabled },
       );
-      // The old window belonged to the old rules. Whatever happens next, it
-      // does not fire; a carried game arms its own from its first broadcast.
-      this.disarm();
-      this.window = null;
       if (carried.kind === 'failed') return carried;
       const stripped = stripPrivateChannel(carried.result);
       if (!stripped.success) {
@@ -1244,6 +1250,9 @@ export class MultiplayerHost {
       return { ...carried, result: stripped };
     });
     if (outcome.kind === 'failed') {
+      // A game that cannot go on has no step to close.
+      this.disarm();
+      this.window = null;
       this.stranded =
         `This game cannot continue on your edited rules: ${outcome.reason}. ` +
         'Press "New game" to start a game on them.';

@@ -975,6 +975,9 @@ export async function devCommand(options: DevOptions): Promise<void> {
           }
         : {}),
       executeOp: tableRules.executeOp,
+      // A step deadline that runs out while an edited rules file rebuilds
+      // waits in the reload queue below with the pages' messages (#387).
+      hostWork: (work) => rulesReload.hold(work),
       send: (clientId, message) => {
         const sock = clients.get(clientId);
         if (sock && sock.readyState === WebSocket.OPEN) sock.send(JSON.stringify(message));

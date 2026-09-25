@@ -118,6 +118,11 @@ send, and each page says "Reloading rules…". They run on the edited rules once
 those are in place, so a click right after a save always tests what you saved.
 If the edit does not load, the held moves are refused with the reason, and the
 game stays on the rules it had.
+The host's own work waits the same way: a step deadline that runs out, or a
+bot taking over the seat of a page that closed, runs on the edited rules once
+they are in place, or on the rules the game kept if the edit does not load. A
+game carried onto edited rules keeps its open step's deadline, so a save gives
+nobody extra time.
 
 **Building a persistent world?** `boardsmith dev` plays your project's table
 game. The world half of a game definition is run by the hosting platform, not by

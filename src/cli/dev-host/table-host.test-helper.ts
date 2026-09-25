@@ -28,7 +28,7 @@ type OpResponse = { success: boolean; error?: string };
 export async function openTable(
   runtime: TableRuntime,
   clients: ReturnType<typeof createDevHostClientMemory>,
-  options: Pick<MultiplayerHostOptions, 'makeSeed' | 'clock' | 'idleAction'>,
+  options: Pick<MultiplayerHostOptions, 'makeSeed' | 'clock' | 'idleAction' | 'hostWork'>,
 ) {
   const sent: Array<{ clientId: string; msg: HostOutbound }> = [];
   const host = new MultiplayerHost({

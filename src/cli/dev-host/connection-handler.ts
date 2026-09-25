@@ -32,6 +32,8 @@ const RUNS_THE_RULES: ReadonlySet<ClientInbound['type']> = new Set([
  *
  * Every message is admitted through the rules reload queue (#379), so one that
  * arrives while a saved rules edit is still rebuilding waits for the new rules.
+ * So is a page's departure (#387): a bot covering its seat is a move, and it
+ * waits for the new rules too.
  *
  * Exported and shared by the real dev server (`dev.ts`) and the DEF-C
  * regression test so the guard has exactly ONE implementation — the test
@@ -94,8 +96,9 @@ export function createDevHostConnectionHandler(opts: {
       // reconnected client — that would orphan every future broadcast/response
       // to its seat (DEF-C).
       if (clientId && clients.get(clientId) === socket) {
-        clients.delete(clientId);
-        mpHost.disconnect(clientId);
+        const gone = clientId;
+        clients.delete(gone);
+        queue.admit({ run: async () => mpHost.disconnect(gone) }).catch((err: unknown) => onError(err, 'disconnect'));
       }
     });
   };
