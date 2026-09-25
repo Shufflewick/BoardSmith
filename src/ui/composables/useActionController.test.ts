@@ -1985,27 +1985,38 @@ describe('useActionController', () => {
   });
 
   describe('followUp + skip + auto-execute', () => {
-    it('should preserve followUp pre-filled args when skip triggers auto-execute', async () => {
-      // Metadata for the followUp action: one optional selection, no other selections
-      const followUpMeta: Record<string, EnrichedActionMetadata> = {
-        collectEquipment: {
-          name: 'collectEquipment',
-          prompt: 'Collect equipment',
-          selections: [
-            {
-              name: 'equipment',
-              type: 'choice',
-              prompt: 'Select equipment',
-              optional: true,
-              choices: [
-                { value: 'sword', display: 'Sword' },
-                { value: 'shield', display: 'Shield' },
-              ],
-            },
-          ],
-        },
-      };
+    /** Metadata for the followUp action: one optional selection, no other selections. */
+    const followUpMeta: Record<string, EnrichedActionMetadata> = {
+      collectEquipment: {
+        name: 'collectEquipment',
+        prompt: 'Collect equipment',
+        selections: [
+          {
+            name: 'equipment',
+            type: 'choice',
+            prompt: 'Select equipment',
+            optional: true,
+            choices: [
+              { value: 'sword', display: 'Sword' },
+              { value: 'shield', display: 'Shield' },
+            ],
+          },
+        ],
+      },
+    };
 
+    /** Waits out queueFollowUp's deferred start, then checks `collectEquipment` opened holding `args`. */
+    async function expectFollowUpOpened(
+      controller: ReturnType<typeof useActionController>,
+      args: Record<string, unknown>,
+    ): Promise<void> {
+      await new Promise(resolve => setTimeout(resolve, 10));
+      await nextTick();
+      expect(controller.currentAction.value).toBe('collectEquipment');
+      for (const [name, value] of Object.entries(args)) expect(controller.currentArgs.value[name]).toBe(value);
+    }
+
+    it('should preserve followUp pre-filled args when skip triggers auto-execute', async () => {
       actionMetadata.value = { ...createTestMetadata(), ...followUpMeta };
       availableActions.value = [...(availableActions.value ?? []), 'collectEquipment'];
 
@@ -2030,14 +2041,7 @@ describe('useActionController', () => {
 
       // Execute the first action which triggers the followUp
       await controller.execute('endTurn');
-      // Wait for setTimeout(0) in executeCurrentAction's followUp handling
-      await new Promise(resolve => setTimeout(resolve, 10));
-      await nextTick();
-
-      // Verify followUp started with pre-filled args
-      expect(controller.currentAction.value).toBe('collectEquipment');
-      expect(controller.currentArgs.value.combatantId).toBe(42);
-      expect(controller.currentArgs.value.sectorId).toBe(7);
+      await expectFollowUpOpened(controller, { combatantId: 42, sectorId: 7 });
 
       // Now skip the optional equipment selection
       controller.skip('equipment');
@@ -2051,6 +2055,23 @@ describe('useActionController', () => {
       expect(lastCall[0]).toBe('collectEquipment');
       expect(lastCall[1]).toHaveProperty('combatantId', 42);
       expect(lastCall[1]).toHaveProperty('sectorId', 7);
+    });
+
+    it('starts the followUp an action with NO metadata hands back, as every send path does', async () => {
+      // execute() sends an action without metadata on its own branch. That
+      // branch used to drop a followUp the other two send paths start.
+      actionMetadata.value = { ...createTestMetadata(), ...followUpMeta };
+      availableActions.value = [...(availableActions.value ?? []), 'searchRuins'];
+
+      const controller = useActionController({ sendAction, availableActions, actionMetadata, isMyTurn });
+      sendAction.mockResolvedValueOnce({
+        success: true,
+        followUp: { action: 'collectEquipment', args: { sectorId: 7 } },
+      });
+
+      const result = await controller.execute('searchRuins');
+      expect(result.success).toBe(true);
+      await expectFollowUpOpened(controller, { sectorId: 7 });
     });
 
     it('buildServerArgs should exclude skipped selections', async () => {

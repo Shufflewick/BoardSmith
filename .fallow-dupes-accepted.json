@@ -74,13 +74,6 @@
       ]
     },
     {
-      "content": "043602c6646f8071",
-      "lines": 12,
-      "files": [
-        "src/ui/composables/useActionController.ts"
-      ]
-    },
-    {
       "content": "04d1a1b036b18b64",
       "lines": 14,
       "files": [
@@ -4466,14 +4459,6 @@
       ]
     },
     {
-      "content": "9d202798e33b7e92",
-      "lines": 17,
-      "files": [
-        "src/ui/composables/useActionController.picks.test.ts",
-        "src/ui/composables/useActionController.test.ts"
-      ]
-    },
-    {
       "content": "9d5df5af22984e00",
       "lines": 40,
       "files": [
@@ -4651,13 +4636,6 @@
       "files": [
         "src/ui/components/helpers/HintOverlay.test.ts",
         "src/ui/components/helpers/TutorialOverlay.test.ts"
-      ]
-    },
-    {
-      "content": "a46183582016d92f",
-      "lines": 21,
-      "files": [
-        "src/ui/composables/useActionController.ts"
       ]
     },
     {
