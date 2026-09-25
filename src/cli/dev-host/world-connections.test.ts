@@ -9,11 +9,12 @@
  * does when a driver process or a browser tab is killed.
  */
 import { afterEach, describe, expect, it } from 'vitest';
-import { WebSocket, WebSocketServer } from 'ws';
+import { WebSocketServer } from 'ws';
 
 import { Game, Player, Space, type GameElement, type GameOptions } from '../../engine/index.js';
 import { worldAction, worldBudgets, type WorldDefinition } from '../../world/index.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
+import { openSocketPage } from './socket-page.test-helper.js';
 import { createWorldConnections } from './world-connections.js';
 import { LocalWorldHost } from './world-host.js';
 import { openWorldStore, worldStorePath } from './world-store.js';
@@ -66,14 +67,6 @@ const definition = {
   } as unknown as WorldDefinition,
 } as unknown as ConstructorParameters<typeof LocalWorldHost>[0]['definition'];
 
-type Frame = Record<string, unknown> & { type: string };
-
-/** One real page: a socket, and every frame it has been sent. */
-interface Page {
-  readonly socket: WebSocket;
-  readonly frames: Frame[];
-  next(accept: (frame: Frame) => boolean): Promise<Frame>;
-}
 
 let cleanup: Array<() => Promise<void> | void> = [];
 afterEach(async () => {
@@ -89,7 +82,7 @@ async function serve(): Promise<{ host: LocalWorldHost; port: number }> {
   const store = openWorldStore(worldStorePath(dir), budgets);
   // Asked for on each message, as the dev server asks, so it may be declared
   // after the connections that read it.
-  const connections = createWorldConnections(() => host);
+  const connections = createWorldConnections(() => host, { admit: (message) => message.run() });
   const host = new LocalWorldHost({
     definition,
     worldName: 'Camp',
@@ -111,32 +104,9 @@ async function serve(): Promise<{ host: LocalWorldHost; port: number }> {
   return { host, port: (wss.address() as { port: number }).port };
 }
 
-async function open(port: number, clientId: string): Promise<Page> {
-  const socket = new WebSocket(`ws://127.0.0.1:${port}`);
-  const frames: Frame[] = [];
-  const waiters: Array<{ accept: (frame: Frame) => boolean; resolve: (frame: Frame) => void }> = [];
-  socket.on('message', (raw) => {
-    const frame = JSON.parse(raw.toString()) as Frame;
-    frames.push(frame);
-    for (const waiter of [...waiters]) {
-      if (!waiter.accept(frame)) continue;
-      waiters.splice(waiters.indexOf(waiter), 1);
-      waiter.resolve(frame);
-    }
-  });
-  await new Promise<void>((resolve, reject) => {
-    socket.once('open', () => resolve());
-    socket.once('error', reject);
-  });
-  cleanup.push(() => socket.terminate());
-  const page: Page = {
-    socket,
-    frames,
-    next: (accept) => new Promise((resolve) => waiters.push({ accept, resolve })),
-  };
-  const greeted = page.next((frame) => frame.type === 'world_offers');
-  socket.send(JSON.stringify({ type: 'hello', clientId }));
-  await greeted;
+async function open(port: number, clientId: string) {
+  const page = await openSocketPage(port, clientId, (frame) => frame.type === 'world_offers');
+  cleanup.push(() => page.socket.terminate());
   return page;
 }
 

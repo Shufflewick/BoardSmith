@@ -653,3 +653,25 @@ describe('#245, #250: offers survive the handshake in either order, and retire w
     wrapper.unmount();
   });
 });
+
+describe('#379: while a saved rules edit is building', () => {
+  it('says "Reloading rules…" while the host holds this page\'s commands', async () => {
+    const wrapper = await open();
+    expect(wrapper.find('[data-testid="rules-reloading"]').exists()).toBe(false);
+    socket!.deliver({ type: 'world_rules_reload', state: 'reloading' });
+    await wrapper.vm.$nextTick();
+    expect(wrapper.find('[data-testid="rules-reloading"]').text()).toBe('Reloading rules…');
+    wrapper.unmount();
+  });
+
+  it('stops saying so, and says why, when the edit did not load', async () => {
+    const wrapper = await open();
+    socket!.deliver({ type: 'world_rules_reload', state: 'reloading' });
+    const message = 'Your edited rules did not load, so this world is still running the ones it had: Expected ";"';
+    socket!.deliver({ type: 'world_rules_reload', state: 'failed', message });
+    await wrapper.vm.$nextTick();
+    expect(wrapper.find('[data-testid="rules-reloading"]').exists()).toBe(false);
+    expect(wrapper.text()).toContain(message);
+    wrapper.unmount();
+  });
+});

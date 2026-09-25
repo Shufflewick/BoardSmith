@@ -14,11 +14,36 @@
 import chalk from 'chalk';
 import { WebSocket } from 'ws';
 
+import type { RulesReloadQueue } from './rules-reload-queue.js';
 import type { LocalWorldHost, WorldDevRequest } from './world-host.js';
+
+/**
+ * How a page is answered when a message that runs the world's rules was held
+ * for a saved edit that did not load (#379), in the frame that message is
+ * answered in. Null for a message that still runs then (hello, attach), on the
+ * rules the world kept.
+ */
+function refusalOf(message: WorldDevRequest): ((text: string) => Record<string, unknown>) | null {
+  switch (message.type) {
+    case 'action':
+      return (text) => ({ type: 'world_response', requestId: message.requestId, ok: false, message: text });
+    case 'pick':
+      return (text) => ({ type: 'world_pick_result', requestId: message.requestId, ok: false, message: text });
+    case 'quote':
+      return (text) => ({ type: 'world_quote_result', requestId: message.requestId, ok: false, message: text });
+    case 'fire_due':
+    case 'wake':
+      return (text) => ({ type: 'world_notice', message: text });
+    default:
+      return null;
+  }
+}
 
 interface WorldConnections {
   /** One frame to one page, dropped when that page's socket is not open. */
   send(clientId: string, message: unknown): void;
+  /** One frame to every open page. */
+  broadcast(message: unknown): void;
   /** Whether this page's socket is open right now -- the host's `isOpen`. */
   isOpen(clientId: string): boolean;
   /** Take one newly upgraded socket: its messages go to the current host, and
@@ -38,8 +63,13 @@ interface WorldConnections {
  *
  * `host` is asked for on every message rather than captured once, because a
  * rule edit replaces the whole world host (#201) while the pages stay put.
+ * Every message is admitted through `queue`, so one sent while a saved rules
+ * edit is still building waits for the world to run it (#379).
  */
-export function createWorldConnections(host: () => LocalWorldHost): WorldConnections {
+export function createWorldConnections(
+  host: () => LocalWorldHost,
+  queue: Pick<RulesReloadQueue, 'admit'>,
+): WorldConnections {
   const clients = new Map<string, WebSocket>();
 
   const openSocket = (clientId: string): WebSocket | undefined => {
@@ -50,6 +80,10 @@ export function createWorldConnections(host: () => LocalWorldHost): WorldConnect
   return {
     send(clientId, message) {
       openSocket(clientId)?.send(JSON.stringify(message));
+    },
+
+    broadcast(message) {
+      for (const clientId of clients.keys()) openSocket(clientId)?.send(JSON.stringify(message));
     },
 
     isOpen(clientId) {
@@ -73,8 +107,20 @@ export function createWorldConnections(host: () => LocalWorldHost): WorldConnect
           clients.set(clientId, socket);
         }
         if (clientId === null) return; // a client identifies itself first
-        void host()
-          .handleMessage(clientId, message as unknown as WorldDevRequest)
+        const from = clientId;
+        const request = message as unknown as WorldDevRequest;
+        const refusal = refusalOf(request);
+        void queue
+          .admit({
+            run: () => host().handleMessage(from, request),
+            ...(refusal === null
+              ? {}
+              : {
+                  refuse: (text: string) => {
+                    if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(refusal(text)));
+                  },
+                }),
+          })
           .catch((error: unknown) =>
             // The message, not the error object, exactly as `reloadWorld` in
             // `dev-world.ts` does it (#240).

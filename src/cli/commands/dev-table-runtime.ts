@@ -13,9 +13,12 @@
  * The import is cache-busted, so loading again after a save is a genuine
  * re-read of the author's edited source.
  */
+import chalk from 'chalk';
+
 import type { GameStateSnapshot } from '../../engine/index.js';
-import type { executeOp as sessionExecuteOp, GameDefinition } from '../../session/index.js';
-import type { TableRules } from '../dev-host/multiplayer-host.js';
+import type { executeOp as sessionExecuteOp, GameDefinition, RulesReload } from '../../session/index.js';
+import type { MultiplayerHost, TableRules } from '../dev-host/multiplayer-host.js';
+import { createRulesReloadQueue, type RulesReloadQueue } from '../dev-host/rules-reload-queue.js';
 import type { reloadTableRules } from '../dev-host/table-rules-reload.js';
 import { cliSourceFile, importRuntimeBundle, toPosix } from './game-runtime.js';
 
@@ -64,4 +67,78 @@ export async function loadTableRuntime(
         reload(gameDefinition, gameOptions, snapshot as GameStateSnapshot, hostOptions),
     },
   };
+}
+
+/**
+ * What a rules edit changed that a running table host cannot take (#343).
+ *
+ * The seat range and the game type were read once at startup: the lobby, the
+ * seat map and every start op were built from them. An edit that changes one is
+ * refused by name, and the table keeps the rules it had, because running new
+ * rules against a table shaped for the old ones fails somewhere much less clear.
+ * Returns null when the edit is one the host can take.
+ */
+export function tableShapeChange(
+  running: Pick<GameDefinition, 'gameType' | 'minPlayers' | 'maxPlayers'>,
+  edited: Pick<GameDefinition, 'gameType' | 'minPlayers' | 'maxPlayers'>,
+): string | null {
+  const changed: string[] = [];
+  if (edited.gameType !== running.gameType) {
+    changed.push(`gameType (from "${running.gameType}" to "${edited.gameType}")`);
+  }
+  if (edited.minPlayers !== running.minPlayers || edited.maxPlayers !== running.maxPlayers) {
+    changed.push(
+      `the seat range (from ${running.minPlayers}-${running.maxPlayers} to ${edited.minPlayers}-${edited.maxPlayers})`,
+    );
+  }
+  if (changed.length === 0) return null;
+  return (
+    `This edit changes ${changed.join(' and ')}, which the running table was set up from, so it ` +
+    'is still running the rules it had. Stop `boardsmith dev` and start it again to use them.'
+  );
+}
+
+/** The terminal's line for a rules reload the table took, or null when there was no game to carry. */
+export function describeTableReload(outcome: RulesReload | null): string | null {
+  if (outcome === null) return 'Reloaded. The next game starts on the edited rules.';
+  switch (outcome.kind) {
+    case 'restored':
+      return 'Reloaded. The game goes on from where it was, on the edited rules.';
+    case 'replayed':
+      return (
+        `Reloaded. The game's saved position does not fit the edited rules (${outcome.restoreError}), ` +
+        `so it was rebuilt by replaying its ${outcome.moves} move${outcome.moves === 1 ? '' : 's'} on them. ` +
+        'Any half-finished selection was dropped.'
+      );
+    case 'failed':
+      // MultiplayerHost has already said so, to the terminal and every page.
+      return null;
+  }
+}
+
+/**
+ * THE TABLE ROAD'S RULES RELOAD QUEUE (#343, #379).
+ *
+ * `load` bundles the rules again; the queue holds every page's messages from
+ * the save until the table runs what it loaded (see `rules-reload-queue.ts`).
+ * An edit that changes the table's shape is refused by name, and the held moves
+ * are refused with the same words.
+ */
+export function tableRulesReloadQueue(args: {
+  host: Pick<MultiplayerHost, 'reloadRules' | 'tellRulesReload'>;
+  /** The definition the running table was set up from. */
+  running: Pick<GameDefinition, 'gameType' | 'minPlayers' | 'maxPlayers'>;
+  load: () => Promise<TableRuntime>;
+}): RulesReloadQueue {
+  return createRulesReloadQueue<TableRuntime>({
+    what: 'table',
+    load: args.load,
+    adopt: async (runtime) => {
+      const refusal = tableShapeChange(args.running, runtime.gameDefinition);
+      if (refusal !== null) throw new Error(refusal);
+      const said = describeTableReload(await args.host.reloadRules(runtime.rules));
+      if (said !== null) console.log(chalk.green(`  ${said}\n`));
+    },
+    tell: (notice) => args.host.tellRulesReload(notice),
+  });
 }

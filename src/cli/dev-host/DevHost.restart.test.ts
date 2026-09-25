@@ -320,3 +320,32 @@ describe('DevHost — debug:restart postMessage routing (D11 RED #1)', () => {
     expect(forwarded).toBeUndefined();
   });
 });
+
+// ── #379: a saved rules edit that is still building ──────────────────────────
+
+describe('DevHost — while a saved rules edit is building (#379)', () => {
+  it('says "Reloading rules…" until the host runs the new rules', async () => {
+    const wrapper = await mountAndActivate();
+    const ws = mockWsInstance!;
+    expect(wrapper.find('[data-testid="rules-reloading"]').exists()).toBe(false);
+
+    ws.simulateMessage({ type: 'rules_reload', state: 'reloading' });
+    await wrapper.vm.$nextTick();
+    expect(wrapper.find('[data-testid="rules-reloading"]').text()).toBe('Reloading rules…');
+
+    ws.simulateMessage({ type: 'rules_reload', state: 'reloaded' });
+    await wrapper.vm.$nextTick();
+    expect(wrapper.find('[data-testid="rules-reloading"]').exists()).toBe(false);
+  });
+
+  it('says why when the edit did not load', async () => {
+    const wrapper = await mountAndActivate();
+    const ws = mockWsInstance!;
+    ws.simulateMessage({ type: 'rules_reload', state: 'reloading' });
+    const message = 'Your edited rules did not load, so this table is still running the ones it had: Expected ";"';
+    ws.simulateMessage({ type: 'rules_reload', state: 'failed', message });
+    await wrapper.vm.$nextTick();
+    expect(wrapper.find('[data-testid="rules-reloading"]').exists()).toBe(false);
+    expect(wrapper.find('.dev-chrome__error').text()).toBe(message);
+  });
+});

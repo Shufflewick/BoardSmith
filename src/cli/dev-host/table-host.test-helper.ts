@@ -6,23 +6,14 @@
  * (`loadTableRuntime`), and run through `MultiplayerHost` with one seated
  * client, `dev`. Nothing here is a hand-built runtime.
  */
-import { mkdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
-
-import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { loadTableRuntime, type TableRuntime } from '../commands/dev-table-runtime.js';
 import { MultiplayerHost, type HostOutbound, type MultiplayerHostOptions } from './multiplayer-host.js';
+import { rulesProject } from './rules-project.test-helper.js';
 import type { createDevHostClientMemory } from './test-client-memory.js';
 
 /** A table project whose rules are `source`, and the one move an author makes to it: saving them. */
 export function tableProject(prefix: string, source: string) {
-  const dir = tempTree(prefix);
-  const rulesPath = join(dir, 'src', 'rules');
-  mkdirSync(rulesPath, { recursive: true });
-  const tempDir = join(dir, '.boardsmith');
-  mkdirSync(tempDir, { recursive: true });
-  const save = (rules: string) => writeFileSync(join(rulesPath, 'index.ts'), rules);
-  save(source);
+  const { rulesPath, tempDir, save } = rulesProject(prefix, source);
   const load = (): Promise<TableRuntime> => loadTableRuntime(rulesPath, tempDir, 'monorepo');
   return { save, load };
 }
