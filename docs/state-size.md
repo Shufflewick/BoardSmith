@@ -165,6 +165,11 @@ remove `checkpoints: { max }` on the game definition to reach further back.
 Refused, not approximated. A bounded window trades undo depth for size, and the
 trade is stated rather than silently taken.
 
+The player is never offered an undo the window (or `enabled: false`) will
+refuse. A seat's `canUndo` comes from the same decision the undo itself takes
+(`decideUndo` in `src/session/utils.ts`), so the Undo button and the "Undo last
+action" menu item are off whenever the checkpoint the undo needs is missing.
+
 The default is unbounded — every checkpoint retained, forever. That is the right
 default for the ordinary game, which never comes near the ceiling, and it is a
 cliff for a high-action-count one: the 15x15 grid above is 44x smaller at
