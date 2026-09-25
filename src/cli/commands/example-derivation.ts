@@ -295,6 +295,14 @@ const DIAGRAM_DESCRIPTION_HEADER_RE = /^Diagram description \(/i;
  * test through `annotationBody` (`verify-derive-check.ts`), never a second decoration-
  * normalization implementation.
  */
+/**
+ * Whether an extraction line is a bare citation header: it names the page and section a quote
+ * comes from and carries no content of its own, so it is never a worked example's own line.
+ */
+export function isCitationHeaderLine(line: string): boolean {
+  return CITATION_HEADER_RE.test(annotationBody(line));
+}
+
 function isExtractionLine(line: string): boolean {
   const body = annotationBody(line);
   return (

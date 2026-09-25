@@ -800,26 +800,36 @@ export async function reanchorExampleLedger(projectDir: string): Promise<Reancho
   const records = await readExampleReplayVerdicts(projectDir);
   if (records.length === 0) return { moved: [], lost: [] };
   const unanchored = findUnanchoredExamples(records, await readLiveSlices(projectDir));
+  const { rewritten, moved } = moveUnanchoredExamples(records, unanchored);
+  if (moved.length > 0) await replaceExampleReplayVerdicts(projectDir, rewritten);
+  return { moved, lost: unanchored.filter(isLost) };
+}
 
+/**
+ * `records` with every `moved` example in `unanchored` moved to the line its text is now on (new
+ * `lineNumber` and `exampleId`, every other field unchanged), in the same order. The one place a
+ * record is re-anchored: `ingest-check` and `verify-example-ledger-upgrade` both move through it.
+ */
+export function moveUnanchoredExamples(
+  records: readonly ExampleReplayRecord[],
+  unanchored: readonly UnanchoredExample[],
+): { rewritten: ExampleReplayRecord[]; moved: ReanchorResult['moved'] } {
   const movedTo = new Map<string, number>();
   for (const u of unanchored) if (u.movedTo !== undefined) movedTo.set(u.exampleId, u.movedTo);
   const moved: ReanchorResult['moved'] = [];
-  if (movedTo.size > 0) {
-    const rewritten = records.map((r) => {
-      const lineNumber = movedTo.get(r.exampleId);
-      if (lineNumber === undefined) return r;
-      const exampleId = workedExampleId({ slicePath: r.slicePath, lineNumber });
-      moved.push({ from: r.exampleId, to: exampleId });
-      return createExampleReplayRecord({
-        ...r,
-        exampleId,
-        lineNumber,
-        supportingQuoteLines: [...r.supportingQuoteLines],
-      });
+  const rewritten = records.map((r) => {
+    const lineNumber = movedTo.get(r.exampleId);
+    if (lineNumber === undefined) return r;
+    const exampleId = workedExampleId({ slicePath: r.slicePath, lineNumber });
+    moved.push({ from: r.exampleId, to: exampleId });
+    return createExampleReplayRecord({
+      ...r,
+      exampleId,
+      lineNumber,
+      supportingQuoteLines: [...r.supportingQuoteLines],
     });
-    await replaceExampleReplayVerdicts(projectDir, rewritten);
-  }
-  return { moved, lost: unanchored.filter(isLost) };
+  });
+  return { rewritten, moved };
 }
 
 /**
