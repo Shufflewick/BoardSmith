@@ -222,7 +222,6 @@
     "src/session/types.ts:ChoiceWithRefs",
     "src/session/utils.ts:UndoFlowState",
     "src/session/utils.ts:UndoRefusalReason",
-    "src/session/utils.ts:ElementDiff",
     "src/testing/test-game.ts:SelectionChoicesView",
     "src/testing/test-game.ts:ActionChoicesView",
     "src/testing/test-game.ts:ActionSpaceWithChoicesView",

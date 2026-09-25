@@ -882,6 +882,37 @@ watch(() => boardInteraction?.currentAction, (action, prevAction) => {
 
 > **Note:** Action state is automatically cleared when the action completes, is cancelled, or the turn ends.
 
+### useTableActionWiring
+
+Builds a table's action controller and the board bridge that feeds the board
+from it, out of one seat's published state. GameShell calls it, so a game built
+on the shell never does. Call it yourself only where you mount a board without
+the shell, which in practice means a test (see the a11y floor in
+`src/cli/slash-command/bs/build/test.md`).
+
+```typescript
+import { createBoardInteraction, provideBoardInteraction, useTableActionWiring } from 'boardsmith/ui';
+
+const board = createBoardInteraction();
+provideBoardInteraction(board);
+const { controller, actionMetadata, disabledActions } = useTableActionWiring({
+  seatState,                    // Ref<PlayerGameState>, replaced on every broadcast
+  availableActions: computed(() => seatState.value.availableActions ?? []),
+  isMyTurn: computed(() => seatState.value.isMyTurn),
+  playerSeat: ref(seat),
+  boardInteraction: board,
+  autoEndTurn: ref(true),
+  isViewingHistory: ref(false),
+  sendAction: (name, args) => session.performAction(name, seat, args),
+  fetchPickChoices: async (action, pick, player, args) => session.getPickChoices(action, pick, player, args),
+});
+```
+
+It reads the action metadata, disabled reasons, tutorial step and which game
+tree the state came from (`gameInstanceId`, `restoreEpoch`) off `seatState`, so
+an undo or a new game cancels an open pick with nothing passed for it. The
+bridge underneath is not exported: see the migration guide, contract r106.
+
 ### useDragDrop
 
 Composable for drag-and-drop in custom UIs. Call once at setup, get functions that work with any element. ActionPanel automatically orchestrates drag-drop by detecting when drag starts, finding matching actions, and executing on drop.

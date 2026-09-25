@@ -12,7 +12,7 @@ import { MultiplayerHost, type TableRules } from '../dev-host/multiplayer-host.j
 import { createDevHostConnectionHandler } from '../dev-host/connection-handler.js';
 import { devStorePath, loadDevStore } from '../dev-host/persistence-file-store.js';
 import { resetWorldStore, worldResetNotice, worldStoreDir } from '../dev-host/world-store.js';
-import { announceHost, onShutdown } from '../dev-host/shutdown.js';
+import { announceHost, onShutdown, teardownInOrder } from '../dev-host/shutdown.js';
 import { requireFreePort } from '../dev-host/port.js';
 import type { PersistenceStore } from '../../persistence/index.js';
 import { getProjectContext, toPosix } from './game-runtime.js';
@@ -24,6 +24,7 @@ import { resolveUserPath } from '../lib/user-path.js';
 import { loadWorldRuntime, startWorldDevServer, type WorldRuntime } from './dev-world.js';
 import {
   claimWebSocketPath,
+  closeViteServer,
   devNotFoundMiddleware,
   listeningViteServer,
   monorepoBoardsmithResolvePlugin,
@@ -1133,18 +1134,17 @@ export async function devCommand(options: DevOptions): Promise<void> {
 
     console.log(chalk.green('\n  Ready! Press Ctrl+C to stop.\n'));
 
-    onShutdown(async () => {
-      console.log(chalk.dim('\n  Shutting down...'));
-      hostSocket.close();
-      clients.clear();
-      await vite.close();
-      try {
-        rmSync(tempDir, { recursive: true, force: true });
-      } catch {
-        // Ignore cleanup errors
-      }
-      process.exit(0);
-    });
+    // ONE ORDERLY STOP (#366): what this host holds, closed in order, and a
+    // stop that cannot finish ends anyway, naming what is still open.
+    onShutdown(
+      teardownInOrder([
+        { name: "the game's socket", close: () => hostSocket.close() },
+        { name: 'the browser connections', close: () => clients.clear() },
+        { name: 'the Vite dev server', close: () => closeViteServer(vite) },
+        { name: `the build directory (${tempDir})`, close: () => rmSync(tempDir, { recursive: true, force: true }) },
+      ]),
+      { say: (line) => console.log(chalk.dim(line)) },
+    );
 
   } catch (error) {
     throw new Error(

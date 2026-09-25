@@ -1859,7 +1859,10 @@ An undo whose span consumed a draw is then refused. Each draw happens exactly
 once no matter how the actions around it are ordered: reordering *before* a draw
 without observing it carries no advantage (the value depends only on the
 generator position, which non-drawing actions never move), and observing a draw
-fences the rewind.
+fences the rewind. The player is not offered that undo either: the seat's
+`canUndo` is decided by the same rule the server applies, so the Undo button and
+the "Undo last action" menu item are off after a draw rather than answering a
+click with the refusal.
 
 Leave it off for cooperative and solo games, where a take-back is a feature.
 It is off by default for that reason.

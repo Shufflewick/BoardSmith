@@ -1,5 +1,6 @@
 import { promises as fs } from 'node:fs';
-import { dirname, join, relative, resolve, sep } from 'node:path';
+import { join, relative, resolve, sep } from 'node:path';
+import ts from 'typescript';
 import {
   annotationBody,
   EXAMPLE_LINE_RE,
@@ -454,48 +455,29 @@ export interface GameApiSurface {
   exportedSymbols: GameApiSymbol[];
 }
 
-/** A top-level `export function|const|class Name` declaration, anchored at line start. */
-const TOP_LEVEL_DECLARATION_RE = /^export\s+(function|const|class)\s+(\w+)/gm;
-
 /**
- * An `export * from '<relative path>'` or `export { a, b as c } from '<relative path>'` re-export,
- * anchored at line start. Group 1 is `*` for the star form, group 2 the braced name list for the
- * named form, group 3 the specifier (any depth, `./` or `../`). `export type { ... }` and
- * re-exports from packages do not match: neither names a runtime symbol the project declares.
+ * One game's rules as its own compiler sees them: the game's compiler options, a `Program`
+ * rooted at `src/rules/index.ts` that holds only files under `src/`, and that program's checker.
+ * `srcDir` ends in `/` and, like every path here, is absolute and in the compiler's forward-slash
+ * form, which is the form the compiler reports file names in. It is deliberately not made a real
+ * path: the compiler reports the game's own modules under the path it was given, so a real path
+ * would put them outside `srcDir` wherever the project path runs through a symlink.
  */
-const RELATIVE_REEXPORT_RE = /^export\s*(?:(\*)|\{([^}]*)\})\s*from\s*['"](\.{1,2}\/[^'"]*)['"]/gm;
-
-/**
- * A local export list, `export { a, b as c }` with no `from`, anchored at line start. Group 1 is
- * the braced name list. `export type { ... }` does not match: it names no runtime symbol.
- */
-const LOCAL_EXPORT_LIST_RE = /^export\s*\{([^}]*)\}(?!\s*from\b)/gm;
-
-/**
- * A value import with a `from` clause, anchored at line start: `import a from`,
- * `import { a, b as c } from`, `import * as ns from`, or a default with either of the last two.
- * Group 1 is the default binding, group 2 the braced name list, group 3 the namespace binding,
- * group 4 the specifier. `import type ...` does not match.
- */
-const IMPORT_RE =
-  /^import\s+(?!type\s)(?:(\w+)\s*,?\s*)?(?:\{([^}]*)\}|\*\s*as\s+(\w+))?\s*from\s*['"]([^'"]+)['"]/gm;
-
-/** Where a module's local binding comes from: the module it imports from, and the name there. */
-interface ImportedBinding {
-  specifier: string;
-  /** The name the source module exports, `default` for a default import, `*` for a namespace. */
-  importedName: string;
+interface RulesProgram {
+  projectDir: string;
+  srcDir: string;
+  options: ts.CompilerOptions;
+  program: ts.Program;
+  checker: ts.TypeChecker;
+  /** Modules whose `export ... from` declarations have already been checked. */
+  checkedModules: Set<string>;
 }
 
-/** A symbol a module exports, located at the module that declares it. */
-interface DeclaredExport {
-  declaredName: string;
-  kind: GameApiSymbol['kind'];
-  absolutePath: string;
-}
+/** Where a module specifier leads: a module of the game's own rules, or a package. */
+type SpecifierTarget = { kind: 'rules'; file: ts.SourceFile } | { kind: 'package' };
 
-function toProjectRelativeModule(projectDir: string, absolutePath: string): string {
-  return relative(projectDir, absolutePath).split(sep).join('/');
+function toProjectRelativeModule(rules: RulesProgram, fileName: string): string {
+  return relative(rules.projectDir, fileName).split(sep).join('/');
 }
 
 async function isFile(path: string): Promise<boolean> {
@@ -506,199 +488,242 @@ async function isFile(path: string): Promise<boolean> {
   }
 }
 
-/**
- * Resolves a relative re-export specifier the way a generated game's TypeScript does
- * (`moduleResolution: 'bundler'`): `./x.js` names `x.ts` or `x.tsx`, and an extensionless `./x`
- * names `x.ts`, `x.tsx`, `x/index.ts` or `x/index.tsx`. Throws, naming every path it tried, when
- * none exists, and refuses a target outside `src/`.
- */
-async function resolveReexport(
-  projectDir: string,
-  importerPath: string,
-  specifier: string,
-): Promise<string> {
-  const importer = toProjectRelativeModule(projectDir, importerPath);
-  const base = resolve(dirname(importerPath), specifier);
-  const srcDir = join(projectDir, 'src');
-  if (!base.startsWith(srcDir + sep)) {
+/** The game's own compiler options, read from its `tsconfig.json` as `tsc` reads them. */
+async function readGameCompilerOptions(projectDir: string): Promise<ts.CompilerOptions> {
+  const configPath = join(projectDir, 'tsconfig.json');
+  if (!(await isFile(configPath))) {
     throw new Error(
-      `${importer} re-exports '${specifier}', which is outside src/.\n` +
-        `The worked-example API surface lists only the game's own rules under src/. Move that ` +
-        `module under src/, or stop re-exporting it from ${importer}.`,
+      `No tsconfig.json in ${projectDir}.\n` +
+        `collectGameApiSurface resolves the rules' imports exactly as the game's compiler does, ` +
+        `so it reads the game's own tsconfig.json. Every generated game has one; pass the ` +
+        `generated project's root directory, or restore its tsconfig.json.`,
     );
   }
-  const candidates = base.endsWith('.js')
-    ? [`${base.slice(0, -3)}.ts`, `${base.slice(0, -3)}.tsx`]
-    : [`${base}.ts`, `${base}.tsx`, join(base, 'index.ts'), join(base, 'index.tsx')];
-  for (const candidate of candidates) {
-    if (await isFile(candidate)) return candidate;
+  const unrecoverable: ts.Diagnostic[] = [];
+  const parsed = ts.getParsedCommandLineOfConfigFile(configPath, undefined, {
+    ...ts.sys,
+    onUnRecoverableConfigFileDiagnostic: (diagnostic) => unrecoverable.push(diagnostic),
+  });
+  const errors = [...unrecoverable, ...(parsed?.errors ?? [])];
+  if (!parsed || errors.length > 0) {
+    throw new Error(
+      `The tsconfig.json in ${projectDir} could not be read: ` +
+        `${errors.map((d) => ts.flattenDiagnosticMessageText(d.messageText, ' ')).join('; ')}\n` +
+        `Fix it; the game will not compile with it either.`,
+    );
   }
-  throw new Error(
-    `${importer} re-exports '${specifier}', but no file exists there. Tried: ` +
-      `${candidates.map((c) => toProjectRelativeModule(projectDir, c)).join(', ')}.\n` +
-      `Fix the path in ${importer}; the game will not compile with it either.`,
+  return parsed.options;
+}
+
+/**
+ * Builds the program over the game's rules. The compiler host hands the program only files under
+ * `src/`, so the compiler never reads the test directory or a package: a package is never the
+ * game's own rules, and `buildExampleTranslationPayload` promises never to carry test text.
+ */
+async function createRulesProgram(projectDir: string): Promise<RulesProgram> {
+  const options = await readGameCompilerOptions(projectDir);
+  const compilerProjectDir = resolve(projectDir).split(sep).join('/');
+  const srcDir = `${compilerProjectDir}/src/`;
+  const host = ts.createCompilerHost(options, true);
+  const readSourceFile = host.getSourceFile.bind(host);
+  host.getSourceFile = (fileName, ...rest) =>
+    fileName.startsWith(srcDir) ? readSourceFile(fileName, ...rest) : undefined;
+  const program = ts.createProgram({
+    rootNames: [`${compilerProjectDir}/src/rules/index.ts`],
+    options,
+    host,
+  });
+  return {
+    projectDir: compilerProjectDir,
+    srcDir,
+    options,
+    program,
+    checker: program.getTypeChecker(),
+    checkedModules: new Set(),
+  };
+}
+
+/**
+ * Resolves the specifier of an import or re-export in `importer` with the game's own compiler
+ * options. A package, or a bare specifier nothing resolves (a package that is not installed), is
+ * never the game's own rules. A relative specifier that resolves to no file, or anything that
+ * resolves to a project file outside `src/`, throws: the first will not compile, and the second
+ * would put a non-rules module, such as a test helper, in the surface.
+ */
+function resolveSpecifier(
+  rules: RulesProgram,
+  importer: ts.SourceFile,
+  specifier: ts.StringLiteralLike,
+): SpecifierTarget {
+  const importerModule = toProjectRelativeModule(rules, importer.fileName);
+  const tried: string[] = [];
+  const { resolvedModule } = ts.resolveModuleName(
+    specifier.text,
+    importer.fileName,
+    rules.options,
+    {
+      ...ts.sys,
+      fileExists: (path) => {
+        tried.push(path);
+        return ts.sys.fileExists(path);
+      },
+    },
+    undefined,
+    undefined,
+    rules.program.getModeForUsageLocation(importer, specifier),
   );
+  if (!resolvedModule) {
+    if (!ts.isExternalModuleNameRelative(specifier.text)) return { kind: 'package' };
+    throw new Error(
+      `${importerModule} re-exports '${specifier.text}', but no file exists there. Tried: ` +
+        `${[...new Set(tried)].map((path) => toProjectRelativeModule(rules, path)).join(', ')}.\n` +
+        `Fix the path in ${importerModule}; the game will not compile with it either.`,
+    );
+  }
+  if (resolvedModule.isExternalLibraryImport) return { kind: 'package' };
+  const file = rules.program.getSourceFile(resolvedModule.resolvedFileName);
+  if (!resolvedModule.resolvedFileName.startsWith(rules.srcDir) || !file) {
+    throw new Error(
+      `${importerModule} re-exports '${specifier.text}', which is outside src/.\n` +
+        `The worked-example API surface lists only the game's own rules under src/. Move that ` +
+        `module under src/, or stop re-exporting it from ${importerModule}.`,
+    );
+  }
+  checkReexports(rules, file);
+  return { kind: 'rules', file };
 }
 
 /**
- * The value entries of a braced name list (`a, b as c, type T`), as `[localName, exportedName]`
- * pairs. Type-only entries are dropped: they name no runtime symbol.
+ * Resolves every `export ... from` of `module`, and of each module those reach, so a broken or
+ * escaping re-export fails loudly even when no listed symbol passes through it. An `export *`
+ * hop is otherwise invisible: the checker folds the target's names into the re-exporting module.
  */
-function parseNameList(list: string): Array<[string, string]> {
-  return list
-    .split(',')
-    .map((entry) => entry.trim())
-    .filter((entry) => entry.length > 0 && !/^type\s/.test(entry))
-    .map((entry) => {
-      const [localName, exportedName = localName] = entry.split(/\s+as\s+/).map((n) => n.trim());
-      return [localName, exportedName];
-    });
-}
-
-/** Every value binding `text` imports, keyed by the local name it is bound to. */
-function collectImportedBindings(text: string): Map<string, ImportedBinding> {
-  const bindings = new Map<string, ImportedBinding>();
-  for (const m of text.matchAll(IMPORT_RE)) {
-    const specifier = m[4];
-    if (m[1]) bindings.set(m[1], { specifier, importedName: 'default' });
-    if (m[3]) bindings.set(m[3], { specifier, importedName: '*' });
-    for (const [importedName, localName] of parseNameList(m[2] ?? '')) {
-      bindings.set(localName, { specifier, importedName });
+function checkReexports(rules: RulesProgram, module: ts.SourceFile): void {
+  if (rules.checkedModules.has(module.fileName)) return;
+  rules.checkedModules.add(module.fileName);
+  for (const statement of module.statements) {
+    if (
+      ts.isExportDeclaration(statement) &&
+      !statement.isTypeOnly &&
+      statement.moduleSpecifier &&
+      ts.isStringLiteralLike(statement.moduleSpecifier)
+    ) {
+      resolveSpecifier(rules, module, statement.moduleSpecifier);
     }
   }
-  return bindings;
+}
+
+/** The specifier of the import or `export ... from` an alias declaration belongs to, if any. */
+function aliasModuleSpecifier(declaration: ts.Declaration): ts.StringLiteralLike | undefined {
+  let specifier: ts.Expression | undefined;
+  if (ts.isExportSpecifier(declaration)) specifier = declaration.parent.parent.moduleSpecifier;
+  else if (ts.isNamespaceExport(declaration)) specifier = declaration.parent.moduleSpecifier;
+  else if (ts.isImportSpecifier(declaration)) specifier = declaration.parent.parent.parent.moduleSpecifier;
+  else if (ts.isNamespaceImport(declaration)) specifier = declaration.parent.parent.moduleSpecifier;
+  else if (ts.isImportClause(declaration)) specifier = declaration.parent.moduleSpecifier;
+  return specifier && ts.isStringLiteralLike(specifier) ? specifier : undefined;
 }
 
 /**
- * The kind of a top-level declaration of `name` in `text`, exported or not. A name declared in
- * another form (`let`, `enum`, ...) is classed `const`, the least-specific default.
+ * True when an alias binds a whole module (`import * as ns`, `export * as ns`) or a module's
+ * default export (`import d`, `import { default as d }`, `export { default as d } from`). Such a
+ * name can be imported by name only where it is exported, so it is listed there.
  */
-function localDeclarationKind(text: string, name: string): GameApiSymbol['kind'] {
-  const m = new RegExp(`^(?:export\\s+)?(function|const|class)\\s+${name}\\b`, 'm').exec(text);
-  return m ? (m[1] as GameApiSymbol['kind']) : 'const';
+function bindsModuleOrDefault(declaration: ts.Declaration): boolean {
+  if (ts.isImportClause(declaration) || ts.isNamespaceImport(declaration) || ts.isNamespaceExport(declaration)) {
+    return true;
+  }
+  if (ts.isImportSpecifier(declaration) || (ts.isExportSpecifier(declaration) && declaration.parent.parent.moduleSpecifier)) {
+    return (declaration.propertyName ?? declaration.name).text === 'default';
+  }
+  return false;
+}
+
+/** The surface entry for a symbol declared in the game's rules, or none for a type. */
+function declaredSymbol(rules: RulesProgram, symbol: ts.Symbol): GameApiSymbol | undefined {
+  if (!(symbol.flags & ts.SymbolFlags.Value)) return undefined;
+  const declaration = symbol.valueDeclaration ?? symbol.declarations![0];
+  const kind: GameApiSymbol['kind'] =
+    symbol.flags & ts.SymbolFlags.Class ? 'class' : symbol.flags & ts.SymbolFlags.Function ? 'function' : 'const';
+  return {
+    name: symbol.name,
+    kind,
+    module: toProjectRelativeModule(rules, declaration.getSourceFile().fileName),
+  };
 }
 
 /**
- * The declaration a module's `importedName` resolves to, given the exports collected from it.
- * A name the chain never finds declared as `export function|const|class` is recorded as `const`
- * at that module.
+ * Follows one exported name, alias by alias, to the module that declares it. The walk stops early,
+ * and lists nothing, at a type-only import or export or at a package. It stops at a whole-module
+ * or default binding and lists the name where it is exported, as `const`.
  */
-function declaredIn(
-  targetExports: ReadonlyMap<string, DeclaredExport>,
-  importedName: string,
-  targetPath: string,
-): DeclaredExport {
-  return (
-    targetExports.get(importedName) ?? { declaredName: importedName, kind: 'const', absolutePath: targetPath }
-  );
-}
-
-/**
- * What the local export lists (`export { a, b as c }`, no `from`) of the module at
- * `absolutePath` export, keyed by exported name (#368). A name the module imported from a
- * relative path is followed to the module that declares it, exactly as a named re-export is. One
- * imported from a package is not the game's own and is skipped, as a package re-export is. A name
- * declared here, or bound here by a default or namespace import, is listed at this module, which
- * is where it can be imported by name.
- */
-async function collectLocalExportLists(
-  projectDir: string,
-  absolutePath: string,
-  text: string,
-  onPath: ReadonlySet<string>,
-): Promise<Map<string, DeclaredExport>> {
-  const exports = new Map<string, DeclaredExport>();
-  const imports = collectImportedBindings(text);
-  for (const m of text.matchAll(LOCAL_EXPORT_LIST_RE)) {
-    for (const [localName, exportedName] of parseNameList(m[1])) {
-      const binding = imports.get(localName);
-      if (binding && !binding.specifier.startsWith('.')) continue;
-      if (!binding || binding.importedName === '*' || binding.importedName === 'default') {
-        const kind = binding ? 'const' : localDeclarationKind(text, localName);
-        exports.set(exportedName, { declaredName: exportedName, kind, absolutePath });
-        continue;
-      }
-      const targetPath = await resolveReexport(projectDir, absolutePath, binding.specifier);
-      const targetExports = await collectModuleExports(projectDir, targetPath, onPath);
-      exports.set(exportedName, declaredIn(targetExports, binding.importedName, targetPath));
+function surfaceEntry(rules: RulesProgram, exported: ts.Symbol): GameApiSymbol | undefined {
+  let current = exported;
+  let exportedAs = exported;
+  while (current.flags & ts.SymbolFlags.Alias) {
+    const declaration = current.declarations![0];
+    if (ts.isTypeOnlyImportOrExportDeclaration(declaration)) return undefined;
+    const specifier = aliasModuleSpecifier(declaration);
+    const importer = declaration.getSourceFile();
+    const target = specifier ? resolveSpecifier(rules, importer, specifier) : undefined;
+    if (target?.kind === 'package') return undefined;
+    if (ts.isExportSpecifier(declaration) || ts.isNamespaceExport(declaration)) exportedAs = current;
+    if (bindsModuleOrDefault(declaration)) {
+      return {
+        name: exportedAs.name,
+        kind: 'const',
+        module: toProjectRelativeModule(rules, exportedAs.declarations![0].getSourceFile().fileName),
+      };
     }
-  }
-  return exports;
-}
-
-/**
- * Every symbol `absolutePath` exports, keyed by its exported name, following its re-exports to
- * any depth. `onPath` holds the modules whose exports are being collected above this call: a
- * re-export back into one of them adds nothing that module is not already collecting, so the
- * walk stops there, which is how a cycle of `export *` terminates.
- */
-async function collectModuleExports(
-  projectDir: string,
-  absolutePath: string,
-  onPath: ReadonlySet<string>,
-): Promise<Map<string, DeclaredExport>> {
-  const exports = new Map<string, DeclaredExport>();
-  if (onPath.has(absolutePath)) return exports;
-  const path = new Set(onPath).add(absolutePath);
-  const text = await fs.readFile(absolutePath, 'utf-8');
-
-  for (const m of text.matchAll(TOP_LEVEL_DECLARATION_RE)) {
-    exports.set(m[2], { declaredName: m[2], kind: m[1] as GameApiSymbol['kind'], absolutePath });
-  }
-
-  for (const m of text.matchAll(RELATIVE_REEXPORT_RE)) {
-    const targetPath = await resolveReexport(projectDir, absolutePath, m[3]);
-    const targetExports = await collectModuleExports(projectDir, targetPath, path);
-    if (m[1] === '*') {
-      // As in TypeScript: `export *` never carries `default`, and a name this module already
-      // exports takes precedence over one it would pull in.
-      for (const [name, declared] of targetExports) {
-        if (name !== 'default' && !exports.has(name)) exports.set(name, declared);
-      }
-      continue;
+    const next = rules.checker.getImmediateAliasedSymbol(current);
+    if (!next?.declarations?.length) {
+      const importerModule = toProjectRelativeModule(rules, importer.fileName);
+      const importedName =
+        ts.isImportSpecifier(declaration) || ts.isExportSpecifier(declaration)
+          ? (declaration.propertyName ?? declaration.name).text
+          : current.name;
+      throw new Error(
+        target
+          ? `${importerModule} exports '${exportedAs.name}' from '${specifier?.text}', ` +
+              `but ${toProjectRelativeModule(rules, target.file.fileName)} exports no '${importedName}'.\n` +
+              `Fix the name in ${importerModule}; the game will not compile with it either.`
+          : `${importerModule} exports '${exportedAs.name}', but declares no '${importedName}'.\n` +
+              `Fix the export list in ${importerModule}; the game will not compile with it either.`,
+      );
     }
-    for (const [importedName, exportedName] of parseNameList(m[2])) {
-      exports.set(exportedName, declaredIn(targetExports, importedName, targetPath));
-    }
+    current = next;
   }
-
-  for (const [exportedName, declared] of await collectLocalExportLists(projectDir, absolutePath, text, path)) {
-    exports.set(exportedName, declared);
-  }
-
-  return exports;
+  return declaredSymbol(rules, current);
 }
 
 /**
  * Produces a generated game project's exported rules API surface MECHANICALLY — a listing, not
- * an inference — by scanning `src/rules/index.ts` and following its re-exports to any depth and
- * into any subfolder of `src/`: `export * from '<path>'`, named
- * `export { a, b as c } from '<path>'`, and a local `export { a, b as c }` of names the module
- * imported, with each relative path resolved as the game's TypeScript resolves it (#359, #368).
- * Each symbol is listed at the module that DECLARES it, under the name it is declared with there,
- * because that is the pair a translated example imports. A name a module declares, or binds by a
- * default or namespace import, and exports only through a local list is listed at that module.
+ * an inference — by compiling `src/rules/index.ts` with the TypeScript compiler, under the game's
+ * own `tsconfig.json`, and following each name it exports to the module that DECLARES it, under
+ * the name it is declared with there, because that is the pair a translated example imports
+ * (#359, #368, #372). Every export form TypeScript has is followed: declarations, `export *`,
+ * `export { a as b } from`, and local lists such as `import { a } from './a.js'; export { a as b };`.
+ * Comments and string literals are never read as code. A name bound by a default or namespace
+ * import, or by `export * as ns`, is listed as `const` at the module that exports it, which is
+ * where it can be imported by name.
  *
  * Documented limits, so a caller never over-trusts this surface:
  *
- *   - A symbol is found only through export chains: `export ... from`, and local export lists
- *     such as `import { a } from './a.js'; export { a as b };`, whose imported names are followed
- *     the same way (#368). A module `index.ts` reaches only by importing it (never exporting
- *     what it imported) contributes nothing.
+ *   - Only runtime values are listed. Interfaces, type aliases and anything exported or imported
+ *     with `type` are not, and neither is a name from a package or `index.ts`'s default export.
  *   - It does NOT know whether a symbol is pure, side-effecting, or even callable with the shape
- *     a translator might assume — `kind` is a syntactic classification only (`function`/`const`/
- *     `class`), not a semantic guarantee.
- *   - A named re-export whose name the chain never finds declared as `export function|const|class`
- *     (another declaration form) is recorded as `const` at the module it was re-exported from —
- *     the least-specific, least-presumptuous default.
+ *     a translator might assume. `kind` is `class` for a class, `function` for a function
+ *     declaration, and `const` for every other value (a variable of any kind, an enum, a
+ *     namespace), not a semantic guarantee.
  *
- * A re-export that resolves to no file, or to a file outside `src/`, throws with the module and
- * specifier named, so a broken chain is never reported as a smaller surface.
+ * A project with no `tsconfig.json`, a relative re-export that resolves to no file, one that
+ * resolves outside `src/`, and a re-export of a name its target does not export all throw, naming
+ * the module and specifier, so a broken chain is never reported as a smaller surface.
  *
- * Reads only under `${projectDir}/src/` — never `testDir`. `buildExampleTranslationPayload`'s
- * "never contains the project's existing test files" guarantee (178-CONTEXT.md decision 6) holds
- * because this function is the ONLY source of project-derived text in that payload, and it never
- * opens a path under `testDir`.
+ * Reads only under `${projectDir}/src/` (and the project's `tsconfig.json`) — never `testDir`: the
+ * compiler host refuses every other source file. `buildExampleTranslationPayload`'s "never
+ * contains the project's existing test files" guarantee (178-CONTEXT.md decision 6) holds because
+ * this function is the ONLY source of project-derived text in that payload.
  */
 export async function collectGameApiSurface(projectDir: string): Promise<GameApiSurface> {
   const testDir = join(projectDir, 'tests');
@@ -711,20 +736,23 @@ export async function collectGameApiSurface(projectDir: string): Promise<GameApi
     );
   }
 
-  const symbols: GameApiSymbol[] = [];
-  const seen = new Set<string>();
-  for (const declared of (await collectModuleExports(projectDir, indexPath, new Set())).values()) {
-    const key = `${declared.declaredName}:${declared.absolutePath}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    symbols.push({
-      name: declared.declaredName,
-      kind: declared.kind,
-      module: toProjectRelativeModule(projectDir, declared.absolutePath),
-    });
+  const rules = await createRulesProgram(projectDir);
+  const index = rules.program.getRootFileNames()[0];
+  const indexFile = rules.program.getSourceFile(index)!;
+  checkReexports(rules, indexFile);
+  const indexModule = rules.checker.getSymbolAtLocation(indexFile);
+
+  const symbols = new Map<string, GameApiSymbol>();
+  for (const exported of indexModule ? rules.checker.getExportsOfModule(indexModule) : []) {
+    if (exported.name === 'default') continue;
+    const symbol = surfaceEntry(rules, exported);
+    if (symbol) symbols.set(`${symbol.module}\0${symbol.name}`, symbol);
   }
 
-  return { projectDir, testDir, exportedSymbols: symbols };
+  const exportedSymbols = [...symbols.values()].sort(
+    (a, b) => a.module.localeCompare(b.module) || a.name.localeCompare(b.name),
+  );
+  return { projectDir, testDir, exportedSymbols };
 }
 
 /**

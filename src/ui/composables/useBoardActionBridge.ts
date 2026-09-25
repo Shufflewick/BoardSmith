@@ -35,7 +35,7 @@ import type {
 } from './useActionControllerTypes.js';
 import { choiceBoardTarget, devWarn, resolvePickCounts } from './actionControllerHelpers.js';
 
-export interface BoardActionBridgeOptions {
+interface BoardActionBridgeOptions {
   controller: UseActionControllerReturn;
   /** Shared board interaction substrate. Undefined outside a GameShell — bridge is a no-op then. */
   boardInteraction: BoardInteraction | undefined;

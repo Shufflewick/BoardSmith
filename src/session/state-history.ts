@@ -18,13 +18,11 @@ import {
 } from './types.js';
 import {
   buildPlayerState,
-  computeUndoEligibility,
-  undoUnavailableMessage,
   buildActionTraces,
   computeElementDiff,
   assertUndoAllowed,
-  UndoRefusedError,
-  type ElementIdChanges,
+  decideUndo,
+  type ElementChanges,
 } from './utils.js';
 
 // ============================================
@@ -48,7 +46,7 @@ export interface UndoResult {
 /**
  * Element-level diff between two game states
  */
-export interface ElementDiff extends ElementIdChanges {
+export interface ElementDiff extends ElementChanges {
   /** The from action index */
   fromIndex: number;
   /** The to action index */
@@ -271,31 +269,15 @@ export class StateHistory<G extends Game = Game> {
 
     const runner = this.#getRunner();
 
-    // Awaiting-aware eligibility (D4/SIM-02): sequential steps keep the
-    // EXACT `currentPlayer` contract; a simultaneous step allows any seat
-    // that is (or was) awaiting THIS step, with the boundary computed from
-    // that seat's OWN action(s) -- not the turn-wide moveCount. Both
-    // executors share this single decision (parity, T-160-* drift guard).
-    const flowState = runner.getFlowState();
-    const { eligible, turnStartActionIndex, actionsThisTurn } = computeUndoEligibility(
-      this.#storedState.actionHistory,
-      flowState,
-      playerPosition
-    );
-    if (!eligible) {
-      return { success: false, error: "It's not your turn", errorCode: ErrorCode.NOT_YOUR_TURN };
+    // The one undo rule (#373), shared with the stateless twin
+    // (`stateless-ops.ts` `handleUndo`) and with the `canUndo` every seat is
+    // sent, so the offer and this decision cannot disagree. It is also the
+    // server-side enforcement (UNDO-01/UNDO-02).
+    const decision = decideUndo(runner, playerPosition);
+    if (!decision.allowed) {
+      return { success: false, error: decision.error, errorCode: decision.errorCode };
     }
-
-    // Check if there's anything to undo. The message is shared with the
-    // stateless twin so an undeclared `turnScope` is explained identically by
-    // both executors (parity, T-160-* drift guard).
-    if (actionsThisTurn === 0) {
-      return {
-        success: false,
-        error: undoUnavailableMessage(flowState),
-        errorCode: ErrorCode.NO_ACTIONS_TO_UNDO,
-      };
-    }
+    const { turnStartActionIndex, actionsThisTurn } = decision;
 
     // Restore the turn-start state AUTHORITATIVELY from the per-action checkpoint
     // captured at that action count — NOT by replaying actionHistory. Replay
@@ -307,18 +289,6 @@ export class StateHistory<G extends Game = Game> {
     const snapshot = runner.getSnapshot();
 
     try {
-      // Server-side enforcement (UNDO-01 / UNDO-02 finished-phase fence):
-      // the same shared guard called by the stateless `handleUndo` op --
-      // the two executors must not drift (D-01/D-09). Placed inside this
-      // try so the existing catch below converts the throw into the
-      // established `{ success: false, error }` shape.
-      assertUndoAllowed({
-        runner,
-        actionHistory: this.#storedState.actionHistory,
-        turnStartActionIndex,
-        fenceRandomRewind: runner.undoPolicy.fenceRandomRewind,
-      });
-
       // Restore the checkpoint, carrying its prefix forward so further undos
       // work -- and carrying BOTH policies off the runner being replaced. A
       // replacement runner built without them silently reverts this game to
@@ -328,14 +298,10 @@ export class StateHistory<G extends Game = Game> {
         undo: runner.undoPolicy,
       });
       if (!newRunner) {
-        return {
-          success: false,
-          error: `Cannot undo to the start of this turn: ` +
-            `${describeCheckpointAbsence(snapshot.actionCheckpoints, turnStartActionIndex)} The session accumulates ` +
-            `per-action checkpoints as it runs; a session cold-restored from action history alone ` +
-            `cannot undo across pending mutations.`,
-          errorCode: ErrorCode.NO_ACTIONS_TO_UNDO,
-        };
+        throw new Error(
+          `Undo was allowed but no checkpoint exists at action ${turnStartActionIndex}. ` +
+          `decideUndo checks for that checkpoint, so this is a BoardSmith bug; please report it.`,
+        );
       }
 
       // Replace the current runner via callback
@@ -360,7 +326,6 @@ export class StateHistory<G extends Game = Game> {
       return {
         success: false,
         error: error instanceof Error ? error.message : 'Failed to undo',
-        errorCode: error instanceof UndoRefusedError ? ErrorCode.UNDO_NOT_ALLOWED : undefined,
       };
     }
   }

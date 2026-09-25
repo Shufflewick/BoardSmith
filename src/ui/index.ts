@@ -121,16 +121,19 @@ export {
   focusFirstBoardTarget,
 } from './composables/useBoardFocusHandoff.js';
 
-// The bridge that keeps a custom board's selection in step with the action
-// controller's fill -> fetchChoicesForPick -> snapshotVersion++ -> currentChoices
-// chain. GameShell calls it internally, so a game built on the shell gets it for
-// free; a game that mounts its board directly — in a test, or without the whole
-// shell — had no way in (#30), which also made BoardSmith's own recommended
-// keyboard-integration test shape unreproducible from a game project.
+// The action controller and the board bridge that keeps a board's selection in
+// step with it, wired together from a seat's published state. GameShell calls
+// it, so a game built on the shell gets it for free; a game that mounts its
+// board directly (in a test, or without the whole shell) calls the same
+// function (#30). The bridge itself is not exported: its options track which
+// state fields it reads, and a game passing them by hand broke when one was
+// renamed (#378).
 export {
-  useBoardActionBridge,
-  type BoardActionBridgeOptions,
-} from './composables/useBoardActionBridge.js';
+  useTableActionWiring,
+  type TableActionWiring,
+  type TableActionWiringOptions,
+  type TableSeatState,
+} from './composables/useTableActionWiring.js';
 
 // The typed contract between GameShell and everything it renders (#39). A
 // custom UI reads the game context through this instead of guessing at string
