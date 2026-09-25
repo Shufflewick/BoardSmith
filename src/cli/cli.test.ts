@@ -171,7 +171,8 @@ describe('verify-example-ledger-upgrade — the one-time lineText upgrade (#371)
   });
 
   it('ingest-check refuses a pre-lineText ledger naming the upgrade, and passes once it has run', async () => {
-    const project = join(tempTree('bs-cli-example-ledger-upgrade-'), 'project');
+    const dir = tempTree('bs-cli-example-ledger-upgrade-');
+    const project = join(dir, 'project');
     const rulebook = join(project, DESIGN_DIR, 'rulebook');
     await fs.mkdir(join(rulebook, '.example-replay'), { recursive: true });
     const line = 'Example (p.2): "Draw a card, then discard one."';
