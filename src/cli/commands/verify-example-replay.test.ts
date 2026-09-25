@@ -17,6 +17,7 @@ import {
   verifyExampleRecordCommand,
   verifyExampleTranslateCommand,
   reanchorExampleLedger,
+  readSlicesWithoutExamples,
   type ExampleReplayRecord,
 } from './verify-example-replay.js';
 import {
@@ -1308,6 +1309,143 @@ describe('worked examples stay anchored to their slice line (#350)', () => {
 
     expect(result.unanchored.map((u) => u.reason)).toEqual(['moved', 'moved']);
     expect(result.slices.find((s) => s.slicePath === SLICE)?.pending).toBe(false);
+  });
+});
+
+describe('a slice recorded with no worked examples (#370)', () => {
+  let dir: string;
+
+  beforeEach(async () => {
+    dir = tempTree('bs-verify-example-none-');
+  });
+
+  const { makeProject, writeJson } = designProjectFixtures(() => dir);
+  const { writeExtraction, writeTranslations } = exampleReturnWriters(writeJson);
+
+  const SLICE = 'rulebook/03-terrain.md';
+  const SLICE_TEXT = '# Terrain\n\np.3, Terrain:\n"Hills slow every unit that crosses them."\n';
+  const EXAMPLE_LINE = 'Example (p.3): "A Crawler crossing a hill moves 1 space."';
+
+  const slicePathOnDisk = (project: string) => join(project, DESIGN_DIR, SLICE);
+  const sliceReport = async (project: string) =>
+    (await verifyExampleReplayCommand({ project, json: true })).slices.find((s) => s.slicePath === SLICE);
+
+  /** Records SLICE the way the build does when its extractor found nothing: `{ "examples": [] }`. */
+  async function recordNoExamples(project: string): Promise<void> {
+    const extraction = await writeExtraction('none-extraction.json', []);
+    const translations = await writeTranslations('none-translations.json', []);
+    await verifyExampleRecordCommand({ project, slicePath: SLICE, extraction, translations, json: true });
+  }
+
+  it('is no longer pending once recorded, and says so', async () => {
+    const project = await makeProject({ [SLICE]: SLICE_TEXT });
+    expect((await sliceReport(project))?.pending).toBe(true);
+
+    await recordNoExamples(project);
+
+    const slice = await sliceReport(project);
+    expect(slice?.pending).toBe(false);
+    expect(slice?.noWorkedExamples).toBe('recorded');
+    expect(await readExampleReplayVerdicts(project)).toEqual([]);
+    expect(await readSlicesWithoutExamples(project)).toEqual([
+      expect.objectContaining({ slicePath: SLICE }),
+    ]);
+  });
+
+  it('verify-example-record says the slice was recorded as having no worked examples', async () => {
+    const project = await makeProject({ [SLICE]: SLICE_TEXT });
+    const extraction = await writeExtraction('none-extraction.json', []);
+    const translations = await writeTranslations('none-translations.json', []);
+    const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      await verifyExampleRecordCommand({ project, slicePath: SLICE, extraction, translations });
+      const printed = logSpy.mock.calls.map((c) => c.join(' ')).join('\n');
+      expect(printed).toContain(`Recorded ${SLICE} as having no worked examples`);
+    } finally {
+      logSpy.mockRestore();
+    }
+  });
+
+  it('is pending again once the lines the extractor reads change, and says why', async () => {
+    const project = await makeProject({ [SLICE]: SLICE_TEXT });
+    await recordNoExamples(project);
+    await fs.writeFile(slicePathOnDisk(project), `${SLICE_TEXT}${EXAMPLE_LINE}\n`);
+
+    const slice = await sliceReport(project);
+    expect(slice?.pending).toBe(true);
+    expect(slice?.noWorkedExamples).toBe('slice-changed');
+    expect(await printedReport(project)).toContain(SLICE);
+  });
+
+  it('stays recorded when only lines the extractor never reads change (a Source line, say)', async () => {
+    const project = await makeProject({ [SLICE]: SLICE_TEXT });
+    await recordNoExamples(project);
+    await fs.writeFile(
+      slicePathOnDisk(project),
+      SLICE_TEXT.replace('# Terrain\n', '# Terrain\n\nSource: rulebook/source/rules.pdf\n'),
+    );
+
+    expect((await sliceReport(project))?.pending).toBe(false);
+  });
+
+  it('recording examples later replaces the no-examples record, and recording none replaces the examples', async () => {
+    const project = await makeProject({ [SLICE]: `${SLICE_TEXT}${EXAMPLE_LINE}\n` });
+    await recordNoExamples(project);
+
+    const extraction = await writeExtraction('one-extraction.json', [
+      {
+        lineNumber: 5,
+        pageCitation: 'p.3, Terrain',
+        kind: 'transition',
+        sourceText: 'A Crawler crossing a hill moves 1 space.',
+        setup: 'A Crawler stands before a hill.',
+        action: 'The Crawler moves.',
+        expected: 'It moves 1 space.',
+      },
+    ]);
+    const translations = await writeTranslations('one-translations.json', [
+      { slicePath: SLICE, lineNumber: 5, testCode: '', imports: [], verdictHint: 'unexecutable', unexecutableReason: 'no-matching-symbol' },
+    ]);
+    await verifyExampleRecordCommand({ project, slicePath: SLICE, extraction, translations, json: true });
+    expect(await readSlicesWithoutExamples(project)).toEqual([]);
+    expect((await readExampleReplayVerdicts(project)).map((r) => r.exampleId)).toEqual([`${SLICE}:5`]);
+
+    await recordNoExamples(project);
+    expect(await readExampleReplayVerdicts(project)).toEqual([]);
+    expect((await readSlicesWithoutExamples(project)).map((s) => s.slicePath)).toEqual([SLICE]);
+  });
+
+  it('survives the other ledger writers: verify-example-run\'s upsert and ingest-check\'s re-anchoring', async () => {
+    const project = await makeProject({
+      [SLICE]: SLICE_TEXT,
+      'rulebook/01-x.md': 'p.1, Definitions:\n"A worked example lives here."\n',
+    });
+    await recordNoExamples(project);
+    await recordExampleReplayVerdicts(project, [
+      recordFor('rulebook/01-x.md', 2, { lineText: '"A worked example lives here."' }),
+    ]);
+    await reanchorExampleLedger(project);
+
+    expect((await readSlicesWithoutExamples(project)).map((s) => s.slicePath)).toEqual([SLICE]);
+    expect((await sliceReport(project))?.pending).toBe(false);
+  });
+
+  it('a ledger that says a slice has examples AND has none is refused', async () => {
+    const project = await makeProject({ [SLICE]: SLICE_TEXT });
+    await recordNoExamples(project);
+    await expect(
+      recordExampleReplayVerdicts(project, [
+        recordFor(SLICE, 4, { lineText: '"Hills slow every unit that crosses them."' }),
+      ]),
+    ).rejects.toThrow(new RegExp(`${SLICE}.*both`, 's'));
+  });
+
+  it('a slice with nothing for an extractor to read is not pending: there is nothing to check', async () => {
+    const project = await makeProject({ [SLICE]: '# Terrain\n\nPlain prose only.\n' });
+
+    const slice = await sliceReport(project);
+    expect(slice?.notDispatchable).toBe('no-extractable-content');
+    expect(slice?.pending).toBe(false);
   });
 });
 

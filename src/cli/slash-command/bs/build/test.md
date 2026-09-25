@@ -131,6 +131,11 @@ here.
        everything the ledger held for that slice, leaving other slices alone. It records each example as
        `example-inconsistent`, `unexecutable` (with the translator's named reason), or `not-run`
        carrying the test the translator wrote.
+       A slice whose extraction returned `{ "examples": [] }` is recorded too, with `{}` as its
+       translations file (steps (c) and (d) have nothing to do for it): the ledger then records it
+       as having no worked examples, and (a) stops reporting it pending until the lines the
+       extractor reads change. A slice (a) reports `notDispatchable` has nothing to extract and
+       is not pending; skip it.
 
    (f) Run `boardsmith verify-example-emit --project <dir> --chunk <slug>` to write this chunk's
        single generated test file from the ledger, then `boardsmith verify-example-run --project

@@ -1,8 +1,10 @@
 import { designChunksDir, designRulebookDir } from '../lib/project-paths.js';
+import { createHash } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import chalk from 'chalk';
 import { atomicWriteFile } from './verify-run.js';
+import { readFencedJsonLedger, type FencedJsonLedgerFile } from '../lib/fenced-json-ledger.js';
 import {
   readLiveSlices,
   readSliceArgument,
@@ -20,6 +22,7 @@ import {
   createWorkedExampleSpec,
   collectWorkedExampleSpecs,
   assertValidExampleLineNumbers,
+  type ExampleExtractionPayload,
   type WorkedExampleKind,
   type WorkedExampleSpec,
 } from './example-derivation.js';
@@ -39,7 +42,7 @@ import {
  * worked example's expected outcome against the real engine.
  *
  * Two commands write the ledger: `verify-example-record` records what the extractor and
- * translator returned, and `verify-example-run` (`example-test-run.ts`) records what running the
+ * translator returned (a slice with no worked example as a `SliceWithoutExamplesRecord`, #370), and `verify-example-run` (`example-test-run.ts`) records what running the
  * emitted tests observed. `ingest-check` only moves a record to the line its text is now on
  * (`reanchorExampleLedger`, #350). This module's own
  * `verifyExampleReplayCommand` is read-only: it never dispatches a subagent and never assigns
@@ -386,6 +389,62 @@ function frozenTranslation(translation: ExampleTranslation): ExampleTranslation 
 }
 
 // -------------------------------------------------------------------------------------------
+// SliceWithoutExamplesRecord — a slice checked and found to hold no worked example (#370)
+// -------------------------------------------------------------------------------------------
+
+/**
+ * A slice whose extraction returned `{ "examples": [] }`. It has no example records to say it was
+ * checked, so without this it would be reported pending forever. `extractionHash` fingerprints the
+ * lines the extractor was shown (`sliceExtractionHash`): when they change, the slice may have
+ * gained an example, and `verify-example-replay` reports it pending again. A slice never has both
+ * this record and example records.
+ */
+interface SliceWithoutExamplesRecord {
+  readonly slicePath: string;
+  readonly noWorkedExamples: true;
+  readonly extractionHash: string;
+  /** ISO 8601, UTC. */
+  readonly recordedAt: string;
+}
+
+/**
+ * The SHA-256 of the text of every line `buildExampleExtractionPayload` retains, in order and
+ * without line numbers, so a line added the extractor never reads (a `Source:` line) or a line
+ * moving leaves it unchanged, and any change to what the extractor reads changes it.
+ */
+function sliceExtractionHash(slice: { path: string; text: string }): string {
+  const { lines } = buildExampleExtractionPayload(slice);
+  return createHash('sha256')
+    .update(lines.map((l) => l.text).join('\n'))
+    .digest('hex');
+}
+
+const SHA256_HEX_RE = /^[0-9a-f]{64}$/;
+
+/** Validates and constructs a `SliceWithoutExamplesRecord`, on the write path and the read path. */
+function createSliceWithoutExamplesRecord(input: {
+  slicePath: string;
+  extractionHash: string;
+  recordedAt?: string;
+}): SliceWithoutExamplesRecord {
+  if (input.slicePath.trim().length === 0) {
+    throw new Error('A no-worked-examples record names no slicePath.');
+  }
+  if (!SHA256_HEX_RE.test(input.extractionHash)) {
+    throw new Error(
+      `${input.slicePath}'s no-worked-examples record has no valid extractionHash.\n` +
+        `Record the slice again with verify-example-record, which computes it.`,
+    );
+  }
+  return Object.freeze({
+    slicePath: input.slicePath,
+    noWorkedExamples: true,
+    extractionHash: input.extractionHash,
+    recordedAt: input.recordedAt ?? new Date().toISOString(),
+  });
+}
+
+// -------------------------------------------------------------------------------------------
 // Task 2 — exampleReplayLedgerPath / replaceExampleReplayVerdicts / recordExampleReplayVerdicts /
 // readExampleReplayVerdicts — the atomic upsert-append ledger triad (CR-02/CR-04/CR-06)
 // -------------------------------------------------------------------------------------------
@@ -403,19 +462,45 @@ function exampleReplayKey(r: Pick<ExampleReplayRecord, 'exampleId'>): string {
   return r.exampleId;
 }
 
+/** Everything the ledger holds: example records, and the slices recorded as having none (#370). */
+interface ExampleReplayLedger {
+  records: ExampleReplayRecord[];
+  slicesWithoutExamples: SliceWithoutExamplesRecord[];
+}
+
 /**
- * Persists a batch of already-validated `ExampleReplayRecord`s to the project-level ledger,
- * through `atomicWriteFile` — the ONE atomic write path in the repo. REPLACES the ENTIRE ledger
- * body with exactly the `records` array supplied — a full rewrite, never the callable the
- * workflow uses per-batch (see `recordExampleReplayVerdicts` for that). Exported for the one
- * legitimate full-rewrite use case and for `recordExampleReplayVerdicts`'s own use.
+ * Throws when the ledger would say two things about one slice: that it has examples and that it
+ * has none, or that it has none twice. Checked on every write and every read.
  */
-export async function replaceExampleReplayVerdicts(
+function assertOneAnswerPerSlice(ledger: ExampleReplayLedger, where: string): void {
+  const withExamples = new Set(ledger.records.map((r) => r.slicePath));
+  const seen = new Set<string>();
+  for (const { slicePath } of ledger.slicesWithoutExamples) {
+    if (withExamples.has(slicePath) || seen.has(slicePath)) {
+      throw new Error(
+        `${where} records ${slicePath} both as having worked examples and as having none, or as ` +
+          `having none twice.\nRecord the slice again with verify-example-record, which replaces ` +
+          `everything the ledger holds for it.`,
+      );
+    }
+    seen.add(slicePath);
+  }
+}
+
+/**
+ * The ONE durable write: the whole ledger, through `atomicWriteFile`. Example records keep the
+ * order given; the no-examples records follow them, in slice order.
+ */
+async function writeExampleReplayLedger(
   projectDir: string,
-  records: ExampleReplayRecord[],
+  ledger: ExampleReplayLedger,
 ): Promise<{ ledgerPath: string }> {
   const ledgerPath = exampleReplayLedgerPath(projectDir);
-  const lines = records.map((r) => JSON.stringify(r));
+  assertOneAnswerPerSlice(ledger, `The example-replay ledger write to ${relative(projectDir, ledgerPath)}`);
+  const lines = [
+    ...ledger.records,
+    ...[...ledger.slicesWithoutExamples].sort((a, b) => a.slicePath.localeCompare(b.slicePath)),
+  ].map((r) => JSON.stringify(r));
   const content =
     `# Example Replay Verdicts (CHECK-06) — project-level, not scoped to any run\n\n` +
     `${EXAMPLE_REPLAY_LEDGER_BEGIN}\n` +
@@ -425,6 +510,19 @@ export async function replaceExampleReplayVerdicts(
   await fs.mkdir(dirname(ledgerPath), { recursive: true });
   await atomicWriteFile(ledgerPath, content);
   return { ledgerPath: relative(projectDir, ledgerPath) };
+}
+
+/**
+ * Replaces every example record in the ledger with exactly `records`, keeping the slices recorded
+ * as having no worked examples. A full rewrite, never the callable the workflow uses per-batch
+ * (see `recordExampleReplayVerdicts` for that).
+ */
+export async function replaceExampleReplayVerdicts(
+  projectDir: string,
+  records: ExampleReplayRecord[],
+): Promise<{ ledgerPath: string }> {
+  const { slicesWithoutExamples } = await readExampleReplayLedger(projectDir);
+  return writeExampleReplayLedger(projectDir, { records, slicesWithoutExamples });
 }
 
 /**
@@ -449,108 +547,118 @@ export async function recordExampleReplayVerdicts(
 }
 
 /**
- * Replaces everything the ledger holds for `slicePath` with `records`, keeping every other
- * slice's records untouched and in order. `verify-example-record` writes through this because an
- * extraction covers its whole slice: an example recorded earlier at a line the new extraction
- * does not name (a line that has since moved, say) is no longer one of the slice's examples, and
- * an upsert by id would leave it behind (#350).
+ * Replaces everything the ledger holds for `slicePath` with `records`, or, when there are none,
+ * with a record that the slice has no worked examples (`noExamples`, #370). Every other slice is
+ * left untouched and in order. `verify-example-record` writes through this because an extraction
+ * covers its whole slice: an example recorded earlier at a line the new extraction does not name
+ * (a line that has since moved, say) is no longer one of the slice's examples, and an upsert by id
+ * would leave it behind (#350).
  */
 async function replaceSliceExampleReplayVerdicts(
   projectDir: string,
   slicePath: string,
-  records: ExampleReplayRecord[],
+  recorded: { records: ExampleReplayRecord[] } | { noExamples: SliceWithoutExamplesRecord },
 ): Promise<{ ledgerPath: string }> {
-  const existing = await readExampleReplayVerdicts(projectDir);
-  return replaceExampleReplayVerdicts(projectDir, [
-    ...existing.filter((r) => r.slicePath !== slicePath),
-    ...records,
-  ]);
+  const existing = await readExampleReplayLedger(projectDir);
+  return writeExampleReplayLedger(projectDir, {
+    records: [
+      ...existing.records.filter((r) => r.slicePath !== slicePath),
+      ...('records' in recorded ? recorded.records : []),
+    ],
+    slicesWithoutExamples: [
+      ...existing.slicesWithoutExamples.filter((s) => s.slicePath !== slicePath),
+      ...('noExamples' in recorded ? [recorded.noExamples] : []),
+    ],
+  });
 }
 
 /**
- * Round-trips exactly what `replaceExampleReplayVerdicts`/`recordExampleReplayVerdicts` wrote.
- * Returns an empty array (never throws) when no ledger has been written yet — a project that has
- * never run CHECK-06's recording step has nothing recorded, which is not a tool failure.
+ * Round-trips exactly what the ledger writers wrote. Returns an empty ledger (never throws) when
+ * none has been written yet — a project that has never run CHECK-06's recording step has nothing
+ * recorded, which is not a tool failure.
  *
- * RE-ENTERS `createExampleReplayRecord` ON EVERY PARSED LINE (CR-02): the ledger is a second
- * entry path into `ExampleReplayRecord`, not a bypass of the type — no `as ExampleReplayRecord`
- * cast may appear anywhere in this module. A hand-edited or out-of-enum ledger record throws
- * through `createExampleReplayRecord`'s own checks rather than reaching the report unvalidated. A
- * malformed JSON line, or a ledger whose fence markers are absent or unbalanced, throws one
- * actionable message naming the ledger's relative path — never silently returns `[]`.
+ * RE-ENTERS `createExampleReplayRecord` (or `createSliceWithoutExamplesRecord`) ON EVERY PARSED
+ * LINE (CR-02): the ledger is a second entry path into those types, not a bypass of them — no
+ * `as ExampleReplayRecord` cast may appear anywhere in this module. A hand-edited or out-of-enum
+ * ledger record throws through the constructor's own checks rather than reaching the report
+ * unvalidated. A malformed JSON line, or a ledger whose fence markers are absent or unbalanced,
+ * throws one actionable message naming the ledger's relative path (`readFencedJsonLedger`).
  */
+async function readExampleReplayLedger(projectDir: string): Promise<ExampleReplayLedger> {
+  const file = exampleReplayLedgerFile(projectDir);
+  const lines = await readFencedJsonLedger(file, (r) =>
+    isSliceWithoutExamplesLine(r) ? readSliceWithoutExamplesLine(r) : readExampleRecordLine(r),
+  );
+  const ledger: ExampleReplayLedger = { records: [], slicesWithoutExamples: [] };
+  for (const line of lines) {
+    if ('noWorkedExamples' in line) ledger.slicesWithoutExamples.push(line);
+    else ledger.records.push(line);
+  }
+  assertOneAnswerPerSlice(ledger, `The example-replay ledger at ${relative(projectDir, file.path)}`);
+  return ledger;
+}
+
+function exampleReplayLedgerFile(projectDir: string): FencedJsonLedgerFile {
+  return {
+    projectDir,
+    path: exampleReplayLedgerPath(projectDir),
+    begin: EXAMPLE_REPLAY_LEDGER_BEGIN,
+    end: EXAMPLE_REPLAY_LEDGER_END,
+    name: 'example-replay',
+    remedy: 'Delete the file to re-run CHECK-06 from scratch.',
+  };
+}
+
+/** A ledger line that records a slice as having no worked examples, not one example (#370). */
+function isSliceWithoutExamplesLine(r: Record<string, unknown>): boolean {
+  return r.noWorkedExamples !== undefined;
+}
+
+/** The example records `readExampleReplayLedger` returns. */
 export async function readExampleReplayVerdicts(
   projectDir: string,
 ): Promise<ExampleReplayRecord[]> {
-  const ledgerPath = exampleReplayLedgerPath(projectDir);
-  let text: string;
-  try {
-    text = await fs.readFile(ledgerPath, 'utf-8');
-  } catch {
-    return [];
-  }
-  const beginIdx = text.indexOf(EXAMPLE_REPLAY_LEDGER_BEGIN);
-  const endIdx = text.indexOf(EXAMPLE_REPLAY_LEDGER_END);
-  const relLedgerPath = relative(projectDir, ledgerPath);
-  if (beginIdx === -1 || endIdx === -1) {
-    throw new Error(
-      `Malformed example-replay ledger at ${relLedgerPath}: missing begin/end fence.`,
-    );
-  }
-  // WR-02 (178-REVIEW.md): the two markers were located independently; a hand-edited or
-  // corrupted ledger with the end fence BEFORE the begin fence (or a doubled begin marker) would
-  // silently slice a negative-length/nonsensical body instead of hitting the "malformed ledger"
-  // error this function's own doc comment promises for "unbalanced" fences.
-  if (beginIdx > endIdx) {
-    throw new Error(
-      `Malformed example-replay ledger at ${relLedgerPath}: the end fence appears before the ` +
-        `begin fence.`,
-    );
-  }
-  const body = text.slice(beginIdx + EXAMPLE_REPLAY_LEDGER_BEGIN.length, endIdx);
-  const rawLines = body
-    .split('\n')
-    .map((l) => l.trim())
-    .filter((l) => l.length > 0);
+  return (await readExampleReplayLedger(projectDir)).records;
+}
 
-  return rawLines.map((line, i) => {
-    let raw: unknown;
-    try {
-      raw = JSON.parse(line);
-    } catch {
-      throw new Error(
-        `Malformed example-replay ledger at ${relLedgerPath} (record ${i + 1}): not valid JSON.\n` +
-          `Delete the file to re-run CHECK-06 from scratch.`,
-      );
-    }
-    const r = raw as Record<string, unknown>;
-    try {
-      return createExampleReplayRecord({
-        exampleId: String(r.exampleId ?? ''),
-        slicePath: String(r.slicePath ?? ''),
-        lineNumber: Number(r.lineNumber),
-        lineText: String(r.lineText ?? ''),
-        kind: String(r.kind ?? ''),
-        verdict: String(r.verdict ?? ''),
-        reason: String(r.reason ?? ''),
-        expected: r.expected !== undefined ? String(r.expected) : '',
-        observed: r.observed !== undefined ? String(r.observed) : '',
-        contradictionA: r.contradictionA !== undefined ? String(r.contradictionA) : '',
-        contradictionB: r.contradictionB !== undefined ? String(r.contradictionB) : '',
-        supportingQuoteLines: Array.isArray(r.supportingQuoteLines)
-          ? (r.supportingQuoteLines as string[])
-          : [],
-        provenance: String(r.provenance ?? ''),
-        recordedAt: r.recordedAt !== undefined ? String(r.recordedAt) : undefined,
-        testFilePath: r.testFilePath !== undefined ? String(r.testFilePath) : undefined,
-        translation: readLedgerTranslation(r.translation),
-      });
-    } catch (err) {
-      throw new Error(
-        `Malformed example-replay ledger at ${relLedgerPath} (record ${i + 1}): ` +
-          `${(err as Error).message}\nDelete the file to re-run CHECK-06 from scratch.`,
-      );
-    }
+/** The slices `readExampleReplayLedger` returns as recorded with no worked examples (#370). */
+export async function readSlicesWithoutExamples(
+  projectDir: string,
+): Promise<SliceWithoutExamplesRecord[]> {
+  return (await readExampleReplayLedger(projectDir)).slicesWithoutExamples;
+}
+
+function readSliceWithoutExamplesLine(r: Record<string, unknown>): SliceWithoutExamplesRecord {
+  if (r.noWorkedExamples !== true) {
+    throw new Error('its noWorkedExamples must be true.');
+  }
+  return createSliceWithoutExamplesRecord({
+    slicePath: String(r.slicePath ?? ''),
+    extractionHash: String(r.extractionHash ?? ''),
+    recordedAt: r.recordedAt !== undefined ? String(r.recordedAt) : undefined,
+  });
+}
+
+function readExampleRecordLine(r: Record<string, unknown>): ExampleReplayRecord {
+  return createExampleReplayRecord({
+    exampleId: String(r.exampleId ?? ''),
+    slicePath: String(r.slicePath ?? ''),
+    lineNumber: Number(r.lineNumber),
+    lineText: String(r.lineText ?? ''),
+    kind: String(r.kind ?? ''),
+    verdict: String(r.verdict ?? ''),
+    reason: String(r.reason ?? ''),
+    expected: r.expected !== undefined ? String(r.expected) : '',
+    observed: r.observed !== undefined ? String(r.observed) : '',
+    contradictionA: r.contradictionA !== undefined ? String(r.contradictionA) : '',
+    contradictionB: r.contradictionB !== undefined ? String(r.contradictionB) : '',
+    supportingQuoteLines: Array.isArray(r.supportingQuoteLines)
+      ? (r.supportingQuoteLines as string[])
+      : [],
+    provenance: String(r.provenance ?? ''),
+    recordedAt: r.recordedAt !== undefined ? String(r.recordedAt) : undefined,
+    testFilePath: r.testFilePath !== undefined ? String(r.testFilePath) : undefined,
+    translation: readLedgerTranslation(r.translation),
   });
 }
 
@@ -715,6 +823,24 @@ function printUnanchoredExamples(unanchored: readonly UnanchoredExample[]): void
   for (const line of describeUnanchoredExamples(unanchored)) console.log(`  ${line}`);
 }
 
+/** `verify-example-replay`'s lines about slices recorded as having no worked examples (#370). */
+function printSlicesWithoutExamples(slices: readonly VerifyExampleReplaySlice[]): void {
+  const recorded = slices.filter((s) => s.noWorkedExamples === 'recorded');
+  const changed = slices.filter((s) => s.noWorkedExamples === 'slice-changed');
+  if (recorded.length > 0) {
+    console.log(`  ${recorded.length} slice(s) checked and recorded as having no worked examples.`);
+  }
+  if (changed.length > 0) {
+    console.log(
+      chalk.yellow(
+        `  ⚠ ${changed.length} slice(s) recorded as having no worked examples have changed since, ` +
+          `so they are pending again: extract and record each once more.`,
+      ),
+    );
+    for (const s of changed) console.log(`    ${s.slicePath}`);
+  }
+}
+
 // -------------------------------------------------------------------------------------------
 // Task 3 — verifyExampleReplayCommand — the read/report surface
 // -------------------------------------------------------------------------------------------
@@ -752,8 +878,16 @@ export interface VerifyExampleReplaySlice {
    */
   notDispatchable?: ExampleReplayNotDispatchableReason;
   /**
-   * `true` when the ledger has no recorded verdict yet whose `slicePath` matches this slice, or
-   * when one of its recorded examples' text is no longer in it (`unanchored`, #350).
+   * Set when the ledger records this slice as having no worked examples (#370): `recorded` while
+   * the lines the extractor reads are unchanged since, `slice-changed` once they have changed
+   * (the slice is then pending again, since it may have gained an example).
+   */
+  noWorkedExamples?: 'recorded' | 'slice-changed';
+  /**
+   * `true` when the slice has something for the extractor to read and the ledger records neither
+   * an example of it nor, for its current text, that it has none; or when one of its recorded
+   * examples' text is no longer in it (`unanchored`, #350). A slice with nothing to extract
+   * (`notDispatchable`) is pending only in that last case.
    */
   pending: boolean;
 }
@@ -851,31 +985,40 @@ export async function verifyExampleReplayCommand(
     liveSlices = liveSlices.filter((s) => resolvedSet.has(s.path));
   }
 
-  const allVerdicts = await readExampleReplayVerdicts(projectDir);
+  const ledger = await readExampleReplayLedger(projectDir);
   const selectedPaths = new Set(liveSlices.map((s) => s.path));
-  const verdicts = allVerdicts.filter((v) => selectedPaths.has(v.slicePath));
+  const verdicts = ledger.records.filter((v) => selectedPaths.has(v.slicePath));
+  const withoutExamples = new Map(ledger.slicesWithoutExamples.map((r) => [r.slicePath, r]));
   const unanchored = findUnanchoredExamples(verdicts, liveSlices);
   const slicesWithLostExamples = new Set(unanchored.filter(isLost).map((u) => u.slicePath));
 
   const slices: VerifyExampleReplaySlice[] = liveSlices
-    .map((s) => {
-      const pending =
-        slicesWithLostExamples.has(s.path) || !verdicts.some((v) => v.slicePath === s.path);
+    .map((s): VerifyExampleReplaySlice => {
+      const lost = slicesWithLostExamples.has(s.path);
+      const hasExamples = verdicts.some((v) => v.slicePath === s.path);
+      let extraction: ExampleExtractionPayload;
       try {
-        const { payload, lines } = buildExampleExtractionPayload({ path: s.path, text: s.text });
-        // 178-12: a zero-content slice never gets an `extractionPayload` — see
-        // `notDispatchable`'s own doc comment for why this is reported, not thrown.
-        if (lines.length === 0) {
-          return {
-            slicePath: s.path,
-            notDispatchable: 'no-extractable-content' as const,
-            pending,
-          };
-        }
-        return { slicePath: s.path, extractionPayload: payload, pending };
+        extraction = buildExampleExtractionPayload({ path: s.path, text: s.text });
       } catch (err) {
-        return { slicePath: s.path, extractionError: (err as Error).message, pending };
+        return { slicePath: s.path, extractionError: (err as Error).message, pending: lost || !hasExamples };
       }
+      // 178-12: a zero-content slice never gets an `extractionPayload` — see
+      // `notDispatchable`'s own doc comment for why this is reported, not thrown. With nothing
+      // to extract there is nothing to check, so it is not pending (#370).
+      if (extraction.lines.length === 0) {
+        return { slicePath: s.path, notDispatchable: 'no-extractable-content', pending: lost };
+      }
+      const none = withoutExamples.get(s.path);
+      if (none === undefined) {
+        return { slicePath: s.path, extractionPayload: extraction.payload, pending: lost || !hasExamples };
+      }
+      const current = none.extractionHash === sliceExtractionHash({ path: s.path, text: s.text });
+      return {
+        slicePath: s.path,
+        extractionPayload: extraction.payload,
+        noWorkedExamples: current ? 'recorded' : 'slice-changed',
+        pending: !current,
+      };
     })
     .sort((a, b) => a.slicePath.localeCompare(b.slicePath));
 
@@ -944,6 +1087,7 @@ export async function verifyExampleReplayCommand(
   }
 
   printUnanchoredExamples(unanchored);
+  printSlicesWithoutExamples(slices);
 
   // 178-CONTEXT.md decision 12: a replay mismatch is grouped into two explicitly-named buckets by
   // the PER-RECORD provenance `verifyExampleRecordCommand` already decided (never recomputed
@@ -1421,8 +1565,20 @@ export async function verifyExampleRecordCommand(
     (a, b) => a.lineNumber - b.lineNumber,
   );
 
-  // The ONE mutation this function performs — everything above is validation.
-  const { ledgerPath } = await replaceSliceExampleReplayVerdicts(projectDir, slicePath, records);
+  // The ONE mutation this function performs — everything above is validation. An extraction
+  // with no examples is recorded too, so the slice counts as checked (#370).
+  const { ledgerPath } = await replaceSliceExampleReplayVerdicts(
+    projectDir,
+    slicePath,
+    records.length > 0
+      ? { records }
+      : {
+          noExamples: createSliceWithoutExamplesRecord({
+            slicePath,
+            extractionHash: sliceExtractionHash({ path: slicePath, text: sliceText }),
+          }),
+        },
+  );
 
   const result: VerifyExampleRecordResult = { records, ledgerPath, provenance, repairs };
   if (options.json) {
@@ -1431,8 +1587,10 @@ export async function verifyExampleRecordCommand(
   }
   console.log(
     chalk.green(
-      `✓ Recorded ${records.length} worked example(s) for ${slicePath} ` +
-        `(provenance: ${provenance}).`,
+      records.length > 0
+        ? `✓ Recorded ${records.length} worked example(s) for ${slicePath} (provenance: ${provenance}).`
+        : `✓ Recorded ${slicePath} as having no worked examples; it stays checked until the lines ` +
+            `the extractor reads change.`,
     ),
   );
   console.log(`  Ledger: ${ledgerPath}`);
