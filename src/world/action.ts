@@ -82,6 +82,7 @@ import type {
   Selection,
 } from "../engine/index.js";
 import type { ConditionConfig, MultiSelectConfig, OrderedListConfig } from "../engine/action/types.js";
+import type { TextPattern } from "../engine/action/text-rules.js";
 import type { WorldBudgets } from "./budgets.js";
 import type { ScheduleArm } from "./schedule-api.js";
 import type { DeclaredSeatActivity, SeatActivity, WorldNarrationLine } from "./contract.js";
@@ -390,6 +391,13 @@ export interface WorldChoiceOptions<G extends Game, T, P = undefined> {
   /** Work every `disabled` call of one evaluation shares; see the engine's `chooseFrom` (#334). */
   prepare?: (context: WorldActionContext<G>) => P;
   disabled?: (choice: T, context: WorldActionContext<G>, prepared: P) => string | false;
+  /**
+   * The player-facing refusal for a submitted value that is no longer listed:
+   * another seat took the offer, a second tab acted first (#393). `value` is
+   * what was submitted; see the engine's `unavailable`. Without it the player
+   * reads a plain default.
+   */
+  unavailable?: (value: unknown, context: WorldActionContext<G>) => string;
 }
 
 /**
@@ -408,6 +416,13 @@ export interface WorldElementOptions<G extends Game, T extends GameElement, P = 
   /** Work every `disabled` call of one evaluation shares; see the engine's `chooseFrom` (#334). */
   prepare?: (context: WorldActionContext<G>) => P;
   disabled?: (element: T, context: WorldActionContext<G>, prepared: P) => string | false;
+  /**
+   * The player-facing refusal for a submitted value that is no longer listed:
+   * another seat took the offer, a second tab acted first (#393). `value` is
+   * what was submitted; see the engine's `unavailable`. Without it the player
+   * reads a plain default.
+   */
+  unavailable?: (value: unknown, context: WorldActionContext<G>) => string;
 }
 
 /** What a seated step's declaration may read: the seat, and whatever earlier
@@ -722,7 +737,16 @@ function forwardElementOptions<G extends Game, T extends GameElement, P>(
       ? (element: T, context: AnyContext, prepared: P) =>
           options.disabled!(element, withWorld<G>(context), prepared)
       : undefined,
+    unavailable: forwardUnavailable<G>(options.unavailable),
   };
+}
+
+/** A world's `unavailable` sentence, handed the WORLD context like every other callback here (#393). */
+function forwardUnavailable<G extends Game>(
+  unavailable: ((value: unknown, context: WorldActionContext<G>) => string) | undefined,
+): ((value: unknown, context: AnyContext) => string) | undefined {
+  if (unavailable === undefined) return undefined;
+  return (value, context) => unavailable(value, withWorld<G>(context));
 }
 
 /**
@@ -1032,6 +1056,7 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
       disabled: options.disabled
         ? (choice, context, prepared) => options.disabled!(choice, withWorld<G>(context), prepared)
         : undefined,
+      unavailable: forwardUnavailable<G>(options.unavailable),
     });
     return this as unknown as WorldAction<G, AddArg<A, K, T | T[]>>;
   }
@@ -1105,7 +1130,9 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
   }
 
   /**
-   * Free text, bounded by the engine's own `maxLength`.
+   * Free text, bounded by the engine's own `maxLength`, and by `maxBytes` when
+   * the text is sized against a partition's byte budget (#394). A world's text
+   * lives in a partition for months, and a partition is refused on its bytes.
    *
    * `multiline:` asks for a resizable box rather than a single line (#229) --
    * presentation only, and forwarded rather than reinterpreted, because a
@@ -1121,8 +1148,9 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
       needs?: (context: WorldNeedsContext<G>) => readonly string[];
       minLength?: number;
       maxLength?: number;
+      maxBytes?: number;
       multiline?: boolean;
-      pattern?: RegExp;
+      pattern?: TextPattern;
       optional?: boolean | string;
       validate?: (
         value: string,
@@ -1136,6 +1164,7 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
       prompt: forwardPrompt<G>(options.prompt),
       minLength: options.minLength,
       maxLength: options.maxLength,
+      maxBytes: options.maxBytes,
       multiline: options.multiline,
       pattern: options.pattern,
       optional: options.optional,

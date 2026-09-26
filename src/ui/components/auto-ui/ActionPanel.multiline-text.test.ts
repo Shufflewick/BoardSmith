@@ -23,11 +23,11 @@
  */
 import { describe, it, expect } from 'vitest';
 import { nextTick } from 'vue';
-import type { VueWrapper } from '@vue/test-utils';
 
 import {
   mountPanelAt as panelAt,
   panelRuleFor as ruleFor,
+  submitText as submit,
 } from './action-panel-editor.test-helper.js';
 import type { EnrichedActionMetadata } from '../../composables/useActionControllerTypes.js';
 
@@ -70,12 +70,6 @@ const setNickname: EnrichedActionMetadata = {
   ],
 };
 
-/** Type a value into the editor and press its submit button. */
-async function submit(wrapper: VueWrapper, control: string, value: string) {
-  await wrapper.find(`.text-input ${control}`).setValue(value);
-  await wrapper.find('.text-input .done-button').trigger('click');
-  await nextTick();
-}
 
 describe('the multiline text editor (#229)', () => {
   it('draws a textarea instead of a single-line input', async () => {

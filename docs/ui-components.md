@@ -373,7 +373,8 @@ the field, the bound as a hint below it, and a submit button.
   and an explicit submit button so Enter inserts a newline rather than
   submitting. See
   [Actions & Flow](./actions-and-flow.md#entertext---enter-text). It is
-  presentation only: the same value, the same bounds, the same validation.
+  presentation only, except that it admits line feed and tab: the same value,
+  the same bounds, the same validation.
 - **A refused value says why.** The panel applies the engine's own
   `textRuleErrors` -- imported, not reimplemented -- so the sentence it shows
   before submitting is the sentence the server would answer with. The message is

@@ -265,7 +265,8 @@ export function deriveManifest(
  * Build the BoardSmith library's own distributable: the bundled CLI.
  *
  * The engine/ui/session sources ship as TypeScript (see the package `exports`
- * map), so `dist/cli.js` is the only compiled artifact the library produces.
+ * map), so `dist/cli.js` and the worker entries built beside it
+ * (`WORKER_ENTRIES`) are the only compiled artifacts the library produces.
  */
 async function buildLibrary(repoRoot: string): Promise<void> {
   console.log(chalk.cyan('\nBuilding BoardSmith CLI...\n'));

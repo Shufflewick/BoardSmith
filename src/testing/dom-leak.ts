@@ -27,6 +27,12 @@ import type { VueWrapper } from '@vue/test-utils';
 import type { default as AutoUIComponent } from '../ui/components/auto-ui/AutoUI.vue';
 import type { GameViewElement as UIGameElement } from '../ui/components/auto-ui/index.js';
 import type { ElementJSON } from '../engine/index.js';
+import type { BoardInteraction } from '../ui/composables/useBoardInteraction.js';
+import type { TableActionWiring } from '../ui/composables/useTableActionWiring.js';
+import type { PlayerGameState } from '../session/types.js';
+import { buildPlayerState } from '../session/utils.js';
+import { PickHandler } from '../session/pick-handler.js';
+import { TestGame } from './test-game.js';
 
 /**
  * WHAT THIS GATE CAN BE AIMED AT: a table, or a persistent world.
@@ -62,7 +68,14 @@ export interface HiddenInfoSubject {
   unredactedElements(): readonly ElementJSON[] | Promise<readonly ElementJSON[]>;
 }
 
-/** One seat's frame, in the shape both subjects answer. */
+/**
+ * One seat's frame, in the shape both subjects answer.
+ *
+ * `availableActions` and `isMyTurn` are a world's answer. A table's player view
+ * carries them under `flowState` instead, and `renderAsSeat` does not read them
+ * here for a `TestGame`: it mounts a table seat from the state a session
+ * publishes for it, as GameShell does (#390).
+ */
 export interface SeatProjection {
   /** The redacted per-seat element tree. */
   readonly state: unknown;
@@ -84,41 +97,55 @@ export interface SeatProjection {
 export type HiddenInfoGameView = UIGameElement;
 
 // ---------------------------------------------------------------------------
-// jsdom does not implement `window.matchMedia`. `useElementAnimation.ts` reads
-// it at MODULE LOAD time (`prefersReducedMotion` top-level ref), and it is
-// pulled in transitively by AutoRenderer's `useFlyingElements()` call — so
-// mounting `AutoUI` for real (no stubs; we need the actual renderers to
-// exercise the real leak surface) throws before this utility can render
-// anything. This supplies the browser API jsdom omits (matching what a real
-// browser provides) — it does not stub/alter any BoardSmith behavior.
+// THE BROWSER APIS JSDOM OMITS, supplied as a browser would answer them here.
+// They do not stub or alter any BoardSmith behavior.
 //
-// The polyfill MUST run before `AutoUI.vue`'s module graph is evaluated. A
-// static `import AutoUI from '...'` at the top of this file would be hoisted
-// and evaluated before ANY of this file's own code runs (ESM import
-// ordering), which is too late. So `AutoUI` is loaded via a runtime dynamic
-// `import()` (see `loadAutoUI`), deferring its module graph evaluation until
-// after the polyfill is installed. (Rule 3: auto-fixed blocking issue.)
+// `window.matchMedia`: `useElementAnimation.ts` reads it at MODULE LOAD time
+// (`prefersReducedMotion` top-level ref), and it is pulled in transitively by
+// AutoRenderer's `useFlyingElements()` call — so mounting `AutoUI` for real (no
+// stubs; we need the actual renderers to exercise the real leak surface) throws
+// before this utility can render anything. It MUST be installed before
+// `AutoUI.vue`'s module graph is evaluated. A static `import AutoUI from '...'`
+// at the top of this file would be hoisted and evaluated before ANY of this
+// file's own code runs (ESM import ordering), which is too late. So `AutoUI` is
+// loaded via a runtime dynamic `import()` (see `loadAutoUI`).
+//
+// `ResizeObserver` (#404): a board that sizes itself from its own element
+// observes it once mounted, and every browser has one. jsdom lays nothing out,
+// so no element ever changes size, and an observer that never reports is
+// exactly what a browser would report for it.
 // ---------------------------------------------------------------------------
-function ensureMatchMediaPolyfill(): void {
-  if (typeof window === 'undefined' || typeof window.matchMedia === 'function') return;
-  window.matchMedia = ((query: string) => ({
-    matches: false,
-    media: query,
-    onchange: null,
-    addListener: () => {},
-    removeListener: () => {},
-    addEventListener: () => {},
-    removeEventListener: () => {},
-    dispatchEvent: () => false,
-  })) as unknown as typeof window.matchMedia;
+function ensureBrowserApis(): void {
+  if (typeof window === 'undefined') return;
+  if (typeof window.matchMedia !== 'function') {
+    window.matchMedia = ((query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => false,
+    })) as unknown as typeof window.matchMedia;
+  }
+  if (typeof globalThis.ResizeObserver !== 'function') {
+    class UnchangingSizeObserver {
+      observe(): void {}
+      unobserve(): void {}
+      disconnect(): void {}
+    }
+    globalThis.ResizeObserver = UnchangingSizeObserver as unknown as typeof ResizeObserver;
+    window.ResizeObserver = globalThis.ResizeObserver;
+  }
 }
 
 let autoUIComponentPromise: Promise<typeof AutoUIComponent> | undefined;
 
-/** Install the matchMedia polyfill, then dynamically import AutoUI (cached). */
+/** Supply the browser APIs jsdom omits, then dynamically import AutoUI (cached). */
 function loadAutoUI(): Promise<typeof AutoUIComponent> {
   if (!autoUIComponentPromise) {
-    ensureMatchMediaPolyfill();
+    ensureBrowserApis();
     autoUIComponentPromise = import('../ui/components/auto-ui/AutoUI.vue').then(
       (mod) => mod.default,
     );
@@ -146,27 +173,94 @@ function loadBoardInteractionModule(): Promise<
   return boardInteractionModulePromise;
 }
 
+let tableWiringModulePromise:
+  | Promise<typeof import('../ui/composables/useTableActionWiring.js')>
+  | undefined;
+
+/** Dynamically import the table wiring GameShell uses (cached); deferred like `loadBoardInteractionModule`. */
+function loadTableWiringModule(): Promise<typeof import('../ui/composables/useTableActionWiring.js')> {
+  tableWiringModulePromise ??= import('../ui/composables/useTableActionWiring.js');
+  return tableWiringModulePromise;
+}
+
 // ---------------------------------------------------------------------------
-// `@vue/test-utils` is a devDependency of BoardSmith itself — consuming
-// projects (games, MERC) have no reason to install it unless they actually
-// call `renderAsSeat`/`assertNoHiddenInfoLeak`. A static top-level
-// `import { mount } from '@vue/test-utils'` would make Vite eagerly resolve
-// that module for EVERY consumer of `boardsmith/testing`'s barrel — even one
-// that only wants `createTestGame` — turning an opt-in DOM-leak utility into
-// a hard, always-on dependency (Rule 1: auto-fixed bug, MERC re-vendor sweep
-// caught this: MERC has no `@vue/test-utils` installed and its entire suite
-// failed to even load). Deferred via runtime dynamic `import()`, mirroring
-// `loadAutoUI`'s existing pattern, so the dependency is only resolved the
-// first time this file's own mount-requiring functions actually run.
+// THE PROJECT'S OWN `@vue/test-utils`, NEVER THIS PACKAGE'S (#389).
+//
+// A game installs `boardsmith` as a symlink to a checkout, and the checkout
+// carries its own devDependencies, `vue` and `@vue/test-utils` among them. The
+// game's `resolve.dedupe: ['vue']` points every `import 'vue'` -- its
+// components' and BoardSmith's UI source alike -- at the game's copy, but it
+// cannot reach a bare `import('@vue/test-utils')` written here: vitest hands a
+// package in `node_modules` to Node, and Node resolves it from this file's real
+// location, the checkout, whose `@vue/test-utils` loads the checkout's `vue`.
+// The board then rendered on one Vue runtime while its computeds ran on the
+// other, so `setProps` changed nothing on screen.
+//
+// So it is resolved from the project the tests run in (vitest's working
+// directory, the root its config resolves `dedupe` against), exactly as the
+// project's own test files resolve it, and it then loads the project's `vue`.
+// It is loaded on first use, never at import time, so a consumer of the
+// `boardsmith/testing` barrel that never renders needs no `@vue/test-utils`
+// installed at all (MERC has none).
 // ---------------------------------------------------------------------------
 let mountFnPromise: Promise<typeof import('@vue/test-utils').mount> | undefined;
 
-/** Dynamically import `@vue/test-utils`'s `mount` (cached) — see note above. */
+/** The project's `@vue/test-utils` `mount`, checked to share BoardSmith's Vue (cached). */
 function loadMount(): Promise<typeof import('@vue/test-utils').mount> {
-  if (!mountFnPromise) {
-    mountFnPromise = import('@vue/test-utils').then((mod) => mod.mount);
-  }
+  mountFnPromise ??= loadProjectMount();
   return mountFnPromise;
+}
+
+async function loadProjectMount(): Promise<typeof import('@vue/test-utils').mount> {
+  const [{ createRequire }, { pathToFileURL }, { join }] = await Promise.all([
+    import('node:module'),
+    import('node:url'),
+    import('node:path'),
+  ]);
+  const project = process.cwd();
+  let entry: string;
+  try {
+    entry = createRequire(join(project, 'package.json')).resolve('@vue/test-utils');
+  } catch {
+    throw new Error(
+      `renderAsSeat mounts with your project's own @vue/test-utils, so a board renders on the same Vue ` +
+        `its components import, and none is installed in ${project}. ` +
+        'Run `npm install --save-dev @vue/test-utils` there, then run the tests again.',
+    );
+  }
+  const { mount } = (await import(pathToFileURL(entry).href)) as typeof import('@vue/test-utils');
+  await requireOneVue(mount);
+  return mount;
+}
+
+/**
+ * Refuse to render when the project's `@vue/test-utils` and BoardSmith's UI
+ * run on two copies of Vue.
+ *
+ * `import('vue')` here resolves the way BoardSmith's UI source does in this
+ * project, so it is the Vue the board interaction, the action controller and
+ * (with the scaffold's dedupe) the game's own components use. A mount on any
+ * other copy renders once and then never updates, which is the silent failure
+ * of #389. The check is a render, because that is the one thing the two copies
+ * do not share: Vue deliberately shares the current component instance across
+ * copies, so `getCurrentInstance()` cannot tell them apart.
+ */
+async function requireOneVue(mount: typeof import('@vue/test-utils').mount): Promise<void> {
+  const { h, ref } = await import('vue');
+  const shown = ref('before');
+  const probe = mount({ render: () => h('i', shown.value) });
+  shown.value = 'after';
+  await probe.vm.$nextTick();
+  const oneVue = probe.text() === 'after';
+  probe.unmount();
+  if (oneVue) return;
+  throw new Error(
+    "renderAsSeat found two copies of Vue in this test run: BoardSmith's UI uses one and your project's " +
+      '@vue/test-utils loads another, so a board would render once and then never update. ' +
+      "Make every import of 'vue' resolve to your project's one copy: keep `resolve: { dedupe: ['vue'] }` " +
+      'in the vite config your vitest config uses (the one `boardsmith init` writes has it), and do not ' +
+      'alias `vue` to another build of it. Then run the tests again.',
+  );
 }
 
 /** Every entry point that renders needs jsdom; say so rather than fail inside Vue. */
@@ -183,7 +277,8 @@ let seatRendererPromise: Promise<void> | undefined;
 
 /**
  * Load everything `renderAsSeat` and `assertNoHiddenInfoLeak` render with:
- * `@vue/test-utils`, AutoUI's module graph and the board-interaction module.
+ * your project's `@vue/test-utils`, AutoUI's module graph, the
+ * board-interaction module and the table action wiring.
  *
  * Call it with a top-level `await` in a test file that renders:
  *
@@ -199,12 +294,18 @@ let seatRendererPromise: Promise<void> | undefined;
  * per test file, and every later call returns the same promise.
  *
  * @throws Outside a jsdom test environment, with the same message a render gives.
+ *   The promise rejects when the project has no `@vue/test-utils` installed, or
+ *   when it and BoardSmith's UI run on two copies of Vue; each message says what
+ *   to change.
  */
 export function preloadSeatRenderer(): Promise<void> {
   requireDom();
-  seatRendererPromise ??= Promise.all([loadMount(), loadAutoUI(), loadBoardInteractionModule()]).then(
-    () => undefined,
-  );
+  seatRendererPromise ??= Promise.all([
+    loadMount(),
+    loadAutoUI(),
+    loadBoardInteractionModule(),
+    loadTableWiringModule(),
+  ]).then(() => undefined);
   return seatRendererPromise;
 }
 
@@ -246,7 +347,8 @@ export interface RenderAsSeatOptions<C extends Component = Component> {
   /**
    * Props merged OVER the standard contract props this function supplies
    * (`gameView`, `playerSeat`, `isMyTurn`, `availableActions`,
-   * `actionController`). Use it for props specific to your component.
+   * `disabledActions`, `actionController`). Use it for props specific to your
+   * component.
    *
    * `gameView` is deliberately re-applied after this merge and cannot be
    * overridden here: rendering anything but the real per-seat view would make
@@ -267,9 +369,10 @@ export interface RenderAsSeatOptions<C extends Component = Component> {
    * before this threw inside `setup()` and left the leak assertion reporting a
    * bare injection Error instead of a verdict (#260).
    *
-   * Pass this only to supply something the default does not cover: an
-   * interaction pre-loaded with valid targets so the board renders its
-   * candidate state, or a provider your own board asks for.
+   * Pass your own interaction under that key to hold a handle on it: for a
+   * table seat it is then the one the seat's controller drives, as GameShell's
+   * is, so its targets come from starting an action on the controller rather
+   * than from pre-loading. Pass anything else your own board asks for.
    */
   provide?: Record<string | symbol, unknown>;
 }
@@ -279,7 +382,10 @@ export interface RenderAsSeatOptions<C extends Component = Component> {
  * (`testGame.getPlayerView(seat).state`) unless `gameViewOverride` is given.
  *
  * Renders AutoUI by default, or `options.component` when supplied — the
- * latter is how a game checks the surface its players actually look at.
+ * latter is how a game checks the surface its players actually look at. A
+ * table's board is given the seat's own actions and a real action controller,
+ * wired as GameShell wires it (see `seatContextFor`); the controller refuses to
+ * take a move, so rendering never changes the game.
  *
  * @param testGame - The TestGame wrapper
  * @param seat - The seat to render as
@@ -350,31 +456,39 @@ async function mountForSeat<C extends Component = typeof AutoUIComponent>(
   options: RenderAsSeatOptions<C> = {},
 ): Promise<MountedForSeat<C>> {
   requireDom();
+  ensureBrowserApis();
 
   const mount = await loadMount();
   const component: Component = options.component ?? (await loadAutoUI());
 
-  // AWAITED, because a world's projection is a read of its store: `viewsFor`
-  // settles the bundle's own `world.view` declaration and hydrates whatever it
-  // names before it can answer. A table's is already in memory and resolves at
-  // once.
-  const projection = await subject.getPlayerView(seat);
-  const gameView =
-    options.gameViewOverride !== undefined
-      ? options.gameViewOverride
-      : (projection.state as UIGameElement);
+  // GameShell provides board interaction; nothing does here, so this function
+  // is the shell's stand-in. The default is the REAL interaction, not an inert
+  // shape: a board reads it in setup() and again on every render, and half of
+  // one would fail somewhere further in than the injection error it replaces.
+  // A caller's own interaction replaces it, and is then the one a table's
+  // controller feeds, so the board and its controller still share one.
+  const { BOARD_INTERACTION_KEY, createBoardInteraction } = await loadBoardInteractionModule();
+  const boardInteraction =
+    (options.provide?.[BOARD_INTERACTION_KEY] as BoardInteraction | undefined) ?? createBoardInteraction();
+  const provide: Record<string | symbol, unknown> = {
+    ...options.provide,
+    [BOARD_INTERACTION_KEY]: boardInteraction,
+  };
+
+  const seatContext = await seatContextFor(subject, seat, options, boardInteraction);
+  const { gameView } = seatContext;
 
   // AutoUI takes only (gameView, playerSeat); a scaffolded custom board also
-  // takes (isMyTurn, availableActions, actionController). Supplying the whole
-  // contract means the common custom-UI case needs no `componentProps` at all
-  // — but it is then FILTERED to what the component actually declares. An
-  // undeclared prop would otherwise fall through to the root element as a
-  // real DOM attribute, which both spams Vue warnings and adds attacker-free
-  // surface strings this very scan would go on to inspect.
+  // takes (isMyTurn, availableActions, actionController, disabledActions).
+  // Supplying the whole contract means the common custom-UI case needs no
+  // `componentProps` at all — but it is then FILTERED to what the component
+  // actually declares. An undeclared prop would otherwise fall through to the
+  // root element as a real DOM attribute, which both spams Vue warnings and
+  // adds attacker-free surface strings this very scan would go on to inspect.
   const props: Record<string, unknown> = options.component
     ? {
         ...retainDeclaredProps(options.component, {
-          ...buildCustomUIContractProps(projection, seat, gameView),
+          ...seatContext.contract,
           ...options.componentProps,
         }),
         // Non-negotiable: the scan is only meaningful against the real
@@ -388,23 +502,25 @@ async function mountForSeat<C extends Component = typeof AutoUIComponent>(
   // own generic pinned to the base `Component`. The wrapper is then re-stated as
   // being over the component that was passed, which is what the signature promises
   // and what a caller inspecting its own board's props needs.
-  // GameShell provides board interaction; nothing does here, so this function
-  // is the shell's stand-in. The default is the REAL interaction, not an inert
-  // shape: a board reads it in setup() and again on every render, and half of
-  // one would fail somewhere further in than the injection error it replaces.
-  const { BOARD_INTERACTION_KEY, createBoardInteraction } = await loadBoardInteractionModule();
-  const provide: Record<string | symbol, unknown> = {
-    [BOARD_INTERACTION_KEY]: createBoardInteraction(),
-    ...options.provide,
-  };
-
+  //
   // COLLECTED, NEVER ESCAPED. See {@link raiseWhatTheBoardDeferred} -- this
   // handler is the whole of why a deferred failure can reach the caller at all.
+  // The seat's wiring lives exactly as long as the app it was made for.
   const raised: unknown[] = [];
-  const wrapper = mount<Component>(component, {
-    props,
-    global: { provide, config: { errorHandler: (error: unknown) => raised.push(error) } },
-  }) as VueWrapper<RenderedInstance<C>>;
+  let wrapper: VueWrapper<RenderedInstance<C>>;
+  try {
+    wrapper = mount<Component>(component, {
+      props,
+      global: {
+        provide,
+        config: { errorHandler: (error: unknown) => raised.push(error) },
+        plugins: [{ install: (app) => app.onUnmount(seatContext.stop) }],
+      },
+    }) as VueWrapper<RenderedInstance<C>>;
+  } catch (failure) {
+    seatContext.stop();
+    throw failure;
+  }
 
   try {
     await raiseWhatTheBoardDeferred(raised, seat);
@@ -413,6 +529,128 @@ async function mountForSeat<C extends Component = typeof AutoUIComponent>(
     throw failure;
   }
   return { wrapper, raised };
+}
+
+/** What a seat's board is mounted with, and how to let go of it afterwards. */
+interface SeatContext {
+  /** The per-seat tree the board draws. */
+  readonly gameView: UIGameElement | null;
+  /** The scaffold's contract props, before they are filtered to what the board declares. */
+  readonly contract: Record<string, unknown>;
+  /** Stops whatever was wired for this mount. */
+  readonly stop: () => void;
+}
+
+/**
+ * The seat's view and the scaffold's contract props.
+ *
+ * A TABLE IS MOUNTED THE WAY GAMESHELL MOUNTS IT (#390). Its seat state is the
+ * one a session publishes (`buildPlayerState`, action metadata included), and
+ * its controller and board bridge come from `useTableActionWiring`, the one
+ * function GameShell wires them with (#378), fed the same interaction the board
+ * injects. Reading the seat's actions off `getPlayerView(seat)` instead is what
+ * #390 was: a table's player view carries them under `flowState`, so every
+ * table board was told it had nothing to do.
+ *
+ * A world answers its offers in its own projection, and its board gets an
+ * inert controller carrying their names.
+ */
+async function seatContextFor(
+  subject: HiddenInfoSubject,
+  seat: number,
+  options: RenderAsSeatOptions<Component>,
+  boardInteraction: BoardInteraction,
+): Promise<SeatContext> {
+  if (subject instanceof TestGame) {
+    const seatState = buildPlayerState(
+      subject.runner,
+      subject.game.players.map((player: { name: string }) => player.name),
+      seat,
+      { includeActionMetadata: true },
+    );
+    const gameView =
+      options.gameViewOverride !== undefined ? options.gameViewOverride : (seatState.view as UIGameElement);
+    // AutoUI declares no action props, so there is nothing to wire for it.
+    if (!options.component) return { gameView, contract: {}, stop: () => undefined };
+    return wireTableSeat(subject, seat, seatState, gameView, boardInteraction);
+  }
+
+  // AWAITED, because a world's projection is a read of its store: `viewsFor`
+  // settles the bundle's own `world.view` declaration and hydrates whatever it
+  // names before it can answer.
+  const projection = await subject.getPlayerView(seat);
+  const gameView =
+    options.gameViewOverride !== undefined ? options.gameViewOverride : (projection.state as UIGameElement);
+  const availableActions = (projection.availableActions ?? []).map((a) => (typeof a === 'string' ? a : a.name));
+  return {
+    gameView,
+    contract: {
+      playerSeat: seat,
+      isMyTurn: projection.isMyTurn ?? false,
+      availableActions,
+      actionController: inertActionController(availableActions),
+    },
+    stop: () => undefined,
+  };
+}
+
+/**
+ * Wire a table seat's controller and board bridge with `useTableActionWiring`,
+ * inside an effect scope the mount stops when it unmounts.
+ *
+ * Two things differ from a live shell, and both keep a render a render. Auto
+ * mode is off (GameShell's player-facing toggle), so mounting never starts or
+ * completes an action by itself. And the transport answers a pick's choices
+ * from the game but refuses to take a move, saying how to take it: a
+ * hidden-information scan that changed the game would not be a scan, and a
+ * board that has moved must be rendered again to show it.
+ */
+async function wireTableSeat(
+  table: TestGame,
+  seat: number,
+  seatState: PlayerGameState,
+  gameView: UIGameElement | null,
+  boardInteraction: BoardInteraction,
+): Promise<SeatContext> {
+  const [{ effectScope, ref }, { useTableActionWiring }] = await Promise.all([
+    import('vue'),
+    loadTableWiringModule(),
+  ]);
+  const picks = new PickHandler(table.runner, table.game.players.length);
+  const availableActions = seatState.availableActions ?? [];
+  const scope = effectScope(true);
+  let wiring!: TableActionWiring;
+  scope.run(() => {
+    wiring = useTableActionWiring({
+      seatState: ref(seatState),
+      availableActions: ref(availableActions),
+      isMyTurn: ref(seatState.isMyTurn),
+      playerSeat: ref(seat),
+      gameView: ref(gameView),
+      boardInteraction,
+      autoEndTurn: ref(false),
+      isViewingHistory: ref(false),
+      sendAction: async (actionName) => ({
+        success: false,
+        error:
+          `renderAsSeat mounted seat ${seat}'s board to render it, so "${actionName}" was not sent to the game. ` +
+          `Take the move with testGame.doAction(${seat}, '${actionName}', args), then render the seat again.`,
+      }),
+      fetchPickChoices: async (actionName, pickName, player, args) =>
+        picks.getPickChoices(actionName, pickName, player, args),
+    });
+  });
+  return {
+    gameView,
+    contract: {
+      playerSeat: seat,
+      isMyTurn: seatState.isMyTurn,
+      availableActions,
+      disabledActions: wiring.disabledActions.value,
+      actionController: wiring.controller,
+    },
+    stop: () => scope.stop(),
+  };
 }
 
 /**
@@ -433,32 +671,6 @@ function retainDeclaredProps(
   if (names.size === 0) return candidate;
 
   return Object.fromEntries(Object.entries(candidate).filter(([key]) => names.has(key)));
-}
-
-/**
- * The standard props a scaffolded custom board declares, derived from the real
- * game state for `seat`. `actionController` is a render-only stand-in: this
- * utility mounts a component to inspect its MARKUP, never to drive an action
- * through it, so the controller only has to be shaped correctly enough for a
- * template to read. It deliberately does not send actions — a leak scan that
- * mutated the game would not be a scan.
- */
-function buildCustomUIContractProps(
-  projection: SeatProjection,
-  seat: number,
-  gameView: UIGameElement | null,
-): Record<string, unknown> {
-  const availableActions = (projection.availableActions ?? []).map((a) =>
-    typeof a === 'string' ? a : a.name,
-  );
-
-  return {
-    playerSeat: seat,
-    isMyTurn: projection.isMyTurn ?? false,
-    availableActions,
-    actionController: inertActionController(availableActions),
-    gameView,
-  };
 }
 
 /**

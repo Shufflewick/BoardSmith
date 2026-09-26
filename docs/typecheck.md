@@ -74,7 +74,9 @@ in every game.
   in a sandbox holding only what we ship, and
   `src/contract/shipped-imports.test.ts` fails if any file `npm pack` would
   publish, or the CLI bundle, imports a package that is not in `dependencies`
-  or `peerDependencies` (#380).
+  or `peerDependencies` (#380). The same test fails if the CLI starts a
+  worker thread whose entry the CLI build does not emit, or if npm would not
+  publish a file that build emits (#401).
 - **Anything at runtime.** Types say nothing about a shape crossing a boundary
   the types do not describe.
 

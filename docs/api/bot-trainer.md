@@ -136,12 +136,14 @@ console.log('Final fitness:', result.fitness);
 ### Training from the CLI
 
 `WeightEvolver` is the live training engine, but the supported end-to-end entry
-point is the `evolve-bot-weights` CLI command. It introspects the game, loads the
-existing objectives produced by `/bs-build-bot`, evolves their weights via parallel
-benchmarking, and regenerates the bot file:
+point is the `evolve-bot-weights` CLI command. Run it from the game project. It
+bundles the rules from source into `.boardsmith/evolve-bot-weights-tmp/` (removed
+when it ends), loads the existing objectives `/bs-build-bot` wrote to the rules
+directory's `bot.ts`, evolves their weights via parallel benchmarking, and writes
+the new weights back into that `bot.ts`:
 
 ```bash
-npx boardsmith evolve-bot-weights --game ./src/game.ts --out ./src/bot.ts
+npx boardsmith evolve-bot-weights --generations 5 --population 20
 ```
 
 Under the hood the command drives `WeightEvolver.evolve(objectives)`, which returns

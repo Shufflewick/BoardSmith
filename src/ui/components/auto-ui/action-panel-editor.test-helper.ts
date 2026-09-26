@@ -17,7 +17,7 @@ import { expect, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { mount } from '@vue/test-utils';
+import { mount, type VueWrapper } from '@vue/test-utils';
 import { nextTick, ref } from 'vue';
 
 import ActionPanel from './ActionPanel.vue';
@@ -80,6 +80,13 @@ export async function mountPanelAt(action: EnrichedActionMetadata) {
   void controller.start(action.name, {});
   await nextTick();
   return { wrapper: await mountPanel(), controller, sendAction };
+}
+
+/** Type `value` into the open text editor's `control` and press its submit button. */
+export async function submitText(wrapper: VueWrapper, control: string, value: string): Promise<void> {
+  await wrapper.find(`.text-input ${control}`).setValue(value);
+  await wrapper.find('.text-input .done-button').trigger('click');
+  await nextTick();
 }
 
 const PANEL_CSS = readFileSync(

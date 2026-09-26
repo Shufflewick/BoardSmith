@@ -153,7 +153,7 @@ export function scratchDir(projectDir: string): string {
 }
 
 /** The CLI commands that bundle a project's rules into a build directory of their own. */
-type BuildingCommand = 'dev' | 'simulate' | 'build' | 'validate';
+type BuildingCommand = 'dev' | 'simulate' | 'build' | 'validate' | 'evolve-bot-weights';
 
 /**
  * Where `command` writes the rules bundle it removes when it ends.

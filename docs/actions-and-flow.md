@@ -441,6 +441,12 @@ Allow players to skip a selection. Use `optional: true` for a "Skip" button, or 
 })
 ```
 
+An optional selection is asked **where it is declared**, with its Skip button
+beside it, never saved for the end (#392). The Action Panel and a custom UI walk
+the same order: the action's selections, top to bottom, each answered or
+skipped before the next. So put an optional pick that narrows an earlier answer
+("who exactly?") straight after that answer.
+
 #### `playerChoices` - Choose a player with chooseFrom
 
 Use the `playerChoices()` helper on your Game class to generate player choices for use with `chooseFrom`:
@@ -523,6 +529,39 @@ Action.create('name')
 copied into every retained checkpoint and every per-seat view, so an unbounded
 field is a state-size hazard. Set your own, lower, bound whenever you know it.
 
+**What no text may contain.** The engine refuses control characters (C0
+U+0000-U+001F, DEL U+007F, C1 U+0080-U+009F) and unpaired UTF-16 surrogates in
+every text argument, and so does the Action Panel before the player submits:
+"<name> contains characters that can't be stored, such as invisible control
+characters. Remove them and try again." A `multiline` field admits line feed and
+tab; a single-line field refuses them too. There is no opt-out: these
+characters are invisible, never typed on purpose, and break logs, rendering and
+UTF-8 storage.
+
+**`maxBytes` when the text is sized against a byte budget.** `maxLength` counts
+UTF-16 characters, but a world partition is refused on the UTF-8 bytes of its
+JSON, and an emoji is two characters and four bytes. With control characters
+refused, a character costs at most three bytes, so `maxLength` bounds the bytes
+at three times itself. `maxBytes` bounds them exactly, measured the way the
+partition store measures (the text's JSON form, without the quotes), and the
+panel and engine both refuse text over it.
+
+```typescript
+worldAction('gossip')
+  .enterText('message', { maxLength: 200, maxBytes: 400 })
+```
+
+**A `pattern` says what it wants.** It is `{ regex, message }`, and `message`
+is what the player is shown when their text does not match:
+
+```typescript
+Action.create('setHandle')
+  .enterText('handle', {
+    maxLength: 20,
+    pattern: { regex: /^[a-z0-9_]+$/, message: 'Use lowercase letters, digits and underscores only.' },
+  })
+```
+
 **`multiline: true` for prose.** The Action Panel draws a text pick as a
 single-line field, which is right for a name and wrong for a description: a
 thousand characters shown a hundred and twenty pixels at a time cannot be read
@@ -539,9 +578,10 @@ Action.create('setDescription')
   })
 ```
 
-It is **presentation only**. The value is the same string, `minLength`,
-`maxLength`, `pattern` and `validate` bind it in exactly the same way, and line
-breaks are ordinary characters either way -- they count toward the length and
+It is **presentation only**, with one exception. The value is the same string,
+and `minLength`, `maxLength`, `maxBytes`, `pattern` and `validate` bind it in
+exactly the same way. The exception is that a multiline field admits line feed
+and tab, which a single-line field refuses; they count toward the length and
 nothing strips them. That is why it is an option on `enterText` rather than a
 selection kind of its own: a new `type` would carry a duplicate of every rule
 `text` already has, and every host that switches on `type` would draw nothing at
@@ -589,6 +629,10 @@ Action.create('dropEquipment')
     },
   })
 ```
+
+A pick may only depend on (`dependsOn`) or filter by (`filterBy`) a pick
+declared **before** it, since picks are asked in declared order. The builder
+refuses a forward reference when the action is declared.
 
 **What `dependsOn` does:**
 - During the availability check the engine iterates every choice for A
@@ -730,6 +774,31 @@ one field breaks the moment you reorder the selections.
 > or a string. Returning an object is refused with an explicit message telling
 > you so — an object is truthy but is not `true`, so guessing at its meaning
 > would silently reject exactly the submissions you meant to allow.
+
+#### `unavailable` — a choice that is no longer listed
+
+A submitted value can stop being a choice while the player is choosing: another
+player took the offer, the auction settled, a second tab acted first. That value
+is refused before `validate` runs, and `disabled` cannot speak to it because it
+is no longer listed. By default the player reads:
+
+> That choice is no longer available. Things changed while you were choosing, so please choose again.
+
+and the engine's own detail (the value sent and the current choices) goes to the
+dev log. To say it in the game's words, give `chooseFrom`, `chooseElement` or
+`chooseElements` an `unavailable` sentence (#393):
+
+```typescript
+.chooseFrom('offer', {
+  choices: ({ game }) => game.openOffers().map((o) => o.id),
+  unavailable: () => 'Someone else took that offer first. Pick another one.',
+})
+```
+
+It receives `(value, context)`. `value` is what was submitted, so it is typed
+`unknown`: for a choice, the value sent; for an element, the element if it still
+exists, otherwise the id sent. Return the sentence the player reads, saying what
+happened and what to do next. An empty return is refused as an authoring error.
 
 #### `.condition()` is about availability, not arguments
 
@@ -2143,15 +2212,22 @@ props.action('attack', { target: target.id });  // Works!
 
 ### Detailed Validation Errors
 
-When validation fails, you get helpful error messages:
+When a submitted value is not among the current choices, the error the player
+reads is plain and says what to do, and the detail for you (the value sent and
+the valid choices) is written to the dev log:
 
 ```typescript
-// Error response includes valid choices:
+// Response:
 {
   success: false,
-  error: 'Invalid selection for "target": "invalid-value". Valid choices: [Militia #1, Militia #2, genesis]'
+  error: 'That choice is no longer available. Things changed while you were choosing, so please choose again.'
 }
+// Dev log:
+// [BoardSmith] Invalid selection for "target": "invalid-value". Valid choices: [Militia #1, Militia #2, genesis] ...
 ```
+
+A game can replace the player's sentence with the selection's `unavailable`
+option; see [`unavailable`](#unavailable--a-choice-that-is-no-longer-listed).
 
 ### Best Practices
 

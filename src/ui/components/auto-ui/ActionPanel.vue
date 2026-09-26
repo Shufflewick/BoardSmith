@@ -940,6 +940,13 @@ function handOffToBoard() {
   boardInteraction?.requestBoardFocus();
 }
 
+/** The open pick's Skip button text: the game's own label, or "Skip". Null when the pick is required. */
+const skipLabel = computed((): string | null => {
+  const optional = currentPick.value?.optional;
+  if (!optional) return null;
+  return typeof optional === 'string' ? optional : 'Skip';
+});
+
 // Skip an optional selection
 function skipOptionalSelection() {
   if (!currentPick.value || !currentPick.value.optional) return;
@@ -974,9 +981,14 @@ function editorValueRefusal(): string | null {
     return textRuleErrors(pick.name, textInputValue.value, {
       minLength: pick.minLength,
       maxLength: pick.maxLength,
-      // The wire carries a pattern as its source string; compiling it here is
-      // the only form the rule can be applied in.
-      pattern: pick.pattern === undefined ? undefined : new RegExp(pick.pattern),
+      maxBytes: pick.maxBytes,
+      multiline: pick.multiline,
+      // The wire carries a pattern as its source string with its sentence;
+      // compiling it here is the only form the rule can be applied in.
+      pattern:
+        pick.pattern === undefined
+          ? undefined
+          : { regex: new RegExp(pick.pattern.source), message: pick.pattern.message },
     })[0] ?? null;
   }
   return null;
@@ -1838,7 +1850,7 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
               class="choice-btn skip-btn"
               @click="skipOptionalSelection"
             >
-              {{ typeof currentPick.optional === 'string' ? currentPick.optional : 'Skip' }}
+              {{ skipLabel }}
             </button>
           </div>
         </template>
@@ -1866,7 +1878,7 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
               class="choice-btn skip-btn"
               @click="skipOptionalSelection"
             >
-              {{ typeof currentPick.optional === 'string' ? currentPick.optional : 'Skip' }}
+              {{ skipLabel }}
             </button>
           </div>
         </template>
@@ -1876,6 +1888,7 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
           <div class="selection-prompt">
             {{ currentPick.prompt || `Select ${currentPick.name}` }}
             <span class="multi-select-count">{{ multiSelectCountDisplay }}</span>
+            <span v-if="currentPick.optional" class="optional-label">(optional)</span>
           </div>
           <div class="choice-buttons multi-select-choices">
             <!-- The directive goes on the LABEL: it is the whole visible option, so
@@ -1908,6 +1921,13 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
               :disabled-reason="multiSelectDoneDisabledReason"
               @click="confirmMultiSelect"
             />
+            <button
+              v-if="currentPick.optional"
+              class="choice-btn skip-btn"
+              @click="skipOptionalSelection"
+            >
+              {{ skipLabel }}
+            </button>
           </div>
         </template>
 
@@ -1934,7 +1954,7 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
               class="choice-btn skip-btn"
               @click="skipOptionalSelection"
             >
-              {{ typeof currentPick.optional === 'string' ? currentPick.optional : 'Skip' }}
+              {{ skipLabel }}
             </button>
           </div>
         </template>
@@ -2013,7 +2033,7 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
               class="choice-btn skip-btn"
               @click="skipOptionalSelection"
             >
-              {{ typeof currentPick.optional === 'string' ? currentPick.optional : 'Skip' }}
+              {{ skipLabel }}
             </button>
           </div>
         </template>
@@ -2023,6 +2043,7 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
           <div class="selection-prompt">
             {{ currentPick.prompt || `Select ${currentPick.name}` }}
             <span class="multi-select-count">{{ multiSelectCountDisplay }}</span>
+            <span v-if="currentPick.optional" class="optional-label">(optional)</span>
           </div>
           <div class="choice-buttons multi-select-choices">
             <!-- Directive on the label, aria-disabled on the control — see the
@@ -2052,6 +2073,13 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
               :disabled-reason="multiSelectDoneDisabledReason"
               @click="confirmMultiSelect"
             />
+            <button
+              v-if="currentPick.optional"
+              class="choice-btn skip-btn"
+              @click="skipOptionalSelection"
+            >
+              {{ skipLabel }}
+            </button>
           </div>
         </template>
 
@@ -2060,6 +2088,7 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
         <template v-else-if="currentPick.type === 'choice' && (currentPick.filterBy || currentPick.dependsOn)">
           <div class="selection-prompt">
             {{ currentPick.prompt || `Select ${currentPick.name}` }}
+            <span v-if="currentPick.optional" class="optional-label">(optional)</span>
           </div>
           <div class="choice-buttons">
             <button
@@ -2085,9 +2114,16 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
             <div v-if="filteredChoices.length === 0 && anchoredChoices.length === 0 && isLoadingChoices" class="loading-choices">
               Loading choices...
             </div>
-            <span v-else-if="filteredChoices.length === 0 && anchoredChoices.length === 0" class="no-choices">
+            <span v-else-if="filteredChoices.length === 0 && anchoredChoices.length === 0 && !currentPick.optional" class="no-choices">
               No options available
             </span>
+            <button
+              v-if="currentPick.optional"
+              class="choice-btn skip-btn"
+              @click="skipOptionalSelection"
+            >
+              {{ skipLabel }}
+            </button>
           </div>
         </template>
 
@@ -2114,7 +2150,7 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
               class="choice-btn skip-btn"
               @click="skipOptionalSelection"
             >
-              {{ typeof currentPick.optional === 'string' ? currentPick.optional : 'Skip' }}
+              {{ skipLabel }}
             </button>
             <span v-if="filteredChoices.length === 0 && !currentPick.optional" class="no-choices">
               No options available
@@ -2132,6 +2168,14 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
           <span class="instruction-text">
             Click on a {{ currentPick.elementClassName || 'element' }} to select it
           </span>
+          <span v-if="currentPick.optional" class="optional-label">(optional)</span>
+          <button
+            v-if="currentPick.optional"
+            class="choice-btn skip-btn"
+            @click="skipOptionalSelection"
+          >
+            {{ skipLabel }}
+          </button>
         </div>
 
         <!-- THE TYPED EDITOR, FOR BOTH PICKS THAT HAVE ONE (#237).
@@ -2187,7 +2231,7 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
               v-model="textInputValue"
               :minlength="currentPick.minLength"
               :maxlength="currentPick.maxLength"
-              :pattern="currentPick.pattern"
+              :pattern="currentPick.pattern?.source"
               @keyup.enter="submitEditorValue"
             />
             <!-- Above the submit button, not below it: the bar caps its own
@@ -2209,7 +2253,7 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
               data-bs-skip-editor
               @click="skipOptionalSelection"
             >
-              {{ typeof currentPick.optional === 'string' ? currentPick.optional : 'Skip' }}
+              {{ skipLabel }}
             </button>
           </div>
           <!-- WHAT THE NUMBER IN THE BOX MEANS (#258). A live region, because

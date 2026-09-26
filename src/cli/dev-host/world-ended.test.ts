@@ -112,7 +112,8 @@ const arrive = worldClockAction<Season>('arrive')
   .needs(() => [LEDGER])
   .execute((_args, { world }) => write(world, 'arrive'));
 
-function bundle(): ConstructorParameters<typeof ResidentWorld>[0]['definition'] {
+/** The season's rules; `world` overrides what a later version of them declares. */
+function bundle(world: Partial<WorldDefinition> = {}): ConstructorParameters<typeof ResidentWorld>[0]['definition'] {
   return {
     gameClass: Season,
     gameType: 'season',
@@ -122,6 +123,7 @@ function bundle(): ConstructorParameters<typeof ResidentWorld>[0]['definition'] 
       genesis: (game: Game): Record<string, GameElement> => ({ [LEDGER]: game.create(Ledger, 'ledger') }),
       view: () => [LEDGER],
       actions: [note, close, beat, expire, arm, arrive],
+      ...world,
     } as WorldDefinition,
   } as ConstructorParameters<typeof ResidentWorld>[0]['definition'];
 }
@@ -140,6 +142,22 @@ function handClock(): WorldHostClock & { set(to: number): void } {
 }
 
 const PLAYER = worldSeatPlayer(1);
+
+/** A world over `store` on `definition`, not yet started. */
+function over(store: WorldStore, definition = bundle()) {
+  const clock = handClock();
+  let minted = 0;
+  const world = new ResidentWorld({
+    definition,
+    seed: 'season',
+    budgets: worldBudgets(),
+    store,
+    clock,
+    presence: () => [],
+    mintId: () => `event-${++minted}`,
+  });
+  return { world, clock };
+}
 
 /** A launched world over `store`, with its one seat taken. */
 async function opened(store: WorldStore) {
@@ -304,5 +322,96 @@ describe('an ended dev world after a restart (#395)', () => {
     expect(store.pendingEvents()).toEqual([]);
     expect(await second.marks()).toBe('close');
     await second.world.close();
+  });
+});
+
+/**
+ * #400: AN ENDED WORLD IS NEVER MIGRATED.
+ *
+ * The platform refuses to move a finished season onto new rules
+ * (ShufflewickPub `games/src/world-session.ts`, `#upgradeDoorClosed`): "This
+ * world's season has already ended, so there are no rules left for it to run.
+ * A finished season keeps the version it played on." It goes on answering
+ * views on the rules it ended on. `boardsmith dev` has only the rules in the
+ * project, so it cannot keep the old ones beside them: it refuses to open the
+ * ended world on rules that declare another state version, with the platform's
+ * sentence and what to do instead, and writes nothing.
+ */
+/**
+ * Each store, as something that can be opened again after the world over it is
+ * closed: the SQLite file is reopened, as a restarted `boardsmith dev` does, and
+ * the memory store is the same object, as a rebuilt host in one test sees it.
+ */
+const REOPENABLE_STORES: ReadonlyArray<readonly [string, () => () => WorldStore]> = [
+  [
+    'the dev host SQLite store',
+    () => {
+      const path = worldStorePath(tempTree('bs-world-ended-400-'));
+      return () => openWorldStore(path, worldBudgets());
+    },
+  ],
+  [
+    'the testing memory store',
+    () => {
+      const store = createMemoryWorldStore(worldBudgets());
+      return () => store;
+    },
+  ],
+];
+
+describe.each(REOPENABLE_STORES)('an ended world offered a new state version, on %s (#400)', (_name, storeAt) => {
+  it('is not migrated, refuses in the platform words, and is left exactly as it ended', async () => {
+    const open = storeAt();
+    const first = await opened(open());
+    await first.take('note');
+    await first.take('close');
+    await first.world.close();
+
+    let migrationRan = false;
+    const store = open();
+    const { world } = over(
+      store,
+      bundle({
+        stateVersion: 1,
+        migration: {
+          from: 0,
+          partition: () => {
+            migrationRan = true;
+          },
+        },
+      }),
+    );
+    const refusal = await world.start().then(
+      () => null,
+      (error: unknown) => error,
+    );
+
+    expect(migrationRan, 'the migration ran on an ended world').toBe(false);
+    expect(refusal).toBeInstanceOf(WorldRefusal);
+    expect((refusal as WorldRefusal).code).toBe('world-ended');
+    const message = (refusal as WorldRefusal).message;
+    expect(message).toContain(
+      "This world's season has already ended, so there are no rules left for it to run. " +
+        'A finished season keeps the version it played on.',
+    );
+    expect(message).toContain('state version 0');
+    expect(message).toContain('boardsmith dev --reset');
+    expect(store.stateVersion()).toBe(0);
+    expect(store.endedAt()).toBe(OPENED);
+    const stored = await store.read(LEDGER);
+    expect((stored?.json as { attributes?: { marks?: string } }).attributes?.marks).toBe('note,close');
+    await world.close();
+  });
+
+  it('still opens on rules that declare the version it ended on', async () => {
+    const open = storeAt();
+    const first = await opened(open());
+    await first.take('close');
+    await first.world.close();
+
+    const { world } = over(open());
+    await expect(world.start()).resolves.toEqual({ migrated: undefined });
+    expect(world.completed).toBe(true);
+    await world.close();
   });
 });
