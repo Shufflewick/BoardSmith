@@ -16,7 +16,11 @@ export interface ChunkSpec {
   checklist?: string[];
   /** Build Manifest rows: project-relative path to file contents, written to disk too. */
   manifest?: Record<string, string>;
-  /** Replaces the template's placeholder claim in `## Interpretation`. */
+  /**
+   * Replaces the template's placeholder claim in `## Interpretation`. Defaults to one plain claim
+   * with no quote, because a full-ceremony chunk has claims and the gate transition refuses one
+   * that has none it can read.
+   */
   interpretation?: string;
   /** A CHUNK.md made before #291: it has no `## Sign-off` section at all. */
   preGate?: boolean;
@@ -33,9 +37,8 @@ function chunkText(template: string, c: ChunkSpec): string {
     '<!-- | src/... | written / pending | -->',
     Object.keys(c.manifest ?? {}).map((path) => `| ${path} | written |`).join('\n'),
   );
-  if (c.interpretation !== undefined) {
-    text = text.replace(/^1\. \*\*<!-- claim text -->\*\*\n.*\n.*\n/m, `${c.interpretation}\n`);
-  }
+  const interpretation = c.interpretation ?? `1. The ${c.slug} rule, as the sketch states it.`;
+  text = text.replace(/^1\. \*\*<!-- claim text -->\*\*\n.*\n.*\n/m, `${interpretation}\n`);
   if (c.preGate) {
     text = text.replace(new RegExp(`^${SIGNOFF_HEADING}\\n[\\s\\S]*?(?=^## )`, 'm'), '');
   }
