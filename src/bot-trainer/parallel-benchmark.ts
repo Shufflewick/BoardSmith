@@ -4,6 +4,9 @@
  */
 import { Worker } from 'worker_threads';
 import { cpus } from 'os';
+import { extname } from 'path';
+import { fileURLToPath, pathToFileURL } from 'url';
+import { createRequire } from 'module';
 import type { LearnedObjective, SerializableGameStructure } from './types.js';
 import type { BenchmarkConfig } from './benchmark.js';
 import type {
@@ -30,6 +33,44 @@ export interface IndividualFitness {
   winRate: number;
   /** Whether evaluation succeeded */
   success: boolean;
+}
+
+/**
+ * How to start a benchmark worker (#401): its entry file is `benchmark-worker`
+ * beside this module, with this module's own extension.
+ *
+ * In an install this module is part of the CLI bundle `dist/cli.js`, and the
+ * CLI build emits `dist/benchmark-worker.js` beside it (`WORKER_ENTRIES` in
+ * `src/cli/lib/build-cli.ts`).
+ *
+ * Run from source, as `bin/boardsmith.js` runs this checkout, the entry is
+ * `benchmark-worker.ts`. tsx registers its hooks on the main thread only, and
+ * without them the worker's `./x.js` imports of `.ts` files do not resolve, so
+ * the worker registers tsx itself before it loads its entry.
+ */
+function benchmarkWorker(): { url: URL; execArgv: string[] | undefined } {
+  const extension = extname(fileURLToPath(import.meta.url));
+  const url = new URL(`./benchmark-worker${extension}`, import.meta.url);
+  if (extension !== '.ts') return { url, execArgv: undefined };
+  const registerTsx = `import { register } from ${JSON.stringify(tsxApiUrl())}; register();`;
+  return {
+    url,
+    execArgv: [...process.execArgv, '--import', `data:text/javascript,${encodeURIComponent(registerTsx)}`],
+  };
+}
+
+/** tsx's registration API, from the packages this module was installed with. */
+function tsxApiUrl(): string {
+  try {
+    return pathToFileURL(createRequire(import.meta.url).resolve('tsx/esm/api')).href;
+  } catch (error) {
+    throw new Error(
+      "Benchmark workers were asked to run from BoardSmith's TypeScript sources, which need tsx to load, " +
+        'and tsx is not installed beside them. Run the benchmark through the `boardsmith` command ' +
+        '(for example `boardsmith evolve-bot-weights`), which runs the built workers in an install.',
+      { cause: error },
+    );
+  }
 }
 
 /**
@@ -91,7 +132,7 @@ export async function runParallelBenchmarks(
   }
 
   // Create worker pool
-  const workerPath = new URL('./benchmark-worker.js', import.meta.url);
+  const { url: workerUrl, execArgv } = benchmarkWorker();
 
   interface WorkerState {
     worker: Worker;
@@ -105,7 +146,7 @@ export async function runParallelBenchmarks(
   return new Promise((resolve, reject) => {
     // Create workers
     for (let i = 0; i < workerCount; i++) {
-      const worker = new Worker(workerPath);
+      const worker = new Worker(workerUrl, { execArgv });
       const workerState: WorkerState = {
         worker,
         busy: false,
