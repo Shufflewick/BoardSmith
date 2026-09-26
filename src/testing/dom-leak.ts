@@ -147,26 +147,83 @@ function loadBoardInteractionModule(): Promise<
 }
 
 // ---------------------------------------------------------------------------
-// `@vue/test-utils` is a devDependency of BoardSmith itself — consuming
-// projects (games, MERC) have no reason to install it unless they actually
-// call `renderAsSeat`/`assertNoHiddenInfoLeak`. A static top-level
-// `import { mount } from '@vue/test-utils'` would make Vite eagerly resolve
-// that module for EVERY consumer of `boardsmith/testing`'s barrel — even one
-// that only wants `createTestGame` — turning an opt-in DOM-leak utility into
-// a hard, always-on dependency (Rule 1: auto-fixed bug, MERC re-vendor sweep
-// caught this: MERC has no `@vue/test-utils` installed and its entire suite
-// failed to even load). Deferred via runtime dynamic `import()`, mirroring
-// `loadAutoUI`'s existing pattern, so the dependency is only resolved the
-// first time this file's own mount-requiring functions actually run.
+// THE PROJECT'S OWN `@vue/test-utils`, NEVER THIS PACKAGE'S (#389).
+//
+// A game installs `boardsmith` as a symlink to a checkout, and the checkout
+// carries its own devDependencies, `vue` and `@vue/test-utils` among them. The
+// game's `resolve.dedupe: ['vue']` points every `import 'vue'` -- its
+// components' and BoardSmith's UI source alike -- at the game's copy, but it
+// cannot reach a bare `import('@vue/test-utils')` written here: vitest hands a
+// package in `node_modules` to Node, and Node resolves it from this file's real
+// location, the checkout, whose `@vue/test-utils` loads the checkout's `vue`.
+// The board then rendered on one Vue runtime while its computeds ran on the
+// other, so `setProps` changed nothing on screen.
+//
+// So it is resolved from the project the tests run in (vitest's working
+// directory, the root its config resolves `dedupe` against), exactly as the
+// project's own test files resolve it, and it then loads the project's `vue`.
+// It is loaded on first use, never at import time, so a consumer of the
+// `boardsmith/testing` barrel that never renders needs no `@vue/test-utils`
+// installed at all (MERC has none).
 // ---------------------------------------------------------------------------
 let mountFnPromise: Promise<typeof import('@vue/test-utils').mount> | undefined;
 
-/** Dynamically import `@vue/test-utils`'s `mount` (cached) — see note above. */
+/** The project's `@vue/test-utils` `mount`, checked to share BoardSmith's Vue (cached). */
 function loadMount(): Promise<typeof import('@vue/test-utils').mount> {
-  if (!mountFnPromise) {
-    mountFnPromise = import('@vue/test-utils').then((mod) => mod.mount);
-  }
+  mountFnPromise ??= loadProjectMount();
   return mountFnPromise;
+}
+
+async function loadProjectMount(): Promise<typeof import('@vue/test-utils').mount> {
+  const [{ createRequire }, { pathToFileURL }, { join }] = await Promise.all([
+    import('node:module'),
+    import('node:url'),
+    import('node:path'),
+  ]);
+  const project = process.cwd();
+  let entry: string;
+  try {
+    entry = createRequire(join(project, 'package.json')).resolve('@vue/test-utils');
+  } catch {
+    throw new Error(
+      `renderAsSeat mounts with your project's own @vue/test-utils, so a board renders on the same Vue ` +
+        `its components import, and none is installed in ${project}. ` +
+        'Run `npm install --save-dev @vue/test-utils` there, then run the tests again.',
+    );
+  }
+  const { mount } = (await import(pathToFileURL(entry).href)) as typeof import('@vue/test-utils');
+  await requireOneVue(mount);
+  return mount;
+}
+
+/**
+ * Refuse to render when the project's `@vue/test-utils` and BoardSmith's UI
+ * run on two copies of Vue.
+ *
+ * `import('vue')` here resolves the way BoardSmith's UI source does in this
+ * project, so it is the Vue the board interaction, the action controller and
+ * (with the scaffold's dedupe) the game's own components use. A mount on any
+ * other copy renders once and then never updates, which is the silent failure
+ * of #389. The check is a render, because that is the one thing the two copies
+ * do not share: Vue deliberately shares the current component instance across
+ * copies, so `getCurrentInstance()` cannot tell them apart.
+ */
+async function requireOneVue(mount: typeof import('@vue/test-utils').mount): Promise<void> {
+  const { h, ref } = await import('vue');
+  const shown = ref('before');
+  const probe = mount({ render: () => h('i', shown.value) });
+  shown.value = 'after';
+  await probe.vm.$nextTick();
+  const oneVue = probe.text() === 'after';
+  probe.unmount();
+  if (oneVue) return;
+  throw new Error(
+    "renderAsSeat found two copies of Vue in this test run: BoardSmith's UI uses one and your project's " +
+      '@vue/test-utils loads another, so a board would render once and then never update. ' +
+      "Make every import of 'vue' resolve to your project's one copy: keep `resolve: { dedupe: ['vue'] }` " +
+      'in the vite config your vitest config uses (the one `boardsmith init` writes has it), and do not ' +
+      'alias `vue` to another build of it. Then run the tests again.',
+  );
 }
 
 /** Every entry point that renders needs jsdom; say so rather than fail inside Vue. */
@@ -183,7 +240,8 @@ let seatRendererPromise: Promise<void> | undefined;
 
 /**
  * Load everything `renderAsSeat` and `assertNoHiddenInfoLeak` render with:
- * `@vue/test-utils`, AutoUI's module graph and the board-interaction module.
+ * your project's `@vue/test-utils`, AutoUI's module graph and the
+ * board-interaction module.
  *
  * Call it with a top-level `await` in a test file that renders:
  *
@@ -199,6 +257,9 @@ let seatRendererPromise: Promise<void> | undefined;
  * per test file, and every later call returns the same promise.
  *
  * @throws Outside a jsdom test environment, with the same message a render gives.
+ *   The promise rejects when the project has no `@vue/test-utils` installed, or
+ *   when it and BoardSmith's UI run on two copies of Vue; each message says what
+ *   to change.
  */
 export function preloadSeatRenderer(): Promise<void> {
   requireDom();

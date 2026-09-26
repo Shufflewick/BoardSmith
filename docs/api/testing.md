@@ -495,6 +495,15 @@ collects the file, where no test timeout applies; without it the first test
 pays for it and can time out under load. It loads once per file, and it throws
 the same jsdom message a render does.
 
+**It renders with your project's own `@vue/test-utils`** (#389), resolved from
+the directory the tests run in exactly as your own test files resolve it, so a
+board renders on the same Vue its components import and re-renders when a test
+hands it new props. `boardsmith init` installs it; a project without it is told
+to run `npm install --save-dev @vue/test-utils`. The first load also checks that
+BoardSmith's UI and your `@vue/test-utils` share one copy of Vue, and refuses,
+saying what to change, when they do not (aliasing `vue` to another build of it
+is the usual cause).
+
 **`subject` is a `TestGame` or a `TestWorld`.** Both answer the same two
 questions -- what this seat is SENT, and what the game or world HOLDS -- and the
 scan is the difference between them. A persistent world is the case this matters
