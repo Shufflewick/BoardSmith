@@ -20,31 +20,12 @@ import type { VueWrapper } from '@vue/test-utils';
 import { Card } from '../engine/index.js';
 import type { UseActionControllerReturn } from '../ui/composables/useActionControllerTypes.js';
 import { useBoardInteraction } from '../ui/composables/useBoardInteraction.js';
-import { makeSecretHandGame, type ViewNode } from './dom-leak.test-helper.js';
-import { createTestWorld } from './test-world.js';
-import { vaultBundle } from './test-world.test-helper.js';
+import { makeSecretHandGame, TargetBoard, type ViewNode } from './dom-leak.test-helper.js';
 import { assertNoHiddenInfoLeak, preloadSeatRenderer, renderAsSeat } from './dom-leak.js';
 
 await preloadSeatRenderer();
 
 const makeGame = () => makeSecretHandGame('open-action');
-
-/** A board that draws each target of the open action, labelled as the game labels it. */
-const TargetBoard = defineComponent({
-  name: 'TargetBoard',
-  props: { gameView: { type: Object as PropType<ViewNode | null>, default: null } },
-  setup() {
-    const interaction = useBoardInteraction();
-    return () =>
-      h(
-        'div',
-        { class: 'board' },
-        interaction.validElements.map((target) =>
-          h('button', { class: 'target', 'data-element-id': String(target.id), 'aria-label': target.display }),
-        ),
-      );
-  },
-});
 
 /** The same board, labelling each target by its position instead of its choice text. */
 const PositionalTargetBoard = defineComponent({
@@ -95,14 +76,6 @@ describe('assertNoHiddenInfoLeak with an action open (#405)', () => {
     await expect(
       assertNoHiddenInfoLeak(makeGame(), 1, { component: TargetBoard, startAction: { name: 'pass' } }),
     ).rejects.toThrow(/"pass" did not stay open for seat 1/);
-  });
-
-  it('refuses to open an action on a world seat, whose controller cannot start one', async () => {
-    const world = await createTestWorld({ definition: vaultBundle() });
-
-    await expect(
-      assertNoHiddenInfoLeak(world, 2, { component: TargetBoard, startAction: { name: 'stash' } }),
-    ).rejects.toThrow(/startAction opens an action on a table seat/);
   });
 });
 

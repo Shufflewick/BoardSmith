@@ -23,6 +23,8 @@ import {
   actionStep,
   type GameOptions,
 } from '../engine/index.js';
+import { defineComponent, h, type PropType } from 'vue';
+import { useBoardInteraction } from '../ui/composables/useBoardInteraction.js';
 import { TestGame } from './test-game.js';
 
 class SecretCard extends Card<SecretHandGame> {
@@ -89,3 +91,24 @@ export function collectCards(node: ViewNode, into: ViewNode[] = []): ViewNode[] 
   for (const child of node.children ?? []) collectCards(child, into);
   return into;
 }
+
+/**
+ * A board that draws each target of the open action, labelled as the game
+ * labels it -- the surface `startAction` exists to scan (#405), on a table
+ * seat or a world seat (#413).
+ */
+export const TargetBoard = defineComponent({
+  name: 'TargetBoard',
+  props: { gameView: { type: Object as PropType<ViewNode | null>, default: null } },
+  setup() {
+    const interaction = useBoardInteraction();
+    return () =>
+      h(
+        'div',
+        { class: 'board' },
+        interaction.validElements.map((target) =>
+          h('button', { class: 'target', 'data-element-id': String(target.id), 'aria-label': target.display }),
+        ),
+      );
+  },
+});

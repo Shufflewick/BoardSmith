@@ -36,6 +36,8 @@ interface PackageJson {
   readonly name: string;
   readonly dependencies: Record<string, string>;
   readonly peerDependencies: Record<string, string>;
+  /** Package-internal `#` specifiers, each mapping conditions to a file in this package. */
+  readonly imports?: Record<string, Record<string, string>>;
 }
 
 /** One shipped file importing one package an install does not provide. */
@@ -68,6 +70,8 @@ const DECLARED = new Set([
 /** The package a bare specifier names, or null for anything that is not a package. */
 function packageOf(specifier: string): string | null {
   if (specifier.startsWith('.') || specifier.startsWith('/')) return null;
+  // `#testing/...`: answered by this package's own "imports", checked below (#411).
+  if (specifier.startsWith('#')) return null;
   // `node:fs`, and Vite's `virtual:` modules, which the CLI's own dev-host plugin serves.
   if (/^[a-z]+:/.test(specifier)) return null;
   const parts = specifier.split('/');
@@ -166,6 +170,29 @@ describe('packageOf', () => {
     expect(packageOf('fs')).toBeNull();
     expect(packageOf('child_process')).toBeNull();
     expect(packageOf('virtual:boardsmith-dev-config')).toBeNull();
+    expect(packageOf('#testing/project-test-utils')).toBeNull();
+  });
+});
+
+describe('every package-internal import is answered by a file the package ships (#411)', () => {
+  it('declares each `#` specifier a shipped file uses in package.json "imports", aimed at shipped files', () => {
+    const used = [...new Set(SHIPPED_SOURCE.flatMap((file) => specifiersOf(file)).filter((s) => s.startsWith('#')))];
+    const declared = PACKAGE_JSON.imports ?? {};
+    const unanswered = used.filter((specifier) => declared[specifier] === undefined);
+    const unshippedTargets = Object.values(declared)
+      .flatMap((conditions) => Object.values(conditions))
+      .map((target) => target.replace(/^\.\//, ''))
+      .filter((target) => !SHIPPED.includes(target));
+
+    expect(
+      unanswered,
+      'These package-internal specifiers are imported by a shipped file and missing from "imports" in ' +
+        'package.json, so nothing resolves them. Add each one there.',
+    ).toEqual([]);
+    expect(
+      unshippedTargets,
+      'package.json "imports" points at files npm would not publish. Ship them, or aim the entry elsewhere.',
+    ).toEqual([]);
   });
 });
 

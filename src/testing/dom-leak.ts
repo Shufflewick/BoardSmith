@@ -29,11 +29,18 @@ import type { GameViewElement as UIGameElement } from '../ui/components/auto-ui/
 import type { ElementJSON } from '../engine/index.js';
 import type { BoardInteraction } from '../ui/composables/useBoardInteraction.js';
 import type { TableSeat } from '../ui/composables/useTableSeat.js';
+import type { WorldSeatHost } from '../ui/world/useWorldHost.js';
+import type { WorldSeat } from '../ui/world/useWorldSeat.js';
+import type { UseActionControllerReturn } from '../ui/composables/useActionControllerTypes.js';
 import type { GameState } from '../client/types.js';
 import type { PlayerGameState } from '../session/types.js';
 import { buildPlayerState } from '../session/utils.js';
 import { PickHandler } from '../session/pick-handler.js';
+import { WorldRefusal } from '../world/index.js';
+import { messageOf } from '../world/host/index.js';
 import { TestGame } from './test-game.js';
+import { TestWorld, type WorldSeatView } from './test-world.js';
+import { importProjectTestUtils } from '#testing/project-test-utils';
 
 /**
  * WHAT THIS GATE CAN BE AIMED AT: a table, or a persistent world.
@@ -51,11 +58,7 @@ import { TestGame } from './test-game.js';
 export interface HiddenInfoSubject {
   /**
    * What this seat is sent -- the same payload a real client receives.
-   *
-   * `state` is the redacted per-seat tree and is what gets mounted. The other
-   * two are the scaffold props a custom board declares; a table answers them
-   * from its flow state and a world from whether the seat holds an offer it can
-   * take, because a world has no turn.
+   * `state` is the redacted per-seat tree, which the scan diffs and mounts.
    */
   getPlayerView(seat: number): SeatProjection | Promise<SeatProjection>;
   /**
@@ -70,20 +73,14 @@ export interface HiddenInfoSubject {
 }
 
 /**
- * One seat's frame, in the shape both subjects answer.
- *
- * `availableActions` and `isMyTurn` are a world's answer. A table's player view
- * carries them under `flowState` instead, and `renderAsSeat` does not read them
- * here for a `TestGame`: it mounts a table seat from the state a session
- * publishes for it, as GameShell does (#390).
+ * One seat's frame, in the shape both subjects answer: the redacted per-seat
+ * tree. Everything else a board is given comes from the subject itself --
+ * `renderAsSeat` mounts a table seat as GameShell does (#390, #406) and a world
+ * seat as WorldShell does (#413).
  */
 export interface SeatProjection {
   /** The redacted per-seat element tree. */
   readonly state: unknown;
-  /** What this seat may do right now, by name or as offers. */
-  readonly availableActions?: readonly (string | { name: string })[];
-  /** Whether this seat can act at all. */
-  readonly isMyTurn?: boolean;
 }
 
 /**
@@ -207,7 +204,8 @@ function loadTableSeatModules(): Promise<
 // project's own test files resolve it, and it then loads the project's `vue`.
 // It is loaded on first use, never at import time, so a consumer of the
 // `boardsmith/testing` barrel that never renders needs no `@vue/test-utils`
-// installed at all (MERC has none).
+// installed at all (MERC has none). The resolving takes Node, so it lives in
+// `project-test-utils.node.ts`, which a game's compiler never sees (#411).
 // ---------------------------------------------------------------------------
 let mountFnPromise: Promise<typeof import('@vue/test-utils').mount> | undefined;
 
@@ -218,23 +216,7 @@ function loadMount(): Promise<typeof import('@vue/test-utils').mount> {
 }
 
 async function loadProjectMount(): Promise<typeof import('@vue/test-utils').mount> {
-  const [{ createRequire }, { pathToFileURL }, { join }] = await Promise.all([
-    import('node:module'),
-    import('node:url'),
-    import('node:path'),
-  ]);
-  const project = process.cwd();
-  let entry: string;
-  try {
-    entry = createRequire(join(project, 'package.json')).resolve('@vue/test-utils');
-  } catch {
-    throw new Error(
-      `renderAsSeat mounts with your project's own @vue/test-utils, so a board renders on the same Vue ` +
-        `its components import, and none is installed in ${project}. ` +
-        'Run `npm install --save-dev @vue/test-utils` there, then run the tests again.',
-    );
-  }
-  const { mount } = (await import(pathToFileURL(entry).href)) as typeof import('@vue/test-utils');
+  const { mount } = await importProjectTestUtils();
   await requireOneVue(mount);
   return mount;
 }
@@ -279,12 +261,20 @@ function requireDom(): void {
   }
 }
 
+let worldSeatModulePromise: Promise<typeof import('../ui/world/useWorldSeat.js')> | undefined;
+
+/** Dynamically import the seat wiring WorldShell uses (cached); deferred like `loadBoardInteractionModule`. */
+function loadWorldSeatModule(): Promise<typeof import('../ui/world/useWorldSeat.js')> {
+  worldSeatModulePromise ??= import('../ui/world/useWorldSeat.js');
+  return worldSeatModulePromise;
+}
+
 let seatRendererPromise: Promise<void> | undefined;
 
 /**
  * Load everything `renderAsSeat` and `assertNoHiddenInfoLeak` render with:
  * your project's `@vue/test-utils`, AutoUI's module graph, the
- * board-interaction module and the table seat wiring.
+ * board-interaction module and the table and world seat wiring.
  *
  * Call it with a top-level `await` in a test file that renders:
  *
@@ -311,6 +301,7 @@ export function preloadSeatRenderer(): Promise<void> {
     loadAutoUI(),
     loadBoardInteractionModule(),
     loadTableSeatModules(),
+    loadWorldSeatModule(),
   ]).then(() => undefined);
   return seatRendererPromise;
 }
@@ -367,23 +358,24 @@ export interface RenderAsSeatOptions<C extends Component = Component> {
    * function supplies.
    *
    * A board reads some of what it needs from props and the rest by injection,
-   * from what `<GameShell>` provides. So this function stands in for the shell
-   * and provides the same things, built by the same function (`useTableSeat`,
-   * #406): board interaction, the game context (`useGameContext()`), the
-   * announcer and animation events. A board that runs inside GameShell mounts
-   * here with no wiring from the caller. A world seat is given board
-   * interaction only.
+   * from what its shell provides. So this function stands in for the shell and
+   * provides the same things, built by the same function. A table seat gets
+   * what `<GameShell>` gives it (`useTableSeat`, #406): board interaction, the
+   * game context (`useGameContext()`), the announcer and animation events. A
+   * world seat gets what `<WorldShell>` gives it (`useWorldSeat`, #413): board
+   * interaction, the shared half of the game context and the world itself
+   * (`useWorld()`). A board that runs inside its shell mounts here with no
+   * wiring from the caller.
    *
    * Pass your own interaction under `BOARD_INTERACTION_KEY` to hold a handle on
-   * it: for a table seat it is then the one the seat's controller drives, as
-   * GameShell's is, so its targets come from starting an action on the
-   * controller rather than from pre-loading. Pass anything else your own board
-   * asks for.
+   * it: it is then the one the seat's controller drives, as the shell's is, so
+   * its targets come from starting an action on the controller rather than
+   * from pre-loading. Pass anything else your own board asks for.
    */
   provide?: Record<string | symbol, unknown>;
   /**
-   * An action to open on a table seat's controller once the board has mounted,
-   * as a player would by choosing it (#405).
+   * An action to open on the seat's controller once the board has mounted, as
+   * a player would by choosing it (#405, #413 for a world seat).
    *
    * A board draws its targets while an action is open, and a target can carry
    * what it hides -- a blind pick labelled with the card's face. Those targets
@@ -395,7 +387,8 @@ export interface RenderAsSeatOptions<C extends Component = Component> {
    * The action must be one the seat may take now and must still be open once
    * started; an action with nothing left to choose completes at once, and the
    * controller refuses to take a move, so that is an error rather than a render.
-   * A world seat's controller cannot start an action, so it is refused there.
+   * A world action that quotes stays open awaiting confirmation, with the
+   * world's own quote for the draft.
    */
   startAction?: { name: string; args?: Record<string, unknown> };
 }
@@ -405,10 +398,10 @@ export interface RenderAsSeatOptions<C extends Component = Component> {
  * (`testGame.getPlayerView(seat).state`) unless `gameViewOverride` is given.
  *
  * Renders AutoUI by default, or `options.component` when supplied — the
- * latter is how a game checks the surface its players actually look at. A
- * table's board is given the seat's own actions and a real action controller,
- * wired as GameShell wires it (see `seatContextFor`); the controller refuses to
- * take a move, so rendering never changes the game.
+ * latter is how a game checks the surface its players actually look at. The
+ * board is given the seat's own actions and a real action controller, wired as
+ * its shell wires it (see `seatContextFor`); the controller refuses to take a
+ * move, so rendering never changes the game or the world.
  *
  * @param testGame - The TestGame wrapper
  * @param seat - The seat to render as
@@ -585,8 +578,9 @@ interface SeatContext {
  * carries them under `flowState`, so every table board was told it had nothing
  * to do.
  *
- * A world answers its offers in its own projection, and its board gets an
- * inert controller carrying their names.
+ * A WORLD IS MOUNTED THE WAY WORLDSHELL MOUNTS IT (#413): from the frame a host
+ * sends the seat, through `useWorldSeat`, the one function WorldShell builds
+ * its seat with.
  */
 async function seatContextFor(
   subject: HiddenInfoSubject,
@@ -605,32 +599,19 @@ async function seatContextFor(
       options.gameViewOverride !== undefined ? options.gameViewOverride : (seatState.view as UIGameElement);
     return wireTableSeat(subject, seat, seatState, gameView, boardInteraction);
   }
-
-  // AWAITED, because a world's projection is a read of its store: `viewsFor`
-  // settles the bundle's own `world.view` declaration and hydrates whatever it
-  // names before it can answer.
-  const projection = await subject.getPlayerView(seat);
-  const gameView =
-    options.gameViewOverride !== undefined ? options.gameViewOverride : (projection.state as UIGameElement);
-  const availableActions = (projection.availableActions ?? []).map((a) => (typeof a === 'string' ? a : a.name));
-  return {
-    gameView,
-    contract: {
-      playerSeat: seat,
-      isMyTurn: projection.isMyTurn ?? false,
-      availableActions,
-      actionController: inertActionController(availableActions),
-    },
-    provide: {},
-    openAction: async ({ name }) => {
-      throw new Error(
-        `startAction opens an action on a table seat's controller, and seat ${seat} of a world is given ` +
-          `one that cannot start "${name}". Render the world board as it stands, or open the action on ` +
-          'a TestGame seat.',
-      );
-    },
-    stop: () => undefined,
-  };
+  if (subject instanceof TestWorld) {
+    // AWAITED, because a world's projection is a read of its store: `viewsFor`
+    // settles the bundle's own `world.view` declaration and hydrates whatever it
+    // names before it can answer.
+    const frame = await subject.getPlayerView(seat);
+    const gameView =
+      options.gameViewOverride !== undefined ? options.gameViewOverride : (frame.state as UIGameElement);
+    return wireWorldSeat(subject, seat, frame, gameView, boardInteraction);
+  }
+  throw new Error(
+    `renderAsSeat mounts a seat of a table or a world, built with createTestGame or createTestWorld, and ` +
+      `seat ${seat}'s subject is neither. Hand it the TestGame or TestWorld your test drove.`,
+  );
 }
 
 /**
@@ -705,17 +686,99 @@ async function wireTableSeat(
       actionController: tableSeat.controller,
     },
     provide: Object.fromEntries(tableSeat.provisions),
-    openAction: (request) => openTableAction(tableSeat.controller, request, seat, seatState.availableActions ?? []),
+    openAction: (request) => openSeatAction(tableSeat.controller, request, seat, seatState.availableActions ?? []),
     stop: () => scope.stop(),
   };
 }
 
 /**
- * Open `request` on a table seat's controller and wait for its targets to
- * reach the board, or say why it could not be held open.
+ * Build a world seat with `useWorldSeat`, inside an effect scope the mount
+ * stops when it unmounts.
+ *
+ * Where WorldShell's host is a window it listens on, this one is the frame a
+ * host would send (`TestWorld.getPlayerView`) and the world itself. It answers
+ * a pick and a quote by asking the world, as a host does, and refuses to take
+ * a move, saying how to take it: a render that changed the world would not be
+ * a render. It has heard no narration, as a page that has just attached has not.
  */
-async function openTableAction(
-  controller: TableSeat['controller'],
+async function wireWorldSeat(
+  world: TestWorld,
+  seat: number,
+  frame: WorldSeatView,
+  gameView: UIGameElement | null,
+  boardInteraction: BoardInteraction,
+): Promise<SeatContext> {
+  const [{ effectScope, ref, shallowRef }, { useWorldSeat }] = await Promise.all([
+    import('vue'),
+    loadWorldSeatModule(),
+  ]);
+  const host: WorldSeatHost = {
+    phase: ref('watching'),
+    // The envelope a host sends, carrying the tree the board is handed, so the
+    // board's props and everything it injects agree.
+    view: shallowRef(Object.assign({}, frame.view, { state: gameView })),
+    seat: ref(seat),
+    actions: shallowRef(frame.offers),
+    offersPending: ref(false),
+    notice: ref(null),
+    worldName: ref(null),
+    presence: ref(frame.presence),
+    players: shallowRef([]),
+    events: shallowRef([]),
+    acting: ref(false),
+    act: async (command) => ({
+      ok: false,
+      message:
+        `renderAsSeat mounted seat ${seat}'s board to render it, so "${command}" was not sent to the world. ` +
+        `Take the move with world.take(${seat}, '${command}', args), then render the seat again.`,
+    }),
+    resolvePick: async (action, selection, args) => {
+      try {
+        return { ok: true, selection: await world.resolvePick(seat, action, selection, args) };
+      } catch (error) {
+        return refusedQuestion(error);
+      }
+    },
+    quoteDraft: async (action, args) => {
+      try {
+        return { ok: true, quote: await world.quote(seat, action, args) };
+      } catch (error) {
+        return refusedQuestion(error);
+      }
+    },
+  };
+  const scope = effectScope(true);
+  let worldSeat!: WorldSeat;
+  scope.run(() => {
+    worldSeat = useWorldSeat({ host, boardInteraction });
+  });
+  return {
+    gameView,
+    contract: {
+      playerSeat: seat,
+      isMyTurn: worldSeat.play.mayAct.value,
+      availableActions: worldSeat.play.availableActions.value,
+      disabledActions: worldSeat.play.disabledActions.value,
+      actionController: worldSeat.controller,
+    },
+    provide: Object.fromEntries(worldSeat.provisions),
+    openAction: (request) =>
+      openSeatAction(worldSeat.controller, request, seat, worldSeat.play.availableActions.value),
+    stop: () => scope.stop(),
+  };
+}
+
+/** A pick or quote the world refused, answered as a host answers it. */
+function refusedQuestion(error: unknown): { ok: false; message: string; code?: string } {
+  return { ok: false, message: messageOf(error), ...(error instanceof WorldRefusal ? { code: error.code } : {}) };
+}
+
+/**
+ * Open `request` on a seat's controller and wait for its targets to reach the
+ * board, or say why it could not be held open.
+ */
+async function openSeatAction(
+  controller: UseActionControllerReturn,
   { name, args }: NonNullable<RenderAsSeatOptions['startAction']>,
   seat: number,
   seatActions: readonly string[],
@@ -760,107 +823,6 @@ function retainDeclaredProps(
 
   return Object.fromEntries(Object.entries(candidate).filter(([key]) => names.has(key)));
 }
-
-/**
- * A ref-SHAPED plain object. Deliberately not Vue's `ref()`: a static runtime
- * `import { ref } from 'vue'` in this module would make every consumer of the
- * `boardsmith/testing` barrel resolve Vue — the exact always-on-dependency
- * failure documented above for `@vue/test-utils`, which broke MERC's entire
- * suite. A template reading `.value` cannot tell the difference, and this
- * render is a one-shot snapshot with nothing to stay reactive to.
- */
-function inertRef<T>(value: T): { value: T } {
-  return { value };
-}
-
-/**
- * The `useActionController` members an inert stand-in has to carry, split by
- * what a template does with them.
- *
- * Hand-listing these is what let the stand-in drift behind the real composable
- * (#20): a board reading `showActionPanel` (may I offer controls right now?) or
- * `lastActionResult` (what did the last action resolve to?) threw during
- * `setup()`, before a node rendered, so the leak assertion never reached its own
- * logic and the failure was a bare TypeError inside the game's component.
- *
- * `dom-leak-shape.test.ts` asserts these against the real return type, so a
- * member added to the controller and forgotten here fails the library's own
- * suite rather than a game's.
- */
-const INERT_REF_MEMBERS: Record<string, unknown> = {
-  // State a template reads directly.
-  currentAction: null,
-  currentSelection: null,
-  currentChoices: [],
-  currentPick: null,
-  currentArgs: {},
-  selectedArgs: {},
-  pendingArgs: {},
-  isSelecting: false,
-  isExecuting: false,
-  isLoadingChoices: false,
-  error: null,
-  selectableElementIds: [],
-  repeatingState: null,
-  pendingFollowUp: false,
-  pendingOnServer: false,
-  actionCompletedTick: 0,
-  multiSelectDraft: null,
-  // The typed value and the open menu level (#235): a board may read either,
-  // and an inert controller must answer both without one.
-  currentPickDraft: null,
-  actionMenuPath: [],
-  actionSnapshot: null,
-  validElements: [],
-  // A computed gate a board consults before offering anything; it was missing.
-  lastActionResult: null,
-  animationsPending: false,
-  // `false` rather than `true`: an inert controller must never invite a
-  // submission it cannot carry out.
-  showActionPanel: false,
-  snapshotVersion: 0,
-};
-
-/** Members a template calls. Every one is a no-op that submits nothing. */
-const INERT_METHOD_MEMBERS = [
-  'startAction', 'cancelAction', 'selectChoice', 'selectElement',
-  'execute', 'fill', 'start', 'skip', 'clear', 'cancel', 'undo',
-  'toggleMultiSelect', 'confirmMultiSelect', 'isMultiSelectSelected',
-  'getChoices', 'getCurrentChoices', 'getValidElements', 'getActionMetadata',
-  'clearArgs', 'fetchChoicesForPick', 'getCollectedPick', 'getCollectedPicks',
-  'setBeforeAutoExecute', 'setPickDraft',
-] as const;
-
-/**
- * A minimal, inert `useActionController`-shaped object. Every field is a plain
- * ref-shaped value or a no-op: enough for a template to render against,
- * incapable of submitting anything. Games needing a real controller can pass
- * one via `componentProps`.
- */
-function inertActionController(availableActions: string[]): Record<string, unknown> {
-  const controller: Record<string, unknown> = {
-    availableActions: inertRef(availableActions),
-  };
-  for (const [name, value] of Object.entries(INERT_REF_MEMBERS)) {
-    controller[name] = inertRef(value);
-  }
-  for (const name of INERT_METHOD_MEMBERS) {
-    // Reads like the real thing to a template, resolves to nothing useful, and
-    // never reaches a server. The few members whose real form returns a
-    // collection return an empty one so a `.length`/`.map` in a template works.
-    controller[name] = () => undefined;
-  }
-  controller.getChoices = () => [];
-  controller.getCurrentChoices = () => [];
-  controller.getValidElements = () => [];
-  controller.getCollectedPicks = () => [];
-  controller.isMultiSelectSelected = () => false;
-  controller.setBeforeAutoExecute = () => () => undefined;
-  return controller;
-}
-
-/** @internal exported for the library's own shape test — not public API. */
-export const _inertActionControllerForTests = inertActionController;
 
 /**
  * A predicate allowlist: returns `true` for a marker that is a known,

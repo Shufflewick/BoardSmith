@@ -123,6 +123,8 @@ export interface WorldSeatView {
   /** Which committed state this frame is of (#244). The state body and the
    *  offers carry the same number, as they do on the wire. */
   readonly revision: number;
+  /** The seats watching this world, as `world_state.presence` carries them. */
+  readonly presence: readonly number[];
 }
 
 /**
@@ -302,6 +304,7 @@ export class TestWorld {
         isMyTurn: true,
         canAct: offers.some((offer) => offer.disabled === undefined),
         revision,
+        presence: this.#watching,
       };
     });
   }
@@ -328,6 +331,20 @@ export class TestWorld {
     return this.#world.run(() =>
       this.#world.resolvePick(worldSeatPlayer(seat), action, selection, args),
     );
+  }
+
+  /**
+   * WHAT THE DRAFT WOULD COST, as the action's own `.quote()` prices it (#248).
+   *
+   * The call a host makes when the panel asks about a draft, so the lines are
+   * the ones this seat would be shown. A read: nothing is dispatched.
+   */
+  async quote(
+    seat: number,
+    action: string,
+    args: Readonly<Record<string, unknown>>,
+  ): Promise<readonly string[] | null> {
+    return this.#world.run(() => this.#world.quote(worldSeatPlayer(seat), action, args));
   }
 
   /**
@@ -430,7 +447,6 @@ export class TestWorld {
    * (see `dom-leak.ts`): a marker is forbidden for a seat when this says the
    * world holds it and that seat's frame does not.
    */
-  // fallow-ignore-next-line unused-class-member
   async unredactedElements(): Promise<readonly ElementJSON[]> {
     const all: ElementJSON[] = [];
     for (const name of this.#store.partitionNames()) {

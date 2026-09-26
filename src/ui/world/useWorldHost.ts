@@ -164,6 +164,32 @@ export interface WorldHost {
   handleMessage(event: MessageEvent): void;
 }
 
+/**
+ * WHAT A WORLD SEAT IS BUILT FROM (#413): the host's state for one seat and the
+ * three questions it answers, without the transport's lifecycle.
+ *
+ * `useWorldSeat` takes this rather than a whole `WorldHost` so `renderAsSeat`
+ * can build a seat from a `TestWorld`: a test has a frame and a world to ask,
+ * and no window to listen on.
+ */
+export type WorldSeatHost = Pick<
+  WorldHost,
+  | 'phase'
+  | 'view'
+  | 'seat'
+  | 'actions'
+  | 'offersPending'
+  | 'notice'
+  | 'worldName'
+  | 'presence'
+  | 'players'
+  | 'events'
+  | 'acting'
+  | 'act'
+  | 'resolvePick'
+  | 'quoteDraft'
+>;
+
 /** What an outstanding command is told when the frame goes before its answer
  *  does. A promise nobody resolves is a button that spins forever. */
 const DROPPED_BEFORE_ANSWER =

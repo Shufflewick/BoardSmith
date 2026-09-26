@@ -49,7 +49,7 @@
  */
 import { computed, type ComputedRef } from 'vue';
 import { deadEndPickMessage } from '../../engine/element/pick-candidates.js';
-import type { WorldHost } from './useWorldHost.js';
+import type { WorldSeatHost } from './useWorldHost.js';
 import type { WorldActionOffer } from './worldProtocol.js';
 import type {
   EnrichedActionMetadata,
@@ -116,7 +116,7 @@ interface WorldView {
   readonly state?: unknown;
 }
 
-export function useWorldPlay(host: WorldHost): WorldPlay {
+export function useWorldPlay(host: WorldSeatHost): WorldPlay {
   const offers = computed<readonly WorldActionOffer[]>(() => host.actions.value);
 
   const availableActions = computed(() => offers.value.map((offer) => offer.name));
