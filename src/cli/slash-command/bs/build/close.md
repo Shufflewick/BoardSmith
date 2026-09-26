@@ -102,7 +102,8 @@ release) and no tail detailing.
    included) cites a script or a capture, that file must be committed. A cited file that is
    gitignored (anything in `.boardsmith/scratch/`), not yet added, missing, or outside the project
    is a finding; move it into `chunks/<slug>/evidence/`, commit it, and cite that path
-   (`state-machine.md` "Project Layout"). A non-zero exit means the ledgers are wrong:
+   (`state-machine.md` "Project Layout"). A file cited by line (`path:N` or `path:N-M`) is held
+   to the same rule, and must also have those lines. A non-zero exit means the ledgers are wrong:
    fix every entry it names, following the fix its message states, and run it again. This step
    is not done, and the lock is not released, until it exits zero. Never edit around a finding
    by renumbering a citation you have not traced, or by deleting an entry.

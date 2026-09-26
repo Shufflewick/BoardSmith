@@ -28,7 +28,8 @@
  * `rulebook/...` or `RULINGS.md` from `design/`, code reached with `../` from `design/` too, and
  * anything else from the project root; never outside the project. A Markdown source is cited by
  * heading (`§"..."`) or by line range; any other file is cited by line range (`path:N` or
- * `path:N-M`). A quote matches when it appears inside the cited section or lines, with runs of
+ * `path:N-M`, the one grammar for a line location, `splitLineLocation` in line-location.ts, which
+ * ledger-check reads cited evidence by too, #414). A quote matches when it appears inside the cited section or lines, with runs of
  * whitespace (line wrapping) treated as one space. A claim a later claim supersedes
  * (build-manifest.ts, WHICH CLAIMS ARE SUPERSEDED, #410) is not checked: it is kept only as the
  * record of what was corrected.
@@ -49,6 +50,7 @@ import { type InterpretationLine, interpretationLines, parseSupersededClaims } f
 import { assertBareName } from '../lib/user-name.js';
 import { DESIGN_DIR, GATE_TRANSITION_MD, chunkMdPath, designRecordPath, relChunkMdPath } from '../lib/project-paths.js';
 import { readGateTransition } from '../lib/gate-transition.js';
+import { LINE_LOCATION_HINT, type LineRange, fileLines, lineRangeProblem, splitLineLocation } from '../lib/line-location.js';
 
 interface QuotedPassage {
   quote: string;
@@ -222,27 +224,21 @@ export function unquotedClaims(chunkText: string): Record<number, string> {
 type Located = { ok: true; text: string } | { ok: false; problem: string };
 
 const SOURCE_SPEC = /^`?([^`§]+?)`?\s*(?:§\s*"([^"]+)")?$/;
-const LINE_RANGE = /^(.+?):(\d+)(?:-(\d+))?$/;
 
 interface SourceSpec {
   spec: string;
   path: string;
   heading?: string;
-  range?: [number, number];
+  range?: LineRange;
+  /** A `:LINE:COLUMN` location's column, which a claim location does not take. */
+  column?: number;
 }
 
 function parseSpec(spec: string): SourceSpec | undefined {
   const parsed = SOURCE_SPEC.exec(spec.trim());
   if (!parsed) return undefined;
-  const path = parsed[1].trim();
-  const rangeMatch = LINE_RANGE.exec(path);
-  if (!rangeMatch) return { spec, path, heading: parsed[2] };
-  return {
-    spec,
-    path: rangeMatch[1],
-    heading: parsed[2],
-    range: [Number(rangeMatch[2]), Number(rangeMatch[3] ?? rangeMatch[2])],
-  };
+  const { path, lines, column } = splitLineLocation(parsed[1].trim());
+  return { spec, path, heading: parsed[2], range: lines, column };
 }
 
 /**
@@ -274,22 +270,22 @@ async function readSourceFile(projectDir: string, path: string): Promise<SourceF
   }
 }
 
-function linesInRange(lines: string[], source: SourceSpec, range: [number, number], shown: string): Located {
+function linesInRange(lines: string[], source: SourceSpec, range: LineRange, shown: string): Located {
   const [from, to] = range;
-  if (from < 1 || to < from) {
-    return { ok: false, problem: `"${source.spec}" has an invalid line range. Write it as :N or :N-M with N <= M.` };
-  }
-  if (to > lines.length) {
-    return {
-      ok: false,
-      problem: `"${source.spec}" cites line ${to}, but ${shown} has ${lines.length} lines.`,
-    };
+  switch (lineRangeProblem(range, lines.length)) {
+    case 'invalid':
+      return { ok: false, problem: `"${source.spec}" has an invalid line range. ${LINE_LOCATION_HINT}` };
+    case 'past-end':
+      return { ok: false, problem: `"${source.spec}" cites line ${to}, but ${shown} has ${lines.length} lines.` };
   }
   return { ok: true, text: lines.slice(from - 1, to).join('\n') };
 }
 
 /** Picks the text a parsed location names out of its file's lines. */
 function locateWithin(lines: string[], source: SourceSpec, shown: string): Located {
+  if (source.column !== undefined) {
+    return { ok: false, problem: `"${source.spec}" gives a column. A claim cites whole lines: ${LINE_LOCATION_HINT}` };
+  }
   if (source.range && source.heading) {
     return { ok: false, problem: `"${source.spec}" gives both a heading and a line range. Give one.` };
   }
@@ -319,7 +315,7 @@ async function locate(projectDir: string, spec: string): Promise<Located> {
   if (!source) return { ok: false, problem: `"${spec}" is not a location. ${FORMAT_HINT}` };
   const file = await readSourceFile(projectDir, source.path);
   if (!file.ok) return file;
-  return locateWithin(file.text.split('\n'), source, file.shown);
+  return locateWithin(fileLines(file.text), source, file.shown);
 }
 
 const HEADING_LINE = /^(#{1,6})\s+(.+?)\s*#*\s*$/;
