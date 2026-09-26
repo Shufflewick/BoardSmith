@@ -22,6 +22,7 @@ import { findUnknownKeys } from '../lib/config-schema.js';
 import { requireGameProject, resolveRulesDir, requireRulesIndex } from '../lib/game-project.js';
 import { resolveWorldMode } from '../lib/world-project.js';
 import { resolveUserPath } from '../lib/user-path.js';
+import { commandBuildDir } from '../lib/project-paths.js';
 import { loadWorldRuntime, startWorldDevServer, type WorldRuntime } from './dev-world.js';
 import {
   claimWebSocketPath,
@@ -734,11 +735,11 @@ export async function devCommand(options: DevOptions): Promise<void> {
 
   const rulesIndexPath = requireRulesIndex(rulesPath);
 
-  // Temp dir for the Node-side rules metadata bundle.
-  const tempDir = join(cwd, '.boardsmith');
-  if (!existsSync(tempDir)) {
-    mkdirSync(tempDir, { recursive: true });
-  }
+  // The Node-side rules bundle is built into dev's own directory, and the stop
+  // removes that directory alone: the rest of `.boardsmith/` holds scratch and
+  // chunk worktrees that dev did not make (#391).
+  const tempDir = commandBuildDir(cwd, 'dev');
+  mkdirSync(tempDir, { recursive: true });
   holdings.hold([{ name: `the build directory (${tempDir})`, close: () => rmSync(tempDir, { recursive: true, force: true }) }]);
 
   console.log(chalk.dim(`  Loading game rules from ${rulesPath}...`));

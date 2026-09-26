@@ -185,7 +185,7 @@ describe('the local world store', () => {
       expect(worldStorePath(root)).toBe(join(root, '.boardsmith-dev-world', 'world.db'));
     });
 
-    it('is not under .boardsmith/, which `boardsmith dev` deletes on shutdown', () => {
+    it('is not under .boardsmith/, where the commands build and delete their rules bundles', () => {
       expect(worldStoreDir(root).includes(`${join(root, '.boardsmith')}/`)).toBe(false);
     });
 
