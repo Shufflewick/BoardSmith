@@ -447,6 +447,16 @@ the same order: the action's selections, top to bottom, each answered or
 skipped before the next. So put an optional pick that narrows an earlier answer
 ("who exactly?") straight after that answer.
 
+Each pick offers exactly the list your action gives it, in the Action Panel and
+on the board alike (#407). Nothing hides a value because an earlier pick of the
+same action already took it. If two picks must differ, say so in the later
+pick's own list, and every surface follows:
+
+```typescript
+.chooseFrom('first', { choices: ['red', 'blue'] })
+.chooseFrom('second', { choices: (ctx) => ['red', 'blue'].filter((c) => c !== ctx.args.first) })
+```
+
 #### `playerChoices` - Choose a player with chooseFrom
 
 Use the `playerChoices()` helper on your Game class to generate player choices for use with `chooseFrom`:

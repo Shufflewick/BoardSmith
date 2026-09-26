@@ -575,9 +575,6 @@
       }
     },
     "src/ui/components/auto-ui/ActionPanel.vue": {
-      "complexity_high": {
-        "count": 1
-      },
       "complexity_moderate": {
         "count": 3
       }
@@ -701,7 +698,7 @@
     },
     "src/ui/composables/useBoardActionBridge.ts": {
       "complexity_high": {
-        "count": 2
+        "count": 1
       },
       "complexity_moderate": {
         "count": 5
