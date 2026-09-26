@@ -5,7 +5,6 @@ import {
   Action,
   defineFlow,
   actionStep,
-  loop,
   simultaneousActionStep,
   type GameOptions,
 } from '../engine/index.js';
@@ -13,6 +12,7 @@ import { executeOp, type GameDefinitionLike, type Op, type OpResult } from './st
 import { SnapshotSessionHost } from './snapshot-session-host.js';
 import { GameSession } from './game-session.js';
 import { BotController } from './bot-controller.js';
+import { BotGame } from './testing/fixtures/bot-game-fixture.js';
 
 // ============================================================================
 // #421: a bot whose move is refused must never spin.
@@ -132,20 +132,6 @@ class RefusedBotGame extends Game<RefusedBotGame, Player> {
   }
 }
 
-/** Seat 1, a human, is to move; the bot in seat 2 has nothing to do. */
-class HumanToMoveGame extends Game<HumanToMoveGame, Player> {
-  constructor(options: GameOptions) {
-    super(options);
-    this.registerAction(Action.create('move').execute(() => ({ success: true })));
-    this.setFlow(defineFlow({
-      root: loop({
-        maxIterations: 100,
-        do: actionStep({ actions: ['move'], player: (ctx) => ctx.game.getPlayer(1)! }),
-      }),
-    }));
-  }
-}
-
 /** Long enough for several of GameSession's bot checks (each waits 300 ms first). */
 const settle = () => new Promise((resolve) => setTimeout(resolve, 1500));
 
@@ -175,9 +161,10 @@ describe('#421: GameSession bot checks', () => {
 
   it('does not keep checking while a human is to move, and checks again when the human moves', async () => {
     const checks = vi.spyOn(BotController.prototype, 'checkAndPlay');
+    // BotGame: seat 1, a human, is always to move; the bot in seat 2 never is.
     const session = GameSession.create({
       gameType: 'human-to-move',
-      GameClass: HumanToMoveGame,
+      GameClass: BotGame,
       playerCount: 2,
       playerNames: ['Human', 'Bot'],
       botSeats: { players: [2], level: 'easy' },
@@ -187,7 +174,7 @@ describe('#421: GameSession bot checks', () => {
     await settle();
     expect(checks).toHaveBeenCalledTimes(1);
 
-    const result = await session.performAction('move', 1, {});
+    const result = await session.performAction('move', 1, { direction: 'left' });
     expect(result.success).toBe(true);
     await vi.waitFor(() => expect(checks).toHaveBeenCalledTimes(2), { timeout: 30_000 });
     await settle();

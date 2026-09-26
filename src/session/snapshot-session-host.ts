@@ -1033,6 +1033,61 @@ export class SnapshotSessionHost {
     await this.enqueue(() => this.runBotTurnsInner());
   }
 
+  /** The bot seats the pump may ask now: every one not held back at this state (#421). */
+  private botSeatsToAsk(): Array<{ seat: number; level?: string }> {
+    const held = this.botSeatsHeldBack;
+    const heldBack = held !== null && held.snapshot === this._snapshot ? held.seats : null;
+    return (this.adapters.botSeats ?? []).filter((s) => !heldBack?.has(s.seat));
+  }
+
+  /**
+   * Report a refused bot turn, and hold the refused seat back until the game
+   * state changes (#421). Returns whether the pump may go on to the other bot
+   * seats: not when the op failed without naming a seat, because then there is
+   * no seat to skip.
+   *
+   * A FAILED bot turn is not the same as "no bot turn was due". Breaking on
+   * both without a word is how a bot seat silently stops driving the flow:
+   * every seat waits on a bot that will never move again, with nothing in the
+   * console on either side to say why. Fail loud — the bot produced a move the
+   * engine rejected, which is a bug in the game's action definition, its bot
+   * hooks, or move enumeration, and the developer needs to see it the moment
+   * it happens.
+   */
+  private holdBackRefusedSeat(res: OpResult, seats: Array<{ seat: number }>): boolean {
+    const seat = res.botPlayer;
+    const who = seat === undefined ? `seat(s) ${seats.map((s) => s.seat).join(', ')}` : `seat ${seat}`;
+    const until = seat === undefined ? '' : ', and the bot will not try again until the game changes';
+    console.error(
+      `[SnapshotSessionHost] bot turn REJECTED for ${who}: ${res.error ?? 'unknown error'}` +
+        `${res.errorCode ? ` (${res.errorCode})` : ''}. The bot cannot act, so the game will ` +
+        `not advance past this step${until}. Check the action's selections and the bot's move ` +
+        `enumeration for this seat.`,
+    );
+    if (seat === undefined) return false;
+    this.holdBotSeatBack(seat);
+    return true;
+  }
+
+  /**
+   * Report a stalled bot seat, and hold it back until the game state changes
+   * (#421).
+   *
+   * #29: `botMoved: false` covers both "no bot seat was due" (ordinary, the
+   * pump is finished) and "a bot seat was due and could not act". The second
+   * used to be an exception that never got this far — it escaped executeOp and
+   * the seat silently never moved, holding open every simultaneous step at the
+   * table. Say it out loud.
+   */
+  private holdBackStalledSeat(stalled: { seat: number; reason: string }): void {
+    console.error(
+      `[SnapshotSessionHost] bot seat ${stalled.seat} is STALLED: ${stalled.reason} ` +
+        `The rest of the table can still act, but any step waiting on this seat will not close ` +
+        `until a human takes it or the game changes.`,
+    );
+    this.holdBotSeatBack(stalled.seat);
+  }
+
   /** Skip `seat` in the bot pump until the game state changes (#421). */
   private holdBotSeatBack(seat: number): void {
     const current = this.botSeatsHeldBack;
@@ -1061,48 +1116,15 @@ export class SnapshotSessionHost {
           console.error('[SnapshotSessionHost] bot pump hit MAX_BOT_MOVES cap (500); stopping to avoid runaway.');
           break;
         }
-        const held = this.botSeatsHeldBack;
-        const heldBack = held !== null && held.snapshot === this._snapshot ? held.seats : null;
-        const seats = this.adapters.botSeats.filter((s) => !heldBack?.has(s.seat));
+        const seats = this.botSeatsToAsk();
         if (seats.length === 0) break;
         const res = await this.adapters.executeOp(this.snapshot, null, { type: 'botTurn', seats });
-        // A FAILED bot turn is not the same as "no bot turn was due". Breaking on
-        // both without a word is how a bot seat silently stops driving the flow:
-        // every seat waits on a bot that will never move again, with nothing in
-        // the console on either side to say why. Fail loud — the bot produced a
-        // move the engine rejected, which is a bug in the game's action
-        // definition, its bot hooks, or move enumeration, and the developer needs
-        // to see it the moment it happens.
         if (!res.success) {
-          const who = res.botPlayer === undefined
-            ? `seat(s) ${seats.map((s) => s.seat).join(', ')}`
-            : `seat ${res.botPlayer}`;
-          const until = res.botPlayer === undefined
-            ? ''
-            : ', and the bot will not try again until the game changes';
-          console.error(
-            `[SnapshotSessionHost] bot turn REJECTED for ${who}: ${res.error ?? 'unknown error'}` +
-              `${res.errorCode ? ` (${res.errorCode})` : ''}. The bot cannot act, so the game will ` +
-              `not advance past this step${until}. Check the action's selections and the bot's move ` +
-              `enumeration for this seat.`,
-          );
-          // Without a seat the op itself failed, and there is nothing to skip.
-          if (res.botPlayer === undefined) break;
-          this.holdBotSeatBack(res.botPlayer);
-          continue;
+          if (this.holdBackRefusedSeat(res, seats)) continue;
+          break;
         }
-        // #29: `botMoved: false` covers both "no bot seat was due" (ordinary,
-        // the pump is finished) and "a bot seat was due and could not act".
-        // The second used to be an exception that never got this far — it
-        // escaped executeOp and the seat silently never moved, holding open
-        // every simultaneous step at the table. Say it out loud.
         if (res.botStalled) {
-          console.error(
-            `[SnapshotSessionHost] bot seat ${res.botStalled.seat} is STALLED: ${res.botStalled.reason} ` +
-              `The rest of the table can still act, but any step waiting on this seat will not close ` +
-              `until a human takes it or the game changes.`,
-          );
-          this.holdBotSeatBack(res.botStalled.seat);
+          this.holdBackStalledSeat(res.botStalled);
           continue;
         }
         if (!res.botMoved) break;
