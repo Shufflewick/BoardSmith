@@ -1,7 +1,7 @@
 {
-  "revision": 111,
+  "revision": 112,
   "bundleProtocol": 2,
-  "surfaceHash": "773526e173880239",
+  "surfaceHash": "71a6fad70c6dbed9",
   "payloadHash": "cae65bbab7213c58",
   "formatHash": "0058593e7cc80205",
   "history": [
@@ -939,7 +939,16 @@
       "revision": 111,
       "date": "2026-09-26",
       "bundleProtocol": 2,
-      "surfaceHash": "773526e173880239",
+      "surfaceHash": "32b341536b489ef5",
+      "payloadHash": "cae65bbab7213c58",
+      "formatHash": "0058593e7cc80205",
+      "summary": "A world action's .quote() and every callback of a pick re-asked with earlier answers bound (prompt, choices/elements, prepare, disabled, multiSelect) now receive each element selection as its read-only element, resolved exactly as dispatch resolves it for execute, instead of the raw id the draft carried (#418). A draft whose element id names nothing the action can offer the seat now (taken since the offer, or never offered) is refused with the new caller-owned refusal code stale-draft; a host relays it on the world_pick / world_quote answer like any other refusal."
+    },
+    {
+      "revision": 112,
+      "date": "2026-09-26",
+      "bundleProtocol": 2,
+      "surfaceHash": "71a6fad70c6dbed9",
       "payloadHash": "cae65bbab7213c58",
       "formatHash": "0058593e7cc80205",
       "summary": "A world can leave a lasting NOTICE for a seat without loading that seat's partition (ShufflewickPub #521, BoardSmith #420). world.notices: { perSeat } declares a per-seat notice box, capped by the new budget maxNoticesPerSeat (64); noticeMaxBytes (1024) bounds one notice and maxNoticesPerCommand (100) the sends per dispatch. ctx.world.notify(seat, { payload, line?, whenFull }) appends to a box with no declaration and no partition load; whenFull is required -- 'dropOldest' evicts and counts dropped, 'refuse' refuses the command (notice-box-full) and needs the box declared. .noticeBox(fn) on worldAction and worldClockAction declares ONE seat's box per round of the walk; the host answers a point read and ctx.world.notices(seat) / takeNotices(seat) read it and empty it. WorldDispatchNeeds gains noticeBoxes; runner.declare and commandNeeds take WorldWalkAnswers { declaredActivity, declaredNotices } and walkDeclaration takes a fourth reader and returns that object, which apply takes; WorldCommandStamp, WorldEventStamp and WorldApplyRequest carry declaredNotices; WorldCommandResult carries notices: { perSeat, writes } which a host applies with applyNoticeWrites in the checkpoint's own write, and each send is also a routed event on the reserved scope 'notice' to its one seat. WorldStore gains noticeBox(seat) and WorldCheckpointExtras.notices, and a vacated chair's box goes with it. New refusals: invalid-notice, notice-batch-cap, notice-box-full, undeclared-notice-box (game) and notice-box-answered-wrong (platform); the partition name 'notice' is reserved. formatHash unmoved: no stored partition byte changes."

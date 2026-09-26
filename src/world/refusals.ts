@@ -178,6 +178,11 @@ export const WORLD_REFUSALS = {
     why: "a seating named a player who already holds a DIFFERENT seat (#150). It used to share `unknown-player`'s code, which misread a conflict about somebody who IS in the world as 'not in this world'. A seat is where a player's holdings are, so the move is refused rather than handing them somebody else's -- and the world is unaffected",
   },
 
+  "stale-draft": {
+    owner: "caller",
+    why: "#418: a seat asked about a draft (a quote, or a pick re-asked with earlier answers bound) whose element selection names nothing this action can offer here -- the element was taken since the offer was sent, or the client named an id no offer carried. A draft is resolved to elements before the action's own callbacks see it, and one that resolves to nothing cannot be answered without handing a callback typed for an element a bare number. One request refused; the world is unaffected, and the next offer carries what can be picked now",
+  },
+
   // ---- GAME: the bundle's own doing; dead-letters, never parks ----
   "undeclared-partition": {
     owner: "game",

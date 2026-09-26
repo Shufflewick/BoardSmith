@@ -39,6 +39,15 @@ the bridge:
   which runs **inside the game iframe** — so you listen for it on
   `iframe.contentWindow`, not on the outer `window`.
 
+The first page to connect to a new `boardsmith dev` run is seated in seat 1.
+A tab left open from an earlier run does not count (#416). Vite reloads it
+when the server comes back, but the tab remembers the run it joined, and the
+new run answers it with "The dev server restarted. Reload to join the new
+game." and gives it no seat. So a scripted check that opens a
+fresh page after starting the server gets seat 1 even with an old tab still
+open. Reloading the old tab joins the new run like any fresh page. Within one
+run, a reload keeps its seat for a 10 s reconnect grace (#412).
+
 ## 1. Stable selectors: `data-bs-el-id`
 
 Every selectable board element carries `data-bs-el-id="<elementId>"`, emitted
