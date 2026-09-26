@@ -44,9 +44,10 @@
  *
  * ## WHY A DIRECTORY, AND NOT UNDER `.boardsmith/`
  *
- * `boardsmith dev` deletes `.boardsmith/` on shutdown -- it is the rules-bundle
- * scratch directory -- so a store kept there would be erased by the one event
- * it has to survive. It goes beside `boardsmith.json` instead, exactly as the
+ * `.boardsmith/` is where the CLI's commands build their rules bundles, each in
+ * a directory of its own that the command deletes when it ends. A store kept
+ * beside those is one path mistake away from being erased by the one event it
+ * has to survive, so it goes beside `boardsmith.json` instead, exactly as the
  * table dev store does.
  *
  * A DIRECTORY rather than the table store's single dotfile, because SQLite owns

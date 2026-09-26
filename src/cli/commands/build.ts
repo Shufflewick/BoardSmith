@@ -8,6 +8,7 @@ import { ENGINE_REVISION } from '../../contract/index.js';
 import { getProjectContext, loadGameDefinition } from './game-runtime.js';
 import { buildCli, CLI_ENTRY, CLI_OUTFILE } from '../lib/build-cli.js';
 import { resolveUserPath } from '../lib/user-path.js';
+import { commandBuildDir } from '../lib/project-paths.js';
 import { requireGameProjectManifests } from '../lib/game-project.js';
 import { ensureWorldEntry, WORLD_ENTRY_HTML } from '../lib/world-entry.js';
 import { readWorldDefinition, type WorldDefinition } from '../../world/index.js';
@@ -475,11 +476,10 @@ export async function buildCommand(options: BuildOptions): Promise<void> {
     // derived from code, never copied from the raw boardsmith.json spread
     // (CLIX-01 / T-135-07 — mirrors simulate.ts:158-167).
     const rulesPath = join(cwd, 'src', 'rules');
-    // Command-scoped subdirectory (WR-02): `.boardsmith` is SHARED — pack puts
-    // tarballs in `.boardsmith/tarballs`, evolve-bot-weights reads
-    // `.boardsmith/rules-bundle.mjs`, and a running dev server keeps its
-    // runtime bundle there. Only ever create and delete what build owns.
-    const tempDir = join(cwd, '.boardsmith', 'build-tmp');
+    // Build's own build directory (WR-02, #391): `.boardsmith` is SHARED with
+    // pack's tarballs, the scratch directory, chunk worktrees and the other
+    // commands' build directories. Only ever create and delete what build owns.
+    const tempDir = commandBuildDir(cwd, 'build');
     mkdirSync(tempDir, { recursive: true });
 
     let gameDefinition: GameDefinition;
@@ -487,7 +487,7 @@ export async function buildCommand(options: BuildOptions): Promise<void> {
       ({ gameDefinition } = await loadGameDefinition(rulesPath, tempDir, context));
     } finally {
       try {
-        // Removes only build-tmp — never the shared .boardsmith parent.
+        // Removes only build's directory, never the shared .boardsmith parent.
         rmSync(tempDir, { recursive: true, force: true });
       } catch {
         // best-effort cleanup; do not mask the original error
