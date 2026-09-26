@@ -9,10 +9,17 @@
  *
  *   - the sketch's dependency graph: every chunk's `- Depends on:` must name only verified chunks,
  *     which also means none of the chunks being started depends on another of them;
- *   - rulebook citations: the slices each chunk cites (its sketch `Citations:` line plus its
- *     CHUNK.md `## Interpretation` and `## Newly Discovered Citations`, the set `/bs-insert-chunk`
- *     compares) must not overlap, and every citation must name a real slice, since a citation
- *     that resolves to nothing cannot be shown not to overlap.
+ *   - rulebook citations: the sections of the rulebook slices each chunk cites must not overlap
+ *     (#415). A chunk's citations are its sketch `Citations:` line plus its CHUNK.md
+ *     `## Interpretation` (less the claims a later claim supersedes) and
+ *     `## Newly Discovered Citations`. The unit is a SECTION of a slice (`slice-sections.ts`), not
+ *     the slice: a designer-decisions page cited by most chunks for different rules would
+ *     otherwise refuse every pair. A citation claims:
+ *       - `rulebook/<file>.md §"<section>"`: that section (a heading: every section under it);
+ *       - `rulebook/<file>.md:N-M`: the sections holding those lines;
+ *       - `rulebook/<file>.md` alone, whatever prose follows it: every section of the slice.
+ *     Every citation must name a real slice, section and lines, since one that resolves to
+ *     nothing cannot be shown not to overlap.
  *
  * The core-loop and final-acceptance chunks always run alone. Whatever cannot be shown to be
  * independent is refused: building in order is always correct, so the safe answer is "no".
@@ -26,13 +33,27 @@ import { SKETCH_MD, chunkMdPath, designPath, designRulebookDir } from '../lib/pr
 import { assertBareName } from '../lib/user-name.js';
 import { extractSection } from './build-manifest.js';
 import { resolveCitedSlices } from './chunk-provenance.js';
+import { interpretationTextInForce } from './claim-quotes.js';
+import { LINE_LOCATION_HINT, fileLines, lineRangeProblem, splitLineLocation } from '../lib/line-location.js';
+import { type SliceSection, sectionsHolding, sectionsNamed, sliceSections } from '../lib/slice-sections.js';
 import { type SketchChunk, dependencyClosure, parseSketchChunks } from './sketch-chunks.js';
 
-/** The rulebook slices one chunk cites, and any citation that named no slice. */
+/** What one chunk cites of one slice: every section of it, or some of them. */
+interface CitedSlice {
+  /** Every section of the slice, in order. */
+  sections: SliceSection[];
+  /** The slice was cited without a section or lines, so every section is cited. */
+  whole: boolean;
+  /** The first line of each cited section, which identifies it. */
+  cited: Set<number>;
+}
+
+/** The slices, and the sections of each, one chunk cites; and every citation that located nothing. */
 interface ChunkCitations {
   slug: string;
-  slices: string[];
-  unresolved: string[];
+  slices: Map<string, CitedSlice>;
+  /** One sentence per citation that names no slice, section or lines of it. */
+  unreadable: string[];
 }
 
 const ALONE: Record<string, string> = {
@@ -66,16 +87,97 @@ export async function readSketchChunks(projectDir: string): Promise<SketchChunk[
   return parseSketchChunks(sketch);
 }
 
-/** The slices a chunk cites: its sketch line plus what its CHUNK.md interpreted and discovered. */
+const CITATION = /rulebook\/[A-Za-z0-9._-]+/g;
+/** What may follow a cited slice's path: a line location, or one or more `§"<section>"`. */
+const LINE_AFTER_PATH = /^`?:(\d+(?:-\d+|:\d+)?)/;
+const SECTIONS_AFTER_PATH = /^`?((?:\s*§\s*"[^"]+")+)/;
+
+function sectionNames(sections: readonly SliceSection[]): string {
+  return [...new Set(sections.map((s) => s.name).filter((n) => n !== ''))].map((n) => `"${n}"`).join(', ');
+}
+
+/**
+ * The sections one citation claims (see the header), or why it locates nothing. `after` is the text
+ * that follows the slice's path.
+ */
+function citedSections(
+  slug: string,
+  slice: string,
+  sections: SliceSection[],
+  lineCount: number,
+  after: string,
+): { whole: boolean; cited: SliceSection[] } | { problem: string } {
+  const lines = LINE_AFTER_PATH.exec(after);
+  if (lines) {
+    const range = splitLineLocation(`${slice}:${lines[1]}`).lines!;
+    const shown = `${slice}:${lines[1]}`;
+    switch (lineRangeProblem(range, lineCount)) {
+      case 'invalid':
+        return { problem: `${slug} cites ${shown}, which is not a line range. ${LINE_LOCATION_HINT}` };
+      case 'past-end':
+        return {
+          problem:
+            `${slug} cites ${shown}, but that slice has ${lineCount} lines, so its overlap with other ` +
+            `chunks cannot be ruled out. Correct the line range.`,
+        };
+    }
+    return { whole: false, cited: sectionsHolding(sections, range[0], range[1]) };
+  }
+  const named = SECTIONS_AFTER_PATH.exec(after);
+  if (!named) return { whole: true, cited: sections };
+  const cited: SliceSection[] = [];
+  for (const [, name] of named[1].matchAll(/§\s*"([^"]+)"/g)) {
+    const found = sectionsNamed(sections, name);
+    if (found.length === 0) {
+      return {
+        problem:
+          `${slug} cites ${slice} §"${name}", which names no section of it, so its overlap with other ` +
+          `chunks cannot be ruled out. Its sections are: ${sectionNames(sections)}. Cite one of them, ` +
+          `or the lines it means (${slice}:N-M).`,
+      };
+    }
+    cited.push(...found);
+  }
+  return { whole: false, cited };
+}
+
+/**
+ * What a chunk cites: its sketch line plus what its CHUNK.md interpreted (the claims in force) and
+ * discovered, each citation resolved to the sections of a slice it claims.
+ */
 export async function chunkCitations(projectDir: string, chunk: SketchChunk): Promise<ChunkCitations> {
   const chunkText = (await readOptional(chunkMdPath(projectDir, chunk.slug))) ?? '';
   const text = [
     chunk.citations ?? '',
-    extractSection(chunkText, '## Interpretation') ?? '',
+    interpretationTextInForce(chunkText) ?? '',
     extractSection(chunkText, '## Newly Discovered Citations') ?? '',
   ].join('\n');
-  const { resolved, unresolved } = resolveCitedSlices(text, await sliceFilenames(projectDir));
-  return { slug: chunk.slug, slices: resolved, unresolved };
+  const filenames = await sliceFilenames(projectDir);
+  const result: ChunkCitations = { slug: chunk.slug, slices: new Map(), unreadable: [] };
+  for (const match of text.matchAll(CITATION)) {
+    const { resolved, unresolved } = resolveCitedSlices(match[0], filenames);
+    if (unresolved.length > 0) {
+      result.unreadable.push(
+        `${chunk.slug} cites ${unresolved[0]}, which names no single file in design/rulebook/, so its ` +
+          `overlap with other chunks cannot be ruled out. Correct the citation to the slice file it means.`,
+      );
+      continue;
+    }
+    const slice = resolved[0];
+    const sliceText = await fs.readFile(designPath(projectDir, slice), 'utf-8');
+    const sections = sliceSections(sliceText);
+    const claim = citedSections(chunk.slug, slice, sections, fileLines(sliceText).length, text.slice(match.index + match[0].length));
+    if ('problem' in claim) {
+      result.unreadable.push(claim.problem);
+      continue;
+    }
+    const entry = result.slices.get(slice) ?? { sections, whole: false, cited: new Set<number>() };
+    entry.whole ||= claim.whole;
+    for (const section of claim.cited) entry.cited.add(section.from);
+    result.slices.set(slice, entry);
+  }
+  result.unreadable = [...new Set(result.unreadable)];
+  return result;
 }
 
 /** Why `a` and `b` cannot be built alongside each other by the sketch's dependency graph. */
@@ -88,20 +190,44 @@ function dependencyProblems(chunks: readonly SketchChunk[], a: string, b: string
     .map(([x, y]) => `${x} depends on ${y} in ${SKETCH_MD}, so it must be built after ${y} is verified, not beside it.`);
 }
 
-/** The rulebook slices `a` and `b` both cite, each as a reason they cannot be built together. */
-function overlapProblems(a: ChunkCitations, b: ChunkCitations): string[] {
-  return a.slices
-    .filter((s) => b.slices.includes(s))
-    .map(
-      (slice) =>
-        `${a.slug} and ${b.slug} both cite ${slice}, so they implement overlapping rules and would each ` +
-        `interpret them without seeing the other. Build them one after the other.`,
+function shownSections(sections: readonly SliceSection[]): string {
+  return sections
+    .map((s) => `${s.name === '' ? 'the top of the page' : `§"${s.name}"`} (lines ${s.from}-${s.to})`)
+    .join(', ');
+}
+
+/** Why `a` and `b` cannot be built together over one slice they both cite, or `undefined`. */
+function sliceOverlap(slice: string, a: ChunkCitations, b: ChunkCitations): string | undefined {
+  const ca = a.slices.get(slice);
+  const cb = b.slices.get(slice);
+  if (!ca || !cb) return undefined;
+  const shared = ca.sections.filter((s) => ca.cited.has(s.from) && cb.cited.has(s.from));
+  if (shared.length === 0) return undefined;
+  const why = 'so they implement overlapping rules and would each interpret them without seeing the other.';
+  const narrowable = ca.sections.length > 1;
+  if (ca.whole && cb.whole) {
+    const narrow = narrowable ? `, or narrow each citation to the sections it needs (${slice} §"<section>")` : '';
+    return `${a.slug} and ${b.slug} both cite ${slice} as a whole page, ${why} Build them one after the other${narrow}.`;
+  }
+  if (ca.whole || cb.whole) {
+    const [whole, other] = ca.whole ? [a.slug, b.slug] : [b.slug, a.slug];
+    const narrow = narrowable ? `, or narrow ${whole}'s citation to the sections it needs (${slice} §"<section>")` : '';
+    return (
+      `${whole} cites ${slice} as a whole page and ${other} cites its ${shownSections(shared)}, ${why} ` +
+      `Build them one after the other${narrow}.`
     );
+  }
+  return `${a.slug} and ${b.slug} both cite ${slice} ${shownSections(shared)}, ${why} Build them one after the other.`;
+}
+
+/** The rulebook sections `a` and `b` both cite, one reason per slice they cannot be built together. */
+function overlapProblems(a: ChunkCitations, b: ChunkCitations): string[] {
+  return [...a.slices.keys()].flatMap((slice) => sliceOverlap(slice, a, b) ?? []);
 }
 
 /**
  * Why chunks `a` and `b` cannot be built alongside each other: one depends on the other, directly
- * or through another chunk, or they cite a rulebook slice in common. `[]` means they are
+ * or through another chunk, or they cite a section of a rulebook slice in common. `[]` means they are
  * independent. `boardsmith chunk-merge` applies it to the chunks that really were built together.
  */
 export function pairProblems(chunks: readonly SketchChunk[], a: ChunkCitations, b: ChunkCitations): string[] {
@@ -138,12 +264,8 @@ function dependencyLineProblems(chunk: SketchChunk, bySlug: Map<string, SketchCh
 }
 
 function citationProblems(c: ChunkCitations): string[] {
-  const problems = c.unresolved.map(
-    (u) =>
-      `${c.slug} cites ${u}, which names no single file in design/rulebook/, so its overlap with ` +
-      `other chunks cannot be ruled out. Correct the citation to the slice file it means.`,
-  );
-  if (c.slices.length === 0 && c.unresolved.length === 0) {
+  const problems = [...c.unreadable];
+  if (c.slices.size === 0 && c.unreadable.length === 0) {
     problems.push(
       `${c.slug} has no rulebook citations (rulebook/<file>.md), so its overlap with other chunks ` +
         `cannot be ruled out. Detail it first, or build it on its own.`,

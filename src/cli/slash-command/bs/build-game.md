@@ -154,7 +154,7 @@ Loop until there is nothing left to build or a stop condition fires
    chunks in list order that have citations and a `- Depends on:` line, and run
    `npx boardsmith parallel-check <target> <next> [...]`, dropping the last chunk until it passes
    or only the target is left. A pass means the batch is independent in the sketch's dependency
-   graph and shares no rulebook citation; build it as `orchestrate/chunk-dispatch.md` "Parallel
+   graph and shares no rulebook section; build it as `orchestrate/chunk-dispatch.md` "Parallel
    Dispatch" says, each chunk in its own worktree, every chunk in one message. Anything else is
    built alone in the main checkout. The check decides, never a judgement call made here.
 4. **Refresh the lock**, append the `### Dispatch N` entry to each chunk's own

@@ -445,7 +445,7 @@ export function createProgram(): Command {
   // combined tree and refusing (leaving the main line unchanged) when it fails one.
   program
     .command('parallel-check <slugs...>')
-    .description('Decide whether these chunks may be built at the same time: no dependency between them and no shared rulebook citation')
+    .description('Decide whether these chunks may be built at the same time: no dependency between them and no rulebook section both cite')
     .option('--project <dir>', 'Project directory (defaults to cwd)')
     .option('--json', 'Emit JSON instead of human-readable output')
     .action(parallelCheckCommand);
