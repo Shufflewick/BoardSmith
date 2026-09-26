@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto';
 import { promises as fs } from 'node:fs';
-import { isAbsolute, relative, resolve, sep } from 'node:path';
+import { isAbsolute, posix, relative, resolve, sep } from 'node:path';
 import chalk from 'chalk';
 import {
   GATE_TRANSITION_MD,
@@ -14,6 +14,7 @@ import {
 } from '../lib/project-paths.js';
 import { assertBareName } from '../lib/user-name.js';
 import { type GateTransition, readGateTransition } from '../lib/gate-transition.js';
+import { type MergeSignoff, readMergeSignoffs } from '../lib/merge-signoffs.js';
 import {
   extractSection,
   findHeadingIndex,
@@ -51,7 +52,9 @@ import { checkConstraints } from './constraint-check.js';
  *     shared file is the normal course of a build, not a change to the signed chunk. An edit is
  *     accounted for when a LATER sign-off of another chunk recorded the file exactly as it is now,
  *     or when another chunk that names the file is being built (Status approved or built), whose
- *     own sign-off will have to cover it. Accounted edits are reported as `sharedEdits`, which is
+ *     own sign-off will have to cover it, or when `boardsmith chunk-merge` vouched for the file as
+ *     it is now after two chunks built at the same time both edited it (#403,
+ *     `design/MERGE-SIGNOFFS.md`). Accounted edits are reported as `sharedEdits`, which is
  *     information, not a refusal. An edit nothing accounts for (a signed chunk reworked without a
  *     reopen, or an edit left behind by nobody's chunk) voids every sign-off naming that file.
  *   - A chunk verified before this gate existed gets through it once, by `boardsmith
@@ -625,9 +628,12 @@ interface ChunkState {
 /** A later edit to a file this chunk's sign-off names, and what accounts for it (#396). */
 export interface SharedEdit {
   path: string;
-  /** The chunk whose later sign-off saw the file as it is now, or which is building it. */
+  /**
+   * The chunk whose later sign-off saw the file as it is now, or which is building it; for a
+   * merge, the chunks whose own checks it re-ran on the combined file, comma-separated.
+   */
   coveredBy: string;
-  how: 'signed-off' | 'being-built';
+  how: 'signed-off' | 'being-built' | 'merged';
 }
 
 interface SignoffAssessment {
@@ -639,6 +645,10 @@ interface SignoffAssessment {
 
 /** Statuses of a chunk whose build is under way, so its own sign-off is still to come. */
 const BEING_BUILT = new Set(['approved', 'built']);
+
+async function readProjectState(dir: string): Promise<ProjectState> {
+  return { chunks: await readChunkStates(dir), merges: await readMergeSignoffs(dir) };
+}
 
 async function readChunkStates(dir: string): Promise<ChunkState[]> {
   const states: ChunkState[] = [];
@@ -656,14 +666,24 @@ async function readChunkStates(dir: string): Promise<ChunkState[]> {
   return states;
 }
 
+/** The project as the sign-off check reads it: every chunk, and every file a merge vouched for. */
+interface ProjectState {
+  chunks: ChunkState[];
+  merges: MergeSignoff[];
+}
+
 /** What accounts for `path` reading `now` in a chunk other than `self`, if anything does. */
-function coverFor(path: string, now: string, self: ChunkState, signedAt: number, all: ChunkState[]): SharedEdit | undefined {
-  const others = all.filter((c) => c.slug !== self.slug);
+function coverFor(path: string, now: string, self: ChunkState, signedAt: number, project: ProjectState): SharedEdit | undefined {
+  const others = project.chunks.filter((c) => c.slug !== self.slug);
   const signed = others.find((c) => {
     const record = c.status.startsWith(VERIFIED) ? c.parsed.record : undefined;
     return record !== undefined && new Date(record.when).getTime() > signedAt && record.code[path] === now;
   });
   if (signed) return { path, coveredBy: signed.slug, how: 'signed-off' };
+  const merged = project.merges.find(
+    (m) => m.path === posix.normalize(path) && m.content === now && new Date(m.when).getTime() > signedAt,
+  );
+  if (merged) return { path, coveredBy: merged.chunks.join(', '), how: 'merged' };
   const building = others.find((c) => BEING_BUILT.has(c.status) && path in c.code);
   return building ? { path, coveredBy: building.slug, how: 'being-built' } : undefined;
 }
@@ -673,7 +693,7 @@ function listFiles(paths: string[]): string {
 }
 
 /** Compares the sign-off's files with the chunk's files now, applying the rule in the header. */
-function codeAssessment(self: ChunkState, record: SignoffRecord, all: ChunkState[], resign: string): SignoffAssessment {
+function codeAssessment(self: ChunkState, record: SignoffRecord, project: ProjectState, resign: string): SignoffAssessment {
   const rel = relChunkMdPath(self.slug);
   const problems: string[] = [];
   const signedPaths = Object.keys(record.code);
@@ -694,15 +714,15 @@ function codeAssessment(self: ChunkState, record: SignoffRecord, all: ChunkState
   const sharedEdits: SharedEdit[] = [];
   const unaccounted: string[] = [];
   for (const path of signedPaths.filter((p) => p in self.code && self.code[p] !== record.code[p])) {
-    const cover = coverFor(path, self.code[path], self, signedAt, all);
+    const cover = coverFor(path, self.code[path], self, signedAt, project);
     if (cover) sharedEdits.push(cover);
     else unaccounted.push(path);
   }
   if (unaccounted.length) {
     problems.push(
       `${rel}'s sign-off (${record.when}) was for different code: ${listFiles(unaccounted)} ` +
-        `changed after it, and no later sign-off saw that change and no chunk being built names ` +
-        `the file. A sign-off applies only to the chunk as it was signed. ${resign}`,
+        `changed after it, and no later sign-off or merge saw that change and no chunk being built ` +
+        `names the file. A sign-off applies only to the chunk as it was signed. ${resign}`,
     );
   }
   return { problems, sharedEdits };
@@ -718,7 +738,7 @@ function transitionHint(transitioned: boolean): string {
 }
 
 /** Everything wrong with one chunk's sign-off, given every chunk in the project. */
-async function assessChunk(dir: string, self: ChunkState, all: ChunkState[]): Promise<SignoffAssessment> {
+async function assessChunk(dir: string, self: ChunkState, project: ProjectState): Promise<SignoffAssessment> {
   const none: SignoffAssessment = { problems: [], sharedEdits: [] };
   const { slug, status, parsed } = self;
   if (!status.startsWith(VERIFIED)) return none;
@@ -767,7 +787,7 @@ async function assessChunk(dir: string, self: ChunkState, all: ChunkState[]): Pr
   }
 
   const record = parsed.record;
-  const code = codeAssessment(self, record, all, resign);
+  const code = codeAssessment(self, record, project, resign);
   const problems = [...signoffProblems(record, await loadContext(dir, slug, self.text)), ...code.problems];
   const expected = derivedStatus(record);
   if (status !== expected) {
@@ -786,9 +806,9 @@ async function assessChunk(dir: string, self: ChunkState, all: ChunkState[]): Pr
  */
 export async function assessSignoffs(projectDir: string): Promise<Map<string, SignoffAssessment>> {
   const dir = resolve(projectDir);
-  const all = await readChunkStates(dir);
+  const project = await readProjectState(dir);
   const result = new Map<string, SignoffAssessment>();
-  for (const chunk of all) result.set(chunk.slug, await assessChunk(dir, chunk, all));
+  for (const chunk of project.chunks) result.set(chunk.slug, await assessChunk(dir, chunk, project));
   return result;
 }
 
@@ -799,12 +819,12 @@ export async function assessSignoffs(projectDir: string): Promise<Map<string, Si
  */
 export async function checkSignoff(projectDir: string, slug: string): Promise<string[]> {
   const dir = resolve(projectDir);
-  const all = await readChunkStates(dir);
-  const self = all.find((c) => c.slug === slug);
+  const project = await readProjectState(dir);
+  const self = project.chunks.find((c) => c.slug === slug);
   if (!self) {
     throw new Error(`No chunk found at ${relChunkMdPath(slug)} in ${dir}.\n${SLUG_REMEDY}`);
   }
-  return (await assessChunk(dir, self, all)).problems;
+  return (await assessChunk(dir, self, project)).problems;
 }
 
 // ---------------------------------------------------------------------------------------------

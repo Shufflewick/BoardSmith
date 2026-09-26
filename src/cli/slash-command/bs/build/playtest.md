@@ -20,7 +20,8 @@ that no sign-off backs. A designer decision about one chunk is never a precedent
 covers only the chunk as it was signed: it records each source file its Build Manifest names. A
 later chunk that edits a shared file (one rules module, one test support file) does not cancel it,
 because that chunk's own sign-off will cover the edit: an edit counts as accounted for when a later
-sign-off saw the file as it is now, or while another chunk naming the file is being built. An edit
+sign-off saw the file as it is now, while another chunk naming the file is being built, or when
+`boardsmith chunk-merge` vouched for the file as two chunks built side by side combined it. An edit
 nothing accounts for, such as a signed chunk reworked without a reopen, voids the sign-off. A verified chunk goes back to `built` for rework only through `boardsmith chunk-reopen <slug>
 --reason "<why>"`, which voids its sign-off, so the reworked chunk needs a fresh `chunk-signoff`.
 

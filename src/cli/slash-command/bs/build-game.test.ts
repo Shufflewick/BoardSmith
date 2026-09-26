@@ -548,6 +548,15 @@ describe('#294 — parallel dispatch is allowed only where the checks say so', (
     expect(audit).toMatch(/- Verdict: no conflict: /);
   });
 
+  it('says the merge vouches for a source file two chunks built side by side both edited, with no designer sign-off (#403)', () => {
+    for (const text of [dispatch(), flat(read('build-game.md'))]) {
+      expect(text).toContain('design/MERGE-SIGNOFFS.md');
+      expect(text).toMatch(/`chunk-check`,? (and )?`claim-quote-check`/);
+      expect(text).toMatch(/no designer sign-off/i);
+    }
+    expect(flat(read('build/playtest.md'))).toMatch(/`boardsmith chunk-merge` vouched for the file/);
+  });
+
   it('build-game.md runs the loop in parallel batches when the check allows, and one at a time otherwise', () => {
     const game = flat(read('build-game.md'));
     expect(game).not.toMatch(/One dispatch at a time, never two/i);
