@@ -49,15 +49,19 @@ So a file of your own in `design/` (one no skill names, like `design/NOTES.md`) 
   a CHUNK.md claim, or a sign-off cites as the reason something is true. Write it there from the
   start, or move it there from scratch the moment you decide to cite it, and commit it with the
   chunk. Cite it by that path (`chunks/<slug>/evidence/food-invariant.mjs`), never by a bare file
-  name. A path in another repository, such as a BoardSmith source file, is written
-  `<repo>:<path>` (`BoardSmith:src/engine/element/game.ts`) so it is not read as this game's.
+  name. BoardSmith's own source and docs are cited from the installed package
+  (`../node_modules/boardsmith/src/engine/element/game.ts`), which is the copy this project runs,
+  and every check reads it there. A path in any other repository is written `<repo>:<path>`
+  (`MERC:src/rules/combat.ts`) so it is not read as this game's.
   The design-review screenshots in `chunks/<slug>/shots/` are committed evidence of the same kind.
 
 `boardsmith ledger-check` enforces the split as code, and `build/close.md` runs it before a chunk
 closes: every script or capture that `RULINGS.md`, `DECISIONS.md` or a verified CHUNK.md (its
 sign-off included) cites must be a committed file in the project. A cited file that is missing,
 not yet added, gitignored (anything in scratch) or outside the project fails the close, and so
-does a citation of lines (`path:N` or `path:N-M`) the file does not have. That is
+does a citation of lines (`path:N` or `path:N-M`) the file does not have. A BoardSmith file cited
+from the installed package is not in the game's git, so it must be in the installed package, with
+the lines cited, instead. That is
 the failure this rule exists for: a harness in scratch, cited as the proof behind `verified`,
 exists nowhere once the session ends.
 

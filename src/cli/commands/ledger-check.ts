@@ -24,7 +24,9 @@
  *     included): every script or capture they cite is in git (#292). A cited file that is
  *     missing, untracked, gitignored (the scratch folder) or outside the project is not evidence.
  *     One cited by line (`path:N`, `path:N-M`, #414) must also have those lines in the version
- *     the citing line was written against.
+ *     the citing line was written against. A file of BoardSmith's own, cited from the installed
+ *     package (`../node_modules/boardsmith/src/...`, #432), is in no commit of the game, so it
+ *     must instead be in the package as installed, with the lines cited.
  *
  * It reads the working tree as it stands, so the same command checks one branch at close time
  * and a combined tree at merge time. READ-ONLY: it never writes a file, and the only git
@@ -45,7 +47,9 @@ import {
   RUN_MD,
   chunkSlugs,
   designPath,
+  INSTALLED_BOARDSMITH_DIR,
   designRecordPath,
+  installedBoardSmithPath,
   relChunkMdPath,
 } from '../lib/project-paths.js';
 import { CHUNK_EVIDENCE_DIR, citedEvidencePaths } from '../lib/cited-evidence.js';
@@ -627,7 +631,7 @@ interface EvidenceSource {
   text: string;
 }
 
-type EvidenceProblem = 'outside' | 'missing' | 'ignored' | 'untracked';
+type EvidenceProblem = 'outside' | 'missing' | 'ignored' | 'untracked' | 'not-in-boardsmith';
 
 const SCRATCH_DIR = '.boardsmith/scratch/';
 const MOVE_TO_EVIDENCE =
@@ -643,6 +647,12 @@ function evidenceDetail(path: string, rel: string | undefined, problem: Evidence
       return `Cites ${path}, which is gitignored, so it was never committed (${SCRATCH_DIR} is for throwaway scripts only). ${MOVE_TO_EVIDENCE}`;
     case 'untracked':
       return `Cites ${path}, which exists but is not in git. Run \`git add ${rel}\` and commit it.`;
+    case 'not-in-boardsmith':
+      return (
+        `Cites ${path}, but the installed BoardSmith (${INSTALLED_BOARDSMITH_DIR}) has no ` +
+        `${installedBoardSmithPath(rel ?? '')}. Correct the citation to the file as this project's ` +
+        'BoardSmith has it, or run `npm install` if the package is missing.'
+      );
   }
 }
 
@@ -685,6 +695,9 @@ async function problemOf(
   citingCommit: () => Promise<string | null>,
 ): Promise<EvidenceProblem | undefined> {
   if (rel === undefined) return 'outside';
+  if (installedBoardSmithPath(rel) !== undefined) {
+    return (await fileExists(pathJoin(projectDir, rel))) ? undefined : 'not-in-boardsmith';
+  }
   if (!(await fileExists(pathJoin(projectDir, rel)))) {
     const sha = await citingCommit();
     return sha !== null && (await trackedAt(projectDir, sha, rel)) ? undefined : 'missing';
@@ -693,12 +706,37 @@ async function problemOf(
   return (await isIgnored(projectDir, rel)) ? 'ignored' : 'untracked';
 }
 
+/** The copy of a cited file whose lines a citation is held to, and how a message names it. */
+interface CitedCopy {
+  key: string;
+  text: () => Promise<string>;
+  /** How the copy is named in a message that gives its line count. */
+  hasLines: (count: number) => string;
+}
+
 /**
- * What is wrong with the lines a citation names, if anything (#414). The lines are read in the
- * file the citing line was written against: the file as it was in the commit that recorded that
- * line, or, when that line is not committed yet or its commit did not have the file (it was
- * committed later), the file as it is now, which is the copy the rest of this check accepts.
+ * The copy of `rel` the citing line was written against: the file as it was in the commit that
+ * recorded that line, or, when that line is not committed yet or its commit did not have the file
+ * (it was committed later), the file as it is now, which is the copy the rest of this check
+ * accepts. A file of the installed BoardSmith is in no commit of the game, so it is the package
+ * as installed, the copy `claim-quote-check` reads (#432).
  */
+async function citedCopy(projectDir: string, rel: string, citingCommit: () => Promise<string | null>): Promise<CitedCopy> {
+  const now = { key: `:${rel}`, text: () => fs.readFile(pathJoin(projectDir, rel), 'utf-8') };
+  const library = installedBoardSmithPath(rel);
+  if (library !== undefined) return { ...now, hasLines: (n) => `the installed BoardSmith's ${library} has ${n} lines` };
+  const sha = await citingCommit();
+  if (sha !== null && (await trackedAt(projectDir, sha, rel))) {
+    return {
+      key: `${sha}:${rel}`,
+      text: () => git(projectDir, ['show', `${sha}:./${rel}`]),
+      hasLines: (n) => `${rel} had ${n} lines when this line was committed`,
+    };
+  }
+  return { ...now, hasLines: (n) => `${rel} has ${n} lines` };
+}
+
+/** What is wrong with the lines a citation names, if anything (#414), read in `citedCopy`. */
 async function citedLinesProblem(
   projectDir: string,
   written: string,
@@ -707,25 +745,19 @@ async function citedLinesProblem(
   citingCommit: () => Promise<string | null>,
   lineCounts: Map<string, Promise<number>>,
 ): Promise<string | undefined> {
-  const sha = await citingCommit();
-  const atCommit = sha !== null && (await trackedAt(projectDir, sha, rel));
-  const key = atCommit ? `${sha}:${rel}` : `:${rel}`;
-  if (!lineCounts.has(key)) {
-    const text = atCommit
-      ? git(projectDir, ['show', `${sha}:./${rel}`])
-      : fs.readFile(pathJoin(projectDir, rel), 'utf-8');
-    lineCounts.set(key, text.then((t) => fileLines(t).length));
-  }
-  const count = await lineCounts.get(key)!;
+  const copy = await citedCopy(projectDir, rel, citingCommit);
+  if (!lineCounts.has(copy.key)) lineCounts.set(copy.key, copy.text().then((t) => fileLines(t).length));
+  const count = await lineCounts.get(copy.key)!;
   switch (lineRangeProblem(range, count)) {
     case undefined:
       return undefined;
     case 'invalid':
       return `Cites ${written}, which is not a line range. ${LINE_LOCATION_HINT}`;
-    case 'past-end': {
-      const had = atCommit ? `had ${count} lines when this line was committed` : `has ${count} lines`;
-      return `Cites ${written}, line ${range[1]}, but ${rel} ${had}. Correct the citation to the lines that were meant.`;
-    }
+    case 'past-end':
+      return (
+        `Cites ${written}, line ${range[1]}, but ${copy.hasLines(count)}. ` +
+        'Correct the citation to the lines that were meant.'
+      );
   }
 }
 
