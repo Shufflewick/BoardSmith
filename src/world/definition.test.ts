@@ -400,8 +400,8 @@ describe("createWorld — one construction, every host", () => {
     // Genesis CREATED the partition, so the engine already holds it and the
     // host is told to send nothing -- the residency subtraction that keeps a
     // warm world's command free of storage reads.
-    const declared = await runner.declare({ name: "poke", args: {} }, "p1", {}, arrival(0), []);
-    expect(declared).toEqual({ partitions: [], seats: [] });
+    const declared = await runner.declare({ name: "poke", args: {} }, "p1", {}, arrival(0), { declaredActivity: [], declaredNotices: [] });
+    expect(declared).toEqual({ partitions: [], seats: [], noticeBoxes: [] });
 
     const result = await runner.apply({
       player: "p1",
@@ -414,6 +414,7 @@ describe("createWorld — one construction, every host", () => {
       activity: null,
       // And it declares no chair (ShufflewickPub #423): a seated action cannot.
       declaredActivity: [],
+      declaredNotices: [],
     });
     expect(result.dirty).toEqual(["yard:1"]);
     expect(result.events).toHaveLength(1);
@@ -463,6 +464,7 @@ describe("createWorld — one construction, every host", () => {
         presence: [],
         activity: null,
         declaredActivity: [],
+        declaredNotices: [],
       }),
     ).rejects.toThrow(/already has 1 unkeyed events pending, which is this world's limit/);
   });
@@ -497,6 +499,7 @@ describe("createWorld — one construction, every host", () => {
       presence: [],
       activity: null,
       declaredActivity: [],
+      declaredNotices: [],
     });
 
     expect(result.schedules).toEqual([
@@ -527,6 +530,7 @@ describe("createWorld — one construction, every host", () => {
         presence: [],
         activity: null,
         declaredActivity: [],
+        declaredNotices: [],
       }),
     ).rejects.toThrow(/must name the key its timer was armed under/);
   });

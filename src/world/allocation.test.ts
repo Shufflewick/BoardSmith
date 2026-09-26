@@ -103,7 +103,7 @@ const READ_A = { name: "read-a", args: {} } as const;
  */
 async function hostHoldingStamp(nextElementId: number) {
   const runner = createWorld(options({ nextElementId })).runner;
-  await runner.declare(READ_A, "p1", {}, arrival(1_000), []);
+  await runner.declare(READ_A, "p1", {}, arrival(1_000), { declaredActivity: [], declaredNotices: [] });
   return runner;
 }
 
@@ -111,7 +111,7 @@ async function hostHoldingStamp(nextElementId: number) {
  *  `a` leaves resident, and nothing else. */
 async function hostHoldingA(genesis: Awaited<ReturnType<typeof storedWorld>>) {
   const runner = await hostHoldingStamp(genesis.nextElementId);
-  await runner.declare(READ_A, "p1", { a: genesis.partitions.a! }, arrival(1_000), []);
+  await runner.declare(READ_A, "p1", { a: genesis.partitions.a! }, arrival(1_000), { declaredActivity: [], declaredNotices: [] });
   return runner;
 }
 
@@ -146,7 +146,7 @@ describe("#377 — a world's id allocation is durable, not derived from what is 
     await cold.createPartition("dynamic");
 
     await expect(
-      cold.declare({ name: "read-both", args: {} }, "p1", { c: genesis.partitions.c! }, arrival(1_000), []),
+      cold.declare({ name: "read-both", args: {} }, "p1", { c: genesis.partitions.c! }, arrival(1_000), { declaredActivity: [], declaredNotices: [] }),
     ).resolves.toBeDefined();
   });
 
@@ -192,7 +192,7 @@ describe("#377 — a world's id allocation is durable, not derived from what is 
     const stale = await hostHoldingStamp(1_000_001);
 
     await expect(
-      stale.declare(READ_A, "p1", { c: genesis.partitions.c! }, arrival(1_000), []),
+      stale.declare(READ_A, "p1", { c: genesis.partitions.c! }, arrival(1_000), { declaredActivity: [], declaredNotices: [] }),
     ).rejects.toThrow(/nextElementId/);
   });
 
@@ -206,7 +206,7 @@ describe("#377 — a world's id allocation is durable, not derived from what is 
     const stale = await hostHoldingStamp(1_000_001);
 
     const refusal = await stale
-      .declare(READ_A, "p1", { c: genesis.partitions.c! }, arrival(1_000), [])
+      .declare(READ_A, "p1", { c: genesis.partitions.c! }, arrival(1_000), { declaredActivity: [], declaredNotices: [] })
       .catch((error: unknown) => error);
 
     expect(refusal).toBeInstanceOf(WorldRefusal);
@@ -276,8 +276,8 @@ describe("#224 — a checkpoint carries the stamp of the ids its command minted"
     const genesis = await born.genesis();
 
     const host = createWorld(grown({ nextElementId: genesis.nextElementId })).runner;
-    await host.declare({ name: "fill", args: {} }, "p1", {}, arrival(1_000), []);
-    await host.declare({ name: "fill", args: {} }, "p1", { a: genesis.partitions.a! }, arrival(1_000), []);
+    await host.declare({ name: "fill", args: {} }, "p1", {}, arrival(1_000), { declaredActivity: [], declaredNotices: [] });
+    await host.declare({ name: "fill", args: {} }, "p1", { a: genesis.partitions.a! }, arrival(1_000), { declaredActivity: [], declaredNotices: [] });
     const result = await host.apply({
       player: "p1",
       command: { name: "fill", args: {} },
@@ -287,6 +287,7 @@ describe("#224 — a checkpoint carries the stamp of the ids its command minted"
       presence: [1],
       activity: null,
       declaredActivity: [],
+      declaredNotices: [],
     });
 
     return { genesis, checkpoint: await host.serialize([...result.dirty]) };
@@ -309,10 +310,10 @@ describe("#224 — a checkpoint carries the stamp of the ids its command minted"
     };
 
     const fresh = createWorld(grown({ nextElementId: checkpoint.nextElementId })).runner;
-    await fresh.declare({ name: "read-a", args: {} }, "p1", {}, arrival(2_000), []);
+    await fresh.declare({ name: "read-a", args: {} }, "p1", {}, arrival(2_000), { declaredActivity: [], declaredNotices: [] });
 
     await expect(
-      fresh.declare({ name: "read-a", args: {} }, "p1", { a: stored }, arrival(2_000), []),
+      fresh.declare({ name: "read-a", args: {} }, "p1", { a: stored }, arrival(2_000), { declaredActivity: [], declaredNotices: [] }),
     ).resolves.toBeDefined();
   });
 

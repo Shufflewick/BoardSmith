@@ -129,8 +129,13 @@ export async function drainScheduled(
       null,
       supplied,
       { kind: "scheduled", timing },
-      declared,
+      { declaredActivity: declared, declaredNotices: [] },
     );
+    // No case driven through here reads a notice box; one that does is driven
+    // through `walkDeclaration` itself (see `notice-box.test.ts`).
+    if (needs.noticeBoxes.length > 0) {
+      throw new Error(`drainScheduled answers no notice box, and "${options.name}" named one`);
+    }
     if (needs.partitions.length === 0 && needs.seats.length === 0) break;
     supplied = {};
     for (const name of needs.partitions) {
@@ -152,6 +157,7 @@ export async function drainScheduled(
     presence: [] as readonly number[],
     activity: null,
     declaredActivity: declared,
+    declaredNotices: [],
   });
   return { result, asked };
 }

@@ -74,6 +74,12 @@ import { dirname, join } from 'node:path';
 
 import type { DeclaredSeatActivityStamp, StoredPartition } from '../../world/contract.js';
 import {
+  EMPTY_NOTICE_BOX,
+  isEmptyNoticeBox,
+  type SettledNoticeBox,
+  type WorldNoticeBox,
+} from '../../world/notices.js';
+import {
   assertPartitionWithinBudget,
   assertStorablePartitionName,
 } from '../../world/partition-store.js';
@@ -288,6 +294,14 @@ export function openWorldStore(path: string, budgets: WorldBudgets): LocalWorldS
         'ON CONFLICT(seat) DO UPDATE SET closed_at = excluded.closed_at',
     ),
     deletePresence: db.prepare('DELETE FROM presence_told WHERE seat = ?'),
+    // ONE ROW PER SEAT WITH SOMETHING WAITING (ShufflewickPub #521): a point
+    // read by seat, and a seat with an empty box has no row at all.
+    readNoticeBox: db.prepare('SELECT box FROM notice_boxes WHERE seat = ?'),
+    writeNoticeBox: db.prepare(
+      'INSERT INTO notice_boxes (seat, box) VALUES (?, ?) ' +
+        'ON CONFLICT(seat) DO UPDATE SET box = excluded.box',
+    ),
+    deleteNoticeBox: db.prepare('DELETE FROM notice_boxes WHERE seat = ?'),
     readMeta: db.prepare('SELECT value FROM meta WHERE key = ?'),
     writeMeta: db.prepare(
       'INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
@@ -517,6 +531,11 @@ export function openWorldStore(path: string, budgets: WorldBudgets): LocalWorldS
       };
     },
 
+    noticeBox(seat: number): WorldNoticeBox {
+      const row = stmt.readNoticeBox.get(seat) as { box: string } | undefined;
+      return row === undefined ? EMPTY_NOTICE_BOX : (JSON.parse(row.box) as WorldNoticeBox);
+    },
+
     receipt(player: string, orderId: string): WorldReceipt | undefined {
       const row = stmt.readReceipt.get(player, orderId) as ReceiptRow | undefined;
       if (row === undefined) return undefined;
@@ -655,6 +674,15 @@ export function openWorldStore(path: string, budgets: WorldBudgets): LocalWorldS
     return Number(stored);
   }
 
+  /** THE NOTICE BOXES A DISPATCH CHANGED (ShufflewickPub #521), in the same
+   *  transaction as its effects. An emptied box is a deleted row. */
+  function writeNoticeBoxes(settled: readonly SettledNoticeBox[]): void {
+    for (const { seat, box } of settled) {
+      if (isEmptyNoticeBox(box)) stmt.deleteNoticeBox.run(seat);
+      else stmt.writeNoticeBox.run(seat, JSON.stringify(box));
+    }
+  }
+
   function writeLedger(extras: WorldCheckpointExtras): void {
     if (extras.receipt !== undefined) {
       const { player, orderId, at, message } = extras.receipt;
@@ -667,6 +695,7 @@ export function openWorldStore(path: string, budgets: WorldBudgets): LocalWorldS
     if (extras.activity !== undefined) {
       stmt.writeActivity.run(extras.activity.seat, extras.activity.at);
     }
+    writeNoticeBoxes(extras.notices ?? []);
     // LAST, so a dispatch that both stamped a seat and freed it leaves the
     // chair empty rather than empty-with-a-watermark. Nothing reaches both
     // today -- the clock's road stamps no activity -- and an order between two
@@ -690,6 +719,8 @@ export function openWorldStore(path: string, budgets: WorldBudgets): LocalWorldS
     if (Number(released.changes) > 0) {
       stmt.deleteSeatActivity.run(extras.vacate.seat);
       stmt.deletePresence.run(extras.vacate.seat);
+      // And what the game left for the last holder is not the next one's (#521).
+      stmt.deleteNoticeBox.run(extras.vacate.seat);
     }
   }
 
@@ -819,6 +850,17 @@ const PRESENCE_TOLD_TABLE = `CREATE TABLE IF NOT EXISTS presence_told (
 );`;
 
 /**
+ * The one table layout 7 added (ShufflewickPub #521), named apart for
+ * `SEAT_ACTIVITY_TABLE`'s reason: the upgrade from layout 6 writes exactly this.
+ * One row per seat that has notices waiting; the box is the JSON
+ * `WorldNoticeBox`, bounded by `perSeat x noticeMaxBytes`.
+ */
+const NOTICE_BOXES_TABLE = `CREATE TABLE IF NOT EXISTS notice_boxes (
+  seat INTEGER PRIMARY KEY,
+  box TEXT NOT NULL
+);`;
+
+/**
  * The layout this file owns.
  *
  * ONE ROW PER PARTITION, and that IS the cost argument rather than a tidiness
@@ -855,6 +897,7 @@ CREATE TABLE IF NOT EXISTS seats (
 );
 ${SEAT_ACTIVITY_TABLE}
 ${PRESENCE_TOLD_TABLE}
+${NOTICE_BOXES_TABLE}
 CREATE TABLE IF NOT EXISTS receipts (
   player TEXT NOT NULL,
   order_id TEXT NOT NULL,
@@ -876,7 +919,7 @@ CREATE INDEX IF NOT EXISTS receipts_at ON receipts (at);
  * Silently READING a store this code does not understand stays forbidden -- an
  * upgrade is a deliberate, atomic rewrite, never a hopeful reinterpretation.
  */
-const SCHEMA_VERSION = '6';
+const SCHEMA_VERSION = '7';
 
 /**
  * THE LAYOUTS THIS CODE CAN CARRY A WORLD FORWARD FROM, and the step each one
@@ -904,6 +947,7 @@ const LAYOUT_UPGRADES: readonly LayoutUpgrade[] = [
   { from: '3', to: '4', apply: upgradeToLayout4 },
   { from: '4', to: '5', apply: upgradeToLayout5 },
   { from: '5', to: '6', apply: upgradeToLayout6 },
+  { from: '6', to: '7', apply: upgradeToLayout7 },
 ];
 
 /**
@@ -1030,6 +1074,19 @@ function upgradeToLayout6(db: SqliteDatabase): void {
   transactOn(db, () => {
     db.exec(PRESENCE_TOLD_TABLE);
     db.prepare('UPDATE meta SET value = ? WHERE key = ?').run('6', SCHEMA_VERSION_KEY);
+  });
+}
+
+/**
+ * LAYOUT 6 TO LAYOUT 7: the seats' notice boxes (ShufflewickPub #521).
+ *
+ * One new table, and empty is the honest answer: nothing could leave a notice
+ * under a layout that had nowhere to keep one.
+ */
+function upgradeToLayout7(db: SqliteDatabase): void {
+  transactOn(db, () => {
+    db.exec(NOTICE_BOXES_TABLE);
+    db.prepare('UPDATE meta SET value = ? WHERE key = ?').run('7', SCHEMA_VERSION_KEY);
   });
 }
 

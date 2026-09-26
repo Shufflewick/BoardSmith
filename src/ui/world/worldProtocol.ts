@@ -86,6 +86,12 @@ export type { WorldActionOffer } from '../../world/contract.js';
  * already decided this frame's reader is in the audience, and nothing here
  * re-checks.
  *
+ * A NOTICE ARRIVES HERE TOO (ShufflewickPub #521). `ctx.world.notify(seat, ...)`
+ * reaches a connected seat at once as a narration on the reserved scope
+ * `"notice"`, addressed to that seat alone; the same notice also waits in the
+ * seat's notice box until the game takes it. No partition may be named
+ * `notice`, so the scope says which this is.
+ *
  * `payload` IS THE GAME'S OWN SHAPE, and stays `unknown` the whole way here:
  * it is written by the game's rules and read by the game's UI, and every layer
  * between the two is deliberately incapable of interpreting it.

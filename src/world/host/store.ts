@@ -33,6 +33,7 @@ import type {
 } from "../runner.js";
 import type { PlannedEvent } from "../schedule-api.js";
 import type { WorldReceipt } from "../orders.js";
+import type { SettledNoticeBox, WorldNoticeBox } from "../notices.js";
 
 /** One seat, as the roster holds it. */
 export interface WorldSeatRecord {
@@ -178,6 +179,16 @@ export interface WorldStore extends WorldPartitionStore, WorldPartitionWriter {
    * hands a chair on, so it answers `held` or `empty` and never `erased`.
    */
   activityOf(seat: number): DeclaredSeatActivityStamp;
+
+  /**
+   * THIS SEAT'S NOTICE BOX (ShufflewickPub #521), or `EMPTY_NOTICE_BOX` when
+   * nothing is waiting for it.
+   *
+   * A POINT READ of one small row, for `activityOf`'s reason: a declared box
+   * read and a send are both about one seat, and must never cost what the
+   * world costs. A store keeps no row for an empty box.
+   */
+  noticeBox(seat: number): WorldNoticeBox;
 
   /**
    * THE STATE VERSION THIS WORLD'S BYTES WERE LAST WRITTEN UNDER (#200).
@@ -382,12 +393,28 @@ export interface WorldCheckpointExtras {
    * vouched for, and the roster key resolved from the engine's own roster. A
    * store writes exactly that identity and resolves nothing of its own.
    *
-   * The seat's activity watermark goes with the holder. It measures how long
-   * the person in the chair has been away, and a chair that kept the last
-   * holder's mark would report its NEXT occupant as idle since before they
-   * arrived -- an inactivity sweep reaping somebody on their first day.
+   * The seat's activity watermark and its notice box go with the holder. The
+   * watermark measures how long the person in the chair has been away, and a
+   * chair that kept the last holder's mark would report its NEXT occupant as
+   * idle since before they arrived -- an inactivity sweep reaping somebody on
+   * their first day. The box holds what the game told the last holder, which
+   * the next one must not read (ShufflewickPub #521).
    */
   readonly vacate?: { readonly seat: number; readonly player: string };
+  /**
+   * EVERY NOTICE BOX THIS CHECKPOINT'S DISPATCH CHANGED, as it now stands
+   * (ShufflewickPub #521).
+   *
+   * `applyNoticeWrites`' answer, written in the same transaction as the
+   * effects for the receipt's reason: a notice must exist exactly when the
+   * command that sent it does, and a take must empty the box exactly when the
+   * state the game moved the notices into is durable. An EMPTY box is a row to
+   * delete, so a seat with nothing waiting costs no storage at all.
+   *
+   * A vacated chair's box goes with it, as its watermark does: a notice left
+   * for the person who held the chair is not the next holder's to read.
+   */
+  readonly notices?: readonly SettledNoticeBox[];
   /**
    * THIS CHECKPOINT ENDS THE WORLD, at this instant (#395).
    *

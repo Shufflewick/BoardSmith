@@ -86,6 +86,7 @@ import {
   type WorldActivityRound,
   type WorldClockFacilities,
   type WorldNeedsRound,
+  type WorldNoticeBoxRound,
   type WorldPartitionsRound,
 } from "./action.js";
 import type {
@@ -96,6 +97,7 @@ import type {
   WorldActionOffer,
   WorldDispatchNeeds,
   WorldDispatchWhen,
+  WorldWalkAnswers,
   WorldCommand,
   WorldCommandResult,
   WorldCommandStamp,
@@ -118,6 +120,14 @@ import {
   type ScheduleRequest,
 } from "./schedule-api.js";
 import { worldRefusal, WorldRefusal } from "./refusals.js";
+import {
+  applyNoticeWrite,
+  NOTICE_SCOPE,
+  stampNotice,
+  type DeclaredNoticeBox,
+  type WorldNoticeBox,
+  type WorldNoticeWrite,
+} from "./notices.js";
 import { devWarn, evaluateCondition, GameElement } from "../engine/index.js";
 import { readOnlyProjection } from "./readonly.js";
 import { assertAnsweredAllocations, assertCreatedRoots } from "./migration.js";
@@ -361,6 +371,13 @@ export interface BoardSmithWorldEngineOptions {
    */
   readonly vacateByClock?: string;
   /**
+   * HOW MANY NOTICES ONE SEAT'S BOX KEEPS (ShufflewickPub #521), or nothing for
+   * a world that declares no notice box -- where `ctx.world.notify` is refused
+   * by name. The bundle's `world.notices.perSeat`, already held under the
+   * host's `maxNoticesPerSeat` by `createWorld`.
+   */
+  readonly noticesPerSeat?: number;
+  /**
    * WHAT ONE SEAT'S VIEW IS ABOUT (#95).
    *
    * The bundle's own declaration, taken by SEAT because that is what the world
@@ -496,6 +513,9 @@ export class BoardSmithWorldEngine implements WorldEngine {
   /** The one verb that may free a chair from the clock (ShufflewickPub #475),
    *  or undefined for a world that declares none. */
   private readonly vacateByClock: string | undefined;
+  /** How many notices one seat's box keeps (ShufflewickPub #521), or
+   *  undefined for a world that declares no notice box. */
+  private readonly noticesPerSeat: number | undefined;
 
   /** Partition name to the id of its resident root. */
   private readonly residentIds = new Map<string, number>();
@@ -542,6 +562,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
     this.store = options.store;
     this.view = options.view;
     this.vacateByClock = options.vacateByClock;
+    this.noticesPerSeat = options.noticesPerSeat;
     this.budgets = options.budgets ?? worldBudgets();
     this.buildOnFirstUse = options.createPartition;
     this.buildSourceGame = options.sourceGame;
@@ -552,6 +573,20 @@ export class BoardSmithWorldEngine implements WorldEngine {
     // asked what they could do here.
     for (const action of options.actions) {
       assertWorldAction(action);
+      // A BOX READ NEEDS A BOX (ShufflewickPub #521). Refused here, once, rather
+      // than answered with an empty box on every dispatch of a world that never
+      // declared how many notices a seat keeps.
+      if (
+        this.noticesPerSeat === undefined &&
+        action.world!.needs.some((round) => round.kind === "notices")
+      ) {
+        throw worldRefusal(
+          "invalid-world-action",
+          `The "${action.name}" action declares a seat's notice box with \`.noticeBox()\`, and ` +
+            "this world declares no notice box. Add `world: { notices: { perSeat: <how many a " +
+            "seat keeps> } }` to the game definition.",
+        );
+      }
       // ONE REGISTRY, and this is where a world's verbs enter it. Registering
       // here rather than asking the bundle to do it in its game constructor is
       // what makes "the actions the engine offers" and "the actions the game
@@ -984,6 +1019,8 @@ export class BoardSmithWorldEngine implements WorldEngine {
       // activity round (ShufflewickPub #423), so the only honest thing to hand
       // its handler is nothing to read.
       declaredActivity: stamp.declaredActivity,
+      // THE NOTICE BOXES ITS WALK NAMED (ShufflewickPub #521), on either road.
+      declaredNotices: stamp.declaredNotices,
     });
   }
 
@@ -1020,6 +1057,8 @@ export class BoardSmithWorldEngine implements WorldEngine {
       // because it is about nobody, and these are how it learns anything about
       // a person at all.
       declaredActivity: stamp.declaredActivity,
+      // THE NOTICE BOXES ITS WALK NAMED (ShufflewickPub #521), on either road.
+      declaredNotices: stamp.declaredNotices,
     });
   }
 
@@ -1111,6 +1150,25 @@ export class BoardSmithWorldEngine implements WorldEngine {
     return declaredOnce(missing);
   }
 
+  /**
+   * WHAT ONE ROUND STILL NEEDS LOADED, on a seat's read roads -- an offer and a
+   * pick. Only a partitions round is asked: an activity round is the clock's
+   * and a seat's read never names a chair (ShufflewickPub #423), and a notice
+   * box is read by the dispatch that answers the question, never to draw a
+   * panel (#521).
+   */
+  private unmetOnASeatsRead(
+    round: WorldNeedsRound,
+    seat: number,
+    args: Readonly<Record<string, unknown>>,
+    now: number,
+  ): readonly string[] {
+    if (round.kind !== "partitions") return [];
+    return this.declareRound(round, seat, args, arrivalAt(now)).filter(
+      (name) => !this.residentIds.has(name),
+    );
+  }
+
   /** One action's share of the answer above: the first round it cannot yet
    *  make, or nothing when its whole offer is already resident. */
   private offerPartitionsOf(
@@ -1121,13 +1179,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
     for (let step = 0; step < definition.selections.length || step === 0; step++) {
       for (const round of definition.world!.needs) {
         if (round.before !== step) continue;
-        // AN OFFER NAMES NO CHAIR (ShufflewickPub #423): only a seatless action
-        // may declare an activity round, and a seatless action is never
-        // offered. There is nothing here to read and nothing to hydrate.
-        if (round.kind === "activity") continue;
-        const unmet = this.declareRound(round, seat, {}, arrivalAt(now)).filter(
-          (name) => !this.residentIds.has(name),
-        );
+        const unmet = this.unmetOnASeatsRead(round, seat, {}, now);
         // ONE ROUND AT A TIME. A later round may read what an earlier one
         // loaded, so there is nothing to say about it until the host has
         // supplied this one.
@@ -1154,7 +1206,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
     try {
       // ROUND ONE (and any round that shares its place), before anything is
       // asked of the player.
-      await this.hydrateRounds(definition, 0, seat, {}, named, namedSeats, arrivalAt(stamp.now));
+      await this.hydrateRounds(definition, 0, seat, {}, named, namedSeats, null, arrivalAt(stamp.now));
 
       // WITH EMPTY ARGS, exactly as a table evaluates availability. An action
       // whose condition is false is not offered and no further round runs, so a
@@ -1191,7 +1243,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
       const selections: PickMetadata[] = [];
       for (let index = 0; index < definition.selections.length; index++) {
         if (index > 0) {
-          await this.hydrateRounds(definition, index, seat, {}, named, namedSeats, arrivalAt(stamp.now));
+          await this.hydrateRounds(definition, index, seat, {}, named, namedSeats, null, arrivalAt(stamp.now));
         }
         selections.push(this.pickOf(definition, index, acting, named));
       }
@@ -1300,7 +1352,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
     bindWorldFacilities(this.game, this.readOnlyFacilities(definition.name, named, stamp));
     try {
       for (let step = 0; step <= through; step++) {
-        await this.hydrateRounds(definition, step, seat, args, named, namedSeats, arrivalAt(stamp.now));
+        await this.hydrateRounds(definition, step, seat, args, named, namedSeats, null, arrivalAt(stamp.now));
       }
       return answer(acting, named, this.resolveDraft(definition, args, acting, named));
     } finally {
@@ -1497,11 +1549,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
     for (let step = 0; step <= through; step++) {
       for (const round of definition.world!.needs) {
         if (round.before !== step) continue;
-        // The activity round is the clock's, and a seat's read never asks one.
-        if (round.kind === "activity") continue;
-        const unmet = this.declareRound(round, seat, args, arrivalAt(now)).filter(
-          (name) => !this.residentIds.has(name),
-        );
+        const unmet = this.unmetOnASeatsRead(round, seat, args, now);
         if (unmet.length > 0) return declaredOnce(unmet);
       }
     }
@@ -1662,7 +1710,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
     player: string | null,
     command: WorldCommand,
     when: WorldDispatchWhen,
-    declared: readonly DeclaredSeatActivityStamp[],
+    answered: WorldWalkAnswers,
   ): WorldDispatchNeeds {
     const seat = player === null ? null : this.seatFor(player);
     const definition = this.actionFor(command.name, seat);
@@ -1675,31 +1723,91 @@ export class BoardSmithWorldEngine implements WorldEngine {
     // answering a question nobody asked, which is refused here rather than
     // discovered as a loop that never ends because the round keeps asking for a
     // seat the answer never covers.
-    let answered = 0;
+    //
+    // AND WHICH NOTICE BOXES, on exactly the same ordered terms (#521).
+    const cursor = { activity: 0, notices: 0 };
     for (const round of definition.world!.needs) {
-      if (round.kind === "activity") {
-        const about = this.declareSeatRound(round, command.args, when, definition.name);
-        if (about === null) continue;
-        const already = declared[answered];
-        if (already === undefined) return { partitions: [], seats: [about] };
-        if (already.seat !== about) {
-          throw worldRefusal(
-            "activity-answered-wrong",
-            `Action "${definition.name}" declared it was about seat ${about}, and the host ` +
-              `answered about seat ${already.seat}. A declared activity read is answered in the ` +
-              "order it was asked, so this host and this world disagree about which chair the " +
-              "phase names.",
-          );
-        }
-        answered += 1;
+      if (round.kind !== "partitions") {
+        const asked = this.namedSeatOf(round, seat, command.args, when, definition.name);
+        if (asked === null) continue;
+        const outstanding = matchAnswered(round.kind, asked, answered, cursor, definition.name);
+        if (outstanding !== null) return outstanding;
         continue;
       }
       const missing = this.declareRound(round, seat, command.args, when).filter(
         (name) => !this.residentIds.has(name),
       );
-      if (missing.length > 0) return { partitions: declaredOnce(missing), seats: [] };
+      if (missing.length > 0) {
+        return { partitions: declaredOnce(missing), seats: [], noticeBoxes: [] };
+      }
     }
-    return { partitions: [], seats: [] };
+    return { partitions: [], seats: [], noticeBoxes: [] };
+  }
+
+  /** Add the seat a chair or notice-box round names to what the handler may
+   *  reach, once. */
+  private noteNamedSeat(
+    round: WorldActivityRound | WorldNoticeBoxRound,
+    seat: number | null,
+    args: Readonly<Record<string, unknown>>,
+    when: WorldDispatchWhen,
+    action: string,
+    named: { readonly namedSeats: number[]; readonly namedBoxes: number[] | null },
+  ): void {
+    const into = round.kind === "activity" ? named.namedSeats : named.namedBoxes;
+    if (into === null) return;
+    const asked = this.namedSeatOf(round, seat, args, when, action);
+    if (asked !== null && !into.includes(asked)) into.push(asked);
+  }
+
+  /** The one seat a chair round or a notice-box round names, or null. */
+  private namedSeatOf(
+    round: WorldActivityRound | WorldNoticeBoxRound,
+    seat: number | null,
+    args: Readonly<Record<string, unknown>>,
+    when: WorldDispatchWhen,
+    action: string,
+  ): number | null {
+    return round.kind === "activity"
+      ? this.declareSeatRound(round, args, when, action)
+      : this.declareNoticeRound(round, seat, args, when, action);
+  }
+
+  /**
+   * ONE NOTICE-BOX ROUND, answered read-only (ShufflewickPub #521).
+   *
+   * `declareSeatRound`'s twin, on either road: a seated step reads its
+   * `player`, a seatless one reads `args`. A seat is a whole number inside this
+   * world or it is nothing, refused here rather than passed to a host that
+   * would answer an empty box for a seat that cannot exist.
+   */
+  private declareNoticeRound(
+    round: WorldNoticeBoxRound,
+    seat: number | null,
+    args: Readonly<Record<string, unknown>>,
+    when: WorldDispatchWhen,
+    action: string,
+  ): number | null {
+    const player = seat === null ? null : this.playerFor(seat);
+    const box = this.game.readingOnly(() =>
+      round.box({
+        game: readOnlyProjection(this.game),
+        player: player === null ? null : readOnlyProjection(player),
+        seat,
+        args: args as Record<string, unknown>,
+        world: this.declaringWorld(when),
+      }),
+    );
+    if (box === null) return null;
+    if (!Number.isInteger(box) || box < 1 || box > this.game.players.length) {
+      throw worldRefusal(
+        "invalid-seat-declaration",
+        `Action "${action}" declared the notice box of "${String(box)}", which is not a seat in ` +
+          `this world. A \`.noticeBox()\` round names one seat from 1 to ` +
+          `${this.game.players.length}, or \`null\` for nobody.`,
+      );
+    }
+    return box;
   }
 
   /**
@@ -1794,19 +1902,22 @@ export class BoardSmithWorldEngine implements WorldEngine {
     args: Readonly<Record<string, unknown>>,
     named: string[],
     namedSeats: number[],
+    /** Null on a seat's read roads -- an offer, a pick, a quote -- which read no
+     *  notice box, so their notice rounds are not even asked (#521). */
+    namedBoxes: number[] | null,
     when: WorldDispatchWhen,
   ): Promise<void> {
     for (const round of definition.world!.needs) {
       if (round.before !== step) continue;
-      // AN ACTIVITY ROUND HYDRATES NOTHING (ShufflewickPub #423). Its answer
-      // came down with the stamp, because the store it would have to read is
-      // the host's. What it does here is say which chairs the handler is
-      // allowed to ask about, evaluated in the same order and against the same
-      // resident tree the declaration walk saw -- so what `activityOf` admits
-      // is exactly what the host was asked for and nothing else.
-      if (round.kind === "activity") {
-        const about = this.declareSeatRound(round, args, when, definition.name);
-        if (about !== null && !namedSeats.includes(about)) namedSeats.push(about);
+      // A CHAIR OR A NOTICE-BOX ROUND HYDRATES NOTHING (ShufflewickPub #423,
+      // #521). Its answer came down with the stamp, because the store it would
+      // have to read is the host's. What it does here is say which chairs and
+      // which boxes the handler is allowed to reach, evaluated in the same order
+      // and against the same resident tree the declaration walk saw -- so what
+      // `activityOf` and `notices` admit is exactly what the host was asked for
+      // and nothing else.
+      if (round.kind !== "partitions") {
+        this.noteNamedSeat(round, seat, args, when, definition.name, { namedSeats, namedBoxes });
         continue;
       }
       for (const name of this.declareRound(round, seat, args, when)) {
@@ -1950,6 +2061,11 @@ export class BoardSmithWorldEngine implements WorldEngine {
       cancel: () => refuse("cancel"),
       complete: () => refuse("complete"),
       emit: () => refuse("emit"),
+      // AN OFFER SENDS NOTHING AND READS NO BOX (ShufflewickPub #521): it runs
+      // once per watcher per refresh with no checkpoint, and it declares none.
+      notify: () => refuse("notify"),
+      notices: () => refuse("notices"),
+      takeNotices: () => refuse("takeNotices"),
     };
   }
 
@@ -2260,6 +2376,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
       presence: readonly number[];
       activity: SeatActivityStamp | null;
       declaredActivity: readonly DeclaredSeatActivityStamp[];
+      declaredNotices: readonly DeclaredNoticeBox[];
     },
   ): Promise<WorldCommandResult> {
     const definition = this.actionFor(command.name, seat);
@@ -2285,8 +2402,19 @@ export class BoardSmithWorldEngine implements WorldEngine {
     // admits, so a handler can read exactly the watermarks its declaration
     // asked for and no others.
     const namedSeats: number[] = [];
+    // AND WHICH NOTICE BOXES (ShufflewickPub #521), on the same terms.
+    const namedBoxes: number[] = [];
     for (let step = 0; step <= definition.selections.length; step++) {
-      await this.hydrateRounds(definition, step, seat, command.args, named, namedSeats, when);
+      await this.hydrateRounds(
+        definition,
+        step,
+        seat,
+        command.args,
+        named,
+        namedSeats,
+        namedBoxes,
+        when,
+      );
     }
 
     // Raised once per command and stamped on everything this one NAMED, so two
@@ -2351,11 +2479,13 @@ export class BoardSmithWorldEngine implements WorldEngine {
       events: [],
       refused: null,
       vacated: null,
+      notices: [],
     };
     const facilities = this.dispatchFacilities(
       command.name,
       named,
       namedSeats,
+      namedBoxes,
       timing,
       charge,
       budget,
@@ -2418,17 +2548,21 @@ export class BoardSmithWorldEngine implements WorldEngine {
         // ROUTED HERE AND NOWHERE ELSE (#58). The action said where; this is
         // the engine saying who, once per event, while the world it is a fact
         // about is still in front of us.
-        events: ledger.events.map((event) => ({
-          ...event,
-          seats: this.audienceOf(command.name, event.scope),
-        })),
+        events: [
+          ...ledger.events.map((event) => ({
+            ...event,
+            seats: this.audienceOf(command.name, event.scope),
+          })),
+          // AND EACH NOTICE, TO ITS ONE SEAT (ShufflewickPub #521).
+          ...noticeEvents(ledger.notices),
+        ],
         // TAKEN, not read: one pass both reports what changed and re-baselines
         // for the next command (#316) -- and since #295 that pass runs over the
         // partitions this command REACHED rather than over the resident set, so
         // what it costs is the room.
         dirty: this.dirtySet(command.name, named, touchedOnce()),
         schedules: ledger.schedules,
-        ...outcomeOf(ledger),
+        ...outcomeOf(ledger, this.noticesPerSeat),
       };
     } catch (error) {
       // A REFUSED ACTION LEAVES THE WORLD UNCHANGED, or the word is worthless
@@ -2497,12 +2631,14 @@ export class BoardSmithWorldEngine implements WorldEngine {
     action: string,
     named: readonly string[],
     namedSeats: readonly number[],
+    namedBoxes: readonly number[],
     timing: { readonly due: number; readonly missedCount: number } | null,
     charge: {
       now: number;
       presence: readonly number[];
       activity: SeatActivityStamp | null;
       declaredActivity: readonly DeclaredSeatActivityStamp[];
+      declaredNotices: readonly DeclaredNoticeBox[];
     },
     budget: ReturnType<typeof scheduleBudget>,
     ledger: DispatchLedger,
@@ -2511,6 +2647,45 @@ export class BoardSmithWorldEngine implements WorldEngine {
       ledger.refused = refusal;
       throw refusal;
     };
+    /**
+     * THE DECLARED BOXES AS THIS DISPATCH HAS LEFT THEM (ShufflewickPub #521).
+     *
+     * Seeded from the host's answers and moved by every send and take through
+     * `applyNoticeWrite` -- the same rule the host will apply to the same
+     * writes -- so a `refuse` send is refused at the line exactly when the
+     * host's write would have refused it, and a second send in one dispatch
+     * sees the first.
+     */
+    const boxes = new Map<number, WorldNoticeBox>();
+    const declaredBox = (seat: number): WorldNoticeBox | null => {
+      if (!namedBoxes.includes(seat)) return null;
+      const held = boxes.get(seat);
+      if (held !== undefined) return held;
+      const answered = charge.declaredNotices.find((one) => one.seat === seat);
+      if (answered === undefined) return raise(noticeBoxAnsweredWrong(action, seat, null));
+      boxes.set(seat, answered.box);
+      return answered.box;
+    };
+    const readBox = (seat: number, verb: string): WorldNoticeBox =>
+      declaredBox(seat) ??
+      raise(
+        worldRefusal(
+          "undeclared-notice-box",
+          `Action "${action}" called ctx.world.${verb}(${seat}), and it did not declare seat ` +
+            `${seat}'s notice box. Declare it with \`.noticeBox(() => ${seat})\` (or whatever ` +
+            "names that seat) before execute, and the host answers that one box -- never the " +
+            "seat's partition.",
+        ),
+      );
+    const perSeat = (): number =>
+      this.noticesPerSeat ??
+      raise(
+        worldRefusal(
+          "invalid-notice",
+          `Action "${action}" sent a notice, and this world declares no notice box. Add ` +
+            "`world: { notices: { perSeat: <how many a seat keeps> } }` to the game definition.",
+        ),
+      );
     /**
      * ONE CHAIR'S ANSWER, AND WHETHER THIS HANDLER MAY HAVE IT.
      *
@@ -2693,6 +2868,64 @@ export class BoardSmithWorldEngine implements WorldEngine {
       },
       complete: () => {
         ledger.completed = true;
+      },
+      // A LASTING NOTICE, WITH NO PARTITION LOADED (ShufflewickPub #521).
+      notify: (seat: number, request) => {
+        const limit = perSeat();
+        let stamped: ReturnType<typeof stampNotice>;
+        try {
+          stamped = stampNotice(action, seat, request, {
+            now: charge.now,
+            seatCount: this.game.players.length,
+            budgets: this.budgets,
+          });
+        } catch (error) {
+          return raise(error as WorldRefusal);
+        }
+        const sends = ledger.notices.filter((write) => write.kind === "send").length;
+        if (sends >= this.budgets.maxNoticesPerCommand) {
+          raise(
+            worldRefusal(
+              "notice-batch-cap",
+              `Action "${action}" sent more than ${this.budgets.maxNoticesPerCommand} notices, the ` +
+                "most one command may send. A line for everybody who is here is " +
+                '`ctx.world.emit("world", ...)`; a notice is for the seats a line must still ' +
+                "reach when they come back.",
+            ),
+          );
+        }
+        const write: WorldNoticeWrite = { kind: "send", ...stamped };
+        const box = declaredBox(stamped.seat);
+        if (box === null) {
+          // A `refuse` MUST KNOW HOW FULL THE BOX IS, and only a declared box
+          // tells it. A `dropOldest` needs nothing: the host evicts at its write.
+          if (stamped.whenFull === "refuse") {
+            raise(
+              worldRefusal(
+                "undeclared-notice-box",
+                `Action "${action}" sent seat ${stamped.seat} a notice that refuses when the box ` +
+                  "is full, and did not declare that seat's notice box, so there is no way to " +
+                  `know whether it is full. Declare it with \`.noticeBox(...)\` naming seat ` +
+                  `${stamped.seat}, or send with \`whenFull: "dropOldest"\`.`,
+              ),
+            );
+          }
+        } else {
+          try {
+            boxes.set(stamped.seat, applyNoticeWrite(box, write, limit));
+          } catch (error) {
+            return raise(error as WorldRefusal);
+          }
+        }
+        ledger.notices.push(write);
+      },
+      notices: (seat: number): WorldNoticeBox => readBox(seat, "notices"),
+      takeNotices: (seat: number): WorldNoticeBox => {
+        const box = readBox(seat, "takeNotices");
+        const write: WorldNoticeWrite = { kind: "take", seat };
+        boxes.set(seat, applyNoticeWrite(box, write, perSeat()));
+        ledger.notices.push(write);
+        return box;
       },
     };
   }
@@ -3451,11 +3684,95 @@ function sent(fields: Record<string, unknown>): Record<string, unknown> {
  */
 function outcomeOf(
   ledger: DispatchLedger,
-): Pick<WorldCommandResult, "ending" | "vacated"> {
+  noticesPerSeat: number | undefined,
+): Pick<WorldCommandResult, "ending" | "vacated" | "notices"> {
   return {
     ...(ledger.completed ? { ending: "completed" as const } : {}),
     ...(ledger.vacated === null ? {} : { vacated: ledger.vacated }),
+    // ABSENT WHEN NOTHING WAS SENT OR TAKEN, which is almost every dispatch.
+    // A write can only exist in a world that declares a box: `notify` refuses
+    // without one, and a `.noticeBox()` round is refused when the world is built.
+    ...(ledger.notices.length === 0 || noticesPerSeat === undefined
+      ? {}
+      : { notices: { perSeat: noticesPerSeat, writes: [...ledger.notices] } }),
   };
+}
+
+/**
+ * MATCH ONE CHAIR OR BOX ROUND AGAINST THE HOST'S ANSWERS, IN ORDER
+ * (ShufflewickPub #423, #521).
+ *
+ * The nth round of a kind is answered by the nth answer of that kind, which is
+ * what makes the walk terminate: an answer about a different seat is a host
+ * answering a question nobody asked, refused here rather than discovered as a
+ * loop that never ends. Answers what the host must still read, or null when
+ * this round is already answered.
+ */
+function matchAnswered(
+  kind: "activity" | "notices",
+  asked: number,
+  answered: WorldWalkAnswers,
+  cursor: { activity: number; notices: number },
+  action: string,
+): WorldDispatchNeeds | null {
+  const already =
+    kind === "activity"
+      ? answered.declaredActivity[cursor.activity]
+      : answered.declaredNotices[cursor.notices];
+  if (already === undefined) {
+    return kind === "activity"
+      ? { partitions: [], seats: [asked], noticeBoxes: [] }
+      : { partitions: [], seats: [], noticeBoxes: [asked] };
+  }
+  if (already.seat !== asked) {
+    if (kind === "notices") throw noticeBoxAnsweredWrong(action, asked, already.seat);
+    throw worldRefusal(
+      "activity-answered-wrong",
+      `Action "${action}" declared it was about seat ${asked}, and the host answered about ` +
+        `seat ${already.seat}. A declared activity read is answered in the order it was asked, ` +
+        "so this host and this world disagree about which chair the phase names.",
+    );
+  }
+  cursor[kind] += 1;
+  return null;
+}
+
+/**
+ * THE LIVE HALF OF A NOTICE (ShufflewickPub #521): each send, as an event
+ * addressed to its seat alone on the reserved `NOTICE_SCOPE`. A host delivers
+ * it exactly as it delivers any routed event -- to that seat's open sockets,
+ * after the checkpoint -- so a connected seat hears it at once and an absent
+ * one finds it in the box.
+ */
+function noticeEvents(writes: readonly WorldNoticeWrite[]): RoutedEvent[] {
+  const events: RoutedEvent[] = [];
+  for (const write of writes) {
+    if (write.kind !== "send") continue;
+    const { payload, text, type } = write.notice;
+    events.push({
+      scope: NOTICE_SCOPE,
+      payload,
+      ...(text === undefined ? {} : { text }),
+      ...(type === undefined ? {} : { type }),
+      seats: [write.seat],
+    });
+  }
+  return events;
+}
+
+/** A host that answered a notice-box round about the wrong seat, or not at all. */
+function noticeBoxAnsweredWrong(action: string, asked: number, answered: number | null) {
+  return worldRefusal(
+    "notice-box-answered-wrong",
+    answered === null
+      ? `Action "${action}" declared seat ${asked}'s notice box, and this host answered no box ` +
+          "for it. The declaration walk asks for a box and the host supplies it before the " +
+          "handler runs; a handler reaching an unanswered box means the walk was not driven " +
+          "to the end."
+      : `Action "${action}" declared seat ${asked}'s notice box, and the host answered seat ` +
+          `${answered}'s. A declared box is answered in the order it was asked, so this host and ` +
+          "this world disagree about which box the action names.",
+  );
 }
 
 interface DispatchLedger {
@@ -3472,4 +3789,8 @@ interface DispatchLedger {
    *  null. Per dispatch like everything else on the ledger: a vacancy that
    *  leaked into the next one would free a chair nothing proved was empty. */
   vacated: { readonly seat: number; readonly player: string } | null;
+  /** Every send and take this dispatch made to a notice box (ShufflewickPub
+   *  #521), in order. Per dispatch: a send that leaked into the next dispatch
+   *  would be a notice nobody sent. */
+  readonly notices: WorldNoticeWrite[];
 }

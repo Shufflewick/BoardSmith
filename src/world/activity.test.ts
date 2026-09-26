@@ -111,8 +111,8 @@ async function dispatch(
     options.timing === undefined
       ? ({ kind: "arrival", now: options.at } as const)
       : ({ kind: "scheduled", timing: options.timing } as const);
-  await runner.declare(command, options.player, {}, when, []);
-  await runner.declare(command, options.player, { hall }, when, []);
+  await runner.declare(command, options.player, {}, when, { declaredActivity: [], declaredNotices: [] });
+  await runner.declare(command, options.player, { hall }, when, { declaredActivity: [], declaredNotices: [] });
   return runner.apply({
     player: options.player,
     command,
@@ -122,6 +122,7 @@ async function dispatch(
     presence: [] as readonly number[],
     activity: options.activity,
     declaredActivity: [],
+    declaredNotices: [],
   });
 }
 

@@ -70,7 +70,9 @@ import type {
   DeclaredSeatActivityStamp,
   StoredPartition,
   WorldDispatchNeeds,
+  WorldWalkAnswers,
 } from "./contract.js";
+import type { DeclaredNoticeBox } from "./notices.js";
 import { worldRefusal } from "./refusals.js";
 
 /**
@@ -182,15 +184,20 @@ export async function settleDeclaration(
  * drove the walk and then handed `apply` a list it assembled separately could
  * hand over a chair the walk never asked about, or forget one it did, and the
  * refusal would land on the bundle. What this returns IS what `apply` takes.
+ *
+ * AND NOTICE BOXES (ShufflewickPub #521), the third kind of answer, on exactly
+ * the terms a chair is answered: one point read per seat a `.noticeBox()`
+ * round named, accumulated here and handed back whole every round.
  */
 export async function walkDeclaration(
   declare: (
     supplied: Record<string, StoredPartition>,
-    declared: readonly DeclaredSeatActivityStamp[],
+    answered: WorldWalkAnswers,
   ) => Promise<WorldDispatchNeeds>,
   read: (name: string) => Promise<StoredPartition>,
   readActivity: (seat: number) => Promise<DeclaredSeatActivityStamp>,
-): Promise<readonly DeclaredSeatActivityStamp[]> {
+  readNoticeBox: (seat: number) => Promise<DeclaredNoticeBox>,
+): Promise<WorldWalkAnswers> {
   // NULL PROTOTYPE, for the reason `settleDeclaration` gives: a partition name
   // is the bundle's, and `supplied["__proto__"] = partition` on a plain object
   // swaps this record's prototype rather than storing an entry (#190).
@@ -201,19 +208,29 @@ export async function walkDeclaration(
   // THE ANSWERS ACCUMULATE, AND THE PARTITIONS DO NOT (ShufflewickPub #423).
   //
   // A partition becomes RESIDENT, so the child subtracts it and each round is
-  // handed only what that round asked for. A watermark becomes nothing: it is
-  // handed to the dispatch and forgotten, so the only thing that can remember
-  // which chairs have been answered is this side -- and the child must not be
-  // the thing that remembers, or a stamp left over between two dispatches would
-  // be read by the second as an answer to a question it never asked.
-  const declared: DeclaredSeatActivityStamp[] = [];
+  // handed only what that round asked for. A watermark or a notice box becomes
+  // nothing: it is handed to the dispatch and forgotten, so the only thing that
+  // can remember which have been answered is this side -- and the child must
+  // not be the thing that remembers, or an answer left over between two
+  // dispatches would be read by the second as an answer to a question it never
+  // asked.
+  const declaredActivity: DeclaredSeatActivityStamp[] = [];
+  const declaredNotices: DeclaredNoticeBox[] = [];
+  const answered: WorldWalkAnswers = { declaredActivity, declaredNotices };
   for (;;) {
-    const needs = await declare(supplied, declared);
-    if (needs.partitions.length === 0 && needs.seats.length === 0) return declared;
+    const needs = await declare(supplied, answered);
+    if (
+      needs.partitions.length === 0 &&
+      needs.seats.length === 0 &&
+      needs.noticeBoxes.length === 0
+    ) {
+      return answered;
+    }
     supplied = Object.create(null) as Record<string, StoredPartition>;
     for (const name of needs.partitions) supplied[name] = await read(name);
-    // ONE POINT READ PER CHAIR, in the order it was asked for, which is the
-    // order the child matches them back in.
-    for (const seat of needs.seats) declared.push(await readActivity(seat));
+    // ONE POINT READ PER CHAIR, and per box, in the order each was asked for,
+    // which is the order the child matches them back in.
+    for (const seat of needs.seats) declaredActivity.push(await readActivity(seat));
+    for (const seat of needs.noticeBoxes) declaredNotices.push(await readNoticeBox(seat));
   }
 }

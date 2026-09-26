@@ -702,6 +702,9 @@ ctx.world.timing                 // {due, missedCount} for a clock action, else 
 ctx.world.presence               // ReadonlySet<number> of connected seats
 ctx.world.partition(name)        // the resident root of a partition this walk declared
 ctx.world.emit(scope, payload, line?) // narration, routed by scope
+ctx.world.notify(seat, { payload, line?, whenFull }) // a lasting notice for one seat
+ctx.world.notices(seat)          // what waits in a seat's notice box you declared
+ctx.world.takeNotices(seat)      // ... taken, and the box emptied
 ctx.world.schedule(request)      // ask the host to wake this world later
 ctx.world.cancel(key)            // ask the host to forget a keyed timer
 ctx.world.complete()             // declare the season over
@@ -1009,9 +1012,155 @@ tree back many times inside one real dispatch and a schedule escapes the tree.
 whose serialized form changed, which is the engine's answer and not the host's
 guess), any schedule requests, `ending: "completed"` if the action called
 `ctx.world.complete()`, and `vacated: { seat, player }` if it called
-`ctx.world.vacate(seat)` — see [giving a chair back](#giving-a-chair-back). An
+`ctx.world.vacate(seat)` — see [giving a chair back](#giving-a-chair-back) — and
+`notices: { perSeat, writes }` if it sent or took a notice — see
+[notices](#notices-a-lasting-line-for-one-seat-without-loading-it). An
 empty dirty set with a full event list is legal and normal: an action that only
 tells people something changed nothing durable.
+
+## Notices: a lasting line for one seat, without loading it
+
+An event reaches whoever can see its scope **now**. A player who is not
+connected never sees it, so anything a player must still be told when they come
+back -- mail, a clan alert, "while you were away" -- has to be written into
+state. Before notices, the only state you could write for another seat was that
+seat's partition, and a partition is loaded and written back whole to add one
+line to it. A clan alert to forty members declared forty partitions; sotf queued
+its alerts on a shared partition and copied them out in a clock sweep, so an
+alert took about eighty minutes to arrive (ShufflewickPub #521).
+
+A **notice box** is kept by the host for each seat, beside the partitions: a
+short, bounded list of what a game has left for that seat. Sending to it loads
+nothing.
+
+### Declaring the box
+
+```ts
+world: { maxPlayers: 500, notices: { perSeat: 32 }, actions, view },
+```
+
+`perSeat` is how many notices one seat's box keeps: a whole number from 1 to the
+host's `maxNoticesPerSeat` budget (64 by default). A world declaring more, or a
+fraction, is refused with `bundle-not-a-world` when it is built. A world that
+declares no `notices` keeps no boxes: `notify` is refused with `invalid-notice`,
+and an action that declares a box read is refused with `invalid-world-action`
+when the world is built.
+
+### Sending: `ctx.world.notify`
+
+```ts
+const alert = worldAction<G>('alert')
+  .needs(({ player }) => [clanPartition(player.seat)])
+  .execute((_args, { world, player }) => {
+    for (const seat of membersOf(world.partition(clanPartition(player.seat)))) {
+      world.notify(seat, {
+        payload: { kind: 'alert', from: player.seat },
+        line: `Seat ${player.seat} raised the clan alarm.`,
+        whenFull: 'dropOldest',
+      });
+    }
+  });
+```
+
+Nothing is declared for the recipients and none of their partitions is loaded.
+The send rides home on the result, and the host appends it to the seat's box **in
+the same write as this command's checkpoint** -- a refused command sends
+nothing. Each notice is stamped with the dispatch's `world.now` as `at`.
+
+`line` is the sentence, in the shape `emit`'s narration takes, and absent is
+silence. `payload` is yours and must be plain JSON. One notice may be at most
+`noticeMaxBytes` (1024 by default), measured in UTF-8 as storage measures it,
+and one command may send at most `maxNoticesPerCommand` (100 by default,
+`notice-batch-cap` past it). A line for everybody who is here is still
+`emit("world", ...)`; a notice is for the seats a line must still reach later.
+
+**A connected recipient also hears it at once.** Each notice is delivered live
+as an event on the reserved scope `"notice"`, addressed to that seat alone, the
+way any routed event is delivered: after the checkpoint, to that seat's open
+sockets. It is never part of a view, so views stay shared between seats. The
+name `notice` is reserved: no partition may be called that.
+
+### A full box is your choice, every time
+
+`whenFull` is required and has no default, because the two right answers are
+opposites:
+
+- **`"dropOldest"`** evicts the oldest waiting notice and adds one to the box's
+  `dropped` count, so the reader can say how many were lost. Right for alerts
+  and "while you were away" lines: a clan alert must never be refused because
+  one member has not logged in for a month.
+- **`"refuse"`** refuses this whole command with `notice-box-full`, and the
+  world is left unchanged. Right for a letter that must not vanish.
+
+A `"refuse"` notice needs the recipient's box **declared** with `.noticeBox()`,
+or it is refused with `undeclared-notice-box`. That is what lets it be refused
+at the line: the engine only knows how full a box is if the host answered that
+box before the handler ran. Read it first if you want to tell the player in
+your own words:
+
+```ts
+const mail = worldAction<G>('mail')
+  .chooseFrom('to', { choices: ({ game }) => mailableSeats(game) })
+  .noticeBox(({ args }) => Number(args.to))
+  .execute(({ to }, { world }) => {
+    if (world.notices(Number(to)).entries.length >= MAIL_KEPT) {
+      throw new PlayerFacingError("Their mailbox is full.");
+    }
+    world.notify(Number(to), { payload: { kind: 'mail' }, line: 'You have mail.', whenFull: 'refuse' });
+  });
+```
+
+### Reading: `.noticeBox()`, `notices` and `takeNotices`
+
+`.noticeBox(({ player, args, world }) => seat)` is one round of the same
+[declaration walk](#the-ordered-declaration-walk) `.needs()` and `.about()` use,
+on a seated action or the clock's, and it names **one seat or `null`**. The
+host answers it with a point read of that seat's box -- never its partition.
+Inside `execute`:
+
+- `ctx.world.notices(seat)` answers `{ entries, dropped }` without taking it,
+  including what this dispatch has already sent to it;
+- `ctx.world.takeNotices(seat)` answers the same and empties the box, in the
+  same write as the checkpoint.
+
+Both refuse a box the walk did not name, with `undeclared-notice-box`. Entries
+are oldest first, each `{ at, payload, text?, type? }`.
+
+**Taking is how a game moves notices into its own state.** The usual place is
+the presence `onArrive` hook, which names the arriving seat:
+
+```ts
+const arrive = worldClockAction<G>('arrive')
+  .needs(({ args }) => [characterPartition(Number(args.seat))])
+  .noticeBox(({ args }) => Number(args.seat))
+  .execute((args, { world }) => {
+    const seat = Number(args.seat);
+    const { entries, dropped } = world.takeNotices(seat);
+    const log = world.partition(characterPartition(seat)) as Character;
+    for (const entry of entries) log.remember(entry.text ?? '');
+    if (dropped > 0) log.remember(`...and ${dropped} older notices were lost.`);
+  });
+```
+
+A player who was connected when a notice arrived has already seen its line live;
+whether taking it writes the line again into their log is the game's choice.
+
+### What a box costs, and when it goes
+
+One storage row per seat with something waiting, bounded by
+`perSeat x noticeMaxBytes` (64 KiB at the default ceilings); a seat with an
+empty box has no row. A send is one small read and one write of the recipient's
+row, never a partition. A box is deleted when its chair is handed on, the way
+the chair's activity watermark is: a notice left for the last holder is not the
+next one's to read. On ShufflewickPub it is also deleted when the holder's
+account is erased.
+
+A host drives all of this with one function, `applyNoticeWrites(result.notices,
+readBox)`, which applies a dispatch's sends and takes in order and answers each
+touched seat's box, so every host agrees about what a full box does. The
+`WorldStore` interface carries `noticeBox(seat)` and a checkpoint's `notices`;
+`boardsmith dev` keeps boxes in its local store, and `TestWorld.noticeBox(seat)`
+shows a test what is waiting.
 
 ## What keeps enumeration O(view), and never O(world)
 
@@ -2505,7 +2654,7 @@ thing next time.
 | `declaration-write` | A declaration, a view or a migration's `survey.root` tried to write through the read-only projection. Do it in `execute`, or in the migration's `partition` hook. |
 | `unknown-scope` | An event was addressed to something that is neither `"world"` nor a loaded partition. |
 | `partition-missing` | A declaration named a partition this world's store does not have, and `world.createPartition` did not build one for that name either. Usually a typo, or a partition nothing has created yet. |
-| `invalid-partition-name` | A partition name a store may not hold: empty, over 128 characters, outside `A-Za-z0-9._:@/-`, or one of `__proto__`, `constructor`, `prototype`. |
+| `invalid-partition-name` | A partition name a store may not hold: empty, over 128 characters, outside `A-Za-z0-9._:@/-`, one of `__proto__`, `constructor`, `prototype`, or `notice`, the scope a seat's notices are delivered live on. |
 | `partition-too-large` | A partition serialized past `partitionMaxBytes`. The fix is to split it. See the next section. |
 | `schedule-cap` | This owner's unkeyed pending events are at the cap. Use a key. |
 | `schedule-key-cap` | This owner holds as many distinct keys as one owner may. Reuse a key rather than minting one per action. |
@@ -2521,12 +2670,17 @@ thing next time.
 | `allocation-undeclared` | A host asked for a partition to be created on demand without handing the world its durable id allocation stamp, so any id minted would be a guess. See [a created root's identity is durable](#a-created-roots-identity-is-durable). |
 | `allocation-stale` | A host handed back a stamp standing below an id its own stored bytes hold, so the next id minted would collide with one already written. Raised at the adoption that proves it. Repair by deriving the stamp with `worldIdAllocationOf` over every stored partition. |
 | `child-timeout` | The bundle did not answer a host's call inside its deadline. |
+| `invalid-notice` | `ctx.world.notify` was handed a notice a box cannot hold: a seat outside the world, no `whenFull`, a payload JSON cannot carry, one past `noticeMaxBytes` -- or the world declares no `world.notices`. See [notices](#notices-a-lasting-line-for-one-seat-without-loading-it). |
+| `notice-batch-cap` | One dispatch sent more notices than `maxNoticesPerCommand`. |
+| `notice-box-full` | A notice sent with `whenFull: "refuse"` met a box already holding `perSeat` notices. The command is rolled back. |
+| `undeclared-notice-box` | `notices`, `takeNotices`, or a `"refuse"` notice named a seat whose box no `.noticeBox()` round declared. |
 **`platform`**: a host's own bookkeeping broke. Not yours to fix, and
 deterministic, so a host with a park ladder parks on it:
 `partition-not-resident`, `partition-vanished`, `checkpoint-unknown-partition`,
 `allocation-undeclared`, `allocation-stale`, `vacancy-unheld`, `unknown-child-op`,
 `child-generations-exhausted`, `world-engine-unavailable`, `engine-mismatch`,
-`world-state-unreadable`.
+`world-state-unreadable`, `notice-box-answered-wrong` (a host answered a declared
+notice-box read about a different seat, or not at all).
 
 `engine-mismatch` means a host handed `createWorld` rules whose game class was
 built on a different copy of the BoardSmith engine than the world runner it
@@ -2589,6 +2743,9 @@ makes local behaviour a poor guide to published behaviour.
 | `catchUpRounds` | 8 | Drain batches one command may wait behind on a `ordering: 'chronological'` world. Running out with events still due refuses the command `world-catching-up` rather than applying it over a world still behind. |
 | `maxCandidatesPerSelection` | 200 | Candidates one selection may offer, checked at enumeration. A 500-seat roster is one honest partition and one honest declaration, and enumerating it yields 500 candidates, so this is the guard the declaration itself cannot supply. |
 | `receiptRetentionMs` | 1209600000 (14 days) | How long a committed order's receipt is kept, and so how long a page may be away and still have an uncertain order answered rather than refused. |
+| `maxNoticesPerSeat` | 64 | The most notices one seat's box may keep: the ceiling on a world's own `world.notices.perSeat`. |
+| `noticeMaxBytes` | 1024 | One notice's serialized size, in UTF-8 bytes. With the ceiling above, one seat's box row is at most 64 KiB. |
+| `maxNoticesPerCommand` | 100 | Notices one dispatch may send. Sized for a clan; a line for everybody present is `emit("world", ...)`. |
 
 Overriding a holding cap recomputes both derived fields, so a host that raises
 `maxPlayers` gets a queue sized for it. Naming a derived field explicitly

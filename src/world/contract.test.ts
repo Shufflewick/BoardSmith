@@ -150,6 +150,8 @@ class ReferenceWorldEngine implements WorldEngine {
       // with no world-owned phase in it is an empty list rather than an
       // invented watermark.
       seats: [],
+      // And no notice box: nothing in it reads one (ShufflewickPub #521).
+      noticeBoxes: [],
     };
   }
 

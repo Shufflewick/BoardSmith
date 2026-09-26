@@ -64,6 +64,7 @@ import {
   readWorldDefinition,
   settleDeclaration,
   walkDeclaration,
+  applyNoticeWrites,
   worldRefusal,
   WorldRefusal,
   assertWorldOrder,
@@ -91,6 +92,8 @@ import {
   type WorldOrder,
   type WorldReceipt,
   type WorldTiming,
+  type SettledNoticeBox,
+  type WorldNoticeWrites,
 } from "../index.js";
 import type { WorldHostClock } from "./clock.js";
 import type { WorldStore } from "./store.js";
@@ -849,6 +852,8 @@ export class ResidentWorld {
         // round at all -- `assertWorldAction` refuses one at construction -- so
         // this list is empty by the engine's own rule rather than by omission.
         seats: [],
+        // Nor a notice box: an offer reads none (ShufflewickPub #521).
+        noticeBoxes: [],
       }),
       (name) =>
         this.#readPartition(
@@ -861,6 +866,7 @@ export class ResidentWorld {
       // out of an offer is the engine's rule above, not a host declining to
       // answer.
       (chair) => Promise.resolve(this.#store.activityOf(chair)),
+      (seat) => Promise.resolve({ seat, box: this.#store.noticeBox(seat) }),
     );
     return runner.offersFor(player, {
       now: this.now(),
@@ -1108,7 +1114,7 @@ export class ResidentWorld {
     // because the length is the action's own selection count -- see
     // `walkDeclaration`, and `settleDeclaration` beside it, which is still what
     // a VIEW needs.
-    const declaredActivity = await walkDeclaration(
+    const answered = await walkDeclaration(
       // THE SAME INSTANT THE APPLY BELOW IS STAMPED WITH (#375), so the
       // declaration and the handler it precedes agree about what time it is.
       (supplied, declared) =>
@@ -1134,6 +1140,9 @@ export class ResidentWorld {
       // no host can drive the declaration and then hand the handler a different
       // set of answers.
       (seat) => Promise.resolve(this.#store.activityOf(seat)),
+      // AND ONE POINT READ PER NOTICE BOX IT NAMED (ShufflewickPub #521) -- the
+      // box, never the seat's partition.
+      (seat) => Promise.resolve({ seat, box: this.#store.noticeBox(seat) }),
     );
 
     const owner = player ?? WORLD_OWNER;
@@ -1155,7 +1164,7 @@ export class ResidentWorld {
       // watermark from BEFORE this arrival: the handler is told when this seat
       // was last here, not that it is here now, which it can see for itself.
       activity: this.#activityFor(request.about ?? player),
-      declaredActivity,
+      ...answered,
     });
 
     // THE PARENT IS THE ONLY WRITER. `ctx.schedule()` refused inside the
@@ -1196,6 +1205,10 @@ export class ResidentWorld {
         // AND THIS CHAIR IS HANDED ON (#278), in the same write as the teardown
         // that earned it.
         ...vacancyWrite(result.vacated),
+        // THE NOTICE BOXES THIS DISPATCH SENT TO OR TOOK (ShufflewickPub #521),
+        // in the same write as its effects, so a notice exists exactly when the
+        // command that sent it does.
+        ...(await this.#noticeWrite(result.notices)),
         // THE ENDING IS DURABLE WITH THE EFFECTS THAT DECLARED IT (#395), and
         // the store empties the queue in the same write.
         ...(result.ending === "completed" ? { endedAt: arrivedAt } : {}),
@@ -1218,6 +1231,14 @@ export class ResidentWorld {
       throw rolledBack(error, command.name);
     }
     return result.events;
+  }
+
+  /** The boxes a dispatch's notice writes leave, for its checkpoint (#521). */
+  async #noticeWrite(
+    notices: WorldNoticeWrites | undefined,
+  ): Promise<{ notices?: readonly SettledNoticeBox[] }> {
+    if (notices === undefined) return {};
+    return { notices: await applyNoticeWrites(notices, (seat) => this.#store.noticeBox(seat)) };
   }
 
   // ── the schedule ───────────────────────────────────────────────────────────

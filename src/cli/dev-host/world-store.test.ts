@@ -117,11 +117,25 @@ function tablesOf(path: string): string[] {
 }
 
 /**
+ * THE SAME WORLD, AS LAYOUT 6 LEFT IT (ShufflewickPub #521).
+ *
+ * Layout 7 added one table, the seats' notice boxes, and changed nothing else.
+ */
+function rewindToLayout6(path: string): void {
+  rawExec(
+    path,
+    'DROP TABLE notice_boxes',
+    "UPDATE meta SET value = '6' WHERE key = 'schemaVersion'",
+  );
+}
+
+/**
  * THE SAME WORLD, AS LAYOUT 5 LEFT IT (#339).
  *
  * Layout 6 added one table, the presence ledger, and changed nothing else.
  */
 function rewindToLayout5(path: string): void {
+  rewindToLayout6(path);
   rawExec(
     path,
     'DROP TABLE presence_told',
@@ -665,6 +679,64 @@ describe('the local world store', () => {
     });
   });
 
+  describe("a seat's notice box (ShufflewickPub #521)", () => {
+    const notice = (text: string, at = 1_000) => ({ at, payload: { text }, text });
+    const boxOf = (...texts: string[]) => ({ entries: texts.map((text) => notice(text)), dropped: 0 });
+
+    beforeEach(async () => {
+      await store.createAll(born({ 'room/a': { parentId: 1, json: { n: 0 } } }));
+    });
+
+    it('answers an empty box for a seat nothing was left for', () => {
+      expect(store.noticeBox(3)).toEqual({ entries: [], dropped: 0 });
+    });
+
+    it('writes a box in the same checkpoint as the effects, and reads it back as a point read', async () => {
+      await store.writeCheckpoint(cp({ 'room/a': '{"n":1}' }), {
+        notices: [{ seat: 3, box: { ...boxOf('alarm', 'again'), dropped: 2 } }],
+      });
+      expect(store.noticeBox(3)).toEqual({ ...boxOf('alarm', 'again'), dropped: 2 });
+      expect(store.noticeBox(4)).toEqual({ entries: [], dropped: 0 });
+    });
+
+    it('keeps no row for an emptied box', async () => {
+      await store.writeCheckpoint(cp({}), { notices: [{ seat: 3, box: boxOf('alarm') }] });
+      await store.writeCheckpoint(cp({}), { notices: [{ seat: 3, box: { entries: [], dropped: 0 } }] });
+      expect(rawRows(worldStorePath(root), 'SELECT seat FROM notice_boxes')).toEqual([]);
+    });
+
+    it('writes no box when the checkpoint is refused', async () => {
+      await expect(
+        store.writeCheckpoint(cp({ 'room/ghost': '{}' }), { notices: [{ seat: 3, box: boxOf('lost') }] }),
+      ).rejects.toThrow();
+      expect(store.noticeBox(3)).toEqual({ entries: [], dropped: 0 });
+    });
+
+    it("drops a chair's box when the clock hands the chair on, and only then", async () => {
+      store.seat('player-a', 1, SEATED_AT);
+      await store.writeCheckpoint(cp({}), {
+        notices: [
+          { seat: 1, box: boxOf('for a') },
+          { seat: 2, box: boxOf('for b') },
+        ],
+      });
+      // Seat 2's release matches nobody, so its box stands; seat 1's is held.
+      for (const vacate of [{ seat: 2, player: 'player-b' }, { seat: 1, player: 'player-a' }]) {
+        await store.writeCheckpoint(cp({}), { vacate });
+      }
+      expect(store.noticeBox(1)).toEqual({ entries: [], dropped: 0 });
+      expect(store.noticeBox(2)).toEqual(boxOf('for b'));
+    });
+
+    it('is still there for the next host to open this world', async () => {
+      await store.writeCheckpoint(cp({}), { notices: [{ seat: 3, box: boxOf('alarm') }] });
+      store.close();
+      const reopened = openWorldStore(worldStorePath(root), BUDGETS);
+      expect(reopened.noticeBox(3)).toEqual(boxOf('alarm'));
+      reopened.close();
+    });
+  });
+
   /**
    * #225: A WORLD SOMEBODY IS PLAYING, WRITTEN UNDER AN OLDER LAYOUT.
    *
@@ -723,7 +795,7 @@ describe('the local world store', () => {
       rewind(worldStorePath(root));
       const reopened = openWorldStore(worldStorePath(root), BUDGETS);
       await expectNothingLost(reopened);
-      expect(layoutOf(worldStorePath(root))).toBe('6');
+      expect(layoutOf(worldStorePath(root))).toBe('7');
       return reopened;
     }
 
@@ -746,6 +818,19 @@ describe('the local world store', () => {
           // where it was measured from before the column existed.
           tenancy: 'held',
         });
+      } finally {
+        reopened.close();
+      }
+    });
+
+    it('upgrades layout 6 to layout 7 with every notice box empty, losing nothing (ShufflewickPub #521)', async () => {
+      const reopened = await upgradedFrom(rewindToLayout6);
+      try {
+        expect(reopened.noticeBox(7)).toEqual({ entries: [], dropped: 0 });
+        await reopened.writeCheckpoint(cp({}), {
+          notices: [{ seat: 7, box: { entries: [{ at: 1, payload: null, text: 'hi' }], dropped: 0 } }],
+        });
+        expect(reopened.noticeBox(7).entries).toHaveLength(1);
       } finally {
         reopened.close();
       }
@@ -789,7 +874,7 @@ describe('the local world store', () => {
       const reopened = openWorldStore(worldStorePath(root), BUDGETS);
       try {
         await expectNothingLost(reopened);
-        expect(layoutOf(worldStorePath(root))).toBe('6');
+        expect(layoutOf(worldStorePath(root))).toBe('7');
       } finally {
         reopened.close();
       }
@@ -833,7 +918,7 @@ describe('the local world store', () => {
       const retried = openWorldStore(worldStorePath(root), BUDGETS);
       try {
         await expectNothingLost(retried);
-        expect(layoutOf(worldStorePath(root))).toBe('6');
+        expect(layoutOf(worldStorePath(root))).toBe('7');
       } finally {
         retried.close();
       }
@@ -845,7 +930,7 @@ describe('the local world store', () => {
       rawExec(worldStorePath(root), "UPDATE meta SET value = '2' WHERE key = 'schemaVersion'");
 
       expect(() => openWorldStore(worldStorePath(root), BUDGETS)).toThrow(
-        /layout 2, and this BoardSmith reads layout 6.*no upgrade/s,
+        /layout 2, and this BoardSmith reads layout 7.*no upgrade/s,
       );
       expect(layoutOf(worldStorePath(root))).toBe('2');
       // The bug that made a refusal destructive: the schema was created before
@@ -913,12 +998,12 @@ describe('the local world store', () => {
 
     it('refuses a store written by a NEWER BoardSmith, and says which way to move', async () => {
       store.close();
-      rawExec(worldStorePath(root), "UPDATE meta SET value = '7' WHERE key = 'schemaVersion'");
+      rawExec(worldStorePath(root), "UPDATE meta SET value = '8' WHERE key = 'schemaVersion'");
 
       expect(() => openWorldStore(worldStorePath(root), BUDGETS)).toThrow(
-        /layout 7, and this BoardSmith reads layout 6.*newer BoardSmith/s,
+        /layout 8, and this BoardSmith reads layout 7.*newer BoardSmith/s,
       );
-      expect(layoutOf(worldStorePath(root))).toBe('7');
+      expect(layoutOf(worldStorePath(root))).toBe('8');
     });
 
     it('closes the database when it refuses to open one', async () => {

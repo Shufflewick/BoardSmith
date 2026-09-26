@@ -70,6 +70,7 @@
  */
 import type {
   DeclaredSeatActivityStamp,
+  WorldWalkAnswers,
   SeatActivityStamp,
   StoredPartition,
   WorldDispatchWhen,
@@ -91,6 +92,7 @@ import type {
 } from "./migration.js";
 import { declaredSources } from "./migration.js";
 import type { ScheduleAllowance } from "./schedule-api.js";
+import type { DeclaredNoticeBox } from "./notices.js";
 import { WorldRefusal, worldRefusal } from "./refusals.js";
 
 /** A scheduled event's timing, or `null` for a player's command. */
@@ -886,6 +888,11 @@ export interface WorldApplyRequest {
    * honest thing to hand its handler is nothing to read.
    */
   readonly declaredActivity: readonly DeclaredSeatActivityStamp[];
+  /**
+   * EVERY NOTICE BOX THIS DISPATCH'S WALK NAMED, ANSWERED (ShufflewickPub
+   * #521). What the walk collected, handed over whole, on either road.
+   */
+  readonly declaredNotices: readonly DeclaredNoticeBox[];
 }
 
 /**
@@ -915,6 +922,9 @@ export interface WorldDispatchDeclaration {
   readonly partitions: readonly string[];
   /** Chairs the parent must answer a point read for, at most one per round. */
   readonly seats: readonly number[];
+  /** Seats whose notice box the parent must answer a point read for, at most
+   *  one per round (ShufflewickPub #521). */
+  readonly noticeBoxes: readonly number[];
 }
 
 /**
@@ -1127,14 +1137,14 @@ export function createWorldRunner(
       player: string | null,
       supplied: Readonly<Record<string, StoredPartition>>,
       when: WorldDispatchWhen,
-      declared: readonly DeclaredSeatActivityStamp[],
+      answered: WorldWalkAnswers,
     ): Promise<WorldDispatchDeclaration> {
       // WHAT THE LAST ROUND ASKED FOR, MADE RESIDENT (#122). Adopted rather
       // than merely held, because a declaration reads through the ENGINE's live
       // tree and bytes sitting in the store answer nothing.
       await adopt(engine, store, supplied);
       const resident = residentNames(engine);
-      const needs = engine.commandNeeds(player, command, when, declared);
+      const needs = engine.commandNeeds(player, command, when, answered);
       return {
         partitions: needs.partitions.filter(
           (name) => !store.holds(name) && !resident.has(name),
@@ -1144,6 +1154,8 @@ export function createWorldRunner(
         // resident, so the engine's own ordered match against what the host has
         // already answered is the whole of the bookkeeping.
         seats: needs.seats,
+        // Nor a notice box, for the same reason (ShufflewickPub #521).
+        noticeBoxes: needs.noticeBoxes,
       };
     },
 
@@ -1529,12 +1541,14 @@ export function createWorldRunner(
             presence: request.presence,
             activity: request.activity,
             declaredActivity: request.declaredActivity,
+            declaredNotices: request.declaredNotices,
           })
         : engine.onEvent(request.command, request.timing, {
             allowance: request.allowance,
             presence: request.presence,
             activity: request.activity,
             declaredActivity: request.declaredActivity,
+            declaredNotices: request.declaredNotices,
           });
     },
   };
@@ -1813,17 +1827,18 @@ export interface WorldRunnerHandle {
    * first round, which is every declaration a world without location state ever
    * makes.
    *
-   * `declared` is the other half of the same idea, for the other kind of round:
-   * every chair the parent has answered a point read for so far, in the order
-   * it was asked. The child never remembers one between calls, because the
-   * store the answers come out of is the parent's.
+   * `answered` is the other half of the same idea, for the other kinds of
+   * round: every chair and every notice box the parent has answered a point
+   * read for so far, in the order each was asked. The child never remembers
+   * one between calls, because the store the answers come out of is the
+   * parent's.
    */
   declare(
     command: WorldCommand,
     player: string | null,
     supplied: Readonly<Record<string, StoredPartition>>,
     when: WorldDispatchWhen,
-    declared: readonly DeclaredSeatActivityStamp[],
+    answered: WorldWalkAnswers,
   ): Promise<WorldDispatchDeclaration>;
   apply(request: WorldApplyRequest): Promise<WorldCommandResult>;
 }

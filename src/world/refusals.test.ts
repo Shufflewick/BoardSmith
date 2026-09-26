@@ -200,7 +200,7 @@ describe("#37 item 5 — the world refusal taxonomy", () => {
     const runner = createWorldRunner(engineWith([]), createInlinedPartitionStore());
 
     try {
-      await runner.declare({ name: "nope", args: {} }, "p1", {}, arrival(0), []);
+      await runner.declare({ name: "nope", args: {} }, "p1", {}, arrival(0), { declaredActivity: [], declaredNotices: [] });
       expect.unreachable("declare accepted an action this world does not have");
     } catch (error) {
       expect(error).toBeInstanceOf(WorldRefusal);
@@ -229,15 +229,16 @@ describe("#37 item 5 — the world refusal taxonomy", () => {
         null,
         {},
         { kind: "scheduled", timing: { due: 0, missedCount: 0 } },
-        [],
+        { declaredActivity: [], declaredNotices: [] },
       ),
     ).toEqual({
       partitions: [],
       seats: [],
+      noticeBoxes: [],
     });
 
     try {
-      await runner.declare({ name: "settle", args: {} }, "p1", {}, arrival(0), []);
+      await runner.declare({ name: "settle", args: {} }, "p1", {}, arrival(0), { declaredActivity: [], declaredNotices: [] });
       expect.unreachable("declare accepted the clock's own action from a player");
     } catch (error) {
       expect(error).toBeInstanceOf(WorldRefusal);
