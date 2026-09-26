@@ -23,6 +23,13 @@ import { SeededRandom } from '../utils/random.js';
 type GameClass<G extends Game = Game> = new (options: GameOptions) => G;
 
 /**
+ * What became of a move the search made in the world it is in (#421).
+ * `refusedAfterChanges` is a refusal that may have changed the game first, so
+ * the world matches no position the move sequence can reach.
+ */
+type SearchMoveOutcome = 'made' | 'refused' | 'refusedAfterChanges';
+
+/**
  * MCTS (Monte-Carlo Tree Search) Bot
  *
  * Implements the UCT algorithm for game-agnostic bot:
@@ -374,21 +381,29 @@ export class MCTSBot<G extends Game = Game> {
       completedIterations = i + 1;
 
       // SELECT: Walk down tree, applying moves to searchGame, collecting tree moves for RAVE
-      const { leaf, treeMoves } = this.selectWithPath(root);
+      const selection = this.selectWithPath(root);
 
       // EXPAND: Try one unexplored move, creating child
-      const child = this.expandIncremental(leaf);
-
-      // Add expanded move to treeMoves for RAVE if expansion created a new node
-      if (child !== leaf && child.parentMove) {
-        treeMoves.push({ move: child.parentMove, player: leaf.currentPlayer });
-      }
+      const child = selection.spoiled ? null : this.expandIncremental(selection.leaf);
 
       // PLAYOUT: Random simulation from current state, collect playout moves for RAVE
-      const { score, playoutMoves } = this.playoutIncremental(child);
+      const playout = child ? this.playoutIncremental() : null;
 
-      // BACKPROPAGATE: Update stats, RAVE table, and undo back to root
-      this.backpropagateWithUndo(child, score, playoutMoves, treeMoves);
+      if (child && playout) {
+        // Add expanded move to treeMoves for RAVE if expansion created a new node
+        const { leaf, treeMoves } = selection;
+        if (child !== leaf && child.parentMove) {
+          treeMoves.push({ move: child.parentMove, player: leaf.currentPlayer });
+        }
+
+        // BACKPROPAGATE: Update stats, RAVE table, and undo back to root
+        this.backpropagateWithUndo(child, playout.score, playout.playoutMoves, treeMoves);
+      } else {
+        // A refused move changed part of this world before it was refused
+        // (#421), so the position no longer describes any node. Nothing from
+        // this iteration is scored; the next one starts from a fresh world.
+        this.restoreSearchGameToRoot();
+      }
 
       // Yield to the event loop in async mode (every iteration). Prefer the
       // Scheduler API when present: inside a Cloudflare Worker, Date.now() is
@@ -478,23 +493,71 @@ export class MCTSBot<G extends Game = Game> {
    * SELECTION with path tracking: Walk down tree using UCT, applying moves to searchGame.
    * After this completes, searchGame is positioned at the returned leaf node's state.
    * Returns the leaf node and the tree moves traversed (for RAVE).
+   *
+   * The walk stops at a node whose turn is not the one this world is on
+   * (#421): below it, every child is a move for a seat that is not to move
+   * here. `spoiled` means a refused move changed this world before it was
+   * refused, so it matches no node and the iteration has to be dropped.
    */
-  private selectWithPath(node: MCTSNode): { leaf: MCTSNode; treeMoves: Array<{ move: BotMove; player: number }> } {
+  private selectWithPath(node: MCTSNode): {
+    leaf: MCTSNode;
+    treeMoves: Array<{ move: BotMove; player: number }>;
+    spoiled: boolean;
+  } {
     const treeMoves: Array<{ move: BotMove; player: number }> = [];
 
-    for (;;) {
+    while (this.turnMatchesWorld(node)) {
       const eligible = this.eligibleChildrenForWorld(node);
       if (node.untriedMoves.length > 0 || eligible.length === 0) break;
       const child = this.selectChild(node, eligible);
-      // Track tree path move for RAVE (player is from parent node where move was made)
-      if (child.parentMove) {
-        treeMoves.push({ move: child.parentMove, player: node.currentPlayer });
-      }
       // Apply the child's move to searchGame to descend
-      this.applyMoveToSearchGame(child);
+      const outcome = this.applyMoveToSearchGame(child);
+      if (outcome === 'refusedAfterChanges') return { leaf: node, treeMoves, spoiled: true };
+      // A clean refusal left the world at `node`, so the walk ends there.
+      if (outcome === 'refused') break;
+      // Track tree path move for RAVE (player is from parent node where move was made)
+      treeMoves.push({ move: child.parentMove!, player: node.currentPlayer });
       node = child;
     }
-    return { leaf: node, treeMoves };
+    return { leaf: node, treeMoves, spoiled: false };
+  }
+
+  /**
+   * Whether the world loaded into `searchGame` has the same seat to move at
+   * `node`, and the same end-of-game answer, as the world `node` was grown in
+   * (#421).
+   *
+   * A node is reached by a sequence of moves, but who moves next is a fact
+   * about the world those moves were made in. Under determinization each
+   * iteration samples a new one, and the same Go Fish ask keeps the asker's
+   * turn in a world where the target held the rank and passes it in one where
+   * they did not. A game whose moves draw on randomness diverges the same way
+   * without a sampler. When the seat differs, the node's children are moves
+   * for a seat that is not to move here, so none of them may be made, and no
+   * move for the other seat may be added under a node that scores its
+   * children for this one.
+   */
+  private turnMatchesWorld(node: MCTSNode): boolean {
+    const live = this.worldFlowState();
+    return (
+      Boolean(live.complete) === Boolean(node.flowState.complete) &&
+      this.getCurrentPlayerFromFlowState(live) === node.currentPlayer
+    );
+  }
+
+  /**
+   * The flow state of the world loaded into `searchGame`, which is the only
+   * account of whose turn it is that holds in this iteration (#421).
+   */
+  private worldFlowState(): FlowState {
+    const state = this.searchGame?.getFlowState();
+    if (!state) {
+      throw new Error(
+        'The bot has no game position to search: its search copy of the game has no flow. ' +
+          'This is a BoardSmith bug; please report it with the game that triggered it.',
+      );
+    }
+    return state;
   }
 
   /**
@@ -533,9 +596,9 @@ export class MCTSBot<G extends Game = Game> {
    * A root under a forced threat response is left alone: the game said MUST.
    */
   private refreshNodeForWorld(node: MCTSNode): Set<string> {
-    const enumerated = (node.flowState.complete || !this.searchGame)
-      ? []
-      : this.enumerateMovesForSimulation(this.searchGame, node.flowState);
+    // The world's own flow state, not the one `node` was grown in (#421).
+    const live = this.worldFlowState();
+    const enumerated = live.complete ? [] : this.enumerateMovesForSimulation(this.searchGame!, live);
 
     const forced = node.parent === null ? this.forcedRootMoveKeys : undefined;
     const legalMoves = forced
@@ -558,7 +621,7 @@ export class MCTSBot<G extends Game = Game> {
     );
     node.untriedMoves = node.allMoves.filter((move) => {
       const key = this.getMoveKey(move);
-      return legal.has(key) && !explored.has(key);
+      return legal.has(key) && !explored.has(key) && !node.refusedMoveKeys.has(key);
     });
 
     return legal;
@@ -648,9 +711,7 @@ export class MCTSBot<G extends Game = Game> {
    * Apply a node's parent move to searchGame.
    * Used during selection to descend the tree.
    */
-  private applyMoveToSearchGame(node: MCTSNode): void {
-    if (!node.parentMove || !this.searchGame || !node.parent) return;
-
+  private applyMoveToSearchGame(node: MCTSNode): SearchMoveOutcome {
     // T-159-07 / F-07: capture the pre-reveal simultaneous baseline during
     // SELECT descent too (not only in expand/playout). `searchGame` is currently
     // at `node.parent`'s state; if that is the START of a fresh simultaneous
@@ -659,60 +720,72 @@ export class MCTSBot<G extends Game = Game> {
     // the baseline undefined, so the 3rd+ co-decider re-enumerated against the
     // live (reveal-leaking) state — the sequentialized-reveal defect for ≥3
     // co-deciders. The `every(!completed)` guard makes it idempotent mid-step.
-    this.maybeCaptureSimultaneousBaseline(node.parent.flowState);
+    this.maybeCaptureSimultaneousBaseline(this.worldFlowState());
+    return this.makeSearchMove(node.parentMove!).outcome;
+  }
 
-    const currentPlayer = this.getCurrentPlayerFromFlowState(node.parent.flowState);
+  /**
+   * Make `move` in `searchGame` for the seat this world has to move, and say
+   * whether the engine took it (#421).
+   *
+   * A refused move does not throw: the flow stays where it was and reports the
+   * refusal on the state it returns. The search used to read that state as the
+   * position the move led to, so every refused move became a child that scored
+   * the unchanged position as if the move had been played.
+   */
+  private makeSearchMove(move: BotMove): { outcome: SearchMoveOutcome; flowState: FlowState } {
+    const game = this.searchGame!;
+    const acting = this.getCurrentPlayerFromFlowState(this.worldFlowState());
+    let flowState: FlowState;
     try {
-      this.searchGame.continueFlow(node.parentMove.action, this.rebindArgs(node.parentMove.args), currentPlayer);
-    } catch (error) {
-      // Move failed - this shouldn't happen for already-explored nodes
-      // but handle gracefully
+      flowState = game.continueFlow(move.action, this.rebindArgs(move.args), acting);
+    } catch {
+      // The flow itself threw, possibly after the move changed the game.
+      return { outcome: 'refusedAfterChanges', flowState: this.worldFlowState() };
     }
+    if (flowState.actionError === undefined) return { outcome: 'made', flowState };
+    return {
+      outcome: flowState.actionPartiallyApplied ? 'refusedAfterChanges' : 'refused',
+      flowState,
+    };
   }
 
   /**
    * EXPAND with incremental state: Apply one unexplored move to searchGame.
    * The searchGame is already positioned at the node's state from selection.
-   * Returns the new child node (or current node if expansion fails).
+   * Returns the new child node, the node itself when there is nothing to grow
+   * here or the move was refused, or null when a refused move changed the
+   * world first (the iteration is spoiled, #421).
    */
-  private expandIncremental(node: MCTSNode): MCTSNode {
-    if (node.untriedMoves.length === 0 || node.flowState.complete) {
+  private expandIncremental(node: MCTSNode): MCTSNode | null {
+    if (node.untriedMoves.length === 0 || node.flowState.complete || !this.turnMatchesWorld(node)) {
       return node;
     }
 
-    if (!this.searchGame) {
-      return node;
-    }
-
-    // T-159-07: if `node.flowState` is the start of a fresh simultaneous step
-    // (no co-decider has acted yet), snapshot searchGame now -- BEFORE this
-    // move mutates it -- so later co-deciders' enumeration in this step
-    // reads the pre-reveal state, not this move's committed effects.
-    this.maybeCaptureSimultaneousBaseline(node.flowState);
+    // T-159-07: if the world is at the start of a fresh simultaneous step (no
+    // co-decider has acted yet), snapshot searchGame now -- BEFORE this move
+    // mutates it -- so later co-deciders' enumeration in this step reads the
+    // pre-reveal state, not this move's committed effects.
+    this.maybeCaptureSimultaneousBaseline(this.worldFlowState());
 
     // Pick first untried move (ordering determined at node creation by moveOrdering hook)
     const move = node.untriedMoves.shift()!;
 
     // Record command count before applying move
-    const commandCountBefore = this.searchGame.commandHistory.length;
+    const commandCountBefore = this.searchGame!.commandHistory.length;
 
-    // Use the current player from flow state (handles simultaneous actions)
-    const currentPlayer = this.getCurrentPlayerFromFlowState(node.flowState);
-
-    // Try to apply the move
-    let flowState: FlowState;
-    try {
-      flowState = this.searchGame.continueFlow(move.action, this.rebindArgs(move.args), currentPlayer);
-    } catch (error) {
-      // Move failed during simulation - return current node
-      return node;
+    const { outcome, flowState } = this.makeSearchMove(move);
+    if (outcome !== 'made') {
+      // Not a move this node can make: never offer it here again.
+      node.refusedMoveKeys.add(this.getMoveKey(move));
+      return outcome === 'refused' ? node : null;
     }
 
     // Calculate how many commands this move generated
-    const commandCount = this.searchGame.commandHistory.length - commandCountBefore;
+    const commandCount = this.searchGame!.commandHistory.length - commandCountBefore;
 
     // Get available moves for the NEXT player (whoever's turn it is now)
-    const newMoves = flowState.complete ? [] : this.enumerateMovesForSimulation(this.searchGame, flowState);
+    const newMoves = flowState.complete ? [] : this.enumerateMovesForSimulation(this.searchGame!, flowState);
 
     // Create child node with command count (no snapshot needed!)
     const child = this.createNode(flowState, node, move, newMoves, commandCount);
@@ -730,16 +803,20 @@ export class MCTSBot<G extends Game = Game> {
    * PLAYOUT with incremental state: Simulate from searchGame's current position.
    * The searchGame is already positioned at the node's state.
    * Plays random moves (or uses playoutPolicy if available) until the game ends or playoutDepth is reached.
-   * Returns a score in [0,1] and the moves played during playout with player info (for RAVE).
+   * Returns a score in [0,1] and the moves played during playout with player info (for RAVE),
+   * or null when a refused move changed the world before it was refused (#421), which leaves
+   * a position that is no position the game can reach.
    */
-  private playoutIncremental(node: MCTSNode): { score: number; playoutMoves: Array<{ move: BotMove; player: number }> } {
+  private playoutIncremental(): { score: number; playoutMoves: Array<{ move: BotMove; player: number }> } | null {
     const playoutMoves: Array<{ move: BotMove; player: number }> = [];
 
     if (!this.searchGame) {
       return { score: 0.5, playoutMoves };
     }
 
-    let flowState = node.flowState;
+    // The world's own flow state: the node the playout starts from may have
+    // been grown in a world where another seat was to move (#421).
+    let flowState = this.worldFlowState();
     let depth = 0;
 
     while (!flowState.complete && depth < this.config.playoutDepth) {
@@ -765,16 +842,14 @@ export class MCTSBot<G extends Game = Game> {
         move = this.rng.pick(moves);
       }
 
+      const made = this.makeSearchMove(move);
+      if (made.outcome === 'refusedAfterChanges') return null;
+      // A clean refusal changed nothing: evaluate the position as it stands.
+      if (made.outcome === 'refused') break;
+      flowState = made.flowState;
+
       // Track move for RAVE update
       playoutMoves.push({ move, player: currentPlayer });
-
-      // Try to apply the move - if it fails, stop the playout
-      try {
-        flowState = this.searchGame.continueFlow(move.action, this.rebindArgs(move.args), currentPlayer);
-      } catch (error) {
-        // Move failed during simulation - stop playout and evaluate current state
-        break;
-      }
       depth++;
     }
 
@@ -1449,6 +1524,7 @@ export class MCTSBot<G extends Game = Game> {
       isProven,
       isDisproven,
       availability: 0,
+      refusedMoveKeys: new Set(),
     };
   }
 

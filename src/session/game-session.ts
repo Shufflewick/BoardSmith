@@ -326,6 +326,10 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
   readonly #tutorialDefinition?: TutorialDefinition;
   /** Circuit breaker: consecutive bot failures before giving up */
   #botConsecutiveFailures = 0;
+  /** A bot check is under way; see #checkBotTurn. */
+  #botCheckRunning = false;
+  /** The game changed while a bot check ran, so it must check again (#421). */
+  #botRecheckRequested = false;
   /** Injectable persistence-failure hook (ERR-03). Never rethrown — see #persistSafely. */
   #onPersistenceError?: (error: PersistenceErrorEntry, consecutiveFailures: number, healthy: boolean) => void;
   /** Most recent sanitized persistence failure, or null if none has occurred yet. */
@@ -1976,17 +1980,46 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
   }
 
   /**
-   * Check if bot should play and execute move.
-   * Uses a circuit breaker to stop retrying after repeated failures,
-   * preventing infinite loops when the bot can't clone the game state.
+   * Check if a bot should play, and make its move.
+   *
+   * A check runs again only when there is something new to check: the bot
+   * moved, or the game changed while this check ran (the check that change
+   * scheduled finds this one running and asks for another). Nothing else
+   * changes what a bot would do, so any other re-run is a loop (#421): a
+   * refused move asked for again and again, or a check that polls without
+   * pause while a human is to move.
    */
   async #checkBotTurn(): Promise<void> {
     if (!this.#botController) return;
+    if (this.#botCheckRunning) {
+      this.#botRecheckRequested = true;
+      return;
+    }
+    this.#botCheckRunning = true;
+    let checkAgain = false;
+    try {
+      checkAgain = await this.#playBotTurn();
+    } finally {
+      this.#botCheckRunning = false;
+      if (checkAgain || this.#botRecheckRequested) {
+        this.#botRecheckRequested = false;
+        this.#scheduleBotCheck();
+      }
+    }
+  }
 
+  /**
+   * Let the due bot seat move, if one is due. Returns whether to check again
+   * straight away: after a move, or after a throw while the circuit breaker
+   * still allows a retry (it stops after repeated failures, preventing
+   * infinite loops when the bot can't clone the game state).
+   */
+  async #playBotTurn(): Promise<boolean> {
+    const botController = this.#botController!;
     let move: { action: string; player: number; args: Record<string, unknown> } | null = null;
 
     try {
-      move = await this.#botController.checkAndPlay(
+      move = await botController.checkAndPlay(
         this.#runner,
         this.#storedState.actionHistory,
         async (action, player, args) => {
@@ -2016,6 +2049,11 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
             if (anyAdvanced) this.broadcast();
             return true;
           }
+          console.error(
+            `[BoardSmith] The bot for seat ${player} chose '${action}' and the game refused it: ` +
+              `${result.error ?? 'no reason given'}. The bot will not try again until the game changes. ` +
+              `Check the action's selections and the bot's move enumeration for this seat.`,
+          );
           return false;
         },
         // Demo narration hook: undefined outside demo mode (no-op to standard bot turns).
@@ -2032,25 +2070,16 @@ export class GameSession<G extends Game = Game, TSession extends SessionInfo = S
             `The game may have non-deterministic flow logic (e.g., an execute block that ` +
             `completes the game during replay). Last error: ${error instanceof Error ? error.message : error}`
           );
-          return;
+          return false;
         }
-        this.#scheduleBotCheck();
+        return true;
       }
-      return;
+      return false;
     }
 
     // If bot made a move, reset failure counter and check again
-    if (move) {
-      this.#botConsecutiveFailures = 0;
-      this.#scheduleBotCheck();
-    } else {
-      // Even if no move was made (e.g., turn changed during delay, or blocked by #thinking),
-      // we should still check if another bot player needs to act
-      const flowState = this.#runner.getFlowState();
-      if (flowState?.awaitingInput && !flowState.complete) {
-        this.#scheduleBotCheck();
-      }
-    }
+    if (move) this.#botConsecutiveFailures = 0;
+    return move !== null;
   }
 
   // ============================================

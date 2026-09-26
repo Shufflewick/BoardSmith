@@ -198,6 +198,12 @@ const session = GameSession.create({
 > `botSeats` declares which seats are bots (`players`) and the difficulty (`level`).
 > The game's custom objectives/threat hooks go in `botStrategy`.
 
+A bot moves when the game hands it a turn, and a move the game refuses is
+reported once on the console, naming the seat and the game's reason. The bot is
+not asked again until the game changes, so a refused move never turns into a
+retry loop. `boardsmith dev`'s host behaves the same way, and holds back only
+the seat whose move was refused: other bot seats keep playing (#421).
+
 ## BotConfig Options
 
 ```typescript
@@ -365,6 +371,12 @@ against the sampler rather than swallowed.
 - **One tree across every sample.** Nodes are keyed by the acting seat's move
   history, not by concrete state, so the tree survives re-sampling. A move's
   value ends up averaged over the worlds it was searched in.
+- **Whose turn it is is per world.** The same move can keep the turn in one
+  sample and pass it in another (a Go Fish ask that finds the rank, or does
+  not). The search reads who is to move from the world it is in, never from
+  the world a node was first grown in, and stops descending at a node whose
+  seat to move differs, so it never makes or grows a move for a seat that is
+  not to move (#421).
 - **Legality is per world.** A move one sample makes legal and another does not
   is selected only in the samples that offer it, and its exploration term
   divides by how often it was ON OFFER rather than by parent visits — otherwise

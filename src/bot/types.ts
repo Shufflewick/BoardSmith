@@ -150,6 +150,12 @@ export interface MCTSNode {
   allMoves: BotMove[];
   /** Moves that haven't been tried yet (subset of allMoves) */
   untriedMoves: BotMove[];
+  /**
+   * Keys of moves the engine refused when the search made them here (#421).
+   * They are never tried at this node again: a refused move is not a move, and
+   * under determinization the untried list is rebuilt every visit.
+   */
+  refusedMoveKeys: Set<string>;
   /** Number of times this node has been visited */
   visits: number;
   /** Cumulative value (wins) from this node */

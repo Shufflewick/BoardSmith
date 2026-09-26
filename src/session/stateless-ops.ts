@@ -218,6 +218,7 @@ export interface OpResult {
   validElements?: unknown[];
   multiSelect?: { min: number; max?: number };
   botMoved?: boolean;
+  /** The bot seat that moved, or on a refused `botTurn`, the seat whose move was refused. */
   botPlayer?: number;
   /**
    * A bot seat that was due but could not move (#29).
@@ -781,7 +782,12 @@ async function handleBotTurn(
   const actionResult = runner.performAction(move.action, botPlayer, move.args);
 
   if (!actionResult.success) {
-    return errorResult(actionResult.error ?? 'bot action failed', 'bundle', actionResult.errorCode);
+    // Names the seat, so a driver can hold that seat back until the game
+    // changes instead of asking it for the same refused move again (#421).
+    return {
+      ...errorResult(actionResult.error ?? 'bot action failed', 'bundle', actionResult.errorCode),
+      botPlayer,
+    };
   }
 
   return {
