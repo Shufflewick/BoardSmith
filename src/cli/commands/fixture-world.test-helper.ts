@@ -25,6 +25,7 @@ import { INSTALLED_MODULES } from '../../testing/installed-modules.test-helper.j
 import { freePort } from './free-port.test-helper.js';
 import { hostHoldings } from '../dev-host/shutdown.js';
 import { loadWorldRuntime, startWorldDevServer } from './dev-world.js';
+import { commandBuildDir } from '../lib/project-paths.js';
 
 /** This checkout, which is the library every fixture resolves against. */
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
@@ -120,7 +121,7 @@ function writeWorldFixture(spec: FixtureWorldSpec): string {
  */
 async function startWorldHost(fixture: string, displayName: string) {
   const port = await freePort();
-  const tempDir = join(fixture, '.boardsmith');
+  const tempDir = commandBuildDir(fixture, 'dev');
   mkdirSync(tempDir, { recursive: true });
   const rulesPath = join(fixture, 'src', 'rules');
   const host = await startWorldDevServer({

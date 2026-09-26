@@ -22,6 +22,7 @@ import {
 } from '../lib/bundle-limits.js';
 import { readDistDir, createZip } from '../lib/zip.js';
 import { requireGameProject, resolveRulesDir } from '../lib/game-project.js';
+import { commandBuildDir } from '../lib/project-paths.js';
 import { resolveWorldMode, WORLD_AUTHORING_DOC } from '../lib/world-project.js';
 import { GAME_BACKENDS, capabilityContradictions, isGameBackend } from '../../session/index.js';
 import type { GameDefinition } from '../../session/index.js';
@@ -1229,7 +1230,7 @@ async function withProjectBundle<T>(
 ): Promise<T> {
   const config = JSON.parse(readFileSync(join(cwd, 'boardsmith.json'), 'utf-8')) as { paths?: { rules?: string } };
   const rulesPath = resolveRulesDir(cwd, config);
-  const tempDir = join(cwd, '.boardsmith', 'validate-tmp');
+  const tempDir = commandBuildDir(cwd, 'validate');
   mkdirSync(tempDir, { recursive: true });
   try {
     const { importRuntimeBundle, getProjectContext, cliSourceFile, toPosix } = await import('./game-runtime.js');

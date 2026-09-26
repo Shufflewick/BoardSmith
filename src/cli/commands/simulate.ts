@@ -1,5 +1,4 @@
-import { existsSync, readFileSync, mkdirSync, rmSync } from 'node:fs';
-import { join } from 'node:path';
+import { readFileSync, mkdirSync, rmSync } from 'node:fs';
 import chalk from 'chalk';
 
 import type { Game, GameOptions } from '../../engine/index.js';
@@ -14,6 +13,7 @@ import { validateGameOptionSelection, type DevOptionDef } from '../dev-host/conf
 import type { GameOptionDefinition } from '../../session/types.js';
 import { requireGameProject, resolveRulesDir, requireRulesIndex } from '../lib/game-project.js';
 import { simulateReplayCommand } from '../lib/replay-command.js';
+import { commandBuildDir } from '../lib/project-paths.js';
 
 interface SimulateOptions {
   games: string;
@@ -216,10 +216,9 @@ export async function simulateCommand(options: SimulateOptions): Promise<void> {
 
   const context = getProjectContext(cwd);
 
-  const tempDir = join(cwd, '.boardsmith');
-  if (!existsSync(tempDir)) {
-    mkdirSync(tempDir, { recursive: true });
-  }
+  // Simulate's own build directory, removed below; never `.boardsmith/` itself (#391).
+  const tempDir = commandBuildDir(cwd, 'simulate');
+  mkdirSync(tempDir, { recursive: true });
 
   let gameDefinition;
   try {

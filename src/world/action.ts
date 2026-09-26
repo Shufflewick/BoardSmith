@@ -619,7 +619,7 @@ export type WorldQuote = (
  *
  * UNDER `Symbol.for`, because THE GAME AND THE HOST ARE NOT THE SAME COPY OF
  * THIS MODULE. A published bundle compiles the library INTO itself -- the local
- * host loads `.boardsmith/runtime-bundle.mjs`, and a Cloudflare child isolate
+ * host loads `.boardsmith/dev-tmp/world-runtime-bundle.mjs`, and a Cloudflare child isolate
  * loads a bundle built the same way -- while the engine driving it is the
  * host's own import. Two module instances, two module-scope variables: a
  * `WeakMap` declared here was written by the engine's copy and read by the
