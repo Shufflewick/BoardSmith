@@ -183,13 +183,28 @@ export class MCTSBot<G extends Game = Game> {
    *
    * This provides diversity benefit: each search explores different
    * parts of the game tree due to randomization, reducing blind spots.
+   *
+   * The move most sub-searches chose wins. A split vote goes to the move the
+   * sub-searches visited most in total, and a tie there to a pick from this
+   * bot's own random source. Taking the first sub-search's move on a split
+   * made every other sub-search's work count only when it agreed, so a
+   * `parallel: 2` bot was a single search of half the iterations (#427).
    */
   private async playParallel(): Promise<BotMove | null> {
     const parallelCount = this.config.parallel!;
     const iterationsPerSearch = Math.floor(this.config.iterations / parallelCount);
 
-    // Track votes for each unique move
-    const moveVotes = new Map<string, { count: number; move: BotMove }>();
+    // Votes and summed root visits for each move any sub-search chose or explored.
+    const tally = new Map<string, { votes: number; visits: number; move: BotMove }>();
+    const entryFor = (move: BotMove) => {
+      const key = this.getMoveKey(move);
+      let entry = tally.get(key);
+      if (!entry) {
+        entry = { votes: 0, visits: 0, move };
+        tally.set(key, entry);
+      }
+      return entry;
+    };
 
     for (let i = 0; i < parallelCount; i++) {
       // Each sub-search needs its own random source for diversity. A seeded
@@ -221,41 +236,23 @@ export class MCTSBot<G extends Game = Game> {
         }
       );
 
-      // Run single search (playSingle is private, so use play with parallel: 1)
-      const move = await subBot.play();
-      if (!move) {
+      const { move, root } = await subBot.runSearch();
+      if (!move || !root) {
         // Every sub-search sees the same information state, so one finding
         // nothing means they all will. Report the stall rather than voting.
         this.lastStallReason = subBot.lastStallReason;
         return null;
       }
 
-      // Tally vote for this move
-      const key = JSON.stringify(move);
-      const existing = moveVotes.get(key);
-      if (existing) {
-        existing.count++;
-      } else {
-        moveVotes.set(key, { count: 1, move });
-      }
+      entryFor(move).votes++;
+      for (const child of root.children) entryFor(child.parentMove!).visits += child.visits;
     }
 
-    // Return move with most votes
-    let best: BotMove | null = null;
-    let bestCount = 0;
-    for (const { count, move } of moveVotes.values()) {
-      if (count > bestCount) {
-        bestCount = count;
-        best = move;
-      }
-    }
-
-    // Safety: if somehow no votes, fall back to single search
-    if (!best) {
-      return (await this.runSearch()).move;
-    }
-
-    return best;
+    const entries = [...tally.values()];
+    const mostVotes = Math.max(...entries.map(entry => entry.votes));
+    const voted = entries.filter(entry => entry.votes === mostVotes);
+    const mostVisits = Math.max(...voted.map(entry => entry.visits));
+    return this.rng.pick(voted.filter(entry => entry.visits === mostVisits)).move;
   }
 
   /**
