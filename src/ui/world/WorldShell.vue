@@ -122,17 +122,12 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useWorldHost } from './useWorldHost.js';
-import { useWorldPlay } from './useWorldPlay.js';
-import { WORLD_CONTEXT_KEY } from './useWorld.js';
-import { provide } from 'vue';
+import { provideWorldSeat, useWorldSeat } from './useWorldSeat.js';
 import PlayShell, { type PlayConnection } from '../components/PlayShell.vue';
 import Toast from '../components/Toast.vue';
 import DisabledReasonTooltip from '../components/helpers/DisabledReasonTooltip.vue';
 import { resolveUiComponent, type GameUIRegistry } from '../game-uis.js';
-import { useActionController } from '../composables/useActionController.js';
-import { createBoardInteraction, provideBoardInteraction } from '../composables/useBoardInteraction.js';
-import { useBoardActionBridge } from '../composables/useBoardActionBridge.js';
-import { providePlayContext } from '../composables/useGameContext.js';
+import { createBoardInteraction } from '../composables/useBoardInteraction.js';
 import { useToast } from '../composables/useToast.js';
 import { applyTheme, BREAKPOINTS } from '../theme.js';
 
@@ -187,8 +182,19 @@ const props = defineProps<{
 const LOG_EMPTY_TEXT = 'Nothing has been said since you arrived';
 
 const host = useWorldHost({ trustedOrigins: props.trustedOrigins });
-const play = useWorldPlay(host);
 const toast = useToast();
+
+/**
+ * THE SEAT, BUILT BY THE FUNCTION `renderAsSeat` BUILDS IT WITH (#413).
+ *
+ * The world's answers to the shared chrome (`play`), the table's controller
+ * unchanged with a world's answers, the board bridge, and everything the board
+ * can inject -- board interaction, the play context and `useWorld()` -- all come
+ * from `useWorldSeat`, so a board that mounts here mounts in a test.
+ */
+const seat = useWorldSeat({ host, boardInteraction: createBoardInteraction() });
+provideWorldSeat(seat);
+const { play, controller: actionController } = seat;
 
 /** The world's own name once the host has said it, and the game's until then --
  *  two worlds of the same game have different names and only one is this one. */
@@ -200,43 +206,13 @@ const boardComponent = computed(() =>
   resolveUiComponent(props.uis, selectedUiName.value, isDevBuild),
 );
 
-const playerSeat = computed(() => host.seat.value ?? -1);
-
-/**
- * THE TABLE'S CONTROLLER, UNCHANGED, WITH A WORLD'S ANSWERS.
- *
- * Everything it needs is injected, and nothing in it knows what a table is. The
- * one piece that has to be a world's own is `fetchPickChoices`: a world's offer
- * arrives with every selection's candidates resolved, so the answer is already
- * in hand and no round trip happens. See `useWorldPlay` for why that is an
- * adapter rather than a change to the controller.
- *
- * `pickStep` and `cancelPendingAction` are absent because a world has no
- * step-wise protocol to reach: a submit carries every selection at once.
- */
-const actionController = useActionController({
-  sendAction: play.sendAction,
-  availableActions: play.availableActions,
-  actionMetadata: play.actionMetadata,
-  isMyTurn: play.mayAct,
-  disabledActions: play.disabledActions,
-  gameView: play.gameView as never,
-  playerSeat,
-  fetchPickChoices: play.fetchPickChoices,
-  // WHAT THE DRAFT WOULD COST (#248). The other piece that has to be a world's
-  // own: the price of a draft is computed by the bundle, inside the world, over
-  // the partitions the action declares -- so there is nothing the controller
-  // could work out for itself and nothing a table's shell has to supply.
-  fetchActionQuote: play.fetchActionQuote,
-});
-
 /**
  * THE OTHER HALF OF #169: A REFUSAL THE PANEL EARNED.
  *
- * `act()` below covers a board that EMITS. But the board a world with no board
- * of its own gets — the supported shape since #170/#181 — never calls `act()`:
- * its player presses the SHARED ACTION PANEL, which submits through the
- * controller. A refusal there only sets `lastError` and bumps `errorTick`, and
+ * `act()` (in `useWorldSeat`) covers a board that EMITS. But the board a world
+ * with no board of its own gets — the supported shape since #170/#181 — never
+ * calls `act()`: its player presses the SHARED ACTION PANEL, which submits
+ * through the controller. A refusal there only sets `lastError` and bumps `errorTick`, and
  * with nobody in this shell watching, a refused command was invisible on the
  * generic board — the player pressed a button and the page said nothing.
  *
@@ -265,71 +241,6 @@ watch(host.recoveryNotice, (notice) => {
   toast.show(notice, { type: 'info', duration: 8000 });
 });
 
-/**
- * THE BOARD SUBSTRATE, SHARED VERBATIM.
- *
- * `useBoardInteraction` is pure element-ref plumbing and reads no game state,
- * and the bridge feeds the board off the controller's `validElements` -- which
- * is precisely why the local `fetchPickChoices` above is load-bearing rather
- * than a nicety. Without it a pre-filled offer would light the action panel and
- * leave the board dead, which is the divergence the bridge exists to forbid.
- */
-const boardInteraction = createBoardInteraction();
-provideBoardInteraction(boardInteraction);
-useBoardActionBridge({
-  controller: actionController,
-  boardInteraction,
-  isMyTurn: play.mayAct,
-  // A WORLD HAS NO TURN TO END, AND NOTHING TO AUTO-START (#212).
-  //
-  // `autoEndTurn` gates two behaviours a TABLE wants: auto-executing a sole
-  // no-selection `endTurn`, and auto-starting a sole available action so a
-  // player whose only move is obvious does not have to press twice. A world
-  // has neither. It has no turn, so there is no end to reach; and its offer is
-  // enumerated over what one seat can SEE, so "the only action" is a fact
-  // about a moment rather than an obvious next move -- a seat that has just
-  // paid for a building was put straight back into choosing another plot,
-  // which reads as an order they never placed.
-  //
-  // Entering an action stays entirely deliberate here: the action panel's own
-  // buttons and the board's candidates, which is what a world's player uses.
-  autoEndTurn: computed(() => false),
-  actionMetadata: play.actionMetadata,
-  availableActions: play.availableActions,
-  disabledActions: play.disabledActions,
-  // A world checkpoints on dirty and keeps no per-action snapshot, so there is
-  // no history to view and no table runner whose replacement invalidates a pick.
-  isViewingHistory: computed(() => false),
-  runnerIdentity: computed(() => undefined),
-});
-
-providePlayContext({
-  gameView: play.gameView,
-  players: play.players,
-  myPlayer: play.myPlayer,
-  playerSeat,
-  isMyTurn: play.mayAct,
-  availableActions: play.availableActions,
-  actionController,
-  platformRequest: async () => ({}),
-  presentation: ref(undefined),
-  debugHighlight: ref(null),
-});
-
-provide(WORLD_CONTEXT_KEY, {
-  phase: host.phase,
-  view: host.view,
-  seat: host.seat,
-  actions: host.actions,
-  offersPending: host.offersPending,
-  notice: host.notice,
-  worldName: host.worldName,
-  presence: host.presence,
-  events: host.events,
-  acting: host.acting,
-  act,
-});
-
 /** The identity token at the head of the action bar: always the VIEWER's own
  *  seat. A world has no turn, so there is no other claim it could make. */
 const panelToken = computed(() => play.myPlayer.value ?? null);
@@ -348,35 +259,6 @@ const connectionIndicator = computed<PlayConnection | null>(() => {
   }
   return { tone: 'attaching', title: 'Attaching to this world…' };
 });
-
-/**
- * WHY AN EMITTED ACT'S REFUSAL IS THE SHELL'S TO SHOW.
- *
- * `useWorld().act()` RETURNS the outcome, so a board that injects it already
- * has the world's sentence and decides where it belongs. A board that EMITS has
- * no return value to hold, and this used to drop the outcome on the floor: a
- * player pressed a button, the world refused, and nothing at all appeared.
- *
- * It speaks through `Toast`, which is where a TABLE's post-hoc refusals go, so
- * the two backends refuse in one voice. The rule both now share: a refusal you
- * can PREDICT is a greyed control with a reason (that is `disabled` on the
- * offer, reaching the panel through `disabledActions`); a refusal you can only
- * discover by TRYING is a sentence next to the thing you tried.
- */
-async function act(command: string, args: Record<string, unknown> = {}) {
-  const outcome = await host.act(command, args);
-  // A refusal RESOLVES rather than throwing -- a world refuses legitimately --
-  // so `ok` is the only place the answer lives. A refusal with no message is a
-  // host that answered without saying anything, which the player still has to
-  // be told about rather than left guessing at.
-  if (!outcome.ok) {
-    toast.show(outcome.message ?? 'The world refused that, and did not say why.', {
-      type: 'error',
-      duration: 5000,
-    });
-  }
-  return outcome;
-}
 
 // ── Chrome layout state, the shell's own ──────────────────────────────────────
 const sidebarRail = ref(false);

@@ -88,10 +88,37 @@ const post = worldAction<VaultWorld>('post')
     ctx.world.emit(COMMONS, { notice: commons.notice });
   });
 
+/** A room the step's `needs` made resident; its absence is a broken fixture. */
+function resident<T>(room: T | undefined, name: string): T {
+  if (room === undefined) throw new Error(`The vault fixture's "${name}" room is not resident.`);
+  return room;
+}
+
+/**
+ * LOOK IN ON A ROOM THIS SEAT CAN SEE: the commons or its own vault.
+ *
+ * The one verb here that asks a question, so it stays open once started and a
+ * board has targets to draw (#413), and it quotes the draft, so a render has a
+ * price to ask the world for. Its candidates are named, not secret.
+ */
+const inspect = worldAction<VaultWorld>('inspect')
+  .prompt('Look in on a room')
+  .chooseElement('room', {
+    needs: ({ player }) => [COMMONS, vaultPartition(player.seat)],
+    elements: ({ game, player }) => [
+      resident(game.first(Commons, COMMONS), COMMONS),
+      resident(game.first(Vault, `vault-${player.seat}`), `vault-${player.seat}`),
+    ],
+  })
+  .quote(({ room }) => (room === undefined ? null : ['One look, free']))
+  .execute(({ room }, ctx) => {
+    ctx.world.emit(COMMONS, { inspected: room.name });
+  });
+
 export function vaultWorldBlock(): WorldDefinition {
   return {
     maxPlayers: SEATS,
-    actions: [stash, post],
+    actions: [stash, post, inspect],
     // THE WHOLE OF WHAT A SEAT MAY SEE. The commons, and its own vault.
     view: (seat: number) => [COMMONS, vaultPartition(seat)],
     genesis: (game: Game) => {

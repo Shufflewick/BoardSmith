@@ -1,12 +1,14 @@
 /**
- * ONE WAY TO ASK `vue-tsc` WHAT IT FOUND, for the two contract gates that ask.
+ * ONE WAY TO ASK `vue-tsc` WHAT IT FOUND, for the contract gates that ask.
  *
- * `dev-host-typecheck.test.ts` compiles the development host, and
- * `dice-typecheck.test.ts` the dice entry point, each in a sandbox that holds
- * only what we ship. They differ in WHAT they compile and WHAT they blame a
- * failure on, and in nothing else -- so the run, and the rule for what counts
- * as an error line, live here rather than twice.
+ * `dev-host-typecheck.test.ts` compiles the development host,
+ * `dice-typecheck.test.ts` the dice entry point and `testing-typecheck.test.ts`
+ * a game test importing `boardsmith/testing`, each in a sandbox. They differ in
+ * WHAT they compile and WHAT they blame a failure on, and in nothing else -- so
+ * the run, the rule for what counts as an error line, and the assertion that
+ * there are none live here rather than once per gate.
  */
+import { expect } from 'vitest';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, resolve } from 'node:path';
@@ -55,4 +57,21 @@ export function vueTscErrors(cwd: string, project: string): string[] {
   return vueTscErrorLines(
     spawnSync(process.execPath, [VUE_TSC, '--noEmit', '-p', project], { cwd, encoding: 'utf8' }),
   );
+}
+
+/**
+ * Compile `project` from `root` and fail unless it reports no error, printing
+ * every error and the command that repeats the run. `compiling` names what was
+ * compiled; `remedy` says what an error there means and what to change.
+ */
+export function expectCleanCompile(root: string, project: string, compiling: string, remedy: string): void {
+  const errors = vueTscErrors(root, project);
+  expect(
+    errors,
+    errors.length === 0
+      ? ''
+      : `vue-tsc reports ${errors.length} error(s) compiling ${compiling}. ${remedy} Repeat the run with:\n` +
+        `  cd ${root} && node ${VUE_TSC} --noEmit -p ${project}\n\n` +
+        errors.join('\n'),
+  ).toEqual([]);
 }

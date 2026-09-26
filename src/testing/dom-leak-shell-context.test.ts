@@ -13,8 +13,7 @@
  * `renderAsSeat` is not given.
  */
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { defineComponent, getCurrentInstance, h, nextTick, type Component, type PropType } from 'vue';
-import type { VueWrapper } from '@vue/test-utils';
+import { defineComponent, h, nextTick, type Component, type PropType } from 'vue';
 import { MoveGame } from '../session/move-game.test-helper.js';
 import { buildPlayerState } from '../session/utils.js';
 import type { UseActionControllerReturn } from '../ui/composables/useActionControllerTypes.js';
@@ -28,6 +27,7 @@ import {
 } from '../ui/components/GameShell.platform-mount.test-helper.js';
 import { TestGame } from './test-game.js';
 import { preloadSeatRenderer, renderAsSeat } from './dom-leak.js';
+import { expectSeatGetsWhatTheShellGives, KeyProbe, keysProbedIn } from './provided-keys.test-helper.js';
 
 await preloadSeatRenderer();
 
@@ -165,36 +165,6 @@ describe('renderAsSeat provides the animation events GameShell provides (#406)',
 // cannot is a board that works in the shell and breaks in a test.
 // ---------------------------------------------------------------------------
 
-let reached: Set<PropertyKey> | undefined;
-
-const KeyProbe = defineComponent({
-  name: 'KeyProbe',
-  setup() {
-    const keys = new Set<PropertyKey>();
-    // A component's `provides` inherits from its parent's by prototype, down to
-    // the app's own record, so walking the chain is every key it can inject.
-    let provides: object | null = (getCurrentInstance() as unknown as { provides: object }).provides;
-    while (provides) {
-      for (const key of Reflect.ownKeys(provides)) keys.add(key);
-      provides = Object.getPrototypeOf(provides) as object | null;
-    }
-    reached = keys;
-    return () => h('div', { class: 'probe' });
-  },
-});
-
-/**
- * What the shell provides only for itself. The board-region pin is how a board
- * tells the shell's auto-zoom that it scrolls instead of scaling; `renderAsSeat`
- * has no zoom to tell, and a board with no shell above it registers into nothing
- * (see boardRegionPin.ts).
- */
-const SHELL_ONLY = new Set(['boardsmith:board-region-pin']);
-
-function describeKey(key: PropertyKey): string {
-  return typeof key === 'symbol' ? (key.description ?? key.toString()) : String(key);
-}
-
 /**
  * Mount the real GameShell as `seat`, with `board` as its one UI, and post it
  * the frame a session publishes for that seat.
@@ -219,10 +189,9 @@ async function renderInsideGameShell(game: TestGame<MoveGame>, seat: number, boa
 }
 
 async function keysInsideGameShell(game: TestGame<MoveGame>, seat: number): Promise<Set<PropertyKey>> {
-  reached = undefined;
-  await renderInsideGameShell(game, seat, KeyProbe);
-  if (!reached) throw new Error('GameShell never mounted the probe board, so there is nothing to compare');
-  return reached;
+  return keysProbedIn('GameShell', async () => {
+    await renderInsideGameShell(game, seat, KeyProbe);
+  });
 }
 
 describe('renderAsSeat and GameShell give a board the same things (#406)', () => {
@@ -230,20 +199,13 @@ describe('renderAsSeat and GameShell give a board the same things (#406)', () =>
     const game = moveGame();
     const shellKeys = await keysInsideGameShell(game, 1);
 
-    reached = undefined;
-    const wrapper: VueWrapper = await render(renderAsSeat(game, 1, { component: KeyProbe }));
-    expect(wrapper.find('.probe').exists()).toBe(true);
-    const seatKeys = reached as Set<PropertyKey> | undefined;
-    if (!seatKeys) throw new Error('renderAsSeat never mounted the probe board');
+    const seatKeys = await keysProbedIn('renderAsSeat', () => render(renderAsSeat(game, 1, { component: KeyProbe })));
 
-    const missing = [...shellKeys]
-      .filter((key) => !seatKeys.has(key))
-      .map(describeKey)
-      .filter((name) => !SHELL_ONLY.has(name));
-    expect(missing).toEqual([]);
-    // The comparison is only worth something if the shell provided the four.
-    expect([...shellKeys].map(describeKey)).toEqual(
-      expect.arrayContaining(['bs:gameState', 'bs:actionController', 'announcer', 'animationEvents']),
-    );
+    expectSeatGetsWhatTheShellGives(shellKeys, seatKeys, [
+      'bs:gameState',
+      'bs:actionController',
+      'announcer',
+      'animationEvents',
+    ]);
   });
 });

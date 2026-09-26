@@ -28,23 +28,12 @@
  *      instruction -- the same function `boardsmith validate` prints from.
  */
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'node:fs';
-import { join } from 'node:path';
-
-import { consumerInstall } from './consumer-install.test-helper.js';
-import { REPO_ROOT, VUE_TSC, vueTscErrors } from './vue-tsc-run.test-helper.js';
+import { consumerInstall, declaredPeers } from './consumer-install.test-helper.js';
+import { expectCleanCompile, vueTscErrors } from './vue-tsc-run.test-helper.js';
 import { missingThreePeerHint, THREE_PEER_INSTRUCTION } from '../ui/components/dice/three-peer.js';
 
 /** The published entry point, exactly as `exports["./ui/dice"]` names it. */
 const DICE_ENTRY_POINTS = ['src/ui/components/dice/index.ts'] as const;
-
-/** Everything `package.json` asks a consumer to install beside us. */
-function declaredPeers(): string[] {
-  const manifest = JSON.parse(readFileSync(join(REPO_ROOT, 'package.json'), 'utf8')) as {
-    peerDependencies?: Record<string, string>;
-  };
-  return Object.keys(manifest.peerDependencies ?? {});
-}
 
 describe('`boardsmith/ui/dice` type-checks from a consumer\'s install (#276)', () => {
   it('reports zero vue-tsc errors for a consumer holding what package.json declares', () => {
@@ -53,20 +42,14 @@ describe('`boardsmith/ui/dice` type-checks from a consumer\'s install (#276)', (
       alsoInstalled: declaredPeers(),
     });
 
-    const errors = vueTscErrors(root, 'tsconfig.json');
-
-    expect(
-      errors,
-      errors.length === 0
-        ? ''
-        : `vue-tsc reports ${errors.length} error(s) compiling boardsmith/ui/dice with only the packages a ` +
-          `consumer receives: our production closure plus the peer dependencies package.json declares. A ` +
-          `"Cannot find module" here means the dice surface imports something no install of this package ` +
-          `provides -- declare it in "dependencies" or "peerDependencies" and refresh package-lock.json. ` +
-          `Repeat the run with:\n` +
-          `  cd ${root} && node ${VUE_TSC} --noEmit -p tsconfig.json\n\n` +
-          errors.join('\n'),
-    ).toEqual([]);
+    expectCleanCompile(
+      root,
+      'tsconfig.json',
+      'boardsmith/ui/dice with only the packages a consumer receives: our production closure plus the peer ' +
+        'dependencies package.json declares',
+      'A "Cannot find module" here means the dice surface imports something no install of this package ' +
+        'provides -- declare it in "dependencies" or "peerDependencies" and refresh package-lock.json.',
+    );
   }, 180_000);
 
   it('turns the absent optional peer into the install instruction, not a bare resolution failure', () => {
