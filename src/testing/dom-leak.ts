@@ -28,7 +28,8 @@ import type { default as AutoUIComponent } from '../ui/components/auto-ui/AutoUI
 import type { GameViewElement as UIGameElement } from '../ui/components/auto-ui/index.js';
 import type { ElementJSON } from '../engine/index.js';
 import type { BoardInteraction } from '../ui/composables/useBoardInteraction.js';
-import type { TableActionWiring } from '../ui/composables/useTableActionWiring.js';
+import type { TableSeat } from '../ui/composables/useTableSeat.js';
+import type { GameState } from '../client/types.js';
 import type { PlayerGameState } from '../session/types.js';
 import { buildPlayerState } from '../session/utils.js';
 import { PickHandler } from '../session/pick-handler.js';
@@ -173,14 +174,19 @@ function loadBoardInteractionModule(): Promise<
   return boardInteractionModulePromise;
 }
 
-let tableWiringModulePromise:
-  | Promise<typeof import('../ui/composables/useTableActionWiring.js')>
+let tableSeatModulesPromise:
+  | Promise<[typeof import('../ui/composables/useTableSeat.js'), typeof import('../ui/composables/useTurnDeadline.js')]>
   | undefined;
 
-/** Dynamically import the table wiring GameShell uses (cached); deferred like `loadBoardInteractionModule`. */
-function loadTableWiringModule(): Promise<typeof import('../ui/composables/useTableActionWiring.js')> {
-  tableWiringModulePromise ??= import('../ui/composables/useTableActionWiring.js');
-  return tableWiringModulePromise;
+/** Dynamically import the seat wiring GameShell uses (cached); deferred like `loadBoardInteractionModule`. */
+function loadTableSeatModules(): Promise<
+  [typeof import('../ui/composables/useTableSeat.js'), typeof import('../ui/composables/useTurnDeadline.js')]
+> {
+  tableSeatModulesPromise ??= Promise.all([
+    import('../ui/composables/useTableSeat.js'),
+    import('../ui/composables/useTurnDeadline.js'),
+  ]);
+  return tableSeatModulesPromise;
 }
 
 // ---------------------------------------------------------------------------
@@ -278,7 +284,7 @@ let seatRendererPromise: Promise<void> | undefined;
 /**
  * Load everything `renderAsSeat` and `assertNoHiddenInfoLeak` render with:
  * your project's `@vue/test-utils`, AutoUI's module graph, the
- * board-interaction module and the table action wiring.
+ * board-interaction module and the table seat wiring.
  *
  * Call it with a top-level `await` in a test file that renders:
  *
@@ -304,7 +310,7 @@ export function preloadSeatRenderer(): Promise<void> {
     loadMount(),
     loadAutoUI(),
     loadBoardInteractionModule(),
-    loadTableWiringModule(),
+    loadTableSeatModules(),
   ]).then(() => undefined);
   return seatRendererPromise;
 }
@@ -360,19 +366,19 @@ export interface RenderAsSeatOptions<C extends Component = Component> {
    * Values to `provide` to the mounted tree, merged OVER the defaults this
    * function supplies.
    *
-   * A board is driven by two sibling injection APIs, not one: the action
-   * controller arrives as a prop, but board interaction arrives through a
-   * `provide` that `<GameShell>` makes. So this function stands in for the
-   * shell and provides a real `createBoardInteraction()` under
-   * `BOARD_INTERACTION_KEY` by default — a board that calls
-   * `useBoardInteraction()` mounts here with no wiring from the caller, which
-   * before this threw inside `setup()` and left the leak assertion reporting a
-   * bare injection Error instead of a verdict (#260).
+   * A board reads some of what it needs from props and the rest by injection,
+   * from what `<GameShell>` provides. So this function stands in for the shell
+   * and provides the same things, built by the same function (`useTableSeat`,
+   * #406): board interaction, the game context (`useGameContext()`), the
+   * announcer and animation events. A board that runs inside GameShell mounts
+   * here with no wiring from the caller. A world seat is given board
+   * interaction only.
    *
-   * Pass your own interaction under that key to hold a handle on it: for a
-   * table seat it is then the one the seat's controller drives, as GameShell's
-   * is, so its targets come from starting an action on the controller rather
-   * than from pre-loading. Pass anything else your own board asks for.
+   * Pass your own interaction under `BOARD_INTERACTION_KEY` to hold a handle on
+   * it: for a table seat it is then the one the seat's controller drives, as
+   * GameShell's is, so its targets come from starting an action on the
+   * controller rather than from pre-loading. Pass anything else your own board
+   * asks for.
    */
   provide?: Record<string | symbol, unknown>;
 }
@@ -461,22 +467,22 @@ async function mountForSeat<C extends Component = typeof AutoUIComponent>(
   const mount = await loadMount();
   const component: Component = options.component ?? (await loadAutoUI());
 
-  // GameShell provides board interaction; nothing does here, so this function
-  // is the shell's stand-in. The default is the REAL interaction, not an inert
-  // shape: a board reads it in setup() and again on every render, and half of
-  // one would fail somewhere further in than the injection error it replaces.
-  // A caller's own interaction replaces it, and is then the one a table's
-  // controller feeds, so the board and its controller still share one.
+  // This function is the shell's stand-in, so it provides what the shell does.
+  // The interaction is the REAL one, not an inert shape: a board reads it in
+  // setup() and again on every render. A caller's own interaction replaces it,
+  // and is then the one a table's controller feeds, so the board and its
+  // controller still share one.
   const { BOARD_INTERACTION_KEY, createBoardInteraction } = await loadBoardInteractionModule();
   const boardInteraction =
     (options.provide?.[BOARD_INTERACTION_KEY] as BoardInteraction | undefined) ?? createBoardInteraction();
-  const provide: Record<string | symbol, unknown> = {
-    ...options.provide,
-    [BOARD_INTERACTION_KEY]: boardInteraction,
-  };
 
   const seatContext = await seatContextFor(subject, seat, options, boardInteraction);
   const { gameView } = seatContext;
+  const provide: Record<string | symbol, unknown> = {
+    ...seatContext.provide,
+    ...options.provide,
+    [BOARD_INTERACTION_KEY]: boardInteraction,
+  };
 
   // AutoUI takes only (gameView, playerSeat); a scaffolded custom board also
   // takes (isMyTurn, availableActions, actionController, disabledActions).
@@ -537,6 +543,8 @@ interface SeatContext {
   readonly gameView: UIGameElement | null;
   /** The scaffold's contract props, before they are filtered to what the board declares. */
   readonly contract: Record<string, unknown>;
+  /** What the board can inject, as GameShell provides it; the caller's `provide` is merged over it. */
+  readonly provide: Record<string | symbol, unknown>;
   /** Stops whatever was wired for this mount. */
   readonly stop: () => void;
 }
@@ -544,13 +552,15 @@ interface SeatContext {
 /**
  * The seat's view and the scaffold's contract props.
  *
- * A TABLE IS MOUNTED THE WAY GAMESHELL MOUNTS IT (#390). Its seat state is the
- * one a session publishes (`buildPlayerState`, action metadata included), and
- * its controller and board bridge come from `useTableActionWiring`, the one
- * function GameShell wires them with (#378), fed the same interaction the board
- * injects. Reading the seat's actions off `getPlayerView(seat)` instead is what
- * #390 was: a table's player view carries them under `flowState`, so every
- * table board was told it had nothing to do.
+ * A TABLE IS MOUNTED THE WAY GAMESHELL MOUNTS IT (#390, #406). Its frame is the
+ * one a session publishes (`buildPlayerState`, action metadata included, under
+ * the runner's flow state), and everything the board is given -- its
+ * controller and board bridge, the game context, the announcer and animation
+ * events -- comes from `useTableSeat`, the one function GameShell builds them
+ * with, fed the same interaction the board injects. Reading the seat's actions
+ * off `getPlayerView(seat)` instead is what #390 was: a table's player view
+ * carries them under `flowState`, so every table board was told it had nothing
+ * to do.
  *
  * A world answers its offers in its own projection, and its board gets an
  * inert controller carrying their names.
@@ -570,8 +580,6 @@ async function seatContextFor(
     );
     const gameView =
       options.gameViewOverride !== undefined ? options.gameViewOverride : (seatState.view as UIGameElement);
-    // AutoUI declares no action props, so there is nothing to wire for it.
-    if (!options.component) return { gameView, contract: {}, stop: () => undefined };
     return wireTableSeat(subject, seat, seatState, gameView, boardInteraction);
   }
 
@@ -590,20 +598,22 @@ async function seatContextFor(
       availableActions,
       actionController: inertActionController(availableActions),
     },
+    provide: {},
     stop: () => undefined,
   };
 }
 
 /**
- * Wire a table seat's controller and board bridge with `useTableActionWiring`,
- * inside an effect scope the mount stops when it unmounts.
+ * Build a table seat with `useTableSeat`, inside an effect scope the mount stops
+ * when it unmounts.
  *
- * Two things differ from a live shell, and both keep a render a render. Auto
- * mode is off (GameShell's player-facing toggle), so mounting never starts or
- * completes an action by itself. And the transport answers a pick's choices
- * from the game but refuses to take a move, saying how to take it: a
- * hidden-information scan that changed the game would not be a scan, and a
- * board that has moved must be rendered again to show it.
+ * Where GameShell's inputs come from a host, these say there is none. Two more
+ * things differ from a live shell, and both keep a render a render. Auto mode is
+ * off (GameShell's player-facing toggle), so mounting never starts or completes
+ * an action by itself. And the transport answers a pick's choices from the game
+ * but refuses to take a move, saying how to take it: a hidden-information scan
+ * that changed the game would not be a scan, and a board that has moved must be
+ * rendered again to show it.
  */
 async function wireTableSeat(
   table: TestGame,
@@ -612,24 +622,39 @@ async function wireTableSeat(
   gameView: UIGameElement | null,
   boardInteraction: BoardInteraction,
 ): Promise<SeatContext> {
-  const [{ effectScope, ref }, { useTableActionWiring }] = await Promise.all([
+  const [{ computed, effectScope, ref }, [{ useTableSeat }, { useTurnDeadline }]] = await Promise.all([
     import('vue'),
-    loadTableWiringModule(),
+    loadTableSeatModules(),
   ]);
   const picks = new PickHandler(table.runner, table.game.players.length);
-  const availableActions = seatState.availableActions ?? [];
+  // The frame a host hands GameShell: the session's seat state under the flow state.
+  const frame = {
+    flowState: table.runner.getFlowState(),
+    state: seatState,
+    playerSeat: seat,
+    isSpectator: false,
+  } as GameState;
   const scope = effectScope(true);
-  let wiring!: TableActionWiring;
+  let tableSeat!: TableSeat;
   scope.run(() => {
-    wiring = useTableActionWiring({
-      seatState: ref(seatState),
-      availableActions: ref(availableActions),
-      isMyTurn: ref(seatState.isMyTurn),
+    tableSeat = useTableSeat({
+      state: ref(frame),
+      gameView: computed(() => gameView),
       playerSeat: ref(seat),
-      gameView: ref(gameView),
+      isMyTurn: ref(seatState.isMyTurn),
       boardInteraction,
       autoEndTurn: ref(false),
       isViewingHistory: ref(false),
+      timeTravelDiff: ref(null),
+      platformRequest: async (op) => {
+        throw new Error(
+          `renderAsSeat mounted seat ${seat}'s board with no host page, so the host request "${op}" has ` +
+            'nothing to answer it. It is made by the debug tools, which run only inside boardsmith dev.',
+        );
+      },
+      presentation: ref(undefined),
+      debugHighlight: ref(null),
+      turnDeadline: useTurnDeadline(ref(null)),
       sendAction: async (actionName) => ({
         success: false,
         error:
@@ -645,10 +670,11 @@ async function wireTableSeat(
     contract: {
       playerSeat: seat,
       isMyTurn: seatState.isMyTurn,
-      availableActions,
-      disabledActions: wiring.disabledActions.value,
-      actionController: wiring.controller,
+      availableActions: tableSeat.availableActions.value,
+      disabledActions: tableSeat.disabledActions.value,
+      actionController: tableSeat.controller,
     },
+    provide: Object.fromEntries(tableSeat.provisions),
     stop: () => scope.stop(),
   };
 }

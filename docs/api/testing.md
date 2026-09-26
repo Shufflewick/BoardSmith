@@ -552,11 +552,19 @@ refuses to take a move, saying to take it with `testGame.doAction(...)` and
 render the seat again. A `TestWorld` seat gets its offers as `availableActions`
 and a controller that only carries their names.
 
-Board interaction is provided too. A board that calls `useBoardInteraction()`
-is normally inside a `<GameShell>`; this utility stands in for the shell and
-provides a real `createBoardInteraction()` under `BOARD_INTERACTION_KEY`, so
-such a board mounts with no wiring from you. Pass your own under that key in
-`provide` to hold a handle on it; a table seat's controller then drives yours.
+**A table seat is given everything GameShell gives its board** (#406): board
+interaction, the game context (`useGameContext()`), the announcer
+(`useAnnouncer()`) and animation events (`useAnimationEvents()`). GameShell and
+this utility build them with the same function, `useTableSeat`, so a board that
+runs inside the shell mounts here with no wiring from you, and a test that
+mounts the real shell fails if it ever provides something this does not. The
+seat's pending animation events play to the handlers your board registers, and
+the announcer relays what it says to `window.postMessage` as the shell's does.
+A world seat is given board interaction only.
+
+Pass your own interaction under `BOARD_INTERACTION_KEY` in `provide` to hold a
+handle on it; a table seat's controller then drives yours. Anything else in
+`provide` is merged over what the shell would give.
 To render a board's candidate state, start the action the way a player would:
 
 ```typescript

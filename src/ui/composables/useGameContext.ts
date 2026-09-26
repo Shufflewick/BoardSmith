@@ -136,15 +136,16 @@ export const GAME_CONTEXT_KEYS: { [K in keyof GameContext]: InjectionKey<GameCon
 };
 
 /**
- * Publish the context. Called by `GameShell` and by nothing else — a second
- * provider would give the components below it two different answers.
+ * The context as key/value pairs, for `useTableSeat` to publish with the rest
+ * of what a table's board is given. It is the only caller: a second provider
+ * would give the components below it two different answers.
  *
  * @internal
  */
-export function provideGameContext(context: GameContext): void {
-  for (const key of Object.keys(GAME_CONTEXT_KEYS) as Array<keyof GameContext>) {
-    provide(GAME_CONTEXT_KEYS[key] as InjectionKey<unknown>, context[key]);
-  }
+export function gameContextProvisions(context: GameContext): Array<readonly [InjectionKey<unknown>, unknown]> {
+  return (Object.keys(GAME_CONTEXT_KEYS) as Array<keyof GameContext>).map(
+    (key) => [GAME_CONTEXT_KEYS[key] as InjectionKey<unknown>, context[key]] as const,
+  );
 }
 
 /**

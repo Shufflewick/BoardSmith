@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, watch, onMounted, onUnmounted, provide, toRef, nextTick } from 'vue';
+import { ref, computed, watch, onMounted, onUnmounted, toRef, nextTick } from 'vue';
 import { applyTheme, BREAKPOINTS } from '../theme.js';
 import { consumeInitMessage, isOriginAllowed } from './GameShellInit.js';
 import type { PresentationOverlay } from './auto-ui/presentation.js';
@@ -12,7 +12,7 @@ import {
   deriveWinnerState,
   describePlaying,
 } from '../composables/liveRegionAnnouncer.js';
-import { dueSeats, turnSequence, orderSeatsByTurn, type SeatActivityState } from '../../engine/flow/seat-activity.js';
+import { turnSequence, orderSeatsByTurn, type SeatActivityState } from '../../engine/flow/seat-activity.js';
 import { flowBoundaryKey, type BoundaryKeyState } from '../../engine/flow/boundary-key.js';
 import { MeepleClient, MeepleClientError, GameConnection, audioService, generatePlayerId, type LobbyInfo } from '../../client/index.js';
 import { useGame } from '../../client/vue.js';
@@ -29,7 +29,6 @@ import GameHeader from './GameHeader.vue';
 import GameLobby from './GameLobby.vue';
 import PlayShell, { type PlayConnection } from './PlayShell.vue';
 import WaitingRoom from './WaitingRoom.vue';
-import { provideGameContext } from '../composables/useGameContext.js';
 import { readTurnDeadlineFrame, useTurnDeadline, type TurnDeadlineFrame } from '../composables/useTurnDeadline.js';
 import { useTeachingActions } from '../composables/useTeachingActions.js';
 import ZoomPreviewOverlay from './helpers/ZoomPreviewOverlay.vue';
@@ -40,13 +39,11 @@ import HeatmapOverlay from './helpers/HeatmapOverlay.vue';
 import BoardMessage from './helpers/BoardMessage.vue';
 import DisabledReasonTooltip from './helpers/DisabledReasonTooltip.vue';
 import Toast from './Toast.vue';
-import { createBoardInteraction, provideBoardInteraction } from '../composables/useBoardInteraction';
+import { createBoardInteraction } from '../composables/useBoardInteraction';
 import { setupDragDropOrchestration } from '../composables/useDragDropTargets';
-import { useTableActionWiring } from '../composables/useTableActionWiring.js';
+import { useTableSeat, provideTableSeat } from '../composables/useTableSeat.js';
 import { useBoardFocusHandoff } from '../composables/useBoardFocusHandoff';
 import { maybePostDevtoolsUpdate } from './GameShell.devtools.js';
-import { createAnimationEvents, provideAnimationEvents } from '../composables/useAnimationEvents';
-import { createAnnouncer, provideAnnouncer } from '../composables/useAnnouncer.js';
 import { useZoomPreview } from '../composables/useZoomPreview';
 import { useAutoZoom, SETTLE_MS } from '../composables/useAutoZoom';
 import { useToast } from '../composables/useToast';
@@ -411,7 +408,7 @@ const isViewingHistory = computed(() => timeTravelState.value !== null);
 
 // Debug highlight state (for element inspector)
 const debugHighlightedElementId = ref<number | null>(null);
-// (published with the rest of the game context below — see provideGameContext)
+// (published with the rest of the game context below — see useTableSeat)
 
 // Create client with our persisted playerId so all API calls (claim
 // position, etc.) use the same ID. Passing it into the constructor (rather
@@ -492,33 +489,6 @@ const { state, connectionStatus, isConnected, isMyTurn, error, action, refreshSt
   { playerSeat }
 );
 
-// Screen-reader live-region message refs.
-// Written only from watchers with immediate:false — never at mount (Pitfall 2).
-const politeMessage = ref('');
-const assertiveMessage = ref('');
-
-// Emit an announce postMessage alongside each live-region write so a future
-// host page can relay the announcement to its own AT-accessible DOM node.
-function emitAnnounce(level: 'polite' | 'assertive', text: string): void {
-  window.postMessage({ source: 'boardsmith-a11y', type: 'announce', level, text }, '*');
-}
-
-// Animation events - wire createAnimationEvents to server state.
-// actionCount (UNDO-04) is the rewind-detection signal: a decrease resets
-// the composable's watermark so a reconnect into a rewound session doesn't
-// carry a stale high-water mark forward (defense-in-depth for Plan 155-04's
-// server-side monotonic-sequence fix).
-const animationEvents = createAnimationEvents({
-  events: () => state.value?.state?.animationEvents,
-  actionCount: () => state.value?.state?.actionCount,
-});
-provideAnimationEvents(animationEvents);
-
-// Announcer - lets any descendant (custom UI or AutoUI) write through the
-// existing live-region refs / postMessage relay above without new DOM nodes.
-const announcer = createAnnouncer({ politeMessage, assertiveMessage, emitAnnounce });
-provideAnnouncer(announcer);
-
 // Sync colorSelectionEnabled from game state (for non-lobby mode like --bot where lobbyInfo is never set)
 watch(state, (s) => {
   if (s?.state?.colorSelectionEnabled) {
@@ -530,24 +500,6 @@ watch(state, (s) => {
 // Initialized from localStorage on mount (default ON when key is absent).
 // Mutated only by handleTeachingAction('help-toggle'); no server round-trip.
 const isActionHelpVisible = ref(getActionHelpEnabled());
-
-// Available actions (from flow state)
-const availableActions = computed(() => {
-  const flowState = state.value?.flowState as any;
-  if (!flowState) return [];
-
-  // Check awaitingPlayers for simultaneous actions
-  if (flowState.awaitingPlayers?.length > 0) {
-    const myPlayerState = flowState.awaitingPlayers.find(
-      (p: { playerIndex: number }) => p.playerIndex === playerSeat.value
-    );
-    if (myPlayerState && !myPlayerState.completed) {
-      return myPlayerState.availableActions || [];
-    }
-  }
-
-  return flowState.availableActions || [];
-});
 
 // LIBX-01 / A11Y C-2: GameShell no longer unmounts ActionPanel when every
 // available action is `.suppressFromActionPanel()`. It used to, with a mid-pick escape
@@ -569,21 +521,6 @@ const availableActions = computed(() => {
 const isSimultaneous = computed(() => {
   const flowState = state.value?.flowState as any;
   return (flowState?.awaitingPlayers?.length ?? 0) > 0;
-});
-
-// The viewer's OWN completed flag during a simultaneous step (T-160-27 /
-// D27 commit-leak fix). `false` outside a simultaneous step — the concept
-// doesn't apply to turn-based actions. Fed to ActionPanel so its execute
-// guard can reject a seat that already committed this step, independent of
-// (and in addition to) `isMyTurn` — defense in depth against a stale/
-// optimistic `isMyTurn=true` prop after the seat has already committed.
-const myCompleted = computed(() => {
-  const flowState = state.value?.flowState as any;
-  if (!flowState?.awaitingPlayers?.length) return false;
-  const myPlayerState = flowState.awaitingPlayers.find(
-    (p: { playerIndex: number }) => p.playerIndex === playerSeat.value
-  );
-  return !!myPlayerState?.completed;
 });
 
 // Whether the "Show action help" toggle has anything to reveal: true when any
@@ -679,22 +616,42 @@ function platformRequest(op: string, payload: Record<string, unknown>): Promise<
 
 // Board interaction state (shared between ActionPanel and game board)
 const boardInteraction = createBoardInteraction();
-provideBoardInteraction(boardInteraction);
 
+// EVERYTHING THE BOARD IS GIVEN, from one function that `renderAsSeat` calls
+// too (#406), so a board that mounts here mounts in a game's tests: board
+// interaction, the game context (#39), the announcer and animation events.
+//
 // The action controller (one for the ActionPanel and every custom UI: same
 // auto-fill, validation and server communication) and the board bridge that
 // feeds the board from it unconditionally, whether or not the footer panel is
-// mounted (Phase 94 board-centric default). Wired by the same function a game's
-// tests use (#378), which reads the action metadata, disabled reasons, tutorial
-// step and runner identity off this seat's state; see useTableActionWiring.
+// mounted (Phase 94 board-centric default), are wired inside it by
+// useTableActionWiring (#378), which reads the action metadata, disabled
+// reasons, tutorial step and runner identity off this seat's state.
 // `isViewingHistory` goes to both halves: it is the one chokepoint that keeps
 // every commit path (board clicks, ActionPanel, auto-execute) off the live
 // engine while the debug panel shows history (LIBX-04/CR-01).
-const { controller: actionController, actionMetadata, disabledActions } = useTableActionWiring({
-  seatState: computed(() => state.value?.state),
+//
+// `availableActions` is this seat's own entry in a simultaneous step, and
+// `completed` the seat's commit flag in one, which gates a re-submit (D27).
+// `dueSeats` is the LIVE table, like `isMyTurn`: time travel changes the board,
+// not whose move it is. The announcer writes the two live regions in the
+// template (only from watchers with immediate:false, never at mount) and
+// relays each message to the host page. `platformRequest` is how the debug
+// panel reaches the host; `presentation` is a reactive ref so the
+// AutoRenderer -> renderers chain re-reads it (D-04).
+const tableSeat = useTableSeat({
+  state,
+  gameView,
+  playerSeat,
+  isMyTurn,
   boardInteraction,
   autoEndTurn,
   isViewingHistory,
+  timeTravelDiff,
+  platformRequest,
+  presentation: toRef(props, 'presentation'),
+  debugHighlight: debugHighlightedElementId,
+  turnDeadline,
   sendAction: async (actionName, args) => {
     if (platformMode.value) {
       // Request/response so the action RESULT (notably followUp, which chains the
@@ -706,17 +663,6 @@ const { controller: actionController, actionMetadata, disabledActions } = useTab
     const result = await action(actionName, args);
     return result as ControllerActionResult;
   },
-  availableActions,
-  isMyTurn,
-  // D27 commit-leak gate (T-160-27 / BLOCKER-160): shared chokepoint so
-  // ActionPanel AND every custom UI routed through useBoardActionBridge
-  // refuse a re-submit once this seat has committed this simultaneous step —
-  // see useActionController's `completed` option doc for the full rationale.
-  completed: myCompleted,
-  gameView,
-  playerSeat,
-  // Animation events for gating (shows "Playing animations..." during playback)
-  animationEvents,
   // Selection choices - fetched from server on-demand for each selection
   fetchPickChoices: async (actionName, selectionName, player, currentArgs) => {
     if (platformMode.value) {
@@ -794,6 +740,19 @@ const { controller: actionController, actionMetadata, disabledActions } = useTab
     }
   },
 });
+provideTableSeat(tableSeat);
+const {
+  controller: actionController,
+  actionMetadata,
+  disabledActions,
+  availableActions,
+  completed: myCompleted,
+  dueSeats: dueSeatsNow,
+  players,
+  myPlayer,
+  announcer,
+  liveRegion: { polite: politeMessage, assertive: assertiveMessage },
+} = tableSeat;
 
 // Read-only action args for display and slot props.
 const actionArgs = computed(() => actionController.currentArgs.value);
@@ -838,10 +797,6 @@ watch(
   },
   { immediate: true }
 );
-
-// Computed properties derived from game view
-const players = computed(() => state.value?.state.players || []);
-const myPlayer = computed(() => players.value.find(p => p.seat === playerSeat.value));
 
 /**
  * The players panel's list, ordered per the `playerOrder` prop (default: the
@@ -907,14 +862,6 @@ const currentPlayerName = computed(() => {
   const player = players.value.find(p => p.seat === currentPos);
   return player?.name || `Player ${currentPos + 1}`;
 });
-// Every seat that has to act right now, the viewer's own included (#337): the
-// one seat of a turn-based step, or every seat a simultaneous step is still
-// waiting on. The engine's `dueSeats` is the one answer to "who may act", so the
-// players panel, the Action Panel's waiting line, the announcer and a custom UI
-// (`useGameContext().dueSeats`) all read this and cannot disagree. It is the
-// LIVE table, like `isMyTurn`: time travel changes the board, not whose move it is.
-const dueSeatsNow = computed(() => dueSeats(state.value?.flowState as SeatActivityState | null | undefined));
-
 // The OTHER seats a simultaneous step is still waiting on, for the Action
 // Panel's waiting line. The viewer is left out (D27): the panel shows the
 // viewer's own actions while they are due, and "waiting on you" beside them
@@ -1264,31 +1211,6 @@ async function fetchPlayerOptions(gameType: string): Promise<Record<string, unkn
   }
   return undefined;
 }
-
-// Publish the game context to every component below (#39). One call, one typed
-// contract — `provideGameContext` owns the key list, so a field cannot be
-// published under a key no consumer knows to look under, and a consumer that
-// misspells one gets a type error rather than a silent `undefined`.
-//
-// `platformRequest` is how the debug panel issues its queries/edits through the
-// host bridge (dev only); `presentation` is a reactive ref so the
-// AutoRenderer → renderers chain re-reads it (D-04).
-provideGameContext({
-  gameState: state,
-  gameView,
-  players,
-  myPlayer,
-  playerSeat,
-  isMyTurn,
-  dueSeats: dueSeatsNow,
-  availableActions,
-  actionController,
-  timeTravelDiff,
-  platformRequest,
-  presentation: toRef(props, 'presentation'),
-  debugHighlight: debugHighlightedElementId,
-  turnDeadline,
-});
 
 // Gate for the game UI (the registry's board component): it must
 // not mount until GameShell's own DOM — including the `#bs-game-modal` teleport

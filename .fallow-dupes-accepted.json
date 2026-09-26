@@ -1877,14 +1877,6 @@
       ]
     },
     {
-      "content": "4485a6b49e2e4690",
-      "lines": 18,
-      "files": [
-        "src/ui/components/GameShell.announcer.test.ts",
-        "src/ui/components/GameShell.vue"
-      ]
-    },
-    {
       "content": "44e735bca9cfb02d",
       "lines": 13,
       "files": [
@@ -5737,13 +5729,6 @@
       "lines": 6,
       "files": [
         "src/cli/dev-host/bridge.test.ts"
-      ]
-    },
-    {
-      "content": "c922155ef1a83890",
-      "lines": 11,
-      "files": [
-        "src/ui/composables/useGameContext.test.ts"
       ]
     },
     {

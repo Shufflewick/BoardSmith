@@ -186,7 +186,13 @@ describe('GameShell.vue source: panel ordering wiring', () => {
   });
 
   it('leaves the seat-ordered `players` array alone for every other consumer', () => {
-    // Turning ordering on must reorder the panel and nothing else.
-    expect(source).toMatch(/const players = computed\(\(\) => state\.value\?\.state\.players \|\| \[\]\)/);
+    // Turning ordering on must reorder the panel and nothing else. The shell's
+    // `players` is the seat's own list, built by useTableSeat (#406).
+    const seatSource = fs.readFileSync(
+      path.join(path.dirname(fileURLToPath(import.meta.url)), '../composables/useTableSeat.ts'),
+      'utf-8',
+    );
+    expect(source).toMatch(/\bplayers,\n[\s\S]*\} = tableSeat;/);
+    expect(seatSource).toMatch(/const players = computed<GameContextPlayer\[\]>\(\(\) => state\.value\?\.state\.players \?\? \[\]\)/);
   });
 });
