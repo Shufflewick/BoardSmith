@@ -640,7 +640,6 @@
     "src/testing/assertions.test.ts:111-126|src/testing/assertions.test.ts:130-143|src/testing/assertions.test.ts:148-159",
     "src/testing/assertions.test.ts:366-372|src/testing/view-diff.test.ts:61-67|src/testing/visibility.test.ts:51-57",
     "src/testing/assertions.test.ts:372-393|src/testing/visibility.test.ts:72-93",
-    "src/testing/assertions.test.ts:372-387|src/testing/dom-leak.test-helper.ts:38-53|src/testing/visibility.test.ts:72-87",
     "src/testing/assertions.test.ts:372-381|src/testing/test-game.test.ts:66-76",
     "src/testing/assertions.test.ts:428-479|src/testing/visibility.test.ts:176-230",
     "src/testing/assertions.test.ts:453-473|src/testing/visibility.test.ts:204-224",

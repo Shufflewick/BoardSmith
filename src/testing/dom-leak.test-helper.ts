@@ -3,7 +3,10 @@
  *
  * Two seats, each with an owner-only `Hand` holding one secret card — the
  * smallest game where "what seat 1 may see" and "what the tree actually holds"
- * differ, which is the whole subject of a hidden-info scan. Lives here because
+ * differ, which is the whole subject of a hidden-info scan. The seat on move may
+ * `pass`, or `peek` at the other seat's card: a blind pick whose choice is
+ * labelled with the card's hidden rank, the leak that exists only while an
+ * action is open (#405). Lives here because
  * both `dom-leak-custom-ui.test.ts` (the `component` seam) and
  * `dom-leak-board-interaction.test.ts` (the `provide` seam) need the same one,
  * and two copies of a fixture are two things to keep true.
@@ -41,13 +44,22 @@ export class SecretHandGame extends Game<SecretHandGame, Player> {
     }
 
     this.registerAction(Action.create<SecretHandGame>('pass').execute(() => ({ success: true })));
+    this.registerAction(
+      Action.create<SecretHandGame>('peek')
+        .chooseElement<'card', SecretCard>('card', {
+          elements: (ctx) => this.all(SecretCard).filter((card) => (card.parent as Hand).player !== ctx.player),
+          // The bug under test: the target is labelled with the face it hides.
+          display: (card) => card.rank,
+        })
+        .execute(() => ({ success: true })),
+    );
 
     this.setFlow(
       defineFlow({
         root: loop({
-          while: () => false,
+          while: () => true,
           maxIterations: 10,
-          do: eachPlayer({ do: actionStep({ actions: ['pass'] }) }),
+          do: eachPlayer({ do: actionStep({ actions: ['pass', 'peek'] }) }),
         }),
       }),
     );

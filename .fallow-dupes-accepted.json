@@ -1957,15 +1957,6 @@
       ]
     },
     {
-      "content": "488bc885d3286c03",
-      "lines": 16,
-      "files": [
-        "src/testing/assertions.test.ts",
-        "src/testing/dom-leak.test-helper.ts",
-        "src/testing/visibility.test.ts"
-      ]
-    },
-    {
       "content": "489ac38066324693",
       "lines": 7,
       "files": [

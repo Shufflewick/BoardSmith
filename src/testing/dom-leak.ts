@@ -381,6 +381,23 @@ export interface RenderAsSeatOptions<C extends Component = Component> {
    * asks for.
    */
   provide?: Record<string | symbol, unknown>;
+  /**
+   * An action to open on a table seat's controller once the board has mounted,
+   * as a player would by choosing it (#405).
+   *
+   * A board draws its targets while an action is open, and a target can carry
+   * what it hides -- a blind pick labelled with the card's face. Those targets
+   * come from the seat's own controller, as in GameShell, so this is the way to
+   * render or scan that state: the targets and their labels are the game's own.
+   * `args` fills the action's first picks, as `actionController.start(name,
+   * { args })` does, to reach a later one.
+   *
+   * The action must be one the seat may take now and must still be open once
+   * started; an action with nothing left to choose completes at once, and the
+   * controller refuses to take a move, so that is an error rather than a render.
+   * A world seat's controller cannot start an action, so it is refused there.
+   */
+  startAction?: { name: string; args?: Record<string, unknown> };
 }
 
 /**
@@ -530,6 +547,10 @@ async function mountForSeat<C extends Component = typeof AutoUIComponent>(
 
   try {
     await raiseWhatTheBoardDeferred(raised, seat);
+    if (options.startAction) {
+      await seatContext.openAction(options.startAction);
+      await raiseWhatTheBoardDeferred(raised, seat);
+    }
   } catch (failure) {
     wrapper.unmount();
     throw failure;
@@ -545,6 +566,8 @@ interface SeatContext {
   readonly contract: Record<string, unknown>;
   /** What the board can inject, as GameShell provides it; the caller's `provide` is merged over it. */
   readonly provide: Record<string | symbol, unknown>;
+  /** Opens an action on the seat's controller, for `startAction`; throws, saying why, when it cannot. */
+  readonly openAction: (request: NonNullable<RenderAsSeatOptions['startAction']>) => Promise<void>;
   /** Stops whatever was wired for this mount. */
   readonly stop: () => void;
 }
@@ -599,6 +622,13 @@ async function seatContextFor(
       actionController: inertActionController(availableActions),
     },
     provide: {},
+    openAction: async ({ name }) => {
+      throw new Error(
+        `startAction opens an action on a table seat's controller, and seat ${seat} of a world is given ` +
+          `one that cannot start "${name}". Render the world board as it stands, or open the action on ` +
+          'a TestGame seat.',
+      );
+    },
     stop: () => undefined,
   };
 }
@@ -675,8 +705,40 @@ async function wireTableSeat(
       actionController: tableSeat.controller,
     },
     provide: Object.fromEntries(tableSeat.provisions),
+    openAction: (request) => openTableAction(tableSeat.controller, request, seat, seatState.availableActions ?? []),
     stop: () => scope.stop(),
   };
+}
+
+/**
+ * Open `request` on a table seat's controller and wait for its targets to
+ * reach the board, or say why it could not be held open.
+ */
+async function openTableAction(
+  controller: TableSeat['controller'],
+  { name, args }: NonNullable<RenderAsSeatOptions['startAction']>,
+  seat: number,
+  seatActions: readonly string[],
+): Promise<void> {
+  const started = await controller.start(name, args ? { args } : undefined);
+  const mayTake = seatActions.length > 0 ? seatActions.map((action) => `"${action}"`).join(', ') : 'nothing';
+  if (!started.success) {
+    throw new Error(
+      `renderAsSeat could not open "${name}" for seat ${seat}: ${started.error ?? 'the controller refused it'}. ` +
+        `startAction opens an action the seat may take now, and seat ${seat} may take ${mayTake}.`,
+    );
+  }
+  // The first pick's choices are fetched and handed to the board by watchers;
+  // a macrotask is after every one of them has run.
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  if (controller.currentAction.value !== name) {
+    const reason = controller.lastError.value ?? 'it completed or was cancelled as soon as it started';
+    throw new Error(
+      `"${name}" did not stay open for seat ${seat}: ${reason}. startAction holds an action open so the ` +
+        'board shows its choices, and an action with nothing left to choose completes at once. Open one ' +
+        'with a choice still to make (leave out any `args` that fill its last pick).',
+    );
+  }
 }
 
 /**
@@ -1332,11 +1394,9 @@ export async function assertNoHiddenInfoLeak(
 
   if (activeMarkers.length === 0) return;
 
-  const { wrapper, raised } = await mountForSeat(subject, seat, {
-    gameViewOverride: options.gameViewOverride,
-    component: options.component,
-    componentProps: options.componentProps,
-  });
+  // Every render option reaches the mount. Picking them out one by one is how
+  // `provide` was accepted here and silently dropped (#405).
+  const { wrapper, raised } = await mountForSeat(subject, seat, options);
   try {
     const surfaces = collectScopedSurfaceStrings(wrapper);
 
