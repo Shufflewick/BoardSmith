@@ -253,11 +253,11 @@ describe("the ordered declaration walk", () => {
     const { engine } = newEngine();
     const command = { name: "tend", args: { neighbour: 0 } };
 
-    const first = engine.commandNeeds("p2", command, arrival(STAMP.now), []).partitions;
+    const first = engine.commandNeeds("p2", command, arrival(STAMP.now), { declaredActivity: [], declaredNotices: [] }).partitions;
     expect(first).toEqual([holdingPartition(2)]);
 
     await engine.hydrate(first);
-    expect([...engine.commandNeeds("p2", command, arrival(STAMP.now), []).partitions].sort()).toEqual([
+    expect([...engine.commandNeeds("p2", command, arrival(STAMP.now), { declaredActivity: [], declaredNotices: [] }).partitions].sort()).toEqual([
       holdingPartition(1),
       holdingPartition(3),
     ]);
@@ -267,7 +267,7 @@ describe("the ordered declaration walk", () => {
     const { engine } = newEngine();
     const command = { name: "tend", args: { neighbour: 0 } };
     await engine.hydrate([holdingPartition(1), holdingPartition(2), holdingPartition(3)]);
-    expect(engine.commandNeeds("p2", command, arrival(STAMP.now), []).partitions).toEqual([]);
+    expect(engine.commandNeeds("p2", command, arrival(STAMP.now), { declaredActivity: [], declaredNotices: [] }).partitions).toEqual([]);
   });
 
   it("refuses a declaration that tries to write", async () => {
@@ -490,11 +490,11 @@ describe("a chain of rounds at one step", () => {
     const { engine } = newEngine([chained]);
     const command = { name: "chained", args: {} };
 
-    expect(engine.commandNeeds("p1", command, arrival(STAMP.now), []).partitions).toEqual([INDEX]);
+    expect(engine.commandNeeds("p1", command, arrival(STAMP.now), { declaredActivity: [], declaredNotices: [] }).partitions).toEqual([INDEX]);
     await engine.hydrate([INDEX]);
-    expect(engine.commandNeeds("p1", command, arrival(STAMP.now), []).partitions).toEqual([holdingPartition(1)]);
+    expect(engine.commandNeeds("p1", command, arrival(STAMP.now), { declaredActivity: [], declaredNotices: [] }).partitions).toEqual([holdingPartition(1)]);
     await engine.hydrate([holdingPartition(1)]);
-    expect(engine.commandNeeds("p1", command, arrival(STAMP.now), []).partitions).toEqual([]);
+    expect(engine.commandNeeds("p1", command, arrival(STAMP.now), { declaredActivity: [], declaredNotices: [] }).partitions).toEqual([]);
 
     const result = await engine.applyCommand("p1", command, STAMP);
     expect([...result.dirty].sort()).toEqual([INDEX, holdingPartition(1)]);
@@ -513,6 +513,7 @@ describe("who may issue what", () => {
         presence: [],
         activity: null,
         declaredActivity: [],
+        declaredNotices: [],
       }),
     ).rejects.toThrow(/a due event has no player/);
   });

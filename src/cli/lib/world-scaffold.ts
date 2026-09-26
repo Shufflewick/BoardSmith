@@ -354,7 +354,7 @@ export const gameDefinition: GameDefinition = {
 /** `tests/world.test.ts` -- the world driven by the library that runs it. */
 export function generateWorldTestTs(): string {
   return `import { describe, expect, it } from 'vitest';
-import { createWorld, settleDeclaration, walkDeclaration } from 'boardsmith/world';
+import { createWorld, EMPTY_NOTICE_BOX, settleDeclaration, walkDeclaration } from 'boardsmith/world';
 import { gameDefinition } from '../src/rules/index.js';
 import { PLOT_ROWS, RIPEN_MS, plotPartition } from '../src/rules/world.js';
 
@@ -416,6 +416,16 @@ function unrecorded(seat: number): Promise<never> {
   );
 }
 
+/**
+ * The third half, for an action that reads a seat's NOTICE BOX with
+ * \`.noticeBox(seat)\`. A real host answers it out of its own store -- one small
+ * row per seat, never the seat's partition. This test keeps no boxes, so every
+ * seat's box is empty.
+ */
+function noBoxes(seat: number) {
+  return Promise.resolve({ seat, box: EMPTY_NOTICE_BOX });
+}
+
 /** What this seat may do, declared and then enumerated -- the two calls a host
  *  makes to draw a player's options. */
 async function offersFor(runner: Runner, player: string) {
@@ -424,9 +434,12 @@ async function offersFor(runner: Runner, player: string) {
       partitions: (await runner.declareOffers(player, supplied, T0)).needs,
       // An offer belongs to a seat, and a seated action declares no chair.
       seats: [],
+      // Nor a notice box: an offer reads none.
+      noticeBoxes: [],
     }),
     unstored,
     unrecorded,
+    noBoxes,
   );
   return runner.offersFor(player, { now: T0, presence: [1] });
 }
@@ -446,7 +459,7 @@ async function perform(
   timing: { due: number; missedCount: number } | null = null,
   arrivedAt: number = T0,
 ) {
-  const declaredActivity = await walkDeclaration(
+  const answered = await walkDeclaration(
     (supplied, declared) =>
       runner.declare(
         command,
@@ -460,6 +473,7 @@ async function perform(
       ),
     unstored,
     unrecorded,
+    noBoxes,
   );
   return runner.apply({
     player,
@@ -470,7 +484,7 @@ async function perform(
     presence: player === null ? [] : [1],
     // WHAT THE WALK COLLECTED, and nothing else: the loop hands back exactly
     // what this takes, so the two halves cannot come apart.
-    declaredActivity,
+    ...answered,
   });
 }
 

@@ -98,6 +98,7 @@ const STAMP = {
   activity: { seat: 1, at: null, since: 1_700_000_000_000 },
   // A seated action declares no activity round, so the host hands back none.
   declaredActivity: [],
+  declaredNotices: [],
 };
 
 const EVENT_STAMP = {
@@ -105,6 +106,7 @@ const EVENT_STAMP = {
   presence: [],
   activity: null,
   declaredActivity: [],
+  declaredNotices: [],
 };
 
 const ROOM_ONE = "room:1";
@@ -1333,7 +1335,7 @@ describe("#68 — a refused command leaves the world unchanged", () => {
     // boundary twice for one command.
     const engine = newEngine();
     expect(
-      engine.commandNeeds("player-a", { name: "tearOwn", args: { aim: "room-one" } }, arrival(STAMP.now), []).partitions,
+      engine.commandNeeds("player-a", { name: "tearOwn", args: { aim: "room-one" } }, arrival(STAMP.now), { declaredActivity: [], declaredNotices: [] }).partitions,
     ).toEqual([ROOM_ONE]);
   });
 
@@ -1403,6 +1405,7 @@ describe("#57 — the clock a handler can trust is the platform's", () => {
         presence: [],
         activity: STAMP.activity,
         declaredActivity: [],
+        declaredNotices: [],
       },
     );
     expect(result.events[0]!.payload).toEqual({
@@ -1439,6 +1442,7 @@ describe("#57 — the clock a handler can trust is the platform's", () => {
         presence: [2, 1],
         activity: STAMP.activity,
         declaredActivity: [],
+        declaredNotices: [],
       },
     );
     expect(result.events[0]!.payload).toEqual({ online: [1, 2] });
@@ -2083,7 +2087,7 @@ describe("retiring a seat's holder (ShufflewickPub #399)", () => {
   function reissueSeatTwo(engine: BoardSmithWorldEngine): void {
     engine.seat("newcomer", 2);
 
-    expect(engine.commandNeeds("newcomer", { name: "tend", args: {} }, arrival(0), []).partitions).toEqual([
+    expect(engine.commandNeeds("newcomer", { name: "tend", args: {} }, arrival(0), { declaredActivity: [], declaredNotices: [] }).partitions).toEqual([
       holdingPartition(2),
     ]);
   }
@@ -2100,7 +2104,7 @@ describe("retiring a seat's holder (ShufflewickPub #399)", () => {
     // begins, so it arrives synchronously rather than as a rejected promise.
     let refused: unknown;
     try {
-      engine.commandNeeds("p2", { name: "tend", args: {} }, arrival(0), []);
+      engine.commandNeeds("p2", { name: "tend", args: {} }, arrival(0), { declaredActivity: [], declaredNotices: [] });
     } catch (error) {
       refused = error;
     }

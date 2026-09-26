@@ -9,7 +9,7 @@ import open from 'open';
 import type { GameDefinition } from '../../session/index.js';
 import { DEFAULT_COLOR_PALETTE, type GameStateSnapshot } from '../../engine/index.js';
 import { MultiplayerHost, type TableRules } from '../dev-host/multiplayer-host.js';
-import { createDevHostConnectionHandler } from '../dev-host/connection-handler.js';
+import { claimDevHostSocket } from '../dev-host/connection-handler.js';
 import { devStorePath, loadDevStore } from '../dev-host/persistence-file-store.js';
 import { resetWorldStore, worldResetNotice, worldStoreDir } from '../dev-host/world-store.js';
 import { announceHost, hostHoldings, onShutdown } from '../dev-host/shutdown.js';
@@ -25,7 +25,6 @@ import { resolveUserPath } from '../lib/user-path.js';
 import { commandBuildDir } from '../lib/project-paths.js';
 import { loadWorldRuntime, startWorldDevServer, type WorldRuntime } from './dev-world.js';
 import {
-  claimWebSocketPath,
   devNotFoundMiddleware,
   monorepoBoardsmithResolvePlugin,
   reloadOnRulesEdit,
@@ -1003,26 +1002,24 @@ export async function devCommand(options: DevOptions): Promise<void> {
     // one road quietly reacquires the collision the other fixed. `serveVite`
     // attaches it to the HTTP server the host owns, which outlives every
     // `vite.config.ts` restart (#214).
-    const hostSocket = claimWebSocketPath(
-      '/__boardsmith/ws',
-      // Per-connection WS handling (hello routing + DEF-C stale-close guard)
-      // lives in one shared, unit-tested factory so the dev server and the
-      // DEF-C regression test run the identical implementation. A rejected
-      // message handler must never crash the dev process — log and continue.
-      createDevHostConnectionHandler({
-        mpHost,
-        clients,
-        queue: rulesReload,
-        onError: (err, msgType) =>
-          // The message, not the error: a running dev server has nothing to
-          // throw to, and a stack trace in its log is the same leak (#240).
-          console.error(
-            chalk.red(
-              `[boardsmith dev] message '${msgType}' failed: ${err instanceof Error ? err.message : String(err)}`,
-            ),
+    // The table socket's path and per-connection handling (hello routing +
+    // DEF-C stale-close guard) come from one function, which the dev-host
+    // integration test serves too, so it drives exactly what runs here (#422).
+    // A rejected message handler must never crash the dev process — log and
+    // continue.
+    const hostSocket = claimDevHostSocket({
+      mpHost,
+      clients,
+      queue: rulesReload,
+      onError: (err, msgType) =>
+        // The message, not the error: a running dev server has nothing to
+        // throw to, and a stack trace in its log is the same leak (#240).
+        console.error(
+          chalk.red(
+            `[boardsmith dev] message '${msgType}' failed: ${err instanceof Error ? err.message : String(err)}`,
           ),
-      }),
-    );
+        ),
+    });
 
     // A refused listen closes Vite and this host's socket before the error
     // reaches the catch below, which is what lets a refused run exit (#345).

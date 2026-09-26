@@ -17,6 +17,7 @@ import Toast from '../../ui/components/Toast.vue';
 import { useToast } from '../../ui/composables/useToast.js';
 import { applyTheme } from '../../ui/theme.js';
 import { loadDevClientId, TABLE_CLIENT_KEY } from './dev-client-id.js';
+import { DEV_HOST_WS_PATH } from './socket-path.js';
 
 const props = defineProps<{ config: DevHostConfig }>();
 const cfg = props.config;
@@ -135,6 +136,22 @@ const takenColors = computed(
 let ws: WebSocket | null = null;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let closedByUs = false;
+/**
+ * The dev-server run this page joined, from the host's `welcome` (#416). Named
+ * in every later `hello`, so after a server restart the new run can tell this
+ * tab apart from a page opened for it.
+ *
+ * Vite reloads every open page when the dev server comes back, so a tab left
+ * open across a restart arrives as a new page load. When the socket drops, the
+ * run is written to this tab's sessionStorage under `DROPPED_RUN_KEY`, and the
+ * next page load takes it (once) as the run it joined. Any other page load
+ * names no run, so a reload by the designer joins whatever run is serving.
+ */
+const DROPPED_RUN_KEY = 'boardsmith:dev-run-left';
+let joinedRunId: string | null = sessionStorage.getItem(DROPPED_RUN_KEY);
+sessionStorage.removeItem(DROPPED_RUN_KEY);
+/** Set when the host says this page joined an earlier run: it holds no seat now. */
+const serverRestarted = ref(false);
 // Cache the latest init/state so a (re)mounted iframe can be re-fed on @load.
 let lastInitSeat: number | null = null;
 let lastGameState: Record<string, unknown> | null = null;
@@ -143,7 +160,7 @@ const stepDeadlineOpen = ref(false);
 
 function wsUrl(): string {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-  return `${proto}://${location.host}/__boardsmith/ws`;
+  return `${proto}://${location.host}${DEV_HOST_WS_PATH}`;
 }
 
 function wsSend(message: Record<string, unknown>): void {
@@ -152,7 +169,9 @@ function wsSend(message: Record<string, unknown>): void {
 
 function connect(): void {
   ws = new WebSocket(wsUrl());
-  ws.addEventListener('open', () => wsSend({ type: 'hello', clientId }));
+  ws.addEventListener('open', () =>
+    wsSend({ type: 'hello', clientId, ...(joinedRunId === null ? {} : { runId: joinedRunId }) }),
+  );
   ws.addEventListener('message', (ev) => {
     try {
       onHostMessage(JSON.parse(ev.data as string));
@@ -162,14 +181,26 @@ function connect(): void {
   });
   ws.addEventListener('close', () => {
     if (closedByUs) return;
+    if (joinedRunId !== null) sessionStorage.setItem(DROPPED_RUN_KEY, joinedRunId);
     connected.value = false;
     reconnectTimer = setTimeout(connect, 1000);
   });
 }
 
+function reloadPage(): void {
+  location.reload();
+}
+
 function onHostMessage(msg: Record<string, unknown>): void {
   connected.value = true;
   switch (msg.type) {
+    case 'welcome':
+      joinedRunId = msg.runId as string;
+      sessionStorage.removeItem(DROPPED_RUN_KEY);
+      break;
+    case 'stale_run':
+      serverRestarted.value = true;
+      break;
     case 'lobby': {
       seats.value = msg.seats as SeatInfo[];
       const mine = (msg.seats as SeatInfo[]).find((s) => s.clientId === clientId);
@@ -483,8 +514,14 @@ onUnmounted(() => {
     <!-- DEV-08: radial vignette darkens edges so the board iframe remains the hero -->
     <div class="dev-vignette" aria-hidden="true"></div>
 
+    <!-- This tab joined an earlier run of the dev server (#416): it holds no seat in this one. -->
+    <div v-if="serverRestarted" class="dev-host__center" role="status" data-testid="server-restarted">
+      <p>The dev server restarted. Reload to join the new game.</p>
+      <button type="button" class="btn" @click="reloadPage">Reload</button>
+    </div>
+
     <!-- Connecting -->
-    <div v-if="!connected" class="dev-host__center">
+    <div v-else-if="!connected" class="dev-host__center">
       <p>Connecting to the dev host…</p>
     </div>
 

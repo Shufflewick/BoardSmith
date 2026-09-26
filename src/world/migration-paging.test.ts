@@ -16,6 +16,7 @@
  * "may this be paged", and an author who writes none pages without saying
  * anything.
  */
+import type { DeclaredNoticeBox } from "./notices.js";
 import { describe, expect, it } from "vitest";
 import { Game, Space, type GameElement, type GameOptions } from "../engine/index.js";
 import { createWorld, type WorldRunnerOptions } from "./definition.js";
@@ -204,6 +205,7 @@ const STAMP = {
   // EMPTY, ALWAYS, on a seat's road (#423): a seated verb may declare no
   // activity round, so there is nothing honest to hand its handler.
   declaredActivity: [] as readonly DeclaredSeatActivityStamp[],
+  declaredNotices: [] as readonly DeclaredNoticeBox[],
 };
 
 describe("#407 — a migrated page may be let go of", () => {
@@ -216,7 +218,7 @@ describe("#407 — a migrated page may be let go of", () => {
     resident: Record<string, StoredPartition>,
   ): Promise<readonly string[]> => {
     const command = { name: "poke", args: {} };
-    await runner.declare(command, "p1", resident, arrival(0), []);
+    await runner.declare(command, "p1", resident, arrival(0), { declaredActivity: [], declaredNotices: [] });
     const result = await runner.apply({ player: "p1", command, timing: null, ...STAMP });
     return result.dirty;
   };
@@ -975,7 +977,7 @@ describe("#246 — a transform page emits the roots its own source root splits i
     const stored: Record<string, StoredPartition> = {
       "owner-1": { parentId: 0, json: JSON.parse(answer.partitions["owner-1"]!) },
     };
-    await runner.declare(command, "p1", stored, arrival(0), []);
+    await runner.declare(command, "p1", stored, arrival(0), { declaredActivity: [], declaredNotices: [] });
     const result = await runner.apply({ player: "p1", command, timing: null, ...STAMP });
 
     expect(result.dirty).toEqual(["owner-1"]);

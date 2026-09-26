@@ -85,6 +85,7 @@ const COMMAND_STAMP = {
   presence: [] as readonly number[],
   activity: { seat: 1, at: null, since: STAMP.now },
   declaredActivity: [],
+  declaredNotices: [],
 };
 
 async function warmEngine(): Promise<BoardSmithWorldEngine> {

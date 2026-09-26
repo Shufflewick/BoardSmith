@@ -1,7 +1,7 @@
 {
-  "revision": 112,
+  "revision": 113,
   "bundleProtocol": 2,
-  "surfaceHash": "1410eb2d9e426550",
+  "surfaceHash": "3d6d28a5d3c36fcd",
   "payloadHash": "cae65bbab7213c58",
   "formatHash": "0058593e7cc80205",
   "history": [
@@ -948,7 +948,16 @@
       "revision": 112,
       "date": "2026-09-26",
       "bundleProtocol": 2,
-      "surfaceHash": "1410eb2d9e426550",
+      "surfaceHash": "71a6fad70c6dbed9",
+      "payloadHash": "cae65bbab7213c58",
+      "formatHash": "0058593e7cc80205",
+      "summary": "A world can leave a lasting NOTICE for a seat without loading that seat's partition (ShufflewickPub #521, BoardSmith #420). world.notices: { perSeat } declares a per-seat notice box, capped by the new budget maxNoticesPerSeat (64); noticeMaxBytes (1024) bounds one notice and maxNoticesPerCommand (100) the sends per dispatch. ctx.world.notify(seat, { payload, line?, whenFull }) appends to a box with no declaration and no partition load; whenFull is required -- 'dropOldest' evicts and counts dropped, 'refuse' refuses the command (notice-box-full) and needs the box declared. .noticeBox(fn) on worldAction and worldClockAction declares ONE seat's box per round of the walk; the host answers a point read and ctx.world.notices(seat) / takeNotices(seat) read it and empty it. WorldDispatchNeeds gains noticeBoxes; runner.declare and commandNeeds take WorldWalkAnswers { declaredActivity, declaredNotices } and walkDeclaration takes a fourth reader and returns that object, which apply takes; WorldCommandStamp, WorldEventStamp and WorldApplyRequest carry declaredNotices; WorldCommandResult carries notices: { perSeat, writes } which a host applies with applyNoticeWrites in the checkpoint's own write, and each send is also a routed event on the reserved scope 'notice' to its one seat. WorldStore gains noticeBox(seat) and WorldCheckpointExtras.notices, and a vacated chair's box goes with it. New refusals: invalid-notice, notice-batch-cap, notice-box-full, undeclared-notice-box (game) and notice-box-answered-wrong (platform); the partition name 'notice' is reserved. formatHash unmoved: no stored partition byte changes."
+    },
+    {
+      "revision": 113,
+      "date": "2026-09-26",
+      "bundleProtocol": 2,
+      "surfaceHash": "3d6d28a5d3c36fcd",
       "payloadHash": "cae65bbab7213c58",
       "formatHash": "0058593e7cc80205",
       "summary": "Bots in hidden-information games (a determinize sampler, such as Go Fish) no longer search moves for a seat that is not to move in the sampled world, and a move the engine refuses during the search is no longer scored as if it had been played, so their searches spend no work on illegal moves (#421). SnapshotSessionHost now holds back a bot seat whose move was refused, or that stalled, until the snapshot changes, and keeps driving the other bot seats instead of stopping the pump. A refused botTurn result now names the seat in botPlayer; the executor must forward botPlayer on its error result for the host to hold back only that seat, otherwise the pump stops as before. GameSession no longer re-checks bots in a loop while a human is to move or after a refused bot move."

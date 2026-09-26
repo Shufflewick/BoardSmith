@@ -1,9 +1,15 @@
 /**
  * Browserless Node integration test — the phase's literal acceptance proof.
  *
- * Stands up a REAL `ws` `WebSocketServer({ port: 0 })` wired to `MultiplayerHost`
- * exactly as `src/cli/commands/dev.ts` does (minus Vite's httpServer), then
- * drives the full agent flow with `createDevHostClient` over a real socket:
+ * Serves the dev host's socket the way `boardsmith dev` does: `claimDevHostSocket`
+ * (the one function `src/cli/commands/dev.ts` calls) claims `DEV_HOST_WS_PATH`
+ * on a real Node HTTP server and routes every connection through the shipped
+ * connection handler. Only Vite is missing. So what this file proves is the
+ * protocol the product speaks, path included (#422): an earlier version stood
+ * up its own socket server that assigned a client id per connection, and
+ * proved a pre-`hello` `getLobby` answer the real server never gives.
+ *
+ * It drives the full agent flow with `createDevHostClient` over a real socket:
  * connect -> hello -> getLobby -> join -> getState -> action -> debugToggle/uiSwitch.
  *
  * Exercises DRIVE-01 (getState/getLobby), DRIVE-02 (a browserless Node client
@@ -25,11 +31,14 @@
  * cleanup to fold into an unrelated change.
  */
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { createServer, type Server } from 'node:http';
+import type { Socket } from 'node:net';
 import { WebSocketServer, WebSocket as NodeWebSocket } from 'ws';
 import { Game, Player, Action, defineFlow, actionStep, loop, type GameOptions } from '../../engine/index.js';
 import { executeOp, ErrorCode, type GameDefinitionLike } from '../../session/index.js';
-import { MultiplayerHost, type ClientInbound } from './multiplayer-host.js';
-import { createDevHostConnectionHandler } from './connection-handler.js';
+import { MultiplayerHost } from './multiplayer-host.js';
+import { claimDevHostSocket } from './connection-handler.js';
+import { DEV_HOST_WS_PATH } from './socket-path.js';
 import { createDevHostClient, type DevHostInboundMessage } from '../../client/dev-host-client.js';
 import { boundaryKeyOf } from '../../session/testing/boundary-stamp.js';
 
@@ -87,12 +96,54 @@ async function waitFor(predicate: () => boolean | Promise<boolean>, timeoutMs = 
   }
 }
 
+/** A dev host's socket served as `boardsmith dev` serves it, minus Vite. */
+interface ServedDevHost {
+  readonly url: string;
+  close(): Promise<void>;
+}
+
+/**
+ * Serve `host` through `claimDevHostSocket` on a real HTTP server, the way
+ * `boardsmith dev` does. `clients` is the map the host's `send` reads.
+ */
+async function serveDevHost(host: MultiplayerHost, clients: Map<string, NodeWebSocket>): Promise<ServedDevHost> {
+  const claimed = claimDevHostSocket({
+    mpHost: host,
+    clients,
+    // No rules reload in this file, so every message runs as it arrives.
+    queue: { admit: (message) => message.run() },
+    onError: (err) => {
+      throw err instanceof Error ? err : new Error(String(err));
+    },
+  });
+  const server: Server = createServer();
+  claimed.attach(server);
+  // An upgraded socket is no longer the HTTP server's to close, so the test
+  // holds every raw socket to end them at teardown.
+  const rawSockets = new Set<Socket>();
+  server.on('connection', (raw) => {
+    rawSockets.add(raw);
+    raw.once('close', () => rawSockets.delete(raw));
+  });
+  await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const address = server.address();
+  if (typeof address === 'string' || address === null) {
+    throw new Error('Expected an AddressInfo from an HTTP server listening on port 0.');
+  }
+  return {
+    url: `ws://127.0.0.1:${address.port}${DEV_HOST_WS_PATH}`,
+    close: async () => {
+      claimed.close();
+      for (const raw of rawSockets) raw.destroy();
+      await new Promise<void>((resolve, reject) => server.close((err) => (err ? reject(err) : resolve())));
+    },
+  };
+}
+
 describe('dev-host integration: createDevHostClient against a real in-process WS server', () => {
-  let wss: WebSocketServer;
   let host: MultiplayerHost;
-  let port: number;
+  let served: ServedDevHost;
   const sockets = new Map<string, NodeWebSocket>();
-  let clientCounter = 0;
 
   beforeAll(async () => {
     host = new MultiplayerHost({
@@ -107,62 +158,20 @@ describe('dev-host integration: createDevHostClient against a real in-process WS
         if (sock && sock.readyState === sock.OPEN) sock.send(JSON.stringify(message));
       },
     });
-
-    wss = new WebSocketServer({ port: 0 });
-
-    // Mirrors dev.ts:559-583 minus the Vite httpServer/upgrade routing: each
-    // connection gets its own clientId (assigned at connection rather than
-    // gated behind a 'hello' text frame, so a scripted client can observe the
-    // host's true pre-hello 'lobby' phase via getLobby before any client has
-    // ever said hello). Every message (including 'hello') is still forwarded
-    // to MultiplayerHost.handleMessage exactly as dev.ts's dispatch() does.
-    wss.on('connection', (socket) => {
-      const clientId = `client-${++clientCounter}`;
-      sockets.set(clientId, socket);
-      socket.on('message', (raw) => {
-        let msg: ClientInbound;
-        try {
-          msg = JSON.parse(raw.toString());
-        } catch {
-          return;
-        }
-        Promise.resolve(host.handleMessage(clientId, msg)).catch((err) => {
-          throw err instanceof Error ? err : new Error(String(err));
-        });
-      });
-      socket.on('close', () => {
-        sockets.delete(clientId);
-        host.disconnect(clientId);
-      });
-    });
-
-    await new Promise<void>((resolve) => wss.once('listening', resolve));
-    const address = wss.address();
-    if (typeof address === 'string' || address === null) {
-      throw new Error('Expected an AddressInfo from WebSocketServer({ port: 0 }).');
-    }
-    port = address.port;
+    served = await serveDevHost(host, sockets);
   });
 
   afterAll(async () => {
-    for (const sock of sockets.values()) sock.close();
     sockets.clear();
-    await new Promise<void>((resolve, reject) => {
-      wss.close((err) => (err ? reject(err) : resolve()));
-    });
+    await served.close();
   });
 
   it('drives connect -> hello -> getLobby -> join -> getState -> action -> debugToggle/uiSwitch', async () => {
-    const url = `ws://localhost:${port}`;
+    const { url } = served;
 
-    // ── Client A: connect, observe the true pre-game lobby phase, then hello. ──
+    // ── Client A: connect and identify. Nothing is answered before `hello` (#422). ──
     const clientA = createDevHostClient(url);
     await clientA.opened;
-
-    const lobbyBeforeStart = await clientA.getLobby();
-    expect(lobbyBeforeStart.phase).toBe('lobby');
-    expect(lobbyBeforeStart.playerCount).toBe(2);
-    expect(lobbyBeforeStart.minPlayers).toBe(1);
 
     // The FIRST hello system-wide auto-seats A into seat 1 and starts the game
     // (MultiplayerHost is "always live" — see multiplayer-host.ts:hello()).
@@ -171,6 +180,8 @@ describe('dev-host integration: createDevHostClient against a real in-process WS
 
     const lobbyAfterStart = await clientA.getLobby();
     expect(lobbyAfterStart.phase).toBe('playing');
+    expect(lobbyAfterStart.playerCount).toBe(2);
+    expect(lobbyAfterStart.minPlayers).toBe(1);
 
     // ── DRIVE-01: getState returns the caller's OWN seat view, requestId echoed. ──
     const stateA = await clientA.getState();
@@ -308,14 +319,55 @@ describe('dev-host integration: createDevHostClient against a real in-process WS
     deadClient.close();
   });
 
+  it('refuses a request made before hello() at once, naming the fix, and sends nothing (#422)', async () => {
+    // The dev host answers nothing a socket sends before it identifies itself
+    // with `hello`, as the platform serves nothing to a socket it has not
+    // identified. So the client refuses such a request itself: without this, a
+    // caller waits out the whole request timeout for an answer that never comes.
+    const client = createDevHostClient(served.url, { requestTimeoutMs: 5000 });
+    await client.opened;
+    const sent: DevHostInboundMessage[] = [];
+    client.onMessage((msg) => sent.push(msg));
+    await expect(client.getLobby()).rejects.toThrow(/call `client\.hello\(\)` before 'getLobby'/);
+    await expect(client.getState()).rejects.toThrow(/call `client\.hello\(\)` before 'getState'/);
+    await expect(client.serverRequest('debug:logs', {})).rejects.toThrow(/call `client\.hello\(\)` before 'server_request'/);
+    expect(() => client.join(2)).toThrow(/call `client\.hello\(\)` before 'join'/);
+    expect(() => client.debugToggle()).toThrow(/call `client\.hello\(\)` before 'debugToggle'/);
+    // Once it has said hello, the same request is answered.
+    client.hello();
+    const lobby = await client.getLobby();
+    expect(lobby.phase).toBe('playing');
+    expect(sent.filter((m) => m.type === 'error')).toEqual([]);
+    client.close();
+  });
+
+  it('the real dev host drops a message sent before hello rather than holding it (#422)', async () => {
+    // Driven over a raw socket, so no client-side guard is involved: this is
+    // the server's own behaviour. Frames on one socket arrive in order, so the
+    // reply to the post-hello getLobby arriving with no reply to the pre-hello
+    // one before it proves the first was dropped, with no clock involved.
+    const raw = new NodeWebSocket(served.url);
+    const frames: Array<{ type?: string; requestId?: string }> = [];
+    raw.on('message', (data) => frames.push(JSON.parse(data.toString())));
+    await new Promise<void>((resolve) => raw.once('open', resolve));
+    raw.send(JSON.stringify({ type: 'getLobby', requestId: 'before-hello' }));
+    raw.send(JSON.stringify({ type: 'hello', clientId: 'raw-422' }));
+    raw.send(JSON.stringify({ type: 'getLobby', requestId: 'after-hello' }));
+    await waitFor(() => frames.some((f) => f.requestId === 'after-hello'));
+    expect(frames.find((f) => f.requestId === 'after-hello')?.type).toBe('lobby');
+    expect(frames.some((f) => f.requestId === 'before-hello')).toBe(false);
+    raw.close();
+  });
+
   it('rejects a correlated getState request promptly with the host error, not a timeout (CR-01)', async () => {
     // By this point in the suite the game is already 'playing' with both
-    // seats claimed by clientA/clientB — a fresh client that never joins a
-    // seat is unseated. getState's guard clause ("You are not seated in this
-    // game.") must reject the promise immediately via requestId correlation —
-    // NOT fall through to the (much longer) generic timeout.
-    const unseatedClient = createDevHostClient(`ws://localhost:${port}`, { requestTimeoutMs: 5000 });
+    // seats claimed by clientA/clientB — a fresh client that says hello but
+    // never joins a seat is unseated. getState's guard clause ("You are not
+    // seated in this game.") must reject the promise immediately via requestId
+    // correlation — NOT fall through to the (much longer) generic timeout.
+    const unseatedClient = createDevHostClient(served.url, { requestTimeoutMs: 5000 });
     await unseatedClient.opened;
+    unseatedClient.hello();
     // The host's own words prove the path: the timeout path rejects with
     // "timed out after ...", never with them. No wall-clock budget needed.
     await expect(unseatedClient.getState()).rejects.toThrow(/not seated in this game/);
@@ -323,36 +375,28 @@ describe('dev-host integration: createDevHostClient against a real in-process WS
   });
 
   it('rejects a pending request immediately when the socket closes mid-request (CR-02)', async () => {
-    const client = createDevHostClient(`ws://localhost:${port}`, { requestTimeoutMs: 5000 });
+    const client = createDevHostClient(served.url, { requestTimeoutMs: 5000 });
     await client.opened;
+    client.hello();
     const pendingRequest = client.getState(); // no reply will ever arrive before close()
     client.close();
     await expect(pendingRequest).rejects.toThrow(/connection to .* closed/);
   });
 
   describe('stale close (DEF-C transport-layer race)', () => {
-    // Standalone real WebSocketServer + MultiplayerHost, wired with the SAME
-    // `createDevHostConnectionHandler` the real dev server (dev.ts) uses — so
-    // clientId is read from the `hello` message body (not assigned
-    // per-connection like this file's own beforeAll harness above), letting TWO
-    // raw sockets share ONE clientId string, exactly how a page reload behaves
-    // (persisted clientId in localStorage, DevHost.vue:29-36). Because the guard
-    // is the literal shared implementation (no hand-mirrored copy), a future
-    // edit that regresses the socket-identity check fails HERE. Before the fix
-    // landed this test failed against the unguarded handler, proving the DEF-C
-    // repro; it now passes with the guard in place.
-    let staleWss: WebSocketServer;
-    let staleHost: MultiplayerHost;
-    let stalePort: number;
+    // Its own MultiplayerHost, served through the same `claimDevHostSocket` as
+    // the rest of this file, so clientId is read from the `hello` message body,
+    // letting TWO raw sockets share ONE clientId string, exactly how a page
+    // reload behaves (persisted clientId in localStorage, DevHost.vue). Because
+    // the guard is the literal shared implementation (no hand-mirrored copy), a
+    // future edit that regresses the socket-identity check fails HERE. Before
+    // the fix landed this test failed against the unguarded handler, proving
+    // the DEF-C repro; it now passes with the guard in place.
+    let staleServed: ServedDevHost;
     const staleClients = new Map<string, NodeWebSocket>();
-    // Tracks every server-side socket ever accepted, independent of the
-    // clientId map above — the stale-close bug under test can leave a live
-    // socket's map entry deleted (see close handler below) while the socket
-    // itself stays open, so cleanup must not rely on staleClients alone.
-    const staleServerSockets = new Set<NodeWebSocket>();
 
     beforeAll(async () => {
-      staleHost = new MultiplayerHost({
+      const staleHost = new MultiplayerHost({
         playerCount: 2,
         minPlayers: 1,
         maxPlayers: gameDef.maxPlayers,
@@ -364,48 +408,16 @@ describe('dev-host integration: createDevHostClient against a real in-process WS
           if (sock && sock.readyState === sock.OPEN) sock.send(JSON.stringify(message));
         },
       });
-
-      staleWss = new WebSocketServer({ port: 0 });
-
-      // Use the SAME connection handler the real dev server runs (dev.ts) — no
-      // hand-mirrored copy. This is what gives the regression test teeth: it
-      // exercises the literal socket-identity guard, so a future edit that
-      // regresses it fails here. The extra socket-tracking wrapper is test-only
-      // cleanup bookkeeping and does not affect the handler under test.
-      const handleConnection = createDevHostConnectionHandler({
-        mpHost: staleHost,
-        clients: staleClients,
-        // No rules reload in this test, so every message runs as it arrives.
-        queue: { admit: (message) => message.run() },
-        onError: (err) => {
-          throw err instanceof Error ? err : new Error(String(err));
-        },
-      });
-      staleWss.on('connection', (socket) => {
-        staleServerSockets.add(socket);
-        socket.once('close', () => staleServerSockets.delete(socket));
-        handleConnection(socket);
-      });
-
-      await new Promise<void>((resolve) => staleWss.once('listening', resolve));
-      const address = staleWss.address();
-      if (typeof address === 'string' || address === null) {
-        throw new Error('Expected an AddressInfo from WebSocketServer({ port: 0 }).');
-      }
-      stalePort = address.port;
+      staleServed = await serveDevHost(staleHost, staleClients);
     });
 
     afterAll(async () => {
-      for (const sock of staleServerSockets) sock.close();
-      staleServerSockets.clear();
       staleClients.clear();
-      await new Promise<void>((resolve, reject) => {
-        staleWss.close((err) => (err ? reject(err) : resolve()));
-      });
+      await staleServed.close();
     });
 
     it('a stale close from the OLD socket must not orphan the reconnected (new) socket', async () => {
-      const url = `ws://localhost:${stalePort}`;
+      const { url } = staleServed;
 
       // S1: original connection, becomes seat 1 ("A").
       const s1 = new NodeWebSocket(url);
@@ -496,6 +508,7 @@ describe('dev-host integration: createDevHostClient against a real in-process WS
         requestTimeoutMs: 50,
       });
       await silentClient.opened;
+      silentClient.hello();
       await expect(silentClient.getLobby()).rejects.toThrow(/timed out after 50ms/);
       silentClient.close();
     } finally {

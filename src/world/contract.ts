@@ -232,6 +232,7 @@
 
 import type { Game, GameElement } from "../engine/index.js";
 import type { ScheduleAllowance, ScheduleRequest } from "./schedule-api.js";
+import type { DeclaredNoticeBox, WorldNoticeWrites } from "./notices.js";
 // TYPE ONLY. A world's offer IS the table's action metadata (#169) -- one
 // shape, so the shared action panel and board bridge read a world's answer
 // with no translation -- and a type import keeps `boardsmith/world` free of a
@@ -442,6 +443,31 @@ export interface WorldDispatchNeeds {
    * O(world) shape this replaced unavailable rather than merely discouraged.
    */
   readonly seats: readonly number[];
+  /**
+   * Seats whose NOTICE BOX the host must answer a point read for, at most one
+   * per round (ShufflewickPub #521).
+   *
+   * `seats`' shape for the other thing a walk may name that is not a
+   * partition: one small row per seat, kept by the host beside the partitions,
+   * so a handler can read or take a seat's notices without loading that seat's
+   * partition.
+   */
+  readonly noticeBoxes: readonly number[];
+}
+
+/**
+ * EVERYTHING A HOST ANSWERED ON ONE DISPATCH'S WALK (ShufflewickPub #423,
+ * #521), which is exactly what `apply` takes.
+ *
+ * Both lists ACCUMULATE on the host's side, in the order they were asked,
+ * because neither answer becomes resident in the child: a watermark and a box
+ * are handed to the dispatch and forgotten. `walkDeclaration` builds this and
+ * returns it, so a host cannot drive the walk and then hand `apply` a
+ * different set of answers.
+ */
+export interface WorldWalkAnswers {
+  readonly declaredActivity: readonly DeclaredSeatActivityStamp[];
+  readonly declaredNotices: readonly DeclaredNoticeBox[];
 }
 
 /**
@@ -649,6 +675,17 @@ export interface WorldCommandResult {
    * must not come apart.
    */
   readonly vacated?: { readonly seat: number; readonly player: string };
+  /**
+   * WHAT THIS DISPATCH DID TO NOTICE BOXES, absent when it did nothing
+   * (ShufflewickPub #521).
+   *
+   * Sends and takes in the order the handler made them. A host applies them
+   * with `applyNoticeWrites`, reading each touched seat's box once, and writes
+   * the boxes IN THE SAME TRANSACTION as this dispatch's checkpoint -- a
+   * refused command sends nothing and takes nothing, so a notice exists
+   * exactly when the command that sent it does.
+   */
+  readonly notices?: WorldNoticeWrites;
 }
 
 /**
@@ -732,6 +769,11 @@ export interface WorldCommandStamp {
    * to a question it never asked.
    */
   readonly declaredActivity: readonly DeclaredSeatActivityStamp[];
+  /**
+   * THE NOTICE BOXES THIS DISPATCH'S WALK NAMED, answered (ShufflewickPub
+   * #521). One per `.noticeBox()` round that named a seat, in the order asked.
+   */
+  readonly declaredNotices: readonly DeclaredNoticeBox[];
 }
 
 /**
@@ -778,6 +820,11 @@ export interface WorldEventStamp {
    * how such an event learns anything about a person at all.
    */
   readonly declaredActivity: readonly DeclaredSeatActivityStamp[];
+  /**
+   * THE NOTICE BOXES THIS DISPATCH'S WALK NAMED, answered (ShufflewickPub
+   * #521). One per `.noticeBox()` round that named a seat, in the order asked.
+   */
+  readonly declaredNotices: readonly DeclaredNoticeBox[];
 }
 
 /**
@@ -1076,16 +1123,17 @@ export interface WorldEngine {
    * world-owned phase has to be able to say which SEAT it is about as well as
    * which rooms: a watermark lives in the host's store, so the only way a
    * handler can read one is for the walk to have named the chair and the host
-   * to have answered it. `declared` is what the host has answered so far, in
+   * to have answered it. `answered` is what the host has answered so far, in
    * the order it was asked, and this subtracts it exactly as it subtracts a
-   * resident partition -- so the walk ends when nothing on either list is
-   * outstanding.
+   * resident partition -- so the walk ends when nothing on any list is
+   * outstanding. A seat's NOTICE BOX is the third kind (ShufflewickPub #521),
+   * answered the same way for the same reason: it is a row in the host's store.
    */
   commandNeeds(
     player: string | null,
     command: WorldCommand,
     when: WorldDispatchWhen,
-    declared: readonly DeclaredSeatActivityStamp[],
+    answered: WorldWalkAnswers,
   ): WorldDispatchNeeds;
 
   /**
