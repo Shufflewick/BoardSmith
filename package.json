@@ -7,6 +7,12 @@
   "bin": {
     "boardsmith": "./bin/boardsmith.js"
   },
+  "imports": {
+    "#testing/project-test-utils": {
+      "types": "./src/testing/project-test-utils.d.ts",
+      "default": "./src/testing/project-test-utils.node.ts"
+    }
+  },
   "exports": {
     ".": {
       "types": "./src/engine/index.ts",

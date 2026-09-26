@@ -34,6 +34,7 @@ import type { PlayerGameState } from '../session/types.js';
 import { buildPlayerState } from '../session/utils.js';
 import { PickHandler } from '../session/pick-handler.js';
 import { TestGame } from './test-game.js';
+import { importProjectTestUtils } from '#testing/project-test-utils';
 
 /**
  * WHAT THIS GATE CAN BE AIMED AT: a table, or a persistent world.
@@ -207,7 +208,8 @@ function loadTableSeatModules(): Promise<
 // project's own test files resolve it, and it then loads the project's `vue`.
 // It is loaded on first use, never at import time, so a consumer of the
 // `boardsmith/testing` barrel that never renders needs no `@vue/test-utils`
-// installed at all (MERC has none).
+// installed at all (MERC has none). The resolving takes Node, so it lives in
+// `project-test-utils.node.ts`, which a game's compiler never sees (#411).
 // ---------------------------------------------------------------------------
 let mountFnPromise: Promise<typeof import('@vue/test-utils').mount> | undefined;
 
@@ -218,23 +220,7 @@ function loadMount(): Promise<typeof import('@vue/test-utils').mount> {
 }
 
 async function loadProjectMount(): Promise<typeof import('@vue/test-utils').mount> {
-  const [{ createRequire }, { pathToFileURL }, { join }] = await Promise.all([
-    import('node:module'),
-    import('node:url'),
-    import('node:path'),
-  ]);
-  const project = process.cwd();
-  let entry: string;
-  try {
-    entry = createRequire(join(project, 'package.json')).resolve('@vue/test-utils');
-  } catch {
-    throw new Error(
-      `renderAsSeat mounts with your project's own @vue/test-utils, so a board renders on the same Vue ` +
-        `its components import, and none is installed in ${project}. ` +
-        'Run `npm install --save-dev @vue/test-utils` there, then run the tests again.',
-    );
-  }
-  const { mount } = (await import(pathToFileURL(entry).href)) as typeof import('@vue/test-utils');
+  const { mount } = await importProjectTestUtils();
   await requireOneVue(mount);
   return mount;
 }
