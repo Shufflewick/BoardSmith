@@ -816,6 +816,15 @@ and an omitted optional number reaches both `.quote()` and `execute` as
 answers the whole way down. Return `null` for a draft there is nothing to say
 about yet.
 
+**Each selection's value is what `execute` would get.** A `chooseElement` is the
+element, not the id the panel sent, and so is every element in a `chooseElements`
+-- the same resolution dispatch applies, in the quote and in every callback of a
+pick re-asked with earlier answers bound (`prompt`, `choices`/`elements`,
+`prepare`, `disabled`, `multiSelect`). Those elements are read-only, like
+everything else a read sees. A draft naming an element this action cannot offer
+the seat any more is refused with `stale-draft` rather than handed over as a bare
+number.
+
 **The number being typed is in there.** That is the point: the panel sends the
 value in its editor before it has been submitted, so the price shown is the price
 of what the player is looking at.
@@ -2480,6 +2489,7 @@ your game.
 | `rate-limited` | A connection sent frames faster than the host accepts. Well-formed traffic, refused at the door. |
 | `invalid-order` | A player command arrived with no usable order identity: no id, an id past 128 characters, or no mint instant. Every player command carries one -- see [an order that survives a lost reply](#an-order-that-survives-a-lost-reply). |
 | `order-outcome-unknown` | A repeat arrived for an order minted before this world's receipt floor, so nothing can say whether it committed. Refused rather than run, because running it is the second spend the identity exists to prevent. |
+| `stale-draft` | A quote, or a pick re-asked with earlier answers bound, was asked about a draft whose element selection names nothing this action can offer the seat now: the element was taken since the offer was sent, or the id was never in an offer. Ask for the offer again. |
 
 **`game`**: your bundle's own doing. Fix these; the same bundle does the same
 thing next time.
