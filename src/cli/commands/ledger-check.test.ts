@@ -703,6 +703,55 @@ describe('ledgerCheck — cited evidence must be in git (#292)', () => {
     expect(pastEnd.detail).toMatch(/line 9, but the installed BoardSmith's src\/engine\/flow\/engine\.ts has 4 lines/);
   });
 
+  /**
+   * #426: a verified chunk's claim may cite code as it was in a commit of the chunk's history
+   * (`path@<commit>:N-M`), so ledger-check holds that citation to the file having been in git
+   * there, with those lines, and not to the file as it is now.
+   */
+  async function builtChunkCiting(source: (base: string) => string[]): Promise<string> {
+    const dir = await tree({ 'src/rules/damage.ts': fiveLines });
+    commitAt(dir, '2026-09-20T12:00:00Z');
+    const base = execSync('git rev-parse HEAD', { cwd: dir, encoding: 'utf8' }).trim();
+    const claims = source(base.slice(0, 7)).flatMap((s, i) => [`${i + 1}. **Claim.**`, '   > one', `   Source: ${s}`]);
+    await fs.mkdir(join(dir, 'design/chunks/game-end'), { recursive: true });
+    await fs.writeFile(join(dir, 'design/chunks/game-end/CHUNK.md'), verifiedClaims(...claims));
+    execSync('git add -A', { cwd: dir, stdio: 'ignore' });
+    execSync(`git ${GIT} commit -q -m "chunk-game-end/step-investigate: claims"`, { cwd: dir, stdio: 'ignore' });
+    await fs.rm(join(dir, 'src/rules/damage.ts'));
+    execSync('git add -A', { cwd: dir, stdio: 'ignore' });
+    execSync(`git ${GIT} commit -q -m "chunk-game-end/step-build: replaced"`, { cwd: dir, stdio: 'ignore' });
+    return dir;
+  }
+
+  it('passes a claim citing a file the chunk removed, pinned to a commit of the chunk (#426)', async () => {
+    await expectNoCitationFindings(await builtChunkCiting((base) => [`../src/rules/damage.ts@${base}:1-5`]));
+  });
+
+  it('fails a pinned citation of lines or a file the commit did not have, or a commit outside the chunk (#426)', async () => {
+    const dir = await builtChunkCiting((base) => [
+      `../src/rules/damage.ts@${base}:4-9`,
+      `../src/rules/other.ts@${base}:1`,
+      '../src/rules/damage.ts@abcdef0:1',
+    ]);
+    const { findings } = await ledgerCheck(dir);
+    const [pastEnd] = citedLines(findings);
+    expect(citedLines(findings)).toHaveLength(1);
+    expect(pastEnd.detail).toMatch(/line 9, but src\/rules\/damage\.ts had 5 lines at [0-9a-f]{10} \(base of chunk-game-end\)/);
+    const [missing, outsideChunk] = evidence(findings);
+    expect(evidence(findings)).toHaveLength(2);
+    expect(missing.detail).toMatch(/src\/rules\/other\.ts was not in git at [0-9a-f]{10} \(base of chunk-game-end\)/);
+    expect(outsideChunk.detail).toMatch(/abcdef0 is not a commit of chunk "game-end"/);
+  });
+
+  it('fails a pinned citation outside a chunk\'s CHUNK.md, which has no chunk history (#426)', async () => {
+    const dir = await tree({ 'design/DECISIONS.md': decision('src/rules/game.ts@abcdef0:2'), 'src/rules/game.ts': fiveLines });
+    commitAt(dir, '2026-09-23T12:00:00Z');
+    const [pinned, ...others] = (await ledgerCheck(dir)).findings;
+    expect(others).toEqual([]);
+    expect(pinned).toMatchObject({ ledger: 'DECISIONS.md', entry: 'line 2', kind: 'evidence-not-committed' });
+    expect(pinned.detail).toMatch(/pins a commit, and only a chunk's CHUNK\.md may.*as it is now/);
+  });
+
   it('does not hold a chunk that is not verified yet to its citations', async () => {
     const dir = await tree({
       'design/chunks/world-shell/CHUNK.md': chunk('built', '- tests/not-written-yet.test.ts'),

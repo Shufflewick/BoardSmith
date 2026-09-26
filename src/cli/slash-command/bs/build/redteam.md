@@ -52,7 +52,9 @@ together form the composite source of truth.
 
 Here is a numbered list of factual claims. Each claim carries one or more quoted passages
 (`> ` lines) and a `Source:` naming where each passage is. For each claim, RE-OPEN every cited
-Source location yourself and read the text there, and around it, rather than the claim text:
+Source location yourself and read the text there, and around it, rather than the claim text (a
+location pinned to a commit, `<path>@<commit>:<lines>`, is read with
+`git show <commit>:<path from the project root>`):
   - Is the quoted passage really at that location, word for word?
   - Does the passage, read in its own context (plus RULINGS.md), say what the claim says? A
     claim that adds, drops, or reverses anything the passage says is refuted.

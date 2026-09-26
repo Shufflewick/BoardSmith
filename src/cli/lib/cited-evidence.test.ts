@@ -95,4 +95,10 @@ describe('citedEvidencePaths — what counts as a cited script or capture', () =
       'chunks/core/evidence/after.png',
     ]);
   });
+
+  it('finds a citation of a file as it was in a commit, and says which (#426)', () => {
+    expect(citedEvidencePaths('Source: ../src/rules/damage.ts@611dc8e:2-3')).toEqual([
+      { path: '../src/rules/damage.ts', lines: [2, 3], commit: '611dc8e', line: 1 },
+    ]);
+  });
 });

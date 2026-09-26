@@ -96,7 +96,8 @@ full
      rests on and where it is. A `Source:` path
      that names a design record (rulebook/..., RULINGS.md) or climbs out of design/ (../src/...)
      is read from design/, any other path from the project root; cite a Markdown source (a slice, RULINGS.md) by heading or line
-     range, and code by file and line. Something no source passage backs is not a claim but an
+     range, and code by file and line (code this chunk replaced as it was in one of the chunk's
+     commits, with @<commit> before the line location). Something no source passage backs is not a claim but an
      open question for the designer, listing every place that was searched:
 
        Q1. **The question.** Why the sources do not settle it.

@@ -10,6 +10,10 @@
  *   - `path:N-M` is lines N to M.
  *   - `path:N:C` (compiler style, line and column) is line N; the column is returned so a reader
  *     that only takes lines, such as claim-quote-check, can refuse it.
+ *   - `path@<commit>`, before any of those (`../src/rules/damage.ts@611dc8e:42`), is the file as it
+ *     was in that commit (a hash of 7 to 40 hex digits) rather than as it is now. That is how a
+ *     claim quotes code the chunk itself replaced; the commit must be in the chunk's history
+ *     (`chunkPins`, chunk-commits.ts, #426).
  */
 
 /** A 1-based, inclusive range of lines, as written: `lineRangeProblem` says whether it is valid. */
@@ -20,17 +24,23 @@ interface LineLocation {
   path: string;
   lines?: LineRange;
   column?: number;
+  /** Written `path@<commit>`: the commit hash, as written, the file is read in. */
+  commit?: string;
 }
 
-const LOCATION = /^(.+?):(\d+)(?:-(\d+)|:(\d+))?$/;
+const LOCATION = /^(.+?)(?:@([0-9a-f]{7,40}))?(?::(\d+)(?:-(\d+)|:(\d+))?)?$/i;
 
-/** Splits a written `path:N`, `path:N-M` or `path:N:C` into its path and the lines it names. */
+/** Splits a written `path[@<commit>][:N | :N-M | :N:C]` into its path and what it names. */
 export function splitLineLocation(written: string): LineLocation {
   const m = LOCATION.exec(written);
   if (!m) return { path: written };
-  const from = Number(m[2]);
-  const lines: LineRange = [from, m[3] === undefined ? from : Number(m[3])];
-  return m[4] === undefined ? { path: m[1], lines } : { path: m[1], lines, column: Number(m[4]) };
+  const location: LineLocation = { path: m[1] };
+  if (m[2] !== undefined) location.commit = m[2];
+  if (m[3] === undefined) return location;
+  const from = Number(m[3]);
+  location.lines = [from, m[4] === undefined ? from : Number(m[4])];
+  if (m[5] !== undefined) location.column = Number(m[5]);
+  return location;
 }
 
 /** A file's lines. The empty text after a final newline is not a line. */

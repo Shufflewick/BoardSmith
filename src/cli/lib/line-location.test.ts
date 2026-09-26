@@ -24,6 +24,17 @@ describe('splitLineLocation', () => {
     expect(splitLineLocation('.boardsmith/scratch/probe.mjs')).toEqual({ path: '.boardsmith/scratch/probe.mjs' });
   });
 
+  it('reads @<commit> before the location as the file as it was in that commit (#426)', () => {
+    expect(splitLineLocation('../src/rules/damage.ts@611dc8e:42')).toEqual({ path: '../src/rules/damage.ts', lines: [42, 42], commit: '611dc8e' });
+    expect(splitLineLocation('src/a.ts@611DC8E0:3-9')).toEqual({ path: 'src/a.ts', lines: [3, 9], commit: '611DC8E0' });
+    expect(splitLineLocation('rulebook/08-combat.md@611dc8e')).toEqual({ path: 'rulebook/08-combat.md', commit: '611dc8e' });
+  });
+
+  it('takes only a commit hash of at least 7 hex digits after @, so a branch name or a short hash stays in the path', () => {
+    expect(splitLineLocation('src/a.ts@main:3')).toEqual({ path: 'src/a.ts@main', lines: [3, 3] });
+    expect(splitLineLocation('src/a.ts@611dc8:3')).toEqual({ path: 'src/a.ts@611dc8', lines: [3, 3] });
+  });
+
   it('keeps a backwards range as written, for lineRangeProblem to refuse', () => {
     expect(splitLineLocation('a.ts:9-2')).toEqual({ path: 'a.ts', lines: [9, 2] });
   });
