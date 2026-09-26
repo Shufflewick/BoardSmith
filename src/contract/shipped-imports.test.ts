@@ -21,14 +21,15 @@
  */
 import { describe, it, expect } from 'vitest';
 import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { builtinModules } from 'node:module';
-import { join } from 'node:path';
+import { basename, dirname, extname, join, relative } from 'node:path';
 import { build } from 'esbuild';
 import ts from 'typescript';
 import { parse as parseSfc } from 'vue/compiler-sfc';
 
-import { cliBuildOptions, CLI_OUTFILE } from '../cli/lib/build-cli.js';
+import { cliBuildOptions, CLI_OUTFILE, WORKER_ENTRIES } from '../cli/lib/build-cli.js';
+import { tempTree } from '../testing/temp-tree.test-helper.js';
 import { REPO_ROOT } from './vue-tsc-run.test-helper.js';
 
 interface PackageJson {
@@ -119,6 +120,33 @@ const SHIPPED_SOURCE = SHIPPED.filter(
 const SOURCE_FINDINGS = SHIPPED_SOURCE.flatMap((file) => undeclared(file, specifiersOf(file)));
 
 const bundle = await build({ ...cliBuildOptions(REPO_ROOT), write: false, metafile: true });
+/** Every file the CLI build emits, relative to the package root: the bundle and each worker entry (#401). */
+const BUILT = Object.keys(bundle.metafile.outputs);
+
+/**
+ * What npm would publish of a package whose `dist/` holds exactly what the CLI
+ * build emits. Asked in a copy, because this checkout's `dist/` may be missing
+ * or stale.
+ */
+const builtPackage = tempTree('bs-shipped-built-');
+copyFileSync(join(REPO_ROOT, 'package.json'), join(builtPackage, 'package.json'));
+for (const output of bundle.outputFiles) {
+  const target = join(builtPackage, relative(REPO_ROOT, output.path));
+  mkdirSync(dirname(target), { recursive: true });
+  writeFileSync(target, output.contents);
+}
+const builtPack = spawnSync('npm', ['pack', '--dry-run', '--json', '--ignore-scripts'], {
+  cwd: builtPackage,
+  encoding: 'utf8',
+});
+if (builtPack.status !== 0) {
+  throw new Error(`npm pack --dry-run of the built package failed:\n${builtPack.stderr}`);
+}
+const PUBLISHED_BUILD = (JSON.parse(builtPack.stdout) as { files: { path: string }[] }[])[0].files.map((f) => f.path);
+
+/** Shipped source files that start a worker thread. */
+const WORKER_HOSTS = SHIPPED_SOURCE.filter((file) => /\bnew Worker\(/.test(readFileSync(join(REPO_ROOT, file), 'utf8')));
+
 const BUNDLE_EXTERNALS = Object.values(bundle.metafile.outputs).flatMap((output) =>
   output.imports.filter((imported) => imported.external).map((imported) => imported.path),
 );
@@ -179,5 +207,40 @@ describe('the published package imports only what an install provides (#380)', (
       (entry) => !SOURCE_FINDINGS.some((found) => found.file === entry.file && found.specifier === entry.specifier),
     );
     expect(stale, 'Remove these entries from REACHED_ONLY_IN_THIS_CHECKOUT; the import is gone.').toEqual([]);
+  });
+});
+
+/**
+ * A worker thread runs a file of its own, which the CLI bundle cannot contain.
+ * Each is built beside `dist/cli.js` from `WORKER_ENTRIES` and published with
+ * it, or the command that starts it crashes in every install (#401).
+ */
+describe('the published package carries every worker the CLI starts (#401)', () => {
+  it('builds each worker entry beside the CLI bundle', () => {
+    expect(BUILT).toContain(CLI_OUTFILE);
+    for (const entry of WORKER_ENTRIES) {
+      expect(BUILT).toContain(join(dirname(CLI_OUTFILE), `${basename(entry, extname(entry))}.js`));
+    }
+  });
+
+  it('publishes every file the CLI build emits', () => {
+    const unpublished = BUILT.filter((path) => !PUBLISHED_BUILD.includes(path));
+    expect(
+      unpublished,
+      `package.json "files" leaves out files the CLI build emits, so an install cannot run them:\n${unpublished.join('\n')}`,
+    ).toEqual([]);
+  });
+
+  it('starts only workers the build emits', () => {
+    expect(WORKER_HOSTS).toContain('src/bot-trainer/parallel-benchmark.ts');
+    const unbuilt = WORKER_HOSTS.filter(
+      (host) =>
+        !WORKER_ENTRIES.some((entry) => readFileSync(join(REPO_ROOT, host), 'utf8').includes(basename(entry, extname(entry)))),
+    );
+    expect(
+      unbuilt,
+      `These shipped files start a worker thread whose entry is not in WORKER_ENTRIES ` +
+        `(src/cli/lib/build-cli.ts), so no install has the file:\n${unbuilt.join('\n')}`,
+    ).toEqual([]);
   });
 });
