@@ -7,6 +7,7 @@ import type { Game, PlayerOf } from '../element/game.js';
 import type { WorldActionBlock } from '../../world/action.js';
 import type { ElementClass } from '../element/types.js';
 import type { ActionMetadata, ElementRef, RefWithRole, ValidElement } from '../../types/protocol.js';
+import type { TextPattern } from './text-rules.js';
 // The protocol owns the element reference shapes; the engine's action API hands them out as they are.
 export type { RefWithRole };
 
@@ -415,8 +416,8 @@ export const DEFAULT_TEXT_MAX_LENGTH = 256;
 
 export interface TextSelection extends BaseSelection<string> {
   type: 'text';
-  /** Pattern to validate against */
-  pattern?: RegExp;
+  /** Pattern the text must match, and the sentence a player is shown when it does not (#394). */
+  pattern?: TextPattern;
   /** Min length */
   minLength?: number;
   /**
@@ -426,6 +427,15 @@ export interface TextSelection extends BaseSelection<string> {
    * on there being a bound to enforce and to surface in the UI.
    */
   maxLength: number;
+  /**
+   * The most UTF-8 bytes the text may add to a world partition, measured as the
+   * partition store measures (#394, `textStoredBytes`). Optional: with the
+   * control characters `text-rules.ts` refuses, a character costs at most three
+   * bytes, so `maxLength` already bounds the bytes at three times itself. Set
+   * this when the text is sized against a byte budget, such as a partition that
+   * holds many posts.
+   */
+  maxBytes?: number;
   /**
    * Ask for the text in a resizable box rather than on a single line (#229).
    *
@@ -437,9 +447,10 @@ export interface TextSelection extends BaseSelection<string> {
    * that switches on `type`, which is the fork the ticket asks us to avoid.
    *
    * Set it when the field is prose the player has to read back as well as
-   * write: a description, a message, a log entry. Line breaks are ordinary
-   * characters either way -- they count toward the length and nothing strips
-   * them -- but a single-line input gives the player nowhere to put one.
+   * write: a description, a message, a log entry. It is also the one rule it
+   * changes (#394): a multiline field admits line feed and tab, and a
+   * single-line field refuses both, as it refuses every other control
+   * character. They count toward the length like any other character.
    *
    * Omitted from a pick's metadata rather than sent as `false` when unset, so a
    * declaration that never heard of it adds no field to the payload a host

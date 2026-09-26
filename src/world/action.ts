@@ -82,6 +82,7 @@ import type {
   Selection,
 } from "../engine/index.js";
 import type { ConditionConfig, MultiSelectConfig, OrderedListConfig } from "../engine/action/types.js";
+import type { TextPattern } from "../engine/action/text-rules.js";
 import type { WorldBudgets } from "./budgets.js";
 import type { ScheduleArm } from "./schedule-api.js";
 import type { DeclaredSeatActivity, SeatActivity, WorldNarrationLine } from "./contract.js";
@@ -1105,7 +1106,9 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
   }
 
   /**
-   * Free text, bounded by the engine's own `maxLength`.
+   * Free text, bounded by the engine's own `maxLength`, and by `maxBytes` when
+   * the text is sized against a partition's byte budget (#394). A world's text
+   * lives in a partition for months, and a partition is refused on its bytes.
    *
    * `multiline:` asks for a resizable box rather than a single line (#229) --
    * presentation only, and forwarded rather than reinterpreted, because a
@@ -1121,8 +1124,9 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
       needs?: (context: WorldNeedsContext<G>) => readonly string[];
       minLength?: number;
       maxLength?: number;
+      maxBytes?: number;
       multiline?: boolean;
-      pattern?: RegExp;
+      pattern?: TextPattern;
       optional?: boolean | string;
       validate?: (
         value: string,
@@ -1136,6 +1140,7 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
       prompt: forwardPrompt<G>(options.prompt),
       minLength: options.minLength,
       maxLength: options.maxLength,
+      maxBytes: options.maxBytes,
       multiline: options.multiline,
       pattern: options.pattern,
       optional: options.optional,

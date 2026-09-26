@@ -22,6 +22,57 @@
  */
 
 /**
+ * A `pattern` and the sentence a player is shown when their text does not
+ * match it (#394). One value, so a pattern cannot be declared without saying
+ * what it wants: "does not match required pattern" told a player nothing they
+ * could act on.
+ */
+export interface TextPattern {
+  regex: RegExp;
+  message: string;
+}
+
+/** The rules a text value is judged by: the declaration's, as a client receives them. */
+interface TextRules {
+  minLength?: number;
+  maxLength?: number;
+  /** The most UTF-8 bytes the text may add to a partition, see {@link textStoredBytes}. */
+  maxBytes?: number;
+  /** A multiline field admits line feed and tab; a single-line field neither. */
+  multiline?: boolean;
+  pattern?: TextPattern;
+}
+
+/**
+ * THE CHARACTERS NO TEXT ARGUMENT MAY CARRY (#394): C0 controls, DEL, C1
+ * controls, and UTF-16 surrogates that are not half of a pair.
+ *
+ * Invisible, never typed on purpose, and trouble in every place the text goes
+ * next: logs, rendering, and strict UTF-8 re-encoding, where a lone surrogate
+ * becomes a replacement character. They also weigh six bytes each in a
+ * partition's JSON (`\u0001`), so a field sized in characters for a byte
+ * budget holds six times what it was sized for. Line feed and tab are the two
+ * controls prose uses, and a multiline field admits them.
+ */
+const UNSTORABLE = /[\u0000-\u0008\u000b-\u001f\u007f-\u009f]|[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/;
+const LINE_BREAK_OR_TAB = /[\n\t]/;
+
+/**
+ * What `value` adds to a world partition, in the units the partition store
+ * refuses a partition in: UTF-8 bytes of its JSON, not counting the quotes.
+ *
+ * `JSON.stringify` of the text is how it sits inside a partition's JSON, with
+ * `"` and `\` escaped, and `partitionBytes` measures that JSON as UTF-8. So
+ * `maxBytes` bounds exactly the bytes this text costs the partition that holds
+ * it, and an emoji (two characters, four bytes) or a CJK character (one
+ * character, three bytes) is counted at what it costs rather than at its length.
+ * `text-rules.test.ts` holds it equal to the partition store's own measure.
+ */
+export function textStoredBytes(value: string): number {
+  return new TextEncoder().encode(JSON.stringify(value)).length - 2;
+}
+
+/**
  * Every reason this value fails the rules, worded as the engine words them.
  *
  * Empty when it passes. `name` is the selection's argument name, which is what
@@ -29,24 +80,44 @@
  * before submitting and the sentence the server would answer with are the same
  * sentence.
  *
- * `pattern` is a `RegExp` even though the wire carries its `source` as a string,
- * because a caller holding the string has to compile it either way and a
- * compiled pattern is the only form the rule can be applied in.
+ * A value carrying a character no text may store is refused for that alone:
+ * its length and its bytes are not what the player has to fix.
  */
-export function textRuleErrors(
-  name: string,
-  value: string,
-  rules: { minLength?: number; maxLength?: number; pattern?: RegExp },
-): string[] {
-  const errors: string[] = [];
+export function textRuleErrors(name: string, value: string, rules: TextRules): string[] {
+  if (hasUnstorableCharacters(value, rules.multiline === true)) {
+    return [
+      `${name} contains characters that can't be stored, such as invisible control characters. ` +
+        'Remove them and try again.',
+    ];
+  }
+  return [
+    lengthError(name, value, rules),
+    bytesError(name, value, rules.maxBytes),
+    rules.pattern && !rules.pattern.regex.test(value) ? rules.pattern.message : undefined,
+  ].filter((error): error is string => error !== undefined);
+}
+
+function hasUnstorableCharacters(value: string, multiline: boolean): boolean {
+  return UNSTORABLE.test(value) || (!multiline && LINE_BREAK_OR_TAB.test(value));
+}
+
+function lengthError(name: string, value: string, rules: TextRules): string | undefined {
   if (rules.minLength !== undefined && value.length < rules.minLength) {
-    errors.push(`${name} must be at least ${rules.minLength} characters`);
+    return `${name} must be at least ${rules.minLength} characters`;
   }
   if (rules.maxLength !== undefined && value.length > rules.maxLength) {
-    errors.push(`${name} must be at most ${rules.maxLength} characters`);
+    return `${name} must be at most ${rules.maxLength} characters`;
   }
-  if (rules.pattern && !rules.pattern.test(value)) {
-    errors.push(`${name} does not match required pattern`);
-  }
-  return errors;
+  return undefined;
+}
+
+function bytesError(name: string, value: string, maxBytes: number | undefined): string | undefined {
+  if (maxBytes === undefined) return undefined;
+  const bytes = textStoredBytes(value);
+  if (bytes <= maxBytes) return undefined;
+  return (
+    `${name} is too long to store: it takes ${bytes} bytes and the limit is ${maxBytes}. ` +
+    'Some characters, such as emoji and accented letters, take more room than others. ' +
+    'Shorten it and try again.'
+  );
 }

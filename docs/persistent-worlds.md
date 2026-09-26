@@ -672,8 +672,10 @@ selections. There are five you may write:
   fact the shell knows before anything is sent. If the number is a QUANTITY YOU
   CHARGE FOR, add [`.quote()`](#quote-what-the-draft-will-cost-before-the-player-pays-it)
   so the player is told the total before they pay it.
-- **`enterText(name, { minLength, maxLength, pattern, multiline })`** -- free
-  text. `multiline: true` asks the shared panel for a resizable box rather than
+- **`enterText(name, { minLength, maxLength, maxBytes, pattern, multiline })`** -- free
+  text. Control characters and unpaired surrogates are refused, and `maxBytes`
+  bounds the bytes the text adds to a partition, measured as the partition store
+  measures; see [Actions & Flow](./actions-and-flow.md#entertext---enter-text). `multiline: true` asks the shared panel for a resizable box rather than
   a single line, with a character count and an explicit submit button so Enter
   inserts a newline; the value, the bounds and the validation are identical
   either way. A world is where the long fields live -- an empire's description

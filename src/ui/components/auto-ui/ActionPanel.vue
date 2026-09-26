@@ -974,9 +974,14 @@ function editorValueRefusal(): string | null {
     return textRuleErrors(pick.name, textInputValue.value, {
       minLength: pick.minLength,
       maxLength: pick.maxLength,
-      // The wire carries a pattern as its source string; compiling it here is
-      // the only form the rule can be applied in.
-      pattern: pick.pattern === undefined ? undefined : new RegExp(pick.pattern),
+      maxBytes: pick.maxBytes,
+      multiline: pick.multiline,
+      // The wire carries a pattern as its source string with its sentence;
+      // compiling it here is the only form the rule can be applied in.
+      pattern:
+        pick.pattern === undefined
+          ? undefined
+          : { regex: new RegExp(pick.pattern.source), message: pick.pattern.message },
     })[0] ?? null;
   }
   return null;
@@ -2187,7 +2192,7 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
               v-model="textInputValue"
               :minlength="currentPick.minLength"
               :maxlength="currentPick.maxLength"
-              :pattern="currentPick.pattern"
+              :pattern="currentPick.pattern?.source"
               @keyup.enter="submitEditorValue"
             />
             <!-- Above the submit button, not below it: the bar caps its own

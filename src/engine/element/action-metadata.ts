@@ -138,9 +138,13 @@ function actionMetadataOf(
  * presentation default nobody chose.
  */
 function describeTextPick(base: PickMetadata, selection: TextSelection): void {
-  base.pattern = selection.pattern?.source;
+  if (selection.pattern) {
+    base.pattern = { source: selection.pattern.regex.source, message: selection.pattern.message };
+  }
   base.minLength = selection.minLength;
   base.maxLength = selection.maxLength;
+  // Only when set (#394), for `multiline`'s reason below.
+  if (selection.maxBytes !== undefined) base.maxBytes = selection.maxBytes;
   if (selection.multiline) base.multiline = true;
 }
 
