@@ -64,11 +64,16 @@ export async function serveSockets(onConnection: (socket: WebSocket) => void): P
   };
 }
 
-/** Open a page on `port`, say hello as `clientId`, and resolve once the host sends a frame `greeted` takes. */
+/**
+ * Open a page on `port`, say hello as `clientId`, and resolve once the host
+ * sends a frame `greeted` takes. `hello.runId` is the server run a page names
+ * when its socket reconnects (#416); a fresh page load names none.
+ */
 export async function openSocketPage(
   port: number,
   clientId: string,
   greeted: (frame: Frame) => boolean,
+  hello: { runId?: unknown } = {},
 ): Promise<SocketPage> {
   const socket = new WebSocket(`ws://127.0.0.1:${port}`);
   const frames: Frame[] = [];
@@ -93,7 +98,7 @@ export async function openSocketPage(
     send: (message) => socket.send(JSON.stringify(message)),
   };
   const greeting = page.next(greeted);
-  page.send({ type: 'hello', clientId });
+  page.send({ type: 'hello', clientId, ...hello });
   await greeting;
   return page;
 }
