@@ -1,10 +1,12 @@
-import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { cpus } from 'node:os';
 import chalk from 'chalk';
 import ora from 'ora';
 import type { TrainingProgress } from '../../bot-trainer/index.js';
-import { requireGameProject, resolveRulesDir } from '../lib/game-project.js';
+import { requireGameProject, resolveRulesDir, requireRulesIndex } from '../lib/game-project.js';
+import { commandBuildDir } from '../lib/project-paths.js';
+import { getProjectContext, loadGameDefinition } from './game-runtime.js';
 
 interface EvolveBotWeightsOptions {
   generations?: string;
@@ -25,7 +27,9 @@ export async function evolveBotWeightsCommand(options: EvolveBotWeightsOptions):
   // Where the rules live is `resolveRulesDir`'s to decide, so a project cannot
   // be laid out one way for `dev` and another for weight evolution. Deriving it
   // here also joined an absolute `paths.rules` onto cwd (#239).
-  const botPath = join(resolveRulesDir(cwd, config), 'bot.ts');
+  const rulesDir = resolveRulesDir(cwd, config);
+  requireRulesIndex(rulesDir);
+  const botPath = join(rulesDir, 'bot.ts');
 
   // Require existing bot.ts
   if (!existsSync(botPath)) {
@@ -54,49 +58,27 @@ export async function evolveBotWeightsCommand(options: EvolveBotWeightsOptions):
   console.log(chalk.cyan(`  Workers: ${workerCount}`));
   console.log();
 
-  const spinner = ora('Loading game module...').start();
+  const spinner = ora('Bundling the game rules...').start();
+
+  // Evolve-bot-weights' own build directory, removed below; never `.boardsmith/`
+  // itself (#391). The rules are bundled from source here rather than read from
+  // some earlier build, so the weights are tuned against the rules as they are
+  // now (#399). The bundle stays until the evolution ends: the worker threads
+  // load the game from it.
+  const tempDir = commandBuildDir(cwd, 'evolve-bot-weights');
+  mkdirSync(tempDir, { recursive: true });
 
   try {
-    // Dynamic import of the game module
-    // Look for built rules in order of preference:
-    // 1. rules/dist/index.js (from pnpm build in rules package)
-    // 2. .boardsmith/rules-bundle.mjs (from boardsmith dev)
-    // 3. dist/rules/rules.js (from boardsmith build)
-    const rulesPkgDist = join(cwd, 'rules', 'dist', 'index.js');
-    const devBundle = join(cwd, '.boardsmith', 'rules-bundle.mjs');
-    const buildDist = join(cwd, 'dist', 'rules', 'rules.js');
-
-    let modulePath: string | undefined;
-    if (existsSync(rulesPkgDist)) {
-      modulePath = rulesPkgDist;
-    } else if (existsSync(devBundle)) {
-      modulePath = devBundle;
-    } else if (existsSync(buildDist)) {
-      modulePath = buildDist;
-    }
-
-    if (!modulePath) {
-      spinner.fail('Game rules not found');
-      console.error(chalk.red('\nNo compiled rules found. Run one of:'));
-      console.error(chalk.dim('  pnpm --filter <rules-package> build'));
-      console.error(chalk.dim('  boardsmith build'));
-      process.exit(1);
-    }
-
-    // Import the game module
-    const gameModule = await import(`file://${modulePath}`);
-    const { gameDefinition } = gameModule;
-
-    if (!gameDefinition || !gameDefinition.gameClass) {
-      spinner.fail('Invalid game module');
-      console.error(chalk.red('\nGame module must export gameDefinition with gameClass'));
-      process.exit(1);
-    }
+    const { gameDefinition, bundlePath: modulePath } = await loadGameDefinition(
+      rulesDir,
+      tempDir,
+      getProjectContext(cwd),
+    );
 
     const GameClass = gameDefinition.gameClass;
     const gameType = gameDefinition.gameType || config.name;
 
-    spinner.succeed('Game module loaded');
+    spinner.succeed('Game rules bundled');
 
     // Import trainer
     spinner.start('Initializing weight optimizer...');
@@ -112,10 +94,9 @@ export async function evolveBotWeightsCommand(options: EvolveBotWeightsOptions):
     const existingBot = parseExistingBot(botPath);
 
     if (!existingBot || existingBot.objectives.length === 0) {
-      spinner.fail('No objectives found in bot.ts');
-      console.error(chalk.red('\nThe existing bot.ts file has no objectives to optimize.'));
-      console.error(chalk.dim('Use /bs-build-bot to create a bot with objectives first.'));
-      process.exit(1);
+      throw new Error(
+        `${botPath} has no objectives to optimize. Use /bs-build-bot to create a bot with objectives first.`,
+      );
     }
 
     const existingObjectives = parsedToLearned(existingBot.objectives);
@@ -202,5 +183,7 @@ export async function evolveBotWeightsCommand(options: EvolveBotWeightsOptions):
     throw new Error(
       `Evolving this bot's weights failed: ${error instanceof Error ? error.message : String(error)}`,
     );
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
   }
 }
