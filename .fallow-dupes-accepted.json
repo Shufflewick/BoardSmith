@@ -2290,13 +2290,6 @@
       ]
     },
     {
-      "content": "5656dc878050915f",
-      "lines": 5,
-      "files": [
-        "src/cli/dev-host/multiplayer-host.startrace.test.ts"
-      ]
-    },
-    {
       "content": "568b4893151c2002",
       "lines": 6,
       "files": [
@@ -6038,14 +6031,6 @@
       ]
     },
     {
-      "content": "d3bdefffff02a0c5",
-      "lines": 27,
-      "files": [
-        "src/cli/dev-host/multiplayer-host.startrace.test.ts",
-        "src/cli/dev-host/multiplayer-host.test.ts"
-      ]
-    },
-    {
       "content": "d419e87a27deb489",
       "lines": 10,
       "files": [
@@ -6193,6 +6178,15 @@
       "lines": 6,
       "files": [
         "src/cli/commands/verify-enumerate.test.ts"
+      ]
+    },
+    {
+      "content": "d8a0b31a4c56cc02",
+      "lines": 10,
+      "files": [
+        "src/cli/dev-host/multiplayer-host.startrace.test.ts",
+        "src/session/game-definition-like-typing.test.ts",
+        "src/session/testing/fixtures/each-player-fixture.ts"
       ]
     },
     {
@@ -6353,6 +6347,14 @@
       "lines": 13,
       "files": [
         "src/cli/commands/verify-enumerate.test.ts"
+      ]
+    },
+    {
+      "content": "e13de0efbe8fe5f1",
+      "lines": 25,
+      "files": [
+        "src/cli/dev-host/multiplayer-host.startrace.test.ts",
+        "src/cli/dev-host/multiplayer-host.test.ts"
       ]
     },
     {

@@ -54,6 +54,25 @@ export interface SeatInfo {
 
 export type LobbyPhase = 'lobby' | 'playing';
 
+/**
+ * How long a seat whose page went away stays its player's before a bot covers
+ * it (#412). A reload closes the old socket before the new page says hello, so
+ * for that moment the seat has no connected holder; within this window it is
+ * still the player's, and nothing moves for it. The platform never lets a bot
+ * act for a disconnected player on a real-time table; the dev host covers a
+ * seat whose page is gone for good (BUG-12: a stale auto-opened tab would
+ * otherwise stall the game), but only after this window, so a reload never does.
+ */
+const RECONNECT_GRACE_MS = 10_000;
+
+/** Arm `fire` after `delayMs`; returns what cancels it. */
+export type ReconnectTimer = (delayMs: number, fire: () => void) => () => void;
+
+const nodeReconnectTimer: ReconnectTimer = (delayMs, fire) => {
+  const timer = setTimeout(fire, delayMs);
+  return () => clearTimeout(timer);
+};
+
 /** Messages the host sends to a client. */
 export type HostOutbound =
   | {
@@ -244,6 +263,11 @@ export interface MultiplayerHostOptions {
    * comes due.
    */
   hostWork?: HostWorkGate;
+  /**
+   * Runs the reconnect grace ({@link RECONNECT_GRACE_MS}) for a seat whose page
+   * went away. Defaults to Node's timers; a test passes one it drives by hand.
+   */
+  reconnectTimer?: ReconnectTimer;
 }
 
 /**
@@ -388,6 +412,11 @@ export class MultiplayerHost {
   /** clientId → seat it currently holds (survives disconnect for reconnect). */
   private readonly clientSeat = new Map<string, number>();
   private readonly connected = new Set<string>();
+  /**
+   * Seats whose page went away and may still come back (#412), each with what
+   * cancels its grace. Such a seat is still its player's: nothing covers it.
+   */
+  private readonly reconnecting = new Map<number, () => void>();
   private session: DevSession | null = null;
   /**
    * Live bot-seat list passed to the session; mutated as humans take/leave seats.
@@ -471,6 +500,7 @@ export class MultiplayerHost {
     if (existing !== undefined) {
       const info = this.seats.get(existing);
       if (info) info.connected = true;
+      this.endGrace(existing);
       // D15/DEVHOST-03: a reconnect always yields the seat back from any
       // bot-cover the post-await reconciliation applied while this client was
       // vanished (a no-op if the seat was never bot-covered — removeBotSeat is
@@ -546,29 +576,16 @@ export class MultiplayerHost {
     if (seat !== undefined) {
       const info = this.seats.get(seat);
       if (info) info.connected = false;
-      // Keep the seat RESERVED for reconnect (a page reload mustn't lose it), but
-      // hand the loop-driver duty to the bot meanwhile (BUG-12): an away seat that
-      // nothing drives stalls the whole game the moment the flow needs it — the
-      // stale auto-opened tab that stranded `boardsmith dev` in its default
-      // configuration. This is a driver-only cover, not a conversion: `hello`'s
+      // Keep the seat RESERVED for reconnect (a page reload mustn't lose it). If
+      // the page is not back within the reconnect grace (#412), hand the
+      // loop-driver duty to the bot (BUG-12): an away seat that nothing drives
+      // stalls the whole game the moment the flow needs it — the stale
+      // auto-opened tab that stranded `boardsmith dev` in its default
+      // configuration. That is a driver-only cover, not a conversion: `hello`'s
       // reconnect branch calls `removeBotSeat` so the bot yields the instant the
-      // client returns, exactly as the D15 post-start reconciliation already does.
-      // Two seats are deliberately NOT covered:
-      //   - the follower's own seat, and every seat while follow-mode is active
-      //     (follow-mode persists across reloads/HMR by design and pauses bot for
-      //     every seat it covers — resuming a bot mid-reload would steal the
-      //     follower's move).
-      if (this.followerClientId === null) {
-        this.addBotSeat(seat);
-        if (this.phase === 'playing') {
-          void this.session?.host.runBotTurns().catch((err: unknown) => {
-            console.error(
-              `[boardsmith dev] bot cover for away seat ${seat} failed: ` +
-                `${err instanceof Error ? err.message : String(err)}`,
-            );
-          });
-        }
-      }
+      // client returns. While follow-mode is active nothing is covered: it
+      // persists across reloads/HMR by design and pauses bot for every seat.
+      if (this.followerClientId === null) this.startGrace(seat);
     }
     // Follow-mode PERSISTS across a disconnect: page reloads / HMR are constant in
     // dev, and dropping follow on every reload makes it unusable. It is restored on
@@ -912,6 +929,7 @@ export class MultiplayerHost {
     // its next `hello` would take the reconnect branch, flip this seat's
     // `connected` flag under the new owner, and re-init the old client onto it.
     if (info.clientId && info.clientId !== clientId) this.clientSeat.delete(info.clientId);
+    this.endGrace(seat);
     info.clientId = clientId;
     info.name = name?.trim() || `Player ${seat}`;
     info.color = color ?? this.opts.colorPalette?.[seat - 1]?.value;
@@ -946,23 +964,59 @@ export class MultiplayerHost {
   }
 
   /**
-   * The ONE definition of "a human is actually playing this seat". A seat whose
-   * holder has disconnected is NOT covered: the reservation survives for their
-   * reconnect, but nobody is driving the seat right now, so anything that asks
-   * "does this seat need a bot / is this player a bot?" must read false here.
-   * Every caller — `rebuildBotSeats`, `startGame`'s `playerIsBot`/`playerConfigs`
-   * — routes through this predicate so the two can never drift apart.
+   * The ONE definition of "a human is playing this seat": its holder is
+   * connected, or went away within the reconnect grace (#412) and may be
+   * reloading. A seat whose holder has been gone longer is NOT: the reservation
+   * survives for their reconnect, but nobody is driving the seat, so anything
+   * that asks "does this seat need a bot / is this player a bot?" must read
+   * false here. Every caller — `rebuildBotSeats`, `startGame`'s
+   * `playerIsBot`/`playerConfigs` and its post-start reconciliation — routes
+   * through this predicate so they can never drift apart.
    */
-  private heldByConnectedHuman(seat: number): boolean {
+  private heldByHuman(seat: number): boolean {
     const info = this.seats.get(seat);
-    return Boolean(info?.clientId && info.connected);
+    return Boolean(info?.clientId && (info.connected || this.reconnecting.has(seat)));
+  }
+
+  /** Give a seat whose page went away the reconnect grace; a bot covers it after. */
+  private startGrace(seat: number): void {
+    this.endGrace(seat);
+    const timer = this.opts.reconnectTimer ?? nodeReconnectTimer;
+    const cancel = timer(RECONNECT_GRACE_MS, () =>
+      (this.opts.hostWork ?? runsAtOnce).hold(() => {
+        // A reconnect, a takeover or a newer grace withdrew this one.
+        if (this.reconnecting.get(seat) !== cancel) return;
+        this.reconnecting.delete(seat);
+        this.coverAwaySeat(seat);
+      }),
+    );
+    this.reconnecting.set(seat, cancel);
+  }
+
+  /** Withdraw a seat's reconnect grace, if it has one. */
+  private endGrace(seat: number): void {
+    this.reconnecting.get(seat)?.();
+    this.reconnecting.delete(seat);
+  }
+
+  /** The grace ran out: the bot drives the seat until its player is back. */
+  private coverAwaySeat(seat: number): void {
+    if (this.followerClientId !== null) return;
+    this.addBotSeat(seat);
+    if (this.phase !== 'playing') return;
+    void this.session?.host.runBotTurns().catch((err: unknown) => {
+      console.error(
+        `[boardsmith dev] bot cover for away seat ${seat} failed: ` +
+          `${err instanceof Error ? err.message : String(err)}`,
+      );
+    });
   }
 
   /** Rebuild the shared bot-seat list in place from currently open seats. */
   private rebuildBotSeats(): void {
     this.botSeats.length = 0;
     for (let seat = 1; seat <= this.opts.playerCount; seat++) {
-      if (!this.heldByConnectedHuman(seat)) this.botSeats.push({ seat, level: this.opts.botLevel });
+      if (!this.heldByHuman(seat)) this.botSeats.push({ seat, level: this.opts.botLevel });
     }
   }
 
@@ -1059,7 +1113,7 @@ export class MultiplayerHost {
     this.window = null;
     this.session?.dispose();
     const { playerCount } = this.opts;
-    // BUG-12: "covered by a human" is `heldByConnectedHuman` — the SAME rule
+    // BUG-12: "covered by a human" is `heldByHuman` — the SAME rule
     // `rebuildBotSeats` uses — never the weaker "has ever been claimed"
     // (`s.clientId` alone). A seat whose holder has gone away (the auto-opened
     // tab that was reloaded, a closed browser) would otherwise be counted as
@@ -1067,7 +1121,7 @@ export class MultiplayerHost {
     // `playerIsBot`/`playerConfigs` below, so neither a bot nor a client drives
     // it and the first step needing that seat waits forever with nothing logged.
     const humanSeats = new Set(
-      [...this.seats.values()].filter((s) => this.heldByConnectedHuman(s.seat)).map((s) => s.seat),
+      [...this.seats.values()].filter((s) => this.heldByHuman(s.seat)).map((s) => s.seat),
     );
     // Seed the live bot-seat list from the current open seats — in place, since
     // the session's bot pump holds this array reference. Mutated later as humans
@@ -1171,19 +1225,19 @@ export class MultiplayerHost {
     this.starting = false;
     this.stranded = null;
 
-    // D15/DEVHOST-03: reconcile against `this.connected` — a seat captured as
-    // human in `humanSeats` (above, BEFORE the await) whose client disconnected
-    // DURING `await session.start()` is not driven by anyone: `playerIsBot` in
-    // the start op was computed pre-await from the same stale `humanSeats`, so
-    // the game treats it as human, but the client that would act for it is
-    // gone. bot-cover it now so `runBotTurns()` (next) has a driver and the flow
-    // loop cannot stall on a vanished human. The seat's `clientId` reservation
-    // is left untouched — this is a loop-driver-only cover, not a permanent
-    // conversion; `hello`'s reconnect branch removes it from `botSeats` again
-    // the moment the client returns, so the bot yields (see `hello` below).
+    // D15/DEVHOST-03: reconcile against `heldByHuman` — a seat captured as
+    // human in `humanSeats` (above, BEFORE the await) that stopped being one
+    // DURING `await session.start()` (its holder left, or went away and did not
+    // come back within the reconnect grace) is not driven by anyone:
+    // `playerIsBot` in the start op was computed pre-await from the same stale
+    // `humanSeats`, so the game treats it as human. bot-cover it now so
+    // `runBotTurns()` (next) has a driver and the flow loop cannot stall on a
+    // vanished human. A seat still within its grace is left alone: its player
+    // is reloading (#412). The seat's `clientId` reservation is untouched —
+    // this is a loop-driver-only cover; `hello`'s reconnect branch removes it
+    // from `botSeats` again the moment the client returns.
     for (const seat of humanSeats) {
-      const info = this.seats.get(seat);
-      if (info && !info.connected) this.addBotSeat(seat);
+      if (!this.heldByHuman(seat)) this.addBotSeat(seat);
     }
 
     // The opening seat may belong to a bot (e.g. a bot dictator that acts first);
@@ -1332,6 +1386,7 @@ export class MultiplayerHost {
     const seat = this.clientSeat.get(clientId);
     if (seat === undefined) return;
     this.clientSeat.delete(clientId);
+    this.endGrace(seat);
     const info = this.seats.get(seat);
     if (info) {
       info.clientId = null;

@@ -20,6 +20,7 @@ import { boundaryKeyOf } from '../../session/testing/boundary-stamp.js';
 import { createDevHostConnectionHandler } from './connection-handler.js';
 import type { WorldHostClock } from './node-world-clock.js';
 import { MultiplayerHost, type HostOutbound } from './multiplayer-host.js';
+import { manualGraceTimer } from './reconnect-grace.test-helper.js';
 import { openTable, tableProject } from './table-host.test-helper.js';
 import { buildFailure } from './rules-project.test-helper.js';
 import { openSocketPage, serveSockets } from './socket-page.test-helper.js';
@@ -303,7 +304,9 @@ async function serveTable(edit: TableRuntime | Error, before: TableRuntime = bef
     return edit;
   };
   const sockets = new Map<string, WebSocket>();
+  const graces = manualGraceTimer();
   const host = new MultiplayerHost({
+    reconnectTimer: graces.timer,
     playerCount: seats,
     minPlayers: seats,
     maxPlayers: seats,
@@ -356,7 +359,7 @@ async function serveTable(edit: TableRuntime | Error, before: TableRuntime = bef
     await reloaded;
     return answer;
   };
-  return { page, server, bump, bumpDuringRebuild, saveHeldUntil, count };
+  return { page, server, bump, bumpDuringRebuild, saveHeldUntil, count, graces };
 }
 
 describe('#379: a move sent while the edited rules are still building', () => {
@@ -492,6 +495,9 @@ describe('#387: a bot covering a seat whose page closes while the edited rules a
     const reloaded = table.saveHeldUntil(table.server.closed());
     p2.socket.close();
     await reloaded;
+    // The page does not come back within the reconnect grace (#412).
+    await vi.waitFor(() => expect(table.graces.armed()).toHaveLength(1));
+    await table.graces.elapse();
     // The bot that took seat 2 over bumps by the step of the rules it ran on.
     await vi.waitFor(() => expect(table.count()).toBe(count));
   }, 30_000);
