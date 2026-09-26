@@ -77,7 +77,7 @@
     "src/cli/commands/audit.test.ts:30-35|src/cli/commands/audit.test.ts:74-79",
     "src/cli/commands/audit.test.ts:32-37|src/cli/commands/audit.test.ts:43-48",
     "src/cli/commands/build-manifest.test.ts:201-215|src/cli/commands/build-manifest.test.ts:230-241",
-    "src/cli/commands/build-manifest.test.ts:566-572|src/ui/components/dice/die3d-lazy.test.ts:27-35",
+    "src/cli/commands/build-manifest.test.ts:570-576|src/ui/components/dice/die3d-lazy.test.ts:27-35",
     "src/cli/commands/chunk-provenance.test.ts:534-541|src/cli/commands/chunk-provenance.test.ts:944-951",
     "src/cli/commands/chunk-provenance.test.ts:585-589|src/cli/commands/chunk-provenance.test.ts:660-665",
     "src/cli/commands/chunk-provenance.test.ts:687-694|src/cli/commands/chunk-provenance.test.ts:710-717",

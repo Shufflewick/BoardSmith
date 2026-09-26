@@ -65,7 +65,8 @@ function git(...args: string[]): void {
 }
 
 beforeAll(async () => {
-  project = join(tempTree('bs-claim-supersession-'), 'game');
+  const tree = tempTree('bs-claim-supersession-');
+  project = join(tree, 'game');
   await fs.mkdir(join(project, 'design', 'chunks', 'combat'), { recursive: true });
   await fs.mkdir(join(project, 'tests'), { recursive: true });
   await fs.writeFile(join(project, 'design', 'chunks', 'combat', 'CHUNK.md'), CHUNK);
