@@ -398,7 +398,7 @@ export interface PlayerGameState {
   /** Full player data including custom properties (abilities, score, etc.) */
   players: Array<{ name: string; seat: number; [key: string]: unknown }>;
   currentPlayer?: number;
-  availableActions?: string[];
+  availableActions: string[];
   isMyTurn: boolean;
   view: unknown;
   /** Action metadata for auto-UI generation (optional) */

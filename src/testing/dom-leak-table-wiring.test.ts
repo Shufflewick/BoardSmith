@@ -87,13 +87,10 @@ describe("renderAsSeat mounts a table's board with the seat's own actions (#390)
     expect(board.attributes('data-my-turn')).toBe('true');
   });
 
-  it('tells a seat that is not on move what GameShell tells it', async () => {
+  it('gives a seat that is not on move no actions (#408)', async () => {
     const board = (await render(moveGame(), 2)).find('.board');
 
-    // GameShell hands every seat the flow's actions in a turn-based step, and
-    // this mount is built by the same function (#406). #408 is the fix, which
-    // gives this seat none; this assertion flips with it.
-    expect(board.attributes('data-actions')).toBe('move');
+    expect(board.attributes('data-actions')).toBe('');
     expect(board.attributes('data-my-turn')).toBe('false');
   });
 

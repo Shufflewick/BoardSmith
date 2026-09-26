@@ -141,7 +141,7 @@ export interface PlayerState {
   currentPlayer?: number;
 
   /** Actions available to the current player */
-  availableActions?: string[];
+  availableActions: string[];
 
   /** Whether it's this player's turn */
   isMyTurn: boolean;
