@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { checkClaimQuotes, claimQuoteCheckCommand, parseInterpretationQuotes } from './claim-quotes.js';
+import { parseInterpretationClaims } from './build-manifest.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { spawnCli } from '../spawn-cli.test-helper.js';
 
@@ -192,6 +193,53 @@ describe('checkClaimQuotes: rulebook-sourced claims', () => {
   });
 });
 
+describe('checkClaimQuotes: what a claim is (#402)', () => {
+  it('checks a plain claim, written without bold, exactly as it checks a bold one', async () => {
+    const accepted = await refusalsFor(`1. Ties go against combatant 1.
+   > Ties favour combatant 2: an equal roll sends damage to combatant 1.
+   Source: rulebook/08-combat.md §"The exchange"`);
+    expect(accepted).toEqual([]);
+
+    const refusals = await refusalsFor(`1. Ties go against combatant 1. — cites rulebook/08-combat.md`);
+    expect(refusals).toHaveLength(1);
+    expect(refusals[0]).toMatch(/Claim 1 has no quoted passage/);
+  });
+
+  it('sees every plain claim, before and after a bold one, as a claim of its own', async () => {
+    await writeChunk(`1. Ties go against combatant 1. — cites rulebook/08-combat.md
+2. **Armour subtracts from damage.**
+   > Armour subtracts from damage.
+   Source: rulebook/08-combat.md §"Armour"
+3. A partial heal restores half. — cites RULINGS.md`);
+    const result = await checkClaimQuotes(project, 'combat');
+    expect(result.claims.map((c) => c.number)).toEqual([1, 2, 3]);
+    expect(result.refusals).toHaveLength(2);
+    expect(result.refusals[0]).toMatch(/Claim 1 has no quoted passage/);
+    expect(result.refusals[1]).toMatch(/Claim 3 has no quoted passage/);
+  });
+
+  it('agrees with parseInterpretationClaims on which claims a chunk has', async () => {
+    const chunk = `## Interpretation
+<!-- 7. **an example in a comment** -->
+
+1. A plain claim.
+2. **A bold claim.**
+   2a. an indented sub-point is not a claim
+1. **<!-- claim text -->**
+   > <!-- quote -->
+   Source: <!-- where -->
+Q1. A plain open question.
+   Searched: rulebook/08-combat.md §"Armour"
+
+## Build Manifest
+`;
+    const parsed = parseInterpretationQuotes(chunk);
+    expect(parsed?.claims.map((c) => c.number)).toEqual(parseInterpretationClaims(chunk));
+    expect(parseInterpretationClaims(chunk)).toEqual([1, 2]);
+    expect(parsed?.questions.map((q) => q.id)).toEqual(['Q1']);
+  });
+});
+
 describe('checkClaimQuotes: code-sourced claims', () => {
   it('accepts a quote found inside the cited line range', async () => {
     const refusals = await refusalsFor(`1. **The higher roll wins; a tie goes to combatant 1.**
@@ -256,6 +304,7 @@ describe('checkClaimQuotes: the section itself', () => {
     await writeChunk('');
     const result = await checkClaimQuotes(project, 'combat');
     expect(result.refusals[0]).toMatch(/no claims and no open questions/);
+    expect(result.refusals[0]).toContain('a line starting with its number (`1. `)');
   });
 
   it('refuses a CHUNK.md with no Interpretation section', async () => {
@@ -343,6 +392,7 @@ describe('the CHUNK.md template', () => {
     await write('design/chunks/combat/CHUNK.md', template);
     const refusals = (await checkClaimQuotes(project, 'combat')).refusals;
     expect(refusals).toHaveLength(1);
-    expect(refusals[0]).toMatch(/Claim 1: a location line is empty/);
+    // The unfilled placeholder is not a claim (#402), so the section has nothing in it yet.
+    expect(refusals[0]).toMatch(/no claims and no open questions/);
   });
 });

@@ -1773,6 +1773,20 @@ describe('decision-19 — claim-level citation anchors (parseClaimCitationAnchor
     ).toBe(true);
   });
 
+  it('reads the anchors of a plain claim, written without bold, like a bold one (#402)', () => {
+    const chunkText = [
+      '# Chunk: plain-claims',
+      '',
+      '## Interpretation',
+      '1. Shield dice are re-rolled each turn. — cites rulebook/02-player-actions.md (p.1): "dice used for shields do not persist from round to round"',
+      '',
+    ].join('\n');
+    const anchors = parseClaimCitationAnchors(chunkText, ['02-player-actions.md']);
+    expect(anchors.slices).toEqual(['rulebook/02-player-actions.md']);
+    expect(anchors.pages).toEqual([1]);
+    expect(anchors.fragments).toEqual(['dice used for shields do not persist from round to round']);
+  });
+
   it('decision-19-anchors-4: short scraps are rejected — a "+1"-length quoted token never becomes an anchor', () => {
     const chunkText = [
       '# Chunk: short-scrap',

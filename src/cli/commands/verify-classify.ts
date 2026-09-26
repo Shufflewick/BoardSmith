@@ -24,7 +24,7 @@ import {
   readRecordedSourcePaths,
   sliceDocuments,
 } from './rulebook-sources.js';
-import { extractSection } from './build-manifest.js';
+import { type InterpretationLine, interpretationLines } from './build-manifest.js';
 import {
   type ClassificationRecord,
   type VerifyRunOptions,
@@ -1062,23 +1062,21 @@ function normalizeWhitespace(s: string): string {
   return s.replace(/\s+/g, ' ').trim();
 }
 
-/** Splits an `## Interpretation` section body into one text span per `^N. **` claim item, so a
- * multi-line claim's continuation lines stay attached to their own claim — the same claim shape
- * `parseInterpretationClaims` (`build-manifest.ts`) uses for numbering. */
-function splitInterpretationClaims(body: string): string[] {
-  const CLAIM_START = /^(\d+)\.\s+\*\*/gm;
-  const starts: number[] = [];
-  let m: RegExpExecArray | null;
-  while ((m = CLAIM_START.exec(body)) !== null) {
-    starts.push(m.index);
+/** One text span per claim (build-manifest.ts's WHAT A CLAIM IS), comments removed, so a
+ * multi-line claim's continuation lines stay attached to their own claim. */
+function splitInterpretationClaims(lines: InterpretationLine[]): string[] {
+  const claims: string[][] = [];
+  let current: string[] | undefined;
+  for (const line of lines) {
+    if (line.claim !== undefined) {
+      current = [];
+      claims.push(current);
+    } else if (line.placeholder) {
+      current = undefined;
+    }
+    current?.push(line.text);
   }
-  const claims: string[] = [];
-  for (let i = 0; i < starts.length; i++) {
-    const start = starts[i];
-    const end = i + 1 < starts.length ? starts[i + 1] : body.length;
-    claims.push(body.slice(start, end));
-  }
-  return claims;
+  return claims.map((claim) => claim.join('\n'));
 }
 
 export interface ClaimCitationAnchors {
@@ -1091,10 +1089,11 @@ export interface ClaimCitationAnchors {
  * The claim-level citation anchors a chunk's `## Interpretation` claims actually name — never
  * scanned from `chunkText` directly (that would also pick up the redteam/findings-ledger/HTML-
  * comment prose 174-CONTEXT.md's `decision-19-anchors-2` measured as noise). Reuses
- * `extractSection` (the `f73153a3`-safe by-line heading lookup) and `resolveCitedSlices` (the
- * shorthand-resolving citation parser) rather than inventing a second convention.
+ * `interpretationLines` (the one claim rule, shared with claim-quote-check) and
+ * `resolveCitedSlices` (the shorthand-resolving citation parser) rather than inventing a second
+ * convention.
  *
- * HTML comments (`<!-- ... -->`) are stripped from the body before parsing — the template's own
+ * HTML comments (`<!-- ... -->`) are not read — the template's own
  * guidance comment inside `## Interpretation` names example `rulebook/...` tokens (measured
  * against `second-action-resolution`'s carried-citations comment) and must not become an anchor.
  *
@@ -1108,11 +1107,9 @@ export function parseClaimCitationAnchors(
   chunkText: string,
   sliceFilenames: string[],
 ): ClaimCitationAnchors {
-  const body = extractSection(chunkText, '## Interpretation');
-  if (body === undefined) return { slices: [], pages: [], fragments: [] };
-
-  const withoutComments = body.replace(/<!--[\s\S]*?-->/g, '');
-  const claims = splitInterpretationClaims(withoutComments);
+  const lines = interpretationLines(chunkText);
+  if (lines === undefined) return { slices: [], pages: [], fragments: [] };
+  const claims = splitInterpretationClaims(lines);
 
   const slices = new Set<string>();
   const pages = new Set<number>();

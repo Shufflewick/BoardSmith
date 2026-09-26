@@ -17,7 +17,7 @@ import {
   readGateTransition,
   renderGateTransition,
 } from '../lib/gate-transition.js';
-import { parseBuildManifest, resolveManifestPath } from './build-manifest.js';
+import { extractSection, parseBuildManifest, resolveManifestPath } from './build-manifest.js';
 import {
   type SignoffRecord,
   VERIFIED,
@@ -28,7 +28,7 @@ import {
   renderSignoff,
   writeSignoffBlock,
 } from './chunk-signoff.js';
-import { unquotedClaims } from './claim-quotes.js';
+import { parseInterpretationQuotes, unquotedClaims } from './claim-quotes.js';
 import { atomicWriteFile } from './verify-run.js';
 
 /**
@@ -45,6 +45,10 @@ import { atomicWriteFile } from './verify-run.js';
  *     `transition` sign-off, and the ledger names the earlier sign-off;
  *   - for each chunk covered above, every claim in force that has no quote is recorded by number
  *     with a hash of its text, so `claim-quote-check` accepts it while that text is unchanged.
+ *     A claim is what `claim-quote-check` reads as one (any `N. ` line, #402). A full-ceremony
+ *     chunk in which it finds no claim and no open question has its claims in some other form, and
+ *     recording nothing for it would leave every one of them owing a quote once they are
+ *     renumbered, so the run refuses before writing anything and names those chunks.
  *
  * A verified chunk whose section was scaffolded empty and never signed was verified by hand under
  * the gate; the transition does not cover it, and it stays refused.
@@ -132,19 +136,52 @@ async function decideChunk(
   };
 }
 
+/**
+ * The chunk's declared ceremony (`full`, `light` or `final-acceptance`, CHUNK.template.md). Only a
+ * full-ceremony chunk has an investigate step, so only it owes claims.
+ */
+function ceremonyOf(text: string): string | undefined {
+  const body = extractSection(text, '## Ceremony')?.replace(/<!--[\s\S]*?-->/g, '');
+  return body?.trim().split(/\s+/)[0] || undefined;
+}
+
+/** A full-ceremony chunk whose `## Interpretation` holds no claim and no open question. */
+function hasNoReadableClaims(text: string): boolean {
+  if (ceremonyOf(text) === 'light' || ceremonyOf(text) === 'final-acceptance') return false;
+  const parsed = parseInterpretationQuotes(text);
+  return parsed === undefined || parsed.claims.length + parsed.questions.length === 0;
+}
+
+function unreadableClaimsError(slugs: string[]): Error {
+  return new Error(
+    `The gate transition records every claim of each chunk it covers, and it found no claim in ` +
+      `${slugs.map((s) => `design/${relChunkMdPath(s)}`).join(', ')}. A claim is a line starting ` +
+      `with its number (\`1. \`), bold or not. Put each of those chunks' claims in that form, keeping ` +
+      `their text, and run the transition again. Nothing was written.`,
+  );
+}
+
+/** Adds one covered chunk's decision and its unquoted claims to the plan. */
+function addToPlan(plan: GateTransition, decided: TransitionedSignoff | KeptSignoff, text: string): void {
+  if ('status' in decided) plan.signoffs.push(decided);
+  else plan.kept.push(decided);
+  const claims = unquotedClaims(text);
+  if (Object.keys(claims).length) plan.claims[decided.slug] = claims;
+}
+
 /** Decides the transition for every verified chunk. Writes nothing. */
 async function planTransition(dir: string, recorded: string, by: string): Promise<GateTransition> {
   const plan: GateTransition = { recorded, by, signoffs: [], kept: [], claims: {} };
+  const unreadable: string[] = [];
   for (const slug of await chunkSlugs(dir)) {
     const text = (await readChunk(dir, slug)) ?? '';
     const status = readStatus(text) ?? '';
     const decided = status.startsWith(VERIFIED) ? await decideChunk(dir, slug, text, status) : undefined;
     if (!decided) continue;
-    if ('status' in decided) plan.signoffs.push(decided);
-    else plan.kept.push(decided);
-    const claims = unquotedClaims(text);
-    if (Object.keys(claims).length) plan.claims[slug] = claims;
+    addToPlan(plan, decided, text);
+    if (hasNoReadableClaims(text)) unreadable.push(slug);
   }
+  if (unreadable.length) throw unreadableClaimsError(unreadable);
   return plan;
 }
 

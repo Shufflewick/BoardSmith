@@ -1,7 +1,9 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { join } from 'node:path';
-import { DESIGN_DIR, WAIVERS_MD } from '../lib/project-paths.js';
+import { createHash } from 'node:crypto';
+import { DESIGN_DIR, MERGE_SIGNOFFS_MD, WAIVERS_MD } from '../lib/project-paths.js';
+import { appendMergeSignoffs } from '../lib/merge-signoffs.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import {
   SIGNOFF_HEADING,
@@ -456,6 +458,31 @@ describe('an edit to a shared file is accounted for by the chunk that made it (#
       expect(problems).toContain('src/rules.ts');
       expect(problems).toContain(`boardsmith chunk-signoff ${slug}`);
     }
+  });
+
+  it('a merge that vouched for the file as it is now keeps the earlier sign-off; a stale or older record does not (#403)', async () => {
+    const project = await sharedProject('built');
+    await recordSignoff('shop', { project, by: 'Jane Designer', observed: '1,2', now: LATER });
+    const merged = 'rules v3, as the merge combined deal and shop';
+    await fs.writeFile(join(project, 'src/rules.ts'), merged);
+    const record = (content: string, when: Date) =>
+      appendMergeSignoffs(undefined, [
+        { path: 'src/rules.ts', content, chunks: ['deal', 'shop'], merge: 'chunk/shop abc into def', when: when.toISOString() },
+      ]);
+    const ledger = join(project, DESIGN_DIR, MERGE_SIGNOFFS_MD);
+    const sha = createHash('sha256').update(merged).digest('hex');
+
+    await fs.writeFile(ledger, record(sha, new Date('2026-09-26T00:00:00Z')));
+    expect(await checkSignoff(project, 'deal')).toEqual([]);
+    expect((await assessSignoffs(project)).get('shop')!.sharedEdits).toEqual([
+      { path: 'src/rules.ts', coveredBy: 'deal, shop', how: 'merged' },
+    ]);
+
+    await fs.writeFile(ledger, record(createHash('sha256').update('rules v2').digest('hex'), new Date('2026-09-26T00:00:00Z')));
+    expect((await checkSignoff(project, 'deal')).join('\n')).toContain('src/rules.ts');
+
+    await fs.writeFile(ledger, record(sha, new Date('2026-09-01T00:00:00Z')));
+    expect((await checkSignoff(project, 'shop')).join('\n')).toContain('src/rules.ts');
   });
 
   it('an edit to a file only this chunk names is not covered by another chunk being built', async () => {

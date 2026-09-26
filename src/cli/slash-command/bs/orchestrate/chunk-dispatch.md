@@ -83,7 +83,12 @@ five; the last two are dispatches it is never asked about:
    lock, allocates real ledger numbers on the combined tree, re-runs `ledger-check`,
    `constraint-check` with its measurement tests, every sign-off and the whole test suite on the
    combined tree, and refuses (leaving the main checkout exactly as it was) when any of them fails,
-   even though the branch passed them alone. A refusal is fixed on the chunk's branch: merge the
+   even though the branch passed them alone. A source file this chunk and one merged while it was
+   built both edited is code neither sign-off saw: the merge vouches for it by re-running both
+   chunks' own tests, `chunk-check` and `claim-quote-check` on the combined tree, then records it
+   in `design/MERGE-SIGNOFFS.md` (the file, both chunks, the merge), which the sign-off check
+   accepts. No designer sign-off is asked for. When one of those checks fails, the refusal names
+   the check and the chunk. A branch never writes `design/MERGE-SIGNOFFS.md` itself. A refusal is fixed on the chunk's branch: merge the
    main line into it in its worktree, resolve and re-test there, commit, and run `chunk-merge`
    again. When the merge lists references between this chunk and the chunks merged while it was
    being built, they land in `design/CROSS-CHUNK.md` as pending, and `ledger-check` (so every close

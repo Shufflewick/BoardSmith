@@ -296,6 +296,21 @@ describe('parseInterpretationClaims', () => {
     ).toEqual([]);
   });
 
+  it("does not count the current template's bold placeholder, or a numbered line inside a comment (#402)", () => {
+    const chunk = [
+      '## Interpretation',
+      '<!-- An example of the format:',
+      '3. **Ties go against combatant 1.**',
+      '-->',
+      '',
+      '1. **<!-- claim text -->**',
+      '   > <!-- the exact source text -->',
+      '   Source: <!-- <file> §"<heading>" -->',
+      '',
+    ].join('\n');
+    expect(parseInterpretationClaims(chunk)).toEqual([]);
+  });
+
   it('returns [] when there is no Interpretation section', () => {
     const chunk = '## Build Manifest\n\n| File | Status |\n|---|---|\n';
     expect(parseInterpretationClaims(chunk)).toEqual([]);

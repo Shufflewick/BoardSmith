@@ -13,7 +13,8 @@
  * cited location is refused. Whether the quote SUPPORTS the claim is judgment, and stays with the
  * red team and the fidelity lens, which this command hands the quotes to (`--json`).
  *
- * THE FORMAT (also stated in `templates/CHUNK.template.md` and `build/investigate.md`)
+ * THE FORMAT (also stated in `templates/CHUNK.template.md` and `build/investigate.md`). What counts
+ * as a claim is `build-manifest.ts`'s rule, WHAT A CLAIM IS: any `N. ` line, bold or not (#402).
  *
  *   1. **Claim text.** Any further prose.
  *      > the exact source text, copied character for character
@@ -42,7 +43,7 @@ import { createHash } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import { isAbsolute, relative, resolve, sep } from 'node:path';
 import chalk from 'chalk';
-import { extractSection } from './build-manifest.js';
+import { type InterpretationLine, interpretationLines } from './build-manifest.js';
 import { assertBareName } from '../lib/user-name.js';
 import { DESIGN_DIR, GATE_TRANSITION_MD, chunkMdPath, designDir, relChunkMdPath } from '../lib/project-paths.js';
 import { readGateTransition } from '../lib/gate-transition.js';
@@ -92,8 +93,7 @@ interface ClaimQuoteCheckResult {
   refusals: string[];
 }
 
-const CLAIM_START = /^(\d+)\.\s+\*\*/;
-const QUESTION_START = /^Q(\d+)\.\s+\*\*/;
+const QUESTION_START = /^Q(\d+)\.[ \t]+\S/;
 const SUBHEADING = /^#{3,}\s/;
 const QUOTE_LINE = /^\s*>\s?(.*)$/;
 const SOURCE_LINE = /^\s*Source:\s*(.+?)\s*$/;
@@ -131,16 +131,18 @@ function closePendingQuote(state: ParseState): void {
   state.pendingQuote = [];
 }
 
-/** Handles a line that starts a claim, starts an open question, or ends the current item. */
-function startItem(state: ParseState, line: string): boolean {
-  const claimMatch = CLAIM_START.exec(line);
-  const questionMatch = QUESTION_START.exec(line);
-  if (!claimMatch && !questionMatch && !SUBHEADING.test(line)) return false;
+/**
+ * Handles a line that starts a claim, starts an open question, or ends the current item. What a
+ * claim is, is `build-manifest.ts`'s rule (WHAT A CLAIM IS), shared with `parseInterpretationClaims`.
+ */
+function startItem(state: ParseState, line: InterpretationLine): boolean {
+  const questionMatch = line.claim === undefined ? QUESTION_START.exec(line.text) : null;
+  if (line.claim === undefined && !line.placeholder && !questionMatch && !SUBHEADING.test(line.text)) return false;
   closePendingQuote(state);
   state.current = undefined;
-  if (claimMatch) {
-    const claim: ParsedClaim = { number: Number(claimMatch[1]), lines: [line], quotes: [], supersedes: [], problems: [] };
-    noteSupersession(claim, line);
+  if (line.claim !== undefined) {
+    const claim: ParsedClaim = { number: line.claim, lines: [line.text], quotes: [], supersedes: [], problems: [] };
+    noteSupersession(claim, line.text);
     state.result.claims.push(claim);
     state.current = { kind: 'claim', claim };
   } else if (questionMatch) {
@@ -181,17 +183,16 @@ function continueItem(state: ParseState, item: Item, line: string): void {
 
 /**
  * Parses `## Interpretation` into claims and open questions. Returns `undefined` when the section
- * is absent. HTML comments are removed first, so the template's own example text is never read.
+ * is absent. HTML comments are not read, so the template's own example text is never a claim.
  */
 export function parseInterpretationQuotes(chunkText: string): ParsedInterpretation | undefined {
-  const rawBody = extractSection(chunkText, '## Interpretation');
-  if (rawBody === undefined) return undefined;
-  const body = rawBody.replace(/<!--[\s\S]*?-->/g, '');
+  const lines = interpretationLines(chunkText);
+  if (lines === undefined) return undefined;
 
   const state: ParseState = { result: { claims: [], questions: [] }, current: undefined, pendingQuote: [] };
-  for (const line of body.split('\n')) {
+  for (const line of lines) {
     if (startItem(state, line)) continue;
-    if (state.current) continueItem(state, state.current, line);
+    if (state.current) continueItem(state, state.current, line.text);
   }
   closePendingQuote(state);
   return state.result;
@@ -456,8 +457,8 @@ function emptyInterpretationRefusal(slug: string, parsed: ParsedInterpretation |
   }
   if (parsed.claims.length === 0 && parsed.questions.length === 0) {
     return (
-      `${shownChunk}'s "## Interpretation" has no claims and no open questions. Claims start with ` +
-      '`1. **`, open questions with `Q1. **`.'
+      `${shownChunk}'s "## Interpretation" has no claims and no open questions. Each claim is ` +
+      'a line starting with its number (`1. `), each open question a line starting `Q1. `.'
     );
   }
   return undefined;
