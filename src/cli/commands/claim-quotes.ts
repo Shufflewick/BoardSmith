@@ -23,13 +23,15 @@
  *   Q1. **An open question for the designer.** Why the source does not settle it.
  *      Searched: rulebook/08-combat.md §"Armour"
  *
- * A claim may carry several quote + `Source:` pairs. A `Source:` path is relative to the design
- * directory, like every other citation in the design docs; archived code outside it is reached
- * with `../`, but never outside the project. A Markdown source is cited by heading (`§"..."`) or
- * by line range; any other file is cited by line range (`path:N` or `path:N-M`). A quote matches
- * when it appears inside the cited section or lines, with runs of whitespace (line wrapping)
- * treated as one space. A claim that a later claim supersedes ("supersedes claim N") is not
- * checked: it is kept only as the record of what was corrected.
+ * A claim may carry several quote + `Source:` pairs. A `Source:` path is read by the one rule for a
+ * path in a design record (`designRecordPath`, project-paths.ts, #409): a design record such as
+ * `rulebook/...` or `RULINGS.md` from `design/`, code reached with `../` from `design/` too, and
+ * anything else from the project root; never outside the project. A Markdown source is cited by
+ * heading (`§"..."`) or by line range; any other file is cited by line range (`path:N` or
+ * `path:N-M`). A quote matches when it appears inside the cited section or lines, with runs of
+ * whitespace (line wrapping) treated as one space. A claim a later claim supersedes
+ * (build-manifest.ts, WHICH CLAIMS ARE SUPERSEDED, #410) is not checked: it is kept only as the
+ * record of what was corrected.
  *
  * A CHUNK VERIFIED BEFORE THIS CHECK EXISTED (#397) has claims with no quotes. The one-time
  * `boardsmith chunk-gate-transition` records each of them, by number, with a hash of its text, in
@@ -41,11 +43,11 @@
 
 import { createHash } from 'node:crypto';
 import { promises as fs } from 'node:fs';
-import { isAbsolute, relative, resolve, sep } from 'node:path';
+import { join, resolve, sep } from 'node:path';
 import chalk from 'chalk';
-import { type InterpretationLine, interpretationLines } from './build-manifest.js';
+import { type InterpretationLine, interpretationLines, parseSupersededClaims } from './build-manifest.js';
 import { assertBareName } from '../lib/user-name.js';
-import { DESIGN_DIR, GATE_TRANSITION_MD, chunkMdPath, designDir, relChunkMdPath } from '../lib/project-paths.js';
+import { DESIGN_DIR, GATE_TRANSITION_MD, chunkMdPath, designRecordPath, relChunkMdPath } from '../lib/project-paths.js';
 import { readGateTransition } from '../lib/gate-transition.js';
 
 interface QuotedPassage {
@@ -58,8 +60,6 @@ interface ParsedClaim {
   /** The claim's own lines, from its number to the next item. */
   lines: string[];
   quotes: QuotedPassage[];
-  /** Claim numbers this claim's own text says it supersedes. */
-  supersedes: number[];
   problems: string[];
 }
 
@@ -98,7 +98,6 @@ const SUBHEADING = /^#{3,}\s/;
 const QUOTE_LINE = /^\s*>\s?(.*)$/;
 const SOURCE_LINE = /^\s*Source:\s*(.+?)\s*$/;
 const SEARCHED_LINE = /^\s*Searched:\s*(.+?)\s*$/;
-const SUPERSEDES = /supersedes\s+claims?\s+(\d+)/gi;
 
 const FORMAT_HINT =
   'Write the exact source text as `> ` lines under the claim, followed by ' +
@@ -141,8 +140,7 @@ function startItem(state: ParseState, line: InterpretationLine): boolean {
   closePendingQuote(state);
   state.current = undefined;
   if (line.claim !== undefined) {
-    const claim: ParsedClaim = { number: line.claim, lines: [line.text], quotes: [], supersedes: [], problems: [] };
-    noteSupersession(claim, line.text);
+    const claim: ParsedClaim = { number: line.claim, lines: [line.text], quotes: [], problems: [] };
     state.result.claims.push(claim);
     state.current = { kind: 'claim', claim };
   } else if (questionMatch) {
@@ -178,7 +176,6 @@ function continueItem(state: ParseState, item: Item, line: string): void {
   closePendingQuote(state);
   const searchedMatch = SEARCHED_LINE.exec(line);
   if (item.kind === 'question' && searchedMatch) item.question.searched.push(searchedMatch[1]);
-  if (item.kind === 'claim') noteSupersession(item.claim, line);
 }
 
 /**
@@ -198,10 +195,6 @@ export function parseInterpretationQuotes(chunkText: string): ParsedInterpretati
   return state.result;
 }
 
-function noteSupersession(claim: ParsedClaim, line: string): void {
-  for (const m of line.matchAll(SUPERSEDES)) claim.supersedes.push(Number(m[1]));
-}
-
 function normalize(text: string): string {
   return text.replace(/\s+/g, ' ').trim();
 }
@@ -211,10 +204,6 @@ function claimTextHash(claim: ParsedClaim): string {
   return createHash('sha256').update(normalize(claim.lines.join('\n'))).digest('hex');
 }
 
-function supersededNumbers(parsed: ParsedInterpretation): Set<number> {
-  return new Set(parsed.claims.flatMap((c) => c.supersedes));
-}
-
 /**
  * Every claim in force that carries no quote, by number, with the hash of its text. This is what
  * `boardsmith chunk-gate-transition` records for a chunk verified before this check existed.
@@ -222,7 +211,7 @@ function supersededNumbers(parsed: ParsedInterpretation): Set<number> {
 export function unquotedClaims(chunkText: string): Record<number, string> {
   const parsed = parseInterpretationQuotes(chunkText);
   if (!parsed) return {};
-  const superseded = supersededNumbers(parsed);
+  const superseded = new Set(parseSupersededClaims(chunkText));
   return Object.fromEntries(
     parsed.claims
       .filter((c) => !superseded.has(c.number) && c.quotes.length === 0)
@@ -256,32 +245,36 @@ function parseSpec(spec: string): SourceSpec | undefined {
   };
 }
 
-/** Reads the cited file, refusing a path that is absolute, leaves the project, or is missing. */
-async function readSourceFile(projectDir: string, path: string): Promise<Located> {
-  if (isAbsolute(path)) {
-    return { ok: false, problem: `"${path}" is an absolute path. Source paths are relative to ${DESIGN_DIR}/.` };
-  }
-  const abs = resolve(designDir(projectDir), path);
-  const fromProject = relative(resolve(projectDir), abs);
-  if (fromProject === '' || fromProject.startsWith('..') || isAbsolute(fromProject)) {
+/**
+ * How a location's path is read: the one rule for a path in a design record (`designRecordPath`,
+ * project-paths.ts), which `ledger-check` reads evidence citations by too (#409).
+ */
+const PATH_RULE =
+  `A path is read from ${DESIGN_DIR}/ when it names a design record (rulebook/08-combat.md, ` +
+  `chunks/<slug>/CHUNK.md, RULINGS.md) or climbs out of ${DESIGN_DIR}/ (../src/rules/game.ts), and ` +
+  `from the project root otherwise (src/rules/game.ts), so a file of your own in ${DESIGN_DIR}/ is ` +
+  `written ${DESIGN_DIR}/<name>.`;
+
+/** A cited file's text, and its project-relative path for messages. */
+type SourceFile = { ok: true; text: string; shown: string } | { ok: false; problem: string };
+
+/** Reads the cited file, refusing a path that leaves the project or names no file. */
+async function readSourceFile(projectDir: string, path: string): Promise<SourceFile> {
+  const shown = designRecordPath(projectDir, path);
+  if (shown === undefined) {
     return {
       ok: false,
       problem: `"${path}" is outside this project. Copy or archive the source inside the project and cite it there.`,
     };
   }
   try {
-    return { ok: true, text: await fs.readFile(abs, 'utf8') };
+    return { ok: true, text: await fs.readFile(join(projectDir, shown), 'utf8'), shown };
   } catch {
-    return {
-      ok: false,
-      problem:
-        `there is no file at ${DESIGN_DIR}/${path}. Source paths are relative to ${DESIGN_DIR}/ ` +
-        '(for example rulebook/08-combat.md or RULINGS.md).',
-    };
+    return { ok: false, problem: `there is no file at ${shown}. ${PATH_RULE}` };
   }
 }
 
-function linesInRange(lines: string[], source: SourceSpec, range: [number, number]): Located {
+function linesInRange(lines: string[], source: SourceSpec, range: [number, number], shown: string): Located {
   const [from, to] = range;
   if (from < 1 || to < from) {
     return { ok: false, problem: `"${source.spec}" has an invalid line range. Write it as :N or :N-M with N <= M.` };
@@ -289,19 +282,18 @@ function linesInRange(lines: string[], source: SourceSpec, range: [number, numbe
   if (to > lines.length) {
     return {
       ok: false,
-      problem: `"${source.spec}" cites line ${to}, but ${DESIGN_DIR}/${source.path} has ${lines.length} lines.`,
+      problem: `"${source.spec}" cites line ${to}, but ${shown} has ${lines.length} lines.`,
     };
   }
   return { ok: true, text: lines.slice(from - 1, to).join('\n') };
 }
 
 /** Picks the text a parsed location names out of its file's lines. */
-function locateWithin(lines: string[], source: SourceSpec): Located {
-  const shown = `${DESIGN_DIR}/${source.path}`;
+function locateWithin(lines: string[], source: SourceSpec, shown: string): Located {
   if (source.range && source.heading) {
     return { ok: false, problem: `"${source.spec}" gives both a heading and a line range. Give one.` };
   }
-  if (source.range) return linesInRange(lines, source, source.range);
+  if (source.range) return linesInRange(lines, source, source.range, shown);
   if (!source.heading) {
     return {
       ok: false,
@@ -327,7 +319,7 @@ async function locate(projectDir: string, spec: string): Promise<Located> {
   if (!source) return { ok: false, problem: `"${spec}" is not a location. ${FORMAT_HINT}` };
   const file = await readSourceFile(projectDir, source.path);
   if (!file.ok) return file;
-  return locateWithin(file.text.split('\n'), source);
+  return locateWithin(file.text.split('\n'), source, file.shown);
 }
 
 const HEADING_LINE = /^(#{1,6})\s+(.+?)\s*#*\s*$/;
@@ -478,7 +470,7 @@ export async function checkClaimQuotes(projectDir: string, slug: string): Promis
     recorded: transition?.claims[slug] ?? {},
     offer: transition === undefined && /^Status:\s*verified/m.test(chunkText),
   };
-  const superseded = supersededNumbers(parsed);
+  const superseded = new Set(parseSupersededClaims(chunkText));
   const refusals: string[] = [];
   const claims: CheckedClaim[] = [];
   for (const claim of parsed.claims) {

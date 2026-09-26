@@ -1,6 +1,5 @@
-import { describe, it, expect, afterEach, vi } from 'vitest';
-import { join } from 'node:path';
-import { citedEvidencePaths, resolveCitation } from './cited-evidence.js';
+import { describe, it, expect } from 'vitest';
+import { citedEvidencePaths } from './cited-evidence.js';
 
 /**
  * `citedEvidencePaths` (#292): which strings in a design record are citations of a script or a
@@ -81,28 +80,5 @@ describe('citedEvidencePaths — what counts as a cited script or capture', () =
       'tests/food.test.ts',
       'chunks/core/evidence/after.png',
     ]);
-  });
-});
-
-describe('resolveCitation — where a cited path lives (#398)', () => {
-  afterEach(() => {
-    vi.unstubAllEnvs();
-  });
-
-  it('reads ~/ as the home directory, so a file in another checkout is outside the project', () => {
-    vi.stubEnv('HOME', '/Users/someone');
-    expect(resolveCitation('/Users/someone/sotf', '~/BoardSmith/src/ui/composables/useAutoZoom.ts')).toBeUndefined();
-  });
-
-  it('reads ~/ as the home directory, so a file in this project is found where it is', () => {
-    vi.stubEnv('HOME', '/Users/someone');
-    expect(resolveCitation('/Users/someone/sotf', '~/sotf/tests/food.test.ts')).toBe('tests/food.test.ts');
-  });
-
-  it('resolves design-relative and project-relative paths inside the project', () => {
-    const project = join('/work', 'game');
-    expect(resolveCitation(project, 'chunks/a/evidence/x.mjs')).toBe('design/chunks/a/evidence/x.mjs');
-    expect(resolveCitation(project, 'tests/a.test.ts')).toBe('tests/a.test.ts');
-    expect(resolveCitation(project, '/tmp/driver.mjs')).toBeUndefined();
   });
 });

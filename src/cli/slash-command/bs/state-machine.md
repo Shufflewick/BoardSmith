@@ -30,7 +30,12 @@ library gap, the third only by `/bs-build-game`. See `orchestrate/questions.md`,
 `design/chunks/<slug>/CHUNK.md`, and so on: prepend `design/` whenever you Read, Write, or `cd` to
 one. The paths are design-relative and not project-relative because that is exactly how citations
 are written inside CHUNK.md's Build Manifest and `## Interpretation` — one grammar, not two, so a
-citation copied out of a doc resolves the same way the `boardsmith` commands resolve it.
+citation copied out of a doc resolves the same way the `boardsmith` commands resolve it. The
+whole rule, which every command applies to every path in a design record: a path naming something
+`design/` owns (`rulebook/`, `chunks/`, `run-log/`, a ledger) or climbing out of it (`../src/...`)
+is read from `design/`; any other path (`src/...`, `tests/...`, `design/...`) from the project root.
+So a file of your own in `design/` (one no skill names, like `design/NOTES.md`) is written with its
+`design/` prefix.
 
 **Two places for a script, and the test is whether anything will cite it.**
 

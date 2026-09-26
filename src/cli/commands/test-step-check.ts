@@ -28,8 +28,8 @@ import { join, resolve as pathResolve } from 'node:path';
 import { promisify } from 'node:util';
 import chalk from 'chalk';
 import {
+  claimsInForce,
   extractSection,
-  parseInterpretationClaims,
   parseSupersededClaims,
   resolveManifestPath,
 } from './build-manifest.js';
@@ -282,12 +282,6 @@ export interface ChunkTestFile {
   path: string;
   absPath: string;
   source: string;
-}
-
-/** The Interpretation's claims less the ones a later claim supersedes. */
-function claimsInForce(chunkText: string): number[] {
-  const superseded = new Set(parseSupersededClaims(chunkText));
-  return parseInterpretationClaims(chunkText).filter((c) => !superseded.has(c));
 }
 
 async function readChunk(projectDir: string, slug: string): Promise<string> {

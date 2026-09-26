@@ -14,9 +14,9 @@
  * convention as `chunk-provenance.ts` exporting `resolveCitedSlices` for reuse.
  */
 
-import { resolveDesignRelative } from '../lib/project-paths.js';
+import { designRecordPath } from '../lib/project-paths.js';
 import { parseLedgerEntries, supersessionPatterns } from '../lib/ledger-entries.js';
-import { relative, resolve as pathResolve, sep } from 'node:path';
+import { resolve as pathResolve } from 'node:path';
 
 /** The locked finding-kind enum from 172-CONTEXT.md decision 7. Never a hand-written union. */
 export const FINDING_KINDS = Object.freeze([
@@ -126,19 +126,18 @@ const PATH_TOKEN = /[A-Za-z0-9_./-]+\.[A-Za-z0-9]+/g;
  *
  * A manifest row may name a design artifact rather than source — real chunks list `DECISIONS.md`
  * or `RULINGS.md` beside `src/rules/game.ts`. Those are written the way every path inside a design
- * doc is written, relative to `design/`, so they resolve through `resolveDesignRelative`; source
- * paths (`src/…`, `tests/…`) still resolve against the project root. Without this split, every
- * ledger row in every existing manifest reads as a deleted file.
+ * doc is written, relative to `design/`; source paths (`src/…`, `tests/…`) resolve against the
+ * project root. Without this split, every ledger row in every existing manifest reads as a deleted
+ * file. The split is the one rule every reader of a design record shares, `designRecordPath`
+ * (project-paths.ts, #409).
  *
  * Returns the absolute resolved path, or the sentinel `'escapes'` for a path that leaves
  * `projectDir`. Callers report the escape as a finding rather than throwing — one bad manifest row
  * must not abort the whole sweep.
  */
 export function resolveManifestPath(projectDir: string, relPathStr: string): string | 'escapes' {
-  const resolved = resolveDesignRelative(projectDir, relPathStr);
-  const rel = relative(projectDir, resolved);
-  if (rel === '..' || rel.startsWith(`..${sep}`)) return 'escapes';
-  return resolved;
+  const rel = designRecordPath(projectDir, relPathStr);
+  return rel === undefined ? 'escapes' : pathResolve(projectDir, rel);
 }
 
 /**
@@ -326,27 +325,40 @@ export function parseInterpretationClaims(chunkText: string): number[] {
 }
 
 /**
- * The claims a later claim supersedes in full. Correction is append-only (investigate.md: a new claim
- * "supersedes claim 7 per redteam objection"; redteam.md marks the old one
- * `7. [superseded by claim 12 — do not review]`), so a superseded claim keeps its number in
- * `parseInterpretationClaims` and is removed here by whoever needs only the claims in force.
- * Scoped to `## Interpretation` like the claim set itself.
+ * WHICH CLAIMS ARE SUPERSEDED (#290, #410). The one rule, beside WHAT A CLAIM IS, that every reader
+ * of `## Interpretation` asks (claim-quote-check, the gate transition, test-step-check, trace-check
+ * and verify-classify's citation anchors), so a claim is never retired for one gate and live for
+ * another.
+ *
+ * Correction is append-only (investigate.md: a new claim "supersedes claim 7 per redteam
+ * objection"; redteam.md marks the old one `7. [superseded by claim 12 — do not review]`), so a
+ * superseded claim keeps its number in `parseInterpretationClaims` and is left out by
+ * `claimsInForce`. Only a WHOLE supersession retires a claim: "supersedes claim 7 per redteam
+ * objection", "in full", "entirely", "wholly", "wholesale", or the end of the sentence. "Supersedes claim 8's closing sentence" and
+ * "supersedes claim 9 on the gem count" correct part of a claim, and the rest of it still stands;
+ * so does any wording this rule does not know ("supersedes claim 4 — corrected: ..."), because a
+ * claim wrongly kept in force owes a quote and a test and says so, while a claim wrongly retired
+ * skips both silently. Write "in full" to retire one.
+ * Like the claim set, it reads only the section's text outside HTML comments.
  */
 export function parseSupersededClaims(chunkText: string): number[] {
-  const body = extractSection(chunkText, '## Interpretation');
-  if (body === undefined) return [];
+  const lines = interpretationLines(chunkText) ?? [];
   const superseded = new Set<number>();
-  // Only a WHOLE supersession retires a claim: "supersedes claim 7 per redteam objection", "in
-  // full", or the end of the sentence. "Supersedes claim 8's closing sentence" and "supersedes
-  // claim 9 on the gem count" correct part of a claim, and the rest of it still stands.
-  const whole = /\bsupersedes claims? (\d+(?:\s*(?:,|and)\s*\d+)*)(?=\s+per\b|\s+in full\b|\s*[.*:;,)]|\s*$)/gim;
-  for (const match of body.matchAll(whole)) {
+  const text = lines.map((line) => line.text).join('\n');
+  const whole = /\bsupersedes claims? (\d+(?:\s*(?:,|and)\s*\d+)*)(?=\s+(?:per|in full|entirely|wholly|wholesale)\b|\s*[.*:;,)]|\s*$)/gim;
+  for (const match of text.matchAll(whole)) {
     for (const n of match[1].matchAll(/\d+/g)) superseded.add(Number(n[0]));
   }
-  for (const match of body.matchAll(/^(\d+)\.[ \t]+\[superseded by claim/gim)) {
-    superseded.add(Number(match[1]));
+  for (const line of lines) {
+    if (line.claim !== undefined && /^\d+\.[ \t]+\[superseded by claim/i.test(line.text)) superseded.add(line.claim);
   }
   return [...superseded].sort((a, b) => a - b);
+}
+
+/** The Interpretation's claims less the ones a later claim supersedes (see WHICH CLAIMS ARE SUPERSEDED). */
+export function claimsInForce(chunkText: string): number[] {
+  const superseded = new Set(parseSupersededClaims(chunkText));
+  return parseInterpretationClaims(chunkText).filter((c) => !superseded.has(c));
 }
 
 // ---------------------------------------------------------------------------------------------

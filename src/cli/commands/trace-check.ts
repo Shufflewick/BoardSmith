@@ -20,6 +20,7 @@ import {
   FINDING_KINDS,
   type Finding,
   type FindingKind,
+  claimsInForce,
   parseBuildManifest,
   parseInterpretationClaims,
   parseRulings,
@@ -135,7 +136,8 @@ export type ClaimResolution =
  *
  *   1. Candidate set = `owners` — every chunk whose Build Manifest lists the citing test file.
  *   2. Discard candidates that do not have a LIVE claim numbered `claimNumber` in their current
- *      `## Interpretation` list (`liveClaims`).
+ *      `## Interpretation` list (`liveClaims`). A superseded claim still counts here, so a test
+ *      that cites one alongside its replacement resolves; only claims in force are demanded a test.
  *   3. If more than one candidate survives rung 2, keep only the AUTHORING chunk(s) — the ones
  *      whose manifest row for this file marks it `NEW`/`written` rather than
  *      `edited`/`extended`/`rewritten`/`tightened` (`authoring`).
@@ -181,6 +183,7 @@ export interface TraceCheckResult {
   counts: Record<FindingKind, number>;
   totals: {
     chunks: number;
+    /** Claims in force, across every chunk. */
     claims: number;
     rulings: number;
     testFiles: number;
@@ -268,6 +271,8 @@ export async function traceCheckCommand(
   const counts = emptyCounts();
 
   const liveClaims: Record<string, number[]> = {};
+  /** The claims a chunk owes a test: its claims less the superseded ones (build-manifest.ts, #410). */
+  const inForce: Record<string, number[]> = {};
   /** file (posix-relative) -> chunk -> authoring, built from every chunk's Build Manifest. */
   const fileOwners: Record<string, Record<string, boolean>> = {};
   const claimCoverage: Record<string, Set<number>> = {};
@@ -281,6 +286,7 @@ export async function traceCheckCommand(
     }
 
     liveClaims[slug] = parseInterpretationClaims(chunkText);
+    inForce[slug] = claimsInForce(chunkText);
     claimCoverage[slug] = new Set();
 
     const manifest = parseBuildManifest(chunkText);
@@ -401,9 +407,9 @@ export async function traceCheckCommand(
     }
   }
 
-  // --- claim-untested: a live claim resolved to by no citation. ---
+  // --- claim-untested: a claim in force resolved to by no citation. ---
   for (const slug of slugs) {
-    for (const claimNumber of liveClaims[slug] ?? []) {
+    for (const claimNumber of inForce[slug] ?? []) {
       if (!claimCoverage[slug]?.has(claimNumber)) {
         pushFinding(findings, counts, {
           kind: 'claim-untested',
@@ -445,7 +451,7 @@ export async function traceCheckCommand(
 
   const totals = {
     chunks: slugs.length,
-    claims: Object.values(liveClaims).reduce((sum, arr) => sum + arr.length, 0),
+    claims: Object.values(inForce).reduce((sum, arr) => sum + arr.length, 0),
     rulings: parsedRulings.length,
     testFiles: discovered.size,
     claimCitations: claimCitationTotal,

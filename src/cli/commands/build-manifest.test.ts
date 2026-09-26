@@ -336,13 +336,17 @@ describe('parseSupersededClaims', () => {
       "14. **Supersedes claim 8's closing sentence**, which was wrong; claim 8 otherwise stands.",
       '15. SUPERSEDES CLAIM 9 ON THE GEM COUNT only.',
       '16. Supersedes claim 10 in full.',
+      '17. **A lost step goes nowhere. Supersedes claim 11 entirely.**',
+      '18. SUPERSEDES CLAIM 2 WHOLESALE — the corrected flow.',
+      '19. Supersedes claim 4 — corrected: only the count changes.',
+      '<!-- 20. Supersedes claim 8 in full, inside a comment, is not part of the section. -->',
       '',
       '## Playtest Test Script',
       '',
       '1. Supersedes claim 8 in prose outside the section does not count.',
       '',
     ].join('\n');
-    expect(parseSupersededClaims(chunk)).toEqual([3, 5, 7, 10]);
+    expect(parseSupersededClaims(chunk)).toEqual([2, 3, 5, 7, 10, 11]);
   });
 });
 
@@ -603,8 +607,13 @@ describe('resolveManifestPath', () => {
   });
 
   it('rejects a traversal that escapes the project root', () => {
+    // A path that climbs out of design/ is read from design/ (#409), so it takes one more `..`.
     expect(resolveManifestPath(project, '../../etc/passwd')).toBe('escapes');
-    expect(resolveManifestPath(project, '..')).toBe('escapes');
+    expect(resolveManifestPath(project, '../..')).toBe('escapes');
+  });
+
+  it('reads a path that climbs out of design/ from design/, as every reader of a design record does (#409)', () => {
+    expect(resolveManifestPath(project, '../src/rules/game.ts')).toBe('/tmp/proj/src/rules/game.ts');
   });
 
   it('resolves a manifest row naming a design ledger into design/, not the project root', () => {
@@ -632,6 +641,6 @@ describe('resolveManifestPath', () => {
 
   it('does not treat a sibling directory with a shared prefix as inside', () => {
     // `/tmp/proj-evil` shares the `/tmp/proj` prefix — a naive startsWith check would admit it.
-    expect(resolveManifestPath(project, '../proj-evil/secrets.ts')).toBe('escapes');
+    expect(resolveManifestPath(project, '../../proj-evil/secrets.ts')).toBe('escapes');
   });
 });

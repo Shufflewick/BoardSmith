@@ -5,7 +5,8 @@
  * is only evidence if a reviewer can open that file later. `.boardsmith/scratch/` is gitignored,
  * so a harness written there and cited as proof exists nowhere once the session ends (sotf's
  * food-invariant harness, cited by a decision that said it was committed). `ledger-check` holds
- * every path this module finds to "it is in git"; this module only finds and resolves them.
+ * every path this module finds to "it is in git"; this module only finds them. Where each one
+ * points is the one rule for a path in a design record, `designRecordPath` (project-paths.ts, #409).
  *
  * A citation is a whitespace-, quote-, bracket- or backtick-delimited token that contains a `/`
  * and ends in a script or capture extension. Skipped on purpose: URLs, a path in another
@@ -16,10 +17,8 @@
  * described rather than a file being cited (#398).
  */
 
-import { homedir } from 'node:os';
-import { isAbsolute, join, posix, relative } from 'node:path';
 import { blankComments } from './ledger-entries.js';
-import { CHUNKS_DIR, DESIGN_DIR, RULEBOOK_DIR } from './project-paths.js';
+import { CHUNKS_DIR, DESIGN_DIR } from './project-paths.js';
 
 /** Where committed evidence for a chunk lives, project-relative. */
 export const CHUNK_EVIDENCE_DIR = `${DESIGN_DIR}/${CHUNKS_DIR}/<slug>/evidence/`;
@@ -63,20 +62,4 @@ export function citedEvidencePaths(text: string): CitedPath[] {
       }
     });
   return cited;
-}
-
-/**
- * The project-relative location of a cited path, or `undefined` when it points outside the
- * project. `~/` is the home directory, as a shell reads it (#398). A path whose first segment is
- * `chunks/` or `rulebook/` is design-relative, the same grammar every design citation uses;
- * anything else is project-relative.
- */
-export function resolveCitation(projectDir: string, cited: string): string | undefined {
-  const path = cited.startsWith('~/') ? join(homedir(), cited.slice(2)) : cited;
-  let rel = path;
-  if (isAbsolute(path)) rel = relative(projectDir, path).split('\\').join('/');
-  else if (path.startsWith(`${CHUNKS_DIR}/`) || path.startsWith(`${RULEBOOK_DIR}/`)) rel = `${DESIGN_DIR}/${path}`;
-  rel = posix.normalize(rel);
-  if (rel === '..' || rel.startsWith('../') || isAbsolute(rel)) return undefined;
-  return rel;
 }

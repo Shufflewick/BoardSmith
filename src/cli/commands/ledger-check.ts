@@ -43,9 +43,10 @@ import {
   RUN_MD,
   chunkSlugs,
   designPath,
+  designRecordPath,
   relChunkMdPath,
 } from '../lib/project-paths.js';
-import { CHUNK_EVIDENCE_DIR, citedEvidencePaths, resolveCitation } from '../lib/cited-evidence.js';
+import { CHUNK_EVIDENCE_DIR, citedEvidencePaths } from '../lib/cited-evidence.js';
 import { type LedgerEntry, parseLedgerEntries, supersessionPatterns } from '../lib/ledger-entries.js';
 import { NUMBERED_LEDGER_SPECS, duplicateProvisionalIds, provisionalHeadings } from '../lib/ledger-allocation.js';
 import { checkCrossChunkLedger } from './cross-chunk.js';
@@ -691,7 +692,7 @@ async function problemOf(
 /** One finding per cited script or capture that is not a committed file in the project. */
 async function checkCitedEvidence(projectDir: string, sources: EvidenceSource[]): Promise<LedgerFinding[]> {
   const cited = sources.flatMap((source) =>
-    citedEvidencePaths(source.text).map((c) => ({ ...c, file: source.file, rel: resolveCitation(projectDir, c.path) })),
+    citedEvidencePaths(source.text).map((c) => ({ ...c, file: source.file, rel: designRecordPath(projectDir, c.path) })),
   );
   if (cited.length === 0) return [];
   await requireGitRepo(projectDir, 'checks that every script and capture the design records cite is committed');

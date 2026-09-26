@@ -93,8 +93,9 @@ full
 
      A claim is a line that starts with its number, `1. `, at the start of the line; bold is
      optional, and every such line is checked. Every claim carries the exact source passage it
-     rests on and where it is. `Source:` paths
-     are relative to design/; cite a Markdown source (a slice, RULINGS.md) by heading or line
+     rests on and where it is. A `Source:` path
+     that names a design record (rulebook/..., RULINGS.md) or climbs out of design/ (../src/...)
+     is read from design/, any other path from the project root; cite a Markdown source (a slice, RULINGS.md) by heading or line
      range, and code by file and line. Something no source passage backs is not a claim but an
      open question for the designer, listing every place that was searched:
 
