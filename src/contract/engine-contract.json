@@ -1,7 +1,7 @@
 {
   "revision": 112,
   "bundleProtocol": 2,
-  "surfaceHash": "76bd9a9243e7d698",
+  "surfaceHash": "1410eb2d9e426550",
   "payloadHash": "cae65bbab7213c58",
   "formatHash": "0058593e7cc80205",
   "history": [
@@ -948,7 +948,7 @@
       "revision": 112,
       "date": "2026-09-26",
       "bundleProtocol": 2,
-      "surfaceHash": "76bd9a9243e7d698",
+      "surfaceHash": "1410eb2d9e426550",
       "payloadHash": "cae65bbab7213c58",
       "formatHash": "0058593e7cc80205",
       "summary": "Bots in hidden-information games (a determinize sampler, such as Go Fish) no longer search moves for a seat that is not to move in the sampled world, and a move the engine refuses during the search is no longer scored as if it had been played, so their searches spend no work on illegal moves (#421). SnapshotSessionHost now holds back a bot seat whose move was refused, or that stalled, until the snapshot changes, and keeps driving the other bot seats instead of stopping the pump. A refused botTurn result now names the seat in botPlayer; the executor must forward botPlayer on its error result for the host to hold back only that seat, otherwise the pump stops as before. GameSession no longer re-checks bots in a loop while a human is to move or after a refused bot move."
