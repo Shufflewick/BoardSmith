@@ -1388,20 +1388,32 @@ export class BoardSmithWorldEngine implements WorldEngine {
         .resolveArgs(definition, { ...args }, acting, readOnlyProjection(this.game)),
     );
     for (const selection of definition.selections) {
-      if (selection.type !== "element" && selection.type !== "elements") continue;
-      const value = draft[selection.name];
-      if (value === undefined || value === null) continue;
-      for (const item of Array.isArray(value) ? value : [value]) {
-        if (item instanceof GameElement && named.includes(this.partitionOf(item))) continue;
-        throw worldRefusal(
-          "stale-draft",
-          `The draft of "${definition.name}" answers "${selection.name}" with ` +
-            `${JSON.stringify(args[selection.name])}, which is not one of the elements this ` +
-            "action can offer here now. Ask for the action's offer again and pick from it.",
-        );
+      if (selection.type === "element" || selection.type === "elements") {
+        this.assertOfferable(definition.name, selection.name, draft[selection.name], args, named);
       }
     }
     return draft;
+  }
+
+  /** One element selection of a resolved draft: unanswered, or every element it
+   *  names inside a partition this read declared. `stale-draft` otherwise. */
+  private assertOfferable(
+    action: string,
+    selection: string,
+    value: unknown,
+    sent: Readonly<Record<string, unknown>>,
+    named: readonly string[],
+  ): void {
+    if (value === undefined || value === null) return;
+    for (const item of Array.isArray(value) ? value : [value]) {
+      if (item instanceof GameElement && named.includes(this.partitionOf(item))) continue;
+      throw worldRefusal(
+        "stale-draft",
+        `The draft of "${action}" answers "${selection}" with ${JSON.stringify(sent[selection])}, ` +
+          "which is not one of the elements this action can offer here now. Ask for the " +
+          "action's offer again and pick from it.",
+      );
+    }
   }
 
   /**

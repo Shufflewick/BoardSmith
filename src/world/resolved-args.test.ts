@@ -37,6 +37,13 @@ const seenOf = (room: unknown): Seen => ({
 /** The vault a seat's `room` pick resolves to. */
 const VAULT_ONE: Seen = { kind: 'object', name: 'vault-1' };
 
+/** An action whose first question is `room`: the acting seat's own vault. */
+const pickingOwnVault = (name: string) =>
+  worldAction<VaultWorld>(name).chooseElement('room', {
+    needs: ({ player }) => [`vault:${player.seat}`],
+    elements: ({ game, player }) => [game.first(Vault, `vault-${player.seat}`)!],
+  });
+
 /**
  * An action whose every callback records what it was handed for `room`, keyed
  * by the callback's kind. `room` is an element pick; `look` is asked after it,
@@ -48,12 +55,7 @@ function surveyingWorld(seen: Map<string, Seen[]>): WorldDefinition {
     list.push(seenOf(room));
     seen.set(kind, list);
   };
-  const survey = worldAction<VaultWorld>('survey')
-    .prompt('Survey a room')
-    .chooseElement('room', {
-      needs: ({ player }) => [`vault:${player.seat}`],
-      elements: ({ game, player }) => [game.first(Vault, `vault-${player.seat}`)!],
-    })
+  const survey = pickingOwnVault('survey')
     .chooseFrom('look', {
       prompt: ({ args }) => {
         if (args.room !== undefined) record('prompt', args.room);
@@ -161,11 +163,7 @@ describe('world-action callbacks receive element selections as elements (#418)',
   });
 
   it('the element a quote is handed is read-only, as everything a read sees is', async () => {
-    const scribble = worldAction<VaultWorld>('scribble')
-      .chooseElement('room', {
-        needs: ({ player }) => [`vault:${player.seat}`],
-        elements: ({ game, player }) => [game.first(Vault, `vault-${player.seat}`)!],
-      })
+    const scribble = pickingOwnVault('scribble')
       .quote(({ room }) => {
         if (room !== undefined) room.tally += '*';
         return null;
