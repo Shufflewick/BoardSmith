@@ -215,6 +215,14 @@ export class SnapshotSessionHost {
   winners: number[] = [];
   private pendingStates = new Map<number, Record<string, unknown>>();
   private botPumpRunning = false;
+  /**
+   * Bot seats that could not act at one game state: their move was refused, or
+   * they found none (#421). Nothing about the game changes when that happens,
+   * so asking the same seat again at the same state gets the same answer, and a
+   * driver that keeps asking is a loop. The pump skips these seats until the
+   * snapshot is a different one, and every other bot seat still moves.
+   */
+  private botSeatsHeldBack: { snapshot: unknown; seats: Set<number> } | null = null;
 
   /**
    * Serialization chain for state-MUTATING op sequences (dev-host-bot-op-race #1
@@ -1025,6 +1033,16 @@ export class SnapshotSessionHost {
     await this.enqueue(() => this.runBotTurnsInner());
   }
 
+  /** Skip `seat` in the bot pump until the game state changes (#421). */
+  private holdBotSeatBack(seat: number): void {
+    const current = this.botSeatsHeldBack;
+    const held = current !== null && current.snapshot === this._snapshot
+      ? current
+      : { snapshot: this._snapshot, seats: new Set<number>() };
+    held.seats.add(seat);
+    this.botSeatsHeldBack = held;
+  }
+
   private async runBotTurnsInner(): Promise<void> {
     if (this.botPumpRunning || !this.adapters.botSeats?.length) return;
     this.botPumpRunning = true;
@@ -1043,7 +1061,11 @@ export class SnapshotSessionHost {
           console.error('[SnapshotSessionHost] bot pump hit MAX_BOT_MOVES cap (500); stopping to avoid runaway.');
           break;
         }
-        const res = await this.adapters.executeOp(this.snapshot, null, { type: 'botTurn', seats: this.adapters.botSeats });
+        const held = this.botSeatsHeldBack;
+        const heldBack = held !== null && held.snapshot === this._snapshot ? held.seats : null;
+        const seats = this.adapters.botSeats.filter((s) => !heldBack?.has(s.seat));
+        if (seats.length === 0) break;
+        const res = await this.adapters.executeOp(this.snapshot, null, { type: 'botTurn', seats });
         // A FAILED bot turn is not the same as "no bot turn was due". Breaking on
         // both without a word is how a bot seat silently stops driving the flow:
         // every seat waits on a bot that will never move again, with nothing in
@@ -1052,14 +1074,22 @@ export class SnapshotSessionHost {
         // definition, its bot hooks, or move enumeration, and the developer needs
         // to see it the moment it happens.
         if (!res.success) {
+          const who = res.botPlayer === undefined
+            ? `seat(s) ${seats.map((s) => s.seat).join(', ')}`
+            : `seat ${res.botPlayer}`;
+          const until = res.botPlayer === undefined
+            ? ''
+            : ', and the bot will not try again until the game changes';
           console.error(
-            `[SnapshotSessionHost] bot turn REJECTED for seat(s) ` +
-              `${this.adapters.botSeats.map((s) => s.seat).join(', ')}: ${res.error ?? 'unknown error'}` +
+            `[SnapshotSessionHost] bot turn REJECTED for ${who}: ${res.error ?? 'unknown error'}` +
               `${res.errorCode ? ` (${res.errorCode})` : ''}. The bot cannot act, so the game will ` +
-              `not advance past this step. Check the action's selections and the bot's move ` +
+              `not advance past this step${until}. Check the action's selections and the bot's move ` +
               `enumeration for this seat.`,
           );
-          break;
+          // Without a seat the op itself failed, and there is nothing to skip.
+          if (res.botPlayer === undefined) break;
+          this.holdBotSeatBack(res.botPlayer);
+          continue;
         }
         // #29: `botMoved: false` covers both "no bot seat was due" (ordinary,
         // the pump is finished) and "a bot seat was due and could not act".
@@ -1070,9 +1100,10 @@ export class SnapshotSessionHost {
           console.error(
             `[SnapshotSessionHost] bot seat ${res.botStalled.seat} is STALLED: ${res.botStalled.reason} ` +
               `The rest of the table can still act, but any step waiting on this seat will not close ` +
-              `until a human takes it.`,
+              `until a human takes it or the game changes.`,
           );
-          break;
+          this.holdBotSeatBack(res.botStalled.seat);
+          continue;
         }
         if (!res.botMoved) break;
         moves++;

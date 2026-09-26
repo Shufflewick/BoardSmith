@@ -198,6 +198,12 @@ const session = GameSession.create({
 > `botSeats` declares which seats are bots (`players`) and the difficulty (`level`).
 > The game's custom objectives/threat hooks go in `botStrategy`.
 
+A bot moves when the game hands it a turn, and a move the game refuses is
+reported once on the console, naming the seat and the game's reason. The bot is
+not asked again until the game changes, so a refused move never turns into a
+retry loop. `boardsmith dev`'s host behaves the same way, and holds back only
+the seat whose move was refused: other bot seats keep playing (#421).
+
 ## BotConfig Options
 
 ```typescript
