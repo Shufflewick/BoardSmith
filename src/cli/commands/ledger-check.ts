@@ -23,6 +23,8 @@
  *   - RULINGS.md, DECISIONS.md and every verified `chunks/<slug>/CHUNK.md` (its sign-off
  *     included): every script or capture they cite is in git (#292). A cited file that is
  *     missing, untracked, gitignored (the scratch folder) or outside the project is not evidence.
+ *     One cited by line (`path:N`, `path:N-M`, #414) must also have those lines in the version
+ *     the citing line was written against.
  *
  * It reads the working tree as it stands, so the same command checks one branch at close time
  * and a combined tree at merge time. READ-ONLY: it never writes a file, and the only git
@@ -47,6 +49,7 @@ import {
   relChunkMdPath,
 } from '../lib/project-paths.js';
 import { CHUNK_EVIDENCE_DIR, citedEvidencePaths } from '../lib/cited-evidence.js';
+import { LINE_LOCATION_HINT, type LineRange, fileLines, lineRangeProblem } from '../lib/line-location.js';
 import { type LedgerEntry, parseLedgerEntries, supersessionPatterns } from '../lib/ledger-entries.js';
 import { NUMBERED_LEDGER_SPECS, duplicateProvisionalIds, provisionalHeadings } from '../lib/ledger-allocation.js';
 import { checkCrossChunkLedger } from './cross-chunk.js';
@@ -61,7 +64,8 @@ export type LedgerFindingKind =
   | 'run-log-misplaced'
   | 'cross-chunk-unreviewed'
   | 'provisional-on-main-line'
-  | 'evidence-not-committed';
+  | 'evidence-not-committed'
+  | 'cited-lines-missing';
 
 export interface LedgerFinding {
   ledger: string;
@@ -689,7 +693,51 @@ async function problemOf(
   return (await isIgnored(projectDir, rel)) ? 'ignored' : 'untracked';
 }
 
-/** One finding per cited script or capture that is not a committed file in the project. */
+/**
+ * What is wrong with the lines a citation names, if anything (#414). The lines are read in the
+ * file the citing line was written against: the file as it was in the commit that recorded that
+ * line, or, when that line is not committed yet or its commit did not have the file (it was
+ * committed later), the file as it is now, which is the copy the rest of this check accepts.
+ */
+async function citedLinesProblem(
+  projectDir: string,
+  written: string,
+  rel: string,
+  range: LineRange,
+  citingCommit: () => Promise<string | null>,
+  lineCounts: Map<string, Promise<number>>,
+): Promise<string | undefined> {
+  const sha = await citingCommit();
+  const atCommit = sha !== null && (await trackedAt(projectDir, sha, rel));
+  const key = atCommit ? `${sha}:${rel}` : `:${rel}`;
+  if (!lineCounts.has(key)) {
+    const text = atCommit
+      ? git(projectDir, ['show', `${sha}:./${rel}`])
+      : fs.readFile(pathJoin(projectDir, rel), 'utf-8');
+    lineCounts.set(key, text.then((t) => fileLines(t).length));
+  }
+  const count = await lineCounts.get(key)!;
+  switch (lineRangeProblem(range, count)) {
+    case undefined:
+      return undefined;
+    case 'invalid':
+      return `Cites ${written}, which is not a line range. ${LINE_LOCATION_HINT}`;
+    case 'past-end': {
+      const had = atCommit ? `had ${count} lines when this line was committed` : `has ${count} lines`;
+      return `Cites ${written}, line ${range[1]}, but ${rel} ${had}. Correct the citation to the lines that were meant.`;
+    }
+  }
+}
+
+/** The citation as a location, `path:N` or `path:N-M`, for messages. */
+function writtenLocation(path: string, [from, to]: LineRange): string {
+  return from === to ? `${path}:${from}` : `${path}:${from}-${to}`;
+}
+
+/**
+ * One finding per cited script or capture that is not a committed file in the project, and one
+ * per citation of lines that file does not have (#414).
+ */
 async function checkCitedEvidence(projectDir: string, sources: EvidenceSource[]): Promise<LedgerFinding[]> {
   const cited = sources.flatMap((source) =>
     citedEvidencePaths(source.text).map((c) => ({ ...c, file: source.file, rel: designRecordPath(projectDir, c.path) })),
@@ -699,7 +747,7 @@ async function checkCitedEvidence(projectDir: string, sources: EvidenceSource[])
   const rels = [...new Set(cited.flatMap((c) => (c.rel === undefined ? [] : [c.rel])))];
   const tracked = await trackedFiles(projectDir, rels);
 
-  // Blamed only when a cited file is missing, and at most once per design record.
+  // Blamed only when a cited file is missing or lines of it are cited, and at most once per design record.
   const trackedSources = await trackedFiles(projectDir, sources.map((source) => `${DESIGN_DIR}/${source.file}`));
   const blames = new Map<string, Promise<Array<LineCommit | null>>>();
   const commitOfLine = async (file: string, line: number): Promise<string | null> => {
@@ -709,16 +757,24 @@ async function checkCitedEvidence(projectDir: string, sources: EvidenceSource[])
     return (await blames.get(rel)!)[line]?.sha ?? null;
   };
 
+  const lineCounts = new Map<string, Promise<number>>();
   const findings: LedgerFinding[] = [];
   for (const c of cited) {
-    const problem = await problemOf(projectDir, c.rel, tracked, () => commitOfLine(c.file, c.line));
-    if (!problem) continue;
-    findings.push({
-      ledger: c.file,
-      entry: `line ${c.line}`,
-      kind: 'evidence-not-committed',
-      detail: evidenceDetail(c.path, c.rel, problem),
-    });
+    const citingCommit = () => commitOfLine(c.file, c.line);
+    const problem = await problemOf(projectDir, c.rel, tracked, citingCommit);
+    if (problem) {
+      findings.push({
+        ledger: c.file,
+        entry: `line ${c.line}`,
+        kind: 'evidence-not-committed',
+        detail: evidenceDetail(c.path, c.rel, problem),
+      });
+      continue;
+    }
+    if (!c.lines || c.rel === undefined) continue;
+    const written = writtenLocation(c.path, c.lines);
+    const detail = await citedLinesProblem(projectDir, written, c.rel, c.lines, citingCommit, lineCounts);
+    if (detail) findings.push({ ledger: c.file, entry: `line ${c.line}`, kind: 'cited-lines-missing', detail });
   }
   return findings;
 }

@@ -56,7 +56,8 @@ So a file of your own in `design/` (one no skill names, like `design/NOTES.md`) 
 `boardsmith ledger-check` enforces the split as code, and `build/close.md` runs it before a chunk
 closes: every script or capture that `RULINGS.md`, `DECISIONS.md` or a verified CHUNK.md (its
 sign-off included) cites must be a committed file in the project. A cited file that is missing,
-not yet added, gitignored (anything in scratch) or outside the project fails the close. That is
+not yet added, gitignored (anything in scratch) or outside the project fails the close, and so
+does a citation of lines (`path:N` or `path:N-M`) the file does not have. That is
 the failure this rule exists for: a harness in scratch, cited as the proof behind `verified`,
 exists nowhere once the session ends.
 

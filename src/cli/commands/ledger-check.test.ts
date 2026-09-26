@@ -569,6 +569,75 @@ describe('ledgerCheck — cited evidence must be in git (#292)', () => {
     expect(found[0].detail).toMatch(/outside the project/);
   });
 
+  const citedLines = (f: LedgerFinding[]) => f.filter((x) => x.kind === 'cited-lines-missing');
+  const decision = (citation: string) => `### Decision 7\n- Decision: measured with \`${citation}\`.\n`;
+  const fiveLines = ['one', 'two', 'three', 'four', 'five', ''].join('\n');
+  async function expectNoCitationFindings(dir: string): Promise<void> {
+    const { findings } = await ledgerCheck(dir);
+    expect(evidence(findings)).toEqual([]);
+    expect(citedLines(findings)).toEqual([]);
+  }
+
+  it('fails a decision that cites a gitignored scratch harness by line range, as it does one cited by line (#414)', async () => {
+    const dir = await tree({
+      'design/DECISIONS.md': [decision('.boardsmith/scratch/probe.mjs:1-5'), decision('.boardsmith/scratch/probe.mjs:1')].join(''),
+      '.boardsmith/scratch/probe.mjs': fiveLines,
+    });
+    commitAt(dir, '2026-09-23T12:00:00Z');
+    const found = evidence((await ledgerCheck(dir)).findings);
+    expect(found.map((f) => f.entry)).toEqual(['line 2', 'line 4']);
+    for (const f of found) expect(f.detail).toMatch(/gitignored/);
+  });
+
+  it('passes a committed file cited by lines it has, up to its last line (#414)', async () => {
+    const dir = await tree({
+      'design/DECISIONS.md': [decision('src/rules/game.ts:2-5'), decision('../src/rules/game.ts:3')].join(''),
+      'src/rules/game.ts': fiveLines,
+    });
+    commitAt(dir, '2026-09-23T12:00:00Z');
+    await expectNoCitationFindings(dir);
+  });
+
+  it('fails a citation of lines past the end of the file, and a range that is not a range (#414)', async () => {
+    const dir = await tree({
+      'design/DECISIONS.md': [decision('src/rules/game.ts:4-9'), decision('src/rules/game.ts:5-2'), decision('src/rules/game.ts:0')].join(''),
+      'src/rules/game.ts': fiveLines,
+    });
+    commitAt(dir, '2026-09-23T12:00:00Z');
+    const [pastEnd, ...notRanges] = citedLines((await ledgerCheck(dir)).findings);
+    expect([pastEnd, ...notRanges].map((f) => `${f.ledger} ${f.entry}`)).toEqual(
+      ['line 2', 'line 4', 'line 6'].map((entry) => `DECISIONS.md ${entry}`),
+    );
+    expect(pastEnd.detail).toContain('src/rules/game.ts:4-9');
+    expect(pastEnd.detail).toMatch(/line 9, but src\/rules\/game\.ts had 5 lines/);
+    for (const f of notRanges) expect(f.detail).toMatch(/:N or :N-M with N <= M/);
+  });
+
+  it('reads the cited lines in the file as it was at the commit that recorded the citation (#414)', async () => {
+    const dir = await tree({ 'src/rules/game.ts': fiveLines, 'src/rules/gone.ts': fiveLines });
+    commitAt(dir, '2026-09-20T12:00:00Z');
+    await fs.writeFile(join(dir, 'design/DECISIONS.md'), [decision('src/rules/game.ts:4-5'), decision('src/rules/gone.ts:5')].join(''));
+    commitAt(dir, '2026-09-21T12:00:00Z');
+    await fs.writeFile(join(dir, 'src/rules/game.ts'), 'one\n');
+    await fs.rm(join(dir, 'src/rules/gone.ts'));
+    commitAt(dir, '2026-09-22T12:00:00Z');
+    await expectNoCitationFindings(dir);
+  });
+
+  it('reads a citation not committed yet, or one committed before its file was, against the file as it is now (#414)', async () => {
+    const dir = await tree({ 'design/DECISIONS.md': decision('src/rules/late.ts:6') });
+    commitAt(dir, '2026-09-20T12:00:00Z');
+    await fs.mkdir(join(dir, 'src/rules'), { recursive: true });
+    await fs.writeFile(join(dir, 'src/rules/late.ts'), fiveLines);
+    await fs.writeFile(join(dir, 'src/rules/game.ts'), fiveLines);
+    commitAt(dir, '2026-09-21T12:00:00Z');
+    await fs.appendFile(join(dir, 'design/DECISIONS.md'), decision('src/rules/game.ts:7'));
+    const found = citedLines((await ledgerCheck(dir)).findings);
+    expect(found.map((f) => f.entry)).toEqual(['line 2', 'line 4']);
+    expect(found[0].detail).toMatch(/line 6, but src\/rules\/late\.ts has 5 lines/);
+    expect(found[1].detail).toMatch(/line 7, but src\/rules\/game\.ts has 5 lines/);
+  });
+
   it('does not hold a chunk that is not verified yet to its citations', async () => {
     const dir = await tree({
       'design/chunks/world-shell/CHUNK.md': chunk('built', '- tests/not-written-yet.test.ts'),

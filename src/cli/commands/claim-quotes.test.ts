@@ -282,6 +282,21 @@ describe('checkClaimQuotes: code-sourced claims', () => {
     expect(refusals[0]).toMatch(/has 7 lines/);
   });
 
+  it('refuses a line past the last one when the file ends in a newline (#414)', async () => {
+    await write('old/lib/ending.pm', `${CODE_SOURCE}\n`);
+    const refusals = await refusalsFor(`1. **The higher roll wins.**
+   > }
+   Source: ../old/lib/ending.pm:7-8`);
+    expect(refusals[0]).toMatch(/cites line 8, but old\/lib\/ending\.pm has 7 lines/);
+  });
+
+  it('refuses a :LINE:COLUMN location: a claim is cited by line or line range (#414)', async () => {
+    const refusals = await refusalsFor(`1. **The higher roll wins.**
+   > if ($roll1 > $roll2) {
+   Source: ../old/lib/combat.pm:3:5`);
+    expect(refusals[0]).toMatch(/"\.\.\/old\/lib\/combat\.pm:3:5" gives a column.*:N or :N-M/);
+  });
+
   it('refuses a section citation into code: code is cited by line', async () => {
     const refusals = await refusalsFor(`1. **The higher roll wins.**
    > if ($roll1 > $roll2) {
