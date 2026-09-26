@@ -318,6 +318,11 @@ describe('checkTestStep (static checks)', () => {
 export const pass = Action.create('pass');
 `;
 
+  /** A test file that dispatches both verbs through the engine, so only the check under test reports. */
+  const DISPATCHES_BOTH = `import { it } from 'vitest';
+it('claim 1 and 2', () => { testGame.doAction(1, 'bid'); testGame.doAction(1, 'pass'); });
+`;
+
   it('passes a chunk whose manifest names real claim tests and whose verbs go through the engine', async () => {
     await build(
       {
@@ -393,9 +398,7 @@ it('claim 1 and 2', async () => {
     await build(
       {
         'src/rules/auction.ts': RULES,
-        'tests/auction.test.ts': `import { it } from 'vitest';
-it('claim 1 and 2', () => { testGame.doAction(1, 'bid'); testGame.doAction(1, 'pass'); });
-`,
+        'tests/auction.test.ts': DISPATCHES_BOTH,
       },
       '| tests/auction.test.ts | 1, 2 | yes |\n',
     );
@@ -413,9 +416,7 @@ it('claim 1 and 2', () => { testGame.doAction(1, 'bid'); testGame.doAction(1, 'p
     await build(
       {
         'src/rules/auction.ts': RULES,
-        'tests/auction.test.ts': `import { it } from 'vitest';
-it('claim 1 and 2', () => { testGame.doAction(1, 'bid'); testGame.doAction(1, 'pass'); });
-`,
+        'tests/auction.test.ts': DISPATCHES_BOTH,
       },
       '| tests/auction.test.ts | 1, 2 | yes |\n',
     );
@@ -465,22 +466,38 @@ it.skip('claim 2', () => {});
     ]);
   });
 
+  /** The findings for a chunk that adds `files` and whose tests dispatch both verbs. */
+  async function findingsFor(files: Record<string, string>) {
+    await build({ ...files, 'tests/auction.test.ts': DISPATCHES_BOTH }, '| tests/auction.test.ts | 1, 2 | yes |\n');
+    return (await checkTestStep(project, 'auction')).findings;
+  }
+
   it('reports an "unreachable" guard the chunk added, with a readable next step', async () => {
-    await build(
-      {
-        'src/rules/auction.ts': `${RULES}export function f(x: number) {
+    const findings = await findingsFor({
+      'src/rules/auction.ts': `${RULES}export function f(x: number) {
   if (x < 0) throw new Error('unreachable');
 }
 `,
-        'tests/auction.test.ts': `import { it } from 'vitest';
-it('claim 1 and 2', () => { testGame.doAction(1, 'bid'); testGame.doAction(1, 'pass'); });
-`,
-      },
-      '| tests/auction.test.ts | 1, 2 | yes |\n',
-    );
-    const findings = (await checkTestStep(project, 'auction')).findings;
+    });
     expect(findings.map((f) => [f.kind, f.subject])).toEqual([['unreachable-guard', 'src/rules/auction.ts:4']]);
     expect(findings[0].detail).toMatch(/test that reaches it|what to do/);
+  });
+
+  it('reads a component the chunk changed, reporting an "unreachable" guard in its script at its line in the .vue file (#425)', async () => {
+    const findings = await findingsFor({
+      'src/rules/auction.ts': RULES,
+      'src/ui/Bid.vue': `<template>
+  <p>{{ label }}</p>
+</template>
+
+<script setup lang="ts">
+const props = defineProps<{ amount: number }>();
+if (props.amount < 0) throw new Error('unreachable');
+const label = \`bid \${props.amount}\`;
+</script>
+`,
+    });
+    expect(findings.map((f) => [f.kind, f.subject])).toEqual([['unreachable-guard', 'src/ui/Bid.vue:7']]);
   });
 
   it('counts uncommitted and untracked implementation as the chunk\'s own', async () => {

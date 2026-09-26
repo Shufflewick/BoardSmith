@@ -46,6 +46,7 @@ import {
   type SourceFile,
 } from './test-step-ast.js';
 import { runMutationCheck, type MutationSummary } from './test-step-mutation.js';
+import { scriptRegions } from './test-step-sfc.js';
 import { chunkMdPath, relChunkMdPath } from '../lib/project-paths.js';
 import { assertBareName } from '../lib/user-name.js';
 
@@ -186,8 +187,11 @@ async function findChunkCommits(projectDir: string, slug: string): Promise<Set<s
 }
 
 const IMPLEMENTATION_FILE = /\.(ts|mts|cts|js|mjs)$/;
+/** A script file under `src/`: where verbs are defined. */
 const isImplementation = (path: string) =>
   path.startsWith('src/') && IMPLEMENTATION_FILE.test(path) && !/\.(test|spec)\.[a-z]+$/.test(path);
+/** Code a chunk writes: a script file, or a Vue component whose script and template are code too (#425). */
+const isChunkCode = (path: string) => isImplementation(path) || (path.startsWith('src/') && path.endsWith('.vue'));
 
 /** Line numbers of `path` as it is now whose last change is one of `owners`. */
 async function ownedLines(projectDir: string, path: string, owners: ReadonlySet<string>): Promise<Set<number>> {
@@ -201,7 +205,7 @@ async function ownedLines(projectDir: string, path: string, owners: ReadonlySet<
 }
 
 /**
- * Implementation files under `src/`, each with the line numbers this chunk wrote: lines whose
+ * Implementation files and components under `src/`, each with the line numbers this chunk wrote: lines whose
  * last change is one of the chunk's own commits, or not committed yet. Attributing by blame, not
  * by a diff from where the chunk started, keeps another chunk's work committed in between (a
  * parallel run, or a revise round after later chunks) from being counted as this one's.
@@ -214,7 +218,7 @@ async function addedImplementationLines(
   const committed = await git(projectDir, ['log', '--no-walk', '--format=', '--name-only', ...chunkCommits]);
   const uncommitted = await git(projectDir, ['diff', 'HEAD', '--name-only', '--', 'src']);
   for (const path of [...committed.split('\n'), ...uncommitted.split('\n')]) {
-    if (isImplementation(path)) touched.add(path);
+    if (isChunkCode(path)) touched.add(path);
   }
 
   const owners = new Set([...chunkCommits, UNCOMMITTED]);
@@ -229,7 +233,7 @@ async function addedImplementationLines(
     if (lines.size > 0) added.set(path, lines);
   }
   const untracked = await git(projectDir, ['ls-files', '--others', '--exclude-standard', '--', 'src']);
-  for (const path of untracked.split('\n').filter(isImplementation)) {
+  for (const path of untracked.split('\n').filter(isChunkCode)) {
     const text = await fs.readFile(join(projectDir, path), 'utf-8');
     added.set(path, new Set(text.split('\n').map((_, i) => i + 1)));
   }
@@ -439,6 +443,17 @@ async function verbFindings(projectDir: string, verbs: string[], testFiles: Chun
     }));
 }
 
+/** The "unreachable" guards on `lines` of a file, read in each of its script regions, at their file lines. */
+function unreachableGuardsIn(path: string, text: string, lines: ReadonlySet<number>): Array<{ line: number; text: string }> {
+  return scriptRegions(path, text).flatMap((region) => {
+    const regionLines = new Set([...lines].map((line) => line - region.firstLine + 1));
+    return findUnreachableGuards(region.text, regionLines, path).map((guard) => ({
+      line: guard.line + region.firstLine - 1,
+      text: guard.text,
+    }));
+  });
+}
+
 /** Check 4: no line the chunk wrote calls a guard unreachable. */
 async function guardFindings(
   projectDir: string,
@@ -447,12 +462,12 @@ async function guardFindings(
   const findings: TestStepFinding[] = [];
   for (const [path, lines] of added) {
     const text = await fs.readFile(join(projectDir, path), 'utf-8');
-    for (const guard of findUnreachableGuards(text, lines, path)) {
+    for (const { line, text: guardText } of unreachableGuardsIn(path, text, lines)) {
       findings.push({
         kind: 'unreachable-guard',
-        subject: `${path}:${guard.line}`,
+        subject: `${path}:${line}`,
         detail:
-          `Line ${guard.line} of ${path} calls a guard unreachable ("${guard.text}"). Either let the compiler prove ` +
+          `Line ${line} of ${path} calls a guard unreachable ("${guardText}"). Either let the compiler prove ` +
           'it (assign the value to a variable typed `never`, so a new case fails tsc) and drop the wording, or ' +
           'treat it as reachable: write the error for the person who hits it (what happened and what to do) and ' +
           'add a test that reaches it and asserts that message.',

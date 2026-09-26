@@ -87,7 +87,9 @@ here.
          what to do, and add a test that reaches it and asserts that message.
        - **Mutation: every claim and every test can fail.** The command makes one small change at a
          time to the lines this chunk added (a flipped comparison, a negated condition, a removed
-         statement, a return value replaced) and runs the chunk's test files against each. A test
+         statement, a return value replaced) and runs the chunk's test files against each. In a
+         `.vue` component that is its `<script>` blocks and the expressions of its template bindings,
+         conditions and interpolations; event handlers and loops are not mutated. A test
          that survives every mutant asserts nothing the chunk's code controls, and a claim none of
          whose tests fail under any mutant has no real test; both are findings. Mutants are served
          to vitest in memory, never written over the source. This runs one vitest process per
