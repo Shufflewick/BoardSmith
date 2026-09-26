@@ -379,12 +379,20 @@ export class ActionExecutor {
    * @param action The action definition
    * @param args The raw args from the client
    * @param player Optional player for context-dependent choice resolution
+   * @param reading The game elements are looked up in and `choices` callbacks
+   *   see, when it must not be the live one. One caller: a world's read of a
+   *   draft (a quote, a re-asked pick), which hands over its read-only
+   *   projection so the elements it resolves cannot be written through
+   *   (ShufflewickPub #384, #418). Everything else passes nothing and gets the
+   *   live game.
    */
   resolveArgs(
     action: ActionDefinition,
     args: Record<string, unknown>,
-    player?: Player
+    player?: Player,
+    reading?: Game,
   ): Record<string, unknown> {
+    const game = reading ?? this.game;
     const resolved = { ...args };
     const selectionNames = new Set(action.selections.map(s => s.name));
 
@@ -400,17 +408,17 @@ export class ActionExecutor {
             // order they were made (#325). Any other array is left as sent, for
             // validateSelection to refuse.
             if (this.isRepeatingSelection(selection)) {
-              resolved[selection.name] = value.map(v => this.resolveElementItem(v));
+              resolved[selection.name] = value.map(v => this.resolveElementItem(v, game));
             }
           } else if (typeof value === 'number') {
             // If value is a number, resolve to actual GameElement by ID
-            const element = this.game.getElementById(value);
+            const element = game.getElementById(value);
             if (element) {
               resolved[selection.name] = element;
             }
           } else if (this.looksLikeSerializedElement(value)) {
             // Handle serialized element objects from followUp args
-            const element = this.game.getElementById((value as { id: number }).id);
+            const element = game.getElementById((value as { id: number }).id);
             if (element) {
               resolved[selection.name] = element;
             }
@@ -422,13 +430,13 @@ export class ActionExecutor {
           // Resolve to actual GameElement object(s)
           if (typeof value === 'number') {
             // Single element ID
-            const element = this.game.getElementById(value);
+            const element = game.getElementById(value);
             if (element) {
               resolved[selection.name] = element;
             }
           } else if (Array.isArray(value)) {
             // Multi-select: array of element IDs or serialized elements.
-            const elements = value.map(v => this.resolveElementItem(v));
+            const elements = value.map(v => this.resolveElementItem(v, game));
             resolved[selection.name] = elements;
           }
           break;
@@ -437,7 +445,7 @@ export class ActionExecutor {
           // If the choice value is a serialized element (object with id and className),
           // resolve it to the actual GameElement
           if (this.isSerializedElement(value)) {
-            const element = this.game.getElementById((value as { id: number }).id);
+            const element = game.getElementById((value as { id: number }).id);
             if (element) {
               resolved[selection.name] = element;
             }
@@ -449,10 +457,10 @@ export class ActionExecutor {
             // being configured so a single choice whose VALUE is itself an
             // array is never corrupted by per-item resolution.
             if ((selection as ChoiceSelection).multiSelect !== undefined) {
-              const candidates = this.candidatesOf(selection, { game: this.game, player, args: resolved });
+              const candidates = this.candidatesOf(selection, { game, player, args: resolved });
               resolved[selection.name] = value.map((item) => {
                 if (this.isSerializedElement(item)) {
-                  const element = this.game.getElementById((item as { id: number }).id);
+                  const element = game.getElementById((item as { id: number }).id);
                   return element ?? item;
                 }
                 const smartResolved = this.smartResolveChoiceValue(item, candidates);
@@ -462,7 +470,7 @@ export class ActionExecutor {
           } else if (player) {
             // Try smart resolution: element ID or display string → actual choice
             // This supports custom UIs sending element IDs for chooseFrom selections
-            const candidates = this.candidatesOf(selection, { game: this.game, player, args: resolved });
+            const candidates = this.candidatesOf(selection, { game, player, args: resolved });
             let resolvedValue = this.smartResolveChoiceValue(value, candidates);
 
             // Extract just the 'value' property from {value, label/display} pattern choices
@@ -499,7 +507,7 @@ export class ActionExecutor {
       // fails loudly downstream -- mirroring relinkFlowVariables (flow/engine.ts).
       if (this.isSerializedElement(value)) {
         const serialized = value as { id: number; className: string };
-        const element = this.game.getElementById(serialized.id);
+        const element = game.getElementById(serialized.id);
         if (element && element.constructor.name === serialized.className) {
           resolved[key] = element;
         } else if (element) {
@@ -521,11 +529,11 @@ export class ActionExecutor {
    * nothing is KEPT as its id, not dropped, so validateSelection can refuse the
    * submission with an actionable error instead of letting it vanish.
    */
-  private resolveElementItem(item: unknown): unknown {
-    if (typeof item === 'number') return this.game.getElementById(item) ?? item;
+  private resolveElementItem(item: unknown, game: Game): unknown {
+    if (typeof item === 'number') return game.getElementById(item) ?? item;
     if (this.looksLikeSerializedElement(item)) {
       const id = (item as { id: number }).id;
-      return this.game.getElementById(id) ?? id;
+      return game.getElementById(id) ?? id;
     }
     return item;
   }
@@ -1883,7 +1891,7 @@ export class ActionExecutor {
       // A repeating chooseElement's picks are held as ids; its callbacks see
       // the elements, as `execute` does.
       [selectionName]: selection?.type === 'element' || selection?.type === 'elements'
-        ? picks.map(p => this.resolveElementItem(p))
+        ? picks.map(p => this.resolveElementItem(p, this.game))
         : [...picks],
     };
   }
@@ -1903,7 +1911,7 @@ export class ActionExecutor {
   ): string | null {
     if (!selection.validate) return null;
     const value = selection.type === 'element' || selection.type === 'elements'
-      ? this.resolveElementItem(pick)
+      ? this.resolveElementItem(pick, this.game)
       : pick;
     const validate = selection.validate as (v: unknown, a: Record<string, unknown>, c: ActionContext) => boolean | string;
     return interpretValidateResult(
