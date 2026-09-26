@@ -1,7 +1,8 @@
 {
   "entry": [
     "scripts/*-browser.mjs",
-    "src/**/*.node.ts"
+    "src/**/*.node.ts",
+    "src/cli/lib/test-progress-reporter.ts"
   ],
   "ignoreDependencies": [
     "postcss-html"

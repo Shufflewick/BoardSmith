@@ -28,7 +28,7 @@ import { build } from 'esbuild';
 import ts from 'typescript';
 import { parse as parseSfc } from 'vue/compiler-sfc';
 
-import { cliBuildOptions, CLI_OUTFILE, WORKER_ENTRIES } from '../cli/lib/build-cli.js';
+import { cliBuildOptions, CLI_OUTFILE, VITEST_REPORTER_ENTRY, WORKER_ENTRIES } from '../cli/lib/build-cli.js';
 import { tempTree } from '../testing/temp-tree.test-helper.js';
 import { REPO_ROOT } from './vue-tsc-run.test-helper.js';
 
@@ -124,7 +124,7 @@ const SHIPPED_SOURCE = SHIPPED.filter(
 const SOURCE_FINDINGS = SHIPPED_SOURCE.flatMap((file) => undeclared(file, specifiersOf(file)));
 
 const bundle = await build({ ...cliBuildOptions(REPO_ROOT), write: false, metafile: true });
-/** Every file the CLI build emits, relative to the package root: the bundle and each worker entry (#401). */
+/** Every file the CLI build emits, relative to the package root: the bundle, each worker entry (#401) and the vitest reporter (#429). */
 const BUILT = Object.keys(bundle.metafile.outputs);
 
 /**
@@ -248,6 +248,10 @@ describe('the published package carries every worker the CLI starts (#401)', () 
     for (const entry of WORKER_ENTRIES) {
       expect(BUILT).toContain(join(dirname(CLI_OUTFILE), `${basename(entry, extname(entry))}.js`));
     }
+  });
+
+  it('builds the vitest reporter `boardsmith test` loads by path beside the CLI bundle (#429)', () => {
+    expect(BUILT).toContain(join(dirname(CLI_OUTFILE), `${basename(VITEST_REPORTER_ENTRY, extname(VITEST_REPORTER_ENTRY))}.js`));
   });
 
   it('publishes every file the CLI build emits', () => {

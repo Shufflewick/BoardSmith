@@ -1,8 +1,9 @@
-import { existsSync } from 'node:fs';
+import { existsSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import chalk from 'chalk';
 import { getProjectContext } from '../lib/project-context.js';
 import { runTool } from '../lib/run-tool.js';
+import { discardRecord, runVitestRecorded, testRunVerdict } from '../lib/vitest-run.js';
 import { requireGameProject } from '../lib/game-project.js';
 import { testRunScopeProblem } from '../lib/test-run-scope.js';
 import { runTypecheck } from './typecheck.js';
@@ -10,6 +11,8 @@ import { runTypecheck } from './typecheck.js';
 interface TestOptions {
   watch?: boolean;
   coverage?: boolean;
+  /** A file to write the verdict of a failed run into, for a script to repeat (`merge-branch.sh`). */
+  verdictFile?: string;
 }
 
 /**
@@ -26,6 +29,13 @@ interface TestOptions {
  * In the BoardSmith repository it type-checks first and runs no test if that
  * fails (#312). In a game project it refuses to start when the project's vitest config would
  * also collect the chunk worktrees under `.boardsmith/worktrees/` (#298).
+ *
+ * A run that does not pass ends with a verdict that says why (#429): the files
+ * that failed, or, when vitest itself stopped before its summary, the signal or
+ * exit code that stopped it and the files it left unfinished. It names a log
+ * holding the run's whole output, and `--verdict-file` writes the same
+ * paragraph to a file for a script to repeat. Watch mode is interactive and has
+ * no end to report, so it runs vitest as it is.
  */
 export async function testCommand(patterns: string[], options: TestOptions): Promise<void> {
   const cwd = process.cwd();
@@ -37,24 +47,42 @@ export async function testCommand(patterns: string[], options: TestOptions): Pro
     // THE BOARDSMITH REPOSITORY TYPE-CHECKS BEFORE IT TESTS (#312), so a type
     // error stops the run, and the merge that runs it, before a test starts.
     const typecheck = await runTypecheck(cwd);
-    if (typecheck !== 0) process.exit(typecheck);
+    if (typecheck !== 0) {
+      fail(
+        `The type check failed (vue-tsc exited with code ${typecheck}), so no test ran. ` +
+          "Its errors are above; run 'boardsmith typecheck' to see them again.",
+        typecheck,
+        options,
+      );
+    }
   }
 
   const label = context === 'monorepo' ? 'BoardSmith' : 'game';
   console.log(chalk.cyan(`\nRunning ${label} tests...\n`));
 
-  const args = [options.watch ? 'watch' : 'run'];
+  const args: string[] = [];
   if (options.coverage) args.push('--coverage');
   args.push(...patterns);
 
-  const code = await runTool('vitest', args, { cwd });
-
-  if (code !== 0) {
-    console.log(chalk.red(`\nTests failed with exit code ${code}\n`));
-    process.exit(code);
+  if (options.watch) {
+    process.exit(await runTool('vitest', ['watch', ...args], { cwd }));
   }
 
+  const run = await runVitestRecorded(args, cwd);
+  const verdict = testRunVerdict(run, run.progress, { cwd, logPath: run.logPath });
+  if (verdict !== undefined) {
+    fail(verdict, run.code !== null && run.code !== 0 ? run.code : 1, options);
+  }
+
+  discardRecord(run);
   console.log(chalk.green('\nAll tests passed!\n'));
+}
+
+/** Ends a run that did not pass: prints why, hands the same text to `--verdict-file`, and exits. */
+function fail(verdict: string, code: number, options: TestOptions): never {
+  console.error(chalk.red(`\n${verdict}\n`));
+  if (options.verdictFile !== undefined) writeFileSync(options.verdictFile, `${verdict}\n`);
+  process.exit(code);
 }
 
 /**

@@ -52,6 +52,10 @@ function git(cwd, ...args) {
  * lock tests below watch what a run validated:
  * - `MERGE_TEST_LOG`: appends the `.txt` files in the tree it is testing.
  * - `MERGE_TEST_SLEEP`: sleeps that many seconds before passing or failing.
+ * - `MERGE_TEST_DIE`: ends itself with SIGKILL before it can say anything.
+ *
+ * Like the real one, a failing run writes its verdict to the file after
+ * `--verdict-file` (#429).
  */
 function fixtureRepo() {
   const repo = tempTree('bs-merge-branch-');
@@ -61,12 +65,20 @@ function fixtureRepo() {
   mkdirSync(path.join(repo, 'bin'));
   writeFileSync(
     path.join(repo, 'bin/boardsmith.js'),
-    "import { appendFileSync, existsSync, readdirSync } from 'node:fs';\n" +
+    "import { appendFileSync, existsSync, readdirSync, writeFileSync } from 'node:fs';\n" +
       "if (process.argv[2] !== 'test') { console.error('expected boardsmith test'); process.exit(2); }\n" +
-      'const { MERGE_TEST_LOG, MERGE_TEST_SLEEP } = process.env;\n' +
+      "const at = process.argv.indexOf('--verdict-file');\n" +
+      "if (at < 0) { console.error('expected --verdict-file'); process.exit(2); }\n" +
+      'const verdictFile = process.argv[at + 1];\n' +
+      'const { MERGE_TEST_LOG, MERGE_TEST_SLEEP, MERGE_TEST_DIE } = process.env;\n' +
       "if (MERGE_TEST_LOG) appendFileSync(MERGE_TEST_LOG, readdirSync('.').filter((f) => f.endsWith('.txt')).sort().join(',') + '\\n');\n" +
       'if (MERGE_TEST_SLEEP) Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, Number(MERGE_TEST_SLEEP) * 1000);\n' +
-      "if (existsSync('broken')) { console.error('planted failure'); process.exit(1); }\n",
+      "if (MERGE_TEST_DIE) process.kill(process.pid, 'SIGKILL');\n" +
+      "if (existsSync('broken')) {\n" +
+      "  console.error('planted failure');\n" +
+      "  writeFileSync(verdictFile, 'Tests failed in 1 file:\\n  tests/planted.test.ts\\nFull output: /tmp/planted/output.log\\n');\n" +
+      '  process.exit(1);\n' +
+      '}\n',
   );
   git(repo, 'add', '.');
   git(repo, 'commit', '--quiet', '-m', 'initial');
@@ -92,6 +104,17 @@ function fixtureRepo() {
   return repo;
 }
 
+/** Everything from the refusal of `branch` on: what a person reads last. */
+function refusalOf(result, branch) {
+  return result.output.slice(result.output.indexOf(`Refused to merge '${branch}'`));
+}
+
+/** A refused merge leaves main where it was, with nothing uncommitted. */
+function expectMainAt(repo, before) {
+  expect(git(repo, 'rev-parse', 'HEAD')).toBe(before);
+  expect(git(repo, 'status', '--porcelain')).toBe('');
+}
+
 function merge(repo, ...args) {
   return run(repo, 'bash', ['scripts/merge-branch.sh', ...args]);
 }
@@ -110,7 +133,7 @@ describe('scripts/merge-branch.sh (#312)', () => {
     expect(git(repo, 'status', '--porcelain')).toBe('');
   }, 30_000);
 
-  it('refuses a branch whose merged tree fails boardsmith test, and leaves main exactly as it was', () => {
+  it('refuses a branch whose merged tree fails boardsmith test, repeating its verdict, and leaves main exactly as it was', () => {
     const repo = fixtureRepo();
     const before = git(repo, 'rev-parse', 'HEAD');
 
@@ -118,9 +141,22 @@ describe('scripts/merge-branch.sh (#312)', () => {
 
     expect(result.status).not.toBe(0);
     expect(result.output).toContain('planted failure');
-    expect(result.output).toContain("Refused to merge 'bad'");
-    expect(git(repo, 'rev-parse', 'HEAD')).toBe(before);
-    expect(git(repo, 'status', '--porcelain')).toBe('');
+    // The reason is the last thing printed, not scrolled away above the refusal (#429).
+    expect(refusalOf(result, 'bad')).toContain(
+      'Tests failed in 1 file:\n  tests/planted.test.ts\nFull output: /tmp/planted/output.log',
+    );
+    expectMainAt(repo, before);
+  }, 30_000);
+
+  it('says so when boardsmith test ended without a verdict, and how it ended (#429)', () => {
+    const repo = fixtureRepo();
+    const before = git(repo, 'rev-parse', 'HEAD');
+
+    const result = run(repo, 'bash', ['scripts/merge-branch.sh', 'good', 'summary'], { MERGE_TEST_DIE: '1' });
+
+    expect(result.status).not.toBe(0);
+    expect(refusalOf(result, 'good')).toContain('boardsmith test ended with exit status 137 and gave no verdict');
+    expectMainAt(repo, before);
   }, 30_000);
 
   it('refuses to run anywhere but a clean main', () => {

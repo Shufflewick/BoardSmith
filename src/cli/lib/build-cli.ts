@@ -17,6 +17,14 @@ export const CLI_OUTFILE = 'dist/cli.js';
  */
 export const WORKER_ENTRIES: readonly string[] = ['src/bot-trainer/benchmark-worker.ts'];
 
+/**
+ * The vitest reporter `boardsmith test` hands vitest by path (#429). vitest
+ * loads it as a file of its own, so like a worker it is built to
+ * `dist/<name>.js` beside `dist/cli.js`, where `src/cli/lib/vitest-run.ts`
+ * finds it as its sibling.
+ */
+export const VITEST_REPORTER_ENTRY = 'src/cli/lib/test-progress-reporter.ts';
+
 /** The output name (no extension) of an entry file: `src/cli/cli.ts` is `cli`. */
 function outputName(entry: string): string {
   return basename(entry, extname(entry));
@@ -31,7 +39,7 @@ function outputName(entry: string): string {
 export function cliBuildOptions(repoRoot: string): BuildOptions {
   return {
     entryPoints: Object.fromEntries(
-      [CLI_ENTRY, ...WORKER_ENTRIES].map((entry) => [outputName(entry), join(repoRoot, entry)]),
+      [CLI_ENTRY, ...WORKER_ENTRIES, VITEST_REPORTER_ENTRY].map((entry) => [outputName(entry), join(repoRoot, entry)]),
     ),
     absWorkingDir: repoRoot,
     bundle: true,
@@ -46,7 +54,7 @@ export function cliBuildOptions(repoRoot: string): BuildOptions {
 
 /**
  * Bundle the BoardSmith CLI itself to `dist/cli.js`, with its worker entries
- * beside it.
+ * and its vitest reporter beside it.
  *
  * `bin/boardsmith.js` runs TypeScript straight from source inside this repo, so
  * this bundle only matters to consumers who install the package. It is

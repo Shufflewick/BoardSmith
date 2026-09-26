@@ -1,10 +1,20 @@
-import { existsSync } from 'node:fs';
+import { createWriteStream, existsSync } from 'node:fs';
 import { join } from 'node:path';
-import { spawn } from 'node:child_process';
+import { spawn, type ChildProcess } from 'node:child_process';
 
 export interface RunToolOptions {
   /** Directory to run the tool in. Also where `node_modules/.bin` is looked up. */
   cwd: string;
+}
+
+/** Where the child's output goes: the terminal, stdout back to the caller, or both streams teed into a log. */
+type Output = 'inherit' | 'capture' | { log: string };
+
+/** How a tool ended: its exit code, or the signal that ended it. */
+interface ToolEnd {
+  code: number | null;
+  signal: NodeJS.Signals | null;
+  stdout: string;
 }
 
 /**
@@ -16,15 +26,17 @@ export interface RunToolOptions {
  * back to `npx` only for tools that are deliberately NOT dependencies
  * (`jscpd`, `fallow`), matching how they have always been invoked.
  *
- * `capture` decides where the child's stdout goes: inherited (the developer
- * reads it) or piped back to the caller (a command reasons about it).
+ * `output` decides where the child's output goes: inherited (the developer
+ * reads it), stdout piped back to the caller (a command reasons about it), or
+ * both streams passed through AND kept in a log (a run that must be explained
+ * afterwards).
  */
 function spawnTool(
   bin: string,
   args: string[],
-  options: RunToolOptions,
-  capture: boolean,
-): Promise<{ code: number; stdout: string }> {
+  options: RunToolOptions & { env?: NodeJS.ProcessEnv },
+  output: Output,
+): Promise<ToolEnd> {
   const localBin = join(options.cwd, 'node_modules', '.bin', bin);
   const useLocal = existsSync(localBin);
   const command = useLocal ? localBin : 'npx';
@@ -33,9 +45,10 @@ function spawnTool(
   return new Promise((resolve, reject) => {
     const child = spawn(command, commandArgs, {
       cwd: options.cwd,
-      // stderr stays inherited even when stdout is captured: progress and
+      env: options.env ?? process.env,
+      // stderr stays inherited when only stdout is captured: progress and
       // warnings belong on the developer's terminal, not in the parsed value.
-      stdio: capture ? ['inherit', 'pipe', 'inherit'] : 'inherit',
+      stdio: output === 'inherit' ? 'inherit' : output === 'capture' ? ['inherit', 'pipe', 'inherit'] : ['inherit', 'pipe', 'pipe'],
       // On Windows both `npx` and the `.bin` shims are batch files, which
       // `spawn` cannot execute without a shell. Everywhere else, running
       // without a shell keeps glob arguments (e.g. 'src/**/*.vue') intact so
@@ -50,9 +63,12 @@ function spawnTool(
     // text `fallow dupes` reports, so one mangled character silently changed an
     // accepted clone group's key (#241).
     const stdoutChunks: Buffer[] = [];
-    child.stdout?.on('data', (chunk: Buffer) => {
-      stdoutChunks.push(chunk);
-    });
+    const logged = typeof output === 'object' ? teeIntoLog(child, output.log) : undefined;
+    if (output === 'capture') {
+      child.stdout?.on('data', (chunk: Buffer) => {
+        stdoutChunks.push(chunk);
+      });
+    }
 
     child.on('error', (error) => {
       reject(
@@ -63,14 +79,34 @@ function spawnTool(
       );
     });
 
-    // A tool killed by a signal produced no verdict — treat that as a failure
-    // rather than reporting the `null` exit code as success.
-    child.on('close', (code, signal) =>
-      resolve({
-        code: signal ? 1 : code ?? 1,
-        stdout: Buffer.concat(stdoutChunks).toString('utf-8'),
-      }));
+    child.on('close', (code, signal) => {
+      const end = { code, signal, stdout: Buffer.concat(stdoutChunks).toString('utf-8') };
+      if (logged === undefined) resolve(end);
+      else logged.end(() => resolve(end));
+    });
   });
+}
+
+/**
+ * Passes the child's stdout and stderr through to this process's own, and
+ * appends both, as they arrive, to the file at `logPath`.
+ */
+function teeIntoLog(child: ChildProcess, logPath: string): ReturnType<typeof createWriteStream> {
+  const log = createWriteStream(logPath, { flags: 'a' });
+  child.stdout?.on('data', (chunk: Buffer) => {
+    process.stdout.write(chunk);
+    log.write(chunk);
+  });
+  child.stderr?.on('data', (chunk: Buffer) => {
+    process.stderr.write(chunk);
+    log.write(chunk);
+  });
+  return log;
+}
+
+/** A tool killed by a signal produced no verdict: that is a failure, not the `null` exit code read as success. */
+function exitCodeOf(end: ToolEnd): number {
+  return end.signal ? 1 : end.code ?? 1;
 }
 
 /**
@@ -86,8 +122,7 @@ export async function runTool(
   args: string[],
   options: RunToolOptions,
 ): Promise<number> {
-  const { code } = await spawnTool(bin, args, options, false);
-  return code;
+  return exitCodeOf(await spawnTool(bin, args, options, 'inherit'));
 }
 
 /**
@@ -97,10 +132,28 @@ export async function runTool(
  * (`fallow audit --format json`). The exit code comes back too, because a tool
  * that exits non-zero on findings still wrote the report that explains them.
  */
-export function runToolCapturingStdout(
+export async function runToolCapturingStdout(
   bin: string,
   args: string[],
   options: RunToolOptions,
 ): Promise<{ code: number; stdout: string }> {
-  return spawnTool(bin, args, options, true);
+  const end = await spawnTool(bin, args, options, 'capture');
+  return { code: exitCodeOf(end), stdout: end.stdout };
+}
+
+/**
+ * Run a developer tool with its output on the developer's terminal AND in the
+ * file at `logPath`, and resolve with how it ended: its exit code, or the
+ * signal that stopped it, which the other two runners fold into a code.
+ *
+ * For a run whose failure has to be explained after the fact (`boardsmith
+ * test`, #429): the log survives the terminal, and the signal is the reason.
+ */
+export async function runToolLogged(
+  bin: string,
+  args: string[],
+  options: RunToolOptions & { env: NodeJS.ProcessEnv; logPath: string },
+): Promise<{ code: number | null; signal: NodeJS.Signals | null }> {
+  const { code, signal } = await spawnTool(bin, args, options, { log: options.logPath });
+  return { code, signal };
 }
