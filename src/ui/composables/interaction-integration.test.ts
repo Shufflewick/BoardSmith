@@ -210,7 +210,7 @@ describe('Board + controller interaction integration', () => {
     // Flush: auto-start → controller.start('move') → fetchChoicesForPick('piece')
     // → pickSnapshots.set('piece', {validElements:[{id:42}]}), snapshotVersion++
     // → board.clear(), board.setCurrentAction('move', 0, 'piece')
-    // → watch([currentPick, filteredValidElements, choicesForBoard]) fires
+    // → watch([currentPick, offeredElements, offeredChoices]) fires
     // → board.setValidElements([{id:42, ref:{id:42}}], onSelect)
     await flush();
 
@@ -227,13 +227,13 @@ describe('Board + controller interaction integration', () => {
     board.triggerElementSelect({ id: 42 });
 
     // Flush: fill('piece', 42) → destination fetch → snapshotVersion++
-    // → currentChoices.value updated → choicesForBoard updated
-    // → watch([currentPick, filteredValidElements, choicesForBoard]) fires
+    // → currentChoices.value updated → offeredChoices updated
+    // → watch([currentPick, offeredElements, offeredChoices]) fires
     //   → RED before fix: condition `selection.type === 'choice' && selection.choices`
     //     evaluates to false (selection.choices=undefined for dynamic choices)
     //     → board.setValidElements([], () => {})
     //   → GREEN after fix: condition `selection.type === 'choice'` is true
-    //     → choicesForBoard has 2 choices with notation refs
+    //     → offeredChoices has 2 choices with notation refs
     //     → board.setValidElements([{id:-1, ref:{notation:'a5'}}, ...], onSelect)
     await flush();
 
