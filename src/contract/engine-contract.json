@@ -1,7 +1,7 @@
 {
-  "revision": 110,
+  "revision": 111,
   "bundleProtocol": 2,
-  "surfaceHash": "58f45cbb3ddaaac7",
+  "surfaceHash": "773526e173880239",
   "payloadHash": "cae65bbab7213c58",
   "formatHash": "0058593e7cc80205",
   "history": [
@@ -934,6 +934,15 @@
       "payloadHash": "cae65bbab7213c58",
       "formatHash": "0058593e7cc80205",
       "summary": "chooseFrom, chooseElement and chooseElements (table and world) take an optional unavailable(value, ctx) sentence for a submitted value that is no longer listed; without it the player now reads a plain 'That choice is no longer available... please choose again' instead of the engine's value-and-choices text, which moves to the dev log (#393)"
+    },
+    {
+      "revision": 111,
+      "date": "2026-09-26",
+      "bundleProtocol": 2,
+      "surfaceHash": "773526e173880239",
+      "payloadHash": "cae65bbab7213c58",
+      "formatHash": "0058593e7cc80205",
+      "summary": "A world can leave a lasting NOTICE for a seat without loading that seat's partition (ShufflewickPub #521, BoardSmith #420). world.notices: { perSeat } declares a per-seat notice box, capped by the new budget maxNoticesPerSeat (64); noticeMaxBytes (1024) bounds one notice and maxNoticesPerCommand (100) the sends per dispatch. ctx.world.notify(seat, { payload, line?, whenFull }) appends to a box with no declaration and no partition load; whenFull is required -- 'dropOldest' evicts and counts dropped, 'refuse' refuses the command (notice-box-full) and needs the box declared. .noticeBox(fn) on worldAction and worldClockAction declares ONE seat's box per round of the walk; the host answers a point read and ctx.world.notices(seat) / takeNotices(seat) read it and empty it. WorldDispatchNeeds gains noticeBoxes; runner.declare and commandNeeds take WorldWalkAnswers { declaredActivity, declaredNotices } and walkDeclaration takes a fourth reader and returns that object, which apply takes; WorldCommandStamp, WorldEventStamp and WorldApplyRequest carry declaredNotices; WorldCommandResult carries notices: { perSeat, writes } which a host applies with applyNoticeWrites in the checkpoint's own write, and each send is also a routed event on the reserved scope 'notice' to its one seat. WorldStore gains noticeBox(seat) and WorldCheckpointExtras.notices, and a vacated chair's box goes with it. New refusals: invalid-notice, notice-batch-cap, notice-box-full, undeclared-notice-box (game) and notice-box-answered-wrong (platform); the partition name 'notice' is reserved. formatHash unmoved: no stored partition byte changes."
     }
   ]
 }
