@@ -502,7 +502,9 @@ hands it new props. `boardsmith init` installs it; a project without it is told
 to run `npm install --save-dev @vue/test-utils`. The first load also checks that
 BoardSmith's UI and your `@vue/test-utils` share one copy of Vue, and refuses,
 saying what to change, when they do not (aliasing `vue` to another build of it
-is the usual cause).
+is the usual cause). It also supplies the browser APIs jsdom lacks and a board
+may rely on, `window.matchMedia` and `ResizeObserver` (#404), answering as a
+browser would for a page that is never laid out.
 
 **`subject` is a `TestGame` or a `TestWorld`.** Both answer the same two
 questions -- what this seat is SENT, and what the game or world HOLDS -- and the

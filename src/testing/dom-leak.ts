@@ -97,41 +97,55 @@ export interface SeatProjection {
 export type HiddenInfoGameView = UIGameElement;
 
 // ---------------------------------------------------------------------------
-// jsdom does not implement `window.matchMedia`. `useElementAnimation.ts` reads
-// it at MODULE LOAD time (`prefersReducedMotion` top-level ref), and it is
-// pulled in transitively by AutoRenderer's `useFlyingElements()` call — so
-// mounting `AutoUI` for real (no stubs; we need the actual renderers to
-// exercise the real leak surface) throws before this utility can render
-// anything. This supplies the browser API jsdom omits (matching what a real
-// browser provides) — it does not stub/alter any BoardSmith behavior.
+// THE BROWSER APIS JSDOM OMITS, supplied as a browser would answer them here.
+// They do not stub or alter any BoardSmith behavior.
 //
-// The polyfill MUST run before `AutoUI.vue`'s module graph is evaluated. A
-// static `import AutoUI from '...'` at the top of this file would be hoisted
-// and evaluated before ANY of this file's own code runs (ESM import
-// ordering), which is too late. So `AutoUI` is loaded via a runtime dynamic
-// `import()` (see `loadAutoUI`), deferring its module graph evaluation until
-// after the polyfill is installed. (Rule 3: auto-fixed blocking issue.)
+// `window.matchMedia`: `useElementAnimation.ts` reads it at MODULE LOAD time
+// (`prefersReducedMotion` top-level ref), and it is pulled in transitively by
+// AutoRenderer's `useFlyingElements()` call — so mounting `AutoUI` for real (no
+// stubs; we need the actual renderers to exercise the real leak surface) throws
+// before this utility can render anything. It MUST be installed before
+// `AutoUI.vue`'s module graph is evaluated. A static `import AutoUI from '...'`
+// at the top of this file would be hoisted and evaluated before ANY of this
+// file's own code runs (ESM import ordering), which is too late. So `AutoUI` is
+// loaded via a runtime dynamic `import()` (see `loadAutoUI`).
+//
+// `ResizeObserver` (#404): a board that sizes itself from its own element
+// observes it once mounted, and every browser has one. jsdom lays nothing out,
+// so no element ever changes size, and an observer that never reports is
+// exactly what a browser would report for it.
 // ---------------------------------------------------------------------------
-function ensureMatchMediaPolyfill(): void {
-  if (typeof window === 'undefined' || typeof window.matchMedia === 'function') return;
-  window.matchMedia = ((query: string) => ({
-    matches: false,
-    media: query,
-    onchange: null,
-    addListener: () => {},
-    removeListener: () => {},
-    addEventListener: () => {},
-    removeEventListener: () => {},
-    dispatchEvent: () => false,
-  })) as unknown as typeof window.matchMedia;
+function ensureBrowserApis(): void {
+  if (typeof window === 'undefined') return;
+  if (typeof window.matchMedia !== 'function') {
+    window.matchMedia = ((query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => false,
+    })) as unknown as typeof window.matchMedia;
+  }
+  if (typeof globalThis.ResizeObserver !== 'function') {
+    class UnchangingSizeObserver {
+      observe(): void {}
+      unobserve(): void {}
+      disconnect(): void {}
+    }
+    globalThis.ResizeObserver = UnchangingSizeObserver as unknown as typeof ResizeObserver;
+    window.ResizeObserver = globalThis.ResizeObserver;
+  }
 }
 
 let autoUIComponentPromise: Promise<typeof AutoUIComponent> | undefined;
 
-/** Install the matchMedia polyfill, then dynamically import AutoUI (cached). */
+/** Supply the browser APIs jsdom omits, then dynamically import AutoUI (cached). */
 function loadAutoUI(): Promise<typeof AutoUIComponent> {
   if (!autoUIComponentPromise) {
-    ensureMatchMediaPolyfill();
+    ensureBrowserApis();
     autoUIComponentPromise = import('../ui/components/auto-ui/AutoUI.vue').then(
       (mod) => mod.default,
     );
@@ -442,6 +456,7 @@ async function mountForSeat<C extends Component = typeof AutoUIComponent>(
   options: RenderAsSeatOptions<C> = {},
 ): Promise<MountedForSeat<C>> {
   requireDom();
+  ensureBrowserApis();
 
   const mount = await loadMount();
   const component: Component = options.component ?? (await loadAutoUI());
