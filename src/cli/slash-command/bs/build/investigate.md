@@ -98,7 +98,10 @@ WRITE directly into this chunk's CHUNK.md — do not return this content, write 
      (`src/...`, `tests/...`, `design/NOTES.md` for a design file of your own) is read from the
      project root, the same way `ledger-check` reads it. Cite a Markdown source (a
      rulebook slice, RULINGS.md, DECISIONS.md) by its heading, `§"<heading text>"`, or by line
-     range. Cite code by file and line: `Source: ../old/lib/combat.pm:101-135`.
+     range. Cite code by file and line: `Source: ../old/lib/combat.pm:101-135`. Cite BoardSmith's
+     own source or docs from the installed package, the version this project runs:
+     `Source: ../node_modules/boardsmith/src/engine/flow/engine.ts:1309-1312`, never
+     `BoardSmith:src/...`, which names no file this project has.
      A claim resting on a slice line marked `Derived` or `Named-but-undefined` must say so
      explicitly, and a `Named-but-undefined` rule can only feed an open question, never a claim.
      If no passage in the sources backs something this chunk needs, it is NOT a claim: never

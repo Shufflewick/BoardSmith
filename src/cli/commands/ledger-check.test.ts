@@ -638,6 +638,71 @@ describe('ledgerCheck — cited evidence must be in git (#292)', () => {
     expect(found[1].detail).toMatch(/line 7, but src\/rules\/game\.ts has 5 lines/);
   });
 
+  /**
+   * #432: a claim about how BoardSmith behaves quotes BoardSmith's own source, and claim-quote-check
+   * reads it from the installed package (`../node_modules/boardsmith/...`). That file is in no
+   * commit of the game (node_modules is gitignored, and a game's copy is a symlink to the library's
+   * checkout), so it is held to the installed package having it, and the lines cited, instead.
+   */
+  async function withInstalledBoardSmith(files: Record<string, string>, library: Record<string, string>): Promise<string> {
+    const dir = await tree({ '.gitignore': '.boardsmith/\nnode_modules/\n', ...files });
+    const checkout = join(dir, '..', 'BoardSmith');
+    for (const [rel, text] of Object.entries(library)) {
+      await fs.mkdir(dirname(join(checkout, rel)), { recursive: true });
+      await fs.writeFile(join(checkout, rel), text);
+    }
+    await fs.mkdir(join(dir, 'node_modules'), { recursive: true });
+    await fs.symlink(checkout, join(dir, 'node_modules', 'boardsmith'));
+    commitAt(dir, '2026-09-23T12:00:00Z');
+    return dir;
+  }
+
+  function verifiedClaims(...claims: string[]): string {
+    return ['# Chunk: game-end', '', 'Status: verified', '', '## Interpretation', '', ...claims, '', '## Sign-off', 'ok', ''].join('\n');
+  }
+
+  const engineTs = ['// flow engine', 'if (this.complete) {', '  return this.finish();', '}', ''].join('\n');
+
+  it('passes a claim quoting BoardSmith source from the installed package, in both checks (#432)', async () => {
+    const dir = await withInstalledBoardSmith(
+      {
+        'design/chunks/game-end/CHUNK.md': verifiedClaims(
+          '1. **The engine finishes a complete game.**',
+          '   > if (this.complete) { return this.finish();',
+          '   Source: ../node_modules/boardsmith/src/engine/flow/engine.ts:2-3',
+          '2. **The same, cited from the project root.**',
+          '   > return this.finish();',
+          '   Source: node_modules/boardsmith/src/engine/flow/engine.ts:3',
+        ),
+      },
+      { 'src/engine/flow/engine.ts': engineTs },
+    );
+    expect((await checkClaimQuotes(dir, 'game-end')).refusals).toEqual([]);
+    await expectNoCitationFindings(dir);
+  });
+
+  it('fails a citation of a BoardSmith file or lines the installed package does not have (#432)', async () => {
+    const dir = await withInstalledBoardSmith(
+      {
+        'design/DECISIONS.md': [
+          decision('../node_modules/boardsmith/src/engine/flow/gone.ts'),
+          decision('../node_modules/boardsmith/src/engine/flow/engine.ts:3-9'),
+        ].join(''),
+      },
+      { 'src/engine/flow/engine.ts': engineTs },
+    );
+    const { findings } = await ledgerCheck(dir);
+    const [missing] = evidence(findings);
+    expect(evidence(findings)).toHaveLength(1);
+    expect(missing.entry).toBe('line 2');
+    expect(missing.detail).toMatch(/installed BoardSmith \(node_modules\/boardsmith\) has no src\/engine\/flow\/gone\.ts/);
+    expect(missing.detail).not.toMatch(/git add/);
+    const [pastEnd] = citedLines(findings);
+    expect(citedLines(findings)).toHaveLength(1);
+    expect(pastEnd.entry).toBe('line 4');
+    expect(pastEnd.detail).toMatch(/line 9, but the installed BoardSmith's src\/engine\/flow\/engine\.ts has 4 lines/);
+  });
+
   it('does not hold a chunk that is not verified yet to its citations', async () => {
     const dir = await tree({
       'design/chunks/world-shell/CHUNK.md': chunk('built', '- tests/not-written-yet.test.ts'),

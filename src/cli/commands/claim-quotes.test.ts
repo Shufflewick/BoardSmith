@@ -199,6 +199,14 @@ describe('checkClaimQuotes: rulebook-sourced claims', () => {
     expect(refusals[0]).toMatch(/no file at OVERNIGHT\.md\..*a file of your own in design\/ is written design\/<name>/);
   });
 
+  it('refuses a BoardSmith:<path> Source, naming the installed-package path it reads BoardSmith source by (#432)', async () => {
+    const refusals = await refusalsFor(`1. **The engine finishes a complete game.**
+   > return this.finish();
+   Source: BoardSmith:src/engine/flow/engine.ts:1309-1312`);
+    expect(refusals).toHaveLength(1);
+    expect(refusals[0]).toMatch(/Claim 1: .*BoardSmith's own source is cited from the installed package, as \.\.\/node_modules\/boardsmith\/src\/engine\/flow\/engine\.ts:1309-1312/);
+  });
+
   it('does not check a claim a later claim supersedes', async () => {
     await writeChunk(`1. **Ties go against the attacker.**
    > Ties favour the defender.

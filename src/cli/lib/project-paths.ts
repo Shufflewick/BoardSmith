@@ -184,6 +184,11 @@ export function commandBuildDir(projectDir: string, command: BuildingCommand): s
  *     something outside the project, so this is the one meaning it can have.
  *   - Anything else (`src/...`, `tests/...`, `design/...`, `boardsmith.json`) is read from the
  *     project root.
+ *   - A path that lands in the installed BoardSmith package (`../node_modules/boardsmith/src/...`,
+ *     or `node_modules/boardsmith/src/...` from the root) is BoardSmith's own source or docs as the
+ *     project has it installed, not a file of the game: `installedBoardSmithPath` says which file
+ *     (#432). It is how a claim about how BoardSmith behaves cites the library, and the only way:
+ *     `BoardSmith:<path>`, the form for a file in another repository, names no installed copy.
  *
  * The distinction is not cosmetic: `rulebook/02-punch.md` on disk is `design/rulebook/02-punch.md`,
  * and resolving it against the project root instead silently reads nothing.
@@ -207,6 +212,22 @@ export function designRecordPath(projectDir: string, path: string): string | und
   const rel = relative(resolve(projectDir), resolveDesignRelative(projectDir, path)).split(sep).join('/');
   if (rel === '..' || rel.startsWith('../') || isAbsolute(rel)) return undefined;
   return rel;
+}
+
+/** Where a game's installed BoardSmith package is, project-relative (#432). */
+export const INSTALLED_BOARDSMITH_DIR = 'node_modules/boardsmith';
+
+/**
+ * The file inside the installed BoardSmith package that a project-relative path (as
+ * `designRecordPath` gives it) names, such as `src/engine/flow/engine.ts`, or `undefined` when the
+ * path names something of the project's own (#432). Such a file is in no commit of the game:
+ * `node_modules/` is not committed, and a game built beside the library has it as a symlink to the
+ * library's checkout. So a check that holds a project file to "it is in git" holds this one to
+ * "the installed package has it", which is also the copy `claim-quote-check` reads its quote from.
+ */
+export function installedBoardSmithPath(rel: string): string | undefined {
+  const prefix = `${INSTALLED_BOARDSMITH_DIR}/`;
+  return rel.startsWith(prefix) && rel.length > prefix.length ? rel.slice(prefix.length) : undefined;
 }
 
 /**

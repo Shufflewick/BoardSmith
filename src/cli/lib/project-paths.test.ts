@@ -1,6 +1,6 @@
 import { describe, it, expect, afterEach, vi } from 'vitest';
 import { join } from 'node:path';
-import { designRecordPath, resolveDesignRelative } from './project-paths.js';
+import { designRecordPath, installedBoardSmithPath, resolveDesignRelative } from './project-paths.js';
 
 /**
  * WHERE A PATH IN A DESIGN RECORD POINTS (#409). A ledger entry, a Build Manifest row, a claim's
@@ -54,6 +54,20 @@ describe('designRecordPath — the one rule for a path written in a design recor
   it('agrees with resolveDesignRelative, which gives the same place as an absolute path', () => {
     for (const written of ['rulebook/a.md', '../src/a.ts', 'src/a.ts', 'DECISIONS.md', 'boardsmith.json']) {
       expect(resolveDesignRelative(project, written)).toBe(join(project, designRecordPath(project, written)!));
+    }
+  });
+});
+
+describe('installedBoardSmithPath — a path that names BoardSmith\'s own source (#432)', () => {
+  it('names the file inside the installed package for either spelling of it', () => {
+    for (const written of ['../node_modules/boardsmith/src/engine/flow/engine.ts', 'node_modules/boardsmith/src/engine/flow/engine.ts']) {
+      expect(installedBoardSmithPath(designRecordPath(project, written)!)).toBe('src/engine/flow/engine.ts');
+    }
+  });
+
+  it('is undefined for the project\'s own files and for another installed package', () => {
+    for (const rel of ['src/rules/game.ts', 'design/chunks/a/evidence/x.mjs', 'node_modules/boardsmith-extra/a.ts', 'node_modules/vue/index.js', 'node_modules/boardsmith']) {
+      expect(installedBoardSmithPath(rel)).toBeUndefined();
     }
   });
 });

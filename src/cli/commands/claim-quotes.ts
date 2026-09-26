@@ -26,7 +26,9 @@
  * A claim may carry several quote + `Source:` pairs. A `Source:` path is read by the one rule for a
  * path in a design record (`designRecordPath`, project-paths.ts, #409): a design record such as
  * `rulebook/...` or `RULINGS.md` from `design/`, code reached with `../` from `design/` too, and
- * anything else from the project root; never outside the project. A Markdown source is cited by
+ * anything else from the project root; never outside the project. BoardSmith's own source or docs
+ * are cited from the installed package, `../node_modules/boardsmith/<path>`, and read there, in the
+ * version the project uses (#432); `BoardSmith:<path>` is refused with that path. A Markdown source is cited by
  * heading (`§"..."`) or by line range; any other file is cited by line range (`path:N` or
  * `path:N-M`, the one grammar for a line location, `splitLineLocation` in line-location.ts, which
  * ledger-check reads cited evidence by too, #414). A quote matches when it appears inside the cited section or lines, with runs of
@@ -48,7 +50,14 @@ import { join, resolve, sep } from 'node:path';
 import chalk from 'chalk';
 import { type InterpretationLine, interpretationLines, parseSupersededClaims } from './build-manifest.js';
 import { assertBareName } from '../lib/user-name.js';
-import { DESIGN_DIR, GATE_TRANSITION_MD, chunkMdPath, designRecordPath, relChunkMdPath } from '../lib/project-paths.js';
+import {
+  DESIGN_DIR,
+  GATE_TRANSITION_MD,
+  INSTALLED_BOARDSMITH_DIR,
+  chunkMdPath,
+  designRecordPath,
+  relChunkMdPath,
+} from '../lib/project-paths.js';
 import { readGateTransition } from '../lib/gate-transition.js';
 import { markdownHeading } from '../lib/slice-sections.js';
 import { LINE_LOCATION_HINT, type LineRange, fileLines, lineRangeProblem, splitLineLocation } from '../lib/line-location.js';
@@ -287,6 +296,14 @@ const PATH_RULE =
   `from the project root otherwise (src/rules/game.ts), so a file of your own in ${DESIGN_DIR}/ is ` +
   `written ${DESIGN_DIR}/<name>.`;
 
+/**
+ * `BoardSmith:<path>`, the form for a file in another repository, written for BoardSmith itself
+ * (#432). BoardSmith's source is cited from the installed package instead (`installedBoardSmithPath`,
+ * project-paths.ts), so the refusal names that path.
+ */
+const BOARDSMITH_REPOSITORY = /^boardsmith:/i;
+const BOARDSMITH_QUALIFIER = /boardsmith:/i;
+
 /** A cited file's text, and its project-relative path for messages. */
 type SourceFile = { ok: true; text: string; shown: string } | { ok: false; problem: string };
 
@@ -349,6 +366,16 @@ async function locate(projectDir: string, spec: string): Promise<Located> {
   if (spec.trim() === '') return { ok: false, problem: `a location line is empty. ${FORMAT_HINT}` };
   const source = parseSpec(spec);
   if (!source) return { ok: false, problem: `"${spec}" is not a location. ${FORMAT_HINT}` };
+  if (BOARDSMITH_REPOSITORY.test(source.path)) {
+    const installed = spec.trim().replace(BOARDSMITH_QUALIFIER, `../${INSTALLED_BOARDSMITH_DIR}/`);
+    return {
+      ok: false,
+      problem:
+        `"${spec}" names a file in BoardSmith's repository, which this project does not have. ` +
+        `BoardSmith's own source is cited from the installed package, as ${installed}, so it is ` +
+        'read in the BoardSmith version this project uses.',
+    };
+  }
   const file = await readSourceFile(projectDir, source.path);
   if (!file.ok) return file;
   return locateWithin(fileLines(file.text), source, file.shown);
