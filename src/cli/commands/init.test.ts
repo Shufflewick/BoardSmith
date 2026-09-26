@@ -825,6 +825,34 @@ describe('initCommand --into-existing — scaffold into the repository you are i
 });
 
 /**
+ * Scaffolds the #309 game and loads its rules once, while the file is
+ * collected, where no test timeout applies (#428). The rules module sits at a
+ * new path, so importing it transforms it and everything it reaches through
+ * `node_modules/boardsmith` for the first time; inside a test that ran into
+ * the 5 s timeout on a busy machine (#354, #355, #363, #417).
+ *
+ * Warnings shown while the module loads are kept, so the tests still see them.
+ */
+async function loadScaffoldedRules() {
+  const originalCwd = process.cwd();
+  const shown = vi.spyOn(console, 'warn').mockImplementation(() => {});
+  try {
+    const { projectPath } = await scaffoldProject('bs-init-309-', 'warning-free-game', { withoutRulebook: true });
+    // `"boardsmith": "file:..."` installs as a symlink to the checkout.
+    mkdirSync(join(projectPath, 'node_modules'));
+    symlinkSync(join(__dirname, '..', '..', '..'), join(projectPath, 'node_modules', 'boardsmith'), 'dir');
+    // Dynamic import: the rules module is the one this scaffold just wrote.
+    const rules = await import(join(projectPath, 'src', 'rules', 'index.ts'));
+    return { gameClass: rules.gameDefinition.gameClass, loadWarnings: shown.mock.calls.map((call) => String(call[0])) };
+  } finally {
+    shown.mockRestore();
+    process.chdir(originalCwd);
+  }
+}
+
+const scaffolded309 = await loadScaffoldedRules();
+
+/**
  * BoardSmith #309: A FRESHLY SCAFFOLDED GAME PLAYS WITHOUT A WARNING.
  *
  * The scaffold's turn is two same-seat action steps, draw then play. With no
@@ -838,10 +866,6 @@ describe('initCommand --into-existing — scaffold into the repository you are i
  * game the command wrote.
  */
 describe('initCommand — a scaffolded game plays with no warnings (#309)', () => {
-  const { scaffold } = scaffoldSuite('bs-init-309-', 'warning-free-game', {
-    withoutRulebook: true,
-  });
-  const repoRoot = join(__dirname, '..', '..', '..');
   let warn: MockInstance<typeof console.warn>;
 
   beforeEach(() => {
@@ -855,20 +879,13 @@ describe('initCommand — a scaffolded game plays with no warnings (#309)', () =
     warn.mockRestore();
   });
 
-  async function loadScaffoldedGame() {
-    const projectPath = await scaffold();
-    // `"boardsmith": "file:..."` installs as a symlink to the checkout.
-    mkdirSync(join(projectPath, 'node_modules'));
-    symlinkSync(repoRoot, join(projectPath, 'node_modules', 'boardsmith'), 'dir');
-    // Dynamic import: the rules module is the one this test's scaffold just wrote.
-    const rules = await import(join(projectPath, 'src', 'rules', 'index.ts'));
-    return createTestGame(rules.gameDefinition.gameClass, { playerCount: 2, seed: 'issue-309' });
-  }
+  const newGame = () =>
+    createTestGame(scaffolded309.gameClass, { playerCount: 2, seed: 'issue-309' });
 
-  const warnings = () => warn.mock.calls.map((call) => String(call[0]));
+  const warnings = () => [...scaffolded309.loadWarnings, ...warn.mock.calls.map((call) => String(call[0]))];
 
-  it("plays the first turn, draw then play, without a warning", async () => {
-    const game = await loadScaffoldedGame();
+  it("plays the first turn, draw then play, without a warning", () => {
+    const game = newGame();
 
     game.doAction(1, 'draw');
     const [card] = game.action('play', 1).getChoices('card');
@@ -877,8 +894,8 @@ describe('initCommand — a scaffolded game plays with no warnings (#309)', () =
     expect(warnings()).toEqual([]);
   });
 
-  it('plays to the end without a warning', async () => {
-    const game = await loadScaffoldedGame();
+  it('plays to the end without a warning', () => {
+    const game = newGame();
 
     playUntilComplete(game);
 
