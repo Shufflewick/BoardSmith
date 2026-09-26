@@ -18,7 +18,7 @@
  * own UI.
  */
 import { describe, it, expect } from 'vitest';
-import { defineComponent, h, type PropType } from 'vue';
+import { defineComponent, h, nextTick, type PropType } from 'vue';
 import {
   useBoardInteraction,
   createBoardInteraction,
@@ -104,7 +104,7 @@ describe('renderAsSeat — board interaction provider', () => {
     wrapper.unmount();
   });
 
-  it('lets a caller override the provided interaction under the exported key', async () => {
+  it('lets a caller hand the board its own interaction under the exported key', async () => {
     const tg = makeGame();
 
     const ownCard = collectCards(tg.getPlayerView(1).state as ViewNode).find(
@@ -114,14 +114,16 @@ describe('renderAsSeat — board interaction provider', () => {
     const cardId = ownCard!.id as number;
 
     const interaction = createBoardInteraction();
-    interaction.setValidElements([{ id: cardId, ref: { id: cardId } }], () => {});
-
     const wrapper = await renderAsSeat(tg, 1, {
       component: InteractiveBoard,
       provide: { [BOARD_INTERACTION_KEY]: interaction },
     });
+    // A table seat's controller owns the interaction's targets, as it does in
+    // GameShell, so they are set after the mount rather than pre-loaded.
+    interaction.setValidElements([{ id: cardId, ref: { id: cardId } }], () => {});
+    await nextTick();
 
-    // The board read the caller's interaction, not a fresh empty one.
+    // The board reads the caller's interaction, not a fresh empty one.
     expect(wrapper.find(`[data-bs-el-id="${cardId}"]`).attributes('data-selectable')).toBe('true');
     wrapper.unmount();
   });

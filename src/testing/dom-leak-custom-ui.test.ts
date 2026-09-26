@@ -115,10 +115,8 @@ const ContractBoard = defineComponent({
         'data-seat': String(props.playerSeat),
         'data-my-turn': String(props.isMyTurn),
         'data-actions': props.availableActions.join(','),
-        // Reads through the inert controller exactly as a real template would.
-        'data-controller-actions': String(
-          (props.actionController.availableActions as { value: string[] }).value.length,
-        ),
+        // Reads through the controller exactly as a real template would.
+        'data-current-action': String((props.actionController.currentAction as { value: string | null }).value),
       });
   },
 });
