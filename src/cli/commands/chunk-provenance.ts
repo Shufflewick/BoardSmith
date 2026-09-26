@@ -606,16 +606,37 @@ export interface VerifiedAgainstWriteResult {
  */
 export async function recordVerifiedAgainst(
   slug: string,
-  options: {
-    project?: string;
-    /**
-     * 175-CONTEXT.md decision 11's stamp value — the drift comparison evidence justifying a
-     * "re-verified, no code change" claim (e.g. `<hash>..<head> — 0 manifest files changed`).
-     * When supplied, writes the `Re-verified (no code change):` label; omitted otherwise.
-     */
-    reverifiedNoCodeChange?: string;
-  } = {},
+  options: VerifiedAgainstOptions = {},
 ): Promise<VerifiedAgainstWriteResult> {
+  const { result, chunkPath, updated } = await planVerifiedAgainst(slug, options);
+  if (result.changed) await fs.writeFile(chunkPath, updated);
+  return result;
+}
+
+/**
+ * Whether `chunk-check` would find the chunk's `## Verified Against` block current, without
+ * writing anything: `changed` is true when it would have to repair it. `chunk-merge` asks this of
+ * each chunk whose file it vouches for on the combined tree (#403).
+ */
+export async function verifiedAgainstIsCurrent(projectDir: string, slug: string): Promise<boolean> {
+  return !(await planVerifiedAgainst(slug, { project: projectDir })).result.changed;
+}
+
+interface VerifiedAgainstOptions {
+  project?: string;
+  /**
+   * 175-CONTEXT.md decision 11's stamp value — the drift comparison evidence justifying a
+   * "re-verified, no code change" claim (e.g. `<hash>..<head> — 0 manifest files changed`).
+   * When supplied, writes the `Re-verified (no code change):` label; omitted otherwise.
+   */
+  reverifiedNoCodeChange?: string;
+}
+
+/** Computes the `## Verified Against` block and the CHUNK.md it belongs in. Writes nothing. */
+async function planVerifiedAgainst(
+  slug: string,
+  options: VerifiedAgainstOptions,
+): Promise<{ result: VerifiedAgainstWriteResult; chunkPath: string; updated: string }> {
   const projectDir = resolve(options.project ?? process.cwd());
   const chunkPath = chunkMdPath(projectDir, slug);
   const relChunkPath = relChunkMdPath(slug);
@@ -711,11 +732,8 @@ export async function recordVerifiedAgainst(
   }
 
   const changed = previousBody === undefined || previousBody !== newBody;
-  if (changed) {
-    await fs.writeFile(chunkPath, updated);
-  }
 
-  return {
+  const result: VerifiedAgainstWriteResult = {
     slug,
     scope: record.scope,
     reason: record.reason,
@@ -725,6 +743,7 @@ export async function recordVerifiedAgainst(
     unresolved,
     ...(previousBody !== undefined ? { previousBody } : {}),
   };
+  return { result, chunkPath, updated };
 }
 
 /**

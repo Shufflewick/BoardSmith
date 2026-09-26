@@ -22,6 +22,13 @@
  *      every verified chunk's sign-off still stands for its code (`assessSignoffs`); and the
  *      project's whole test suite.
  *      Any failure aborts the merge and leaves the main line exactly as it was.
+ *   3a. A source file this branch and the main line both edited since the branch left (#403) is
+ *      code no designer signed off: each chunk's sign-off saw only its own side. The merge vouches
+ *      for it by re-running the own checks of every chunk involved (this one and those built
+ *      alongside it whose Build Manifest names the file) on the combined tree: their tests,
+ *      `chunk-check` and `claim-quote-check`. If all pass, it records the file, its content hash,
+ *      those chunks and the merge in design/MERGE-SIGNOFFS.md, which the sign-off check accepts;
+ *      if any fails, the merge is refused naming the check and the chunk. No designer is asked.
  *   4. It lists every reference between the merged chunk's changes and what the main line gained
  *      while it was being built, in design/CROSS-CHUNK.md, pending the audit's ruling;
  *      `ledger-check` fails until the audit rules, so the next close and merge wait for it.
@@ -33,17 +40,20 @@
  */
 import { promises as fs } from 'node:fs';
 import { execFile } from 'node:child_process';
-import { join, resolve } from 'node:path';
+import { join, posix, resolve } from 'node:path';
 import chalk from 'chalk';
+import { createHash } from 'node:crypto';
 import {
   CROSS_CHUNK_MD,
   DESIGN_DIR,
+  MERGE_SIGNOFFS_MD,
   RUN_LOG_DIR,
   RUN_MD,
   SKETCH_MD,
   chunkMdPath,
   designPath,
 } from '../lib/project-paths.js';
+import { type MergeSignoff, appendMergeSignoffs } from '../lib/merge-signoffs.js';
 import { assertBareName } from '../lib/user-name.js';
 import {
   NUMBERED_LEDGER_SPECS,
@@ -53,7 +63,10 @@ import {
 } from '../lib/ledger-allocation.js';
 import { ledgerCheck } from './ledger-check.js';
 import { type TestRunner, checkConstraints, runVitest } from './constraint-check.js';
-import { assessSignoffs } from './chunk-signoff.js';
+import { assessSignoffs, checkSignoff, chunkCodeFiles } from './chunk-signoff.js';
+import { verifiedAgainstIsCurrent } from './chunk-provenance.js';
+import { checkClaimQuotes } from './claim-quotes.js';
+import { parseSpecManifest } from './test-step-check.js';
 import { chunkCitations, pairProblems, readSketchChunks } from './parallel-check.js';
 import { appendCrossChunkEntry, changedSide, crossReferences } from './cross-chunk.js';
 
@@ -74,6 +87,8 @@ interface ChunkMergeResult {
   alongside: string[];
   /** `pending` when references were recorded for the audit, `none` when nothing was shared. */
   crossChunk: 'pending' | 'none' | 'not built alongside';
+  /** Source files both sides edited, which the merge vouched for (#403), each with its chunks. */
+  vouched: Array<{ path: string; chunks: string[] }>;
 }
 
 interface GitResult {
@@ -121,6 +136,7 @@ const refused = (refusals: string[]): ChunkMergeResult => ({
   allocated: {},
   alongside: [],
   crossChunk: 'not built alongside',
+  vouched: [],
 });
 
 async function showAt(ctx: MergeContext, rev: string, designRel: string): Promise<string> {
@@ -152,13 +168,14 @@ async function realNumbersAdded(ctx: MergeContext): Promise<string[]> {
 function sharedRunFiles(ctx: MergeContext): string[] {
   const design = `${ctx.prefix}${DESIGN_DIR}/`;
   const own = `${design}${RUN_LOG_DIR}/${ctx.slug}.md`;
+  const mainLineOnly = [`${design}${RUN_MD}`, `${design}${MERGE_SIGNOFFS_MD}`];
   return ctx.changed
-    .filter((name) => (name === `${design}${RUN_MD}` || name.startsWith(`${design}${RUN_LOG_DIR}/`)) && name !== own)
+    .filter((name) => (mainLineOnly.includes(name) || name.startsWith(`${design}${RUN_LOG_DIR}/`)) && name !== own)
     .map(
       (name) =>
         `${ctx.branch} changes ${name.slice(ctx.prefix.length)}. A chunk's branch writes only its own run log, ` +
-        `${DESIGN_DIR}/${RUN_LOG_DIR}/${ctx.slug}.md; ${RUN_MD} and other chunks' logs belong to the main line. ` +
-        `Undo that change on the branch and merge again.`,
+        `${DESIGN_DIR}/${RUN_LOG_DIR}/${ctx.slug}.md; ${RUN_MD}, ${MERGE_SIGNOFFS_MD} and other chunks' logs ` +
+        `belong to the main line. Undo that change on the branch and merge again.`,
     );
 }
 
@@ -311,6 +328,130 @@ async function combinedTreeProblems(ctx: MergeContext, alongside: string[], runT
   return suite.ok ? [] : [`The project's test suite fails on the combined tree:\n${tail(suite.output)}`];
 }
 
+// ---------------------------------------------------------------------------------------------
+// A source file both sides edited: the merge vouches for it (#403)
+// ---------------------------------------------------------------------------------------------
+
+/** A source file both sides edited, and the chunks involved whose Build Manifest names it. */
+interface SharedFile {
+  path: string;
+  chunks: string[];
+}
+
+async function manifestPaths(projectDir: string, slug: string): Promise<Set<string>> {
+  const text = await fs.readFile(chunkMdPath(projectDir, slug), 'utf-8').catch(() => undefined);
+  if (text === undefined) return new Set();
+  return new Set(Object.keys(await chunkCodeFiles(projectDir, text)).map((p) => posix.normalize(p)));
+}
+
+/**
+ * Each source file (outside design/) that the branch changed and the main line also changed after
+ * the branch left it, with the chunks, this one or one built alongside it, whose Build Manifest
+ * names it. A file no such chunk names has no sign-off for the merge to vouch for.
+ */
+async function sharedSourceFiles(ctx: MergeContext, alongside: string[]): Promise<SharedFile[]> {
+  const mainChanged = new Set((await git(ctx.top, ['diff', '--name-only', ctx.fork, 'HEAD'])).split('\n'));
+  const design = `${ctx.prefix}${DESIGN_DIR}/`;
+  const both = ctx.changed
+    .filter((name) => mainChanged.has(name) && name.startsWith(ctx.prefix) && !name.startsWith(design))
+    .map((name) => name.slice(ctx.prefix.length));
+  if (both.length === 0) return [];
+  const manifests: Array<[string, Set<string>]> = [];
+  for (const slug of [ctx.slug, ...alongside]) manifests.push([slug, await manifestPaths(ctx.projectDir, slug)]);
+  return both
+    .map((path) => ({ path, chunks: manifests.filter(([, paths]) => paths.has(path)).map(([slug]) => slug).sort() }))
+    .filter((file) => file.chunks.length > 0);
+}
+
+/** The test files a chunk's Spec Manifest lists, or the sentence that says why there are none to run. */
+function ownTestFiles(chunkText: string): string[] | string {
+  try {
+    return parseSpecManifest(chunkText).rows.map((row) => row.testFile);
+  } catch (error) {
+    return (error as Error).message.split('\n')[0];
+  }
+}
+
+/**
+ * What fails when one chunk's own checks run on the combined tree, each as `[what failed, why]`,
+ * where `what failed` names the check and the chunk ("claim-quote-check fails for trading").
+ */
+async function ownCheckFailures(projectDir: string, slug: string, runTests: TestRunner): Promise<Array<[string, string]>> {
+  const text = await fs.readFile(chunkMdPath(projectDir, slug), 'utf-8');
+  const failures: Array<[string, string]> = [];
+  const tests = ownTestFiles(text);
+  if (typeof tests === 'string') {
+    failures.push([`${slug}'s own tests cannot be found`, tests]);
+  } else if (tests.length > 0) {
+    const run = await runTests(projectDir, tests);
+    const what = `${slug}'s own tests (${tests.join(', ')}) fail`;
+    if ('refused' in run) failures.push([what, run.refused]);
+    else if (!run.ok) failures.push([what, tail(run.output)]);
+  }
+  const quotes = (await checkClaimQuotes(projectDir, slug)).refusals;
+  if (quotes.length) failures.push([`claim-quote-check fails for ${slug}`, quotes.join(' ')]);
+  if (!(await verifiedAgainstIsCurrent(projectDir, slug))) {
+    failures.push([
+      `chunk-check fails for ${slug}`,
+      `its "## Verified Against" block is out of date, so chunk-check would have to repair it.`,
+    ]);
+  }
+  return failures;
+}
+
+function vouchRefusal(ctx: MergeContext, shared: SharedFile[], slug: string, [what, detail]: [string, string]): string {
+  const files = shared.filter((f) => f.chunks.includes(slug)).map((f) => f.path).join(', ');
+  return (
+    `${what} on the combined tree, so this merge cannot vouch for ${files}, which ${ctx.branch} and ` +
+    `the main line both edited: ${detail} Merge the main line into ${ctx.branch} in its worktree, fix it ` +
+    `there, re-run the chunk's checks, commit, and run chunk-merge again.`
+  );
+}
+
+function sha256(data: Buffer): string {
+  return createHash('sha256').update(data).digest('hex');
+}
+
+/** Records every shared file as the merge combined it, in design/MERGE-SIGNOFFS.md, staged. */
+async function recordMergeSignoffs(ctx: MergeContext, shared: SharedFile[]): Promise<void> {
+  const merge = `${ctx.branch} ${(await git(ctx.top, ['rev-parse', ctx.branch])).trim()} into ${(await git(ctx.top, ['rev-parse', 'HEAD'])).trim()}`;
+  const when = new Date().toISOString();
+  const entries: MergeSignoff[] = [];
+  for (const file of shared) {
+    const content = await fs.readFile(join(ctx.projectDir, file.path)).catch(() => undefined);
+    // A file the merge deleted has no code to vouch for; its chunks' manifests answer for that.
+    if (content !== undefined) entries.push({ path: file.path, content: sha256(content), chunks: file.chunks, merge, when });
+  }
+  const path = designPath(ctx.projectDir, MERGE_SIGNOFFS_MD);
+  const existing = await fs.readFile(path, 'utf-8').catch(() => undefined);
+  await fs.writeFile(path, appendMergeSignoffs(existing, entries));
+  await git(ctx.projectDir, ['add', '--', path]);
+}
+
+/**
+ * Vouches for every source file both sides edited: each involved chunk's tests, claim-quote-check
+ * and chunk-check (its Verified Against block, then, once the record is written, its sign-off)
+ * must pass on the combined tree. Returns every failure, naming the check and the chunk.
+ */
+async function vouchForSharedFiles(ctx: MergeContext, shared: SharedFile[], runTests: TestRunner): Promise<string[]> {
+  if (shared.length === 0) return [];
+  const chunks = [...new Set(shared.flatMap((f) => f.chunks))].sort();
+  const problems: string[] = [];
+  for (const slug of chunks) {
+    for (const failure of await ownCheckFailures(ctx.projectDir, slug, runTests)) {
+      problems.push(vouchRefusal(ctx, shared, slug, failure));
+    }
+  }
+  if (problems.length) return problems;
+  await recordMergeSignoffs(ctx, shared);
+  for (const slug of chunks) {
+    for (const problem of await checkSignoff(ctx.projectDir, slug)) {
+      problems.push(vouchRefusal(ctx, shared, slug, [`chunk-check fails for ${slug}`, problem]));
+    }
+  }
+  return problems;
+}
+
 /** Records where this chunk's changes meet what the main line gained while it was built. */
 async function recordCrossChunk(ctx: MergeContext, alongside: string[]): Promise<ChunkMergeResult['crossChunk']> {
   if (alongside.length === 0) return 'not built alongside';
@@ -371,6 +512,15 @@ function commitMessage(ctx: MergeContext, allocated: Record<string, string>, alo
   return lines.join('\n');
 }
 
+/** Runs each stage in turn and returns the first one's problems; later stages build on earlier ones. */
+async function firstProblems(stages: Array<() => Promise<string[]>>): Promise<string[]> {
+  for (const stage of stages) {
+    const problems = await stage();
+    if (problems.length) return problems;
+  }
+  return [];
+}
+
 /** Merges with the lock held; aborts the merge, restoring the main line, on any refusal. */
 async function mergeLocked(ctx: MergeContext, runTests: TestRunner): Promise<ChunkMergeResult> {
   const before = [...(await realNumbersAdded(ctx)), ...sharedRunFiles(ctx)];
@@ -386,14 +536,21 @@ async function mergeLocked(ctx: MergeContext, runTests: TestRunner): Promise<Chu
   }
   const { allocated, refusals } = await allocate(ctx);
   const alongside = await builtAlongside(ctx);
-  const problems = [...refusals, ...(await combinedTreeProblems(ctx, alongside, runTests))];
+  const shared = await sharedSourceFiles(ctx, alongside);
+  const problems = [
+    ...refusals,
+    ...(await firstProblems([
+      () => vouchForSharedFiles(ctx, shared, runTests),
+      () => combinedTreeProblems(ctx, alongside, runTests),
+    ])),
+  ];
   if (problems.length) {
     await run(ctx.top, ['merge', '--abort']);
     return refused(problems);
   }
   const crossChunk = await recordCrossChunk(ctx, alongside);
   await git(ctx.top, ['commit', '-q', '-m', commitMessage(ctx, allocated, alongside)]);
-  return { merged: true, refusals: [], allocated, alongside, crossChunk };
+  return { merged: true, refusals: [], allocated, alongside, crossChunk, vouched: shared };
 }
 
 async function withLock<T>(common: string, work: () => Promise<T>): Promise<T | string> {
@@ -430,6 +587,12 @@ function report(slug: string, result: ChunkMergeResult): void {
   }
   console.log(chalk.green(`✓ ${slug} merged; every tree-wide check passed on the combined tree.`));
   for (const [from, to] of Object.entries(result.allocated)) console.log(`  ${from} is now ${to}.`);
+  for (const { path, chunks } of result.vouched) {
+    console.log(
+      `  ${path} was edited on both sides; the own checks of ${chunks.join(' and ')} passed on the combined ` +
+        `file, recorded in ${DESIGN_DIR}/${MERGE_SIGNOFFS_MD}.`,
+    );
+  }
   if (result.crossChunk === 'pending') {
     console.log(
       `  ${slug} and ${result.alongside.join(', ')} share code or names, listed in ${DESIGN_DIR}/${CROSS_CHUNK_MD}. ` +

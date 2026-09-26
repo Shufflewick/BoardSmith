@@ -159,6 +159,7 @@ export type {
   ElementSelection,
   ElementsSelection,
   TextSelection,
+  TextPattern,
   NumberSelection,
   ActionContext,
   ActionDefinition,

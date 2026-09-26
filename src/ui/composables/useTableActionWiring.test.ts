@@ -16,13 +16,14 @@
 import { describe, it, expect, afterEach } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { computed, defineComponent, h, nextTick, ref, type Ref } from 'vue';
-import { mount, type VueWrapper } from '@vue/test-utils';
+import { ref, type Ref } from 'vue';
+import type { VueWrapper } from '@vue/test-utils';
 import { GameSession } from '../../session/game-session.js';
 import type { PlayerGameState } from '../../session/types.js';
 import { MoveGame } from '../../session/move-game.test-helper.js';
 import { createBoardInteraction, type BoardInteraction } from './useBoardInteraction.js';
-import { useTableActionWiring, type TableActionWiring } from './useTableActionWiring.js';
+import type { TableActionWiring } from './useTableActionWiring.js';
+import { mountTableWiring, settle } from './table-wiring.test-helper.js';
 
 const SEAT = 1;
 
@@ -34,13 +35,6 @@ function newSession(seed: string) {
     playerNames: ['Alice', 'Bob'],
     seed,
   });
-}
-
-async function settle(): Promise<void> {
-  for (let i = 0; i < 10; i++) {
-    await nextTick();
-    await new Promise((resolve) => setTimeout(resolve, 0));
-  }
 }
 
 interface Table {
@@ -76,38 +70,26 @@ function mountTable(delivery: Delivery = 'reply-first'): Table {
   let session = newSession('bs378');
   const seatState = ref(session.buildPlayerState(SEAT)) as Ref<PlayerGameState>;
   const board = createBoardInteraction();
-  let wiring: TableActionWiring | undefined;
-
-  const Host = defineComponent({
-    setup() {
-      wiring = useTableActionWiring({
-        seatState,
-        availableActions: computed(() => seatState.value.availableActions ?? []),
-        isMyTurn: computed(() => seatState.value.isMyTurn),
-        playerSeat: ref(SEAT),
-        boardInteraction: board,
-        autoEndTurn: ref(true),
-        isViewingHistory: ref(false),
-        // Exactly the transport build/test.md shows a game. The new state
-        // reaches the seat as a separate broadcast: after the action's own
-        // reply ('reply-first', see `moveTo`), or before it ('state-first').
-        sendAction: async (name, args) => {
-          const result = await session.performAction(name, SEAT, args);
-          if (delivery === 'state-first') seatState.value = session.buildPlayerState(SEAT);
-          return result;
-        },
-        fetchPickChoices: async (action, pick, player, args) => session.getPickChoices(action, pick, player, args),
-      });
-      return () => h('div');
+  // Exactly the transport build/test.md shows a game. The new state reaches
+  // the seat as a separate broadcast: after the action's own reply
+  // ('reply-first', see `moveTo`), or before it ('state-first').
+  const { wiring, wrapper } = mountTableWiring({
+    session: () => session,
+    seat: SEAT,
+    seatState,
+    boardInteraction: board,
+    autoEndTurn: true,
+    afterPerform: () => {
+      if (delivery === 'state-first') seatState.value = session.buildPlayerState(SEAT);
     },
   });
-  mounted.push(mount(Host));
+  mounted.push(wrapper);
 
   return {
     get session() { return session; },
     seatState,
     board,
-    wiring: wiring!,
+    wiring,
     broadcast: () => { seatState.value = session.buildPlayerState(SEAT); },
     newGame: (seed) => {
       session = newSession(seed);

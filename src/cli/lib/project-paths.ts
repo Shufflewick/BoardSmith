@@ -110,6 +110,11 @@ export const WAIVERS_MD = 'WAIVERS.md';
  * by `boardsmith chunk-gate-transition` (#397).
  */
 export const GATE_TRANSITION_MD = 'GATE-TRANSITION.md';
+/**
+ * Source files two chunks built at the same time both edited, vouched for by the merge that
+ * combined them, written only by `boardsmith chunk-merge` (#403).
+ */
+export const MERGE_SIGNOFFS_MD = 'MERGE-SIGNOFFS.md';
 
 /** Every ledger `design/` owns, in the order `boardsmith doctor` reports them. */
 export const DESIGN_LEDGERS = [
@@ -122,6 +127,7 @@ export const DESIGN_LEDGERS = [
   BOARDSMITH_BUGS_MD,
   WAIVERS_MD,
   GATE_TRANSITION_MD,
+  MERGE_SIGNOFFS_MD,
 ] as const;
 
 /** Absolute path to a ledger in `design/`. */
@@ -147,7 +153,7 @@ export function scratchDir(projectDir: string): string {
 }
 
 /** The CLI commands that bundle a project's rules into a build directory of their own. */
-type BuildingCommand = 'dev' | 'simulate' | 'build' | 'validate';
+type BuildingCommand = 'dev' | 'simulate' | 'build' | 'validate' | 'evolve-bot-weights';
 
 /**
  * Where `command` writes the rules bundle it removes when it ends.

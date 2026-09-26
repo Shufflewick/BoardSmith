@@ -1114,7 +1114,7 @@ for (const sel of debug.details.selections) {
 | Symptom | Cause | Fix |
 |---------|-------|-----|
 | Action not in availableActions | Condition failed or no valid selections | Use `debugActionAvailability()` |
-| "Invalid selection" error | Passed wrong value type | Check you're passing element ID (number) not object |
+| "That choice is no longer available" from the server | The value is not among the current choices: it went stale, or the UI passed the wrong value type | Read the dev log line starting `[BoardSmith] Invalid selection` for the value sent and the valid choices; pass an element ID (number), not an object |
 | Element not found in gameView | ID mismatch or element moved | Use `findElementById()` to verify |
 | validElements is empty | Choices not fetched yet | Check `isLoadingChoices`, wait for fetch |
 | Selection not applying | Wrote to actionArgs directly | Use `actionController.fill()` instead |

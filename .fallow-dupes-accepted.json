@@ -37,13 +37,6 @@
       ]
     },
     {
-      "content": "020a5b48fa179504",
-      "lines": 26,
-      "files": [
-        "src/ui/composables/interaction-integration.test.ts"
-      ]
-    },
-    {
       "content": "021065be73155da2",
       "lines": 27,
       "files": [
@@ -552,6 +545,13 @@
       "lines": 7,
       "files": [
         "src/bot-trainer/feature-templates.ts"
+      ]
+    },
+    {
+      "content": "11ce450966c09bcd",
+      "lines": 30,
+      "files": [
+        "src/ui/composables/interaction-integration.test.ts"
       ]
     },
     {
@@ -2166,13 +2166,6 @@
       "files": [
         "src/ui/components/auto-ui/useAutoRendererAnimations.test.ts",
         "src/ui/composables/useAnimationEvents.test.ts"
-      ]
-    },
-    {
-      "content": "506be4190b242189",
-      "lines": 30,
-      "files": [
-        "src/ui/composables/interaction-integration.test.ts"
       ]
     },
     {
@@ -6144,6 +6137,13 @@
       "lines": 7,
       "files": [
         "src/world/engine.test.ts"
+      ]
+    },
+    {
+      "content": "d72130c60ab28311",
+      "lines": 26,
+      "files": [
+        "src/ui/composables/interaction-integration.test.ts"
       ]
     },
     {

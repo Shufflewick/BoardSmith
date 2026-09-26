@@ -823,36 +823,13 @@ const displayableArgs = computed(() => {
   return result;
 });
 
-// The choices the current pick still offers: the controller's base choices, less
-// any value an earlier choice step of this action already took.
-const offeredChoices = computed<ChoiceWithRefs[]>(() => {
-  if (!currentPick.value) return [];
-
-  // Get base choices from controller (handles repeating, dependsOn, filterBy).
-  // PIT OF SUCCESS: read the REACTIVE computed (currentChoices.value tracks snapshotVersion)
-  // rather than the bare getCurrentChoices() helper which does not. When async-fetched
-  // choices arrive, snapshotVersion++ marks currentChoices dirty → this computed re-runs.
-  let choices = (actionController.currentChoices.value as ChoiceWithRefs[]).slice();
-
-  // ActionPanel-specific: Exclude choices that were already selected in previous choice selections
-  // This handles sequential choice selections where user shouldn't pick the same thing twice
-  if (currentActionMeta.value) {
-    const alreadySelectedValues = new Set<unknown>();
-    for (const sel of currentActionMeta.value.selections) {
-      if (sel.type === 'choice' && sel.name !== currentPick.value.name) {
-        const selectedValue = currentArgs.value[sel.name];
-        if (selectedValue !== undefined) {
-          alreadySelectedValues.add(selectedValue);
-        }
-      }
-    }
-
-    if (alreadySelectedValues.size > 0) {
-      choices = choices.filter(choice => !alreadySelectedValues.has(choice.value));
-    }
-  }
-  return choices;
-});
+// What the open pick offers is exactly the engine's list for it (#407), read
+// from the controller's REACTIVE computeds (they track snapshotVersion, so
+// async-fetched lists land here). The panel never filters them: a game that wants
+// distinct values across picks narrows its own `choices`, `elements` or
+// `filterBy`, and the engine's list is then already distinct.
+const offeredChoices = actionController.currentChoices;
+const offeredElements = actionController.validElements;
 
 // D-03: Partition the offered choices into primary (unanchored) and anchored
 // (notation-anchored) sets, never dropping one. Primary choices render as normal
@@ -867,44 +844,6 @@ const filteredChoices = computed(() => _splitChoices.value.primary);
 // Notation-anchored choices: rendered as a secondary focusable list of buttons
 // whose activation calls triggerElementSelect — parity with clicking the board element.
 const anchoredChoices = computed(() => _splitChoices.value.anchored);
-
-// Filtered valid elements - excludes elements already selected in previous selections
-// This handles the case where an action has multiple element selections and the filter
-// depends on previous selections (e.g., "select second die, excluding the first")
-const filteredValidElements = computed(() => {
-  if (!currentPick.value || (currentPick.value.type !== 'element' && currentPick.value.type !== 'elements')) return [];
-
-  // Get valid elements from controller cache.
-  // PIT OF SUCCESS: read the REACTIVE computed (validElements.value tracks snapshotVersion)
-  // rather than the non-reactive getValidElements() helper.
-  const validElements = actionController.validElements.value;
-  if (validElements.length === 0) return [];
-
-  // Get IDs of elements already selected in previous element/elements selections
-  const alreadySelectedIds = new Set<number>();
-  if (currentActionMeta.value) {
-    for (const sel of currentActionMeta.value.selections) {
-      if ((sel.type === 'element' || sel.type === 'elements') && sel.name !== currentPick.value.name) {
-        const selectedValue = currentArgs.value[sel.name];
-        if (typeof selectedValue === 'number') {
-          alreadySelectedIds.add(selectedValue);
-        } else if (Array.isArray(selectedValue)) {
-          // For elements multiSelect - array of IDs
-          for (const id of selectedValue) {
-            if (typeof id === 'number') alreadySelectedIds.add(id);
-          }
-        }
-      }
-    }
-  }
-
-  // Filter out already-selected elements
-  if (alreadySelectedIds.size === 0) {
-    return validElements;
-  }
-
-  return validElements.filter(elem => !alreadySelectedIds.has(elem.id));
-});
 
 /**
  * #172 / #313 / #341: a candidate set too large for the panel to read, every
@@ -922,12 +861,12 @@ const filteredValidElements = computed(() => {
 const deferPickToBoard = computed(() => {
   const type = currentPick.value?.type;
   if (type === 'choice') return shouldDeferChoicePickToBoard(offeredChoices.value);
-  return shouldDeferElementPickToBoard(type, filteredValidElements.value);
+  return shouldDeferElementPickToBoard(type, offeredElements.value);
 });
 
 /** How many candidates the board handoff sends the player to. */
 const boardCandidateCount = computed(() =>
-  currentPick.value?.type === 'choice' ? offeredChoices.value.length : filteredValidElements.value.length,
+  currentPick.value?.type === 'choice' ? offeredChoices.value.length : offeredElements.value.length,
 );
 
 /** The handoff control's accessible name: the gesture, the size, and how to move. */
@@ -939,6 +878,13 @@ const boardHandoffLabel = computed(() =>
 function handOffToBoard() {
   boardInteraction?.requestBoardFocus();
 }
+
+/** The open pick's Skip button text: the game's own label, or "Skip". Null when the pick is required. */
+const skipLabel = computed((): string | null => {
+  const optional = currentPick.value?.optional;
+  if (!optional) return null;
+  return typeof optional === 'string' ? optional : 'Skip';
+});
 
 // Skip an optional selection
 function skipOptionalSelection() {
@@ -974,9 +920,14 @@ function editorValueRefusal(): string | null {
     return textRuleErrors(pick.name, textInputValue.value, {
       minLength: pick.minLength,
       maxLength: pick.maxLength,
-      // The wire carries a pattern as its source string; compiling it here is
-      // the only form the rule can be applied in.
-      pattern: pick.pattern === undefined ? undefined : new RegExp(pick.pattern),
+      maxBytes: pick.maxBytes,
+      multiline: pick.multiline,
+      // The wire carries a pattern as its source string with its sentence;
+      // compiling it here is the only form the rule can be applied in.
+      pattern:
+        pick.pattern === undefined
+          ? undefined
+          : { regex: new RegExp(pick.pattern.source), message: pick.pattern.message },
     })[0] ?? null;
   }
   return null;
@@ -1838,20 +1789,20 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
               class="choice-btn skip-btn"
               @click="skipOptionalSelection"
             >
-              {{ typeof currentPick.optional === 'string' ? currentPick.optional : 'Skip' }}
+              {{ skipLabel }}
             </button>
           </div>
         </template>
 
         <!-- Element selection with validElements (shows buttons for each valid element) -->
-        <template v-else-if="currentPick.type === 'element' && filteredValidElements.length">
+        <template v-else-if="currentPick.type === 'element' && offeredElements.length">
           <div class="selection-prompt">
             {{ currentPick.prompt || `Select ${currentPick.elementClassName || 'element'}` }}
             <span v-if="currentPick.optional" class="optional-label">(optional)</span>
           </div>
           <div class="choice-buttons element-selection">
             <button
-              v-for="element in filteredValidElements"
+              v-for="element in offeredElements"
               :key="element.id"
               class="choice-btn element-btn"
               v-disabled-reason="element.disabled"
@@ -1866,16 +1817,17 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
               class="choice-btn skip-btn"
               @click="skipOptionalSelection"
             >
-              {{ typeof currentPick.optional === 'string' ? currentPick.optional : 'Skip' }}
+              {{ skipLabel }}
             </button>
           </div>
         </template>
 
         <!-- Elements selection with multiSelect (checkboxes for multiple element selection) -->
-        <template v-else-if="currentPick.type === 'elements' && currentMultiSelect && filteredValidElements.length">
+        <template v-else-if="currentPick.type === 'elements' && currentMultiSelect && offeredElements.length">
           <div class="selection-prompt">
             {{ currentPick.prompt || `Select ${currentPick.name}` }}
             <span class="multi-select-count">{{ multiSelectCountDisplay }}</span>
+            <span v-if="currentPick.optional" class="optional-label">(optional)</span>
           </div>
           <div class="choice-buttons multi-select-choices">
             <!-- The directive goes on the LABEL: it is the whole visible option, so
@@ -1884,7 +1836,7 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
                  additionally carries aria-disabled, because THAT is the control a
                  screen reader announces. -->
             <label
-              v-for="element in filteredValidElements"
+              v-for="element in offeredElements"
               :key="element.id"
               class="multi-select-choice"
               :class="{ selected: isMultiSelectValueSelected(element.id) }"
@@ -1900,7 +1852,7 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
               />
               <span class="checkbox-label">{{ element.display || element.id }}</span>
             </label>
-            <span v-if="filteredValidElements.length === 0" class="no-choices">
+            <span v-if="offeredElements.length === 0" class="no-choices">
               No options available
             </span>
             <DoneButton
@@ -1908,18 +1860,25 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
               :disabled-reason="multiSelectDoneDisabledReason"
               @click="confirmMultiSelect"
             />
+            <button
+              v-if="currentPick.optional"
+              class="choice-btn skip-btn"
+              @click="skipOptionalSelection"
+            >
+              {{ skipLabel }}
+            </button>
           </div>
         </template>
 
         <!-- Elements selection without multiSelect (buttons for single element selection) -->
-        <template v-else-if="currentPick.type === 'elements' && filteredValidElements.length">
+        <template v-else-if="currentPick.type === 'elements' && offeredElements.length">
           <div class="selection-prompt">
             {{ currentPick.prompt || `Select ${currentPick.name}` }}
             <span v-if="currentPick.optional" class="optional-label">(optional)</span>
           </div>
           <div class="choice-buttons element-selection">
             <button
-              v-for="element in filteredValidElements"
+              v-for="element in offeredElements"
               :key="element.id"
               class="choice-btn element-btn"
               v-disabled-reason="element.disabled"
@@ -1934,7 +1893,7 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
               class="choice-btn skip-btn"
               @click="skipOptionalSelection"
             >
-              {{ typeof currentPick.optional === 'string' ? currentPick.optional : 'Skip' }}
+              {{ skipLabel }}
             </button>
           </div>
         </template>
@@ -2013,7 +1972,7 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
               class="choice-btn skip-btn"
               @click="skipOptionalSelection"
             >
-              {{ typeof currentPick.optional === 'string' ? currentPick.optional : 'Skip' }}
+              {{ skipLabel }}
             </button>
           </div>
         </template>
@@ -2023,6 +1982,7 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
           <div class="selection-prompt">
             {{ currentPick.prompt || `Select ${currentPick.name}` }}
             <span class="multi-select-count">{{ multiSelectCountDisplay }}</span>
+            <span v-if="currentPick.optional" class="optional-label">(optional)</span>
           </div>
           <div class="choice-buttons multi-select-choices">
             <!-- Directive on the label, aria-disabled on the control — see the
@@ -2052,6 +2012,13 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
               :disabled-reason="multiSelectDoneDisabledReason"
               @click="confirmMultiSelect"
             />
+            <button
+              v-if="currentPick.optional"
+              class="choice-btn skip-btn"
+              @click="skipOptionalSelection"
+            >
+              {{ skipLabel }}
+            </button>
           </div>
         </template>
 
@@ -2060,6 +2027,7 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
         <template v-else-if="currentPick.type === 'choice' && (currentPick.filterBy || currentPick.dependsOn)">
           <div class="selection-prompt">
             {{ currentPick.prompt || `Select ${currentPick.name}` }}
+            <span v-if="currentPick.optional" class="optional-label">(optional)</span>
           </div>
           <div class="choice-buttons">
             <button
@@ -2085,9 +2053,16 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
             <div v-if="filteredChoices.length === 0 && anchoredChoices.length === 0 && isLoadingChoices" class="loading-choices">
               Loading choices...
             </div>
-            <span v-else-if="filteredChoices.length === 0 && anchoredChoices.length === 0" class="no-choices">
+            <span v-else-if="filteredChoices.length === 0 && anchoredChoices.length === 0 && !currentPick.optional" class="no-choices">
               No options available
             </span>
+            <button
+              v-if="currentPick.optional"
+              class="choice-btn skip-btn"
+              @click="skipOptionalSelection"
+            >
+              {{ skipLabel }}
+            </button>
           </div>
         </template>
 
@@ -2114,7 +2089,7 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
               class="choice-btn skip-btn"
               @click="skipOptionalSelection"
             >
-              {{ typeof currentPick.optional === 'string' ? currentPick.optional : 'Skip' }}
+              {{ skipLabel }}
             </button>
             <span v-if="filteredChoices.length === 0 && !currentPick.optional" class="no-choices">
               No options available
@@ -2132,6 +2107,14 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
           <span class="instruction-text">
             Click on a {{ currentPick.elementClassName || 'element' }} to select it
           </span>
+          <span v-if="currentPick.optional" class="optional-label">(optional)</span>
+          <button
+            v-if="currentPick.optional"
+            class="choice-btn skip-btn"
+            @click="skipOptionalSelection"
+          >
+            {{ skipLabel }}
+          </button>
         </div>
 
         <!-- THE TYPED EDITOR, FOR BOTH PICKS THAT HAVE ONE (#237).
@@ -2187,7 +2170,7 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
               v-model="textInputValue"
               :minlength="currentPick.minLength"
               :maxlength="currentPick.maxLength"
-              :pattern="currentPick.pattern"
+              :pattern="currentPick.pattern?.source"
               @keyup.enter="submitEditorValue"
             />
             <!-- Above the submit button, not below it: the bar caps its own
@@ -2209,7 +2192,7 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
               data-bs-skip-editor
               @click="skipOptionalSelection"
             >
-              {{ typeof currentPick.optional === 'string' ? currentPick.optional : 'Skip' }}
+              {{ skipLabel }}
             </button>
           </div>
           <!-- WHAT THE NUMBER IN THE BOX MEANS (#258). A live region, because

@@ -21,6 +21,7 @@ import type {
   ConditionDetail,
   AnnotatedChoice,
   DisabledRule,
+  UnavailableRule,
   OnSelectContext,
 } from './types.js';
 import { wrapFilterWithHelpfulErrors } from './helpers.js';
@@ -35,6 +36,13 @@ import { resolveOrderedList } from '../utils/resolve-multiselect.js';
 
 // Re-export Action class from action-builder
 export { Action };
+
+/**
+ * What a player reads when the value they submitted is no longer among a
+ * selection's choices and the game wrote no `unavailable` sentence (#393).
+ */
+const NO_LONGER_AVAILABLE =
+  'That choice is no longer available. Things changed while you were choosing, so please choose again.';
 
 /**
  * Turn a throw out of an action's `execute()` into a failure result.
@@ -952,8 +960,10 @@ export class ActionExecutor {
             if (selection.type === 'choice') {
               const smartMatch = this.trySmartResolveChoice(v, choices);
               if (!smartMatch) {
-                const validChoicesStr = this.formatValidChoices(choices);
-                errors.push(`Invalid selection for "${selection.name}": ${JSON.stringify(v)}. Valid choices: ${validChoicesStr}`);
+                errors.push(this.unavailableRefusal(
+                  selection, v, context, actionName,
+                  `Invalid selection for "${selection.name}": ${JSON.stringify(v)}. Valid choices: ${this.formatValidChoices(choices)}`,
+                ));
               } else if (smartMatch.disabled !== false) {
                 errors.push(`Selection disabled: ${smartMatch.disabled}`);
               }
@@ -971,13 +981,18 @@ export class ActionExecutor {
           if (selection.type === 'choice') {
             const smartMatch = this.trySmartResolveChoice(value, choices);
             if (!smartMatch) {
-              const validChoicesStr = this.formatValidChoices(choices);
-              errors.push(`Invalid selection for "${selection.name}": ${JSON.stringify(value)}. Valid choices: ${validChoicesStr}`);
+              errors.push(this.unavailableRefusal(
+                selection, value, context, actionName,
+                `Invalid selection for "${selection.name}": ${JSON.stringify(value)}. Valid choices: ${this.formatValidChoices(choices)}`,
+              ));
             } else if (smartMatch.disabled !== false) {
               errors.push(`Selection disabled: ${smartMatch.disabled}`);
             }
           } else if (selection.type === 'element') {
-            errors.push(`Invalid selection for ${selection.name}`);
+            errors.push(this.unavailableRefusal(
+              selection, value, context, actionName,
+              `Invalid selection for "${selection.name}": ${this.describeSubmittedElement(value)}. Valid elements: ${this.formatValidChoices(choices)}`,
+            ));
           }
         }
       }
@@ -1036,6 +1051,7 @@ export class ActionExecutor {
       const annotatedElements = this.getChoices(selection, player, args, actionName);
       const validElements = annotatedElements.map(c => c.value) as GameElement[];
       const validIds = validElements.map(e => e.id);
+      const validNames = () => validElements.map(e => `${e.name} (id: ${e.id})`).join(', ');
 
       const validateElement = (elem: unknown): string | null => {
         // Handle resolved GameElement objects
@@ -1049,8 +1065,10 @@ export class ActionExecutor {
             return `Selection disabled: ${disabledMatch.disabled}`;
           }
           if (!validIds.includes(id)) {
-            const validNames = validElements.map(e => `${e.name} (id: ${e.id})`).join(', ');
-            return `Element ID ${id} is not a valid choice for "${selection.name}". Valid elements: [${validNames}]`;
+            return this.unavailableRefusal(
+              selection, elem, context, actionName,
+              `Element ID ${id} is not a valid choice for "${selection.name}". Valid elements: [${validNames()}]`,
+            );
           }
           return null;
         }
@@ -1066,11 +1084,11 @@ export class ActionExecutor {
           if (!validIds.includes(elem)) {
             // An ID that doesn't resolve to any element at all is "not found";
             // an ID that resolves but isn't an offered choice is "not valid".
-            if (!this.game.getElementById(elem)) {
-              return `Element ID ${elem} not found for "${selection.name}".`;
-            }
-            const validNames = validElements.map(e => `${e.name} (id: ${e.id})`).join(', ');
-            return `Element ID ${elem} is not a valid choice for "${selection.name}". Valid elements: [${validNames}]`;
+            // The player is told the same thing either way: it is gone.
+            const detail = this.game.getElementById(elem)
+              ? `Element ID ${elem} is not a valid choice for "${selection.name}". Valid elements: [${validNames()}]`
+              : `Element ID ${elem} not found for "${selection.name}".`;
+            return this.unavailableRefusal(selection, elem, context, actionName, detail);
           }
           return null;
         }
@@ -1159,10 +1177,63 @@ export class ActionExecutor {
       if (error) errors.push(error);
     }
 
+    // One sentence per refusal: a multiSelect with three stale values is one
+    // stale pick to the player, not the same sentence three times.
+    const refusals = [...new Set(errors)];
     return {
-      valid: errors.length === 0,
-      errors,
+      valid: refusals.length === 0,
+      errors: refusals,
     };
+  }
+
+  /**
+   * What the player is told when a value they submitted is no longer among the
+   * selection's choices (#393).
+   *
+   * In a world this is routine -- another seat took the offer, a second tab
+   * acted first -- so it is not the engine's text, which names raw values and
+   * lists the valid ones. It is the selection's own `unavailable` sentence when
+   * the game wrote one, and a plain one that says what to do otherwise. The
+   * engine's `detail` goes to the dev log, where the author reads it.
+   */
+  private unavailableRefusal(
+    selection: Pick<Selection, 'name'> & UnavailableRule,
+    value: unknown,
+    context: ActionContext,
+    actionName: string | undefined,
+    detail: string,
+  ): string {
+    const message = selection.unavailable
+      ? this.gameUnavailableSentence(selection, value, context, actionName)
+      : NO_LONGER_AVAILABLE;
+    if (isDevThrowEnabled()) {
+      console.warn(`[BoardSmith] ${detail} The player was told: "${message}"`);
+    }
+    return message;
+  }
+
+  /** The game's own `unavailable` sentence, refused loudly when it is not one. */
+  private gameUnavailableSentence(
+    selection: Pick<Selection, 'name'> & UnavailableRule,
+    value: unknown,
+    context: ActionContext,
+    actionName: string | undefined,
+  ): string {
+    const message: unknown = selection.unavailable!(value, context);
+    if (typeof message === 'string' && message.trim() !== '') return message;
+    const returned = typeof message === 'string' ? 'an empty string' : describeValidateReturn(message);
+    throw new Error(
+      `unavailable for selection '${selection.name}'` +
+        (actionName ? ` of action '${actionName}'` : '') +
+        ` returned ${returned}. Return the sentence the player reads when the value they ` +
+        `submitted is no longer listed, saying what happened and what to do next.`,
+    );
+  }
+
+  /** An element submission, for the dev log: its name and id, or what was sent. */
+  private describeSubmittedElement(value: unknown): string {
+    if (isElement(value)) return `${value.name} (id: ${value.id})`;
+    return JSON.stringify(value);
   }
 
   /**

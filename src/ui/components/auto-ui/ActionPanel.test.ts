@@ -807,9 +807,10 @@ describe('ActionPanel large board-anchored choice picks (#313)', () => {
     expect(wrapper.find('.board-handoff-btn').exists()).toBe(false);
   });
 
-  it('counts only what is still offered, after an earlier step took its value', () => {
-    // A value an earlier choice step of the same action already took is not
-    // offered again, so the count the player is told must leave it out too.
+  it('counts every candidate the pick offers, one an earlier step took included (#407)', () => {
+    // The count is the length of the list the pick offers. A value an earlier
+    // choice step of the same action took is still offered unless the game's own
+    // list leaves it out, so the count the player is told includes it.
     const wrapper = mountSpacePick(spaces(50), { name: 'second' }, createBoardInteraction(), {
       currentAction: ref('placeTwo'),
       currentArgs: ref({ first: 's0' }),
@@ -826,7 +827,7 @@ describe('ActionPanel large board-anchored choice picks (#313)', () => {
       }),
     });
 
-    expect(wrapper.find('.board-handoff-btn').text()).toContain('49');
+    expect(wrapper.find('.board-handoff-btn').text()).toContain('(50)');
   });
 
   it('defers a dependsOn / filterBy choice step the same way', () => {

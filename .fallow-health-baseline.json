@@ -123,11 +123,6 @@
         "count": 1
       }
     },
-    "src/cli/commands/evolve-bot-weights.ts": {
-      "complexity_high": {
-        "count": 1
-      }
-    },
     "src/cli/commands/example-derivation.ts": {
       "complexity_moderate": {
         "count": 2
@@ -580,9 +575,6 @@
       }
     },
     "src/ui/components/auto-ui/ActionPanel.vue": {
-      "complexity_high": {
-        "count": 1
-      },
       "complexity_moderate": {
         "count": 3
       }
@@ -706,7 +698,7 @@
     },
     "src/ui/composables/useBoardActionBridge.ts": {
       "complexity_high": {
-        "count": 2
+        "count": 1
       },
       "complexity_moderate": {
         "count": 5

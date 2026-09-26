@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
+import { withDevLog } from './dev-log.test-helper.js';
 import {
   Game,
   Space,
@@ -1131,7 +1132,7 @@ describe('Action Executor', () => {
       });
 
       expect(result.success).toBe(false);
-      expect(result.error).toContain('Invalid selection');
+      expect(result.error).toContain('That choice is no longer available');
     });
 
     it('catches an execution error and leads with a sentence the reader can act on (#47)', () => {
@@ -2915,9 +2916,11 @@ describe('Element selection API (F23/F28)', () => {
     // The unresolved ID is preserved, not dropped, so validation can reject it.
     expect((resolved.cards as unknown[]).length).toBe(2);
 
-    const result = executor.validateAction(action, player, resolved);
+    // The player reads that it is gone (#393); the engine's detail goes to the dev log.
+    const { result, log } = withDevLog(() => executor.validateAction(action, player, resolved));
     expect(result.valid).toBe(false);
-    expect(result.errors.join(' ')).toContain('Element ID 99999 not found');
+    expect(result.errors.join(' ')).toContain('That choice is no longer available');
+    expect(log).toContain('Element ID 99999 not found');
   });
 
   it('accepts a submission whose count is within multiSelect bounds', () => {

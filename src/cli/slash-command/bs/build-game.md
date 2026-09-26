@@ -164,7 +164,12 @@ Loop until there is nothing left to build or a stop condition fires
 5. **Consume each return by field name** and fill that entry's `Outcome`/`Detail`. Then route on
    `outcome` per Step 4. A chunk built in its own worktree reaches the main checkout only through
    `npx boardsmith chunk-merge <slug>`, one merge at a time, once it has closed; when that merge
-   records cross-chunk references, the audit's cross-chunk lens runs before anything else.
+   records cross-chunk references, the audit's cross-chunk lens runs before anything else. When
+   this chunk and one merged while it was built both edited a source file, the merge itself
+   vouches for the combined file: it re-runs both chunks' own checks (their tests, `chunk-check`,
+   `claim-quote-check`) on the combined tree and records the file in `design/MERGE-SIGNOFFS.md`
+   naming both chunks and the merge. That needs no designer sign-off. If one of those checks
+   fails, the merge is refused naming the check and the chunk; fix it on the chunk's branch.
 
 Between chunks, say one plain sentence about what the designer can now see in their game — or
 nothing, if there is nothing visible yet. Do not announce each dispatch.

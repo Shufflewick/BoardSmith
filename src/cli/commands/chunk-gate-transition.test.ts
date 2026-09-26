@@ -187,6 +187,44 @@ describe('recordGateTransition — the one-time transition', () => {
     await expect(fs.access(join(project, DESIGN_DIR, GATE_TRANSITION_MD))).rejects.toThrow();
   });
 
+  it('refuses, writing nothing, when a chunk it would cover has no claim it can read (#402)', async () => {
+    const offFormat = [
+      'Claim 1 — A player draws two cards each turn. rulebook/01-turn.md §"Draw"',
+      '',
+      'Claim 2 — Discards are public.',
+    ].join('\n');
+    const project = await makeProject([
+      { slug: 'deal', status: 'verified', preGate: true },
+      { slug: 'shop', status: 'verified', preGate: true, interpretation: offFormat },
+    ]);
+    const before = await readChunk(project, 'deal');
+    await expect(recordGateTransition({ project, by: 'Jane Designer', now: NOW })).rejects.toThrow(
+      /design\/chunks\/shop\/CHUNK\.md[\s\S]*a line starting with its number \(`1\. `\)[\s\S]*Nothing was written/,
+    );
+    await expect(fs.access(join(project, DESIGN_DIR, GATE_TRANSITION_MD))).rejects.toThrow();
+    expect(await readChunk(project, 'deal')).toBe(before);
+
+    // Once the claims are numbered, the same text is recorded.
+    const text = await readChunk(project, 'shop');
+    await fs.writeFile(chunkPath(project, 'shop'), text.replace(/^Claim (\d+) — /gm, '$1. '));
+    const result = await recordGateTransition({ project, by: 'Jane Designer', now: NOW });
+    expect(result.claims).toEqual({ deal: [1], shop: [1, 2] });
+  });
+
+  it('does not ask a final-acceptance or light chunk for claims', async () => {
+    const project = await makeProject([
+      { slug: 'deal', status: 'verified', preGate: true },
+      { slug: 'final-acceptance', status: 'verified', preGate: true, interpretation: 'Coverage check: complete.' },
+    ]);
+    const text = await readChunk(project, 'final-acceptance');
+    await fs.writeFile(
+      chunkPath(project, 'final-acceptance'),
+      text.replace(/^(## Ceremony\n[\s\S]*?)^full$/m, '$1final-acceptance'),
+    );
+    const result = await recordGateTransition({ project, by: 'Jane Designer', now: NOW });
+    expect(result.transitioned.map((t) => t.slug)).toEqual(['deal', 'final-acceptance']);
+  });
+
   it('writes nothing when no chunk needs the transition', async () => {
     const project = await makeProject([{ slug: 'deal' }]);
     const result = await recordGateTransition({ project, by: 'Jane Designer', now: NOW });
@@ -233,18 +271,24 @@ describe('after the transition', () => {
     expect(await checkSignoff(project, 'deal')).toEqual([]);
   });
 
-  it('claim-quote-check accepts the unquoted claims it recorded, and marks them', async () => {
-    const project = await makeProject([
-      { slug: 'deal', status: 'verified', preGate: true, interpretation: OLD_CLAIMS },
-    ]);
+  // A plain claim, written without bold, is a claim like a bold one (#402).
+  const PLAIN_CLAIMS = [
+    '1. A player draws two cards each turn. — cites rulebook/01-turn.md §"Draw"',
+    '   A second line of the same claim.',
+    '2. **Discards are public.** — cites rulebook/01-turn.md §"Discard"',
+    '3. The deck is reshuffled when empty. — cites rulebook/01-turn.md §"Deck"',
+  ].join('\n');
+
+  it.each([
+    ['bold claims', OLD_CLAIMS, [1, 2]],
+    ['plain claims beside a bold one (#402)', PLAIN_CLAIMS, [1, 2, 3]],
+  ])('claim-quote-check accepts the unquoted %s it recorded, and marks them', async (_, interpretation, numbers) => {
+    const project = await makeProject([{ slug: 'deal', status: 'verified', preGate: true, interpretation }]);
     const result = await recordGateTransition({ project, by: 'Jane Designer', now: NOW });
-    expect(result.claims).toEqual({ deal: [1, 2] });
+    expect(result.claims).toEqual({ deal: numbers });
     const checked = await checkClaimQuotes(project, 'deal');
     expect(checked.refusals).toEqual([]);
-    expect(checked.claims.map((c) => [c.number, c.preGate])).toEqual([
-      [1, true],
-      [2, true],
-    ]);
+    expect(checked.claims.map((c) => [c.number, c.preGate])).toEqual(numbers.map((n) => [n, true]));
   });
 
   it('a recorded claim whose text changed, and a claim added since, each need a quote', async () => {
@@ -271,7 +315,7 @@ describe('after the transition', () => {
       { slug: 'later', status: 'built', preGate: true, interpretation: OLD_CLAIMS },
     ]);
     const result = await recordGateTransition({ project, by: 'Jane Designer', now: NOW });
-    expect(result.claims).toEqual({});
+    expect(Object.keys(result.claims)).toEqual(['deal']);
     expect((await checkClaimQuotes(project, 'later')).refusals).toHaveLength(2);
   });
 });

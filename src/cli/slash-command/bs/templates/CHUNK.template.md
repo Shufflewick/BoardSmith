@@ -91,7 +91,9 @@ full
      form the composite source of truth. Append new claims as investigate discovers them; never
      renumber existing claims.
 
-     Every claim carries the exact source passage it rests on and where it is. `Source:` paths
+     A claim is a line that starts with its number, `1. `, at the start of the line; bold is
+     optional, and every such line is checked. Every claim carries the exact source passage it
+     rests on and where it is. `Source:` paths
      are relative to design/; cite a Markdown source (a slice, RULINGS.md) by heading or line
      range, and code by file and line. Something no source passage backs is not a claim but an
      open question for the designer, listing every place that was searched:

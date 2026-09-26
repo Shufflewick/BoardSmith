@@ -209,57 +209,14 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
   const currentMultiSelect = computed(() => currentPickCounts.value.multiSelect);
   const currentOrderedList = computed(() => currentPickCounts.value.orderedList);
 
-  // Choices for the current pick, with already-selected choice values removed
-  // (mirrors ActionPanel.filteredChoices but WITHOUT the D-03 anchored filter —
-  // the board needs the anchored choices, those are exactly the clickable ones).
-  const choicesForBoard = computed<ChoiceWithRefs[]>(() => {
-    if (!currentPick.value) return [];
-    // Use the controller's REACTIVE currentChoices (reads snapshotVersion) so this
-    // recomputes when async-fetched choices arrive. getCurrentChoices() is a bare
-    // function that does not track the fetch version — depending on it meant the
-    // board never registered choices that landed after the watcher first ran (the
-    // Checkers destination step: pick a piece → destinations never became
-    // selectable because their choices arrived after the watcher had run once).
-    let choices = controller.currentChoices.value.slice();
-    const meta = currentActionMeta.value;
-    if (meta) {
-      const alreadySelected = new Set<unknown>();
-      for (const sel of meta.selections) {
-        if (sel.type === 'choice' && sel.name !== currentPick.value.name) {
-          const v = currentArgs.value[sel.name];
-          if (v !== undefined) alreadySelected.add(v);
-        }
-      }
-      if (alreadySelected.size > 0) choices = choices.filter(c => !alreadySelected.has(c.value));
-    }
-    return choices;
-  });
-
-  // Valid elements for the current element/elements pick, excluding elements
-  // already chosen in OTHER element selections of the same action.
-  const filteredValidElements = computed<EnrichedValidElement[]>(() => {
-    const sel = currentPick.value;
-    if (!sel || (sel.type !== 'element' && sel.type !== 'elements')) return [];
-    // controller.validElements is the REACTIVE source for the current pick (it reads
-    // snapshotVersion), so a second-step element pick whose elements are fetched
-    // asynchronously still surfaces on the board. getValidElements() is non-reactive.
-    const validElements = controller.validElements.value;
-    if (validElements.length === 0) return [];
-
-    const alreadySelectedIds = new Set<number>();
-    const meta = currentActionMeta.value;
-    if (meta) {
-      for (const other of meta.selections) {
-        if ((other.type === 'element' || other.type === 'elements') && other.name !== sel.name) {
-          const v = currentArgs.value[other.name];
-          if (typeof v === 'number') alreadySelectedIds.add(v);
-          else if (Array.isArray(v)) for (const id of v) if (typeof id === 'number') alreadySelectedIds.add(id);
-        }
-      }
-    }
-    if (alreadySelectedIds.size === 0) return validElements;
-    return validElements.filter(e => !alreadySelectedIds.has(e.id));
-  });
+  // What the open pick offers, exactly as the engine lists it (#407): the same
+  // two computeds the Action Panel reads, so the board and the panel can never
+  // offer different things. They are REACTIVE (they read snapshotVersion), so a
+  // list fetched after the watcher below first ran still reaches the board (the
+  // Checkers destination step). The board keeps the anchored choices the panel
+  // splits off: those are exactly the clickable ones.
+  const offeredChoices = controller.currentChoices;
+  const offeredElements = controller.validElements;
 
   // ── Action lifecycle helpers (controller delegation) ─────────────────────────
 
@@ -299,10 +256,10 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
     if (isViewingHistory.value) return;
     const selection = currentPick.value;
     // Capture choices BEFORE fill() — fill() advances the pick state so
-    // choicesForBoard.value would return the NEXT pick's choices after the await.
+    // offeredChoices.value would return the NEXT pick's choices after the await.
     // selection.choices only holds static metadata choices (never dynamic ones),
-    // so use choicesForBoard.value to cover both static and dynamically-fetched choices.
-    const choicesSnapshot = selection?.type === 'choice' ? choicesForBoard.value.slice() : [];
+    // so use offeredChoices.value to cover both static and dynamically-fetched choices.
+    const choicesSnapshot = selection?.type === 'choice' ? offeredChoices.value.slice() : [];
     const result = await controller.fill(name, value);
     if (!result.valid) {
       console.error('Selection failed:', result.error);
@@ -344,7 +301,7 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
     const sourceRefs: ElementRef[] = [];
     const targetRefs: ElementRef[] = [];
     for (const val of selectedValues) {
-      const choice = choicesForBoard.value.find(c => c.value === val);
+      const choice = offeredChoices.value.find(c => c.value === val);
       if (!choice) continue;
       for (const r of choice.refs ?? []) {
         if (r.role === 'source') sourceRefs.push(r.ref);
@@ -562,7 +519,7 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
 
   // Feed the board substrate's selectable elements + click callback for the
   // current pick. This is the watcher whose absence broke board-centric play.
-  watch([currentPick, filteredValidElements, choicesForBoard], ([selection]) => {
+  watch([currentPick, offeredElements, offeredChoices], ([selection]) => {
     if (!selection) {
       board.setValidElements([], () => {});
       board.setDraggableSelectedElement(null);
@@ -578,7 +535,7 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
     let onSelect: ((id: number) => void) | null = null;
 
     if (selection.type === 'element' || selection.type === 'elements') {
-      validElems = filteredValidElements.value.map(ve => ({
+      validElems = offeredElements.value.map(ve => ({
         id: ve.id,
         ref: elementClickRef(ve),
         disabled: ve.disabled,
@@ -598,8 +555,8 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
     } else if (selection.type === 'choice') {
       // Note: selection.choices carries static metadata choices only; dynamic choices
       // (fetched via fetchPickChoices) are NOT present on selection.choices. Use
-      // choicesForBoard.value (reactive, reads snapshotVersion) for the actual choices.
-      const choices = choicesForBoard.value;
+      // offeredChoices.value (reactive, reads snapshotVersion) for the actual choices.
+      const choices = offeredChoices.value;
       const choicesWithRefs = choices.filter((c: ChoiceWithRefs) => (c.refs ?? []).length > 0);
       if (choicesWithRefs.length > 0) {
         const refToChoice = new Map<number, { value: unknown; ref: ElementRef; disabled?: string; display: string }>();
@@ -702,7 +659,7 @@ export function useBoardActionBridge(opts: BoardActionBridgeOptions): void {
       // triggerElementSelect already handled the click via onElementSelect.
       if (board.onElementSelect) return;
       if (Object.values(currentArgs.value).includes(selected.id)) return;
-      const validElem = filteredValidElements.value.find(e => {
+      const validElem = offeredElements.value.find(e => {
         if (selected.id !== undefined && e.id === selected.id) return true;
         if (selected.notation && elementClickRef(e).notation === selected.notation) return true;
         return false;

@@ -4,7 +4,8 @@ import { execFileSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { chunkMerge, resolveDesignConflicts } from './chunk-merge.js';
-import { recordSignoff } from './chunk-signoff.js';
+import { assessSignoffs, recordSignoff } from './chunk-signoff.js';
+import { recordVerifiedAgainst } from './chunk-provenance.js';
 import { checkConstraints, type TestRunner } from './constraint-check.js';
 
 /**
@@ -316,6 +317,164 @@ describe('chunkMerge: preconditions', () => {
     const { refusals } = await chunkMerge(main, 'trading');
     expect(refusals).toEqual([expect.stringMatching(/has no vitest config[\s\S]*boardsmith doctor --fix/)]);
     expect([head(), status()]).toEqual([before, '']);
+  });
+});
+
+describe('chunkMerge: a source file two chunks built together both edited (#403)', () => {
+  /** One rules module both chunks add to, each in its own part. */
+  const world = (trading: number, quests: number) =>
+    `// world\n// a\n// b\n// c\nexport const TRADING = ${trading};\n// one\n// two\n// three\nexport const QUESTS = ${quests};\n`;
+
+  /**
+   * Each chunk's own test, run as code: quests' test assumes trading's constant is still 0, so it
+   * passes on quests' branch and fails once trading's edit is in the combined file.
+   */
+  const ownTestsRunner: TestRunner = async (projectDir, files) => {
+    for (const file of files) {
+      const source = await read(projectDir, file);
+      if (source.includes('assumes TRADING = 0') && (await read(projectDir, 'src/world.ts')).includes('TRADING = 1')) {
+        return { ok: false, output: `${file}: expected TRADING to be 0` };
+      }
+    }
+    return budgetRunner(projectDir, files);
+  };
+
+  /** A chunk whose Build Manifest names src/world.ts, with a quoted claim and its own test. */
+  async function sharedChunkMd(slug: string, claim: string): Promise<string> {
+    return (await chunkMd(slug))
+      .replace(`| src/${slug}.ts | written |`, `| src/${slug}.ts | written |\n| src/world.ts | written |`)
+      .replace(/^1\. \*\*<!-- claim text -->\*\*\n.*\n.*\n/m, `${claim}\n`)
+      .replace('<!-- | src/...test.ts | 1, 3, 4 | pending / yes | -->', `| tests/${slug}.test.ts | 1 | yes |`);
+  }
+
+  const TRADING_CLAIM = [
+    '1. **Every trade is public.**',
+    '   > Every trade is public.',
+    '   Source: rulebook/04-trading.md §"Trading"',
+  ].join('\n');
+  const QUESTS_CLAIM = [
+    '1. **A quest has one giver.**',
+    '   > A quest has one giver.',
+    '   Source: rulebook/07-quests.md §"Quests"',
+  ].join('\n');
+
+  async function buildShared(
+    slug: 'trading' | 'quests',
+    options: { claim?: string; test?: string; worldFile?: string; chunkCheck?: boolean } = {},
+  ): Promise<void> {
+    const claim = options.claim ?? (slug === 'trading' ? TRADING_CLAIM : QUESTS_CLAIM);
+    const worktree = await buildOnBranch(slug, 100, {
+      [`design/chunks/${slug}/CHUNK.md`]: await sharedChunkMd(slug, claim),
+      [`tests/${slug}.test.ts`]: options.test ?? `// ${slug}'s own test\n`,
+      'src/world.ts': options.worldFile ?? (slug === 'trading' ? world(1, 0) : world(0, 1)),
+    });
+    if (options.chunkCheck === false) return;
+    await recordVerifiedAgainst(slug, { project: worktree });
+    git(worktree, 'add', '-A');
+    git(worktree, 'commit', '-q', '-m', `chunk-${slug}/close: chunk-check`);
+  }
+
+  beforeEach(async () => {
+    await write(main, {
+      'src/world.ts': world(0, 0),
+      'design/rulebook/04-trading.md': '# Trading\n\nEvery trade is public.\n',
+      'design/rulebook/07-quests.md': '# Quests\n\nA quest has one giver.\n',
+    });
+    git(main, 'add', '-A');
+    git(main, 'commit', '-q', '-m', 'world');
+  });
+
+  it("vouches for the combined file with both chunks' own checks, and records it naming both chunks and the merge", async () => {
+    await buildShared('trading');
+    await buildShared('quests');
+    expect((await chunkMerge(main, 'trading', { runTests: ownTestsRunner })).refusals).toEqual([]);
+    const mainBefore = head();
+    const branchTip = git(main, 'rev-parse', 'chunk/quests').trim();
+
+    const result = await chunkMerge(main, 'quests', { runTests: ownTestsRunner });
+    expect(result.refusals).toEqual([]);
+    expect(await read(main, 'src/world.ts')).toBe(world(1, 1));
+
+    const ledger = await read(main, 'design/MERGE-SIGNOFFS.md');
+    expect(ledger).toContain('### src/world.ts');
+    expect(ledger).toContain('- Chunks: quests, trading');
+    expect(ledger).toContain(`- Merge: chunk/quests ${branchTip} into ${mainBefore}`);
+    expect(ledger).toMatch(/^- Content: [0-9a-f]{64}$/m);
+    expect(ledger).toMatch(/^- Checks: tests, chunk-check, claim-quote-check$/m);
+    // The merge commit carries the record, and its parents are the two commits it names.
+    expect(git(main, 'rev-parse', 'HEAD^1', 'HEAD^2').trim().split('\n')).toEqual([mainBefore, branchTip]);
+
+    const signoffs = await assessSignoffs(main);
+    expect(signoffs.get('trading')).toEqual({
+      problems: [],
+      sharedEdits: [{ path: 'src/world.ts', coveredBy: 'quests, trading', how: 'merged' }],
+    });
+    expect(signoffs.get('quests')).toEqual({
+      problems: [],
+      sharedEdits: [{ path: 'src/world.ts', coveredBy: 'quests, trading', how: 'merged' }],
+    });
+    expect(status()).toBe('');
+  });
+
+  /**
+   * Merges `first`, then `second`, and expects the second merge to be refused with `refusal`,
+   * leaving the main line, its working tree and design/MERGE-SIGNOFFS.md as they were.
+   */
+  async function expectSecondMergeRefused(first: string, second: string, refusal: RegExp): Promise<void> {
+    expect((await chunkMerge(main, first, { runTests: ownTestsRunner })).refusals).toEqual([]);
+    const before = head();
+    const result = await chunkMerge(main, second, { runTests: ownTestsRunner });
+    expect(result.merged).toBe(false);
+    expect(result.refusals.join('\n')).toMatch(refusal);
+    expect([head(), status()]).toEqual([before, '']);
+    await expect(fs.access(join(main, 'design/MERGE-SIGNOFFS.md'))).rejects.toThrow();
+  }
+
+  it("refuses when a chunk's own tests fail on the combined file, naming the check and the chunk", async () => {
+    await buildShared('trading');
+    await buildShared('quests', { test: '// quests: assumes TRADING = 0\n' });
+    await expectSecondMergeRefused(
+      'trading',
+      'quests',
+      /quests's own tests \(tests\/quests\.test\.ts\) fail on the combined tree[\s\S]*src\/world\.ts[\s\S]*expected TRADING to be 0/,
+    );
+  });
+
+  it("refuses when a chunk's claim-quote-check fails on the combined tree", async () => {
+    // Trading quotes Ruling 1; quests, built alongside, rewords it.
+    const rulingClaim = ['1. **The core loop comes first.**', '   > the core loop.', '   Source: RULINGS.md §"Ruling 1"'].join('\n');
+    await buildShared('trading', { claim: rulingClaim });
+    const quests = join(dirname(main), 'wt-quests');
+    await buildShared('quests');
+    await write(quests, { 'design/RULINGS.md': '# Rulings\n\n### Ruling 1\n- Decision: the game loop.\n' });
+    git(quests, 'commit', '-q', '-am', 'chunk-quests/revise: Ruling 1 reworded');
+    await expectSecondMergeRefused('quests', 'trading', /claim-quote-check fails for trading on the combined tree[\s\S]*Claim 1/);
+  });
+
+  it("refuses when a chunk's chunk-check fails on the combined tree", async () => {
+    await buildShared('trading');
+    await buildShared('quests', { chunkCheck: false });
+    await expectSecondMergeRefused('trading', 'quests', /chunk-check fails for quests on the combined tree[\s\S]*Verified Against/);
+  });
+
+  it("refuses, and leaves no record behind, when a chunk's sign-off fails once the merge has vouched", async () => {
+    await buildShared('trading');
+    await buildShared('quests');
+    expect((await chunkMerge(main, 'trading', { runTests: ownTestsRunner })).refusals).toEqual([]);
+    // An edit to trading's own file on the main line that no chunk accounts for voids its sign-off.
+    await write(main, { 'src/trading.ts': 'export const PARTITION_BYTES = 101;\n' });
+    git(main, 'commit', '-q', '-am', 'an unaccounted edit');
+    const before = head();
+    const result = await chunkMerge(main, 'quests', { runTests: ownTestsRunner });
+    expect(result.refusals.join('\n')).toMatch(/chunk-check fails for trading on the combined tree[\s\S]*src\/trading\.ts changed after it/);
+    expect([head(), status()]).toEqual([before, '']);
+    await expect(fs.access(join(main, 'design/MERGE-SIGNOFFS.md'))).rejects.toThrow();
+  });
+
+  it('refuses a branch that writes the merge sign-offs itself', async () => {
+    await buildOnBranch('trading', 100, { 'design/MERGE-SIGNOFFS.md': '# Merge Sign-offs\n' });
+    const result = await chunkMerge(main, 'trading', { runTests: budgetRunner });
+    expect(result.refusals.join('\n')).toMatch(/design\/MERGE-SIGNOFFS\.md/);
   });
 });
 

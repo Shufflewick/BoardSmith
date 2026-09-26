@@ -20,6 +20,7 @@ import type {
   OnSelectContext,
 } from './types.js';
 import { DEFAULT_TEXT_MAX_LENGTH } from './types.js';
+import type { TextPattern } from './text-rules.js';
 import { assertLabellableRange, assertUsableInitial } from './number-labels.js';
 
 /**
@@ -80,6 +81,13 @@ type DisabledOptions<G extends Game, T, P> = {
   prepare?: (context: ActionContext<G>) => P;
   /** Check if a choice should be disabled. Returns reason string or false. */
   disabled?: (choice: T, context: ActionContext<G>, prepared: P) => string | false;
+  /**
+   * The player-facing refusal for a submitted value that is no longer listed
+   * (#393). `value` is what was submitted: a choice's value, or an element if
+   * it still exists and otherwise the id sent. Without it the player reads a
+   * plain default and the engine's detail goes to the dev log.
+   */
+  unavailable?: (value: unknown, context: ActionContext<G>) => string;
 };
 
 /**
@@ -95,6 +103,28 @@ function assertPrepareHasDisabled(method: string, name: string, options: { prepa
       `rule that reads it, or remove prepare.`
     );
   }
+}
+
+/**
+ * Picks are asked in declared order, optional ones included (#392), so a pick
+ * may only read an EARLIER pick through `dependsOn` or `filterBy`. One naming a
+ * later pick would be asked while its source is unanswered and draw an empty
+ * list. Refused where the action is declared.
+ */
+function assertReadsEarlierPick(
+  method: string,
+  name: string,
+  declared: readonly Selection[],
+  source: string | undefined,
+  relation: 'depends on' | 'filters by',
+): void {
+  if (source === undefined || declared.some((selection) => selection.name === source)) return;
+  const earlier = declared.map((selection) => `'${selection.name}'`).join(', ') || 'none';
+  throw new Error(
+    `${method}('${name}') ${relation} '${source}', which is not declared before it. Picks are asked ` +
+    `in the order the action declares them, so declare '${source}' earlier in the chain, or name one of ` +
+    `the picks that come before '${name}' (${earlier}).`
+  );
 }
 
 /** Every `chooseFrom` option except the repeat options ({@link RepeatingOptions}) and the disabled rule ({@link DisabledOptions}). */
@@ -614,6 +644,8 @@ export class Action<
     options: ChooseFromOptions<G, T> & DisabledOptions<G, T, P> & Partial<RepeatingOptions<T>>
   ): Action<G, AddArg<A, K, T>> | Action<G, AddArg<A, K, T[]>> {
     assertPrepareHasDisabled('chooseFrom', name, options);
+    assertReadsEarlierPick('chooseFrom', name, this.definition.selections, options.dependsOn, 'depends on');
+    assertReadsEarlierPick('chooseFrom', name, this.definition.selections, options.filterBy?.selectionName, 'filters by');
     // A SET AND A SEQUENCE ARE DIFFERENT QUESTIONS (#249), and a selection that
     // asked both would have to pick one silently: the set refuses the repeat the
     // list exists to allow. Refused at declaration time, where the author is
@@ -643,6 +675,7 @@ export class Action<
       orderedList: options.orderedList,
       prepare: options.prepare,
       disabled: options.disabled,
+      unavailable: options.unavailable,
       onSelect: options.onSelect,
       onCancel: options.onCancel,
     } as ChoiceSelection<T>;
@@ -723,6 +756,7 @@ export class Action<
     options: ChooseElementOptions<G, T> & DisabledOptions<G, T, P> & Partial<RepeatingOptions<T>> = {}
   ): Action<G, AddArg<A, K, T>> | Action<G, AddArg<A, K, T[]>> {
     assertPrepareHasDisabled('chooseElement', name, options);
+    assertReadsEarlierPick('chooseElement', name, this.definition.selections, options.dependsOn, 'depends on');
     const selection = {
       type: 'element',
       name,
@@ -740,6 +774,7 @@ export class Action<
       repeatUntil: options.repeatUntil,
       prepare: options.prepare,
       disabled: options.disabled,
+      unavailable: options.unavailable,
       onSelect: options.onSelect,
       onCancel: options.onCancel,
     } as ElementSelection<T>;
@@ -832,6 +867,7 @@ export class Action<
     }
   ): Action<G, AddArg<A, K, T[]>> {
     assertPrepareHasDisabled('chooseElements', name, options);
+    assertReadsEarlierPick('chooseElements', name, this.definition.selections, options.dependsOn, 'depends on');
     const selection = {
       type: 'elements',
       name,
@@ -848,6 +884,7 @@ export class Action<
       repeatUntil: options.repeatUntil,
       prepare: options.prepare,
       disabled: options.disabled,
+      unavailable: options.unavailable,
       onSelect: options.onSelect as ElementsSelection<T>['onSelect'],
       onCancel: options.onCancel,
     } as ElementsSelection<T>;
@@ -865,6 +902,10 @@ export class Action<
    * do not set `maxLength`, {@link DEFAULT_TEXT_MAX_LENGTH} is applied; set
    * your own, lower, bound whenever you know the real one.
    *
+   * **What no text may contain (#394).** Control characters (C0, DEL, C1) and
+   * unpaired UTF-16 surrogates are refused, with a sentence the player can act
+   * on; a `multiline` field admits line feed and tab. See `text-rules.ts`.
+   *
    * **Bounding length is not sanitization.** The engine validates length and
    * `pattern`/`validate`; it does not escape anything. Text a player types is
    * rendered in other players' clients, so for anything but free prose supply
@@ -874,9 +915,13 @@ export class Action<
    * @param options - Configuration for the text input
    * @param options.prompt - User-facing prompt text, or a function evaluated
    *   against the current game state each time the pick is rendered
-   * @param options.pattern - Regex pattern the input must match
+   * @param options.pattern - `{ regex, message }`: the regex the input must
+   *   match, and the sentence the player is shown when it does not
    * @param options.minLength - Minimum required string length
    * @param options.maxLength - Maximum allowed string length. Default: {@link DEFAULT_TEXT_MAX_LENGTH}
+   * @param options.maxBytes - The most UTF-8 bytes the text may add to a world
+   *   partition, measured as the partition store measures it. A positive
+   *   integer. Without it, `maxLength` bounds the bytes at three times itself
    * @param options.multiline - Draw the field as a resizable box rather than a
    *   single line, with a character count and an explicit submit button so
    *   Enter inserts a newline. Presentation only: the value, the bounds and the
@@ -895,7 +940,7 @@ export class Action<
    *     prompt: 'Enter your nickname',
    *     minLength: 1,
    *     maxLength: 20,
-   *     pattern: /^[a-zA-Z0-9_]+$/,
+   *     pattern: { regex: /^[a-zA-Z0-9_]+$/, message: 'Use letters, digits and underscores only.' },
    *   })
    *   .execute(({ nickname }) => {
    *     ctx.player.nickname = nickname;
@@ -919,9 +964,10 @@ export class Action<
     name: K,
     options: {
       prompt?: string | ((context: ActionContext<G>) => string);
-      pattern?: RegExp;
+      pattern?: TextPattern;
       minLength?: number;
       maxLength?: number;
+      maxBytes?: number;
       multiline?: boolean;
       optional?: boolean | string;
       validate?: (value: string, args: Record<string, unknown>, context: ActionContext<G>) => boolean | string;
@@ -931,6 +977,12 @@ export class Action<
       onCancel?: (context: OnSelectContext) => void;
     } = {}
   ): Action<G, AddArg<A, K, string>> {
+    if (options.maxBytes !== undefined && !(Number.isInteger(options.maxBytes) && options.maxBytes > 0)) {
+      throw new Error(
+        `enterText('${name}') was given maxBytes ${String(options.maxBytes)}. maxBytes is the most ` +
+          'bytes the text may take when stored, so it must be a whole number above zero.',
+      );
+    }
     const selection = {
       type: 'text',
       name,
@@ -938,6 +990,7 @@ export class Action<
       pattern: options.pattern,
       minLength: options.minLength,
       maxLength: options.maxLength ?? DEFAULT_TEXT_MAX_LENGTH,
+      maxBytes: options.maxBytes,
       multiline: options.multiline,
       optional: options.optional,
       validate: options.validate,

@@ -33,9 +33,10 @@ import { describe, expect, it } from "vitest";
 import { Game, Piece, Player, Space } from "../engine/index.js";
 import type { ActionDefinition, ElementJSON, GameOptions } from "../engine/index.js";
 import { BoardSmithWorldEngine } from "./engine.js";
-import { worldAction } from "./action.js";
+import { worldAction, type WorldAction } from "./action.js";
 import type { StoredPartition } from "./contract.js";
 import { MapStore, offerStamp } from "./stored-world.test-helper.js";
+import { STAMP as COMMAND_STAMP } from "./village.test-helper.js";
 
 class Operative extends Piece<FleetGame> {}
 
@@ -118,6 +119,19 @@ function newEngine(): BoardSmithWorldEngine {
     actions: [deploy],
     view: () => [FLEET],
   });
+}
+
+/** An engine running one action, with the fleet resident. */
+async function engineFor(action: ActionDefinition) {
+  const engine = new BoardSmithWorldEngine({
+    game: newGame(),
+    seats: new Map([["player-a", 1]]),
+    store: new MapStore(genesis()),
+    actions: [action],
+    view: () => [FLEET],
+  });
+  await engine.hydrate([FLEET]);
+  return engine;
 }
 
 /** An engine with the fleet resident, which is what an offer needs. */
@@ -249,18 +263,6 @@ describe("#384 — an offer cannot write to the world it is describing", () => {
     })
     .execute(() => {});
 
-  async function engineFor(action: ActionDefinition) {
-    const engine = new BoardSmithWorldEngine({
-      game: newGame(),
-      seats: new Map([["player-a", 1]]),
-      store: new MapStore(genesis()),
-      actions: [action],
-      view: () => [FLEET],
-    });
-    await engine.hydrate([FLEET]);
-    return engine;
-  }
-
   it("REFUSES a write from a candidate callback, and leaves the world alone", async () => {
     const engine = await engineFor(meddle);
 
@@ -333,5 +335,48 @@ describe("#384 — an offer cannot write to the world it is describing", () => {
     const [offer] = await engine.offersFor("player-a", STAMP);
 
     expect(offer!.selections.find((pick) => pick.name === "ship")!.choices).toHaveLength(2);
+  });
+});
+
+/**
+ * #393: A CHOICE GONE STALE IS REFUSED IN THE GAME'S WORDS, OR IN PLAIN ONES.
+ *
+ * A world's choices go stale while a player is choosing: another seat took the
+ * offer, the ship sailed. The refusal used to be the engine's own text, raw
+ * values and a list of the valid ones, and the host showed it to the player.
+ * `unavailable` lets the game write that sentence, with the world in scope; a
+ * game that does not gets a plain one that says what to do.
+ */
+describe("#393 — a submitted choice that is no longer listed", () => {
+  const board = (unavailable?: Parameters<WorldAction<FleetGame>["chooseFrom"]>[1]["unavailable"]) =>
+    worldAction<FleetGame>("board")
+      .needs(() => [FLEET])
+      .chooseFrom("ship", {
+        choices: ({ game }) => game.all(Ship).map((ship) => ship.name!),
+        unavailable,
+      })
+      .execute(() => {});
+
+  it("refuses in plain words when the game says nothing", async () => {
+    const engine = await engineFor(board());
+
+    await expect(
+      engine.applyCommand("player-a", { name: "board", args: { ship: "galleon" } }, COMMAND_STAMP),
+    ).rejects.toThrow(
+      /^That choice is no longer available\. Things changed while you were choosing, so please choose again\.$/,
+    );
+  });
+
+  it("refuses in the game's own words, with the world in scope", async () => {
+    const engine = await engineFor(
+      board((value, { world, player }) => {
+        const dock = world.partition(FLEET) as Dock;
+        return `The ${String(value)} has left ${dock.name} before seat ${player.seat} could board. Pick another ship.`;
+      }),
+    );
+
+    await expect(
+      engine.applyCommand("player-a", { name: "board", args: { ship: "galleon" } }, COMMAND_STAMP),
+    ).rejects.toThrow(/^The galleon has left dock before seat 1 could board\. Pick another ship\.$/);
   });
 });
