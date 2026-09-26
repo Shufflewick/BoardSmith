@@ -1,16 +1,19 @@
 import { createHash } from 'node:crypto';
 import { promises as fs } from 'node:fs';
-import { resolve } from 'node:path';
+import { isAbsolute, relative, resolve, sep } from 'node:path';
 import chalk from 'chalk';
 import {
+  GATE_TRANSITION_MD,
   SKETCH_MD,
   WAIVERS_MD,
   chunkMdPath,
+  chunkSlugs,
+  designDir,
   designPath,
-  isDesignArtifact,
   relChunkMdPath,
 } from '../lib/project-paths.js';
 import { assertBareName } from '../lib/user-name.js';
+import { type GateTransition, readGateTransition } from '../lib/gate-transition.js';
 import {
   extractSection,
   findHeadingIndex,
@@ -39,10 +42,22 @@ import { checkConstraints } from './constraint-check.js';
  *     and it must cover every item.
  *   - A waiver lives in `design/WAIVERS.md`, names its chunks one by one, and expires. It is good
  *     for exactly the chunks it names; citing it from any other chunk is refused.
- *   - A sign-off is bound to the chunk as it was signed (#295): it records a hash of the chunk's
- *     Build Manifest source files, and `checkSignoff` refuses it once that code changes.
- *     `boardsmith chunk-reopen` voids it outright, so a reopened chunk whose Status is typed
- *     back to verified is refused even when no code moved.
+ *   - A sign-off is bound to the chunk as it was signed (#295): it records a content hash of each
+ *     source file the chunk's Build Manifest names. `boardsmith chunk-reopen` voids it outright,
+ *     so a reopened chunk whose Status is typed back to verified is refused even when no code
+ *     moved.
+ *   - An edit to one of those files after the sign-off must be accounted for (#396). Chunks share
+ *     files (one rules module, one test support file), so a later chunk editing its own part of a
+ *     shared file is the normal course of a build, not a change to the signed chunk. An edit is
+ *     accounted for when a LATER sign-off of another chunk recorded the file exactly as it is now,
+ *     or when another chunk that names the file is being built (Status approved or built), whose
+ *     own sign-off will have to cover it. Accounted edits are reported as `sharedEdits`, which is
+ *     information, not a refusal. An edit nothing accounts for (a signed chunk reworked without a
+ *     reopen, or an edit left behind by nobody's chunk) voids every sign-off naming that file.
+ *   - A chunk verified before this gate existed gets through it once, by `boardsmith
+ *     chunk-gate-transition` (#397): the designer records it in `design/GATE-TRANSITION.md`, and
+ *     the chunk's block reads `Basis: transition`. That basis counts only for a chunk the ledger
+ *     names, so it cannot be typed into a chunk verified since.
  *
  * HONEST LIMITATION: code cannot prove a human typed the name. What it does is make the failure
  * modes the audit found impossible to reach by accident: a run cannot sign as itself, cannot skip
@@ -56,32 +71,44 @@ export const SIGNOFF_END = '<!-- boardsmith:signoff:end -->';
 /** The body a freshly scaffolded CHUNK.md carries before anyone signs it off. */
 const SIGNOFF_EMPTY = '_Not yet signed off._';
 
-const VERIFIED = 'verified';
+export const VERIFIED = 'verified';
 const VERIFIED_WAIVED = 'verified (user-waived)';
 
 /**
- * The three ways a chunk can be done, and nothing else.
+ * The ways a chunk can be done, and nothing else.
  *
  * - `designer`: the designer played the script and confirmed every checklist item.
  * - `waiver`: the designer granted a waiver that names this chunk and has not expired.
  * - `automated`: the chunk has no designer playtest (not a milestone, or no visible UI), so the
  *   automated test and sim pass stands in; the evidence names that pass.
+ * - `transition`: the chunk was verified before this gate existed, and the designer recorded it
+ *   in the project's one-time gate transition; `status` is the verified Status it kept.
  */
 type SignoffBasis =
   | { basis: 'designer'; by: string; when: string; observed: number[] }
   | { basis: 'waiver'; waiver: string; by: string; when: string }
-  | { basis: 'automated'; when: string; evidence: string };
+  | { basis: 'automated'; when: string; evidence: string }
+  | { basis: 'transition'; by: string; when: string; status: string };
 
-/** Every basis also records `code`: the chunk's code hash at sign-off (`chunkCodeHash`). */
-type SignoffRecord = SignoffBasis & { code: string };
+/**
+ * Each source file the Build Manifest names, mapped to its content at sign-off: a SHA-256, or
+ * `missing`, or `outside-project` for a path that leaves the project (`chunkCodeFiles`).
+ */
+type CodeFiles = Record<string, string>;
+
+/** Every basis also records `code`: the chunk's source files as they were at sign-off. */
+export type SignoffRecord = SignoffBasis & { code: CodeFiles };
 
 interface ParsedSignoff {
   /**
    * `absent`: no section. `empty`: scaffolded, never signed. `reopened`: signed once, then voided
-   * by `boardsmith chunk-reopen`. `malformed`: present but unreadable.
+   * by `boardsmith chunk-reopen`. `malformed`: present but unreadable. `whole-file`: a sign-off
+   * recorded before #396, with one hash over all its files, which cannot say which file moved.
    */
-  state: 'absent' | 'empty' | 'reopened' | 'malformed' | 'recorded';
+  state: 'absent' | 'empty' | 'reopened' | 'malformed' | 'whole-file' | 'recorded';
   record?: SignoffRecord;
+  /** A `whole-file` sign-off: its basis, and the one hash it recorded over all its files. */
+  wholeFile?: { basis: SignoffBasis; hash: string };
   reopened?: { when: string; reason: string };
 }
 
@@ -120,7 +147,7 @@ const RUN_IDENTITIES = new Set([
   'system',
 ]);
 
-function designerNameProblem(by: string, flag: string): string | undefined {
+export function designerNameProblem(by: string, flag: string): string | undefined {
   const name = by.trim();
   if (!name) {
     return `${flag} is empty. Pass the designer's own name: the person who answered.`;
@@ -141,7 +168,7 @@ function stripComments(text: string): string {
   return text.replace(/<!--[\s\S]*?-->/g, '');
 }
 
-function readStatus(chunkText: string): string | undefined {
+export function readStatus(chunkText: string): string | undefined {
   return /^Status:\s*(.*)$/m.exec(chunkText)?.[1].trim();
 }
 
@@ -216,55 +243,75 @@ function sha256(data: string | Buffer): string {
   return createHash('sha256').update(data).digest('hex');
 }
 
+const MISSING = 'missing';
+const OUTSIDE_PROJECT = 'outside-project';
+
+function isInside(dir: string, path: string): boolean {
+  const rel = relative(dir, path);
+  return rel === '' || (rel !== '..' && !rel.startsWith(`..${sep}`) && !isAbsolute(rel));
+}
+
 /**
- * The chunk's code as a sign-off sees it: one SHA-256 over every source file its
- * `## Build Manifest` names, each paired with its own content hash, in path order. Adding,
- * removing or editing any of those files changes it. Design ledgers a manifest may list
- * (`DECISIONS.md`, `RULINGS.md`, rulebook slices) are left out: close writes them after the
- * sign-off, and they are not the code the designer played.
+ * The chunk's code as a sign-off sees it: every source file its `## Build Manifest` names, each
+ * with its own content hash. Anything under `design/` is left out however the manifest writes it
+ * (`DECISIONS.md` or `design/DECISIONS.md`, a rulebook slice, a chunk's evidence): close writes
+ * the ledgers after the sign-off, and none of it is the code the designer played.
  */
-async function chunkCodeHash(projectDir: string, chunkText: string): Promise<string> {
-  const paths = [
-    ...new Set(
-      parseBuildManifest(chunkText)
-        .entries.map((e) => e.path)
-        .filter((p) => !isDesignArtifact(p)),
-    ),
-  ].sort();
-  const lines: string[] = [];
+export async function chunkCodeFiles(projectDir: string, chunkText: string): Promise<CodeFiles> {
+  const design = designDir(projectDir);
+  const files: CodeFiles = {};
+  const paths = [...new Set(parseBuildManifest(chunkText).entries.map((e) => e.path))].sort();
   for (const path of paths) {
     const abs = resolveManifestPath(projectDir, path);
-    const content = abs === 'escapes' ? undefined : await fs.readFile(abs).catch(() => undefined);
-    lines.push(`${path}\t${abs === 'escapes' ? 'outside the project' : content ? sha256(content) : 'missing'}`);
+    if (abs === 'escapes') {
+      files[path] = OUTSIDE_PROJECT;
+      continue;
+    }
+    if (isInside(design, abs)) continue;
+    const content = await fs.readFile(abs).catch(() => undefined);
+    files[path] = content ? sha256(content) : MISSING;
   }
-  return sha256(lines.join('\n'));
+  return files;
 }
 
 // ---------------------------------------------------------------------------------------------
 // The sign-off block
 // ---------------------------------------------------------------------------------------------
 
-/** The fields each basis records, in the order they are written. */
+/** The fields each basis records, in the order they are written. `Code:` lines follow them. */
 const BASIS_FIELDS = {
-  designer: ['By', 'When', 'Observed', 'Code'],
-  waiver: ['Waiver', 'By', 'When', 'Code'],
-  automated: ['When', 'Evidence', 'Code'],
+  designer: ['By', 'When', 'Observed'],
+  waiver: ['Waiver', 'By', 'When'],
+  automated: ['When', 'Evidence'],
+  transition: ['By', 'When', 'Status'],
 } as const;
 
-function fieldValues(record: SignoffRecord): Record<string, string> {
+function fieldValues(record: SignoffBasis): Record<string, string> {
   switch (record.basis) {
     case 'designer':
-      return { By: record.by, When: record.when, Observed: record.observed.join(', '), Code: record.code };
+      return { By: record.by, When: record.when, Observed: record.observed.join(', ') };
     case 'waiver':
-      return { Waiver: record.waiver, By: record.by, When: record.when, Code: record.code };
+      return { Waiver: record.waiver, By: record.by, When: record.when };
     case 'automated':
-      return { When: record.when, Evidence: record.evidence, Code: record.code };
+      return { When: record.when, Evidence: record.evidence };
+    case 'transition':
+      return { By: record.by, When: record.when, Status: record.status };
   }
 }
 
-function renderSignoff(record: SignoffRecord): string {
+/** One `Code: <path> <content>` line per file, or `Code: none` for a manifest with no source. */
+function renderCode(code: CodeFiles): string[] {
+  const paths = Object.keys(code).sort();
+  return paths.length ? paths.map((p) => `Code: ${p} ${code[p]}`) : ['Code: none'];
+}
+
+export function renderSignoff(record: SignoffRecord): string {
   const values = fieldValues(record);
-  const lines = [`Basis: ${record.basis}`, ...BASIS_FIELDS[record.basis].map((f) => `${f}: ${values[f]}`)];
+  const lines = [
+    `Basis: ${record.basis}`,
+    ...BASIS_FIELDS[record.basis].map((f) => `${f}: ${values[f]}`),
+    ...renderCode(record.code),
+  ];
   return `\n${lines.join('\n')}\n`;
 }
 
@@ -289,12 +336,32 @@ function parseObserved(raw: string): number[] | undefined {
   return observed.every((n) => Number.isInteger(n)) ? observed : undefined;
 }
 
-function buildRecord(basis: keyof typeof BASIS_FIELDS, f: Record<string, string>): SignoffRecord | undefined {
-  const code = f.Code;
-  if (basis === 'waiver') return { basis, waiver: f.Waiver, by: f.By, when: f.When, code };
-  if (basis === 'automated') return { basis, when: f.When, evidence: f.Evidence, code };
+function buildBasis(basis: keyof typeof BASIS_FIELDS, f: Record<string, string>): SignoffBasis | undefined {
+  if (basis === 'waiver') return { basis, waiver: f.Waiver, by: f.By, when: f.When };
+  if (basis === 'automated') return { basis, when: f.When, evidence: f.Evidence };
+  if (basis === 'transition') return { basis, by: f.By, when: f.When, status: f.Status };
   const observed = parseObserved(f.Observed);
-  return observed ? { basis, by: f.By, when: f.When, observed, code } : undefined;
+  return observed ? { basis, by: f.By, when: f.When, observed } : undefined;
+}
+
+const WHOLE_FILE_HASH = /^[0-9a-f]{64}$/;
+
+/**
+ * The block's `Code:` lines. `whole-file` is the pre-#396 form, a single bare hash; anything else
+ * that is not `none` or `<path> <content>` lines is unreadable (`undefined`).
+ */
+function readCode(body: string): CodeFiles | 'whole-file' | undefined {
+  const values = [...body.matchAll(/^Code:[ \t]*(.*)$/gm)].map((m) => m[1].trim());
+  if (values.length === 1 && WHOLE_FILE_HASH.test(values[0])) return 'whole-file';
+  if (values.length === 1 && values[0] === 'none') return {};
+  if (values.length === 0) return undefined;
+  const code: CodeFiles = {};
+  for (const value of values) {
+    const match = /^(\S+)[ \t]+(\S+)$/.exec(value);
+    if (!match) return undefined;
+    code[match[1]] = match[2];
+  }
+  return code;
 }
 
 function signoffBody(chunkText: string): string | undefined {
@@ -313,11 +380,11 @@ function readFields(body: string): Record<string, string> {
   return fields;
 }
 
-function recordFromFields(fields: Record<string, string>): SignoffRecord | undefined {
+function basisFromFields(fields: Record<string, string>): SignoffBasis | undefined {
   const basis = fields.Basis ?? '';
   if (!(basis in BASIS_FIELDS)) return undefined;
   const key = basis as keyof typeof BASIS_FIELDS;
-  return BASIS_FIELDS[key].every((f) => fields[f]) ? buildRecord(key, fields) : undefined;
+  return BASIS_FIELDS[key].every((f) => fields[f]) ? buildBasis(key, fields) : undefined;
 }
 
 /** Pure. Strict: a block missing any field its basis needs is `malformed`, never half-read. */
@@ -330,12 +397,18 @@ export function parseSignoff(chunkText: string): ParsedSignoff {
   if (fields.Reopened) {
     return { state: 'reopened', reopened: { when: fields.Reopened, reason: fields.Reason ?? '' } };
   }
-  const record = recordFromFields(fields);
-  return record ? { state: 'recorded', record } : { state: 'malformed' };
+  const basis = basisFromFields(fields);
+  const code = readCode(body);
+  if (!basis || code === undefined) return { state: 'malformed' };
+  if (code === 'whole-file') {
+    return { state: 'whole-file', wholeFile: { basis, hash: /^Code:[ \t]*(\S+)/m.exec(body)![1] } };
+  }
+  return { state: 'recorded', record: { ...basis, code } };
 }
 
 /** The Status a sign-off derives. Never typed by a session. */
 function derivedStatus(record: SignoffBasis): string {
+  if (record.basis === 'transition') return record.status;
   return record.basis === 'waiver' ? VERIFIED_WAIVED : VERIFIED;
 }
 
@@ -398,6 +471,7 @@ interface SignoffContext {
   /** An Error when the gate could not be read; its message becomes the problem. */
   needsDesigner: boolean | Error;
   waivers: Waiver[];
+  transition: GateTransition | undefined;
 }
 
 function designerProblems(record: { by: string; observed: number[] }, ctx: SignoffContext): string[] {
@@ -476,6 +550,36 @@ function automatedProblems(ctx: SignoffContext): string[] {
   ];
 }
 
+function transitionProblems(record: { by: string; when: string; status: string }, ctx: SignoffContext): string[] {
+  if (!ctx.transition) {
+    return [
+      `${ctx.slug}'s sign-off cites the gate transition, but design/${GATE_TRANSITION_MD} does not ` +
+        `exist. Only \`boardsmith chunk-gate-transition\` writes a transition sign-off.`,
+    ];
+  }
+  const entry = ctx.transition.signoffs.find((s) => s.slug === ctx.slug);
+  if (!entry) {
+    return [
+      `The gate transition (design/${GATE_TRANSITION_MD}) does not name ${ctx.slug}. It covers only ` +
+        `the chunks verified before the gates when it was recorded; a chunk verified since is ` +
+        `signed off with \`boardsmith chunk-signoff ${ctx.slug} ...\`.`,
+    ];
+  }
+  const recorded = { By: ctx.transition.by, When: ctx.transition.recorded, Status: entry.status };
+  const given = { By: record.by, When: record.when, Status: record.status };
+  const problems = (Object.keys(recorded) as Array<keyof typeof recorded>)
+    .filter((k) => recorded[k] !== given[k])
+    .map(
+      (k) =>
+        `The sign-off says ${k} "${given[k]}" but design/${GATE_TRANSITION_MD} records ` +
+        `"${recorded[k]}" for ${ctx.slug}.`,
+    );
+  if (![VERIFIED, VERIFIED_WAIVED].includes(record.status)) {
+    problems.push(`A transition sign-off keeps a verified Status; "${record.status}" is not one.`);
+  }
+  return problems;
+}
+
 function signoffProblems(record: SignoffBasis, ctx: SignoffContext): string[] {
   const whenProblems = Number.isNaN(new Date(record.when).getTime())
     ? [`The sign-off's When "${record.when}" is not a date and time.`]
@@ -487,6 +591,8 @@ function signoffProblems(record: SignoffBasis, ctx: SignoffContext): string[] {
       return [...whenProblems, ...waiverProblems(record, ctx)];
     case 'automated':
       return [...whenProblems, ...automatedProblems(ctx)];
+    case 'transition':
+      return [...whenProblems, ...transitionProblems(record, ctx)];
   }
 }
 
@@ -499,56 +605,206 @@ async function loadContext(projectDir: string, slug: string, chunkText: string):
     checklistItems: countChecklistItems(chunkText),
     needsDesigner,
     waivers: await readWaivers(projectDir),
+    transition: await readGateTransition(projectDir),
   };
 }
 
-/**
- * The check. Returns every reason this chunk's Status is not backed by a valid sign-off, as
- * sentences a designer can act on; `[]` means it is backed, or that the chunk is not verified.
- * Read-only. `chunk-check` fails on a non-empty result; `chunk-provenance-status` reports it.
- */
-export async function checkSignoff(projectDir: string, slug: string): Promise<string[]> {
-  const dir = resolve(projectDir);
-  const rel = relChunkMdPath(slug);
-  const chunkText = await fs.readFile(chunkMdPath(dir, slug), 'utf-8');
-  const status = readStatus(chunkText) ?? '';
-  if (!status.startsWith(VERIFIED)) return [];
+// ---------------------------------------------------------------------------------------------
+// The check
+// ---------------------------------------------------------------------------------------------
 
+/** One chunk as the check reads it. `code` is its source files as they are now. */
+interface ChunkState {
+  slug: string;
+  text: string;
+  status: string;
+  parsed: ParsedSignoff;
+  code: CodeFiles;
+}
+
+/** A later edit to a file this chunk's sign-off names, and what accounts for it (#396). */
+export interface SharedEdit {
+  path: string;
+  /** The chunk whose later sign-off saw the file as it is now, or which is building it. */
+  coveredBy: string;
+  how: 'signed-off' | 'being-built';
+}
+
+interface SignoffAssessment {
+  /** Every reason this chunk's Status is not backed by a valid sign-off. Empty means it is. */
+  problems: string[];
+  /** Accounted-for edits to files this chunk shares. Information, never a refusal. */
+  sharedEdits: SharedEdit[];
+}
+
+/** Statuses of a chunk whose build is under way, so its own sign-off is still to come. */
+const BEING_BUILT = new Set(['approved', 'built']);
+
+async function readChunkStates(dir: string): Promise<ChunkState[]> {
+  const states: ChunkState[] = [];
+  for (const slug of await chunkSlugs(dir)) {
+    const text = await fs.readFile(chunkMdPath(dir, slug), 'utf-8').catch(() => undefined);
+    if (text === undefined) continue;
+    states.push({
+      slug,
+      text,
+      status: readStatus(text) ?? '',
+      parsed: parseSignoff(text),
+      code: await chunkCodeFiles(dir, text),
+    });
+  }
+  return states;
+}
+
+/** What accounts for `path` reading `now` in a chunk other than `self`, if anything does. */
+function coverFor(path: string, now: string, self: ChunkState, signedAt: number, all: ChunkState[]): SharedEdit | undefined {
+  const others = all.filter((c) => c.slug !== self.slug);
+  const signed = others.find((c) => {
+    const record = c.status.startsWith(VERIFIED) ? c.parsed.record : undefined;
+    return record !== undefined && new Date(record.when).getTime() > signedAt && record.code[path] === now;
+  });
+  if (signed) return { path, coveredBy: signed.slug, how: 'signed-off' };
+  const building = others.find((c) => BEING_BUILT.has(c.status) && path in c.code);
+  return building ? { path, coveredBy: building.slug, how: 'being-built' } : undefined;
+}
+
+function listFiles(paths: string[]): string {
+  return paths.join(', ');
+}
+
+/** Compares the sign-off's files with the chunk's files now, applying the rule in the header. */
+function codeAssessment(self: ChunkState, record: SignoffRecord, all: ChunkState[], resign: string): SignoffAssessment {
+  const rel = relChunkMdPath(self.slug);
+  const problems: string[] = [];
+  const signedPaths = Object.keys(record.code);
+  const added = Object.keys(self.code).filter((p) => !(p in record.code));
+  const removed = signedPaths.filter((p) => !(p in self.code));
+  if (added.length || removed.length) {
+    const changes = [
+      ...(added.length ? [`added ${listFiles(added)}`] : []),
+      ...(removed.length ? [`removed ${listFiles(removed)}`] : []),
+    ];
+    problems.push(
+      `${rel}'s sign-off (${record.when}) was for a different chunk: its Build Manifest has since ` +
+        `${changes.join(' and ')}. A sign-off applies only to the chunk as it was signed. ${resign}`,
+    );
+  }
+
+  const signedAt = new Date(record.when).getTime();
+  const sharedEdits: SharedEdit[] = [];
+  const unaccounted: string[] = [];
+  for (const path of signedPaths.filter((p) => p in self.code && self.code[p] !== record.code[p])) {
+    const cover = coverFor(path, self.code[path], self, signedAt, all);
+    if (cover) sharedEdits.push(cover);
+    else unaccounted.push(path);
+  }
+  if (unaccounted.length) {
+    problems.push(
+      `${rel}'s sign-off (${record.when}) was for different code: ${listFiles(unaccounted)} ` +
+        `changed after it, and no later sign-off saw that change and no chunk being built names ` +
+        `the file. A sign-off applies only to the chunk as it was signed. ${resign}`,
+    );
+  }
+  return { problems, sharedEdits };
+}
+
+/** The refusal's pointer to the one-time transition, while the project has not recorded it. */
+function transitionHint(transitioned: boolean): string {
+  if (transitioned) return '';
+  return (
+    ` If this chunk was verified before BoardSmith recorded sign-offs, the designer records that ` +
+    `once for the whole project with \`boardsmith chunk-gate-transition --by "<designer>"\`.`
+  );
+}
+
+/** Everything wrong with one chunk's sign-off, given every chunk in the project. */
+async function assessChunk(dir: string, self: ChunkState, all: ChunkState[]): Promise<SignoffAssessment> {
+  const none: SignoffAssessment = { problems: [], sharedEdits: [] };
+  const { slug, status, parsed } = self;
+  if (!status.startsWith(VERIFIED)) return none;
+
+  const rel = relChunkMdPath(slug);
   const resign =
     `Set Status back to built, then record the designer's sign-off with ` +
     `\`boardsmith chunk-signoff ${slug} ...\`.`;
-  const parsed = parseSignoff(chunkText);
+  const transitioned = (await readGateTransition(dir)) !== undefined;
   if (parsed.reopened) {
-    return [
-      `${rel} says "Status: ${status}" but it was reopened on ${parsed.reopened.when} ` +
-        `(${parsed.reopened.reason}), which voided its sign-off. Nobody has signed off the ` +
-        `reworked chunk. ${resign}`,
-    ];
+    return {
+      ...none,
+      problems: [
+        `${rel} says "Status: ${status}" but it was reopened on ${parsed.reopened.when} ` +
+          `(${parsed.reopened.reason}), which voided its sign-off. Nobody has signed off the ` +
+          `reworked chunk. ${resign}`,
+      ],
+    };
+  }
+  if (parsed.state === 'whole-file') {
+    return {
+      ...none,
+      problems: [
+        `${rel}'s sign-off records one hash over all its files, the form used before a sign-off ` +
+          `was tracked file by file, so it cannot tell a later chunk's edit from a change to this ` +
+          `chunk. ` +
+          (transitioned
+            ? resign
+            : `Convert it with the one-time \`boardsmith chunk-gate-transition --by "<designer>"\`, ` +
+              `which keeps a sign-off whose code still matches it.`),
+      ],
+    };
   }
   if (!parsed.record) {
     const damaged = parsed.state === 'malformed' ? ' (its "## Sign-off" block is damaged)' : '';
-    return [
-      `${rel} says "Status: ${status}" but has no designer sign-off entry${damaged}. A verified ` +
-        `status is derived from a sign-off and cannot be set by hand. ${resign}`,
-    ];
+    // A CHUNK.md with no "## Sign-off" section at all was made before #291 scaffolded one; a
+    // chunk made since carries the section from its template, so it gets no transition hint.
+    const hint = parsed.state === 'absent' ? transitionHint(transitioned) : '';
+    return {
+      ...none,
+      problems: [
+        `${rel} says "Status: ${status}" but has no designer sign-off entry${damaged}. A verified ` +
+          `status is derived from a sign-off and cannot be set by hand. ${resign}${hint}`,
+      ],
+    };
   }
 
-  const problems = signoffProblems(parsed.record, await loadContext(dir, slug, chunkText));
-  if (parsed.record.code !== (await chunkCodeHash(dir, chunkText))) {
-    problems.push(
-      `${rel}'s sign-off (${parsed.record.when}) was for different code: the files its Build ` +
-        `Manifest names have been added, removed or edited since. A sign-off applies only to the ` +
-        `chunk as it was signed. ${resign}`,
-    );
-  }
-  const expected = derivedStatus(parsed.record);
+  const record = parsed.record;
+  const code = codeAssessment(self, record, all, resign);
+  const problems = [...signoffProblems(record, await loadContext(dir, slug, self.text)), ...code.problems];
+  const expected = derivedStatus(record);
   if (status !== expected) {
     problems.push(
-      `${rel} says "Status: ${status}" but its sign-off (basis: ${parsed.record.basis}) derives ` +
+      `${rel} says "Status: ${status}" but its sign-off (basis: ${record.basis}) derives ` +
         `"${expected}". Status is written only by \`boardsmith chunk-signoff\`.`,
     );
   }
-  return problems;
+  return { problems, sharedEdits: code.sharedEdits };
+}
+
+/**
+ * Every chunk's sign-off, checked against every other chunk's (a later sign-off or a chunk being
+ * built can account for an edit to a shared file). Read-only. `chunk-merge` and
+ * `chunk-provenance-status` read the whole project this way.
+ */
+export async function assessSignoffs(projectDir: string): Promise<Map<string, SignoffAssessment>> {
+  const dir = resolve(projectDir);
+  const all = await readChunkStates(dir);
+  const result = new Map<string, SignoffAssessment>();
+  for (const chunk of all) result.set(chunk.slug, await assessChunk(dir, chunk, all));
+  return result;
+}
+
+/**
+ * The check for one chunk. Returns every reason its Status is not backed by a valid sign-off, as
+ * sentences a designer can act on; `[]` means it is backed, or that the chunk is not verified.
+ * Read-only. `chunk-check` fails on a non-empty result.
+ */
+export async function checkSignoff(projectDir: string, slug: string): Promise<string[]> {
+  const dir = resolve(projectDir);
+  const all = await readChunkStates(dir);
+  const self = all.find((c) => c.slug === slug);
+  if (!self) {
+    throw new Error(`No chunk found at ${relChunkMdPath(slug)} in ${dir}.\n${SLUG_REMEDY}`);
+  }
+  return (await assessChunk(dir, self, all)).problems;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -666,7 +922,7 @@ export async function recordSignoff(slug: string, options: SignoffOptions): Prom
   const ctx = await loadContext(dir, slug, chunkText);
   const record: SignoffRecord = {
     ...recordFromOptions(options, ctx, (options.now ?? new Date()).toISOString()),
-    code: await chunkCodeHash(dir, chunkText),
+    code: await chunkCodeFiles(dir, chunkText),
   };
 
   // #288: a chunk is not done while the project's hard constraints do not hold for it, whoever
@@ -699,7 +955,7 @@ function insertSignoffSection(chunkText: string, body: string): string {
   return before + renderSignoffSection(body) + after;
 }
 
-function writeSignoffBlock(chunkText: string, body: string, rel: string): string {
+export function writeSignoffBlock(chunkText: string, body: string, rel: string): string {
   if (parseSignoff(chunkText).state === 'absent') return insertSignoffSection(chunkText, body);
   if (signoffBody(chunkText) === undefined) {
     throw new Error(

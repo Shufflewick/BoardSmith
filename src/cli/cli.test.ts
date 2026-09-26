@@ -220,6 +220,19 @@ describe('verify-example-ledger-upgrade — the one-time lineText upgrade (#371)
   });
 });
 
+describe('chunk-gate-transition — the one-time transition of chunks verified before the gates (#397)', () => {
+  it('is registered with --project, --by and --json, and no bypass flag', async () => {
+    await expectHelpWithoutBypass('chunk-gate-transition', ['--project <dir>', '--by <designer>', '--json', '-h, --help']);
+  });
+
+  it('refuses without the designer, in a readable message', async () => {
+    const result = await spawnCli(['chunk-gate-transition', '--project', '/tmp']);
+    expect(result.code).not.toBe(0);
+    expect(result.stderr).toContain('--by');
+    expect(result.stderr).not.toMatch(/\bat \S+\.ts:\d+/);
+  });
+});
+
 describe('verify-example-translate — registration (CHECK-06, the second dispatch\'s byte source)', () => {
   it('is registered: --help exits 0 and lists exactly --project, --slice-path, --extraction, --json (plus -h), never --run-id or a bypass flag', async () => {
     await expectHelpWithoutBypass('verify-example-translate', [
