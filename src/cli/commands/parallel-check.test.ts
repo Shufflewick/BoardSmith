@@ -71,20 +71,23 @@ function chunkMd(slug: string, newlyDiscovered = '_None._'): string {
 
 const RULEBOOK = ['01-turns', '04-trading', '05-market', '06-auctions', '07-quests', '08-venues', '09-legacy'];
 
-async function project(extra: Record<string, string> = {}): Promise<string> {
-  const tree = tempTree('bs-parallel-check-');
-  const dir = join(tree, 'proj');
-  const files: Record<string, string> = { 'SKETCH.md': SKETCH };
-  for (const name of RULEBOOK) files[`rulebook/${name}.md`] = `# ${name}\n`;
-  for (const slug of ['core-loop', 'trading', 'quests', 'auctions', 'venues', 'legacy', 'final']) {
-    files[`chunks/${slug}/CHUNK.md`] = chunkMd(slug);
-  }
-  Object.assign(files, extra);
+/** A game project in a temp tree whose design/ folder holds `files`, keyed by design-relative path. */
+async function designProject(prefix: string, files: Record<string, string>): Promise<string> {
+  const dir = join(tempTree(prefix), 'proj');
   for (const [rel, text] of Object.entries(files)) {
     await fs.mkdir(dirname(join(dir, 'design', rel)), { recursive: true });
     await fs.writeFile(join(dir, 'design', rel), text);
   }
   return dir;
+}
+
+async function project(extra: Record<string, string> = {}): Promise<string> {
+  const files: Record<string, string> = { 'SKETCH.md': SKETCH };
+  for (const name of RULEBOOK) files[`rulebook/${name}.md`] = `# ${name}\n`;
+  for (const slug of ['core-loop', 'trading', 'quests', 'auctions', 'venues', 'legacy', 'final']) {
+    files[`chunks/${slug}/CHUNK.md`] = chunkMd(slug);
+  }
+  return designProject('bs-parallel-check-', { ...files, ...extra });
 }
 
 describe('checkParallel', () => {
@@ -185,18 +188,12 @@ async function sectionProject(
   entries: Array<[slug: string, citations: string]>,
   chunkMds: Record<string, string> = {},
 ): Promise<string> {
-  const dir = join(tempTree('bs-parallel-check-sections-'), 'proj');
-  const files: Record<string, string> = {
+  return designProject('bs-parallel-check-sections-', {
     'SKETCH.md': sectionSketch(entries),
     'rulebook/01-turns.md': '# Turns\n',
     'rulebook/02-designer-decisions.md': DECISIONS,
     ...Object.fromEntries(Object.entries(chunkMds).map(([slug, text]) => [`chunks/${slug}/CHUNK.md`, text])),
-  };
-  for (const [rel, text] of Object.entries(files)) {
-    await fs.mkdir(dirname(join(dir, 'design', rel)), { recursive: true });
-    await fs.writeFile(join(dir, 'design', rel), text);
-  }
-  return dir;
+  });
 }
 
 function interpretation(slug: string, body: string[]): string {
@@ -264,12 +261,12 @@ describe('checkParallel by section (#415)', () => {
       ['board', 'rulebook/02-designer-decisions.md (p.2, Battlefield)'],
       ['economy', 'rulebook/02-designer-decisions.md §"Designer Decisions > Economy"'],
     ]);
-    const refusals = await checkParallel(dir, ['board', 'economy']);
-    expect(refusals).toHaveLength(1);
-    expect(refusals[0]).toMatch(
+    const [only, ...more] = await checkParallel(dir, ['board', 'economy']);
+    expect(more).toEqual([]);
+    expect(only).toMatch(
       /board cites rulebook\/02-designer-decisions\.md as a whole page and economy cites its §"Designer Decisions > Economy" \(lines 9-12\)/,
     );
-    expect(refusals[0]).toMatch(/§"<section>"/);
+    expect(only).toMatch(/narrow board's citation to the sections it needs \(rulebook\/02-designer-decisions\.md §"<section>"\)/);
   });
 
   it('refuses a section name the slice does not have, listing the sections it does', async () => {

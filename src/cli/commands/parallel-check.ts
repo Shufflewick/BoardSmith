@@ -48,6 +48,14 @@ interface CitedSlice {
   cited: Set<number>;
 }
 
+/** One citation: the slice, all its sections, and the ones the citation claims. */
+interface ResolvedCitation {
+  slice: string;
+  sections: SliceSection[];
+  whole: boolean;
+  cited: SliceSection[];
+}
+
 /** The slices, and the sections of each, one chunk cites; and every citation that located nothing. */
 interface ChunkCitations {
   slug: string;
@@ -146,38 +154,56 @@ function citedSections(
  * discovered, each citation resolved to the sections of a slice it claims.
  */
 export async function chunkCitations(projectDir: string, chunk: SketchChunk): Promise<ChunkCitations> {
+  const text = await citingText(projectDir, chunk);
+  const filenames = await sliceFilenames(projectDir);
+  const result: ChunkCitations = { slug: chunk.slug, slices: new Map(), unreadable: [] };
+  for (const match of text.matchAll(CITATION)) {
+    const after = text.slice(match.index + match[0].length);
+    const claim = await resolveCitation(projectDir, chunk.slug, match[0], after, filenames);
+    if (!('problem' in claim)) addCited(result.slices, claim);
+    else if (!result.unreadable.includes(claim.problem)) result.unreadable.push(claim.problem);
+  }
+  return result;
+}
+
+/** The text a chunk's citations are read from: its sketch line, claims in force and discoveries. */
+async function citingText(projectDir: string, chunk: SketchChunk): Promise<string> {
   const chunkText = (await readOptional(chunkMdPath(projectDir, chunk.slug))) ?? '';
-  const text = [
+  return [
     chunk.citations ?? '',
     interpretationTextInForce(chunkText) ?? '',
     extractSection(chunkText, '## Newly Discovered Citations') ?? '',
   ].join('\n');
-  const filenames = await sliceFilenames(projectDir);
-  const result: ChunkCitations = { slug: chunk.slug, slices: new Map(), unreadable: [] };
-  for (const match of text.matchAll(CITATION)) {
-    const { resolved, unresolved } = resolveCitedSlices(match[0], filenames);
-    if (unresolved.length > 0) {
-      result.unreadable.push(
-        `${chunk.slug} cites ${unresolved[0]}, which names no single file in design/rulebook/, so its ` +
-          `overlap with other chunks cannot be ruled out. Correct the citation to the slice file it means.`,
-      );
-      continue;
-    }
-    const slice = resolved[0];
-    const sliceText = await fs.readFile(designPath(projectDir, slice), 'utf-8');
-    const sections = sliceSections(sliceText);
-    const claim = citedSections(chunk.slug, slice, sections, fileLines(sliceText).length, text.slice(match.index + match[0].length));
-    if ('problem' in claim) {
-      result.unreadable.push(claim.problem);
-      continue;
-    }
-    const entry = result.slices.get(slice) ?? { sections, whole: false, cited: new Set<number>() };
-    entry.whole ||= claim.whole;
-    for (const section of claim.cited) entry.cited.add(section.from);
-    result.slices.set(slice, entry);
+}
+
+function addCited(slices: Map<string, CitedSlice>, claim: ResolvedCitation): void {
+  const entry = slices.get(claim.slice) ?? { sections: claim.sections, whole: false, cited: new Set<number>() };
+  entry.whole ||= claim.whole;
+  for (const section of claim.cited) entry.cited.add(section.from);
+  slices.set(claim.slice, entry);
+}
+
+/** One `rulebook/...` token, and the text after it, resolved to its slice and the sections it claims. */
+async function resolveCitation(
+  projectDir: string,
+  slug: string,
+  token: string,
+  after: string,
+  filenames: string[],
+): Promise<ResolvedCitation | { problem: string }> {
+  const { resolved, unresolved } = resolveCitedSlices(token, filenames);
+  if (unresolved.length > 0) {
+    return {
+      problem:
+        `${slug} cites ${unresolved[0]}, which names no single file in design/rulebook/, so its ` +
+        `overlap with other chunks cannot be ruled out. Correct the citation to the slice file it means.`,
+    };
   }
-  result.unreadable = [...new Set(result.unreadable)];
-  return result;
+  const slice = resolved[0];
+  const sliceText = await fs.readFile(designPath(projectDir, slice), 'utf-8');
+  const sections = sliceSections(sliceText);
+  const claim = citedSections(slug, slice, sections, fileLines(sliceText).length, after);
+  return 'problem' in claim ? claim : { slice, sections, ...claim };
 }
 
 /** Why `a` and `b` cannot be built alongside each other by the sketch's dependency graph. */
@@ -203,21 +229,33 @@ function sliceOverlap(slice: string, a: ChunkCitations, b: ChunkCitations): stri
   if (!ca || !cb) return undefined;
   const shared = ca.sections.filter((s) => ca.cited.has(s.from) && cb.cited.has(s.from));
   if (shared.length === 0) return undefined;
+  return overlapSentence(slice, [a.slug, ca], [b.slug, cb], shared);
+}
+
+/**
+ * The refusal for two chunks that cite `shared` sections of `slice`. It names those sections, and
+ * says how to narrow a whole-page citation when the page has more than one section.
+ */
+function overlapSentence(
+  slice: string,
+  [a, ca]: [string, CitedSlice],
+  [b, cb]: [string, CitedSlice],
+  shared: SliceSection[],
+): string {
   const why = 'so they implement overlapping rules and would each interpret them without seeing the other.';
-  const narrowable = ca.sections.length > 1;
+  const narrow = (whose: string) =>
+    ca.sections.length > 1 ? `, or narrow ${whose} to the sections it needs (${slice} §"<section>")` : '';
   if (ca.whole && cb.whole) {
-    const narrow = narrowable ? `, or narrow each citation to the sections it needs (${slice} §"<section>")` : '';
-    return `${a.slug} and ${b.slug} both cite ${slice} as a whole page, ${why} Build them one after the other${narrow}.`;
+    return `${a} and ${b} both cite ${slice} as a whole page, ${why} Build them one after the other${narrow('each citation')}.`;
   }
-  if (ca.whole || cb.whole) {
-    const [whole, other] = ca.whole ? [a.slug, b.slug] : [b.slug, a.slug];
-    const narrow = narrowable ? `, or narrow ${whole}'s citation to the sections it needs (${slice} §"<section>")` : '';
-    return (
-      `${whole} cites ${slice} as a whole page and ${other} cites its ${shownSections(shared)}, ${why} ` +
-      `Build them one after the other${narrow}.`
-    );
+  if (!ca.whole && !cb.whole) {
+    return `${a} and ${b} both cite ${slice} ${shownSections(shared)}, ${why} Build them one after the other.`;
   }
-  return `${a.slug} and ${b.slug} both cite ${slice} ${shownSections(shared)}, ${why} Build them one after the other.`;
+  const [whole, other] = ca.whole ? [a, b] : [b, a];
+  return (
+    `${whole} cites ${slice} as a whole page and ${other} cites its ${shownSections(shared)}, ${why} ` +
+    `Build them one after the other${narrow(`${whole}'s citation`)}.`
+  );
 }
 
 /** The rulebook sections `a` and `b` both cite, one reason per slice they cannot be built together. */
