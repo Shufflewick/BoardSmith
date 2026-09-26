@@ -73,7 +73,8 @@ const RULEBOOK = ['01-turns', '04-trading', '05-market', '06-auctions', '07-ques
 
 /** A game project in a temp tree whose design/ folder holds `files`, keyed by design-relative path. */
 async function designProject(prefix: string, files: Record<string, string>): Promise<string> {
-  const dir = join(tempTree(prefix), 'proj');
+  const tree = tempTree(prefix);
+  const dir = join(tree, 'proj');
   for (const [rel, text] of Object.entries(files)) {
     await fs.mkdir(dirname(join(dir, 'design', rel)), { recursive: true });
     await fs.writeFile(join(dir, 'design', rel), text);
