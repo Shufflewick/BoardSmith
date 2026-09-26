@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { Game, Action, defineFlow, actionStep, type GameOptions } from '../engine/index.js';
+import { Game, Action, defineFlow, actionStep, loop, eachPlayer, type GameOptions } from '../engine/index.js';
 import { MCTSBot } from './mcts-bot.js';
 import { DIFFICULTY_PRESETS, type BotConfig } from './types.js';
 
@@ -127,11 +127,14 @@ type BotInternals = { config: BotConfig; rng: { state: number } };
  */
 async function subSearchesOf(bot: MCTSBot<ChoiceGame>): Promise<SubSearch[]> {
   const subs: SubSearch[] = [];
-  const play = MCTSBot.prototype.play;
-  const spy = vi.spyOn(MCTSBot.prototype, 'play').mockImplementation(function (this: MCTSBot<Game>) {
+  // Each sub-search is one `runSearch` on its own bot; it is private, so the
+  // spy reaches it through a cast.
+  const proto = MCTSBot.prototype as unknown as { runSearch: () => Promise<unknown> };
+  const runSearch = proto.runSearch;
+  const spy = vi.spyOn(proto, 'runSearch').mockImplementation(function (this: MCTSBot<Game>) {
     const self = this as unknown as BotInternals;
     if (this !== (bot as unknown)) subs.push({ seed: self.config.seed, rngState: self.rng.state });
-    return play.call(this);
+    return runSearch.call(this);
   });
   await bot.play();
   spy.mockRestore();
@@ -143,7 +146,8 @@ async function subSearchesOf(bot: MCTSBot<ChoiceGame>): Promise<SubSearch[]> {
  * playout depth) that searches only a few iterations per sub-search. What these
  * tests pin is decided before a sub-search runs its first iteration (the seed it
  * gets and its random source's starting state), or needs only enough iterations
- * to draw from that source (the move a seeded ensemble returns). The preset's 500
+ * to draw from that source (the move a seeded ensemble returns, on `ParityGame`
+ * below). The preset's 500
  * iterations bought none of it and cost several plays of up to a second each per
  * test under load, which timed out unrelated merges (#424).
  *
@@ -160,6 +164,59 @@ const parallelBot = (seed?: string) => new MCTSBot(newGame(), ChoiceGame, 'choic
   async: false,
   ...(seed === undefined ? {} : { seed }),
 });
+
+/**
+ * A game whose best first move genuinely depends on the search's random
+ * source (#427). Each seat picks 1-4 twice, alternately, and seat 1 wins when
+ * the four picks sum to an even number. No first pick is better than another,
+ * so which one a short search prefers comes down to how its random playouts
+ * happened to fall, and that is fixed by its seed. `ChoiceGame` cannot show
+ * this: it ends at the first pick, so every search scores every move the same
+ * whatever its seed.
+ */
+class ParityGame extends Game {
+  picks: number[] = [];
+
+  constructor(options: GameOptions) {
+    super(options);
+
+    this.registerAction(
+      Action.create('pick')
+        .chooseFrom('value', { prompt: 'Pick', choices: [1, 2, 3, 4] })
+        .execute((args, ctx) => {
+          const game = ctx.game as ParityGame;
+          game.picks = [...game.picks, args.value as number];
+          return { success: true };
+        }),
+    );
+
+    this.setFlow(defineFlow({
+      root: loop({ maxIterations: 2, do: eachPlayer({ do: actionStep({ actions: ['pick'] }) }) }),
+      isComplete: (ctx) => (ctx.game as ParityGame).picks.length >= 4,
+      getWinners: (ctx) => {
+        const game = ctx.game as ParityGame;
+        const sum = game.picks.reduce((total, pick) => total + pick, 0);
+        return [game.getPlayer(sum % 2 === 0 ? 1 : 2)!];
+      },
+    }));
+  }
+}
+
+function newParityGame(): ParityGame {
+  const game = new ParityGame({ playerCount: 2, playerNames: ['Player 1', 'Player 2'], seed: 'game-seed' });
+  game.startFlow();
+  return game;
+}
+
+const PARITY_SEEDS = Array.from({ length: 12 }, (_, i) => `parity-${i}`);
+const parityConfig = {
+  ...DIFFICULTY_PRESETS.hard,
+  iterations: DIFFICULTY_PRESETS.hard.parallel! * ITERATIONS_PER_SUB_SEARCH,
+  timeout: Infinity,
+  async: false,
+};
+const parityBot = (seed: string) =>
+  new MCTSBot(newParityGame(), ParityGame, 'parity', 1, [], { ...parityConfig, seed });
 
 describe('parallel MCTS sub-search seeding (#329)', () => {
   afterEach(() => {
@@ -188,10 +245,47 @@ describe('parallel MCTS sub-search seeding (#329)', () => {
     expect(other.map(sub => sub.rngState)).not.toEqual(first.map(sub => sub.rngState));
   });
 
-  it('picks the same move every time for the same seed', async () => {
-    const move = async () => parallelBot('fixture-7').play();
-    const first = await move();
-    for (let run = 0; run < 3; run++) expect(await move()).toEqual(first);
+  it('picks the same move every time for the same seed, and the seed decides which', async () => {
+    const movesFor = async () => {
+      const moves: unknown[] = [];
+      for (const seed of PARITY_SEEDS) moves.push((await parityBot(seed).play())?.args.value);
+      return moves;
+    };
+    const first = await movesFor();
+
+    // The fixture has teeth: the seed actually changes the move, so a
+    // sub-search that stopped following the bot's seed would show up below.
+    expect(new Set(first).size).toBeGreaterThan(1);
+    expect(await movesFor()).toEqual(first);
+  });
+
+  it('settles a split vote by the visits the sub-searches gave each move in total', async () => {
+    let splits = 0;
+    for (const seed of PARITY_SEEDS) {
+      // Each sub-search on its own, configured as playParallel configures it.
+      const subs = await Promise.all(
+        Array.from({ length: DIFFICULTY_PRESETS.hard.parallel! }, (_, i) => new MCTSBot(
+          newParityGame(), ParityGame, 'parity', 1, [],
+          { ...parityConfig, iterations: ITERATIONS_PER_SUB_SEARCH, parallel: 1, seed: `${seed}-parallel-${i}` },
+        ).playWithStats()),
+      );
+      const votes = subs.map(sub => sub.move?.args.value);
+      if (new Set(votes).size < votes.length) continue;
+
+      const visits = new Map<unknown, number>();
+      for (const { stats } of subs) {
+        for (const stat of stats) visits.set(stat.move.args.value, (visits.get(stat.move.args.value) ?? 0) + stat.visits);
+      }
+      const ranked = votes.map(vote => visits.get(vote) ?? 0);
+      const most = Math.max(...ranked);
+      if (ranked.filter(count => count === most).length > 1) continue;
+
+      splits++;
+      expect((await parityBot(seed).play())?.args.value).toBe(votes[ranked.indexOf(most)]);
+    }
+    // Enough split votes decided by visits that always taking the first
+    // sub-search's move cannot pass by luck.
+    expect(splits).toBeGreaterThanOrEqual(3);
   });
 
   it('does not warn about a seed when an unseeded hard bot\'s search is cut short', async () => {

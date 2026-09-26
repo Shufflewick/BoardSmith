@@ -199,7 +199,7 @@ for (const { move: candidate, visits, value } of stats) {
 }
 ```
 
-`playWithStats()` always runs a single-mode search, even when `parallel > 1` — parallel ensembles aggregate by vote and lose per-child stats.
+`playWithStats()` always runs a single-mode search, even when `parallel > 1` — parallel ensembles aggregate by vote and lose per-child stats. An ensemble plays the move most sub-searches chose; a split vote goes to the move the sub-searches visited most in total, and a tie there to a pick from the bot's own seeded random source, so every sub-search counts.
 
 ## How MCTS Works
 
