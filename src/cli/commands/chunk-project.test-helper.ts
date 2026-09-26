@@ -1,6 +1,7 @@
 import { promises as fs } from 'node:fs';
 import { join } from 'node:path';
 import { DESIGN_DIR } from '../lib/project-paths.js';
+import { SIGNOFF_HEADING } from './chunk-signoff.js';
 
 /**
  * A game project on disk with the chunks a sign-off test needs: each chunk's CHUNK.md made from
@@ -15,6 +16,10 @@ export interface ChunkSpec {
   checklist?: string[];
   /** Build Manifest rows: project-relative path to file contents, written to disk too. */
   manifest?: Record<string, string>;
+  /** Replaces the template's placeholder claim in `## Interpretation`. */
+  interpretation?: string;
+  /** A CHUNK.md made before #291: it has no `## Sign-off` section at all. */
+  preGate?: boolean;
 }
 
 function chunkText(template: string, c: ChunkSpec): string {
@@ -28,6 +33,12 @@ function chunkText(template: string, c: ChunkSpec): string {
     '<!-- | src/... | written / pending | -->',
     Object.keys(c.manifest ?? {}).map((path) => `| ${path} | written |`).join('\n'),
   );
+  if (c.interpretation !== undefined) {
+    text = text.replace(/^1\. \*\*<!-- claim text -->\*\*\n.*\n.*\n/m, `${c.interpretation}\n`);
+  }
+  if (c.preGate) {
+    text = text.replace(new RegExp(`^${SIGNOFF_HEADING}\\n[\\s\\S]*?(?=^## )`, 'm'), '');
+  }
   return text;
 }
 

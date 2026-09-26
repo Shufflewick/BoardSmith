@@ -105,6 +105,11 @@ export const RUN_LOG_DIR = 'run-log';
 export const CROSS_CHUNK_MD = 'CROSS-CHUNK.md';
 /** Designer playtest waivers, written only by `boardsmith chunk-waiver` (#291). */
 export const WAIVERS_MD = 'WAIVERS.md';
+/**
+ * The one-time record of chunks verified before the sign-off and claim-quote gates, written only
+ * by `boardsmith chunk-gate-transition` (#397).
+ */
+export const GATE_TRANSITION_MD = 'GATE-TRANSITION.md';
 
 /** Every ledger `design/` owns, in the order `boardsmith doctor` reports them. */
 export const DESIGN_LEDGERS = [
@@ -116,6 +121,7 @@ export const DESIGN_LEDGERS = [
   ASSETS_MD,
   BOARDSMITH_BUGS_MD,
   WAIVERS_MD,
+  GATE_TRANSITION_MD,
 ] as const;
 
 /** Absolute path to a ledger in `design/`. */

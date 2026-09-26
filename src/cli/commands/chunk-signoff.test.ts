@@ -494,7 +494,7 @@ describe('an edit to a shared file is accounted for by the chunk that made it (#
     expect(Object.keys(parseSignoff(await readChunk(project, 'deal')).record!.code)).toEqual(['src/deal.ts']);
   });
 
-  it('a sign-off with the old single whole-file hash is refused, naming the fix', async () => {
+  it('a sign-off with the old single whole-file hash is refused, naming the one-time transition', async () => {
     const project = await makeProject([{ slug: 'deal', manifest: { 'src/deal.ts': 'v1' } }]);
     await recordSignoff('deal', { project, by: 'Jane Designer', observed: '1,2', now: NOW });
     const text = await readChunk(project, 'deal');
@@ -503,7 +503,7 @@ describe('an edit to a shared file is accounted for by the chunk that made it (#
       text.replace(/^Code: .*$/m, `Code: ${'a'.repeat(64)}`),
     );
     expect(parseSignoff(await readChunk(project, 'deal')).state).toBe('whole-file');
-    expect((await checkSignoff(project, 'deal')).join('\n')).toContain('boardsmith chunk-signoff deal');
+    expect((await checkSignoff(project, 'deal')).join('\n')).toContain('boardsmith chunk-gate-transition');
   });
 
   it('chunk-provenance-status reports shared edits apart from the chunks without a valid sign-off', async () => {

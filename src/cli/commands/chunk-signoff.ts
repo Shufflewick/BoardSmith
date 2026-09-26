@@ -3,6 +3,7 @@ import { promises as fs } from 'node:fs';
 import { isAbsolute, relative, resolve, sep } from 'node:path';
 import chalk from 'chalk';
 import {
+  GATE_TRANSITION_MD,
   SKETCH_MD,
   WAIVERS_MD,
   chunkMdPath,
@@ -12,6 +13,7 @@ import {
   relChunkMdPath,
 } from '../lib/project-paths.js';
 import { assertBareName } from '../lib/user-name.js';
+import { type GateTransition, readGateTransition } from '../lib/gate-transition.js';
 import {
   extractSection,
   findHeadingIndex,
@@ -52,6 +54,10 @@ import { checkConstraints } from './constraint-check.js';
  *     own sign-off will have to cover it. Accounted edits are reported as `sharedEdits`, which is
  *     information, not a refusal. An edit nothing accounts for (a signed chunk reworked without a
  *     reopen, or an edit left behind by nobody's chunk) voids every sign-off naming that file.
+ *   - A chunk verified before this gate existed gets through it once, by `boardsmith
+ *     chunk-gate-transition` (#397): the designer records it in `design/GATE-TRANSITION.md`, and
+ *     the chunk's block reads `Basis: transition`. That basis counts only for a chunk the ledger
+ *     names, so it cannot be typed into a chunk verified since.
  *
  * HONEST LIMITATION: code cannot prove a human typed the name. What it does is make the failure
  * modes the audit found impossible to reach by accident: a run cannot sign as itself, cannot skip
@@ -65,21 +71,24 @@ export const SIGNOFF_END = '<!-- boardsmith:signoff:end -->';
 /** The body a freshly scaffolded CHUNK.md carries before anyone signs it off. */
 const SIGNOFF_EMPTY = '_Not yet signed off._';
 
-const VERIFIED = 'verified';
+export const VERIFIED = 'verified';
 const VERIFIED_WAIVED = 'verified (user-waived)';
 
 /**
- * The three ways a chunk can be done, and nothing else.
+ * The ways a chunk can be done, and nothing else.
  *
  * - `designer`: the designer played the script and confirmed every checklist item.
  * - `waiver`: the designer granted a waiver that names this chunk and has not expired.
  * - `automated`: the chunk has no designer playtest (not a milestone, or no visible UI), so the
  *   automated test and sim pass stands in; the evidence names that pass.
+ * - `transition`: the chunk was verified before this gate existed, and the designer recorded it
+ *   in the project's one-time gate transition; `status` is the verified Status it kept.
  */
 type SignoffBasis =
   | { basis: 'designer'; by: string; when: string; observed: number[] }
   | { basis: 'waiver'; waiver: string; by: string; when: string }
-  | { basis: 'automated'; when: string; evidence: string };
+  | { basis: 'automated'; when: string; evidence: string }
+  | { basis: 'transition'; by: string; when: string; status: string };
 
 /**
  * Each source file the Build Manifest names, mapped to its content at sign-off: a SHA-256, or
@@ -88,7 +97,7 @@ type SignoffBasis =
 type CodeFiles = Record<string, string>;
 
 /** Every basis also records `code`: the chunk's source files as they were at sign-off. */
-type SignoffRecord = SignoffBasis & { code: CodeFiles };
+export type SignoffRecord = SignoffBasis & { code: CodeFiles };
 
 interface ParsedSignoff {
   /**
@@ -98,6 +107,8 @@ interface ParsedSignoff {
    */
   state: 'absent' | 'empty' | 'reopened' | 'malformed' | 'whole-file' | 'recorded';
   record?: SignoffRecord;
+  /** A `whole-file` sign-off: its basis, and the one hash it recorded over all its files. */
+  wholeFile?: { basis: SignoffBasis; hash: string };
   reopened?: { when: string; reason: string };
 }
 
@@ -136,7 +147,7 @@ const RUN_IDENTITIES = new Set([
   'system',
 ]);
 
-function designerNameProblem(by: string, flag: string): string | undefined {
+export function designerNameProblem(by: string, flag: string): string | undefined {
   const name = by.trim();
   if (!name) {
     return `${flag} is empty. Pass the designer's own name: the person who answered.`;
@@ -157,7 +168,7 @@ function stripComments(text: string): string {
   return text.replace(/<!--[\s\S]*?-->/g, '');
 }
 
-function readStatus(chunkText: string): string | undefined {
+export function readStatus(chunkText: string): string | undefined {
   return /^Status:\s*(.*)$/m.exec(chunkText)?.[1].trim();
 }
 
@@ -246,7 +257,7 @@ function isInside(dir: string, path: string): boolean {
  * (`DECISIONS.md` or `design/DECISIONS.md`, a rulebook slice, a chunk's evidence): close writes
  * the ledgers after the sign-off, and none of it is the code the designer played.
  */
-async function chunkCodeFiles(projectDir: string, chunkText: string): Promise<CodeFiles> {
+export async function chunkCodeFiles(projectDir: string, chunkText: string): Promise<CodeFiles> {
   const design = designDir(projectDir);
   const files: CodeFiles = {};
   const paths = [...new Set(parseBuildManifest(chunkText).entries.map((e) => e.path))].sort();
@@ -272,6 +283,7 @@ const BASIS_FIELDS = {
   designer: ['By', 'When', 'Observed'],
   waiver: ['Waiver', 'By', 'When'],
   automated: ['When', 'Evidence'],
+  transition: ['By', 'When', 'Status'],
 } as const;
 
 function fieldValues(record: SignoffBasis): Record<string, string> {
@@ -282,6 +294,8 @@ function fieldValues(record: SignoffBasis): Record<string, string> {
       return { Waiver: record.waiver, By: record.by, When: record.when };
     case 'automated':
       return { When: record.when, Evidence: record.evidence };
+    case 'transition':
+      return { By: record.by, When: record.when, Status: record.status };
   }
 }
 
@@ -291,7 +305,7 @@ function renderCode(code: CodeFiles): string[] {
   return paths.length ? paths.map((p) => `Code: ${p} ${code[p]}`) : ['Code: none'];
 }
 
-function renderSignoff(record: SignoffRecord): string {
+export function renderSignoff(record: SignoffRecord): string {
   const values = fieldValues(record);
   const lines = [
     `Basis: ${record.basis}`,
@@ -325,6 +339,7 @@ function parseObserved(raw: string): number[] | undefined {
 function buildBasis(basis: keyof typeof BASIS_FIELDS, f: Record<string, string>): SignoffBasis | undefined {
   if (basis === 'waiver') return { basis, waiver: f.Waiver, by: f.By, when: f.When };
   if (basis === 'automated') return { basis, when: f.When, evidence: f.Evidence };
+  if (basis === 'transition') return { basis, by: f.By, when: f.When, status: f.Status };
   const observed = parseObserved(f.Observed);
   return observed ? { basis, by: f.By, when: f.When, observed } : undefined;
 }
@@ -385,12 +400,15 @@ export function parseSignoff(chunkText: string): ParsedSignoff {
   const basis = basisFromFields(fields);
   const code = readCode(body);
   if (!basis || code === undefined) return { state: 'malformed' };
-  if (code === 'whole-file') return { state: 'whole-file' };
+  if (code === 'whole-file') {
+    return { state: 'whole-file', wholeFile: { basis, hash: /^Code:[ \t]*(\S+)/m.exec(body)![1] } };
+  }
   return { state: 'recorded', record: { ...basis, code } };
 }
 
 /** The Status a sign-off derives. Never typed by a session. */
 function derivedStatus(record: SignoffBasis): string {
+  if (record.basis === 'transition') return record.status;
   return record.basis === 'waiver' ? VERIFIED_WAIVED : VERIFIED;
 }
 
@@ -453,6 +471,7 @@ interface SignoffContext {
   /** An Error when the gate could not be read; its message becomes the problem. */
   needsDesigner: boolean | Error;
   waivers: Waiver[];
+  transition: GateTransition | undefined;
 }
 
 function designerProblems(record: { by: string; observed: number[] }, ctx: SignoffContext): string[] {
@@ -531,6 +550,36 @@ function automatedProblems(ctx: SignoffContext): string[] {
   ];
 }
 
+function transitionProblems(record: { by: string; when: string; status: string }, ctx: SignoffContext): string[] {
+  if (!ctx.transition) {
+    return [
+      `${ctx.slug}'s sign-off cites the gate transition, but design/${GATE_TRANSITION_MD} does not ` +
+        `exist. Only \`boardsmith chunk-gate-transition\` writes a transition sign-off.`,
+    ];
+  }
+  const entry = ctx.transition.signoffs.find((s) => s.slug === ctx.slug);
+  if (!entry) {
+    return [
+      `The gate transition (design/${GATE_TRANSITION_MD}) does not name ${ctx.slug}. It covers only ` +
+        `the chunks verified before the gates when it was recorded; a chunk verified since is ` +
+        `signed off with \`boardsmith chunk-signoff ${ctx.slug} ...\`.`,
+    ];
+  }
+  const recorded = { By: ctx.transition.by, When: ctx.transition.recorded, Status: entry.status };
+  const given = { By: record.by, When: record.when, Status: record.status };
+  const problems = (Object.keys(recorded) as Array<keyof typeof recorded>)
+    .filter((k) => recorded[k] !== given[k])
+    .map(
+      (k) =>
+        `The sign-off says ${k} "${given[k]}" but design/${GATE_TRANSITION_MD} records ` +
+        `"${recorded[k]}" for ${ctx.slug}.`,
+    );
+  if (![VERIFIED, VERIFIED_WAIVED].includes(record.status)) {
+    problems.push(`A transition sign-off keeps a verified Status; "${record.status}" is not one.`);
+  }
+  return problems;
+}
+
 function signoffProblems(record: SignoffBasis, ctx: SignoffContext): string[] {
   const whenProblems = Number.isNaN(new Date(record.when).getTime())
     ? [`The sign-off's When "${record.when}" is not a date and time.`]
@@ -542,6 +591,8 @@ function signoffProblems(record: SignoffBasis, ctx: SignoffContext): string[] {
       return [...whenProblems, ...waiverProblems(record, ctx)];
     case 'automated':
       return [...whenProblems, ...automatedProblems(ctx)];
+    case 'transition':
+      return [...whenProblems, ...transitionProblems(record, ctx)];
   }
 }
 
@@ -554,6 +605,7 @@ async function loadContext(projectDir: string, slug: string, chunkText: string):
     checklistItems: countChecklistItems(chunkText),
     needsDesigner,
     waivers: await readWaivers(projectDir),
+    transition: await readGateTransition(projectDir),
   };
 }
 
@@ -578,7 +630,7 @@ export interface SharedEdit {
   how: 'signed-off' | 'being-built';
 }
 
-export interface SignoffAssessment {
+interface SignoffAssessment {
   /** Every reason this chunk's Status is not backed by a valid sign-off. Empty means it is. */
   problems: string[];
   /** Accounted-for edits to files this chunk shares. Information, never a refusal. */
@@ -656,6 +708,15 @@ function codeAssessment(self: ChunkState, record: SignoffRecord, all: ChunkState
   return { problems, sharedEdits };
 }
 
+/** The refusal's pointer to the one-time transition, while the project has not recorded it. */
+function transitionHint(transitioned: boolean): string {
+  if (transitioned) return '';
+  return (
+    ` If this chunk was verified before BoardSmith recorded sign-offs, the designer records that ` +
+    `once for the whole project with \`boardsmith chunk-gate-transition --by "<designer>"\`.`
+  );
+}
+
 /** Everything wrong with one chunk's sign-off, given every chunk in the project. */
 async function assessChunk(dir: string, self: ChunkState, all: ChunkState[]): Promise<SignoffAssessment> {
   const none: SignoffAssessment = { problems: [], sharedEdits: [] };
@@ -666,6 +727,7 @@ async function assessChunk(dir: string, self: ChunkState, all: ChunkState[]): Pr
   const resign =
     `Set Status back to built, then record the designer's sign-off with ` +
     `\`boardsmith chunk-signoff ${slug} ...\`.`;
+  const transitioned = (await readGateTransition(dir)) !== undefined;
   if (parsed.reopened) {
     return {
       ...none,
@@ -682,17 +744,24 @@ async function assessChunk(dir: string, self: ChunkState, all: ChunkState[]): Pr
       problems: [
         `${rel}'s sign-off records one hash over all its files, the form used before a sign-off ` +
           `was tracked file by file, so it cannot tell a later chunk's edit from a change to this ` +
-          `chunk. ${resign}`,
+          `chunk. ` +
+          (transitioned
+            ? resign
+            : `Convert it with the one-time \`boardsmith chunk-gate-transition --by "<designer>"\`, ` +
+              `which keeps a sign-off whose code still matches it.`),
       ],
     };
   }
   if (!parsed.record) {
     const damaged = parsed.state === 'malformed' ? ' (its "## Sign-off" block is damaged)' : '';
+    // A CHUNK.md with no "## Sign-off" section at all was made before #291 scaffolded one; a
+    // chunk made since carries the section from its template, so it gets no transition hint.
+    const hint = parsed.state === 'absent' ? transitionHint(transitioned) : '';
     return {
       ...none,
       problems: [
         `${rel} says "Status: ${status}" but has no designer sign-off entry${damaged}. A verified ` +
-          `status is derived from a sign-off and cannot be set by hand. ${resign}`,
+          `status is derived from a sign-off and cannot be set by hand. ${resign}${hint}`,
       ],
     };
   }
@@ -886,7 +955,7 @@ function insertSignoffSection(chunkText: string, body: string): string {
   return before + renderSignoffSection(body) + after;
 }
 
-function writeSignoffBlock(chunkText: string, body: string, rel: string): string {
+export function writeSignoffBlock(chunkText: string, body: string, rel: string): string {
   if (parseSignoff(chunkText).state === 'absent') return insertSignoffSection(chunkText, body);
   if (signoffBody(chunkText) === undefined) {
     throw new Error(

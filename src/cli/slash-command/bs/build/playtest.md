@@ -24,6 +24,25 @@ sign-off saw the file as it is now, or while another chunk naming the file is be
 nothing accounts for, such as a signed chunk reworked without a reopen, voids the sign-off. A verified chunk goes back to `built` for rework only through `boardsmith chunk-reopen <slug>
 --reason "<why>"`, which voids its sign-off, so the reworked chunk needs a fresh `chunk-signoff`.
 
+### Chunks Verified Before the Gates
+
+A project may hold chunks verified before BoardSmith recorded sign-offs (#291) or tracked them file
+by file (#396). The sign-off check at close and `chunk-provenance-status` refuse those, and the
+refusal names the one-time transition the designer records for the whole project:
+
+```
+npx boardsmith chunk-gate-transition --by "<designer's name>"
+```
+
+It gives every chunk whose CHUNK.md has no `## Sign-off` section a `transition` sign-off that keeps
+its verified Status, keeps a whole-file sign-off whose code still matches (rewritten file by file),
+transitions one whose code has moved, and records each of those chunks' unquoted claims for
+`claim-quote-check` (`build/investigate.md` "Chunks Verified Before Claims Carried Quotes"). It
+writes `design/GATE-TRANSITION.md` and runs once: a later run only completes chunk writes a crash
+interrupted. It does not cover a chunk whose sign-off section was scaffolded and left empty, which
+was verified by hand under the gate. A transitioned chunk that is reopened needs a real sign-off,
+like any other.
+
 ## Milestone/UI Gate (SKILLAUTO-01)
 
 The human client-playtest stop below — "The Numbered Click-By-Click Test Script" through "The

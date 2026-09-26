@@ -71,7 +71,7 @@
     "src/cli/cli-conformance-commands.test.ts:132-137|src/cli/cli-conformance-commands.test.ts:166-171",
     "src/cli/cli-conformance-commands.test.ts:148-153|src/cli/cli-conformance-commands.test.ts:181-186",
     "src/cli/cli-conformance-commands.test.ts:153-159|src/cli/cli-conformance-commands.test.ts:186-192",
-    "src/cli/cli.test.ts:131-135|src/cli/cli.test.ts:314-317|src/cli/cli.test.ts:37-41",
+    "src/cli/cli.test.ts:131-135|src/cli/cli.test.ts:327-330|src/cli/cli.test.ts:37-41",
     "src/cli/cli.test.ts:139-145|src/cli/cli.test.ts:45-51",
     "src/cli/commands/analyze.ts:68-84|src/cli/commands/lint.ts:129-147",
     "src/cli/commands/audit.test.ts:30-35|src/cli/commands/audit.test.ts:74-79",
