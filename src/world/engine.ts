@@ -69,7 +69,6 @@ import type {
   ActionDefinition,
   ElementJSON,
   Game,
-  GameElement,
   Player,
 } from "../engine/index.js";
 import type { ActionMetadata, PickMetadata } from "../session/types.js";
@@ -119,7 +118,7 @@ import {
   type ScheduleRequest,
 } from "./schedule-api.js";
 import { worldRefusal, WorldRefusal } from "./refusals.js";
-import { devWarn, evaluateCondition } from "../engine/index.js";
+import { devWarn, evaluateCondition, GameElement } from "../engine/index.js";
 import { readOnlyProjection } from "./readonly.js";
 import { assertAnsweredAllocations, assertCreatedRoots } from "./migration.js";
 import { worldBudgets, type WorldBudgets } from "./budgets.js";
@@ -1262,8 +1261,8 @@ export class BoardSmithWorldEngine implements WorldEngine {
     // EVERY ROUND UP TO AND INCLUDING THIS SELECTION'S, with the args bound. A
     // later round may read what an earlier one loaded, and with arguments in hand
     // a round can name a partition the empty-args offer could not.
-    return this.answeringRead(player, definition, index, args, stamp, (acting, named) =>
-      this.pickOf(definition, index, acting, named, args),
+    return this.answeringRead(player, definition, index, args, stamp, (acting, named, draft) =>
+      this.pickOf(definition, index, acting, named, draft),
     );
   }
 
@@ -1280,6 +1279,10 @@ export class BoardSmithWorldEngine implements WorldEngine {
    * `through` is the last step to hydrate -- a selection's own index for a pick,
    * and `selections.length` (the execute round) for a quote, which reads the state
    * the purchase writes to.
+   *
+   * `answer` is handed the DRAFT, not the args as they came in (#418): each
+   * selection's value resolved the way dispatch resolves it, so a callback typed
+   * to receive an element receives one. See `resolveDraft`.
    */
   private async answeringRead<T>(
     player: string,
@@ -1287,7 +1290,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
     through: number,
     args: Readonly<Record<string, unknown>>,
     stamp: WorldOfferStamp,
-    answer: (acting: Player, named: readonly string[]) => T,
+    answer: (acting: Player, named: readonly string[], draft: Readonly<Record<string, unknown>>) => T,
   ): Promise<T> {
     const seat = this.seatFor(player);
     const acting = this.playerFor(seat);
@@ -1299,7 +1302,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
       for (let step = 0; step <= through; step++) {
         await this.hydrateRounds(definition, step, seat, args, named, namedSeats, arrivalAt(stamp.now));
       }
-      return answer(acting, named);
+      return answer(acting, named, this.resolveDraft(definition, args, acting, named));
     } finally {
       bindWorldFacilities(this.game, null);
     }
@@ -1336,18 +1339,81 @@ export class BoardSmithWorldEngine implements WorldEngine {
     // the state the purchase writes to and that partition is usually named by the
     // round after the last selection.
     return this.answeringRead(player, definition, definition.selections.length, args, stamp,
-      (acting) =>
+      (acting, _named, draft) =>
         // READ-ONLY FOR THE WHOLE CALLBACK, exactly as a pick's own callbacks are
         // (ShufflewickPub #384/#295): the projection refuses a write and
         // `readingOnly` refuses a reach-mark, so a quote cannot move the world it
         // is describing.
         this.game.readingOnly(() =>
           quote(
-            { ...args },
-            { game: readOnlyProjection(this.game), player: acting, args: { ...args } },
+            { ...draft },
+            { game: readOnlyProjection(this.game), player: acting, args: { ...draft } },
           ),
         ),
     );
+  }
+
+  /**
+   * THE DRAFT A SEAT HAS SENT, AS THE ACTION'S CALLBACKS ARE TYPED TO SEE IT (#418).
+   *
+   * The wire carries an element selection as its id. `execute` has always been
+   * handed the element, because dispatch goes through
+   * `ActionExecutor.resolveArgs`; a quote and a re-asked pick were handed the
+   * id, while their types promised the element, so `room.name` read `undefined`
+   * with no type error anywhere. This is the one place a world's READ resolves
+   * a draft, with the same `resolveArgs` dispatch uses, so the two cannot come to
+   * disagree about what a selection's value is.
+   *
+   * THROUGH THE PROJECTION, so what it resolves is read-only: an element handed
+   * to a quote cannot be written through any more than one the quote finds for
+   * itself (ShufflewickPub #384).
+   *
+   * AND ONLY INSIDE WHAT THIS READ DECLARED. An element id that is not resident,
+   * or that lies outside every partition this action's declaration named, is a
+   * draft the offer could never have produced: the element was taken since, or
+   * the client made the id up. Dispatch refuses the same draft when it is
+   * submitted; a read refuses it here rather than handing a callback a number
+   * typed as an element, or an element whose residency is an accident of who
+   * else is in the world.
+   */
+  private resolveDraft(
+    definition: ActionDefinition,
+    args: Readonly<Record<string, unknown>>,
+    acting: Player,
+    named: readonly string[],
+  ): Readonly<Record<string, unknown>> {
+    const draft = this.game.readingOnly(() =>
+      this.game
+        .getActionExecutor()
+        .resolveArgs(definition, { ...args }, acting, readOnlyProjection(this.game)),
+    );
+    for (const selection of definition.selections) {
+      if (selection.type === "element" || selection.type === "elements") {
+        this.assertOfferable(definition.name, selection.name, draft[selection.name], args, named);
+      }
+    }
+    return draft;
+  }
+
+  /** One element selection of a resolved draft: unanswered, or every element it
+   *  names inside a partition this read declared. `stale-draft` otherwise. */
+  private assertOfferable(
+    action: string,
+    selection: string,
+    value: unknown,
+    sent: Readonly<Record<string, unknown>>,
+    named: readonly string[],
+  ): void {
+    if (value === undefined || value === null) return;
+    for (const item of Array.isArray(value) ? value : [value]) {
+      if (item instanceof GameElement && named.includes(this.partitionOf(item))) continue;
+      throw worldRefusal(
+        "stale-draft",
+        `The draft of "${action}" answers "${selection}" with ${JSON.stringify(sent[selection])}, ` +
+          "which is not one of the elements this action can offer here now. Ask for the " +
+          "action's offer again and pick from it.",
+      );
+    }
   }
 
   /**
