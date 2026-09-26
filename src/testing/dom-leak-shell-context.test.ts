@@ -20,6 +20,7 @@ import type { UseActionControllerReturn } from '../ui/composables/useActionContr
 import { useGameContext } from '../ui/composables/useGameContext.js';
 import { useAnnouncer } from '../ui/composables/useAnnouncer.js';
 import { useAnimationEvents } from '../ui/composables/useAnimationEvents.js';
+import { holdGameOverUntil } from '../ui/composables/useGameOverReveal.js';
 import {
   enterIframe,
   leaveIframe,
@@ -132,6 +133,23 @@ describe('renderAsSeat provides the announcer GameShell provides (#406)', () => 
   });
 });
 
+/** A board that holds the table's ending back, as a board replaying the final battle does. */
+const HoldingBoard = defineComponent({
+  name: 'HoldingBoard',
+  setup() {
+    holdGameOverUntil(() => false);
+    return () => h('div', { class: 'board' });
+  },
+});
+
+describe('renderAsSeat provides the game-over hold GameShell provides (#419)', () => {
+  it('mounts a board that holds the ending back, as the shell does', async () => {
+    const wrapper = await render(renderAsSeat(moveGame(), 1, { component: HoldingBoard }));
+
+    expect(wrapper.find('.board').exists()).toBe(true);
+  });
+});
+
 /** A board that plays the seat's `flash` events, recording each one it is handed. */
 const played: unknown[] = [];
 const AnimatedBoard = defineComponent({
@@ -206,6 +224,7 @@ describe('renderAsSeat and GameShell give a board the same things (#406)', () =>
       'bs:actionController',
       'announcer',
       'animationEvents',
+      'boardsmith:game-over-holds',
     ]);
   });
 });

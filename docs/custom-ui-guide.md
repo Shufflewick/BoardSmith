@@ -958,6 +958,51 @@ Notes:
 - Do **not** teleport to `body`/outside GameShell for board modals — you lose
   the board-region confinement and the chrome guarantees.
 
+## The End of the Game
+
+When the flow completes, GameShell presents the ending twice: a game-over card
+over the board, and an assertive screen-reader announcement ("Game over — Alice
+wins"). The two follow **one** answer: the ending is shown when the flow is
+complete and no board is holding it back. A board cannot get the card without
+the announcement, or the other way round.
+
+Two separate questions decide what a game's ending looks like.
+
+**Who draws it.** By default the shell draws its `GameOverCard`. Fill the
+`#game-over` slot to draw your own card in its place, or set
+`providesOwnGameOverUI` on GameShell when your board draws the ending itself.
+Then no card is drawn, but the shell still announces the result. Write the prop
+in camelCase (`:providesOwnGameOverUI="true"`): the kebab form camelizes to
+`providesOwnGameOverUi`, which is not the prop's name.
+
+**When it is shown.** By default, the moment the flow completes. A board that
+holds its result back on purpose (until the player has watched a replay of
+the deciding battle, say) calls `holdGameOverUntil` in its `setup`, with a
+function that says when its ending is on screen:
+
+```ts
+import { holdGameOverUntil } from 'boardsmith/ui';
+
+// The result is on screen once this viewer's replay of the final battle has
+// ended or been skipped.
+holdGameOverUntil(() => matchResultShown.value);
+```
+
+Until that function returns true, the shell shows no card and says nothing.
+When it does, the card appears (unless your board draws the ending) and the
+result is announced, once per game. The hold is released when the board
+unmounts.
+
+The shell reads the function after your board has rendered the frame that
+completed the flow, so a hold that starts in reaction to that frame (a watcher
+that starts the replay) is in place in time. It has to be false by then,
+without waiting on anything: a hold that turns on only after an `await` has
+already let the ending through.
+
+`holdGameOverUntil` works in any board GameShell renders and in one
+`renderAsSeat` mounts. Called anywhere else it throws, because only a table has
+a game over to hold back.
+
 ## Board Sizing
 
 GameShell fits the board to the available screen space at startup by
