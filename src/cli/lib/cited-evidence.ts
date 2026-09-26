@@ -9,7 +9,9 @@
  * points is the one rule for a path in a design record, `designRecordPath` (project-paths.ts, #409).
  *
  * A citation is a whitespace-, quote-, bracket- or backtick-delimited token that contains a `/`
- * and ends in a script or capture extension. Skipped on purpose: URLs, a path in another
+ * and ends in a script or capture extension, optionally followed by a line location (`:N`,
+ * `:N-M`, `:N:C`) read by the one grammar for one, `splitLineLocation` (line-location.ts, #414).
+ * The lines it names are returned with it, so `ledger-check` can hold them to "the file has them". Skipped on purpose: URLs, a path in another
  * repository written `<repo>:<path>` (for example `BoardSmith:src/engine/game.ts`), template
  * placeholders and globs (`<slug>`, `*`, `{a,b}`), bare file names, anything inside an HTML
  * comment, which is where the templates keep their examples, and a module specifier quoted in
@@ -18,16 +20,19 @@
  */
 
 import { blankComments } from './ledger-entries.js';
+import { type LineRange, splitLineLocation } from './line-location.js';
 import { CHUNKS_DIR, DESIGN_DIR } from './project-paths.js';
 
 /** Where committed evidence for a chunk lives, project-relative. */
 export const CHUNK_EVIDENCE_DIR = `${DESIGN_DIR}/${CHUNKS_DIR}/<slug>/evidence/`;
 
 interface CitedPath {
-  /** The path as written, without any `:line` suffix. */
+  /** The path as written, without its line location. */
   path: string;
   /** 1-based line of the file it was cited on. */
   line: number;
+  /** The lines of the cited file the citation names, when it names any (`path:N`, `path:N-M`). */
+  lines?: LineRange;
 }
 
 const EVIDENCE_EXTENSION = /\.(?:mjs|cjs|js|mts|cts|ts|sh|py|png|jpe?g|gif|webp|svg|webm|mp4)$/i;
@@ -41,13 +46,13 @@ const NOT_A_GAME_PATH = /[*{}<>$]/;
 const MODULE_SPECIFIER =
   /\b(?:import|export)\b[^'"\n]*?\bfrom\s*(['"])[^'"\n]*\1|\b(?:import|require)\s*\(?\s*(['"])[^'"\n]*\2/g;
 
-function asCitation(raw: string): string | undefined {
-  const path = raw.replace(/[.,:;!?]+$/, '').replace(/:\d+(?::\d+)?$/, '');
+function asCitation(raw: string): { path: string; lines?: LineRange } | undefined {
+  const { path, lines } = splitLineLocation(raw.replace(/[.,:;!?]+$/, ''));
   if (!path.includes('/') || !EVIDENCE_EXTENSION.test(path)) return undefined;
   if (NOT_A_GAME_PATH.test(path)) return undefined;
   // A colon before the first slash is a URL scheme or a `<repo>:` qualifier.
   if (/^[^/]*:/.test(path)) return undefined;
-  return path;
+  return lines ? { path, lines } : { path };
 }
 
 /** Every cited script or capture in `text`, in file order. */
@@ -57,8 +62,8 @@ export function citedEvidencePaths(text: string): CitedPath[] {
     .split('\n')
     .forEach((lineText, index) => {
       for (const [token] of lineText.replace(MODULE_SPECIFIER, ' ').matchAll(TOKEN)) {
-        const path = asCitation(token);
-        if (path) cited.push({ path, line: index + 1 });
+        const citation = asCitation(token);
+        if (citation) cited.push({ ...citation, line: index + 1 });
       }
     });
   return cited;
