@@ -110,7 +110,8 @@ it('reports the refusal', async () => {
 function gameProject(prefix: string, withTestUtils: boolean): string {
   // realpath: on macOS the temp root is a symlink, and Vite resolves ids to
   // real paths, which would put the project's own files outside its root.
-  const dir = realpathSync(tempTree(prefix));
+  const tree = tempTree(prefix);
+  const dir = realpathSync(tree);
   const modules = join(dir, 'node_modules');
   mkdirSync(join(dir, 'tests'), { recursive: true });
   mkdirSync(modules);
