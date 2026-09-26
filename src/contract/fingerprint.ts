@@ -1286,6 +1286,10 @@ async function computeWorldFixture(): Promise<{
       prompt: 'What to post',
       minLength: 2,
       maxLength: 240,
+      // #394: the byte bound and the pattern's sentence travel on the pick, and
+      // both are optional fields a type change alone would not show.
+      maxBytes: 480,
+      pattern: { regex: /\S/, message: 'Write something to post.' },
       multiline: true,
     })
     .execute((args: any, ctx: any) => {

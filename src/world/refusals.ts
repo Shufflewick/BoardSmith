@@ -157,7 +157,9 @@ export const WORLD_REFUSALS = {
       "it runs no command ever again. REFUSED rather than ignored, because a player whose move " +
       "vanished silently cannot tell a finished season from a broken world; and never run, " +
       "because running it could end the season a second time. CALLER-owned: the world is " +
-      "finished, not in trouble, and it still answers views",
+      "finished, not in trouble, and it still answers views. #400: also what a host answers when " +
+      "asked to open an ended world on rules of another state version, because an ended world is " +
+      "never migrated (the platform keeps the version it ended on)",
   },
   "rate-limited": {
     owner: "caller",

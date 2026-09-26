@@ -141,6 +141,10 @@ export function toPosix(p: string): string {
  * `gameClass` to hand to `simulateRandomGames`/`createTestGame`, which run the
  * engine directly without the stateless-ops executor.
  *
+ * `bundlePath` is the bundle it loaded, left in `tempDir` for a caller that
+ * must load the same rules again elsewhere (`evolve-bot-weights` hands it to its
+ * worker threads). The caller owns `tempDir` and removes it.
+ *
  * SECURITY NOTE (T-125-03, accepted risk): like `dev`/`build`, this
  * dynamic-imports the project's OWN rules module — arbitrary code from the
  * project being simulated executes in this CLI process. This is the same
@@ -152,9 +156,15 @@ export async function loadGameDefinition(
   rulesPath: string,
   tempDir: string,
   context: 'monorepo' | 'standalone',
-): Promise<{ gameDefinition: GameDefinition }> {
-  const module = await importRuntimeBundle({ rulesPath, tempDir, name: 'simulate', context, exports: [] });
-  return { gameDefinition: module.gameDefinition };
+): Promise<{ gameDefinition: GameDefinition; bundlePath: string }> {
+  const name = 'definition';
+  const module = await importRuntimeBundle({ rulesPath, tempDir, name, context, exports: [] });
+  return { gameDefinition: module.gameDefinition, bundlePath: runtimeBundlePath(tempDir, name) };
+}
+
+/** Where {@link importRuntimeBundle} writes the bundle it names `name` in `tempDir`. */
+function runtimeBundlePath(tempDir: string, name: string): string {
+  return join(tempDir, `${name}-bundle.mjs`);
 }
 
 /**
@@ -206,7 +216,7 @@ export async function importRuntimeBundle(args: {
       '\n',
     ),
   );
-  const bundlePath = join(args.tempDir, `${args.name}-bundle.mjs`);
+  const bundlePath = runtimeBundlePath(args.tempDir, args.name);
 
   await build({
     entryPoints: [entryPath],

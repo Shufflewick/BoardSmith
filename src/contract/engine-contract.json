@@ -1,8 +1,8 @@
 {
-  "revision": 108,
+  "revision": 109,
   "bundleProtocol": 2,
   "surfaceHash": "3fc4e9fcecb3b9fe",
-  "payloadHash": "5bfe87a6bf117444",
+  "payloadHash": "cae65bbab7213c58",
   "formatHash": "0058593e7cc80205",
   "history": [
     {
@@ -916,6 +916,15 @@
       "payloadHash": "5bfe87a6bf117444",
       "formatHash": "0058593e7cc80205",
       "summary": "WORLD_REFUSALS gains the caller-owned world-ended code, WorldStore gains endedAt() and WorldCheckpointExtras gains endedAt: an ended world's ending is durable, the ending's checkpoint empties the schedule, and ResidentWorld refuses commands with world-ended and runs no events or clock commands after it (#395)"
+    },
+    {
+      "revision": 109,
+      "date": "2026-09-26",
+      "bundleProtocol": 2,
+      "surfaceHash": "3fc4e9fcecb3b9fe",
+      "payloadHash": "cae65bbab7213c58",
+      "formatHash": "0058593e7cc80205",
+      "summary": "enterText refuses control characters (C0, DEL, C1; a multiline field admits line feed and tab) and unpaired surrogates with a player-facing sentence, takes an optional maxBytes that bounds the UTF-8 bytes the text adds to a partition (measured as the partition store measures), and its pattern is now { regex, message }. The text pick on the wire gains maxBytes (only when set) and carries pattern as { source, message } instead of a bare source string (#394)."
     }
   ]
 }

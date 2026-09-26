@@ -523,6 +523,39 @@ Action.create('name')
 copied into every retained checkpoint and every per-seat view, so an unbounded
 field is a state-size hazard. Set your own, lower, bound whenever you know it.
 
+**What no text may contain.** The engine refuses control characters (C0
+U+0000-U+001F, DEL U+007F, C1 U+0080-U+009F) and unpaired UTF-16 surrogates in
+every text argument, and so does the Action Panel before the player submits:
+"<name> contains characters that can't be stored, such as invisible control
+characters. Remove them and try again." A `multiline` field admits line feed and
+tab; a single-line field refuses them too. There is no opt-out: these
+characters are invisible, never typed on purpose, and break logs, rendering and
+UTF-8 storage.
+
+**`maxBytes` when the text is sized against a byte budget.** `maxLength` counts
+UTF-16 characters, but a world partition is refused on the UTF-8 bytes of its
+JSON, and an emoji is two characters and four bytes. With control characters
+refused, a character costs at most three bytes, so `maxLength` bounds the bytes
+at three times itself. `maxBytes` bounds them exactly, measured the way the
+partition store measures (the text's JSON form, without the quotes), and the
+panel and engine both refuse text over it.
+
+```typescript
+worldAction('gossip')
+  .enterText('message', { maxLength: 200, maxBytes: 400 })
+```
+
+**A `pattern` says what it wants.** It is `{ regex, message }`, and `message`
+is what the player is shown when their text does not match:
+
+```typescript
+Action.create('setHandle')
+  .enterText('handle', {
+    maxLength: 20,
+    pattern: { regex: /^[a-z0-9_]+$/, message: 'Use lowercase letters, digits and underscores only.' },
+  })
+```
+
 **`multiline: true` for prose.** The Action Panel draws a text pick as a
 single-line field, which is right for a name and wrong for a description: a
 thousand characters shown a hundred and twenty pixels at a time cannot be read
@@ -539,9 +572,10 @@ Action.create('setDescription')
   })
 ```
 
-It is **presentation only**. The value is the same string, `minLength`,
-`maxLength`, `pattern` and `validate` bind it in exactly the same way, and line
-breaks are ordinary characters either way -- they count toward the length and
+It is **presentation only**, with one exception. The value is the same string,
+and `minLength`, `maxLength`, `maxBytes`, `pattern` and `validate` bind it in
+exactly the same way. The exception is that a multiline field admits line feed
+and tab, which a single-line field refuses; they count toward the length and
 nothing strips them. That is why it is an option on `enterText` rather than a
 selection kind of its own: a new `type` would carry a duplicate of every rule
 `text` already has, and every host that switches on `type` would draw nothing at
