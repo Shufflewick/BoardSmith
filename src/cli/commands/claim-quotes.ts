@@ -30,15 +30,22 @@
  * treated as one space. A claim that a later claim supersedes ("supersedes claim N") is not
  * checked: it is kept only as the record of what was corrected.
  *
+ * A CHUNK VERIFIED BEFORE THIS CHECK EXISTED (#397) has claims with no quotes. The one-time
+ * `boardsmith chunk-gate-transition` records each of them, by number, with a hash of its text, in
+ * `design/GATE-TRANSITION.md`. Such a claim is accepted (reported `preGate`) while its text is
+ * unchanged; once its text changes, or for any claim added since, the quote is owed like any other.
+ *
  * READ-ONLY: never writes a file.
  */
 
+import { createHash } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import { isAbsolute, relative, resolve, sep } from 'node:path';
 import chalk from 'chalk';
 import { extractSection } from './build-manifest.js';
 import { assertBareName } from '../lib/user-name.js';
-import { DESIGN_DIR, chunkMdPath, designDir, relChunkMdPath } from '../lib/project-paths.js';
+import { DESIGN_DIR, GATE_TRANSITION_MD, chunkMdPath, designDir, relChunkMdPath } from '../lib/project-paths.js';
+import { readGateTransition } from '../lib/gate-transition.js';
 
 interface QuotedPassage {
   quote: string;
@@ -47,6 +54,8 @@ interface QuotedPassage {
 
 interface ParsedClaim {
   number: number;
+  /** The claim's own lines, from its number to the next item. */
+  lines: string[];
   quotes: QuotedPassage[];
   /** Claim numbers this claim's own text says it supersedes. */
   supersedes: number[];
@@ -71,6 +80,8 @@ interface CheckedQuote extends QuotedPassage {
 interface CheckedClaim {
   number: number;
   superseded: boolean;
+  /** Recorded without a quote by the gate transition (#397), and unchanged since. */
+  preGate: boolean;
   quotes: CheckedQuote[];
 }
 
@@ -128,7 +139,7 @@ function startItem(state: ParseState, line: string): boolean {
   closePendingQuote(state);
   state.current = undefined;
   if (claimMatch) {
-    const claim: ParsedClaim = { number: Number(claimMatch[1]), quotes: [], supersedes: [], problems: [] };
+    const claim: ParsedClaim = { number: Number(claimMatch[1]), lines: [line], quotes: [], supersedes: [], problems: [] };
     noteSupersession(claim, line);
     state.result.claims.push(claim);
     state.current = { kind: 'claim', claim };
@@ -151,6 +162,7 @@ function takeSource(state: ParseState, item: Item, source: string): void {
 
 /** Handles a line inside the current claim or open question. */
 function continueItem(state: ParseState, item: Item, line: string): void {
+  if (item.kind === 'claim') item.claim.lines.push(line);
   const quoteMatch = QUOTE_LINE.exec(line);
   if (quoteMatch) {
     state.pendingQuote.push(quoteMatch[1]);
@@ -191,6 +203,30 @@ function noteSupersession(claim: ParsedClaim, line: string): void {
 
 function normalize(text: string): string {
   return text.replace(/\s+/g, ' ').trim();
+}
+
+/** What a claim's text is recorded as: line wrapping and blank lines do not change it. */
+function claimTextHash(claim: ParsedClaim): string {
+  return createHash('sha256').update(normalize(claim.lines.join('\n'))).digest('hex');
+}
+
+function supersededNumbers(parsed: ParsedInterpretation): Set<number> {
+  return new Set(parsed.claims.flatMap((c) => c.supersedes));
+}
+
+/**
+ * Every claim in force that carries no quote, by number, with the hash of its text. This is what
+ * `boardsmith chunk-gate-transition` records for a chunk verified before this check existed.
+ */
+export function unquotedClaims(chunkText: string): Record<number, string> {
+  const parsed = parseInterpretationQuotes(chunkText);
+  if (!parsed) return {};
+  const superseded = supersededNumbers(parsed);
+  return Object.fromEntries(
+    parsed.claims
+      .filter((c) => !superseded.has(c.number) && c.quotes.length === 0)
+      .map((c) => [c.number, claimTextHash(c)]),
+  );
 }
 
 type Located = { ok: true; text: string } | { ok: false; problem: string };
@@ -345,21 +381,52 @@ async function checkPassage(
   return { ...passage, found };
 }
 
+/**
+ * What the gate transition means for this chunk's unquoted claims: `recorded` holds the claims it
+ * recorded (by number, text hash), and `offer` says a verified chunk may still take the
+ * transition, so a refusal names it.
+ */
+interface PreGateClaims {
+  recorded: Record<number, string>;
+  offer: boolean;
+}
+
+function noQuoteRefusal(claim: ParsedClaim, preGate: PreGateClaims): string {
+  const recordedHash = preGate.recorded[claim.number];
+  if (recordedHash !== undefined) {
+    return (
+      `Claim ${claim.number} changed since the gate transition recorded it without a quote ` +
+      `(design/${GATE_TRANSITION_MD}), so it now needs one. ${FORMAT_HINT}`
+    );
+  }
+  const offer = preGate.offer
+    ? ' This chunk is verified: if its claims were written before claims carried quotes, the ' +
+      'designer records them once for the whole project with ' +
+      '`boardsmith chunk-gate-transition --by "<designer>"`, after which only a claim added or ' +
+      'changed needs a quote.'
+    : '';
+  return (
+    `Claim ${claim.number} has no quoted passage. ${FORMAT_HINT} If no source text backs it, it is ` +
+    'not a claim: rewrite it as an open question (`Q1. **...**`) with `Searched:` lines naming where ' +
+    `you looked, and the ask step puts it to the designer.${offer}`
+  );
+}
+
 async function checkClaim(
   projectDir: string,
   claim: ParsedClaim,
   superseded: boolean,
+  preGate: PreGateClaims,
   refusals: string[],
 ): Promise<CheckedClaim> {
-  const checked: CheckedClaim = { number: claim.number, superseded, quotes: [] };
+  const checked: CheckedClaim = { number: claim.number, superseded, preGate: false, quotes: [] };
   if (superseded) return checked;
+  if (claim.quotes.length === 0 && preGate.recorded[claim.number] === claimTextHash(claim)) {
+    return { ...checked, preGate: true };
+  }
   refusals.push(...claim.problems);
   if (claim.quotes.length === 0 && claim.problems.length === 0) {
-    refusals.push(
-      `Claim ${claim.number} has no quoted passage. ${FORMAT_HINT} If no source text backs it, it is ` +
-        'not a claim: rewrite it as an open question (`Q1. **...**`) with `Searched:` lines naming where ' +
-        'you looked, and the ask step puts it to the designer.',
-    );
+    refusals.push(noQuoteRefusal(claim, preGate));
   }
   for (const passage of claim.quotes) {
     checked.quotes.push(await checkPassage(projectDir, claim.number, passage, refusals));
@@ -398,17 +465,23 @@ function emptyInterpretationRefusal(slug: string, parsed: ParsedInterpretation |
 
 /** Checks one chunk's claims and open questions against the files they cite. */
 export async function checkClaimQuotes(projectDir: string, slug: string): Promise<ClaimQuoteCheckResult> {
-  const parsed = parseInterpretationQuotes(await fs.readFile(chunkMdPath(projectDir, slug), 'utf8'));
+  const chunkText = await fs.readFile(chunkMdPath(projectDir, slug), 'utf8');
+  const parsed = parseInterpretationQuotes(chunkText);
   const empty = emptyInterpretationRefusal(slug, parsed);
   if (empty !== undefined || parsed === undefined) {
     return { claims: [], questions: [], refusals: empty === undefined ? [] : [empty] };
   }
 
-  const superseded = new Set(parsed.claims.flatMap((c) => c.supersedes));
+  const transition = await readGateTransition(projectDir);
+  const preGate: PreGateClaims = {
+    recorded: transition?.claims[slug] ?? {},
+    offer: transition === undefined && /^Status:\s*verified/m.test(chunkText),
+  };
+  const superseded = supersededNumbers(parsed);
   const refusals: string[] = [];
   const claims: CheckedClaim[] = [];
   for (const claim of parsed.claims) {
-    claims.push(await checkClaim(projectDir, claim, superseded.has(claim.number), refusals));
+    claims.push(await checkClaim(projectDir, claim, superseded.has(claim.number), preGate, refusals));
   }
   for (const question of parsed.questions) {
     await checkQuestion(projectDir, question, refusals);
@@ -418,6 +491,18 @@ export async function checkClaimQuotes(projectDir: string, slug: string): Promis
     questions: parsed.questions.map((q) => ({ id: q.id, searched: q.searched })),
     refusals,
   };
+}
+
+function passLine(shownChunk: string, result: ClaimQuoteCheckResult): string {
+  const live = result.claims.filter((c) => !c.superseded).length;
+  const preGate = result.claims.filter((c) => c.preGate).length;
+  const preGateNote = preGate
+    ? ` ${preGate} of them recorded without a quote by the gate transition and unchanged since;`
+    : '';
+  return (
+    `✓ ${shownChunk}: ${live} claim(s), every quote found at its source;${preGateNote} ` +
+    `${result.questions.length} open question(s) for the ask step.`
+  );
 }
 
 /**
@@ -459,13 +544,7 @@ export async function claimQuoteCheckCommand(
   if (options.json) {
     console.log(JSON.stringify({ slug, ok, ...result }, null, 2));
   } else if (ok) {
-    const live = result.claims.filter((c) => !c.superseded).length;
-    console.log(
-      chalk.green(
-        `✓ ${shownChunk}: ${live} claim(s), every quote found at its source; ` +
-          `${result.questions.length} open question(s) for the ask step.`,
-      ),
-    );
+    console.log(chalk.green(passLine(shownChunk, result)));
   }
 
   if (!ok) {

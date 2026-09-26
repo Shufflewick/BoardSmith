@@ -1,7 +1,7 @@
 {
-  "revision": 107,
+  "revision": 108,
   "bundleProtocol": 2,
-  "surfaceHash": "7abda4be9833ab31",
+  "surfaceHash": "3fc4e9fcecb3b9fe",
   "payloadHash": "5bfe87a6bf117444",
   "formatHash": "0058593e7cc80205",
   "history": [
@@ -907,6 +907,15 @@
       "payloadHash": "5bfe87a6bf117444",
       "formatHash": "0058593e7cc80205",
       "summary": "SnapshotSessionHost takes an optional hostWork gate (new HostWorkGate type): demo moves and bot chains wait on it while the host's rules are being replaced; a host without one runs that work at once"
+    },
+    {
+      "revision": 108,
+      "date": "2026-09-26",
+      "bundleProtocol": 2,
+      "surfaceHash": "3fc4e9fcecb3b9fe",
+      "payloadHash": "5bfe87a6bf117444",
+      "formatHash": "0058593e7cc80205",
+      "summary": "WORLD_REFUSALS gains the caller-owned world-ended code, WorldStore gains endedAt() and WorldCheckpointExtras gains endedAt: an ended world's ending is durable, the ending's checkpoint empties the schedule, and ResidentWorld refuses commands with world-ended and runs no events or clock commands after it (#395)"
     }
   ]
 }

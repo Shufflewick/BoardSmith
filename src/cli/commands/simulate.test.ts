@@ -1,6 +1,7 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { mkdirSync, writeFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   Game,
   Player,
@@ -15,6 +16,7 @@ import {
 import { runSimulation, runReplay, simulateCommand, resolveSimulationGameOptions } from './simulate.js';
 import { DeadEndGame } from './simulate.fixture.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
+import { commandBuildDir, scratchDir } from '../lib/project-paths.js';
 
 /**
  * Minimal always-completing game (mirrors the fixture used by
@@ -216,5 +218,74 @@ describe('simulateCommand', () => {
     process.exitCode = 0;
     await simulateCommand({ games: '1', players: '0', seed: undefined });
     expect(process.exitCode).toBe(1);
+  });
+});
+
+/**
+ * #391: simulate bundles the rules into its own build directory and removes
+ * only that. `.boardsmith/` also holds the scratch directory and the chunk
+ * worktrees of a parallel build, which simulate did not make.
+ */
+describe('simulateCommand leaves the rest of .boardsmith alone (#391)', () => {
+  const fixture = resolve(dirname(fileURLToPath(import.meta.url)), 'simulate.fixture.ts');
+  let originalCwd: string;
+  let originalExitCode: number | string | null | undefined;
+
+  beforeEach(() => {
+    originalCwd = process.cwd();
+    originalExitCode = process.exitCode;
+  });
+
+  afterEach(() => {
+    process.chdir(originalCwd);
+    process.exitCode = originalExitCode;
+  });
+
+  /** A project whose rules module is `rules`, already holding a scratch file and a chunk worktree. */
+  function projectWithAuthorFiles(rules: string): { dir: string; expectAuthorFilesKept: () => void } {
+    const dir = tempTree('boardsmith-simulate-391-');
+    writeFileSync(join(dir, 'boardsmith.json'), JSON.stringify({ name: 'fixture', backend: 'table' }));
+    mkdirSync(join(dir, 'src', 'rules'), { recursive: true });
+    writeFileSync(join(dir, 'src', 'rules', 'index.ts'), rules);
+    const scratchFile = join(scratchDir(dir), 'keep.txt');
+    const worktreeFile = join(dir, '.boardsmith', 'worktrees', 'chunk-a', 'notes.md');
+    mkdirSync(scratchDir(dir), { recursive: true });
+    mkdirSync(dirname(worktreeFile), { recursive: true });
+    writeFileSync(scratchFile, 'keep me\n');
+    writeFileSync(worktreeFile, 'unfinished chunk\n');
+    process.chdir(dir);
+    return {
+      dir,
+      expectAuthorFilesKept: () => {
+        expect(readFileSync(scratchFile, 'utf-8')).toBe('keep me\n');
+        expect(readFileSync(worktreeFile, 'utf-8')).toBe('unfinished chunk\n');
+        expect(existsSync(commandBuildDir(dir, 'simulate')), 'simulate left its build directory behind').toBe(false);
+      },
+    };
+  }
+
+  it('after a run', async () => {
+    const { expectAuthorFilesKept } = projectWithAuthorFiles(
+      [
+        `import { DeadEndGame } from ${JSON.stringify(fixture)};`,
+        `export const gameDefinition = { gameClass: DeadEndGame, gameType: 'fixture', displayName: 'Fixture',`,
+        `  minPlayers: 3, maxPlayers: 4, gameOptions: { deadEnd: { type: 'number', label: 'Dead end' } } };`,
+      ].join('\n'),
+    );
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      await simulateCommand({ games: '1', players: '3', seed: 'keep', json: true });
+    } finally {
+      log.mockRestore();
+    }
+    expectAuthorFilesKept();
+  });
+
+  it('after rules that fail to load', async () => {
+    const { expectAuthorFilesKept } = projectWithAuthorFiles('export const gameDefinition = ;\n');
+    await expect(simulateCommand({ games: '1', players: '2', seed: undefined })).rejects.toThrow(
+      "Failed to load this game's rules",
+    );
+    expectAuthorFilesKept();
   });
 });

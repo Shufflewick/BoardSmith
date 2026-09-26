@@ -7,6 +7,7 @@ import {
   SIGNOFF_HEADING,
   SIGNOFF_BEGIN,
   SIGNOFF_END,
+  assessSignoffs,
   checkSignoff,
   recordSignoff,
   recordWaiver,
@@ -14,6 +15,13 @@ import {
   parseSignoff,
 } from './chunk-signoff.js';
 import { chunkCheckCommand, chunkProvenanceStatusCommand } from './chunk-provenance.js';
+import {
+  type ChunkSpec,
+  makeChunkProject,
+  readChunk,
+  readSketch,
+  setStatusByHand,
+} from './chunk-project.test-helper.js';
 
 /**
  * #291: an orchestrated run accepted its own gates and marked four chunks `verified` with playtest
@@ -31,91 +39,7 @@ beforeEach(() => {
 
 const NOW = new Date('2026-09-23T12:00:00Z');
 
-interface ChunkSpec {
-  slug: string;
-  status?: string;
-  ui?: 'none' | 'touches' | 'major';
-  milestone?: 'none' | 'core-loop' | 'scoring' | 'final-acceptance';
-  checklist?: string[];
-  /** Build Manifest rows: project-relative path to file contents, written to disk too. */
-  manifest?: Record<string, string>;
-}
-
-async function makeProject(chunks: ChunkSpec[]): Promise<string> {
-  const project = join(tree, 'game');
-  const design = join(project, DESIGN_DIR);
-  await fs.mkdir(design, { recursive: true });
-
-  const template = await fs.readFile(
-    new URL('../slash-command/bs/templates/CHUNK.template.md', import.meta.url),
-    'utf-8',
-  );
-
-  const sketchEntries: string[] = [];
-  for (const c of chunks) {
-    const status = c.status ?? 'built';
-    const ui = c.ui ?? 'touches';
-    const milestone = c.milestone ?? 'core-loop';
-    const checklist = c.checklist ?? ['Draw a card', 'Pass the turn'];
-
-    let text = template.replace(/^Status: proposed$/m, `Status: ${status}`);
-    text = text.replace(/(## ui:\n<!--[\s\S]*?-->\n)none\n/, `$1${ui}\n`);
-    text = text.replace(
-      '- [ ] <!-- item 1 -->\n- [ ] <!-- item 2 -->',
-      checklist.map((item) => `- [ ] ${item}`).join('\n'),
-    );
-    const manifest = c.manifest ?? {};
-    text = text.replace(
-      '<!-- | src/... | written / pending | -->',
-      Object.keys(manifest).map((path) => `| ${path} | written |`).join('\n'),
-    );
-    for (const [path, content] of Object.entries(manifest)) {
-      const onDisk = path.endsWith('DECISIONS.md') ? join(design, path) : join(project, path);
-      await fs.mkdir(join(onDisk, '..'), { recursive: true });
-      await fs.writeFile(onDisk, content);
-    }
-    const chunkDir = join(design, 'chunks', c.slug);
-    await fs.mkdir(chunkDir, { recursive: true });
-    await fs.writeFile(join(chunkDir, 'CHUNK.md'), text);
-
-    sketchEntries.push(
-      [
-        `### ${c.slug}`,
-        `- What it builds: ${c.slug}`,
-        `- Citations: none`,
-        `- ui: ${ui}`,
-        `- Milestone: ${milestone}`,
-        `- Status (derived from chunks/${c.slug}/CHUNK.md): ${status}`,
-        `- Rules Staleness (derived from chunks/${c.slug}/CHUNK.md): clear`,
-        `- Test script (outcome-based): play it`,
-        '',
-      ].join('\n'),
-    );
-  }
-  await fs.copyFile(
-    new URL('../slash-command/bs/templates/CONSTRAINTS.template.md', import.meta.url),
-    join(design, 'CONSTRAINTS.md'),
-  );
-  await fs.writeFile(
-    join(design, 'SKETCH.md'),
-    `# Sketch\n\n## Ordered Chunk List\n\n${sketchEntries.join('\n')}\n### later-tail\n- What it builds: later\n- ui: none\n- Milestone: none\n- Status: proposed (sketch-level — no CHUNK.md yet)\n`,
-  );
-  return project;
-}
-
-async function readChunk(project: string, slug: string): Promise<string> {
-  return fs.readFile(join(project, DESIGN_DIR, 'chunks', slug, 'CHUNK.md'), 'utf-8');
-}
-
-async function readSketch(project: string): Promise<string> {
-  return fs.readFile(join(project, DESIGN_DIR, 'SKETCH.md'), 'utf-8');
-}
-
-async function setStatusByHand(project: string, slug: string, status: string): Promise<void> {
-  const path = join(project, DESIGN_DIR, 'chunks', slug, 'CHUNK.md');
-  const text = await fs.readFile(path, 'utf-8');
-  await fs.writeFile(path, text.replace(/^Status:.*$/m, `Status: ${status}`));
-}
+const makeProject = (chunks: ChunkSpec[]) => makeChunkProject(tree, chunks);
 
 /** Runs chunk-check twice (the first run writes provenance) and expects the second to fail. */
 async function expectChunkCheckRefuses(project: string, slug: string): Promise<void> {
@@ -148,7 +72,7 @@ describe('recordSignoff — a designer sign-off is the only way a playtested chu
       by: 'Jane Designer',
       when: '2026-09-23T12:00:00.000Z',
       observed: [1, 2],
-      code: expect.stringMatching(/^[0-9a-f]{64}$/),
+      code: {},
     });
     expect(await readSketch(project)).toContain(
       '- Status (derived from chunks/deal/CHUNK.md): verified',
@@ -443,7 +367,7 @@ describe('a sign-off counts only for the chunk as it was signed (#295)', () => {
     await recordSignoff('deal', { project, by: 'Jane Designer', observed: '1,2', now: NOW });
     await setStatusByHand(project, 'deal', 'built');
     await fs.writeFile(join(project, 'src/deal.ts'), 'v2');
-    expect(await verifiedByHandProblems(project, 'deal')).toMatch(/Build Manifest/);
+    expect(await verifiedByHandProblems(project, 'deal')).toMatch(/src\/deal\.ts changed after it/);
   });
 
   it('adding a file to the Build Manifest after the sign-off voids it', async () => {
@@ -479,5 +403,116 @@ describe('a sign-off counts only for the chunk as it was signed (#295)', () => {
     await recordSignoff('deal', { project, by: 'Jane Designer', observed: '1,2', now: NOW });
     await expect(recordReopen('deal', { project, reason: ' ', now: NOW })).rejects.toThrow(/--reason/);
     expect(await readChunk(project, 'deal')).toMatch(/^Status: verified$/m);
+  });
+});
+
+describe('an edit to a shared file is accounted for by the chunk that made it (#396)', () => {
+  const chunkPath = (project: string, slug: string) =>
+    join(project, DESIGN_DIR, 'chunks', slug, 'CHUNK.md');
+  const LATER = new Date('2026-09-24T12:00:00Z');
+
+  /** A signed-off `deal`, then `shop` sharing its rules file, at the given status. */
+  async function sharedProject(shopStatus: string): Promise<string> {
+    const project = await makeProject([
+      { slug: 'deal', manifest: { 'src/deal.ts': 'deal v1', 'src/rules.ts': 'rules v1' } },
+      { slug: 'shop', status: shopStatus, manifest: { 'src/shop.ts': 'shop v1', 'src/rules.ts': 'rules v1' } },
+    ]);
+    await recordSignoff('deal', { project, by: 'Jane Designer', observed: '1,2', now: NOW });
+    return project;
+  }
+
+  it('records one content hash per source file the Build Manifest names', async () => {
+    const project = await sharedProject('approved');
+    const record = parseSignoff(await readChunk(project, 'deal')).record;
+    expect(Object.keys(record!.code).sort()).toEqual(['src/deal.ts', 'src/rules.ts']);
+    expect(record!.code['src/deal.ts']).toMatch(/^[0-9a-f]{64}$/);
+    expect(await readChunk(project, 'deal')).toMatch(/^Code: src\/rules\.ts [0-9a-f]{64}$/m);
+  });
+
+  it('a later chunk still being built that names the file keeps the earlier sign-off, and says so', async () => {
+    const project = await sharedProject('built');
+    await fs.writeFile(join(project, 'src/rules.ts'), 'rules v2, with the shop rules added');
+    expect(await checkSignoff(project, 'deal')).toEqual([]);
+    const deal = (await assessSignoffs(project)).get('deal')!;
+    expect(deal.sharedEdits).toEqual([{ path: 'src/rules.ts', coveredBy: 'shop', how: 'being-built' }]);
+  });
+
+  it('a later sign-off that saw the edited file keeps the earlier sign-off', async () => {
+    const project = await sharedProject('built');
+    await fs.writeFile(join(project, 'src/rules.ts'), 'rules v2, with the shop rules added');
+    await recordSignoff('shop', { project, by: 'Jane Designer', observed: '1,2', now: LATER });
+    expect(await checkSignoff(project, 'deal')).toEqual([]);
+    expect(await checkSignoff(project, 'shop')).toEqual([]);
+    const deal = (await assessSignoffs(project)).get('deal')!;
+    expect(deal.sharedEdits).toEqual([{ path: 'src/rules.ts', coveredBy: 'shop', how: 'signed-off' }]);
+  });
+
+  it('an edit no later sign-off saw and no chunk being built names voids every sign-off naming the file', async () => {
+    const project = await sharedProject('built');
+    await recordSignoff('shop', { project, by: 'Jane Designer', observed: '1,2', now: LATER });
+    await fs.writeFile(join(project, 'src/rules.ts'), 'rules v3, edited after both sign-offs');
+    for (const slug of ['deal', 'shop']) {
+      const problems = (await checkSignoff(project, slug)).join('\n');
+      expect(problems).toContain('src/rules.ts');
+      expect(problems).toContain(`boardsmith chunk-signoff ${slug}`);
+    }
+  });
+
+  it('an edit to a file only this chunk names is not covered by another chunk being built', async () => {
+    const project = await sharedProject('built');
+    await fs.writeFile(join(project, 'src/deal.ts'), 'deal v2, reworked without a reopen');
+    expect((await checkSignoff(project, 'deal')).join('\n')).toContain('src/deal.ts');
+  });
+
+  it('a sign-off older than this one does not cover a later edit, even when its content matches', async () => {
+    const project = await makeProject([
+      { slug: 'shop', manifest: { 'src/rules.ts': 'rules v1' } },
+      { slug: 'deal', manifest: { 'src/rules.ts': 'rules v1' } },
+    ]);
+    await recordSignoff('shop', { project, by: 'Jane Designer', observed: '1,2', now: NOW });
+    await fs.writeFile(join(project, 'src/rules.ts'), 'rules v2');
+    await recordSignoff('deal', { project, by: 'Jane Designer', observed: '1,2', now: LATER });
+    // Put back to what only the OLDER sign-off saw: nobody signed the tree after deal's.
+    await fs.writeFile(join(project, 'src/rules.ts'), 'rules v1');
+    expect((await checkSignoff(project, 'deal')).join('\n')).toContain('src/rules.ts');
+  });
+
+  it('a chunk that is proposed or already verified is not "being built" and covers nothing', async () => {
+    const project = await sharedProject('proposed');
+    await fs.writeFile(join(project, 'src/rules.ts'), 'rules v2');
+    expect((await checkSignoff(project, 'deal')).join('\n')).toContain('src/rules.ts');
+  });
+
+  it('a design file named with its design/ prefix (a ledger close writes) is not code', async () => {
+    const project = await makeProject([{ slug: 'deal', manifest: { 'src/deal.ts': 'v1' } }]);
+    await fs.writeFile(join(project, DESIGN_DIR, 'ASSETS.md'), '# Assets\n');
+    const text = await readChunk(project, 'deal');
+    await fs.writeFile(chunkPath(project, 'deal'), text.replace('| src/deal.ts | written |', '| src/deal.ts | written |\n| design/ASSETS.md | written |'));
+    await recordSignoff('deal', { project, by: 'Jane Designer', observed: '1,2', now: NOW });
+    await fs.writeFile(join(project, DESIGN_DIR, 'ASSETS.md'), '# Assets\n- a row close added\n');
+    expect(await checkSignoff(project, 'deal')).toEqual([]);
+    expect(Object.keys(parseSignoff(await readChunk(project, 'deal')).record!.code)).toEqual(['src/deal.ts']);
+  });
+
+  it('a sign-off with the old single whole-file hash is refused, naming the one-time transition', async () => {
+    const project = await makeProject([{ slug: 'deal', manifest: { 'src/deal.ts': 'v1' } }]);
+    await recordSignoff('deal', { project, by: 'Jane Designer', observed: '1,2', now: NOW });
+    const text = await readChunk(project, 'deal');
+    await fs.writeFile(
+      chunkPath(project, 'deal'),
+      text.replace(/^Code: .*$/m, `Code: ${'a'.repeat(64)}`),
+    );
+    expect(parseSignoff(await readChunk(project, 'deal')).state).toBe('whole-file');
+    expect((await checkSignoff(project, 'deal')).join('\n')).toContain('boardsmith chunk-gate-transition');
+  });
+
+  it('chunk-provenance-status reports shared edits apart from the chunks without a valid sign-off', async () => {
+    const project = await sharedProject('built');
+    await fs.writeFile(join(project, 'src/rules.ts'), 'rules v2');
+    const result = await chunkProvenanceStatusCommand({ project, quiet: true });
+    expect(result.verifiedWithoutSignoff).toEqual([]);
+    expect(result.signoffSharedEdits).toEqual([
+      { slug: 'deal', edits: [{ path: 'src/rules.ts', coveredBy: 'shop', how: 'being-built' }] },
+    ]);
   });
 });

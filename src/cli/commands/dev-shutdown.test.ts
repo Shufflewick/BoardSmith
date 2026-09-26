@@ -15,13 +15,38 @@
  * teardown and ends, which no in-process call can observe.
  */
 import { describe, it, expect, vi } from 'vitest';
-import { existsSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { devProject, EXIT_WITHIN_MS, spawnDev, type DevRunEnding } from './dev-project.test-helper.js';
 import { freePort } from './free-port.test-helper.js';
 import { openWorldStore, worldStorePath } from '../dev-host/world-store.js';
 import { worldBudgets } from '../../world/index.js';
+import { commandBuildDir, scratchDir } from '../lib/project-paths.js';
+
+/**
+ * #391: WHAT `.boardsmith/` HOLDS THAT DEV DID NOT MAKE, AND MUST NOT REMOVE.
+ *
+ * `.boardsmith/` is also the home of the scratch directory and of the chunk
+ * worktrees a parallel build checks out, so a teardown that removed the whole
+ * directory threw away an agent's saved screenshots and claims files. Every
+ * stop below starts from a project that already holds both, and checks they
+ * are still there, unchanged, once dev has stopped.
+ */
+function plantAuthorFiles(cwd: string): () => void {
+  const scratchFile = join(scratchDir(cwd), 'keep.txt');
+  const worktreeFile = join(cwd, '.boardsmith', 'worktrees', 'chunk-a', 'src', 'rules', 'game.ts');
+  mkdirSync(scratchDir(cwd), { recursive: true });
+  mkdirSync(join(worktreeFile, '..'), { recursive: true });
+  writeFileSync(scratchFile, 'a playtest note\n');
+  writeFileSync(worktreeFile, 'export const unfinished = true;\n');
+  return () => {
+    expect(existsSync(scratchFile), 'the stop removed a scratch file dev did not create').toBe(true);
+    expect(readFileSync(scratchFile, 'utf-8')).toBe('a playtest note\n');
+    expect(existsSync(worktreeFile), 'the stop removed a chunk worktree dev did not create').toBe(true);
+    expect(readFileSync(worktreeFile, 'utf-8')).toBe('export const unfinished = true;\n');
+  };
+}
 
 // Each run bundles the project's rules and starts Vite, which under full-suite
 // parallelism can take a while. A hang guard, not a budget.
@@ -46,6 +71,7 @@ async function stopWhileOptimising(cwd: string, signal: NodeJS.Signals): Promise
     run.child.on('exit', () => resolve(false));
   });
   if (!(await ready)) return run.ended;
+  expect(existsSync(commandBuildDir(cwd, 'dev')), 'dev is ready without its build directory').toBe(true);
 
   const base = `http://127.0.0.1:${port}`;
   const page = await (await fetch(`${base}/`)).text();
@@ -61,6 +87,7 @@ async function stopWhileOptimising(cwd: string, signal: NodeJS.Signals): Promise
 
 /** Stop a fresh project's first run mid-optimisation, and assert it stopped whole. */
 async function expectStoppedWhole(cwd: string, signal: NodeJS.Signals = 'SIGINT'): Promise<void> {
+  const expectAuthorFilesKept = plantAuthorFiles(cwd);
   const run = await stopWhileOptimising(cwd, signal);
   expect(run.stuck, `boardsmith dev was still running ${EXIT_WITHIN_MS}ms after it started:\n${run.output}`).toBe(false);
   expect(run.output).toContain('Shutting down...');
@@ -68,7 +95,8 @@ async function expectStoppedWhole(cwd: string, signal: NodeJS.Signals = 'SIGINT'
   expect(run.code, run.output).toBe(0);
   // The build directory is the teardown's last step, so it is gone only if
   // everything before it, Vite included, finished closing.
-  expect(existsSync(join(cwd, '.boardsmith')), `the teardown never finished:\n${run.output}`).toBe(false);
+  expect(existsSync(commandBuildDir(cwd, 'dev')), `the teardown never finished:\n${run.output}`).toBe(false);
+  expectAuthorFilesKept();
 }
 
 describe('boardsmith dev stopped while Vite optimises its dependencies (#366)', () => {
@@ -117,6 +145,7 @@ describe('boardsmith dev stopped with SIGTERM (#382)', () => {
  * stopped the moment it prints the line that says which stage it is in.
  */
 async function stopDuringStartup(cwd: string, stage: string): Promise<void> {
+  const expectAuthorFilesKept = plantAuthorFiles(cwd);
   const run = spawnDev(cwd, await freePort());
   const reached = await new Promise<boolean>((resolve) => {
     run.child.stdout.on('data', () => {
@@ -125,6 +154,7 @@ async function stopDuringStartup(cwd: string, stage: string): Promise<void> {
     run.child.on('exit', () => resolve(false));
   });
   expect(reached, `boardsmith dev ended before it printed "${stage}":\n${run.output()}`).toBe(true);
+  expect(existsSync(commandBuildDir(cwd, 'dev')), `dev printed "${stage}" before making its build directory`).toBe(true);
   run.child.kill('SIGINT');
   const ended = await run.ended;
   expect(ended.stuck, `boardsmith dev was still running ${EXIT_WITHIN_MS}ms after it started:\n${ended.output}`).toBe(false);
@@ -132,7 +162,8 @@ async function stopDuringStartup(cwd: string, stage: string): Promise<void> {
   expect(ended.output).toContain('Shutting down...');
   expect(ended.output, 'the teardown reported something it could not close').not.toContain('Still open');
   expect(ended.code, ended.output).toBe(0);
-  expect(existsSync(join(cwd, '.boardsmith')), `the build directory was left behind:\n${ended.output}`).toBe(false);
+  expect(existsSync(commandBuildDir(cwd, 'dev')), `the build directory was left behind:\n${ended.output}`).toBe(false);
+  expectAuthorFilesKept();
 }
 
 /** The world a stopped run leaves behind: closed cleanly, and opened again without complaint. */

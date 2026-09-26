@@ -13,9 +13,9 @@
  * because restarting `boardsmith dev` is exactly the seam the feature spans.
  *
  * WHY A DOTFILE AT THE PROJECT ROOT, and specifically NOT under `.boardsmith/`:
- * `boardsmith dev` deletes that directory on shutdown (it is the rules-bundle
- * scratch dir), so a store kept there would be erased by the one event it has
- * to survive. A single dotfile beside `boardsmith.json` is gitignore-able and
+ * that is where the CLI's commands build their rules bundles and delete them
+ * again, so a store kept there is one path mistake away from being erased by
+ * the one event it has to survive. A single dotfile beside `boardsmith.json` is gitignore-able and
  * is never carried by `boardsmith publish`.
  */
 

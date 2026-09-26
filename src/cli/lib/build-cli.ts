@@ -1,11 +1,29 @@
 import { join } from 'node:path';
-import { build } from 'esbuild';
+import { build, type BuildOptions } from 'esbuild';
 
 /** Entry point of the CLI, relative to the BoardSmith repo root. */
 export const CLI_ENTRY = 'src/cli/cli.ts';
 
 /** Bundle emitted for published/packed installs, relative to the repo root. */
 export const CLI_OUTFILE = 'dist/cli.js';
+
+/**
+ * How the CLI bundle is built. `buildCli` writes it; the shipped-imports gate
+ * (`src/contract/shipped-imports.test.ts`) builds it in memory to read which
+ * packages it leaves external.
+ */
+export function cliBuildOptions(repoRoot: string): BuildOptions {
+  return {
+    entryPoints: [join(repoRoot, CLI_ENTRY)],
+    bundle: true,
+    platform: 'node',
+    format: 'esm',
+    outfile: join(repoRoot, CLI_OUTFILE),
+    // Dependencies are resolved from the installed package's own node_modules;
+    // bundling them would duplicate (and stale-pin) every runtime dependency.
+    packages: 'external',
+  };
+}
 
 /**
  * Bundle the BoardSmith CLI itself to `dist/cli.js`.
@@ -17,14 +35,5 @@ export const CLI_OUTFILE = 'dist/cli.js';
  * npm lifecycle hook — an explicit build cannot silently ship a stale bundle.
  */
 export async function buildCli(repoRoot: string): Promise<void> {
-  await build({
-    entryPoints: [join(repoRoot, CLI_ENTRY)],
-    bundle: true,
-    platform: 'node',
-    format: 'esm',
-    outfile: join(repoRoot, CLI_OUTFILE),
-    // Dependencies are resolved from the installed package's own node_modules;
-    // bundling them would duplicate (and stale-pin) every runtime dependency.
-    packages: 'external',
-  });
+  await build(cliBuildOptions(repoRoot));
 }

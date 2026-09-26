@@ -230,10 +230,12 @@ Second-seat leak check (if hidden info): <!-- steps, or "n/a — no hidden info 
      <slug>` and by nothing else. It records who signed this chunk off, when, and on what basis:
      the designer's observed checklist items, a designer waiver that names this chunk, or (only
      for a chunk with no designer playtest) the automated test and sim pass. It also records a
-     hash of the Build Manifest's source files, so the sign-off covers only the code that was
-     signed. The Status line above is DERIVED from this block, never typed: `boardsmith
-     chunk-check` refuses a verified Status that this block does not back, once that code
-     changes, and after `boardsmith chunk-reopen` has voided it. -->
+     hash of each source file the Build Manifest names, so the sign-off covers only the code that
+     was signed. The Status line above is DERIVED from this block, never typed: `boardsmith
+     chunk-check` refuses a verified Status that this block does not back, after `boardsmith
+     chunk-reopen` has voided it, and once one of those files changes in a way nothing accounts
+     for. A later chunk's edit to a shared file is accounted for by that chunk: by its later
+     sign-off, or while it is being built. -->
 
 <!-- boardsmith:signoff:begin -->
 _Not yet signed off._

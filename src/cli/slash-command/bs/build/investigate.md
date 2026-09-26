@@ -150,6 +150,18 @@ turns the claim into an open question, and run the check again. Never check off 
 and never dispatch redteam, while it exits non-zero. Open questions go to `build/ask.md` as part
 (b) questions; the agent never settles them by inventing a rule.
 
+### Chunks Verified Before Claims Carried Quotes
+
+A chunk verified before #289 has claims with no quotes. The one-time `boardsmith
+chunk-gate-transition` (`build/playtest.md` "Chunks Verified Before the Gates") records each such
+claim with a hash of its text in `design/GATE-TRANSITION.md`, and from then on `claim-quote-check`
+accepts it, reported `preGate`, while its text is unchanged. A repair or re-audit of such a chunk
+owes quotes only for the claims it adds or changes: a claim appended by a re-investigate round
+needs its quote like any new claim, and a recorded claim whose text was edited is refused until it
+has one. Do not re-quote the recorded claims, and do not send the chunk back to investigate for
+them. Before the transition is recorded, the check refuses every unquoted claim of a verified chunk
+and names the command.
+
 ## Re-Investigate Round Behavior (redteam refuted-once path)
 
 When `redteam.md` returns a refuted-once verdict on a claim, the re-investigate round APPENDS a

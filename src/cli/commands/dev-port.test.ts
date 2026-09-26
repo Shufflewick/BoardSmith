@@ -19,6 +19,7 @@ import { createServer, type AddressInfo, type Server } from 'node:net';
 import { join } from 'node:path';
 
 import { loadWorldRuntime, startWorldDevServer } from './dev-world.js';
+import { commandBuildDir } from '../lib/project-paths.js';
 import { hostHoldings } from '../dev-host/shutdown.js';
 import { worldStoreDir, worldStorePath } from '../dev-host/world-store.js';
 import { devProject, EXIT_WITHIN_MS, spawnDev } from './dev-project.test-helper.js';
@@ -64,7 +65,7 @@ describe('boardsmith dev on a taken port (#345)', () => {
 
   it('a world host whose own listen fails closes the world it opened', async () => {
     const cwd = await devProject(true);
-    const tempDir = join(cwd, '.boardsmith');
+    const tempDir = commandBuildDir(cwd, 'dev');
     mkdirSync(tempDir, { recursive: true });
     const rulesPath = join(cwd, 'src', 'rules');
     const runtime = await loadWorldRuntime(rulesPath, tempDir, 'standalone');

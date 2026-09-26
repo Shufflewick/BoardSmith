@@ -288,7 +288,6 @@ export class ResidentWorld {
    * enumerated before it are still about this state.
    */
   #revision = 0;
-  #completed = false;
   #closed = false;
   /** The world lock. Every entry point queues behind it. */
   #lock: Promise<unknown> = Promise.resolve();
@@ -327,10 +326,17 @@ export class ResidentWorld {
     return this.#revision;
   }
 
-  /** Has this world reported that it is complete? */
+  /**
+   * HAS THIS WORLD REPORTED THAT IT IS COMPLETE? (#395)
+   *
+   * Read from the store, because the ending is durable: a host rebuilt over
+   * this store after a restart is looking at the same finished world. An ended
+   * world refuses every command with `world-ended`, runs no scheduled event and
+   * no clock command, and still answers views -- the platform's behaviour.
+   */
   // fallow-ignore-next-line unused-class-member
   get completed(): boolean {
-    return this.#completed;
+    return this.#store.endedAt() !== undefined;
   }
 
   /** How far ahead of the wall clock this world is running (#216). */
@@ -962,6 +968,9 @@ export class ResidentWorld {
     const { player, order, action } = request;
     const args = request.args ?? {};
     assertWorldOrder(order);
+    // BEFORE THE RECEIPT CHECK, as on the platform: an ended world answers
+    // every command the same way (#395).
+    this.#refuseIfEnded();
     const decision = resolveOrder({
       order,
       receipt: this.#store.receipt(player, order.id),
@@ -998,6 +1007,9 @@ export class ResidentWorld {
             "Send it again in a moment -- it will run exactly once when the world is level.",
         );
       }
+      // THE CATCH-UP CAN END THE WORLD, and then this command is refused like
+      // any other that arrives after the ending (#395).
+      this.#refuseIfEnded();
       const events = await this.#dispatch({
         player,
         command: { name: action, args },
@@ -1031,6 +1043,10 @@ export class ResidentWorld {
    */
   // fallow-ignore-next-line unused-class-member
   async clockCommand(name: string, args: Record<string, unknown>): Promise<void> {
+    // AN ENDED WORLD HEARS NOTHING FROM ITS CLOCK EITHER (#395). The platform
+    // drops a presence transition on an ended world the same way: nobody is
+    // owed an answer, so there is nothing to refuse.
+    if (this.completed) return;
     try {
       const events = await this.#dispatch({
         player: null,
@@ -1155,8 +1171,6 @@ export class ResidentWorld {
     });
     if (!plan.ok) throw plan.refusal;
 
-    if (result.ending === "completed") this.#completed = true;
-
     // RECORDED BEFORE THE CHECKPOINT, deliberately: a restart that finds a
     // non-empty dirty set is being told the truth about which partitions'
     // durable bytes are older than the last command that ran.
@@ -1180,6 +1194,9 @@ export class ResidentWorld {
         // AND THIS CHAIR IS HANDED ON (#278), in the same write as the teardown
         // that earned it.
         ...vacancyWrite(result.vacated),
+        // THE ENDING IS DURABLE WITH THE EFFECTS THAT DECLARED IT (#395), and
+        // the store empties the queue in the same write.
+        ...(result.ending === "completed" ? { endedAt: arrivedAt } : {}),
       });
       // THE STATE MOVED, AND IT MOVED HERE (#244). After the write and not
       // before: a checkpoint that refuses is a command that did not happen, and
@@ -1266,6 +1283,9 @@ export class ResidentWorld {
     // because being spent is this batch's fact, not the store's.
     const spent = new Set<string>();
     for (let taken = 0; taken < this.#budgets.drainBatch; taken++) {
+      // RE-ASKED BEFORE EVERY EVENT (#395): the one before may have ended the
+      // world, and an ended world runs nothing else.
+      if (this.completed) break;
       const event = this.#nextDue(now, spent);
       if (event === undefined) break;
       spent.add(event.id);
@@ -1294,6 +1314,9 @@ export class ResidentWorld {
       nextDue === null ? [] : [{ ...event, due: nextDue, attempts: 0 }];
     let ran = 0;
     for (const [index, timing] of occurrences.entries()) {
+      // A RECURRENCE CAN END THE WORLD on one of several occurrences due at
+      // once, and the rest belong to a world that no longer runs (#395).
+      if (this.completed) break;
       const last = index === occurrences.length - 1;
       try {
         const events = await this.#dispatch({
@@ -1470,6 +1493,15 @@ export class ResidentWorld {
       await this.#store.writeCheckpoint(await this.#world.runner.serialize(dirty));
     }
     this.#store.close();
+  }
+
+  /** Refuse a command because this world has ended, in the platform's words. */
+  #refuseIfEnded(): void {
+    if (!this.completed) return;
+    throw worldRefusal(
+      "world-ended",
+      "This world's season has ended, so it no longer answers commands.",
+    );
   }
 
   /** Has this world been closed? A host's own timers must not reach a world

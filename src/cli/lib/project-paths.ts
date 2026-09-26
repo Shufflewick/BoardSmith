@@ -105,6 +105,11 @@ export const RUN_LOG_DIR = 'run-log';
 export const CROSS_CHUNK_MD = 'CROSS-CHUNK.md';
 /** Designer playtest waivers, written only by `boardsmith chunk-waiver` (#291). */
 export const WAIVERS_MD = 'WAIVERS.md';
+/**
+ * The one-time record of chunks verified before the sign-off and claim-quote gates, written only
+ * by `boardsmith chunk-gate-transition` (#397).
+ */
+export const GATE_TRANSITION_MD = 'GATE-TRANSITION.md';
 
 /** Every ledger `design/` owns, in the order `boardsmith doctor` reports them. */
 export const DESIGN_LEDGERS = [
@@ -116,6 +121,7 @@ export const DESIGN_LEDGERS = [
   ASSETS_MD,
   BOARDSMITH_BUGS_MD,
   WAIVERS_MD,
+  GATE_TRANSITION_MD,
 ] as const;
 
 /** Absolute path to a ledger in `design/`. */
@@ -138,6 +144,21 @@ export const SCRATCH_DIR = join('.boardsmith', 'scratch');
 /** Absolute path to a project's scratch directory. */
 export function scratchDir(projectDir: string): string {
   return join(projectDir, SCRATCH_DIR);
+}
+
+/** The CLI commands that bundle a project's rules into a build directory of their own. */
+type BuildingCommand = 'dev' | 'simulate' | 'build' | 'validate';
+
+/**
+ * Where `command` writes the rules bundle it removes when it ends.
+ *
+ * Each command gets its own subdirectory of `.boardsmith/`, and removes only
+ * that. `.boardsmith/` itself is never a command's to remove: it also holds the
+ * scratch directory and the git worktrees of chunks built side by side, and
+ * `boardsmith dev` stopping once deleted both (#391).
+ */
+export function commandBuildDir(projectDir: string, command: BuildingCommand): string {
+  return join(projectDir, '.boardsmith', `${command}-tmp`);
 }
 
 /**

@@ -94,6 +94,7 @@ describe('checkClaimQuotes: rulebook-sourced claims', () => {
       {
         number: 1,
         superseded: false,
+        preGate: false,
         quotes: [
           {
             quote: 'Ties favour combatant 2: an equal roll sends damage to combatant 1.',

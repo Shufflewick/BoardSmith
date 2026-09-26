@@ -10,11 +10,14 @@
  * A citation is a whitespace-, quote-, bracket- or backtick-delimited token that contains a `/`
  * and ends in a script or capture extension. Skipped on purpose: URLs, a path in another
  * repository written `<repo>:<path>` (for example `BoardSmith:src/engine/game.ts`), template
- * placeholders and globs (`<slug>`, `*`, `{a,b}`), bare file names, and anything inside an HTML
- * comment, which is where the templates keep their examples.
+ * placeholders and globs (`<slug>`, `*`, `{a,b}`), bare file names, anything inside an HTML
+ * comment, which is where the templates keep their examples, and a module specifier quoted in
+ * import, export or require syntax (`import { beat } from './heartbeat.js'`), which is code being
+ * described rather than a file being cited (#398).
  */
 
-import { isAbsolute, posix, relative } from 'node:path';
+import { homedir } from 'node:os';
+import { isAbsolute, join, posix, relative } from 'node:path';
 import { blankComments } from './ledger-entries.js';
 import { CHUNKS_DIR, DESIGN_DIR, RULEBOOK_DIR } from './project-paths.js';
 
@@ -31,6 +34,13 @@ interface CitedPath {
 const EVIDENCE_EXTENSION = /\.(?:mjs|cjs|js|mts|cts|ts|sh|py|png|jpe?g|gif|webp|svg|webm|mp4)$/i;
 const TOKEN = /[^\s`'"()[\],;]+/g;
 const NOT_A_GAME_PATH = /[*{}<>$]/;
+/**
+ * The quoted specifier of an `import ... from`, `export ... from`, `import(...)`, bare `import`
+ * or `require(...)`. A `from` counts only after `import` or `export` on the same line, so prose
+ * such as `copied from "tests/food.test.ts"` is still a citation.
+ */
+const MODULE_SPECIFIER =
+  /\b(?:import|export)\b[^'"\n]*?\bfrom\s*(['"])[^'"\n]*\1|\b(?:import|require)\s*\(?\s*(['"])[^'"\n]*\2/g;
 
 function asCitation(raw: string): string | undefined {
   const path = raw.replace(/[.,:;!?]+$/, '').replace(/:\d+(?::\d+)?$/, '');
@@ -47,7 +57,7 @@ export function citedEvidencePaths(text: string): CitedPath[] {
   blankComments(text)
     .split('\n')
     .forEach((lineText, index) => {
-      for (const [token] of lineText.matchAll(TOKEN)) {
+      for (const [token] of lineText.replace(MODULE_SPECIFIER, ' ').matchAll(TOKEN)) {
         const path = asCitation(token);
         if (path) cited.push({ path, line: index + 1 });
       }
@@ -57,10 +67,12 @@ export function citedEvidencePaths(text: string): CitedPath[] {
 
 /**
  * The project-relative location of a cited path, or `undefined` when it points outside the
- * project. A path whose first segment is `chunks/` or `rulebook/` is design-relative, the same
- * grammar every design citation uses; anything else is project-relative.
+ * project. `~/` is the home directory, as a shell reads it (#398). A path whose first segment is
+ * `chunks/` or `rulebook/` is design-relative, the same grammar every design citation uses;
+ * anything else is project-relative.
  */
-export function resolveCitation(projectDir: string, path: string): string | undefined {
+export function resolveCitation(projectDir: string, cited: string): string | undefined {
+  const path = cited.startsWith('~/') ? join(homedir(), cited.slice(2)) : cited;
   let rel = path;
   if (isAbsolute(path)) rel = relative(projectDir, path).split('\\').join('/');
   else if (path.startsWith(`${CHUNKS_DIR}/`) || path.startsWith(`${RULEBOOK_DIR}/`)) rel = `${DESIGN_DIR}/${path}`;

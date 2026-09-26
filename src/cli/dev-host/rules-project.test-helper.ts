@@ -1,7 +1,7 @@
 /**
  * A GAME PROJECT'S RULES ON DISK, the way an author has them: a `src/rules`
- * directory holding `index.ts`, and the `.boardsmith` directory `boardsmith dev`
- * bundles into. Saving is the one move an author makes to it.
+ * directory holding `index.ts`, and the directory under `.boardsmith` that
+ * `boardsmith dev` bundles into. Saving is the one move an author makes to it.
  *
  * Shared by the table road's tests (`table-host.test-helper.ts`) and the world
  * road's (`world-rules-reload.test.ts`), which each load it with their own
@@ -11,12 +11,13 @@ import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
+import { commandBuildDir } from '../lib/project-paths.js';
 
 export function rulesProject(prefix: string, source: string) {
   const dir = tempTree(prefix);
   const rulesPath = join(dir, 'src', 'rules');
   mkdirSync(rulesPath, { recursive: true });
-  const tempDir = join(dir, '.boardsmith');
+  const tempDir = commandBuildDir(dir, 'dev');
   mkdirSync(tempDir, { recursive: true });
   const save = (rules: string) => writeFileSync(join(rulesPath, 'index.ts'), rules);
   save(source);

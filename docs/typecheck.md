@@ -71,7 +71,10 @@ in every game.
 - **What a consumer's install lacks.** This check runs inside this checkout,
   where every devDependency is installed. `src/contract/dev-host-typecheck.test.ts`
   and `src/contract/dice-typecheck.test.ts` compile the modules consumers import
-  in a sandbox holding only what we ship.
+  in a sandbox holding only what we ship, and
+  `src/contract/shipped-imports.test.ts` fails if any file `npm pack` would
+  publish, or the CLI bundle, imports a package that is not in `dependencies`
+  or `peerDependencies` (#380).
 - **Anything at runtime.** Types say nothing about a shape crossing a boundary
   the types do not describe.
 

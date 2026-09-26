@@ -93,7 +93,9 @@ investigate subagent; redteam is never dispatched on claims that fail it. The ch
 quote is THERE; the refuters judge whether it SAYS what the claim says, which is why they re-open
 the source rather than the claim text. A claim refuted because no passage backs it is resolved by
 turning it into an open question (`Q<N>.`) for the ask step, never by writing a rule the source
-does not contain.
+does not contain. A claim the check reports as `preGate` was recorded without a quote by the
+gate transition and is unchanged since (`build/investigate.md` "Chunks Verified Before Claims
+Carried Quotes"); a refuter re-opens the slice the claim cites instead.
 
 ## Default-to-Refuted
 

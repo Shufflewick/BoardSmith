@@ -431,23 +431,25 @@ describe('deriveManifest - the game version', () => {
   });
 });
 
-// WR-02 regression: `.boardsmith` is a SHARED directory (pack tarballs,
-// evolve-bot-weights' rules-bundle.mjs fallback, a running dev server's runtime
-// bundle). build's temp-dir cleanup must only ever remove a build-owned
-// subdirectory, never the shared parent.
-describe('build temp-dir scoping (WR-02)', () => {
-  const src = readFileSync(join(__dirname, 'build.ts'), 'utf-8');
+// WR-02, #391: `.boardsmith` is a SHARED directory (pack tarballs, the scratch
+// directory, chunk worktrees, the other commands' build directories). Every
+// command that bundles the rules builds into its own `commandBuildDir` and
+// removes only that, never the shared parent.
+describe('command build directories (WR-02, #391)', () => {
+  for (const command of ['build', 'dev', 'simulate', 'validate'] as const) {
+    const src = readFileSync(join(__dirname, `${command}.ts`), 'utf-8');
 
-  it('uses a build-owned subdirectory of .boardsmith as its temp dir', () => {
-    expect(src).toContain("join(cwd, '.boardsmith', 'build-tmp')");
-    // The shared parent must never be the temp dir itself.
-    expect(src).not.toMatch(/tempDir = join\(cwd, '\.boardsmith'\)/);
-  });
+    it(`${command} builds into its own subdirectory of .boardsmith`, () => {
+      expect(src).toContain(`commandBuildDir(cwd, '${command}')`);
+      // The shared parent must never be a command's directory.
+      expect(src).not.toMatch(/join\(cwd, '\.boardsmith'\)/);
+    });
 
-  it('only rmSyncs the scoped tempDir, never the shared .boardsmith parent', () => {
-    const rmTargets = [...src.matchAll(/rmSync\(([^,)]+)/g)].map((m) => m[1].trim());
-    expect(rmTargets).toEqual(['tempDir']);
-  });
+    it(`${command} only removes its own build directory`, () => {
+      const rmTargets = [...src.matchAll(/rmSync\(([^,)]+)/g)].map((m) => m[1].trim());
+      expect(rmTargets.filter((target) => target !== 'tempDir' && target !== 'viteCacheDir')).toEqual([]);
+    });
+  }
 });
 
 /**

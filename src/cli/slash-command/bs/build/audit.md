@@ -41,7 +41,13 @@ upstream step is exactly what would defeat an independent audit.
    location the chunk's claims quote, and every finding it reports quotes the source too.
    Before dispatching it, the orchestrator runs `boardsmith claim-quote-check <slug>`; a
    non-zero exit means the claims were never properly quoted, so the chunk goes back to
-   `investigate` rather than into an audit built on them.
+   `investigate` rather than into an audit built on them. A chunk verified before claims carried
+   quotes passes once the gate transition has recorded its claims, and a re-audit of it owes
+   quotes only for the claims it adds or changes (`build/investigate.md` "Chunks Verified Before
+   Claims Carried Quotes"); if the check names `boardsmith chunk-gate-transition` instead, that is
+   the designer's one-time step, not a reason to re-investigate. A claim the check reports as
+   `preGate` has no quote in `{quotedSourcesJson}`: the lens checks the code against the slices
+   it was given, as it would for any rule the quotes do not cover.
 2. **Visibility** — a two-seat diff: does any hidden information leak to a seat that should not
    see it?
 3. **Undo** — does undo (where applicable) restore state cleanly, with no residual leak or
