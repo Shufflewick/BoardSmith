@@ -76,8 +76,11 @@ interface PlatformShellOptions {
    * draws nothing worth asserting on.
    */
   board?: Component;
-  /** Further GameShell props, for a test about what a prop changes. */
-  props?: { providesOwnGameOverUI?: boolean };
+  /**
+   * Further GameShell props, for a test about what a prop changes, in either
+   * form a template writes them (#433).
+   */
+  props?: { providesOwnGameOverUi?: boolean; 'provides-own-game-over-ui'?: boolean };
 }
 
 export function mountPlatformShell(options: PlatformShellOptions) {

@@ -970,10 +970,11 @@ Two separate questions decide what a game's ending looks like.
 
 **Who draws it.** By default the shell draws its `GameOverCard`. Fill the
 `#game-over` slot to draw your own card in its place, or set
-`providesOwnGameOverUI` on GameShell when your board draws the ending itself.
-Then no card is drawn, but the shell still announces the result. Write the prop
-in camelCase (`:providesOwnGameOverUI="true"`): the kebab form camelizes to
-`providesOwnGameOverUi`, which is not the prop's name.
+`providesOwnGameOverUi` on GameShell when your board draws the ending itself.
+Then no card is drawn, but the shell still announces the result. Either form
+works in a template: `provides-own-game-over-ui` or `providesOwnGameOverUi`.
+(Every public component prop is named so its kebab-case form camelizes back to
+it, which `src/ui/public-prop-names.test.ts` holds, #433.)
 
 **When it is shown.** By default, the moment the flow completes. A board that
 holds its result back on purpose (until the player has watched a replay of

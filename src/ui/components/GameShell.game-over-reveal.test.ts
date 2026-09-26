@@ -85,7 +85,7 @@ async function settle(): Promise<void> {
 
 const mounted: Array<{ unmount(): void }> = [];
 
-async function mountShell(board: ReturnType<typeof defineComponent>, props?: { providesOwnGameOverUI?: boolean }) {
+async function mountShell(board: ReturnType<typeof defineComponent>, props?: Parameters<typeof mountPlatformShell>[0]['props']) {
   enterIframe();
   const wrapper = mountPlatformShell({ gameType: 'game-over-reveal-test', board, props });
   mounted.push(wrapper);
@@ -182,10 +182,16 @@ describe('the table ending (#419)', () => {
 
   it('for a board that draws its own ending, is announced when the board shows it, with no shell card', async () => {
     const shown = ref(false);
-    const shell = await mountShell(boardHeldBy(shown), { providesOwnGameOverUI: true });
+    const shell = await mountShell(boardHeldBy(shown), { providesOwnGameOverUi: true });
 
     expect(await after(shell, complete)).toEqual(HELD);
     expect(await after(shell, () => { shown.value = true; })).toEqual({ announced: [ALICE_WINS], card: false });
+  });
+
+  it('for a board that draws its own ending, draws no shell card when the prop is written in kebab-case (#433)', async () => {
+    const shell = await mountShell(PlainBoard, { 'provides-own-game-over-ui': true });
+
+    expect(await after(shell, complete)).toEqual({ announced: [ALICE_WINS], card: false });
   });
 
   it('says the result the card shows, from the winners the host sent', async () => {
