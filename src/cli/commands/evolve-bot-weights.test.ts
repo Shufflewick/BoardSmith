@@ -9,8 +9,13 @@
  * the path the evolver is given, that the file exists and loads while the
  * evolution runs, and that it is gone afterwards with the rest of
  * `.boardsmith/` untouched.
+ *
+ * Both runs happen while the file is collected, where no test timeout applies
+ * (#354, #355, #363, #417): a run bundles the rules and loads the bot trainer's
+ * module graph, several seconds on a busy machine. The tests assert what each
+ * run recorded.
  */
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -66,71 +71,78 @@ const BOT = [
   '',
 ].join('\n');
 
-/** A game project whose rules index is `rules` and whose rules directory holds a bot; the cwd moves into it. */
+/** A game project whose rules index is `rules` and whose rules directory holds a bot. */
 function projectWith(rules: string): string {
   const dir = tempTree('boardsmith-evolve-399-');
   writeFileSync(join(dir, 'boardsmith.json'), JSON.stringify({ name: 'fixture', backend: 'table' }));
   mkdirSync(join(dir, 'src', 'rules'), { recursive: true });
   writeFileSync(join(dir, 'src', 'rules', 'index.ts'), rules);
   writeFileSync(join(dir, 'src', 'rules', 'bot.ts'), BOT);
-  process.chdir(dir);
   return dir;
 }
 
-describe('evolve-bot-weights bundles the rules into its own build directory (#399)', () => {
-  let originalCwd: string;
+interface EvolveRun {
+  /** The project's directory, as the command saw it as its cwd. */
+  projectDir: string;
+  evolverCalls: EvolverCall[];
+  /** What the command threw, or undefined when it finished. */
+  error: unknown;
+}
 
-  beforeEach(() => {
-    originalCwd = process.cwd();
-    evolverCalls.length = 0;
-  });
-
-  afterEach(() => {
+/** Runs the command from inside `dir`, then moves the cwd back. */
+async function evolveIn(dir: string, options: Parameters<typeof evolveBotWeightsCommand>[0]): Promise<EvolveRun> {
+  const originalCwd = process.cwd();
+  evolverCalls.length = 0;
+  const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+  process.chdir(dir);
+  const projectDir = process.cwd();
+  let error: unknown;
+  try {
+    await evolveBotWeightsCommand(options);
+  } catch (thrown) {
+    error = thrown;
+  } finally {
     process.chdir(originalCwd);
-  });
+    log.mockRestore();
+  }
+  return { projectDir, evolverCalls: [...evolverCalls], error };
+}
 
-  it('evolves against a fresh bundle of the source rules and removes only that bundle', async () => {
-    const dir = projectWith(
-      [
-        `import { DeadEndGame } from ${JSON.stringify(fixture)};`,
-        `export const gameDefinition = { gameClass: DeadEndGame, gameType: 'dead-end', displayName: 'Fixture',`,
-        `  minPlayers: 3, maxPlayers: 4 };`,
-      ].join('\n'),
-    );
-    const scratchFile = join(scratchDir(dir), 'keep.txt');
-    mkdirSync(scratchDir(dir), { recursive: true });
-    writeFileSync(scratchFile, 'keep me\n');
+const evolvedDir = projectWith(
+  [
+    `import { DeadEndGame } from ${JSON.stringify(fixture)};`,
+    `export const gameDefinition = { gameClass: DeadEndGame, gameType: 'dead-end', displayName: 'Fixture',`,
+    `  minPlayers: 3, maxPlayers: 4 };`,
+  ].join('\n'),
+);
+const scratchFile = join(scratchDir(evolvedDir), 'keep.txt');
+mkdirSync(scratchDir(evolvedDir), { recursive: true });
+writeFileSync(scratchFile, 'keep me\n');
+const evolved = await evolveIn(evolvedDir, { generations: '1', population: '1', mcts: '1', workers: '1' });
 
-    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
-    try {
-      await evolveBotWeightsCommand({ generations: '1', population: '1', mcts: '1', workers: '1' });
-    } finally {
-      log.mockRestore();
-    }
+const brokenDir = projectWith('export const gameDefinition = ;\n');
+const broken = await evolveIn(brokenDir, { generations: '1', population: '1' });
 
-    expect(evolverCalls).toHaveLength(1);
-    const [call] = evolverCalls;
+describe('evolve-bot-weights bundles the rules into its own build directory (#399)', () => {
+  it('evolves against a fresh bundle of the source rules and removes only that bundle', () => {
+    expect(evolved.error).toBeUndefined();
+    expect(evolved.evolverCalls).toHaveLength(1);
+    const [call] = evolved.evolverCalls;
     expect(call.gameType).toBe('dead-end');
-    expect(dirname(call.modulePath)).toBe(commandBuildDir(process.cwd(), 'evolve-bot-weights'));
+    expect(dirname(call.modulePath)).toBe(commandBuildDir(evolved.projectDir, 'evolve-bot-weights'));
     expect(call.bundleExistedDuringEvolution, 'the workers were handed a path with no file behind it').toBe(true);
     expect(call.bundleExportedGameClass, 'the bundle did not export the game class').toBe(true);
 
-    expect(existsSync(commandBuildDir(dir, 'evolve-bot-weights')), 'the build directory was left behind').toBe(false);
+    expect(existsSync(commandBuildDir(evolvedDir, 'evolve-bot-weights')), 'the build directory was left behind').toBe(
+      false,
+    );
     expect(readFileSync(scratchFile, 'utf-8')).toBe('keep me\n');
   });
 
-  it('removes its build directory when the rules fail to load, and says so readably', async () => {
-    const dir = projectWith('export const gameDefinition = ;\n');
-
-    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
-    try {
-      await expect(evolveBotWeightsCommand({ generations: '1', population: '1' })).rejects.toThrow(
-        "Evolving this bot's weights failed",
-      );
-    } finally {
-      log.mockRestore();
-    }
-    expect(evolverCalls).toHaveLength(0);
-    expect(existsSync(commandBuildDir(dir, 'evolve-bot-weights'))).toBe(false);
+  it('removes its build directory when the rules fail to load, and says so readably', () => {
+    expect(broken.error).toBeInstanceOf(Error);
+    expect((broken.error as Error).message).toContain("Evolving this bot's weights failed");
+    expect(broken.evolverCalls).toHaveLength(0);
+    expect(existsSync(commandBuildDir(brokenDir, 'evolve-bot-weights'))).toBe(false);
   });
 });

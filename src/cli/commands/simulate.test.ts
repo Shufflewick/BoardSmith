@@ -225,67 +225,73 @@ describe('simulateCommand', () => {
  * #391: simulate bundles the rules into its own build directory and removes
  * only that. `.boardsmith/` also holds the scratch directory and the chunk
  * worktrees of a parallel build, which simulate did not make.
+ *
+ * Both runs happen while the file is collected, where no test timeout applies,
+ * because each bundles the rules (#363, #417). The tests assert what they left.
  */
-describe('simulateCommand leaves the rest of .boardsmith alone (#391)', () => {
-  const fixture = resolve(dirname(fileURLToPath(import.meta.url)), 'simulate.fixture.ts');
-  let originalCwd: string;
-  let originalExitCode: number | string | null | undefined;
+const deadEndFixture = resolve(dirname(fileURLToPath(import.meta.url)), 'simulate.fixture.ts');
 
-  beforeEach(() => {
-    originalCwd = process.cwd();
-    originalExitCode = process.exitCode;
-  });
+/** A project whose rules module is `rules`, already holding a scratch file and a chunk worktree. */
+function projectWithAuthorFiles(rules: string): { dir: string; expectAuthorFilesKept: () => void } {
+  const dir = tempTree('boardsmith-simulate-391-');
+  writeFileSync(join(dir, 'boardsmith.json'), JSON.stringify({ name: 'fixture', backend: 'table' }));
+  mkdirSync(join(dir, 'src', 'rules'), { recursive: true });
+  writeFileSync(join(dir, 'src', 'rules', 'index.ts'), rules);
+  const scratchFile = join(scratchDir(dir), 'keep.txt');
+  const worktreeFile = join(dir, '.boardsmith', 'worktrees', 'chunk-a', 'notes.md');
+  mkdirSync(scratchDir(dir), { recursive: true });
+  mkdirSync(dirname(worktreeFile), { recursive: true });
+  writeFileSync(scratchFile, 'keep me\n');
+  writeFileSync(worktreeFile, 'unfinished chunk\n');
+  return {
+    dir,
+    expectAuthorFilesKept: () => {
+      expect(readFileSync(scratchFile, 'utf-8')).toBe('keep me\n');
+      expect(readFileSync(worktreeFile, 'utf-8')).toBe('unfinished chunk\n');
+      expect(existsSync(commandBuildDir(dir, 'simulate')), 'simulate left its build directory behind').toBe(false);
+    },
+  };
+}
 
-  afterEach(() => {
+/** Runs simulate from inside `dir`, then restores the cwd and exit code. Returns what it threw, if anything. */
+async function simulateIn(dir: string, options: Parameters<typeof simulateCommand>[0]): Promise<unknown> {
+  const originalCwd = process.cwd();
+  const originalExitCode = process.exitCode;
+  const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+  process.chdir(dir);
+  try {
+    await simulateCommand(options);
+    return undefined;
+  } catch (thrown) {
+    return thrown;
+  } finally {
     process.chdir(originalCwd);
     process.exitCode = originalExitCode;
-  });
-
-  /** A project whose rules module is `rules`, already holding a scratch file and a chunk worktree. */
-  function projectWithAuthorFiles(rules: string): { dir: string; expectAuthorFilesKept: () => void } {
-    const dir = tempTree('boardsmith-simulate-391-');
-    writeFileSync(join(dir, 'boardsmith.json'), JSON.stringify({ name: 'fixture', backend: 'table' }));
-    mkdirSync(join(dir, 'src', 'rules'), { recursive: true });
-    writeFileSync(join(dir, 'src', 'rules', 'index.ts'), rules);
-    const scratchFile = join(scratchDir(dir), 'keep.txt');
-    const worktreeFile = join(dir, '.boardsmith', 'worktrees', 'chunk-a', 'notes.md');
-    mkdirSync(scratchDir(dir), { recursive: true });
-    mkdirSync(dirname(worktreeFile), { recursive: true });
-    writeFileSync(scratchFile, 'keep me\n');
-    writeFileSync(worktreeFile, 'unfinished chunk\n');
-    process.chdir(dir);
-    return {
-      dir,
-      expectAuthorFilesKept: () => {
-        expect(readFileSync(scratchFile, 'utf-8')).toBe('keep me\n');
-        expect(readFileSync(worktreeFile, 'utf-8')).toBe('unfinished chunk\n');
-        expect(existsSync(commandBuildDir(dir, 'simulate')), 'simulate left its build directory behind').toBe(false);
-      },
-    };
+    log.mockRestore();
   }
+}
 
-  it('after a run', async () => {
-    const { expectAuthorFilesKept } = projectWithAuthorFiles(
-      [
-        `import { DeadEndGame } from ${JSON.stringify(fixture)};`,
-        `export const gameDefinition = { gameClass: DeadEndGame, gameType: 'fixture', displayName: 'Fixture',`,
-        `  minPlayers: 3, maxPlayers: 4, gameOptions: { deadEnd: { type: 'number', label: 'Dead end' } } };`,
-      ].join('\n'),
-    );
-    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
-    try {
-      await simulateCommand({ games: '1', players: '3', seed: 'keep', json: true });
-    } finally {
-      log.mockRestore();
-    }
-    expectAuthorFilesKept();
+const afterRun = projectWithAuthorFiles(
+  [
+    `import { DeadEndGame } from ${JSON.stringify(deadEndFixture)};`,
+    `export const gameDefinition = { gameClass: DeadEndGame, gameType: 'fixture', displayName: 'Fixture',`,
+    `  minPlayers: 3, maxPlayers: 4, gameOptions: { deadEnd: { type: 'number', label: 'Dead end' } } };`,
+  ].join('\n'),
+);
+const afterRunError = await simulateIn(afterRun.dir, { games: '1', players: '3', seed: 'keep', json: true });
+
+const afterBrokenRules = projectWithAuthorFiles('export const gameDefinition = ;\n');
+const brokenRulesError = await simulateIn(afterBrokenRules.dir, { games: '1', players: '2', seed: undefined });
+
+describe('simulateCommand leaves the rest of .boardsmith alone (#391)', () => {
+  it('after a run', () => {
+    expect(afterRunError).toBeUndefined();
+    afterRun.expectAuthorFilesKept();
   });
 
-  it('after rules that fail to load', async () => {
-    const { expectAuthorFilesKept } = projectWithAuthorFiles('export const gameDefinition = ;\n');
-    await expect(simulateCommand({ games: '1', players: '2', seed: undefined })).rejects.toThrow(
-      "Failed to load this game's rules",
-    );
-    expectAuthorFilesKept();
+  it('after rules that fail to load', () => {
+    expect(brokenRulesError).toBeInstanceOf(Error);
+    expect((brokenRulesError as Error).message).toContain("Failed to load this game's rules");
+    afterBrokenRules.expectAuthorFilesKept();
   });
 });
