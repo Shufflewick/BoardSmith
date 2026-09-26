@@ -130,6 +130,16 @@ function turnStatus(player: Player): string {
  * playing". Reads all players, not only the rows the cap kept, because an
  * acting seat the strip has no room to draw still has to be named.
  */
+/**
+ * Token sizes in the seat strip: the acting seat's is drawn larger. The token
+ * row reserves the acting size in every state, so the strip is as tall with no
+ * seat acting (the game is over) as with one. On a phone the strip is the top
+ * bar, and a bar that shrank when the game ended moved and resized the board
+ * region below it (#431).
+ */
+const STRIP_TOKEN_ACTING = 34;
+const STRIP_TOKEN_IDLE = 28;
+
 const stripStatus = computed(() => {
   const acting = props.players.filter(p => isPlayerActive(p.seat));
   const youAct = acting.some(p => p.seat === props.playerSeat);
@@ -200,7 +210,7 @@ defineSlots<{
   <!-- ── Seat Strip: compact one-line for phone compact tier (IA-06) ───────── -->
   <div v-if="seatStrip" class="players-panel seat-strip" role="status" aria-label="Players">
     <!-- All player tokens inline -->
-    <div class="strip-tokens" aria-hidden="true">
+    <div class="strip-tokens" aria-hidden="true" :style="{ minHeight: `${STRIP_TOKEN_ACTING}px` }">
       <span
         v-for="player in visiblePlayers"
         :key="player.seat"
@@ -212,7 +222,7 @@ defineSlots<{
           :name="player.name"
           :seat="player.seat"
           :color="player.color"
-          :size="isPlayerActive(player.seat) ? 34 : 28"
+          :size="isPlayerActive(player.seat) ? STRIP_TOKEN_ACTING : STRIP_TOKEN_IDLE"
         />
       </span>
     </div>
