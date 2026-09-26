@@ -2001,6 +2001,15 @@ it runs. Views are still answered. The ending is saved in the world store, so a
 restarted `boardsmith dev` still shows the world as complete; `--reset` is the
 way back to an open world.
 
+An ended world is never migrated. The platform keeps a finished season on the
+version it played on and refuses to upgrade it. `boardsmith dev` has only the
+project's current rules, so when they declare a different `stateVersion` from
+the one an ended world was written under, it refuses to open that world with
+`world-ended` and the platform's sentence ("This world's season has already
+ended, so there are no rules left for it to run. A finished season keeps the
+version it played on."), writes nothing, and says to run `boardsmith dev
+--reset` for a new season or the rules the world ended on to look at it.
+
 ### `world.migration`: how the old bytes become the new ones
 
 A veto is the right answer for a change nobody can reconcile. It was the ONLY

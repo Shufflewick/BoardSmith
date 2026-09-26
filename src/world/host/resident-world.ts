@@ -578,6 +578,9 @@ export class ResidentWorld {
           readWorldDefinition(this.#definition).stateVersion ?? 0,
         );
       } else {
+        // BEFORE ANYTHING IS WRITTEN (#400): an ended world is never moved
+        // onto rules that read its bytes differently.
+        this.#refuseNewVersionIfEnded();
         // BEFORE ANY MIGRATION, AND BEFORE ANY ADOPTION (#223). A world
         // written before #218's construction-id floor holds roots at ids the
         // wider game's own construction now mints, so widening it failed on
@@ -1493,6 +1496,33 @@ export class ResidentWorld {
       await this.#store.writeCheckpoint(await this.#world.runner.serialize(dirty));
     }
     this.#store.close();
+  }
+
+  /**
+   * REFUSE TO OPEN AN ENDED WORLD ON RULES OF ANOTHER STATE VERSION (#400).
+   *
+   * The platform never upgrades a finished season: it keeps the rules it
+   * ended on and goes on answering views with them (ShufflewickPub
+   * `games/src/world-session.ts`, `#upgradeDoorClosed`). A host here has only
+   * the rules it was given, so it cannot keep the old ones beside them, and
+   * reading the old bytes with new rules is what a migration exists to avoid.
+   * So it refuses, before anything is written, and says what to do instead.
+   * An ended world on rules of its own version opens as before.
+   */
+  #refuseNewVersionIfEnded(): void {
+    if (!this.completed) return;
+    const stored = this.#store.stateVersion();
+    const declared = readWorldDefinition(this.#definition).stateVersion ?? 0;
+    if (stored === declared) return;
+    throw worldRefusal(
+      "world-ended",
+      "This world's season has already ended, so there are no rules left for it to run. " +
+        "A finished season keeps the version it played on. " +
+        `It ended under state version ${stored} and these rules declare ${declared}, and an ` +
+        "ended world is never migrated. Run `boardsmith dev --reset` to start a new season on " +
+        `these rules, or run the rules it ended on (state version ${stored}) to look at the ` +
+        "finished one.",
+    );
   }
 
   /** Refuse a command because this world has ended, in the platform's words. */
