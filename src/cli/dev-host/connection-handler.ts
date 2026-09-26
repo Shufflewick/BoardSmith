@@ -1,6 +1,8 @@
 import type { WebSocket } from 'ws';
+import { claimWebSocketPath } from '../commands/dev-server.js';
 import type { ClientInbound, HostOutbound, MultiplayerHost } from './multiplayer-host.js';
 import type { RulesReloadQueue } from './rules-reload-queue.js';
+import { DEV_HOST_WS_PATH } from './socket-path.js';
 
 /**
  * The messages that run the table's rules, and so are refused rather than run
@@ -24,6 +26,11 @@ const RUNS_THE_RULES: ReadonlySet<ClientInbound['type']> = new Set([
  * message to the MultiplayerHost, and on `close` tears down session state ONLY
  * if this socket is still the registered connection for its clientId.
  *
+ * Nothing a socket sends before `hello` is answered or held: it is dropped, as
+ * the platform serves nothing to a socket it has not identified (#422).
+ * `createDevHostClient` refuses such a request itself, so a scripted caller is
+ * told to say hello rather than left waiting out a timeout.
+ *
  * The close guard is the DEF-C fix: a page reload opens a new socket whose
  * `hello` can be processed BEFORE the older socket's `close` fires (Node gives
  * no ordering guarantee). Without the `clients.get(clientId) === socket` check,
@@ -40,13 +47,26 @@ const RUNS_THE_RULES: ReadonlySet<ClientInbound['type']> = new Set([
  * exercises the literal code the server runs, with no hand-mirrored copy to
  * drift out of sync.
  */
-export function createDevHostConnectionHandler(opts: {
+interface DevHostConnectionOptions {
   mpHost: Pick<MultiplayerHost, 'handleMessage' | 'disconnect'>;
   clients: Map<string, WebSocket>;
   queue: Pick<RulesReloadQueue, 'admit'>;
   /** Called when an async message dispatch rejects; receives the failing message type. */
   onError: (err: unknown, msgType: string) => void;
-}): (socket: WebSocket) => void {
+}
+
+/**
+ * The table socket exactly as `boardsmith dev` serves it: `DEV_HOST_WS_PATH`
+ * claimed on the host's HTTP server, every connection handled by
+ * `createDevHostConnectionHandler`. `dev.ts` calls this, and so does
+ * `dev-host.integration.test.ts`, so the test speaks to the server the product
+ * runs, path included (#422).
+ */
+export function claimDevHostSocket(opts: DevHostConnectionOptions): ReturnType<typeof claimWebSocketPath> {
+  return claimWebSocketPath(DEV_HOST_WS_PATH, createDevHostConnectionHandler(opts));
+}
+
+export function createDevHostConnectionHandler(opts: DevHostConnectionOptions): (socket: WebSocket) => void {
   const { mpHost, clients, queue, onError } = opts;
 
   return (socket: WebSocket) => {

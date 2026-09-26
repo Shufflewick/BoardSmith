@@ -17,6 +17,7 @@ import Toast from '../../ui/components/Toast.vue';
 import { useToast } from '../../ui/composables/useToast.js';
 import { applyTheme } from '../../ui/theme.js';
 import { loadDevClientId, TABLE_CLIENT_KEY } from './dev-client-id.js';
+import { DEV_HOST_WS_PATH } from './socket-path.js';
 
 const props = defineProps<{ config: DevHostConfig }>();
 const cfg = props.config;
@@ -143,7 +144,7 @@ const stepDeadlineOpen = ref(false);
 
 function wsUrl(): string {
   const proto = location.protocol === 'https:' ? 'wss' : 'ws';
-  return `${proto}://${location.host}/__boardsmith/ws`;
+  return `${proto}://${location.host}${DEV_HOST_WS_PATH}`;
 }
 
 function wsSend(message: Record<string, unknown>): void {

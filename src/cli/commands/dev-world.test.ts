@@ -15,6 +15,7 @@ import { fileURLToPath } from 'node:url';
 import { WORLD_IFRAME_PATH, WORLD_WS_PATH } from './dev-world.js';
 import { ensureWorldEntry, WORLD_ENTRY_HTML } from '../lib/world-entry.js';
 import { GAME_IFRAME_PATH } from './dev.js';
+import { DEV_HOST_WS_PATH } from '../dev-host/socket-path.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
@@ -56,7 +57,7 @@ describe('the two dev hosts share no path and no socket', () => {
     // half-consumed -- the same reason `worldProtocol.ts` gives for its own
     // source strings.
     expect(WORLD_IFRAME_PATH).not.toBe(GAME_IFRAME_PATH);
-    expect(WORLD_WS_PATH).not.toBe('/__boardsmith/ws');
+    expect(WORLD_WS_PATH).not.toBe(DEV_HOST_WS_PATH);
   });
 
   it('serves its surface from a TOP-LEVEL path, so relative assets resolve', () => {
