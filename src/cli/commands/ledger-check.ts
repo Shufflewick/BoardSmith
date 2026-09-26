@@ -582,13 +582,19 @@ async function trackedFiles(projectDir: string, relPaths: string[]): Promise<Set
   return new Set(listed.split('\0').filter(Boolean));
 }
 
+/** The commit that recorded a line: its hash and its committer time in epoch seconds. */
+interface LineCommit {
+  sha: string;
+  time: number;
+}
+
 /**
- * Committer time (epoch seconds) of the commit that recorded each line of the tracked file
- * `relPath`, indexed by 1-based line number; null for a line not committed yet.
+ * The commit that recorded each line of the tracked file `relPath`, indexed by 1-based line
+ * number; null for a line not committed yet.
  */
-async function lineCommitTimes(projectDir: string, relPath: string): Promise<Array<number | null>> {
+async function lineCommits(projectDir: string, relPath: string): Promise<Array<LineCommit | null>> {
   const porcelain = await git(projectDir, ['blame', '--line-porcelain', '--', relPath]);
-  const times: Array<number | null> = [];
+  const commits: Array<LineCommit | null> = [];
   let sha = '';
   let finalLine = 0;
   let time = 0;
@@ -600,10 +606,10 @@ async function lineCommitTimes(projectDir: string, relPath: string): Promise<Arr
     } else if (line.startsWith('committer-time ')) {
       time = Number(line.slice('committer-time '.length));
     } else if (line.startsWith('\t')) {
-      times[finalLine] = UNCOMMITTED.test(sha) ? null : time;
+      commits[finalLine] = UNCOMMITTED.test(sha) ? null : { sha, time };
     }
   }
-  return times;
+  return commits;
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -627,7 +633,7 @@ function evidenceDetail(path: string, rel: string | undefined, problem: Evidence
     case 'outside':
       return `Cites ${path}, which is outside the project, so it is in no commit. ${MOVE_TO_EVIDENCE}`;
     case 'missing':
-      return `Cites ${path}, which does not exist. Commit the file it names, or correct the citation to the file that was really used.`;
+      return `Cites ${path}, which does not exist and was not in git when this line was committed. Commit the file it names, or correct the citation to the file that was really used.`;
     case 'ignored':
       return `Cites ${path}, which is gitignored, so it was never committed (${SCRATCH_DIR} is for throwaway scripts only). ${MOVE_TO_EVIDENCE}`;
     case 'untracked':
@@ -652,13 +658,32 @@ async function isIgnored(projectDir: string, rel: string): Promise<boolean> {
   }
 }
 
+/** Whether `rel` (project-relative) was a tracked file in commit `sha`. */
+async function trackedAt(projectDir: string, sha: string, rel: string): Promise<boolean> {
+  try {
+    await git(projectDir, ['cat-file', '-e', `${sha}:./${rel}`]);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * What is wrong with one citation, if anything. A file that is gone now but was in git at the
+ * commit that recorded the citing line is not a problem: the design records are append-only, so
+ * an entry that cited a file deleted on purpose later stays as it was written (#398).
+ */
 async function problemOf(
   projectDir: string,
   rel: string | undefined,
   tracked: Set<string>,
+  citingCommit: () => Promise<string | null>,
 ): Promise<EvidenceProblem | undefined> {
   if (rel === undefined) return 'outside';
-  if (!(await fileExists(pathJoin(projectDir, rel)))) return 'missing';
+  if (!(await fileExists(pathJoin(projectDir, rel)))) {
+    const sha = await citingCommit();
+    return sha !== null && (await trackedAt(projectDir, sha, rel)) ? undefined : 'missing';
+  }
   if (tracked.has(rel)) return undefined;
   return (await isIgnored(projectDir, rel)) ? 'ignored' : 'untracked';
 }
@@ -673,9 +698,19 @@ async function checkCitedEvidence(projectDir: string, sources: EvidenceSource[])
   const rels = [...new Set(cited.flatMap((c) => (c.rel === undefined ? [] : [c.rel])))];
   const tracked = await trackedFiles(projectDir, rels);
 
+  // Blamed only when a cited file is missing, and at most once per design record.
+  const trackedSources = await trackedFiles(projectDir, sources.map((source) => `${DESIGN_DIR}/${source.file}`));
+  const blames = new Map<string, Promise<Array<LineCommit | null>>>();
+  const commitOfLine = async (file: string, line: number): Promise<string | null> => {
+    const rel = `${DESIGN_DIR}/${file}`;
+    if (!trackedSources.has(rel)) return null;
+    if (!blames.has(rel)) blames.set(rel, lineCommits(projectDir, rel));
+    return (await blames.get(rel)!)[line]?.sha ?? null;
+  };
+
   const findings: LedgerFinding[] = [];
   for (const c of cited) {
-    const problem = await problemOf(projectDir, c.rel, tracked);
+    const problem = await problemOf(projectDir, c.rel, tracked, () => commitOfLine(c.file, c.line));
     if (!problem) continue;
     findings.push({
       ledger: c.file,
@@ -753,8 +788,8 @@ export async function ledgerCheck(projectDir: string): Promise<LedgerCheckResult
     const text = (await readLedger(projectDir, log))!;
     result.checked.push(log);
     const rel = `${DESIGN_DIR}/${log}`;
-    const times = trackedLogs.has(rel) ? await lineCommitTimes(projectDir, rel) : [];
-    result.findings.push(...checkRunLog(text, log, (line) => times[line] ?? null, Math.floor(Date.now() / 1000)));
+    const commits = trackedLogs.has(rel) ? await lineCommits(projectDir, rel) : [];
+    result.findings.push(...checkRunLog(text, log, (line) => commits[line]?.time ?? null, Math.floor(Date.now() / 1000)));
   }
 
   const crossChunk = await readLedger(projectDir, CROSS_CHUNK_MD);
