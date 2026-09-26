@@ -18,7 +18,7 @@ import {
   useActionController,
   type EnrichedActionMetadata,
 } from './useActionController.js';
-import { createMockSendAction, createTestMetadata } from './useActionController.helpers.js';
+import { createMockSendAction, createTestMetadata } from './useActionController.test-helper.js';
 
 type ActionResolvedDetail = {
   action: string;

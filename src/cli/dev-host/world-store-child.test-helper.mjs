@@ -11,11 +11,11 @@
  * `boardsmith dev` mid-world" is the acceptance sentence for the store and a
  * test that reused an open database would be asserting about memory.
  *
- * Plain `.mjs` rather than a `.ts` test helper so that spawning it is a spawn
+ * An `.mjs` test helper rather than a `.ts` one so that spawning it is a spawn
  * of Node and nothing else; `tsx` is loaded the same way `bin/boardsmith.js`
  * loads it, so the store runs from source with no build step.
  *
- * Usage: `node world-store-child.mjs <mode> <storePath> <markerDir> [count] [bytes]`
+ * Usage: `node world-store-child.test-helper.mjs <mode> <storePath> <markerDir> [count] [bytes]`
  */
 
 import { writeFileSync } from 'node:fs';
