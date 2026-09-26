@@ -35,8 +35,9 @@ const PLAYERS = [
 const DueSeatsBoard = defineComponent({
   name: 'DueSeatsBoard',
   setup() {
-    const { dueSeats, isMyTurn } = useGameContext();
+    const { dueSeats, isMyTurn, availableActions } = useGameContext();
     return () => h('div', [
+      h('span', { 'data-testid': 'board-actions' }, availableActions.value.join(',')),
       h('span', { 'data-testid': 'board-due' }, dueSeats.value.join(',')),
       h('span', { 'data-testid': 'board-my-turn' }, String(isMyTurn.value)),
     ]);
@@ -178,6 +179,8 @@ describe('GameShell in a simultaneous step (#337)', () => {
     expect(wrapper.find('[data-testid="board-due"]').text()).toBe('1,2');
     expect(wrapper.find('[data-testid="board-my-turn"]').text()).toBe('false');
     expect(wrapper.find('.waiting-message').text()).toContain('Bob, Carol');
+    // A committed seat has nothing left to take (#408).
+    expect(wrapper.find('[data-testid="board-actions"]').text()).toBe('');
   });
 
   it('never names the viewer in its own waiting line, whoever has committed (D27)', async () => {
@@ -205,6 +208,8 @@ describe('GameShell in a simultaneous step (#337)', () => {
     expect(cardStatuses(wrapper)).toEqual({ Alice: '', Bob: 'Bob is playing', Carol: '' });
     expect(stripStatus(wrapper)).toBe('Bob is playing');
     expect(wrapper.find('[data-testid="board-due"]').text()).toBe('1');
+    // The flow's `play` is Bob's; the viewer is given none of it (#408).
+    expect(wrapper.find('[data-testid="board-actions"]').text()).toBe('');
   });
 
   it('announces "Your move" once when the step opens, not on every frame after', async () => {

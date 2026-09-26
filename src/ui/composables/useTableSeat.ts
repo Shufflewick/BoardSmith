@@ -74,7 +74,7 @@ interface TableSeatOptions extends SeatTransport {
 }
 
 export interface TableSeat extends TableActionWiring {
-  /** The action names this seat may take now: its own entry in a simultaneous step, else the flow's. */
+  /** The action names this seat may take now, as the session published them for it. */
   availableActions: ComputedRef<string[]>;
   /** Whether this seat has already committed the current simultaneous step. False outside one. */
   completed: ComputedRef<boolean>;
@@ -125,15 +125,10 @@ export function useTableSeat(opts: TableSeatOptions): TableSeat {
     flowState.value?.awaitingPlayers?.find((entry) => entry.playerIndex === playerSeat.value),
   );
 
-  const availableActions = computed<string[]>(() => {
-    const flow = flowState.value;
-    if (!flow) return [];
-    if (flow.awaitingPlayers?.length) {
-      const mine = myAwaiting.value;
-      if (mine && !mine.completed) return mine.availableActions ?? [];
-    }
-    return flow.availableActions ?? [];
-  });
+  // The session's per-seat answer (`buildPlayerState`): none for a seat that is
+  // not on move or has committed, and reconciled with `actionMetadata` so every
+  // name here can be started (#408). The flow's own list is the acting seat's.
+  const availableActions = computed<string[]>(() => state.value?.state.availableActions ?? []);
   const completed = computed(() => (flowState.value?.awaitingPlayers?.length ? !!myAwaiting.value?.completed : false));
   // The engine's `dueSeats` is the one answer to "who may act", so the players
   // panel, the Action Panel, the announcer and a custom UI cannot disagree.

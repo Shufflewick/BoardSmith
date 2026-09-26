@@ -13,7 +13,7 @@
  * `renderAsSeat` is not given.
  */
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { defineComponent, getCurrentInstance, h, nextTick, type PropType } from 'vue';
+import { defineComponent, getCurrentInstance, h, nextTick, type Component, type PropType } from 'vue';
 import type { VueWrapper } from '@vue/test-utils';
 import { MoveGame } from '../session/move-game.test-helper.js';
 import { buildPlayerState } from '../session/utils.js';
@@ -87,14 +87,25 @@ describe('renderAsSeat provides the game context GameShell provides (#406)', () 
     expect(board.attributes('data-same-controller')).toBe('true');
   });
 
-  it('answers a seat that is not on move the way the shell would', async () => {
+  it('gives a seat that is not on move no actions (#408)', async () => {
     const board = (await render(renderAsSeat(moveGame(), 2, { component: ContextBoard }))).find('.board');
 
     expect(board.attributes('data-seat')).toBe('2');
     expect(board.attributes('data-my-turn')).toBe('false');
-    // The flow's actions, as GameShell gives them; #408 flips this to none.
-    expect(board.attributes('data-actions')).toBe('move');
+    expect(board.attributes('data-actions')).toBe('');
     expect(board.attributes('data-due')).toBe('1');
+  });
+
+  it("gives GameShell's board the seat's own actions, not the acting seat's (#408)", async () => {
+    const game = moveGame();
+
+    const onMove = (await renderInsideGameShell(game, 1, ContextBoard)).find('.board');
+    expect(onMove.attributes('data-actions')).toBe('move');
+    for (const wrapper of mounted.splice(0)) wrapper.unmount();
+
+    const offMove = (await renderInsideGameShell(game, 2, ContextBoard)).find('.board');
+    expect(offMove.attributes('data-my-turn')).toBe('false');
+    expect(offMove.attributes('data-actions')).toBe('');
   });
 });
 
@@ -184,10 +195,13 @@ function describeKey(key: PropertyKey): string {
   return typeof key === 'symbol' ? (key.description ?? key.toString()) : String(key);
 }
 
-async function keysInsideGameShell(game: TestGame<MoveGame>, seat: number): Promise<Set<PropertyKey>> {
-  reached = undefined;
+/**
+ * Mount the real GameShell as `seat`, with `board` as its one UI, and post it
+ * the frame a session publishes for that seat.
+ */
+async function renderInsideGameShell(game: TestGame<MoveGame>, seat: number, board: Component) {
   enterIframe();
-  const shell = mountPlatformShell({ gameType: 'render-as-seat-parity', board: KeyProbe, stubLobby: true });
+  const shell = mountPlatformShell({ gameType: 'render-as-seat-parity', board, stubLobby: true });
   mounted.push(shell);
   await nextTick();
   window.dispatchEvent(new MessageEvent('message', { data: { source: 'shufflewick', type: 'init', seat } }));
@@ -201,6 +215,12 @@ async function keysInsideGameShell(game: TestGame<MoveGame>, seat: number): Prom
     new MessageEvent('message', { data: { source: 'shufflewick', type: 'game_state', view: frame, winners: [] } }),
   );
   for (let i = 0; i < 3; i++) await nextTick();
+  return shell;
+}
+
+async function keysInsideGameShell(game: TestGame<MoveGame>, seat: number): Promise<Set<PropertyKey>> {
+  reached = undefined;
+  await renderInsideGameShell(game, seat, KeyProbe);
   if (!reached) throw new Error('GameShell never mounted the probe board, so there is nothing to compare');
   return reached;
 }
