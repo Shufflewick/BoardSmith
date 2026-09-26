@@ -495,6 +495,17 @@ collects the file, where no test timeout applies; without it the first test
 pays for it and can time out under load. It loads once per file, and it throws
 the same jsdom message a render does.
 
+**It renders with your project's own `@vue/test-utils`** (#389), resolved from
+the directory the tests run in exactly as your own test files resolve it, so a
+board renders on the same Vue its components import and re-renders when a test
+hands it new props. `boardsmith init` installs it; a project without it is told
+to run `npm install --save-dev @vue/test-utils`. The first load also checks that
+BoardSmith's UI and your `@vue/test-utils` share one copy of Vue, and refuses,
+saying what to change, when they do not (aliasing `vue` to another build of it
+is the usual cause). It also supplies the browser APIs jsdom lacks and a board
+may rely on, `window.matchMedia` and `ResizeObserver` (#404), answering as a
+browser would for a page that is never laid out.
+
 **`subject` is a `TestGame` or a `TestWorld`.** Both answer the same two
 questions -- what this seat is SENT, and what the game or world HOLDS -- and the
 scan is the difference between them. A persistent world is the case this matters
@@ -525,29 +536,33 @@ await assertNoHiddenInfoLeak(testGame, 2, { component: GameTable });
 ```
 
 The standard scaffold props (`playerSeat`, `isMyTurn`, `availableActions`,
-`actionController`) are supplied automatically from real game state and
-filtered to the props your component declares, so most boards need nothing
-else. Add `componentProps` for anything beyond that contract. `gameView` is
-always the real per-seat view and cannot be overridden through
+`disabledActions`, `actionController`) are supplied automatically from real game
+state and filtered to the props your component declares, so most boards need
+nothing else. Add `componentProps` for anything beyond that contract. `gameView`
+is always the real per-seat view and cannot be overridden through
 `componentProps` — rendering any other tree would invalidate the scan.
+
+**A `TestGame` seat is mounted the way GameShell mounts it** (#390). Its props
+come from the state a session publishes for that seat, and its
+`actionController` is the real one, wired with the board interaction by
+`useTableActionWiring`, the function GameShell uses. So a board starting an
+action draws the game's own targets. Two things keep the mount a render: auto
+mode is off, so nothing starts or completes by itself, and the controller
+refuses to take a move, saying to take it with `testGame.doAction(...)` and
+render the seat again. A `TestWorld` seat gets its offers as `availableActions`
+and a controller that only carries their names.
 
 Board interaction is provided too. A board that calls `useBoardInteraction()`
 is normally inside a `<GameShell>`; this utility stands in for the shell and
 provides a real `createBoardInteraction()` under `BOARD_INTERACTION_KEY`, so
-such a board mounts with no wiring from you. Use the `provide` option only to
-supply something the default does not cover — an interaction pre-loaded with
-valid targets, say, so the board renders its candidate state:
+such a board mounts with no wiring from you. Pass your own under that key in
+`provide` to hold a handle on it; a table seat's controller then drives yours.
+To render a board's candidate state, start the action the way a player would:
 
 ```typescript
-import { createBoardInteraction, BOARD_INTERACTION_KEY } from 'boardsmith/ui';
-
-const interaction = createBoardInteraction();
-interaction.setValidElements([{ id: cardId, ref: { id: cardId } }], () => {});
-
-await assertNoHiddenInfoLeak(testGame, 2, {
-  component: GameTable,
-  provide: { [BOARD_INTERACTION_KEY]: interaction },
-});
+const wrapper = await renderAsSeat(testGame, 1, { component: GameTable });
+await wrapper.props('actionController').start('placePack');
+// the board now shows the spaces placePack may target
 ```
 
 `assertNoHiddenInfoLeak` derives forbidden markers by diffing each element's
