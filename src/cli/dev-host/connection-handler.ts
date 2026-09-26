@@ -18,6 +18,25 @@ const RUNS_THE_RULES: ReadonlySet<ClientInbound['type']> = new Set([
   'fireDeadline',
 ]);
 
+interface DevHostConnectionOptions {
+  mpHost: Pick<MultiplayerHost, 'handleMessage' | 'disconnect'>;
+  clients: Map<string, WebSocket>;
+  queue: Pick<RulesReloadQueue, 'admit'>;
+  /** Called when an async message dispatch rejects; receives the failing message type. */
+  onError: (err: unknown, msgType: string) => void;
+}
+
+/**
+ * The table socket exactly as `boardsmith dev` serves it: `DEV_HOST_WS_PATH`
+ * claimed on the host's HTTP server, every connection handled by
+ * `createDevHostConnectionHandler`. `dev.ts` calls this, and so does
+ * `dev-host.integration.test.ts`, so the test speaks to the server the product
+ * runs, path included (#422).
+ */
+export function claimDevHostSocket(opts: DevHostConnectionOptions): ReturnType<typeof claimWebSocketPath> {
+  return claimWebSocketPath(DEV_HOST_WS_PATH, createDevHostConnectionHandler(opts));
+}
+
 /**
  * Per-connection WebSocket handler for the dev host.
  *
@@ -51,30 +70,11 @@ const RUNS_THE_RULES: ReadonlySet<ClientInbound['type']> = new Set([
  * So is a page's departure (#387): a bot covering its seat is a move, and it
  * waits for the new rules too.
  *
- * Exported and shared by the real dev server (`dev.ts`) and the DEF-C
- * regression test so the guard has exactly ONE implementation — the test
- * exercises the literal code the server runs, with no hand-mirrored copy to
- * drift out of sync.
+ * The real dev server reaches it through `claimDevHostSocket`, and the tests
+ * run the same handler, so the guard has exactly ONE implementation — the
+ * tests exercise the literal code the server runs, with no hand-mirrored copy
+ * to drift out of sync.
  */
-interface DevHostConnectionOptions {
-  mpHost: Pick<MultiplayerHost, 'handleMessage' | 'disconnect'>;
-  clients: Map<string, WebSocket>;
-  queue: Pick<RulesReloadQueue, 'admit'>;
-  /** Called when an async message dispatch rejects; receives the failing message type. */
-  onError: (err: unknown, msgType: string) => void;
-}
-
-/**
- * The table socket exactly as `boardsmith dev` serves it: `DEV_HOST_WS_PATH`
- * claimed on the host's HTTP server, every connection handled by
- * `createDevHostConnectionHandler`. `dev.ts` calls this, and so does
- * `dev-host.integration.test.ts`, so the test speaks to the server the product
- * runs, path included (#422).
- */
-export function claimDevHostSocket(opts: DevHostConnectionOptions): ReturnType<typeof claimWebSocketPath> {
-  return claimWebSocketPath(DEV_HOST_WS_PATH, createDevHostConnectionHandler(opts));
-}
-
 export function createDevHostConnectionHandler(opts: DevHostConnectionOptions): (socket: WebSocket) => void {
   const { mpHost, clients, queue, onError } = opts;
   const runId = randomUUID();
