@@ -179,6 +179,26 @@ describe('checkClaimQuotes: rulebook-sourced claims', () => {
     expect(refusals[0]).toMatch(/outside this project/);
   });
 
+  it('reads a Source path by the one rule for a path in a design record (#409)', async () => {
+    await write('design/OVERNIGHT.md', '# Overnight\n\nArmour subtracts from damage.\n');
+    await write('src/combat.ts', 'export const ARMOUR = 1;\n');
+    const accepted = await refusalsFor(`1. **Armour subtracts.**
+   > Armour subtracts from damage.
+   Source: design/OVERNIGHT.md:3
+2. **Armour is one.**
+   > export const ARMOUR = 1;
+   Source: src/combat.ts:1
+3. **Armour is still one.**
+   > export const ARMOUR = 1;
+   Source: ../src/combat.ts:1`);
+    expect(accepted).toEqual([]);
+
+    const refusals = await refusalsFor(`1. **Armour subtracts.**
+   > Armour subtracts from damage.
+   Source: OVERNIGHT.md:3`);
+    expect(refusals[0]).toMatch(/no file at OVERNIGHT\.md\..*a file of your own in design\/ is written design\/<name>/);
+  });
+
   it('does not check a claim a later claim supersedes', async () => {
     await writeChunk(`1. **Ties go against the attacker.**
    > Ties favour the defender.

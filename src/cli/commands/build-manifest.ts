@@ -14,9 +14,9 @@
  * convention as `chunk-provenance.ts` exporting `resolveCitedSlices` for reuse.
  */
 
-import { resolveDesignRelative } from '../lib/project-paths.js';
+import { designRecordPath } from '../lib/project-paths.js';
 import { parseLedgerEntries, supersessionPatterns } from '../lib/ledger-entries.js';
-import { relative, resolve as pathResolve, sep } from 'node:path';
+import { resolve as pathResolve } from 'node:path';
 
 /** The locked finding-kind enum from 172-CONTEXT.md decision 7. Never a hand-written union. */
 export const FINDING_KINDS = Object.freeze([
@@ -126,19 +126,18 @@ const PATH_TOKEN = /[A-Za-z0-9_./-]+\.[A-Za-z0-9]+/g;
  *
  * A manifest row may name a design artifact rather than source — real chunks list `DECISIONS.md`
  * or `RULINGS.md` beside `src/rules/game.ts`. Those are written the way every path inside a design
- * doc is written, relative to `design/`, so they resolve through `resolveDesignRelative`; source
- * paths (`src/…`, `tests/…`) still resolve against the project root. Without this split, every
- * ledger row in every existing manifest reads as a deleted file.
+ * doc is written, relative to `design/`; source paths (`src/…`, `tests/…`) resolve against the
+ * project root. Without this split, every ledger row in every existing manifest reads as a deleted
+ * file. The split is the one rule every reader of a design record shares, `designRecordPath`
+ * (project-paths.ts, #409).
  *
  * Returns the absolute resolved path, or the sentinel `'escapes'` for a path that leaves
  * `projectDir`. Callers report the escape as a finding rather than throwing — one bad manifest row
  * must not abort the whole sweep.
  */
 export function resolveManifestPath(projectDir: string, relPathStr: string): string | 'escapes' {
-  const resolved = resolveDesignRelative(projectDir, relPathStr);
-  const rel = relative(projectDir, resolved);
-  if (rel === '..' || rel.startsWith(`..${sep}`)) return 'escapes';
-  return resolved;
+  const rel = designRecordPath(projectDir, relPathStr);
+  return rel === undefined ? 'escapes' : pathResolve(projectDir, rel);
 }
 
 /**

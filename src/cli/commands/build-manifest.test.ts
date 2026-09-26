@@ -603,8 +603,13 @@ describe('resolveManifestPath', () => {
   });
 
   it('rejects a traversal that escapes the project root', () => {
+    // A path that climbs out of design/ is read from design/ (#409), so it takes one more `..`.
     expect(resolveManifestPath(project, '../../etc/passwd')).toBe('escapes');
-    expect(resolveManifestPath(project, '..')).toBe('escapes');
+    expect(resolveManifestPath(project, '../..')).toBe('escapes');
+  });
+
+  it('reads a path that climbs out of design/ from design/, as every reader of a design record does (#409)', () => {
+    expect(resolveManifestPath(project, '../src/rules/game.ts')).toBe('/tmp/proj/src/rules/game.ts');
   });
 
   it('resolves a manifest row naming a design ledger into design/, not the project root', () => {
@@ -632,6 +637,6 @@ describe('resolveManifestPath', () => {
 
   it('does not treat a sibling directory with a shared prefix as inside', () => {
     // `/tmp/proj-evil` shares the `/tmp/proj` prefix — a naive startsWith check would admit it.
-    expect(resolveManifestPath(project, '../proj-evil/secrets.ts')).toBe('escapes');
+    expect(resolveManifestPath(project, '../../proj-evil/secrets.ts')).toBe('escapes');
   });
 });

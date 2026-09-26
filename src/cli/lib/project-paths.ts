@@ -1,5 +1,6 @@
 import { promises as fs } from 'node:fs';
-import { join, resolve } from 'node:path';
+import { homedir } from 'node:os';
+import { isAbsolute, join, relative, resolve, sep } from 'node:path';
 
 /**
  * Where a bs-built game project keeps everything the `bs-` skills author.
@@ -90,6 +91,8 @@ export const ASSETS_MD = 'ASSETS.md';
 export const DESIGN_MD = 'DESIGN.md';
 export const BRIEF_MD = 'BRIEF.md';
 export const BOARDSMITH_BUGS_MD = 'BOARDSMITH-BUGS.md';
+/** The project's hard constraints and every state structure that grows, with its cap (#288). */
+export const CONSTRAINTS_MD = 'CONSTRAINTS.md';
 /** The filings ledger and the orchestrated-run journal, written by `/bs-build-game`. */
 export const FILINGS_MD = 'FILINGS.md';
 export const RUN_MD = 'RUN.md';
@@ -168,31 +171,60 @@ export function commandBuildDir(projectDir: string, command: BuildingCommand): s
 }
 
 /**
- * Resolve a path as it is WRITTEN in a bs- design doc to where it actually sits on disk.
+ * WHERE A PATH WRITTEN IN A DESIGN RECORD POINTS (#409). Every reader of a design record, whether
+ * a Build Manifest row, a claim's `Source:`/`Searched:` line, or a script or capture a ledger or
+ * verified chunk cites as evidence, resolves the path through this one rule, so a path one check
+ * accepts is never refused by another:
  *
- * Inside `design/`, every path is design-relative: a Build Manifest cites `rulebook/02-punch.md`,
- * SKETCH.md points at `chunks/<slug>/CHUNK.md`. Outside it, paths are project-relative:
- * `src/rules/index.ts`, `tests/punch.test.ts`, `boardsmith.json`. This function is the ONE place
- * that knows which is which, so a caller can hand it either form and get the real path back.
+ *   - `~/...` is the home directory, as a shell reads it, and an absolute path is itself.
+ *   - A path that names something `design/` owns (`rulebook/...`, `chunks/...`, `run-log/...`, or a
+ *     ledger such as `DECISIONS.md`) is read from `design/`, where the records live.
+ *   - A path that climbs out of `design/` (`../src/rules/world.ts`) is read from `design/` too, so
+ *     it names the project's `src/rules/world.ts`. Read from the project root it could only name
+ *     something outside the project, so this is the one meaning it can have.
+ *   - Anything else (`src/...`, `tests/...`, `design/...`, `boardsmith.json`) is read from the
+ *     project root.
  *
  * The distinction is not cosmetic: `rulebook/02-punch.md` on disk is `design/rulebook/02-punch.md`,
  * and resolving it against the project root instead silently reads nothing.
  *
  * Uses `resolve`, not `join`, so an absolute or `..`-escaping input still lands OUTSIDE
  * `projectDir` and a caller's containment check can catch it. `join` would quietly graft
- * `/etc/passwd` onto the project root and defeat that check.
+ * `/etc/passwd` onto the project root and defeat that check. `designRecordPath` is that check.
  */
 export function resolveDesignRelative(projectDir: string, path: string): string {
-  const base = isDesignArtifact(path) ? join(projectDir, DESIGN_DIR) : projectDir;
-  return resolve(base, path);
+  const written = path.replace(/\\/g, '/');
+  if (written.startsWith('~/')) return resolve(homedir(), written.slice(2));
+  const fromDesign = isDesignArtifact(written) || written === '..' || written.startsWith('../');
+  return resolve(fromDesign ? designDir(projectDir) : projectDir, written);
 }
+
+/**
+ * The project-relative, `/`-separated path a design record's written path names (see
+ * `resolveDesignRelative` for the rule), or `undefined` when it names something outside the project.
+ */
+export function designRecordPath(projectDir: string, path: string): string | undefined {
+  const rel = relative(resolve(projectDir), resolveDesignRelative(projectDir, path)).split(sep).join('/');
+  if (rel === '..' || rel.startsWith('../') || isAbsolute(rel)) return undefined;
+  return rel;
+}
+
+/**
+ * Every file directly in `design/` that BoardSmith names, the ledgers `doctor` reports and the
+ * records the build and merge commands keep beside them.
+ */
+const DESIGN_FILES: readonly string[] = [
+  ...DESIGN_LEDGERS,
+  CONSTRAINTS_MD,
+  QUESTIONS_MD,
+  FILINGS_MD,
+  RUN_MD,
+  CROSS_CHUNK_MD,
+];
 
 /** True when a doc-written path names something `design/` owns rather than the project root. */
 export function isDesignArtifact(path: string): boolean {
   const normalized = path.replace(/\\/g, '/');
-  if (normalized.startsWith(`${RULEBOOK_DIR}/`)) return true;
-  if (normalized.startsWith(`${CHUNKS_DIR}/`)) return true;
-  return (DESIGN_LEDGERS as readonly string[]).includes(normalized);
+  if ([RULEBOOK_DIR, CHUNKS_DIR, RUN_LOG_DIR].some((dir) => normalized.startsWith(`${dir}/`))) return true;
+  return DESIGN_FILES.includes(normalized);
 }
-/** The project's hard constraints and every state structure that grows, with its cap (#288). */
-export const CONSTRAINTS_MD = 'CONSTRAINTS.md';

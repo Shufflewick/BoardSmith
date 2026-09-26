@@ -12,6 +12,7 @@ import {
   ledgerCheck,
   ledgerCheckCommand,
 } from './ledger-check.js';
+import { checkClaimQuotes } from './claim-quotes.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
 /**
@@ -527,6 +528,45 @@ describe('ledgerCheck — cited evidence must be in git (#292)', () => {
     });
     commitAt(dir, '2026-09-23T12:00:00Z');
     expect(evidence((await ledgerCheck(dir)).findings)).toEqual([]);
+  });
+
+  it('reads a claim\'s Source path exactly as claim-quote-check does, so a claim that passes one passes the other (#409)', async () => {
+    const claims = [
+      '1. **Trading starts at zero.**',
+      '   > export const TRADING = 0;',
+      '   Source: ../src/world.ts:1',
+      '2. **Hunting starts at one.**',
+      '   > export const HUNTING = 1;',
+      '   Source: src/hunting.ts:1',
+      '3. **Ties go to combatant 2.**',
+      '   > Ties favour combatant 2.',
+      '   Source: rulebook/08-combat.md:1',
+    ].join('\n');
+    const dir = await tree({
+      'design/chunks/world-shell/CHUNK.md': [
+        '# Chunk: world-shell', '', 'Status: verified', '', '## Interpretation', '', claims, '', '## Sign-off', 'ok', '',
+      ].join('\n'),
+      'src/world.ts': 'export const TRADING = 0;\n',
+      'src/hunting.ts': 'export const HUNTING = 1;\n',
+      'design/rulebook/08-combat.md': 'Ties favour combatant 2.\n',
+    });
+    commitAt(dir, '2026-09-23T12:00:00Z');
+    expect((await checkClaimQuotes(dir, 'world-shell')).refusals).toEqual([]);
+    expect(evidence((await ledgerCheck(dir)).findings)).toEqual([]);
+  });
+
+  it('refuses a claim\'s Source path that leaves the project in both checks (#409)', async () => {
+    const dir = await tree({
+      'design/chunks/world-shell/CHUNK.md': [
+        '# Chunk: world-shell', '', 'Status: verified', '', '## Interpretation', '',
+        '1. **Trading starts at zero.**', '   > export const TRADING = 0;', '   Source: ../../other/src/world.ts:1', '',
+      ].join('\n'),
+    });
+    commitAt(dir, '2026-09-23T12:00:00Z');
+    expect((await checkClaimQuotes(dir, 'world-shell')).refusals[0]).toMatch(/outside this project/);
+    const found = evidence((await ledgerCheck(dir)).findings);
+    expect(found).toHaveLength(1);
+    expect(found[0].detail).toMatch(/outside the project/);
   });
 
   it('does not hold a chunk that is not verified yet to its citations', async () => {
