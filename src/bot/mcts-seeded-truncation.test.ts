@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { Game, Action, defineFlow, actionStep, type GameOptions } from '../engine/index.js';
 import { MCTSBot } from './mcts-bot.js';
-import { createBot } from './index.js';
 import { DIFFICULTY_PRESETS, type BotConfig } from './types.js';
 
 /**
@@ -139,18 +138,37 @@ async function subSearchesOf(bot: MCTSBot<ChoiceGame>): Promise<SubSearch[]> {
   return subs;
 }
 
-const hardBot = (seed?: string) => createBot(
-  newGame(), ChoiceGame, 'choice', 1, [], 'hard', undefined, seed === undefined ? undefined : { seed },
-);
+/**
+ * A parallel bot shaped like the `hard` preset (its `parallel` count and
+ * playout depth) that searches only a few iterations per sub-search. What these
+ * tests pin is decided before a sub-search runs its first iteration (the seed it
+ * gets and its random source's starting state), or needs only enough iterations
+ * to draw from that source (the move a seeded ensemble returns). The preset's 500
+ * iterations bought none of it and cost several plays of up to a second each per
+ * test under load, which timed out unrelated merges (#424).
+ *
+ * `timeout: Infinity` bounds every search by iterations alone, as `createBot`'s
+ * `reproducible` does for a seeded bot (create-bot.test.ts pins that wiring), so
+ * no run here depends on how busy the machine is. `async: false` skips the
+ * event-loop yield between iterations, which only a live game needs.
+ */
+const ITERATIONS_PER_SUB_SEARCH = 8;
+const parallelBot = (seed?: string) => new MCTSBot(newGame(), ChoiceGame, 'choice', 1, [], {
+  ...DIFFICULTY_PRESETS.hard,
+  iterations: DIFFICULTY_PRESETS.hard.parallel! * ITERATIONS_PER_SUB_SEARCH,
+  timeout: Infinity,
+  async: false,
+  ...(seed === undefined ? {} : { seed }),
+});
 
 describe('parallel MCTS sub-search seeding (#329)', () => {
   afterEach(() => {
     vi.restoreAllMocks();
   });
 
-  it('gives an unseeded hard bot\'s sub-searches independent random seeds', async () => {
-    const first = await subSearchesOf(hardBot());
-    const second = await subSearchesOf(hardBot());
+  it('gives an unseeded parallel bot\'s sub-searches independent random seeds', async () => {
+    const first = await subSearchesOf(parallelBot());
+    const second = await subSearchesOf(parallelBot());
 
     expect(first).toHaveLength(DIFFICULTY_PRESETS.hard.parallel!);
     for (const sub of [...first, ...second]) expect(sub.seed).toBeUndefined();
@@ -159,10 +177,10 @@ describe('parallel MCTS sub-search seeding (#329)', () => {
     expect(new Set(states).size).toBe(states.length);
   });
 
-  it('derives a seeded hard bot\'s sub-searches from its seed, so the same seed searches the same way', async () => {
-    const first = await subSearchesOf(hardBot('fixture-7'));
-    const second = await subSearchesOf(hardBot('fixture-7'));
-    const other = await subSearchesOf(hardBot('fixture-8'));
+  it('derives a seeded parallel bot\'s sub-searches from its seed, so the same seed searches the same way', async () => {
+    const first = await subSearchesOf(parallelBot('fixture-7'));
+    const second = await subSearchesOf(parallelBot('fixture-7'));
+    const other = await subSearchesOf(parallelBot('fixture-8'));
 
     expect(first).toHaveLength(DIFFICULTY_PRESETS.hard.parallel!);
     expect(second).toEqual(first);
@@ -171,7 +189,7 @@ describe('parallel MCTS sub-search seeding (#329)', () => {
   });
 
   it('picks the same move every time for the same seed', async () => {
-    const move = async () => hardBot('fixture-7').play();
+    const move = async () => parallelBot('fixture-7').play();
     const first = await move();
     for (let run = 0; run < 3; run++) expect(await move()).toEqual(first);
   });
