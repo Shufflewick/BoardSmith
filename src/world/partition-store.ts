@@ -46,6 +46,7 @@
 import type { StoredPartition } from "./contract.js";
 import type { WorldGenesis, WorldSerialized } from "./runner.js";
 import { worldRefusal } from "./refusals.js";
+import { NOTICE_SCOPE } from "./notices.js";
 import type { WorldBudgets } from "./budgets.js";
 
 /**
@@ -97,6 +98,18 @@ export function assertStorablePartitionName(name: string): void {
       "invalid-partition-name",
       `The partition name ${JSON.stringify(name)} contains characters a partition name may not: ` +
         `use letters, digits, and any of . _ : @ / -`,
+    );
+  }
+  // THE LIVE NOTICE SCOPE IS RESERVED (ShufflewickPub #521). A notice reaches a
+  // connected seat as an event on this scope, and an event's scope is otherwise
+  // a partition name -- so a partition called this would make a room's news and
+  // a seat's notice the same frame on the wire.
+  if (name === NOTICE_SCOPE) {
+    throw worldRefusal(
+      "invalid-partition-name",
+      `A partition may not be named ${JSON.stringify(name)}. That name is the scope a seat's ` +
+        `notices are delivered on, so a room by that name would be indistinguishable from a ` +
+        `notice. Rename it -- "${name}s" or "world/${name}" both work.`,
     );
   }
   if (PROTOTYPE_KEYS.has(name)) {

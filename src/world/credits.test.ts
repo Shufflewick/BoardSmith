@@ -62,6 +62,7 @@ const STAMP = {
   presence: [] as readonly number[],
   activity: null,
   declaredActivity: [],
+  declaredNotices: [],
 };
 
 async function attempt() {
@@ -72,8 +73,8 @@ async function attempt() {
   }).runner;
   const genesis = await runner.genesis();
   const command = { name: "buy", args: {} };
-  await runner.declare(command, "p1", {}, arrival(STAMP.arrivedAt), []);
-  await runner.declare(command, "p1", { vault: genesis.partitions.vault! }, arrival(STAMP.arrivedAt), []);
+  await runner.declare(command, "p1", {}, arrival(STAMP.arrivedAt), { declaredActivity: [], declaredNotices: [] });
+  await runner.declare(command, "p1", { vault: genesis.partitions.vault! }, arrival(STAMP.arrivedAt), { declaredActivity: [], declaredNotices: [] });
   return runner.apply({ player: "p1", command, timing: null, ...STAMP });
 }
 

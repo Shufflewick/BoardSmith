@@ -172,6 +172,32 @@ export interface WorldBudgets {
    * second spend.
    */
   readonly receiptRetentionMs: number;
+  /**
+   * THE MOST NOTICES ONE SEAT'S BOX MAY HOLD (ShufflewickPub #521).
+   *
+   * A ceiling on the bundle's own `world.notices.perSeat`, the way
+   * `maxPlayers` is a ceiling on its seat count: the game says how many
+   * notices its seats keep, and this says how many the host is prepared to
+   * store per seat. A bundle declaring more is refused when the world is built.
+   */
+  readonly maxNoticesPerSeat: number;
+  /**
+   * HOW MANY SERIALIZED BYTES ONE NOTICE MAY BE, measured in UTF-8.
+   *
+   * With `maxNoticesPerSeat`, this bounds one seat's box row at
+   * `maxNoticesPerSeat x noticeMaxBytes`, which is what keeps a box a small
+   * point read rather than a second partition.
+   */
+  readonly noticeMaxBytes: number;
+  /**
+   * HOW MANY NOTICES ONE COMMAND MAY SEND.
+   *
+   * Every send is a read and a write of the recipient's box in the host's
+   * checkpoint, so this bounds that write the way `maxSchedulesPerCommand`
+   * bounds the queue's. It is sized for a clan, not for the whole world: a
+   * line for everybody present is `emit` on the `"world"` scope.
+   */
+  readonly maxNoticesPerCommand: number;
 }
 
 /**
@@ -197,6 +223,13 @@ const BASE = {
   // selection over "everything in the world" is refused rather than paid for.
   maxCandidatesPerSelection: 200,
   receiptRetentionMs: 14 * 24 * 60 * 60 * 1000,
+  // A box holds a screenful of "while you were away" lines; past that, an
+  // alert box drops its oldest and a letter box refuses the sender.
+  maxNoticesPerSeat: 64,
+  // A sentence and a small payload. 64 of them is a 64 KiB row per seat.
+  noticeMaxBytes: 1024,
+  // A large clan's worth of recipients in one command.
+  maxNoticesPerCommand: 100,
 } as const;
 
 /** What a host may say about its budgets. Everything is optional; the two
@@ -256,6 +289,15 @@ export function worldBudgets(overrides: WorldBudgetOverrides = {}): WorldBudgets
     receiptRetentionMs: positive(
       overrides.receiptRetentionMs ?? BASE.receiptRetentionMs,
       "receiptRetentionMs",
+    ),
+    maxNoticesPerSeat: positive(
+      overrides.maxNoticesPerSeat ?? BASE.maxNoticesPerSeat,
+      "maxNoticesPerSeat",
+    ),
+    noticeMaxBytes: positive(overrides.noticeMaxBytes ?? BASE.noticeMaxBytes, "noticeMaxBytes"),
+    maxNoticesPerCommand: positive(
+      overrides.maxNoticesPerCommand ?? BASE.maxNoticesPerCommand,
+      "maxNoticesPerCommand",
     ),
   };
 }

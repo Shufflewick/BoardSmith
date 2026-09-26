@@ -29,6 +29,7 @@
  * handed the engine live objects would prove adoption worked without ever
  * running it (`docs/TEST-FIXTURES.md`).
  */
+import type { DeclaredNoticeBox } from "./notices.js";
 import { expect } from "vitest";
 import { Game, Player, Space, type ElementJSON, type GameOptions } from "../engine/index.js";
 import { worldAction } from "./action.js";
@@ -120,6 +121,7 @@ export const STAMP = {
   /** These suites' actions are all seated, and a seated action may declare no
    *  chair at all (ShufflewickPub #423), so there is nothing to answer. */
   declaredActivity: [] as readonly DeclaredSeatActivityStamp[],
+  declaredNotices: [] as readonly DeclaredNoticeBox[],
 };
 
 /** The same two facts an offer needs. */
@@ -211,7 +213,7 @@ export async function applyThroughWalk(
   command: { name: string; args: Record<string, unknown> },
 ): ReturnType<BoardSmithWorldEngine["applyCommand"]> {
   for (;;) {
-    const needs = engine.commandNeeds(player, command, arrival(STAMP.now), STAMP.declaredActivity);
+    const needs = engine.commandNeeds(player, command, arrival(STAMP.now), STAMP);
     if (needs.partitions.length === 0) break;
     await engine.hydrate(needs.partitions);
   }
@@ -235,7 +237,7 @@ export async function fireThroughWalk(
   timing: { readonly due: number; readonly missedCount: number },
 ): ReturnType<BoardSmithWorldEngine["onEvent"]> {
   for (;;) {
-    const needs = engine.commandNeeds(null, event, { kind: "scheduled", timing }, []).partitions;
+    const needs = engine.commandNeeds(null, event, { kind: "scheduled", timing }, { declaredActivity: [], declaredNotices: [] }).partitions;
     if (needs.length === 0) break;
     await engine.hydrate(needs);
   }
@@ -244,6 +246,7 @@ export async function fireThroughWalk(
     presence: [],
     activity: null,
     declaredActivity: [],
+    declaredNotices: [],
   });
 }
 
@@ -280,7 +283,7 @@ export async function expectDeclarationWriteRefused(engine: BoardSmithWorldEngin
   await engine.hydrate([holdingPartition(1)]);
 
   expect(() =>
-    engine.commandNeeds("p1", { name: "writer", args: {} }, arrival(STAMP.now), []).partitions,
+    engine.commandNeeds("p1", { name: "writer", args: {} }, arrival(STAMP.now), { declaredActivity: [], declaredNotices: [] }).partitions,
   ).toThrow(/A read-only view of this world tried to write/);
 }
 

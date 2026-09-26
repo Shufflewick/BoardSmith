@@ -219,6 +219,39 @@ export const WORLD_REFUSALS = {
       "which reads to the phase that asked exactly like an established empire " +
       "nobody has touched since the upgrade",
   },
+  "invalid-notice": {
+    owner: "game",
+    why:
+      "ShufflewickPub #521: `ctx.world.notify` was handed a notice the box cannot " +
+      "hold -- a seat outside the world, no `whenFull`, a payload JSON cannot " +
+      "carry, one over `noticeMaxBytes`, or a world that declares no " +
+      "`world.notices`. GAME-owned: every one of them is a line in the bundle, " +
+      "and the same line sends the same notice next time",
+  },
+  "notice-batch-cap": {
+    owner: "game",
+    why:
+      "ShufflewickPub #521: one command sent more notices than " +
+      "`maxNoticesPerCommand`. `schedule-batch-cap`'s twin: it is the bundle's " +
+      "own loop, and the same loop runs again next time",
+  },
+  "notice-box-full": {
+    owner: "game",
+    why:
+      "ShufflewickPub #521: a notice sent with `whenFull: \"refuse\"` met a box " +
+      "already holding `world.notices.perSeat` notices. GAME-owned because the " +
+      "game chose `refuse` for this notice; it is the answer a letter that must " +
+      "not be lost asked for, and it rolls the command back like any refusal",
+  },
+  "undeclared-notice-box": {
+    owner: "game",
+    why:
+      "ShufflewickPub #521: a handler read or took a seat's notice box, or sent a " +
+      "`refuse` notice to one, that no `.noticeBox()` round declared. " +
+      "`undeclared-partition`'s twin: what a handler may read is what its walk " +
+      "named, and a `refuse` notice has to know how full the box is before it " +
+      "can refuse at the line",
+  },
   "engine-not-world-mode": {
     owner: "game",
     why: "the bundle built its engine over a game that is not in world mode, so element references would resolve to the wrong element once a partition is not resident",
@@ -311,6 +344,16 @@ export const WORLD_REFUSALS = {
       "own questions cannot be corrected by a bundle. It is refused rather than " +
       "tolerated because the alternative is a phase reading somebody else's " +
       "idleness and destroying the wrong empire",
+  },
+  "notice-box-answered-wrong": {
+    owner: "platform",
+    why:
+      "ShufflewickPub #521: the host answered a declared notice-box read about a " +
+      "different seat from the one the walk asked for, or a handler reached a " +
+      "declared box the host never answered. PLATFORM-owned for the reason " +
+      "`activity-answered-wrong` is: the walk is driven by the host, and a " +
+      "phase handed somebody else's box would move their notices into the " +
+      "wrong seat's state",
   },
   "activity-unanswered": {
     owner: "platform",

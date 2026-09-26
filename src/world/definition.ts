@@ -286,6 +286,20 @@ export interface WorldDefinition {
    */
   readonly vacateByClock?: string;
   /**
+   * A NOTICE BOX PER SEAT, and how many notices it keeps (ShufflewickPub #521).
+   *
+   * Declaring it is what lets `ctx.world.notify(seat, ...)` leave a lasting
+   * notice for a seat without loading that seat's partition, and what lets a
+   * `.noticeBox()` round read one. `perSeat` is a whole number from 1 to the
+   * host's `maxNoticesPerSeat`; a world declaring more is refused when it is
+   * built, as `maxPlayers` is. Absent means this world keeps no notice boxes,
+   * and `notify` is refused by name.
+   *
+   * A full box is not decided here. Every `notify` says what a full box means
+   * for that notice, because an alert and a letter want opposite answers.
+   */
+  readonly notices?: { readonly perSeat: number };
+  /**
    * WHICH VERBS A REFERRAL IS ATTRIBUTED THROUGH (ShufflewickPub #473).
    *
    * `founding` is the verb a player FOUNDS with -- the first thing an invited
@@ -565,6 +579,38 @@ export function worldSeatCount(
         `world.maxPlayers is checked at build; this is the number inside the rules, which build ` +
         `validation cannot see. Lower it to ${budgets.maxPlayers} or fewer and rebuild, or raise ` +
         `the host's maxPlayers budget.`,
+    );
+  }
+  return declared;
+}
+
+/**
+ * HOW MANY NOTICES ONE SEAT'S BOX KEEPS, or undefined for a world that keeps
+ * none (ShufflewickPub #521).
+ *
+ * `worldSeatCount`'s shape: the bundle declares, the host's budget caps, and a
+ * declaration past the cap is refused when the world is built rather than
+ * clamped -- a box silently smaller than its author wrote would drop notices
+ * nobody decided to drop.
+ */
+export function worldNoticesPerSeat(
+  declaration: { notices?: { perSeat?: unknown } },
+  budgets: WorldBudgets,
+): number | undefined {
+  if (declaration.notices === undefined) return undefined;
+  const declared = declaration.notices.perSeat;
+  if (
+    typeof declared !== "number" ||
+    !Number.isInteger(declared) ||
+    declared < 1 ||
+    declared > budgets.maxNoticesPerSeat
+  ) {
+    throw worldRefusal(
+      "bundle-not-a-world",
+      `This bundle's compiled rules declare world.notices.perSeat: ${JSON.stringify(declared)}, ` +
+        `and a seat's notice box keeps a whole number of notices from 1 to ` +
+        `${budgets.maxNoticesPerSeat} on this host. Set it within that range and rebuild, or ` +
+        "remove `world.notices` if this world leaves no notices.",
     );
   }
   return declared;
@@ -876,6 +922,7 @@ export function createWorld(options: WorldRunnerOptions): WorldRunner {
   // is a different fact, and a world game that has one at all is one #174 has
   // not reached yet.
   const seatCount = worldSeatCount(world, budgets);
+  const noticesPerSeat = worldNoticesPerSeat(world, budgets);
   for (const [player, seat] of options.seats) {
     assertSeatWithinWorld(player, seat, seatCount);
   }
@@ -910,6 +957,8 @@ export function createWorld(options: WorldRunnerOptions): WorldRunner {
     // nothing. The engine is the only thing that can hold the rule, because the
     // rule is about a call made from inside a running dispatch.
     ...(world.vacateByClock === undefined ? {} : { vacateByClock: world.vacateByClock }),
+    // HOW MANY NOTICES A SEAT'S BOX KEEPS (ShufflewickPub #521), or nothing.
+    ...(noticesPerSeat === undefined ? {} : { noticesPerSeat }),
     budgets,
     // A world that builds a root the first time somebody reaches for it (#218).
     // Absent for a world whose every root came from genesis, which is most.

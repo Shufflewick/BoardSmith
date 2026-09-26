@@ -90,6 +90,7 @@ import type { DeclaredSeatActivity, SeatActivity, WorldNarrationLine } from "./c
 // at runtime. `WorldResidency` is declared beside the engine that answers it.
 import type { WorldDeclarationFacilities } from "./engine.js";
 import { worldRefusal } from "./refusals.js";
+import type { WorldNoticeBox, WorldNoticeRequest } from "./notices.js";
 
 /**
  * WHAT A WORLD GIVES AN ACTION THAT A TABLE CANNOT.
@@ -168,6 +169,43 @@ export interface WorldFacilities {
    * narration puts no line in the log rather than an invented one.
    */
   emit(scope: string, payload: unknown, narration?: WorldNarrationLine): void;
+  /**
+   * LEAVE A LASTING NOTICE FOR ONE SEAT, WITHOUT LOADING ITS PARTITION
+   * (ShufflewickPub #521).
+   *
+   * Appends to the seat's notice box, which the host keeps beside the
+   * partitions: nothing is declared and nothing is loaded, so a clan alert to
+   * forty members costs forty small box writes rather than forty partitions.
+   * The box is emptied by the game, with `takeNotices`, when that seat next
+   * does something the game chooses -- the presence `onArrive` hook is the
+   * usual place.
+   *
+   * `whenFull` IS REQUIRED. `"dropOldest"` evicts the oldest waiting notice and
+   * counts it in the box's `dropped`; `"refuse"` refuses this whole command by
+   * name (`notice-box-full`), and needs the box declared with `.noticeBox()` so
+   * the engine knows how full it is.
+   *
+   * A seat that is connected ALSO receives the line at once, as an event on
+   * the reserved `"notice"` scope addressed to that seat alone.
+   *
+   * Refused outside a real dispatch, for the reason `schedule` is.
+   */
+  notify(seat: number, notice: WorldNoticeRequest): void;
+  /**
+   * WHAT IS WAITING IN A SEAT'S NOTICE BOX, without taking it
+   * (ShufflewickPub #521). Refused for a box no `.noticeBox()` round declared.
+   * Includes what this dispatch has already sent to it.
+   */
+  notices(seat: number): WorldNoticeBox;
+  /**
+   * TAKE EVERYTHING WAITING IN A SEAT'S NOTICE BOX, and empty it
+   * (ShufflewickPub #521).
+   *
+   * How a game moves its notices into its own state. The box empties in the
+   * same write as this command's checkpoint, so a command that is refused takes
+   * nothing. Refused for a box no `.noticeBox()` round declared.
+   */
+  takeNotices(seat: number): WorldNoticeBox;
   /**
    * ASK THE HOST TO WAKE THIS WORLD LATER.
    *
@@ -488,7 +526,7 @@ export interface WorldClockNeedsContext<G extends Game = Game> {
  * partition, names the chair the cursor points at, and then names that seat's
  * own partition, which nothing could have named before the cursor was read.
  */
-export type WorldNeedsRound = WorldPartitionsRound | WorldActivityRound;
+export type WorldNeedsRound = WorldPartitionsRound | WorldActivityRound | WorldNoticeBoxRound;
 
 /** A round that names partitions. The original shape, and the common one. */
 export interface WorldPartitionsRound {
@@ -518,6 +556,34 @@ export interface WorldActivityRound {
    *  roster. */
   readonly about: WorldSeatNeeds;
 }
+
+/**
+ * A round that names ONE SEAT whose notice box this dispatch will read, take,
+ * or send a `refuse` notice to (ShufflewickPub #521).
+ *
+ * On a seated action AND on the clock's: a box holds what a game chose to tell
+ * a seat, so reading one is the game's own business on either road -- a seat
+ * taking its own notices, a letter checking the recipient has room, the
+ * presence hook moving an arriving seat's notices into its state. What keeps it
+ * O(one box) is the same thing that keeps `.about()` so: one seat per round,
+ * so the total is the action's own source.
+ */
+export interface WorldNoticeBoxRound {
+  readonly kind: "notices";
+  readonly before: number;
+  /** The seat whose box this round names, or null for nobody. */
+  readonly box: WorldNoticeSeatNeeds;
+}
+
+/** A notice-box declaration, with its author's typing erased. Either road's
+ *  context: a seated step has a `player`, a seatless one has none. */
+export type WorldNoticeSeatNeeds = (context: {
+  readonly game: Game;
+  readonly player: Player | null;
+  readonly seat: number | null;
+  readonly args: Record<string, unknown>;
+  readonly world: WorldDeclarationFacilities;
+}) => number | null;
 
 /** A seatless step's activity declaration, with its author's typing erased. */
 export type WorldSeatNeeds = (context: {
@@ -856,6 +922,40 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
       before,
       about,
     });
+  }
+
+  /**
+   * NAME ONE SEAT WHOSE NOTICE BOX THIS ACTION READS (ShufflewickPub #521).
+   *
+   * A round of the same walk `.needs()` appends to, at the same position, and
+   * the host answers it with a point read of that seat's box -- never its
+   * partition. Inside `execute`, `ctx.world.notices(seat)` and
+   * `ctx.world.takeNotices(seat)` then answer for this seat and refuse any
+   * other, and a `whenFull: "refuse"` notice to it can be refused at the line.
+   *
+   * ONE SEAT, or `null` for nobody: the number of boxes a dispatch reads is the
+   * number of `.noticeBox()` calls in its source.
+   *
+   * ```ts
+   * worldAction<G>('read')
+   *   .needs(({ player }) => [`room:${player.seat}`])
+   *   .noticeBox(({ player }) => player.seat)
+   *   .execute((_args, { world, player }) => {
+   *     const { entries, dropped } = world.takeNotices(player.seat);
+   *     // ... move them into the seat's own state
+   *   });
+   * ```
+   */
+  // fallow-ignore-next-line unused-class-member
+  noticeBox(declare: (context: WorldNeedsContext<G>) => number | null): this {
+    this.askNoticeBox(this.definition.selections.length, declare as unknown as WorldNoticeSeatNeeds);
+    return this;
+  }
+
+  /** Append one NOTICE-BOX round of the walk (ShufflewickPub #521).
+   *  `worldClockAction`'s `.noticeBox()` reaches it too. */
+  askNoticeBox(before: number, box: WorldNoticeSeatNeeds): void {
+    (this.definition.world!.needs as WorldNeedsRound[]).push({ kind: "notices", before, box });
   }
 
   prompt(prompt: string): this {
@@ -1323,6 +1423,26 @@ export class WorldClockAction<G extends Game = Game> {
   // fallow-ignore-next-line unused-class-member
   about(declare: (context: WorldClockNeedsContext<G>) => number | null): this {
     this.action.askAbout(0, declare as unknown as WorldSeatNeeds);
+    return this;
+  }
+
+  /**
+   * NAME ONE SEAT WHOSE NOTICE BOX THIS PHASE READS (ShufflewickPub #521).
+   *
+   * `WorldAction.noticeBox` on the clock's road, and the road it is usually
+   * written on: the presence `onArrive` hook names the arriving seat and moves
+   * what was waiting for it into its own state.
+   *
+   * ```ts
+   * worldClockAction<G>('arrive')
+   *   .needs(({ args }) => [`room:${Number(args.seat)}`])
+   *   .noticeBox(({ args }) => Number(args.seat))
+   *   .execute((args, { world }) => { world.takeNotices(Number(args.seat)); ... });
+   * ```
+   */
+  // fallow-ignore-next-line unused-class-member
+  noticeBox(declare: (context: WorldClockNeedsContext<G>) => number | null): this {
+    this.action.askNoticeBox(0, declare as unknown as WorldNoticeSeatNeeds);
     return this;
   }
 

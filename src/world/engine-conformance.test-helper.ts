@@ -40,6 +40,7 @@ const STAMP: WorldCommandStamp = {
   // Every action this suite sends is seated, and a seated action declares no
   // chair (ShufflewickPub #423), so the host hands back none.
   declaredActivity: [],
+  declaredNotices: [],
 };
 
 const CONFORMANCE_PLAYERS = ["player-a", "player-b"] as const;
@@ -158,7 +159,7 @@ export function assertWorldEngineConformance(makeEngine: WorldEngineFactory): vo
 
     const named = askedWithoutLoading(
       engine,
-      () => engine.commandNeeds(alice, command, arrival(STAMP.now), []).partitions,
+      () => engine.commandNeeds(alice, command, arrival(STAMP.now), { declaredActivity: [], declaredNotices: [] }).partitions,
     );
 
     // THE LOOP ENDS. Driven exactly as a host drives it -- and an engine that
@@ -166,7 +167,7 @@ export function assertWorldEngineConformance(makeEngine: WorldEngineFactory): vo
     // than passing quietly, which is the property the ceiling used to buy.
     const walked = new Set<string>(named);
     for (let round = 0; ; round++) {
-      const needs = engine.commandNeeds(alice, command, arrival(STAMP.now), []).partitions;
+      const needs = engine.commandNeeds(alice, command, arrival(STAMP.now), { declaredActivity: [], declaredNotices: [] }).partitions;
       if (needs.length === 0) break;
       expect(round, "a command's declaration walk did not end").toBeLessThan(16);
       for (const name of needs) walked.add(name);
@@ -184,7 +185,7 @@ export function assertWorldEngineConformance(makeEngine: WorldEngineFactory): vo
     // than reaching `player.seat` on nothing and answering with a TypeError out
     // of game code. The clock's own verbs are seatless, and `worldClockAction()` is
     // enforced on BOTH roads` below is where the pair is asserted.
-    expect(() => engine.commandNeeds(null, command, arrival(STAMP.now), []).partitions).toThrow(/no player/);
+    expect(() => engine.commandNeeds(null, command, arrival(STAMP.now), { declaredActivity: [], declaredNotices: [] }).partitions).toThrow(/no player/);
   });
 
   // "viewFor is PER PLAYER" USED TO BE ASSERTED HERE, AND IS RETIRED
@@ -353,12 +354,12 @@ export function assertWorldEngineConformance(makeEngine: WorldEngineFactory): vo
     const early = await engine.onEvent(
       { name: "tick", args: {} },
       { due: 1_000, missedCount: 0 },
-      { allowance: { unkeyed: 0, keys: [], worldPending: 0 }, presence: [], activity: null, declaredActivity: [] },
+      { allowance: { unkeyed: 0, keys: [], worldPending: 0 }, presence: [], activity: null, declaredActivity: [], declaredNotices: [] },
     );
     const late = await engine.onEvent(
       { name: "tick", args: {} },
       { due: 1_000, missedCount: 0 },
-      { allowance: { unkeyed: 0, keys: [], worldPending: 0 }, presence: [], activity: null, declaredActivity: [] },
+      { allowance: { unkeyed: 0, keys: [], worldPending: 0 }, presence: [], activity: null, declaredActivity: [], declaredNotices: [] },
     );
 
     expect(late.events).toEqual(early.events);
@@ -382,6 +383,7 @@ export function assertWorldEngineConformance(makeEngine: WorldEngineFactory): vo
       presence: [],
       activity: STAMP.activity,
       declaredActivity: [],
+      declaredNotices: [],
     };
     // Two FRESH worlds, so the only difference between the two answers is the
     // catch-up itself and not the order the suite drove them in.

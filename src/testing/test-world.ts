@@ -36,6 +36,7 @@ import {
   type StoredPartition,
   type WorldActionOffer,
   type WorldBudgets,
+  type WorldNoticeBox,
   type WorldRunnerOptions,
 } from '../world/index.js';
 import {
@@ -455,6 +456,18 @@ export class TestWorld {
       flatten(stored.json as ElementJSON, all);
     }
     return all;
+  }
+
+  /**
+   * WHAT IS WAITING IN THIS SEAT'S NOTICE BOX, as the store holds it
+   * (ShufflewickPub #521).
+   *
+   * Read from the durable store rather than asked of the world, because a box
+   * is never part of a seat's view: it is what `ctx.world.notify` left and a
+   * `takeNotices` has not yet moved into the game's own state.
+   */
+  noticeBox(seat: number): WorldNoticeBox {
+    return this.#store.noticeBox(seat);
   }
 
   /** Stop, leaving nothing resident that is not durable. A memory store has

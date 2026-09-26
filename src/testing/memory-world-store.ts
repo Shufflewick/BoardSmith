@@ -22,6 +22,8 @@ import {
   assertPartitionWithinBudget,
   assertStorablePartitionName,
   worldBudgets,
+  EMPTY_NOTICE_BOX,
+  isEmptyNoticeBox,
   type DeclaredSeatActivityStamp,
   type PlannedEvent,
   type StoredPartition,
@@ -30,6 +32,7 @@ import {
   type WorldGenesis,
   type WorldMigrated,
   type WorldReceipt,
+  type WorldNoticeBox,
   type WorldSerialized,
 } from '../world/index.js';
 import {
@@ -61,6 +64,8 @@ export function createMemoryWorldStore(budgets: WorldBudgets = worldBudgets()): 
   const events = new Map<string, PlannedEvent>();
   const roster = new Map<string, { seat: number; seatedAt: number }>();
   const activity = new Map<number, number>();
+  /** One box per seat with something waiting (ShufflewickPub #521). */
+  const noticeBoxes = new Map<number, WorldNoticeBox>();
   const receipts = new Map<string, WorldReceipt>();
   let launched = false;
   let seq = 0;
@@ -127,11 +132,16 @@ export function createMemoryWorldStore(budgets: WorldBudgets = worldBudgets()): 
     if (extras.activity !== undefined) {
       activity.set(extras.activity.seat, extras.activity.at);
     }
+    // AN EMPTY BOX IS NO ROW (#521), so a seat with nothing waiting costs nothing.
+    for (const { seat, box } of extras.notices ?? []) {
+      if (isEmptyNoticeBox(box)) noticeBoxes.delete(seat);
+      else noticeBoxes.set(seat, box);
+    }
     releaseChair(extras.vacate);
   }
 
   /** A chair the world's clock handed on (#278), matched on both keys and
-   *  taking the holder's watermark with it -- the rule is `WorldStore`'s
+   *  taking the holder's watermark and notice box with it -- the rule is `WorldStore`'s
    *  `vacate`, and the SQLite store keeps the same one in SQL. */
   function releaseChair(
     vacancy: { readonly seat: number; readonly player: string } | undefined,
@@ -140,6 +150,7 @@ export function createMemoryWorldStore(budgets: WorldBudgets = worldBudgets()): 
     if (roster.get(vacancy.player)?.seat !== vacancy.seat) return;
     roster.delete(vacancy.player);
     activity.delete(vacancy.seat);
+    noticeBoxes.delete(vacancy.seat);
   }
 
   return {
@@ -250,6 +261,8 @@ export function createMemoryWorldStore(budgets: WorldBudgets = worldBudgets()): 
         tenancy: chair === undefined ? 'empty' : 'held',
       };
     },
+
+    noticeBox: (seat: number): WorldNoticeBox => noticeBoxes.get(seat) ?? EMPTY_NOTICE_BOX,
 
     receipt: (player: string, orderId: string): WorldReceipt | undefined =>
       receipts.get(receiptKey(player, orderId)),

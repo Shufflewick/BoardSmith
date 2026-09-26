@@ -65,7 +65,8 @@ function forgetAllocationStamp(path: string): void {
  *
  * Layout 4 added `seat_activity` and the epoch a seat's idleness is measured
  * from; layout 5 added the instant each chair was granted; layout 6 added the
- * presence ledger (#339). None changed anything else, so undoing all four is
+ * presence ledger (#339); layout 7 added the seats' notice boxes
+ * (ShufflewickPub #521). None changed anything else, so undoing all five is
  * layout 3 exactly. Reached through
  * SQLite for the reason `forgetAllocationStamp` is: the store only ever writes
  * the layout it is on, so a world from an older one cannot be built through its
@@ -85,6 +86,7 @@ function rewindStoreToLayout3(path: string): void {
     db.exec('ALTER TABLE seats_old RENAME TO seats');
     db.exec('DROP TABLE seat_activity');
     db.exec('DROP TABLE presence_told');
+    db.exec('DROP TABLE notice_boxes');
     db.exec("DELETE FROM meta WHERE key = 'activitySince'");
     db.exec("UPDATE meta SET value = '3' WHERE key = 'schemaVersion'");
   } finally {
@@ -3109,5 +3111,41 @@ describe('an ended world, as a page sees it (#395)', () => {
     expect(await send(second, 'chop')).toMatchObject({ ok: false, code: 'world-ended' });
     expect(JSON.stringify(last(second.sent, 'c1', 'world_state')?.view)).toContain('"logs":0');
     await second.host.close();
+  });
+});
+
+describe('ShufflewickPub #521: a notice reaches its seat now if it is here, and waits in its box either way', () => {
+  const alarm = worldAction<Village>('alarm')
+    .prompt('Raise the alarm for seats 2 and 3')
+    .needs(() => [HEARTH])
+    .execute((_args, ctx) => {
+      for (const seat of [2, 3]) {
+        ctx.world.notify(seat, { payload: { from: ctx.player.seat }, line: 'The alarm sounds.', whenFull: 'dropOldest' });
+      }
+    });
+  const noticed = () =>
+    bundle({ world: worldBlock({ notices: { perSeat: 4 }, actions: [...VILLAGE_ACTIONS, alarm] }) });
+
+  it('sends the line to the connected recipient alone, and keeps it in both boxes', async () => {
+    const { host, sent, store } = await attached({ dir, definition: noticed() });
+    await host.handleMessage('c2', { type: 'hello' });
+    const before = sent.length;
+
+    await host.handleMessage('c1', { type: 'action', order: nextOrder(), requestId: 'r1', action: 'alarm', args: {} });
+
+    const frames = sent.slice(before).filter((s) => s.message.type === 'world_events');
+    // Seat 2 is here and hears it at once, on the reserved scope; seat 1 sent
+    // it and is told nothing; seat 3 is not connected at all.
+    expect(frames.map((f) => f.clientId)).toEqual(['c2']);
+    expect(frames[0]!.message.events).toEqual([
+      { scope: 'notice', payload: { from: 1 }, text: 'The alarm sounds.' },
+    ]);
+    // And both boxes hold it, durably, whoever was connected.
+    expect(store.noticeBox(2).entries.map((entry) => entry.text)).toEqual(['The alarm sounds.']);
+    expect(store.noticeBox(3).entries.map((entry) => entry.text)).toEqual(['The alarm sounds.']);
+    await host.close();
+    const disk = onDisk();
+    expect(disk.noticeBox(3).entries).toHaveLength(1);
+    disk.close();
   });
 });

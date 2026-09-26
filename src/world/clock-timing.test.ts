@@ -163,6 +163,7 @@ async function drain(
       return Promise.resolve(stored);
     },
     (seat) => Promise.reject(new Error(`no action here declares a chair, and one named ${seat}`)),
+    (seat) => Promise.reject(new Error(`no action here declares a notice box, and one named ${seat}`)),
   );
   const result = await runner.apply({
     player,
@@ -173,6 +174,7 @@ async function drain(
     presence: [] as readonly number[],
     activity: null,
     declaredActivity: [],
+    declaredNotices: [],
   });
   return { runner, result, named };
 }
@@ -292,7 +294,7 @@ describe("#271 — a clock declaration reads the occurrence it is running", () =
         null,
         {},
         { kind: "arrival", now: OPENED },
-        [],
+        { declaredActivity: [], declaredNotices: [] },
       ),
     ).rejects.toThrow(/scheduled/i);
     expect(bytes.yard).toBeDefined();

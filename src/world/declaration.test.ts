@@ -91,7 +91,7 @@ describe("walkDeclaration — an ACTION, whose length is its own source", () => 
     const answered = await walkDeclaration(
       async (given) => {
         supplied.push(given);
-        return { partitions: [], seats: [] };
+        return { partitions: [], seats: [], noticeBoxes: [] };
       },
       async () => {
         throw new Error("nothing was needed, so nothing should have been read");
@@ -99,11 +99,14 @@ describe("walkDeclaration — an ACTION, whose length is its own source", () => 
       async () => {
         throw new Error("no chair was named, so none should have been read");
       },
+      async () => {
+        throw new Error("no notice box was named, so none should have been read");
+      },
     );
 
     expect(supplied).toHaveLength(1);
     expect(Object.keys(supplied[0]!)).toEqual([]);
-    expect(answered).toEqual([]);
+    expect(answered).toEqual({ declaredActivity: [], declaredNotices: [] });
   });
 
   it("hands the next round a partition named __proto__ as an OWN property (#190)", async () => {
@@ -115,11 +118,14 @@ describe("walkDeclaration — an ACTION, whose length is its own source", () => 
     await walkDeclaration(
       async (given) => {
         rounds.push(given);
-        return { partitions: rounds.length === 1 ? ["__proto__"] : [], seats: [] };
+        return { partitions: rounds.length === 1 ? ["__proto__"] : [], seats: [], noticeBoxes: [] };
       },
       async (name) => partition(name),
       async () => {
         throw new Error("no chair was named, so none should have been read");
+      },
+      async () => {
+        throw new Error("no notice box was named, so none should have been read");
       },
     );
 
@@ -142,11 +148,14 @@ describe("walkDeclaration — an ACTION, whose length is its own source", () => 
         step += 1;
         const needs = step > 6 ? [] : [`room:${step}`];
         asked.push([...needs]);
-        return { partitions: needs, seats: [] };
+        return { partitions: needs, seats: [], noticeBoxes: [] };
       },
       async (name) => partition(name),
       async () => {
         throw new Error("no chair was named, so none should have been read");
+      },
+      async () => {
+        throw new Error("no notice box was named, so none should have been read");
       },
     );
 
@@ -177,17 +186,20 @@ describe("walkDeclaration — an ACTION, whose length is its own source", () => 
     let round = 0;
     const answered = await walkDeclaration(
       async (_supplied, declared) => {
-        (seen as number[][]).push(declared.map((one) => one.seat));
+        (seen as number[][]).push(declared.declaredActivity.map((one) => one.seat));
         round += 1;
-        if (round === 1) return { partitions: ["roll"], seats: [] };
-        if (round === 2) return { partitions: [], seats: [7] };
-        if (round === 3) return { partitions: [], seats: [9] };
-        return { partitions: [], seats: [] };
+        if (round === 1) return { partitions: ["roll"], seats: [], noticeBoxes: [] };
+        if (round === 2) return { partitions: [], seats: [7], noticeBoxes: [] };
+        if (round === 3) return { partitions: [], seats: [9], noticeBoxes: [] };
+        return { partitions: [], seats: [], noticeBoxes: [] };
       },
       async (name) => partition(name),
       async (seat) => {
         asked.push(seat);
         return { seat, at: null, since: 1_000, tenancy: "held" as const };
+      },
+      async () => {
+        throw new Error("no notice box was named, so none should have been read");
       },
     );
 
@@ -196,9 +208,47 @@ describe("walkDeclaration — an ACTION, whose length is its own source", () => 
     // Every round sees every answer so far, which is what lets the child match
     // them back against its own rounds in order.
     expect(seen).toEqual([[], [], [7], [7, 9]]);
-    expect(answered).toEqual([
+    expect(answered.declaredActivity).toEqual([
       { seat: 7, at: null, since: 1_000, tenancy: "held" },
       { seat: 9, at: null, since: 1_000, tenancy: "held" },
     ]);
+  });
+
+  /**
+   * ShufflewickPub #521: THE THIRD KIND OF ROUND, answered exactly as a chair
+   * is -- one point read per box, accumulated, and handed back whole.
+   */
+  it("accumulates the notice boxes it was asked for, beside the chairs", async () => {
+    const seen: number[][] = [];
+    const asked: number[] = [];
+    let round = 0;
+    const box = { entries: [{ at: 1, payload: null, text: "hi" }], dropped: 0 };
+    const answered = await walkDeclaration(
+      async (_supplied, declared) => {
+        seen.push(declared.declaredNotices.map((one) => one.seat));
+        round += 1;
+        if (round === 1) return { partitions: [], seats: [], noticeBoxes: [3] };
+        if (round === 2) return { partitions: [], seats: [], noticeBoxes: [4] };
+        return { partitions: [], seats: [], noticeBoxes: [] };
+      },
+      async (name) => partition(name),
+      async () => {
+        throw new Error("no chair was named, so none should have been read");
+      },
+      async (seat) => {
+        asked.push(seat);
+        return { seat, box };
+      },
+    );
+
+    expect(asked).toEqual([3, 4]);
+    expect(seen).toEqual([[], [3], [3, 4]]);
+    expect(answered).toEqual({
+      declaredActivity: [],
+      declaredNotices: [
+        { seat: 3, box },
+        { seat: 4, box },
+      ],
+    });
   });
 });
