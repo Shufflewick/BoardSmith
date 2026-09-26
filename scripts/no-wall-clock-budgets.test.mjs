@@ -18,12 +18,7 @@
  * claim about a value, not about elapsed time.
  */
 import { describe, it, expect } from 'vitest';
-import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
+import { trackedTestFiles } from './tracked-tests.test-helper.mjs';
 
 const CLOCK = String.raw`(?:Date\.now\(\)|performance\.now\(\)|process\.hrtime(?:\.bigint)?\(\))`;
 
@@ -68,13 +63,11 @@ describe('wallClockBudgets', () => {
 
 describe('the test suite (#360)', () => {
   it('holds no wall-clock budget assertion', () => {
-    const tracked = execFileSync('git', ['ls-files', 'src', 'docs', 'scripts'], { cwd: ROOT, encoding: 'utf-8' })
-      .split('\n')
-      .filter((path) => /\.test\.(?:ts|mjs)$/.test(path))
+    const tracked = trackedTestFiles(['src', 'docs', 'scripts'])
       // This file's own examples above are budgets on purpose.
-      .filter((path) => path !== 'scripts/no-wall-clock-budgets.test.mjs');
-    const findings = tracked.flatMap((path) =>
-      wallClockBudgets(readFileSync(join(ROOT, path), 'utf-8')).map(
+      .filter(({ path }) => path !== 'scripts/no-wall-clock-budgets.test.mjs');
+    const findings = tracked.flatMap(({ path, text }) =>
+      wallClockBudgets(text).map(
         ({ line, text }) => `${path}:${line}  ${text}`,
       ),
     );
