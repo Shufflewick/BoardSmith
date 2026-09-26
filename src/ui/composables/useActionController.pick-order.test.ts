@@ -20,20 +20,17 @@
  * `ActionPanel.pick-order.test.ts` holds the mounted panel.
  */
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { nextTick, ref, type Ref } from 'vue';
+import { nextTick, ref } from 'vue';
 import type { VueWrapper } from '@vue/test-utils';
 import { useActionController } from './useActionController.js';
 import type { EnrichedActionMetadata, PickChoicesResult } from './useActionControllerTypes.js';
-import { PEOPLE, recipientChoices } from './send-mail.test-helper.js';
-import { createBoardInteraction } from './useBoardInteraction.js';
+import { PEOPLE, recipientChoices, mailPicks } from './send-mail.test-helper.js';
 import type { TableActionWiring } from './useTableActionWiring.js';
-import { mountTableWiring, settle } from './table-wiring.test-helper.js';
-import { GameSession } from '../../session/game-session.js';
-import type { PlayerGameState } from '../../session/types.js';
+import { mountLiveSeat, settle } from './table-wiring.test-helper.js';
+import type { GameSession } from '../../session/game-session.js';
 import {
   Game,
   Player,
-  Action,
   defineFlow,
   actionStep,
   type GameOptions,
@@ -144,13 +141,7 @@ class MailGame extends Game<MailGame, Player> {
   constructor(options: GameOptions) {
     super(options);
     this.registerAction(
-      Action.create('sendMail')
-        .chooseFrom('to', { choices: ['Player 3', 'Player 4'] })
-        .chooseFrom('recipient', {
-          dependsOn: 'to',
-          optional: 'Anyone of that name',
-          choices: (ctx) => PEOPLE.filter((p) => p.startsWith(String(ctx.args.to ?? ''))),
-        })
+      mailPicks<MailGame>()
         .chooseFrom('item', { choices: ['none', 'coin'] })
         .execute((args, ctx) => {
           (ctx.game as MailGame).sent.push({ ...args });
@@ -170,8 +161,6 @@ class MailGame extends Game<MailGame, Player> {
   }
 }
 
-const SEAT = 1;
-
 const mounted: VueWrapper[] = [];
 afterEach(() => {
   for (const wrapper of mounted.splice(0)) wrapper.unmount();
@@ -179,23 +168,7 @@ afterEach(() => {
 
 /** A mail table at seat 1, with `sendMail` started and `to` answered. */
 async function answeredTo(to: string): Promise<{ session: GameSession<MailGame>; controller: TableActionWiring['controller'] }> {
-  const session = GameSession.create<MailGame>({
-    gameType: 'mail',
-    GameClass: MailGame,
-    playerCount: 2,
-    playerNames: ['Alice', 'Bob'],
-    seed: 'bs392',
-  });
-  const seatState = ref(session.buildPlayerState(SEAT)) as Ref<PlayerGameState>;
-  const { wiring, wrapper } = mountTableWiring({
-    session: () => session,
-    seat: SEAT,
-    seatState,
-    boardInteraction: createBoardInteraction(),
-    autoEndTurn: false,
-    afterPerform: () => { seatState.value = session.buildPlayerState(SEAT); },
-  });
-  mounted.push(wrapper);
+  const { session, wiring } = mountLiveSeat(MailGame, 'bs392', mounted);
   const { controller } = wiring;
   await controller.start('sendMail');
   await settle();
