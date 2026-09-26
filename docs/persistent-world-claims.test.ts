@@ -1032,6 +1032,8 @@ describe('#282: the panel says when a world has not sent its verbs yet', () => {
   const panel = readSrc('src', 'ui', 'components', 'auto-ui', 'ActionPanel.vue');
   const playShell = readSrc('src', 'ui', 'components', 'PlayShell.vue');
   const worldShell = readSrc('src', 'ui', 'world', 'WorldShell.vue');
+  // What a world's board can inject is built by `useWorldSeat`, for WorldShell and renderAsSeat alike (#413).
+  const worldSeat = readSrc('src', 'ui', 'world', 'useWorldSeat.ts');
 
   it('the panel renders the sentence the guide quotes, on the hook it names', () => {
     expect(panel).toContain('Working out what you can do here');
@@ -1053,7 +1055,7 @@ describe('#282: the panel says when a world has not sent its verbs yet', () => {
   it('the panel and a board read ONE value, so the two cannot disagree', () => {
     // The panel's is `host.offersPending` above; a board's is the same ref,
     // provided on the world context -- not a second flag computed beside it.
-    expect(worldShell).toContain('offersPending: host.offersPending,');
+    expect(worldSeat).toContain('offersPending: host.offersPending,');
     expect(guide).toContain('useWorld().offersPending');
   });
 

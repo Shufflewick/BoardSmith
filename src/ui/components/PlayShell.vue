@@ -230,7 +230,7 @@ const actionController = inject(GAME_CONTEXT_KEYS.actionController, undefined) a
 if (!actionController) {
   throw new Error(
     'PlayShell requires the action controller to be provided. ' +
-    'Mount it inside GameShell or WorldShell, which publish it via useTableSeat/providePlayContext.',
+    'Mount it inside GameShell or WorldShell, which publish it via useTableSeat/useWorldSeat.',
   );
 }
 

@@ -29,10 +29,10 @@
  * would report zero errors while a consumer is broken. The sandbox IS the gate,
  * and a failure prints its path so the run can be repeated there.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it } from 'vitest';
 
 import { consumerInstall } from './consumer-install.test-helper.js';
-import { VUE_TSC, vueTscErrors } from './vue-tsc-run.test-helper.js';
+import { expectCleanCompile } from './vue-tsc-run.test-helper.js';
 
 /**
  * THE MODULES A NATIVE-HOST HARNESS IMPORTS, and the reason this list is short.
@@ -52,18 +52,13 @@ describe("BoardSmith's development host type-checks from a consumer's install (#
   it('reports zero vue-tsc errors with only the declared dependencies present', () => {
     const root = consumerInstall({ entryPoints: DEV_HOST_ENTRY_POINTS });
 
-    const errors = vueTscErrors(root, 'tsconfig.json');
-
-    expect(
-      errors,
-      errors.length === 0
-        ? ''
-        : `vue-tsc reports ${errors.length} error(s) compiling BoardSmith's development host with only the ` +
-          `packages a consumer receives. A TS7016 here means a typings package is a devDependency and so never ` +
-          `ships -- move it into "dependencies" in package.json and refresh package-lock.json. Any other error ` +
-          `is an ordinary type error in our source. Repeat the run with:\n` +
-          `  cd ${root} && node ${VUE_TSC} --noEmit -p tsconfig.json\n\n` +
-          errors.join('\n'),
-    ).toEqual([]);
+    expectCleanCompile(
+      root,
+      'tsconfig.json',
+      "BoardSmith's development host with only the packages a consumer receives",
+      'A TS7016 here means a typings package is a devDependency and so never ships -- move it into ' +
+        '"dependencies" in package.json and refresh package-lock.json. Any other error is an ordinary type ' +
+        'error in our source.',
+    );
   }, 180_000);
 });

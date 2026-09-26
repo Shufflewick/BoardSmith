@@ -549,8 +549,7 @@ come from the state a session publishes for that seat, and its
 action draws the game's own targets. Two things keep the mount a render: auto
 mode is off, so nothing starts or completes by itself, and the controller
 refuses to take a move, saying to take it with `testGame.doAction(...)` and
-render the seat again. A `TestWorld` seat gets its offers as `availableActions`
-and a controller that only carries their names.
+render the seat again.
 
 **A table seat is given everything GameShell gives its board** (#406): board
 interaction, the game context (`useGameContext()`), the announcer
@@ -560,10 +559,22 @@ runs inside the shell mounts here with no wiring from you, and a test that
 mounts the real shell fails if it ever provides something this does not. The
 seat's pending animation events play to the handlers your board registers, and
 the announcer relays what it says to `window.postMessage` as the shell's does.
-A world seat is given board interaction only.
+
+**A world seat is given everything WorldShell gives its board** (#413): board
+interaction, the shared half of the game context (a world has no `gameState`,
+`dueSeats`, `timeTravelDiff` or `turnDeadline`) and the world itself
+(`useWorld()`). WorldShell and this utility build them with the same function,
+`useWorldSeat`, from the frame a host would send the seat, and a test that
+mounts the real shell fails if it ever provides something this does not. The
+seat's `actionController` is the real one: a pick re-asked with answers bound
+and a draft's quote are answered by the world itself, and a move, from the
+controller or from `useWorld().act()`, is refused, saying to take it with
+`world.take(...)` and render the seat again. The frame is one a page has just
+attached to: phase `watching`, no notice, no world name, no narration yet, and
+the host names no players, so the roster reads "Seat n" for each watching seat.
 
 Pass your own interaction under `BOARD_INTERACTION_KEY` in `provide` to hold a
-handle on it; a table seat's controller then drives yours. Anything else in
+handle on it; the seat's controller then drives yours. Anything else in
 `provide` is merged over what the shell would give.
 **To render or scan a board with an action open, pass `startAction`** (#405).
 A board draws its targets while an action is open, and a target can carry what
@@ -582,9 +593,11 @@ const wrapper = await renderAsSeat(testGame, 1, { component: GameTable, startAct
 
 It fails, saying why, when the seat may not take the action now, when the
 action does not stay open (one with nothing left to choose completes at once,
-and the controller refuses to take a move), and on a world seat, whose
-controller cannot start one. `assertNoHiddenInfoLeak` passes every other
-option on to the mount too, `provide` included.
+and the controller refuses to take a move). It works the same on a world seat;
+a world action that quotes stays open awaiting confirmation once its picks are
+filled, with the world's quote for the draft on `actionController.actionQuote`.
+`assertNoHiddenInfoLeak` passes every other option on to the mount too,
+`provide` included.
 
 `assertNoHiddenInfoLeak` derives forbidden markers by diffing each element's
 *unfiltered* `toJSON()` against its node in the final `toJSONForPlayer(seat)`
@@ -764,7 +777,10 @@ seen.availableActions;   // their names, as the world shell hands them to a boar
 seen.disabledActions;    // name -> why it is offered but cannot be taken
 seen.canAct;             // does this seat hold an offer it can actually take?
 seen.revision;           // which committed state this frame is of
+seen.presence;           // the watching seats, as world_state.presence carries them
 
+await world.resolvePick(2, 'build', 'crew', { ship });  // re-ask a pick with answers bound
+await world.quote(2, 'boost', { weeks: 2 });            // price a draft with the action's .quote()
 await world.unredactedElements();   // the whole world, which no single seat can see
 ```
 

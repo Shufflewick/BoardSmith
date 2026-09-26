@@ -1,61 +1,16 @@
 // @vitest-environment jsdom
 /**
- * The leak assertion has to actually run, and actually check something (#20).
+ * The leak assertion has to actually check something (#20).
  *
- * Two independent defects with one consequence: a game believes it has
- * DOM-level leak coverage when it has none.
+ * `stringifyScalar` returned undefined for anything but a string or number, so
+ * a game packing private state into arrays contributed ZERO forbidden markers
+ * for those fields, and the assertion passed over an almost-empty marker set.
  *
- * 1. The inert controller was hand-listed, so it drifted behind the real
- *    `useActionController` return. A board reading `showActionPanel` or
- *    `lastActionResult` — both published by the real composable, both the
- *    documented way to know whether controls may be offered and what the last
- *    action resolved to — threw during setup(), before a single node rendered.
- *    The assertion never reached its own logic, and the failure was a bare
- *    TypeError pointing into the game's component.
- * 2. `stringifyScalar` returned undefined for anything but a string or number,
- *    so a game packing private state into arrays contributed ZERO forbidden
- *    markers for those fields, and the assertion passed over an almost-empty
- *    marker set.
+ * (#20 also found the inert controller a world seat was mounted with drifting
+ * behind the real one. Since #413 every seat gets the real controller.)
  */
 import { describe, it, expect } from 'vitest';
-import { _inertActionControllerForTests, _identityCandidatesForTests } from './dom-leak.js';
-
-describe('the inert controller is controller-shaped (#20)', () => {
-  const inert = _inertActionControllerForTests(['move']);
-
-  it.each([
-    'availableActions',
-    'currentAction',
-    'currentChoices',
-    'isExecuting',
-    'selectableElementIds',
-  ])('carries %s, as it always did', (field) => {
-    expect(inert[field]).toBeDefined();
-  });
-
-  it.each(['showActionPanel', 'lastActionResult'])(
-    'carries %s, which a real board reads and the hand-list omitted',
-    (field) => {
-      expect(inert[field]).toBeDefined();
-    },
-  );
-
-  it('gives every ref-shaped field a readable .value rather than undefined', () => {
-    for (const [name, value] of Object.entries(inert)) {
-      if (typeof value === 'function') continue;
-      expect(value, name).toHaveProperty('value');
-    }
-  });
-
-  it('is inert — nothing it exposes can submit an action', () => {
-    // Every non-ref member is a no-op function; none returns a promise that
-    // could carry a submission.
-    for (const [name, value] of Object.entries(inert)) {
-      if (typeof value !== 'function') continue;
-      expect(() => (value as () => unknown)(), name).not.toThrow();
-    }
-  });
-});
+import { _identityCandidatesForTests } from './dom-leak.js';
 
 describe('array-valued attributes produce markers (#20)', () => {
   const candidates = (attributes: Record<string, unknown>) =>
@@ -137,53 +92,5 @@ describe('array-valued attributes produce markers (#20)', () => {
     loop.self = loop;
     expect(() => candidates({ loop })).not.toThrow();
     expect(candidates({ loop }).map((c) => c.value)).toContain('wolf');
-  });
-});
-
-describe('the inert controller cannot drift behind the real one', () => {
-  it('carries every member a board is likely to read', async () => {
-    // The real return type is an interface, so it has no runtime key list to
-    // diff against. This pins the members the report named plus the rest of the
-    // reactive surface — the set that, when one went missing, turned the leak
-    // assertion into a TypeError inside the game's component.
-    const inert = _inertActionControllerForTests([]);
-    const expected = [
-      'availableActions', 'currentAction', 'currentSelection', 'currentPick',
-      'currentChoices', 'currentArgs', 'selectedArgs', 'pendingArgs',
-      'isSelecting', 'isExecuting', 'isLoadingChoices', 'error',
-      'selectableElementIds', 'validElements', 'repeatingState',
-      'pendingFollowUp', 'pendingOnServer', 'actionCompletedTick',
-      'multiSelectDraft', 'currentPickDraft', 'actionMenuPath',
-      'actionSnapshot', 'lastActionResult',
-      'animationsPending', 'showActionPanel',
-      'snapshotVersion',
-      'start', 'fill', 'skip', 'clear', 'cancel', 'execute', 'undo',
-      'toggleMultiSelect', 'confirmMultiSelect', 'isMultiSelectSelected',
-      'getChoices', 'getCurrentChoices', 'getValidElements',
-      'getActionMetadata', 'clearArgs', 'fetchChoicesForPick',
-      'getCollectedPick', 'getCollectedPicks', 'setBeforeAutoExecute',
-      'setPickDraft',
-    ];
-    for (const member of expected) {
-      expect(inert[member], member).toBeDefined();
-    }
-  });
-
-  it('returns a collection from the members whose real form returns one', () => {
-    const inert = _inertActionControllerForTests([]) as Record<string, () => unknown>;
-    expect(inert.getChoices()).toEqual([]);
-    expect(inert.getCurrentChoices()).toEqual([]);
-    expect(inert.getValidElements()).toEqual([]);
-    expect(inert.getCollectedPicks()).toEqual([]);
-  });
-
-  it('returns an unregister function from setBeforeAutoExecute, as the real one does', () => {
-    const inert = _inertActionControllerForTests([]) as Record<string, () => unknown>;
-    expect(inert.setBeforeAutoExecute()).toBeTypeOf('function');
-  });
-
-  it('never claims the panel may be shown — an inert controller cannot submit', () => {
-    const inert = _inertActionControllerForTests([]) as Record<string, { value: unknown }>;
-    expect(inert.showActionPanel.value).toBe(false);
   });
 });

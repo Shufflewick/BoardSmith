@@ -21,13 +21,13 @@
  * hide the fault -- in a sandbox holding what a consumer's install holds, under
  * the tsconfig `boardsmith init` writes.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it } from 'vitest';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { generateTsConfig } from '../cli/lib/project-scaffold.js';
 import { consumerInstall, declaredPeers } from './consumer-install.test-helper.js';
-import { VUE_TSC, vueTscErrors } from './vue-tsc-run.test-helper.js';
+import { expectCleanCompile } from './vue-tsc-run.test-helper.js';
 
 /** The smallest use of the entry: a board rendered as a seat, and the preload a rendering test file calls. */
 const GAME_TEST = `import { createTestGame, preloadSeatRenderer, renderAsSeat, type TestGame } from 'boardsmith/testing';
@@ -73,19 +73,14 @@ describe("`boardsmith/testing` type-checks under a game's browser tsconfig (#411
     writeFileSync(join(root, 'tests', 'seat.test.ts'), GAME_TEST);
     writeFileSync(join(root, 'game.tsconfig.json'), gameTsConfig());
 
-    const errors = vueTscErrors(root, 'game.tsconfig.json');
-
-    expect(
-      errors,
-      errors.length === 0
-        ? ''
-        : `vue-tsc reports ${errors.length} error(s) compiling a game test that imports boardsmith/testing ` +
-          `under the tsconfig \`boardsmith init\` writes, which has no Node types. A "Cannot find module ` +
-          `'node:...'" or a missing \`process\` member means Node-only code is reachable from the entry's ` +
-          `types: keep it behind a declaration, as package.json "imports" does for ` +
-          `\`#testing/project-test-utils\` (see src/testing/project-test-utils.d.ts). Repeat the run with:\n` +
-          `  cd ${root} && node ${VUE_TSC} --noEmit -p game.tsconfig.json\n\n` +
-          errors.join('\n'),
-    ).toEqual([]);
+    expectCleanCompile(
+      root,
+      'game.tsconfig.json',
+      'a game test that imports boardsmith/testing under the tsconfig `boardsmith init` writes, which has no ' +
+        'Node types',
+      'A "Cannot find module \'node:...\'" or a missing `process` member means Node-only code is reachable from ' +
+        'the entry\'s types: keep it behind a declaration, as package.json "imports" does for ' +
+        '`#testing/project-test-utils` (see src/testing/project-test-utils.d.ts).',
+    );
   }, 180_000);
 });
