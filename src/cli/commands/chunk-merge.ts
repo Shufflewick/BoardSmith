@@ -19,7 +19,8 @@
  *   3. On the combined tree, before anything is committed, it re-runs every tree-wide check:
  *      the chunk is verified; the chunks really built alongside it were allowed to be (the
  *      `parallel-check` pair rule); `ledger-check`; `constraint-check` with its measurement tests;
- *      every verified chunk's sign-off still matches its code; and the project's whole test suite.
+ *      every verified chunk's sign-off still stands for its code (`assessSignoffs`); and the
+ *      project's whole test suite.
  *      Any failure aborts the merge and leaves the main line exactly as it was.
  *   4. It lists every reference between the merged chunk's changes and what the main line gained
  *      while it was being built, in design/CROSS-CHUNK.md, pending the audit's ruling;
@@ -41,7 +42,6 @@ import {
   RUN_MD,
   SKETCH_MD,
   chunkMdPath,
-  chunkSlugs,
   designPath,
 } from '../lib/project-paths.js';
 import { assertBareName } from '../lib/user-name.js';
@@ -53,7 +53,7 @@ import {
 } from '../lib/ledger-allocation.js';
 import { ledgerCheck } from './ledger-check.js';
 import { type TestRunner, checkConstraints, runVitest } from './constraint-check.js';
-import { checkSignoff } from './chunk-signoff.js';
+import { assessSignoffs } from './chunk-signoff.js';
 import { chunkCitations, pairProblems, readSketchChunks } from './parallel-check.js';
 import { appendCrossChunkEntry, changedSide, crossReferences } from './cross-chunk.js';
 
@@ -290,12 +290,7 @@ async function concurrencyProblems(ctx: MergeContext, alongside: string[]): Prom
 }
 
 async function signoffProblems(projectDir: string): Promise<string[]> {
-  const problems: string[] = [];
-  for (const slug of await chunkSlugs(projectDir)) {
-    const exists = await fs.stat(chunkMdPath(projectDir, slug)).then(() => true, () => false);
-    if (exists) problems.push(...(await checkSignoff(projectDir, slug)));
-  }
-  return problems;
+  return [...(await assessSignoffs(projectDir)).values()].flatMap((a) => a.problems);
 }
 
 const tail = (output: string) => output.trimEnd().split('\n').slice(-25).join('\n');

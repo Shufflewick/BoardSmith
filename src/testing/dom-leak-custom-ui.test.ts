@@ -20,7 +20,7 @@
  * Cross-layer boundary: testing -> engine (toJSONForPlayer) -> a game's own UI.
  */
 import { describe, it, expect } from 'vitest';
-import { defineComponent, h, type PropType } from 'vue';
+import { defineComponent, h, onMounted, ref, type PropType } from 'vue';
 import {
   collectCards,
   makeSecretHandGame,
@@ -28,7 +28,7 @@ import {
   type ViewNode,
 } from './dom-leak.test-helper.js';
 import type { TestGame } from './test-game.js';
-import { assertNoHiddenInfoLeak, preloadSeatRenderer } from './dom-leak.js';
+import { assertNoHiddenInfoLeak, preloadSeatRenderer, renderAsSeat } from './dom-leak.js';
 
 // #354: this file renders AutoUI too, so its module graph loads while the file
 // is collected rather than inside the first test's timeout.
@@ -115,10 +115,8 @@ const ContractBoard = defineComponent({
         'data-seat': String(props.playerSeat),
         'data-my-turn': String(props.isMyTurn),
         'data-actions': props.availableActions.join(','),
-        // Reads through the inert controller exactly as a real template would.
-        'data-controller-actions': String(
-          (props.actionController.availableActions as { value: string[] }).value.length,
-        ),
+        // Reads through the controller exactly as a real template would.
+        'data-current-action': String((props.actionController.currentAction as { value: string | null }).value),
       });
   },
 });
@@ -177,5 +175,28 @@ describe('assertNoHiddenInfoLeak — custom UI component', () => {
         componentProps: { gameView: authoritativeView(tg) },
       }),
     ).resolves.not.toThrow();
+  });
+});
+
+/**
+ * A board that sizes itself from its own element, as Cribbage's table does: it
+ * observes that element once it is in the page.
+ */
+const SelfSizingBoard = defineComponent({
+  name: 'SelfSizingBoard',
+  props: { gameView: { type: Object as PropType<ViewNode | null>, default: null } },
+  setup() {
+    const root = ref<HTMLElement | null>(null);
+    onMounted(() => new ResizeObserver(() => {}).observe(root.value as HTMLElement));
+    return () => h('div', { class: 'board', ref: root });
+  },
+});
+
+describe('renderAsSeat — the browser APIs a board may rely on (#404)', () => {
+  it('mounts a board that observes its own size, which jsdom alone cannot', async () => {
+    const wrapper = await renderAsSeat(makeGame(), 1, { component: SelfSizingBoard });
+
+    expect(wrapper.find('.board').exists()).toBe(true);
+    wrapper.unmount();
   });
 });

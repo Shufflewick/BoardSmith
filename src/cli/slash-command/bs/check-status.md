@@ -152,6 +152,12 @@ claim verification with no provenance record behind them. `unknown` means the ch
 before provenance recording existed; it is not the same as `code-conformance-only` and must not
 be reported as it.
 
+Report `verifiedWithoutSignoff` under its own heading with each chunk's `problems` as the command
+gives them: a verified status no valid sign-off backs. Report `signoffSharedEdits` separately, as
+information only: a later chunk edited a file this chunk shares, and that chunk's own sign-off saw
+the edit (`signed-off`) or it is still being built (`being-built`). Those sign-offs still stand;
+never list them as unverified.
+
 Consume the command's own `projectProvenanceState` field rather than re-deriving severity from
 the raw `verifiedWithoutProvenance` count: a `pre-provenance` project (no chunk in it carries a
 `## Verified Against` block at all — both reference games are in this state, 12 and 17 chunks)

@@ -27,6 +27,7 @@ import { testStepCheckCommand } from './commands/test-step-check.js';
 import { claimQuoteCheckCommand } from './commands/claim-quotes.js';
 import { constraintCheckCommand } from './commands/constraint-check.js';
 import { chunkReopenCommand, chunkSignoffCommand, chunkWaiverCommand } from './commands/chunk-signoff.js';
+import { chunkGateTransitionCommand } from './commands/chunk-gate-transition.js';
 import { traceCheckCommand } from './commands/trace-check.js';
 import { driftCheckCommand } from './commands/drift-check.js';
 import { ledgerCheckCommand } from './commands/ledger-check.js';
@@ -383,6 +384,18 @@ export function createProgram(): Command {
     .requiredOption('--expires <date>', 'YYYY-MM-DD; the waiver ends after this day')
     .requiredOption('--reason <text>', 'Why the designer waived these chunks')
     .action(chunkWaiverCommand);
+
+  // #397: chunks verified before the sign-off and claim-quote gates existed get through them once,
+  // recorded by the designer in design/GATE-TRANSITION.md. Every gate's refusal names this command.
+  program
+    .command('chunk-gate-transition')
+    .description(
+      'Once per project: record the chunks verified before sign-offs and claim quotes were required, so both gates accept them',
+    )
+    .option('--project <dir>', 'Project directory (defaults to cwd)')
+    .requiredOption('--by <designer>', "The designer's name")
+    .option('--json', 'Emit JSON instead of human-readable output')
+    .action(chunkGateTransitionCommand);
 
   program
     .command('chunk-provenance-status')

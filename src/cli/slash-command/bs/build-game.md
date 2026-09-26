@@ -76,6 +76,11 @@ question it answered, and a playtest waiver covers only the chunks it names, unt
 (`build/playtest.md` "The Verified Gate"). Code holds this line: `boardsmith chunk-signoff` is the
 only writer of a verified status, and `boardsmith chunk-check` refuses one it did not produce.
 
+A project whose chunks were verified before those gates existed is refused until the designer
+records the one-time `boardsmith chunk-gate-transition --by "<designer>"` (`build/playtest.md`
+"Chunks Verified Before the Gates"). That is the designer's statement about their own chunks, so it
+is a gate like any other: put it to the designer, and never run it under the run's own name.
+
 ## Step 0: Entry — Layout, Ingest Synthesis, Consistency, Lock
 
 Identical to `/bs-build-chunk` Step 0, which owns these checks — run them, do not re-derive them:
