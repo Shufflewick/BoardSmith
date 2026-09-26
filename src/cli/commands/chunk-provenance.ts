@@ -21,7 +21,7 @@ import {
 import { readBoardsmithVersion } from '../lib/boardsmith-version.js';
 import { hashSkillsTree } from '../lib/skills-tree-hash.js';
 import { findHeadingIndex } from './build-manifest.js';
-import { checkSignoff } from './chunk-signoff.js';
+import { type SharedEdit, assessSignoffs, checkSignoff } from './chunk-signoff.js';
 
 /**
  * `computeVerificationScope()` / `resolveCitedSlices()` — the two pure computations behind
@@ -1073,6 +1073,13 @@ export interface ChunkProvenanceStatusResult {
    */
   verifiedWithoutSignoff: Array<{ slug: string; problems: string[] }>;
   /**
+   * #396: verified chunks whose files were edited after their sign-off by another chunk, where
+   * that chunk's later sign-off saw the edit or that chunk is being built. Information for a
+   * reviewer, not a fault: chunks that add to shared files edit them in the normal course of a
+   * build, and the sign-off still stands.
+   */
+  signoffSharedEdits: Array<{ slug: string; edits: SharedEdit[] }>;
+  /**
    * Project-level classification, which is what makes `verifiedWithoutProvenance` usable.
    *
    * The flag's membership is correct but its SEVERITY is not uniform, and without this field a
@@ -1132,6 +1139,8 @@ export async function chunkProvenanceStatusCommand(
   const byBoardsmithVersion: Record<string, string[]> = {};
   const verifiedWithoutProvenance: string[] = [];
   const verifiedWithoutSignoff: Array<{ slug: string; problems: string[] }> = [];
+  const signoffSharedEdits: Array<{ slug: string; edits: SharedEdit[] }> = [];
+  const signoffs = await assessSignoffs(projectDir);
   const counts = { full: 0, codeConformanceOnly: 0, unknown: 0 };
 
   for (const slug of slugs) {
@@ -1160,8 +1169,9 @@ export async function chunkProvenanceStatusCommand(
       verifiedWithoutProvenance.push(slug);
     }
 
-    const signoffProblems = await checkSignoff(projectDir, slug);
-    if (signoffProblems.length) verifiedWithoutSignoff.push({ slug, problems: signoffProblems });
+    const signoff = signoffs.get(slug);
+    if (signoff?.problems.length) verifiedWithoutSignoff.push({ slug, problems: signoff.problems });
+    if (signoff?.sharedEdits.length) signoffSharedEdits.push({ slug, edits: signoff.sharedEdits });
 
     chunks.push({
       slug,
@@ -1195,6 +1205,7 @@ export async function chunkProvenanceStatusCommand(
     byBoardsmithVersion,
     verifiedWithoutProvenance,
     verifiedWithoutSignoff,
+    signoffSharedEdits,
     projectProvenanceState,
   };
 
@@ -1284,6 +1295,20 @@ export async function chunkProvenanceStatusCommand(
     for (const { slug, problems } of verifiedWithoutSignoff) {
       console.log(`  • ${slug}`);
       for (const p of problems) console.log(`      ${p}`);
+    }
+  }
+
+  if (signoffSharedEdits.length) {
+    console.log('');
+    console.log(
+      `Shared files edited since sign-off (for information; each sign-off still stands, because ` +
+        `the chunk named signed off the edit or is building it):`,
+    );
+    for (const { slug, edits } of signoffSharedEdits) {
+      const described = edits.map((e) =>
+        `${e.path} (${e.how === 'signed-off' ? 'signed off with' : 'being built by'} ${e.coveredBy})`,
+      );
+      console.log(`  • ${slug}: ${described.join(', ')}`);
     }
   }
 

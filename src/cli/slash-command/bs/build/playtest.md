@@ -17,8 +17,11 @@ never typed: it is derived from a sign-off that `boardsmith chunk-signoff` recor
 which checklist items were observed), and the provenance check at close refuses a verified status
 that no sign-off backs. A designer decision about one chunk is never a precedent for another: a
 "machine playtest" or "skip it" decision is a waiver, it names its chunks one by one, and it expires. A sign-off
-covers only the chunk as it was signed: once a file its Build Manifest names changes, it no longer
-counts. A verified chunk goes back to `built` for rework only through `boardsmith chunk-reopen <slug>
+covers only the chunk as it was signed: it records each source file its Build Manifest names. A
+later chunk that edits a shared file (one rules module, one test support file) does not cancel it,
+because that chunk's own sign-off will cover the edit: an edit counts as accounted for when a later
+sign-off saw the file as it is now, or while another chunk naming the file is being built. An edit
+nothing accounts for, such as a signed chunk reworked without a reopen, voids the sign-off. A verified chunk goes back to `built` for rework only through `boardsmith chunk-reopen <slug>
 --reason "<why>"`, which voids its sign-off, so the reworked chunk needs a fresh `chunk-signoff`.
 
 ## Milestone/UI Gate (SKILLAUTO-01)
