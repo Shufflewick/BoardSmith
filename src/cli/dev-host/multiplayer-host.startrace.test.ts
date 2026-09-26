@@ -21,6 +21,7 @@ import { beforeEach, describe, it, expect } from 'vitest';
 import { Game, Player, Action, defineFlow, actionStep, loop, eachPlayer, type GameOptions } from '../../engine/index.js';
 import { executeOp, type GameDefinitionLike, type Op, type OpResult } from '../../session/index.js';
 import { MultiplayerHost, type HostOutbound } from './multiplayer-host.js';
+import { manualGraceTimer } from './reconnect-grace.test-helper.js';
 import { createDevHostClientMemory } from './test-client-memory.js';
 
 /** This suite's stand-in browser memory — see test-client-memory.ts. */
@@ -70,7 +71,9 @@ function makeDeferred(): { promise: Promise<void>; resolve: () => void } {
  */
 function makeRaceHost(gate: { promise: Promise<void> } | null) {
   const sent: Array<{ clientId: string; msg: HostOutbound }> = [];
+  const graces = manualGraceTimer();
   const host = new MultiplayerHost({
+    reconnectTimer: graces.timer,
     playerCount: 2,
     minPlayers: 2,
     maxPlayers: raceDef.maxPlayers,
@@ -93,21 +96,50 @@ function makeRaceHost(gate: { promise: Promise<void> } | null) {
   const lastLobby = () => [...sent].reverse().find((e) => e.msg.type === 'lobby')?.msg as
     | { seats: Array<{ seat: number; clientId: string | null; connected: boolean }> }
     | undefined;
-  return { host, sent, to, lastOfType, lastLobby, clear: () => (sent.length = 0) };
+  /** `clientId` passes, as its page would; resolves with whether the host took the move. */
+  const passes = async (clientId: string, requestId: string): Promise<boolean> => {
+    await host.handleMessage(clientId, {
+      type: 'server_request',
+      requestId,
+      op: 'action',
+      payload: { actionName: 'pass', args: {}, boundaryKey: clientKey(clientId) },
+    });
+    const answer = to(clientId).find((m) => m.type === 'server_response' && m.requestId === requestId);
+    return answer?.type === 'server_response' && answer.result.success === true;
+  };
+  return { host, sent, to, lastOfType, lastLobby, graces, passes, clear: () => (sent.length = 0) };
+}
+
+/**
+ * A normal, un-raced start: A says hello (auto-seated in seat 1, which is due
+ * first) and B joins seat 2 as a human.
+ */
+async function seatedTable() {
+  const table = makeRaceHost(null);
+  await table.host.handleMessage('A', { type: 'hello' });
+  await table.host.handleMessage('B', { type: 'join', seat: 2, name: 'B' });
+  return table;
+}
+
+/** Whether the host is driving `seat` with a bot right now. */
+function botCovers(host: MultiplayerHost, seat: number): boolean {
+  return (host as any).botSeats.some((s: { seat: number }) => s.seat === seat); // eslint-disable-line @typescript-eslint/no-explicit-any
 }
 
 describe('MultiplayerHost — D15 disconnect-mid-startGame-await race (DEVHOST-03)', () => {
   it('a disconnect landing INSIDE the `await session.start()` window leaves the seat bot-covered post-fix (pre-fix: orphaned, loop stalls)', async () => {
     const gate = makeDeferred();
-    const { host, lastOfType } = makeRaceHost(gate);
+    const { host, lastOfType, graces } = makeRaceHost(gate);
 
     // A auto-seats into seat 1 and drives synchronously into the gated
     // `start` op — still inside `await session.start()` when this call
     // returns, because nothing between here and the stub yields control.
     const helloPromise = host.handleMessage('A', { type: 'hello' });
 
-    // THE interleave: disconnect lands mid-await, not after.
+    // THE interleave: disconnect lands mid-await, not after. A does not come
+    // back within the reconnect grace (#412), so the seat is covered.
     host.disconnect('A');
+    await graces.elapse();
 
     gate.resolve();
     await helloPromise;
@@ -122,12 +154,10 @@ describe('MultiplayerHost — D15 disconnect-mid-startGame-await race (DEVHOST-0
     expect(state.isComplete).toBe(false); // 5-round loop; round 1 alone doesn't finish it
   });
 
-  it('BUG-12: a plain disconnect AFTER a normal start is bot-covered too — the away-seat rule is the same wherever the disconnect lands', async () => {
-    const { host, lastLobby } = makeRaceHost(null); // no gate — normal, un-raced start
-    await host.handleMessage('A', { type: 'hello' }); // auto-seats A -> seat 1, starts normally
+  it('BUG-12: a plain disconnect AFTER a normal start is bot-covered too, once the reconnect grace runs out', async () => {
     // B is here only so the post-disconnect lobby broadcast has a recipient to
     // observe (broadcastLobby sends to CONNECTED clients — A is gone by then).
-    await host.handleMessage('B', { type: 'join', seat: 2, name: 'B' });
+    const { host, lastLobby, graces } = await seatedTable();
 
     // A disconnect landing AFTER startGame has committed gets the SAME cover as
     // one landing inside the await: nothing is driving seat 1 either way, and a
@@ -135,8 +165,9 @@ describe('MultiplayerHost — D15 disconnect-mid-startGame-await race (DEVHOST-0
     // BUG-12 this was deliberately left uncovered — "pause on away" — which is
     // what stranded `boardsmith dev` behind its own stale auto-opened tab.)
     host.disconnect('A');
+    await graces.elapse();
 
-    expect((host as any).botSeats.some((s: { seat: number }) => s.seat === 1)).toBe(true); // eslint-disable-line @typescript-eslint/no-explicit-any
+    expect(botCovers(host, 1)).toBe(true);
 
     // Cover is loop-driver-only: the seat is still RESERVED for A's reconnect.
     const seat1 = lastLobby()?.seats.find((s) => s.seat === 1);
@@ -145,7 +176,7 @@ describe('MultiplayerHost — D15 disconnect-mid-startGame-await race (DEVHOST-0
   });
 
   it('NEGATIVE CONTROL: the FOLLOWER disconnecting is NOT bot-covered — follow-mode persists across reloads and keeps bot paused', async () => {
-    const { host } = makeRaceHost(null);
+    const { host, graces } = makeRaceHost(null);
     await host.handleMessage('A', { type: 'hello' }); // A -> seat 1
     await host.handleMessage('B', { type: 'join', seat: 2, name: 'B' }); // B -> seat 2 (human)
     await host.handleMessage('A', { type: 'follow', enabled: true });
@@ -154,16 +185,18 @@ describe('MultiplayerHost — D15 disconnect-mid-startGame-await race (DEVHOST-0
     // survives it, and a follower covers EVERY seat — so handing any seat to a
     // bot here would steal the move the follower is coming back for.
     host.disconnect('A');
+    await graces.elapse();
 
     expect((host as any).botSeats).toHaveLength(0); // eslint-disable-line @typescript-eslint/no-explicit-any
   });
 
   it('reclaim: a reconnecting human takes back the bot-covered seat — the bot yields, proven by the human successfully acting on the very NEXT round (not just static state)', async () => {
     const gate = makeDeferred();
-    const { host, lastLobby, to } = makeRaceHost(gate);
+    const { host, lastLobby, to, graces } = makeRaceHost(gate);
 
     const helloPromise = host.handleMessage('A', { type: 'hello' }); // A auto-seats -> seat 1, gated mid-await
     host.disconnect('A'); // A vanishes mid-await (the D15 interleave)
+    await graces.elapse(); // and stays away past the reconnect grace (#412)
     // B claims seat 2 as a HUMAN (not bot) while still inside the gated await,
     // so `runBotTurns()` halts after round 1 seat 1 (bot-covered) instead of
     // auto-completing the whole game — leaving it genuinely mid-play so the
@@ -242,33 +275,67 @@ describe('MultiplayerHost — D15 disconnect-mid-startGame-await race (DEVHOST-0
   });
 
   it('BUG-12: a MID-GAME disconnect on the away player\'s OWN due turn does not stall the game — the bot plays it and the flow advances', async () => {
-    const { host, to } = makeRaceHost(null); // normal, un-raced start
-    await host.handleMessage('A', { type: 'hello' }); // A -> seat 1, game starts normally
-    await host.handleMessage('B', { type: 'join', seat: 2, name: 'B' }); // B -> seat 2, human
+    const { host, graces, passes } = await seatedTable();
 
-    // Seat 1 (round 1) is due; A disconnects mid-game — the exact stranded-seat
-    // case: the game is idling on input from a client that is gone. Pre-fix
-    // nothing drove seat 1 ever again and the game sat here forever, silently.
+    // Seat 1 (round 1) is due; A disconnects mid-game and does not come back
+    // within the reconnect grace — the exact stranded-seat case: the game is
+    // idling on input from a client that is gone. Pre-fix nothing drove seat 1
+    // ever again and the game sat here forever, silently.
     host.disconnect('A');
-    await Promise.resolve(); // let disconnect()'s fire-and-forget bot pump settle
-    await new Promise((r) => setTimeout(r, 0));
+    await graces.elapse();
 
-    expect((host as any).botSeats.some((s: { seat: number }) => s.seat === 1)).toBe(true); // eslint-disable-line @typescript-eslint/no-explicit-any
+    expect(botCovers(host, 1)).toBe(true);
 
     // The flow really advanced: seat 1's round-1 turn was consumed by the bot,
     // so B — who could NOT act while seat 1 was due — can act now.
-    await host.handleMessage('B', {
-      type: 'server_request',
-      requestId: 'b-mid',
-      op: 'action',
-      payload: { actionName: 'pass', args: {}, boundaryKey: clientKey('B') },
-    });
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const bResp = to('B').find((m) => m.type === 'server_response' && (m as any).requestId === 'b-mid') as any;
-    expect(bResp?.result?.success).toBe(true);
+    expect(await passes('B', 'b-mid')).toBe(true);
 
     // And the cover is reclaimable: A's reconnect yields the seat back.
     await host.handleMessage('A', { type: 'hello' });
-    expect((host as any).botSeats.some((s: { seat: number }) => s.seat === 1)).toBe(false); // eslint-disable-line @typescript-eslint/no-explicit-any
+    expect(botCovers(host, 1)).toBe(false);
+  });
+});
+
+describe('MultiplayerHost — a reload is a reconnect, not a vacancy (#412)', () => {
+  it("keeps a reloading seat's turn for its player: no bot moves for it before the grace runs out", async () => {
+    const { host, graces, passes } = await seatedTable();
+
+    // A's tab reloads: the old socket closes before the new one says hello.
+    host.disconnect('A');
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    expect(graces.armed()).toHaveLength(1);
+    expect(botCovers(host, 1)).toBe(false);
+    // Seat 1's turn is still open: B cannot act yet.
+    expect(await passes('B', 'b-early')).toBe(false);
+
+    // The reloaded page says hello: the grace is withdrawn and A takes its own turn.
+    await host.handleMessage('A', { type: 'hello' });
+    expect(graces.armed()).toEqual([]);
+    expect(await passes('A', 'a-back')).toBe(true);
+    expect(botCovers(host, 1)).toBe(false);
+  });
+
+  it('counts a reloading seat as its player\'s when the bot seats are rebuilt', async () => {
+    const { host, graces } = await seatedTable();
+    host.disconnect('A');
+
+    // Turning follow-mode off rebuilds the bot seats; A is reloading, not gone.
+    await host.handleMessage('B', { type: 'follow', enabled: true });
+    await host.handleMessage('B', { type: 'follow', enabled: false });
+
+    expect(botCovers(host, 1)).toBe(false);
+    await graces.elapse();
+    expect(botCovers(host, 1)).toBe(true);
+  });
+
+  it('withdraws the grace when another client takes the seat over', async () => {
+    const { host, graces } = await seatedTable();
+    host.disconnect('A');
+
+    await host.handleMessage('C', { type: 'join', seat: 1, name: 'C' });
+
+    expect(graces.armed()).toEqual([]);
+    expect(botCovers(host, 1)).toBe(false);
   });
 });
