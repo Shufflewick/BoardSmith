@@ -720,9 +720,10 @@ describe('the local world store', () => {
           { seat: 2, box: boxOf('for b') },
         ],
       });
-      await store.writeCheckpoint(cp({}), { vacate: { seat: 1, player: 'player-a' } });
-      // Seat 2's release matches nobody, so its box stands.
-      await store.writeCheckpoint(cp({}), { vacate: { seat: 2, player: 'player-b' } });
+      // Seat 2's release matches nobody, so its box stands; seat 1's is held.
+      for (const vacate of [{ seat: 2, player: 'player-b' }, { seat: 1, player: 'player-a' }]) {
+        await store.writeCheckpoint(cp({}), { vacate });
+      }
       expect(store.noticeBox(1)).toEqual({ entries: [], dropped: 0 });
       expect(store.noticeBox(2)).toEqual(boxOf('for b'));
     });

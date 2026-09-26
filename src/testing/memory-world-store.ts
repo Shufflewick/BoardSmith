@@ -32,6 +32,7 @@ import {
   type WorldGenesis,
   type WorldMigrated,
   type WorldReceipt,
+  type SettledNoticeBox,
   type WorldNoticeBox,
   type WorldSerialized,
 } from '../world/index.js';
@@ -132,12 +133,17 @@ export function createMemoryWorldStore(budgets: WorldBudgets = worldBudgets()): 
     if (extras.activity !== undefined) {
       activity.set(extras.activity.seat, extras.activity.at);
     }
-    // AN EMPTY BOX IS NO ROW (#521), so a seat with nothing waiting costs nothing.
-    for (const { seat, box } of extras.notices ?? []) {
+    writeNoticeBoxes(extras.notices ?? []);
+    releaseChair(extras.vacate);
+  }
+
+  /** The boxes a checkpoint's dispatch changed (ShufflewickPub #521). An empty
+   *  box is no row, so a seat with nothing waiting costs nothing. */
+  function writeNoticeBoxes(settled: readonly SettledNoticeBox[]): void {
+    for (const { seat, box } of settled) {
       if (isEmptyNoticeBox(box)) noticeBoxes.delete(seat);
       else noticeBoxes.set(seat, box);
     }
-    releaseChair(extras.vacate);
   }
 
   /** A chair the world's clock handed on (#278), matched on both keys and

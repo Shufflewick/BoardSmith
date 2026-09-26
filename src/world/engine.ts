@@ -1151,6 +1151,25 @@ export class BoardSmithWorldEngine implements WorldEngine {
     return declaredOnce(missing);
   }
 
+  /**
+   * WHAT ONE ROUND STILL NEEDS LOADED, on a seat's read roads -- an offer and a
+   * pick. Only a partitions round is asked: an activity round is the clock's
+   * and a seat's read never names a chair (ShufflewickPub #423), and a notice
+   * box is read by the dispatch that answers the question, never to draw a
+   * panel (#521).
+   */
+  private unmetOnASeatsRead(
+    round: WorldNeedsRound,
+    seat: number,
+    args: Readonly<Record<string, unknown>>,
+    now: number,
+  ): readonly string[] {
+    if (round.kind !== "partitions") return [];
+    return this.declareRound(round, seat, args, arrivalAt(now)).filter(
+      (name) => !this.residentIds.has(name),
+    );
+  }
+
   /** One action's share of the answer above: the first round it cannot yet
    *  make, or nothing when its whole offer is already resident. */
   private offerPartitionsOf(
@@ -1161,15 +1180,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
     for (let step = 0; step < definition.selections.length || step === 0; step++) {
       for (const round of definition.world!.needs) {
         if (round.before !== step) continue;
-        // AN OFFER NAMES NO CHAIR (ShufflewickPub #423): only a seatless action
-        // may declare an activity round, and a seatless action is never
-        // offered. There is nothing here to read and nothing to hydrate.
-        // NOR A NOTICE BOX (ShufflewickPub #521): an offer is a question, and
-        // the box is read by the dispatch that answers it, never to draw a panel.
-        if (round.kind === "activity" || round.kind === "notices") continue;
-        const unmet = this.declareRound(round, seat, {}, arrivalAt(now)).filter(
-          (name) => !this.residentIds.has(name),
-        );
+        const unmet = this.unmetOnASeatsRead(round, seat, {}, now);
         // ONE ROUND AT A TIME. A later round may read what an earlier one
         // loaded, so there is nothing to say about it until the host has
         // supplied this one.
@@ -1472,12 +1483,7 @@ export class BoardSmithWorldEngine implements WorldEngine {
     for (let step = 0; step <= through; step++) {
       for (const round of definition.world!.needs) {
         if (round.before !== step) continue;
-        // The activity round is the clock's, and a seat's read never asks one.
-        // Nor a notice box: a pick draws a panel and reads no box (#521).
-        if (round.kind === "activity" || round.kind === "notices") continue;
-        const unmet = this.declareRound(round, seat, args, arrivalAt(now)).filter(
-          (name) => !this.residentIds.has(name),
-        );
+        const unmet = this.unmetOnASeatsRead(round, seat, args, now);
         if (unmet.length > 0) return declaredOnce(unmet);
       }
     }
@@ -1640,7 +1646,6 @@ export class BoardSmithWorldEngine implements WorldEngine {
     when: WorldDispatchWhen,
     answered: WorldWalkAnswers,
   ): WorldDispatchNeeds {
-    const declared = answered.declaredActivity;
     const seat = player === null ? null : this.seatFor(player);
     const definition = this.actionFor(command.name, seat);
     assertClockIsTimed(command.name, seat, when);
@@ -1652,34 +1657,15 @@ export class BoardSmithWorldEngine implements WorldEngine {
     // answering a question nobody asked, which is refused here rather than
     // discovered as a loop that never ends because the round keeps asking for a
     // seat the answer never covers.
-    let chairs = 0;
+    //
     // AND WHICH NOTICE BOXES, on exactly the same ordered terms (#521).
-    let boxes = 0;
+    const cursor = { activity: 0, notices: 0 };
     for (const round of definition.world!.needs) {
-      if (round.kind === "notices") {
-        const box = this.declareNoticeRound(round, seat, command.args, when, definition.name);
-        if (box === null) continue;
-        const already = answered.declaredNotices[boxes];
-        if (already === undefined) return { partitions: [], seats: [], noticeBoxes: [box] };
-        if (already.seat !== box) throw noticeBoxAnsweredWrong(definition.name, box, already.seat);
-        boxes += 1;
-        continue;
-      }
-      if (round.kind === "activity") {
-        const about = this.declareSeatRound(round, command.args, when, definition.name);
-        if (about === null) continue;
-        const already = declared[chairs];
-        if (already === undefined) return { partitions: [], seats: [about], noticeBoxes: [] };
-        if (already.seat !== about) {
-          throw worldRefusal(
-            "activity-answered-wrong",
-            `Action "${definition.name}" declared it was about seat ${about}, and the host ` +
-              `answered about seat ${already.seat}. A declared activity read is answered in the ` +
-              "order it was asked, so this host and this world disagree about which chair the " +
-              "phase names.",
-          );
-        }
-        chairs += 1;
+      if (round.kind !== "partitions") {
+        const asked = this.namedSeatOf(round, seat, command.args, when, definition.name);
+        if (asked === null) continue;
+        const outstanding = matchAnswered(round.kind, asked, answered, cursor, definition.name);
+        if (outstanding !== null) return outstanding;
         continue;
       }
       const missing = this.declareRound(round, seat, command.args, when).filter(
@@ -1690,6 +1676,35 @@ export class BoardSmithWorldEngine implements WorldEngine {
       }
     }
     return { partitions: [], seats: [], noticeBoxes: [] };
+  }
+
+  /** Add the seat a chair or notice-box round names to what the handler may
+   *  reach, once. */
+  private noteNamedSeat(
+    round: WorldActivityRound | WorldNoticeBoxRound,
+    seat: number | null,
+    args: Readonly<Record<string, unknown>>,
+    when: WorldDispatchWhen,
+    action: string,
+    named: { readonly namedSeats: number[]; readonly namedBoxes: number[] | null },
+  ): void {
+    const into = round.kind === "activity" ? named.namedSeats : named.namedBoxes;
+    if (into === null) return;
+    const asked = this.namedSeatOf(round, seat, args, when, action);
+    if (asked !== null && !into.includes(asked)) into.push(asked);
+  }
+
+  /** The one seat a chair round or a notice-box round names, or null. */
+  private namedSeatOf(
+    round: WorldActivityRound | WorldNoticeBoxRound,
+    seat: number | null,
+    args: Readonly<Record<string, unknown>>,
+    when: WorldDispatchWhen,
+    action: string,
+  ): number | null {
+    return round.kind === "activity"
+      ? this.declareSeatRound(round, args, when, action)
+      : this.declareNoticeRound(round, seat, args, when, action);
   }
 
   /**
@@ -1828,24 +1843,15 @@ export class BoardSmithWorldEngine implements WorldEngine {
   ): Promise<void> {
     for (const round of definition.world!.needs) {
       if (round.before !== step) continue;
-      // A NOTICE-BOX ROUND HYDRATES NOTHING EITHER (ShufflewickPub #521). Its
-      // answer came down with the stamp; this says which boxes the handler may
-      // read, take, or refuse a notice against.
-      if (round.kind === "notices") {
-        if (namedBoxes === null) continue;
-        const box = this.declareNoticeRound(round, seat, args, when, definition.name);
-        if (box !== null && !namedBoxes.includes(box)) namedBoxes.push(box);
-        continue;
-      }
-      // AN ACTIVITY ROUND HYDRATES NOTHING (ShufflewickPub #423). Its answer
-      // came down with the stamp, because the store it would have to read is
-      // the host's. What it does here is say which chairs the handler is
-      // allowed to ask about, evaluated in the same order and against the same
-      // resident tree the declaration walk saw -- so what `activityOf` admits
-      // is exactly what the host was asked for and nothing else.
-      if (round.kind === "activity") {
-        const about = this.declareSeatRound(round, args, when, definition.name);
-        if (about !== null && !namedSeats.includes(about)) namedSeats.push(about);
+      // A CHAIR OR A NOTICE-BOX ROUND HYDRATES NOTHING (ShufflewickPub #423,
+      // #521). Its answer came down with the stamp, because the store it would
+      // have to read is the host's. What it does here is say which chairs and
+      // which boxes the handler is allowed to reach, evaluated in the same order
+      // and against the same resident tree the declaration walk saw -- so what
+      // `activityOf` and `notices` admit is exactly what the host was asked for
+      // and nothing else.
+      if (round.kind !== "partitions") {
+        this.noteNamedSeat(round, seat, args, when, definition.name, { namedSeats, namedBoxes });
         continue;
       }
       for (const name of this.declareRound(round, seat, args, when)) {
@@ -3624,6 +3630,45 @@ function outcomeOf(
       ? {}
       : { notices: { perSeat: noticesPerSeat, writes: [...ledger.notices] } }),
   };
+}
+
+/**
+ * MATCH ONE CHAIR OR BOX ROUND AGAINST THE HOST'S ANSWERS, IN ORDER
+ * (ShufflewickPub #423, #521).
+ *
+ * The nth round of a kind is answered by the nth answer of that kind, which is
+ * what makes the walk terminate: an answer about a different seat is a host
+ * answering a question nobody asked, refused here rather than discovered as a
+ * loop that never ends. Answers what the host must still read, or null when
+ * this round is already answered.
+ */
+function matchAnswered(
+  kind: "activity" | "notices",
+  asked: number,
+  answered: WorldWalkAnswers,
+  cursor: { activity: number; notices: number },
+  action: string,
+): WorldDispatchNeeds | null {
+  const already =
+    kind === "activity"
+      ? answered.declaredActivity[cursor.activity]
+      : answered.declaredNotices[cursor.notices];
+  if (already === undefined) {
+    return kind === "activity"
+      ? { partitions: [], seats: [asked], noticeBoxes: [] }
+      : { partitions: [], seats: [], noticeBoxes: [asked] };
+  }
+  if (already.seat !== asked) {
+    if (kind === "notices") throw noticeBoxAnsweredWrong(action, asked, already.seat);
+    throw worldRefusal(
+      "activity-answered-wrong",
+      `Action "${action}" declared it was about seat ${asked}, and the host answered about ` +
+        `seat ${already.seat}. A declared activity read is answered in the order it was asked, ` +
+        "so this host and this world disagree about which chair the phase names.",
+    );
+  }
+  cursor[kind] += 1;
+  return null;
 }
 
 /**

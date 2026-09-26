@@ -92,6 +92,8 @@ import {
   type WorldOrder,
   type WorldReceipt,
   type WorldTiming,
+  type SettledNoticeBox,
+  type WorldNoticeWrites,
 } from "../index.js";
 import type { WorldHostClock } from "./clock.js";
 import type { WorldStore } from "./store.js";
@@ -1206,13 +1208,7 @@ export class ResidentWorld {
         // THE NOTICE BOXES THIS DISPATCH SENT TO OR TOOK (ShufflewickPub #521),
         // in the same write as its effects, so a notice exists exactly when the
         // command that sent it does.
-        ...(result.notices === undefined
-          ? {}
-          : {
-              notices: await applyNoticeWrites(result.notices, (seat) =>
-                this.#store.noticeBox(seat),
-              ),
-            }),
+        ...(await this.#noticeWrite(result.notices)),
         // THE ENDING IS DURABLE WITH THE EFFECTS THAT DECLARED IT (#395), and
         // the store empties the queue in the same write.
         ...(result.ending === "completed" ? { endedAt: arrivedAt } : {}),
@@ -1235,6 +1231,14 @@ export class ResidentWorld {
       throw rolledBack(error, command.name);
     }
     return result.events;
+  }
+
+  /** The boxes a dispatch's notice writes leave, for its checkpoint (#521). */
+  async #noticeWrite(
+    notices: WorldNoticeWrites | undefined,
+  ): Promise<{ notices?: readonly SettledNoticeBox[] }> {
+    if (notices === undefined) return {};
+    return { notices: await applyNoticeWrites(notices, (seat) => this.#store.noticeBox(seat)) };
   }
 
   // ── the schedule ───────────────────────────────────────────────────────────

@@ -196,24 +196,11 @@ export function stampNotice(
   request: unknown,
   context: { readonly now: number; readonly seatCount: number; readonly budgets: WorldBudgets },
 ): { readonly seat: number; readonly notice: WorldNotice; readonly whenFull: NoticeWhenFull } {
-  if (typeof seat !== "number" || !Number.isInteger(seat) || seat < 1 || seat > context.seatCount) {
-    throw invalidNotice(
-      action,
-      `names seat ${JSON.stringify(seat)}, and this world's seats are 1 to ${context.seatCount}.`,
-    );
-  }
+  const addressed = noticeSeat(action, seat, context.seatCount);
   if (typeof request !== "object" || request === null) {
     throw invalidNotice(action, "was not given a notice. Pass `{ payload, line?, whenFull }`.");
   }
   const { payload, line, whenFull } = request as Partial<WorldNoticeRequest>;
-  if (whenFull !== "refuse" && whenFull !== "dropOldest") {
-    throw invalidNotice(
-      action,
-      `says whenFull is ${JSON.stringify(whenFull)}. Every notice says what a full box means for ` +
-        'it, and there is no default: "dropOldest" evicts the oldest waiting notice (right for ' +
-        'an alert), "refuse" refuses this command (right for a letter that must not be lost).',
-    );
-  }
   const narration = typeof line === "string" ? { text: line } : line;
   const notice: WorldNotice = {
     at: context.now,
@@ -221,7 +208,35 @@ export function stampNotice(
     ...(narration?.text === undefined ? {} : { text: narration.text }),
     ...(narration?.type === undefined ? {} : { type: narration.type }),
   };
-  const json = payload === undefined ? undefined : JSON.stringify(notice);
+  assertNoticeFits(action, notice, context.budgets);
+  return { seat: addressed, notice, whenFull: noticeWhenFull(action, whenFull) };
+}
+
+/** The seat a notice is for: a whole number inside this world, or a refusal. */
+function noticeSeat(action: string, seat: unknown, seatCount: number): number {
+  if (typeof seat === "number" && Number.isInteger(seat) && seat >= 1 && seat <= seatCount) {
+    return seat;
+  }
+  throw invalidNotice(
+    action,
+    `names seat ${JSON.stringify(seat)}, and this world's seats are 1 to ${seatCount}.`,
+  );
+}
+
+/** What a full box means for this notice. Required: there is no default. */
+function noticeWhenFull(action: string, whenFull: unknown): NoticeWhenFull {
+  if (whenFull === "refuse" || whenFull === "dropOldest") return whenFull;
+  throw invalidNotice(
+    action,
+    `says whenFull is ${JSON.stringify(whenFull)}. Every notice says what a full box means for ` +
+      'it, and there is no default: "dropOldest" evicts the oldest waiting notice (right for ' +
+      'an alert), "refuse" refuses this command (right for a letter that must not be lost).',
+  );
+}
+
+/** Refuse a notice JSON cannot carry, or one past `noticeMaxBytes`. */
+function assertNoticeFits(action: string, notice: WorldNotice, budgets: WorldBudgets): void {
+  const json = notice.payload === undefined ? undefined : JSON.stringify(notice);
   if (json === undefined) {
     throw invalidNotice(
       action,
@@ -231,15 +246,14 @@ export function stampNotice(
   }
   // MEASURED AS STORAGE MEASURES IT, in UTF-8 bytes.
   const bytes = encoder.encode(json).length;
-  if (bytes > context.budgets.noticeMaxBytes) {
+  if (bytes > budgets.noticeMaxBytes) {
     throw invalidNotice(
       action,
-      `is ${bytes} bytes, over the ${context.budgets.noticeMaxBytes}-byte limit one notice may ` +
+      `is ${bytes} bytes, over the ${budgets.noticeMaxBytes}-byte limit one notice may ` +
         "be. A notice is a line and a small payload; put anything larger in a partition and send " +
         "a notice that points at it.",
     );
   }
-  return { seat, notice, whenFull };
 }
 
 /** One encoder for the module, as `partition-store.ts` keeps one. Not imported

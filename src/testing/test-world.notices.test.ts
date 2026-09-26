@@ -50,9 +50,8 @@ const arrive = worldClockAction<Pack>('arrive')
   .needs(({ args }) => [den(Number(args.seat))])
   .noticeBox(({ args }) => Number(args.seat))
   .execute((args, { world }) => {
-    const seat = Number(args.seat);
-    const { entries } = world.takeNotices(seat);
-    (world.partition(den(seat)) as Den).log.push(...entries.map((entry) => entry.text ?? ''));
+    const log = (world.partition(den(Number(args.seat))) as Den).log;
+    for (const entry of world.takeNotices(Number(args.seat)).entries) log.push(entry.text ?? '');
   });
 
 const definition = {

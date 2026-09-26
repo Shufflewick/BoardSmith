@@ -466,6 +466,7 @@ export class TestWorld {
    * is never part of a seat's view: it is what `ctx.world.notify` left and a
    * `takeNotices` has not yet moved into the game's own state.
    */
+  // fallow-ignore-next-line unused-class-member
   noticeBox(seat: number): WorldNoticeBox {
     return this.#store.noticeBox(seat);
   }

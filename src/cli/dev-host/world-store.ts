@@ -73,7 +73,12 @@ import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
 
 import type { DeclaredSeatActivityStamp, StoredPartition } from '../../world/contract.js';
-import { EMPTY_NOTICE_BOX, isEmptyNoticeBox, type WorldNoticeBox } from '../../world/notices.js';
+import {
+  EMPTY_NOTICE_BOX,
+  isEmptyNoticeBox,
+  type SettledNoticeBox,
+  type WorldNoticeBox,
+} from '../../world/notices.js';
 import {
   assertPartitionWithinBudget,
   assertStorablePartitionName,
@@ -669,6 +674,15 @@ export function openWorldStore(path: string, budgets: WorldBudgets): LocalWorldS
     return Number(stored);
   }
 
+  /** THE NOTICE BOXES A DISPATCH CHANGED (ShufflewickPub #521), in the same
+   *  transaction as its effects. An emptied box is a deleted row. */
+  function writeNoticeBoxes(settled: readonly SettledNoticeBox[]): void {
+    for (const { seat, box } of settled) {
+      if (isEmptyNoticeBox(box)) stmt.deleteNoticeBox.run(seat);
+      else stmt.writeNoticeBox.run(seat, JSON.stringify(box));
+    }
+  }
+
   function writeLedger(extras: WorldCheckpointExtras): void {
     if (extras.receipt !== undefined) {
       const { player, orderId, at, message } = extras.receipt;
@@ -681,12 +695,7 @@ export function openWorldStore(path: string, budgets: WorldBudgets): LocalWorldS
     if (extras.activity !== undefined) {
       stmt.writeActivity.run(extras.activity.seat, extras.activity.at);
     }
-    // THE NOTICE BOXES THIS DISPATCH CHANGED (ShufflewickPub #521), in the same
-    // transaction as its effects. An emptied box is a deleted row.
-    for (const { seat, box } of extras.notices ?? []) {
-      if (isEmptyNoticeBox(box)) stmt.deleteNoticeBox.run(seat);
-      else stmt.writeNoticeBox.run(seat, JSON.stringify(box));
-    }
+    writeNoticeBoxes(extras.notices ?? []);
     // LAST, so a dispatch that both stamped a seat and freed it leaves the
     // chair empty rather than empty-with-a-watermark. Nothing reaches both
     // today -- the clock's road stamps no activity -- and an order between two
