@@ -17,7 +17,7 @@ import {
   type EnrichedActionMetadata,
   type PickChoicesResult,
 } from './useActionController.js';
-import { createMockSendAction, createTestMetadata } from './useActionController.helpers.js';
+import { createMockSendAction, createTestMetadata } from './useActionController.test-helper.js';
 import type { TutorialStepView } from '../../engine/tutorial/types.js';
 
 describe('useActionController picks', () => {

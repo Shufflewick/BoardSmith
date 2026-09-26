@@ -18,7 +18,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { ref } from 'vue';
 import { useActionController, type EnrichedActionMetadata } from './useActionController.js';
-import { createMockSendAction } from './useActionController.helpers.js';
+import { createMockSendAction } from './useActionController.test-helper.js';
 
 /** One action: repair up to three buildings, in order, repeats allowed. */
 function repairMetadata(): Record<string, EnrichedActionMetadata> {
