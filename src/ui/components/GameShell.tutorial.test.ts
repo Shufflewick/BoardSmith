@@ -36,7 +36,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { ref, computed, nextTick, defineComponent } from 'vue';
 import { mount } from '@vue/test-utils';
 import { useActionController } from '../composables/useActionController.js';
-import { createMockSendAction, createTestMetadata } from '../composables/useActionController.helpers.js';
+import { createMockSendAction, createTestMetadata } from '../composables/useActionController.test-helper.js';
 import type { TutorialStepView } from '../../engine/tutorial/types.js';
 
 // ── Minimal PlayerGameState shape used in the harness ────────────────────────

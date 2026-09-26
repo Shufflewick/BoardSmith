@@ -33,6 +33,7 @@ import {
   type WorldSerialized,
 } from '../world/index.js';
 import {
+  secondEndingRefused,
   storablePartitionRows,
   type WorldCheckpointExtras,
   type WorldSeatRecord,
@@ -68,6 +69,7 @@ export function createMemoryWorldStore(budgets: WorldBudgets = worldBudgets()): 
   let recordingSince: number | undefined;
   let receiptFloor = 0;
   let skewMs = 0;
+  let endedAt: number | undefined;
 
   const receiptKey = (player: string, orderId: string): string => `${player}\u0000${orderId}`;
 
@@ -176,6 +178,7 @@ export function createMemoryWorldStore(budgets: WorldBudgets = worldBudgets()): 
       checkpoint: WorldSerialized,
       extras: WorldCheckpointExtras = {},
     ): Promise<void> {
+      if (extras.endedAt !== undefined && endedAt !== undefined) throw secondEndingRefused(endedAt);
       const rows = rowsFor(checkpoint.partitions);
       writePartitions(rows);
       // THE STAMP LANDS WITH THE BYTES IT MINTED (#224).
@@ -191,6 +194,11 @@ export function createMemoryWorldStore(budgets: WorldBudgets = worldBudgets()): 
       // The sequence advances with the events that used it, never beside them.
       if (highestSeq >= 0) seq = Math.max(seq, highestSeq + 1);
       writeLedger(extras);
+      // THE ENDING EMPTIES THE QUEUE IN THE SAME WRITE (#395).
+      if (extras.endedAt !== undefined) {
+        events.clear();
+        endedAt = extras.endedAt;
+      }
     },
 
     isLaunched: () => launched,
@@ -249,6 +257,8 @@ export function createMemoryWorldStore(budgets: WorldBudgets = worldBudgets()): 
     receiptFloorAt: () => receiptFloor,
 
     clockSkewMs: () => skewMs,
+
+    endedAt: () => endedAt,
 
     advanceClock(byMs: number): number {
       if (!Number.isFinite(byMs) || byMs < 0) {

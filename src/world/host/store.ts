@@ -306,6 +306,16 @@ export interface WorldStore extends WorldPartitionStore, WorldPartitionWriter {
    */
   advanceClock(byMs: number): number;
 
+  /**
+   * WHEN THIS WORLD ENDED, or `undefined` while it is still running (#395).
+   *
+   * Durable, because an ending is final: a host rebuilt over this store after
+   * a restart or a rule reload must still refuse commands and run no events,
+   * exactly as the platform does from its own `worldEndedAt`. Written only by
+   * the checkpoint that carries the ending, see `WorldCheckpointExtras.endedAt`.
+   */
+  endedAt(): number | undefined;
+
   /** Close the database. Never deletes anything -- see `resetWorldStore`. */
   close(): void;
 }
@@ -378,6 +388,33 @@ export interface WorldCheckpointExtras {
    * arrived -- an inactivity sweep reaping somebody on their first day.
    */
   readonly vacate?: { readonly seat: number; readonly player: string };
+  /**
+   * THIS CHECKPOINT ENDS THE WORLD, at this instant (#395).
+   *
+   * Recorded in the same write as the effects of the command or event that
+   * called `complete()`, and that write also empties the whole schedule --
+   * including anything this same checkpoint arms -- because an ended world
+   * runs nothing else ever, and a queue left behind would keep re-arming a
+   * timer on a world that will never run it. That is the platform's
+   * `endSeason` then `clearEvents`, in one transaction here.
+   *
+   * A store that has already recorded an ending refuses a second one: a world
+   * has exactly one ending (ShufflewickPub #339), and a second would mean the
+   * host ran something on a world that had already ended.
+   */
+  readonly endedAt?: number;
+}
+
+/**
+ * The sentence a store refuses a second ending with. One wording for every
+ * store, so the SQLite store and the memory store cannot disagree about it.
+ */
+export function secondEndingRefused(endedAt: number): Error {
+  return new Error(
+    `This world has already ended (at ${new Date(endedAt).toISOString()}), and a world has ` +
+      "exactly one ending, so a second one cannot be recorded. Something ran on the world " +
+      "after it ended; an ended world must refuse commands and run no scheduled events.",
+  );
 }
 
 /** One partition, ready to be written: checked, and with its bytes already a

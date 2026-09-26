@@ -20,7 +20,7 @@ import {
   setupDragDropOrchestration,
 } from './useDragDropTargets.js';
 import { createBoardInteraction } from './useBoardInteraction.js';
-import { createMockSendAction } from './useActionController.helpers.js';
+import { createMockSendAction } from './useActionController.test-helper.js';
 
 /** Flush Vue's scheduler + the async watcher's awaited start()/fetch chain. */
 async function flushAll(): Promise<void> {

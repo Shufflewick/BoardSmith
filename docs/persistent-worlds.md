@@ -1991,6 +1991,16 @@ Calling it does not stop the action. `execute` runs to its end and its events an
 dirty set are reported normally; what ends is the season, once the dispatch's
 changes are durable.
 
+An ended world runs nothing else, in `boardsmith dev` and `TestWorld` exactly as
+on the platform. Every later command is refused with `world-ended` ("This
+world's season has ended, so it no longer answers commands."), the whole
+schedule is cleared in the same write as the ending, including anything the
+ending action itself scheduled, and no scheduled event or presence hook runs
+again. If an event ends the world partway through a drain, nothing queued behind
+it runs. Views are still answered. The ending is saved in the world store, so a
+restarted `boardsmith dev` still shows the world as complete; `--reset` is the
+way back to an open world.
+
 ### `world.migration`: how the old bytes become the new ones
 
 A veto is the right answer for a change nobody can reconcile. It was the ONLY

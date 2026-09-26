@@ -44,9 +44,10 @@
  *
  * ## WHY A DIRECTORY, AND NOT UNDER `.boardsmith/`
  *
- * `boardsmith dev` deletes `.boardsmith/` on shutdown -- it is the rules-bundle
- * scratch directory -- so a store kept there would be erased by the one event
- * it has to survive. It goes beside `boardsmith.json` instead, exactly as the
+ * `.boardsmith/` is where the CLI's commands build their rules bundles, each in
+ * a directory of its own that the command deletes when it ends. A store kept
+ * beside those is one path mistake away from being erased by the one event it
+ * has to survive, so it goes beside `boardsmith.json` instead, exactly as the
  * table dev store does.
  *
  * A DIRECTORY rather than the table store's single dotfile, because SQLite owns
@@ -77,6 +78,7 @@ import {
   assertStorablePartitionName,
 } from '../../world/partition-store.js';
 import {
+  secondEndingRefused,
   storablePartitionRows,
   type WorldCheckpointExtras,
   type WorldSeatRecord,
@@ -242,6 +244,7 @@ export function openWorldStore(path: string, budgets: WorldBudgets): LocalWorldS
         'every_ms = excluded.every_ms, attempts = excluded.attempts',
     ),
     deleteEvent: db.prepare('DELETE FROM scheduled WHERE id = ?'),
+    deleteAllEvents: db.prepare('DELETE FROM scheduled'),
     listSeats: db.prepare('SELECT player, seat FROM seats ORDER BY seat'),
     // WHO HOLDS ONE CHAIR, AND SINCE WHEN (ShufflewickPub #423). A point read
     // by seat, because that is the question a declared activity read asks: five
@@ -380,6 +383,8 @@ export function openWorldStore(path: string, budgets: WorldBudgets): LocalWorldS
         if (!known) throw unknownPartition(name);
         return { name, parentId: known.parent_id, json };
       });
+      const endedAt = readEndedAt();
+      if (extras.endedAt !== undefined && endedAt !== undefined) throw secondEndingRefused(endedAt);
       const schedule = extras.schedule ?? [];
       const settle = extras.settle ?? [];
       const highestSeq = schedule.reduce((high, event) => Math.max(high, event.seq), -1);
@@ -402,6 +407,12 @@ export function openWorldStore(path: string, budgets: WorldBudgets): LocalWorldS
           stmt.writeMeta.run(SEQ_KEY, String(Math.max(readSeq(), highestSeq + 1)));
         }
         writeLedger(extras);
+        // THE ENDING EMPTIES THE QUEUE IN THE SAME WRITE (#395), what this
+        // checkpoint armed included: an ended world runs nothing else ever.
+        if (extras.endedAt !== undefined) {
+          stmt.deleteAllEvents.run();
+          stmt.writeMeta.run(ENDED_AT_KEY, String(extras.endedAt));
+        }
       });
     },
 
@@ -523,6 +534,10 @@ export function openWorldStore(path: string, budgets: WorldBudgets): LocalWorldS
 
     clockSkewMs(): number {
       return readClockSkew();
+    },
+
+    endedAt(): number | undefined {
+      return readEndedAt();
     },
 
     advanceClock(byMs: number): number {
@@ -718,6 +733,11 @@ export function openWorldStore(path: string, budgets: WorldBudgets): LocalWorldS
     return stored === undefined ? 0 : Number(stored);
   }
 
+  function readEndedAt(): number | undefined {
+    const stored = meta(ENDED_AT_KEY);
+    return stored === undefined ? undefined : Number(stored);
+  }
+
   function readSeq(): number {
     const stored = meta(SEQ_KEY);
     return stored === undefined ? 0 : Number(stored);
@@ -750,6 +770,8 @@ const SEQ_KEY = 'seq';
 const RECEIPT_FLOOR_KEY = 'receiptFloor';
 const CLOCK_SKEW_KEY = 'clockSkew';
 const STATE_VERSION_KEY = 'stateVersion';
+/** WHEN THIS WORLD ENDED (#395). Absent while it is running; see `WorldStore.endedAt`. */
+const ENDED_AT_KEY = 'endedAt';
 /**
  * THE WORLD'S DURABLE ID ALLOCATION (ShufflewickPub #377).
  *

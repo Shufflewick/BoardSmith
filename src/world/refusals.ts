@@ -150,6 +150,15 @@ export const WORLD_REFUSALS = {
       "arrives after the catch-up finishes runs exactly once. The platform re-arms before " +
       "answering, so the catch-up is already continuing when the player reads this",
   },
+  "world-ended": {
+    owner: "caller",
+    why:
+      "#395, ShufflewickPub #339: this world has called `complete()`, so its season is over and " +
+      "it runs no command ever again. REFUSED rather than ignored, because a player whose move " +
+      "vanished silently cannot tell a finished season from a broken world; and never run, " +
+      "because running it could end the season a second time. CALLER-owned: the world is " +
+      "finished, not in trouble, and it still answers views",
+  },
   "rate-limited": {
     owner: "caller",
     why:
