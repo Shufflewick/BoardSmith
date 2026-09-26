@@ -197,9 +197,17 @@ describe('useTableActionWiring drives the board from the seat state alone (#378)
 
 describe('GameShell wires its actions through the same function (#378)', () => {
   const shell = readFileSync(join(import.meta.dirname, '../components/GameShell.vue'), 'utf-8');
+  const seat = readFileSync(join(import.meta.dirname, 'useTableSeat.ts'), 'utf-8');
 
-  it('calls useTableActionWiring', () => {
-    expect(shell).toMatch(/\buseTableActionWiring\(\{/);
+  it('calls useTableActionWiring, through useTableSeat (#406)', () => {
+    expect(shell).toMatch(/\buseTableSeat\(\{/);
+    expect(seat).toMatch(/\buseTableActionWiring\(\{/);
+  });
+
+  it('provides its board nothing by hand, so renderAsSeat, which also calls useTableSeat, is given it too (#406)', () => {
+    expect(shell).toMatch(/\bprovideTableSeat\(tableSeat\)/);
+    expect(shell).not.toMatch(/\bprovide\(/);
+    expect(shell).not.toMatch(/\bprovide(BoardInteraction|Announcer|AnimationEvents|GameContext)\(/);
   });
 
   it('does not call the controller or the bridge itself, so a test wired with the helper cannot drift from it', () => {
