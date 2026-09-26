@@ -3072,3 +3072,42 @@ describe('#387: a departure whose grace runs out is handed to the host', () => {
     expect(told).toEqual(['arrive:1']);
   });
 });
+
+/**
+ * #395: THE DEV HOST'S ANSWER TO AN ENDED WORLD, through the socket.
+ *
+ * `world-ended.test.ts` holds the world itself to the platform's behaviour;
+ * this is what a page sees of it: the command refused by code with the
+ * platform's sentence, and the completion notice still there after a restart.
+ */
+describe('an ended world, as a page sees it (#395)', () => {
+  const finish = worldAction<Village>('finish')
+    .prompt('End the season')
+    .needs(() => [HEARTH])
+    .execute((_args, ctx) => {
+      ctx.world.complete();
+    });
+  const seasonal = () => bundle({ world: worldBlock({ actions: [...VILLAGE_ACTIONS, finish] }) });
+
+  async function send(opened: Awaited<ReturnType<typeof attached>>, action: string): Promise<Record<string, unknown> | undefined> {
+    await opened.host.handleMessage('c1', { type: 'action', order: nextOrder(), requestId: `r-${action}`, action, args: {} });
+    return last(opened.sent, 'c1', 'world_response');
+  }
+
+  it('refuses a command after the ending, and still does after a restart', async () => {
+    const first = await attached({ dir, definition: seasonal() });
+    expect(await send(first, 'finish')).toMatchObject({ ok: true });
+    expect(await send(first, 'chop')).toMatchObject({
+      ok: false,
+      code: 'world-ended',
+      message: "This world's season has ended, so it no longer answers commands.",
+    });
+    await first.host.close();
+
+    const second = await attached({ dir, definition: seasonal() });
+    expect(last(second.sent, 'c1', 'world_state')?.notice).toMatch(/reported that it is complete/);
+    expect(await send(second, 'chop')).toMatchObject({ ok: false, code: 'world-ended' });
+    expect(JSON.stringify(last(second.sent, 'c1', 'world_state')?.view)).toContain('"logs":0');
+    await second.host.close();
+  });
+});
