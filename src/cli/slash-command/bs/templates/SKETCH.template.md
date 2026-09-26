@@ -88,7 +88,15 @@ Cutover chunk (if autoui-with-cutover): <!-- slug, or n/a -->
      naming, comma-separated, the chunks whose work it builds on (their state, verbs, or rules), or
      `none`. This is the sketch's dependency graph. `boardsmith parallel-check` reads it to decide
      whether chunks may be built at the same time; an entry without the line is treated as depending
-     on every chunk before it, so it is only ever built in order. -->
+     on every chunk before it, so it is only ever built in order.
+
+     Citations grammar (#415): name the sections of a slice the chunk implements, comma-separated:
+     `rulebook/<file>.md §"<section>"` (repeat `§"<section>"` after one path for several), where a
+     section is a heading's text or a citation prefix without its page (`p.2, Designer Decisions >
+     Economy:` is `§"Designer Decisions > Economy"`), or `rulebook/<file>.md:N-M` for lines. A bare
+     `rulebook/<file>.md`, with or without a note after it, cites the whole page. `boardsmith
+     parallel-check` builds two chunks together only when they cite no section in common, so a
+     whole-page citation of a page other chunks also cite keeps this chunk from running beside them. -->
 
 ### <!-- slug -->
 - What it builds: <!-- one-line description -->

@@ -37,6 +37,20 @@ describe('citedEvidencePaths — what counts as a cited script or capture', () =
     expect(paths('see `src/rules/food.ts:42`')).toEqual(['src/rules/food.ts']);
   });
 
+  it('finds a path cited by line or line range, and records the lines it cites (#414)', () => {
+    const text = [
+      'Source: ../src/rules/game.ts:120-135',
+      '- measured with `.boardsmith/scratch/probe.mjs:1-5`.',
+      'see src/rules/food.ts:42, and src/a.ts:3:7.',
+    ].join('\n');
+    expect(citedEvidencePaths(text)).toEqual([
+      { path: '../src/rules/game.ts', line: 1, lines: [120, 135] },
+      { path: '.boardsmith/scratch/probe.mjs', line: 2, lines: [1, 5] },
+      { path: 'src/rules/food.ts', line: 3, lines: [42, 42] },
+      { path: 'src/a.ts', line: 3, lines: [3, 3] },
+    ]);
+  });
+
   it('finds an absolute path, which can never be in the game repository', () => {
     expect(paths('ran /tmp/harness.mjs by hand')).toEqual(['/tmp/harness.mjs']);
   });
