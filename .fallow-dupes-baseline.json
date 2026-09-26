@@ -232,7 +232,7 @@
     "src/cli/dev-host/bridge.test.ts:134-147|src/cli/dev-host/bridge.test.ts:169-188",
     "src/cli/dev-host/bridge.test.ts:371-376|src/cli/dev-host/bridge.test.ts:599-604",
     "src/cli/dev-host/bridge.test.ts:470-485|src/cli/dev-host/bridge.test.ts:514-529",
-    "src/cli/dev-host/dev-host.integration.test.ts:45-49|src/cli/dev-host/multiplayer-host.palette.test.ts:13-17|src/cli/dev-host/multiplayer-host.test.ts:15-19|src/session/seat-activity-canonical.test.ts:112-116|src/session/stateless-ops-debug.test.ts:12-16",
+    "src/cli/dev-host/dev-host.integration.test.ts:54-58|src/cli/dev-host/multiplayer-host.palette.test.ts:13-17|src/cli/dev-host/multiplayer-host.test.ts:15-19|src/session/seat-activity-canonical.test.ts:112-116|src/session/stateless-ops-debug.test.ts:12-16",
     "src/cli/dev-host/multiplayer-host.gameoptions.test.ts:17-33|src/cli/dev-host/multiplayer-host.palette.test.ts:13-29",
     "src/cli/dev-host/multiplayer-host.gameoptions.test.ts:19-33|src/cli/dev-host/multiplayer-host.world.test.ts:20-34",
     "src/cli/dev-host/multiplayer-host.gameoptions.test.ts:88-93|src/cli/dev-host/multiplayer-host.palette.test.ts:49-54|src/cli/dev-host/multiplayer-host.palette.test.ts:74-79",

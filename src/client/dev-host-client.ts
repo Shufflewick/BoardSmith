@@ -63,7 +63,12 @@ export interface DevHostClientOptions {
 export interface DevHostClient {
   /** Resolves once the underlying socket has opened. Await before sending anything. */
   readonly opened: Promise<void>;
-  /** Identify this connection to the host — the FIRST client to do so auto-seats and starts the game. */
+  /**
+   * Identify this connection to the host — the FIRST client to do so auto-seats
+   * and starts the game. Call it before anything else: the host answers nothing
+   * a connection sends before `hello`, so every other method throws (or
+   * rejects) until it has been called (#422).
+   */
   hello(): void;
   /** Take over an open/bot seat (works mid-game). */
   join(seat: number, opts?: { name?: string; color?: string }): void;
@@ -75,7 +80,7 @@ export interface DevHostClient {
   follow(enabled: boolean): void;
   /** Fetch this connection's own seat view (DRIVE-01). Rejects on host-reported error or timeout. */
   getState(): Promise<DevHostStateReply>;
-  /** Fetch the lobby payload, in any phase (DRIVE-01). Rejects on host-reported error or timeout. */
+  /** Fetch the lobby payload (DRIVE-01), once `hello()` has been called. Rejects on host-reported error or timeout. */
   getLobby(): Promise<DevHostLobbyReply>;
   /**
    * Perform a server op (e.g. `action`) and resolve with its result payload.
@@ -191,11 +196,21 @@ export function createDevHostClient(url: string, opts: DevHostClientOptions = {}
     entry.resolve(msg);
   });
 
+  // The host drops anything a connection sends before `hello` (#422), so a
+  // request sent earlier could only ever time out. Refused here instead.
+  let saidHello = false;
+
   function send(message: Record<string, unknown>): void {
     if (socket.readyState !== wsCtor.OPEN) {
       throw new Error(
         `createDevHostClient: cannot send '${String(message.type)}' — socket is not open ` +
           `(readyState=${socket.readyState}). Await \`client.opened\` before sending.`,
+      );
+    }
+    if (message.type !== 'hello' && !saidHello) {
+      throw new Error(
+        `createDevHostClient: call \`client.hello()\` before '${String(message.type)}' — ` +
+          `the dev host answers nothing a connection sends before it says hello.`,
       );
     }
     socket.send(JSON.stringify(message));
@@ -246,6 +261,7 @@ export function createDevHostClient(url: string, opts: DevHostClientOptions = {}
     opened,
     hello() {
       send({ type: 'hello' });
+      saidHello = true;
     },
     join(seat, joinOpts = {}) {
       send({ type: 'join', seat, name: joinOpts.name, color: joinOpts.color });

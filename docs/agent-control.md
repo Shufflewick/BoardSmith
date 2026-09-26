@@ -406,7 +406,7 @@ browser — use the dev-only ops below plus `createDevHostClient`.
 | Op | Purpose |
 |----|---------|
 | `getState` | Perspective-aware state for the caller's own connected seat (resolved server-side from the tracked connection — there is no client-supplied seat field, so a client can never request another seat's view). |
-| `getLobby` | Lobby-phase info (connected/open seats) — works even before any seat has said `hello`. |
+| `getLobby` | Lobby info (phase, connected/open seats), in either phase. Like every op here, it is answered only after the connection has said `hello`. |
 | `debugToggle` | Relay-only: toggles the debug panel on every connected client. |
 | `uiSwitch` | Relay-only: switches every connected client's UI mode (`{ name }`). |
 | `debug:logs` | Returns the dev-host's captured server-side log ring buffer (see [Structured Errors](#structured-errors-err) below). |
@@ -422,17 +422,28 @@ correlate. `getState`/`getLobby`/`debug:logs`/`debug:flow-state` echo a
 ```typescript
 import { createDevHostClient } from 'boardsmith/client';
 
-const client = createDevHostClient('ws://localhost:5173/ws');
+// `boardsmith dev` serves its table socket at /__boardsmith/ws on its own port.
+const client = createDevHostClient('ws://localhost:5173/__boardsmith/ws');
 await client.opened; // resolves once the socket is open; sending before this throws (fail-loud)
 
-client.hello({ /* ... */ });
-const lobby = await client.getLobby();       // works even in lobby phase, before any hello
-await client.join(/* seat info */);
+client.hello();                              // first: the host answers nothing sent before hello
+const lobby = await client.getLobby();
+client.join(2);                              // take over an open or bot seat
 const state = await client.getState();       // own-seat-only — no seat field to spoof
-await client.serverRequest({ type: 'action', /* ... */ }); // submit an action
+await client.serverRequest('action', {
+  actionName: 'pass',
+  args: {},
+  boundaryKey, // flowBoundaryKey(view.flowState) of the state you acted on; see serverRequest's doc
+});
 client.debugToggle();
 client.uiSwitch('auto');
 ```
+
+The host drops anything a connection sends before `hello`, and serves nothing
+to it: identity comes first, as it does on the platform, where a socket is
+identified before its first frame. So `createDevHostClient` refuses every call
+made before `hello()` at once, with an error saying to call it, rather than
+sending a request whose answer would never come.
 
 `getState`/`getLobby`/`serverRequest` are promise-correlated by `requestId`
 with a fail-loud not-open guard and a timeout-reject fallback — there is no
