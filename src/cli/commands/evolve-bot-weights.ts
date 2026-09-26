@@ -3,7 +3,7 @@ import { join } from 'node:path';
 import { cpus } from 'node:os';
 import chalk from 'chalk';
 import ora from 'ora';
-import type { TrainingProgress } from '../../bot-trainer/index.js';
+import type { LearnedObjective, TrainingProgress } from '../../bot-trainer/index.js';
 import { requireGameProject, resolveRulesDir, requireRulesIndex } from '../lib/game-project.js';
 import { commandBuildDir } from '../lib/project-paths.js';
 import { getProjectContext, loadGameDefinition } from './game-runtime.js';
@@ -45,11 +45,7 @@ export async function evolveBotWeightsCommand(options: EvolveBotWeightsOptions):
 
   console.log(chalk.cyan(`\nOptimizing bot weights for ${gameName}...\n`));
 
-  // Parse options
-  const workerCount = options.workers ? parseInt(options.workers, 10) : Math.max(1, cpus().length - 1);
-  const generations = options.generations ? parseInt(options.generations, 10) : 5;
-  const population = options.population ? parseInt(options.population, 10) : 20;
-  const mctsIterations = options.mcts ? parseInt(options.mcts, 10) : 100;
+  const { workerCount, generations, population, mctsIterations } = evolutionSettings(options);
 
   console.log(chalk.dim(`  bot file: ${botPath}`));
   console.log(chalk.dim(`  Generations: ${generations}`));
@@ -102,15 +98,7 @@ export async function evolveBotWeightsCommand(options: EvolveBotWeightsOptions):
     const existingObjectives = parsedToLearned(existingBot.objectives);
     spinner.succeed(`Found ${existingObjectives.length} objectives to optimize`);
 
-    if (options.verbose) {
-      console.log(chalk.dim('\nExisting objectives:'));
-      for (const obj of existingObjectives.slice(0, 5)) {
-        console.log(chalk.dim(`  ${obj.featureId}: weight=${obj.weight.toFixed(1)}`));
-      }
-      if (existingObjectives.length > 5) {
-        console.log(chalk.dim(`  ... and ${existingObjectives.length - 5} more`));
-      }
-    }
+    if (options.verbose) printExistingObjectives(existingObjectives);
 
     // Run evolution
     spinner.start(`Evolving weights (${generations} generations x ${population} population)...`);
@@ -132,19 +120,7 @@ export async function evolveBotWeightsCommand(options: EvolveBotWeightsOptions):
     const duration = ((Date.now() - startTime) / 1000).toFixed(1);
     spinner.succeed(`Evolution complete in ${duration}s`);
 
-    // Report results
-    console.log(chalk.green('\n=== Evolution Results ===\n'));
-    console.log(`  Initial win rate: ${(result.initialFitness * 100).toFixed(1)}%`);
-    console.log(`  Final win rate: ${(result.bestFitness * 100).toFixed(1)}%`);
-    console.log(`  Improvement: ${((result.bestFitness - result.initialFitness) * 100).toFixed(1)}%`);
-
-    if (result.objectives.length > 0) {
-      console.log(chalk.cyan('\nOptimized weights:'));
-      for (const obj of result.objectives.slice(0, 5)) {
-        const sign = obj.weight > 0 ? '+' : '';
-        console.log(chalk.dim(`  ${obj.featureId}: ${sign}${obj.weight.toFixed(1)}`));
-      }
-    }
+    printEvolutionResult(result);
 
     // Update the bot.ts file with new weights
     spinner.start('Updating bot.ts with optimized weights...');
@@ -163,16 +139,7 @@ export async function evolveBotWeightsCommand(options: EvolveBotWeightsOptions):
     writeFileSync(botPath, updatedCode, 'utf-8');
     spinner.succeed(`Updated ${botPath}`);
 
-    // Summary
-    console.log(chalk.green('\n=== Done ===\n'));
-    console.log(chalk.dim('The bot.ts file has been updated with optimized weights.'));
-    console.log(chalk.dim('All code structure (checker functions, imports) is preserved.\n'));
-
-    console.log(chalk.cyan('Next steps:'));
-    console.log(chalk.dim('  1. Review the weight changes in bot.ts'));
-    console.log(chalk.dim('  2. Test with: boardsmith dev --bot 1'));
-    console.log(chalk.dim('  3. Run again with more generations for further optimization\n'));
-
+    printNextSteps();
   } catch (error) {
     spinner.fail('Weight evolution failed');
     // THROWN, NOT PRINTED (#240): `cli.ts`'s handler renders one clean line.
@@ -186,4 +153,55 @@ export async function evolveBotWeightsCommand(options: EvolveBotWeightsOptions):
   } finally {
     rmSync(tempDir, { recursive: true, force: true });
   }
+}
+
+/** The run's settings, from the flags or their defaults. */
+function evolutionSettings(options: EvolveBotWeightsOptions) {
+  return {
+    workerCount: options.workers ? parseInt(options.workers, 10) : Math.max(1, cpus().length - 1),
+    generations: options.generations ? parseInt(options.generations, 10) : 5,
+    population: options.population ? parseInt(options.population, 10) : 20,
+    mctsIterations: options.mcts ? parseInt(options.mcts, 10) : 100,
+  };
+}
+
+/** `--verbose`: the first few objectives the evolution starts from. */
+function printExistingObjectives(objectives: readonly LearnedObjective[]): void {
+  console.log(chalk.dim('\nExisting objectives:'));
+  for (const obj of objectives.slice(0, 5)) {
+    console.log(chalk.dim(`  ${obj.featureId}: weight=${obj.weight.toFixed(1)}`));
+  }
+  if (objectives.length > 5) {
+    console.log(chalk.dim(`  ... and ${objectives.length - 5} more`));
+  }
+}
+
+function printEvolutionResult(result: {
+  initialFitness: number;
+  bestFitness: number;
+  objectives: readonly LearnedObjective[];
+}): void {
+  console.log(chalk.green('\n=== Evolution Results ===\n'));
+  console.log(`  Initial win rate: ${(result.initialFitness * 100).toFixed(1)}%`);
+  console.log(`  Final win rate: ${(result.bestFitness * 100).toFixed(1)}%`);
+  console.log(`  Improvement: ${((result.bestFitness - result.initialFitness) * 100).toFixed(1)}%`);
+
+  if (result.objectives.length > 0) {
+    console.log(chalk.cyan('\nOptimized weights:'));
+    for (const obj of result.objectives.slice(0, 5)) {
+      const sign = obj.weight > 0 ? '+' : '';
+      console.log(chalk.dim(`  ${obj.featureId}: ${sign}${obj.weight.toFixed(1)}`));
+    }
+  }
+}
+
+function printNextSteps(): void {
+  console.log(chalk.green('\n=== Done ===\n'));
+  console.log(chalk.dim('The bot.ts file has been updated with optimized weights.'));
+  console.log(chalk.dim('All code structure (checker functions, imports) is preserved.\n'));
+
+  console.log(chalk.cyan('Next steps:'));
+  console.log(chalk.dim('  1. Review the weight changes in bot.ts'));
+  console.log(chalk.dim('  2. Test with: boardsmith dev --bot 1'));
+  console.log(chalk.dim('  3. Run again with more generations for further optimization\n'));
 }

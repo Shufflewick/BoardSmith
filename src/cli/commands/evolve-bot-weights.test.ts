@@ -66,6 +66,17 @@ const BOT = [
   '',
 ].join('\n');
 
+/** A game project whose rules index is `rules` and whose rules directory holds a bot; the cwd moves into it. */
+function projectWith(rules: string): string {
+  const dir = tempTree('boardsmith-evolve-399-');
+  writeFileSync(join(dir, 'boardsmith.json'), JSON.stringify({ name: 'fixture', backend: 'table' }));
+  mkdirSync(join(dir, 'src', 'rules'), { recursive: true });
+  writeFileSync(join(dir, 'src', 'rules', 'index.ts'), rules);
+  writeFileSync(join(dir, 'src', 'rules', 'bot.ts'), BOT);
+  process.chdir(dir);
+  return dir;
+}
+
 describe('evolve-bot-weights bundles the rules into its own build directory (#399)', () => {
   let originalCwd: string;
 
@@ -79,22 +90,16 @@ describe('evolve-bot-weights bundles the rules into its own build directory (#39
   });
 
   it('evolves against a fresh bundle of the source rules and removes only that bundle', async () => {
-    const dir = tempTree('boardsmith-evolve-399-');
-    writeFileSync(join(dir, 'boardsmith.json'), JSON.stringify({ name: 'fixture', backend: 'table' }));
-    mkdirSync(join(dir, 'src', 'rules'), { recursive: true });
-    writeFileSync(
-      join(dir, 'src', 'rules', 'index.ts'),
+    const dir = projectWith(
       [
         `import { DeadEndGame } from ${JSON.stringify(fixture)};`,
         `export const gameDefinition = { gameClass: DeadEndGame, gameType: 'dead-end', displayName: 'Fixture',`,
         `  minPlayers: 3, maxPlayers: 4 };`,
       ].join('\n'),
     );
-    writeFileSync(join(dir, 'src', 'rules', 'bot.ts'), BOT);
     const scratchFile = join(scratchDir(dir), 'keep.txt');
     mkdirSync(scratchDir(dir), { recursive: true });
     writeFileSync(scratchFile, 'keep me\n');
-    process.chdir(dir);
 
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
     try {
@@ -115,12 +120,7 @@ describe('evolve-bot-weights bundles the rules into its own build directory (#39
   });
 
   it('removes its build directory when the rules fail to load, and says so readably', async () => {
-    const dir = tempTree('boardsmith-evolve-399-');
-    writeFileSync(join(dir, 'boardsmith.json'), JSON.stringify({ name: 'fixture', backend: 'table' }));
-    mkdirSync(join(dir, 'src', 'rules'), { recursive: true });
-    writeFileSync(join(dir, 'src', 'rules', 'index.ts'), 'export const gameDefinition = ;\n');
-    writeFileSync(join(dir, 'src', 'rules', 'bot.ts'), BOT);
-    process.chdir(dir);
+    const dir = projectWith('export const gameDefinition = ;\n');
 
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
     try {
