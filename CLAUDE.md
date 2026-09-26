@@ -73,6 +73,7 @@ This library is developed alongside two sibling repos. When a BoardSmith change 
 - **Prove Before Fix**: When fixing a bug, never guess at the cause. Always prove the root cause through investigation before attempting a fix.
 - All UI interactions must work in a Custom UI and Action Panel in parity with shared state through useBoardInteraction
 - Don't leave a dev server running that you start.
+- **Stop only the processes you started, by their pid. Never by name** (`pkill -f vitest`, `killall node`): every agent on this machine runs vitest, and a kill by name ends all of their runs and any merge in progress. That is what cut `boardsmith test` short in #429.
 
 # Testing
 - All development is done as test-driven development, meaning you'll write a test first, make sure it is failing. Then you will fix the code or add the code and you are not done until all of the tests are green.
@@ -86,7 +87,7 @@ This library is developed alongside two sibling repos. When a BoardSmith change 
 # Typechecking and Merging
 - **`boardsmith typecheck` is the one type check.** It runs `vue-tsc` over the whole package (every `.ts` and `.vue` file under `src/` and `docs/`), and `main` is at zero errors. `docs/typecheck.md` says exactly what it covers. Plain `tsc` cannot read `.vue` files, so it is not a substitute.
 - **`boardsmith test` type-checks first** and runs no test if that fails. A bare `npx vitest run` does not type-check.
-- **A branch reaches `main` only through `bash scripts/merge-branch.sh <branch> "<summary (#issue)>"`**, run from the main checkout on a clean `main`. It merges without committing, runs `boardsmith test` on the merged tree, and aborts the merge if that fails (or on Ctrl-C). Merge `main` into your branch first so conflicts are resolved there.
+- **A branch reaches `main` only through `bash scripts/merge-branch.sh <branch> "<summary (#issue)>"`**, run from the main checkout on a clean `main`. It merges without committing, runs `boardsmith test` on the merged tree, and aborts the merge if that fails (or on Ctrl-C). Merge `main` into your branch first so conflicts are resolved there. Its refusal ends with `boardsmith test`'s verdict: the failing files, or, when vitest was stopped partway, the signal, the files left unfinished and the path of the full log (#429).
 - **Merges are serialised (#333).** `merge-branch.sh` holds a lock for its whole merge-then-test span, so a second merge started while one is running waits for it (up to 30 minutes, saying which branch it is waiting on), then tests its own merged result. Let it wait: do not hand-merge around it, and do not tidy up a main that is dirty because another merge is in flight. The lock is released by the kernel when the script exits, however it exits, so it cannot go stale. If a run is told the lock's recorded holder is no longer running, it prints the `lsof` command that finds the process still holding it.
 
 # Code Quality Audits

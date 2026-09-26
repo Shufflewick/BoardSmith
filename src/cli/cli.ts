@@ -135,6 +135,7 @@ export function createProgram(): Command {
     .description('Run this workspace\'s tests (the game\'s, or BoardSmith\'s own after a type check)')
     .option('-w, --watch', 'Watch mode - re-run tests on changes')
     .option('--coverage', 'Generate coverage report')
+    .option('--verdict-file <path>', 'When the run does not pass, also write why to <path> (merge-branch.sh repeats it)')
     .action(testCommand);
 
   program

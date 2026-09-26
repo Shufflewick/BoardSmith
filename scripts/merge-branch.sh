@@ -7,6 +7,7 @@
 # committing, runs `boardsmith test` on the merged tree (which type-checks the
 # whole package first), and commits the merge only if that passes. On any
 # failure, and on Ctrl-C, it aborts the merge, so main is left exactly as it was.
+# A refusal ends with boardsmith test's verdict, the reason it did not pass (#429).
 #
 # Merges are serialised (#333). A second run started while one is in flight
 # waits for it (up to BOARDSMITH_MERGE_LOCK_WAIT_SECONDS, default 1800, checking
@@ -121,12 +122,19 @@ acquire_lock() {
 # the exit trap aborts exactly the merge this run started and nothing else.
 merging=0
 
+# Where `boardsmith test --verdict-file` writes why a run did not pass (#429),
+# so the refusal can repeat it as the last thing printed. Removed on exit.
+verdict_file=""
+
 # Runs on every exit once the lock is taken: undoes an uncommitted merge, then
 # drops the lock. In that order, so the next merge never starts on a tree this
 # one is still unwinding.
 cleanup() {
   if [ "$merging" -eq 1 ]; then
     git merge --abort || true
+  fi
+  if [ -n "$verdict_file" ]; then
+    rm -f "$verdict_file"
   fi
   if [ -n "$lock_file" ]; then
     rm -f "$lock_file.holder"
@@ -170,8 +178,21 @@ main() {
     fail "Refused to merge '$branch': it conflicts with main. Merge main into '$branch', resolve the conflicts there, and run the merge again."
 
   # fd 9 closed: a process the test run leaves behind must not hold the lock.
-  node bin/boardsmith.js test 9>&- ||
-    fail "Refused to merge '$branch': boardsmith test failed on the merged tree (it type-checks first). Fix the errors above on '$branch', merge main into it, and run the merge again."
+  # The verdict is repeated in the refusal (#429): a run that stops partway
+  # scrolls its reason out of sight, and "failed" alone says nothing.
+  verdict_file=$(mktemp "${TMPDIR:-/tmp}/merge-branch-verdict.XXXXXX")
+  local status=0
+  node bin/boardsmith.js test --verdict-file "$verdict_file" 9>&- || status=$?
+  if [ "$status" -ne 0 ]; then
+    local verdict
+    verdict=$(cat "$verdict_file")
+    if [ -z "$verdict" ]; then
+      verdict="boardsmith test ended with exit status $status and gave no verdict, so it stopped before it could say why. Its output above is all there is."
+    fi
+    fail "Refused to merge '$branch': boardsmith test failed on the merged tree (it type-checks first).
+$verdict
+Fix that on '$branch', merge main into it, and run the merge again."
+  fi
 
   git commit --quiet -m "Merge branch '$branch': $summary"
   merging=0
