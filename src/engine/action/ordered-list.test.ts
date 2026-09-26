@@ -16,6 +16,7 @@
  * refused outright.
  */
 import { describe, it, expect, beforeEach } from 'vitest';
+import { withDevLog } from './dev-log.test-helper.js';
 import { Game, Player, Action, ActionExecutor } from '../index.js';
 import type { Selection } from '../index.js';
 import { buildPickMetadata } from '../element/action-metadata.js';
@@ -93,10 +94,14 @@ describe('orderedList — an ordered, repeatable list of choices (#249)', () => 
   });
 
   it('checks EVERY occurrence against the current authoritative choice set', () => {
-    const result = check(repairs().selections[0], ['university', 'observatory', 'university']);
+    // The player reads that it is gone (#393); which entry was caught is in the dev log.
+    const { result, log } = withDevLog(() =>
+      check(repairs().selections[0], ['university', 'observatory', 'university']),
+    );
 
     expect(result.valid).toBe(false);
-    expect(result.errors.join(' ')).toContain('observatory');
+    expect(result.errors.join(' ')).toContain('That choice is no longer available');
+    expect(log).toContain('"observatory"');
   });
 
   it('refuses a repeated occurrence of a DISABLED choice, every time it appears', () => {

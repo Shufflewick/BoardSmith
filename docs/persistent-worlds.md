@@ -767,6 +767,11 @@ afterwards. An action has a channel for this and a world uses it:
 - **`disabled: (candidate, ctx) => string | false`** on a selection greys one
   candidate. A neighbour whose land is already at full growth is shown, greyed,
   with the reason, rather than accepted and refused afterwards.
+- **`unavailable: (value, ctx) => string`** on a selection is what a player is
+  told when the value they submitted is no longer listed: another seat took the
+  offer, a second tab acted first. In a world that is routine. Without it the
+  player reads a plain "that choice is no longer available, please choose again",
+  never the engine's list of raw values (#393).
 - **`.condition()`** hides the action entirely, for a verb that is not merely
   unavailable but irrelevant here. Use it sparingly: a hidden verb teaches a
   player nothing, and a false condition also stops the offer walking that

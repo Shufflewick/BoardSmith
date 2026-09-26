@@ -391,6 +391,13 @@ export interface WorldChoiceOptions<G extends Game, T, P = undefined> {
   /** Work every `disabled` call of one evaluation shares; see the engine's `chooseFrom` (#334). */
   prepare?: (context: WorldActionContext<G>) => P;
   disabled?: (choice: T, context: WorldActionContext<G>, prepared: P) => string | false;
+  /**
+   * The player-facing refusal for a submitted value that is no longer listed:
+   * another seat took the offer, a second tab acted first (#393). `value` is
+   * what was submitted; see the engine's `unavailable`. Without it the player
+   * reads a plain default.
+   */
+  unavailable?: (value: unknown, context: WorldActionContext<G>) => string;
 }
 
 /**
@@ -409,6 +416,13 @@ export interface WorldElementOptions<G extends Game, T extends GameElement, P = 
   /** Work every `disabled` call of one evaluation shares; see the engine's `chooseFrom` (#334). */
   prepare?: (context: WorldActionContext<G>) => P;
   disabled?: (element: T, context: WorldActionContext<G>, prepared: P) => string | false;
+  /**
+   * The player-facing refusal for a submitted value that is no longer listed:
+   * another seat took the offer, a second tab acted first (#393). `value` is
+   * what was submitted; see the engine's `unavailable`. Without it the player
+   * reads a plain default.
+   */
+  unavailable?: (value: unknown, context: WorldActionContext<G>) => string;
 }
 
 /** What a seated step's declaration may read: the seat, and whatever earlier
@@ -723,7 +737,16 @@ function forwardElementOptions<G extends Game, T extends GameElement, P>(
       ? (element: T, context: AnyContext, prepared: P) =>
           options.disabled!(element, withWorld<G>(context), prepared)
       : undefined,
+    unavailable: forwardUnavailable<G>(options.unavailable),
   };
+}
+
+/** A world's `unavailable` sentence, handed the WORLD context like every other callback here (#393). */
+function forwardUnavailable<G extends Game>(
+  unavailable: ((value: unknown, context: WorldActionContext<G>) => string) | undefined,
+): ((value: unknown, context: AnyContext) => string) | undefined {
+  if (unavailable === undefined) return undefined;
+  return (value, context) => unavailable(value, withWorld<G>(context));
 }
 
 /**
@@ -1033,6 +1056,7 @@ export class WorldAction<G extends Game = Game, A extends Record<string, unknown
       disabled: options.disabled
         ? (choice, context, prepared) => options.disabled!(choice, withWorld<G>(context), prepared)
         : undefined,
+      unavailable: forwardUnavailable<G>(options.unavailable),
     });
     return this as unknown as WorldAction<G, AddArg<A, K, T | T[]>>;
   }

@@ -727,7 +727,7 @@ describe("#249 — a world action can ask for an ORDERED, REPEATABLE list", () =
 
     await expect(
       apply(engine, "p1", { name: "errands", args: { stops: [first, stranger, first] } }),
-    ).rejects.toThrow(/Invalid selection/);
+    ).rejects.toThrow(/That choice is no longer available/);
   });
 
   it("still REFUSES a repeated identity on an ordinary multiSelect", async () => {
