@@ -36,8 +36,9 @@ const PLAYERS: Player[] = [
 
 // ---------------------------------------------------------------------------
 // GameOverHarness — mirrors GameShell.vue's game-over mount guard (post-fix,
-// GameShell.vue's `<template v-if="state?.flowState?.complete &&
-// !providesOwnGameOverUI && !gameOverDismissed">` block).
+// GameShell.vue's `<template v-if="gameOverRevealed &&
+// !providesOwnGameOverUI && !gameOverDismissed">` block; `complete` stands in
+// for `gameOverRevealed`, which GameShell.game-over-reveal.test.ts covers).
 // ---------------------------------------------------------------------------
 const GameOverHarness = defineComponent({
   name: 'GameOverHarness',

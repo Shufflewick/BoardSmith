@@ -2,9 +2,10 @@
  * useTableSeat — everything a table's board is given, built from one seat's
  * state, and the one place that list is written down (#406).
  *
- * A board mounted by `GameShell` can inject four things: board interaction, the
- * game context (`useGameContext()`), the announcer (`useAnnouncer()`) and
- * animation events (`useAnimationEvents()`). They used to be built and
+ * A board mounted by `GameShell` can inject five things: board interaction, the
+ * game context (`useGameContext()`), the announcer (`useAnnouncer()`),
+ * animation events (`useAnimationEvents()`) and the game-over hold
+ * (`holdGameOverUntil()`). They used to be built and
  * provided one by one inside the shell, so anything else that mounts a board --
  * `renderAsSeat` in `boardsmith/testing` above all -- had to restate the list,
  * and when it did not, a board that worked in the shell threw in its test.
@@ -24,6 +25,7 @@ import type { GameViewElement } from '../types.js';
 import { BOARD_INTERACTION_KEY, type BoardInteraction } from './useBoardInteraction.js';
 import { ANIMATION_EVENTS_KEY, createAnimationEvents, type UseAnimationEventsReturn } from './useAnimationEvents.js';
 import { ANNOUNCER_KEY, createAnnouncer, type UseAnnouncerReturn } from './useAnnouncer.js';
+import { GAME_OVER_HOLDS_KEY, createGameOverReveal } from './useGameOverReveal.js';
 import { gameContextProvisions, type GameContextPlayer, type TimeTravelDiff } from './useGameContext.js';
 import type { TurnDeadline } from './useTurnDeadline.js';
 import { useTableActionWiring, type TableActionWiring, type TableActionWiringOptions } from './useTableActionWiring.js';
@@ -90,6 +92,12 @@ export interface TableSeat extends TableActionWiring {
   announcer: UseAnnouncerReturn;
   /** The live-region text the announcer writes: render each in an `aria-live` node. */
   liveRegion: { polite: Ref<string>; assertive: Ref<string> };
+  /**
+   * Whether the table's ending is on screen: the flow is complete and every board
+   * that holds its result back (`holdGameOverUntil`) has shown it. The game-over
+   * card and the game-over announcement both read this, never the flow alone (#419).
+   */
+  gameOverRevealed: ComputedRef<boolean>;
   /** Everything the board can inject, by key. Publish with {@link provideTableSeat} or a mount's `provide`. */
   provisions: readonly Provision[];
 }
@@ -150,6 +158,8 @@ export function useTableSeat(opts: TableSeatOptions): TableSeat {
     emitAnnounce: relayAnnouncement,
   });
 
+  const gameOver = createGameOverReveal(() => flowState.value?.complete === true);
+
   const wiring = useTableActionWiring({
     ...transport,
     seatState: computed(() => state.value?.state),
@@ -171,6 +181,7 @@ export function useTableSeat(opts: TableSeatOptions): TableSeat {
     [BOARD_INTERACTION_KEY, boardInteraction],
     [ANIMATION_EVENTS_KEY, animationEvents],
     [ANNOUNCER_KEY, announcer],
+    [GAME_OVER_HOLDS_KEY, gameOver.holds],
     ...gameContextProvisions({
       gameState: state,
       gameView,
@@ -199,6 +210,7 @@ export function useTableSeat(opts: TableSeatOptions): TableSeat {
     animationEvents,
     announcer,
     liveRegion,
+    gameOverRevealed: gameOver.revealed,
     provisions,
   };
 }

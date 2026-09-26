@@ -76,6 +76,8 @@ interface PlatformShellOptions {
    * draws nothing worth asserting on.
    */
   board?: Component;
+  /** Further GameShell props, for a test about what a prop changes. */
+  props?: { providesOwnGameOverUI?: boolean };
 }
 
 export function mountPlatformShell(options: PlatformShellOptions) {
@@ -83,6 +85,7 @@ export function mountPlatformShell(options: PlatformShellOptions) {
     props: {
       gameType: options.gameType,
       uis: defineGameUIs({ Stub: defaultUI(options.board ?? StubBoard) }),
+      ...options.props,
     },
     global: {
       stubs: {

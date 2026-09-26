@@ -258,6 +258,9 @@ export {
   type UseAnnouncerReturn,
 } from './composables/useAnnouncer.js';
 
+// Holding the table's ending back until the board shows it (see docs/custom-ui-guide.md "The End of the Game")
+export { holdGameOverUntil } from './composables/useGameOverReveal.js';
+
 export {
   useZoomPreview,
   type CardPreviewData,
