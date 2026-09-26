@@ -334,7 +334,6 @@ export class ResidentWorld {
    * world refuses every command with `world-ended`, runs no scheduled event and
    * no clock command, and still answers views -- the platform's behaviour.
    */
-  // fallow-ignore-next-line unused-class-member
   get completed(): boolean {
     return this.#store.endedAt() !== undefined;
   }
