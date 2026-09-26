@@ -29,8 +29,9 @@
  * anything else from the project root; never outside the project. A Markdown source is cited by
  * heading (`§"..."`) or by line range; any other file is cited by line range (`path:N` or
  * `path:N-M`). A quote matches when it appears inside the cited section or lines, with runs of
- * whitespace (line wrapping) treated as one space. A claim that a later claim supersedes ("supersedes claim N") is not
- * checked: it is kept only as the record of what was corrected.
+ * whitespace (line wrapping) treated as one space. A claim a later claim supersedes
+ * (build-manifest.ts, WHICH CLAIMS ARE SUPERSEDED, #410) is not checked: it is kept only as the
+ * record of what was corrected.
  *
  * A CHUNK VERIFIED BEFORE THIS CHECK EXISTED (#397) has claims with no quotes. The one-time
  * `boardsmith chunk-gate-transition` records each of them, by number, with a hash of its text, in
@@ -44,7 +45,7 @@ import { createHash } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import { join, resolve, sep } from 'node:path';
 import chalk from 'chalk';
-import { type InterpretationLine, interpretationLines } from './build-manifest.js';
+import { type InterpretationLine, interpretationLines, parseSupersededClaims } from './build-manifest.js';
 import { assertBareName } from '../lib/user-name.js';
 import { DESIGN_DIR, GATE_TRANSITION_MD, chunkMdPath, designRecordPath, relChunkMdPath } from '../lib/project-paths.js';
 import { readGateTransition } from '../lib/gate-transition.js';
@@ -59,8 +60,6 @@ interface ParsedClaim {
   /** The claim's own lines, from its number to the next item. */
   lines: string[];
   quotes: QuotedPassage[];
-  /** Claim numbers this claim's own text says it supersedes. */
-  supersedes: number[];
   problems: string[];
 }
 
@@ -99,7 +98,6 @@ const SUBHEADING = /^#{3,}\s/;
 const QUOTE_LINE = /^\s*>\s?(.*)$/;
 const SOURCE_LINE = /^\s*Source:\s*(.+?)\s*$/;
 const SEARCHED_LINE = /^\s*Searched:\s*(.+?)\s*$/;
-const SUPERSEDES = /supersedes\s+claims?\s+(\d+)/gi;
 
 const FORMAT_HINT =
   'Write the exact source text as `> ` lines under the claim, followed by ' +
@@ -142,8 +140,7 @@ function startItem(state: ParseState, line: InterpretationLine): boolean {
   closePendingQuote(state);
   state.current = undefined;
   if (line.claim !== undefined) {
-    const claim: ParsedClaim = { number: line.claim, lines: [line.text], quotes: [], supersedes: [], problems: [] };
-    noteSupersession(claim, line.text);
+    const claim: ParsedClaim = { number: line.claim, lines: [line.text], quotes: [], problems: [] };
     state.result.claims.push(claim);
     state.current = { kind: 'claim', claim };
   } else if (questionMatch) {
@@ -179,7 +176,6 @@ function continueItem(state: ParseState, item: Item, line: string): void {
   closePendingQuote(state);
   const searchedMatch = SEARCHED_LINE.exec(line);
   if (item.kind === 'question' && searchedMatch) item.question.searched.push(searchedMatch[1]);
-  if (item.kind === 'claim') noteSupersession(item.claim, line);
 }
 
 /**
@@ -199,10 +195,6 @@ export function parseInterpretationQuotes(chunkText: string): ParsedInterpretati
   return state.result;
 }
 
-function noteSupersession(claim: ParsedClaim, line: string): void {
-  for (const m of line.matchAll(SUPERSEDES)) claim.supersedes.push(Number(m[1]));
-}
-
 function normalize(text: string): string {
   return text.replace(/\s+/g, ' ').trim();
 }
@@ -212,10 +204,6 @@ function claimTextHash(claim: ParsedClaim): string {
   return createHash('sha256').update(normalize(claim.lines.join('\n'))).digest('hex');
 }
 
-function supersededNumbers(parsed: ParsedInterpretation): Set<number> {
-  return new Set(parsed.claims.flatMap((c) => c.supersedes));
-}
-
 /**
  * Every claim in force that carries no quote, by number, with the hash of its text. This is what
  * `boardsmith chunk-gate-transition` records for a chunk verified before this check existed.
@@ -223,7 +211,7 @@ function supersededNumbers(parsed: ParsedInterpretation): Set<number> {
 export function unquotedClaims(chunkText: string): Record<number, string> {
   const parsed = parseInterpretationQuotes(chunkText);
   if (!parsed) return {};
-  const superseded = supersededNumbers(parsed);
+  const superseded = new Set(parseSupersededClaims(chunkText));
   return Object.fromEntries(
     parsed.claims
       .filter((c) => !superseded.has(c.number) && c.quotes.length === 0)
@@ -482,7 +470,7 @@ export async function checkClaimQuotes(projectDir: string, slug: string): Promis
     recorded: transition?.claims[slug] ?? {},
     offer: transition === undefined && /^Status:\s*verified/m.test(chunkText),
   };
-  const superseded = supersededNumbers(parsed);
+  const superseded = new Set(parseSupersededClaims(chunkText));
   const refusals: string[] = [];
   const claims: CheckedClaim[] = [];
   for (const claim of parsed.claims) {

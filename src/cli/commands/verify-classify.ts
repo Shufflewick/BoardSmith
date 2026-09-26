@@ -24,7 +24,7 @@ import {
   readRecordedSourcePaths,
   sliceDocuments,
 } from './rulebook-sources.js';
-import { type InterpretationLine, interpretationLines } from './build-manifest.js';
+import { type InterpretationLine, interpretationLines, parseSupersededClaims } from './build-manifest.js';
 import {
   type ClassificationRecord,
   type VerifyRunOptions,
@@ -1062,15 +1062,16 @@ function normalizeWhitespace(s: string): string {
   return s.replace(/\s+/g, ' ').trim();
 }
 
-/** One text span per claim (build-manifest.ts's WHAT A CLAIM IS), comments removed, so a
- * multi-line claim's continuation lines stay attached to their own claim. */
-function splitInterpretationClaims(lines: InterpretationLine[]): string[] {
+/** One text span per claim in force (build-manifest.ts's WHAT A CLAIM IS, less WHICH CLAIMS ARE
+ * SUPERSEDED), comments removed, so a multi-line claim's continuation lines stay attached to their
+ * own claim. */
+function splitInterpretationClaims(lines: InterpretationLine[], superseded: ReadonlySet<number>): string[] {
   const claims: string[][] = [];
   let current: string[] | undefined;
   for (const line of lines) {
     if (line.claim !== undefined) {
-      current = [];
-      claims.push(current);
+      current = superseded.has(line.claim) ? undefined : [];
+      if (current) claims.push(current);
     } else if (line.placeholder) {
       current = undefined;
     }
@@ -1089,7 +1090,8 @@ export interface ClaimCitationAnchors {
  * The claim-level citation anchors a chunk's `## Interpretation` claims actually name — never
  * scanned from `chunkText` directly (that would also pick up the redteam/findings-ledger/HTML-
  * comment prose 174-CONTEXT.md's `decision-19-anchors-2` measured as noise). Reuses
- * `interpretationLines` (the one claim rule, shared with claim-quote-check) and
+ * `interpretationLines` (the one claim rule, shared with claim-quote-check), `parseSupersededClaims`
+ * (a superseded claim is no longer what the chunk rests on, #410) and
  * `resolveCitedSlices` (the shorthand-resolving citation parser) rather than inventing a second
  * convention.
  *
@@ -1109,7 +1111,7 @@ export function parseClaimCitationAnchors(
 ): ClaimCitationAnchors {
   const lines = interpretationLines(chunkText);
   if (lines === undefined) return { slices: [], pages: [], fragments: [] };
-  const claims = splitInterpretationClaims(lines);
+  const claims = splitInterpretationClaims(lines, new Set(parseSupersededClaims(chunkText)));
 
   const slices = new Set<string>();
   const pages = new Set<number>();

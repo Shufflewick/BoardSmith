@@ -336,13 +336,17 @@ describe('parseSupersededClaims', () => {
       "14. **Supersedes claim 8's closing sentence**, which was wrong; claim 8 otherwise stands.",
       '15. SUPERSEDES CLAIM 9 ON THE GEM COUNT only.',
       '16. Supersedes claim 10 in full.',
+      '17. **A lost step goes nowhere. Supersedes claim 11 entirely.**',
+      '18. SUPERSEDES CLAIM 2 WHOLESALE — the corrected flow.',
+      '19. Supersedes claim 4 — corrected: only the count changes.',
+      '<!-- 20. Supersedes claim 8 in full, inside a comment, is not part of the section. -->',
       '',
       '## Playtest Test Script',
       '',
       '1. Supersedes claim 8 in prose outside the section does not count.',
       '',
     ].join('\n');
-    expect(parseSupersededClaims(chunk)).toEqual([3, 5, 7, 10]);
+    expect(parseSupersededClaims(chunk)).toEqual([2, 3, 5, 7, 10, 11]);
   });
 });
 
