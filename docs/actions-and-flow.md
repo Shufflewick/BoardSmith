@@ -775,6 +775,31 @@ one field breaks the moment you reorder the selections.
 > you so — an object is truthy but is not `true`, so guessing at its meaning
 > would silently reject exactly the submissions you meant to allow.
 
+#### `unavailable` — a choice that is no longer listed
+
+A submitted value can stop being a choice while the player is choosing: another
+player took the offer, the auction settled, a second tab acted first. That value
+is refused before `validate` runs, and `disabled` cannot speak to it because it
+is no longer listed. By default the player reads:
+
+> That choice is no longer available. Things changed while you were choosing, so please choose again.
+
+and the engine's own detail (the value sent and the current choices) goes to the
+dev log. To say it in the game's words, give `chooseFrom`, `chooseElement` or
+`chooseElements` an `unavailable` sentence (#393):
+
+```typescript
+.chooseFrom('offer', {
+  choices: ({ game }) => game.openOffers().map((o) => o.id),
+  unavailable: () => 'Someone else took that offer first. Pick another one.',
+})
+```
+
+It receives `(value, context)`. `value` is what was submitted, so it is typed
+`unknown`: for a choice, the value sent; for an element, the element if it still
+exists, otherwise the id sent. Return the sentence the player reads, saying what
+happened and what to do next. An empty return is refused as an authoring error.
+
 #### `.condition()` is about availability, not arguments
 
 `.condition()` decides whether the action appears. It is evaluated **twice**:
@@ -2187,15 +2212,22 @@ props.action('attack', { target: target.id });  // Works!
 
 ### Detailed Validation Errors
 
-When validation fails, you get helpful error messages:
+When a submitted value is not among the current choices, the error the player
+reads is plain and says what to do, and the detail for you (the value sent and
+the valid choices) is written to the dev log:
 
 ```typescript
-// Error response includes valid choices:
+// Response:
 {
   success: false,
-  error: 'Invalid selection for "target": "invalid-value". Valid choices: [Militia #1, Militia #2, genesis]'
+  error: 'That choice is no longer available. Things changed while you were choosing, so please choose again.'
 }
+// Dev log:
+// [BoardSmith] Invalid selection for "target": "invalid-value". Valid choices: [Militia #1, Militia #2, genesis] ...
 ```
+
+A game can replace the player's sentence with the selection's `unavailable`
+option; see [`unavailable`](#unavailable--a-choice-that-is-no-longer-listed).
 
 ### Best Practices
 

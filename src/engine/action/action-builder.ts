@@ -81,6 +81,13 @@ type DisabledOptions<G extends Game, T, P> = {
   prepare?: (context: ActionContext<G>) => P;
   /** Check if a choice should be disabled. Returns reason string or false. */
   disabled?: (choice: T, context: ActionContext<G>, prepared: P) => string | false;
+  /**
+   * The player-facing refusal for a submitted value that is no longer listed
+   * (#393). `value` is what was submitted: a choice's value, or an element if
+   * it still exists and otherwise the id sent. Without it the player reads a
+   * plain default and the engine's detail goes to the dev log.
+   */
+  unavailable?: (value: unknown, context: ActionContext<G>) => string;
 };
 
 /**
@@ -668,6 +675,7 @@ export class Action<
       orderedList: options.orderedList,
       prepare: options.prepare,
       disabled: options.disabled,
+      unavailable: options.unavailable,
       onSelect: options.onSelect,
       onCancel: options.onCancel,
     } as ChoiceSelection<T>;
@@ -766,6 +774,7 @@ export class Action<
       repeatUntil: options.repeatUntil,
       prepare: options.prepare,
       disabled: options.disabled,
+      unavailable: options.unavailable,
       onSelect: options.onSelect,
       onCancel: options.onCancel,
     } as ElementSelection<T>;
@@ -875,6 +884,7 @@ export class Action<
       repeatUntil: options.repeatUntil,
       prepare: options.prepare,
       disabled: options.disabled,
+      unavailable: options.unavailable,
       onSelect: options.onSelect as ElementsSelection<T>['onSelect'],
       onCancel: options.onCancel,
     } as ElementsSelection<T>;

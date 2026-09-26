@@ -210,9 +210,28 @@ export interface DisabledRule<T> {
 }
 
 /**
+ * What the player is told when the value they submitted is no longer among a
+ * selection's choices (`chooseFrom`, `chooseElement`, `chooseElements`), #393.
+ */
+export interface UnavailableRule {
+  /**
+   * The player-facing refusal for a submitted value that is no longer listed:
+   * someone else took the offer, the auction settled, a second tab acted first.
+   * `disabled` covers a value still listed; this covers one that is gone.
+   *
+   * `value` is what was submitted, so it is `unknown`: for a choice, the value
+   * sent; for an element, the element if it still exists, otherwise the id
+   * sent. Return the sentence the player reads, saying what happened and what
+   * to do next. Without it the player reads a plain default, and the engine's
+   * detailed text (the value and the current choices) goes to the dev log.
+   */
+  unavailable?: (value: unknown, context: ActionContext) => string;
+}
+
+/**
  * Select from a list of choices
  */
-export interface ChoiceSelection<T = unknown> extends BaseSelection<T>, DisabledRule<T> {
+export interface ChoiceSelection<T = unknown> extends BaseSelection<T>, DisabledRule<T>, UnavailableRule {
   type: 'choice';
   /** Choices - can be static array or function */
   choices: T[] | ((context: ActionContext) => T[]);
@@ -295,7 +314,7 @@ export interface ChoiceSelection<T = unknown> extends BaseSelection<T>, Disabled
 /**
  * Select an element from the board
  */
-export interface ElementSelection<T extends GameElement = GameElement> extends BaseSelection<T>, DisabledRule<T> {
+export interface ElementSelection<T extends GameElement = GameElement> extends BaseSelection<T>, DisabledRule<T>, UnavailableRule {
   type: 'element';
   /**
    * Elements to choose from (alternative to filter/from pattern).
@@ -356,7 +375,7 @@ export interface ElementSelection<T extends GameElement = GameElement> extends B
  *   });
  * ```
  */
-export interface ElementsSelection<T extends GameElement = GameElement> extends BaseSelection<T>, DisabledRule<T> {
+export interface ElementsSelection<T extends GameElement = GameElement> extends BaseSelection<T>, DisabledRule<T>, UnavailableRule {
   type: 'elements';
   /**
    * Elements to choose from - can be static array or function.
