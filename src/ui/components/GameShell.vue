@@ -143,8 +143,10 @@ interface GameShellProps {
   /**
    * The game renders its own end-state UI inside its own board (D10/ENDGAME-01).
    * When true, BOTH the default GameOverCard and any `#game-over` slot content
-   * are suppressed — the game is fully responsible for presenting the outcome.
-   * Default: false.
+   * are suppressed — the game draws the outcome. The shell still announces the
+   * result to screen readers, when the ending is on screen: a board that holds
+   * its result back calls `holdGameOverUntil` (#419). Write it in camelCase;
+   * the kebab form camelizes to `providesOwnGameOverUi`. Default: false.
    */
   providesOwnGameOverUI?: boolean;
   /** Per-UI presentation overlay — keyed by element class/name/attribute → visuals (D-04). */
@@ -391,10 +393,12 @@ const isDraw = ref(false);
 const turnDeadlineFrame = ref<TurnDeadlineFrame | null>(null);
 const turnDeadline = useTurnDeadline(turnDeadlineFrame);
 
-// Game-over card/slot dismissed by the player (D10). Reset when a new game
-// starts (flowState.complete transitions back to false) so the next completion
-// shows the card again.
+// Game-over card/slot dismissed by the player (D10), and whether this game's
+// result has been announced (#419). Both reset when a new game starts
+// (flowState.complete transitions back to false) so the next completion shows
+// the card and announces again.
 const gameOverDismissed = ref(false);
+let gameOverAnnounced = false;
 function dismissGameOver(): void {
   gameOverDismissed.value = true;
   nextTick(() => boardregionEl.value?.focus());
@@ -752,6 +756,7 @@ const {
   myPlayer,
   announcer,
   liveRegion: { polite: politeMessage, assertive: assertiveMessage },
+  gameOverRevealed,
 } = tableSeat;
 
 // Read-only action args for display and slot props.
@@ -1532,41 +1537,37 @@ watch(connectionStatus, (newVal, oldVal) => {
   }
 }, { immediate: false });
 
-// A restart clears `complete` back to false — re-arm the dismissed card so
-// the NEXT completion shows it again (D10).
+// A restart clears `complete` back to false — re-arm the dismissed card and
+// the announcement so the NEXT completion shows and says it again (D10, #419).
 watch(
   () => (state.value?.flowState as any)?.complete,
   (newComplete) => {
-    if (!newComplete) gameOverDismissed.value = false;
+    if (!newComplete) {
+      gameOverDismissed.value = false;
+      gameOverAnnounced = false;
+    }
   },
   { immediate: false },
 );
 
+// Winners are captured when the flow completes, and a running bot demo stops.
+// Nothing here is shown or said: that waits for `gameOverRevealed` below.
 watch(
   () => (state.value?.flowState as any)?.complete,
   (newComplete, oldComplete) => {
     if (newComplete && !oldComplete) {
-      const flowState = state.value?.flowState as any;
+      // ENDGAME-01 / F-13: the card and the announcement both read these refs.
       // flowState.winners is a DEFINED array when complete (empty = a genuine
       // draw) vs undefined when winner data could not be validated (dev-WS
-      // degrade) — see engine/utils/snapshot.ts. A bare `winnerSeats.length
-      // === 0` cannot distinguish the two; the definedness check can (D10).
-      const rawWinners: number[] | undefined = flowState?.winners;
-      const derived = deriveWinnerState(rawWinners);
-      // ENDGAME-01 / F-13: keep the GameOverCard's refs in sync with the SAME
-      // flowState.winners source the announcer uses, in NON-platform mode. In
-      // platform mode the validated `data.winners`/`data.isDraw` frame (captured
-      // in the game_state handler) is authoritative, so don't overwrite it here.
+      // degrade) — see engine/utils/snapshot.ts; deriveWinnerState tells the two
+      // apart. Set here in NON-platform mode only. In platform mode the
+      // validated `data.winners`/`data.isDraw` frame (captured in the
+      // game_state handler) is authoritative, so don't overwrite it here.
       if (!platformMode.value) {
+        const derived = deriveWinnerState((state.value?.flowState as any)?.winners);
         winnerSeats.value = derived.winnerSeats;
         isDraw.value = derived.isDraw;
       }
-      const winnerNames = derived.winnerSeats.map((seat) => {
-        const p = players.value.find((pl) => pl.seat === seat);
-        return (p as any)?.name || `Player ${seat}`;
-      });
-      const text = announceGameOver(winnerNames, derived.isDraw);
-      announcer.announce(text, { assertive: true });
 
       // Stop any running bot demo when the game completes. isDemoRunning is
       // now derived from broadcast state (WR-04), so we only fire the request;
@@ -1577,6 +1578,29 @@ watch(
     }
   },
   { immediate: false },
+);
+
+// The game-over announcement follows the same answer the card does (#419): the
+// flow is complete AND every board holding its result back has shown it. Read
+// after render (`flush: 'post'`), so a board's hold that turns on in reaction to
+// the completing frame is already in place. Said once per completion; a board
+// that hides and re-shows its result (a replay of the final moment) does not
+// repeat it.
+watch(
+  gameOverRevealed,
+  (revealed) => {
+    if (!revealed || gameOverAnnounced) return;
+    gameOverAnnounced = true;
+    // Said from the same `winnerSeats`/`isDraw` the card draws, so the two can
+    // never name different results: in platform mode those come from the host's
+    // validated frame, otherwise from flowState.winners when the flow completed.
+    const winnerNames = winnerSeats.value.map((seat) => {
+      const p = players.value.find((pl) => pl.seat === seat);
+      return (p as any)?.name || `Player ${seat}`;
+    });
+    announcer.announce(announceGameOver(winnerNames, isDraw.value), { assertive: true });
+  },
+  { flush: 'post' },
 );
 
 // Once the viewer has committed in a simultaneous step, say who is still
@@ -1805,12 +1829,15 @@ if ((import.meta as any).hot) {
              Scrim is absolute inside .boardregion — cannot cover the .actionbar sibling
              or browser chrome (T-100-06-02). winnerSeats degrades to [] in dev-WS mode;
              isDraw distinguishes that degrade from a genuine draw.
+             It appears when `gameOverRevealed` says the ending is on screen -- the same answer
+             the game-over announcement follows -- so a board holding its result back
+             (holdGameOverUntil) holds the card back too (#419).
              A filled #game-over slot replaces the default card entirely; providesOwnGameOverUI
              suppresses BOTH (the game renders its own end state on its own board). Dismissing
              (close button / Escape) reveals the board without restarting or leaving.
              @new-game and @rematch both restart via the one real restart path (D11/ENDGAME-02);
              @leave (menu-only) is the only forward exit that returns to the lobby. -->
-        <template v-if="state?.flowState?.complete && !props.providesOwnGameOverUI && !gameOverDismissed">
+        <template v-if="gameOverRevealed && !props.providesOwnGameOverUI && !gameOverDismissed">
           <slot
             v-if="$slots['game-over']"
             name="game-over"
