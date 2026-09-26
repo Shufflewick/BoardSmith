@@ -975,21 +975,14 @@ export function useActionController(options: UseActionControllerOptions): UseAct
   const currentPick = computed((): EnrichedPickMetadata | null => {
     if (!currentActionMeta.value) return null;
 
-    // Find first pick that needs input
-    for (const sel of currentActionMeta.value.selections) {
-      if (selectionNeedsInput(sel) && !sel.optional) {
-        return enrichValidElements(sel);
-      }
-    }
-
-    // Then check optional picks
-    for (const sel of currentActionMeta.value.selections) {
-      if (selectionNeedsInput(sel) && sel.optional) {
-        return enrichValidElements(sel);
-      }
-    }
-
-    return null;
+    // THE FIRST UNANSWERED PICK IN DECLARED ORDER, optional or not (#392). An
+    // optional pick is asked where the action declares it and skipped there
+    // (`skip` records `null`, so it no longer needs input). Declared order is
+    // the order choices are fetched in (`getNextSelection`), the order a later
+    // pick's `dependsOn` and a world's re-asked list read earlier answers in,
+    // and the only order the engine's step-wise path accepts.
+    const next = currentActionMeta.value.selections.find(selectionNeedsInput);
+    return next ? enrichValidElements(next) : null;
   });
 
   const isReady = computed((): boolean => {

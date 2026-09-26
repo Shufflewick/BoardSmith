@@ -98,6 +98,28 @@ function assertPrepareHasDisabled(method: string, name: string, options: { prepa
   }
 }
 
+/**
+ * Picks are asked in declared order, optional ones included (#392), so a pick
+ * may only read an EARLIER pick through `dependsOn` or `filterBy`. One naming a
+ * later pick would be asked while its source is unanswered and draw an empty
+ * list. Refused where the action is declared.
+ */
+function assertReadsEarlierPick(
+  method: string,
+  name: string,
+  declared: readonly Selection[],
+  source: string | undefined,
+  relation: 'depends on' | 'filters by',
+): void {
+  if (source === undefined || declared.some((selection) => selection.name === source)) return;
+  const earlier = declared.map((selection) => `'${selection.name}'`).join(', ') || 'none';
+  throw new Error(
+    `${method}('${name}') ${relation} '${source}', which is not declared before it. Picks are asked ` +
+    `in the order the action declares them, so declare '${source}' earlier in the chain, or name one of ` +
+    `the picks that come before '${name}' (${earlier}).`
+  );
+}
+
 /** Every `chooseFrom` option except the repeat options ({@link RepeatingOptions}) and the disabled rule ({@link DisabledOptions}). */
 type ChooseFromOptions<G extends Game, T> = {
   prompt?: string | ((context: ActionContext<G>) => string);
@@ -615,6 +637,8 @@ export class Action<
     options: ChooseFromOptions<G, T> & DisabledOptions<G, T, P> & Partial<RepeatingOptions<T>>
   ): Action<G, AddArg<A, K, T>> | Action<G, AddArg<A, K, T[]>> {
     assertPrepareHasDisabled('chooseFrom', name, options);
+    assertReadsEarlierPick('chooseFrom', name, this.definition.selections, options.dependsOn, 'depends on');
+    assertReadsEarlierPick('chooseFrom', name, this.definition.selections, options.filterBy?.selectionName, 'filters by');
     // A SET AND A SEQUENCE ARE DIFFERENT QUESTIONS (#249), and a selection that
     // asked both would have to pick one silently: the set refuses the repeat the
     // list exists to allow. Refused at declaration time, where the author is
@@ -724,6 +748,7 @@ export class Action<
     options: ChooseElementOptions<G, T> & DisabledOptions<G, T, P> & Partial<RepeatingOptions<T>> = {}
   ): Action<G, AddArg<A, K, T>> | Action<G, AddArg<A, K, T[]>> {
     assertPrepareHasDisabled('chooseElement', name, options);
+    assertReadsEarlierPick('chooseElement', name, this.definition.selections, options.dependsOn, 'depends on');
     const selection = {
       type: 'element',
       name,
@@ -833,6 +858,7 @@ export class Action<
     }
   ): Action<G, AddArg<A, K, T[]>> {
     assertPrepareHasDisabled('chooseElements', name, options);
+    assertReadsEarlierPick('chooseElements', name, this.definition.selections, options.dependsOn, 'depends on');
     const selection = {
       type: 'elements',
       name,

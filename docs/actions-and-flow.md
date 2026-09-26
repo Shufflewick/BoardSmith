@@ -441,6 +441,12 @@ Allow players to skip a selection. Use `optional: true` for a "Skip" button, or 
 })
 ```
 
+An optional selection is asked **where it is declared**, with its Skip button
+beside it, never saved for the end (#392). The Action Panel and a custom UI walk
+the same order: the action's selections, top to bottom, each answered or
+skipped before the next. So put an optional pick that narrows an earlier answer
+("who exactly?") straight after that answer.
+
 #### `playerChoices` - Choose a player with chooseFrom
 
 Use the `playerChoices()` helper on your Game class to generate player choices for use with `chooseFrom`:
@@ -623,6 +629,10 @@ Action.create('dropEquipment')
     },
   })
 ```
+
+A pick may only depend on (`dependsOn`) or filter by (`filterBy`) a pick
+declared **before** it, since picks are asked in declared order. The builder
+refuses a forward reference when the action is declared.
 
 **What `dependsOn` does:**
 - During the availability check the engine iterates every choice for A
