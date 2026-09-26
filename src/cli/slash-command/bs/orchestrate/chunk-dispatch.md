@@ -41,11 +41,23 @@ below. Either way the session lock (`state-machine.md` "Session Lock") stays hel
 Chunks may be built at the same time when, and only when, `boardsmith parallel-check <slug> <slug>
 [...]` exits zero for the whole batch. It passes chunks that are **independent in the sketch's
 dependency graph** (every chunk each one names in its `- Depends on:` line is already verified, so
-none of them waits on another) and that have **no rulebook citation in common** (the slices named in
-each chunk's sketch `Citations:` line and its CHUNK.md `## Interpretation` and
-`## Newly Discovered Citations`, the same set `/bs-insert-chunk` compares). A citation that names no
-slice file, or a chunk with no citations yet, cannot be shown to be independent, so it is refused.
-Never start a batch the check refused, and never start one without running it.
+none of them waits on another) and that have **no rulebook section in common** (the citations in
+each chunk's sketch `Citations:` line and its CHUNK.md `## Interpretation`, less the claims a later
+claim supersedes, and `## Newly Discovered Citations`). The unit is a section of a slice, not the
+slice, so chunks that cite different parts of one shared page (a designer-decisions page) can run
+together. A citation claims:
+
+- `rulebook/<file>.md §"<section>"`: that section, named by its heading or by its citation prefix
+  without the page (`p.2, Designer Decisions > Economy:` is `§"Designer Decisions > Economy"`); a
+  heading also claims every section under it;
+- `rulebook/<file>.md:N-M`: the sections holding those lines;
+- `rulebook/<file>.md` alone, whatever prose follows it: the whole page, every section of it.
+
+A refusal names the shared sections. A refusal over a whole-page citation is lifted by narrowing
+that citation to the sections the chunk needs, never by guessing. A citation that names no slice
+file, no section of it, or lines it does not have, or a chunk with no citations yet, cannot be shown
+to be independent, so it is refused. Never start a batch the check refused, and never start one
+without running it.
 
 ### When Chunks Run One at a Time
 
@@ -54,7 +66,7 @@ five; the last two are dispatches it is never asked about:
 
 - the check refused the batch, for any reason;
 - a chunk depends, directly or through another chunk, on one that is not verified;
-- two chunks cite a rulebook slice in common;
+- two chunks cite a section of a rulebook slice in common;
 - the chunk is the core-loop chunk or the final-acceptance chunk (they always run alone);
 - the chunk has no `- Depends on:` line, or no rulebook citations yet;
 - the dispatch is a sketch reshape (`/bs-insert-chunk`), which rewrites the whole Ordered Chunk List

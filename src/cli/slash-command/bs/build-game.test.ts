@@ -519,10 +519,21 @@ describe('#294 — parallel dispatch is allowed only where the checks say so', (
     expect(dispatch()).not.toMatch(/Never dispatch two chunks at once/i);
     expect(dispatch()).toMatch(/## Parallel Dispatch/);
     expect(dispatch()).toMatch(/independent in the sketch's dependency graph/i);
-    expect(dispatch()).toMatch(/no rulebook citation in common/i);
+    expect(dispatch()).toMatch(/no rulebook section in common/i);
     expect(dispatch()).toMatch(/`boardsmith parallel-check <slug> <slug>/);
     expect(dispatch()).toMatch(/When Chunks Run One at a Time/);
     for (const alone of ['core-loop', 'final-acceptance', 'bs-insert-chunk']) expect(dispatch()).toContain(alone);
+  });
+
+  it('states the unit of overlap is a section of a slice, and how a citation names one (#415)', () => {
+    expect(dispatch()).toMatch(/rulebook\/<file>\.md §"<section>"/);
+    expect(dispatch()).toMatch(/rulebook\/<file>\.md:N-M/);
+    expect(dispatch()).toMatch(/whole page/i);
+    const sketch = flat(read('templates/SKETCH.template.md'));
+    expect(sketch).toMatch(/Citations grammar \(#415\)/);
+    expect(sketch).toMatch(/rulebook\/<file>\.md §"<section>"/);
+    expect(flat(read('build-game.md'))).toMatch(/shares no rulebook section/i);
+    expect(flat(read('build/investigate.md'))).toMatch(/Cite it by section or by line/);
   });
 
   it('gives each parallel chunk its own worktree and branch, and merges only through chunk-merge, one at a time', () => {

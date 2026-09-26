@@ -50,6 +50,7 @@ import { type InterpretationLine, interpretationLines, parseSupersededClaims } f
 import { assertBareName } from '../lib/user-name.js';
 import { DESIGN_DIR, GATE_TRANSITION_MD, chunkMdPath, designRecordPath, relChunkMdPath } from '../lib/project-paths.js';
 import { readGateTransition } from '../lib/gate-transition.js';
+import { markdownHeading } from '../lib/slice-sections.js';
 import { LINE_LOCATION_HINT, type LineRange, fileLines, lineRangeProblem, splitLineLocation } from '../lib/line-location.js';
 
 interface QuotedPassage {
@@ -137,20 +138,55 @@ function closePendingQuote(state: ParseState): void {
  * claim is, is `build-manifest.ts`'s rule (WHAT A CLAIM IS), shared with `parseInterpretationClaims`.
  */
 function startItem(state: ParseState, line: InterpretationLine): boolean {
-  const questionMatch = line.claim === undefined ? QUESTION_START.exec(line.text) : null;
-  if (line.claim === undefined && !line.placeholder && !questionMatch && !SUBHEADING.test(line.text)) return false;
+  const boundary = itemBoundary(line);
+  if (boundary === undefined) return false;
   closePendingQuote(state);
   state.current = undefined;
-  if (line.claim !== undefined) {
-    const claim: ParsedClaim = { number: line.claim, lines: [line.text], quotes: [], problems: [] };
+  if (boundary.kind === 'claim') {
+    const claim: ParsedClaim = { number: boundary.number, lines: [line.text], quotes: [], problems: [] };
     state.result.claims.push(claim);
     state.current = { kind: 'claim', claim };
-  } else if (questionMatch) {
-    const question: ParsedQuestion = { id: `Q${questionMatch[1]}`, searched: [], problems: [] };
+  } else if (boundary.kind === 'question') {
+    const question: ParsedQuestion = { id: boundary.id, searched: [], problems: [] };
     state.result.questions.push(question);
     state.current = { kind: 'question', question };
   }
   return true;
+}
+
+type ItemBoundary = { kind: 'claim'; number: number } | { kind: 'question'; id: string } | { kind: 'end' };
+
+/**
+ * Whether a line starts a claim, starts an open question, or only ends the item above it (the
+ * template's placeholder, a sub-heading). `undefined` for a line inside an item.
+ */
+function itemBoundary(line: InterpretationLine): ItemBoundary | undefined {
+  if (line.claim !== undefined) return { kind: 'claim', number: line.claim };
+  const questionMatch = QUESTION_START.exec(line.text);
+  if (questionMatch) return { kind: 'question', id: `Q${questionMatch[1]}` };
+  if (line.placeholder || SUBHEADING.test(line.text)) return { kind: 'end' };
+  return undefined;
+}
+
+/**
+ * The `## Interpretation` text, HTML comments removed, less every claim a later claim supersedes
+ * (build-manifest.ts, WHICH CLAIMS ARE SUPERSEDED): what the chunk's claims in force and open
+ * questions cite. `boardsmith parallel-check` reads a chunk's citations from it (#415), so a
+ * citation a correction retired does not keep two chunks apart. `undefined` when the section is
+ * absent.
+ */
+export function interpretationTextInForce(chunkText: string): string | undefined {
+  const lines = interpretationLines(chunkText);
+  if (lines === undefined) return undefined;
+  const superseded = new Set(parseSupersededClaims(chunkText));
+  let retired = false;
+  const kept: string[] = [];
+  for (const line of lines) {
+    const boundary = itemBoundary(line);
+    if (boundary !== undefined) retired = boundary.kind === 'claim' && superseded.has(boundary.number);
+    if (!retired) kept.push(line.text);
+  }
+  return kept.join('\n');
 }
 
 function takeSource(state: ParseState, item: Item, source: string): void {
@@ -318,13 +354,11 @@ async function locate(projectDir: string, spec: string): Promise<Located> {
   return locateWithin(fileLines(file.text), source, file.shown);
 }
 
-const HEADING_LINE = /^(#{1,6})\s+(.+?)\s*#*\s*$/;
-
 function sectionUnder(lines: string[], heading: string, shown: string): Located {
   const headings = lines
     .map((line, index) => {
-      const m = HEADING_LINE.exec(line);
-      return m ? { index, level: m[1].length, text: m[2] } : undefined;
+      const h = markdownHeading(line);
+      return h ? { index, ...h } : undefined;
     })
     .filter((h): h is { index: number; level: number; text: string } => h !== undefined);
   const matches = headings.filter((h) => h.text === heading);

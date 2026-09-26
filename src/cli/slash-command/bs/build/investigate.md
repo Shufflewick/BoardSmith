@@ -118,7 +118,10 @@ WRITE directly into this chunk's CHUNK.md — do not return this content, write 
      has no hidden information, write that explicitly ("none — no hidden information in this
      chunk") rather than leaving the section blank.
   3. `## Newly Discovered Citations` — append any INDEX-discovered slice not already cited by
-     the chunk, so the record shows what search surfaced beyond the original citations.
+     the chunk, so the record shows what search surfaced beyond the original citations. Cite it
+     by section or by line (`rulebook/<file>.md §"<section>"`, `rulebook/<file>.md:N-M`): a bare
+     slice path claims the whole page, and `boardsmith parallel-check` then keeps this chunk from
+     running beside any chunk that cites another part of that page.
 
 Do not restructure CHUNK.md's other sections. Fill only the three named above.
 
