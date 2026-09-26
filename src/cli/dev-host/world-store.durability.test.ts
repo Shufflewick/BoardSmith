@@ -3,7 +3,7 @@
  *
  * Every other test of the local world store reuses a live handle, and a live
  * handle proves neither of the things the store exists for. So both tests here
- * spawn Node, drive the store from `world-store-child.mjs`, SIGKILL it -- no
+ * spawn Node, drive the store from `world-store-child.test-helper.mjs`, SIGKILL it -- no
  * clean shutdown, no `close()`, nothing flushed on the way out -- and then
  * REOPEN THE FILE from this process.
  *
@@ -29,7 +29,7 @@ import { worldBudgets } from '../../world/budgets.js';
 import { openWorldStore, worldStorePath } from './world-store.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
-const CHILD = join(dirname(fileURLToPath(import.meta.url)), 'world-store-child.mjs');
+const CHILD = join(dirname(fileURLToPath(import.meta.url)), 'world-store-child.test-helper.mjs');
 const BUDGETS = worldBudgets();
 
 /**

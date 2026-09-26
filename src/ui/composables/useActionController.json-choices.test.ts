@@ -18,7 +18,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { ref } from 'vue';
 import { useActionController, type EnrichedActionMetadata } from './useActionController.js';
-import { createMockSendAction } from './useActionController.helpers.js';
+import { createMockSendAction } from './useActionController.test-helper.js';
 import { findMatchingChoice } from '../../engine/action/choice-matching.js';
 
 const OPERATIVES = [

@@ -10,7 +10,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { ref, nextTick } from 'vue';
 import { useActionController, type EnrichedActionMetadata } from './useActionController.js';
-import { createMockSendAction, createTestMetadata } from './useActionController.helpers.js';
+import { createMockSendAction, createTestMetadata } from './useActionController.test-helper.js';
 
 const SKIP_LABEL = 'Keep them all';
 

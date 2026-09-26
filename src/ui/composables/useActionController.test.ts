@@ -22,7 +22,7 @@ import {
   ACTION_CONTROLLER_KEY,
   type EnrichedActionMetadata,
 } from './useActionController.js';
-import { createMockSendAction, createTestMetadata } from './useActionController.helpers.js';
+import { createMockSendAction, createTestMetadata } from './useActionController.test-helper.js';
 import type { TutorialStepView } from '../../engine/tutorial/types.js';
 import { _clearShownWarnings } from '../../utils/dev.js';
 

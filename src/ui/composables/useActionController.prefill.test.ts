@@ -14,7 +14,7 @@ import {
   type EnrichedActionMetadata,
   type PickChoicesResult,
 } from './useActionController.js';
-import { createMockSendAction } from './useActionController.helpers.js';
+import { createMockSendAction } from './useActionController.test-helper.js';
 
 /** Settle every queued watcher and every pending fetch microtask. */
 async function flush(): Promise<void> {

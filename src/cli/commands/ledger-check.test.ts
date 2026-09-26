@@ -480,6 +480,55 @@ describe('ledgerCheck — cited evidence must be in git (#292)', () => {
     expect(found[2].detail).toMatch(/outside the project/);
   });
 
+  it('passes a decision citing a file that was committed when the decision was, and deleted later (#398)', async () => {
+    const dir = await tree({ 'src/rules/flow.ts': '// the old session flow\n' });
+    commitAt(dir, '2026-09-20T12:00:00Z');
+    await fs.writeFile(join(dir, 'design/DECISIONS.md'), '### Decision 12\n- Decision: turn order lives in `src/rules/flow.ts`.\n');
+    commitAt(dir, '2026-09-21T12:00:00Z');
+    await fs.rm(join(dir, 'src/rules/flow.ts'));
+    commitAt(dir, '2026-09-22T12:00:00Z');
+    expect(evidence((await ledgerCheck(dir)).findings)).toEqual([]);
+  });
+
+  it('still fails a citation of a file that was not in git when the citing line was committed (#398)', async () => {
+    const dir = await tree({ 'src/rules/flow.ts': '// the old session flow\n' });
+    commitAt(dir, '2026-09-20T12:00:00Z');
+    await fs.rm(join(dir, 'src/rules/flow.ts'));
+    commitAt(dir, '2026-09-21T12:00:00Z');
+    await fs.writeFile(
+      join(dir, 'design/DECISIONS.md'),
+      ['### Decision 12', '- Decision: see `src/rules/flow.ts`.', '### Decision 13', '- Decision: see `tests/never.test.ts`.', ''].join('\n'),
+    );
+    commitAt(dir, '2026-09-22T12:00:00Z');
+    await fs.appendFile(join(dir, 'design/DECISIONS.md'), '### Decision 14\n- Decision: see `src/rules/flow.ts` again.\n');
+    const found = evidence((await ledgerCheck(dir)).findings);
+    expect(found.map((f) => f.entry)).toEqual(['line 2', 'line 4', 'line 6']);
+    for (const f of found) expect(f.detail).toMatch(/does not exist/);
+  });
+
+  it('reports a ~/ path in another checkout as outside the project, not as a missing project file (#398)', async () => {
+    const dir = await tree({
+      'design/DECISIONS.md': '### Decision 3\n- Decision: zoom as `~/BoardSmith/src/ui/composables/useAutoZoom.ts` does.\n',
+    });
+    commitAt(dir, '2026-09-23T12:00:00Z');
+    vi.stubEnv('HOME', dirname(dir));
+    try {
+      const found = evidence((await ledgerCheck(dir)).findings);
+      expect(found).toHaveLength(1);
+      expect(found[0].detail).toMatch(/outside the project/);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('does not treat a module specifier quoted in a decision as a cited file (#398)', async () => {
+    const dir = await tree({
+      'design/DECISIONS.md': "### Decision 4\n- Decision: the host loads it with `import { beat } from './heartbeat.js'`.\n",
+    });
+    commitAt(dir, '2026-09-23T12:00:00Z');
+    expect(evidence((await ledgerCheck(dir)).findings)).toEqual([]);
+  });
+
   it('does not hold a chunk that is not verified yet to its citations', async () => {
     const dir = await tree({
       'design/chunks/world-shell/CHUNK.md': chunk('built', '- tests/not-written-yet.test.ts'),
