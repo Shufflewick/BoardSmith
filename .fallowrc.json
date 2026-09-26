@@ -1,6 +1,7 @@
 {
   "entry": [
-    "scripts/*-browser.mjs"
+    "scripts/*-browser.mjs",
+    "src/**/*.node.ts"
   ],
   "ignoreDependencies": [
     "postcss-html"

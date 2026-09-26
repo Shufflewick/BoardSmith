@@ -387,6 +387,15 @@ unreachable file elsewhere still fails. Any future browser regression under that
 name is a root the moment it is written, which is the point: the shape that
 makes the gate honest should be the shape that is easiest to reach for.
 
+## A `.node.ts` file is reached through package.json `imports` (#411)
+
+A Node-only module that a game's type check must not see (see
+`docs/typecheck.md`) is imported as a `#` specifier, and package.json `imports`
+answers that with a declaration under `types` and the `.node.ts` source under
+`default`. Fallow resolves the `types` target, so the source looks unreachable.
+`.fallowrc.json` names `src/**/*.node.ts` as an entry for that reason, which
+states a fact about how those files are loaded rather than exempting them.
+
 ## The duplication baseline is keyed by CONTENT, not by line (#232)
 
 `.fallow-dupes-baseline.json` used to be the record, and it keys a clone group

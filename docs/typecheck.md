@@ -77,6 +77,13 @@ in every game.
   or `peerDependencies` (#380). The same test fails if the CLI starts a
   worker thread whose entry the CLI build does not emit, or if npm would not
   publish a file that build emits (#401).
+- **What a game's own tsconfig lacks.** This check lists `node` in `types`; a
+  game's (the one `boardsmith init` writes) does not.
+  `src/contract/testing-typecheck.test.ts` compiles a game test importing
+  `boardsmith/testing` under that tsconfig (#411). Node-only code the testing
+  entry runs (`src/testing/project-test-utils.node.ts`) is imported through
+  package.json `imports`, whose `types` condition hands every compiler the
+  Node-free `project-test-utils.d.ts` instead.
 - **Anything at runtime.** Types say nothing about a shape crossing a boundary
   the types do not describe.
 

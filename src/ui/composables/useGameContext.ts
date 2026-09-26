@@ -17,7 +17,7 @@
  *
  * @module
  */
-import { inject, provide, type ComputedRef, type InjectionKey, type Ref } from 'vue';
+import { inject, type ComputedRef, type InjectionKey, type Ref } from 'vue';
 import type { GameState } from '../../client/types.js';
 import type { UseActionControllerReturn } from './useActionController.js';
 import type { TurnDeadline } from './useTurnDeadline.js';
@@ -149,7 +149,8 @@ export function gameContextProvisions(context: GameContext): Array<readonly [Inj
 }
 
 /**
- * Publish the shared half. Called by `WorldShell` and by nothing else.
+ * The shared half as key/value pairs, for `useWorldSeat` to publish with the
+ * rest of what a world's board is given. It is the only caller.
  *
  * The table-only keys are deliberately left UNPROVIDED rather than filled with
  * nulls: a component that reads `gameState` inside a world is asking a question
@@ -159,10 +160,10 @@ export function gameContextProvisions(context: GameContext): Array<readonly [Inj
  *
  * @internal
  */
-export function providePlayContext(context: PlayContext): void {
-  for (const key of PLAY_CONTEXT_KEY_NAMES) {
-    provide(GAME_CONTEXT_KEYS[key] as InjectionKey<unknown>, context[key]);
-  }
+export function playContextProvisions(context: PlayContext): Array<readonly [InjectionKey<unknown>, unknown]> {
+  return PLAY_CONTEXT_KEY_NAMES.map(
+    (key) => [GAME_CONTEXT_KEYS[key] as InjectionKey<unknown>, context[key]] as const,
+  );
 }
 
 /**

@@ -13,6 +13,8 @@
  * `dev-host-typecheck.test.ts` uses it for the native-host modules.
  * `dice-typecheck.test.ts` uses it for `boardsmith/ui/dice`, twice: once with
  * the optional `three` peer installed and once without.
+ * `testing-typecheck.test.ts` uses it for a game's test importing
+ * `boardsmith/testing`, compiled under the game's own tsconfig.
  */
 import { mkdirSync, readFileSync, symlinkSync, writeFileSync, existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -83,6 +85,14 @@ function transitiveClosure(names: readonly string[]): string[] {
   }
 
   return [...found];
+}
+
+/** Everything `package.json` asks a consumer to install beside us, optional peers included. */
+export function declaredPeers(): string[] {
+  const manifest = JSON.parse(readFileSync(join(REPO_ROOT, 'package.json'), 'utf8')) as {
+    peerDependencies?: Record<string, string>;
+  };
+  return Object.keys(manifest.peerDependencies ?? {});
 }
 
 interface ConsumerInstall {
