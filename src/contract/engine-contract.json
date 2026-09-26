@@ -1,7 +1,7 @@
 {
-  "revision": 109,
+  "revision": 110,
   "bundleProtocol": 2,
-  "surfaceHash": "3fc4e9fcecb3b9fe",
+  "surfaceHash": "58f45cbb3ddaaac7",
   "payloadHash": "cae65bbab7213c58",
   "formatHash": "0058593e7cc80205",
   "history": [
@@ -925,6 +925,15 @@
       "payloadHash": "cae65bbab7213c58",
       "formatHash": "0058593e7cc80205",
       "summary": "enterText refuses control characters (C0, DEL, C1; a multiline field admits line feed and tab) and unpaired surrogates with a player-facing sentence, takes an optional maxBytes that bounds the UTF-8 bytes the text adds to a partition (measured as the partition store measures), and its pattern is now { regex, message }. The text pick on the wire gains maxBytes (only when set) and carries pattern as { source, message } instead of a bare source string (#394)."
+    },
+    {
+      "revision": 110,
+      "date": "2026-09-26",
+      "bundleProtocol": 2,
+      "surfaceHash": "58f45cbb3ddaaac7",
+      "payloadHash": "cae65bbab7213c58",
+      "formatHash": "0058593e7cc80205",
+      "summary": "chooseFrom, chooseElement and chooseElements (table and world) take an optional unavailable(value, ctx) sentence for a submitted value that is no longer listed; without it the player now reads a plain 'That choice is no longer available... please choose again' instead of the engine's value-and-choices text, which moves to the dev log (#393)"
     }
   ]
 }
