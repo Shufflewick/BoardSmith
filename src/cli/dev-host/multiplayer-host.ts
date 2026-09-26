@@ -112,7 +112,18 @@ export type HostOutbound =
   | { type: 'debugToggle' }
   | { type: 'uiSwitch'; name: string }
   /** A saved rules edit is reloading, or has settled (#379): see `rules-reload-queue.ts`. */
-  | ({ type: 'rules_reload' } & RulesReloadNotice);
+  | ({ type: 'rules_reload' } & RulesReloadNotice)
+  /**
+   * The dev-server run this page joined (#416), sent by the connection layer
+   * (`connection-handler.ts`) in answer to `hello`. The page names it in its
+   * next `hello` when its socket reconnects.
+   */
+  | { type: 'welcome'; runId: string }
+  /**
+   * The page's `hello` named an earlier dev-server run (#416): the server
+   * restarted since it joined. It is not seated; reloading it joins this run.
+   */
+  | { type: 'stale_run' };
 
 /** Messages a client sends to the host. */
 export type ClientInbound =

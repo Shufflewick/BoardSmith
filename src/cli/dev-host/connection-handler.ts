@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import type { WebSocket } from 'ws';
 import type { ClientInbound, HostOutbound, MultiplayerHost } from './multiplayer-host.js';
 import type { RulesReloadQueue } from './rules-reload-queue.js';
@@ -30,6 +31,14 @@ const RUNS_THE_RULES: ReadonlySet<ClientInbound['type']> = new Set([
  * that stale close marks the just-reconnected client disconnected and silently
  * orphans every future broadcast/response to its seat.
  *
+ * Each handler is one run of the dev server, with its own id (#416). A page's
+ * `hello` is answered `welcome` with that id, and a page names it again when
+ * its socket reconnects. A `hello` naming a different run comes from a tab
+ * left open across a server restart: it is answered `stale_run` and the socket
+ * is never identified, so it claims no seat, receives nothing further and
+ * cannot take over the routing of a page that shares its client id. A fresh
+ * page load names no run and joins as the first arrival or a reconnect would.
+ *
  * Every message is admitted through the rules reload queue (#379), so one that
  * arrives while a saved rules edit is still rebuilding waits for the new rules.
  * So is a page's departure (#387): a bot covering its seat is a move, and it
@@ -48,8 +57,12 @@ export function createDevHostConnectionHandler(opts: {
   onError: (err: unknown, msgType: string) => void;
 }): (socket: WebSocket) => void {
   const { mpHost, clients, queue, onError } = opts;
+  const runId = randomUUID();
 
   return (socket: WebSocket) => {
+    const send = (message: HostOutbound) => {
+      if (socket.readyState === socket.OPEN) socket.send(JSON.stringify(message));
+    };
     const dispatch = (clientId: string, msg: ClientInbound) => {
       const refusal = (message: string): HostOutbound => ({
         type: 'error',
@@ -59,13 +72,7 @@ export function createDevHostConnectionHandler(opts: {
       queue
         .admit({
           run: () => mpHost.handleMessage(clientId, msg),
-          ...(RUNS_THE_RULES.has(msg.type)
-            ? {
-                refuse: (message: string) => {
-                  if (socket.readyState === socket.OPEN) socket.send(JSON.stringify(refusal(message)));
-                },
-              }
-            : {}),
+          ...(RUNS_THE_RULES.has(msg.type) ? { refuse: (message: string) => send(refusal(message)) } : {}),
         })
         .catch((err: unknown) => onError(err, msg.type));
     };
@@ -80,13 +87,20 @@ export function createDevHostConnectionHandler(opts: {
         return;
       }
       if (msg.type === 'hello') {
+        if (msg.runId !== undefined && msg.runId !== runId) {
+          send({ type: 'stale_run' });
+          return;
+        }
+        send({ type: 'welcome', runId });
         clientId =
           typeof msg.clientId === 'string' ? msg.clientId : `anon-${Math.random().toString(36).slice(2)}`;
         clients.set(clientId, socket);
         dispatch(clientId, { type: 'hello' });
         return;
       }
-      if (!clientId) return; // a client must identify itself via `hello` first
+      // A client must identify itself via `hello` first; a tab from an earlier
+      // run never does (#416).
+      if (!clientId) return;
       dispatch(clientId, msg as ClientInbound);
     });
 
