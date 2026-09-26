@@ -8,13 +8,13 @@
  * `inject('gameview')` got `undefined` with no error and no type help.
  */
 import { describe, it, expect } from 'vitest';
-import { defineComponent, h, ref, computed } from 'vue';
+import { defineComponent, h, ref, computed, provide } from 'vue';
 import { mount } from '@vue/test-utils';
 import * as ui from '../index.js';
 import {
   useGameContext,
   tryUseGameContext,
-  provideGameContext,
+  gameContextProvisions,
   GAME_CONTEXT_KEYS,
   type GameContext,
 } from './useGameContext.js';
@@ -41,42 +41,42 @@ function fakeContext(): GameContext {
 /** A shell stand-in that publishes the context, then renders its slot. */
 const Provider = defineComponent({
   setup(_, { slots }) {
-    provideGameContext(fakeContext());
+    for (const [key, value] of gameContextProvisions(fakeContext())) provide(key, value);
     return () => h('div', slots.default?.());
   },
 });
 
+/** What `useGameContext()` hands a component mounted inside the Provider. */
+function contextInsideProvider(): GameContext {
+  let seen: GameContext | undefined;
+  const Child = defineComponent({
+    setup() {
+      seen = useGameContext();
+      return () => h('span');
+    },
+  });
+  mount(Provider, { slots: { default: () => h(Child) } });
+  if (!seen) throw new Error('the child inside the Provider never ran setup()');
+  return seen;
+}
+
 describe('useGameContext inside a shell', () => {
   it('hands back every field the shell publishes', () => {
-    let seen: GameContext | undefined;
-    const Child = defineComponent({
-      setup() {
-        seen = useGameContext();
-        return () => h('span');
-      },
-    });
-    mount(Provider, { slots: { default: () => h(Child) } });
+    const seen = contextInsideProvider();
 
-    expect(Object.keys(seen!).sort()).toEqual(Object.keys(GAME_CONTEXT_KEYS).sort());
-    expect(seen!.playerSeat.value).toBe(1);
-    expect(seen!.gameView.value).toEqual({ board: 'here' });
-    expect(seen!.availableActions.value).toEqual(['move']);
+    expect(Object.keys(seen).sort()).toEqual(Object.keys(GAME_CONTEXT_KEYS).sort());
+    expect(seen.playerSeat.value).toBe(1);
+    expect(seen.gameView.value).toEqual({ board: 'here' });
+    expect(seen.availableActions.value).toEqual(['move']);
   });
 
   it('publishes every key the context type declares — none can be forgotten', () => {
-    // provideGameContext derives its key list from GAME_CONTEXT_KEYS, so a new
+    // gameContextProvisions derives its key list from GAME_CONTEXT_KEYS, so a new
     // field cannot be added to the context without also being published.
-    let seen: GameContext | undefined;
-    const Child = defineComponent({
-      setup() {
-        seen = useGameContext();
-        return () => h('span');
-      },
-    });
-    mount(Provider, { slots: { default: () => h(Child) } });
+    const seen = contextInsideProvider();
 
     for (const key of Object.keys(GAME_CONTEXT_KEYS)) {
-      expect(seen![key as keyof GameContext], key).toBeDefined();
+      expect(seen[key as keyof GameContext], key).toBeDefined();
     }
   });
 });

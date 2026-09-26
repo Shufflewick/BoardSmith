@@ -552,18 +552,39 @@ refuses to take a move, saying to take it with `testGame.doAction(...)` and
 render the seat again. A `TestWorld` seat gets its offers as `availableActions`
 and a controller that only carries their names.
 
-Board interaction is provided too. A board that calls `useBoardInteraction()`
-is normally inside a `<GameShell>`; this utility stands in for the shell and
-provides a real `createBoardInteraction()` under `BOARD_INTERACTION_KEY`, so
-such a board mounts with no wiring from you. Pass your own under that key in
-`provide` to hold a handle on it; a table seat's controller then drives yours.
-To render a board's candidate state, start the action the way a player would:
+**A table seat is given everything GameShell gives its board** (#406): board
+interaction, the game context (`useGameContext()`), the announcer
+(`useAnnouncer()`) and animation events (`useAnimationEvents()`). GameShell and
+this utility build them with the same function, `useTableSeat`, so a board that
+runs inside the shell mounts here with no wiring from you, and a test that
+mounts the real shell fails if it ever provides something this does not. The
+seat's pending animation events play to the handlers your board registers, and
+the announcer relays what it says to `window.postMessage` as the shell's does.
+A world seat is given board interaction only.
+
+Pass your own interaction under `BOARD_INTERACTION_KEY` in `provide` to hold a
+handle on it; a table seat's controller then drives yours. Anything else in
+`provide` is merged over what the shell would give.
+**To render or scan a board with an action open, pass `startAction`** (#405).
+A board draws its targets while an action is open, and a target can carry what
+it hides: a blind pick labelled with the card's face is invisible to a scan of
+the board at rest. `startAction` opens the action on the seat's controller once
+the board has mounted, as a player would, so the targets and their labels are
+the game's own; `args` fills its first picks to reach a later one. Both
+functions take it:
 
 ```typescript
-const wrapper = await renderAsSeat(testGame, 1, { component: GameTable });
-await wrapper.props('actionController').start('placePack');
-// the board now shows the spaces placePack may target
+await assertNoHiddenInfoLeak(testGame, 1, { component: GameTable, startAction: { name: 'peek' } });
+
+const wrapper = await renderAsSeat(testGame, 1, { component: GameTable, startAction: { name: 'placePack' } });
+// the board shows the spaces placePack may target
 ```
+
+It fails, saying why, when the seat may not take the action now, when the
+action does not stay open (one with nothing left to choose completes at once,
+and the controller refuses to take a move), and on a world seat, whose
+controller cannot start one. `assertNoHiddenInfoLeak` passes every other
+option on to the mount too, `provide` included.
 
 `assertNoHiddenInfoLeak` derives forbidden markers by diffing each element's
 *unfiltered* `toJSON()` against its node in the final `toJSONForPlayer(seat)`

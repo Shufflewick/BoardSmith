@@ -2,7 +2,8 @@
  * useTableActionWiring — the one way a table's action controller and board
  * bridge are wired together.
  *
- * GameShell calls it, and so should anything else that mounts a board against a
+ * GameShell calls it (through `useTableSeat`, which builds the rest of what the
+ * board is given), and so should anything else that mounts a board against a
  * live game without the whole shell: a game's a11y or keyboard test above all
  * (build/test.md, "The A11y Floor" item 1). Hand it this seat's latest published
  * state (`PlayerGameState`, or the client's `PlayerState` for the same seat) and
