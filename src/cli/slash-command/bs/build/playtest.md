@@ -37,7 +37,10 @@ npx boardsmith chunk-gate-transition --by "<designer's name>"
 It gives every chunk whose CHUNK.md has no `## Sign-off` section a `transition` sign-off that keeps
 its verified Status, keeps a whole-file sign-off whose code still matches (rewritten file by file),
 transitions one whose code has moved, and records each of those chunks' unquoted claims for
-`claim-quote-check` (`build/investigate.md` "Chunks Verified Before Claims Carried Quotes"). It
+`claim-quote-check` (`build/investigate.md` "Chunks Verified Before Claims Carried Quotes"). A
+claim is any line starting with its number (`1. `), bold or not. If a full-ceremony chunk it would
+cover has no claim in that form (claims written as `Claim 1 — ...`, say), it refuses and writes
+nothing: renumber those claims as `1. `, keeping their text, and run it again. It
 writes `design/GATE-TRANSITION.md` and runs once: a later run only completes chunk writes a crash
 interrupted. It does not cover a chunk whose sign-off section was scaffolded and left empty, which
 was verified by hand under the gate. A transitioned chunk that is reopened needs a real sign-off,

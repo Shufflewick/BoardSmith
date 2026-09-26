@@ -247,26 +247,80 @@ export function parseBuildManifest(chunkText: string): ParsedManifest {
 // ---------------------------------------------------------------------------------------------
 
 /**
- * The LIVE claim set: the integers that actually appear as `^N. ` items inside the
+ * WHAT A CLAIM IS (#290, #402). This is the one rule every reader of `## Interpretation` shares
+ * (`parseInterpretationClaims` here, `claim-quote-check`, and through it the gate transition), so
+ * they can never disagree about which claims a chunk has.
+ *
+ * A claim is a line that starts, at column 0, with its number, a dot, a space, and its text:
+ * `1. **Claim text.**` or `1. Claim text — cites ...`. Bold is optional. The CHUNK template writes
+ * bold, older chunks do not, and requiring `**` let every plain claim skip the claim-set checks
+ * (#290) and the quote gate (#402). HTML comments are not part of the section, so a numbered line
+ * inside one is never a claim. An item whose text begins with a comment, like the template's
+ * unfilled `1. **<!-- claim text -->**`, is the placeholder: it ends the claim above it, and it is
+ * not a claim.
+ */
+const CLAIM_ITEM = /^(\d+)\.[ \t]+(?!(?:\*\*)?<!--)\S/;
+const PLACEHOLDER_ITEM = /^\d+\.[ \t]+(?:\*\*)?<!--/;
+
+export interface InterpretationLine {
+  /** The line with its HTML comments removed. */
+  text: string;
+  /** The number of the claim this line starts, if it starts one. */
+  claim?: number;
+  /** This line starts the template's unfilled placeholder item. */
+  placeholder: boolean;
+}
+
+/** Removes the HTML comments from one line, given whether it starts inside one. */
+function uncomment(line: string, inComment: boolean): { text: string; inComment: boolean } {
+  let text = '';
+  let rest = line;
+  let open = inComment;
+  while (rest.length > 0) {
+    const marker = rest.indexOf(open ? '-->' : '<!--');
+    if (marker === -1) {
+      if (!open) text += rest;
+      break;
+    }
+    if (!open) text += rest.slice(0, marker);
+    rest = rest.slice(marker + (open ? 3 : 4));
+    open = !open;
+  }
+  return { text, inComment: open };
+}
+
+/**
+ * The `## Interpretation` body line by line, with HTML comments removed and each line that starts a
+ * claim marked by the rule above. `undefined` when the section is absent.
+ */
+export function interpretationLines(chunkText: string): InterpretationLine[] | undefined {
+  const body = extractSection(chunkText, '## Interpretation');
+  if (body === undefined) return undefined;
+  let inComment = false;
+  return body.split('\n').map((raw) => {
+    const startsInComment = inComment;
+    const uncommented = uncomment(raw, inComment);
+    inComment = uncommented.inComment;
+    const claim = startsInComment ? null : CLAIM_ITEM.exec(raw);
+    return {
+      text: uncommented.text,
+      claim: claim ? Number(claim[1]) : undefined,
+      placeholder: !startsInComment && PLACEHOLDER_ITEM.test(raw),
+    };
+  });
+}
+
+/**
+ * The LIVE claim set: the numbers of the claims (see WHAT A CLAIM IS) inside the
  * `## Interpretation` body only. A numbered list in another section (e.g.
- * `## Playtest Test Script`'s own `6. **Regression ...**` step) contributes nothing — this
- * function never scans `chunkText` directly, only the section body `extractSection` returns.
+ * `## Playtest Test Script`'s own `6. **Regression ...**` step) contributes nothing.
  *
  * Non-contiguous starts are preserved verbatim, never normalised to `1..max`.
- *
- * A claim is any numbered item at the start of a line, bolded or not: the CHUNK template writes
- * `1. <claim text> — cites ...` with no bold, and real chunks use both shapes, so requiring `**`
- * silently dropped every plain claim from the set (#290). The template's unfilled placeholder,
- * `1. <!-- claim text -->`, is not a claim.
  */
 export function parseInterpretationClaims(chunkText: string): number[] {
-  const body = extractSection(chunkText, '## Interpretation');
-  if (body === undefined) return [];
-
   const claims = new Set<number>();
-  const CLAIM_ITEM = /^(\d+)\.[ \t]+(?!<!--)\S/gm;
-  for (const match of body.matchAll(CLAIM_ITEM)) {
-    claims.add(Number(match[1]));
+  for (const line of interpretationLines(chunkText) ?? []) {
+    if (line.claim !== undefined) claims.add(line.claim);
   }
   return [...claims].sort((a, b) => a - b);
 }
