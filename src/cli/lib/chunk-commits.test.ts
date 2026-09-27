@@ -71,3 +71,27 @@ describe('the chunk\'s history (#426)', () => {
     expect(!refused.ok && refused.problem).toMatch(/No commit for chunk "combat" yet.*chunk-combat\/step-<name>/);
   });
 });
+
+describe('the chunk\'s history while a merge is in progress (#435)', () => {
+  it('includes the commits being merged, so a check run on the combined tree sees the branch\'s chunk', async () => {
+    const dir = await repo();
+    git(dir, 'checkout', '-q', '-b', 'main');
+    await commit(dir, 'initial', { 'src/a.ts': 'one\n' });
+    const earlier = await commit(dir, 'chunk-setup/step-close: done', { 'src/a.ts': 'two\n' });
+    git(dir, 'checkout', '-q', '-b', 'chunk/combat');
+    const investigate = await commit(dir, 'chunk-combat/step-investigate: claims', { 'design/x.md': 'x\n' });
+    const build = await commit(dir, 'chunk-combat/step-build: green', { 'src/b.ts': 'three\n' });
+    git(dir, 'checkout', '-q', 'main');
+    const mainLine = await commit(dir, 'chunk-trade/step-close: done', { 'src/c.ts': 'four\n' });
+    git(dir, 'merge', '-q', '--no-ff', '--no-commit', 'chunk/combat');
+
+    expect(await chunkHistory(dir, 'combat')).toEqual([
+      { hash: build, label: 'chunk-combat/step-build: green' },
+      { hash: investigate, label: 'chunk-combat/step-investigate: claims' },
+      { hash: earlier, label: 'base of chunk-combat' },
+    ]);
+    expect(await chunkPins(dir, 'combat')(build.slice(0, 10))).toMatchObject({ ok: true, commit: { hash: build } });
+    // The main line's own chunks are still found: the combined tree is both histories.
+    expect([...(await findChunkCommits(dir, 'trade'))]).toEqual([mainLine]);
+  });
+});

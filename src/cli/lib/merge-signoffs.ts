@@ -2,10 +2,11 @@ import { promises as fs } from 'node:fs';
 import { MERGE_SIGNOFFS_MD, designPath } from './project-paths.js';
 
 /**
- * `design/MERGE-SIGNOFFS.md` (#403): what `boardsmith chunk-merge` vouched for when two chunks
- * built at the same time both edited one source file. The combined file is code neither
- * designer signed off, so the merge re-runs both chunks' own checks (their tests, chunk-check and
- * claim-quote-check) on it and records each such file here, with its content hash, the chunks it
+ * `design/MERGE-SIGNOFFS.md` (#403): what `boardsmith chunk-merge` vouched for when the merged
+ * tree has a source file in a form no designer signed off: two chunks built at the same time both
+ * edited it, or the merge rewrote its provisional ledger citations to real numbers (#435). The
+ * merge re-runs the own checks (tests, chunk-check and claim-quote-check) of the chunks whose
+ * Build Manifest names it and records each such file here, with its content hash, the chunks it
  * vouched for, and the merge. The sign-off check (`checkSignoff`) then accounts for that file's
  * edit the way it accounts for one a later sign-off saw.
  *
@@ -33,7 +34,8 @@ const MERGE_CHECKS = 'tests, chunk-check, claim-quote-check';
 const HEADER = `# Merge Sign-offs
 
 <!-- MACHINE-OWNED. Written by \`boardsmith chunk-merge\` and by nothing else. Each entry is a
-     source file that two chunks built at the same time both edited, as the merge combined it.
+     source file the merge changed after its chunks signed it off (two chunks built at the same
+     time both edited it, or the merge renumbered its ledger citations), as the merge left it.
      The merge re-ran every named chunk's own checks on the combined file and they passed, so the
      sign-off check accepts that edit for each chunk whose sign-off names the file. -->
 `;

@@ -6,6 +6,7 @@ import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { chunkMerge, resolveDesignConflicts } from './chunk-merge.js';
 import { assessSignoffs, recordSignoff } from './chunk-signoff.js';
 import { recordVerifiedAgainst } from './chunk-provenance.js';
+import { checkClaimQuotes } from './claim-quotes.js';
 import { checkConstraints, type TestRunner } from './constraint-check.js';
 
 /**
@@ -220,6 +221,28 @@ describe('chunkMerge: the combined tree is checked, not the branch alone', () =>
     expect(result.refusals.join('\n')).toMatch(/both cite rulebook\/04-trading\.md/);
     expect(status()).toBe('');
   });
+
+  it("sees the branch's own commits on the combined tree, so a claim pinned to one of them holds (#435)", async () => {
+    const trading = await buildOnBranch('trading', 100);
+    const closed = git(trading, 'rev-parse', 'HEAD').trim();
+    const pinned = [
+      '1. **Trading has its own budget.**',
+      '   > export const PARTITION_BYTES = 100;',
+      `   Source: ../src/trading.ts@${closed.slice(0, 10)}:1`,
+    ].join('\n');
+    const chunk = await read(trading, 'design/chunks/trading/CHUNK.md');
+    await write(trading, { 'design/chunks/trading/CHUNK.md': chunk.replace(/^1\. \*\*<!-- claim text -->\*\*\n.*\n.*\n/m, `${pinned}\n`) });
+    git(trading, 'commit', '-q', '-am', 'chunk-trading/close: claim pinned to the code as the chunk left it');
+    expect((await checkClaimQuotes(trading, 'trading')).refusals).toEqual([]);
+    // The main line moves on, so the branch's commits are reachable only from the merge.
+    await write(main, { 'README.md': 'the main line moved on\n' });
+    git(main, 'add', '-A');
+    git(main, 'commit', '-q', '-m', 'main line moves on');
+
+    const result = await chunkMerge(main, 'trading', { runTests: budgetRunner });
+    expect(result.refusals).toEqual([]);
+    expect(status()).toBe('');
+  });
 });
 
 describe('chunkMerge: ledger numbers are allocated at merge, never on a branch', () => {
@@ -360,13 +383,14 @@ describe('chunkMerge: a source file two chunks built together both edited (#403)
 
   async function buildShared(
     slug: 'trading' | 'quests',
-    options: { claim?: string; test?: string; worldFile?: string; chunkCheck?: boolean } = {},
+    options: { claim?: string; test?: string; worldFile?: string; chunkCheck?: boolean; extra?: Record<string, string> } = {},
   ): Promise<void> {
     const claim = options.claim ?? (slug === 'trading' ? TRADING_CLAIM : QUESTS_CLAIM);
     const worktree = await buildOnBranch(slug, 100, {
       [`design/chunks/${slug}/CHUNK.md`]: await sharedChunkMd(slug, claim),
       [`tests/${slug}.test.ts`]: options.test ?? `// ${slug}'s own test\n`,
       'src/world.ts': options.worldFile ?? (slug === 'trading' ? world(1, 0) : world(0, 1)),
+      ...options.extra,
     });
     if (options.chunkCheck === false) return;
     await recordVerifiedAgainst(slug, { project: worktree });
@@ -469,6 +493,26 @@ describe('chunkMerge: a source file two chunks built together both edited (#403)
     expect(result.refusals.join('\n')).toMatch(/chunk-check fails for trading on the combined tree[\s\S]*src\/trading\.ts changed after it/);
     expect([head(), status()]).toEqual([before, '']);
     await expect(fs.access(join(main, 'design/MERGE-SIGNOFFS.md'))).rejects.toThrow();
+  });
+
+  it("vouches for signed-off code the merge renumbered, so allocating a ledger number voids no sign-off (#435)", async () => {
+    const signedWorld = `// Ruling @trading.1: prices are public.\n${world(1, 0)}`;
+    await buildShared('trading', {
+      worldFile: signedWorld,
+      extra: { 'design/RULINGS.md': '# Rulings\n\n### Ruling 1\n- Decision: the core loop.\n\n### Ruling @trading.1\n- Decision: prices are public.\n' },
+    });
+
+    const result = await chunkMerge(main, 'trading', { runTests: ownTestsRunner });
+    expect(result.refusals).toEqual([]);
+    expect(result.allocated).toEqual({ 'Ruling @trading.1': 'Ruling 2' });
+    expect(await read(main, 'src/world.ts')).toBe(`// Ruling 2: prices are public.\n${world(1, 0)}`);
+    expect(result.vouched).toEqual([{ path: 'src/world.ts', chunks: ['trading'], why: 'renumbered' }]);
+    expect(await read(main, 'design/MERGE-SIGNOFFS.md')).toContain('### src/world.ts');
+    expect((await assessSignoffs(main)).get('trading')).toEqual({
+      problems: [],
+      sharedEdits: [{ path: 'src/world.ts', coveredBy: 'trading', how: 'merged' }],
+    });
+    expect(status()).toBe('');
   });
 
   it('refuses a branch that writes the merge sign-offs itself', async () => {
