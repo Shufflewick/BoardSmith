@@ -658,6 +658,51 @@ interface VerifiedAgainstOptions {
   reverifiedNoCodeChange?: string;
 }
 
+/** A block written before #440, whose `BoardSmith version:` line names no engine. */
+const namesNoEngine = (body: string): boolean => !ENGINE_LINE_RE.test(body) && PRE_ENGINE_LINE_RE.test(body);
+
+/** The skills reinstall a current block reports as information (#438), if there was one. */
+function skillsReinstalled(
+  recorded: string | undefined,
+  installed: string,
+): { skillsTreeChanged?: { recorded: string; installed: string } } {
+  return recorded !== undefined && recorded !== installed ? { skillsTreeChanged: { recorded, installed } } : {};
+}
+
+/**
+ * Whether a block that says `previousBody` is stale against `record` (rendered as `newBody`).
+ *
+ * The skills hash is provenance, not an input (#438): it records which skill text governed the
+ * verification. A later reinstall leaves the block current and keeps the recorded hash; only a
+ * change to what the chunk was verified against (scope, rules, cited slices, engine revision)
+ * makes it stale, and that rewrite records the skills installed now.
+ *
+ * A block from before #440 names no engine. It is compared as if it named the installed one, so
+ * recording the engine never makes a chunk stale; anything else that changed still does.
+ * `compared` is the block as it should now read when only the engine was recorded.
+ */
+function compareToRecorded(
+  previousBody: string | undefined,
+  record: VerifiedAgainstRecord,
+  newBody: string,
+): { changed: boolean; skillsTreeChanged?: { recorded: string; installed: string }; engineRecorded?: number; compared?: string } {
+  if (previousBody === undefined) return { changed: true };
+  const recordedSkills = new RegExp(`^${LABEL_SKILLS_HASH} (.*)$`, 'm').exec(previousBody)?.[1];
+  const asRecorded =
+    recordedSkills === undefined ? newBody : renderVerifiedAgainst({ ...record, skillsTreeHash: recordedSkills });
+  const engineUnknown = namesNoEngine(previousBody);
+  const compared = engineUnknown
+    ? previousBody.replace(PRE_ENGINE_LINE_RE, `${LABEL_ENGINE} ${record.engineRevision}`)
+    : previousBody;
+  if (compared !== asRecorded) return { changed: true };
+  return {
+    changed: false,
+    compared,
+    ...skillsReinstalled(recordedSkills, record.skillsTreeHash),
+    ...(engineUnknown ? { engineRecorded: record.engineRevision } : {}),
+  };
+}
+
 /** Computes the `## Verified Against` block and the CHUNK.md it belongs in. Writes nothing. */
 async function planVerifiedAgainst(
   slug: string,
@@ -757,27 +802,7 @@ async function planVerifiedAgainst(
       chunkText.slice(0, begin + VERIFIED_AGAINST_BEGIN.length) + newBody + chunkText.slice(end);
   }
 
-  // The skills hash is provenance, not an input (#438): it records which skill text governed the
-  // verification. A later reinstall leaves the block current and keeps the recorded hash; only a
-  // change to what the chunk was verified against (scope, rules, cited slices, engine revision)
-  // makes it stale, and that rewrite records the skills installed now.
-  const recordedSkills =
-    previousBody === undefined ? undefined : new RegExp(`^${LABEL_SKILLS_HASH} (.*)$`, 'm').exec(previousBody)?.[1];
-  const asRecorded =
-    recordedSkills === undefined ? newBody : renderVerifiedAgainst({ ...record, skillsTreeHash: recordedSkills });
-  // A block from before #440 names no engine. It is compared as if it named the installed one, so
-  // recording the engine never makes a chunk stale; anything else that changed still does.
-  const engineUnknown =
-    previousBody !== undefined && !ENGINE_LINE_RE.test(previousBody) && PRE_ENGINE_LINE_RE.test(previousBody);
-  const compared = engineUnknown
-    ? previousBody!.replace(PRE_ENGINE_LINE_RE, `${LABEL_ENGINE} ${record.engineRevision}`)
-    : previousBody;
-  const changed = compared === undefined || compared !== asRecorded;
-  const skillsTreeChanged =
-    !changed && recordedSkills !== undefined && recordedSkills !== record.skillsTreeHash
-      ? { recorded: recordedSkills, installed: record.skillsTreeHash }
-      : undefined;
-  const engineRecorded = !changed && engineUnknown ? record.engineRevision : undefined;
+  const { changed, skillsTreeChanged, engineRecorded, compared } = compareToRecorded(previousBody, record, newBody);
   if (engineRecorded !== undefined) updated = chunkText.replace(previousBody!, compared!);
 
   const result: VerifiedAgainstWriteResult = {
@@ -960,6 +985,15 @@ export async function chunkCheckCommand(
   // session's `close` step, which needs the non-zero status and should never see this repo's
   // internal paths.
   process.exitCode = 1;
+}
+
+/** The engine a parsed block records, as the drift report groups it: `unknown` before #440. */
+const engineKey = (parsed: ParsedVerifiedAgainst): string => String(parsed.engineRevision ?? 'unknown');
+
+/** One engine revision's chunks in the drift report; `unknown` is a block from before #440. */
+function engineDriftLine(key: string, slugs: string[]): string {
+  const note = key === 'unknown' ? ' (verified before the block recorded the engine; chunk-check records it)' : '';
+  return `  engine revision ${key}: ${slugs.join(', ')}${note}`;
 }
 
 /**
@@ -1260,7 +1294,7 @@ export async function chunkProvenanceStatusCommand(
     const editionKey = normalizeEdition(parsed.edition);
     (byEdition[editionKey] ??= []).push(slug);
     if (parsed.skillsTreeHash) (bySkillsTreeHash[parsed.skillsTreeHash] ??= []).push(slug);
-    if (parsed.state !== PROVENANCE_UNKNOWN) (byEngineRevision[String(parsed.engineRevision ?? 'unknown')] ??= []).push(slug);
+    if (parsed.state !== PROVENANCE_UNKNOWN) (byEngineRevision[engineKey(parsed)] ??= []).push(slug);
 
     if (status.startsWith('verified') && parsed.state === PROVENANCE_UNKNOWN) {
       verifiedWithoutProvenance.push(slug);
@@ -1344,8 +1378,7 @@ export async function chunkProvenanceStatusCommand(
     }
     if (engineKeys.length > 1) {
       for (const key of engineKeys) {
-        const note = key === 'unknown' ? ' (verified before the block recorded the engine; chunk-check records it)' : '';
-        console.log(`  engine revision ${key}: ${byEngineRevision[key].join(', ')}${note}`);
+        console.log(engineDriftLine(key, byEngineRevision[key]));
       }
     }
   }

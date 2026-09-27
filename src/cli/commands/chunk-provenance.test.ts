@@ -610,6 +610,16 @@ describe('chunk-check', () => {
    * #438: the skills hash is provenance (which skill text governed the verification), not an
    * input to it. Reinstalling the skills used to make every closed chunk's block stale.
    */
+  /** Runs chunk-check on `jab` as `close` does, from a clean exit code, and returns what it printed. */
+  async function checkJab(project: string, json = false): Promise<string> {
+    process.exitCode = undefined;
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    await chunkCheckCommand('jab', { project, json });
+    const out = log.mock.calls.map((c) => c.join(' ')).join('\n');
+    log.mockRestore();
+    return out;
+  }
+
   describe('a skills reinstall is reported, never stale (#438)', () => {
     const skillFile = (project: string) => join(project, '.claude', 'skills', 'bs-build-chunk', 'SKILL.md');
     async function install(project: string, text: string): Promise<void> {
@@ -628,11 +638,7 @@ describe('chunk-check', () => {
       const recorded = skillsLine(closed);
 
       await install(project, 'skill text v2\n');
-      process.exitCode = undefined;
-      const log = vi.spyOn(console, 'log').mockImplementation(() => {});
-      await chunkCheckCommand('jab', { project, json: true });
-      const json = JSON.parse(log.mock.calls.map((c) => c.join(' ')).join('\n'));
-      log.mockRestore();
+      const json = JSON.parse(await checkJab(project, true));
 
       expect(process.exitCode).toBeUndefined();
       expect(await fs.readFile(chunkPath(project), 'utf-8')).toBe(closed);
@@ -648,11 +654,7 @@ describe('chunk-check', () => {
       await install(project, 'skill text v1\n');
       await chunkCheckCommand('jab', { project });
       await install(project, 'skill text v2\n');
-      process.exitCode = undefined;
-      const log = vi.spyOn(console, 'log').mockImplementation(() => {});
-      await chunkCheckCommand('jab', { project });
-      const out = log.mock.calls.map((c) => c.join(' ')).join('\n');
-      log.mockRestore();
+      const out = await checkJab(project);
       expect(process.exitCode).toBeUndefined();
       expect(out).toMatch(/up to date/);
       expect(out).toMatch(/skills have been reinstalled since jab was verified/i);
@@ -668,10 +670,7 @@ describe('chunk-check', () => {
       await fs.writeFile(join(project, DESIGN_DIR, 'rulebook', '01-setup-and-round-structure.md'), '# Setup\n\nChanged.\n');
 
       expect(await verifiedAgainstIsCurrent(project, 'jab')).toBe(false);
-      process.exitCode = undefined;
-      const log = vi.spyOn(console, 'log').mockImplementation(() => {});
-      await chunkCheckCommand('jab', { project, json: true });
-      log.mockRestore();
+      await checkJab(project, true);
       expect(process.exitCode).toBe(1);
       const repaired = skillsLine(await fs.readFile(chunkPath(project), 'utf-8'));
       expect(repaired).toMatch(/^[0-9a-f]{64}$/);
@@ -689,39 +688,33 @@ describe('chunk-check', () => {
   describe('the engine a chunk was verified against (#440)', () => {
     const chunkPath = (project: string) => join(project, DESIGN_DIR, 'chunks', 'jab', 'CHUNK.md');
     const engineLine = (text: string) => /^Engine revision: (.*)$/m.exec(text)?.[1];
-
-    it('records the engine contract revision, and a different revision makes the chunk stale', async () => {
+    /** A project whose chunk `jab` has been closed, and its CHUNK.md as closing wrote it. */
+    async function closedJab(): Promise<{ project: string; text: string }> {
       const { project } = await makeCheckProject();
       await makeChunk(project, 'jab', JAB_CITES);
-      await chunkCheckCommand('jab', { project, json: true });
-      const text = await fs.readFile(chunkPath(project), 'utf-8');
+      await checkJab(project, true);
+      return { project, text: await fs.readFile(chunkPath(project), 'utf-8') };
+    }
+
+    it('records the engine contract revision, and a different revision makes the chunk stale', async () => {
+      const { project, text } = await closedJab();
       expect(engineLine(text)).toBe(String(ENGINE_REVISION));
       expect(text).not.toContain('BoardSmith version:');
 
       await fs.writeFile(chunkPath(project), text.replace(/^Engine revision: .*$/m, `Engine revision: ${ENGINE_REVISION - 1}`));
       expect(await verifiedAgainstIsCurrent(project, 'jab')).toBe(false);
-      process.exitCode = undefined;
-      const log = vi.spyOn(console, 'log').mockImplementation(() => {});
-      await chunkCheckCommand('jab', { project, json: true });
-      log.mockRestore();
+      await checkJab(project, true);
       expect(process.exitCode).toBe(1);
       expect(engineLine(await fs.readFile(chunkPath(project), 'utf-8'))).toBe(String(ENGINE_REVISION));
     });
 
     it('records the engine in a block from before #440 without making the chunk stale', async () => {
-      const { project } = await makeCheckProject();
-      await makeChunk(project, 'jab', JAB_CITES);
-      await chunkCheckCommand('jab', { project, json: true });
-      const current = await fs.readFile(chunkPath(project), 'utf-8');
+      const { project, text: current } = await closedJab();
       const old = current.replace(/^Engine revision: .*$/m, 'BoardSmith version: 0.0.1');
       await fs.writeFile(chunkPath(project), old);
 
       expect(await verifiedAgainstIsCurrent(project, 'jab')).toBe(true);
-      process.exitCode = undefined;
-      const log = vi.spyOn(console, 'log').mockImplementation(() => {});
-      await chunkCheckCommand('jab', { project });
-      const out = log.mock.calls.map((c) => c.join(' ')).join('\n');
-      log.mockRestore();
+      const out = await checkJab(project);
 
       expect(process.exitCode).toBeUndefined();
       expect(await fs.readFile(chunkPath(project), 'utf-8')).toBe(current);
@@ -734,15 +727,11 @@ describe('chunk-check', () => {
     });
 
     it('still makes a block from before #440 stale when what it was verified against changed', async () => {
-      const { project } = await makeCheckProject();
-      await makeChunk(project, 'jab', JAB_CITES);
-      await chunkCheckCommand('jab', { project, json: true });
-      const text = await fs.readFile(chunkPath(project), 'utf-8');
+      const { project, text } = await closedJab();
       await fs.writeFile(chunkPath(project), text.replace(/^Engine revision: .*$/m, 'BoardSmith version: 0.0.1'));
       await fs.writeFile(join(project, DESIGN_DIR, 'rulebook', '01-setup-and-round-structure.md'), '# Setup\n\nChanged.\n');
       expect(await verifiedAgainstIsCurrent(project, 'jab')).toBe(false);
     });
-
   });
 
   it('the written body contains Scope/Rulebook edition/Rulebook source hash/Engine revision/Skills tree hash lines and a cited-slice hash row', async () => {

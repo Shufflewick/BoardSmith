@@ -15,6 +15,19 @@ import {
 import { computeVerificationScope, renderVerifiedAgainst } from './chunk-provenance.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
+/** The Verified Against block a chunk verified under `scope` would carry. */
+const renderScope = (scope: Awaited<ReturnType<typeof computeVerificationScope>>): string =>
+  renderVerifiedAgainst({
+    scope: scope.scope,
+    reason: scope.reason,
+    edition: scope.edition,
+    sourceHash: scope.sourceHash,
+    engineRevision: 1,
+    skillsTreeHash: 'deadbeef',
+    citedSlices: [],
+    unresolved: [],
+  });
+
 /**
  * Decision 7 (179-CONTEXT.md): "A test must FAIL when a pipeline step exists with no
  * unchecked-class mapping." This is this phase's version of the trap Phase 178 hit seven times
@@ -480,16 +493,7 @@ describe('PROV-02 data flow — source-free project', () => {
     expect(scope.scope).toBe('code-conformance-only');
     expect(scope.reason).toBe('source-missing');
 
-    const rendered = renderVerifiedAgainst({
-      scope: scope.scope,
-      reason: scope.reason,
-      edition: scope.edition,
-      sourceHash: scope.sourceHash,
-      engineRevision: 1,
-      skillsTreeHash: 'deadbeef',
-      citedSlices: [],
-      unresolved: [],
-    });
+    const rendered = renderScope(scope);
     expect(rendered).toContain('code-conformance-only');
     expect(rendered.split('\n').some((line) => line.startsWith('Reason:'))).toBe(true);
     expect(rendered).toContain('Reason: source-missing');
@@ -531,16 +535,7 @@ describe('PROV-02 data flow — source-free project', () => {
     expect(report.scope).toBe(scope.scope);
     expect(report.reason).toBe(scope.reason);
 
-    const rendered = renderVerifiedAgainst({
-      scope: scope.scope,
-      reason: scope.reason,
-      edition: scope.edition,
-      sourceHash: scope.sourceHash,
-      engineRevision: 1,
-      skillsTreeHash: 'deadbeef',
-      citedSlices: [],
-      unresolved: [],
-    });
+    const rendered = renderScope(scope);
     expect(rendered).toContain('Reason: pre-provenance-project');
   });
 
@@ -568,16 +563,7 @@ describe('PROV-02 data flow — source-free project', () => {
     expect(scope.scope).toBe('full');
     expect(scope.reason).toBeUndefined();
 
-    const rendered = renderVerifiedAgainst({
-      scope: scope.scope,
-      reason: scope.reason,
-      edition: scope.edition,
-      sourceHash: scope.sourceHash,
-      engineRevision: 1,
-      skillsTreeHash: 'deadbeef',
-      citedSlices: [],
-      unresolved: [],
-    });
+    const rendered = renderScope(scope);
     expect(rendered.split('\n').some((line) => line.startsWith('Reason:'))).toBe(false);
 
     const report = await computeSourceFreeReport(project);
@@ -613,16 +599,7 @@ describe('PROV-02 data flow — source-free project', () => {
     expect(cliResult.scope).toBe(scope.scope);
     expect(cliResult.reason).toBe(scope.reason);
 
-    const rendered = renderVerifiedAgainst({
-      scope: scope.scope,
-      reason: scope.reason,
-      edition: scope.edition,
-      sourceHash: scope.sourceHash,
-      engineRevision: 1,
-      skillsTreeHash: 'deadbeef',
-      citedSlices: [],
-      unresolved: [],
-    });
+    const rendered = renderScope(scope);
     expect(rendered).toContain(`Reason: ${cliResult.reason}`);
   });
 });
