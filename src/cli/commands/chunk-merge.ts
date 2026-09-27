@@ -29,6 +29,8 @@
  *      `chunk-check` and `claim-quote-check`. If all pass, it records the file, its content hash,
  *      those chunks and the merge in design/MERGE-SIGNOFFS.md, which the sign-off check accepts;
  *      if any fails, the merge is refused naming the check and the chunk. No designer is asked.
+ *      A source file whose provisional ledger ids step 2 rewrote is code the merge itself changed
+ *      after its chunks signed it off, so it is vouched for the same way (#435).
  *   4. It lists every reference between the merged chunk's changes and what the main line gained
  *      while it was being built, in design/CROSS-CHUNK.md, pending the audit's ruling;
  *      `ledger-check` fails until the audit rules, so the next close and merge wait for it.
@@ -87,8 +89,8 @@ interface ChunkMergeResult {
   alongside: string[];
   /** `pending` when references were recorded for the audit, `none` when nothing was shared. */
   crossChunk: 'pending' | 'none' | 'not built alongside';
-  /** Source files both sides edited, which the merge vouched for (#403), each with its chunks. */
-  vouched: Array<{ path: string; chunks: string[] }>;
+  /** Source files the merge vouched for (#403, #435), each with its chunks and why it needed to. */
+  vouched: SharedFile[];
 }
 
 interface GitResult {
@@ -243,7 +245,13 @@ async function readText(path: string): Promise<string | undefined> {
   return buffer.toString('utf-8');
 }
 
-async function allocate(ctx: MergeContext): Promise<{ allocated: Record<string, string>; refusals: string[] }> {
+/**
+ * Gives every provisional id a real number on the combined tree and rewrites its citations.
+ * `renumbered` is each source file (outside design/, project-relative) whose text that changed.
+ */
+async function allocate(
+  ctx: MergeContext,
+): Promise<{ allocated: Record<string, string>; refusals: string[]; renumbered: string[] }> {
   const top = ctx.top;
   const ledgers = NUMBERED_LEDGER_SPECS.map((spec) => ({ spec, path: `${ctx.prefix}${DESIGN_DIR}/${spec.file}` }));
   const files: Record<string, string> = {};
@@ -253,16 +261,19 @@ async function allocate(ctx: MergeContext): Promise<{ allocated: Record<string, 
   }
   const { files: rewritten, mapping } = allocateProvisional(files, ledgers);
   const refusals: string[] = [];
+  const renumbered: string[] = [];
+  const design = `${ctx.prefix}${DESIGN_DIR}/`;
   for (const [name, text] of Object.entries(rewritten)) {
     if (text !== files[name]) {
       await fs.writeFile(join(top, name), text);
       await git(top, ['add', '--', name]);
+      if (name.startsWith(ctx.prefix) && !name.startsWith(design)) renumbered.push(name.slice(ctx.prefix.length));
     }
     for (const id of provisionalReferences(text)) {
       refusals.push(`${name} cites ${id}, but no ledger entry is headed ${id}. Correct the citation on the branch.`);
     }
   }
-  return { allocated: mapping, refusals };
+  return { allocated: mapping, refusals, renumbered };
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -329,13 +340,18 @@ async function combinedTreeProblems(ctx: MergeContext, alongside: string[], runT
 }
 
 // ---------------------------------------------------------------------------------------------
-// A source file both sides edited: the merge vouches for it (#403)
+// A source file the merge changed after its chunks signed it off: the merge vouches for it
 // ---------------------------------------------------------------------------------------------
 
-/** A source file both sides edited, and the chunks involved whose Build Manifest names it. */
+/**
+ * A source file the combined tree has in a form no chunk signed off, the chunks involved whose
+ * Build Manifest names it, and why: both sides edited it (#403), or the merge rewrote its
+ * provisional ledger citations to real numbers (#435).
+ */
 interface SharedFile {
   path: string;
   chunks: string[];
+  why: 'both-edited' | 'renumbered';
 }
 
 async function manifestPaths(projectDir: string, slug: string): Promise<Set<string>> {
@@ -346,21 +362,33 @@ async function manifestPaths(projectDir: string, slug: string): Promise<Set<stri
 
 /**
  * Each source file (outside design/) that the branch changed and the main line also changed after
- * the branch left it, with the chunks, this one or one built alongside it, whose Build Manifest
- * names it. A file no such chunk names has no sign-off for the merge to vouch for.
+ * the branch left it, then each one the allocation renumbered, with the chunks, this one or one
+ * built alongside it, whose Build Manifest names it. A file no such chunk names has no sign-off
+ * for the merge to vouch for.
  */
-async function sharedSourceFiles(ctx: MergeContext, alongside: string[]): Promise<SharedFile[]> {
+async function sharedSourceFiles(ctx: MergeContext, alongside: string[], renumbered: string[]): Promise<SharedFile[]> {
   const mainChanged = new Set((await git(ctx.top, ['diff', '--name-only', ctx.fork, 'HEAD'])).split('\n'));
   const design = `${ctx.prefix}${DESIGN_DIR}/`;
   const both = ctx.changed
     .filter((name) => mainChanged.has(name) && name.startsWith(ctx.prefix) && !name.startsWith(design))
     .map((name) => name.slice(ctx.prefix.length));
-  if (both.length === 0) return [];
+  const files = [
+    ...both.map((path) => ({ path, why: 'both-edited' as const })),
+    ...renumbered.filter((path) => !both.includes(path)).map((path) => ({ path, why: 'renumbered' as const })),
+  ];
+  if (files.length === 0) return [];
   const manifests: Array<[string, Set<string>]> = [];
   for (const slug of [ctx.slug, ...alongside]) manifests.push([slug, await manifestPaths(ctx.projectDir, slug)]);
-  return both
-    .map((path) => ({ path, chunks: manifests.filter(([, paths]) => paths.has(path)).map(([slug]) => slug).sort() }))
+  return files
+    .map((file) => ({ ...file, chunks: manifests.filter(([, paths]) => paths.has(file.path)).map(([slug]) => slug).sort() }))
     .filter((file) => file.chunks.length > 0);
+}
+
+/** Why the merge had to vouch for `file`, as a clause after its path. */
+function vouchReason(ctx: MergeContext, file: SharedFile): string {
+  return file.why === 'both-edited'
+    ? `which ${ctx.branch} and the main line both edited`
+    : `whose provisional ledger citations this merge renumbered`;
 }
 
 /** The test files a chunk's Spec Manifest lists, or the sentence that says why there are none to run. */
@@ -400,11 +428,14 @@ async function ownCheckFailures(projectDir: string, slug: string, runTests: Test
 }
 
 function vouchRefusal(ctx: MergeContext, shared: SharedFile[], slug: string, [what, detail]: [string, string]): string {
-  const files = shared.filter((f) => f.chunks.includes(slug)).map((f) => f.path).join(', ');
+  const files = shared
+    .filter((f) => f.chunks.includes(slug))
+    .map((f) => `${f.path} (${vouchReason(ctx, f)})`)
+    .join(', ');
   return (
-    `${what} on the combined tree, so this merge cannot vouch for ${files}, which ${ctx.branch} and ` +
-    `the main line both edited: ${detail} Merge the main line into ${ctx.branch} in its worktree, fix it ` +
-    `there, re-run the chunk's checks, commit, and run chunk-merge again.`
+    `${what} on the combined tree, so this merge cannot vouch for ${files}: ${detail} Merge the main ` +
+    `line into ${ctx.branch} in its worktree, fix it there, re-run the chunk's checks, commit, and run ` +
+    `chunk-merge again.`
   );
 }
 
@@ -429,7 +460,8 @@ async function recordMergeSignoffs(ctx: MergeContext, shared: SharedFile[]): Pro
 }
 
 /**
- * Vouches for every source file both sides edited: each involved chunk's tests, claim-quote-check
+ * Vouches for every source file the merge changed after its chunks signed it off (both sides
+ * edited it, or the allocation renumbered it): each involved chunk's tests, claim-quote-check
  * and chunk-check (its Verified Against block, then, once the record is written, its sign-off)
  * must pass on the combined tree. Returns every failure, naming the check and the chunk.
  */
@@ -534,9 +566,9 @@ async function mergeLocked(ctx: MergeContext, runTests: TestRunner): Promise<Chu
         `chunk's own worktree, resolve the conflicts there, re-run its tests, commit, and run chunk-merge again.`,
     ]);
   }
-  const { allocated, refusals } = await allocate(ctx);
+  const { allocated, refusals, renumbered } = await allocate(ctx);
   const alongside = await builtAlongside(ctx);
-  const shared = await sharedSourceFiles(ctx, alongside);
+  const shared = await sharedSourceFiles(ctx, alongside, renumbered);
   const problems = [
     ...refusals,
     ...(await firstProblems([
@@ -587,9 +619,10 @@ function report(slug: string, result: ChunkMergeResult): void {
   }
   console.log(chalk.green(`✓ ${slug} merged; every tree-wide check passed on the combined tree.`));
   for (const [from, to] of Object.entries(result.allocated)) console.log(`  ${from} is now ${to}.`);
-  for (const { path, chunks } of result.vouched) {
+  for (const { path, chunks, why } of result.vouched) {
+    const changed = why === 'both-edited' ? 'was edited on both sides' : 'had its ledger citations renumbered';
     console.log(
-      `  ${path} was edited on both sides; the own checks of ${chunks.join(' and ')} passed on the combined ` +
+      `  ${path} ${changed}; the own checks of ${chunks.join(' and ')} passed on the combined ` +
         `file, recorded in ${DESIGN_DIR}/${MERGE_SIGNOFFS_MD}.`,
     );
   }

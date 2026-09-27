@@ -99,7 +99,8 @@ five; the last two are dispatches it is never asked about:
    built both edited is code neither sign-off saw: the merge vouches for it by re-running both
    chunks' own tests, `chunk-check` and `claim-quote-check` on the combined tree, then records it
    in `design/MERGE-SIGNOFFS.md` (the file, both chunks, the merge), which the sign-off check
-   accepts. No designer sign-off is asked for. When one of those checks fails, the refusal names
+   accepts. A source file whose provisional ledger citations the merge renumbered to real numbers
+   is vouched for the same way. No designer sign-off is asked for. When one of those checks fails, the refusal names
    the check and the chunk. A branch never writes `design/MERGE-SIGNOFFS.md` itself. A refusal is fixed on the chunk's branch: merge the
    main line into it in its worktree, resolve and re-test there, commit, and run `chunk-merge`
    again. When the merge lists references between this chunk and the chunks merged while it was
