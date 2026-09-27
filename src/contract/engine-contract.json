@@ -1,5 +1,5 @@
 {
-  "revision": 113,
+  "revision": 114,
   "bundleProtocol": 2,
   "surfaceHash": "3d6d28a5d3c36fcd",
   "payloadHash": "cae65bbab7213c58",
@@ -961,6 +961,15 @@
       "payloadHash": "cae65bbab7213c58",
       "formatHash": "0058593e7cc80205",
       "summary": "Bots in hidden-information games (a determinize sampler, such as Go Fish) no longer search moves for a seat that is not to move in the sampled world, and a move the engine refuses during the search is no longer scored as if it had been played, so their searches spend no work on illegal moves (#421). SnapshotSessionHost now holds back a bot seat whose move was refused, or that stalled, until the snapshot changes, and keeps driving the other bot seats instead of stopping the pump. A refused botTurn result now names the seat in botPlayer; the executor must forward botPlayer on its error result for the host to hold back only that seat, otherwise the pump stops as before. GameSession no longer re-checks bots in a loop while a human is to move or after a refused bot move."
+    },
+    {
+      "revision": 114,
+      "date": "2026-09-27",
+      "bundleProtocol": 2,
+      "surfaceHash": "3d6d28a5d3c36fcd",
+      "payloadHash": "cae65bbab7213c58",
+      "formatHash": "0058593e7cc80205",
+      "summary": "Adopts engine changes no fingerprint covers, made since r113 was packed (ShufflewickPub #532): GameShell's game-over card and announcement wait for a board that holds its result back (holdGameOverUntil, useGameOverReveal) and the announcement names the result the card shows (#419); the phone top strip keeps its height when the game ends (#431); providesOwnGameOverUi works when written in kebab-case (#433); boardsmith validate names the engine revision a type error runs into (#423); boardsmith test ends a failed run with a verdict naming the failing files or the signal (#429); test-step-check mutates .vue components (#425); ledger-check and claim-quote-check accept BoardSmith source cited from the installed package and claims quoting code their own chunk replaced (#426, #432). No surface, payload or format change."
     }
   ]
 }
