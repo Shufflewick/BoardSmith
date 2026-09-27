@@ -66,8 +66,11 @@ export function provisionalHeadings(text: string, spec: NumberedLedgerSpec): str
  */
 const WORD_KINDS = NUMBERED_LEDGER_SPECS.filter((s) => s.sep === ' ').map((s) => escapeRegExp(s.kind));
 const LETTER_KINDS = NUMBERED_LEDGER_SPECS.filter((s) => s.sep === '').map((s) => escapeRegExp(s.kind));
-/** Whitespace that may wrap onto the next line, but never across a blank line. */
-const GAP = '[ \\t]*\\n?[ \\t]*';
+/**
+ * Whitespace that may wrap onto the next line, never across a blank line. The next line may open
+ * with a comment or quote marker (` * `, `// `, `# `, `> `), since prose is wrapped inside those too.
+ */
+const GAP = '[ \\t]*(?:\\n[ \\t]*(?:(?:\\*|//|#|>)[ \\t]*)?)?';
 /** A kind word or letter, then an id; the groups are named only where one item is read at a time. */
 const listItem = (named: boolean, kindRequired: boolean): string => {
   const group = (name: string) => (named ? `?<${name}>` : '?:');

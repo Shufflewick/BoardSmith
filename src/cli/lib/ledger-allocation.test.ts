@@ -175,6 +175,17 @@ describe('provisional ids in list citations (#439)', () => {
     expect(provisionalReferences('design/a.md', 'G4 and @w.1, C@w.2')).toEqual(['G@w.1', 'C@w.2']);
   });
 
+  it('follows a citation wrapped onto the next line of a source comment, as Windup Warfare wraps them', () => {
+    const movement = ' * 0 with the target inside the firing cone; outside the cone it is held at 0 (Ruling\n * @ranged-units.3), and the next blow waits.\n';
+    const table = '  // then the check-in row (Decision\n  // @ranged-units.9), and Rulings 31 and\n  // @ranged-units.4.\n';
+    expect(provisionalReferences('src/rules/sim/movement.ts', movement)).toEqual(['Ruling @ranged-units.3']);
+    expect(provisionalReferences('src/ui/components/GameTable.vue', table)).toEqual([
+      'Decision @ranged-units.9',
+      'Ruling @ranged-units.4',
+    ]);
+    expect(provisionalReferences('design/a.md', 'per Ruling\n> @a.1 here')).toEqual(['Ruling @a.1']);
+  });
+
   it('names a provisional id written with no kind before it, so the merge can refuse it', () => {
     expect(provisionalReferences('design/a.md', 'as settled in @a.1, and Ruling @a.2.')).toEqual([
       '@a.1',
