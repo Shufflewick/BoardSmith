@@ -12,7 +12,8 @@
  * follow skill prose exactly, so the rules live here, and a merge that skips them is not possible
  * by running this command:
  *
- *   1. Merges are serial: a lock in the git directory refuses a second merge while one runs.
+ *   1. Merges are serial: a lock in the git directory refuses a second merge while one runs, naming
+ *      the run that holds it. The kernel releases it when that run exits, however it exits (#441).
  *   2. A branch may not add a real ledger number (it writes `Ruling @<slug>.<n>`), may not write
  *      RUN.md, and may not write another chunk's run log. Real numbers are allocated here, on the
  *      combined tree, and every citation of each provisional id is rewritten.
@@ -71,6 +72,7 @@ import { checkClaimQuotes } from './claim-quotes.js';
 import { parseSpecManifest } from './test-step-check.js';
 import { chunkCitations, pairProblems, readSketchChunks } from './parallel-check.js';
 import { appendCrossChunkEntry, changedSide, crossReferences } from './cross-chunk.js';
+import { takeOsLock } from '../lib/os-lock.js';
 
 interface ChunkMergeOptions {
   /** The chunk's branch. Defaults to `chunk/<slug>`, the branch the dispatch contract names. */
@@ -591,17 +593,20 @@ async function mergeLocked(ctx: MergeContext, runTests: TestRunner): Promise<Chu
   return { merged: true, refusals: [], allocated, alongside, crossChunk, vouched: shared };
 }
 
-async function withLock<T>(common: string, work: () => Promise<T>): Promise<T | string> {
-  const lock = join(common, 'boardsmith-chunk-merge.lock');
-  try {
-    await fs.mkdir(lock);
-  } catch {
-    return `Another chunk-merge holds ${lock}. Merges run one at a time; wait for it. If no merge is running, remove that directory.`;
-  }
+/**
+ * Runs `work` holding the merge lock, a kernel lock the process drops however it exits (#441), or
+ * returns the refusal naming who holds it. It lives in the git directory every worktree shares.
+ */
+async function withLock<T>(ctx: MergeContext, work: () => Promise<T>): Promise<T | string> {
+  const lock = await takeOsLock(
+    join(ctx.common, 'boardsmith-chunk-merge.flock'),
+    `chunk-merge of ${ctx.slug} (branch ${ctx.branch})`,
+  );
+  if (typeof lock === 'string') return lock;
   try {
     return await work();
   } finally {
-    await fs.rm(lock, { recursive: true, force: true });
+    await lock.release();
   }
 }
 
@@ -613,7 +618,7 @@ export async function chunkMerge(projectDir: string, slug: string, options: Chun
   const dir = resolve(projectDir);
   const ctx = await readContext(dir, slug, options.branch ?? `chunk/${slug}`);
   if (typeof ctx === 'string') return refused([ctx]);
-  const result = await withLock(ctx.common, () => mergeLocked(ctx, options.runTests ?? runVitest));
+  const result = await withLock(ctx, () => mergeLocked(ctx, options.runTests ?? runVitest));
   return typeof result === 'string' ? refused([result]) : result;
 }
 

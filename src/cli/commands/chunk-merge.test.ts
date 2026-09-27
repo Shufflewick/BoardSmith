@@ -1,8 +1,9 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { promises as fs } from 'node:fs';
+import { existsSync, promises as fs } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
+import { takeOsLock } from '../lib/os-lock.js';
 import { chunkMerge, resolveDesignConflicts } from './chunk-merge.js';
 import { assessSignoffs, recordSignoff } from './chunk-signoff.js';
 import { recordVerifiedAgainst } from './chunk-provenance.js';
@@ -365,6 +366,24 @@ describe('chunkMerge: references between chunks built together go to the audit',
 });
 
 describe('chunkMerge: preconditions', () => {
+  it('refuses while another chunk-merge holds the lock, naming it, and merges once it is released (#441)', async () => {
+    await buildOnBranch('trading', 100);
+    const common = git(main, 'rev-parse', '--path-format=absolute', '--git-common-dir').trim();
+    const other = await takeOsLock(join(common, 'boardsmith-chunk-merge.flock'), 'chunk-merge of quests (branch chunk/quests)');
+    if (typeof other === 'string') throw new Error(other);
+
+    const refused = await chunkMerge(main, 'trading', { runTests: budgetRunner });
+    await other.release();
+    expect(refused.merged).toBe(false);
+    expect(refused.refusals.join('\n')).toContain(
+      `Another chunk-merge holds the merge lock: chunk-merge of quests (branch chunk/quests), pid ${process.pid}`,
+    );
+    expect(git(main, 'status', '--porcelain')).toBe('');
+
+    expect((await chunkMerge(main, 'trading', { runTests: budgetRunner })).refusals).toEqual([]);
+    expect(existsSync(join(common, 'boardsmith-chunk-merge.flock.holder'))).toBe(false);
+  });
+
   it('refuses a dirty main checkout, a missing branch, and a chunk that is not verified', async () => {
     expect((await chunkMerge(main, 'trading', { runTests: budgetRunner })).refusals.join('\n')).toMatch(/no branch chunk\/trading/);
 
