@@ -2920,8 +2920,12 @@ const bytes = await runner.serialize([...result.dirty]);
 `runner.declareOffers(player, supplied)` and `runner.offersFor(player, stamp)`
 drive the offer path the same way, `runner.declareViews(...)` and
 `runner.viewsFor(...)` drive the read path, and `runner.evict(names)` releases
-partitions. `walkDeclaration(declare, read)` is the loop itself, exported so a
-host writes it once rather than three times; `settleDeclaration` is the view's
+partitions. `walkDeclaration(declare, read, readActivity, readNoticeBox)` is the
+loop itself, exported so a host writes it once rather than three times: it reads
+the partitions, seat watermarks and notice boxes each round declares, and returns
+the `WorldWalkAnswers` (`declaredActivity`, `declaredNotices`) that `apply` takes
+whole. It is host API, so it changes with the engine revision; a test that only
+wants a world to act in uses `TestWorld` below. `settleDeclaration` is the view's
 fixpoint. Every refusal on this page is reachable from a test file.
 
 **Under `boardsmith/testing`, driven the way a host drives one.** `createWorld`

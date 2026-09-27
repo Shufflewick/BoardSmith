@@ -54,6 +54,58 @@ const LIMIT: 3 = 3;
   });
 });
 
+/**
+ * #425: a chunk's `.vue` changes were never mutated, so a test that pinned only component code
+ * was blamed for asserting nothing the chunk controls. The script blocks are mutated like any
+ * TypeScript, and so are the expressions of template bindings, conditions and interpolations.
+ */
+describe('generateMutants on a single-file component (#425)', () => {
+  const sfc = `<script setup lang="ts">
+import { computed } from 'vue';
+const props = defineProps<{ n: number }>();
+const big = computed(() => props.n > 3);
+</script>
+
+<template>
+  <p v-if="!big" :title="big ? 'big' : 'small'">{{ props.n + 1 }}</p>
+  <Child :flag="true" @click="go(1)" v-for="i in [1, 2]" :key="i" />
+</template>
+`;
+
+  it('mutates the script block and the template expressions, at their lines in the .vue file', () => {
+    const mutants = generateMutants('src/ui/Count.vue', sfc, lines(1, 2, 3, 4, 5, 6, 7, 8, 9, 10));
+    expect(mutants.map((m) => `${m.line}: ${m.description}`)).toEqual([
+      '4: > -> >=',
+      '4: 3 -> 4',
+      '8: removed !',
+      '8: condition negated',
+      '8: + -> -',
+      '8: 1 -> 2',
+      '9: true -> false',
+    ]);
+    // Each mutant is the whole component with one change, so the Vue plugin compiles it as usual.
+    const change = (description: string) => mutants.find((m) => m.description === description)!.source;
+    expect(change('> -> >=')).toBe(sfc.replace('props.n > 3', 'props.n >= 3'));
+    expect(change('removed !')).toBe(sfc.replace('v-if="!big"', 'v-if="big"'));
+    expect(change('condition negated')).toBe(sfc.replace(":title=\"big ?", ":title=\"!(big) ?"));
+    expect(change('+ -> -')).toBe(sfc.replace('{{ props.n + 1 }}', '{{ props.n - 1 }}'));
+    expect(change('true -> false')).toBe(sfc.replace(':flag="true"', ':flag="false"'));
+  });
+
+  it('leaves event handlers, loops and lines the chunk did not write alone', () => {
+    // Line 9 holds a handler (`go(1)`) and a loop (`[1, 2]`): neither is a value a mutant can flip.
+    expect(generateMutants('src/ui/Count.vue', sfc, lines(9)).map((m) => m.description)).toEqual(['true -> false']);
+    expect(generateMutants('src/ui/Count.vue', sfc, lines(1, 2, 3, 5, 6, 7, 10))).toEqual([]);
+  });
+
+  it('mutates a plain <script> block too', () => {
+    const plain = '<template><p>{{ label }}</p></template>\n<script lang="ts">\nexport const limit = 5;\n</script>\n';
+    expect(generateMutants('src/ui/Plain.vue', plain, lines(3)).map((m) => `${m.line}: ${m.description}`)).toEqual([
+      '3: 5 -> 6',
+    ]);
+  });
+});
+
 // -------------------------------------------------------------------------------------------
 // runMutationCheck — a real vitest run in a generated project
 // -------------------------------------------------------------------------------------------
@@ -135,6 +187,58 @@ it('claim 1 — red', () => { expect(1).toBe(2); });
     expect(result.findings.map((f) => f.kind)).toEqual(['suite-not-green']);
     expect(result.summary.mutants).toBe(0);
   }, 60_000);
+
+  it('mutates a component the chunk changed, so a mounted test of it is credited and a tautology is not (#425)', async () => {
+    const component = `<script setup lang="ts">
+import { computed } from 'vue';
+const props = defineProps<{ score: number }>();
+const verdict = computed(() => (props.score > 10 ? 'won' : 'lost'));
+</script>
+
+<template>
+  <p class="result">{{ verdict }}</p>
+  <p class="double">{{ props.score * 2 }}</p>
+</template>
+`;
+    const project = await makeProject({
+      'vitest.config.ts': `import { defineConfig } from 'vitest/config';
+import vue from '@vitejs/plugin-vue';
+export default defineConfig({ plugins: [vue()], test: { environment: 'jsdom', include: ['tests/**/*.test.ts'] } });
+`,
+      'src/ui/Result.vue': component,
+    });
+    const testSource = `import { it, expect } from 'vitest';
+import { mount } from '@vue/test-utils';
+import Result from '../src/ui/Result.vue';
+it('claim 1 — a score over ten wins', () => {
+  expect(mount(Result, { props: { score: 11 } }).find('.result').text()).toBe('won');
+});
+it('claim 2 — tautology', () => { const score = 11; expect(score).toBe(11); });
+// Only a template mutant can make this fail: the script never touches the doubled score.
+it('claim 3 — the doubled score is shown', () => {
+  expect(mount(Result, { props: { score: 11 } }).find('.double').text()).toBe('22');
+});
+`;
+    const testPath = join(project, 'tests/result.test.ts');
+    await fs.mkdir(dirname(testPath), { recursive: true });
+    await fs.writeFile(testPath, testSource);
+
+    const result = await runMutationCheck({
+      projectDir: project,
+      testFiles: [{ path: 'tests/result.test.ts', absPath: testPath, source: testSource }],
+      added: new Map([['src/ui/Result.vue', lines(1, 2, 3, 4, 5, 6, 7, 8, 9, 10)]]),
+      claims: [1, 2, 3],
+      log: () => {},
+    });
+
+    expect(result.summary.files).toBe(1);
+    expect(result.summary.killed).toBeGreaterThan(0);
+    expect(result.findings.map((f) => `${f.kind} ${f.subject}`)).toEqual([
+      'claim-survives-mutation claim 2',
+      'test-survives-mutation tests/result.test.ts > claim 2 — tautology',
+    ]);
+    expect(await fs.readFile(join(project, 'src/ui/Result.vue'), 'utf-8')).toBe(component);
+  }, 120_000);
 
   it('says how to install vitest when the project has none', async () => {
     const tree = tempTree('bs-mutation-');

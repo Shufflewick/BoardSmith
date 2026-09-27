@@ -22,6 +22,7 @@ import { spawn } from 'node:child_process';
 import { existsSync, promises as fs, realpathSync } from 'node:fs';
 import { join, relative, sep } from 'node:path';
 import { parseSource, walk, findTestBlocks, type AstNode, type ParsedSource, type TestBlock } from './test-step-ast.js';
+import { codeRegions } from './test-step-sfc.js';
 import type { ChunkTestFile, TestStepFinding } from './test-step-check.js';
 import { scratchDir } from '../lib/project-paths.js';
 import { VITEST_CONFIG_NAMES } from '../lib/test-run-scope.js';
@@ -144,16 +145,30 @@ const MUTATORS: Readonly<Record<string, Mutator>> = Object.freeze({
   ExpressionStatement: removeStatement,
 });
 
-/** Every mutant of `source` whose change starts on one of `addedLines`, in source order. */
+/**
+ * Every mutant of `source` whose change starts on one of `addedLines`, in source order. A Vue
+ * component's script blocks and template expressions are mutated; the rest of it is markup (#425).
+ */
 export function generateMutants(file: string, source: string, addedLines: ReadonlySet<number>): Mutant[] {
-  const { ast, tokens } = parseSource(source, file);
   const found: Array<{ start: number; order: number; line: number; description: string; edit: Edit }> = [];
-  walk(ast, (node, ancestors) => {
-    const mutator = MUTATORS[node.type];
-    if (!mutator || !addedLines.has(node.loc.start.line)) return;
-    const change = mutator({ node, ancestors, source, tokens });
-    if (change) found.push({ start: node.range[0], order: found.length, line: node.loc.start.line, ...change });
-  });
+  for (const region of codeRegions(file, source)) {
+    const { ast, tokens } = parseSource(region.text, file);
+    walk(ast, (node, ancestors) => {
+      const line = region.firstLine + node.loc.start.line - 1;
+      const mutator = MUTATORS[node.type];
+      if (!mutator || !addedLines.has(line)) return;
+      const change = mutator({ node, ancestors, source: region.text, tokens });
+      if (!change) return;
+      const [from, to, replacement] = change.edit;
+      found.push({
+        start: region.offset + node.range[0],
+        order: found.length,
+        line,
+        description: change.description,
+        edit: [region.offset + from, region.offset + to, replacement],
+      });
+    });
+  }
   return found
     .sort((a, b) => a.line - b.line || a.start - b.start || a.order - b.order)
     .map(({ line, description, edit: [from, to, replacement] }) => ({
