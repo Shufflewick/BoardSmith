@@ -159,6 +159,13 @@ describe('WF-03 — build-chunk.md honours orchestrated mode', () => {
     expect(playtest).toMatch(/never.*infer a waiver\s*from silence/i);
   });
 
+  it('says a skills reinstall is provenance, never a stale Verified Against block (#438)', () => {
+    const close = flat(read('build/close.md'));
+    expect(close).toMatch(/skills tree hash as provenance only/i);
+    expect(close).toMatch(/reinstalling the bs skills never makes a closed chunk stale/i);
+    expect(flat(read('check-status.md'))).toMatch(/skills-tree drift is information[^.]*never staleness/i);
+  });
+
   it('close.md returns instead of auto-advancing under an orchestrated run', () => {
     const close = flat(read('build/close.md'));
     expect(close).toMatch(/In orchestrated mode, close returns instead of auto-advancing/i);

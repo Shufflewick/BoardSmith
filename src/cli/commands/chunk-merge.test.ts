@@ -499,6 +499,20 @@ describe('chunkMerge: a source file two chunks built together both edited (#403)
     await expectSecondMergeRefused('quests', 'trading', /claim-quote-check fails for trading on the combined tree[\s\S]*Claim 1/);
   });
 
+  it('vouches for a closed chunk after the skills were reinstalled on the main line (#438)', async () => {
+    const skill = '.claude/skills/bs-build-chunk/SKILL.md';
+    await write(main, { [skill]: 'skill text v1\n' });
+    git(main, 'add', '-A');
+    git(main, 'commit', '-q', '-m', 'skills v1');
+    await buildShared('trading');
+    await buildShared('quests');
+    await write(main, { [skill]: 'skill text v2\n' });
+    git(main, 'commit', '-q', '-am', 'skills reinstalled');
+
+    expect((await chunkMerge(main, 'trading', { runTests: ownTestsRunner })).refusals).toEqual([]);
+    expect((await chunkMerge(main, 'quests', { runTests: ownTestsRunner })).refusals).toEqual([]);
+  });
+
   it("refuses when a chunk's chunk-check fails on the combined tree", async () => {
     await buildShared('trading');
     await buildShared('quests', { chunkCheck: false });

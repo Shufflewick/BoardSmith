@@ -147,7 +147,8 @@ from the state just read:
 FORMAT its output — do not compute any of it here. Report: how many chunks are `full`,
 `code-conformance-only` (with each one's reason code), and `unknown`; which rulebook edition and
 skills-tree hash each group was verified against, calling out drift when more than one of either
-is present; and, under its own heading, every slug in `verifiedWithoutProvenance` — chunks that
+is present (skills-tree drift is information about which skill text governed each verification,
+never staleness: a skills reinstall leaves a closed chunk current); and, under its own heading, every slug in `verifiedWithoutProvenance` — chunks that
 claim verification with no provenance record behind them. `unknown` means the chunk was verified
 before provenance recording existed; it is not the same as `code-conformance-only` and must not
 be reported as it.
