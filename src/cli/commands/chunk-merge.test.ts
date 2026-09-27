@@ -6,6 +6,7 @@ import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { chunkMerge, resolveDesignConflicts } from './chunk-merge.js';
 import { assessSignoffs, recordSignoff } from './chunk-signoff.js';
 import { recordVerifiedAgainst } from './chunk-provenance.js';
+import { checkClaimQuotes } from './claim-quotes.js';
 import { checkConstraints, type TestRunner } from './constraint-check.js';
 
 /**
@@ -218,6 +219,28 @@ describe('chunkMerge: the combined tree is checked, not the branch alone', () =>
     expect((await chunkMerge(main, 'trading', { runTests: budgetRunner })).refusals).toEqual([]);
     const result = await chunkMerge(main, 'auctions', { runTests: budgetRunner });
     expect(result.refusals.join('\n')).toMatch(/both cite rulebook\/04-trading\.md/);
+    expect(status()).toBe('');
+  });
+
+  it("sees the branch's own commits on the combined tree, so a claim pinned to one of them holds (#435)", async () => {
+    const trading = await buildOnBranch('trading', 100);
+    const closed = git(trading, 'rev-parse', 'HEAD').trim();
+    const pinned = [
+      '1. **Trading has its own budget.**',
+      '   > export const PARTITION_BYTES = 100;',
+      `   Source: ../src/trading.ts@${closed.slice(0, 10)}:1`,
+    ].join('\n');
+    const chunk = await read(trading, 'design/chunks/trading/CHUNK.md');
+    await write(trading, { 'design/chunks/trading/CHUNK.md': chunk.replace(/^1\. \*\*<!-- claim text -->\*\*\n.*\n.*\n/m, `${pinned}\n`) });
+    git(trading, 'commit', '-q', '-am', 'chunk-trading/close: claim pinned to the code as the chunk left it');
+    expect((await checkClaimQuotes(trading, 'trading')).refusals).toEqual([]);
+    // The main line moves on, so the branch's commits are reachable only from the merge.
+    await write(main, { 'README.md': 'the main line moved on\n' });
+    git(main, 'add', '-A');
+    git(main, 'commit', '-q', '-m', 'main line moves on');
+
+    const result = await chunkMerge(main, 'trading', { runTests: budgetRunner });
+    expect(result.refusals).toEqual([]);
     expect(status()).toBe('');
   });
 });

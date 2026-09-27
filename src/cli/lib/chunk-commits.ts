@@ -15,6 +15,11 @@ import { promisify } from 'node:util';
  * (line-location.ts, #426). Only the chunk's history is accepted: the pin says "as this chunk
  * found it", not "somewhere in the project's past". `claim-quote-check` reads the quote there, and
  * `ledger-check` holds a verified chunk's citation to the file and lines being there.
+ *
+ * WHERE THE COMMITS ARE READ FROM is the history of the tree in the checkout: HEAD, and, while a
+ * merge is in progress, the commits being merged (MERGE_HEAD) too. `chunk-merge` runs every check
+ * on the combined tree before it commits the merge, when a branch's chunk commits are reachable
+ * only from MERGE_HEAD (#435). Every check that asks which commits are a chunk's asks here.
  */
 
 const execFileAsync = promisify(execFile);
@@ -31,11 +36,17 @@ export interface ChunkCommit {
   label: string;
 }
 
+/** The tips of the checked-out tree's history: HEAD, and MERGE_HEAD while a merge is in progress. */
+async function checkoutTips(projectDir: string): Promise<string[]> {
+  const merging = await git(projectDir, ['rev-parse', '--quiet', '--verify', 'MERGE_HEAD^{commit}']).catch(() => '');
+  return merging.trim() === '' ? ['HEAD'] : ['HEAD', 'MERGE_HEAD'];
+}
+
 /** The chunk's commits, newest first, each with its parents and subject. */
 async function chunkLog(projectDir: string, slug: string): Promise<{ hash: string; parents: string[]; subject: string }[]> {
   let log: string;
   try {
-    log = await git(projectDir, ['log', '--topo-order', '--format=%H%x09%P%x09%s']);
+    log = await git(projectDir, ['log', '--topo-order', '--format=%H%x09%P%x09%s', ...(await checkoutTips(projectDir)), '--']);
   } catch {
     throw new Error(
       `${projectDir} is not a git repository with commits.\n` +
