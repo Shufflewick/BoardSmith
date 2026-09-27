@@ -13,7 +13,7 @@ import {
 import { assertBareName } from '../lib/user-name.js';
 import { testRunScopeProblem } from '../lib/test-run-scope.js';
 import { extractSection, parseRulings } from './build-manifest.js';
-import { ENTRY_NUMBER, NUMBERED_LEDGER_SPECS, provisionalHeadings } from '../lib/ledger-allocation.js';
+import { ENTRY_NUMBER, entryHeadingPattern } from '../lib/ledger-entries.js';
 
 /**
  * `boardsmith constraint-check [slug]`: does the project hold its own hard constraints (#288)?
@@ -107,11 +107,10 @@ function normalize(text: string): string {
 /** Splits a section into its `### <id>` entries and reads each entry's `- Field: value` lines. */
 function readEntries(section: string | undefined, prefix: 'C' | 'G'): Array<Record<string, string>> {
   const body = stripComments(section ?? '');
-  const heading = new RegExp(`^### (${prefix}${ENTRY_NUMBER})\\s*$`, 'gm');
-  const starts = [...body.matchAll(heading)];
+  const starts = [...body.matchAll(entryHeadingPattern(prefix, '', ENTRY_NUMBER))];
   return starts.map((match, i) => {
     const end = i + 1 < starts.length ? starts[i + 1].index : body.length;
-    const fields: Record<string, string> = { id: match[1] };
+    const fields: Record<string, string> = { id: `${prefix}${match[1]}` };
     for (const line of body.slice(match.index, end).split('\n')) {
       const field = /^- ([A-Za-z ]+):\s*(.*)$/.exec(line.trim());
       if (field) fields[field[1].toLowerCase()] = field[2].trim();
@@ -245,11 +244,7 @@ function duplicateIdRefusals(entries: ReadonlyArray<{ id: string }>): string[] {
 
 async function rulingNumbers(projectDir: string): Promise<Set<string>> {
   const text = stripComments((await readOptional(designPath(projectDir, RULINGS_MD))) ?? '');
-  const rulings = NUMBERED_LEDGER_SPECS.find((spec) => spec.file === RULINGS_MD)!;
-  return new Set([
-    ...parseRulings(text).map((r) => `Ruling ${r.number}`),
-    ...provisionalHeadings(text, rulings),
-  ]);
+  return new Set(parseRulings(text).map((r) => `Ruling ${r.id}`));
 }
 
 async function capRefusals(projectDir: string, g: GrowingStructure, name: string): Promise<string[]> {

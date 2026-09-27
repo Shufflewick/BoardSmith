@@ -34,6 +34,7 @@ import {
   designChunksDir,
   designPath,
 } from '../lib/project-paths.js';
+import { ENTRY_NUMBER } from '../lib/ledger-entries.js';
 
 // -------------------------------------------------------------------------------------------
 // scanTestCitations
@@ -41,18 +42,19 @@ import {
 
 export interface ScannedCitations {
   claims: number[];
-  rulings: number[];
+  /** Ruling ids, real (`9`) or provisional (`@trading.1`, on a chunk branch before merge). */
+  rulings: string[];
   importsRules: boolean;
 }
 
 /**
- * Scans forward from `start` for a comma/slash/`and`/whitespace-separated run of integers,
- * stopping the instant the next token is not a number — in particular, a `Ruling` token is never
- * a valid separator, so `claim 28 / Ruling 9/15` stops the claim list at `28` rather than
- * swallowing `9` and `15`.
+ * Scans forward from `start` for a comma/slash/`and`/whitespace-separated run of tokens matching
+ * `token` (anchored), stopping the instant the next token does not match — in particular, a
+ * `Ruling` token is never a valid separator, so `claim 28 / Ruling 9/15` stops the claim list at
+ * `28` rather than swallowing `9` and `15`.
  */
-function scanNumberList(text: string, start: number): { numbers: number[]; end: number } {
-  const numbers: number[] = [];
+function scanTokenList(text: string, start: number, token: RegExp): { tokens: string[]; end: number } {
+  const tokens: string[] = [];
   let i = start;
   const SEP = /^(\s*,\s*|\s*\/\s*|\s+and\s+|\s+)/i;
 
@@ -62,8 +64,8 @@ function scanNumberList(text: string, start: number): { numbers: number[]; end: 
     let consumed = 0;
     let checkRest = rest;
 
-    if (numbers.length > 0) {
-      // Every number after the first REQUIRES a separator — no separator, no more numbers.
+    if (tokens.length > 0) {
+      // Every number after the first REQUIRES a separator — no separator, no more tokens.
       if (!sepMatch) break;
       consumed = sepMatch[0].length;
       checkRest = rest.slice(consumed);
@@ -72,18 +74,20 @@ function scanNumberList(text: string, start: number): { numbers: number[]; end: 
       checkRest = rest.slice(consumed);
     }
 
-    const numMatch = /^\d+/.exec(checkRest);
-    if (!numMatch) break;
+    const tokenMatch = token.exec(checkRest);
+    if (!tokenMatch) break;
 
-    numbers.push(Number(numMatch[0]));
-    i += consumed + numMatch[0].length;
+    tokens.push(tokenMatch[0]);
+    i += consumed + tokenMatch[0].length;
   }
 
-  return { numbers, end: i };
+  return { tokens, end: i };
 }
 
 const CLAIM_HEAD = /\bclaims?\b\s*/gi;
 const RULING_HEAD = /\brulings?\b\s*/gi;
+const CLAIM_NUMBER = /^\d+/;
+const RULING_ID = new RegExp(`^${ENTRY_NUMBER}`);
 /** Any import/require whose string literal names a `rules/` path segment, relative or aliased. */
 const IMPORT_PATH = /(?:from\s+|require\(\s*)['"]([^'"]+)['"]/g;
 
@@ -95,15 +99,15 @@ const IMPORT_PATH = /(?:from\s+|require\(\s*)['"]([^'"]+)['"]/g;
  */
 export function scanTestCitations(sourceText: string): ScannedCitations {
   const claims = new Set<number>();
-  const rulings = new Set<number>();
+  const rulings = new Set<string>();
 
   for (const m of sourceText.matchAll(CLAIM_HEAD)) {
-    const { numbers } = scanNumberList(sourceText, m.index + m[0].length);
-    numbers.forEach((n) => claims.add(n));
+    const { tokens } = scanTokenList(sourceText, m.index + m[0].length, CLAIM_NUMBER);
+    tokens.forEach((n) => claims.add(Number(n)));
   }
   for (const m of sourceText.matchAll(RULING_HEAD)) {
-    const { numbers } = scanNumberList(sourceText, m.index + m[0].length);
-    numbers.forEach((n) => rulings.add(n));
+    const { tokens } = scanTokenList(sourceText, m.index + m[0].length, RULING_ID);
+    tokens.forEach((id) => rulings.add(id));
   }
 
   let importsRules = false;
@@ -116,7 +120,7 @@ export function scanTestCitations(sourceText: string): ScannedCitations {
 
   return {
     claims: [...claims].sort((a, b) => a - b),
-    rulings: [...rulings].sort((a, b) => a - b),
+    rulings: [...rulings],
     importsRules,
   };
 }
@@ -191,7 +195,7 @@ export interface TraceCheckResult {
     rulingCitations: number;
   };
   /** Supersede-verb sentences whose chain could not be parsed — reported, never assumed. */
-  unparsedSupersessions: Array<{ ruling: number; sentence: string }>;
+  unparsedSupersessions: Array<{ ruling: string; sentence: string }>;
 }
 
 function emptyCounts(): Record<FindingKind, number> {
@@ -337,7 +341,7 @@ export async function traceCheckCommand(
 
   let claimCitationTotal = 0;
   let rulingCitationTotal = 0;
-  const citedRulings = new Set<number>();
+  const citedRulings = new Set<string>();
 
   for (const [relPath, absPath] of [...discovered.entries()].sort(([a], [b]) => a.localeCompare(b))) {
     let sourceText: string;
@@ -432,20 +436,20 @@ export async function traceCheckCommand(
 
   for (const ruling of parsedRulings) {
     if (ruling.supersededBy !== undefined) continue; // superseded rulings are not demanded a test
-    if (!citedRulings.has(ruling.number)) {
+    if (!citedRulings.has(ruling.id)) {
       pushFinding(findings, counts, {
         kind: 'ruling-untested',
         chunk: '',
-        subject: `Ruling ${ruling.number}`,
-        detail: `no test file cites Ruling ${ruling.number}`,
+        subject: `Ruling ${ruling.id}`,
+        detail: `no test file cites Ruling ${ruling.id}`,
       });
     }
   }
 
-  const unparsedSupersessions: Array<{ ruling: number; sentence: string }> = [];
+  const unparsedSupersessions: Array<{ ruling: string; sentence: string }> = [];
   for (const ruling of parsedRulings) {
     for (const sentence of ruling.unparsedSupersession) {
-      unparsedSupersessions.push({ ruling: ruling.number, sentence });
+      unparsedSupersessions.push({ ruling: ruling.id, sentence });
     }
   }
 

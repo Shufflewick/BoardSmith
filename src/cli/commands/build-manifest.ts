@@ -385,9 +385,10 @@ export function extractVerifiedCommitHash(chunkText: string): string | undefined
 // ---------------------------------------------------------------------------------------------
 
 export interface ParsedRuling {
-  number: number;
-  /** Set only for the explicit supersede verbs, direction-resolved. */
-  supersededBy?: number;
+  /** The ruling's id as its heading writes it: `12`, or provisional `@trading.1` on a chunk branch. */
+  id: string;
+  /** Set only for the explicit supersede verbs, direction-resolved: the superseding ruling's id. */
+  supersededBy?: string;
   /** Supersede-verb sentences whose target number or direction could not be resolved. */
   unparsedSupersession: string[];
   /**
@@ -437,14 +438,14 @@ function sentences(body: string): string[] {
 export function parseRulings(rulingsText: string): ParsedRuling[] {
   const headings = parseLedgerEntries(rulingsText, 'Ruling');
 
-  const byNumber = new Map<number, ParsedRuling>();
+  const byId = new Map<string, ParsedRuling>();
   for (const h of headings) {
-    byNumber.set(h.number, { number: h.number, unparsedSupersession: [], body: '' });
+    byId.set(h.id, { id: h.id, unparsedSupersession: [], body: '' });
   }
 
   for (const h of headings) {
     const body = h.body;
-    const entry = byNumber.get(h.number)!;
+    const entry = byId.get(h.id)!;
     entry.body = body;
 
     for (const sentence of sentences(body)) {
@@ -453,7 +454,7 @@ export function parseRulings(rulingsText: string): ParsedRuling[] {
       const backward = SUPERSEDED_BY.exec(sentence);
       if (backward) {
         // "superseded by Ruling M" on entry N's own body -> N is superseded by M.
-        entry.supersededBy = Number(backward[1]);
+        entry.supersededBy = backward[1];
         continue;
       }
 
@@ -461,10 +462,9 @@ export function parseRulings(rulingsText: string): ParsedRuling[] {
       if (forward) {
         // "supersedes Ruling M" on entry N's own body -> M is superseded by N, IF the sentence
         // names the ruling directly (not a sub-part like "the RATIONALE of Ruling M").
-        const targetNumber = Number(forward[1]);
-        const target = byNumber.get(targetNumber);
+        const target = byId.get(forward[1]);
         if (target) {
-          target.supersededBy = h.number;
+          target.supersededBy = h.id;
           continue;
         }
       }
@@ -475,5 +475,5 @@ export function parseRulings(rulingsText: string): ParsedRuling[] {
     }
   }
 
-  return headings.map((h) => byNumber.get(h.number)!);
+  return headings.map((h) => byId.get(h.id)!);
 }

@@ -11,6 +11,7 @@ import { promises as fs } from 'node:fs';
 import { join, relative, resolve } from 'node:path';
 import chalk from 'chalk';
 import { findHeadingIndex, parseRulings } from './build-manifest.js';
+import { allocatedNumber } from '../lib/ledger-entries.js';
 import {
   VERIFIED_AGAINST_HEADING,
   VERIFIED_AGAINST_END,
@@ -698,7 +699,7 @@ const RULING_LABELS = Object.freeze([
 export function nextRulingNumber(rulingsText: string): number {
   const parsed = parseRulings(rulingsText);
   if (parsed.length === 0) return 1;
-  return Math.max(...parsed.map((r) => r.number)) + 1;
+  return Math.max(...parsed.map((r) => allocatedNumber('Ruling', r.id))) + 1;
 }
 
 /**

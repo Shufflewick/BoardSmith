@@ -127,6 +127,11 @@ describe('enumerateRulingsForRecheck', () => {
     expect(result.skipped).toEqual([{ number: 3, supersededBy: 9 }]);
   });
 
+  it('refuses a provisional ruling, which only a chunk branch holds, naming it (#436)', () => {
+    const text = sevenRuling3And9() + '\n### Ruling @ranged-units.1\n- Decision: x.\n';
+    expect(() => enumerateRulingsForRecheck(text)).toThrow(/Ruling @ranged-units\.1 is a provisional id.*chunk-merge/s);
+  });
+
   it('enumerated entries carry the ruling body text', () => {
     const result = enumerateRulingsForRecheck(sevenRuling3And9());
     const ruling9 = result.enumerated.find((r) => r.number === 9)!;

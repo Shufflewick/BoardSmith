@@ -60,7 +60,7 @@ import { CHUNK_EVIDENCE_DIR, citedEvidencePaths } from '../lib/cited-evidence.js
 import { type ChunkCommit, type PinnedCommit, chunkPins } from '../lib/chunk-commits.js';
 import { LINE_LOCATION_HINT, type LineRange, fileLines, lineRangeProblem } from '../lib/line-location.js';
 import { type LedgerEntry, parseLedgerEntries, supersessionPatterns } from '../lib/ledger-entries.js';
-import { NUMBERED_LEDGER_SPECS, duplicateProvisionalIds, provisionalHeadings } from '../lib/ledger-allocation.js';
+import { NUMBERED_LEDGER_SPECS, provisionalHeadings } from '../lib/ledger-allocation.js';
 import { checkCrossChunkLedger } from './cross-chunk.js';
 
 export type LedgerFindingKind =
@@ -105,77 +105,78 @@ const NUMBERED_LEDGERS = [
 // Numbering and supersession
 // ---------------------------------------------------------------------------------------------
 
-function groupByNumber(entries: LedgerEntry[]): Map<number, LedgerEntry[]> {
-  const byNumber = new Map<number, LedgerEntry[]>();
+function groupById(entries: LedgerEntry[]): Map<string, LedgerEntry[]> {
+  const byId = new Map<string, LedgerEntry[]>();
   for (const entry of entries) {
-    const list = byNumber.get(entry.number) ?? [];
+    const list = byId.get(entry.id) ?? [];
     list.push(entry);
-    byNumber.set(entry.number, list);
+    byId.set(entry.id, list);
   }
-  return byNumber;
+  return byId;
 }
 
-function duplicateFindings(
-  byNumber: Map<number, LedgerEntry[]>,
-  kind: string,
-  ledger: string,
-): LedgerFinding[] {
+function duplicateFindings(byId: Map<string, LedgerEntry[]>, kind: string, ledger: string): LedgerFinding[] {
   const findings: LedgerFinding[] = [];
-  for (const [number, list] of byNumber) {
+  for (const [id, list] of byId) {
     if (list.length < 2) continue;
     const lines = list.map((e) => e.line);
+    const remedy = id.startsWith('@')
+      ? `A provisional id is allocated one real number at merge, so the entries under it would be merged ` +
+        `into one citation. Give the later one the next unused provisional id for this chunk.`
+      : `A citation of "${kind} ${id}" now means two things. Keep the first, give the later one the next ` +
+        `unused number, and update every citation that meant it.`;
     findings.push({
       ledger,
-      entry: `${kind} ${number}`,
+      entry: `${kind} ${id}`,
       kind: 'duplicate-number',
       detail:
-        `${kind} ${number} is used ${list.length} times, at lines ${lines.slice(0, -1).join(', ')} and ` +
-        `${lines[lines.length - 1]}. A citation of "${kind} ${number}" now means two things. Keep the ` +
-        `first, give the later one the next unused number, and update every citation that meant it.`,
+        `${kind} ${id} is used ${list.length} times, at lines ${lines.slice(0, -1).join(', ')} and ` +
+        `${lines[lines.length - 1]}. ${remedy}`,
     });
   }
   return findings;
 }
 
-function allMatches(pattern: RegExp, text: string): number[] {
-  return [...text.matchAll(new RegExp(pattern.source, 'gi'))].map((m) => Number(m[1]));
+/** Every entry id `pattern` captures in `text`, real or provisional. */
+function allMatches(pattern: RegExp, text: string): string[] {
+  return [...text.matchAll(new RegExp(pattern.source, 'gi'))].map((m) => m[1]);
 }
 
 interface Supersession {
   kind: string;
   ledger: string;
-  byNumber: Map<number, LedgerEntry[]>;
+  byId: Map<string, LedgerEntry[]>;
   supersedes: RegExp;
   supersededBy: RegExp;
 }
 
 /** Findings for every `supersedes <Kind> M` written on `entry`. */
 function forwardSupersessionFindings(entry: LedgerEntry, s: Supersession): LedgerFinding[] {
-  const { kind, ledger, byNumber } = s;
+  const { kind, ledger, byId } = s;
   const findings: LedgerFinding[] = [];
   for (const target of allMatches(s.supersedes, entry.body)) {
-    const targets = byNumber.get(target);
+    const targets = byId.get(target);
     if (!targets) {
       findings.push({
         ledger,
-        entry: `${kind} ${entry.number}`,
+        entry: `${kind} ${entry.id}`,
         kind: 'supersession-target-missing',
         detail:
-          `${kind} ${entry.number} (line ${entry.line}) says it supersedes ${kind} ${target}, ` +
+          `${kind} ${entry.id} (line ${entry.line}) says it supersedes ${kind} ${target}, ` +
           `but there is no ${kind} ${target}. Correct the number it names.`,
       });
       continue;
     }
-    const unmarked = targets.filter((old) => !allMatches(s.supersededBy, old.body).includes(entry.number));
+    const unmarked = targets.filter((old) => !allMatches(s.supersededBy, old.body).includes(entry.id));
     for (const old of unmarked) {
       findings.push({
         ledger,
         entry: `${kind} ${target}`,
         kind: 'superseded-without-pointer',
         detail:
-          `${kind} ${entry.number} (line ${entry.line}) supersedes ${kind} ${target}, but ` +
+          `${kind} ${entry.id} (line ${entry.line}) supersedes ${kind} ${target}, but ` +
           `${kind} ${target} (line ${old.line}) does not say so, so anyone reading it still ` +
-          `takes it as current. Add the line "- Superseded by: ${kind} ${entry.number}" to ` +
+          `takes it as current. Add the line "- Superseded by: ${kind} ${entry.id}" to ` +
           `${kind} ${target}.`,
       });
     }
@@ -185,15 +186,15 @@ function forwardSupersessionFindings(entry: LedgerEntry, s: Supersession): Ledge
 
 /** Findings for every in-place `Superseded by: <Kind> M` pointer on `entry` that names nothing. */
 function pointerFindings(entry: LedgerEntry, s: Supersession): LedgerFinding[] {
-  const { kind, ledger, byNumber } = s;
+  const { kind, ledger, byId } = s;
   return allMatches(s.supersededBy, entry.body)
-    .filter((pointer) => !byNumber.has(pointer))
+    .filter((pointer) => !byId.has(pointer))
     .map((pointer) => ({
       ledger,
-      entry: `${kind} ${entry.number}`,
+      entry: `${kind} ${entry.id}`,
       kind: 'supersession-target-missing' as const,
       detail:
-        `${kind} ${entry.number} (line ${entry.line}) says it is superseded by ${kind} ${pointer}, ` +
+        `${kind} ${entry.id} (line ${entry.line}) says it is superseded by ${kind} ${pointer}, ` +
         `but there is no ${kind} ${pointer}. Correct the number, or add the superseding entry.`,
     }));
 }
@@ -204,20 +205,10 @@ function pointerFindings(entry: LedgerEntry, s: Supersession): LedgerFinding[] {
  */
 export function checkNumberedLedger(text: string, kind: string, ledger: string): LedgerFinding[] {
   const entries = parseLedgerEntries(text, kind);
-  const byNumber = groupByNumber(entries);
-  const supersession: Supersession = { kind, ledger, byNumber, ...supersessionPatterns(kind) };
-  const provisionalDupes = duplicateProvisionalIds(text, { file: ledger, kind, sep: ' ' }).map((id) => ({
-    ledger,
-    entry: id,
-    kind: 'duplicate-number' as const,
-    detail:
-      `${id} is used as a heading more than once. A provisional id is allocated one real number at ` +
-      `merge, so two entries under it would be merged into one citation. Give the later one the ` +
-      `next unused provisional id for this chunk.`,
-  }));
+  const byId = groupById(entries);
+  const supersession: Supersession = { kind, ledger, byId, ...supersessionPatterns(kind) };
   return [
-    ...provisionalDupes,
-    ...duplicateFindings(byNumber, kind, ledger),
+    ...duplicateFindings(byId, kind, ledger),
     ...entries.flatMap((entry) => [
       ...forwardSupersessionFindings(entry, supersession),
       ...pointerFindings(entry, supersession),
@@ -321,7 +312,7 @@ function bannerProblems(body: string, where: string, status: Reported): Problem[
 }
 
 function filingProblems(entry: LedgerEntry): Problem[] {
-  const where = `Filing ${entry.number} (line ${entry.line})`;
+  const where = `Filing ${entry.id} (line ${entry.line})`;
   const status = reportedStatus(entry.body, where);
   if (typeof status !== 'string') return [status];
   const issue = issueProblem(entry.body, where, status);
@@ -332,7 +323,7 @@ function filingProblems(entry: LedgerEntry): Problem[] {
 /** Checks that each filing's `Reported:`, `Issue:` and any status banner tell one story. */
 export function checkFilingStatus(text: string): LedgerFinding[] {
   return parseLedgerEntries(text, 'Filing').flatMap((entry) =>
-    filingProblems(entry).map((p) => ({ ledger: FILINGS_MD, entry: `Filing ${entry.number}`, ...p })),
+    filingProblems(entry).map((p) => ({ ledger: FILINGS_MD, entry: `Filing ${entry.id}`, ...p })),
   );
 }
 
@@ -475,21 +466,21 @@ export function checkRunLog(
   nowSeconds: number,
 ): LedgerFinding[] {
   const entries = parseLedgerEntries(text, 'Dispatch');
-  const findings = duplicateFindings(groupByNumber(entries), 'Dispatch', ledger);
+  const findings = duplicateFindings(groupById(entries), 'Dispatch', ledger);
   const clock: Clock = { commitTimeOfLine, nowSeconds };
-  let previous: { number: number; at: number } | undefined;
+  let previous: { id: string; at: number } | undefined;
 
   for (const entry of entries) {
-    const name = `Dispatch ${entry.number}`;
+    const name = `Dispatch ${entry.id}`;
     const out: string[] = [];
     const dispatched = dispatchProblems(name, entry, clock, out);
     if (dispatched && previous && dispatched.at < previous.at) {
       out.push(
-        `${name} Dispatched at ${dispatched.field.value} is earlier than Dispatch ${previous.number}, ` +
+        `${name} Dispatched at ${dispatched.field.value} is earlier than Dispatch ${previous.id}, ` +
           `which was logged before it. The log is append-only, so dispatch times only move forward.`,
       );
     }
-    if (dispatched) previous = { number: entry.number, at: dispatched.at };
+    if (dispatched) previous = { id: entry.id, at: dispatched.at };
     finishProblems(name, entry, dispatched, clock, out);
     findings.push(...out.map((detail) => ({ ledger, entry: name, kind: 'run-timestamp' as const, detail })));
   }
@@ -540,7 +531,7 @@ function misplacedRunLog(text: string): LedgerFinding[] {
   return [
     {
       ledger: RUN_MD,
-      entry: `Dispatch ${entries[0].number}`,
+      entry: `Dispatch ${entries[0].id}`,
       kind: 'run-log-misplaced',
       detail:
         `RUN.md holds ${entries.length} dispatch entr${entries.length === 1 ? 'y' : 'ies'}, starting at ` +

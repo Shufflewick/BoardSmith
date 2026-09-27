@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest';
 import {
   NUMBERED_LEDGER_SPECS,
   allocateProvisional,
-  duplicateProvisionalIds,
   plainNumbersAdded,
   provisionalReferences,
 } from './ledger-allocation.js';
@@ -65,11 +64,6 @@ describe('allocateProvisional', () => {
 });
 
 describe('the refusals around allocation', () => {
-  it('finds a provisional id used as a heading twice', () => {
-    const text = '### Ruling @a.1\n- x\n### Ruling @a.1\n- y\n';
-    expect(duplicateProvisionalIds(text, RULINGS)).toEqual(['Ruling @a.1']);
-  });
-
   it('finds provisional references left in a text, so a citation of an id nobody declared is caught', () => {
     expect(provisionalReferences('see Ruling @ghost.3 and G@world.2, not Ruling 3')).toEqual([
       'Ruling @ghost.3',

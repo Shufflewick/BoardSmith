@@ -438,26 +438,41 @@ describe('parseRulings', () => {
     ].join('\n');
   }
 
+  it('reads a provisional ruling (### Ruling @slug.n) as its own entry, and its supersession (#436)', () => {
+    const text = [
+      '### Ruling 3',
+      '- Decision: old.',
+      '',
+      '### Ruling @ranged-units.1',
+      '- Decision: new. Supersedes Ruling 3.',
+      '',
+    ].join('\n');
+    const parsed = parseRulings(text);
+    expect(parsed.map((r) => r.id)).toEqual(['3', '@ranged-units.1']);
+    expect(parsed[0].body).toBe('- Decision: old.\n\n');
+    expect(parsed[0].supersededBy).toBe('@ranged-units.1');
+  });
+
   it('parses every ### Ruling N entry, line-anchored, body to the next ### line', () => {
     const parsed = parseRulings(rulingsFixture());
-    expect(parsed.map((r) => r.number)).toEqual([3, 9, 14, 21, 22, 23, 24, 25]);
+    expect(parsed.map((r) => r.id)).toEqual(['3', '9', '14', '21', '22', '23', '24', '25']);
   });
 
   it('"supersedes Ruling M" on entry N sets supersededBy: N on ruling M', () => {
     const parsed = parseRulings(rulingsFixture());
-    const ruling14 = parsed.find((r) => r.number === 14)!;
-    expect(ruling14.supersededBy).toBe(21);
+    const ruling14 = parsed.find((r) => r.id === '14')!;
+    expect(ruling14.supersededBy).toBe('21');
   });
 
   it('reversed direction: "SUPERSEDED BY RULING M" sitting on entry N sets supersededBy: M on N', () => {
     const parsed = parseRulings(rulingsFixture());
-    const ruling3 = parsed.find((r) => r.number === 3)!;
-    expect(ruling3.supersededBy).toBe(9);
+    const ruling3 = parsed.find((r) => r.id === '3')!;
+    expect(ruling3.supersededBy).toBe('9');
   });
 
   it('a supersede verb whose object is a sub-part (RATIONALE) goes to unparsedSupersession, not a resolved chain', () => {
     const parsed = parseRulings(rulingsFixture());
-    const ruling22 = parsed.find((r) => r.number === 22)!;
+    const ruling22 = parsed.find((r) => r.id === '22')!;
     expect(ruling22.supersededBy).toBeUndefined();
     expect(ruling22.unparsedSupersession.length).toBeGreaterThan(0);
     expect(ruling22.unparsedSupersession[0]).toMatch(/Supersedes the RATIONALE of Ruling 3/);
@@ -465,8 +480,8 @@ describe('parseRulings', () => {
 
   it('non-supersession cross-reference verbs never set supersededBy and never appear in unparsedSupersession', () => {
     const parsed = parseRulings(rulingsFixture());
-    for (const num of [23, 24, 25]) {
-      const r = parsed.find((rr) => rr.number === num)!;
+    for (const id of ['23', '24', '25']) {
+      const r = parsed.find((rr) => rr.id === id)!;
       expect(r.supersededBy).toBeUndefined();
       expect(r.unparsedSupersession).toEqual([]);
     }
@@ -480,7 +495,7 @@ describe('parseRulings', () => {
       '',
     ].join('\n');
     const parsed = parseRulings(text);
-    const ruling1 = parsed.find((r) => r.number === 1)!;
+    const ruling1 = parsed.find((r) => r.id === '1')!;
     expect(ruling1.supersededBy).toBeUndefined();
     expect(ruling1.unparsedSupersession.length).toBe(1);
   });
@@ -529,8 +544,8 @@ describe('parseRulings', () => {
       '',
     ].join('\n');
     const parsed = parseRulings(text);
-    const ruling3 = parsed.find((r) => r.number === 3)!;
-    expect(ruling3.supersededBy).toBe(9);
+    const ruling3 = parsed.find((r) => r.id === '3')!;
+    expect(ruling3.supersededBy).toBe('9');
     expect(ruling3.body).toContain('RATIONALE SUPERSEDED BY RULING 9');
     expect(ruling3.body).toContain('Mess exhaustion is treated as unreachable');
   });
@@ -549,8 +564,8 @@ describe('parseRulings', () => {
       '',
     ].join('\n');
     const parsed = parseRulings(text);
-    const ruling1 = parsed.find((r) => r.number === 1)!;
-    const ruling2 = parsed.find((r) => r.number === 2)!;
+    const ruling1 = parsed.find((r) => r.id === '1')!;
+    const ruling2 = parsed.find((r) => r.id === '2')!;
     // Ruling 1's body stops before Ruling 2's heading — proves body termination is per-entry.
     expect(ruling1.body).not.toContain('second ruling');
     expect(ruling2.body).toContain('Rationale: the final line of the file');
@@ -589,7 +604,10 @@ describe('parseRulings', () => {
       regexDeclarationCount += matches.length;
     }
     expect(regexDeclarationCount).toBe(0);
-    expect(readFileSync(join(cliRoot, 'lib', 'ledger-entries.ts'), 'utf-8')).toContain('`^### ${kind} (\\\\d+)');
+    // The one heading definition, real numbers and provisional ids alike (#436).
+    expect(readFileSync(join(cliRoot, 'lib', 'ledger-entries.ts'), 'utf-8')).toContain(
+      "matchAll(entryHeadingPattern(kind, ' ', ENTRY_NUMBER))",
+    );
   });
 });
 
