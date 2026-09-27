@@ -128,6 +128,21 @@ export function plainNumbersAdded(base: string, tip: string, spec: NumberedLedge
     .map((n) => `${spec.kind}${spec.sep}${n}`);
 }
 
+/**
+ * `text` with each provisional id `mapping` allocated replaced by its real number. Found on the
+ * citable text, spliced into the real one: a quoted id stays as written.
+ */
+function rewriteCitations(path: string, text: string, mapping: Record<string, string>): string {
+  let out = '';
+  let from = 0;
+  for (const { index, number, id } of provisionalCitations(path, text)) {
+    if (id === undefined || !(id in mapping)) continue;
+    out += text.slice(from, index) + /\d+$/.exec(mapping[id])![0];
+    from = index + number.length;
+  }
+  return out + text.slice(from);
+}
+
 interface AllocationResult {
   /** Every file handed in, with provisional ids replaced by their allocated numbers. */
   files: Record<string, string>;
@@ -156,16 +171,6 @@ export function allocateProvisional(
   }
   if (Object.keys(mapping).length === 0) return { files: { ...files }, mapping };
   const rewritten: Record<string, string> = {};
-  for (const [path, text] of Object.entries(files)) {
-    // Found on the citable text, spliced into the real one: a quoted id stays as written.
-    let out = '';
-    let from = 0;
-    for (const { index, number, id } of provisionalCitations(path, text)) {
-      if (id === undefined || !(id in mapping)) continue;
-      out += text.slice(from, index) + /\d+$/.exec(mapping[id])![0];
-      from = index + number.length;
-    }
-    rewritten[path] = out + text.slice(from);
-  }
+  for (const [path, text] of Object.entries(files)) rewritten[path] = rewriteCitations(path, text, mapping);
   return { files: rewritten, mapping };
 }

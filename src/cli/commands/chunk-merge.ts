@@ -247,6 +247,18 @@ async function readText(path: string): Promise<string | undefined> {
   return buffer.toString('utf-8');
 }
 
+/** Why a provisional id cited in file `name` after allocation stops the merge, and the fix. */
+function citationRefusal(name: string, id: string): string {
+  const orExample = name.endsWith('.md') ? `, or, if it is an example rather than a citation, put it in a code span.` : '.';
+  if (id.startsWith('@')) {
+    return (
+      `${name} cites ${id} without saying what kind of entry it is. Write the kind in front of it ` +
+      `(for example \`Ruling ${id}\`, or in a list, \`Rulings 8 and ${id}\`) on the branch${orExample}`
+    );
+  }
+  return `${name} cites ${id}, but no ledger entry is headed ${id}. Correct the citation on the branch${orExample}`;
+}
+
 /**
  * Gives every provisional id a real number on the combined tree and rewrites its citations.
  * `renumbered` is each source file (outside design/, project-relative) whose text that changed.
@@ -271,15 +283,7 @@ async function allocate(
       await git(top, ['add', '--', name]);
       if (name.startsWith(ctx.prefix) && !name.startsWith(design)) renumbered.push(name.slice(ctx.prefix.length));
     }
-    const orExample = name.endsWith('.md') ? `, or, if it is an example rather than a citation, put it in a code span.` : '.';
-    for (const id of provisionalReferences(name, text)) {
-      refusals.push(
-        id.startsWith('@')
-          ? `${name} cites ${id} without saying what kind of entry it is. Write the kind in front of it ` +
-              `(for example \`Ruling ${id}\`, or in a list, \`Rulings 8 and ${id}\`) on the branch${orExample}`
-          : `${name} cites ${id}, but no ledger entry is headed ${id}. Correct the citation on the branch${orExample}`,
-      );
-    }
+    for (const id of provisionalReferences(name, text)) refusals.push(citationRefusal(name, id));
   }
   return { allocated: mapping, refusals, renumbered };
 }
