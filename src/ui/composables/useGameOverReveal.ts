@@ -17,7 +17,7 @@
  * `#game-over` slot) and the assertive "Game over" announcement both follow one
  * answer, {@link GameOverReveal.revealed}: the flow is complete and every hold
  * says its ending is shown. A board that holds nothing is revealed the moment the
- * flow completes. `providesOwnGameOverUI` on GameShell is a separate question --
+ * flow completes. `providesOwnGameOverUi` on GameShell is a separate question --
  * who draws the ending, not when it is shown -- so a board that draws its own
  * ending and holds it back uses both, and the shell still announces the result,
  * at the moment the board shows it.

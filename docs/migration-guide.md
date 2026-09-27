@@ -1,5 +1,22 @@
 # Migration Guide
 
+## GameShell's `providesOwnGameOverUI` is now `providesOwnGameOverUi`
+
+Written in kebab-case, `provides-own-game-over-ui` camelized to
+`providesOwnGameOverUi`, which was not the prop's name, so Vue passed it
+through as a plain attribute and the shell still drew its game-over card
+(#433). The prop is renamed so both forms reach it. A game still passing the
+old name gets the same silent miss, so rename it:
+
+```diff
+-  <GameShell :providesOwnGameOverUI="true" ...>
++  <GameShell provides-own-game-over-ui ...>
+```
+
+Every prop of a component exported from `boardsmith/ui`,
+`boardsmith/ui/auto-ui` or `boardsmith/ui/dice` now has to survive that round
+trip; `src/ui/public-prop-names.test.ts` fails on one that does not.
+
 ## Engine contract r106: a test wires a table's actions with `useTableActionWiring`
 
 Contract r106 (#356) replaced `useBoardActionBridge`'s `restoreEpoch` option

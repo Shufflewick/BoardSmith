@@ -145,10 +145,10 @@ interface GameShellProps {
    * When true, BOTH the default GameOverCard and any `#game-over` slot content
    * are suppressed — the game draws the outcome. The shell still announces the
    * result to screen readers, when the ending is on screen: a board that holds
-   * its result back calls `holdGameOverUntil` (#419). Write it in camelCase;
-   * the kebab form camelizes to `providesOwnGameOverUi`. Default: false.
+   * its result back calls `holdGameOverUntil` (#419). Written
+   * `provides-own-game-over-ui` or `providesOwnGameOverUi` (#433). Default: false.
    */
-  providesOwnGameOverUI?: boolean;
+  providesOwnGameOverUi?: boolean;
   /** Per-UI presentation overlay — keyed by element class/name/attribute → visuals (D-04). */
   presentation?: PresentationOverlay;
   /**
@@ -213,7 +213,7 @@ const props = withDefaults(defineProps<GameShellProps>(), {
   playerCount: 2,
   debugMode: true,
   platformActionPanelEscapeHatch: false,
-  providesOwnGameOverUI: false,
+  providesOwnGameOverUi: false,
   playerOrder: 'turn',
   showTurnStatus: true,
 });
@@ -1832,12 +1832,12 @@ if ((import.meta as any).hot) {
              It appears when `gameOverRevealed` says the ending is on screen -- the same answer
              the game-over announcement follows -- so a board holding its result back
              (holdGameOverUntil) holds the card back too (#419).
-             A filled #game-over slot replaces the default card entirely; providesOwnGameOverUI
+             A filled #game-over slot replaces the default card entirely; providesOwnGameOverUi
              suppresses BOTH (the game renders its own end state on its own board). Dismissing
              (close button / Escape) reveals the board without restarting or leaving.
              @new-game and @rematch both restart via the one real restart path (D11/ENDGAME-02);
              @leave (menu-only) is the only forward exit that returns to the lobby. -->
-        <template v-if="gameOverRevealed && !props.providesOwnGameOverUI && !gameOverDismissed">
+        <template v-if="gameOverRevealed && !props.providesOwnGameOverUi && !gameOverDismissed">
           <slot
             v-if="$slots['game-over']"
             name="game-over"

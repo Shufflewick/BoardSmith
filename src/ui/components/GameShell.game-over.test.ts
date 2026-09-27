@@ -6,12 +6,12 @@
  * bridge) is impractical for a unit test — this file follows the established
  * harness pattern (see GameShell.ia.test.ts Suite 5, WinnerCaptureHarness):
  * an isolated component that mirrors GameShell.vue's exact mount-guard template
- * logic for the `#game-over` slot / `providesOwnGameOverUI` prop, using the REAL
+ * logic for the `#game-over` slot / `providesOwnGameOverUi` prop, using the REAL
  * GameOverCard component so labeling/dismiss behavior is exercised for real.
  *
  * GREEN: the harness template now mirrors the post-fix GameShell.vue mount
  * guard — `#game-over` slot (auto-suppresses the default card when filled)
- * and `providesOwnGameOverUI` (suppresses both), kept in lockstep with the
+ * and `providesOwnGameOverUi` (suppresses both), kept in lockstep with the
  * real GameShell.vue change (same discipline as the other GameShell.*.test.ts
  * harnesses in this file).
  *
@@ -19,7 +19,7 @@
  *   (a) Default card renders when neither slot nor flag is present.
  *   (b) A filled `#game-over` slot suppresses the default card entirely (DOM
  *       removal, not display:none) and renders the slot content instead.
- *   (c) `providesOwnGameOverUI=true` suppresses BOTH the default card and any
+ *   (c) `providesOwnGameOverUi=true` suppresses BOTH the default card and any
  *       slot content.
  *   (b)/(c) are asserted under both the default board and a custom `#game-board`
  *   slot, to prove UI parity (CLAUDE.md hard rule).
@@ -37,7 +37,7 @@ const PLAYERS: Player[] = [
 // ---------------------------------------------------------------------------
 // GameOverHarness — mirrors GameShell.vue's game-over mount guard (post-fix,
 // GameShell.vue's `<template v-if="gameOverRevealed &&
-// !providesOwnGameOverUI && !gameOverDismissed">` block; `complete` stands in
+// !providesOwnGameOverUi && !gameOverDismissed">` block; `complete` stands in
 // for `gameOverRevealed`, which GameShell.game-over-reveal.test.ts covers).
 // ---------------------------------------------------------------------------
 const GameOverHarness = defineComponent({
@@ -48,7 +48,7 @@ const GameOverHarness = defineComponent({
     winnerSeats: { type: Array as PropType<number[]>, default: () => [] },
     players: { type: Array as PropType<Player[]>, default: () => PLAYERS },
     isDraw: { type: Boolean, default: false },
-    providesOwnGameOverUI: { type: Boolean, default: false },
+    providesOwnGameOverUi: { type: Boolean, default: false },
     useCustomBoard: { type: Boolean, default: false },
   },
   emits: ['new-game', 'rematch', 'dismiss'],
@@ -70,7 +70,7 @@ const GameOverHarness = defineComponent({
       <div v-if="useCustomBoard" class="custom-board">Custom board UI</div>
       <div v-else class="empty-game-area">Add your game board in the #game-board slot</div>
 
-      <template v-if="complete && !providesOwnGameOverUI && !dismissed">
+      <template v-if="complete && !providesOwnGameOverUi && !dismissed">
         <slot
           v-if="$slots['game-over']"
           name="game-over"
@@ -131,10 +131,10 @@ describe.each([
 describe.each([
   ['default board', false],
   ['custom #game-board UI', true],
-] as const)('GameShell game-over — providesOwnGameOverUI suppression (%s)', (_label, useCustomBoard) => {
-  it('suppresses BOTH the default card and slot content when providesOwnGameOverUI=true', () => {
+] as const)('GameShell game-over — providesOwnGameOverUi suppression (%s)', (_label, useCustomBoard) => {
+  it('suppresses BOTH the default card and slot content when providesOwnGameOverUi=true', () => {
     const wrapper = mountHarness(
-      { complete: true, useCustomBoard, providesOwnGameOverUI: true },
+      { complete: true, useCustomBoard, providesOwnGameOverUi: true },
       { 'game-over': '<div class="custom-game-over">Custom result UI</div>' },
     );
 
@@ -169,16 +169,16 @@ describe.each([
     expect(wrapper.html()).not.toContain('game-over-title');
   });
 
-  it('the default card markup is entirely absent from wrapper.html() when providesOwnGameOverUI=true', () => {
-    const wrapper = mountHarness({ complete: true, useCustomBoard, providesOwnGameOverUI: true });
+  it('the default card markup is entirely absent from wrapper.html() when providesOwnGameOverUi=true', () => {
+    const wrapper = mountHarness({ complete: true, useCustomBoard, providesOwnGameOverUi: true });
 
     expect(wrapper.html()).not.toContain('game-over-card');
     expect(wrapper.html()).not.toContain('game-over-title');
   });
 
-  it('neither the card nor the slot render when providesOwnGameOverUI=true even with a slot supplied', () => {
+  it('neither the card nor the slot render when providesOwnGameOverUi=true even with a slot supplied', () => {
     const wrapper = mountHarness(
-      { complete: true, useCustomBoard, providesOwnGameOverUI: true },
+      { complete: true, useCustomBoard, providesOwnGameOverUi: true },
       { 'game-over': '<div class="custom-game-over">Custom result UI</div>' },
     );
 
