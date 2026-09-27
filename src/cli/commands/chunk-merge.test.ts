@@ -292,6 +292,30 @@ describe('chunkMerge: ledger numbers are allocated at merge, never on a branch',
     expect(filings).toContain('then `### Filing @x.1` holding');
   });
 
+  it('rewrites a provisional id cited in list form, "Rulings 1 and @trading.1" (#439)', async () => {
+    await buildOnBranch('trading', 100, {
+      'design/RULINGS.md': '# Rulings\n\n### Ruling 1\n- Decision: the core loop.\n\n### Ruling @trading.1\n- Decision: prices are public.\n',
+      'design/notes.md': 'Prices follow Rulings 1 and @trading.1.\n',
+    });
+    const result = await chunkMerge(main, 'trading', { runTests: budgetRunner });
+    expect(result.refusals).toEqual([]);
+    expect(result.allocated).toEqual({ 'Ruling @trading.1': 'Ruling 2' });
+    expect(await read(main, 'design/notes.md')).toBe('Prices follow Rulings 1 and 2.\n');
+  });
+
+  it('refuses a provisional id written with no kind before it, naming the file and the form to write (#439)', async () => {
+    await buildOnBranch('trading', 100, {
+      'design/RULINGS.md': '# Rulings\n\n### Ruling 1\n- Decision: the core loop.\n\n### Ruling @trading.1\n- Decision: prices are public.\n',
+      'design/notes.md': 'Prices follow @trading.1.\n',
+    });
+    const result = await chunkMerge(main, 'trading', { runTests: budgetRunner });
+    expect(result.merged).toBe(false);
+    expect(result.refusals.join('\n')).toContain(
+      'design/notes.md cites @trading.1 without saying what kind of entry it is. Write the kind in front of it ' +
+        '(for example `Ruling @trading.1`, or in a list, `Rulings 8 and @trading.1`) on the branch',
+    );
+  });
+
   it('refuses a branch that took a real number itself, which is how two branches collide', async () => {
     await buildOnBranch('trading', 100, {
       'design/RULINGS.md': '# Rulings\n\n### Ruling 1\n- Decision: the core loop.\n\n### Ruling 2\n- Decision: prices are public.\n',

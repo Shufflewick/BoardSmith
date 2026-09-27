@@ -563,6 +563,12 @@ describe('#294 — parallel dispatch is allowed only where the checks say so', (
     expect(flat(read('templates/FILINGS.template.md'))).toContain('an example ledger id in a reproduction, such as `### Filing @x.1`, goes in a code span');
   });
 
+  it('says which list form of a provisional citation chunk-merge rewrites, and that a kindless id stops the merge (#439)', () => {
+    const machine = flat(read('state-machine.md'));
+    expect(machine).toContain('`Rulings 8 and @<slug>.1`');
+    expect(machine).toMatch(/A provisional id with no kind before it in its list.*?stops the merge; write the kind in front of it/);
+  });
+
   it('routes the cross-chunk references a merge records to the audit before the next merge', () => {
     expect(dispatch()).toContain('CROSS-CHUNK.md');
     expect(dispatch()).toMatch(/cross-chunk lens/i);

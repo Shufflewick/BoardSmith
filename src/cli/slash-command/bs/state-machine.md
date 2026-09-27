@@ -326,6 +326,13 @@ is quoted text and never a citation: `chunk-merge` neither rewrites it nor asks 
 with it. Written bare in prose, `Filing @x.1` is a citation, and a citation of an id no entry
 declares stops the merge.
 
+A citation writes its kind, then its id: `Ruling @<slug>.<n>`. In a list the kind word may be
+written once, plural, and every id after it takes that kind: `Rulings 8 and @<slug>.1`,
+`Questions @<slug>.14, @<slug>.15 or 16`. A list runs across commas, "and", "or" and "&", and a
+new kind word inside it switches the kind. `chunk-merge` rewrites every provisional id in such a
+list. A provisional id with no kind before it in its list (`as settled in @<slug>.1`) says nothing
+about which ledger it names, so it stops the merge; write the kind in front of it.
+
 ## Git Protocol
 
 - Commit at every step completion. Message convention: `chunk-<slug>/step-<name>` (e.g. `chunk-movement/step-build`).

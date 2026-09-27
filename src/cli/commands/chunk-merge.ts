@@ -269,10 +269,13 @@ async function allocate(
       await git(top, ['add', '--', name]);
       if (name.startsWith(ctx.prefix) && !name.startsWith(design)) renumbered.push(name.slice(ctx.prefix.length));
     }
+    const orExample = name.endsWith('.md') ? `, or, if it is an example rather than a citation, put it in a code span.` : '.';
     for (const id of provisionalReferences(name, text)) {
       refusals.push(
-        `${name} cites ${id}, but no ledger entry is headed ${id}. Correct the citation on the branch` +
-          (name.endsWith('.md') ? `, or, if it is an example rather than a citation, put it in a code span.` : '.'),
+        id.startsWith('@')
+          ? `${name} cites ${id} without saying what kind of entry it is. Write the kind in front of it ` +
+              `(for example \`Ruling ${id}\`, or in a list, \`Rulings 8 and ${id}\`) on the branch${orExample}`
+          : `${name} cites ${id}, but no ledger entry is headed ${id}. Correct the citation on the branch${orExample}`,
       );
     }
   }
