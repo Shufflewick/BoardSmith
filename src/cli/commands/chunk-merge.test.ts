@@ -1,8 +1,9 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { promises as fs } from 'node:fs';
+import { existsSync, promises as fs } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
+import { takeOsLock } from '../lib/os-lock.js';
 import { chunkMerge, resolveDesignConflicts } from './chunk-merge.js';
 import { assessSignoffs, recordSignoff } from './chunk-signoff.js';
 import { recordVerifiedAgainst } from './chunk-provenance.js';
@@ -292,6 +293,30 @@ describe('chunkMerge: ledger numbers are allocated at merge, never on a branch',
     expect(filings).toContain('then `### Filing @x.1` holding');
   });
 
+  it('rewrites a provisional id cited in list form, "Rulings 1 and @trading.1" (#439)', async () => {
+    await buildOnBranch('trading', 100, {
+      'design/RULINGS.md': '# Rulings\n\n### Ruling 1\n- Decision: the core loop.\n\n### Ruling @trading.1\n- Decision: prices are public.\n',
+      'design/notes.md': 'Prices follow Rulings 1 and @trading.1.\n',
+    });
+    const result = await chunkMerge(main, 'trading', { runTests: budgetRunner });
+    expect(result.refusals).toEqual([]);
+    expect(result.allocated).toEqual({ 'Ruling @trading.1': 'Ruling 2' });
+    expect(await read(main, 'design/notes.md')).toBe('Prices follow Rulings 1 and 2.\n');
+  });
+
+  it('refuses a provisional id written with no kind before it, naming the file and the form to write (#439)', async () => {
+    await buildOnBranch('trading', 100, {
+      'design/RULINGS.md': '# Rulings\n\n### Ruling 1\n- Decision: the core loop.\n\n### Ruling @trading.1\n- Decision: prices are public.\n',
+      'design/notes.md': 'Prices follow @trading.1.\n',
+    });
+    const result = await chunkMerge(main, 'trading', { runTests: budgetRunner });
+    expect(result.merged).toBe(false);
+    expect(result.refusals.join('\n')).toContain(
+      'design/notes.md cites @trading.1 without saying what kind of entry it is. Write the kind in front of it ' +
+        '(for example `Ruling @trading.1`, or in a list, `Rulings 8 and @trading.1`) on the branch',
+    );
+  });
+
   it('refuses a branch that took a real number itself, which is how two branches collide', async () => {
     await buildOnBranch('trading', 100, {
       'design/RULINGS.md': '# Rulings\n\n### Ruling 1\n- Decision: the core loop.\n\n### Ruling 2\n- Decision: prices are public.\n',
@@ -341,6 +366,41 @@ describe('chunkMerge: references between chunks built together go to the audit',
 });
 
 describe('chunkMerge: preconditions', () => {
+  it('refuses while another chunk-merge holds the lock, naming it, and merges once it is released (#441)', async () => {
+    await buildOnBranch('trading', 100);
+    const common = git(main, 'rev-parse', '--path-format=absolute', '--git-common-dir').trim();
+    const other = await takeOsLock(join(common, 'boardsmith-chunk-merge.flock'), 'chunk-merge of quests (branch chunk/quests)');
+    if (typeof other === 'string') throw new Error(other);
+
+    const refused = await chunkMerge(main, 'trading', { runTests: budgetRunner });
+    // A merge in flight leaves the main checkout dirty; a second run is told about the merge, not
+    // asked to clean up the files that merge is working on.
+    const sketch = await read(main, 'design/SKETCH.md');
+    await fs.writeFile(join(main, 'design/SKETCH.md'), `${sketch}\nmid-merge\n`);
+    const whileDirty = await chunkMerge(main, 'trading', { runTests: budgetRunner });
+    await fs.writeFile(join(main, 'design/SKETCH.md'), sketch);
+    await other.release();
+    expect(refused.merged).toBe(false);
+    expect(refused.refusals.join('\n')).toContain(
+      `Another chunk-merge holds the merge lock: chunk-merge of quests (branch chunk/quests), pid ${process.pid}`,
+    );
+    expect(whileDirty.refusals).toEqual(refused.refusals);
+    expect(git(main, 'status', '--porcelain')).toBe('');
+
+    expect((await chunkMerge(main, 'trading', { runTests: budgetRunner })).refusals).toEqual([]);
+    expect(existsSync(join(common, 'boardsmith-chunk-merge.flock.holder'))).toBe(false);
+  });
+
+  it('names a merge a killed chunk-merge left half done, and how to undo it (#441)', async () => {
+    await buildOnBranch('trading', 100);
+    git(main, 'merge', '--no-ff', '--no-commit', 'chunk/trading');
+    const result = await chunkMerge(main, 'trading', { runTests: budgetRunner });
+    expect(result.refusals).toEqual([
+      'The main checkout holds a merge that was started and never finished, most likely by a chunk-merge ' +
+        'that was stopped partway. Undo it with `git merge --abort` in the main checkout, then run chunk-merge again.',
+    ]);
+  });
+
   it('refuses a dirty main checkout, a missing branch, and a chunk that is not verified', async () => {
     expect((await chunkMerge(main, 'trading', { runTests: budgetRunner })).refusals.join('\n')).toMatch(/no branch chunk\/trading/);
 

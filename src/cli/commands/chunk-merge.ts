@@ -12,7 +12,8 @@
  * follow skill prose exactly, so the rules live here, and a merge that skips them is not possible
  * by running this command:
  *
- *   1. Merges are serial: a lock in the git directory refuses a second merge while one runs.
+ *   1. Merges are serial: a lock in the git directory refuses a second merge while one runs, naming
+ *      the run that holds it. The kernel releases it when that run exits, however it exits (#441).
  *   2. A branch may not add a real ledger number (it writes `Ruling @<slug>.<n>`), may not write
  *      RUN.md, and may not write another chunk's run log. Real numbers are allocated here, on the
  *      combined tree, and every citation of each provisional id is rewritten.
@@ -71,6 +72,7 @@ import { checkClaimQuotes } from './claim-quotes.js';
 import { parseSpecManifest } from './test-step-check.js';
 import { chunkCitations, pairProblems, readSketchChunks } from './parallel-check.js';
 import { appendCrossChunkEntry, changedSide, crossReferences } from './cross-chunk.js';
+import { takeOsLock } from '../lib/os-lock.js';
 
 interface ChunkMergeOptions {
   /** The chunk's branch. Defaults to `chunk/<slug>`, the branch the dispatch contract names. */
@@ -118,8 +120,6 @@ interface MergeContext {
   projectDir: string;
   /** The repository's top level; pathspecs are given from here. */
   top: string;
-  /** The git directory every worktree shares, where the merge lock lives. */
-  common: string;
   slug: string;
   branch: string;
   /** The project's path inside its repository, `''` or ending in `/`. */
@@ -245,6 +245,18 @@ async function readText(path: string): Promise<string | undefined> {
   return buffer.toString('utf-8');
 }
 
+/** Why a provisional id cited in file `name` after allocation stops the merge, and the fix. */
+function citationRefusal(name: string, id: string): string {
+  const orExample = name.endsWith('.md') ? `, or, if it is an example rather than a citation, put it in a code span.` : '.';
+  if (id.startsWith('@')) {
+    return (
+      `${name} cites ${id} without saying what kind of entry it is. Write the kind in front of it ` +
+      `(for example \`Ruling ${id}\`, or in a list, \`Rulings 8 and ${id}\`) on the branch${orExample}`
+    );
+  }
+  return `${name} cites ${id}, but no ledger entry is headed ${id}. Correct the citation on the branch${orExample}`;
+}
+
 /**
  * Gives every provisional id a real number on the combined tree and rewrites its citations.
  * `renumbered` is each source file (outside design/, project-relative) whose text that changed.
@@ -269,12 +281,7 @@ async function allocate(
       await git(top, ['add', '--', name]);
       if (name.startsWith(ctx.prefix) && !name.startsWith(design)) renumbered.push(name.slice(ctx.prefix.length));
     }
-    for (const id of provisionalReferences(name, text)) {
-      refusals.push(
-        `${name} cites ${id}, but no ledger entry is headed ${id}. Correct the citation on the branch` +
-          (name.endsWith('.md') ? `, or, if it is an example rather than a citation, put it in a code span.` : '.'),
-      );
-    }
+    for (const id of provisionalReferences(name, text)) refusals.push(citationRefusal(name, id));
   }
   return { allocated: mapping, refusals, renumbered };
 }
@@ -506,23 +513,27 @@ async function recordCrossChunk(ctx: MergeContext, alongside: string[]): Promise
 
 /** The merge's facts, or the reason there is nothing that can be merged. */
 async function readContext(projectDir: string, slug: string, branch: string): Promise<MergeContext | string> {
-  // One process for all three: --show-prefix prints an empty line at the top level.
-  const where = await run(projectDir, ['rev-parse', '--show-toplevel', '--show-prefix', '--git-common-dir']);
-  if (where.code !== 0) return `${projectDir} is not in a git repository. Run chunk-merge from the game project's main checkout.`;
+  // One process for both: --show-prefix prints an empty line at the top level.
+  const where = await run(projectDir, ['rev-parse', '--show-toplevel', '--show-prefix']);
   if ((await run(projectDir, ['rev-parse', '--verify', '--quiet', `${branch}^{commit}`])).code !== 0) {
     return `There is no branch ${branch}. A chunk built alongside others lives on chunk/<slug>; pass --branch if it is elsewhere.`;
+  }
+  if ((await run(projectDir, ['rev-parse', '--verify', '--quiet', 'MERGE_HEAD'])).code === 0) {
+    return (
+      'The main checkout holds a merge that was started and never finished, most likely by a chunk-merge ' +
+      'that was stopped partway. Undo it with `git merge --abort` in the main checkout, then run chunk-merge again.'
+    );
   }
   if ((await git(projectDir, ['status', '--porcelain', '--untracked-files=no'])).trim() !== '') {
     return 'The main checkout has uncommitted changes. Commit or remove them first, so a refused merge can put everything back.';
   }
   const own = (await git(projectDir, ['rev-list', '--first-parent', branch, '^HEAD'])).split('\n').filter(Boolean);
   if (own.length === 0) return `${branch} has nothing the main line does not already have.`;
-  const [top, prefix, common] = where.out.split('\n');
+  const [top, prefix] = where.out.split('\n');
   const base = (await git(projectDir, ['merge-base', 'HEAD', branch])).trim();
   return {
     projectDir,
     top,
-    common: resolve(projectDir, common),
     slug,
     branch,
     prefix,
@@ -588,30 +599,29 @@ async function mergeLocked(ctx: MergeContext, runTests: TestRunner): Promise<Chu
   return { merged: true, refusals: [], allocated, alongside, crossChunk, vouched: shared };
 }
 
-async function withLock<T>(common: string, work: () => Promise<T>): Promise<T | string> {
-  const lock = join(common, 'boardsmith-chunk-merge.lock');
-  try {
-    await fs.mkdir(lock);
-  } catch {
-    return `Another chunk-merge holds ${lock}. Merges run one at a time; wait for it. If no merge is running, remove that directory.`;
-  }
-  try {
-    return await work();
-  } finally {
-    await fs.rm(lock, { recursive: true, force: true });
-  }
-}
-
 /**
  * Merges chunk `slug`'s branch into the checked-out main line through the gate described at the
  * top of this file. Returns what happened; `refusals` says why when it did not merge.
+ *
+ * The merge lock is taken before anything is read (#441): a merge in flight leaves the main
+ * checkout dirty, and a second run must be told a merge is running, not asked to clean up the
+ * files that merge is working on. It is a kernel lock the process drops however it exits, in the
+ * git directory every worktree shares.
  */
 export async function chunkMerge(projectDir: string, slug: string, options: ChunkMergeOptions = {}): Promise<ChunkMergeResult> {
   const dir = resolve(projectDir);
-  const ctx = await readContext(dir, slug, options.branch ?? `chunk/${slug}`);
-  if (typeof ctx === 'string') return refused([ctx]);
-  const result = await withLock(ctx.common, () => mergeLocked(ctx, options.runTests ?? runVitest));
-  return typeof result === 'string' ? refused([result]) : result;
+  const branch = options.branch ?? `chunk/${slug}`;
+  const common = await run(dir, ['rev-parse', '--path-format=absolute', '--git-common-dir']);
+  if (common.code !== 0) return refused([`${dir} is not in a git repository. Run chunk-merge from the game project's main checkout.`]);
+  const lock = await takeOsLock(join(common.out.trim(), 'boardsmith-chunk-merge.flock'), `chunk-merge of ${slug} (branch ${branch})`);
+  if (typeof lock === 'string') return refused([lock]);
+  try {
+    const ctx = await readContext(dir, slug, branch);
+    if (typeof ctx === 'string') return refused([ctx]);
+    return await mergeLocked(ctx, options.runTests ?? runVitest);
+  } finally {
+    await lock.release();
+  }
 }
 
 function report(slug: string, result: ChunkMergeResult): void {

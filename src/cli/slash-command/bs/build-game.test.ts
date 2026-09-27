@@ -166,6 +166,13 @@ describe('WF-03 — build-chunk.md honours orchestrated mode', () => {
     expect(flat(read('check-status.md'))).toMatch(/skills-tree drift is information[^.]*never staleness/i);
   });
 
+  it('says the block pins the engine revision, and chunk-check records it in an older block without staleness (#440)', () => {
+    const close = flat(read('build/close.md'));
+    expect(close).toMatch(/and the engine revision \(the engine contract revision/);
+    expect(close).toMatch(/`chunk-check` records the installed engine revision in it once, says so, and passes/);
+    expect(flat(read('check-status.md'))).toMatch(/engine revision `unknown` is a block written before it recorded the engine/);
+  });
+
   it('close.md returns instead of auto-advancing under an orchestrated run', () => {
     const close = flat(read('build/close.md'));
     expect(close).toMatch(/In orchestrated mode, close returns instead of auto-advancing/i);
@@ -561,6 +568,12 @@ describe('#294 — parallel dispatch is allowed only where the checks say so', (
     expect(flat(read('state-machine.md'))).toMatch(/An example id \([^)]*\) goes in a code span/);
     expect(flat(read('state-machine.md'))).toMatch(/inside a code span, a fenced block or an HTML comment is quoted text and never a citation/);
     expect(flat(read('templates/FILINGS.template.md'))).toContain('an example ledger id in a reproduction, such as `### Filing @x.1`, goes in a code span');
+  });
+
+  it('says which list form of a provisional citation chunk-merge rewrites, and that a kindless id stops the merge (#439)', () => {
+    const machine = flat(read('state-machine.md'));
+    expect(machine).toContain('`Rulings 8 and @<slug>.1`');
+    expect(machine).toMatch(/A provisional id with no kind before it in its list.*?stops the merge; write the kind in front of it/);
   });
 
   it('routes the cross-chunk references a merge records to the audit before the next merge', () => {

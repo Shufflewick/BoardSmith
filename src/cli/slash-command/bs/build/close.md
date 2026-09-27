@@ -58,8 +58,12 @@ release) and no tail detailing.
    written by this command and by nothing else. If it instead names the sign-off, re-running will
    not help: the chunk is not closed until the designer signs it off (`build/playtest.md` "Who Signs Off").
    The block pins what the chunk was verified against: the rulebook edition and source, the
-   SHA-256 of each slice the chunk cites, and the BoardSmith version. A change to any of those
-   makes it stale. It also records the skills tree hash as provenance only, naming the skill text
+   SHA-256 of each slice the chunk cites, and the engine revision (the engine contract revision
+   of the installed BoardSmith, which moves whenever the engine's contract does). A change to any
+   of those makes it stale. A block written before it recorded the engine carries a
+   `BoardSmith version: 0.0.1` line instead, which names no engine; `chunk-check` records the
+   installed engine revision in it once, says so, and passes, because nothing the chunk was
+   verified against changed. Commit the CHUNK.md it rewrote. It also records the skills tree hash as provenance only, naming the skill text
    that governed this verification: reinstalling the bs skills never makes a closed chunk stale,
    and `chunk-check` reports the reinstall as information and passes.
 

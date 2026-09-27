@@ -3486,13 +3486,6 @@
       ]
     },
     {
-      "content": "7ed129b40a79cb75",
-      "lines": 13,
-      "files": [
-        "src/cli/commands/verify-source-free.test.ts"
-      ]
-    },
-    {
       "content": "7edd0cf9984c9f59",
       "lines": 7,
       "files": [

@@ -572,7 +572,7 @@ async function writeCitingChunk(
     edition: 'none recorded',
     sourceHash: recordedSourceHash,
     additionalSources,
-    boardsmithVersion: '9.9.9',
+    engineRevision: 99,
     skillsTreeHash: 'deadbeef',
     citedSlices: [],
     unresolved: [],

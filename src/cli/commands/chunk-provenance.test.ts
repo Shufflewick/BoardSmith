@@ -25,6 +25,7 @@ import {
   type VerifiedAgainstRecord,
 } from './chunk-provenance.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
+import { ENGINE_REVISION } from '../../contract/index.js';
 import { readChunkTemplate, withInterpretation, writeChunk } from './design-project.test-helper.js';
 
 /**
@@ -609,6 +610,16 @@ describe('chunk-check', () => {
    * #438: the skills hash is provenance (which skill text governed the verification), not an
    * input to it. Reinstalling the skills used to make every closed chunk's block stale.
    */
+  /** Runs chunk-check on `jab` as `close` does, from a clean exit code, and returns what it printed. */
+  async function checkJab(project: string, json = false): Promise<string> {
+    process.exitCode = undefined;
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    await chunkCheckCommand('jab', { project, json });
+    const out = log.mock.calls.map((c) => c.join(' ')).join('\n');
+    log.mockRestore();
+    return out;
+  }
+
   describe('a skills reinstall is reported, never stale (#438)', () => {
     const skillFile = (project: string) => join(project, '.claude', 'skills', 'bs-build-chunk', 'SKILL.md');
     async function install(project: string, text: string): Promise<void> {
@@ -627,11 +638,7 @@ describe('chunk-check', () => {
       const recorded = skillsLine(closed);
 
       await install(project, 'skill text v2\n');
-      process.exitCode = undefined;
-      const log = vi.spyOn(console, 'log').mockImplementation(() => {});
-      await chunkCheckCommand('jab', { project, json: true });
-      const json = JSON.parse(log.mock.calls.map((c) => c.join(' ')).join('\n'));
-      log.mockRestore();
+      const json = JSON.parse(await checkJab(project, true));
 
       expect(process.exitCode).toBeUndefined();
       expect(await fs.readFile(chunkPath(project), 'utf-8')).toBe(closed);
@@ -647,11 +654,7 @@ describe('chunk-check', () => {
       await install(project, 'skill text v1\n');
       await chunkCheckCommand('jab', { project });
       await install(project, 'skill text v2\n');
-      process.exitCode = undefined;
-      const log = vi.spyOn(console, 'log').mockImplementation(() => {});
-      await chunkCheckCommand('jab', { project });
-      const out = log.mock.calls.map((c) => c.join(' ')).join('\n');
-      log.mockRestore();
+      const out = await checkJab(project);
       expect(process.exitCode).toBeUndefined();
       expect(out).toMatch(/up to date/);
       expect(out).toMatch(/skills have been reinstalled since jab was verified/i);
@@ -667,27 +670,71 @@ describe('chunk-check', () => {
       await fs.writeFile(join(project, DESIGN_DIR, 'rulebook', '01-setup-and-round-structure.md'), '# Setup\n\nChanged.\n');
 
       expect(await verifiedAgainstIsCurrent(project, 'jab')).toBe(false);
-      process.exitCode = undefined;
-      const log = vi.spyOn(console, 'log').mockImplementation(() => {});
-      await chunkCheckCommand('jab', { project, json: true });
-      log.mockRestore();
+      await checkJab(project, true);
       expect(process.exitCode).toBe(1);
       const repaired = skillsLine(await fs.readFile(chunkPath(project), 'utf-8'));
       expect(repaired).toMatch(/^[0-9a-f]{64}$/);
       expect(repaired).not.toBe(v1);
     });
 
-    it('still makes the chunk stale when the BoardSmith version it was verified against changes', async () => {
+  });
+
+  /**
+   * #440: the block's engine line was package.json's version, 0.0.1 for every engine there has
+   * been, so an engine change never made a closed chunk stale. It records the engine contract
+   * revision now. A block written before that carries the old line and says nothing about the
+   * engine: chunk-check records the engine installed now without making the chunk stale.
+   */
+  describe('the engine a chunk was verified against (#440)', () => {
+    const chunkPath = (project: string) => join(project, DESIGN_DIR, 'chunks', 'jab', 'CHUNK.md');
+    const engineLine = (text: string) => /^Engine revision: (.*)$/m.exec(text)?.[1];
+    /** A project whose chunk `jab` has been closed, and its CHUNK.md as closing wrote it. */
+    async function closedJab(): Promise<{ project: string; text: string }> {
       const { project } = await makeCheckProject();
       await makeChunk(project, 'jab', JAB_CITES);
-      await chunkCheckCommand('jab', { project, json: true });
-      const text = await fs.readFile(chunkPath(project), 'utf-8');
-      await fs.writeFile(chunkPath(project), text.replace(/^BoardSmith version: .*$/m, 'BoardSmith version: 0.0.0-an-older-engine'));
+      await checkJab(project, true);
+      return { project, text: await fs.readFile(chunkPath(project), 'utf-8') };
+    }
+
+    it('records the engine contract revision, and a different revision makes the chunk stale', async () => {
+      const { project, text } = await closedJab();
+      expect(engineLine(text)).toBe(String(ENGINE_REVISION));
+      expect(text).not.toContain('BoardSmith version:');
+
+      await fs.writeFile(chunkPath(project), text.replace(/^Engine revision: .*$/m, `Engine revision: ${ENGINE_REVISION - 1}`));
+      expect(await verifiedAgainstIsCurrent(project, 'jab')).toBe(false);
+      await checkJab(project, true);
+      expect(process.exitCode).toBe(1);
+      expect(engineLine(await fs.readFile(chunkPath(project), 'utf-8'))).toBe(String(ENGINE_REVISION));
+    });
+
+    it('records the engine in a block from before #440 without making the chunk stale', async () => {
+      const { project, text: current } = await closedJab();
+      const old = current.replace(/^Engine revision: .*$/m, 'BoardSmith version: 0.0.1');
+      await fs.writeFile(chunkPath(project), old);
+
+      expect(await verifiedAgainstIsCurrent(project, 'jab')).toBe(true);
+      const out = await checkJab(project);
+
+      expect(process.exitCode).toBeUndefined();
+      expect(await fs.readFile(chunkPath(project), 'utf-8')).toBe(current);
+      expect(out).toMatch(/up to date/);
+      expect(out).toContain(
+        `jab was verified before its Verified Against block recorded the engine. It now records engine ` +
+          `revision ${ENGINE_REVISION}, the one installed; that does not make the chunk stale. Commit ` +
+          `design/chunks/jab/CHUNK.md.`,
+      );
+    });
+
+    it('still makes a block from before #440 stale when what it was verified against changed', async () => {
+      const { project, text } = await closedJab();
+      await fs.writeFile(chunkPath(project), text.replace(/^Engine revision: .*$/m, 'BoardSmith version: 0.0.1'));
+      await fs.writeFile(join(project, DESIGN_DIR, 'rulebook', '01-setup-and-round-structure.md'), '# Setup\n\nChanged.\n');
       expect(await verifiedAgainstIsCurrent(project, 'jab')).toBe(false);
     });
   });
 
-  it('the written body contains Scope/Rulebook edition/Rulebook source hash/BoardSmith version/Skills tree hash lines and a cited-slice hash row', async () => {
+  it('the written body contains Scope/Rulebook edition/Rulebook source hash/Engine revision/Skills tree hash lines and a cited-slice hash row', async () => {
     const { project, sliceHash } = await makeCheckProject();
     await makeChunk(project, 'jab', JAB_CITES);
     await chunkCheckCommand('jab', { project, json: true });
@@ -697,7 +744,7 @@ describe('chunk-check', () => {
       'Scope:',
       'Rulebook edition:',
       'Rulebook source hash:',
-      'BoardSmith version:',
+      'Engine revision:',
       'Skills tree hash:',
     ]) {
       expect(VERIFIED_AGAINST_LABELS).toContain(label);
@@ -1121,12 +1168,27 @@ describe('chunk-provenance-status', () => {
     );
     await chunkCheckCommand('jab', { project, json: true });
     const text = await fs.readFile(chunkPath, 'utf-8');
-    await fs.writeFile(chunkPath, text.replace(/^BoardSmith version:.*$/m, ''));
+    await fs.writeFile(chunkPath, text.replace(/^Engine revision:.*$/m, ''));
 
     const result = await chunkProvenanceStatusCommand({ project, json: false });
     const entry = result.chunks.find((c) => c.slug === 'jab')!;
     expect(entry.state).toBe(PROVENANCE_UNKNOWN);
     expect(entry.blockMalformed).toBe(true);
+  });
+
+  it('groups chunks by engine revision in chunk-provenance-status, a block from before #440 as unknown', async () => {
+    const { project } = await makeStatusProject();
+    await addChunk(project, 'jab', 'verified', 'rulebook/01-setup-and-round-structure.md');
+    const oldPath = await addChunk(project, 'hook', 'verified', 'rulebook/01-setup-and-round-structure.md');
+    await chunkCheckCommand('jab', { project, json: true });
+    await chunkCheckCommand('hook', { project, json: true });
+    const text = await fs.readFile(oldPath, 'utf-8');
+    await fs.writeFile(oldPath, text.replace(/^Engine revision: .*$/m, 'BoardSmith version: 0.0.1'));
+
+    const result = await chunkProvenanceStatusCommand({ project, json: false });
+    expect(result.byEngineRevision).toEqual({ [String(ENGINE_REVISION)]: ['jab'], unknown: ['hook'] });
+    expect(result.chunks.find((c) => c.slug === 'hook')).toMatchObject({ engineRevision: undefined, blockMalformed: false });
+    expect(result.chunks.find((c) => c.slug === 'jab')?.engineRevision).toBe(ENGINE_REVISION);
   });
 
   it('a chunk whose block exists but has a fence deleted reports unknown with blockMalformed: true', async () => {
@@ -1256,7 +1318,7 @@ describe('chunk-provenance-status', () => {
     expect(Array.isArray(parsed.chunks)).toBe(true);
     expect(typeof parsed.byEdition).toBe('object');
     expect(typeof parsed.bySkillsTreeHash).toBe('object');
-    expect(typeof parsed.byBoardsmithVersion).toBe('object');
+    expect(typeof parsed.byEngineRevision).toBe('object');
   });
 
   it('the human output prints one row per chunk plus the group summaries', async () => {
@@ -1423,7 +1485,7 @@ describe('VERIFIED_AGAINST_LABELS — Re-verified (no code change) append (175-0
     'Reason:',
     'Rulebook edition:',
     'Rulebook source hash:',
-    'BoardSmith version:',
+    'Engine revision:', // #440: replaced 'BoardSmith version:', package.json's never-changing 0.0.1
     'Skills tree hash:',
     'Cited slices:',
     'Unresolved citations:',
@@ -1434,7 +1496,7 @@ describe('VERIFIED_AGAINST_LABELS — Re-verified (no code change) append (175-0
       scope: SCOPE_FULL,
       edition: 'First Printing 2020',
       sourceHash: 'deadbeef',
-      boardsmithVersion: '4.7.0',
+      engineRevision: 47,
       skillsTreeHash: 'cafef00d',
       citedSlices: [],
       unresolved: [],
@@ -1467,7 +1529,7 @@ describe('VERIFIED_AGAINST_LABELS — Re-verified (no code change) append (175-0
       '\nScope: full\n' +
         'Rulebook edition: First Printing 2020\n' +
         'Rulebook source hash: deadbeef\n' +
-        'BoardSmith version: 4.7.0\n' +
+        'Engine revision: 47\n' +
         'Skills tree hash: cafef00d\n' +
         '\n' +
         'Cited slices:\n' +
@@ -1528,7 +1590,7 @@ describe('## Verified Against — additional source hashes (#305)', () => {
       scope: SCOPE_FULL,
       edition: 'First Printing 2020',
       sourceHash: 'deadbeef',
-      boardsmithVersion: '4.7.0',
+      engineRevision: 47,
       skillsTreeHash: 'cafef00d',
       citedSlices: [],
       unresolved: [],
@@ -1553,7 +1615,7 @@ describe('## Verified Against — additional source hashes (#305)', () => {
       'Rulebook source hash: deadbeef\n' +
         `Additional source hash: ${HASH_A} rulebook/source/REFERENCE.md\n` +
         `Additional source hash: ${HASH_B} rulebook/source/cards.pdf\n` +
-        'BoardSmith version: 4.7.0\n',
+        'Engine revision: 47\n',
     );
   });
 

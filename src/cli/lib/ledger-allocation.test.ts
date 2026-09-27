@@ -140,3 +140,81 @@ describe('quoted ids are never citations (#437)', () => {
     }
   });
 });
+
+/**
+ * #439: prose also cites in list form, `Rulings 8 and @ranged-units.1`, where the kind word is
+ * written once, plural, and the provisional id after it carries none. The grammar: every id in a
+ * list that follows a kind word takes that kind, and a bare provisional id with no kind before it
+ * in its list is still a provisional id, which the merge refuses to leave on the main line.
+ */
+describe('provisional ids in list citations (#439)', () => {
+  const DECISIONS = NUMBERED_LEDGER_SPECS.find((s) => s.kind === 'Decision')!;
+  const QUESTIONS = NUMBERED_LEDGER_SPECS.find((s) => s.kind === 'Question')!;
+  // The three list citations Windup Warfare's chunk/ranged-units left unrewritten.
+  const WINDUP_DECISION_Q =
+    '- Rationale: pending designer review (Questions @ranged-units.14 and @ranged-units.15, issue #93).\n';
+  const WINDUP_DECISION_R = '- Rationale: Audit round 1 F1 (rulebook p.20; Rulings 8 and @ranged-units.1) and F12.\n';
+  const WINDUP_RESULTS =
+    '{ "observed": "it plays at once under reduced motion too, Decisions 71 and @ranged-units.15); 6044 frames" }\n';
+
+  it('reads every id in a list as the kind the list opens with', () => {
+    expect(provisionalReferences('design/DECISIONS.md', WINDUP_DECISION_Q)).toEqual([
+      'Question @ranged-units.14',
+      'Question @ranged-units.15',
+    ]);
+    expect(provisionalReferences('design/DECISIONS.md', WINDUP_DECISION_R)).toEqual(['Ruling @ranged-units.1']);
+    expect(provisionalReferences('design/playtests/ranged-units/results.json', WINDUP_RESULTS)).toEqual([
+      'Decision @ranged-units.15',
+    ]);
+    expect(provisionalReferences('design/a.md', 'Rulings 3, @a.1, and\n@a.2; Decision @a.1 or @a.3')).toEqual([
+      'Ruling @a.1',
+      'Ruling @a.2',
+      'Decision @a.1',
+      'Decision @a.3',
+    ]);
+    expect(provisionalReferences('design/a.md', 'G4 and @w.1, C@w.2')).toEqual(['G@w.1', 'C@w.2']);
+  });
+
+  it('follows a citation wrapped onto the next line of a source comment, as Windup Warfare wraps them', () => {
+    const movement = ' * 0 with the target inside the firing cone; outside the cone it is held at 0 (Ruling\n * @ranged-units.3), and the next blow waits.\n';
+    const table = '  // then the check-in row (Decision\n  // @ranged-units.9), and Rulings 31 and\n  // @ranged-units.4.\n';
+    expect(provisionalReferences('src/rules/sim/movement.ts', movement)).toEqual(['Ruling @ranged-units.3']);
+    expect(provisionalReferences('src/ui/components/GameTable.vue', table)).toEqual([
+      'Decision @ranged-units.9',
+      'Ruling @ranged-units.4',
+    ]);
+    expect(provisionalReferences('design/a.md', 'per Ruling\n> @a.1 here')).toEqual(['Ruling @a.1']);
+  });
+
+  it('names a provisional id written with no kind before it, so the merge can refuse it', () => {
+    expect(provisionalReferences('design/a.md', 'as settled in @a.1, and Ruling @a.2.')).toEqual([
+      '@a.1',
+      'Ruling @a.2',
+    ]);
+    expect(provisionalReferences('design/a.md', 'mail jt@example.com, pkg@1.2.3, or `see @a.1`')).toEqual([]);
+  });
+
+  it('rewrites the list citations Windup Warfare left behind, and only the provisional ids in them', () => {
+    const files = {
+      'design/RULINGS.md': '### Ruling 8\n- a\n### Ruling @ranged-units.1\n- b\n',
+      'design/DECISIONS.md': `### Decision 71\n- a\n### Decision @ranged-units.15\n- b\n${WINDUP_DECISION_Q}${WINDUP_DECISION_R}`,
+      'design/QUESTIONS.md': '### Question 30\n- a\n### Question @ranged-units.14\n- b\n### Question @ranged-units.15\n- c\n',
+      'design/playtests/ranged-units/results.json': WINDUP_RESULTS,
+    };
+    const result = allocateProvisional(files, [
+      { spec: RULINGS, path: 'design/RULINGS.md' },
+      { spec: DECISIONS, path: 'design/DECISIONS.md' },
+      { spec: QUESTIONS, path: 'design/QUESTIONS.md' },
+    ]);
+    expect(result.mapping).toEqual({
+      'Ruling @ranged-units.1': 'Ruling 9',
+      'Decision @ranged-units.15': 'Decision 72',
+      'Question @ranged-units.14': 'Question 31',
+      'Question @ranged-units.15': 'Question 32',
+    });
+    expect(result.files['design/DECISIONS.md']).toContain('(Questions 31 and 32, issue #93)');
+    expect(result.files['design/DECISIONS.md']).toContain('(rulebook p.20; Rulings 8 and 9)');
+    expect(result.files['design/playtests/ranged-units/results.json']).toContain('Decisions 71 and 72);');
+    for (const text of Object.values(result.files)) expect(text).not.toContain('@ranged-units');
+  });
+});

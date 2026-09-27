@@ -55,13 +55,72 @@ export function provisionalHeadings(text: string, spec: NumberedLedgerSpec): str
 }
 
 /**
- * Every provisional id cited in file `path`, of any kind, in order of first appearance. An id the
- * file only quotes (`citableText`) is not cited.
+ * The citation grammar for entry ids in prose (#439). A citation names its kind, then its number:
+ * `Ruling 12`, `Ruling @trading.1`, `G@world.2`. In a list the kind word is written once, often
+ * plural, and every id after it takes that kind until another kind word:
+ * `Rulings 8 and @ranged-units.1`, `Questions @a.14, @a.15 or 16`. A list continues across `,`,
+ * `and`, `or` and `&`, and ends at anything else. A provisional id with no kind anywhere before it in
+ * its list (`as settled in @a.1`) is still a provisional id: it is returned with no kind, so nothing
+ * provisional can reach the main line unnoticed. `@` directly after a letter, digit or `.` is not an
+ * id (`jt@example.com`, `pkg@1.2.3`).
+ */
+const WORD_KINDS = NUMBERED_LEDGER_SPECS.filter((s) => s.sep === ' ').map((s) => escapeRegExp(s.kind));
+const LETTER_KINDS = NUMBERED_LEDGER_SPECS.filter((s) => s.sep === '').map((s) => escapeRegExp(s.kind));
+/**
+ * Whitespace that may wrap onto the next line, never across a blank line. The next line may open
+ * with a comment or quote marker (` * `, `// `, `# `, `> `), since prose is wrapped inside those too.
+ */
+const GAP = '[ \\t]*(?:\\n[ \\t]*(?:(?:\\*|//|#|>)[ \\t]*)?)?';
+/** A kind word or letter, then an id; the groups are named only where one item is read at a time. */
+const listItem = (named: boolean, kindRequired: boolean): string => {
+  const group = (name: string) => (named ? `?<${name}>` : '?:');
+  const kind = `(?:\\b(${group('word')}${WORD_KINDS.join('|')})s?(?=\\s)${GAP}|\\b(${group('letter')}${LETTER_KINDS.join('|')}))`;
+  return `${kind}${kindRequired ? '' : '?'}(${group('number')}\\d+|${PROVISIONAL_NUMBER})(?!\\d)`;
+};
+const LIST_JOIN = `${GAP}(?:,${GAP}(?:(?:and|or)(?=\\s)${GAP})?|(?:and|or|&)(?=\\s)${GAP})`;
+const CITATION_LIST = new RegExp(`${listItem(false, true)}(?:${LIST_JOIN}${listItem(false, false)})*`, 'g');
+const LIST_ITEMS = new RegExp(listItem(true, false), 'g');
+const BARE_PROVISIONAL = new RegExp(`(?<![\\w@.])${PROVISIONAL_NUMBER}(?!\\d)`, 'g');
+
+interface ProvisionalCitation {
+  /** Offset of the provisional number (`@a.1`) in the file. */
+  index: number;
+  /** The provisional number as written, e.g. `@a.1`. */
+  number: string;
+  /** The full id with its kind, e.g. `Ruling @a.1`, or `undefined` when no kind precedes it. */
+  id: string | undefined;
+}
+
+/** Every provisional id cited in file `path`, in file order. An id the file only quotes (`citableText`) is not cited. */
+function provisionalCitations(path: string, text: string): ProvisionalCitation[] {
+  const citable = citableText(path, text);
+  const found: ProvisionalCitation[] = [];
+  const attributed = new Set<number>();
+  for (const list of citable.matchAll(CITATION_LIST)) {
+    let kind = '';
+    for (const item of list[0].matchAll(LIST_ITEMS)) {
+      const { word, letter, number } = item.groups!;
+      if (word !== undefined) kind = `${word} `;
+      else if (letter !== undefined) kind = letter;
+      if (!number.startsWith('@')) continue;
+      const index = list.index + item.index + item[0].length - number.length;
+      attributed.add(index);
+      found.push({ index, number, id: `${kind}${number}` });
+    }
+  }
+  for (const m of citable.matchAll(BARE_PROVISIONAL)) {
+    if (!attributed.has(m.index)) found.push({ index: m.index, number: m[0], id: undefined });
+  }
+  return found.sort((a, b) => a.index - b.index);
+}
+
+/**
+ * Every provisional id cited in file `path`, of any kind, in order of first appearance: `Ruling @a.1`
+ * with its kind, or the bare `@a.1` when the text gives it none. An id the file only quotes
+ * (`citableText`) is not cited.
  */
 export function provisionalReferences(path: string, text: string): string[] {
-  const kinds = [...new Set(NUMBERED_LEDGER_SPECS.map((s) => `${escapeRegExp(s.kind)}${s.sep}`))];
-  const pattern = new RegExp(`\\b(?:${kinds.join('|')})${PROVISIONAL_NUMBER}\\b`, 'g');
-  return [...new Set([...citableText(path, text).matchAll(pattern)].map((m) => m[0]))];
+  return [...new Set(provisionalCitations(path, text).map((c) => c.id ?? c.number))];
 }
 
 /** Real numbers present as headings in `tip` but not in `base`, e.g. `['Ruling 139']`. */
@@ -70,6 +129,21 @@ export function plainNumbersAdded(base: string, tip: string, spec: NumberedLedge
   return plainNumbers(tip, spec)
     .filter((n) => !before.has(n))
     .map((n) => `${spec.kind}${spec.sep}${n}`);
+}
+
+/**
+ * `text` with each provisional id `mapping` allocated replaced by its real number. Found on the
+ * citable text, spliced into the real one: a quoted id stays as written.
+ */
+function rewriteCitations(path: string, text: string, mapping: Record<string, string>): string {
+  let out = '';
+  let from = 0;
+  for (const { index, number, id } of provisionalCitations(path, text)) {
+    if (id === undefined || !(id in mapping)) continue;
+    out += text.slice(from, index) + /\d+$/.exec(mapping[id])![0];
+    from = index + number.length;
+  }
+  return out + text.slice(from);
 }
 
 interface AllocationResult {
@@ -98,19 +172,8 @@ export function allocateProvisional(
       if (!(id in mapping)) mapping[id] = `${spec.kind}${spec.sep}${next++}`;
     }
   }
-  const ids = Object.keys(mapping);
-  if (ids.length === 0) return { files: { ...files }, mapping };
-  const pattern = new RegExp(`\\b(?:${ids.map(escapeRegExp).join('|')})(?!\\.?\\d)`, 'g');
+  if (Object.keys(mapping).length === 0) return { files: { ...files }, mapping };
   const rewritten: Record<string, string> = {};
-  for (const [path, text] of Object.entries(files)) {
-    // Matched on the citable text, spliced into the real one: a quoted id stays as written.
-    let out = '';
-    let from = 0;
-    for (const m of citableText(path, text).matchAll(pattern)) {
-      out += text.slice(from, m.index) + mapping[m[0]];
-      from = m.index + m[0].length;
-    }
-    rewritten[path] = out + text.slice(from);
-  }
+  for (const [path, text] of Object.entries(files)) rewritten[path] = rewriteCitations(path, text, mapping);
   return { files: rewritten, mapping };
 }
