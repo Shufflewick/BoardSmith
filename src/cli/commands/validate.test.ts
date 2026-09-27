@@ -22,7 +22,9 @@ import {
   checkRulesAgreement,
   validateRequiredFiles,
   successGuidance,
+  typeScriptFailureDetails,
 } from './validate.js';
+import { ENGINE_REVISION } from '../../contract/index.js';
 import {
   MAX_TABLE_RULES_ENCODED_BYTES,
   MAX_UPLOAD_ZIP_BYTES,
@@ -1048,5 +1050,41 @@ describe('remote image sources must be declared before they are used (#370)', ()
     const result = await validateAssetPaths(cwd);
     const lines = (result.details ?? []).filter((line) => line.includes(REMOTE));
     expect(lines).toHaveLength(1);
+  });
+});
+
+/**
+ * #423: engine r112 changed `walkDeclaration`, and a game whose test called it
+ * the old way failed validate with only the compiler's words. The failure now
+ * says which revision since the game's last build changed what the errors use.
+ */
+describe('typeScriptFailureDetails names the engine change a type error runs into (#423)', () => {
+  const DIAGNOSTICS = [
+    'tests/world.test.ts(2,11): error TS2554: Expected 4 arguments, but got 3.',
+    "tests/world.test.ts(3,7): error TS2740: Type 'WorldWalkAnswers' is missing the following properties from type 'readonly DeclaredSeatActivityStamp[]': length, concat, join, slice, and 20 more.",
+  ];
+
+  function game(builtRevision: number | undefined): string {
+    const cwd = tempTree('bs-validate-engine-change-');
+    mkdirSync(join(cwd, 'tests'));
+    writeFileSync(join(cwd, 'tests/world.test.ts'), 'const host = {\n  offers: await walkDeclaration(\n      declaredActivity,\n};\n');
+    if (builtRevision !== undefined) {
+      mkdirSync(join(cwd, 'dist'));
+      writeFileSync(join(cwd, 'dist/manifest.json'), JSON.stringify({ engineRevision: builtRevision }));
+    }
+    return cwd;
+  }
+
+  it('puts the revision that changed walkDeclaration, and what it says, above the errors', () => {
+    const details = typeScriptFailureDetails(game(107), DIAGNOSTICS);
+    expect(details[0]).toContain(`engine revision 107; this BoardSmith is revision ${ENGINE_REVISION}`);
+    expect(details[1]).toMatch(/^Engine revision 112 \(2026-09-26\) changed .*walkDeclaration.*, used at tests\/world\.test\.ts:2, 3: /);
+    expect(details[1]).toContain('walkDeclaration takes a fourth reader and returns that object');
+    expect(details.slice(2)).toEqual(DIAGNOSTICS);
+  });
+
+  it('gives the errors alone for a game never built, or built against this revision', () => {
+    expect(typeScriptFailureDetails(game(undefined), DIAGNOSTICS)).toEqual(DIAGNOSTICS);
+    expect(typeScriptFailureDetails(game(ENGINE_REVISION), DIAGNOSTICS)).toEqual(DIAGNOSTICS);
   });
 });
