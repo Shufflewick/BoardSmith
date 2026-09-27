@@ -1,6 +1,7 @@
 import { existsSync, readFileSync, writeFileSync, mkdirSync, readdirSync, renameSync, rmSync, copyFileSync } from 'node:fs';
 import { join, basename } from 'node:path';
-import { execSync } from 'node:child_process';
+import { execFileSync, execSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import chalk from 'chalk';
 import ora from 'ora';
 import { getProjectContext } from '../lib/project-context.js';
@@ -11,13 +12,12 @@ interface PackOptions {
   outDir?: string;
   /**
    * Repeatable. Multiple targets are integrated from ONE pack, so every target
-   * receives the byte-identical tarball.
+   * receives the same tarball file.
    *
-   * This matters more than it looks: the tarball version is a timestamp, so
-   * running `pack --target a` then `pack --target b` gives a and b DIFFERENT
-   * engines. ShufflewickPub vendors into both `games/` and `executor/` — one
-   * validates uploads, the other runs them — and a split between those two
-   * lets the platform accept a bundle it cannot run.
+   * ShufflewickPub vendors into both `games/` and `executor/` — one validates
+   * uploads, the other runs them — and a split between those two lets the
+   * platform accept a bundle it cannot run. One pack rules the split out even
+   * if the tree changes between two separate runs.
    */
   target?: string[];
 }
@@ -26,12 +26,15 @@ interface PackageInfo {
   name: string;
   path: string;
   version: string;
+  /** The engine contract revision the packed tree records. */
+  revision: number;
 }
 
 interface PackResult {
   name: string;
   tarball: string;
-  timestampVersion: string;
+  /** The version written into the packed `package.json`; see `packVersion`. */
+  packVersion: string;
 }
 
 /**
@@ -55,20 +58,73 @@ function discoverPackages(monorepoRoot: string): PackageInfo[] {
     name: pkgJson.name || 'boardsmith',
     path: monorepoRoot,
     version: pkgJson.version || '0.0.1',
+    revision: readContractRevision(monorepoRoot),
   }];
 }
 
 /**
- * Generate a timestamp-based version string.
- * Format: baseVersion-YYYYMMDDHHMMSS (e.g., 1.0.0-20260118123456)
+ * The engine contract revision recorded in the tree at `root`.
+ *
+ * Read from the file on disk, not from the `ENGINE_REVISION` this CLI was
+ * built with: the running CLI can be older than the tree it is packing.
  */
-function generateTimestampVersion(baseVersion: string): string {
-  const now = new Date();
-  const timestamp = now.toISOString()
-    .replace(/[-:T]/g, '')
-    .replace(/\.\d{3}Z$/, '')
-    .slice(0, 14); // YYYYMMDDHHMMSS
-  return `${baseVersion}-${timestamp}`;
+export function readContractRevision(root: string): number {
+  const contractPath = join(root, 'src', 'contract', 'engine-contract.json');
+  if (!existsSync(contractPath)) {
+    throw new Error(
+      `No engine contract at ${contractPath}. Run boardsmith pack from the BoardSmith repository root.`,
+    );
+  }
+  const revision: unknown = JSON.parse(readFileSync(contractPath, 'utf-8')).revision;
+  if (typeof revision !== 'number' || !Number.isInteger(revision) || revision < 1) {
+    throw new Error(
+      `${contractPath} has no valid revision (found ${JSON.stringify(revision)}). ` +
+        'Restore it from git before packing.',
+    );
+  }
+  return revision;
+}
+
+/**
+ * The sha256 of every file `npm pack` would put in the tarball, first 12 hex
+ * characters.
+ *
+ * The file list is npm's own (`npm pack --dry-run`), so the `files` globs in
+ * `package.json` are applied by the program that applies them for real.
+ * Paths are sorted, and each path and length is hashed beside its bytes so
+ * moving content between files cannot collide.
+ */
+function packedContentHash(pkgPath: string): string {
+  const [report] = JSON.parse(
+    execFileSync('npm', ['pack', '--dry-run', '--json', '--ignore-scripts'], {
+      cwd: pkgPath,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+    }),
+  ) as [{ files: { path: string }[] }];
+  const paths = report.files.map((file) => file.path).sort();
+  const hash = createHash('sha256');
+  for (const path of paths) {
+    const content = readFileSync(join(pkgPath, path));
+    hash.update(`${path}\0${content.length}\0`);
+    hash.update(content);
+  }
+  return hash.digest('hex').slice(0, 12);
+}
+
+/**
+ * The version a pack writes into `package.json`:
+ * `<version>-r<contract revision>-<content hash>`, e.g. `0.0.1-r115-3fa9c2d41b7e`.
+ *
+ * Derived from the tree and nothing else, so packing the same tree twice gives
+ * the same tarball name and, because `npm pack` fixes mtimes and ownership,
+ * the same bytes. A consumer that re-vendors unchanged sources sees no change
+ * (#434). The revision and hash are one prerelease identifier, joined by `-`
+ * rather than `.`: a hash that happened to be all digits with a leading zero
+ * would be an invalid semver identifier on its own.
+ */
+function packVersion(pkg: PackageInfo): string {
+  return `${pkg.version}-r${pkg.revision}-${packedContentHash(pkg.path)}`;
 }
 
 /** The `.tgz` filenames currently sitting in a directory. */
@@ -77,7 +133,7 @@ function tarballsIn(dir: string): string[] {
 }
 
 /**
- * Pack a single package with a timestamp version.
+ * Pack a single package with its pack version.
  * Returns the tarball filename.
  *
  * `npm pack` writes into the package directory, so this owns getting the
@@ -88,7 +144,7 @@ function tarballsIn(dir: string): string[] {
 function packPackage(
   pkgPath: string,
   outputDir: string,
-  timestampVersion: string
+  version: string
 ): string {
   const pkgJsonPath = join(pkgPath, 'package.json');
   const originalContent = readFileSync(pkgJsonPath, 'utf-8');
@@ -98,9 +154,9 @@ function packPackage(
   const preexisting = new Set(tarballsIn(pkgPath));
 
   try {
-    // Write modified package.json with timestamp version
+    // Write modified package.json with the pack version
     // Note: workspace: deps are left as-is; npm overrides in target handle resolution
-    pkgJson.version = timestampVersion;
+    pkgJson.version = version;
     writeFileSync(pkgJsonPath, JSON.stringify(pkgJson, null, 2) + '\n');
 
     // Run npm pack in the package directory
@@ -110,7 +166,7 @@ function packPackage(
     });
 
     // Find the generated tarball (npm pack creates it in the package dir)
-    const tarballName = `${pkgJson.name.replace('@', '').replace('/', '-')}-${timestampVersion}.tgz`;
+    const tarballName = `${pkgJson.name.replace('@', '').replace('/', '-')}-${version}.tgz`;
     const generatedTarball = join(pkgPath, tarballName);
 
     // Move tarball to output directory
@@ -154,7 +210,6 @@ function packPackage(
 export function packAll(
   packages: PackageInfo[],
   outputPath: string,
-  timestamp: string,
 ): PackResult[] {
   // `recursive` returns the topmost directory it had to create, or undefined
   // when the whole path already existed.
@@ -163,16 +218,17 @@ export function packAll(
 
   try {
     for (const pkg of packages) {
-      const timestampVersion = `${pkg.version}-${timestamp}`;
+      let version: string;
       let tarball: string;
       try {
-        tarball = packPackage(pkg.path, outputPath, timestampVersion);
+        version = packVersion(pkg);
+        tarball = packPackage(pkg.path, outputPath, version);
       } catch (error) {
         throw new Error(
           `npm pack failed for ${pkg.name}: ${error instanceof Error ? error.message : String(error)}`,
         );
       }
-      results.push({ name: pkg.name, tarball, timestampVersion });
+      results.push({ name: pkg.name, tarball, packVersion: version });
     }
     return results;
   } catch (error) {
@@ -379,7 +435,7 @@ export function packOutputDir(cwd: string, outDir: string | undefined): string {
 }
 
 /**
- * Main pack command: discover packages, pack them with timestamp versions,
+ * Main pack command: discover packages, pack them with content-derived versions,
  * and collect tarballs in output directory.
  */
 export async function packCommand(options: PackOptions): Promise<void> {
@@ -414,7 +470,13 @@ export async function packCommand(options: PackOptions): Promise<void> {
 
   // Discover packages
   const spinner = ora('Discovering packages...').start();
-  const packages = discoverPackages(cwd);
+  let packages: PackageInfo[];
+  try {
+    packages = discoverPackages(cwd);
+  } catch (error) {
+    spinner.fail('Could not read the package to pack');
+    throw error;
+  }
 
   if (packages.length === 0) {
     spinner.fail('No boardsmith package found');
@@ -423,13 +485,10 @@ export async function packCommand(options: PackOptions): Promise<void> {
 
   spinner.succeed(`Found ${packages.length} package to pack`);
 
-  // Generate single timestamp for all packages (consistent snapshot)
-  const timestamp = generateTimestampVersion('0.0.0').split('-')[1]; // Just get the timestamp part
-
   const packSpinner = ora(`Packing ${packages.map((p) => p.name).join(', ')}...`).start();
   let results: PackResult[];
   try {
-    results = packAll(packages, outputPath, timestamp);
+    results = packAll(packages, outputPath);
   } catch (error) {
     packSpinner.fail('Pack failed');
     // Rethrown rather than exited: cli.ts reports a thrown Error as one clean
