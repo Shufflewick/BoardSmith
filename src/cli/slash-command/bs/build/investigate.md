@@ -101,7 +101,14 @@ WRITE directly into this chunk's CHUNK.md — do not return this content, write 
      range. Cite code by file and line: `Source: ../old/lib/combat.pm:101-135`. Cite BoardSmith's
      own source or docs from the installed package, the version this project runs:
      `Source: ../node_modules/boardsmith/src/engine/flow/engine.ts:1309-1312`, never
-     `BoardSmith:src/...`, which names no file this project has.
+     `BoardSmith:src/...`, which names no file this project has. A claim about code this chunk
+     replaces ("the draw path returns a loss today") stays quoted as it was: once build has
+     changed the line, pin the location to a commit of this chunk that still has it, with
+     `@<commit>` before the line location: `Source: ../src/rules/damage.ts@611dc8e:42`. The
+     commit must be the chunk's base commit (the parent of its first `chunk-{slug}/` commit) or
+     one of its own `chunk-{slug}/` commits, and the check reads the file there from git. When a
+     quote is not at its unpinned location, `claim-quote-check` names the pinned location that
+     still has it, if any; copy that.
      A claim resting on a slice line marked `Derived` or `Named-but-undefined` must say so
      explicitly, and a `Named-but-undefined` rule can only feed an open question, never a claim.
      If no passage in the sources backs something this chunk needs, it is NOT a claim: never

@@ -10,7 +10,8 @@
  *
  * A citation is a whitespace-, quote-, bracket- or backtick-delimited token that contains a `/`
  * and ends in a script or capture extension, optionally followed by a line location (`:N`,
- * `:N-M`, `:N:C`) read by the one grammar for one, `splitLineLocation` (line-location.ts, #414).
+ * `:N-M`, `:N:C`), and by `@<commit>` for the file as it was in a commit of the chunk's history (#426), read by
+ * the one grammar for one, `splitLineLocation` (line-location.ts, #414).
  * The lines it names are returned with it, so `ledger-check` can hold them to "the file has them". Skipped on purpose: URLs, a path in another
  * repository written `<repo>:<path>` (for example `BoardSmith:src/engine/game.ts`), template
  * placeholders and globs (`<slug>`, `*`, `{a,b}`), bare file names, anything inside an HTML
@@ -33,6 +34,8 @@ interface CitedPath {
   line: number;
   /** The lines of the cited file the citation names, when it names any (`path:N`, `path:N-M`). */
   lines?: LineRange;
+  /** Written `path@<commit>`: the file as it was in that commit of the chunk's history (#426). */
+  commit?: string;
 }
 
 const EVIDENCE_EXTENSION = /\.(?:mjs|cjs|js|mts|cts|ts|sh|py|png|jpe?g|gif|webp|svg|webm|mp4)$/i;
@@ -46,13 +49,13 @@ const NOT_A_GAME_PATH = /[*{}<>$]/;
 const MODULE_SPECIFIER =
   /\b(?:import|export)\b[^'"\n]*?\bfrom\s*(['"])[^'"\n]*\1|\b(?:import|require)\s*\(?\s*(['"])[^'"\n]*\2/g;
 
-function asCitation(raw: string): { path: string; lines?: LineRange } | undefined {
-  const { path, lines } = splitLineLocation(raw.replace(/[.,:;!?]+$/, ''));
+function asCitation(raw: string): Omit<CitedPath, 'line'> | undefined {
+  const { path, lines, commit } = splitLineLocation(raw.replace(/[.,:;!?]+$/, ''));
   if (!path.includes('/') || !EVIDENCE_EXTENSION.test(path)) return undefined;
   if (NOT_A_GAME_PATH.test(path)) return undefined;
   // A colon before the first slash is a URL scheme or a `<repo>:` qualifier.
   if (/^[^/]*:/.test(path)) return undefined;
-  return lines ? { path, lines } : { path };
+  return { path, ...(lines && { lines }), ...(commit !== undefined && { commit }) };
 }
 
 /** Every cited script or capture in `text`, in file order. */

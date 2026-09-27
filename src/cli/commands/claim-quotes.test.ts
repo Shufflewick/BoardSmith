@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { execFileSync } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { checkClaimQuotes, claimQuoteCheckCommand, parseInterpretationQuotes } from './claim-quotes.js';
@@ -310,6 +311,92 @@ describe('checkClaimQuotes: code-sourced claims', () => {
    > if ($roll1 > $roll2) {
    Source: ../old/lib/combat.pm §"fight"`);
     expect(refusals[0]).toMatch(/cite it by line/);
+  });
+});
+
+/**
+ * #426: a claim written at investigate often quotes the code the chunk is about to replace. After
+ * build replaces it the quote is no longer at its location, and there is no honest new location.
+ * `path@<commit>:N-M` cites the file as it was in a commit of the chunk's history (its base commit
+ * or one of its own `chunk-<slug>/` commits), read from git.
+ */
+describe('checkClaimQuotes: code as it was in a commit of the chunk (#426)', () => {
+  function git(...args: string[]): string {
+    return execFileSync('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', ...args], { cwd: project, encoding: 'utf8' }).trim();
+  }
+  function commit(message: string): string {
+    git('add', '-A');
+    git('commit', '-q', '--allow-empty', '-m', message);
+    return git('rev-parse', 'HEAD');
+  }
+  const before = ['export function outcome(winner) {', '  if (winner === null) return lost;', '}', ''].join('\n');
+  const after = ['export function outcome(winner) {', '  if (winner === null) return drawn;', '}', ''].join('\n');
+  const replacedClaim = (source: string) => `1. **The draw path returns a loss today.**
+   > if (winner === null) return lost;
+   Source: ${source}`;
+
+  /** A chunk whose build replaced the quoted line: its commits, and the check's refusals for `source`. */
+  async function builtChunk(source: (c: Record<'unrelated' | 'base' | 'investigate', string>) => string): Promise<string[]> {
+    git('init', '-q');
+    await write('src/rules/damage.ts', before);
+    const unrelated = commit('scaffold');
+    const base = commit('chunk-setup/step-close: done');
+    await writeChunk('1. **placeholder**');
+    const investigate = commit('chunk-combat/step-investigate: claims');
+    await write('src/rules/damage.ts', after);
+    commit('chunk-combat/step-build: draws are drawn');
+    await writeChunk(replacedClaim(source({ unrelated, base, investigate })));
+    return (await checkClaimQuotes(project, 'combat')).refusals;
+  }
+
+  it('accepts a quote of code the chunk replaced, pinned to its base commit or one of its own commits', async () => {
+    expect(await builtChunk((c) => `../src/rules/damage.ts@${c.base.slice(0, 7)}:2`)).toEqual([]);
+    await fs.rm(join(project, '.git'), { recursive: true });
+    expect(await builtChunk((c) => `../src/rules/damage.ts@${c.investigate}:2`)).toEqual([]);
+  });
+
+  it('refuses that quote cited at the file as it is now, naming the commit of the chunk that has it', async () => {
+    let investigate = '';
+    const refusals = await builtChunk((c) => {
+      investigate = c.investigate;
+      return '../src/rules/damage.ts:2';
+    });
+    expect(refusals).toHaveLength(1);
+    expect(refusals[0]).toMatch(/not found at \.\.\/src\/rules\/damage\.ts:2/);
+    expect(refusals[0]).toContain(`../src/rules/damage.ts@${investigate.slice(0, 10)}:2 (chunk-combat/step-investigate: claims)`);
+  });
+
+  it('refuses a quote that was not at the pinned lines either', async () => {
+    const refusals = await builtChunk((c) => `../src/rules/damage.ts@${c.investigate.slice(0, 7)}:1`);
+    expect(refusals).toHaveLength(1);
+    expect(refusals[0]).toMatch(/not found at \.\.\/src\/rules\/damage\.ts@[0-9a-f]{7}:1/);
+  });
+
+  it('refuses a file the pinned commit did not have, naming the commit', async () => {
+    const refusals = await builtChunk((c) => `../src/rules/new.ts@${c.investigate.slice(0, 7)}:1`);
+    expect(refusals).toHaveLength(1);
+    expect(refusals[0]).toMatch(/src\/rules\/new\.ts was not in git at [0-9a-f]{10} \(chunk-combat\/step-investigate: claims\)/);
+  });
+
+  it('refuses a pin outside the chunk\'s history, listing the commits it may pin to', async () => {
+    const refusals = await builtChunk((c) => `../src/rules/damage.ts@${c.unrelated.slice(0, 7)}:2`);
+    expect(refusals).toHaveLength(1);
+    expect(refusals[0]).toMatch(/is not a commit of chunk "combat".*step-build.*step-investigate.*base of chunk-combat/);
+  });
+
+  it('refuses a pin when the chunk has no commit yet, saying how commits are named', async () => {
+    git('init', '-q');
+    await write('src/rules/damage.ts', before);
+    const scaffold = commit('scaffold');
+    const refusals = await refusalsFor(replacedClaim(`../src/rules/damage.ts@${scaffold.slice(0, 7)}:2`));
+    expect(refusals).toHaveLength(1);
+    expect(refusals[0]).toMatch(/chunk-combat\/step-<name>/);
+  });
+
+  it('refuses a pin on BoardSmith\'s installed source, which is in no commit of the game', async () => {
+    const refusals = await builtChunk((c) => `../node_modules/boardsmith/src/engine/flow/engine.ts@${c.base.slice(0, 7)}:2`);
+    expect(refusals).toHaveLength(1);
+    expect(refusals[0]).toMatch(/installed BoardSmith.*not in this project's git/);
   });
 });
 

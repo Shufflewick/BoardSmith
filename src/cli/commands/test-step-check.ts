@@ -47,6 +47,7 @@ import {
 } from './test-step-ast.js';
 import { runMutationCheck, type MutationSummary } from './test-step-mutation.js';
 import { scriptRegions } from './test-step-sfc.js';
+import { findChunkCommits } from '../lib/chunk-commits.js';
 import { chunkMdPath, relChunkMdPath } from '../lib/project-paths.js';
 import { assertBareName } from '../lib/user-name.js';
 
@@ -157,34 +158,6 @@ async function git(projectDir: string, args: string[]): Promise<string> {
 
 /** The hash git blame gives a line that is not committed yet. */
 const UNCOMMITTED = '0'.repeat(40);
-
-/** Every commit whose message starts with `chunk-<slug>/` (state-machine.md "Git Protocol"). */
-async function findChunkCommits(projectDir: string, slug: string): Promise<Set<string>> {
-  let log: string;
-  try {
-    log = await git(projectDir, ['log', '--format=%H%x09%s']);
-  } catch {
-    throw new Error(
-      `${projectDir} is not a git repository with commits.\n` +
-        'The build skill commits every step (state-machine.md "Git Protocol"); initialise git and commit first.',
-    );
-  }
-  const prefix = `chunk-${slug}/`;
-  const commits = new Set(
-    log
-      .split('\n')
-      .map((line) => line.split('\t'))
-      .filter(([, subject]) => subject?.startsWith(prefix))
-      .map(([hash]) => hash),
-  );
-  if (commits.size === 0) {
-    throw new Error(
-      `No commit for chunk "${slug}" yet: none of its commit messages starts with "${prefix}step-".\n` +
-        `Commit each finished step as "chunk-${slug}/step-<name>" (state-machine.md "Git Protocol"), then run this again.`,
-    );
-  }
-  return commits;
-}
 
 const IMPLEMENTATION_FILE = /\.(ts|mts|cts|js|mjs)$/;
 /** A script file under `src/`: where verbs are defined. */

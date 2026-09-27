@@ -41,7 +41,12 @@ upstream step is exactly what would defeat an independent audit.
    location the chunk's claims quote, and every finding it reports quotes the source too.
    Before dispatching it, the orchestrator runs `boardsmith claim-quote-check <slug>`; a
    non-zero exit means the claims were never properly quoted, so the chunk goes back to
-   `investigate` rather than into an audit built on them. A chunk verified before claims carried
+   `investigate` rather than into an audit built on them. The one exception is a quote of code
+   this chunk itself replaced: build changed that line on purpose, so the orchestrator re-points
+   the claim's `Source:` at the code as it was in a commit of the chunk, `<path>@<commit>:<lines>`
+   (the check's refusal names that location when one exists; `build/investigate.md`), reruns the
+   check, and continues to audit without re-investigating. A quote that no commit of the chunk
+   has at its lines was never properly quoted, and goes back. A chunk verified before claims carried
    quotes passes once the gate transition has recorded its claims, and a re-audit of it owes
    quotes only for the claims it adds or changes (`build/investigate.md` "Chunks Verified Before
    Claims Carried Quotes"); if the check names `boardsmith chunk-gate-transition` instead, that is
@@ -81,7 +86,9 @@ Then read the built code at: {codeFilePaths}.
 These are the source passages this chunk was built on, as
 `boardsmith claim-quote-check {slug} --json` reports them: each quote and the location it came
 from, without any agent's reading of it. RE-OPEN every location yourself, read the passage in its surrounding context, and check the
-code against what the source says there, not against the quote alone:
+code against what the source says there, not against the quote alone. A location pinned to a
+commit, `<path>@<commit>:<lines>`, is code this chunk replaced, as it was in that commit: read it
+with `git show <commit>:<path from the project root>`, and check the built code for what replaced it:
 
 {quotedSourcesJson}
 

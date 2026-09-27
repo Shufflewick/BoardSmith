@@ -26,7 +26,9 @@
  *     One cited by line (`path:N`, `path:N-M`, #414) must also have those lines in the version
  *     the citing line was written against. A file of BoardSmith's own, cited from the installed
  *     package (`../node_modules/boardsmith/src/...`, #432), is in no commit of the game, so it
- *     must instead be in the package as installed, with the lines cited.
+ *     must instead be in the package as installed, with the lines cited. One pinned to a commit
+ *     (`path@<commit>:N-M`, #426) must have been in git there, with those lines; only a chunk's
+ *     own CHUNK.md may pin, and only to a commit of that chunk's history.
  *
  * It reads the working tree as it stands, so the same command checks one branch at close time
  * and a combined tree at merge time. READ-ONLY: it never writes a file, and the only git
@@ -45,6 +47,8 @@ import {
   RULINGS_MD,
   RUN_LOG_DIR,
   RUN_MD,
+  CHUNKS_DIR,
+  CHUNK_MD,
   chunkSlugs,
   designPath,
   INSTALLED_BOARDSMITH_DIR,
@@ -53,6 +57,7 @@ import {
   relChunkMdPath,
 } from '../lib/project-paths.js';
 import { CHUNK_EVIDENCE_DIR, citedEvidencePaths } from '../lib/cited-evidence.js';
+import { type ChunkCommit, type PinnedCommit, chunkPins } from '../lib/chunk-commits.js';
 import { LINE_LOCATION_HINT, type LineRange, fileLines, lineRangeProblem } from '../lib/line-location.js';
 import { type LedgerEntry, parseLedgerEntries, supersessionPatterns } from '../lib/ledger-entries.js';
 import { NUMBERED_LEDGER_SPECS, duplicateProvisionalIds, provisionalHeadings } from '../lib/ledger-allocation.js';
@@ -719,9 +724,22 @@ interface CitedCopy {
  * recorded that line, or, when that line is not committed yet or its commit did not have the file
  * (it was committed later), the file as it is now, which is the copy the rest of this check
  * accepts. A file of the installed BoardSmith is in no commit of the game, so it is the package
- * as installed, the copy `claim-quote-check` reads (#432).
+ * as installed, the copy `claim-quote-check` reads (#432). A citation pinned to a commit of its
+ * chunk (#426) is that commit's copy.
  */
-async function citedCopy(projectDir: string, rel: string, citingCommit: () => Promise<string | null>): Promise<CitedCopy> {
+async function citedCopy(
+  projectDir: string,
+  rel: string,
+  citingCommit: () => Promise<string | null>,
+  pinned: ChunkCommit | undefined,
+): Promise<CitedCopy> {
+  if (pinned !== undefined) {
+    return {
+      key: `${pinned.hash}:${rel}`,
+      text: () => git(projectDir, ['show', `${pinned.hash}:./${rel}`]),
+      hasLines: (n) => `${rel} had ${n} lines at ${commitName(pinned)}`,
+    };
+  }
   const now = { key: `:${rel}`, text: () => fs.readFile(pathJoin(projectDir, rel), 'utf-8') };
   const library = installedBoardSmithPath(rel);
   if (library !== undefined) return { ...now, hasLines: (n) => `the installed BoardSmith's ${library} has ${n} lines` };
@@ -744,8 +762,9 @@ async function citedLinesProblem(
   range: LineRange,
   citingCommit: () => Promise<string | null>,
   lineCounts: Map<string, Promise<number>>,
+  pinned: ChunkCommit | undefined,
 ): Promise<string | undefined> {
-  const copy = await citedCopy(projectDir, rel, citingCommit);
+  const copy = await citedCopy(projectDir, rel, citingCommit, pinned);
   if (!lineCounts.has(copy.key)) lineCounts.set(copy.key, copy.text().then((t) => fileLines(t).length));
   const count = await lineCounts.get(copy.key)!;
   switch (lineRangeProblem(range, count)) {
@@ -761,9 +780,62 @@ async function citedLinesProblem(
   }
 }
 
+/** A cited path as `checkCitedEvidence` holds it: where it was cited, and what it names. */
+type Citation = ReturnType<typeof citedEvidencePaths>[number] & { file: string; rel: string | undefined };
+
+const CHUNK_MD_FILE = new RegExp(`^${CHUNKS_DIR}/([^/]+)/${CHUNK_MD.replace('.', '\\.')}$`);
+
+/**
+ * The commit a citation pinned to one (`path@<commit>`, #426) is read in, or why it cannot be. The
+ * commit must be in the history of the chunk whose CHUNK.md cites it (`chunkPins`,
+ * chunk-commits.ts) and have the file, as `claim-quote-check` requires of the quote.
+ */
+async function pinnedCommitOf(
+  projectDir: string,
+  c: Citation & { commit: string },
+  pins: Map<string, (ref: string) => Promise<PinnedCommit>>,
+): Promise<{ commit: ChunkCommit } | { problem: string }> {
+  const written = `${c.path}@${c.commit}`;
+  if (c.rel === undefined) return { problem: evidenceDetail(written, c.rel, 'outside') };
+  if (installedBoardSmithPath(c.rel) !== undefined) {
+    return { problem: `Cites ${written}, but the installed BoardSmith is not in this project's git. Cite it as it is installed, with no @<commit>.` };
+  }
+  const slug = CHUNK_MD_FILE.exec(c.file)?.[1];
+  if (slug === undefined) {
+    return {
+      problem:
+        `Cites ${written}, which pins a commit, and only a chunk's CHUNK.md may: the pin must be in that chunk's history. ` +
+        'Cite the file as it is now.',
+    };
+  }
+  if (!pins.has(slug)) pins.set(slug, chunkPins(projectDir, slug));
+  const pinned = await pins.get(slug)!(c.commit);
+  if (!pinned.ok) return { problem: `Cites ${written}: ${pinned.problem}` };
+  if (!(await trackedAt(projectDir, pinned.commit.hash, c.rel))) {
+    return { problem: `Cites ${written}, but ${c.rel} was not in git at ${commitName(pinned.commit)}. Pin a commit that has it.` };
+  }
+  return { commit: pinned.commit };
+}
+
+/** A commit of a chunk's history, as messages name it. */
+function commitName({ hash, label }: ChunkCommit): string {
+  return `${hash.slice(0, 10)} (${label})`;
+}
+
 /** The citation as a location, `path:N` or `path:N-M`, for messages. */
 function writtenLocation(path: string, [from, to]: LineRange): string {
   return from === to ? `${path}:${from}` : `${path}:${from}-${to}`;
+}
+
+/** What is wrong with a citation of a file as it is (not pinned to a commit), if anything. */
+async function unpinnedCitation(
+  projectDir: string,
+  c: Citation,
+  tracked: Set<string>,
+  citingCommit: () => Promise<string | null>,
+): Promise<{ commit: undefined } | { problem: string }> {
+  const problem = await problemOf(projectDir, c.rel, tracked, citingCommit);
+  return problem ? { problem: evidenceDetail(c.path, c.rel, problem) } : { commit: undefined };
 }
 
 /**
@@ -771,12 +843,12 @@ function writtenLocation(path: string, [from, to]: LineRange): string {
  * per citation of lines that file does not have (#414).
  */
 async function checkCitedEvidence(projectDir: string, sources: EvidenceSource[]): Promise<LedgerFinding[]> {
-  const cited = sources.flatMap((source) =>
+  const cited: Citation[] = sources.flatMap((source) =>
     citedEvidencePaths(source.text).map((c) => ({ ...c, file: source.file, rel: designRecordPath(projectDir, c.path) })),
   );
   if (cited.length === 0) return [];
   await requireGitRepo(projectDir, 'checks that every script and capture the design records cite is committed');
-  const rels = [...new Set(cited.flatMap((c) => (c.rel === undefined ? [] : [c.rel])))];
+  const rels = [...new Set(cited.flatMap((c) => (c.rel === undefined || c.commit !== undefined ? [] : [c.rel])))];
   const tracked = await trackedFiles(projectDir, rels);
 
   // Blamed only when a cited file is missing or lines of it are cited, and at most once per design record.
@@ -790,22 +862,21 @@ async function checkCitedEvidence(projectDir: string, sources: EvidenceSource[])
   };
 
   const lineCounts = new Map<string, Promise<number>>();
+  const pins = new Map<string, (ref: string) => Promise<PinnedCommit>>();
   const findings: LedgerFinding[] = [];
   for (const c of cited) {
     const citingCommit = () => commitOfLine(c.file, c.line);
-    const problem = await problemOf(projectDir, c.rel, tracked, citingCommit);
-    if (problem) {
-      findings.push({
-        ledger: c.file,
-        entry: `line ${c.line}`,
-        kind: 'evidence-not-committed',
-        detail: evidenceDetail(c.path, c.rel, problem),
-      });
+    const read =
+      c.commit === undefined
+        ? await unpinnedCitation(projectDir, c, tracked, citingCommit)
+        : await pinnedCommitOf(projectDir, { ...c, commit: c.commit }, pins);
+    if ('problem' in read) {
+      findings.push({ ledger: c.file, entry: `line ${c.line}`, kind: 'evidence-not-committed', detail: read.problem });
       continue;
     }
     if (!c.lines || c.rel === undefined) continue;
-    const written = writtenLocation(c.path, c.lines);
-    const detail = await citedLinesProblem(projectDir, written, c.rel, c.lines, citingCommit, lineCounts);
+    const written = writtenLocation(c.commit === undefined ? c.path : `${c.path}@${c.commit}`, c.lines);
+    const detail = await citedLinesProblem(projectDir, written, c.rel, c.lines, citingCommit, lineCounts, read.commit);
     if (detail) findings.push({ ledger: c.file, entry: `line ${c.line}`, kind: 'cited-lines-missing', detail });
   }
   return findings;
