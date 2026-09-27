@@ -1,8 +1,8 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, readdirSync, utimesSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
-import { packAll, packOutputDir, pruneStaleTarballs } from './pack.js';
+import { packAll, packOutputDir, pruneStaleTarballs, readContractRevision } from './pack.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 
 /**
@@ -138,40 +138,86 @@ describe('packAll', () => {
     return dir;
   }
 
+  /** The `PackageInfo` for a fixture package, at contract revision `revision`. */
+  const info = (name: string, path: string, revision = 7) => ({ name, path, version: '1.0.0', revision });
+
   it('writes the tarball into an absolute output directory it has to create', () => {
     const pkgDir = fixturePackage('bs-fixture-ok');
     const outDir = join(root, 'elsewhere', 'nested', 'tarballs');
 
-    const results = packAll(
-      [{ name: 'bs-fixture-ok', path: pkgDir, version: '1.0.0' }],
-      outDir,
-      '20260910000000',
-    );
+    const [result] = packAll([info('bs-fixture-ok', pkgDir)], outDir);
 
-    expect(results).toEqual([
-      {
-        name: 'bs-fixture-ok',
-        tarball: 'bs-fixture-ok-1.0.0-20260910000000.tgz',
-        timestampVersion: '1.0.0-20260910000000',
-      },
-    ]);
-    expect(existsSync(join(outDir, 'bs-fixture-ok-1.0.0-20260910000000.tgz'))).toBe(true);
+    expect(existsSync(join(outDir, result.tarball))).toBe(true);
     // The source tree keeps nothing: `npm pack` writes into the package
     // directory and the tarball is moved out of it.
     expect(readdirSync(pkgDir).filter((f) => f.endsWith('.tgz'))).toEqual([]);
   });
 
+  it('names the version after the contract revision and the packed content (#434)', () => {
+    const pkgDir = fixturePackage('bs-fixture-named');
+
+    const [result] = packAll([info('bs-fixture-named', pkgDir, 115)], join(root, 'out'));
+
+    // One prerelease identifier, not two: a dot before the hash would make an
+    // all-digit hash with a leading zero an invalid semver version.
+    expect(result.packVersion).toMatch(/^1\.0\.0-r115-[0-9a-f]{12}$/);
+    expect(result.tarball).toBe(`bs-fixture-named-${result.packVersion}.tgz`);
+  });
+
+  it('packs the same tree twice into byte-identical tarballs with the same name (#434)', () => {
+    // A re-vendor of unchanged sources has to be a no-op in the consumer, so
+    // nothing about a pack may depend on when it ran.
+    const pkgDir = fixturePackage('bs-fixture-twice');
+
+    const [first] = packAll([info('bs-fixture-twice', pkgDir)], join(root, 'first'));
+    utimesSync(join(pkgDir, 'index.js'), new Date(2030, 0, 1), new Date(2030, 0, 1));
+    const [second] = packAll([info('bs-fixture-twice', pkgDir)], join(root, 'second'));
+
+    expect(second.tarball).toBe(first.tarball);
+    expect(
+      readFileSync(join(root, 'second', second.tarball)).equals(readFileSync(join(root, 'first', first.tarball))),
+    ).toBe(true);
+  });
+
+  it('changes the name when any packed file changes (#434)', () => {
+    const pkgDir = fixturePackage('bs-fixture-edited');
+
+    const [before] = packAll([info('bs-fixture-edited', pkgDir)], join(root, 'before'));
+    writeFileSync(join(pkgDir, 'index.js'), 'module.exports = { changed: true };\n');
+    const [after] = packAll([info('bs-fixture-edited', pkgDir)], join(root, 'after'));
+
+    expect(after.tarball).not.toBe(before.tarball);
+  });
+
+  it('changes the name when only the contract revision changes (#434)', () => {
+    const pkgDir = fixturePackage('bs-fixture-revision');
+
+    const [r7] = packAll([info('bs-fixture-revision', pkgDir, 7)], join(root, 'r7'));
+    const [r8] = packAll([info('bs-fixture-revision', pkgDir, 8)], join(root, 'r8'));
+
+    expect(r8.tarball).not.toBe(r7.tarball);
+  });
+
+  it('keeps the name when a file npm does not pack changes (#434)', () => {
+    // The hash covers what ships, by npm's own file list, so editing a file
+    // `files` leaves out cannot make an unchanged engine look new.
+    const pkgDir = fixturePackage('bs-fixture-unpacked', { files: ['index.js'] });
+    writeFileSync(join(pkgDir, 'notes.txt'), 'first\n');
+
+    const [before] = packAll([info('bs-fixture-unpacked', pkgDir)], join(root, 'before'));
+    writeFileSync(join(pkgDir, 'notes.txt'), 'second\n');
+    const [after] = packAll([info('bs-fixture-unpacked', pkgDir)], join(root, 'after'));
+
+    expect(after.tarball).toBe(before.tarball);
+  });
+
   it('restores the package version it rewrote', () => {
     const pkgDir = fixturePackage('bs-fixture-restore');
 
-    packAll(
-      [{ name: 'bs-fixture-restore', path: pkgDir, version: '1.0.0' }],
-      join(root, 'out'),
-      '20260910000000',
-    );
+    packAll([info('bs-fixture-restore', pkgDir)], join(root, 'out'));
 
-    // The timestamp version is written into package.json only for the duration
-    // of `npm pack`; a pack must not leave the source tree's version rewritten.
+    // The pack version is written into package.json only for the duration of
+    // `npm pack`; a pack must not leave the source tree's version rewritten.
     const pkgJson = JSON.parse(readFileSync(join(pkgDir, 'package.json'), 'utf-8'));
     expect(pkgJson.version).toBe('1.0.0');
   });
@@ -184,14 +230,7 @@ describe('packAll', () => {
     const outDir = join(root, 'created-by-pack', 'tarballs');
 
     expect(() =>
-      packAll(
-        [
-          { name: 'bs-fixture-first', path: good, version: '1.0.0' },
-          { name: 'bs-fixture-broken', path: bad, version: '1.0.0' },
-        ],
-        outDir,
-        '20260910000000',
-      ),
+      packAll([info('bs-fixture-first', good), info('bs-fixture-broken', bad)], outDir),
     ).toThrow(/bs-fixture-broken/);
 
     // Nothing survives: not the directory tree pack made, not the tarball it
@@ -209,9 +248,7 @@ describe('packAll', () => {
     mkdirSync(outDir, { recursive: true });
     writeFileSync(join(outDir, 'KEEP.md'), 'mine\n');
 
-    expect(() =>
-      packAll([{ name: 'bs-fixture-preexisting', path: bad, version: '1.0.0' }], outDir, '20260910000000'),
-    ).toThrow();
+    expect(() => packAll([info('bs-fixture-preexisting', bad)], outDir)).toThrow();
 
     expect(readdirSync(outDir)).toEqual(['KEEP.md']);
   });
@@ -220,15 +257,44 @@ describe('packAll', () => {
     // A directory standing where the tarball has to land makes the move fail
     // after `npm pack` has already written into the package directory. Without
     // cleanup that tarball stays in the source tree, which is what dirtied the
-    // checkout in #239.
+    // checkout in #239. The name is content-derived, so a first pack finds it.
     const pkgDir = fixturePackage('bs-fixture-blocked');
+    const [probe] = packAll([info('bs-fixture-blocked', pkgDir)], join(root, 'probe'));
     const outDir = join(root, 'blocked');
-    mkdirSync(join(outDir, 'bs-fixture-blocked-1.0.0-20260910000000.tgz'), { recursive: true });
+    mkdirSync(join(outDir, probe.tarball), { recursive: true });
 
-    expect(() =>
-      packAll([{ name: 'bs-fixture-blocked', path: pkgDir, version: '1.0.0' }], outDir, '20260910000000'),
-    ).toThrow();
+    expect(() => packAll([info('bs-fixture-blocked', pkgDir)], outDir)).toThrow();
 
     expect(readdirSync(pkgDir).filter((f) => f.endsWith('.tgz'))).toEqual([]);
+  });
+});
+
+/**
+ * The revision in the pack version is read from the tree being packed, not
+ * from the CLI doing the packing, which can be an older build (#434).
+ */
+describe('readContractRevision', () => {
+  let root: string;
+
+  beforeEach(() => {
+    root = tempTree('bs-pack-revision-');
+    mkdirSync(join(root, 'src', 'contract'), { recursive: true });
+  });
+
+  const writeContract = (contract: unknown) =>
+    writeFileSync(join(root, 'src', 'contract', 'engine-contract.json'), JSON.stringify(contract));
+
+  it('reads the revision the tree records', () => {
+    writeContract({ revision: 115, history: [] });
+    expect(readContractRevision(root)).toBe(115);
+  });
+
+  it('refuses a tree with no contract, naming where it looked', () => {
+    expect(() => readContractRevision(root)).toThrow(/No engine contract at .*engine-contract\.json/);
+  });
+
+  it('refuses a contract whose revision is not a positive integer', () => {
+    writeContract({ revision: '115' });
+    expect(() => readContractRevision(root)).toThrow(/has no valid revision \(found "115"\)/);
   });
 });
