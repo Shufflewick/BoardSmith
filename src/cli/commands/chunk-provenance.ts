@@ -4,6 +4,7 @@ import {
   designDir,
   designRulebookDir,
   relChunkMdPath,
+  DESIGN_DIR,
 } from '../lib/project-paths.js';
 import { assertBareName } from '../lib/user-name.js';
 import { createHash } from 'node:crypto';
@@ -18,7 +19,7 @@ import {
   readRecordedSourcePaths,
   sliceDocuments,
 } from './rulebook-sources.js';
-import { readBoardsmithVersion } from '../lib/boardsmith-version.js';
+import { ENGINE_REVISION } from '../../contract/index.js';
 import { hashSkillsTree } from '../lib/skills-tree-hash.js';
 import { findHeadingIndex } from './build-manifest.js';
 import { type SharedEdit, assessSignoffs, checkSignoff } from './chunk-signoff.js';
@@ -431,7 +432,7 @@ export const VERIFIED_AGAINST_LABELS = Object.freeze([
   'Reason:',
   'Rulebook edition:',
   'Rulebook source hash:',
-  'BoardSmith version:',
+  'Engine revision:',
   'Skills tree hash:',
   'Cited slices:',
   'Unresolved citations:',
@@ -444,7 +445,7 @@ const [
   LABEL_REASON,
   LABEL_EDITION,
   LABEL_SOURCE_HASH,
-  LABEL_VERSION,
+  LABEL_ENGINE,
   LABEL_SKILLS_HASH,
   LABEL_CITED,
   LABEL_UNRESOLVED,
@@ -459,6 +460,14 @@ const [
  * those blocks are byte-identical to before; a block without the line records no additional
  * source, which `resolveProvenance` reads as "not verified against the current one".
  */
+/**
+ * The engine line of a block written before #440. It recorded package.json's version, `0.0.1` for
+ * every engine there has been, so it names no engine: such a block is "engine unknown", and
+ * `chunk-check` records the installed engine in it without making the chunk stale.
+ */
+const PRE_ENGINE_LINE_RE = /^BoardSmith version:.*$/m;
+const ENGINE_LINE_RE = new RegExp(`^${LABEL_ENGINE} (\\d+)$`, 'm');
+
 const ADDITIONAL_SOURCE_LINE_RE = new RegExp(
   `^${LABEL_ADDITIONAL_SOURCE}\\s+([0-9a-f]{64})\\s+(\\S.*)$`,
   'gm',
@@ -481,7 +490,11 @@ export interface VerifiedAgainstRecord {
   sourceHash?: string;
   /** The hash-verified `## Additional Sources` rows, anchoring the rest of the rules (#305). */
   additionalSources?: Array<{ sourcePath: string; sourceHash: string }>;
-  boardsmithVersion: string;
+  /**
+   * The engine contract revision (`ENGINE_REVISION`, #440) the chunk was verified against. It moves
+   * whenever the engine's contract does, and a change makes the block stale.
+   */
+  engineRevision: number;
   /** Provenance only (#438): the skills that governed the verification. Never makes it stale. */
   skillsTreeHash: string;
   citedSlices: Array<{ path: string; hash: string }>;
@@ -512,7 +525,7 @@ export function renderVerifiedAgainst(record: VerifiedAgainstRecord): string {
   for (const additional of record.additionalSources ?? []) {
     lines.push(`${LABEL_ADDITIONAL_SOURCE} ${additional.sourceHash} ${additional.sourcePath}`);
   }
-  lines.push(`${LABEL_VERSION} ${record.boardsmithVersion}`);
+  lines.push(`${LABEL_ENGINE} ${record.engineRevision}`);
   lines.push(`${LABEL_SKILLS_HASH} ${record.skillsTreeHash}`);
   if (record.reverifiedNoCodeChange) {
     lines.push(`${LABEL_REVERIFIED} ${record.reverifiedNoCodeChange}`);
@@ -544,7 +557,7 @@ function renderVerifiedAgainstSection(record: VerifiedAgainstRecord): string {
 
      \`boardsmith chunk-check <slug>\` computes this block from disk state: the SHA-256 of each
      rulebook slice this chunk cites, the rulebook index's own \`Source hash:\` line as the
-     edition anchor, this project's installed BoardSmith version, and the verification scope
+     edition anchor, the installed engine's contract revision, and the verification scope
      \`computeVerificationScope()\` derives from disk. Any of those changing makes the block stale.
      The skills-tree content hash is provenance only: it records which skill text governed the
      verification, and a later skills reinstall leaves the block current. It runs from \`close\`
@@ -591,6 +604,11 @@ export interface VerifiedAgainstWriteResult {
    */
   skillsTreeChanged?: { recorded: string; installed: string };
   /**
+   * Present when the block was written before it recorded the engine (#440) and nothing else
+   * changed: the engine revision now recorded in it. The chunk is not stale; the file changed.
+   */
+  engineRecorded?: number;
+  /**
    * `undefined` when the block was freshly created (no prior body to compare bullets against);
    * present when a repair ran. `chunkCheckCommand` uses this to compose its own human bullets —
    * see that function's `previousBody === undefined` branch below.
@@ -617,7 +635,7 @@ export async function recordVerifiedAgainst(
   options: VerifiedAgainstOptions = {},
 ): Promise<VerifiedAgainstWriteResult> {
   const { result, chunkPath, updated } = await planVerifiedAgainst(slug, options);
-  if (result.changed) await fs.writeFile(chunkPath, updated);
+  if (result.changed || result.engineRecorded !== undefined) await fs.writeFile(chunkPath, updated);
   return result;
 }
 
@@ -700,7 +718,7 @@ async function planVerifiedAgainst(
     edition: scope.edition,
     sourceHash: scope.sourceHash,
     additionalSources: scope.additionalSources ?? [],
-    boardsmithVersion: readBoardsmithVersion(),
+    engineRevision: ENGINE_REVISION,
     skillsTreeHash: await hashSkillsTree(projectDir),
     citedSlices,
     unresolved,
@@ -741,17 +759,26 @@ async function planVerifiedAgainst(
 
   // The skills hash is provenance, not an input (#438): it records which skill text governed the
   // verification. A later reinstall leaves the block current and keeps the recorded hash; only a
-  // change to what the chunk was verified against (scope, rules, cited slices, BoardSmith version)
+  // change to what the chunk was verified against (scope, rules, cited slices, engine revision)
   // makes it stale, and that rewrite records the skills installed now.
   const recordedSkills =
     previousBody === undefined ? undefined : new RegExp(`^${LABEL_SKILLS_HASH} (.*)$`, 'm').exec(previousBody)?.[1];
   const asRecorded =
     recordedSkills === undefined ? newBody : renderVerifiedAgainst({ ...record, skillsTreeHash: recordedSkills });
-  const changed = previousBody === undefined || previousBody !== asRecorded;
+  // A block from before #440 names no engine. It is compared as if it named the installed one, so
+  // recording the engine never makes a chunk stale; anything else that changed still does.
+  const engineUnknown =
+    previousBody !== undefined && !ENGINE_LINE_RE.test(previousBody) && PRE_ENGINE_LINE_RE.test(previousBody);
+  const compared = engineUnknown
+    ? previousBody!.replace(PRE_ENGINE_LINE_RE, `${LABEL_ENGINE} ${record.engineRevision}`)
+    : previousBody;
+  const changed = compared === undefined || compared !== asRecorded;
   const skillsTreeChanged =
     !changed && recordedSkills !== undefined && recordedSkills !== record.skillsTreeHash
       ? { recorded: recordedSkills, installed: record.skillsTreeHash }
       : undefined;
+  const engineRecorded = !changed && engineUnknown ? record.engineRevision : undefined;
+  if (engineRecorded !== undefined) updated = chunkText.replace(previousBody!, compared!);
 
   const result: VerifiedAgainstWriteResult = {
     slug,
@@ -763,6 +790,7 @@ async function planVerifiedAgainst(
     unresolved,
     ...(previousBody !== undefined ? { previousBody } : {}),
     ...(skillsTreeChanged ? { skillsTreeChanged } : {}),
+    ...(engineRecorded !== undefined ? { engineRecorded } : {}),
   };
   return { result, chunkPath, updated };
 }
@@ -772,6 +800,7 @@ function reportUpToDate(
   slug: string,
   record: { scope: string; reason?: string },
   skillsTreeChanged: VerifiedAgainstWriteResult['skillsTreeChanged'],
+  engineRecorded: number | undefined,
 ): void {
   console.log(
     chalk.green(
@@ -783,6 +812,13 @@ function reportUpToDate(
       `  The bs skills have been reinstalled since ${slug} was verified (skills tree hash ` +
         `${skillsTreeChanged.recorded} then, ${skillsTreeChanged.installed} now). That is recorded ` +
         `as provenance only and does not make the chunk stale; nothing to do.`,
+    );
+  }
+  if (engineRecorded !== undefined) {
+    console.log(
+      `  ${slug} was verified before its Verified Against block recorded the engine. It now records ` +
+        `engine revision ${engineRecorded}, the one installed; that does not make the chunk stale. ` +
+        `Commit ${DESIGN_DIR}/${relChunkMdPath(slug)}.`,
     );
   }
 }
@@ -852,6 +888,7 @@ export async function chunkCheckCommand(
     unresolved,
     previousBody,
     skillsTreeChanged,
+    engineRecorded,
   } = await recordVerifiedAgainst(slug, {
     project: options.project,
     reverifiedNoCodeChange: options.reverifiedNoCodeChange,
@@ -871,6 +908,7 @@ export async function chunkCheckCommand(
     unresolved,
     signoffProblems,
     ...(skillsTreeChanged ? { skillsTreeChanged } : {}),
+    ...(engineRecorded !== undefined ? { engineRecorded } : {}),
   };
 
   if (options.json) {
@@ -887,7 +925,7 @@ export async function chunkCheckCommand(
   }
 
   if (!changed) {
-    if (!options.json && !signoffProblems.length) reportUpToDate(slug, record, skillsTreeChanged);
+    if (!options.json && !signoffProblems.length) reportUpToDate(slug, record, skillsTreeChanged, engineRecorded);
     return;
   }
 
@@ -949,7 +987,8 @@ export interface ParsedVerifiedAgainst {
   sourceHash?: string;
   /** Each `Additional source hash:` line (#305); `[]` when the block records none. */
   additionalSources: Array<{ sourcePath: string; sourceHash: string }>;
-  boardsmithVersion?: string;
+  /** `undefined` when the block names no engine: none at all, or one written before #440. */
+  engineRevision?: number;
   skillsTreeHash?: string;
   citedSlices: string[];
   unresolved: string[];
@@ -1020,7 +1059,7 @@ export function parseVerifiedAgainst(chunkText: string): ParsedVerifiedAgainst {
   const scopeRaw = readLabel(LABEL_SCOPE);
   const editionRaw = readLabel(LABEL_EDITION);
   const sourceHashRaw = readLabel(LABEL_SOURCE_HASH);
-  const versionRaw = readLabel(LABEL_VERSION);
+  const engineRaw = ENGINE_LINE_RE.exec(body)?.[1];
   const skillsHashRaw = readLabel(LABEL_SKILLS_HASH);
   // Absence is valid — an eight-label block predates decision 11's append and is not malformed.
   const reverifiedNoCodeChangeRaw = readLabel(LABEL_REVERIFIED);
@@ -1029,7 +1068,7 @@ export function parseVerifiedAgainst(chunkText: string): ParsedVerifiedAgainst {
     (scopeRaw !== SCOPE_FULL && scopeRaw !== SCOPE_CODE_ONLY) ||
     editionRaw === undefined ||
     sourceHashRaw === undefined ||
-    !versionRaw ||
+    (engineRaw === undefined && !PRE_ENGINE_LINE_RE.test(body)) ||
     !skillsHashRaw ||
     !body.includes(LABEL_CITED)
   ) {
@@ -1074,7 +1113,7 @@ export function parseVerifiedAgainst(chunkText: string): ParsedVerifiedAgainst {
       sourcePath: m[2].trim(),
       sourceHash: m[1],
     })),
-    boardsmithVersion: versionRaw,
+    ...(engineRaw !== undefined ? { engineRevision: Number(engineRaw) } : {}),
     skillsTreeHash: skillsHashRaw,
     citedSlices,
     unresolved,
@@ -1093,7 +1132,8 @@ export interface ChunkProvenanceEntry {
   reason?: ScopeReason;
   edition?: string;
   skillsTreeHash?: string;
-  boardsmithVersion?: string;
+  /** `undefined` for a block written before #440, which names no engine. */
+  engineRevision?: number;
   citedSliceCount: number;
   unresolvedCount: number;
   blockMalformed: boolean;
@@ -1105,7 +1145,8 @@ export interface ChunkProvenanceStatusResult {
   /** Keyed by `normalizeEdition()` output — pre-F-1 free text collapses to one bucket (RESEARCH.md Pitfall 3). */
   byEdition: Record<string, string[]>;
   bySkillsTreeHash: Record<string, string[]>;
-  byBoardsmithVersion: Record<string, string[]>;
+  /** Keyed by engine revision; `unknown` holds blocks written before #440. */
+  byEngineRevision: Record<string, string[]>;
   /**
    * Slugs whose `Status:` starts with `verified` (covering both `verified` and
    * `verified (user-waived)` — a waived verification is still a claim) but whose `state` is
@@ -1192,7 +1233,7 @@ export async function chunkProvenanceStatusCommand(
   const chunks: ChunkProvenanceEntry[] = [];
   const byEdition: Record<string, string[]> = {};
   const bySkillsTreeHash: Record<string, string[]> = {};
-  const byBoardsmithVersion: Record<string, string[]> = {};
+  const byEngineRevision: Record<string, string[]> = {};
   const verifiedWithoutProvenance: string[] = [];
   const verifiedWithoutSignoff: Array<{ slug: string; problems: string[] }> = [];
   const signoffSharedEdits: Array<{ slug: string; edits: SharedEdit[] }> = [];
@@ -1219,7 +1260,7 @@ export async function chunkProvenanceStatusCommand(
     const editionKey = normalizeEdition(parsed.edition);
     (byEdition[editionKey] ??= []).push(slug);
     if (parsed.skillsTreeHash) (bySkillsTreeHash[parsed.skillsTreeHash] ??= []).push(slug);
-    if (parsed.boardsmithVersion) (byBoardsmithVersion[parsed.boardsmithVersion] ??= []).push(slug);
+    if (parsed.state !== PROVENANCE_UNKNOWN) (byEngineRevision[String(parsed.engineRevision ?? 'unknown')] ??= []).push(slug);
 
     if (status.startsWith('verified') && parsed.state === PROVENANCE_UNKNOWN) {
       verifiedWithoutProvenance.push(slug);
@@ -1236,7 +1277,7 @@ export async function chunkProvenanceStatusCommand(
       reason: parsed.reason,
       edition: parsed.edition,
       skillsTreeHash: parsed.skillsTreeHash,
-      boardsmithVersion: parsed.boardsmithVersion,
+      engineRevision: parsed.engineRevision,
       citedSliceCount: parsed.citedSlices.length,
       unresolvedCount: parsed.unresolved.length,
       blockMalformed: parsed.blockMalformed,
@@ -1258,7 +1299,7 @@ export async function chunkProvenanceStatusCommand(
     counts,
     byEdition,
     bySkillsTreeHash,
-    byBoardsmithVersion,
+    byEngineRevision,
     verifiedWithoutProvenance,
     verifiedWithoutSignoff,
     signoffSharedEdits,
@@ -1287,8 +1328,8 @@ export async function chunkProvenanceStatusCommand(
 
   const editionKeys = Object.keys(byEdition);
   const skillsHashKeys = Object.keys(bySkillsTreeHash);
-  const versionKeys = Object.keys(byBoardsmithVersion);
-  if (editionKeys.length > 1 || skillsHashKeys.length > 1 || versionKeys.length > 1) {
+  const engineKeys = Object.keys(byEngineRevision);
+  if (editionKeys.length > 1 || skillsHashKeys.length > 1 || engineKeys.length > 1) {
     console.log('');
     console.log(chalk.yellow('Drift:'));
     if (editionKeys.length > 1) {
@@ -1301,9 +1342,10 @@ export async function chunkProvenanceStatusCommand(
         console.log(`  skills-tree hash ${key}: ${bySkillsTreeHash[key].join(', ')}`);
       }
     }
-    if (versionKeys.length > 1) {
-      for (const key of versionKeys) {
-        console.log(`  BoardSmith version ${key}: ${byBoardsmithVersion[key].join(', ')}`);
+    if (engineKeys.length > 1) {
+      for (const key of engineKeys) {
+        const note = key === 'unknown' ? ' (verified before the block recorded the engine; chunk-check records it)' : '';
+        console.log(`  engine revision ${key}: ${byEngineRevision[key].join(', ')}${note}`);
       }
     }
   }

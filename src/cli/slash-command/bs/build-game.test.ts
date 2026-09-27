@@ -166,6 +166,13 @@ describe('WF-03 — build-chunk.md honours orchestrated mode', () => {
     expect(flat(read('check-status.md'))).toMatch(/skills-tree drift is information[^.]*never staleness/i);
   });
 
+  it('says the block pins the engine revision, and chunk-check records it in an older block without staleness (#440)', () => {
+    const close = flat(read('build/close.md'));
+    expect(close).toMatch(/and the engine revision \(the engine contract revision/);
+    expect(close).toMatch(/`chunk-check` records the installed engine revision in it once, says so, and passes/);
+    expect(flat(read('check-status.md'))).toMatch(/engine revision `unknown` is a block written before it recorded the engine/);
+  });
+
   it('close.md returns instead of auto-advancing under an orchestrated run', () => {
     const close = flat(read('build/close.md'));
     expect(close).toMatch(/In orchestrated mode, close returns instead of auto-advancing/i);
