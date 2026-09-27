@@ -482,6 +482,7 @@ export interface VerifiedAgainstRecord {
   /** The hash-verified `## Additional Sources` rows, anchoring the rest of the rules (#305). */
   additionalSources?: Array<{ sourcePath: string; sourceHash: string }>;
   boardsmithVersion: string;
+  /** Provenance only (#438): the skills that governed the verification. Never makes it stale. */
   skillsTreeHash: string;
   citedSlices: Array<{ path: string; hash: string }>;
   unresolved: string[];
@@ -543,8 +544,10 @@ function renderVerifiedAgainstSection(record: VerifiedAgainstRecord): string {
 
      \`boardsmith chunk-check <slug>\` computes this block from disk state: the SHA-256 of each
      rulebook slice this chunk cites, the rulebook index's own \`Source hash:\` line as the
-     edition anchor, this project's installed BoardSmith version and skills-tree content hash, and
-     the verification scope \`computeVerificationScope()\` derives from disk. It runs from \`close\`
+     edition anchor, this project's installed BoardSmith version, and the verification scope
+     \`computeVerificationScope()\` derives from disk. Any of those changing makes the block stale.
+     The skills-tree content hash is provenance only: it records which skill text governed the
+     verification, and a later skills reinstall leaves the block current. It runs from \`close\`
      and repairs this block on every run. Anything you write here is overwritten on the next run.
 
      Why this is fenced rather than requested politely: 171-CONTEXT.md decision 3 traces this
@@ -582,6 +585,11 @@ export interface VerifiedAgainstWriteResult {
    * never changes shape.
    */
   citedSliceHashes: Array<{ path: string; hash: string }>;
+  /**
+   * Present when the installed skills differ from the ones the block records and nothing else
+   * changed: information for the reader, never staleness (#438).
+   */
+  skillsTreeChanged?: { recorded: string; installed: string };
   /**
    * `undefined` when the block was freshly created (no prior body to compare bullets against);
    * present when a repair ran. `chunkCheckCommand` uses this to compose its own human bullets —
@@ -731,7 +739,19 @@ async function planVerifiedAgainst(
       chunkText.slice(0, begin + VERIFIED_AGAINST_BEGIN.length) + newBody + chunkText.slice(end);
   }
 
-  const changed = previousBody === undefined || previousBody !== newBody;
+  // The skills hash is provenance, not an input (#438): it records which skill text governed the
+  // verification. A later reinstall leaves the block current and keeps the recorded hash; only a
+  // change to what the chunk was verified against (scope, rules, cited slices, BoardSmith version)
+  // makes it stale, and that rewrite records the skills installed now.
+  const recordedSkills =
+    previousBody === undefined ? undefined : new RegExp(`^${LABEL_SKILLS_HASH} (.*)$`, 'm').exec(previousBody)?.[1];
+  const asRecorded =
+    recordedSkills === undefined ? newBody : renderVerifiedAgainst({ ...record, skillsTreeHash: recordedSkills });
+  const changed = previousBody === undefined || previousBody !== asRecorded;
+  const skillsTreeChanged =
+    !changed && recordedSkills !== undefined && recordedSkills !== record.skillsTreeHash
+      ? { recorded: recordedSkills, installed: record.skillsTreeHash }
+      : undefined;
 
   const result: VerifiedAgainstWriteResult = {
     slug,
@@ -742,8 +762,29 @@ async function planVerifiedAgainst(
     citedSliceHashes: citedSlices,
     unresolved,
     ...(previousBody !== undefined ? { previousBody } : {}),
+    ...(skillsTreeChanged ? { skillsTreeChanged } : {}),
   };
   return { result, chunkPath, updated };
+}
+
+/** `chunk-check`'s human line for a current block, and the skills reinstall as information (#438). */
+function reportUpToDate(
+  slug: string,
+  record: { scope: string; reason?: string },
+  skillsTreeChanged: VerifiedAgainstWriteResult['skillsTreeChanged'],
+): void {
+  console.log(
+    chalk.green(
+      `✓ ${relChunkMdPath(slug)} — Verified Against up to date (${record.scope}${record.reason ? `, ${record.reason}` : ''})`,
+    ),
+  );
+  if (skillsTreeChanged) {
+    console.log(
+      `  The bs skills have been reinstalled since ${slug} was verified (skills tree hash ` +
+        `${skillsTreeChanged.recorded} then, ${skillsTreeChanged.installed} now). That is recorded ` +
+        `as provenance only and does not make the chunk stale; nothing to do.`,
+    );
+  }
 }
 
 /**
@@ -810,6 +851,7 @@ export async function chunkCheckCommand(
     citedSliceHashes,
     unresolved,
     previousBody,
+    skillsTreeChanged,
   } = await recordVerifiedAgainst(slug, {
     project: options.project,
     reverifiedNoCodeChange: options.reverifiedNoCodeChange,
@@ -828,6 +870,7 @@ export async function chunkCheckCommand(
     citedSlices,
     unresolved,
     signoffProblems,
+    ...(skillsTreeChanged ? { skillsTreeChanged } : {}),
   };
 
   if (options.json) {
@@ -844,13 +887,7 @@ export async function chunkCheckCommand(
   }
 
   if (!changed) {
-    if (!options.json && !signoffProblems.length) {
-      console.log(
-        chalk.green(
-          `✓ ${relChunkPath} — Verified Against up to date (${record.scope}${record.reason ? `, ${record.reason}` : ''})`,
-        ),
-      );
-    }
+    if (!options.json && !signoffProblems.length) reportUpToDate(slug, record, skillsTreeChanged);
     return;
   }
 

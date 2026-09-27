@@ -12,6 +12,7 @@ import {
   SCOPE_REASONS,
   chunkCheckCommand,
   recordVerifiedAgainst,
+  verifiedAgainstIsCurrent,
   VERIFIED_AGAINST_HEADING,
   VERIFIED_AGAINST_BEGIN,
   VERIFIED_AGAINST_END,
@@ -602,6 +603,88 @@ describe('chunk-check', () => {
     expect(process.exitCode).toBeUndefined();
     const after2 = await fs.readFile(join(project, DESIGN_DIR, 'chunks', 'jab', 'CHUNK.md'), 'utf-8');
     expect(after2).toBe(after1);
+  });
+
+  /**
+   * #438: the skills hash is provenance (which skill text governed the verification), not an
+   * input to it. Reinstalling the skills used to make every closed chunk's block stale.
+   */
+  describe('a skills reinstall is reported, never stale (#438)', () => {
+    const skillFile = (project: string) => join(project, '.claude', 'skills', 'bs-build-chunk', 'SKILL.md');
+    async function install(project: string, text: string): Promise<void> {
+      await fs.mkdir(dirname(skillFile(project)), { recursive: true });
+      await fs.writeFile(skillFile(project), text);
+    }
+    const chunkPath = (project: string) => join(project, DESIGN_DIR, 'chunks', 'jab', 'CHUNK.md');
+    const skillsLine = (text: string) => /^Skills tree hash: (.*)$/m.exec(text)?.[1];
+
+    it('keeps a closed chunk current, and its recorded skills hash, after the skills are reinstalled', async () => {
+      const { project } = await makeCheckProject();
+      await makeChunk(project, 'jab', JAB_CITES);
+      await install(project, 'skill text v1\n');
+      await chunkCheckCommand('jab', { project, json: true });
+      const closed = await fs.readFile(chunkPath(project), 'utf-8');
+      const recorded = skillsLine(closed);
+
+      await install(project, 'skill text v2\n');
+      process.exitCode = undefined;
+      const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+      await chunkCheckCommand('jab', { project, json: true });
+      const json = JSON.parse(log.mock.calls.map((c) => c.join(' ')).join('\n'));
+      log.mockRestore();
+
+      expect(process.exitCode).toBeUndefined();
+      expect(await fs.readFile(chunkPath(project), 'utf-8')).toBe(closed);
+      expect(await verifiedAgainstIsCurrent(project, 'jab')).toBe(true);
+      expect(json.changed).toBe(false);
+      expect(json.skillsTreeChanged.recorded).toBe(recorded);
+      expect(json.skillsTreeChanged.installed).not.toBe(recorded);
+    });
+
+    it('says in plain words that the skills changed since the chunk was verified, and passes', async () => {
+      const { project } = await makeCheckProject();
+      await makeChunk(project, 'jab', JAB_CITES);
+      await install(project, 'skill text v1\n');
+      await chunkCheckCommand('jab', { project });
+      await install(project, 'skill text v2\n');
+      process.exitCode = undefined;
+      const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+      await chunkCheckCommand('jab', { project });
+      const out = log.mock.calls.map((c) => c.join(' ')).join('\n');
+      log.mockRestore();
+      expect(process.exitCode).toBeUndefined();
+      expect(out).toMatch(/up to date/);
+      expect(out).toMatch(/skills have been reinstalled since jab was verified/i);
+    });
+
+    it('still makes the chunk stale when a cited rules slice changes, and records the skills installed now', async () => {
+      const { project } = await makeCheckProject();
+      await makeChunk(project, 'jab', JAB_CITES);
+      await install(project, 'skill text v1\n');
+      await chunkCheckCommand('jab', { project, json: true });
+      const v1 = skillsLine(await fs.readFile(chunkPath(project), 'utf-8'));
+      await install(project, 'skill text v2\n');
+      await fs.writeFile(join(project, DESIGN_DIR, 'rulebook', '01-setup-and-round-structure.md'), '# Setup\n\nChanged.\n');
+
+      expect(await verifiedAgainstIsCurrent(project, 'jab')).toBe(false);
+      process.exitCode = undefined;
+      const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+      await chunkCheckCommand('jab', { project, json: true });
+      log.mockRestore();
+      expect(process.exitCode).toBe(1);
+      const repaired = skillsLine(await fs.readFile(chunkPath(project), 'utf-8'));
+      expect(repaired).toMatch(/^[0-9a-f]{64}$/);
+      expect(repaired).not.toBe(v1);
+    });
+
+    it('still makes the chunk stale when the BoardSmith version it was verified against changes', async () => {
+      const { project } = await makeCheckProject();
+      await makeChunk(project, 'jab', JAB_CITES);
+      await chunkCheckCommand('jab', { project, json: true });
+      const text = await fs.readFile(chunkPath(project), 'utf-8');
+      await fs.writeFile(chunkPath(project), text.replace(/^BoardSmith version: .*$/m, 'BoardSmith version: 0.0.0-an-older-engine'));
+      expect(await verifiedAgainstIsCurrent(project, 'jab')).toBe(false);
+    });
   });
 
   it('the written body contains Scope/Rulebook edition/Rulebook source hash/BoardSmith version/Skills tree hash lines and a cited-slice hash row', async () => {

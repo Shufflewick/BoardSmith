@@ -159,6 +159,13 @@ describe('WF-03 — build-chunk.md honours orchestrated mode', () => {
     expect(playtest).toMatch(/never.*infer a waiver\s*from silence/i);
   });
 
+  it('says a skills reinstall is provenance, never a stale Verified Against block (#438)', () => {
+    const close = flat(read('build/close.md'));
+    expect(close).toMatch(/skills tree hash as provenance only/i);
+    expect(close).toMatch(/reinstalling the bs skills never makes a closed chunk stale/i);
+    expect(flat(read('check-status.md'))).toMatch(/skills-tree drift is information[^.]*never staleness/i);
+  });
+
   it('close.md returns instead of auto-advancing under an orchestrated run', () => {
     const close = flat(read('build/close.md'));
     expect(close).toMatch(/In orchestrated mode, close returns instead of auto-advancing/i);
@@ -548,6 +555,12 @@ describe('#294 — parallel dispatch is allowed only where the checks say so', (
     expect(dispatch()).toContain('Ruling @<slug>.<n>');
     expect(flat(read('state-machine.md'))).toMatch(/## Ledger Numbers on a Parallel Branch/);
     expect(flat(read('state-machine.md'))).toContain('Ruling @<slug>.<n>');
+  });
+
+  it('says an example id goes in a code span, which chunk-merge never reads as a citation (#437)', () => {
+    expect(flat(read('state-machine.md'))).toMatch(/An example id \([^)]*\) goes in a code span/);
+    expect(flat(read('state-machine.md'))).toMatch(/inside a code span, a fenced block or an HTML comment is quoted text and never a citation/);
+    expect(flat(read('templates/FILINGS.template.md'))).toContain('an example ledger id in a reproduction, such as `### Filing @x.1`, goes in a code span');
   });
 
   it('routes the cross-chunk references a merge records to the audit before the next merge', () => {

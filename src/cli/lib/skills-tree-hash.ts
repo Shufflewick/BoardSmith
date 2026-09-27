@@ -13,6 +13,9 @@ import { join, relative, sep } from 'node:path';
  * alone would have stamped fourteen materially different skill contracts as identical. The
  * version is the human-readable anchor; this hash is what actually distinguishes two installs.
  *
+ * It is PROVENANCE, not an input (#438): a chunk's Verified Against block records it to say which
+ * skill text governed the verification, and a later reinstall never makes that block stale.
+ *
  * SCOPE: this hashes exactly what `installClaudeCommand` (`install-claude-command.ts`) owns — the
  * 5 `bs-<name>/` skill dirs plus the single `bs-shared/` namespace root, both under a resolved
  * skills root. That pairing (project-local `.claude/skills` first, then `~/.claude/skills`) MUST

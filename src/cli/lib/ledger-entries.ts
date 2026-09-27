@@ -64,6 +64,23 @@ export function blankComments(text: string): string {
   return text.replace(/<!--[\s\S]*?-->/g, (comment) => comment.replace(/[^\n]/g, ' '));
 }
 
+const blank = (quoted: string): string => quoted.replace(/[^\n]/g, ' ');
+
+/**
+ * The citation grammar (#437): in a Markdown file, an entry id inside an HTML comment, a fenced
+ * code block or an inline code span is QUOTED, never cited. A filing that reproduces a ledger bug
+ * writes `### Filing @x.1` as an example, and a skill writes `Ruling @<slug>.<n>` as a form; neither
+ * names an entry. Returns `text` with every quoted region blanked to the same shape, so offsets and
+ * line numbers still point into the real file. Outside Markdown (source code) backticks are not
+ * quoting, so the text is returned unchanged: `// Ruling @a.1` in a `.ts` file is a citation.
+ */
+export function citableText(path: string, text: string): string {
+  if (!path.endsWith('.md')) return text;
+  return blankComments(text)
+    .replace(/^ {0,3}(`{3,}|~{3,})[^\n]*\n[\s\S]*?(?:^ {0,3}\1[`~]*[ \t]*$|(?![\s\S]))/gm, blank)
+    .replace(/(?<!`)(`+)(?!`)(?:(?!\n[ \t]*\n)[\s\S])+?(?<!`)\1(?!`)/g, blank);
+}
+
 function lineOf(text: string, index: number): number {
   let line = 1;
   for (let i = 0; i < index; i++) if (text.charCodeAt(i) === 10) line++;

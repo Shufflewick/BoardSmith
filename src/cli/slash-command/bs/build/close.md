@@ -57,6 +57,11 @@ release) and no tail detailing.
    which will then pass. Do not hand-author anything between the block's fences — that section is
    written by this command and by nothing else. If it instead names the sign-off, re-running will
    not help: the chunk is not closed until the designer signs it off (`build/playtest.md` "Who Signs Off").
+   The block pins what the chunk was verified against: the rulebook edition and source, the
+   SHA-256 of each slice the chunk cites, and the BoardSmith version. A change to any of those
+   makes it stale. It also records the skills tree hash as provenance only, naming the skill text
+   that governed this verification: reinstalling the bs skills never makes a closed chunk stale,
+   and `chunk-check` reports the reinstall as information and passes.
 
 4. **Roll up decisions.** Append this chunk's settled house-rule/adaptation choices and any
    revise-round resolutions into `DECISIONS.md`'s append-only ledger, one entry per decision, so

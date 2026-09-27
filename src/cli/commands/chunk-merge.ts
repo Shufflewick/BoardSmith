@@ -269,8 +269,11 @@ async function allocate(
       await git(top, ['add', '--', name]);
       if (name.startsWith(ctx.prefix) && !name.startsWith(design)) renumbered.push(name.slice(ctx.prefix.length));
     }
-    for (const id of provisionalReferences(text)) {
-      refusals.push(`${name} cites ${id}, but no ledger entry is headed ${id}. Correct the citation on the branch.`);
+    for (const id of provisionalReferences(name, text)) {
+      refusals.push(
+        `${name} cites ${id}, but no ledger entry is headed ${id}. Correct the citation on the branch` +
+          (name.endsWith('.md') ? `, or, if it is an example rather than a citation, put it in a code span.` : '.'),
+      );
     }
   }
   return { allocated: mapping, refusals, renumbered };

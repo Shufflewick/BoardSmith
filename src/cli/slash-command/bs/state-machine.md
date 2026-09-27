@@ -320,6 +320,12 @@ any other (a duplicate is a finding), a citation of a provisional id nobody decl
 merge, and `ledger-check` run in the main checkout fails any provisional id it finds there, since
 one can only get there by a merge that skipped `chunk-merge`.
 
+An example id (a reproduction in a filing, a form like `Ruling @<slug>.<n>`) goes in a code span or
+a fenced code block. In a Markdown file an id inside a code span, a fenced block or an HTML comment
+is quoted text and never a citation: `chunk-merge` neither rewrites it nor asks for an entry headed
+with it. Written bare in prose, `Filing @x.1` is a citation, and a citation of an id no entry
+declares stops the merge.
+
 ## Git Protocol
 
 - Commit at every step completion. Message convention: `chunk-<slug>/step-<name>` (e.g. `chunk-movement/step-build`).

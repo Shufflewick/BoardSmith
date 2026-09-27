@@ -11,10 +11,11 @@
  * scoped to its own slug, `Ruling @<slug>.<n>` (or `G@<slug>.<n>` in CONSTRAINTS.md), which no
  * other branch can write. `boardsmith chunk-merge` then allocates real numbers on the combined
  * tree, one merge at a time under a lock, and rewrites every citation of each provisional id in
- * the files the branch changed. It refuses a branch that added a real number, so the only way a
- * number reaches `main` from a parallel branch is through this allocation.
+ * the files the branch changed. An id a Markdown file only quotes, in a code span, a fenced block or
+ * a comment, is not a citation (`citableText`, #437). `chunk-merge` refuses a branch that added a real number,
+ * so the only way a number reaches `main` from a parallel branch is through this allocation.
  */
-import { PROVISIONAL_NUMBER, blankComments, entryHeadingPattern, escapeRegExp } from './ledger-entries.js';
+import { PROVISIONAL_NUMBER, blankComments, citableText, entryHeadingPattern, escapeRegExp } from './ledger-entries.js';
 import { CONSTRAINTS_MD, DECISIONS_MD, FILINGS_MD, QUESTIONS_MD, RULINGS_MD } from './project-paths.js';
 
 /** One kind of numbered entry: its ledger, its heading word, and what separates word and number. */
@@ -53,11 +54,14 @@ export function provisionalHeadings(text: string, spec: NumberedLedgerSpec): str
   );
 }
 
-/** Every provisional id cited anywhere in `text`, of any kind, in order of first appearance. */
-export function provisionalReferences(text: string): string[] {
+/**
+ * Every provisional id cited in file `path`, of any kind, in order of first appearance. An id the
+ * file only quotes (`citableText`) is not cited.
+ */
+export function provisionalReferences(path: string, text: string): string[] {
   const kinds = [...new Set(NUMBERED_LEDGER_SPECS.map((s) => `${escapeRegExp(s.kind)}${s.sep}`))];
   const pattern = new RegExp(`\\b(?:${kinds.join('|')})${PROVISIONAL_NUMBER}\\b`, 'g');
-  return [...new Set([...text.matchAll(pattern)].map((m) => m[0]))];
+  return [...new Set([...citableText(path, text).matchAll(pattern)].map((m) => m[0]))];
 }
 
 /** Real numbers present as headings in `tip` but not in `base`, e.g. `['Ruling 139']`. */
@@ -99,7 +103,14 @@ export function allocateProvisional(
   const pattern = new RegExp(`\\b(?:${ids.map(escapeRegExp).join('|')})(?!\\.?\\d)`, 'g');
   const rewritten: Record<string, string> = {};
   for (const [path, text] of Object.entries(files)) {
-    rewritten[path] = text.replace(pattern, (id) => mapping[id]);
+    // Matched on the citable text, spliced into the real one: a quoted id stays as written.
+    let out = '';
+    let from = 0;
+    for (const m of citableText(path, text).matchAll(pattern)) {
+      out += text.slice(from, m.index) + mapping[m[0]];
+      from = m.index + m[0].length;
+    }
+    rewritten[path] = out + text.slice(from);
   }
   return { files: rewritten, mapping };
 }
