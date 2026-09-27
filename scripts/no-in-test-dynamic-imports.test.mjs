@@ -22,13 +22,8 @@
  * test case) is not a finding, and a `typeof import(...)` type is not a load.
  */
 import { describe, it, expect } from 'vitest';
-import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import ts from 'typescript';
-
-const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
+import { trackedTestFiles } from './tracked-tests.test-helper.mjs';
 
 const REASON = /^\/\/\s*Dynamic import:\s*\S/;
 
@@ -138,11 +133,8 @@ describe('unexplainedDynamicImports', () => {
 
 describe('the test suite (#365)', () => {
   it('loads no module inside a function without saying why', () => {
-    const tracked = execFileSync('git', ['ls-files', 'src', 'docs', 'scripts'], { cwd: ROOT, encoding: 'utf-8' })
-      .split('\n')
-      .filter((path) => /\.test\.(?:ts|mjs)$/.test(path));
-    const findings = tracked.flatMap((path) =>
-      unexplainedDynamicImports(path, readFileSync(join(ROOT, path), 'utf-8')).map(
+    const findings = trackedTestFiles(['src', 'docs', 'scripts']).flatMap(({ path, text }) =>
+      unexplainedDynamicImports(path, text).map(
         ({ line, text }) => `${path}:${line}  ${text}`,
       ),
     );

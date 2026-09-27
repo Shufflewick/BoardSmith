@@ -15,7 +15,7 @@ import { spawn, spawnSync } from 'node:child_process';
 import { copyFileSync, existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { tempTree } from '../src/testing/temp-tree.test-helper.ts';
+import { fixtureSandbox } from '../src/testing/fixture-sandbox.test-helper.ts';
 
 const PROJECT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SCRIPT = path.join(PROJECT_ROOT, 'scripts/merge-branch.sh');
@@ -27,11 +27,24 @@ const GIT_IDENTITY = {
   GIT_COMMITTER_EMAIL: 'merge-test@example.invalid',
 };
 
+/**
+ * Each fixture repository's sandbox environment (#430). Everything these tests
+ * run in a fixture runs with it, so the stub below can write only inside the
+ * fixture's own tree, whatever path it is handed.
+ */
+const sandboxEnvs = new Map();
+
+function sandboxEnv(repo) {
+  const env = sandboxEnvs.get(repo);
+  if (!env) throw new Error(`${repo} is not a fixtureRepo(), so there is no sandbox to run it in.`);
+  return { ...env, ...GIT_IDENTITY };
+}
+
 function run(cwd, command, args, env = {}) {
   const result = spawnSync(command, args, {
     cwd,
     encoding: 'utf8',
-    env: { ...process.env, ...GIT_IDENTITY, ...env },
+    env: { ...sandboxEnv(cwd), ...env },
   });
   return { status: result.status, output: `${result.stdout}${result.stderr}` };
 }
@@ -55,10 +68,14 @@ function git(cwd, ...args) {
  * - `MERGE_TEST_DIE`: ends itself with SIGKILL before it can say anything.
  *
  * Like the real one, a failing run writes its verdict to the file after
- * `--verdict-file` (#429).
+ * `--verdict-file` (#429). It runs in a fixture sandbox, because a stub that
+ * writes to a path it is handed once overwrote the machine's node (#430).
  */
 function fixtureRepo() {
-  const repo = tempTree('bs-merge-branch-');
+  const sandbox = fixtureSandbox('bs-merge-branch-', { tools: ['git'] });
+  const repo = path.join(sandbox.root, 'repo');
+  mkdirSync(repo);
+  sandboxEnvs.set(repo, sandbox.env);
   git(repo, 'init', '--quiet', '--initial-branch=main');
   mkdirSync(path.join(repo, 'scripts'));
   copyFileSync(SCRIPT, path.join(repo, 'scripts/merge-branch.sh'));
@@ -230,7 +247,7 @@ describe('scripts/merge-branch.sh serialises merges (#333)', () => {
     const child = spawn('bash', ['scripts/merge-branch.sh', branch, summary], {
       cwd: repo,
       detached: true,
-      env: { ...process.env, ...GIT_IDENTITY, ...lockEnv(options) },
+      env: { ...sandboxEnv(repo), ...lockEnv(options) },
     });
     started.push(-child.pid);
     let output = '';
@@ -323,7 +340,7 @@ describe('scripts/merge-branch.sh serialises merges (#333)', () => {
     const holder = spawn(
       'perl',
       ['-e', '$| = 1; open(my $f, ">>", $ARGV[0]) or die; flock($f, 2) or die; print "locked\\n"; sleep 60', lockPath(repo)],
-      { stdio: ['ignore', 'pipe', 'inherit'] },
+      { stdio: ['ignore', 'pipe', 'inherit'], env: sandboxEnv(repo) },
     );
     started.push(holder.pid);
     return new Promise((resolve) => holder.stdout.once('data', resolve)).then(() => {

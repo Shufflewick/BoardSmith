@@ -28,7 +28,11 @@
  * `rulebook/...` or `RULINGS.md` from `design/`, code reached with `../` from `design/` too, and
  * anything else from the project root; never outside the project. BoardSmith's own source or docs
  * are cited from the installed package, `../node_modules/boardsmith/<path>`, and read there, in the
- * version the project uses (#432); `BoardSmith:<path>` is refused with that path. A Markdown source is cited by
+ * version the project uses (#432); `BoardSmith:<path>` is refused with that path. `@<commit>` before a
+ * location (`../src/rules/damage.ts@611dc8e:42`) reads the file as it was in that commit, which must
+ * be in the chunk's history, its base commit or one of its own `chunk-<slug>/` commits
+ * (chunk-commits.ts), so a claim can quote code the chunk itself went on to replace (#426). A quote
+ * not at its unpinned location is refused with the pinned location that has it, when there is one. A Markdown source is cited by
  * heading (`§"..."`) or by line range; any other file is cited by line range (`path:N` or
  * `path:N-M`, the one grammar for a line location, `splitLineLocation` in line-location.ts, which
  * ledger-check reads cited evidence by too, #414). A quote matches when it appears inside the cited section or lines, with runs of
@@ -56,8 +60,10 @@ import {
   INSTALLED_BOARDSMITH_DIR,
   chunkMdPath,
   designRecordPath,
+  installedBoardSmithPath,
   relChunkMdPath,
 } from '../lib/project-paths.js';
+import { type ChunkCommit, type PinnedCommit, chunkHistory, chunkPins, fileAtCommit } from '../lib/chunk-commits.js';
 import { readGateTransition } from '../lib/gate-transition.js';
 import { markdownHeading } from '../lib/slice-sections.js';
 import { LINE_LOCATION_HINT, type LineRange, fileLines, lineRangeProblem, splitLineLocation } from '../lib/line-location.js';
@@ -277,13 +283,15 @@ interface SourceSpec {
   range?: LineRange;
   /** A `:LINE:COLUMN` location's column, which a claim location does not take. */
   column?: number;
+  /** Written `path@<commit>`: the file as it was in that commit of the chunk's history (#426). */
+  commit?: string;
 }
 
 function parseSpec(spec: string): SourceSpec | undefined {
   const parsed = SOURCE_SPEC.exec(spec.trim());
   if (!parsed) return undefined;
-  const { path, lines, column } = splitLineLocation(parsed[1].trim());
-  return { spec, path, heading: parsed[2], range: lines, column };
+  const { path, lines, column, commit } = splitLineLocation(parsed[1].trim());
+  return { spec, path, heading: parsed[2], range: lines, column, commit };
 }
 
 /**
@@ -307,8 +315,51 @@ const BOARDSMITH_QUALIFIER = /boardsmith:/i;
 /** A cited file's text, and its project-relative path for messages. */
 type SourceFile = { ok: true; text: string; shown: string } | { ok: false; problem: string };
 
+/**
+ * The chunk whose claims are checked: where its files are, and the commits of its history a
+ * `path@<commit>` location may be read in (`chunkPins`, chunk-commits.ts, #426).
+ */
+interface ChunkSources {
+  projectDir: string;
+  slug: string;
+  pin: (ref: string) => Promise<PinnedCommit>;
+}
+
+function chunkSources(projectDir: string, slug: string): ChunkSources {
+  return { projectDir, slug, pin: chunkPins(projectDir, slug) };
+}
+
+/** A commit of the chunk's history, as messages name it. */
+function commitName({ hash, label }: ChunkCommit): string {
+  return `${hash.slice(0, 10)} (${label})`;
+}
+
+/** Reads the cited file as it was in the commit of the chunk's history it is pinned to (#426). */
+async function readAtCommit(chunk: ChunkSources, source: SourceSpec, ref: string, shown: string): Promise<SourceFile> {
+  if (installedBoardSmithPath(shown) !== undefined) {
+    return {
+      ok: false,
+      problem:
+        `"${source.spec}" reads the installed BoardSmith at a commit, but BoardSmith is not in this project's git. ` +
+        'Cite BoardSmith as it is installed, with no @<commit>.',
+    };
+  }
+  const pinned = await chunk.pin(ref);
+  if (!pinned.ok) return { ok: false, problem: `"${source.spec}": ${pinned.problem}` };
+  const text = await fileAtCommit(chunk.projectDir, pinned.commit.hash, shown);
+  if (text === undefined) {
+    return {
+      ok: false,
+      problem: `${shown} was not in git at ${commitName(pinned.commit)}, so "${source.spec}" names nothing. Pin a commit that has it.`,
+    };
+  }
+  return { ok: true, text, shown: `${shown}@${ref}` };
+}
+
 /** Reads the cited file, refusing a path that leaves the project or names no file. */
-async function readSourceFile(projectDir: string, path: string): Promise<SourceFile> {
+async function readSourceFile(chunk: ChunkSources, source: SourceSpec): Promise<SourceFile> {
+  const { projectDir } = chunk;
+  const { path } = source;
   const shown = designRecordPath(projectDir, path);
   if (shown === undefined) {
     return {
@@ -316,6 +367,7 @@ async function readSourceFile(projectDir: string, path: string): Promise<SourceF
       problem: `"${path}" is outside this project. Copy or archive the source inside the project and cite it there.`,
     };
   }
+  if (source.commit !== undefined) return readAtCommit(chunk, source, source.commit, shown);
   try {
     return { ok: true, text: await fs.readFile(join(projectDir, shown), 'utf8'), shown };
   } catch {
@@ -362,7 +414,7 @@ function locateWithin(lines: string[], source: SourceSpec, shown: string): Locat
  * Resolves a `Source:`/`Searched:` location to the text it names: a Markdown heading's section
  * (the heading line down to the next heading of the same or higher level) or a line range.
  */
-async function locate(projectDir: string, spec: string): Promise<Located> {
+async function locate(chunk: ChunkSources, spec: string): Promise<Located> {
   if (spec.trim() === '') return { ok: false, problem: `a location line is empty. ${FORMAT_HINT}` };
   const source = parseSpec(spec);
   if (!source) return { ok: false, problem: `"${spec}" is not a location. ${FORMAT_HINT}` };
@@ -376,7 +428,7 @@ async function locate(projectDir: string, spec: string): Promise<Located> {
         'read in the BoardSmith version this project uses.',
     };
   }
-  const file = await readSourceFile(projectDir, source.path);
+  const file = await readSourceFile(chunk, source);
   if (!file.ok) return file;
   return locateWithin(fileLines(file.text), source, file.shown);
 }
@@ -408,14 +460,60 @@ function shownChunkPath(slug: string): string {
   return `${DESIGN_DIR}/${relChunkMdPath(slug)}`.split(sep).join('/');
 }
 
+/** What a quote of code the chunk itself replaced is cited as (#426). */
+const REPLACED_BY_CHUNK =
+  ' If this chunk replaced the quoted text, pin the location to the commit of the chunk that still ' +
+  'has it, its base commit or one of its own (../src/rules/game.ts@<commit>:120-135).';
+
+/**
+ * Where a quote that is not at its unpinned line range still is: the newest commit of the chunk's
+ * history with the quote at those same lines, written as the pinned location to cite (#426).
+ * `undefined` when there is none, or the chunk has no commit yet.
+ */
+async function pinnedLocationOf(chunk: ChunkSources, passage: QuotedPassage): Promise<string | undefined> {
+  const source = parseSpec(passage.source);
+  if (!source?.range || source.commit !== undefined) return undefined;
+  const shown = designRecordPath(chunk.projectDir, source.path);
+  if (shown === undefined || installedBoardSmithPath(shown) !== undefined) return undefined;
+  const commit = await commitWithQuote(chunk, shown, source.range, passage.quote);
+  if (commit === undefined) return undefined;
+  const [from, to] = source.range;
+  return `${source.path}@${commit.hash.slice(0, 10)}:${from === to ? from : `${from}-${to}`} (${commit.label})`;
+}
+
+/** The newest commit of the chunk's history whose copy of `shown` has `quote` at `range`. */
+async function commitWithQuote(
+  chunk: ChunkSources,
+  shown: string,
+  [from, to]: LineRange,
+  quote: string,
+): Promise<ChunkCommit | undefined> {
+  let history: ChunkCommit[];
+  try {
+    history = await chunkHistory(chunk.projectDir, chunk.slug);
+  } catch {
+    return undefined;
+  }
+  for (const commit of history) {
+    const text = await fileAtCommit(chunk.projectDir, commit.hash, shown);
+    if (text !== undefined && normalize(fileLines(text).slice(from - 1, to).join('\n')).includes(quote)) return commit;
+  }
+  return undefined;
+}
+
+function replacedHint(pinned: string | undefined, source: string): string {
+  if (pinned !== undefined) return ` This chunk's history has it at ${pinned}: if the chunk replaced it, cite that.`;
+  return parseSpec(source)?.commit === undefined ? REPLACED_BY_CHUNK : '';
+}
+
 /** Checks one quoted passage at its cited location, adding a refusal when it is not there. */
 async function checkPassage(
-  projectDir: string,
+  chunk: ChunkSources,
   claimNumber: number,
   passage: QuotedPassage,
   refusals: string[],
 ): Promise<CheckedQuote> {
-  const located = await locate(projectDir, passage.source);
+  const located = await locate(chunk, passage.source);
   if (!located.ok) {
     refusals.push(`Claim ${claimNumber}: ${located.problem}`);
     return { ...passage, found: false };
@@ -425,7 +523,8 @@ async function checkPassage(
     refusals.push(
       `Claim ${claimNumber}: the quote "${passage.quote}" was not found at ${passage.source}. ` +
         'Re-open that location and copy the text exactly, correct the location, or, if the source ' +
-        'does not say this, rewrite the claim as an open question for the designer.',
+        'does not say this, rewrite the claim as an open question for the designer.' +
+        replacedHint(await pinnedLocationOf(chunk, passage), passage.source),
     );
   }
   return { ...passage, found };
@@ -463,7 +562,7 @@ function noQuoteRefusal(claim: ParsedClaim, preGate: PreGateClaims): string {
 }
 
 async function checkClaim(
-  projectDir: string,
+  chunk: ChunkSources,
   claim: ParsedClaim,
   superseded: boolean,
   preGate: PreGateClaims,
@@ -479,12 +578,12 @@ async function checkClaim(
     refusals.push(noQuoteRefusal(claim, preGate));
   }
   for (const passage of claim.quotes) {
-    checked.quotes.push(await checkPassage(projectDir, claim.number, passage, refusals));
+    checked.quotes.push(await checkPassage(chunk, claim.number, passage, refusals));
   }
   return checked;
 }
 
-async function checkQuestion(projectDir: string, question: ParsedQuestion, refusals: string[]): Promise<void> {
+async function checkQuestion(chunk: ChunkSources, question: ParsedQuestion, refusals: string[]): Promise<void> {
   refusals.push(...question.problems);
   if (question.searched.length === 0) {
     refusals.push(
@@ -493,7 +592,7 @@ async function checkQuestion(projectDir: string, question: ParsedQuestion, refus
     );
   }
   for (const spec of question.searched) {
-    const located = await locate(projectDir, spec);
+    const located = await locate(chunk, spec);
     if (!located.ok) refusals.push(`${question.id}: ${located.problem}`);
   }
 }
@@ -530,11 +629,12 @@ export async function checkClaimQuotes(projectDir: string, slug: string): Promis
   const superseded = new Set(parseSupersededClaims(chunkText));
   const refusals: string[] = [];
   const claims: CheckedClaim[] = [];
+  const chunk = chunkSources(projectDir, slug);
   for (const claim of parsed.claims) {
-    claims.push(await checkClaim(projectDir, claim, superseded.has(claim.number), preGate, refusals));
+    claims.push(await checkClaim(chunk, claim, superseded.has(claim.number), preGate, refusals));
   }
   for (const question of parsed.questions) {
-    await checkQuestion(projectDir, question, refusals);
+    await checkQuestion(chunk, question, refusals);
   }
   return {
     claims,

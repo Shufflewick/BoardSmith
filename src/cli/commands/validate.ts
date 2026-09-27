@@ -36,6 +36,8 @@ import {
 } from '../lib/choice-cardinality.js';
 import type { Game, GameOptions } from '../../engine/index.js';
 import { missingThreePeerHint } from '../../ui/components/dice/three-peer.js';
+import { ENGINE_CONTRACT } from '../../contract/index.js';
+import { engineChangeHint } from '../lib/engine-changes.js';
 
 interface ValidationResult {
   name: string;
@@ -547,28 +549,12 @@ async function validateTypeScript(cwd: string): Promise<TypeCheckRun> {
         const allErrors = output.split('\n').filter(line =>
           line.includes('error TS')
         );
-        const maxShown = 20;
-        const shown = allErrors.slice(0, maxShown);
-        const remaining = allErrors.length - shown.length;
-        if (remaining > 0) {
-          shown.push(`... and ${remaining} more error${remaining === 1 ? '' : 's'}. Run \`npx vue-tsc --noEmit\` for full output.`);
-        }
-
-        // A game that imports `boardsmith/ui/dice` without installing the
-        // optional `three` peer fails INSIDE node_modules/boardsmith, which
-        // reads as our bug and tells the author nothing they can act on. The
-        // instruction goes first, above the compiler's own words (#276).
-        const threePeer = missingThreePeerHint(allErrors);
-        const details = threePeer
-          ? [...threePeer.split('\n').filter((line) => line.trim() !== ''), ...shown]
-          : shown;
-
         resolve({
           result: {
             name: 'TypeScript',
             passed: false,
             message: 'TypeScript compilation failed',
-            details: details.length > 0 ? details : ['Run `npx vue-tsc --noEmit` for details'],
+            details: typeScriptFailureDetails(cwd, allErrors),
           },
           programFiles,
         });
@@ -586,6 +572,68 @@ async function validateTypeScript(cwd: string): Promise<TypeCheckRun> {
       });
     });
   });
+}
+
+/**
+ * What a failed type check prints under its verdict: the compiler's errors
+ * (the first 20), with what the author can act on above them.
+ */
+export function typeScriptFailureDetails(cwd: string, allErrors: string[]): string[] {
+  const maxShown = 20;
+  const shown = allErrors.slice(0, maxShown);
+  const remaining = allErrors.length - shown.length;
+  if (remaining > 0) {
+    shown.push(`... and ${remaining} more error${remaining === 1 ? '' : 's'}. Run \`npx vue-tsc --noEmit\` for full output.`);
+  }
+
+  // A game that imports `boardsmith/ui/dice` without installing the
+  // optional `three` peer fails INSIDE node_modules/boardsmith, which
+  // reads as our bug and tells the author nothing they can act on. The
+  // instruction goes first, above the compiler's own words (#276).
+  const threePeer = missingThreePeerHint(allErrors);
+  // An API BoardSmith changed since the game's last build fails with only
+  // the compiler's words; the contract history says what to write (#423).
+  const builtRevision = lastBuiltEngineRevision(cwd);
+  const engineChange =
+    builtRevision === undefined
+      ? null
+      : engineChangeHint({
+          diagnostics: allErrors,
+          sourceLine: gameSourceLine(cwd),
+          builtRevision,
+          history: ENGINE_CONTRACT.history,
+        });
+  const details = [
+    ...(threePeer ? threePeer.split('\n').filter((line) => line.trim() !== '') : []),
+    ...(engineChange ?? []),
+    ...shown,
+  ];
+  return details.length > 0 ? details : ['Run `npx vue-tsc --noEmit` for details'];
+}
+
+/** The engine revision `dist/manifest.json` was built against, when the game has been built. */
+function lastBuiltEngineRevision(cwd: string): number | undefined {
+  const manifestPath = join(cwd, 'dist', 'manifest.json');
+  if (!existsSync(manifestPath)) return undefined;
+  let manifest: { engineRevision?: unknown };
+  try {
+    manifest = JSON.parse(readFileSync(manifestPath, 'utf-8')) as { engineRevision?: unknown };
+  } catch {
+    throw new Error('dist/manifest.json is not valid JSON. Run `boardsmith build` to write it again, then run `boardsmith validate`.');
+  }
+  return typeof manifest.engineRevision === 'number' ? manifest.engineRevision : undefined;
+}
+
+/** Reads line `line` of a game file named as the compiler names it, relative to the project. */
+function gameSourceLine(cwd: string): (file: string, line: number) => string | undefined {
+  const files = new Map<string, string[] | undefined>();
+  return (file, line) => {
+    if (!files.has(file)) {
+      const path = resolvePath(cwd, file);
+      files.set(file, existsSync(path) ? readFileSync(path, 'utf-8').split('\n') : undefined);
+    }
+    return files.get(file)?.[line - 1];
+  };
 }
 
 /**
