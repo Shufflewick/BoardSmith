@@ -7,6 +7,7 @@ import { promises as fs } from 'node:fs';
 import { dirname, join, relative, resolve } from 'node:path';
 import chalk from 'chalk';
 import { parseRulings } from './build-manifest.js';
+import { allocatedNumber } from '../lib/ledger-entries.js';
 import { readFencedJsonLedger } from '../lib/fenced-json-ledger.js';
 import { atomicWriteFile, RUN_ID_RE, runRootDir, stagingSlicesDir } from './verify-run.js';
 
@@ -160,7 +161,11 @@ export interface RulingEnumerationResult {
  * `trace-check.ts`'s exact supersession skip condition (`ruling.supersededBy !== undefined`).
  */
 export function enumerateRulingsForRecheck(rulingsText: string): RulingEnumerationResult {
-  const parsed = parseRulings(rulingsText);
+  const parsed = parseRulings(rulingsText).map((ruling) => ({
+    ...ruling,
+    number: allocatedNumber('Ruling', ruling.id),
+    supersededBy: ruling.supersededBy === undefined ? undefined : allocatedNumber('Ruling', ruling.supersededBy),
+  }));
 
   const enumerated: RulingEnumerationEntry[] = [];
   const skipped: SkippedRuling[] = [];

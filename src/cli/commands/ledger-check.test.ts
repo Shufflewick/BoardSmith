@@ -760,3 +760,43 @@ describe('ledgerCheck — cited evidence must be in git (#292)', () => {
     expect(evidence((await ledgerCheck(dir)).findings)).toEqual([]);
   });
 });
+
+describe('provisional entries after numbered ones (#436)', () => {
+  it('does not read a provisional filing\'s fields as the numbered filing above it', () => {
+    const text = [
+      filing(25, 'posted', 'https://github.com/Shufflewick/BoardSmith/issues/283'),
+      filing(1, 'recorded', 'n/a — not posted').replace('### Filing 1', '### Filing @demo.1'),
+    ].join('\n');
+    expect(checkFilingStatus(text)).toEqual([]);
+  });
+
+  it('names a provisional filing by its own id when it is inconsistent', () => {
+    const text = [
+      filing(25, 'recorded', 'n/a — not posted'),
+      filing(1, 'posted', 'n/a — not posted').replace('### Filing 1', '### Filing @demo.1'),
+    ].join('\n');
+    expect(checkFilingStatus(text).map((f) => f.entry)).toEqual(['Filing @demo.1']);
+  });
+
+  it('reads a provisional decision\'s supersession as its own, pointing both ways', () => {
+    const text = [
+      '### Decision 25',
+      '- Decision: old.',
+      '- Superseded by: Decision @board-zoom-pan.9',
+      '',
+      '### Decision 109',
+      '- Decision: unrelated.',
+      '',
+      '### Decision @board-zoom-pan.9',
+      '- Decision: new. Supersedes Decision 25.',
+    ].join('\n');
+    expect(checkNumberedLedger(text, 'Decision', 'DECISIONS.md')).toEqual([]);
+  });
+
+  it('still reports a provisional entry that supersedes an entry without its pointer', () => {
+    const text = ['### Decision 25', '- Decision: old.', '', '### Decision @demo.1', '- Decision: Supersedes Decision 25.'].join('\n');
+    const findings = checkNumberedLedger(text, 'Decision', 'DECISIONS.md');
+    expect(findings.map((f) => [f.entry, f.kind])).toEqual([['Decision 25', 'superseded-without-pointer']]);
+    expect(findings[0].detail).toContain('- Superseded by: Decision @demo.1');
+  });
+});

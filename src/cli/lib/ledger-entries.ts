@@ -1,19 +1,57 @@
 /**
  * The one reader of a design ledger's numbered entries (`### Ruling N`, `### Decision N`,
- * `### Filing N`, `### Dispatch N`).
+ * `### Filing N`, `### Dispatch N`), and the one definition of an entry heading.
  *
- * `parseRulings` (`build-manifest.ts`) and `ledger-check` both read entries through this, so
- * there is exactly one heading grammar and one supersession grammar for every ledger. A second,
- * slightly different regex is how two tools come to disagree about what a ledger says.
+ * `parseRulings` (`build-manifest.ts`), `ledger-check` and the merge-time allocation
+ * (`ledger-allocation.ts`) all read headings through this, so there is exactly one heading grammar
+ * and one supersession grammar for every ledger. A second, slightly different regex is how two
+ * tools come to disagree about what a ledger says: before #436 this reader knew only real numbers,
+ * so it read a chunk branch's provisional entry as part of the numbered entry above it.
  */
 
+const SLUG = '[A-Za-z0-9_-]+';
+/** A provisional entry number, `@<slug>.<n>`, written on a parallel chunk branch until merge (#294). */
+export const PROVISIONAL_NUMBER = `@${SLUG}\\.\\d+`;
+/** The number part of an entry id, real or provisional: `12`, or `@trading.1`. */
+export const ENTRY_NUMBER = `(?:\\d+|${PROVISIONAL_NUMBER})`;
+
+export function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * The heading line of a `<kind>` entry whose number matches `number` (a regex source, captured as
+ * group 1). `sep` is what separates word and number: `' '` for `Ruling 12`, `''` for `G12`.
+ */
+export function entryHeadingPattern(kind: string, sep: string, number: string): RegExp {
+  return new RegExp(`^### ${escapeRegExp(kind)}${sep}(${number})[ \\t]*$`, 'gm');
+}
+
+/**
+ * The real number of entry `id` of `kind`. For a reader that runs on a merged game (the verify
+ * commands): every entry there has a real number, and a provisional id (`@<slug>.<n>`) exists only
+ * on a chunk branch until `chunk-merge` allocates it one (#294), so one here is refused.
+ */
+export function allocatedNumber(kind: string, id: string): number {
+  if (/^\d+$/.test(id)) return Number(id);
+  throw new Error(
+    `${kind} ${id} is a provisional id, which only a chunk branch holds until \`boardsmith chunk-merge\` ` +
+      `gives it a real number. Run this on the game's main checkout after the chunk is merged with ` +
+      `\`boardsmith chunk-merge\`.`,
+  );
+}
+
 export interface LedgerEntry {
-  number: number;
+  /** The entry's number as written in its heading: `12`, or provisional `@trading.1`. */
+  id: string;
   /** 1-based line number of the `### <Kind> N` heading. */
   line: number;
   /** 1-based line number of the first body line (the line after the heading). */
   bodyLine: number;
-  /** Everything after the heading line up to the next heading of the same kind, or end of file. */
+  /**
+   * Everything after the heading line up to the next heading of the same kind, real or
+   * provisional, or end of file.
+   */
   body: string;
 }
 
@@ -33,17 +71,17 @@ function lineOf(text: string, index: number): number {
 }
 
 /**
- * Every `### <kind> N` entry in file order. Duplicated numbers are KEPT as separate entries, so
- * a caller can see a number that was used twice instead of having one silently replace the other.
+ * Every `### <kind> N` and `### <kind> @<slug>.<n>` entry in file order. Duplicated ids are KEPT
+ * as separate entries, so a caller can see an id that was used twice instead of having one
+ * silently replace the other.
  */
 export function parseLedgerEntries(text: string, kind: string): LedgerEntry[] {
   const visible = blankComments(text);
-  const heading = new RegExp(`^### ${kind} (\\d+)[ \\t]*$`, 'gm');
-  const found: Array<{ number: number; index: number; bodyStart: number }> = [];
-  for (const match of visible.matchAll(heading)) {
+  const found: Array<{ id: string; index: number; bodyStart: number }> = [];
+  for (const match of visible.matchAll(entryHeadingPattern(kind, ' ', ENTRY_NUMBER))) {
     const lineEnd = visible.indexOf('\n', match.index);
     found.push({
-      number: Number(match[1]),
+      id: match[1],
       index: match.index,
       bodyStart: lineEnd === -1 ? visible.length : lineEnd + 1,
     });
@@ -51,7 +89,7 @@ export function parseLedgerEntries(text: string, kind: string): LedgerEntry[] {
   return found.map((h, i) => {
     const line = lineOf(visible, h.index);
     return {
-      number: h.number,
+      id: h.id,
       line,
       bodyLine: line + 1,
       body: visible.slice(h.bodyStart, i + 1 < found.length ? found[i + 1].index : visible.length),
@@ -61,6 +99,8 @@ export function parseLedgerEntries(text: string, kind: string): LedgerEntry[] {
 
 /**
  * The only two supersession shapes read as a chain, for one ledger kind:
+ *
+ * M and N are entry ids, real or provisional.
  *
  * - `supersedes <Kind> M`, written on the NEW entry N: N replaces M.
  * - `superseded by <Kind> M`, the in-place pointer written on the OLD entry: it was replaced by M.
@@ -73,7 +113,7 @@ export function parseLedgerEntries(text: string, kind: string): LedgerEntry[] {
  */
 export function supersessionPatterns(kind: string): { supersededBy: RegExp; supersedes: RegExp } {
   return {
-    supersededBy: new RegExp(`supersede[sd]?\\s+by:?\\s+${kind}\\s+(\\d+)`, 'i'),
-    supersedes: new RegExp(`\\bsupersedes\\s+${kind}\\s+(\\d+)`, 'i'),
+    supersededBy: new RegExp(`supersede[sd]?\\s+by:?\\s+${kind}\\s+(${ENTRY_NUMBER})`, 'i'),
+    supersedes: new RegExp(`\\bsupersedes\\s+${kind}\\s+(${ENTRY_NUMBER})`, 'i'),
   };
 }

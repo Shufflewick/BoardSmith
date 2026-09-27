@@ -774,6 +774,12 @@ function rulingsCorpus(entryCount: number = CORPUS_ENTRY_COUNT): string {
 const nextNumberFor = (entryCount: number = CORPUS_ENTRY_COUNT): number => entryCount + 1;
 
 describe('contradictory — nextRulingNumber / appendRuling — over a self-contained multi-entry RULINGS.md corpus', () => {
+  it('refuses a provisional ruling, which only a chunk branch holds before chunk-merge (#436)', () => {
+    expect(() => nextRulingNumber('### Ruling 4\n- Decision: a\n### Ruling @demo.1\n- Decision: b\n')).toThrow(
+      /Ruling @demo\.1 is a provisional id.*chunk-merge/s,
+    );
+  });
+
   let dir: string;
 
   beforeEach(async () => {

@@ -14,7 +14,7 @@
  * the files the branch changed. It refuses a branch that added a real number, so the only way a
  * number reaches `main` from a parallel branch is through this allocation.
  */
-import { blankComments } from './ledger-entries.js';
+import { PROVISIONAL_NUMBER, blankComments, entryHeadingPattern, escapeRegExp } from './ledger-entries.js';
 import { CONSTRAINTS_MD, DECISIONS_MD, FILINGS_MD, QUESTIONS_MD, RULINGS_MD } from './project-paths.js';
 
 /** One kind of numbered entry: its ledger, its heading word, and what separates word and number. */
@@ -37,16 +37,8 @@ export const NUMBERED_LEDGER_SPECS: readonly NumberedLedgerSpec[] = [
   { file: CONSTRAINTS_MD, kind: 'G', sep: '' },
 ];
 
-const SLUG = '[A-Za-z0-9_-]+';
-/** The number part of an entry id, real or provisional: `12`, or `@trading.1`. */
-export const ENTRY_NUMBER = `(?:\\d+|@${SLUG}\\.\\d+)`;
-
-function escape(text: string): string {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
 function headingPattern(spec: NumberedLedgerSpec, id: string): RegExp {
-  return new RegExp(`^### ${escape(spec.kind)}${spec.sep}(${id})[ \\t]*$`, 'gm');
+  return entryHeadingPattern(spec.kind, spec.sep, id);
 }
 
 /** Real (allocated) numbers used as headings, in file order, template comments excluded. */
@@ -56,27 +48,16 @@ function plainNumbers(text: string, spec: NumberedLedgerSpec): number[] {
 
 /** Provisional ids used as headings, in file order, e.g. `Ruling @trading.1`. */
 export function provisionalHeadings(text: string, spec: NumberedLedgerSpec): string[] {
-  return [...blankComments(text).matchAll(headingPattern(spec, `@${SLUG}\\.\\d+`))].map(
+  return [...blankComments(text).matchAll(headingPattern(spec, PROVISIONAL_NUMBER))].map(
     (m) => `${spec.kind}${spec.sep}${m[1]}`,
   );
 }
 
 /** Every provisional id cited anywhere in `text`, of any kind, in order of first appearance. */
 export function provisionalReferences(text: string): string[] {
-  const kinds = [...new Set(NUMBERED_LEDGER_SPECS.map((s) => `${escape(s.kind)}${s.sep}`))];
-  const pattern = new RegExp(`\\b(?:${kinds.join('|')})@${SLUG}\\.\\d+\\b`, 'g');
+  const kinds = [...new Set(NUMBERED_LEDGER_SPECS.map((s) => `${escapeRegExp(s.kind)}${s.sep}`))];
+  const pattern = new RegExp(`\\b(?:${kinds.join('|')})${PROVISIONAL_NUMBER}\\b`, 'g');
   return [...new Set([...text.matchAll(pattern)].map((m) => m[0]))];
-}
-
-/** Provisional ids used as a heading more than once in one ledger. */
-export function duplicateProvisionalIds(text: string, spec: NumberedLedgerSpec): string[] {
-  const seen = new Set<string>();
-  const dupes = new Set<string>();
-  for (const id of provisionalHeadings(text, spec)) {
-    if (seen.has(id)) dupes.add(id);
-    seen.add(id);
-  }
-  return [...dupes];
 }
 
 /** Real numbers present as headings in `tip` but not in `base`, e.g. `['Ruling 139']`. */
@@ -115,7 +96,7 @@ export function allocateProvisional(
   }
   const ids = Object.keys(mapping);
   if (ids.length === 0) return { files: { ...files }, mapping };
-  const pattern = new RegExp(`\\b(?:${ids.map(escape).join('|')})(?!\\.?\\d)`, 'g');
+  const pattern = new RegExp(`\\b(?:${ids.map(escapeRegExp).join('|')})(?!\\.?\\d)`, 'g');
   const rewritten: Record<string, string> = {};
   for (const [path, text] of Object.entries(files)) {
     rewritten[path] = text.replace(pattern, (id) => mapping[id]);

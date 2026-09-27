@@ -43,17 +43,23 @@ describe('scanTestCitations', () => {
   it('splits "claim 28 / Ruling 9/15" into claims [28] and rulings [9,15], never swallowing the ruling numbers as claims', () => {
     const result = scanTestCitations('// claim 28 / Ruling 9/15');
     expect(result.claims).toEqual([28]);
-    expect(result.rulings).toEqual([9, 15]);
+    expect(result.rulings).toEqual(['9', '15']);
   });
 
   it('parses a bare single ruling: "Ruling 23"', () => {
     const result = scanTestCitations('// Ruling 23 applies');
-    expect(result.rulings).toEqual([23]);
+    expect(result.rulings).toEqual(['23']);
+  });
+
+  it('reads a provisional ruling id, which a chunk branch cites until chunk-merge numbers it (#436)', () => {
+    const result = scanTestCitations('// Ruling @ranged-units.1 and claim 2');
+    expect(result.rulings).toEqual(['@ranged-units.1']);
+    expect(result.claims).toEqual([2]);
   });
 
   it('parses a slash-joined ruling pair: "rulings 21/22"', () => {
     const result = scanTestCitations('// rulings 21/22 both apply');
-    expect(result.rulings).toEqual([21, 22]);
+    expect(result.rulings).toEqual(['21', '22']);
   });
 
   it('importsRules is true for a relative import from a src/rules/ path', () => {
@@ -303,6 +309,25 @@ describe('traceCheckCommand', () => {
 
     const untested = result.findings.filter((f) => f.kind === 'claim-untested' && f.chunk === 'jab');
     expect(untested.map((f) => f.subject).sort()).toEqual(['claim 2', 'claim 3']);
+  });
+
+  it('a provisional ruling is its own entry, cited by its provisional id (#436)', async () => {
+    const project = await makeProject();
+    await makeChunk(project, 'jab', { claims: [] });
+    await writeRulings(
+      project,
+      ['### Ruling 1', '', 'Decision: jabs block.', '', '### Ruling @jab.1', '', 'Decision: jabs stun.', ''].join('\n'),
+    );
+    await writeTestFile(project, 'tests/jab.test.ts', '// Ruling 1\n');
+
+    const result = await traceCheckCommand({ project });
+    expect(result.findings.filter((f) => f.kind === 'ruling-untested').map((f) => f.subject)).toEqual([
+      'Ruling @jab.1',
+    ]);
+
+    await writeTestFile(project, 'tests/jab.test.ts', '// Ruling 1, Ruling @jab.1\n');
+    const cited = await traceCheckCommand({ project });
+    expect(cited.findings.filter((f) => f.kind === 'ruling-untested')).toEqual([]);
   });
 
   it('a ruling with no citing test is ruling-untested; a superseded ruling is not demanded one', async () => {
