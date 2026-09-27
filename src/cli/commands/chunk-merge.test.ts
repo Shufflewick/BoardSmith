@@ -268,6 +268,30 @@ describe('chunkMerge: ledger numbers are allocated at merge, never on a branch',
     expect(rulings).not.toContain('@');
   });
 
+  it('merges a filing whose reproduction quotes example ids, written into the shipped FILINGS template (#437)', async () => {
+    const template = await fs.readFile(
+      new URL('../slash-command/bs/templates/FILINGS.template.md', import.meta.url),
+      'utf-8',
+    );
+    const filing = [
+      '### Filing @trading.1',
+      '- Kind: bug',
+      '- What happened: a FILINGS.md with `### Filing 1`, then `### Filing @x.1` holding',
+      '  `- Reported: recorded`; ledger-check reads the second as part of the first.',
+      '- Reported: recorded',
+      '- Issue: n/a — not posted',
+      '',
+    ].join('\n');
+    await buildOnBranch('trading', 100, { 'design/FILINGS.md': `${template.trimEnd()}\n\n${filing}` });
+
+    const result = await chunkMerge(main, 'trading', { runTests: budgetRunner });
+    expect(result.refusals).toEqual([]);
+    expect(result.allocated).toEqual({ 'Filing @trading.1': 'Filing 1' });
+    const filings = await read(main, 'design/FILINGS.md');
+    expect(filings).toContain('### Filing 1\n');
+    expect(filings).toContain('then `### Filing @x.1` holding');
+  });
+
   it('refuses a branch that took a real number itself, which is how two branches collide', async () => {
     await buildOnBranch('trading', 100, {
       'design/RULINGS.md': '# Rulings\n\n### Ruling 1\n- Decision: the core loop.\n\n### Ruling 2\n- Decision: prices are public.\n',

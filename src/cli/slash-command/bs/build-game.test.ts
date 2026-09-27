@@ -550,6 +550,12 @@ describe('#294 — parallel dispatch is allowed only where the checks say so', (
     expect(flat(read('state-machine.md'))).toContain('Ruling @<slug>.<n>');
   });
 
+  it('says an example id goes in a code span, which chunk-merge never reads as a citation (#437)', () => {
+    expect(flat(read('state-machine.md'))).toMatch(/An example id \([^)]*\) goes in a code span/);
+    expect(flat(read('state-machine.md'))).toMatch(/inside a code span, a fenced block or an HTML comment is quoted text and never a citation/);
+    expect(flat(read('templates/FILINGS.template.md'))).toContain('an example ledger id in a reproduction, such as `### Filing @x.1`, goes in a code span');
+  });
+
   it('routes the cross-chunk references a merge records to the audit before the next merge', () => {
     expect(dispatch()).toContain('CROSS-CHUNK.md');
     expect(dispatch()).toMatch(/cross-chunk lens/i);

@@ -54,6 +54,8 @@
      - Title: one line, specific enough to be an issue title on its own
      - What happened: what was expected, what actually happened, and the smallest reproduction —
        for a feature request, what the game needs and why the library is the only place it can live
+       (an example ledger id in a reproduction, such as `### Filing @x.1`, goes in a code span, or
+       chunk-merge reads it as a citation of an entry that does not exist)
      - Blocked: the chunk slug this came out of, and whether it blocked that chunk or was worked
        around
      - Workaround in the game: what the game does instead, or "none — the chunk is blocked"
