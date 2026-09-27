@@ -373,15 +373,32 @@ describe('chunkMerge: preconditions', () => {
     if (typeof other === 'string') throw new Error(other);
 
     const refused = await chunkMerge(main, 'trading', { runTests: budgetRunner });
+    // A merge in flight leaves the main checkout dirty; a second run is told about the merge, not
+    // asked to clean up the files that merge is working on.
+    const sketch = await read(main, 'design/SKETCH.md');
+    await fs.writeFile(join(main, 'design/SKETCH.md'), `${sketch}\nmid-merge\n`);
+    const whileDirty = await chunkMerge(main, 'trading', { runTests: budgetRunner });
+    await fs.writeFile(join(main, 'design/SKETCH.md'), sketch);
     await other.release();
     expect(refused.merged).toBe(false);
     expect(refused.refusals.join('\n')).toContain(
       `Another chunk-merge holds the merge lock: chunk-merge of quests (branch chunk/quests), pid ${process.pid}`,
     );
+    expect(whileDirty.refusals).toEqual(refused.refusals);
     expect(git(main, 'status', '--porcelain')).toBe('');
 
     expect((await chunkMerge(main, 'trading', { runTests: budgetRunner })).refusals).toEqual([]);
     expect(existsSync(join(common, 'boardsmith-chunk-merge.flock.holder'))).toBe(false);
+  });
+
+  it('names a merge a killed chunk-merge left half done, and how to undo it (#441)', async () => {
+    await buildOnBranch('trading', 100);
+    git(main, 'merge', '--no-ff', '--no-commit', 'chunk/trading');
+    const result = await chunkMerge(main, 'trading', { runTests: budgetRunner });
+    expect(result.refusals).toEqual([
+      'The main checkout holds a merge that was started and never finished, most likely by a chunk-merge ' +
+        'that was stopped partway. Undo it with `git merge --abort` in the main checkout, then run chunk-merge again.',
+    ]);
   });
 
   it('refuses a dirty main checkout, a missing branch, and a chunk that is not verified', async () => {
