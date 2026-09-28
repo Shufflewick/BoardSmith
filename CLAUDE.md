@@ -1,12 +1,8 @@
 This app is BoardSmith, a library for designing digital board games.
 
-Read everything in the docs folder to get started.
+Have a subagent read the relevant docs in the docs folder to get started.
 
 ## Motto: The Pit of Success
-
-> Make the easy path the right path, and the wrong path the hard path.
-
-Every design decision should guide developers and users toward correct behavior by default. When someone takes the path of least resistance, they should end up doing the right thing. Mistakes should require deliberate effort.
 
 ### What This Means in Practice
 
@@ -29,16 +25,12 @@ Every design decision should guide developers and users toward correct behavior 
 - Fail fast and loud, not silently
 - Error messages should be as descriptive as possible for users
 - Never leak implementation details (line numbers, stack traces, internal paths)
-- Clear error messages with actionable next steps
 - Graceful degradation that's visible, not hidden
 
 **Testing**
 - If it's hard to test, the design is probably wrong
 - Integration tests for the happy path
 - Property-based tests for invariants
-- Local dev: `wrangler` (Cloudflare) + `convex dev` (Convex) running together
-- Stripe test mode for all payment testing
-- Seed data scripts for common scenarios
 
 ---
 
@@ -60,7 +52,7 @@ Every design decision should guide developers and users toward correct behavior 
 
 This library is developed alongside two sibling repos. When a BoardSmith change affects games, verify against them.
 
-- **`~/BoardSmithGames/`** — example games. Reference games: Hex (simplest), Go Fish (cards), Checkers (grid + multi-step), Cribbage (complex multi-phase); plus Polyhedral Potions and demo-* apps. Each game depends on BoardSmith via `"boardsmith": "file:../../BoardSmith"`, and `node_modules/boardsmith` is a **symlink to this repo** — so `npx boardsmith dev` in a game picks up local BoardSmith source changes live (Vite HMR). Quickest way to browser-test a UI change: `cd ~/BoardSmithGames/go-fish && npx boardsmith dev` (serves on :5173). Kill the server when done. **Each game is its own private repository** under the `Shufflewick` org (issue #193); a machine without them runs `bash ~/BoardSmithGames/scripts/clone-catalogue.sh`, and work in a game is not safe until it is pushed.
+- **`~/BoardSmithGames/`** — example games. Reference games: Hex (simplest), Go Fish (cards), Checkers (grid + multi-step), Cribbage (complex multi-phase); plus Polyhedral Potions and demo-* apps. Each game depends on BoardSmith via `"boardsmith": "file:../../BoardSmith"`, and `node_modules/boardsmith` is a **symlink to this repo** — so `npx boardsmith dev` in a game picks up local BoardSmith source changes live (Vite HMR). Quickest way to browser-test a UI change: `cd ~/BoardSmithGames/go-fish && npx boardsmith dev` (serves on :5173). **Each game is its own private repository** under the `Shufflewick` org (issue #193); a machine without them runs `bash ~/BoardSmithGames/scripts/clone-catalogue.sh`, and work in a game is not safe until it is pushed.
 - **`~/Dropbox/MERC/BoardSmith/MERC`** — our most complex game. It does NOT symlink; it uses a **vendored copy** of BoardSmith that must be re-vendored to pick up library changes (see its commit history for the re-vendor pattern).
 
 # `boardsmith dev` host (CLI)
@@ -69,31 +61,29 @@ This library is developed alongside two sibling repos. When a BoardSmith change 
 
 # Shared Agent Rules
 
-The rules every Shufflewick repo shares, and which model and reasoning level each kind of work uses, live in the `Shufflewick/agent-policy` repo, installed as `~/.claude/CLAUDE.md` and `~/.codex/AGENTS.md`. `.agent-policy.json` here lists the check `agent-policy verify` runs before any agent may report done: `boardsmith test`, the same gate `merge-branch.sh` runs.
+The rules every Shufflewick repo shares, and which model and reasoning level each kind of work uses, live in the `Shufflewick/agent-policy` repo, installed as `~/.claude/CLAUDE.md` and `~/.codex/AGENTS.md`. `.agent-policy.json` here lists the check `agent-policy verify` runs before any agent may report done: `boardsmith test`, the same check `agent-policy thread merge` runs on the merged tree.
 
 # Hard Rules
-- **Pit of Success**: The right path is always the easy path, the wrong path is always hard. Design APIs and code so correct usage is obvious and incorrect usage is difficult.
 - **No Backward Compatibility**: Always pursue the cleanest implementation. No deprecation cycles—remove the bad thing and add the good thing. We're a library in active development, not a legacy system.
 - **Prove Before Fix**: When fixing a bug, never guess at the cause. Always prove the root cause through investigation before attempting a fix.
 - All UI interactions must work in a Custom UI and Action Panel in parity with shared state through useBoardInteraction
-- Don't leave a dev server running that you start.
 - **Stop only the processes you started, by their pid. Never by name** (`pkill -f vitest`, `killall node`): every agent on this machine runs vitest, and a kill by name ends all of their runs and any merge in progress. That is what cut `boardsmith test` short in #429.
 
 # Testing
-- All development is done as test-driven development, meaning you'll write a test first, make sure it is failing. Then you will fix the code or add the code and you are not done until all of the tests are green.
 - Verify behavior by running the application, not just reviewing code structure. Confirm features work end-to-end in the browser before marking work complete.
 - Enumerate all code paths a change affects (e.g. lobby mode, `--bot` mode, presets) and verify each one — not just the primary happy path.
 - Trace at least one real value through the full stack (config → engine → session → UI) to confirm data survives every layer boundary.
 - Treat identified test gaps as blockers, not observations. If verification flags untested code within the scope of the change, address it before completion.
 - Write at least one integration test per cross-layer boundary the change touches.
-- A fixture program that writes to a path it is handed (an argument, an environment variable) runs in `fixtureSandbox` (`src/testing/fixture-sandbox.test-helper.ts`), where it can write only inside its own temp tree. A merge-branch stub handed the wrong path once overwrote the machine's `node` (#430); `scripts/fixture-writes-sandboxed.test.mjs` refuses such a fixture outside a sandbox.
+- A fixture program that writes to a path it is handed (an argument, an environment variable) runs in `fixtureSandbox` (`src/testing/fixture-sandbox.test-helper.ts`), where it can write only inside its own temp tree. A merge-script stub handed the wrong path once overwrote the machine's `node` (#430); `scripts/fixture-writes-sandboxed.test.mjs` refuses such a fixture outside a sandbox.
 - Never assert how long something took. `boardsmith test` runs on a busy machine during merges, so a wall-clock budget fails with nothing wrong. Assert the work done (calls, reads, timers scheduled) or the path taken; `scripts/no-wall-clock-budgets.test.mjs` refuses a budget (#360). Do slow one-time setup (a heavy module import, a bundle) at the top of the test file, where no test timeout applies, not inside the first test (#354, #355, #363). A module load inside a function in a test file (a test body, a hook, a helper) needs a `// Dynamic import: <why>` comment directly above it, for the loads that belong there (after `vi.resetModules()` or `vi.doMock`, a file the test wrote, the import under test); `scripts/no-in-test-dynamic-imports.test.mjs` refuses one without it (#365).
 
 # Typechecking and Merging
 - **`boardsmith typecheck` is the one type check.** It runs `vue-tsc` over the whole package (every `.ts` and `.vue` file under `src/` and `docs/`), and `main` is at zero errors. `docs/typecheck.md` says exactly what it covers. Plain `tsc` cannot read `.vue` files, so it is not a substitute.
 - **`boardsmith test` type-checks first** and runs no test if that fails. A bare `npx vitest run` does not type-check.
-- **A branch reaches `main` only through `bash scripts/merge-branch.sh <branch> "<summary (#issue)>"`**, run from the main checkout on a clean `main`. It merges without committing, runs `boardsmith test` on the merged tree, and aborts the merge if that fails (or on Ctrl-C). Merge `main` into your branch first so conflicts are resolved there. Its refusal ends with `boardsmith test`'s verdict: the failing files, or, when vitest was stopped partway, the signal, the files left unfinished and the path of the full log (#429).
-- **Merges are serialised (#333).** `merge-branch.sh` holds a lock for its whole merge-then-test span, so a second merge started while one is running waits for it (up to 30 minutes, saying which branch it is waiting on), then tests its own merged result. Let it wait: do not hand-merge around it, and do not tidy up a main that is dirty because another merge is in flight. The lock is released by the kernel when the script exits, however it exits, so it cannot go stale. If a run is told the lock's recorded holder is no longer running, it prints the `lsof` command that finds the process still holding it.
+- **Every task is done in a thread.** Start one with `agent-policy thread start <slug>` (branch `codex/<slug>` in `.worktrees/<slug>`), and work only there.
+- **A branch reaches `main` only through `agent-policy thread merge <slug> [--summary "<one line (#issue)>"]`**, run from any checkout. It validates the merged tree with `boardsmith test` and refuses the merge otherwise, leaving `main` as it was. Merges are serialised: a second one waits for the first. Let it wait; do not hand-merge around it.
+- Remove a merged thread with `agent-policy thread clean <slug>`. `agent-policy thread clean <slug> --discard` is the one way to throw a thread's work away.
 
 # Code Quality Audits
 - Run `boardsmith audit` after significant refactors. **It checks the files your branch changed against its base branch, not the whole repository**, and it subtracts this repo's committed baselines (`.fallow-dead-code-baseline.json`, `.fallow-dupes-baseline.json`, `.fallow-health-baseline.json`). So it reports what your change introduced — unused exports, dead files, circular dependencies, complexity and duplication — and a clean branch passes it. See `docs/fallow-gate.md` for why the baselines exist.
