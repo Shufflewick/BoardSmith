@@ -6,7 +6,7 @@ import { fixtureSandbox } from './fixture-sandbox.test-helper.js';
 import { tempTree } from './temp-tree.test-helper.js';
 
 /**
- * #430: a merge-branch fixture's stub wrote its planted verdict over the
+ * #430: a merge gate fixture's stub wrote its planted verdict over the
  * machine's real `node`, because it took its write target from an argument
  * that was missing (`argv[indexOf('--verdict-file') + 1]` is `argv[0]`, the
  * node binary). These prove a program run in a fixture sandbox cannot write

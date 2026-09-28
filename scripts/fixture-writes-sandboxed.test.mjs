@@ -2,7 +2,7 @@
  * A test whose fixture program writes to a path it is handed runs that program
  * in a fixture sandbox (#430).
  *
- * In #430 the fake `boardsmith test` in `scripts/merge-branch.test.mjs` wrote
+ * In #430 the fake `boardsmith test` in the old merge script's test wrote
  * its planted verdict to `argv[indexOf('--verdict-file') + 1]`. With the flag
  * missing that is `argv[0]`, and the machine's real `node` was overwritten.
  * `fixtureSandbox` (`src/testing/fixture-sandbox.test-helper.ts`) runs such a

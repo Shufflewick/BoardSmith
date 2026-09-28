@@ -38,19 +38,6 @@ export default defineConfig({ plugins: [vue()], resolve: { dedupe: ['vue'] } });
 `;
 
 /**
- * A project whose components run on a different build of vue than Node loads
- * for its `@vue/test-utils`: aliasing `vue` to its ESM build is a common way
- * to get a runtime template compiler, and it leaves two Vue runtimes in one run.
- */
-const ALIASED_CONFIG = `import { defineConfig } from 'vitest/config';
-import vue from '@vitejs/plugin-vue';
-export default defineConfig({
-  plugins: [vue()],
-  resolve: { dedupe: ['vue'], alias: { vue: 'vue/dist/vue.esm-bundler.js' } },
-});
-`;
-
-/**
  * A board whose text is a computed over its props, which is the shape that
  * stopped re-rendering: the computed belongs to the project's Vue, the render
  * effect to whichever Vue mounted it, and one runtime's effect never tracks the
@@ -117,7 +104,6 @@ function gameProject(prefix: string, withTestUtils: boolean): string {
   mkdirSync(modules);
   writeFileSync(join(dir, 'package.json'), JSON.stringify({ name: 'project', private: true, type: 'module' }));
   writeFileSync(join(dir, 'vitest.config.ts'), DEDUPED_CONFIG);
-  writeFileSync(join(dir, 'vitest.aliased.config.ts'), ALIASED_CONFIG);
   writeFileSync(join(dir, 'tests', 'board.test.ts'), BOARD_TEST);
   writeFileSync(join(dir, 'tests', 'refusal.test.ts'), REFUSAL_TEST);
 
@@ -129,8 +115,28 @@ function gameProject(prefix: string, withTestUtils: boolean): string {
     cpSync(join(INSTALLED_MODULES, '@vue', name), join(modules, '@vue', name), { recursive: true });
   }
   for (const name of readdirSync(INSTALLED_MODULES)) {
-    if (['.bin', 'vue', '@vue', 'boardsmith'].includes(name) || name.startsWith('.')) continue;
+    // `node_modules` would be a stray link inside the install, not a package (#455).
+    if (['.bin', 'vue', '@vue', 'boardsmith', 'node_modules'].includes(name) || name.startsWith('.')) continue;
     symlinkSync(join(INSTALLED_MODULES, name), join(modules, name), 'dir');
+  }
+  return dir;
+}
+
+/**
+ * A game project whose `@vue/test-utils` carries its OWN nested `vue` and
+ * `@vue/*` copies (#455). Node resolves test-utils' `import 'vue'` to the
+ * nested copy, while the project's components and BoardSmith's UI resolve to
+ * the project's copy: two Vue runtimes in one run, built here explicitly so the
+ * case does not depend on what the developer's install happens to hold.
+ */
+function projectWithTwoVues(prefix: string): string {
+  const dir = gameProject(prefix, true);
+  const nested = join(dir, 'node_modules', '@vue', 'test-utils', 'node_modules');
+  mkdirSync(join(nested, '@vue'), { recursive: true });
+  cpSync(join(INSTALLED_MODULES, 'vue'), join(nested, 'vue'), { recursive: true });
+  for (const name of readdirSync(join(INSTALLED_MODULES, '@vue'))) {
+    if (name === 'test-utils') continue;
+    cpSync(join(INSTALLED_MODULES, '@vue', name), join(nested, '@vue', name), { recursive: true });
   }
   return dir;
 }
@@ -156,6 +162,7 @@ function refusalIn(output: string): string {
 // test timeout should be spent on it.
 const withTestUtils = gameProject('bs-389-project-', true);
 const withoutTestUtils = gameProject('bs-389-no-test-utils-', false);
+const twoVues = projectWithTwoVues('bs-455-two-vues-');
 
 describe("renderAsSeat renders on the project's own Vue (#389)", () => {
   it("mounts a board with the project's @vue/test-utils, so the board re-renders on setProps", () => {
@@ -164,7 +171,7 @@ describe("renderAsSeat renders on the project's own Vue (#389)", () => {
   }, 180_000);
 
   it("refuses, saying what to change, when the project's components and its @vue/test-utils run different copies of vue", () => {
-    const { output } = runVitest(withTestUtils, 'tests/refusal.test.ts', 'vitest.aliased.config.ts');
+    const { output } = runVitest(twoVues, 'tests/refusal.test.ts', 'vitest.config.ts');
     const refusal = refusalIn(output);
     expect(refusal).toMatch(/two copies of Vue/);
     expect(refusal).toContain("dedupe: ['vue']");

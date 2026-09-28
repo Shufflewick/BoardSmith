@@ -11,7 +11,7 @@ import { runTypecheck } from './typecheck.js';
 interface TestOptions {
   watch?: boolean;
   coverage?: boolean;
-  /** A file to write the verdict of a failed run into, for a script to repeat (`merge-branch.sh`). */
+  /** A file to write the verdict of a failed run into, for a script to repeat (such as a merge gate). */
   verdictFile?: string;
 }
 

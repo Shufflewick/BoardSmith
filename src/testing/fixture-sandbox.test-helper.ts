@@ -3,8 +3,8 @@
  * only inside its own temp tree (#430).
  *
  * A stub that writes to a path it is handed (an argument, an environment
- * variable) will one day be handed the wrong one. In #430 the merge-branch
- * fixture's fake `boardsmith test` wrote its planted verdict to
+ * variable) will one day be handed the wrong one. In #430 the merge
+ * gate fixture's fake `boardsmith test` wrote its planted verdict to
  * `argv[indexOf('--verdict-file') + 1]`, the flag was missing, so the target
  * was `argv[0]`: the machine's real `node`, which every agent on it then lost.
  * A check inside each stub is one more thing each author has to remember. This
@@ -23,7 +23,7 @@
  * `scripts/fixture-writes-sandboxed.test.mjs` fails on a test whose fixture
  * program writes to a path it is handed and that does not use this.
  *
- * Use: `const sandbox = fixtureSandbox('bs-merge-branch-', { tools: ['git'] })`,
+ * Use: `const sandbox = fixtureSandbox('bs-my-fixture-', { tools: ['git'] })`,
  * build the fixture under `sandbox.root`, and pass `sandbox.env` (plus any
  * variables the test adds) to every process that runs it.
  */

@@ -1,6 +1,6 @@
 /**
  * Files a tool writes into the checkout for a moment must be ignored, because
- * `bash scripts/merge-branch.sh` refuses to start on a dirty main and runs
+ * `agent-policy thread merge` refuses to start on a dirty main and runs
  * `boardsmith test` there.
  *
  * Vite writes `<config>.timestamp-<n>-<hash>.mjs` beside a config file while it
