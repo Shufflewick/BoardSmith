@@ -1,0 +1,1 @@
+{ "verify": [ { "name": "test", "run": "node bin/boardsmith.js test" } ] }

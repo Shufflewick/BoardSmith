@@ -67,6 +67,10 @@ This library is developed alongside two sibling repos. When a BoardSmith change 
 
 `npx boardsmith dev` serves a multiplayer dev host (`src/cli/dev-host/DevHost.vue`): each browser is a real player connecting over WS, rendering its seat via a GameShell **iframe in platform mode** (the exact code production runs). The outer page is the "Dev" chrome (seat selector w/ Follow-active-seat, UI switcher, New game, End step while a timed step is open, Table setup, Debug). The Debug panel lives inside the iframe but is toggled from the Dev header via postMessage. To repro GameShell's mobile breakpoint without shrinking the whole window, shrink the iframe element width via JS in the page context.
 
+# Shared Agent Rules
+
+The rules every Shufflewick repo shares, and which model and reasoning level each kind of work uses, live in the `Shufflewick/agent-policy` repo, installed as `~/.claude/CLAUDE.md` and `~/.codex/AGENTS.md`. `.agent-policy.json` here lists the check `agent-policy verify` runs before any agent may report done: `boardsmith test`, the same gate `merge-branch.sh` runs.
+
 # Hard Rules
 - **Pit of Success**: The right path is always the easy path, the wrong path is always hard. Design APIs and code so correct usage is obvious and incorrect usage is difficult.
 - **No Backward Compatibility**: Always pursue the cleanest implementation. No deprecation cycles—remove the bad thing and add the good thing. We're a library in active development, not a legacy system.
