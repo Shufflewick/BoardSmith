@@ -1,1 +1,24 @@
-{ "verify": [ { "name": "test", "run": "node bin/boardsmith.js test" } ] }
+{
+  "verify": [
+    { "name": "test", "run": "node bin/boardsmith.js test --verdict-file {verdictFile}", "verdictFile": true }
+  ],
+  "thread": {
+    "workspaces": [
+      { "dir": ".", "install": "npm install", "requireInstalled": "node_modules", "refreshWhenChanged": "^package(-lock)?\\.json$" }
+    ],
+    "seed": [".env", ".env.local", ".dev.vars"],
+    "disposableIgnored": [
+      "node_modules/",
+      "dist/",
+      "*.tsbuildinfo",
+      "coverage/",
+      ".wrangler/",
+      ".boardsmith/",
+      ".fallow/*.bin",
+      "boardsmith-audit-report*.html",
+      ".treeshake-test-fixtures/",
+      "*.timestamp-*.mjs",
+      "*.log"
+    ]
+  }
+}
