@@ -15,8 +15,9 @@ it there.
 1. **`boardsmith test`** runs it first in this repository and runs no test at
    all if it fails. So a type error is found while you are still working, not
    at merge.
-2. **The repo's merge gate** runs `boardsmith test` on the merged tree before a
-   branch reaches `main`, and refuses the branch if it fails. Because it checks
+2. **At merge.** Maintainers merge a branch into `main` only through a gate
+   that runs `boardsmith test` on the merged tree, and the gate refuses the
+   branch if it fails. Because it checks
    the merged tree, a branch that was clean on its own but conflicts in types
    with something that landed since is refused too.
 

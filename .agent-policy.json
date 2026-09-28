@@ -13,7 +13,6 @@
       "*.tsbuildinfo",
       "coverage/",
       ".wrangler/",
-      ".boardsmith/",
       ".fallow/*.bin",
       "boardsmith-audit-report*.html",
       ".treeshake-test-fixtures/",

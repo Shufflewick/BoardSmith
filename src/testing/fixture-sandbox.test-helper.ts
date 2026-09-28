@@ -23,7 +23,7 @@
  * `scripts/fixture-writes-sandboxed.test.mjs` fails on a test whose fixture
  * program writes to a path it is handed and that does not use this.
  *
- * Use: `const sandbox = fixtureSandbox('bs-merge-gate-', { tools: ['git'] })`,
+ * Use: `const sandbox = fixtureSandbox('bs-my-fixture-', { tools: ['git'] })`,
  * build the fixture under `sandbox.root`, and pass `sandbox.env` (plus any
  * variables the test adds) to every process that runs it.
  */

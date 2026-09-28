@@ -82,7 +82,7 @@ The rules every Shufflewick repo shares, and which model and reasoning level eac
 - **`boardsmith typecheck` is the one type check.** It runs `vue-tsc` over the whole package (every `.ts` and `.vue` file under `src/` and `docs/`), and `main` is at zero errors. `docs/typecheck.md` says exactly what it covers. Plain `tsc` cannot read `.vue` files, so it is not a substitute.
 - **`boardsmith test` type-checks first** and runs no test if that fails. A bare `npx vitest run` does not type-check.
 - **Every task is done in a thread.** Start one with `agent-policy thread start <slug>` (branch `codex/<slug>` in `.worktrees/<slug>`), and work only there.
-- **A branch reaches `main` only through `agent-policy thread merge <slug> [--summary "<one line (#issue)>"]`**, run from any checkout. It validates the merged tree with `boardsmith test` and refuses the merge otherwise, leaving `main` as it was. Merges are serialised: a second one waits for the first. Let it wait; do not hand-merge around it.
+- **A branch reaches `main` only through `agent-policy thread merge <slug> --summary "<what it does (#issue)>"`**, run from any checkout. `--summary` is required, and the merge commit reads `Merge branch '<branch>': <summary>`, the format BoardSmith's merge commits have always had. It validates the merged tree with `boardsmith test` and refuses the merge otherwise, leaving `main` as it was. Merges are serialised: a second one waits for the first. Let it wait; do not hand-merge around it.
 - Remove a merged thread with `agent-policy thread clean <slug>`. `agent-policy thread clean <slug> --discard` is the one way to throw a thread's work away.
 
 # Code Quality Audits
