@@ -79,7 +79,7 @@ const KILLS_VITEST_TEST = [
 /**
  * #429: a run that ends without vitest's summary says why, and where the rest is.
  *
- * `merge-branch.sh` refused merges with nothing but "Tests failed with exit code 1" when the
+ * The repo's merge gate refused merges with nothing but "Tests failed with exit code 1" when the
  * vitest process died partway: no summary, no failing test, no reason. These drive a real
  * `boardsmith test` whose vitest really is killed, from inside the run.
  */

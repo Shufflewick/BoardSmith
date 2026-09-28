@@ -8,7 +8,7 @@ import { takeOsLock, type OsLock } from './os-lock.js';
 /**
  * #441: chunk-merge locked with `mkdir` and removed the directory in a `finally`, so a killed run
  * left the lock behind for good, and the refusal named no holder. The lock is now one the kernel
- * releases when the holding process exits, however it exits, as `scripts/merge-branch.sh` does
+ * releases when the holding process exits, however it exits, as the repo's merge gate's lock does
  * (#333), and a refusal names the holder, whether it is still running, and how to check.
  */
 

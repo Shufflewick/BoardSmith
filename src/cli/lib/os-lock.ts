@@ -3,7 +3,7 @@
  *
  * `chunk-merge` used to lock with `mkdir` and remove the directory in a `finally`, so a run that was
  * killed (a timeout, a stopped background task) left the lock behind for good, and the refusal
- * could not say who held it. This takes the same lock `scripts/merge-branch.sh` takes (#333): an
+ * could not say who held it. This takes the same kind of lock the repo's merge gate takes (#333): an
  * exclusive `flock` on a file, which the kernel drops when the process holding it exits. Node has
  * no `flock`, so a small `perl` helper holds it on this process's behalf and reads its stdin until
  * end-of-file. That pipe closes when this process exits by any means, a SIGKILL included, so the

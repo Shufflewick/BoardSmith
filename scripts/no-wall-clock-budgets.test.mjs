@@ -1,7 +1,7 @@
 /**
  * No test asserts how long something took (#360).
  *
- * `scripts/merge-branch.sh` runs the whole suite while other merges and
+ * The merge gate (`agent-policy thread merge`) runs the whole suite while other merges and
  * worktree suites run on the same machine, at load averages past 100. A test
  * that asserts `elapsed < 1000` then fails with nothing regressed, refuses an
  * unrelated merge, and every agent has to prove the red is not theirs. #354,

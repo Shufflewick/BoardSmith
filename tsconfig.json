@@ -1,7 +1,7 @@
 {
   // THE ONE TYPECHECK CONFIG. `boardsmith typecheck` runs `vue-tsc --noEmit`
   // against it, `boardsmith test` runs that before any test here, and
-  // scripts/merge-branch.sh refuses a branch it fails on. See docs/typecheck.md.
+  // the repo's merge gate refuses a branch it fails on. See docs/typecheck.md.
   //
   // The options are a game's options (compare `generateTsConfig` in
   // src/cli/lib/project-scaffold.ts). This package ships TypeScript SOURCE --

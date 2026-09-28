@@ -10,7 +10,7 @@ import { TEST_PROGRESS_FILE_ENV, type TestProgressEvent } from './test-progress-
  *
  * vitest prints its summary as the last thing it does, so a vitest process
  * that is killed, or exits early, leaves a run with no summary and no failing
- * test named. `merge-branch.sh` used to refuse such runs with only "Tests
+ * test named. The repo's merge gate used to refuse such runs with only "Tests
  * failed with exit code 1". Every run here therefore:
  *
  * - keeps its whole output in `output.log`, in a directory of its own under
