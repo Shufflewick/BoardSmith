@@ -200,7 +200,10 @@ nothing, if there is nothing visible yet. Do not announce each dispatch.
   (`orchestrate/questions.md` "The Two Non-Negotiables"). The answer is the designer's, given in this
   conversation; if the designer is not here to give it, the gate stays open (see "Who Answers a
   Gate"). A `playtest` gate's sign-off is recorded with `boardsmith chunk-signoff`, and a waiver
-  with `boardsmith chunk-waiver`, only from what the designer said. Then **re-dispatch the same chunk** with
+  with `boardsmith chunk-waiver`, only from what the designer said. First commit what the gate
+  wrote and run `npx boardsmith verify --base <the chunk's verify base>` (the command is in
+  `state-machine.md` "Git Protocol") in the chunk's checkout: `chunk-signoff` refuses a commit with
+  no passing result. Then **re-dispatch the same chunk** with
   the answers in its digest — the work never happens in this thread
   (`orchestrate/chunk-dispatch.md` "After the Return").
 - **`filing`** — handle it per `${CLAUDE_SKILL_DIR}/../bs-shared/orchestrate/filings.md`: confirm,

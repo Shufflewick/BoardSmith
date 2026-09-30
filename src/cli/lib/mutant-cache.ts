@@ -27,7 +27,8 @@ import { gitOutput as git } from './git-output.js';
  * a busy machine that can be the load, not the mutant, so it is tried again next time.
  *
  * The cache is `.boardsmith/verify/mutants.json`, out of git like the results. `save` writes only
- * the outcomes the run looked up or recorded, so the file holds one run's worth and never grows.
+ * the outcomes the run looked up or recorded, so the file holds one run's worth and never grows;
+ * a run that tried no mutant leaves it as it was.
  * `boardsmith verify` saves only when the tree stayed clean for the whole run, since the key is
  * computed from the commit and would not describe files edited mid-run.
  */
@@ -116,7 +117,10 @@ export interface MutantCache {
   /** The stored outcome of `mutant` for the project's HEAD, or undefined when it must run. */
   get(mutant: MutantText): CachedOutcome | undefined;
   set(mutant: MutantText, outcome: CachedOutcome): void;
-  /** Writes the outcomes this run looked up or recorded, and only those. */
+  /**
+   * Writes the outcomes this run looked up or recorded, and only those. A run that tried no mutant
+   * (a red suite, or no code changed) learned nothing and leaves the file as it was.
+   */
   save(): Promise<void>;
 }
 
@@ -139,6 +143,7 @@ export async function openMutantCache(projectDir: string, revision: string): Pro
       used.set(keyOf(mutant), outcome);
     },
     async save() {
+      if (used.size === 0) return;
       await fs.mkdir(join(path, '..'), { recursive: true });
       const partial = `${path}.${process.pid}.tmp`;
       await fs.writeFile(partial, `${JSON.stringify({ format: CACHE_FORMAT, outcomes: Object.fromEntries(used) })}\n`);

@@ -103,6 +103,9 @@ describe('the mutant cache: a mutant outcome is reused only when nothing it coul
     const third = await openMutantCache(dir, 'rev-1');
     expect(third.get(MUTANT)).toBe('killed');
     expect(third.get(other)).toBeUndefined();
+    // A run that tried no mutant (a red suite, or no code changed) learned nothing, so it keeps what is there.
+    await (await openMutantCache(dir, 'rev-1')).save();
+    expect(await lookup(dir)).toBe('killed');
   });
 
   it('starts empty, without failing, when the file on disk is unreadable', async () => {

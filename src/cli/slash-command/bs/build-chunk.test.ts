@@ -2135,6 +2135,11 @@ describe('#452: the done gate is `boardsmith verify`', () => {
     expect(game).toMatch(/verify --check.{0,800}never as closed/);
   });
 
+  it("build-game.md records a playtest gate's sign-off only after the chunk's verify command passed", () => {
+    const gate = flatRead('build-game.md').split('- **`gate`**')[1].split('- **`filing`**')[0];
+    expect(gate).toMatch(/commit.{0,200}npx boardsmith verify --base <the chunk's verify base>.{0,300}chunk-signoff/);
+  });
+
   it('playtest.md says a sign-off needs the work committed and verified first', () => {
     const playtest = flatRead('build/playtest.md');
     expect(playtest).toMatch(/chunk-signoff.{0,300}boardsmith verify/);
