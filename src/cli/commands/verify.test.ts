@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { INSTALLED_MODULES } from '../../testing/installed-modules.test-helper.js';
 import { spawnCli } from '../spawn-cli.test-helper.js';
@@ -395,6 +396,72 @@ describe('boardsmith verify: a result counts only for a commit on a clean tree',
   });
 });
 
+const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+
+/**
+ * The smallest whole game `boardsmith build` and `boardsmith validate` both accept: rules with one
+ * action, a page, a UI entry, the metadata validate asks for, and a test. `node_modules` is a
+ * directory of links, `boardsmith` to this checkout and the tools validate runs through npx to
+ * this checkout's install, so nothing is fetched. It is built on a branch that adds `fee`.
+ */
+async function wholeGameOnBranch(): Promise<string> {
+  const dir = join(tempTree('bs-verify-whole-game-'), 'game');
+  await write(dir, {
+    '.gitignore': 'node_modules\ndist/\n.boardsmith/\n',
+    'package.json': JSON.stringify({ name: 'fixture', version: '1.0.0', type: 'module' }),
+    'boardsmith.json': JSON.stringify({
+      name: 'fixture',
+      backend: 'table',
+      displayName: 'Fixture',
+      description: 'A test fixture',
+      audience: 'casual',
+      tags: ['card-game'],
+      playtime: { min: 1, max: 5 },
+      cooperative: false,
+    }),
+    'tsconfig.json': TSCONFIG,
+    'vitest.config.ts': generateVitestConfig(undefined),
+    'index.html': '<!DOCTYPE html><html><body><div id="app"></div></body></html>\n',
+    'src/rules/game.ts': `import { Game, Action, actionStep } from 'boardsmith';
+
+export class FixtureGame extends Game {
+  done = false;
+  constructor(options: ConstructorParameters<typeof Game>[0]) {
+    super(options);
+    this.registerAction(Action.create('pass').execute(() => { this.done = true; return { success: true }; }));
+    this.setFlow({ root: actionStep({ actions: ['pass'] }), isComplete: () => this.done });
+  }
+}
+`,
+    'src/rules/index.ts': `import { FixtureGame } from './game.js';
+export const gameDefinition = { gameClass: FixtureGame, gameType: 'fixture', displayName: 'Fixture', minPlayers: 1, maxPlayers: 1 };
+`,
+    'src/ui/uis.ts': 'export {};\n',
+    'src/ui/App.vue': '<template><div /></template>\n',
+    'tests/rules.test.ts': `import { it, expect } from 'vitest';
+import { gameDefinition } from '../src/rules/index.js';
+it('seats one player', () => { expect(gameDefinition.maxPlayers).toBe(1); });
+`,
+  });
+  const modules = join(dir, 'node_modules');
+  await fs.mkdir(join(modules, '.bin'), { recursive: true });
+  await fs.symlink(REPO, join(modules, 'boardsmith'), 'dir');
+  for (const name of ['typescript', 'vue-tsc', 'vitest']) {
+    await fs.symlink(join(INSTALLED_MODULES, name), join(modules, name), 'dir');
+  }
+  await fs.symlink('../vue-tsc/bin/vue-tsc.js', join(modules, '.bin', 'vue-tsc'));
+  await fs.symlink('../vitest/vitest.mjs', join(modules, '.bin', 'vitest'));
+  initRepo(dir);
+  commitAll(dir, 'base');
+  git(dir, 'checkout', '-q', '-b', 'fee');
+  await write(dir, {
+    'src/rules/fee.ts': 'export function fee(price: number): number {\n  return price * 2;\n}\n',
+    'tests/fee.test.ts': FEE_TEST.replace("'../src/rules'", "'../src/rules/fee.js'"),
+  });
+  commitAll(dir, 'add the fee');
+  return dir;
+}
+
 describe('the boardsmith verify command, as a user runs it', () => {
   it('--check exits non-zero and says to run boardsmith verify when HEAD has no result, and 0 once it passed', async () => {
     const dir = await gameOnBranch(false);
@@ -427,6 +494,23 @@ describe('the boardsmith verify command, as a user runs it', () => {
     expect(check(result, 'build').next).toBe('Run `boardsmith build` to see why.');
     expect(run.stdout).toContain('build');
     expect(run.stdout).toContain('Run `boardsmith build` to see why.');
+  });
+
+  it('passes all five real checks on a whole game, and --check then accepts the commit', async () => {
+    const dir = await wholeGameOnBranch();
+    const run = await spawnCli(['verify', '--project', dir]);
+    const head = git(dir, 'rev-parse', 'HEAD').trim();
+    const result = (await readVerifyResult(dir, head)) as VerifyResult;
+    expect(result.checks.map((c) => [c.name, c.passed, c.summary])).toEqual([
+      ['test', true, '2 tests passed in 2 files.'],
+      ['typecheck', true, 'No type errors.'],
+      ['build', true, '`boardsmith build` passed.'],
+      ['validate', true, '`boardsmith validate` passed.'],
+      ['mutation', true, expect.stringMatching(/^Every one of 3 mutants of the lines changed since main/)],
+    ]);
+    expect(run.code).toBe(0);
+    expect(git(dir, 'status', '--porcelain')).toBe('');
+    expect((await spawnCli(['verify', '--check', '--project', dir])).code).toBe(0);
   });
 
   it('refuses a project whose .gitignore does not leave .boardsmith/ out, since its own result would dirty the tree', async () => {
