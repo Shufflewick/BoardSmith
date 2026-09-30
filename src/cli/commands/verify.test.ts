@@ -78,6 +78,29 @@ describe('changedSince: the files and code lines a change touched', () => {
     expect([...changed.code.get('src/rules.ts')!]).toEqual([2, 3, 4]);
     expect([...changed.code.get('src/ui/Board.vue')!]).toEqual([1]);
   });
+
+  it('names paths from the game project, not the repository, when the game sits in a subfolder of its repo', async () => {
+    const root = await repo({
+      'README.md': 'the repository\n',
+      'games/bid/src/rules.ts': 'export const a = 1;\n',
+      'games/bid/tests/rules.test.ts': "it('x', () => {});\n",
+      'games/other/src/rules.ts': 'export const o = 1;\n',
+    });
+    const dir = join(root, 'games', 'bid');
+    const base = git(root, 'rev-parse', 'HEAD').trim();
+    await write(root, {
+      'games/bid/src/rules.ts': 'export const a = 2;\n',
+      'games/other/src/rules.ts': 'export const o = 2;\n',
+      'README.md': 'changed outside the game\n',
+    });
+    commitAll(root, 'change both games');
+    await write(dir, { 'src/new.ts': 'export const n = 1;\n', 'tests/new.test.ts': "it('n', () => {});\n" });
+
+    const changed = await changedSince(dir, base);
+    expect(changed.files).toEqual(['src/new.ts', 'src/rules.ts', 'tests/new.test.ts']);
+    expect([...changed.code.keys()]).toEqual(['src/new.ts', 'src/rules.ts']);
+    expect([...changed.code.get('src/rules.ts')!]).toEqual([1]);
+  });
 });
 
 // -------------------------------------------------------------------------------------------
@@ -219,26 +242,101 @@ describe('boardsmith verify: a claim of green is refused when a test outside the
     expect(mutation.next).toMatch(/test.*fails.*boardsmith verify/s);
   });
 
-  it('records a run on a dirty tree as not clean, and exits non-zero even when every check passes', async () => {
+  it('fails the mutation check on the main branch with no --base, rather than passing with nothing covered', async () => {
+    const dir = await gameOnBranch(false);
+    const started = git(dir, 'rev-parse', 'main').trim();
+    git(dir, 'checkout', '-q', 'main');
+    git(dir, 'merge', '-q', '--ff-only', 'chunk/deal');
+
+    const { result } = await runVerify({ projectDir: dir, checks: CHECKS, log: () => {} });
+
+    expect(result.passed).toBe(false);
+    expect(result.checks.map((c) => [c.name, c.passed])).toEqual([
+      ['test', true],
+      ['typecheck', true],
+      ['build', true],
+      ['validate', true],
+      ['mutation', false],
+    ]);
+    const mutation = check(result, 'mutation');
+    expect(mutation.summary).toMatch(/merge base with main is the current commit.*nothing/s);
+    expect(mutation.next).toMatch(/--base <commit the work started from>/);
+
+    const { result: based } = await runVerify({ projectDir: dir, base: started, checks: CHECKS, log: () => {} });
+    expect(based.passed).toBe(true);
+    expect(check(based, 'mutation').counts).toMatchObject({ mutants: 3, killed: 3 });
+  });
+});
+
+/** Every check stood in for as passing, counting how many ran: for the tests about when verify runs at all. */
+function countingChecks() {
+  const ran: string[] = [];
+  const stub = (name: string) => async () => {
+    ran.push(name);
+    return { passed: true, summary: `${name} stood in for by the fixture` };
+  };
+  const checks = {
+    test: stub('test'),
+    typecheck: stub('typecheck'),
+    build: stub('build'),
+    validate: stub('validate'),
+    mutation: stub('mutation'),
+  };
+  return { ran, checks };
+}
+
+describe('boardsmith verify: a result counts only for a commit on a clean tree', () => {
+  it('refuses a dirty tree before running any check, and keeps the passing result already on file', async () => {
+    const dir = await gameOnBranch(false);
+    const { ran, checks } = countingChecks();
+    const { result: earlier } = await runVerify({ projectDir: dir, checks, log: () => {} });
+    expect(earlier.passed).toBe(true);
+    expect(ran).toHaveLength(5);
+
+    await write(dir, { 'notes.md': 'uncommitted\n' });
+    await expect(runVerify({ projectDir: dir, checks, log: () => {} })).rejects.toThrow(
+      /uncommitted changes.*Commit.*then run `boardsmith verify`/s,
+    );
+    expect(ran).toHaveLength(5);
+    const head = git(dir, 'rev-parse', 'HEAD').trim();
+    expect(await readVerifyResult(dir, head)).toEqual(earlier);
+  });
+
+  it('says to commit first, and exits non-zero, when the command is run on a dirty tree', async () => {
     const dir = await gameOnBranch(false);
     await write(dir, { 'notes.md': 'uncommitted\n' });
-    const exitCode = process.exitCode;
-    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
-    const error = vi.spyOn(console, 'error').mockImplementation(() => {});
-    try {
-      await verifyCommand({ project: dir }, CHECKS);
-      expect(process.exitCode).toBe(1);
-      const printed = [...log.mock.calls, ...error.mock.calls].flat().join('\n');
-      expect(printed).toMatch(/uncommitted changes.*does not count.*Commit.*boardsmith verify/s);
-    } finally {
-      process.exitCode = exitCode;
-      log.mockRestore();
-      error.mockRestore();
-    }
+    const run = await spawnCli(['verify', '--project', dir]);
+    expect(run.code).toBe(1);
+    expect(run.stderr).toMatch(/uncommitted changes.*Commit/s);
+    expect(run.stdout).not.toContain('boardsmith verify: test');
+  });
+
+  it('records a run the tree changed during as not clean, without replacing a clean passing result', async () => {
+    const dir = await gameOnBranch(false);
     const head = git(dir, 'rev-parse', 'HEAD').trim();
-    expect(await readVerifyResult(dir, head)).toMatchObject({ cleanTree: false, passed: true });
-    await fs.rm(join(dir, 'notes.md'));
+    const { checks } = countingChecks();
+    const dirtying = {
+      ...checks,
+      build: async () => {
+        await write(dir, { 'notes.md': 'written while verify ran\n' });
+        return { passed: true, summary: 'stood in for by the fixture' };
+      },
+    };
+
+    const first = await runVerify({ projectDir: dir, checks: dirtying, log: () => {} });
+    expect(first.result).toMatchObject({ cleanTree: false, passed: true });
+    expect(first.path).toBe(join(dir, '.boardsmith', 'verify', `${head}.json`));
+    expect(await readVerifyResult(dir, head)).toEqual(first.result);
     expect(await verifiedProblem(dir)).toMatch(/uncommitted changes/);
+
+    await fs.rm(join(dir, 'notes.md'));
+    const { result: clean } = await runVerify({ projectDir: dir, checks, log: () => {} });
+    expect(clean.cleanTree).toBe(true);
+
+    const again = await runVerify({ projectDir: dir, checks: dirtying, log: () => {} });
+    expect(again.result.cleanTree).toBe(false);
+    expect(again.path).toBeUndefined();
+    expect(await readVerifyResult(dir, head)).toEqual(clean);
   });
 });
 
