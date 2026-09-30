@@ -262,6 +262,17 @@ export function fee(price: number): number {
 }
 `;
 
+  /** A cache that holds nothing and keeps what it is given, standing in for `openMutantCache`. */
+  function memoryCache(held: Map<string, 'killed' | 'survived'> = new Map()) {
+    const key = (m: { file: string; source: string }) => `${m.file}\0${m.source}`;
+    return {
+      held,
+      get: (m: { file: string; source: string }) => held.get(key(m)),
+      set: (m: { file: string; source: string }, outcome: 'killed' | 'survived') => void held.set(key(m), outcome),
+      save: async () => {},
+    };
+  }
+
   async function suite(project: string, files: Record<string, string>): Promise<void> {
     for (const [path, text] of Object.entries(files)) {
       await fs.mkdir(dirname(join(project, path)), { recursive: true });
@@ -271,6 +282,7 @@ export function fee(price: number): number {
 
   it('runs the whole suite against each mutant and reports every mutant no test caught, by file and line', async () => {
     const project = await makeProject({ 'vitest.config.ts': VITEST_CONFIG, 'src/rules.ts': RULES_TWO });
+    const cache = memoryCache();
     // Two test files: the one that catches the bid mutants is not the one "near" the change.
     await suite(project, {
       'tests/bid.test.ts': `import { it, expect } from 'vitest';
@@ -284,7 +296,7 @@ it('a fee exists', () => { expect(typeof fee).toBe('function'); });
 `,
     });
 
-    const result = await runDiffMutationCheck({ projectDir: project, added: new Map([['src/rules.ts', lines(2, 5)]]), log: () => {} });
+    const result = await runDiffMutationCheck({ projectDir: project, added: new Map([['src/rules.ts', lines(2, 5)]]), cache, log: () => {} });
 
     expect(result.notGreen).toBeUndefined();
     expect(result.summary.mutants).toBe(5);
@@ -295,7 +307,24 @@ it('a fee exists', () => { expect(typeof fee).toBe('function'); });
       { file: 'src/rules.ts', line: 5, description: '* -> /' },
       { file: 'src/rules.ts', line: 5, description: '2 -> 3' },
     ]);
+    expect(result.reused).toBe(0);
+    expect([...cache.held.values()].sort()).toEqual(['killed', 'killed', 'survived', 'survived', 'survived']);
     expect(await fs.readFile(join(project, 'src/rules.ts'), 'utf-8')).toBe(RULES_TWO);
+    await expect(fs.readdir(join(project, '.boardsmith/scratch'))).resolves.toEqual([]);
+
+    // Run again with every outcome held: no vitest run at all, and the same report.
+    const logged: string[] = [];
+    const again = await runDiffMutationCheck({
+      projectDir: project,
+      added: new Map([['src/rules.ts', lines(2, 5)]]),
+      cache,
+      log: (line) => logged.push(line),
+    });
+    expect(again.reused).toBe(5);
+    expect(again.summary).toEqual(result.summary);
+    expect(again.survivors).toEqual(result.survivors);
+    expect(logged.every((line) => line.includes('(reused: '))).toBe(true);
+    expect(logged).toHaveLength(5);
     await expect(fs.readdir(join(project, '.boardsmith/scratch'))).resolves.toEqual([]);
   }, 120_000);
 
@@ -304,14 +333,14 @@ it('a fee exists', () => { expect(typeof fee).toBe('function'); });
     await suite(project, {
       'tests/red.test.ts': "import { it, expect } from 'vitest';\nit('is red', () => { expect(1).toBe(2); });\n",
     });
-    const result = await runDiffMutationCheck({ projectDir: project, added: new Map([['src/rules.ts', lines(2)]]), log: () => {} });
+    const result = await runDiffMutationCheck({ projectDir: project, added: new Map([['src/rules.ts', lines(2)]]), cache: memoryCache(), log: () => {} });
     expect(result.notGreen).toEqual(['tests/red.test.ts > is red']);
     expect(result.summary.mutants).toBe(0);
   }, 60_000);
 
   it('runs nothing when no changed line can be mutated', async () => {
     const project = await makeProject({ 'vitest.config.ts': VITEST_CONFIG, 'src/rules.ts': RULES });
-    const result = await runDiffMutationCheck({ projectDir: project, added: new Map([['src/rules.ts', lines(3)]]), log: () => {} });
-    expect(result).toEqual({ summary: { files: 0, mutants: 0, killed: 0, survived: 0, timedOut: 0 }, survivors: [] });
+    const result = await runDiffMutationCheck({ projectDir: project, added: new Map([['src/rules.ts', lines(3)]]), cache: memoryCache(), log: () => {} });
+    expect(result).toEqual({ summary: { files: 0, mutants: 0, killed: 0, survived: 0, timedOut: 0 }, reused: 0, survivors: [] });
   });
 });

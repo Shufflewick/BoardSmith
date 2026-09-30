@@ -25,6 +25,7 @@ import { join, relative, sep } from 'node:path';
 import { parseSource, walk, findTestBlocks, type AstNode, type ParsedSource, type TestBlock } from './test-step-ast.js';
 import { codeRegions } from './test-step-sfc.js';
 import type { ChunkTestFile, TestStepFinding } from './test-step-check.js';
+import type { MutantCache } from '../lib/mutant-cache.js';
 import { scratchDir } from '../lib/project-paths.js';
 import { VITEST_CONFIG_NAMES } from '../lib/test-run-scope.js';
 
@@ -555,6 +556,8 @@ interface DiffMutationInput {
   projectDir: string;
   /** Code files changed since the base, with the lines that changed (`changedSince` in verify.ts). */
   added: ReadonlyMap<string, ReadonlySet<number>>;
+  /** Outcomes of earlier runs, reused where nothing the mutant depends on changed (`lib/mutant-cache.ts`). */
+  cache: MutantCache;
   log: (line: string) => void;
 }
 
@@ -572,45 +575,66 @@ function redParts(result: RunResult & { kind: 'ran' }): string[] {
   return red;
 }
 
+type DiffOutcome = 'killed' | 'survived' | 'timed-out';
+
 /**
  * Mutates the changed lines one change at a time and runs the whole suite against each mutant,
  * stopping a run at its first failure. Unlike the chunk check, nothing here is scoped to a chunk's
  * test files or claims: any test anywhere may catch a mutant, and a mutant none catches is reported
  * by file and line. A mutant that makes the suite run past its time limit (an infinite loop) is
- * counted as timed out, not as a survivor, since the suite did not pass. The whole suite runs once unmutated
- * first, and must pass: `notGreen` then names what failed, and no mutant is tried.
+ * counted as timed out, not as a survivor, since the suite did not pass.
+ *
+ * A mutant whose outcome `cache` holds is not run again (`reused` counts them). When any mutant
+ * must run, the whole suite first runs once unmutated and must pass: `notGreen` then names what
+ * failed, and no mutant is tried.
  */
 export async function runDiffMutationCheck(
   input: DiffMutationInput,
-): Promise<{ summary: MutationSummary; survivors: SurvivingMutant[]; notGreen?: string[] }> {
+): Promise<{ summary: MutationSummary; reused: number; survivors: SurvivingMutant[]; notGreen?: string[] }> {
   const projectDir = realpathSync(input.projectDir);
   const summary: MutationSummary = { files: 0, mutants: 0, killed: 0, survived: 0, timedOut: 0 };
   const mutants = await collectMutants(projectDir, input.added, summary);
-  if (mutants.length === 0) return { summary, survivors: [] };
+  const known = mutants.map((m) => input.cache.get(m));
+  let reused = 0;
+  if (mutants.length === 0) return { summary, reused, survivors: [] };
 
-  const runner = await createRunner(projectDir, [], 'verify-mutation');
+  const runner = known.includes(undefined) ? await createRunner(projectDir, [], 'verify-mutation') : undefined;
   try {
-    const baseline = await runner.run('whole-suite', null, 10 * 60_000);
-    if (baseline.kind !== 'ran') throw new Error('The unmutated test run did not finish within 10 minutes.');
-    if (suiteNoticed(baseline)) return { summary, survivors: [], notGreen: redParts(baseline) };
+    let timeoutMs = 0;
+    if (runner) {
+      const baseline = await runner.run('whole-suite', null, 10 * 60_000);
+      if (baseline.kind !== 'ran') throw new Error('The unmutated test run did not finish within 10 minutes.');
+      if (suiteNoticed(baseline)) return { summary, reused, survivors: [], notGreen: redParts(baseline) };
+      timeoutMs = Math.max(30_000, baseline.ms * 10);
+    }
 
-    const timeoutMs = Math.max(30_000, baseline.ms * 10);
     const survivors: SurvivingMutant[] = [];
     for (const [i, mutant] of mutants.entries()) {
-      input.log(`mutant ${i + 1}/${mutants.length}: ${mutant.file}:${mutant.line} ${mutant.description}`);
-      const result = await runner.run('whole-suite', mutant, timeoutMs, { bail: true });
+      const label = `mutant ${i + 1}/${mutants.length}: ${mutant.file}:${mutant.line} ${mutant.description}`;
+      let outcome: DiffOutcome;
+      const stored = known[i];
+      if (stored !== undefined) {
+        input.log(`${label} (reused: ${stored})`);
+        outcome = stored;
+        reused++;
+      } else {
+        input.log(label);
+        const result = await runner!.run('whole-suite', mutant, timeoutMs, { bail: true });
+        outcome = result.kind === 'timed-out' ? 'timed-out' : suiteNoticed(result) ? 'killed' : 'survived';
+        if (outcome !== 'timed-out') input.cache.set(mutant, outcome);
+      }
       summary.mutants++;
-      if (result.kind === 'timed-out') {
+      if (outcome === 'timed-out') {
         summary.timedOut++;
-      } else if (suiteNoticed(result)) {
+      } else if (outcome === 'killed') {
         summary.killed++;
       } else {
         summary.survived++;
         survivors.push({ file: mutant.file, line: mutant.line, description: mutant.description });
       }
     }
-    return { summary, survivors };
+    return { summary, reused, survivors };
   } finally {
-    await runner.dispose();
+    await runner?.dispose();
   }
 }

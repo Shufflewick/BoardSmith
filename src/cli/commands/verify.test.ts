@@ -220,7 +220,7 @@ describe('boardsmith verify: a claim of green is refused when a test outside the
     expect(result.passed).toBe(true);
     expect(check(result, 'test').counts).toEqual({ files: 2, tests: 3, passed: 3, failed: 0, skipped: 0 });
     // `return price * 2`: return undefined, * -> /, 2 -> 3. The fee test catches each one.
-    expect(check(result, 'mutation').counts).toEqual({ files: 1, mutants: 3, killed: 3, survived: 0, timedOut: 0 });
+    expect(check(result, 'mutation').counts).toEqual({ files: 1, mutants: 3, killed: 3, survived: 0, timedOut: 0, reused: 0 });
     expect(await verifiedProblem(dir)).toBeUndefined();
     await expect(signoff(dir)).resolves.toMatchObject({ basis: 'designer' });
   });
@@ -265,6 +265,61 @@ describe('boardsmith verify: a claim of green is refused when a test outside the
     const { result: based } = await runVerify({ projectDir: dir, base: started, checks: CHECKS, log: () => {} });
     expect(based.passed).toBe(true);
     expect(check(based, 'mutation').counts).toMatchObject({ mutants: 3, killed: 3 });
+  });
+});
+
+describe('boardsmith verify: a re-verify reuses mutant outcomes only while nothing they depend on changed', () => {
+  const freshRuns = (lines: string[]) => lines.filter((l) => /^mutant \d+\/\d+: /.test(l) && !l.includes('(reused:')).length;
+
+  it('reuses every mutant after a bookkeeping-only commit, and runs them all again once a test changed', async () => {
+    const dir = await gameOnBranch(false);
+    const lines: string[] = [];
+    const log = (line: string) => lines.push(line);
+
+    const first = await runVerify({ projectDir: dir, checks: CHECKS, log });
+    expect(check(first.result, 'mutation').counts).toMatchObject({ mutants: 3, killed: 3, reused: 0 });
+    expect(freshRuns(lines)).toBe(3);
+
+    const chunk = join(dir, 'design', 'chunks', 'deal', 'CHUNK.md');
+    await fs.writeFile(chunk, `${await fs.readFile(chunk, 'utf-8')}\n<!-- close: verified hash recorded -->\n`);
+    await write(dir, { 'design/DECISIONS.md': '## Decision 1\n', 'design/run-log/deal.md': '### Dispatch 1\n' });
+    commitAll(dir, 'chunk-deal/step-close');
+    lines.length = 0;
+
+    const second = await runVerify({ projectDir: dir, checks: CHECKS, log });
+    expect(second.result.passed).toBe(true);
+    expect(check(second.result, 'mutation').counts).toMatchObject({ mutants: 3, killed: 3, reused: 3 });
+    expect(check(second.result, 'mutation').summary).toMatch(/3 reused from an earlier run of this same code and these same tests/);
+    expect(freshRuns(lines)).toBe(0);
+    expect(check(second.result, 'test').counts).toMatchObject({ tests: 3, passed: 3 });
+
+    await write(dir, { 'tests/fee.test.ts': FEE_TEST.replace('expect(fee(3)).toBe(6)', "expect(typeof fee).toBe('function')") });
+    commitAll(dir, 'chunk-deal/weaker test');
+    lines.length = 0;
+
+    const third = await runVerify({ projectDir: dir, checks: CHECKS, log });
+    expect(check(third.result, 'mutation').counts).toMatchObject({ mutants: 3, survived: 3, reused: 0 });
+    expect(freshRuns(lines)).toBe(3);
+  });
+
+  it('keeps no outcome from a run whose tree changed while it ran', async () => {
+    const dir = await gameOnBranch(false);
+    const dirtying = {
+      ...CHECKS,
+      build: async () => {
+        await write(dir, { 'notes.md': 'written while verify ran\n' });
+        return { passed: true, summary: 'stood in for by the fixture' };
+      },
+    };
+    const first = await runVerify({ projectDir: dir, checks: dirtying, log: () => {} });
+    expect(first.result.cleanTree).toBe(false);
+    expect(check(first.result, 'mutation').counts).toMatchObject({ mutants: 3, reused: 0 });
+
+    await fs.rm(join(dir, 'notes.md'));
+    const lines: string[] = [];
+    const second = await runVerify({ projectDir: dir, checks: CHECKS, log: (l) => lines.push(l) });
+    expect(check(second.result, 'mutation').counts).toMatchObject({ mutants: 3, killed: 3, reused: 0 });
+    expect(freshRuns(lines)).toBe(3);
   });
 });
 

@@ -12,7 +12,9 @@
  *   3. build      `boardsmith build`
  *   4. validate   `boardsmith validate`
  *   5. mutation   every code line under `src/` changed since the base, broken one small change at a
- *                 time; the whole suite must fail for each (`runDiffMutationCheck`)
+ *                 time; the whole suite must fail for each (`runDiffMutationCheck`). An outcome from
+ *                 an earlier run of the same code and tests is reused (`lib/mutant-cache.ts`), so a
+ *                 re-verify after a bookkeeping-only commit runs no mutant again.
  *
  * The base is the merge base of HEAD with `--base`, or with the main branch (`main`, else `master`).
  * On the main branch itself that merge base is HEAD, which measures no change, so without `--base`
@@ -33,6 +35,7 @@ import { join, relative, resolve as pathResolve } from 'node:path';
 import { promisify } from 'node:util';
 import chalk from 'chalk';
 import { boardsmithPackageRoot } from '../lib/boardsmith-version.js';
+import { type MutantCache, openMutantCache, toolRevision } from '../lib/mutant-cache.js';
 import { scratchDir } from '../lib/project-paths.js';
 import { testRunScopeProblem } from '../lib/test-run-scope.js';
 import { discardRecord, runVitestRecorded, testRunVerdict } from '../lib/vitest-run.js';
@@ -171,6 +174,8 @@ interface VerifyContext {
   head: string;
   base: { ref: string; commit: string; given: boolean };
   changed: ChangedSince;
+  /** Mutant outcomes of earlier runs, for this commit's code and tests (`lib/mutant-cache.ts`). */
+  mutantCache: MutantCache;
   earlier: ReadonlyMap<VerifyCheckName, VerifyCheckResult>;
   log: (line: string) => void;
 }
@@ -319,7 +324,7 @@ function cliCheck(command: 'build' | 'validate'): CheckRunner {
 /** 5. Every mutant of a changed code line must make the whole suite fail. */
 async function mutationCheck(ctx: VerifyContext): Promise<CheckOutcome> {
   const since = `${ctx.base.ref} (${short(ctx.base.commit)})`;
-  const zero = { files: 0, mutants: 0, killed: 0, survived: 0, timedOut: 0 };
+  const zero = { files: 0, mutants: 0, killed: 0, survived: 0, timedOut: 0, reused: 0 };
   if (!ctx.base.given && ctx.base.commit === ctx.head) {
     // On the main branch itself (a chunk built in the main checkout) the merge base is HEAD, so the
     // default base measures no change at all, and a pass would cover nothing.
@@ -343,12 +348,14 @@ async function mutationCheck(ctx: VerifyContext): Promise<CheckOutcome> {
       counts: zero,
     };
   }
-  const { summary, survivors, notGreen } = await runDiffMutationCheck({
+  const { summary, reused, survivors, notGreen } = await runDiffMutationCheck({
     projectDir: ctx.projectDir,
     added: ctx.changed.code,
+    cache: ctx.mutantCache,
     log: ctx.log,
   });
-  const counts = { ...summary };
+  const counts = { ...summary, reused };
+  const reuse = reused > 0 ? ` ${reused} reused from an earlier run of this same code and these same tests.` : '';
   if (notGreen) {
     return {
       passed: false,
@@ -365,7 +372,7 @@ async function mutationCheck(ctx: VerifyContext): Promise<CheckOutcome> {
       passed: false,
       summary:
         `${survivors.length} of ${plural(summary.mutants, 'mutant')} of the lines changed since ${since} survived: ` +
-        'the whole suite still passed with the code changed.',
+        `the whole suite still passed with the code changed.${reuse}`,
       next:
         'For each one, add or tighten a test so it fails when that line is changed that way, then run `boardsmith verify` again.',
       counts,
@@ -374,7 +381,7 @@ async function mutationCheck(ctx: VerifyContext): Promise<CheckOutcome> {
   }
   return {
     passed: true,
-    summary: `Every one of ${plural(summary.mutants, 'mutant')} of the lines changed since ${since} made a test fail${summary.timedOut > 0 ? ` (${summary.timedOut} by running past the time limit)` : ''}.`,
+    summary: `Every one of ${plural(summary.mutants, 'mutant')} of the lines changed since ${since} made a test fail${summary.timedOut > 0 ? ` (${summary.timedOut} by running past the time limit)` : ''}.${reuse}`,
     counts,
   };
 }
@@ -464,6 +471,7 @@ export async function runVerify(options: {
   await requireResultIgnored(projectDir);
   const base = { ...(await resolveBase(projectDir, options.base)), given: options.base !== undefined };
   const changed = await changedSince(projectDir, base.commit);
+  const mutantCache = await openMutantCache(projectDir, await toolRevision(boardsmithPackageRoot()));
   const checks = options.checks ?? VERIFY_CHECKS;
   const log = options.log ?? ((line: string) => console.error(chalk.dim(line)));
 
@@ -472,7 +480,7 @@ export async function runVerify(options: {
     console.log(chalk.cyan(`\nboardsmith verify: ${name}\n`));
     let outcome: CheckOutcome;
     try {
-      outcome = await checks[name]({ projectDir, head: before.commit, base, changed, earlier, log });
+      outcome = await checks[name]({ projectDir, head: before.commit, base, changed, mutantCache, earlier, log });
     } catch (error) {
       outcome = {
         passed: false,
@@ -485,6 +493,8 @@ export async function runVerify(options: {
 
   const after = await checkoutState(projectDir);
   const cleanTree = !('problem' in after) && after.clean && after.commit === before.commit;
+  // The cache keys outcomes by the commit's files; a run whose files changed under it keeps none.
+  if (cleanTree) await mutantCache.save();
   const result = buildVerifyResult({
     commit: before.commit,
     cleanTree,
