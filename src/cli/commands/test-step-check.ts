@@ -1,5 +1,5 @@
 /**
- * `boardsmith test-step-check <slug>` — the gate `build/test.md` item 3 runs (#290).
+ * `boardsmith test-step-check <slug>` — the gate `build/test.md` item 2 runs (#290).
  *
  * A green suite says the tests pass. It does not say they would fail if the code were wrong, or
  * that they test what CHUNK.md claims they test. A build run (Shufflewick/sotf#29, #34, #35, #36)
@@ -163,8 +163,11 @@ const IMPLEMENTATION_FILE = /\.(ts|mts|cts|js|mjs)$/;
 /** A script file under `src/`: where verbs are defined. */
 const isImplementation = (path: string) =>
   path.startsWith('src/') && IMPLEMENTATION_FILE.test(path) && !/\.(test|spec)\.[a-z]+$/.test(path);
-/** Code a chunk writes: a script file, or a Vue component whose script and template are code too (#425). */
-const isChunkCode = (path: string) => isImplementation(path) || (path.startsWith('src/') && path.endsWith('.vue'));
+/**
+ * Code a chunk writes: a script file, or a Vue component whose script and template are code too (#425).
+ * `boardsmith verify` mutates the same kind of file.
+ */
+export const isChunkCode = (path: string) => isImplementation(path) || (path.startsWith('src/') && path.endsWith('.vue'));
 
 /** Line numbers of `path` as it is now whose last change is one of `owners`. */
 async function ownedLines(projectDir: string, path: string, owners: ReadonlySet<string>): Promise<Set<number>> {

@@ -151,6 +151,9 @@ Write Order), rolls up decisions, reconciles the filings/library-gap, asset-debt
 waived-chunk ledgers against what this chunk changed (SKILLAUTO-08, see `build/close.md`
 "Bookkeeping Sequence" item 5), and — as the terminal write — releases the session lock
 (`Session Lock: none`, see "Session Lock" above and `build/close.md` "Bookkeeping Sequence").
+It then ends the way every close ends, with `build/close.md` "The Done Gate": commit, run
+`boardsmith verify --chunk <slug>` for that commit, and `boardsmith verify --check --chunk <slug>`
+as the last command.
 
 ## Authority
 
@@ -340,6 +343,24 @@ about which ledger it names, so it stops the merge; write the kind in front of i
 - Commit **before** `spec` starts, so work-in-progress is always distinguishable from the last verified baseline.
 - `chunk-<slug>/step-spec` is the **RED anchor**: failing tests and signature-only stubs, no implementation. `chunk-<slug>/step-build` is GREEN. Never conflate them into one commit — that erases the only durable evidence the tests preceded the code (`build/spec.md` "Git Protocol").
 - `close` records the verified commit hash in CHUNK.md — this is the bisect anchor for any later regression and the diff base for "what changed since the human last said yes."
+- **The chunk's verify base** is the commit before the chunk's first `chunk-<slug>/` commit: where
+  this chunk's work started. Every `boardsmith verify` run for chunk work (`build/test.md`,
+  `build/repair.md`, `build/playtest.md`, `build/close.md`) names the chunk, and the command finds
+  that commit itself, so its mutation check covers exactly the code changed since then. Run from
+  the chunk's checkout:
+
+  ```bash
+  npx boardsmith verify --chunk <slug>
+  ```
+
+  Never run a bare `boardsmith verify` for chunk work. Its default base is the merge base with
+  the main branch, and a chunk built in the main checkout is on the main branch, where that merge
+  base is the current commit: no change is measured, and `boardsmith verify` fails the mutation
+  check and says to pass a base. When `--chunk <slug>` says the chunk has no commit yet, commit
+  its work under the `chunk-<slug>/step-<name>` convention first. A result measured from anywhere
+  else is not the chunk's: `chunk-signoff <slug>` and `verify --check --chunk <slug>` accept a
+  result only when its base is the chunk's verify base or a commit before it, so a
+  `npx boardsmith verify --base HEAD` run (which mutates nothing) satisfies no chunk's sign-off.
 
 ## Repair Loop Bound
 

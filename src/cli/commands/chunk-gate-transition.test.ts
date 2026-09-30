@@ -4,6 +4,7 @@ import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { DESIGN_DIR, GATE_TRANSITION_MD } from '../lib/project-paths.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
+import { recordPassingVerify } from '../lib/verify-result.test-helper.js';
 import { checkSignoff, parseSignoff, recordSignoff, recordReopen } from './chunk-signoff.js';
 import { recordGateTransition } from './chunk-gate-transition.js';
 import { checkClaimQuotes } from './claim-quotes.js';
@@ -14,6 +15,19 @@ import {
   readChunk,
   setStatusByHand,
 } from './chunk-project.test-helper.js';
+
+
+/** Every sign-off here is made on a commit that passed `boardsmith verify --chunk <slug>` (#452), unless a test says otherwise. */
+async function signOff(slug: string, options: Parameters<typeof recordSignoff>[1]): ReturnType<typeof recordSignoff> {
+  await recordPassingVerify(options.project!, { chunk: slug });
+  return recordSignoff(slug, options);
+}
+
+/** The transition, run on a commit that passed `boardsmith verify --base HEAD` (#452): it builds nothing. */
+async function transition(options: Parameters<typeof recordGateTransition>[0]): ReturnType<typeof recordGateTransition> {
+  await recordPassingVerify(options.project!);
+  return recordGateTransition(options);
+}
 
 /**
  * #397: chunks verified before the sign-off gate (#291) and the claim-quote gate (#289) had no way
@@ -90,7 +104,7 @@ describe('recordGateTransition — the one-time transition', () => {
       { slug: 'shop', status: 'verified (user-waived)', preGate: true },
       { slug: 'later', status: 'built', preGate: true },
     ]);
-    const result = await recordGateTransition({ project, by: 'Jane Designer', now: NOW });
+    const result = await transition({ project, by: 'Jane Designer', now: NOW });
     expect(result.transitioned.map((t) => t.slug)).toEqual(['deal', 'shop']);
 
     const deal = await readChunk(project, 'deal');
@@ -117,10 +131,10 @@ describe('recordGateTransition — the one-time transition', () => {
 
   it('keeps a whole-file sign-off whose code still matches, file by file, with its basis unchanged', async () => {
     const project = await makeProject([{ slug: 'deal', manifest: { 'src/deal.ts': 'v1' } }]);
-    await recordSignoff('deal', { project, by: 'Jane Designer', observed: '1,2', now: SIGNED });
+    await signOff('deal', { project, by: 'Jane Designer', observed: '1,2', now: SIGNED });
     await makeWholeFileSignoff(project, 'deal', wholeFileHash({ 'src/deal.ts': 'v1' }));
 
-    const result = await recordGateTransition({ project, by: 'Jane Designer', now: NOW });
+    const result = await transition({ project, by: 'Jane Designer', now: NOW });
     expect(result.kept).toEqual([{ slug: 'deal', basis: 'designer' }]);
     expect(result.transitioned).toEqual([]);
     expect(parseSignoff(await readChunk(project, 'deal')).record).toMatchObject({
@@ -137,10 +151,10 @@ describe('recordGateTransition — the one-time transition', () => {
     const project = await makeProject([
       { slug: 'deal', ui: 'none', milestone: 'none', manifest: { 'src/deal.ts': 'v1' } },
     ]);
-    await recordSignoff('deal', { project, automated: 'sim pass', now: SIGNED });
+    await signOff('deal', { project, automated: 'sim pass', now: SIGNED });
     await makeWholeFileSignoff(project, 'deal', wholeFileHash({ 'src/deal.ts': 'v0' }));
 
-    const result = await recordGateTransition({ project, by: 'Jane Designer', now: NOW });
+    const result = await transition({ project, by: 'Jane Designer', now: NOW });
     expect(result.transitioned).toEqual([
       expect.objectContaining({ slug: 'deal', status: 'verified', reason: expect.stringContaining(SIGNED.toISOString()) }),
     ]);
@@ -151,15 +165,15 @@ describe('recordGateTransition — the one-time transition', () => {
   it('does not excuse a chunk verified by hand under the gate', async () => {
     const project = await makeProject([{ slug: 'deal' }, { slug: 'old', status: 'verified', preGate: true }]);
     await setStatusByHand(project, 'deal', 'verified');
-    const result = await recordGateTransition({ project, by: 'Jane Designer', now: NOW });
+    const result = await transition({ project, by: 'Jane Designer', now: NOW });
     expect(result.transitioned.map((t) => t.slug)).toEqual(['old']);
     expect((await checkSignoff(project, 'deal')).join('\n')).toMatch(/no designer sign-off/);
   });
 
   it('runs once per project', async () => {
     const project = await makeProject([{ slug: 'deal', status: 'verified', preGate: true }]);
-    await recordGateTransition({ project, by: 'Jane Designer', now: NOW });
-    await expect(recordGateTransition({ project, by: 'Jane Designer', now: NOW })).rejects.toThrow(
+    await transition({ project, by: 'Jane Designer', now: NOW });
+    await expect(transition({ project, by: 'Jane Designer', now: NOW })).rejects.toThrow(
       /already recorded .*Jane Designer/,
     );
   });
@@ -169,13 +183,13 @@ describe('recordGateTransition — the one-time transition', () => {
       { slug: 'deal', status: 'verified', preGate: true },
       { slug: 'shop', status: 'verified', preGate: true },
     ]);
-    await recordGateTransition({ project, by: 'Jane Designer', now: NOW });
+    await transition({ project, by: 'Jane Designer', now: NOW });
     // As if the run died after the ledger and one chunk were written.
     const shop = await readChunk(project, 'shop');
     await fs.writeFile(chunkPath(project, 'shop'), shop.replace(/^## Sign-off\n[\s\S]*?(?=^## )/m, ''));
     expect(await checkSignoff(project, 'shop')).not.toEqual([]);
 
-    const resumed = await recordGateTransition({ project, by: 'Jane Designer', now: new Date('2026-09-27T00:00:00Z') });
+    const resumed = await transition({ project, by: 'Jane Designer', now: new Date('2026-09-27T00:00:00Z') });
     expect(resumed.transitioned.map((t) => t.slug)).toEqual(['shop']);
     expect(await checkSignoff(project, 'shop')).toEqual([]);
     expect(parseSignoff(await readChunk(project, 'shop')).record).toMatchObject({ when: NOW.toISOString() });
@@ -183,7 +197,7 @@ describe('recordGateTransition — the one-time transition', () => {
 
   it('refuses a transition recorded by the run itself', async () => {
     const project = await makeProject([{ slug: 'deal', status: 'verified', preGate: true }]);
-    await expect(recordGateTransition({ project, by: 'orchestrator', now: NOW })).rejects.toThrow(/designer/i);
+    await expect(transition({ project, by: 'orchestrator', now: NOW })).rejects.toThrow(/designer/i);
     await expect(fs.access(join(project, DESIGN_DIR, GATE_TRANSITION_MD))).rejects.toThrow();
   });
 
@@ -198,7 +212,7 @@ describe('recordGateTransition — the one-time transition', () => {
       { slug: 'shop', status: 'verified', preGate: true, interpretation: offFormat },
     ]);
     const before = await readChunk(project, 'deal');
-    await expect(recordGateTransition({ project, by: 'Jane Designer', now: NOW })).rejects.toThrow(
+    await expect(transition({ project, by: 'Jane Designer', now: NOW })).rejects.toThrow(
       /design\/chunks\/shop\/CHUNK\.md[\s\S]*a line starting with its number \(`1\. `\)[\s\S]*Nothing was written/,
     );
     await expect(fs.access(join(project, DESIGN_DIR, GATE_TRANSITION_MD))).rejects.toThrow();
@@ -207,7 +221,7 @@ describe('recordGateTransition — the one-time transition', () => {
     // Once the claims are numbered, the same text is recorded.
     const text = await readChunk(project, 'shop');
     await fs.writeFile(chunkPath(project, 'shop'), text.replace(/^Claim (\d+) — /gm, '$1. '));
-    const result = await recordGateTransition({ project, by: 'Jane Designer', now: NOW });
+    const result = await transition({ project, by: 'Jane Designer', now: NOW });
     expect(result.claims).toEqual({ deal: [1], shop: [1, 2] });
   });
 
@@ -221,13 +235,13 @@ describe('recordGateTransition — the one-time transition', () => {
       chunkPath(project, 'final-acceptance'),
       text.replace(/^(## Ceremony\n[\s\S]*?)^full$/m, '$1final-acceptance'),
     );
-    const result = await recordGateTransition({ project, by: 'Jane Designer', now: NOW });
+    const result = await transition({ project, by: 'Jane Designer', now: NOW });
     expect(result.transitioned.map((t) => t.slug)).toEqual(['deal', 'final-acceptance']);
   });
 
   it('writes nothing when no chunk needs the transition', async () => {
     const project = await makeProject([{ slug: 'deal' }]);
-    const result = await recordGateTransition({ project, by: 'Jane Designer', now: NOW });
+    const result = await transition({ project, by: 'Jane Designer', now: NOW });
     expect(result).toMatchObject({ transitioned: [], kept: [], claims: {} });
     await expect(fs.access(join(project, DESIGN_DIR, GATE_TRANSITION_MD))).rejects.toThrow();
   });
@@ -239,7 +253,7 @@ describe('after the transition', () => {
       { slug: 'deal', status: 'verified', preGate: true },
       { slug: 'shop' },
     ]);
-    await recordGateTransition({ project, by: 'Jane Designer', now: NOW });
+    await transition({ project, by: 'Jane Designer', now: NOW });
     const deal = await readChunk(project, 'deal');
     const block = deal.slice(deal.indexOf('<!-- boardsmith:signoff:begin -->'), deal.indexOf('<!-- boardsmith:signoff:end -->'));
     const shop = await readChunk(project, 'shop');
@@ -254,7 +268,7 @@ describe('after the transition', () => {
 
   it('a transitioned chunk that is reopened needs a real sign-off, like any other', async () => {
     const project = await makeProject([{ slug: 'deal', status: 'verified', preGate: true }]);
-    await recordGateTransition({ project, by: 'Jane Designer', now: NOW });
+    await transition({ project, by: 'Jane Designer', now: NOW });
     await recordReopen('deal', { project, reason: 'rework', now: NOW });
     await setStatusByHand(project, 'deal', 'verified');
     expect((await checkSignoff(project, 'deal')).join('\n')).toMatch(/reopened/);
@@ -265,9 +279,9 @@ describe('after the transition', () => {
       { slug: 'deal', manifest: { 'src/rules.ts': 'v1' } },
       { slug: 'old', status: 'verified', preGate: true, manifest: { 'src/rules.ts': 'v1' } },
     ]);
-    await recordSignoff('deal', { project, by: 'Jane Designer', observed: '1,2', now: SIGNED });
+    await signOff('deal', { project, by: 'Jane Designer', observed: '1,2', now: SIGNED });
     await fs.writeFile(join(project, 'src/rules.ts'), 'v2, from the older chunk');
-    await recordGateTransition({ project, by: 'Jane Designer', now: NOW });
+    await transition({ project, by: 'Jane Designer', now: NOW });
     expect(await checkSignoff(project, 'deal')).toEqual([]);
   });
 
@@ -284,7 +298,7 @@ describe('after the transition', () => {
     ['plain claims beside a bold one (#402)', PLAIN_CLAIMS, [1, 2, 3]],
   ])('claim-quote-check accepts the unquoted %s it recorded, and marks them', async (_, interpretation, numbers) => {
     const project = await makeProject([{ slug: 'deal', status: 'verified', preGate: true, interpretation }]);
-    const result = await recordGateTransition({ project, by: 'Jane Designer', now: NOW });
+    const result = await transition({ project, by: 'Jane Designer', now: NOW });
     expect(result.claims).toEqual({ deal: numbers });
     const checked = await checkClaimQuotes(project, 'deal');
     expect(checked.refusals).toEqual([]);
@@ -295,7 +309,7 @@ describe('after the transition', () => {
     const project = await makeProject([
       { slug: 'deal', status: 'verified', preGate: true, interpretation: OLD_CLAIMS },
     ]);
-    await recordGateTransition({ project, by: 'Jane Designer', now: NOW });
+    await transition({ project, by: 'Jane Designer', now: NOW });
     const edited = OLD_CLAIMS.replace('Discards are public.', 'Discards are public, and face up.');
     const text = await readChunk(project, 'deal');
     await fs.writeFile(
@@ -314,8 +328,18 @@ describe('after the transition', () => {
       { slug: 'deal', status: 'verified', preGate: true },
       { slug: 'later', status: 'built', preGate: true, interpretation: OLD_CLAIMS },
     ]);
-    const result = await recordGateTransition({ project, by: 'Jane Designer', now: NOW });
+    const result = await transition({ project, by: 'Jane Designer', now: NOW });
     expect(Object.keys(result.claims)).toEqual(['deal']);
     expect((await checkClaimQuotes(project, 'later')).refusals).toHaveLength(2);
+  });
+});
+
+describe('recordGateTransition: the transition records chunks as done, so it needs a passing boardsmith verify (#452)', () => {
+  it('refuses, writing nothing, when HEAD has no passing result', async () => {
+    const project = await makeProject([{ slug: 'deal', status: 'verified', preGate: true }]);
+    await expect(recordGateTransition({ project, by: 'Jane Designer', now: NOW })).rejects.toThrow(
+      /gate transition was not recorded.*boardsmith verify/s,
+    );
+    await expect(fs.access(join(project, 'design', GATE_TRANSITION_MD))).rejects.toThrow();
   });
 });

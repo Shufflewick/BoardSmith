@@ -11,16 +11,14 @@ only the tool output the commands themselves produce.
 
 Run the following as ONE numbered sequence immediately after `build` completes. Do not skip
 steps, do not reorder them, and do not treat an earlier step's pass as license to skip a later
-one. A failure at any step STOPS the sequence with an actionable message (what failed, the exact
+one. The type check, the whole suite, the build and `boardsmith validate` are not steps of their
+own: they are part of the last step, `boardsmith verify`, which runs them together and records the
+result. A failure at any step STOPS the sequence with an actionable message (what failed, the exact
 error, what to fix) — never proceed past a failing step assuming a later step will "catch it
 anyway." A failing step routes this chunk to `repair`; it does not get silently worked around
 here.
 
-1. **Compile gate** — `npx vue-tsc --noEmit`. Catches type errors before anything else runs.
-   Never plain `tsc`: it cannot type a `.vue` import, so it fails on every game whatever the
-   chunk did. `vue-tsc` is the checker `boardsmith validate` runs.
-
-2. **Sandbox lint** — `boardsmith lint`. This command surfaces two different kinds of finding
+1. **Sandbox lint** — `boardsmith lint`. This command surfaces two different kinds of finding
    from one invocation, and only one kind is build-blocking here: the AST-based sandbox rules
    (`error` severity) are the hard gate; the separate regex-heuristic warnings the same command
    also reports are informational, not a `test`-step failure. The seven sandbox rules are the
@@ -39,7 +37,7 @@ here.
    `boardsmith validate` and `boardsmith lint` — do not reimplement or duplicate this scan; cite
    it and run the real command.
 
-3. **Chunk unit/integration tests — the red-to-green check.** These tests are NOT authored here:
+2. **Chunk unit/integration tests — the red-to-green check.** These tests are NOT authored here:
    `build/spec.md` wrote them from the approved interpretation and observed every one of them
    FAILING before any implementation existed, and `build` wrote the code that makes them pass. This
    step re-runs them and requires them all GREEN. Run them with `boardsmith test <pattern>`, naming
@@ -98,7 +96,7 @@ here.
        A finding here goes back to `build` (or to `spec`, when the fix is a test that pins the claim
        properly), never to an edit of the Spec Manifest that makes the row claim less.
 
-4. **Worked-example tests (TEST-01)** — this chunk's cited worked examples become executable
+3. **Worked-example tests (TEST-01)** — this chunk's cited worked examples become executable
    tests as part of this same build, generated and immediately run, never left as a one-time
    seed for hand-written tests to accumulate by hand. Run these sub-steps in order, citing the
    real commands below — never compose their output by hand and never restate their logic in
@@ -171,13 +169,9 @@ here.
    (i) A chunk whose cited slices contain zero worked examples SKIPS this step and names the
        exemption explicitly in the generated test file's own comment — the same
        "a chunk with zero new actions is exempt; name that exemption explicitly" discipline item
-       6 below already uses for its per-action coverage counter, never a silent omission.
+       4 below already uses for its per-action coverage counter, never a silent omission.
 
-5. **Full accumulated suite (regression)** — `boardsmith test` with no pattern, running the
-   entire generated project's test suite, not just this chunk's new tests. A chunk that passes
-   its own tests but breaks an earlier chunk's tests is not done; this step is what catches that.
-
-6. **Random-sim playthrough** — a scripted run of `simulateRandomGames` (from `boardsmith/testing`)
+4. **Random-sim playthrough** — a scripted run of `simulateRandomGames` (from `boardsmith/testing`)
    against the accumulated game, proving it doesn't crash or get stuck with this chunk's rules
    in place:
 
@@ -282,20 +276,35 @@ here.
    pure refactor or asset-only chunk) is exempt; name that exemption explicitly in the test file's
    comment rather than silently omitting the assertion.
 
-7. **Asset-reachability gate (conditional on `ui: touches|major`)** — if this chunk's CHUNK.md
+5. **Asset-reachability gate (conditional on `ui: touches|major`)** — if this chunk's CHUNK.md
    `## ui:` tag is `touches` or `major`, run `scanAssetReachability(cwd)`, imported from
    `boardsmith/asset-scan`, against the generated project. A `ui: none` chunk skips this item
    entirely — it has no UI to check. This is the single source of truth for ASSET-02's bare-`<img>`
    scan — do not reimplement or duplicate this scan in prose; cite it and run the real function,
-   the same discipline item 2 above applies to `sandbox-scan.ts`. Any non-empty result (any bare
+   the same discipline item 1 above applies to `sandbox-scan.ts`. Any non-empty result (any bare
    asset `<img>` found anywhere in the game's own `src/ui`, since `AssetImage` lives in
    `boardsmith/ui`) is a build-blocking FAIL that routes this chunk
    back to `build` (see "Failures Loop Back to `build`" below) — never silently worked around
    here.
 
-8. **A11y floor (conditional on `ui: touches|major`)** — if this chunk's CHUNK.md `## ui:` tag
+6. **A11y floor (conditional on `ui: touches|major`)** — if this chunk's CHUNK.md `## ui:` tag
    is `touches` or `major`, run all five a11y floor items below as part of this same numbered
    sequence. A `ui: none` chunk skips this item entirely — it has no UI to check.
+
+7. **The done gate: `boardsmith verify`**. Commit the chunk's work (`chunk-<slug>/step-test`,
+   `state-machine.md` "Git Protocol"), then run `npx boardsmith verify --chunk <slug>`
+   (`state-machine.md` "Git Protocol" says what it measures from). It runs, in order and
+   without stopping at the first failure, the full suite, typecheck, build, validate and a
+   mutation check of the code changed since the chunk began, and writes the result for this
+   commit to `.boardsmith/verify/<commit>.json`. The full suite is the regression check: a chunk
+   that passes its own tests but breaks an earlier chunk's is not done, and this is what catches
+   it. The mutation check breaks each changed line one small change at a time and reports, by
+   file and line, every change no test noticed. This step is not done until it exits zero on a
+   clean tree; a failure routes the chunk back per "Failures Loop Back to `build`",
+   using what each failed check names, and the gate runs again on the new commit. Never report
+   this step, the chunk, or the suite as done or green without it: `chunk-signoff` refuses a chunk
+   whose commit has no passing result covering the chunk's change, and any later step asks
+   `npx boardsmith verify --check --chunk <slug>`.
 
 ## The A11y Floor — All Five Items (UIQ-03)
 

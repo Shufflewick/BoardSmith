@@ -421,7 +421,7 @@ describe('TDD-01 — red-before-green enforcement across spec/build/test', () =>
     expect(build).toMatch(/[Aa]dding NEW tests here is fine/);
   });
 
-  it('test.md item 3 requires the spec tests green and cross-checks them against the RED commit', () => {
+  it('test.md item 2 requires the spec tests green and cross-checks them against the RED commit', () => {
     const test = read('build/test.md');
     expect(test).toMatch(/red-to-green check/i);
     expect(test).toMatch(/NOT authored here/);
@@ -462,7 +462,7 @@ describe('TDD-01 — red-before-green enforcement across spec/build/test', () =>
 describe('#290 — test-step-check gate', () => {
   const cli = readFileSync(join(__dirname, '..', '..', 'cli.ts'), 'utf-8');
 
-  it('test.md item 3 runs `boardsmith test-step-check <slug>` as a build-blocking gate', () => {
+  it('test.md item 2 runs `boardsmith test-step-check <slug>` as a build-blocking gate', () => {
     const test = read('build/test.md');
     expect(cli).toContain(".command('test-step-check <slug>')");
     expect(test).toContain('boardsmith test-step-check <slug>');
@@ -520,7 +520,7 @@ describe('BUILD-05 — build step', () => {
 describe('BUILD-06 — test step', () => {
   it('names the exact command tokens', () => {
     const test = read('build/test.md');
-    expect(test).toContain('npx vue-tsc --noEmit');
+    expect(test).toContain('npx boardsmith verify');
     expect(test).toContain('boardsmith lint');
     expect(test).toMatch(/full.{0,20}(accumulated )?suite|regression/i);
     expect(test).toContain('simulateRandomGames');
@@ -586,30 +586,36 @@ describe('BUILD-06 / TEST-01 — worked-example step (178-08)', () => {
     }));
   }
 
-  it('the ordered sequence is numbered exactly 1..8, with no duplicate or skipped number', () => {
+  it('the ordered sequence is numbered exactly 1..7, with no duplicate or skipped number', () => {
     const numbers = parseOrderedSequenceNumbers(read('build/test.md'));
-    expect(numbers).toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
+    expect(numbers).toEqual([1, 2, 3, 4, 5, 6, 7]);
   });
 
   it('the numbering-guard parse helper is a real regression detector: a duplicated item number in a mutated copy is caught, not silently accepted', () => {
     const mutated = read('build/test.md').replace(
-      /^5\. \*\*Full accumulated suite/m,
-      '4. **Full accumulated suite',
+      /^4\. \*\*Random-sim playthrough/m,
+      '3. **Random-sim playthrough',
     );
     const numbers = parseOrderedSequenceNumbers(mutated);
-    expect(numbers).not.toEqual([1, 2, 3, 4, 5, 6, 7, 8]);
-    expect(numbers.filter((n) => n === 4).length).toBeGreaterThan(1);
+    expect(numbers).not.toEqual([1, 2, 3, 4, 5, 6, 7]);
+    expect(numbers.filter((n) => n === 3).length).toBeGreaterThan(1);
   });
 
-  it('the worked-example step is item 4 — parsed index places it directly after the chunk-tests item and directly before the full-suite item, not a raw substring-ordering check', () => {
+  it('the worked-example step is item 3: parsed index places it directly after the chunk-tests item and directly before the random-sim item, not a raw substring-ordering check', () => {
     const items = parseOrderedSequenceItems(read('build/test.md'));
     const chunkTestsIdx = items.findIndex((i) => /Chunk unit\/integration tests/.test(i.title));
     const workedExampleIdx = items.findIndex((i) => /Worked-example tests/.test(i.title));
-    const fullSuiteIdx = items.findIndex((i) => /Full accumulated suite/.test(i.title));
+    const simIdx = items.findIndex((i) => /Random-sim playthrough/.test(i.title));
     expect(chunkTestsIdx).toBeGreaterThanOrEqual(0);
     expect(workedExampleIdx).toBe(chunkTestsIdx + 1);
-    expect(fullSuiteIdx).toBe(workedExampleIdx + 1);
-    expect(items[workedExampleIdx].n).toBe(4);
+    expect(simIdx).toBe(workedExampleIdx + 1);
+    expect(items[workedExampleIdx].n).toBe(3);
+  });
+
+  it('ends with the done gate, `boardsmith verify`, and no longer lists its checks as separate steps (#452)', () => {
+    const items = parseOrderedSequenceItems(read('build/test.md'));
+    expect(items[items.length - 1]).toEqual({ n: 7, title: 'The done gate: `boardsmith verify`' });
+    expect(items.some((i) => /Compile gate|Full accumulated suite/.test(i.title))).toBe(false);
   });
 
   it('names all five real commands, including verify-example-translate as the cited producer of the translation dispatch bytes', () => {
@@ -2030,5 +2036,126 @@ describe('#288 — the audit dispatches a constraints lens', () => {
 
   it('CHUNK.template.md carries the Constraints Review the check reads', () => {
     expect(read('templates/CHUNK.template.md')).toContain('## Constraints Review');
+  });
+});
+
+/**
+ * #452: the checks a done claim needs run as ONE command, `boardsmith verify`, which records a
+ * result per commit, and every step that can say "done" or "green" points at it instead of
+ * listing the checks in prose. `boardsmith verify --check` is the one question later steps ask.
+ */
+describe('#452: the done gate is `boardsmith verify`', () => {
+  const cli = readFileSync(join(__dirname, '..', '..', 'cli.ts'), 'utf-8');
+  const flatRead = (rel: string) => read(rel).replace(/\s+/g, ' ');
+
+  it('is a real command, with --base, --chunk and --check', () => {
+    expect(cli).toContain(".command('verify')");
+    expect(cli).toContain("'--base <git-ref>'");
+    expect(cli).toContain("'--chunk <slug>'");
+    expect(cli).toContain("'--check'");
+  });
+
+  const CHUNK_COMMAND = 'npx boardsmith verify --chunk <slug>';
+  const CHUNK_CHECK = 'npx boardsmith verify --check --chunk <slug>';
+
+  it("state-machine.md's Git Protocol defines the chunk's verify base once, as what `--chunk` measures from, with no shell to compute it", () => {
+    const protocol = flatRead('state-machine.md').split('## Git Protocol')[1].split(' ## ')[0];
+    expect(protocol).toContain(CHUNK_COMMAND);
+    expect(protocol).toMatch(/verify base.{0,200}commit before the chunk's first `chunk-<slug>\/` commit/);
+    expect(protocol).toMatch(/main branch.{0,300}merge base is the current commit/);
+    expect(protocol).toMatch(/--base HEAD.{0,400}no chunk/);
+    expect(protocol).not.toContain('--grep');
+  });
+
+  it('every step that runs the gate for chunk work runs `--chunk <slug>`, never a bare `boardsmith verify` or a --base of its own', () => {
+    for (const file of ['build/test.md', 'build/repair.md', 'build/close.md', 'build/playtest.md']) {
+      const text = flatRead(file);
+      expect({ file, cites: text.includes(CHUNK_COMMAND) }).toEqual({ file, cites: true });
+      expect({ file, bare: /`npx boardsmith verify`/.test(text) }).toEqual({ file, bare: false });
+      expect({ file, ownBase: /verify --base <the chunk's verify base>/.test(text) }).toEqual({ file, ownBase: false });
+    }
+  });
+
+  it('playtest.md keeps `--base HEAD` for the gate transition alone, and says that result satisfies no chunk\'s sign-off', () => {
+    const transition = flatRead('build/playtest.md').split('### Chunks Verified Before the Gates')[1].split('## Milestone/UI Gate')[0];
+    expect(transition).toContain('npx boardsmith verify --base HEAD');
+    expect(transition).toMatch(/--base HEAD.{0,500}no chunk/);
+  });
+
+  it('test.md runs it as the last step, and never lists vue-tsc or the whole suite as steps of their own', () => {
+    const test = flatRead('build/test.md');
+    expect(test).toMatch(/npx boardsmith verify --chunk <slug>`.{0,160} It runs.{0,80}full suite, typecheck, build, validate/);
+    expect(test).toMatch(/not done until it exits zero/);
+    expect(test).not.toContain('npx vue-tsc --noEmit');
+  });
+
+  it('repair.md does not end a round that changed code until `boardsmith verify` passes for it', () => {
+    const repair = flatRead('build/repair.md');
+    expect(repair).toMatch(/fixed.{0,200}boardsmith verify/);
+  });
+
+  it('close.md ends with the done gate: commit, verify, then --check as the last command, after every write', () => {
+    const close = read('build/close.md');
+    const sections = [...close.matchAll(/^## (.+)$/gm)].map((m) => m[1]);
+    const gate = sections.indexOf('The Done Gate');
+    expect(gate).toBe(sections.indexOf('Sketch-Tail Delta Gate') + 1);
+    expect(sections[gate + 1]).toMatch(/^Chunk-Complete Line/);
+
+    const body = close.split('\n## The Done Gate\n')[1].split('\n## ')[0].replace(/\s+/g, ' ');
+    const commit = body.indexOf('Commit everything');
+    const verify = body.indexOf(CHUNK_COMMAND);
+    const check = body.indexOf(CHUNK_CHECK);
+    expect(commit).toBeGreaterThanOrEqual(0);
+    expect(verify).toBeGreaterThan(commit);
+    expect(check).toBeGreaterThan(verify);
+    expect(body).not.toMatch(/verify --check(?! --chunk)/);
+    expect(body).toMatch(/last command close runs.{0,200}nothing is written or committed after it/);
+    expect(body).toMatch(/outcome: closed/);
+  });
+
+  it('close.md says why `## Verified Commit Hash` is not the commit the done gate checks', () => {
+    const close = flatRead('build/close.md');
+    const step2 = close.split('2. **Record the verified commit hash.**')[1].split('3. **Record what this chunk was verified against.**')[0];
+    expect(step2).not.toContain('verify --check');
+    expect(close).toMatch(/cannot record its own hash/);
+    expect(close).toMatch(/## Verified Commit Hash.{0,400}The Done Gate/);
+  });
+
+  it('the light path ends with the same done gate', () => {
+    expect(flatRead('build/close.md')).toMatch(/light path.{0,400}## The Done Gate/);
+    const light = flatRead('build/playtest.md').split('## Light-Path Bookkeeping')[1];
+    expect(light).toMatch(/## The Done Gate/);
+    expect(flatRead('state-machine.md')).toMatch(/light chunks.{0,1500}`build\/close\.md` "The Done Gate"/);
+  });
+
+  it('chunk-dispatch.md: a `closed` return is the commit `verify --check --chunk <slug>` accepted, and the orchestrator checks it before writing anything', () => {
+    const dispatch = flatRead('orchestrate/chunk-dispatch.md');
+    expect(dispatch).toMatch(/`closed`.{0,400}boardsmith verify --check --chunk <slug>/);
+    expect(dispatch).toMatch(/clean tree/);
+    expect(dispatch).not.toMatch(/verify --check(?! --chunk)/);
+    const after = dispatch.split('## After the Return')[1];
+    expect(after.indexOf(CHUNK_CHECK)).toBeGreaterThanOrEqual(0);
+    expect(after.indexOf(CHUNK_CHECK)).toBeLessThan(after.indexOf('`Outcome`/`Detail`'));
+    expect(after).toMatch(/before it writes anything/);
+  });
+
+  it('build-game.md runs `boardsmith verify --check --chunk <slug>` on a `closed` return before it writes the run log, and treats a refusal as not closed', () => {
+    const game = flatRead('build-game.md');
+    const consume = game.split('5. **Consume each return by field name')[1].split('## Step 4')[0];
+    expect(consume.indexOf(CHUNK_CHECK)).toBeGreaterThanOrEqual(0);
+    expect(consume.indexOf(CHUNK_CHECK)).toBeLessThan(consume.indexOf('`Outcome`/`Detail`'));
+    expect(game).toMatch(/\*\*`closed`\*\*:.{0,300}verify --check --chunk <slug>/);
+    expect(game).toMatch(/verify --check --chunk <slug>.{0,800}never as closed/);
+    expect(game).not.toMatch(/verify --check(?! --chunk)/);
+  });
+
+  it("build-game.md records a playtest gate's sign-off only after the chunk's verify command passed", () => {
+    const gate = flatRead('build-game.md').split('- **`gate`**')[1].split('- **`filing`**')[0];
+    expect(gate).toMatch(/commit.{0,200}npx boardsmith verify --chunk <slug>.{0,300}chunk-signoff/);
+  });
+
+  it('playtest.md says a sign-off needs the work committed and verified first', () => {
+    const playtest = flatRead('build/playtest.md');
+    expect(playtest).toMatch(/chunk-signoff.{0,300}boardsmith verify/);
   });
 });

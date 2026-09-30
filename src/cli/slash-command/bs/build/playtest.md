@@ -35,6 +35,14 @@ refusal names the one-time transition the designer records for the whole project
 npx boardsmith chunk-gate-transition --by "<designer's name>"
 ```
 
+Like a sign-off, it refuses unless the commit checked out, on a clean tree, passed `boardsmith
+verify`. The transition builds and changes no code, so commit the project as it stands and run
+`npx boardsmith verify --base HEAD` first: the full suite, typecheck, build and validate for the
+project as it is, with nothing changed for the mutation check to break. That result is good for
+the transition only: because it measured no change, it satisfies no chunk's sign-off, which
+accepts only a result from `npx boardsmith verify --chunk <slug>` or one measured from before the
+chunk began (`state-machine.md` "Git Protocol").
+
 It gives every chunk whose CHUNK.md has no `## Sign-off` section a `transition` sign-off that keeps
 its verified Status, keeps a whole-file sign-off whose code still matches (rewritten file by file),
 transitions one whose code has moved, and records each of those chunks' unquoted claims for
@@ -147,7 +155,7 @@ failure mode this hard-reload instruction already catches; a second, distinct fa
 human playtest that LOOKS complete but never actually reached this chunk's new behavior — the
 human clicked through the numbered script on a stale build that silently fell back to prior-chunk
 behavior, or a script step was skipped/misread so the new action was never triggered. This is the
-human-playtest analog of `build/test.md`'s fail-loud "sim exercised this chunk" assertion (item 5
+human-playtest analog of `build/test.md`'s fail-loud "sim exercised this chunk" assertion (item 4
 of the Ordered Sequence): the freshness guard above (fresh tab, fresh module graph) plus the
 Verified Checklist's item-by-item confirmation (`## The Verified Gate` below — never a whole-script
 "looks good") together are what prevent a quietly-passing playtest that never exercised its
@@ -208,7 +216,11 @@ npx boardsmith chunk-signoff <slug> --by "<designer's name>" --observed 1,2,3
 
 `--observed` lists every checklist item the designer confirmed. The command refuses when any item is
 missing (that chunk goes to `build/revise.md` instead), when `--by` names the run rather than a
-person, or when the chunk is not `built`. On success it records who, when and which items, writes
+person, or when the chunk is not `built`. Every `chunk-signoff` (designer, waiver or automated) also
+refuses unless the commit checked out, on a clean tree, passed `boardsmith verify` with this chunk's
+change measured: commit what the gate wrote (`QUESTIONS.md`, the rulings), run
+`npx boardsmith verify --chunk <slug>` (`state-machine.md` "Git Protocol"), then sign off. On
+success it records who, when and which items, writes
 `Status: verified` to CHUNK.md last, then mirrors SKETCH.md's derived pointer (`state-machine.md`
 "Write Order"). Never write the `Status:` line or the `## Sign-off` block by hand.
 
@@ -237,7 +249,8 @@ performs on the light path's behalf. It does **not** detail the sketch tail: tai
 user-gated `## Sketch-Tail Delta Gate`, which the light path does not run (`build-chunk.md`
 Step 2's lazy tail-entry detailing covers any undetailed tail entry instead). This file does not
 restate that sequence here — it cites it, exactly the shape `build/close.md` itself specifies for
-reuse.
+reuse. After the sequence, the light path ends exactly as a full close does, with `build/close.md`'s
+`## The Done Gate`: commit, verify, and `boardsmith verify --check --chunk <slug>` as the last command.
 
 ## If the Human Reports Issues
 

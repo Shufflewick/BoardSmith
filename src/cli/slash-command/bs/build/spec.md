@@ -48,7 +48,7 @@ failure this per-claim rule exists to make impossible.
 
 ## Tests That Can Fail (checked as code at `test`)
 
-`build/test.md` item 3(c) runs `boardsmith test-step-check <slug>` against what this step writes,
+`build/test.md` item 2(c) runs `boardsmith test-step-check <slug>` against what this step writes,
 and it fails the chunk on each of these, so write the tests to meet them now:
 
 - **A claim listed in the Spec Manifest has a test that cites it.** A row's Claims Covered is a
@@ -135,7 +135,7 @@ which of the two cases it is and act on that.
   `node_modules/boardsmith` is READ-ONLY, a library shortfall is FILED not patched, and built-in
   BoardSmith UI is never suppressed. A test that can only pass by editing the library is a library
   gap to file, not a test to work around.
-- **Never generates the worked-example tests.** Those are `build/test.md` item 4's, run at the
+- **Never generates the worked-example tests.** Those are `build/test.md` item 3's, run at the
   `test` step against the finished code. `spec` covers the `## Interpretation` claims; the
   worked-example pass covers the rulebook's own printed examples. Two different sources, two
   different steps — do not duplicate either here.
@@ -164,7 +164,7 @@ rules change — has no claims to pin and writes no behavioral tests. Name that 
 as the one row in `## Spec Manifest`, written exactly `| exempt | <reason> | n/a |` so
 `boardsmith test-step-check` can read it (an exempt row on a chunk that has claims is a finding),
 the same "name the exemption explicitly rather than
-silently omitting" discipline `build/test.md` items 4(i) and 6 already use. A chunk trivial enough
+silently omitting" discipline `build/test.md` items 3(i) and 4 already use. A chunk trivial enough
 to be genuinely exempt is usually a chunk that should have been tagged `light` at proposal time
 (`state-machine.md` "Step Names (exact, light path — trivial chunks)").
 

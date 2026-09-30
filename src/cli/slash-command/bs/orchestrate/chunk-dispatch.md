@@ -150,7 +150,13 @@ already owns:
 - `chunk` — the slug this dispatch was for.
 - `outcome` — exactly one of:
   - `closed` — the chunk reached `close` (or the light path's equivalent) and its status is
-    `verified` or `verified (user-waived)`.
+    `verified` or `verified (user-waived)`, and close ended with `build/close.md` "The Done Gate":
+    its last command was `npx boardsmith verify --check --chunk <slug>`, which exited zero, and
+    nothing was written or committed after it. So the chunk's last commit, on a clean tree, has a
+    passing `boardsmith verify` result that measured the chunk's whole change (the full suite,
+    typecheck, build, validate and the mutation check of everything since the chunk began).
+    A subagent never returns `closed`, and never says done or green anywhere in its report, without
+    that; the orchestrator runs the same check before it believes one.
   - `gate` — work stopped at a human gate. Requires `gate`.
   - `filing` — work stopped because a library gap or bug blocks the chunk outright. Requires
     `filings`, and the chunk is left at its last persisted step.
@@ -178,14 +184,23 @@ already owns:
 - `stuckDetail` — present when `outcome: stuck`: what was stuck, what was tried, and what it would
   take to unblock.
 
+A `closed` return whose checkout fails `npx boardsmith verify --check --chunk <slug>` is not
+closed, whatever its `designerSummary` says: the orchestrator treats it as the ordinary case of unfinished work and
+re-dispatches the same chunk with the check's message in the brief, so the fresh subagent fixes
+what it names and runs `build/close.md` "The Done Gate" again (`build-game.md` Step 4).
+
 A return missing a field its `outcome` requires is itself a stuck dispatch: the orchestrator does
 not guess the missing half. Re-dispatch once with the missing field named; if the second return is
 also malformed, stop the run and tell the designer plainly what did not come back.
 
 ## After the Return
 
-The orchestrator, in this order: fills the chunk's `design/run-log/<slug>.md` dispatch entry's `Outcome`/`Detail`
-(`orchestrate/run-state.md` "Writing It"), records any `questions` and `filings`
+The orchestrator, in this order: for a `closed` return, first runs
+`npx boardsmith verify --check --chunk <slug>` in the chunk's checkout (`build-game.md` Step 4)
+before it writes anything, since any write to that
+checkout (the run log included) leaves its tree dirty and the check would refuse the chunk for the
+orchestrator's own change; then fills the chunk's `design/run-log/<slug>.md` dispatch entry's `Outcome`/`Detail`
+(`orchestrate/run-state.md` "Writing It"), recording a refused check as the chunk not closed; records any `questions` and `filings`
 (`orchestrate/questions.md`, `orchestrate/filings.md`), relays `designerSummary` if there is
 anything the designer can see, and then routes on `outcome` per `build-game.md` Step 4.
 

@@ -5,6 +5,7 @@ import { createHash } from 'node:crypto';
 import { DESIGN_DIR, MERGE_SIGNOFFS_MD, WAIVERS_MD } from '../lib/project-paths.js';
 import { appendMergeSignoffs } from '../lib/merge-signoffs.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
+import { commitAll, recordPassingVerify } from '../lib/verify-result.test-helper.js';
 import {
   SIGNOFF_HEADING,
   SIGNOFF_BEGIN,
@@ -24,6 +25,13 @@ import {
   readSketch,
   setStatusByHand,
 } from './chunk-project.test-helper.js';
+
+
+/** Every sign-off here is made on a commit that passed `boardsmith verify --chunk <slug>` (#452), unless a test says otherwise. */
+async function signOff(slug: string, options: Parameters<typeof recordSignoff>[1]): ReturnType<typeof recordSignoff> {
+  await recordPassingVerify(options.project!, { chunk: slug });
+  return recordSignoff(slug, options);
+}
 
 /**
  * #291: an orchestrated run accepted its own gates and marked four chunks `verified` with playtest
@@ -62,7 +70,7 @@ async function verifiedByHandProblems(project: string, slug: string): Promise<st
 describe('recordSignoff — a designer sign-off is the only way a playtested chunk becomes verified', () => {
   it('writes who, when, and which items were observed, then derives Status: verified in CHUNK.md and SKETCH.md', async () => {
     const project = await makeProject([{ slug: 'deal' }]);
-    await recordSignoff('deal', { project, by: 'Jane Designer', observed: '1,2', now: NOW });
+    await signOff('deal', { project, by: 'Jane Designer', observed: '1,2', now: NOW });
 
     const chunk = await readChunk(project, 'deal');
     expect(chunk).toMatch(/^Status: verified$/m);
@@ -84,7 +92,7 @@ describe('recordSignoff — a designer sign-off is the only way a playtested chu
   it('refuses when a checklist item has no observation recorded', async () => {
     const project = await makeProject([{ slug: 'deal', checklist: ['a', 'b', 'c'] }]);
     await expect(
-      recordSignoff('deal', { project, by: 'Jane Designer', observed: '1,3', now: NOW }),
+      signOff('deal', { project, by: 'Jane Designer', observed: '1,3', now: NOW }),
     ).rejects.toThrow(/item 2/);
     expect(await readChunk(project, 'deal')).toMatch(/^Status: built$/m);
   });
@@ -93,7 +101,7 @@ describe('recordSignoff — a designer sign-off is the only way a playtested chu
     const project = await makeProject([{ slug: 'deal' }]);
     for (const by of ['orchestrator', 'Claude', 'the run', 'subagent', 'automated']) {
       await expect(
-        recordSignoff('deal', { project, by, observed: '1,2', now: NOW }),
+        signOff('deal', { project, by, observed: '1,2', now: NOW }),
       ).rejects.toThrow(/designer/i);
     }
   });
@@ -101,13 +109,13 @@ describe('recordSignoff — a designer sign-off is the only way a playtested chu
   it('refuses an automated sign-off for a chunk that needs a designer playtest', async () => {
     const project = await makeProject([{ slug: 'deal', ui: 'major', milestone: 'scoring' }]);
     await expect(
-      recordSignoff('deal', { project, automated: 'sim pass, tests/deal.test.ts', now: NOW }),
+      signOff('deal', { project, automated: 'sim pass, tests/deal.test.ts', now: NOW }),
     ).rejects.toThrow(/designer/i);
   });
 
   it('accepts an automated sign-off, with its evidence, for a chunk no designer playtests', async () => {
     const project = await makeProject([{ slug: 'rules', ui: 'none', milestone: 'none' }]);
-    await recordSignoff('rules', { project, automated: 'sim pass, tests/rules.test.ts', now: NOW });
+    await signOff('rules', { project, automated: 'sim pass, tests/rules.test.ts', now: NOW });
     const chunk = await readChunk(project, 'rules');
     expect(chunk).toMatch(/^Status: verified$/m);
     expect(parseSignoff(chunk).record).toMatchObject({
@@ -119,14 +127,14 @@ describe('recordSignoff — a designer sign-off is the only way a playtested chu
   it('refuses unless the chunk is built', async () => {
     const project = await makeProject([{ slug: 'deal', status: 'approved' }]);
     await expect(
-      recordSignoff('deal', { project, by: 'Jane Designer', observed: '1,2', now: NOW }),
+      signOff('deal', { project, by: 'Jane Designer', observed: '1,2', now: NOW }),
     ).rejects.toThrow(/built/);
   });
 
   it('refuses when more than one basis is given', async () => {
     const project = await makeProject([{ slug: 'deal' }]);
     await expect(
-      recordSignoff('deal', {
+      signOff('deal', {
         project,
         by: 'Jane Designer',
         observed: '1,2',
@@ -156,7 +164,7 @@ describe('recordSignoff — a chunk does not reach verified while a constraint d
     const project = await makeProject([{ slug: 'deal' }]);
     await addStructure(project, '');
     await expect(
-      recordSignoff('deal', { project, by: 'Jane Designer', observed: '1,2', now: NOW }),
+      signOff('deal', { project, by: 'Jane Designer', observed: '1,2', now: NOW }),
     ).rejects.toThrow(/G1 .* has no cap/);
     expect(await readChunk(project, 'deal')).toMatch(/^Status: built$/m);
   });
@@ -168,7 +176,7 @@ describe('recordSignoff — a chunk does not reach verified while a constraint d
       join(project, DESIGN_DIR, 'RULINGS.md'),
       '# Rulings\n\n## Ledger\n\n### Ruling 1\n- Decision: mail may grow without a cap.\n',
     );
-    await recordSignoff('deal', { project, by: 'Jane Designer', observed: '1,2', now: NOW });
+    await signOff('deal', { project, by: 'Jane Designer', observed: '1,2', now: NOW });
     expect(await readChunk(project, 'deal')).toMatch(/^Status: verified$/m);
   });
 });
@@ -189,7 +197,7 @@ describe('waivers — scoped to named chunks, and they expire', () => {
     expect(ledger).toContain('### Waiver W1');
     expect(ledger).toContain('Chunks: world-shell');
 
-    await recordSignoff('world-shell', { project, waiver: 'W1', now: NOW });
+    await signOff('world-shell', { project, waiver: 'W1', now: NOW });
     const chunk = await readChunk(project, 'world-shell');
     expect(chunk).toMatch(/^Status: verified \(user-waived\)$/m);
     expect(parseSignoff(chunk).record).toMatchObject({ basis: 'waiver', waiver: 'W1', by: 'Jane Designer' });
@@ -205,7 +213,7 @@ describe('waivers — scoped to named chunks, and they expire', () => {
       reason: 'machine playtest',
       now: NOW,
     });
-    await expect(recordSignoff('combat', { project, waiver: 'W1', now: NOW })).rejects.toThrow(
+    await expect(signOff('combat', { project, waiver: 'W1', now: NOW })).rejects.toThrow(
       /does not name combat/,
     );
     expect(await readChunk(project, 'combat')).toMatch(/^Status: built$/m);
@@ -222,7 +230,7 @@ describe('waivers — scoped to named chunks, and they expire', () => {
       now: NOW,
     });
     await expect(
-      recordSignoff('world-shell', { project, waiver: 'W1', now: new Date('2026-09-25T00:00:01Z') }),
+      signOff('world-shell', { project, waiver: 'W1', now: new Date('2026-09-25T00:00:01Z') }),
     ).rejects.toThrow(/expired/);
   });
 
@@ -275,14 +283,14 @@ describe('checkSignoff — refuses a verified status that no sign-off backs', ()
 
   it('a recorded designer sign-off passes', async () => {
     const project = await makeProject([{ slug: 'deal' }]);
-    await recordSignoff('deal', { project, by: 'Jane Designer', observed: '1,2', now: NOW });
+    await signOff('deal', { project, by: 'Jane Designer', observed: '1,2', now: NOW });
     expect(await checkSignoff(project, 'deal')).toEqual([]);
   });
 
   it('a sign-off copied from another chunk that cites a waiver not naming this chunk is refused', async () => {
     const project = await makeProject([{ slug: 'world-shell' }, { slug: 'combat' }]);
     await recordWaiver({ project, chunks: 'world-shell', by: 'Jane', expires: '2026-09-30', reason: 'x', now: NOW });
-    await recordSignoff('world-shell', { project, waiver: 'W1', now: NOW });
+    await signOff('world-shell', { project, waiver: 'W1', now: NOW });
 
     // The sotf failure: the run extends the one-chunk waiver by writing it into a later chunk.
     const shell = await readChunk(project, 'world-shell');
@@ -298,14 +306,14 @@ describe('checkSignoff — refuses a verified status that no sign-off backs', ()
 
   it('a status that does not match what the sign-off derives is refused', async () => {
     const project = await makeProject([{ slug: 'deal' }]);
-    await recordSignoff('deal', { project, by: 'Jane Designer', observed: '1,2', now: NOW });
+    await signOff('deal', { project, by: 'Jane Designer', observed: '1,2', now: NOW });
     await setStatusByHand(project, 'deal', 'verified (user-waived)');
     expect((await checkSignoff(project, 'deal')).join('\n')).toMatch(/derives "verified"/);
   });
 
   it('a hand-edited sign-off that drops an observed item is refused', async () => {
     const project = await makeProject([{ slug: 'deal', checklist: ['a', 'b', 'c'] }]);
-    await recordSignoff('deal', { project, by: 'Jane Designer', observed: '1,2,3', now: NOW });
+    await signOff('deal', { project, by: 'Jane Designer', observed: '1,2,3', now: NOW });
     const path = join(project, DESIGN_DIR, 'chunks', 'deal', 'CHUNK.md');
     const text = await fs.readFile(path, 'utf-8');
     await fs.writeFile(path, text.replace('Observed: 1, 2, 3', 'Observed: 1, 3'));
@@ -314,7 +322,7 @@ describe('checkSignoff — refuses a verified status that no sign-off backs', ()
 
   it('an automated sign-off on a chunk that needs a designer playtest is refused', async () => {
     const project = await makeProject([{ slug: 'rules', ui: 'none', milestone: 'core-loop' }]);
-    await recordSignoff('rules', { project, automated: 'sim pass', now: NOW });
+    await signOff('rules', { project, automated: 'sim pass', now: NOW });
     // The sketch later marks it a UI chunk: the automated basis no longer covers it.
     const chunkPath = join(project, DESIGN_DIR, 'chunks', 'rules', 'CHUNK.md');
     const text = await fs.readFile(chunkPath, 'utf-8');
@@ -332,7 +340,7 @@ describe('chunk-check and chunk-provenance-status run the sign-off check', () =>
 
   it('chunk-check passes a verified chunk whose sign-off is recorded', async () => {
     const project = await makeProject([{ slug: 'deal' }]);
-    await recordSignoff('deal', { project, by: 'Jane Designer', observed: '1,2', now: NOW });
+    await signOff('deal', { project, by: 'Jane Designer', observed: '1,2', now: NOW });
     await chunkCheckCommand('deal', { project, json: true });
     process.exitCode = undefined;
     await chunkCheckCommand('deal', { project, json: true });
@@ -342,7 +350,7 @@ describe('chunk-check and chunk-provenance-status run the sign-off check', () =>
   it('chunk-provenance-status lists verified chunks without a valid sign-off', async () => {
     const project = await makeProject([{ slug: 'deal' }, { slug: 'shop' }]);
     await setStatusByHand(project, 'deal', 'verified');
-    await recordSignoff('shop', { project, by: 'Jane Designer', observed: '1,2', now: NOW });
+    await signOff('shop', { project, by: 'Jane Designer', observed: '1,2', now: NOW });
     const result = await chunkProvenanceStatusCommand({ project, quiet: true });
     expect(result.verifiedWithoutSignoff.map((e) => e.slug)).toEqual(['deal']);
   });
@@ -354,7 +362,7 @@ describe('a sign-off counts only for the chunk as it was signed (#295)', () => {
 
   it('sign off, reopen to built, hand-type verified: chunk-check refuses and names chunk-signoff', async () => {
     const project = await makeProject([{ slug: 'deal', manifest: { 'src/deal.ts': 'v1' } }]);
-    await recordSignoff('deal', { project, by: 'Jane Designer', observed: '1,2', now: NOW });
+    await signOff('deal', { project, by: 'Jane Designer', observed: '1,2', now: NOW });
     await recordReopen('deal', { project, reason: 'the discard pile shows face down', now: NOW });
     expect(await readChunk(project, 'deal')).toMatch(/^Status: built$/m);
     expect(await readSketch(project)).toContain('- Status (derived from chunks/deal/CHUNK.md): built');
@@ -366,7 +374,7 @@ describe('a sign-off counts only for the chunk as it was signed (#295)', () => {
 
   it('a code change after the sign-off voids it, even when Status is flipped by hand', async () => {
     const project = await makeProject([{ slug: 'deal', manifest: { 'src/deal.ts': 'v1' } }]);
-    await recordSignoff('deal', { project, by: 'Jane Designer', observed: '1,2', now: NOW });
+    await signOff('deal', { project, by: 'Jane Designer', observed: '1,2', now: NOW });
     await setStatusByHand(project, 'deal', 'built');
     await fs.writeFile(join(project, 'src/deal.ts'), 'v2');
     expect(await verifiedByHandProblems(project, 'deal')).toMatch(/src\/deal\.ts changed after it/);
@@ -374,7 +382,7 @@ describe('a sign-off counts only for the chunk as it was signed (#295)', () => {
 
   it('adding a file to the Build Manifest after the sign-off voids it', async () => {
     const project = await makeProject([{ slug: 'deal', manifest: { 'src/deal.ts': 'v1' } }]);
-    await recordSignoff('deal', { project, by: 'Jane Designer', observed: '1,2', now: NOW });
+    await signOff('deal', { project, by: 'Jane Designer', observed: '1,2', now: NOW });
     await fs.writeFile(join(project, 'src/extra.ts'), 'new');
     const text = await readChunk(project, 'deal');
     await fs.writeFile(chunkPath(project, 'deal'), text.replace('| src/deal.ts | written |', '| src/deal.ts | written |\n| src/extra.ts | written |'));
@@ -385,24 +393,24 @@ describe('a sign-off counts only for the chunk as it was signed (#295)', () => {
     const project = await makeProject([
       { slug: 'deal', manifest: { 'src/deal.ts': 'v1', 'DECISIONS.md': '# Decisions\n' } },
     ]);
-    await recordSignoff('deal', { project, by: 'Jane Designer', observed: '1,2', now: NOW });
+    await signOff('deal', { project, by: 'Jane Designer', observed: '1,2', now: NOW });
     await fs.writeFile(join(project, DESIGN_DIR, 'DECISIONS.md'), '# Decisions\n- rolled up\n');
     expect(await checkSignoff(project, 'deal')).toEqual([]);
   });
 
   it('a reopened chunk can be signed off afresh and then passes', async () => {
     const project = await makeProject([{ slug: 'deal', manifest: { 'src/deal.ts': 'v1' } }]);
-    await recordSignoff('deal', { project, by: 'Jane Designer', observed: '1,2', now: NOW });
+    await signOff('deal', { project, by: 'Jane Designer', observed: '1,2', now: NOW });
     await recordReopen('deal', { project, reason: 'rework', now: NOW });
     await fs.writeFile(join(project, 'src/deal.ts'), 'v2');
-    await recordSignoff('deal', { project, by: 'Jane Designer', observed: '1,2', now: NOW });
+    await signOff('deal', { project, by: 'Jane Designer', observed: '1,2', now: NOW });
     expect(await checkSignoff(project, 'deal')).toEqual([]);
   });
 
   it('reopen refuses a chunk that is not verified, and needs a reason', async () => {
     const project = await makeProject([{ slug: 'deal' }]);
     await expect(recordReopen('deal', { project, reason: 'rework', now: NOW })).rejects.toThrow(/not verified/);
-    await recordSignoff('deal', { project, by: 'Jane Designer', observed: '1,2', now: NOW });
+    await signOff('deal', { project, by: 'Jane Designer', observed: '1,2', now: NOW });
     await expect(recordReopen('deal', { project, reason: ' ', now: NOW })).rejects.toThrow(/--reason/);
     expect(await readChunk(project, 'deal')).toMatch(/^Status: verified$/m);
   });
@@ -419,7 +427,7 @@ describe('an edit to a shared file is accounted for by the chunk that made it (#
       { slug: 'deal', manifest: { 'src/deal.ts': 'deal v1', 'src/rules.ts': 'rules v1' } },
       { slug: 'shop', status: shopStatus, manifest: { 'src/shop.ts': 'shop v1', 'src/rules.ts': 'rules v1' } },
     ]);
-    await recordSignoff('deal', { project, by: 'Jane Designer', observed: '1,2', now: NOW });
+    await signOff('deal', { project, by: 'Jane Designer', observed: '1,2', now: NOW });
     return project;
   }
 
@@ -442,7 +450,7 @@ describe('an edit to a shared file is accounted for by the chunk that made it (#
   it('a later sign-off that saw the edited file keeps the earlier sign-off', async () => {
     const project = await sharedProject('built');
     await fs.writeFile(join(project, 'src/rules.ts'), 'rules v2, with the shop rules added');
-    await recordSignoff('shop', { project, by: 'Jane Designer', observed: '1,2', now: LATER });
+    await signOff('shop', { project, by: 'Jane Designer', observed: '1,2', now: LATER });
     expect(await checkSignoff(project, 'deal')).toEqual([]);
     expect(await checkSignoff(project, 'shop')).toEqual([]);
     const deal = (await assessSignoffs(project)).get('deal')!;
@@ -451,7 +459,7 @@ describe('an edit to a shared file is accounted for by the chunk that made it (#
 
   it('an edit no later sign-off saw and no chunk being built names voids every sign-off naming the file', async () => {
     const project = await sharedProject('built');
-    await recordSignoff('shop', { project, by: 'Jane Designer', observed: '1,2', now: LATER });
+    await signOff('shop', { project, by: 'Jane Designer', observed: '1,2', now: LATER });
     await fs.writeFile(join(project, 'src/rules.ts'), 'rules v3, edited after both sign-offs');
     for (const slug of ['deal', 'shop']) {
       const problems = (await checkSignoff(project, slug)).join('\n');
@@ -462,7 +470,7 @@ describe('an edit to a shared file is accounted for by the chunk that made it (#
 
   it('a merge that vouched for the file as it is now keeps the earlier sign-off; a stale or older record does not (#403)', async () => {
     const project = await sharedProject('built');
-    await recordSignoff('shop', { project, by: 'Jane Designer', observed: '1,2', now: LATER });
+    await signOff('shop', { project, by: 'Jane Designer', observed: '1,2', now: LATER });
     const merged = 'rules v3, as the merge combined deal and shop';
     await fs.writeFile(join(project, 'src/rules.ts'), merged);
     const record = (content: string, when: Date) =>
@@ -496,9 +504,9 @@ describe('an edit to a shared file is accounted for by the chunk that made it (#
       { slug: 'shop', manifest: { 'src/rules.ts': 'rules v1' } },
       { slug: 'deal', manifest: { 'src/rules.ts': 'rules v1' } },
     ]);
-    await recordSignoff('shop', { project, by: 'Jane Designer', observed: '1,2', now: NOW });
+    await signOff('shop', { project, by: 'Jane Designer', observed: '1,2', now: NOW });
     await fs.writeFile(join(project, 'src/rules.ts'), 'rules v2');
-    await recordSignoff('deal', { project, by: 'Jane Designer', observed: '1,2', now: LATER });
+    await signOff('deal', { project, by: 'Jane Designer', observed: '1,2', now: LATER });
     // Put back to what only the OLDER sign-off saw: nobody signed the tree after deal's.
     await fs.writeFile(join(project, 'src/rules.ts'), 'rules v1');
     expect((await checkSignoff(project, 'deal')).join('\n')).toContain('src/rules.ts');
@@ -515,7 +523,7 @@ describe('an edit to a shared file is accounted for by the chunk that made it (#
     await fs.writeFile(join(project, DESIGN_DIR, 'ASSETS.md'), '# Assets\n');
     const text = await readChunk(project, 'deal');
     await fs.writeFile(chunkPath(project, 'deal'), text.replace('| src/deal.ts | written |', '| src/deal.ts | written |\n| design/ASSETS.md | written |'));
-    await recordSignoff('deal', { project, by: 'Jane Designer', observed: '1,2', now: NOW });
+    await signOff('deal', { project, by: 'Jane Designer', observed: '1,2', now: NOW });
     await fs.writeFile(join(project, DESIGN_DIR, 'ASSETS.md'), '# Assets\n- a row close added\n');
     expect(await checkSignoff(project, 'deal')).toEqual([]);
     expect(Object.keys(parseSignoff(await readChunk(project, 'deal')).record!.code)).toEqual(['src/deal.ts']);
@@ -523,7 +531,7 @@ describe('an edit to a shared file is accounted for by the chunk that made it (#
 
   it('a sign-off with the old single whole-file hash is refused, naming the one-time transition', async () => {
     const project = await makeProject([{ slug: 'deal', manifest: { 'src/deal.ts': 'v1' } }]);
-    await recordSignoff('deal', { project, by: 'Jane Designer', observed: '1,2', now: NOW });
+    await signOff('deal', { project, by: 'Jane Designer', observed: '1,2', now: NOW });
     const text = await readChunk(project, 'deal');
     await fs.writeFile(
       chunkPath(project, 'deal'),
@@ -543,3 +551,60 @@ describe('an edit to a shared file is accounted for by the chunk that made it (#
     ]);
   });
 });
+
+describe('recordSignoff: a sign-off is a done claim, and needs a passing boardsmith verify for HEAD (#452)', () => {
+  it('refuses a chunk whose project has no verify result for the commit checked out, touching nothing', async () => {
+    const project = await makeProject([{ slug: 'deal' }]);
+    await recordPassingVerify(project, { chunk: 'deal' });
+    await fs.writeFile(join(project, 'src-change.ts'), 'export const more = 1;\n');
+    await commitWithoutVerify(project);
+    const before = await readChunk(project, 'deal');
+    await expect(signOffUnverified(project)).rejects.toThrow(/No `boardsmith verify` result for the current commit.*Run `boardsmith verify`/s);
+    expect(await readChunk(project, 'deal')).toBe(before);
+  });
+
+  it('refuses while the working tree has uncommitted changes, even when HEAD passed', async () => {
+    const project = await makeProject([{ slug: 'deal' }]);
+    await recordPassingVerify(project, { chunk: 'deal' });
+    await fs.writeFile(join(project, 'notes.md'), 'not committed\n');
+    await expect(signOffUnverified(project)).rejects.toThrow(/uncommitted changes.*boardsmith verify/s);
+  });
+
+  it('refuses a project that is not a git repository, saying how to get a result', async () => {
+    const project = await makeProject([{ slug: 'deal' }]);
+    await expect(signOffUnverified(project)).rejects.toThrow(/not a git repository.*boardsmith verify/s);
+  });
+
+  /**
+   * The result must also have measured the chunk's change: `boardsmith verify --base HEAD` passes
+   * with nothing mutated, and a sign-off on that result would be a done claim no check backs.
+   */
+  it('refuses a result made with --base HEAD, and says to run boardsmith verify --chunk <slug>', async () => {
+    const project = await makeProject([{ slug: 'deal' }]);
+    await recordPassingVerify(project, { chunk: 'deal' });
+    await recordPassingVerify(project, { message: 'chunk-deal/step-close' });
+    await expect(signOffUnverified(project)).rejects.toThrow(/measured the change from HEAD.*Run `boardsmith verify --chunk deal`/s);
+  });
+
+  it('accepts a result whose base is where the chunk started', async () => {
+    const project = await makeProject([{ slug: 'deal' }]);
+    await recordPassingVerify(project, { chunk: 'deal' });
+    await expect(signOffUnverified(project)).resolves.toMatchObject({ basis: 'designer' });
+  });
+
+  it('accepts a result whose base is a commit before the chunk started', async () => {
+    const project = await makeProject([{ slug: 'deal' }]);
+    const before = await recordPassingVerify(project, { message: 'the project, before the chunk' });
+    commitAll(project, 'setup finished');
+    await recordPassingVerify(project, { chunk: 'deal', base: before });
+    await expect(signOffUnverified(project)).resolves.toMatchObject({ basis: 'designer' });
+  });
+});
+
+function signOffUnverified(project: string): Promise<unknown> {
+  return recordSignoff('deal', { project, by: 'Jane Designer', observed: '1,2', now: NOW });
+}
+
+async function commitWithoutVerify(project: string): Promise<void> {
+  commitAll(project, 'more work, not verified');
+}

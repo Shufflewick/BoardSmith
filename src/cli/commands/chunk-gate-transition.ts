@@ -30,6 +30,7 @@ import {
 } from './chunk-signoff.js';
 import { parseInterpretationQuotes, unquotedClaims } from './claim-quotes.js';
 import { atomicWriteFile } from './verify-run.js';
+import { verifiedProblem } from '../lib/verify-result.js';
 
 /**
  * `boardsmith chunk-gate-transition --by <designer>` (#397): the one-time transition for chunks a
@@ -52,6 +53,9 @@ import { atomicWriteFile } from './verify-run.js';
  *
  * A verified chunk whose section was scaffolded empty and never signed was verified by hand under
  * the gate; the transition does not cover it, and it stays refused.
+ *
+ * It records chunks as done, so it is refused unless the commit checked out, on a clean tree, passed
+ * `boardsmith verify` (#452).
  *
  * The decisions go to `design/GATE-TRANSITION.md` first, then to each CHUNK.md. The ledger exists
  * once: a second run only completes chunk writes a crash interrupted, from the ledger, and refuses
@@ -250,6 +254,11 @@ export async function recordGateTransition(options: GateTransitionOptions): Prom
 
   const existing = await readGateTransition(dir);
   if (existing) return { ledgerPath, ...(await completeTransition(dir, existing)) };
+
+  // #452: the transition records chunks as done, so the project as it stands must have passed
+  // `boardsmith verify`. A run completing an interrupted one (above) already passed this.
+  const unverified = await verifiedProblem(dir);
+  if (unverified) throw new Error(`The gate transition was not recorded: ${unverified}`);
 
   const plan = await planTransition(dir, (options.now ?? new Date()).toISOString(), options.by.trim());
   if (!plan.signoffs.length && !plan.kept.length) {

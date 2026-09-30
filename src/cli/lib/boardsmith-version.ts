@@ -20,11 +20,12 @@ import { dirname, join, parse } from 'node:path';
  * which is itself a synchronous call site.
  */
 
-let cachedVersion: string | undefined;
+let cachedRoot: { dir: string; version: string } | undefined;
 
-export function readBoardsmithVersion(): string {
-  if (cachedVersion !== undefined) {
-    return cachedVersion;
+/** The directory holding BoardSmith's own package.json, and the version it states. */
+function findPackage(): { dir: string; version: string } {
+  if (cachedRoot !== undefined) {
+    return cachedRoot;
   }
 
   const startDir = dirname(fileURLToPath(import.meta.url));
@@ -36,8 +37,8 @@ export function readBoardsmithVersion(): string {
       const raw = readFileSync(candidate, 'utf-8');
       const pkg = JSON.parse(raw);
       if (pkg.name === 'boardsmith') {
-        cachedVersion = pkg.version;
-        return cachedVersion as string;
+        cachedRoot = { dir, version: pkg.version as string };
+        return cachedRoot;
       }
     } catch {
       // Not found or not parseable at this level — keep walking up.
@@ -54,4 +55,13 @@ export function readBoardsmithVersion(): string {
     }
     dir = parent;
   }
+}
+
+export function readBoardsmithVersion(): string {
+  return findPackage().version;
+}
+
+/** The root of the BoardSmith package this CLI runs from: a checkout, or an installed copy. */
+export function boardsmithPackageRoot(): string {
+  return findPackage().dir;
 }

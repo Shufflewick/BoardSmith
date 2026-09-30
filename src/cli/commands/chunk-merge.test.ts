@@ -6,6 +6,7 @@ import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { takeOsLock } from '../lib/os-lock.js';
 import { chunkMerge, resolveDesignConflicts } from './chunk-merge.js';
 import { assessSignoffs, recordSignoff } from './chunk-signoff.js';
+import { recordPassingVerify } from '../lib/verify-result.test-helper.js';
 import { recordVerifiedAgainst } from './chunk-provenance.js';
 import { checkClaimQuotes } from './claim-quotes.js';
 import { checkConstraints, type TestRunner } from './constraint-check.js';
@@ -159,6 +160,8 @@ async function buildOnBranch(slug: string, bytes: number, extra: Record<string, 
     ].join('\n'),
     ...extra,
   });
+  // A sign-off needs the chunk's work committed and verified (#452).
+  await recordPassingVerify(worktree, { chunk: slug, message: `chunk-${slug}/build` });
   await recordSignoff(slug, { project: worktree, automated: 'tests/budget.test.ts passed', now: new Date('2026-09-01T02:00:00Z') });
   // Close releases the lock on the branch; the run on the main line still holds it.
   const sketch = await read(worktree, 'design/SKETCH.md');

@@ -65,6 +65,7 @@ import {
 } from './commands/verify-example-replay.js';
 import { verifySourceFreeCheckCommand } from './commands/verify-source-free.js';
 import { verifyCloseRecordCommand } from './commands/verify-close-record.js';
+import { verifyCommand } from './commands/verify.js';
 import { verifyExampleEmitCommand } from './commands/example-test-emit.js';
 import { verifyExampleRunCommand } from './commands/example-test-run.js';
 import { evolveBotWeightsCommand } from './commands/evolve-bot-weights.js';
@@ -168,6 +169,22 @@ export function createProgram(): Command {
     .command('validate')
     .description('Validate game before publishing')
     .action(validateCommand);
+
+  // The done gate (#452): every check, recorded for the commit it ran on.
+  program
+    .command('verify')
+    .description(
+      'Run the full test suite, typecheck, build, validate and a mutation check of the code changed since the base, ' +
+        'and record the result for this commit; --check says whether HEAD has a passing result',
+    )
+    .option('--base <git-ref>', 'Where the change started: its merge base with HEAD is the base (default: the main branch)')
+    .option(
+      '--chunk <slug>',
+      "Measure a chunk's change from the commit before its first chunk-<slug>/ commit; with --check, accept only a result that covers it",
+    )
+    .option('--check', 'Run nothing: exit 0 only when HEAD, on a clean tree, has a passing result')
+    .option('--project <dir>', 'Project directory (defaults to cwd)')
+    .action((options: { base?: string; chunk?: string; check?: boolean; project?: string }) => verifyCommand(options));
 
   // Linting
   program
