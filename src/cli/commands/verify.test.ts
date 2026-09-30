@@ -7,19 +7,12 @@ import { INSTALLED_MODULES } from '../../testing/installed-modules.test-helper.j
 import { spawnCli } from '../spawn-cli.test-helper.js';
 import { generateVitestConfig } from '../lib/test-run-scope.js';
 import { readVerifyResult, verifiedProblem, type VerifyResult } from '../lib/verify-result.js';
-import { commitAll, git, initRepo } from '../lib/verify-result.test-helper.js';
+import { commitAll, git, initRepo, writeFiles as write } from '../lib/verify-result.test-helper.js';
 import { makeChunkProject } from './chunk-project.test-helper.js';
 import { recordSignoff } from './chunk-signoff.js';
-import { VERIFY_CHECKS, changedSince, resolveBase, runVerify, verifyCommand } from './verify.js';
+import { VERIFY_CHECKS, changedSince, resolveBase, runVerify } from './verify.js';
 
 vi.setConfig({ testTimeout: 180_000, hookTimeout: 60_000 });
-
-async function write(dir: string, files: Record<string, string>): Promise<void> {
-  for (const [path, text] of Object.entries(files)) {
-    await fs.mkdir(dirname(join(dir, path)), { recursive: true });
-    await fs.writeFile(join(dir, path), text);
-  }
-}
 
 /** A repository on `main` with one commit, holding `files`. */
 async function repo(files: Record<string, string>): Promise<string> {
@@ -275,6 +268,17 @@ describe('boardsmith verify: a claim of green is refused when a test outside the
   });
 });
 
+/** `checks` with a build that writes an uncommitted file into the project while verify runs. */
+function dirtiesTheTree<T extends object>(dir: string, checks: T): T {
+  return {
+    ...checks,
+    build: async () => {
+      await write(dir, { 'notes.md': 'written while verify ran\n' });
+      return { passed: true, summary: 'stood in for by the fixture' };
+    },
+  };
+}
+
 describe('boardsmith verify: a re-verify reuses mutant outcomes only while nothing they depend on changed', () => {
   const freshRuns = (lines: string[]) => lines.filter((l) => /^mutant \d+\/\d+: /.test(l) && !l.includes('(reused:')).length;
 
@@ -311,13 +315,7 @@ describe('boardsmith verify: a re-verify reuses mutant outcomes only while nothi
 
   it('keeps no outcome from a run whose tree changed while it ran', async () => {
     const dir = await gameOnBranch(false);
-    const dirtying = {
-      ...CHECKS,
-      build: async () => {
-        await write(dir, { 'notes.md': 'written while verify ran\n' });
-        return { passed: true, summary: 'stood in for by the fixture' };
-      },
-    };
+    const dirtying = dirtiesTheTree(dir, CHECKS);
     const first = await runVerify({ projectDir: dir, checks: dirtying, log: () => {} });
     expect(first.result.cleanTree).toBe(false);
     expect(check(first.result, 'mutation').counts).toMatchObject({ mutants: 3, reused: 0 });
@@ -377,13 +375,7 @@ describe('boardsmith verify: a result counts only for a commit on a clean tree',
     const dir = await gameOnBranch(false);
     const head = git(dir, 'rev-parse', 'HEAD').trim();
     const { checks } = countingChecks();
-    const dirtying = {
-      ...checks,
-      build: async () => {
-        await write(dir, { 'notes.md': 'written while verify ran\n' });
-        return { passed: true, summary: 'stood in for by the fixture' };
-      },
-    };
+    const dirtying = dirtiesTheTree(dir, checks);
 
     const first = await runVerify({ projectDir: dir, checks: dirtying, log: () => {} });
     expect(first.result).toMatchObject({ cleanTree: false, passed: true });

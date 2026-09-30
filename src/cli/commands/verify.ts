@@ -29,12 +29,12 @@
  * otherwise says what to run. `chunk-signoff` and `chunk-gate-transition` ask the same question
  * (`verifiedProblem`) before they record a done claim.
  */
-import { execFile, spawn } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { existsSync, promises as fs } from 'node:fs';
 import { join, relative, resolve as pathResolve } from 'node:path';
-import { promisify } from 'node:util';
 import chalk from 'chalk';
 import { boardsmithPackageRoot } from '../lib/boardsmith-version.js';
+import { gitOutput as git } from '../lib/git-output.js';
 import { type MutantCache, openMutantCache, toolRevision } from '../lib/mutant-cache.js';
 import { scratchDir } from '../lib/project-paths.js';
 import { testRunScopeProblem } from '../lib/test-run-scope.js';
@@ -55,16 +55,6 @@ import {
 import { isChunkCode } from './test-step-check.js';
 import { runDiffMutationCheck } from './test-step-mutation.js';
 import { runTypecheck } from './typecheck.js';
-
-const execFileAsync = promisify(execFile);
-
-async function git(dir: string, args: string[]): Promise<string> {
-  const { stdout } = await execFileAsync('git', ['-c', 'core.quotePath=false', ...args], {
-    cwd: dir,
-    maxBuffer: 256 * 1024 * 1024,
-  });
-  return stdout;
-}
 
 const short = (commit: string) => commit.slice(0, 12);
 
@@ -321,10 +311,10 @@ function cliCheck(command: 'build' | 'validate'): CheckRunner {
   };
 }
 
-/** 5. Every mutant of a changed code line must make the whole suite fail. */
-async function mutationCheck(ctx: VerifyContext): Promise<CheckOutcome> {
-  const since = `${ctx.base.ref} (${short(ctx.base.commit)})`;
-  const zero = { files: 0, mutants: 0, killed: 0, survived: 0, timedOut: 0, reused: 0 };
+const NO_MUTANTS = Object.freeze({ files: 0, mutants: 0, killed: 0, survived: 0, timedOut: 0, reused: 0 });
+
+/** Why no mutant is tried at all (nothing measured, nothing changed, a red suite), or undefined. */
+function mutationNotTried(ctx: VerifyContext, since: string): CheckOutcome | undefined {
   if (!ctx.base.given && ctx.base.commit === ctx.head) {
     // On the main branch itself (a chunk built in the main checkout) the merge base is HEAD, so the
     // default base measures no change at all, and a pass would cover nothing.
@@ -334,26 +324,26 @@ async function mutationCheck(ctx: VerifyContext): Promise<CheckOutcome> {
         `The merge base with ${ctx.base.ref} is the current commit (${short(ctx.head)}), so no change is measured ` +
         'and there is nothing to mutate. A pass here would cover nothing.',
       next: 'Run `boardsmith verify --base <commit the work started from>`: the commit before the first commit of this work.',
-      counts: zero,
+      counts: { ...NO_MUTANTS },
     };
   }
   if (ctx.changed.code.size === 0) {
-    return { passed: true, summary: `No code under src/ changed since ${since}, so there was nothing to mutate.`, counts: zero };
+    return { passed: true, summary: `No code under src/ changed since ${since}, so there was nothing to mutate.`, counts: { ...NO_MUTANTS } };
   }
   if (!ctx.earlier.get('test')?.passed) {
     return {
       passed: false,
       summary: 'Not run: the full suite is not green, and a mutant proves nothing on a red suite.',
       next: 'Fix the test check first, then run `boardsmith verify` again.',
-      counts: zero,
+      counts: { ...NO_MUTANTS },
     };
   }
-  const { summary, reused, survivors, notGreen } = await runDiffMutationCheck({
-    projectDir: ctx.projectDir,
-    added: ctx.changed.code,
-    cache: ctx.mutantCache,
-    log: ctx.log,
-  });
+  return undefined;
+}
+
+/** What a finished mutation run says: a red suite under the runner, survivors, or every mutant caught. */
+function mutationVerdict(since: string, run: Awaited<ReturnType<typeof runDiffMutationCheck>>): CheckOutcome {
+  const { summary, reused, survivors, notGreen } = run;
   const counts = { ...summary, reused };
   const reuse = reused > 0 ? ` ${reused} reused from an earlier run of this same code and these same tests.` : '';
   if (notGreen) {
@@ -379,11 +369,26 @@ async function mutationCheck(ctx: VerifyContext): Promise<CheckOutcome> {
       findings: survivors.map((s) => ({ file: s.file, line: s.line, detail: `${s.description}: no test failed` })),
     };
   }
+  const timedOut = summary.timedOut > 0 ? ` (${summary.timedOut} by running past the time limit)` : '';
   return {
     passed: true,
-    summary: `Every one of ${plural(summary.mutants, 'mutant')} of the lines changed since ${since} made a test fail${summary.timedOut > 0 ? ` (${summary.timedOut} by running past the time limit)` : ''}.${reuse}`,
+    summary: `Every one of ${plural(summary.mutants, 'mutant')} of the lines changed since ${since} made a test fail${timedOut}.${reuse}`,
     counts,
   };
+}
+
+/** 5. Every mutant of a changed code line must make the whole suite fail. */
+async function mutationCheck(ctx: VerifyContext): Promise<CheckOutcome> {
+  const since = `${ctx.base.ref} (${short(ctx.base.commit)})`;
+  const notTried = mutationNotTried(ctx, since);
+  if (notTried) return notTried;
+  const run = await runDiffMutationCheck({
+    projectDir: ctx.projectDir,
+    added: ctx.changed.code,
+    cache: ctx.mutantCache,
+    log: ctx.log,
+  });
+  return mutationVerdict(since, run);
 }
 
 /** Every check, by name. Adding a name to `VERIFY_CHECK_NAMES` requires its runner here. */
@@ -427,15 +432,19 @@ async function requireResultIgnored(projectDir: string): Promise<void> {
 }
 
 /**
- * Why `projectDir` cannot be verified as it stands, or undefined when it can: a result is tied to a
- * commit, so uncommitted or untracked changes are refused before any check runs.
+ * The commit checked out in `projectDir`, when it can be verified as it stands. A result is tied to
+ * a commit, so uncommitted or untracked changes are refused here, before any check runs.
  */
-function dirtyTreeProblem(state: { clean: boolean }): string | undefined {
-  if (state.clean) return undefined;
-  return (
-    'The working tree has uncommitted changes, and a `boardsmith verify` result is tied to a commit, so no check was run. ' +
-    'Commit your work (`git status` lists the changes), then run `boardsmith verify`.'
-  );
+async function verifiableCommit(projectDir: string): Promise<string> {
+  const state = await checkoutState(projectDir);
+  if ('problem' in state) throw new Error(state.problem);
+  if (!state.clean) {
+    throw new Error(
+      'The working tree has uncommitted changes, and a `boardsmith verify` result is tied to a commit, so no check was run. ' +
+        'Commit your work (`git status` lists the changes), then run `boardsmith verify`.',
+    );
+  }
+  return state.commit;
 }
 
 /**
@@ -451,36 +460,17 @@ async function recordResult(projectDir: string, result: VerifyResult): Promise<s
   return writeVerifyResult(projectDir, result);
 }
 
-/**
- * Runs every check in order, each whether or not an earlier one failed, and records the result for
- * the commit checked out. A dirty tree is refused before anything runs. `checks` is for tests that
- * stand in for a check a fixture cannot run.
- */
-export async function runVerify(options: {
-  projectDir: string;
-  base?: string;
-  checks?: Readonly<Record<VerifyCheckName, CheckRunner>>;
-  log?: (line: string) => void;
-}): Promise<{ result: VerifyResult; path: string | undefined }> {
-  const projectDir = pathResolve(options.projectDir);
-  requireGameProject(projectDir);
-  const before = await checkoutState(projectDir);
-  if ('problem' in before) throw new Error(before.problem);
-  const dirty = dirtyTreeProblem(before);
-  if (dirty) throw new Error(dirty);
-  await requireResultIgnored(projectDir);
-  const base = { ...(await resolveBase(projectDir, options.base)), given: options.base !== undefined };
-  const changed = await changedSince(projectDir, base.commit);
-  const mutantCache = await openMutantCache(projectDir, await toolRevision(boardsmithPackageRoot()));
-  const checks = options.checks ?? VERIFY_CHECKS;
-  const log = options.log ?? ((line: string) => console.error(chalk.dim(line)));
-
+/** Runs every check in order, each whether or not an earlier one failed. A check that throws failed. */
+async function runChecks(
+  checks: Readonly<Record<VerifyCheckName, CheckRunner>>,
+  ctx: Omit<VerifyContext, 'earlier'>,
+): Promise<VerifyCheckResult[]> {
   const earlier = new Map<VerifyCheckName, VerifyCheckResult>();
   for (const name of VERIFY_CHECK_NAMES) {
     console.log(chalk.cyan(`\nboardsmith verify: ${name}\n`));
     let outcome: CheckOutcome;
     try {
-      outcome = await checks[name]({ projectDir, head: before.commit, base, changed, mutantCache, earlier, log });
+      outcome = await checks[name]({ ...ctx, earlier });
     } catch (error) {
       outcome = {
         passed: false,
@@ -490,19 +480,63 @@ export async function runVerify(options: {
     }
     earlier.set(name, { name, ...outcome });
   }
+  return [...earlier.values()];
+}
+
+/**
+ * Runs every check and records the result for the commit checked out. A dirty tree is refused
+ * before anything runs. `checks` is for tests that stand in for a check a fixture cannot run.
+ */
+export async function runVerify(options: {
+  projectDir: string;
+  base?: string;
+  checks?: Readonly<Record<VerifyCheckName, CheckRunner>>;
+  log?: (line: string) => void;
+}): Promise<{ result: VerifyResult; path: string | undefined }> {
+  const projectDir = pathResolve(options.projectDir);
+  requireGameProject(projectDir);
+  const head = await verifiableCommit(projectDir);
+  await requireResultIgnored(projectDir);
+  const base = { ...(await resolveBase(projectDir, options.base)), given: options.base !== undefined };
+  const mutantCache = await openMutantCache(projectDir, await toolRevision(boardsmithPackageRoot()));
+  const checks = await runChecks(options.checks ?? VERIFY_CHECKS, {
+    projectDir,
+    head,
+    base,
+    changed: await changedSince(projectDir, base.commit),
+    mutantCache,
+    log: options.log ?? ((line: string) => console.error(chalk.dim(line))),
+  });
 
   const after = await checkoutState(projectDir);
-  const cleanTree = !('problem' in after) && after.clean && after.commit === before.commit;
+  const cleanTree = !('problem' in after) && after.clean && after.commit === head;
   // The cache keys outcomes by the commit's files; a run whose files changed under it keeps none.
   if (cleanTree) await mutantCache.save();
   const result = buildVerifyResult({
-    commit: before.commit,
+    commit: head,
     cleanTree,
     base: { ref: base.ref, commit: base.commit },
-    checks: [...earlier.values()],
+    checks,
     boardsmithCommit: await currentBoardsmithCommit(),
   });
   return { result, path: await recordResult(projectDir, result) };
+}
+
+/** The closing line: whether the run counts, and if not, what to do. */
+function printVerdict(result: VerifyResult): void {
+  if (!result.cleanTree) {
+    console.error(
+      chalk.red(
+        '\nThe working tree changed while the checks ran, so this run does not count for a done claim. ' +
+          'Commit or remove the changes (`git status` lists them), then run `boardsmith verify` again.',
+      ),
+    );
+  } else if (result.passed) {
+    console.log(chalk.green(`\nEvery check passed for ${short(result.commit)}.`));
+  } else {
+    const failed = result.checks.filter((c) => !c.passed).map((c) => c.name);
+    console.error(chalk.red(`\nFailed: ${failed.join(', ')}. Fix what each names above, commit, and run \`boardsmith verify\` again.`));
+  }
 }
 
 function printResult(result: VerifyResult, path: string | undefined, projectDir: string): void {
@@ -518,19 +552,7 @@ function printResult(result: VerifyResult, path: string | undefined, projectDir:
       ? `Result: not recorded; the passing result already on file for ${short(result.commit)} stands.`
       : `Result: ${relative(projectDir, path)}`,
   );
-  if (!result.cleanTree) {
-    console.error(
-      chalk.red(
-        '\nThe working tree changed while the checks ran, so this run does not count for a done claim. ' +
-          'Commit or remove the changes (`git status` lists them), then run `boardsmith verify` again.',
-      ),
-    );
-  } else if (result.passed) {
-    console.log(chalk.green(`\nEvery check passed for ${short(result.commit)}.`));
-  } else {
-    const failed = result.checks.filter((c) => !c.passed).map((c) => c.name);
-    console.error(chalk.red(`\nFailed: ${failed.join(', ')}. Fix what each names above, commit, and run \`boardsmith verify\` again.`));
-  }
+  printVerdict(result);
 }
 
 /**

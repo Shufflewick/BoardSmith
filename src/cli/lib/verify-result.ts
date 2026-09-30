@@ -1,9 +1,8 @@
-import { execFile } from 'node:child_process';
 import { promises as fs } from 'node:fs';
 import { join } from 'node:path';
-import { promisify } from 'node:util';
 import { ENGINE_REVISION } from '../../contract/index.js';
 import { boardsmithPackageRoot, readBoardsmithVersion } from './boardsmith-version.js';
+import { gitOutput as git } from './git-output.js';
 
 /**
  * The result `boardsmith verify` writes, and the one question every done claim asks of it (#452).
@@ -63,13 +62,6 @@ export interface VerifyResult {
   finishedAt: string;
   passed: boolean;
   checks: VerifyCheckResult[];
-}
-
-const execFileAsync = promisify(execFile);
-
-async function git(dir: string, args: string[]): Promise<string> {
-  const { stdout } = await execFileAsync('git', args, { cwd: dir, maxBuffer: 64 * 1024 * 1024 });
-  return stdout;
 }
 
 /** The commit of the BoardSmith checkout this CLI runs from, or null when it is an installed copy. */

@@ -3,14 +3,7 @@ import { promises as fs } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { BOOKKEEPING_RECORDS, mutantCachePath, openMutantCache, toolRevision } from './mutant-cache.js';
-import { commitAll, initRepo } from './verify-result.test-helper.js';
-
-async function write(dir: string, files: Record<string, string>): Promise<void> {
-  for (const [path, text] of Object.entries(files)) {
-    await fs.mkdir(dirname(join(dir, path)), { recursive: true });
-    await fs.writeFile(join(dir, path), text);
-  }
-}
+import { commitAll, initRepo, writeFiles as write } from './verify-result.test-helper.js';
 
 const RULES = 'export const fee = (price: number) => price * 2;\n';
 const MUTANT = { file: 'src/rules.ts', source: 'export const fee = (price: number) => price / 2;\n' };

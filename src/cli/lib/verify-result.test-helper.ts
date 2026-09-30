@@ -8,11 +8,19 @@
  * `verify.test.ts` drives the real command, so the shape written here is the shape it writes.
  */
 import { execFileSync } from 'node:child_process';
-import { appendFileSync, existsSync, mkdirSync, readFileSync, realpathSync } from 'node:fs';
-import { dirname, resolve } from 'node:path';
+import { appendFileSync, existsSync, mkdirSync, promises as fs, readFileSync, realpathSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
 import { VERIFY_CHECK_NAMES, buildVerifyResult, writeVerifyResult } from './verify-result.js';
 
 const IDENTITY = ['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.com', '-c', 'commit.gpgsign=false'];
+
+/** Writes each file under `dir`, making the directories it needs. */
+export async function writeFiles(dir: string, files: Record<string, string>): Promise<void> {
+  for (const [path, text] of Object.entries(files)) {
+    await fs.mkdir(dirname(join(dir, path)), { recursive: true });
+    await fs.writeFile(join(dir, path), text);
+  }
+}
 
 /** Runs git in `dir` and returns its stdout. */
 export function git(dir: string, ...args: string[]): string {

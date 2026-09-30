@@ -1,10 +1,9 @@
-import { execFile } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { promises as fs } from 'node:fs';
 import { join } from 'node:path';
-import { promisify } from 'node:util';
 import { ENGINE_REVISION } from '../../contract/index.js';
 import { readBoardsmithVersion } from './boardsmith-version.js';
+import { gitOutput as git } from './git-output.js';
 
 /**
  * The outcomes of `boardsmith verify`'s mutants, kept so a re-verify runs only the mutants whose
@@ -54,16 +53,6 @@ export const BOOKKEEPING_RECORDS: readonly RegExp[] = Object.freeze([
   /^design\/chunks\/[^/]+\/CHUNK\.md$/,
   /^design\/run-log\/[^/]+\.md$/,
 ]);
-
-const execFileAsync = promisify(execFile);
-
-async function git(dir: string, args: string[]): Promise<string> {
-  const { stdout } = await execFileAsync('git', ['-c', 'core.quotePath=false', ...args], {
-    cwd: dir,
-    maxBuffer: 256 * 1024 * 1024,
-  });
-  return stdout;
-}
 
 const sha256 = (text: string | Buffer) => createHash('sha256').update(text).digest('hex');
 
