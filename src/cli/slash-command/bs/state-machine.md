@@ -367,14 +367,14 @@ about which ledger it names, so it stops the merge; write the kind in front of i
 - Maximum **3 audit rounds** per chunk.
 - Round N+1 auditors see the existing findings ledger (stable IDs) and report **only NEW findings** — they do not re-litigate findings already recorded.
 - After round 3, any remaining findings are triaged with the user: real blocker, defer to a later chunk, or auditor was wrong (refuted).
-- The rounds follow the role ladder (`routing.md`): the first repair runs one role above whoever last changed the work, and a repair that fails at `judgement` gets exactly one more `judgement` round (the named exception) before the triage. Each later round reviews only the change since the round before (`boardsmith review-gate --since`).
+- The rounds follow the role ladder (`routing.md`): the first repair runs one role above whoever last changed the work, and a repair that fails at `judgement` gets exactly one more `judgement` round (the first named exception) before the triage. Each later round reviews only the change since the round before (`boardsmith review-gate --since`).
 
 ## Redteam Escalation
 
 - **Refuted once:** re-investigate with the specific objections attached. Maximum **one** re-investigate round.
 - **Refuted twice:** that is by definition an ambiguity. Escalate to the user as a plain-language question; the ruling is recorded in `RULINGS.md`.
 - Disputes go to the human, never to more agents.
-- The re-investigate round runs at `judgement` again, the same role that wrote the claims: the one named exception to "never retry at the same role" (`routing.md`).
+- The re-investigate round runs at `judgement` again, the same role that wrote the claims: the first named exception to "never retry at the same role" (`routing.md`).
 
 ## Autonomy Scope: How, Never What (PROC-02)
 
@@ -540,7 +540,7 @@ harness signal. Authoritative harness signal beats the floor; the floor beats se
 
 **Sub-agent offload is the substantive lever that keeps the main thread under the 60% ceiling
 while still clearing the 50% floor.** Heavy work classes — research, audits, large reads, and
-repairs — are dispatched to sub-agents rather than performed inline by the orchestrator, so the
+repairs — are dispatched to sub-agents rather than performed inline by the orchestrator (each as the role `routing.md` gives it: research at the `judgement` role, audits at the `judgement` and `review` roles, large reads at the `mechanical` role, repairs one role above the work that failed), so the
 main thread's own context fills slowly across a long autonomous run instead of spiking on any one
 step. This is the same mechanism `build-chunk.md`'s Context-Economics Hard Rule already codifies
 ("the orchestrator never reads rulebook slices, BoardSmith docs, or generated code itself") —

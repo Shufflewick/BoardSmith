@@ -56,23 +56,18 @@ than by asking — the gate still stops the work, and the human still decides.
 
 ## Model Routing
 
-The `bs-` skills name roles, never models. `${CLAUDE_SKILL_DIR}/../bs-shared/routing.md` is the one
-authority: `mechanical` (bulk edits, searches, summaries), `bounded` (implementation where failing
-tests say what done is), `judgement` (spec, investigate, red team, fidelity, anything touching a
-ruling), `review` (once `boardsmith verify` has passed) and `second-opinion` (an independent
-second reading, on a different agent from `judgement`). Before every dispatch,
-`npx boardsmith agent <role>` names the agent type to dispatch: the one the project's
-`boardsmith.json` `"agents"` block maps the role to, or BoardSmith's own `bs-<role>`. Every
-dispatch prompt starts with `Work package: <id>`.
+Which role does each piece of work, when review may start, and what happens when a step fails:
+`${CLAUDE_SKILL_DIR}/../bs-shared/routing.md`, the one authority.
 
 No review step starts until `boardsmith verify` has passed for the commit under review: the
 red team, every audit round and the final-acceptance pass each run `npx boardsmith verify --chunk
 <slug>` and then `npx boardsmith review-gate <slug>`, which refuses, saying to run `boardsmith
 verify`, when there is no passing result for the current commit, and when open prints the verify
-brief every review prompt carries. A step that fails (its verify fails, or its reviewer asks for
-changes) goes one role up at once, never to the same role again (`npx boardsmith agent <role>
---escalate`), and after `judgement` to the designer. Every dispatch and review round is recorded
-in the chunk's run log.
+brief every review prompt carries. A step that fails (its verify fails, `claim-quote-check`
+refuses its claims, or its reviewer asks for changes) goes one role up at once, never to the same
+role again (`npx boardsmith agent <role> --escalate`), and after `judgement` to the designer,
+apart from routing.md's two named exceptions. Every dispatch and review round is recorded in the
+chunk's run log.
 
 ## Context-Economics Hard Rule
 
@@ -420,7 +415,7 @@ re-invoke `/bs-build-chunk` to resume (`${CLAUDE_SKILL_DIR}/../bs-shared/state-m
 This continuation is exactly what the **≥50% wind-down floor** (SKILLAUTO-06,
 `${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md` "Context floor + ceiling") protects: the group-2 dispatches below
 (research the rulebook, audit findings, large reads, repairs) go to sub-agents rather than being
-read inline by the orchestrator, so the main thread's own context fills slowly enough to clear the
+read inline by the orchestrator (each as the role `routing.md` gives it: research at the `judgement` role, audits at the `judgement` and `review` roles, large reads at the `mechanical` role, repairs one role above the work that failed), so the main thread's own context fills slowly enough to clear the
 50% floor before the 60% ceiling ever forces a stop.
 If the redteam step hit a refuted-twice escalation earlier in this group, that is its own
 human-input gate — the session stops there for the user's ruling before reaching `ask`.
@@ -550,7 +545,7 @@ self-assessed "feels big" judgment, never an authoritative harness signal. The l
 main thread's own usage climbing slowly enough to clear that 50% floor before the 60% ceiling forces
 a stop is **sub-agent
 offload**: research (rulebook slices, docs), audits, large reads, and repairs are dispatched to
-sub-agents rather than performed inline, per this file's own "Context-Economics Hard Rule" above
+sub-agents rather than performed inline (each as the role `routing.md` gives it: research at the `judgement` role, audits at the `judgement` and `review` roles, large reads at the `mechanical` role, repairs one role above the work that failed), per this file's own "Context-Economics Hard Rule" above
 ("the orchestrator never reads rulebook slices, BoardSmith docs, or generated code itself") — that
 rule is the mechanism the offload rides on, and it is unchanged by this floor. See
 `state-machine.md` "Session Handoff Seams" → "Context floor + ceiling" for the full framing.

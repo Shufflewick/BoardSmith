@@ -24,8 +24,8 @@ never the slices, docs, or ledgers behind it — is NOT the failure mode this ru
 against. The failure mode is re-opening the chunk's *sources* to "double-check" the subagent's
 work: that silently reintroduces the exact context-exhaustion problem the fan-out design exists
 to avoid. If something looks wrong in a returned summary or in the written claims, dispatch a
-narrower follow-up subagent or ask the user — never fall back to reading the chunk's sources
-yourself.
+narrower follow-up subagent of the `judgement` role, the role of the investigate it follows up
+(`routing.md`), or ask the user — never fall back to reading the chunk's sources yourself.
 
 ## Required Reading (cite verbatim — do not re-derive)
 
@@ -164,10 +164,15 @@ open question with no `Searched:` line. It works the same for a rulebook-sourced
 heading) and a code-sourced one (cite file and lines).
 
 The orchestrator runs `boardsmith claim-quote-check <slug>` itself once the investigate subagent
-returns, before checking off `investigate`. A non-zero exit means the claims are not done: send
-its refusals to a narrower follow-up investigate subagent, which fixes the quote or location or
-turns the claim into an open question, and run the check again. Never check off `investigate`,
-and never dispatch redteam, while it exits non-zero. Open questions go to `build/ask.md` as part
+returns, before checking off `investigate`, and before it fills that dispatch's run log Outcome.
+A non-zero exit means the claims are not done, and the investigate (or re-investigate) dispatch
+has failed at `judgement`: record its Outcome `failed` with the refusals in its Detail. It gets
+one narrower `quote-fix`, dispatched at the `judgement` role, the second named exception in
+`routing.md` (`Work: quote-fix`, `Escalated from: Dispatch N` naming the refused dispatch), handed
+only the refusals: it fixes each quote or location, or turns the claim into an open question. Run
+the check again; if it still refuses, stop and ask the designer, then the designer decides what
+happens to the claims. Never check off `investigate`, and never dispatch redteam, while it exits
+non-zero. Open questions go to `build/ask.md` as part
 (b) questions; the agent never settles them by inventing a rule.
 
 ### Chunks Verified Before Claims Carried Quotes
@@ -185,7 +190,7 @@ and names the command.
 ## Re-Investigate Round Behavior (redteam refuted-once path)
 
 When `redteam.md` returns a refuted-once verdict on a claim, the re-investigate round (dispatched
-at the `judgement` role again, the one named exception in `routing.md`) APPENDS a
+at the `judgement` role again, the first named exception in `routing.md`) APPENDS a
 new claim noting supersession of the objected claim — it does NOT renumber or silently rewrite
 the existing numbered list. Concretely: if claim 7 is refuted with a specific objection and
 re-investigation concludes the objection is valid, the subagent appends a new claim (e.g. claim
@@ -205,8 +210,8 @@ Declaration` to obtain the numbered claims list text it will embed in the redtea
 prompts and restate at ask. Before that it runs `boardsmith claim-quote-check <slug>` (see
 "Quoted Claims, Checked as Code" above); a non-zero exit blocks the check-off. It never re-opens the chunk's sources — slices, docs, RULINGS.md,
 DECISIONS.md, DESIGN.md — to verify the subagent's work. If a returned summary or the written
-claims look incomplete or wrong, dispatch a narrower follow-up investigate subagent rather than
-reading the sources to verify. Once the return is recorded, the orchestrator checks off
+claims look incomplete or wrong, dispatch a narrower follow-up investigate subagent of the
+`judgement` role rather than reading the sources to verify. Once the return is recorded, the orchestrator checks off
 `investigate` on CHUNK.md's Step Checklist **before** dispatching redteam — every step persists
 its completion to CHUNK.md before the next step starts (see `build-chunk.md` "Step Group 1
 Dispatch"), so a cold resume never re-runs a completed investigate and appends a duplicate

@@ -254,8 +254,11 @@ boardsmith review-gate deal             # may a model review of chunk deal start
 `boardsmith review-gate <slug>` refuses unless the current commit passed
 `boardsmith verify --chunk <slug>`, and otherwise prints the verify result every
 review prompt carries, so no reviewer spends its time re-running the checks. A
-step that fails its verify, or whose reviewer asks for changes, goes one role up,
-never to the same role again, and after `judgement` to you.
+step that fails its verify, whose claims `claim-quote-check` refuses, or whose
+reviewer asks for changes, goes one role up, never to the same role again, and
+after `judgement` to you, apart from two named exceptions: a red-team
+re-investigation or a repair gets one more `judgement` round, and a refused quote
+gets one narrower fix.
 
 ### 5. Build for Production
 

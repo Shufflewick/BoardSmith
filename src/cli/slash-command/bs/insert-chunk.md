@@ -25,14 +25,8 @@ you may need to play that part again"), never as a raw diff.
 
 ## Model Routing
 
-The `bs-` skills name roles, never models. `${CLAUDE_SKILL_DIR}/../bs-shared/routing.md` is the one
-authority: `mechanical` (bulk edits, searches, summaries), `bounded` (implementation where failing
-tests say what done is), `judgement` (spec, investigate, red team, fidelity, anything touching a
-ruling), `review` (once `boardsmith verify` has passed) and `second-opinion` (an independent
-second reading, on a different agent from `judgement`). Before every dispatch,
-`npx boardsmith agent <role>` names the agent type to dispatch: the one the project's
-`boardsmith.json` `"agents"` block maps the role to, or BoardSmith's own `bs-<role>`. Every
-dispatch prompt starts with `Work package: <id>`.
+Which role does each piece of work, when review may start, and what happens when a step fails:
+`${CLAUDE_SKILL_DIR}/../bs-shared/routing.md`, the one authority.
 
 A sketch reshape touches the plan the designer approved, so under `/bs-build-game` it is
 dispatched as the `judgement` role's agent, with the work package the reshaped chunk's slug.

@@ -98,7 +98,9 @@ content-driven call, unchanged from ingest's fan-out.
 
 ## Dispatch
 
-For each pending range (per Resume above), dispatch one Task-tool subagent. **Do not compose, restate, or
+For each pending range (per Resume above), dispatch one subagent, as the agent `npx boardsmith
+agent judgement` names (`routing.md`), with `Work package: verify-game` as its prompt's first line
+and a `### Dispatch N` entry (`Work: transcribe <range>`) in `design/run-log/verify-game.md`. **Do not compose, restate, or
 summarize the transcription contract in the dispatch prompt.** The contract lives in
 `${CLAUDE_SKILL_DIR}/../bs-shared/ingest/transcription-subagent.md`; the subagent reads it
 directly. Copy this pointer block byte-identical except the last line, filling `Write slices to:`
@@ -127,7 +129,7 @@ looking like.
 Fill `{pages}` and `{source}` from the `ranges` entry being dispatched: `{source}` is the
 archived document exactly as `INDEX.md` records it (`rulebook/source/<file>`), so `Rulebook path:`
 is that file under `design/` and `Source record:` is the value each staged slice writes as its
-`Source:` line. A fresh-context Task subagent has no inherited knowledge of where the source lives
+`Source:` line. A fresh-context subagent has no inherited knowledge of where the source lives
 or which run it belongs to.
 
 ## Recording

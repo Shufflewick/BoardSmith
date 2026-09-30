@@ -204,7 +204,7 @@ export function createProgram(): Command {
   program
     .command('agent <role>')
     .description(
-      'Print the agent type to dispatch a role (mechanical, bounded, judgement, review) as: the one boardsmith.json "agents" maps it to, else bs-<role>',
+      'Print the agent type to dispatch a role (mechanical, bounded, judgement, review, second-opinion) as: the one boardsmith.json "agents" maps it to, else bs-<role>',
     )
     .option('--escalate', 'The step failed at this role: print the next role up and its agent type, or say to ask the designer')
     .option('--project <dir>', 'Project directory (defaults to cwd)')

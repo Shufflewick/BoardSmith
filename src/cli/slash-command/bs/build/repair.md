@@ -46,10 +46,13 @@ re-derive it in its own words, it applies it:
   findings is a request for changes, so the first repair is dispatched one role above whoever
   last changed the work: `npx boardsmith agent <that role> --escalate` names it, `judgement` after
   a `bounded` build. A repair that fails at `judgement` (its verify fails, or the next audit round
-  still has findings) gets exactly one more `judgement` round, the named exception in
+  still has findings) gets exactly one more `judgement` round, the first named exception in
   `routing.md`, and then the findings go to the round-3 triage. After a `bounded` build that is
-  the three audit rounds above. Each repair is a `### Dispatch N` entry in the run log, and its
-  prompt starts `Work package: <slug>` and hands over the round's findings.
+  the three audit rounds above; audit findings on a `build` that was already at `judgement` get
+  that one more round straight away. Each repair is a `### Dispatch N` entry in the run log
+  (`Work: repair`, `Escalated from: Review Round N` naming the audit round whose findings it
+  fixes, or `Escalated from: Dispatch N` naming the repair whose verify failed), and its prompt
+  starts `Work package: <slug>` and hands over the round's findings.
 
 ## Same-Group Loop-Back to Audit (cite, never restate)
 
@@ -106,6 +109,11 @@ present exactly three plain-language options, one per finding:
 - **Auditor was wrong (refuted)** — the finding does not actually hold; the user confirms the
   refutation in the same designer register `build/redteam.md`'s escalation example uses (a
   concrete plain-language question with concrete options), never engine or agent vocabulary.
+
+A finding the user calls a real blocker is worked by a further `repair` at the `judgement` role,
+whose run log entry records `Designer answer:` naming this triage in the Findings Ledger, since the
+work already failed at the top role and only the designer's answer lets it go on
+(`routing.md` "The Run Log").
 
 Whatever the user chooses becomes that finding's final disposition in the `## Findings Ledger`
 entry — `deferred` findings that the user routes to a later chunk are also noted in `SKETCH.md`'s

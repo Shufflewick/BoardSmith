@@ -31,8 +31,8 @@ truth for every rules-fidelity check.
 Audit runs 4 independent fresh-context agents, one per lens, plus a 5th for `ui: touches|major`
 chunks. Every lens (and the design-review agent) is dispatched in one message, so they run at the
 same time (`build-chunk.md` "Concurrency Within a Chunk"). Each lens is a SEPARATE dispatch of its
-role's agent (`routing.md`: the fidelity lens is `judgement`, the other three and the design
-review are `review`; `npx boardsmith agent <role>` names the agent type): fresh context, no inherited conversation,
+role's agent (`routing.md`: the fidelity lens is the `judgement` role, the other three and the
+design review the `review` role; `npx boardsmith agent <role>` names the agent type): fresh context, no inherited conversation,
 never the orchestrator's running conversation, never a peer lens's findings, and never
 `## Interpretation` (per the rule above). This is `build/redteam.md`'s "Independence:
 Fresh-Context, No-Framing Dispatch" applied one step further down the pipeline: framing from any
@@ -94,8 +94,9 @@ below:
   reviewing only the change the brief names.
 - `none`: no round. Verify is the whole gate for that change; record nothing and move on.
 
-The round is recorded as a `### Review Round N` entry (`Step: audit`, the level, `Verify: <commit>
-passed` as the brief names it, the agents) in the chunk's run log before the lenses are dispatched.
+The round is recorded as a `### Review Round N` entry (`Step: audit`, `Reviewed: Dispatch M` for
+the `build` or `repair` whose work it reviews, the level, `Verify: <commit> passed` as the brief
+names it, the agents) in the chunk's run log before the lenses are dispatched.
 
 ### Dispatch Templates
 
@@ -296,7 +297,8 @@ further merge lands until this lens has ruled.
 
 It is a review like any other, so it waits for verify: in the main checkout, run
 `npx boardsmith verify --chunk <slug>` for the chunk just merged, then `npx boardsmith review-gate
-<slug>`, and record the round (`Step: cross-chunk`) in that chunk's run log. The orchestrator then
+<slug>`, and record the round (`Step: cross-chunk`, `Reviewed: Dispatch M` for the chunk's
+dispatch that closed) in that chunk's run log. The orchestrator then
 dispatches it as its own fresh-context agent of the `judgement` role, against the main checkout,
 with only the gate's brief and the entry's text (its chunk, the chunks built alongside, the shared
 files and names):
@@ -360,7 +362,8 @@ never changes or is reused across rounds.
 
 **Cold-resume rule:** a session resuming at `audit` (unchecked on the Step Checklist) with a
 partial or missing current-round entry in `## Findings Ledger` re-dispatches this round's lenses
-from scratch — the round is not considered complete, and no partial finding list is trusted,
+from scratch, each at its own role as above (the fidelity lens at the `judgement` role, the others
+at the `review` role) — the round is not considered complete, and no partial finding list is trusted,
 until the full `### Audit Round N` entry lands. A session resuming at `repair` finds the prior
 round's entry already persisted and reads it directly; it never re-runs `audit` to reconstruct
 findings that are already on disk.

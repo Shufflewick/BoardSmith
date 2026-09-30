@@ -9,7 +9,7 @@ Cite `${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md`,
 `${CLAUDE_SKILL_DIR}/../bs-shared/reporting.md`, and the `orchestrate/` reference files rather than
 restating their rules — if you are extending this skill, link to the relevant section instead of
 copying rule text. This file is a lean **run loop**: it checks the project, resolves run state,
-dispatches each chunk into a fresh subagent (independent chunks side by side when `parallel-check` allows), conducts every human gate itself, and stops
+dispatches each chunk into a fresh subagent of the `judgement` role (independent chunks side by side when `parallel-check` allows), conducts every human gate itself, and stops
 only when it must. It does not explain the chunk pipeline, the status enum, or the session lock
 inline — `/bs-build-chunk` and `state-machine.md` own those.
 
@@ -52,14 +52,8 @@ of work you did not do (`reporting.md` "Don't Defend the Work").
 
 ## Model Routing
 
-The `bs-` skills name roles, never models. `${CLAUDE_SKILL_DIR}/../bs-shared/routing.md` is the one
-authority: `mechanical` (bulk edits, searches, summaries), `bounded` (implementation where failing
-tests say what done is), `judgement` (spec, investigate, red team, fidelity, anything touching a
-ruling), `review` (once `boardsmith verify` has passed) and `second-opinion` (an independent
-second reading, on a different agent from `judgement`). Before every dispatch,
-`npx boardsmith agent <role>` names the agent type to dispatch: the one the project's
-`boardsmith.json` `"agents"` block maps the role to, or BoardSmith's own `bs-<role>`. Every
-dispatch prompt starts with `Work package: <id>`.
+Which role does each piece of work, when review may start, and what happens when a step fails:
+`${CLAUDE_SKILL_DIR}/../bs-shared/routing.md`, the one authority.
 
 Each chunk is dispatched as the `judgement` role's agent (`orchestrate/chunk-dispatch.md`). No
 review step starts until `boardsmith verify` has passed for the commit under review, in any chunk
@@ -208,8 +202,9 @@ nothing, if there is nothing visible yet. Do not announce each dispatch.
   everything since the chunk began. A result from `--base HEAD`, which mutates nothing, is
   refused. A non-zero exit means the claim of done is not backed by a run: treat the chunk as unfinished,
   never as closed: its dispatch failed at `judgement`, the top role. Record it `failed`, stop, and
-  put it to the designer with the check's message; re-dispatch only with their answer in the brief
-  (`orchestrate/chunk-dispatch.md` "The Return Shape", `routing.md`). Then run `npx boardsmith chunk-check <slug>` (with `--project` set to the chunk's
+  put it to the designer with the check's message; re-dispatch only with their answer in the brief,
+  and with `Designer answer:` in the re-dispatch's run log entry (`orchestrate/chunk-dispatch.md`
+  "The Return Shape", `routing.md`). Then run `npx boardsmith chunk-check <slug>` (with `--project` set to the chunk's
   worktree when it was built in one, then `npx boardsmith chunk-merge <slug>` from the main checkout). A non-zero exit that names the
   sign-off means the chunk's verified status is not backed by the designer (or by a waiver naming
   it): treat the chunk as still at its playtest gate, never as closed. Otherwise relay the
@@ -255,8 +250,10 @@ The run is not finished when the last rules chunk closes.
 `${CLAUDE_SKILL_DIR}/../bs-build-bot/SKILL.md` instead of the chunk pipeline (same brief, same return
 shape). It belongs late — after game-end/scoring is verified, since an opponent needs real terminal
 states to evaluate against. If the sketch has **no** bot-opponent chunk, ask the designer once,
-before final acceptance, whether they want a computer opponent; if yes, dispatch a subagent against
-`${CLAUDE_SKILL_DIR}/../bs-insert-chunk/SKILL.md` to insert it ahead of final acceptance (which
+before final acceptance, whether they want a computer opponent; if yes, dispatch the `judgement`
+role's agent (`npx boardsmith agent judgement`) against
+`${CLAUDE_SKILL_DIR}/../bs-insert-chunk/SKILL.md`, with the bot chunk's slug as the work package
+and a `### Dispatch N` entry (`Work: insert-chunk`) in that chunk's run log, to insert it ahead of final acceptance (which
 re-validates dependency order and bumps the sketch version — never edit the ordered chunk list by
 hand), then continue the loop. If no, record the decision in `DECISIONS.md` and move on.
 

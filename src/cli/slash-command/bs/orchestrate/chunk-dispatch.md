@@ -109,8 +109,9 @@ five; the last two are dispatches it is never asked about:
    main line into it in its worktree, resolve and re-test there, commit, and run `chunk-merge`
    again. When the merge lists references between this chunk and the chunks merged while it was
    being built, they land in `design/CROSS-CHUNK.md` as pending, and `ledger-check` (so every close
-   and every later merge) fails until the audit rules on them: dispatch the cross-chunk lens
-   (`build/audit.md` "The Cross-Chunk Lens") against the main checkout before anything else.
+   and every later merge) fails until the audit rules on them: dispatch the cross-chunk lens, the
+   `judgement` role's agent (`build/audit.md` "The Cross-Chunk Lens"), against the main checkout
+   before anything else.
 6. **Clean up.** After a chunk merges, `git worktree remove .boardsmith/worktrees/<slug>` and
    `git branch -d chunk/<slug>`. When the last chunk of the batch has merged, set the session lock
    back to the next chunk the run dispatches.
@@ -196,7 +197,9 @@ orchestrator's own say-so (`routing.md` "When a Step Fails: One Role Up, Never t
 the orchestrator records the dispatch `failed`, stops, and puts it to the designer with the
 check's message (`build-game.md` Step 4). Once they answer, the chunk is re-dispatched with the
 answer and the check's message in the brief, so the fresh subagent fixes what it names and runs
-`build/close.md` "The Done Gate" again.
+`build/close.md` "The Done Gate" again. That re-dispatch's run log entry records where the
+designer's answer is in `Designer answer:`; `boardsmith ledger-check` refuses a re-dispatch of
+failed work at `judgement` without it.
 
 A return missing a field its `outcome` requires is itself a stuck dispatch: the orchestrator does
 not guess the missing half. Re-dispatch once with the missing field named; if the second return is

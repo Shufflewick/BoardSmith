@@ -29,16 +29,13 @@ staged output into a live location.
 
 ## Model Routing
 
-The `bs-` skills name roles, never models. `${CLAUDE_SKILL_DIR}/../bs-shared/routing.md` is the one
-authority: `mechanical` (bulk edits, searches, summaries), `bounded` (implementation where failing
-tests say what done is), `judgement` (spec, investigate, red team, fidelity, anything touching a
-ruling), `review` (once `boardsmith verify` has passed) and `second-opinion` (an independent
-second reading, on a different agent from `judgement`). Before every dispatch,
-`npx boardsmith agent <role>` names the agent type to dispatch: the one the project's
-`boardsmith.json` `"agents"` block maps the role to, or BoardSmith's own `bs-<role>`. Every
-dispatch prompt starts with `Work package: <id>`.
+Which role does each piece of work, when review may start, and what happens when a step fails:
+`${CLAUDE_SKILL_DIR}/../bs-shared/routing.md`, the one authority.
 
-Its dispatches use this skill's own name as the work package (`routing.md`). Its repair of stale chunks runs through the
+Its dispatches use this skill's own name as the work package (`routing.md`), and each one is
+recorded before it is launched as a `### Dispatch N` entry in `design/run-log/verify-game.md`,
+created from `${CLAUDE_SKILL_DIR}/../bs-shared/templates/RUN-LOG.template.md`, which `boardsmith
+ledger-check` checks exactly as it checks a chunk's. Its repair of stale chunks runs through the
 build pipeline's audit and repair, so the same review gate and escalation apply there. Step 7's
 second enumerator is the `second-opinion` role, which `boardsmith validate` keeps on a different
 agent from `judgement`, because that step depends on the two readings being independent.
@@ -187,18 +184,18 @@ Dispatch to `${CLAUDE_SKILL_DIR}/../bs-shared/verify/staging-dispatch.md` for th
 allocation, ledger-driven resume, fan-out dispatch, and per-unit recording sequence. In short: a
 `verify-run-init` call allocates (or resumes) a run-scoped staging directory, a
 `verify-run-status` call decides exactly which units still need re-transcription, each needed
-unit is dispatched to the shared transcription-subagent contract with its output directory set to
-the staging path, and each completed unit is recorded via `verify-run-record` — never by trusting
+unit is dispatched to a subagent of the `judgement` role following the shared
+transcription-subagent contract, with its output directory set to the staging path, and each completed unit is recorded via `verify-run-record` — never by trusting
 what files exist on disk.
 
 ## Step 3: Classification (VERIFY-03, VERIFY-07)
 
-Dispatch to `${CLAUDE_SKILL_DIR}/../bs-shared/verify/classification-dispatch.md` for the full pair
-enumeration, ledger-driven resume, per-pair subagent dispatch, and verdict recording sequence. In
+Follow `${CLAUDE_SKILL_DIR}/../bs-shared/verify/classification-dispatch.md` for the full pair
+enumeration, ledger-driven resume, per-pair dispatch, and verdict recording sequence. In
 short: a `verify-classify-pairs` call groups live and staged slices by page-span overlap, a
 `verify-classify-status` call decides exactly which pairs still need classifying, each pending pair
-is dispatched to the shared classification-subagent contract (the one place either slice is
-legitimately read), and each returned verdict is recorded via `verify-classify-record` — never by
+is dispatched to a subagent of the `judgement` role following the shared classification-subagent
+contract (the one place either slice is legitimately read), and each returned verdict is recorded via `verify-classify-record` — never by
 the orchestrator opening a slice itself. This step records verdicts only; acting on them — the
 adjudication gate and the rules-staleness write — is Step 4's job, below.
 
@@ -223,7 +220,8 @@ below, dispatches `verify/repair-dispatch.md` to actually perform it.
 Dispatch to `${CLAUDE_SKILL_DIR}/../bs-shared/verify/ruling-recheck.md` for the full judgment
 contract. In short: every `RULINGS.md` entry without a resolved `supersededBy` (parsed once, via
 `parseRulings` — the one ruling parser in this repo, never a second regex path) is dispatched, in
-turn, to a fresh-context subagent carrying the `BS-RULING-RECHECK-V1` handshake token, together
+turn, to a fresh-context subagent of the `judgement` role (`npx boardsmith agent judgement`;
+`Work: ruling-recheck Ruling <n>` in the run log) carrying the `BS-RULING-RECHECK-V1` handshake token, together
 with that ruling's own full body text (Decision/Citation/Rationale) and the fresh STAGED
 transcription only — never the live `rulebook/` slices. Each subagent returns exactly one of
 `still-needed`, `resolved-by-source`, `contradicted`, or `undetermined`, with mandatory reasoning.
@@ -272,13 +270,15 @@ For each slice the command reports as pending, dispatch the SAME `slices[].enume
 bytes TWICE, unchanged, to two independent subagents carrying
 `${CLAUDE_SKILL_DIR}/../bs-shared/verify/enumerate-facts.md`'s `BS-ENUMERATE-V1` handshake:
 enumerator A as the agent `npx boardsmith agent judgement` names, enumerator B as the agent
-`npx boardsmith agent second-opinion` names. The roles come from the command's own `roles` field,
-so this prose and the code cannot drift. Independence is load-bearing: two enumerators that are
+`npx boardsmith agent second-opinion` names, each a `Work: enumerate <slice>` entry in the run log
+with its own role. The roles come from the command's own `roles` field, so this prose and the code cannot
+drift. Independence is load-bearing: two enumerators that are
 the same agent would confirm each other's decomposition rather than independently reproduce the
 facts, which is why `boardsmith validate` refuses a `boardsmith.json` that maps `second-opinion`
 to the same agent type as `judgement`.
 
-Dispatch a THIRD subagent, as the agent `npx boardsmith agent judgement` names, carrying
+Dispatch a THIRD subagent, as the agent `npx boardsmith agent judgement` names (`Work: reconcile <slice>`),
+carrying
 `${CLAUDE_SKILL_DIR}/../bs-shared/verify/reconcile-facts.md`'s `BS-RECONCILE-V1` handshake, the two
 enumerator returns, and `slices[].derivedLines`.
 
@@ -304,14 +304,16 @@ staleness verdicts and is not scoped to the chunks Step 6 touched. Run
 `boardsmith verify-example-replay --json` PROJECT-WIDE.
 
 For each slice the command reports pending, dispatch that slice's `slices[].extractionPayload`
-UNCHANGED to a subagent carrying
+UNCHANGED to a subagent of the `judgement` role (`npx boardsmith agent judgement`;
+`Work: extract-example <slice>` in the run log) carrying
 `${CLAUDE_SKILL_DIR}/../bs-shared/verify/extract-example.md`'s `BS-EXAMPLE-EXTRACT-V1` handshake,
 and save its return to a file UNCHANGED — the one `{ "examples": [...] }` object that contract
 returns.
 
 Obtain the SECOND dispatch's bytes from `boardsmith verify-example-translate --slice-path <p>
 --extraction <that return file> --json`, and dispatch each returned `payloads[].translationPayload`
-UNCHANGED and SEPARATELY to a subagent carrying
+UNCHANGED and SEPARATELY to a subagent of the `judgement` role
+(`Work: translate-example <example id>`) carrying
 `${CLAUDE_SKILL_DIR}/../bs-shared/verify/translate-example.md`'s `BS-EXAMPLE-TRANSLATE-V1`
 handshake. Two dispatches, never one combined pass — a combined pass would let the model work
 backward from code it can already see, producing agreement with itself rather than a real test of
@@ -393,6 +395,8 @@ pair classified, the pass closes:
   that could not be recorded and does NOT fail the pass, matching this skill's standing rule that
   advisory results never gate a Close. Place this bullet before the commit bullet below, so the
   write is part of what gets committed.
+- Run `npx boardsmith ledger-check`. It checks `design/run-log/verify-game.md`, the record of
+  every dispatch this pass made; fix what it names before committing.
 - Commit per `${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md` ("Git Protocol").
 - Release the session lock: rewrite `Session Lock:` in `SKETCH.md` to exactly `none`, the same
   clean-close release the chunk-build lock already uses.

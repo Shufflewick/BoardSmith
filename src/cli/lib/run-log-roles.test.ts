@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { checkRunLogRoles } from './run-log-roles.js';
+import { type VerifyLookup, checkRunLogRoles, reviewRoundCommits, runLogEntries } from './run-log-roles.js';
+import { type VerifyResult, buildVerifyResult } from './verify-result.js';
 
 /**
  * The run log's record of who did the work and how review went (#454): each dispatch's role and
- * agent type, escalation one role at a time, and each review round's verify result.
+ * agent type, escalation one role at a time from a failed dispatch or a review round that asked for
+ * changes, routing.md's two named exceptions at judgement, and each review round's link to the
+ * dispatch it reviewed and the verify result it started from.
  */
 
 function dispatch(n: number, fields: Record<string, string>): string {
@@ -24,6 +27,7 @@ function dispatch(n: number, fields: Record<string, string>): string {
 function round(n: number, fields: Record<string, string>): string {
   const all = {
     Step: 'audit',
+    Reviewed: 'Dispatch 1',
     Level: 'full',
     Verify: '0123456789ab passed',
     Agents: 'fidelity=bs-judgement, visibility=bs-review, undo=bs-review, constraints=bs-review',
@@ -33,93 +37,312 @@ function round(n: number, fields: Record<string, string>): string {
   return [`### Review Round ${n}`, ...Object.entries(all).filter(([, v]) => v !== '').map(([k, v]) => `- ${k}: ${v}`), ''].join('\n');
 }
 
-const details = (text: string) => checkRunLogRoles(text).map((f) => `${f.entry}: ${f.detail}`);
+const J = { Role: 'judgement', Agent: 'bs-judgement' };
+const noVerifyFiles: VerifyLookup = () => undefined;
+const details = (text: string, lookup: VerifyLookup = noVerifyFiles) =>
+  checkRunLogRoles(text, lookup).map((f) => `${f.entry}: ${f.detail}`);
+const log = (...entries: string[]) => entries.join('\n');
+/** The findings `details` should give, in order, each as a pattern it must match. */
+const matching = (...patterns: RegExp[]) => patterns.map((p) => expect.stringMatching(p));
+
+/** A bounded build (Dispatch 1) whose audit round (Review Round 1) asked for changes. */
+const buildWithFindings = [dispatch(1, {}), round(1, { Outcome: 'changes requested' })];
+/** Dispatch `n`: a repair at judgement answering review round `r`. */
+const repairOf = (n: number, r: number, fields: Record<string, string> = {}) =>
+  dispatch(n, { Work: 'repair', ...J, 'Escalated from': `Review Round ${r}`, ...fields });
+/** An investigate (Dispatch 1) whose red team round (Review Round 1) asked for changes. */
+const refutedClaims = [dispatch(1, { Work: 'investigate', ...J }), round(1, { Step: 'redteam', Outcome: 'changes requested' })];
 
 describe('dispatch entries', () => {
   it('pass with a role, the agent type dispatched, and an escalation one role up from a failed dispatch', () => {
-    const text = [
-      dispatch(1, { Work: 'build-chunk', Role: 'judgement', Agent: 'senior', Outcome: 'pending', 'Finished at': 'pending' }),
+    const text = log(
+      dispatch(1, { Work: 'build-chunk', ...J, Agent: 'senior', Outcome: 'pending', 'Finished at': 'pending' }),
       dispatch(2, { Outcome: 'failed', Detail: 'verify failed: test' }),
-      dispatch(3, { Work: 'build', Role: 'judgement', Agent: 'senior', 'Escalated from': 'Dispatch 2' }),
-    ].join('\n');
+      dispatch(3, { ...J, Agent: 'senior', 'Escalated from': 'Dispatch 2' }),
+    );
     expect(details(text)).toEqual([]);
   });
 
   it('refuse a missing Work, Role or Agent, and a role that does not exist or is review', () => {
-    const text = [
-      dispatch(1, { Work: '', Role: '', Agent: '' }),
-      dispatch(2, { Role: 'senior' }),
-      dispatch(3, { Role: 'review', Agent: 'bs-review' }),
-    ].join('\n');
-    const found = details(text);
-    expect(found).toHaveLength(5);
-    expect(found[0]).toMatch(/^Dispatch 1: .*no "- Work:" field/);
-    expect(found[1]).toMatch(/^Dispatch 1: .*no "- Role:" field/);
-    expect(found[2]).toMatch(/^Dispatch 1: .*no "- Agent:" field.*the agent type actually dispatched/);
-    expect(found[3]).toMatch(/^Dispatch 2: .*"Role: senior", which is not a role that does work: mechanical, bounded or judgement/);
-    expect(found[4]).toMatch(/^Dispatch 3: .*"Role: review".*Review Round/);
+    const text = log(dispatch(1, { Work: '', Role: '', Agent: '' }), dispatch(2, { Role: 'senior' }), dispatch(3, { Role: 'review', Agent: 'bs-review' }));
+    expect(details(text)).toEqual(matching(
+      /^Dispatch 1: .*no "- Work:" field/,
+      /^Dispatch 1: .*no "- Role:" field/,
+      /^Dispatch 1: .*no "- Agent:" field.*the agent type actually dispatched/,
+      /^Dispatch 2: .*"Role: senior", which is not a role that does work: mechanical, bounded, judgement or second-opinion/,
+      /^Dispatch 3: .*"Role: review".*Review Round/,
+    ));
   });
 
-  it('refuse an escalation that skips a role, stays at the same role, or starts from a dispatch that did not fail', () => {
-    const text = [
+  it('accept second-opinion, the role of verify-game\'s second enumerator, which nothing escalates from', () => {
+    const text = log(
+      dispatch(1, { Work: 'enumerate', ...J }),
+      dispatch(2, { Work: 'enumerate', Role: 'second-opinion', Agent: 'bs-second-opinion', Outcome: 'failed' }),
+      dispatch(3, { Work: 'enumerate', ...J, 'Escalated from': 'Dispatch 2' }),
+    );
+    expect(details(text)).toEqual([expect.stringMatching(/^Dispatch 3: .*Dispatch 2 failed at second-opinion.*ask the designer/)]);
+  });
+
+  it('refuse an escalation that skips a role, or starts from a dispatch that did not fail or is not there', () => {
+    const text = log(
       dispatch(1, { Role: 'mechanical', Agent: 'bs-mechanical', Outcome: 'failed' }),
-      dispatch(2, { Role: 'judgement', Agent: 'bs-judgement', 'Escalated from': 'Dispatch 1' }),
+      dispatch(2, { ...J, 'Escalated from': 'Dispatch 1' }),
       dispatch(3, { Outcome: 'done' }),
-      dispatch(4, { Role: 'judgement', Agent: 'bs-judgement', 'Escalated from': 'Dispatch 3' }),
+      dispatch(4, { ...J, 'Escalated from': 'Dispatch 3' }),
       dispatch(5, { 'Escalated from': 'Dispatch 9' }),
-    ].join('\n');
-    const found = details(text);
-    expect(found).toHaveLength(3);
-    expect(found[0]).toMatch(/^Dispatch 2: .*escalates from Dispatch 1 \(mechanical\), so it must be the next role up, bounded, not judgement/);
-    expect(found[1]).toMatch(/^Dispatch 4: .*Dispatch 3 did not fail/);
-    expect(found[2]).toMatch(/^Dispatch 5: .*no Dispatch 9 before it/);
+      dispatch(6, { 'Escalated from': 'the last one' }),
+    );
+    expect(details(text)).toEqual(matching(
+      /^Dispatch 2: .*escalates from Dispatch 1 \(mechanical\), so it must be the next role up, bounded, not judgement/,
+      /^Dispatch 4: .*Dispatch 3 did not fail \(Outcome: done\)/,
+      /^Dispatch 5: .*no Dispatch 9 before it/,
+      /^Dispatch 6: .*"Escalated from: the last one".*"Dispatch N".*"Review Round N"/,
+    ));
   });
 
-  it('refuse a retry of failed work at the same role below judgement, and a second escalation from one failure', () => {
-    const text = [
+  it('refuse a retry of failed work at the same role or below, and a second escalation from one failure', () => {
+    const text = log(
       dispatch(1, { Outcome: 'failed' }),
       dispatch(2, {}),
-      dispatch(3, { Role: 'judgement', Agent: 'bs-judgement', 'Escalated from': 'Dispatch 1' }),
-      dispatch(4, { Role: 'judgement', Agent: 'bs-judgement', 'Escalated from': 'Dispatch 1' }),
-    ].join('\n');
-    const found = details(text);
-    expect(found).toHaveLength(2);
-    expect(found[0]).toMatch(/^Dispatch 2: .*retries "build" at bounded after Dispatch 1 failed there.*one role up/);
-    expect(found[1]).toMatch(/^Dispatch 4: .*Dispatch 1 was already escalated by Dispatch 3/);
+      dispatch(3, { Role: 'mechanical', Agent: 'bs-mechanical' }),
+      dispatch(4, { ...J, 'Escalated from': 'Dispatch 1' }),
+      dispatch(5, { ...J, 'Escalated from': 'Dispatch 1' }),
+    );
+    expect(details(text)).toEqual(matching(
+      /^Dispatch 2: .*retries "build" at bounded after Dispatch 1 failed at bounded.*one role up.*"Escalated from: Dispatch 1"/,
+      /^Dispatch 3: .*retries "build" at mechanical after Dispatch 1 failed at bounded/,
+      /^Dispatch 5: .*Dispatch 1 was already answered by Dispatch 4/,
+    ));
   });
 
-  it('refuse an escalation from judgement: after judgement the designer decides', () => {
-    const text = [
-      dispatch(1, { Role: 'judgement', Agent: 'bs-judgement', Outcome: 'failed' }),
-      dispatch(2, { Role: 'judgement', Agent: 'bs-judgement', 'Escalated from': 'Dispatch 1' }),
-    ].join('\n');
+  it('refuse an escalation from judgement for work that is not a named exception: after judgement the designer decides', () => {
+    const text = log(dispatch(1, { Work: 'spec', ...J, Outcome: 'failed' }), dispatch(2, { Work: 'spec', ...J, 'Escalated from': 'Dispatch 1' }));
     expect(details(text)).toEqual([
-      expect.stringMatching(/^Dispatch 2: .*Dispatch 1 failed at judgement, the top role.*ask the designer/),
+      expect.stringMatching(/^Dispatch 2: .*Dispatch 1 failed at judgement, the top role, and "spec" is not one of the named exceptions.*ask the designer/),
     ]);
   });
 
-  it('allow the same work at judgement again once the designer has answered', () => {
-    const text = [dispatch(1, { Role: 'judgement', Agent: 'bs-judgement', Outcome: 'failed' }), dispatch(2, { Role: 'judgement', Agent: 'bs-judgement' })].join('\n');
+  it('refuse the same work at judgement again unless the dispatch records where the designer answered', () => {
+    const refused = log(dispatch(1, { Work: 'spec', ...J, Outcome: 'failed' }), dispatch(2, { Work: 'spec', ...J }));
+    expect(details(refused)).toEqual([
+      expect.stringMatching(/^Dispatch 2: .*retries "spec" at judgement after Dispatch 1 failed at judgement, the top role.*ask the designer.*"- Designer answer:"/),
+    ]);
+    const answered = log(
+      dispatch(1, { Work: 'spec', ...J, Outcome: 'failed' }),
+      dispatch(2, { Work: 'spec', ...J, 'Designer answer': 'RULINGS.md Ruling 4' }),
+    );
+    expect(details(answered)).toEqual([]);
+  });
+
+  it('refuse a designer answer standing in for the ladder below judgement', () => {
+    const text = log(dispatch(1, { Outcome: 'failed' }), dispatch(2, { 'Designer answer': 'DECISIONS.md Decision 2' }));
+    expect(details(text)).toEqual([expect.stringMatching(/^Dispatch 2: .*retries "build" at bounded after Dispatch 1 failed at bounded.*one role up/)]);
+  });
+
+  it('tell a retry of one unit from the next unit\'s first dispatch by the unit in its Work', () => {
+    const text = log(
+      dispatch(1, { Work: 'transcribe rulebook.pdf pp. 1-8', ...J, Outcome: 'failed' }),
+      dispatch(2, { Work: 'transcribe rulebook.pdf pp. 9-16', ...J }),
+      dispatch(3, { Work: 'transcribe rulebook.pdf pp. 1-8', ...J }),
+    );
+    expect(details(text)).toEqual(matching(/^Dispatch 3: .*retries "transcribe rulebook.pdf pp. 1-8" at judgement after Dispatch 1 failed/));
+  });
+
+  it('keep the role across a gate or a context ceiling, which are not failures', () => {
+    const text = log(
+      dispatch(1, { Outcome: 'context-ceiling' }),
+      dispatch(2, { Outcome: 'gate', Detail: 'a rules question' }),
+      dispatch(3, {}),
+    );
     expect(details(text)).toEqual([]);
   });
 });
 
+describe('review rounds as the cause of an escalation', () => {
+  it('link each round to the dispatch it reviewed, and let a round that asked for changes start an escalation one role up', () => {
+    const text = log(
+      dispatch(1, {}),
+      round(1, { Reviewed: 'Dispatch 1', Outcome: 'changes requested' }),
+      repairOf(2, 1),
+      round(2, { Reviewed: 'Dispatch 2', Verify: 'fedcba987654 passed' }),
+    );
+    expect(details(text)).toEqual([]);
+  });
+
+  it('refuse a repair at the reviewed role after a round asked for changes, without an escalation', () => {
+    const text = log(...buildWithFindings, dispatch(2, { Work: 'repair' }), dispatch(3, { Work: 'build' }));
+    expect(details(text)).toEqual(matching(
+      /^Dispatch 2: .*retries "repair" at bounded after Review Round 1 asked for changes to Dispatch 1's work at bounded.*`boardsmith agent bounded --escalate`.*"Escalated from: Review Round 1"/,
+      /^Dispatch 3: .*retries "build" at bounded after Review Round 1/,
+    ));
+  });
+
+  it('refuse an escalation from a round that did not ask for changes, is not there, or skips a role', () => {
+    const text = log(
+      dispatch(1, { Role: 'mechanical', Agent: 'bs-mechanical' }),
+      round(1, { Outcome: 'clean' }),
+      dispatch(2, { Work: 'repair', 'Escalated from': 'Review Round 1' }),
+      dispatch(3, { Work: 'repair', 'Escalated from': 'Review Round 7' }),
+      round(2, { Outcome: 'changes requested' }),
+      repairOf(4, 2),
+    );
+    expect(details(text)).toEqual(matching(
+      /^Dispatch 2: .*Review Round 1 did not ask for changes \(Outcome: clean\)/,
+      /^Dispatch 3: .*no Review Round 7 before it/,
+      /^Dispatch 4: .*escalates from Review Round 2 \(mechanical\), so it must be the next role up, bounded, not judgement/,
+    ));
+  });
+});
+
+describe('the named exceptions at judgement (routing.md "When a Step Fails")', () => {
+  it('give a repair one more judgement round, and send the next failure to the designer: three audit rounds after a bounded build', () => {
+    const text = log(
+      ...buildWithFindings,
+      repairOf(2, 1),
+      round(2, { Reviewed: 'Dispatch 2', Outcome: 'changes requested' }),
+      repairOf(3, 2),
+      round(3, { Reviewed: 'Dispatch 3', Outcome: 'changes requested' }),
+      repairOf(4, 3),
+    );
+    expect(details(text)).toEqual([
+      expect.stringMatching(/^Dispatch 4: .*already had its one more judgement round \(Dispatch 3\).*No step gets a third round.*ask the designer/),
+    ]);
+  });
+
+  it('count audit findings on work already at judgement as the repair exception', () => {
+    const text = log(
+      dispatch(1, { Outcome: 'failed' }),
+      dispatch(2, { ...J, 'Escalated from': 'Dispatch 1' }),
+      round(1, { Reviewed: 'Dispatch 2', Outcome: 'changes requested' }),
+      repairOf(3, 1),
+      round(2, { Reviewed: 'Dispatch 3', Outcome: 'changes requested' }),
+      repairOf(4, 2),
+    );
+    expect(details(text)).toEqual([expect.stringMatching(/^Dispatch 4: .*already had its one more judgement round \(Dispatch 3\)/)]);
+  });
+
+  it('give a repair whose verify failed at judgement its one more round, but not a build', () => {
+    const repair = log(
+      ...buildWithFindings,
+      repairOf(2, 1, { Outcome: 'failed' }),
+      dispatch(3, { Work: 'repair', ...J, 'Escalated from': 'Dispatch 2' }),
+    );
+    expect(details(repair)).toEqual([]);
+    const build = log(
+      dispatch(1, { Outcome: 'failed' }),
+      dispatch(2, { ...J, 'Escalated from': 'Dispatch 1', Outcome: 'failed' }),
+      dispatch(3, { Work: 'repair', ...J, 'Escalated from': 'Dispatch 2' }),
+    );
+    expect(details(build)).toEqual([expect.stringMatching(/^Dispatch 3: .*one more judgement round is for a repair after an audit, final-acceptance or cross-chunk round asked for changes, or after a repair's verify failed.*ask the designer/)]);
+  });
+
+  it('give a red-team re-investigation one more judgement round, then the designer', () => {
+    const text = log(
+      ...refutedClaims,
+      dispatch(2, { Work: 're-investigate', ...J, 'Escalated from': 'Review Round 1' }),
+      round(2, { Step: 'redteam', Reviewed: 'Dispatch 2', Outcome: 'changes requested' }),
+      dispatch(3, { Work: 're-investigate', ...J, 'Escalated from': 'Review Round 2' }),
+    );
+    expect(details(text)).toEqual([expect.stringMatching(/^Dispatch 3: .*already had its one more judgement round \(Dispatch 2\)/)]);
+  });
+
+  it('refuse a re-investigation after an audit round, and a repair after a red team round', () => {
+    const text = log(
+      ...refutedClaims,
+      repairOf(2, 1),
+      dispatch(3, { Work: 'build', ...J }),
+      round(2, { Reviewed: 'Dispatch 3', Outcome: 'changes requested' }),
+      dispatch(4, { Work: 're-investigate', ...J, 'Escalated from': 'Review Round 2' }),
+    );
+    expect(details(text)).toEqual(matching(
+      /^Dispatch 2: .*one more judgement round is for a repair after an audit, final-acceptance or cross-chunk round asked for changes/,
+      /^Dispatch 4: .*one more judgement round is for a re-investigation after a red team round asked for changes/,
+    ));
+  });
+
+  it('give a claim-quote-check refusal one narrower quote-fix at judgement, then the designer', () => {
+    const text = log(
+      dispatch(1, { Work: 'investigate', ...J, Outcome: 'failed', Detail: 'claim-quote-check: claim 4 quote not at its citation' }),
+      dispatch(2, { Work: 'quote-fix', ...J, 'Escalated from': 'Dispatch 1', Outcome: 'failed' }),
+      dispatch(3, { Work: 'quote-fix', ...J, 'Escalated from': 'Dispatch 2' }),
+    );
+    expect(details(text)).toEqual([
+      expect.stringMatching(/^Dispatch 3: .*A quote-fix answers a claim-quote-check refusal of an investigate or re-investigate dispatch.*ask the designer/),
+    ]);
+  });
+
+  it('keep the two exceptions apart, and refuse a second re-investigation reached through a quote-fix', () => {
+    const text = log(
+      ...refutedClaims,
+      dispatch(2, { Work: 're-investigate', ...J, 'Escalated from': 'Review Round 1', Outcome: 'failed' }),
+      dispatch(3, { Work: 'quote-fix', ...J, 'Escalated from': 'Dispatch 2' }),
+      round(2, { Step: 'redteam', Reviewed: 'Dispatch 3', Outcome: 'changes requested' }),
+      dispatch(4, { Work: 're-investigate', ...J, 'Escalated from': 'Review Round 2' }),
+    );
+    expect(details(text)).toEqual([expect.stringMatching(/^Dispatch 4: .*already had its one more judgement round \(Dispatch 2\)/)]);
+  });
+
+  it('carry an exception round across a context ceiling, so a resumed round is not a fresh one', () => {
+    const text = log(
+      ...buildWithFindings,
+      repairOf(2, 1),
+      round(2, { Reviewed: 'Dispatch 2', Outcome: 'changes requested' }),
+      repairOf(3, 2, { Outcome: 'context-ceiling' }),
+      dispatch(4, { Work: 'repair', ...J }),
+      round(3, { Reviewed: 'Dispatch 4', Outcome: 'changes requested' }),
+      repairOf(5, 3),
+    );
+    expect(details(text)).toEqual([expect.stringMatching(/^Dispatch 5: .*already had its one more judgement round \(Dispatch 3\)/)]);
+  });
+
+  it('refuse an unlinked judgement repair after a review failure at judgement, naming the exception and the designer', () => {
+    const text = log(
+      ...buildWithFindings,
+      repairOf(2, 1),
+      round(2, { Reviewed: 'Dispatch 2', Outcome: 'changes requested' }),
+      dispatch(3, { Work: 'repair', ...J }),
+    );
+    expect(details(text)).toEqual([
+      expect.stringMatching(/^Dispatch 3: .*after Review Round 2 asked for changes to Dispatch 2's work at judgement, the top role.*one more judgement round.*"Escalated from: Review Round 2".*"- Designer answer:"/),
+    ]);
+  });
+});
+
 describe('review rounds', () => {
-  it('pass when they record the step, level, the passing verify they started from, the agents and the outcome', () => {
-    const text = [round(1, { Outcome: 'changes requested' }), round(2, { Verify: 'fedcba9876543210 passed', Level: 'light', Agents: 'bs-review' })].join('\n');
+  it('pass when they record the step, the dispatch reviewed, level, the passing verify they started from, the agents and the outcome', () => {
+    const text = log(...buildWithFindings, round(2, { Verify: 'fedcba9876543210 passed', Level: 'light', Agents: 'bs-review' }));
     expect(details(text)).toEqual([]);
   });
 
   it('refuse a round that did not start from a passing verify', () => {
-    const text = [round(1, { Verify: '' }), round(2, { Verify: '0123456789ab failed' }), round(3, { Verify: 'pending' })].join('\n');
+    const text = log(dispatch(1, {}), round(1, { Verify: '' }), round(2, { Verify: '0123456789ab failed' }), round(3, { Verify: 'pending' }));
     const found = details(text);
     expect(found).toHaveLength(3);
     for (const line of found) expect(line).toMatch(/review-gate/);
     expect(found[0]).toMatch(/^Review Round 1: .*no "- Verify:" field/);
   });
 
+  it('refuse a round with no link to the dispatch it reviewed, or a link to one that is not there or did not finish', () => {
+    const text = log(
+      dispatch(1, { Outcome: 'failed' }),
+      dispatch(2, { Work: 'repair', Outcome: 'pending', 'Finished at': 'pending', ...J, 'Escalated from': 'Dispatch 1' }),
+      round(1, { Reviewed: '' }),
+      round(2, { Reviewed: 'Dispatch 5' }),
+      round(3, { Reviewed: 'Dispatch 1' }),
+      round(4, { Reviewed: 'Dispatch 2' }),
+      round(5, { Reviewed: 'the build' }),
+    );
+    expect(details(text)).toEqual(matching(
+      /^Review Round 1: .*no "- Reviewed:" field.*"Dispatch N"/,
+      /^Review Round 2: .*no Dispatch 5 before it/,
+      /^Review Round 3: .*Dispatch 1, whose Outcome is failed.*only work that finished and passed its checks is reviewed/,
+      /^Review Round 4: .*Dispatch 2, whose Outcome is pending/,
+      /^Review Round 5: .*"Reviewed: the build".*"Dispatch N"/,
+    ));
+  });
+
   it('refuse an unknown step, level or outcome, and a round with no agents', () => {
-    const text = round(1, { Step: 'playtest', Level: 'none', Outcome: 'fine', Agents: '' });
+    const text = log(dispatch(1, {}), round(1, { Step: 'playtest', Level: 'none', Outcome: 'fine', Agents: '' }));
     const found = details(text);
     expect(found).toHaveLength(4);
     expect(found.join('\n')).toMatch(/"Step: playtest", which is not a review step: redteam, audit, final-acceptance or cross-chunk/);
@@ -129,6 +352,48 @@ describe('review rounds', () => {
   });
 
   it('refuse a round number used twice', () => {
-    expect(details([round(1, {}), round(1, {})].join('\n'))).toEqual([expect.stringMatching(/^Review Round 1: .*used twice/)]);
+    expect(details(log(dispatch(1, {}), round(1, {}), round(1, {})))).toEqual([expect.stringMatching(/^Review Round 1: .*used twice/)]);
+  });
+
+  it('never read one entry\'s field from the entry after it', () => {
+    const text = log(dispatch(1, {}), round(1, { Outcome: '' }), dispatch(2, { Outcome: 'done' }));
+    expect(details(text)).toEqual([expect.stringMatching(/^Review Round 1: .*no "- Outcome:" field/)]);
+    const [first] = runLogEntries(text);
+    expect(first.body).not.toMatch(/Review Round/);
+  });
+});
+
+describe('a review round\'s verify, confirmed against the result on file (#454)', () => {
+  const COMMIT = '0123456789abcdef0123456789abcdef01234567';
+  const result = (passed: boolean, cleanTree = true): VerifyResult =>
+    buildVerifyResult({
+      commit: COMMIT,
+      cleanTree,
+      base: { ref: 'main', commit: 'f'.repeat(40) },
+      chunk: 'core-loop',
+      checks: [{ name: 'test', passed, summary: passed ? '12 passed' : '1 failed' }],
+    });
+  const file = `.boardsmith/verify/${COMMIT}.json`;
+  const text = log(dispatch(1, {}), round(1, { Verify: '0123456789ab passed' }));
+
+  it('lists the commit each round names, so the caller can look its result up', () => {
+    expect(reviewRoundCommits(log(text, round(2, { Verify: 'fedcba987654 passed' }), round(3, { Verify: 'pending' })))).toEqual([
+      '0123456789ab',
+      'fedcba987654',
+    ]);
+  });
+
+  it('passes a round whose result on file passed on a clean tree, and one with no result on this machine', () => {
+    expect(details(text, (c) => (c === '0123456789ab' ? { file, result: result(true) } : undefined))).toEqual([]);
+    expect(details(text, noVerifyFiles)).toEqual([]);
+  });
+
+  it('refuses a round whose result on file failed, ran on a dirty tree, cannot be read, or is ambiguous', () => {
+    expect(details(text, () => ({ file, result: result(false) }))).toEqual([
+      expect.stringMatching(/^Review Round 1: Review Round 1 says "Verify: 0123456789ab passed", but the verify result on file for that commit \(\.boardsmith\/verify\/0123456789abcdef0123456789abcdef01234567\.json\) failed/),
+    ]);
+    expect(details(text, () => ({ file, result: result(true, false) }))).toEqual([expect.stringMatching(/uncommitted changes/)]);
+    expect(details(text, () => ({ file, result: 'unreadable' }))).toEqual([expect.stringMatching(/could not be read/)]);
+    expect(details(text, () => ({ ambiguous: [COMMIT, '0123456789ab' + 'f'.repeat(28)] }))).toEqual([expect.stringMatching(/matches more than one verify result/)]);
   });
 });

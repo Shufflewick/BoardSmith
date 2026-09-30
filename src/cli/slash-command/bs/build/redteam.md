@@ -18,7 +18,8 @@ orchestrator needs about this round's outcome comes from the structured verdicts
 returns. Do not add a "let me double-check the claims against the rulebook" pass after the
 agents return — re-opening the slices silently reintroduces the exact context-exhaustion failure
 mode the fan-out design exists to avoid. If a returned verdict looks wrong, dispatch a narrower
-follow-up subagent or escalate to the user — never fall back to reading the sources yourself.
+follow-up subagent of the `judgement` role, the role of the refuter it follows up (`routing.md`),
+or escalate to the user — never fall back to reading the sources yourself.
 
 ## Independence: Fresh-Context, No-Framing Dispatch
 
@@ -114,14 +115,17 @@ No review step starts until `boardsmith verify` has passed for the commit under 
 the chunk's work (`chunk-<slug>/step-investigate`), runs `npx boardsmith verify --chunk <slug>`,
 then `npx boardsmith review-gate <slug>`. A refusal means no reviewer is dispatched: fix what
 verify names and run both again. Open, the brief it prints fills `{verifyResult}` in all three
-prompts, and the round is recorded as a `### Review Round N` entry (`Step: redteam`) in the
-chunk's run log (`templates/RUN-LOG.template.md`) before the agents are dispatched.
+prompts, and the round is recorded as a `### Review Round N` entry (`Step: redteam`,
+`Reviewed: Dispatch M` for the `investigate`, `re-investigate` or `quote-fix` dispatch that last
+wrote the claims) in the chunk's run log (`templates/RUN-LOG.template.md`) before the agents are dispatched.
 
 Before that, the orchestrator runs `boardsmith claim-quote-check <slug>`. It
 re-opens every claim's cited location and refuses a claim with no quote, a quote that is not at
 its citation, or an open question that does not show where it looked (see `build/investigate.md`
-"Quoted Claims, Checked as Code"). A non-zero exit sends the refusals back to a narrower
-investigate subagent; redteam is never dispatched on claims that fail it. The check proves the
+"Quoted Claims, Checked as Code"). A non-zero exit is a failure of the dispatch that wrote the
+claims: it gets one narrower `quote-fix`, handed only the refusals, at the `judgement` role, the
+second named exception in `routing.md`, and if the check still refuses, then the designer decides.
+Redteam is never dispatched on claims that fail it. The check proves the
 quote is THERE; the refuters judge whether it SAYS what the claim says, which is why they re-open
 the source rather than the claim text. A claim refuted because no passage backs it is resolved by
 turning it into an open question (`Q<N>.`) for the ask step, never by writing a rule the source
@@ -143,9 +147,10 @@ this file does not restate the max-1-round bound or the refuted-twice rule, it a
 
 - **Refuted once** (one refuter, or the coverage adversary alone, flags a claim/gap): hand off
   to `build/investigate.md`'s re-investigate behavior with the specific objection(s) attached —
-  maximum ONE re-investigate round. It is dispatched at the `judgement` role again: the one named
+  maximum ONE re-investigate round. It is dispatched at the `judgement` role again: the first named
   exception to "never retry at the same role" (`routing.md`), because the claims were already
-  written at the top role and the designer's time is the scarcer resource. Round 2 is a review
+  written at the top role and the designer's time is the scarcer resource. Its run log entry is
+  `Work: re-investigate`, `Escalated from: Review Round N` naming this round. Round 2 is a review
   like round 1: commit the re-investigation, and it waits for `npx boardsmith verify --chunk
   <slug>` and `npx boardsmith review-gate <slug>` exactly as "Gate Before Dispatch" says, and is
   recorded as its own `### Review Round N` entry in the run log. Re-investigation appends a superseding claim; it never
@@ -172,7 +177,8 @@ section (`templates/CHUNK.template.md`) at the end of **each** round — per-cla
 objection text, the coverage adversary's findings, and the round's disposition. Concretely:
 
 - **Round 1, refuted-once path:** append `### Redteam Round 1` with disposition
-  `re-investigate dispatched` **before** dispatching the re-investigate subagent — never
+  `re-investigate dispatched`, and fill the run log's `### Review Round N` Outcome with `changes
+  requested`, **before** dispatching the re-investigate subagent — never
   deferred until the re-investigate round completes. A crash mid-re-investigate must not lose
   Round 1's verdicts while the re-investigate subagent's superseding claim (written directly to
   `## Interpretation`) survives.

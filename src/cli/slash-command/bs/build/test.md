@@ -107,7 +107,9 @@ here.
        extraction dispatch payload (`extractionPayload`).
 
    (b) For each pending slice, dispatch that slice's `extractionPayload` UNCHANGED to a subagent
-       carrying `${CLAUDE_SKILL_DIR}/../bs-shared/verify/extract-example.md`'s
+       of the `judgement` role (`npx boardsmith agent judgement`, `routing.md`; a
+       `### Dispatch N` entry, `Work: extract-example <slice>`, in the chunk's run log) carrying
+       `${CLAUDE_SKILL_DIR}/../bs-shared/verify/extract-example.md`'s
        `BS-EXAMPLE-EXTRACT-V1` handshake, and save its return to a file UNCHANGED — the one
        `{ "examples": [...] }` object that contract returns. Never unwrap it or rebuild it.
 
@@ -119,7 +121,9 @@ here.
        never duplicated in this skill's text.
 
    (d) Dispatch each returned `payloads[].translationPayload` UNCHANGED and SEPARATELY to a
-       second subagent carrying `translate-example.md`'s `BS-EXAMPLE-TRANSLATE-V1` handshake.
+       second subagent of the `judgement` role (`npx boardsmith agent judgement`;
+       `Work: translate-example <example id>` in the run log) carrying `translate-example.md`'s
+       `BS-EXAMPLE-TRANSLATE-V1` handshake.
        Two separate dispatches, never one combined pass — a combined pass would let the model
        work backward from code it can already see, producing agreement with itself rather than a
        real test of the printed example. Save the slice's returns to ONE file: a JSON object

@@ -8,9 +8,11 @@
  * home directory.
  *
  * With `--escalate` it answers the other question the skills ask, after a step fails at `<role>`
- * (its verify failed, or its reviewer asked for changes): which role takes the step next. That is
+ * (its verify failed, `claim-quote-check` refused its claims, or its reviewer asked for changes):
+ * which role takes the step next. That is
  * always the next role up, never the same one. There is nothing above judgement, so there the
- * command refuses and says to ask the designer.
+ * command refuses, names routing.md's two exceptions that get one more judgement round, and
+ * otherwise says to ask the designer.
  *
  * Throws, with what to do, on anything it cannot answer; cli.ts prints the message and exits 1.
  */
@@ -63,11 +65,12 @@ function escalatedRole(role: Role): Role {
   const next = nextRole(role as WorkRole);
   if (next === undefined) {
     throw new Error(
-      'judgement is the top role, so no role above it takes this step. The one exception (routing.md): a red-team ' +
-        're-investigation or a repair that failed at judgement for the first time gets exactly one more judgement round; ' +
-        'dispatch `boardsmith agent judgement` for it. Any other step, or one that has already had that round: stop and ask ' +
-        'the designer. Tell them, in their terms, what the step was for, what failed, and what each attempt tried, and ' +
-        'dispatch nothing more for this step until they answer.',
+      'judgement is the top role, so no role above it takes this step. Two named exceptions (routing.md "When a Step ' +
+        'Fails"): a red-team re-investigation or a repair that failed at judgement gets exactly one more judgement round, ' +
+        "and a claim-quote-check refusal of investigate's claims gets one narrower quote-fix at judgement. For either, " +
+        'dispatch `boardsmith agent judgement` and record the dispatch as escalated from the failure. Any other step, or ' +
+        'one that has already had its round: stop and ask the designer. Tell them, in their terms, what the step was for, ' +
+        'what failed, and what each attempt tried, and dispatch nothing more for this step until they answer.',
     );
   }
   return next;

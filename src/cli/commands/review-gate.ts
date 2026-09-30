@@ -120,7 +120,7 @@ function reviewBrief(projectDir: string, slug: string, result: VerifyResult, fro
 
 type ReviewGate =
   | { open: false; refusal: string }
-  | { open: true; level: ReviewLevel; reason: string; changedLines: number; brief: string; commit: string };
+  | { open: true; level: ReviewLevel; reason: string; changedLines: number; brief: string };
 
 /**
  * Whether a model review of chunk `slug`'s work may start, and if so how much review it needs and
@@ -161,7 +161,7 @@ export async function reviewGate(options: {
   const from = options.since === undefined ? result.base.commit : await sinceCommit(options.projectDir, options.since, result.commit);
   const changedLines = await changedLinesBetween(options.projectDir, from, result.commit);
   const { level, reason } = reviewLevel(workRole ?? 'judgement', changedLines);
-  return { open: true, level, reason, changedLines, brief: reviewBrief(options.projectDir, options.slug, result, from), commit: result.commit };
+  return { open: true, level, reason, changedLines, brief: reviewBrief(options.projectDir, options.slug, result, from) };
 }
 
 export async function reviewGateCommand(

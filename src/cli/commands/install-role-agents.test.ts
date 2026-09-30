@@ -64,16 +64,21 @@ describe('the role agents a global install writes into the home directory', () =
     expect(model('second-opinion')).not.toBe(model('judgement'));
   });
 
-  it('tells every agent its prompt starts with the work package, and the review agent to refuse a prompt without the verify brief', () => {
+  it('tells every agent its prompt starts with the work package, and every agent that reviews to refuse a review prompt without the verify brief', () => {
     for (const role of ROLES) {
       expect(readFileSync(join(agentsDir(), `bs-${role}.md`), 'utf-8')).toContain('Your prompt starts with `Work package: <id>`');
     }
-    const review = readFileSync(join(agentsDir(), 'bs-review.md'), 'utf-8');
-    expect(review).toContain('Mechanical checks: done.');
-    expect(review).toContain('REVIEW REFUSED');
+    // bs-judgement takes the red team, the fidelity lens and the cross-chunk lens, so it refuses the same way bs-review does.
+    const refusal =
+      'review nothing and reply only: `REVIEW REFUSED: no verify result in the prompt. Run npx boardsmith review-gate <slug> and put its brief in the review prompt.`';
+    for (const role of ['review', 'judgement']) {
+      const text = readFileSync(join(agentsDir(), `bs-${role}.md`), 'utf-8').split(/\s+/).join(' ');
+      expect(text, `bs-${role}`).toContain('Mechanical checks: done.');
+      expect(text, `bs-${role}`).toContain(refusal);
+    }
   });
 
-  it('uninstall removes the four role agents and leaves an agent of the user\'s own alone', async () => {
+  it('uninstall removes the five role agents and leaves an agent of the user\'s own alone', async () => {
     writeFileSync(join(agentsDir(), 'senior.md'), '---\nname: senior\n---\n');
     const log = vi.spyOn(console, 'log').mockImplementation(() => {});
     try {

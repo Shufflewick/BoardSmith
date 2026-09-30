@@ -32,7 +32,7 @@ import { gitOutput as git } from './git-output.js';
  */
 
 /** The version of the file's shape. A result in any other format is made again. */
-const VERIFY_RESULT_FORMAT = 1;
+export const VERIFY_RESULT_FORMAT = 1;
 
 /** Every check `boardsmith verify` runs, in the order it runs them. A passing result has all of them. */
 export const VERIFY_CHECK_NAMES = ['test', 'typecheck', 'build', 'validate', 'mutation'] as const;
@@ -121,9 +121,14 @@ export function currentBoardsmithCommit(): Promise<string | null> {
   return cachedBoardsmithCommit;
 }
 
+/** The folder a project's verify results live in, one `<commit>.json` per commit verified. */
+export function verifyResultsDir(projectDir: string): string {
+  return join(projectDir, '.boardsmith', 'verify');
+}
+
 /** Where the result for `commit` lives in a project. */
 export function verifyResultPath(projectDir: string, commit: string): string {
-  return join(projectDir, '.boardsmith', 'verify', `${commit}.json`);
+  return join(verifyResultsDir(projectDir), `${commit}.json`);
 }
 
 export async function writeVerifyResult(projectDir: string, result: VerifyResult): Promise<string> {
