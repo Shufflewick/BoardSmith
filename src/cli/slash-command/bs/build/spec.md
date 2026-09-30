@@ -66,6 +66,16 @@ and it fails the chunk on each of these, so write the tests to meet them now:
   the person who hits it and a test reaches it. A case only the compiler can rule out is an
   exhaustive `never` check, not a comment saying it cannot happen.
 
+**Required output: the smoke test, for any chunk that adds an action or a UI control.** Such a
+chunk adds each new action's name to `actions` in the game's `tests/browser/smoke.spec.ts` (which
+`boardsmith init` writes), in the same change that adds the action. `boardsmith verify` serves the
+game with `boardsmith dev` and walks it in Chromium: a seated player takes every action the panel
+offers and presses every control on the board, and the check fails on any page or console error,
+any offered action that fails, an offered action the spec does not list, and a listed one the walk
+never takes. A board test mounts with `renderAsSeat`, `tableShellContext` or `worldShellContext`
+(boardsmith/testing), never with game-context keys provided by hand: `test-step-check` reports a
+test that provides a key only one of the two shells provides.
+
 Tests belong to the chunk's own test files in the GENERATED game project — never BoardSmith's repo,
 and never appended to an earlier chunk's test file. Extending an earlier chunk's file is how a
 regression suite becomes unattributable; a chunk's tests live where `close` can point at them.

@@ -14,6 +14,7 @@ import { join } from 'node:path';
 import { vi } from 'vitest';
 
 import { initCommand } from './init.js';
+import { collectOutput } from '../lib/child-output.js';
 import { REPO_ROOT } from '../spawn-cli.test-helper.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { INSTALLED_MODULES } from '../../testing/installed-modules.test-helper.js';
@@ -72,18 +73,16 @@ export function spawnDev(cwd: string, port: number): DevRun {
     [join(REPO_ROOT, 'bin', 'boardsmith.js'), 'dev', '--port', String(port), '--no-open'],
     { cwd },
   );
-  let output = '';
-  child.stdout.on('data', (chunk) => (output += chunk));
-  child.stderr.on('data', (chunk) => (output += chunk));
+  const output = collectOutput(child);
   const ended = new Promise<DevRunEnding>((resolve) => {
     const timer = setTimeout(() => {
       child.kill('SIGKILL');
-      resolve({ code: null, output, stuck: true });
+      resolve({ code: null, output: output(), stuck: true });
     }, EXIT_WITHIN_MS);
     child.on('exit', (code) => {
       clearTimeout(timer);
-      resolve({ code, output, stuck: false });
+      resolve({ code, output: output(), stuck: false });
     });
   });
-  return { child, output: () => output, ended };
+  return { child, output, ended };
 }

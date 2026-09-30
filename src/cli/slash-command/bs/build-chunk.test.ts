@@ -2044,15 +2044,18 @@ describe('#288 — the audit dispatches a constraints lens', () => {
  * result per commit, and every step that can say "done" or "green" points at it instead of
  * listing the checks in prose. `boardsmith verify --check` is the one question later steps ask.
  */
+/** The CLI's source, for the tests that check a command the skills name exists. */
+const cliSource = readFileSync(join(__dirname, '..', '..', 'cli.ts'), 'utf-8');
+/** A skill file with its whitespace collapsed, so a pinned phrase may wrap. */
+const flatRead = (rel: string) => read(rel).replace(/\s+/g, ' ');
+
 describe('#452: the done gate is `boardsmith verify`', () => {
-  const cli = readFileSync(join(__dirname, '..', '..', 'cli.ts'), 'utf-8');
-  const flatRead = (rel: string) => read(rel).replace(/\s+/g, ' ');
 
   it('is a real command, with --base, --chunk and --check', () => {
-    expect(cli).toContain(".command('verify')");
-    expect(cli).toContain("'--base <git-ref>'");
-    expect(cli).toContain("'--chunk <slug>'");
-    expect(cli).toContain("'--check'");
+    expect(cliSource).toContain(".command('verify')");
+    expect(cliSource).toContain("'--base <git-ref>'");
+    expect(cliSource).toContain("'--chunk <slug>'");
+    expect(cliSource).toContain("'--check'");
   });
 
   const CHUNK_COMMAND = 'npx boardsmith verify --chunk <slug>';
@@ -2157,5 +2160,25 @@ describe('#452: the done gate is `boardsmith verify`', () => {
   it('playtest.md says a sign-off needs the work committed and verified first', () => {
     const playtest = flatRead('build/playtest.md');
     expect(playtest).toMatch(/chunk-signoff.{0,300}boardsmith verify/);
+  });
+});
+
+describe('#453: the in-browser smoke test is a chunk output, and part of the done gate', () => {
+
+  it('names tests/browser/smoke.spec.ts as a required output of any chunk that adds an action or a UI control', () => {
+    const spec = flatRead('build/spec.md');
+    expect(spec).toMatch(
+      /Required output: the smoke test, for any chunk that adds an action or a UI control\..{0,200}`actions` in the game's `tests\/browser\/smoke\.spec\.ts`/,
+    );
+    expect(spec).toMatch(/`renderAsSeat`, `tableShellContext` or `worldShellContext`/);
+  });
+
+  it("puts the smoke test in the done gate's list of checks, with the commands to run it alone and to install its browser", () => {
+    const gate = flatRead('build/test.md').split('The done gate: `boardsmith verify`')[1].split('## The A11y Floor')[0];
+    expect(gate).toMatch(/full suite, typecheck, build, validate, the smoke test and a mutation check/);
+    expect(gate).toContain('`npx boardsmith smoke`');
+    expect(gate).toContain('`npx boardsmith install-browser`');
+    expect(cliSource).toContain(".command('smoke')");
+    expect(cliSource).toContain(".command('install-browser')");
   });
 });

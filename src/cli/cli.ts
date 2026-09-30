@@ -66,6 +66,7 @@ import {
 import { verifySourceFreeCheckCommand } from './commands/verify-source-free.js';
 import { verifyCloseRecordCommand } from './commands/verify-close-record.js';
 import { verifyCommand } from './commands/verify.js';
+import { installBrowserCommand, smokeCommand } from './commands/smoke.js';
 import { verifyExampleEmitCommand } from './commands/example-test-emit.js';
 import { verifyExampleRunCommand } from './commands/example-test-run.js';
 import { evolveBotWeightsCommand } from './commands/evolve-bot-weights.js';
@@ -174,8 +175,8 @@ export function createProgram(): Command {
   program
     .command('verify')
     .description(
-      'Run the full test suite, typecheck, build, validate and a mutation check of the code changed since the base, ' +
-        'and record the result for this commit; --check says whether HEAD has a passing result',
+      'Run the full test suite, typecheck, build, validate, the in-browser smoke test and a mutation check of the code ' +
+        'changed since the base, and record the result for this commit; --check says whether HEAD has a passing result',
     )
     .option('--base <git-ref>', 'Where the change started: its merge base with HEAD is the base (default: the main branch)')
     .option(
@@ -185,6 +186,21 @@ export function createProgram(): Command {
     .option('--check', 'Run nothing: exit 0 only when HEAD, on a clean tree, has a passing result')
     .option('--project <dir>', 'Project directory (defaults to cwd)')
     .action((options: { base?: string; chunk?: string; check?: boolean; project?: string }) => verifyCommand(options));
+
+  // The in-browser smoke test alone (#453), and the browser it runs in.
+  program
+    .command('smoke')
+    .description(
+      "Serve the game with boardsmith dev from a fresh start and run tests/browser/smoke.spec.ts in Chromium: seat a " +
+        'player, take every offered action, press every board control, and fail on any error',
+    )
+    .option('--project <dir>', 'Project directory (defaults to cwd)')
+    .action(smokeCommand);
+
+  program
+    .command('install-browser')
+    .description("Download the Chromium build this BoardSmith's Playwright drives, for the smoke test (one time per machine)")
+    .action(installBrowserCommand);
 
   // Linting
   program

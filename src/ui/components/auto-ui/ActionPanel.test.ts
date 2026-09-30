@@ -294,21 +294,26 @@ describe('ActionPanel UIX-01 — no direct toast on rejected actions (GameShell 
   });
 });
 
+/** The panel with `testAction` open, so its action-config view (and cancel button) renders. */
+function mountWithAnOpenAction() {
+  const controller = stubActionController({ currentAction: ref('testAction') });
+  return mount(ActionPanel, {
+    global: { provide: { [GAME_CONTEXT_KEYS.actionController as symbol]: controller } },
+    props: { availableActions: [], playerSeat: 1, isMyTurn: true },
+  });
+}
+
 describe('ActionPanel QUICK-02 — accessible names on icon-only controls', () => {
   it('cancel button has aria-label="Cancel action"', () => {
-    // currentAction must be non-null for the action-config view (and cancel button) to render
-    const controller = stubActionController({
-      currentAction: ref('testAction'),
-    });
-
-    const wrapper = mount(ActionPanel, {
-      global: { provide: { [GAME_CONTEXT_KEYS.actionController as symbol]: controller } },
-      props: { availableActions: [], playerSeat: 1, isMyTurn: true },
-    });
-
-    const cancelBtn = wrapper.find('.cancel-btn');
+    const cancelBtn = mountWithAnOpenAction().find('.cancel-btn');
     expect(cancelBtn.exists()).toBe(true);
     expect(cancelBtn.attributes('aria-label')).toBe('Cancel action');
+  });
+});
+
+describe('ActionPanel names the action it has open (#453)', () => {
+  it('marks the open action with data-bs-open-action, for a browser test to know which one it is filling', () => {
+    expect(mountWithAnOpenAction().find('.action-config').attributes('data-bs-open-action')).toBe('testAction');
   });
 });
 

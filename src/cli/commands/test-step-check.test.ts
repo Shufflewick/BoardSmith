@@ -472,6 +472,27 @@ it.skip('claim 2', () => {});
     return (await checkTestStep(project, 'auction')).findings;
   }
 
+  it('reports a test file of the chunk that provides a key only one shell gives by hand, and names the stubs (#453)', async () => {
+    const findings = await findingsFor({
+      'src/rules/auction.ts': RULES,
+      'tests/support/board.ts': `export function fakeContext() {
+  provide(GAME_CONTEXT_KEYS.gameView, computed(() => ({})));
+  provide(GAME_CONTEXT_KEYS.gameState, ref(null));
+}
+`,
+    });
+    expect(findings.map((f) => [f.kind, f.subject])).toEqual([['hand-built-shell-context', 'tests/support/board.ts:3']]);
+    expect(findings[0].detail).toMatch(/GAME_CONTEXT_KEYS\.gameState.*by hand.*renderAsSeat.*tableShellContext.*worldShellContext/s);
+  });
+
+  it('leaves alone a hand-built context in a test file the chunk did not touch (#453)', async () => {
+    await write(project, { 'tests/old-board.test.ts': 'provide(WORLD_CONTEXT_KEY, fake);\n' });
+    git(project, 'add', '-A');
+    git(project, 'commit', '-q', '-m', 'chunk-setup/step-close');
+    const findings = await findingsFor({ 'src/rules/auction.ts': RULES });
+    expect(findings).toEqual([]);
+  });
+
   it('reports an "unreachable" guard the chunk added, with a readable next step', async () => {
     const findings = await findingsFor({
       'src/rules/auction.ts': `${RULES}export function f(x: number) {

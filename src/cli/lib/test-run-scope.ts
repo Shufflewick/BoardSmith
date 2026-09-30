@@ -2,7 +2,8 @@ import { promises as fs } from 'node:fs';
 import { join } from 'node:path';
 
 /**
- * WHAT A GAME PROJECT'S TEST RUN COVERS: the main checkout's tests, and nothing under `.boardsmith/`.
+ * WHAT A GAME PROJECT'S TEST RUN COVERS: the main checkout's tests, nothing under `.boardsmith/`,
+ * and not the in-browser smoke test under `tests/browser/`, which only Playwright runs (#453).
  *
  * Chunks built side by side live in git worktrees at `.boardsmith/worktrees/<slug>`, inside the
  * project (#294), and vitest's discovery walks into dot-directories. Left alone, a plain
@@ -18,6 +19,14 @@ import { join } from 'node:path';
 
 /** The glob, relative to the project root, that no test run collects from. */
 const OUTSIDE_THE_CHECKOUT = '.boardsmith/**';
+
+/**
+ * The browser tests, which run under Playwright against `boardsmith dev` (`boardsmith verify`'s
+ * smoke check), never under vitest: vitest's default pattern matches `smoke.spec.ts`, and loading
+ * it there fails.
+ */
+const BROWSER_TESTS_DIR = join('tests', 'browser');
+const BROWSER_TESTS = 'tests/browser/**';
 
 /** The vitest config `boardsmith init` and `boardsmith doctor --fix` write. */
 export const VITEST_CONFIG_FILE = 'vitest.config.ts';
@@ -67,17 +76,19 @@ export function generateVitestConfig(viteConfig: string | undefined): string {
 ${base}
 
 // A test run covers this checkout's tests only. Chunks built side by side are git worktrees under
-// .boardsmith/worktrees/, and vitest would otherwise collect their unfinished tests too.
-// BoardSmith's commands that run tests refuse to start without this exclusion.
+// .boardsmith/worktrees/, and vitest would otherwise collect their unfinished tests too. The
+// in-browser smoke test under tests/browser/ runs under Playwright (boardsmith verify), not here.
+// BoardSmith's commands that run tests refuse to start without these exclusions.
 export default defineConfig(async (env) =>
   mergeConfig(typeof base === 'function' ? await base(env) : base, {
-    test: { exclude: [...configDefaults.exclude, ${JSON.stringify(OUTSIDE_THE_CHECKOUT)}] },
+    test: { exclude: [...configDefaults.exclude, ${JSON.stringify(OUTSIDE_THE_CHECKOUT)}, ${JSON.stringify(BROWSER_TESTS)}] },
   }),
 );
 `;
 }
 
 const CARRIES_EXCLUSION = /['"`]\.boardsmith\/\*\*['"`]/;
+const CARRIES_BROWSER_EXCLUSION = /['"`]tests\/browser\/\*\*['"`]/;
 
 /**
  * Why this project's test run would collect `.boardsmith/`, as a sentence that says how to fix it,
@@ -96,7 +107,7 @@ export async function testRunScopeProblem(projectDir: string): Promise<string | 
     );
   }
   const text = await fs.readFile(join(projectDir, config), 'utf-8');
-  if (CARRIES_EXCLUSION.test(text)) return undefined;
+  if (CARRIES_EXCLUSION.test(text)) return browserTestsProblem(projectDir, config, text);
   if (config.startsWith('vite.config.')) {
     return (
       `${config} does not leave .boardsmith/ out of test runs, so they would also collect the unfinished ` +
@@ -108,5 +119,24 @@ export async function testRunScopeProblem(projectDir: string): Promise<string | 
     `chunks under .boardsmith/worktrees/. Add this to its \`test\` block, then run this again:\n` +
     `  exclude: [...configDefaults.exclude, '${OUTSIDE_THE_CHECKOUT}'],\n` +
     `(import configDefaults from 'vitest/config').`
+  );
+}
+
+/**
+ * Why `config` would collect the project's browser tests, or undefined when it has none or leaves
+ * them out. Only a project with `tests/browser/` is asked, so a config written before the smoke
+ * test existed keeps working until the project gains one.
+ */
+async function browserTestsProblem(projectDir: string, config: string, text: string): Promise<string | undefined> {
+  if (CARRIES_BROWSER_EXCLUSION.test(text)) return undefined;
+  const hasBrowserTests = await fs.stat(join(projectDir, BROWSER_TESTS_DIR)).then(
+    (stat) => stat.isDirectory(),
+    () => false,
+  );
+  if (!hasBrowserTests) return undefined;
+  return (
+    `${config} does not leave tests/browser/ out of test runs, so vitest would collect the in-browser smoke test, ` +
+    `which runs only under Playwright (\`boardsmith verify\`, \`boardsmith smoke\`). Add '${BROWSER_TESTS}' to its ` +
+    `\`test.exclude\`, beside '${OUTSIDE_THE_CHECKOUT}', then run this again.`
   );
 }

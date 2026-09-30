@@ -35,6 +35,10 @@ npx boardsmith dev
 multiplayer on the same port. Every browser tab is a real player, so open a
 second tab to take the second seat.
 
+`boardsmith verify`, the check before calling a change done, opens the game in
+Chromium. Run `npx boardsmith install-browser` once per machine to download it;
+BoardSmith's own test suite needs it too.
+
 ## Documentation
 
 [docs/getting-started.md](./docs/getting-started.md) walks through the generated

@@ -37,7 +37,7 @@ npx boardsmith chunk-gate-transition --by "<designer's name>"
 
 Like a sign-off, it refuses unless the commit checked out, on a clean tree, passed `boardsmith
 verify`. The transition builds and changes no code, so commit the project as it stands and run
-`npx boardsmith verify --base HEAD` first: the full suite, typecheck, build and validate for the
+`npx boardsmith verify --base HEAD` first: the full suite, typecheck, build, validate and the smoke test for the
 project as it is, with nothing changed for the mutation check to break. That result is good for
 the transition only: because it measured no change, it satisfies no chunk's sign-off, which
 accepts only a result from `npx boardsmith verify --chunk <slug>` or one measured from before the

@@ -203,8 +203,9 @@ boardsmith verify --check --chunk deal   # ...with the chunk's whole change meas
 ```
 
 `boardsmith verify` runs the full suite, `boardsmith typecheck`, `boardsmith
-build`, `boardsmith validate` and a mutation check, in that order, and keeps
-going after a failure so you see every problem at once. The mutation check
+build`, `boardsmith validate`, the in-browser smoke test and a mutation check,
+in that order, and keeps going after a failure so you see every problem at once.
+The mutation check
 breaks each line of code under `src/` that changed since the main branch (or
 since `--base`), one small change at a time, and runs the whole suite against
 each: a change no test notices is reported by file and line, because the tests
@@ -217,6 +218,33 @@ no change would be measured: there the mutation check fails unless you pass
 `chunk-<slug>/` commit. A mutant whose code, tests, repository and installed
 packages have not changed since an earlier run is not run again, so verifying
 again after a commit that only touches the `bs-` skills' design records is quick.
+
+The smoke test is your game's `tests/browser/smoke.spec.ts`, which `boardsmith
+init` writes:
+
+```ts
+import { defineSmokeTest } from 'boardsmith/testing/browser';
+
+defineSmokeTest({ actions: ['draw', 'play'] });
+```
+
+`boardsmith verify` copies the project's files into `.boardsmith/smoke/`, starts
+`boardsmith dev` there on a free port (a fresh game, or a world from genesis,
+leaving your own dev world alone), and runs the spec in Chromium. A player takes
+a seat, takes every action the action panel offers, answering each choice (on
+the board when the board shows it), and presses every control on the board once.
+The check fails on any uncaught page error, any console error, any failed request
+to the dev host, any offered action that fails, an offered action `actions` does
+not list, and a listed action the walk never takes. A game with no actions yet
+lists none and still has to load and seat a player without an error. The run
+stops every process it started, and removes its copy, whether it passed, failed
+or was interrupted. `boardsmith smoke` runs this check alone, on the files as
+they stand, while you work.
+
+The browser is Playwright's own Chromium build, downloaded once per machine with
+`boardsmith install-browser`. It is never downloaded during a check: on a machine
+without it the smoke check fails and says to run that command. It is never
+skipped.
 
 Commit first: a tree with uncommitted changes is refused before any check runs.
 The result is written to `.boardsmith/verify/<commit>.json`, tied to that one

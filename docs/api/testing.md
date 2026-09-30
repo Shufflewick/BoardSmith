@@ -575,7 +575,29 @@ the host names no players, so the roster reads "Seat n" for each watching seat.
 
 Pass your own interaction under `BOARD_INTERACTION_KEY` in `provide` to hold a
 handle on it; the seat's controller then drives yours. Anything else in
-`provide` is merged over what the shell would give.
+`provide` is merged over what the shell would give, except a key only the other
+shell provides (#453): a world seat refuses a table's `gameState`, `dueSeats`,
+`timeTravelDiff`, `turnDeadline`, announcer and animation events, and a table
+seat refuses `useWorld()`'s key, because a board reading one would pass here and
+throw in play. The tests that mount the real shells also fail if the seat is
+given a key the shell does not give.
+
+**`tableShellContext(testGame, seat, options?)` / `worldShellContext(testWorld,
+seat, options?)`** are the same two shell stubs for a test that calls `mount()`
+itself, to mount a part of a board rather than the whole of it. Each resolves to
+`{ provide, actionController, stop }`: `provide` holds exactly what the real
+shell gives its board, built by the same function, and takes the same `provide`
+option, checked the same way. Use one instead of providing `GAME_CONTEXT_KEYS`
+by hand; `boardsmith test-step-check` reports a test file that provides, by
+hand, a key only one shell provides.
+
+```typescript
+const shell = await worldShellContext(testWorld, 1);
+const wrapper = mount(SectorReport, { props: { sector }, global: { provide: shell.provide } });
+// ...
+wrapper.unmount();
+shell.stop();
+```
 **To render or scan a board with an action open, pass `startAction`** (#405).
 A board draws its targets while an action is open, and a target can carry what
 it hides: a blind pick labelled with the card's face is invisible to a scan of

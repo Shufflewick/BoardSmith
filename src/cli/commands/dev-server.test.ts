@@ -23,7 +23,7 @@ import { createServer as createViteServer, type ViteDevServer } from 'vite';
 import { WebSocket as WsClient } from 'ws';
 
 import { claimWebSocketPath, reloadOnRulesEdit, serveVite } from './dev-server.js';
-import { freePort } from './free-port.test-helper.js';
+import { freePort } from '../lib/free-port.js';
 import { teardownInOrder } from '../dev-host/shutdown.js';
 import { createRulesReloadQueue } from '../dev-host/rules-reload-queue.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';

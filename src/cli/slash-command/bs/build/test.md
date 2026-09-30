@@ -11,9 +11,9 @@ only the tool output the commands themselves produce.
 
 Run the following as ONE numbered sequence immediately after `build` completes. Do not skip
 steps, do not reorder them, and do not treat an earlier step's pass as license to skip a later
-one. The type check, the whole suite, the build and `boardsmith validate` are not steps of their
-own: they are part of the last step, `boardsmith verify`, which runs them together and records the
-result. A failure at any step STOPS the sequence with an actionable message (what failed, the exact
+one. The type check, the whole suite, the build, `boardsmith validate` and the in-browser smoke test
+are not steps of their own: they are part of the last step, `boardsmith verify`, which runs them
+together and records the result. A failure at any step STOPS the sequence with an actionable message (what failed, the exact
 error, what to fix) — never proceed past a failing step assuming a later step will "catch it
 anyway." A failing step routes this chunk to `repair`; it does not get silently worked around
 here.
@@ -65,7 +65,7 @@ here.
        tests are green. It exits non-zero on any finding, and a non-zero exit is a failure of this
        step like any other: route the chunk back per "Failures Loop Back to `build`". There is no
        flag that skips part of it, and its findings are never argued away in prose. It enforces
-       four rules, each of which a real build run broke while its suite was green:
+       five rules, each of which a real build run broke while its suite was green:
 
        - **Every Spec Manifest claim names a test that exists.** Each `## Spec Manifest` row names a
          test file on disk with `RED Observed: yes`, and for every claim the row lists, a test in
@@ -83,6 +83,11 @@ here.
          proves it (an exhaustive check assigning to a `never`-typed variable, with no such
          wording), or it is reachable: make it a human-readable error that says what happened and
          what to do, and add a test that reaches it and asserts that message.
+       - **No test hand-builds a shell's context.** A test file the chunk wrote or changed that
+         provides, by hand, a key only one of the two shells provides (`GAME_CONTEXT_KEYS.gameState`,
+         `dueSeats`, `timeTravelDiff`, `turnDeadline`, `ANNOUNCER_KEY`, `ANIMATION_EVENTS_KEY`,
+         `WORLD_CONTEXT_KEY`) is a finding: a board reading it passes the test and throws in the
+         other shell. Mount with `renderAsSeat`, `tableShellContext` or `worldShellContext`.
        - **Mutation: every claim and every test can fail.** The command makes one small change at a
          time to the lines this chunk added (a flipped comparison, a negated condition, a removed
          statement, a return value replaced) and runs the chunk's test files against each. In a
@@ -294,9 +299,13 @@ here.
 7. **The done gate: `boardsmith verify`**. Commit the chunk's work (`chunk-<slug>/step-test`,
    `state-machine.md` "Git Protocol"), then run `npx boardsmith verify --chunk <slug>`
    (`state-machine.md` "Git Protocol" says what it measures from). It runs, in order and
-   without stopping at the first failure, the full suite, typecheck, build, validate and a
-   mutation check of the code changed since the chunk began, and writes the result for this
-   commit to `.boardsmith/verify/<commit>.json`. The full suite is the regression check: a chunk
+   without stopping at the first failure, the full suite, typecheck, build, validate, the smoke
+   test and a mutation check of the code changed since the chunk began, and writes the result for
+   this commit to `.boardsmith/verify/<commit>.json`. The smoke test is the game's
+   `tests/browser/smoke.spec.ts` (a required output of any chunk that adds an action or a UI
+   control, `build/spec.md`), run in Chromium against `boardsmith dev` served from a fresh copy
+   of the project; `npx boardsmith smoke` runs it alone while you work, and a machine without the
+   browser gets a failed check telling it to run `npx boardsmith install-browser` once. The full suite is the regression check: a chunk
    that passes its own tests but breaks an earlier chunk's is not done, and this is what catches
    it. The mutation check breaks each changed line one small change at a time and reports, by
    file and line, every change no test noticed. This step is not done until it exits zero on a

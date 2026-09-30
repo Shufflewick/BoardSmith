@@ -183,7 +183,7 @@ file. It runs before the chunk-complete line, which is a claim of done, and befo
    Protocol"). `git status --porcelain` must then print nothing.
 2. Run `npx boardsmith verify --chunk <slug>` (`state-machine.md` "Git Protocol" says what it
    measures from). It runs every check again for this commit: the full suite, typecheck, build,
-   validate and the mutation check. A mutant whose code and tests have not changed since an
+   validate, the smoke test and the mutation check. A mutant whose code and tests have not changed since an
    earlier run is not run again, so after close's bookkeeping-only commits the mutation check
    costs next to nothing.
 3. Run `npx boardsmith verify --check --chunk <slug>`. It is the last command close runs, and

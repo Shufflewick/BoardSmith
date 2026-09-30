@@ -15,6 +15,7 @@ import {
   useGameContext,
   tryUseGameContext,
   gameContextProvisions,
+  playContextProvisions,
   GAME_CONTEXT_KEYS,
   type GameContext,
 } from './useGameContext.js';
@@ -38,13 +39,18 @@ function fakeContext(): GameContext {
   };
 }
 
-/** A shell stand-in that publishes the context, then renders its slot. */
-const Provider = defineComponent({
-  setup(_, { slots }) {
-    for (const [key, value] of gameContextProvisions(fakeContext())) provide(key, value);
-    return () => h('div', slots.default?.());
-  },
-});
+/** A shell stand-in that publishes what `provisions` builds, then renders its slot. */
+function providerOf(provisions: () => ReturnType<typeof gameContextProvisions>) {
+  return defineComponent({
+    setup(_, { slots }) {
+      for (const [key, value] of provisions()) provide(key, value);
+      return () => h('div', slots.default?.());
+    },
+  });
+}
+
+/** A table's shell stand-in: the whole context. */
+const Provider = providerOf(() => gameContextProvisions(fakeContext()));
 
 /** What `useGameContext()` hands a component mounted inside the Provider. */
 function contextInsideProvider(): GameContext {
@@ -81,26 +87,38 @@ describe('useGameContext inside a shell', () => {
   });
 });
 
+/** A component that reads the whole context, as a table's board does. */
+const ReadsTheContext = defineComponent({
+  setup() {
+    useGameContext();
+    return () => h('span');
+  },
+});
+
 describe('useGameContext outside a shell', () => {
   it('throws rather than handing back a bag of undefineds', () => {
-    const Orphan = defineComponent({
-      setup() {
-        useGameContext();
-        return () => h('span');
-      },
-    });
-    expect(() => mount(Orphan)).toThrow(/no GameShell above this component/);
+    expect(() => mount(ReadsTheContext)).toThrow(/no GameShell above this component/);
   });
 
   it('names what was missing, so the cause is not a later .value read', () => {
-    const Orphan = defineComponent({
-      setup() {
-        useGameContext();
-        return () => h('span');
-      },
-    });
-    expect(() => mount(Orphan)).toThrow(/gameState/);
-    expect(() => mount(Orphan)).toThrow(/actionController/);
+    expect(() => mount(ReadsTheContext)).toThrow(/gameState/);
+    expect(() => mount(ReadsTheContext)).toThrow(/actionController/);
+  });
+
+  it("says a test's context comes from the shell stubs, not from keys provided by hand (#453)", () => {
+    expect(() => mount(ReadsTheContext)).toThrow(/renderAsSeat.*tableShellContext/s);
+    expect(() => mount(ReadsTheContext)).not.toThrow(/provide the pieces it needs/);
+  });
+});
+
+describe("useGameContext inside a world's shell (#453)", () => {
+  /** What a world's shell publishes: the shared half, and none of a table's own keys. */
+  const WorldProvider = providerOf(() => playContextProvisions(fakeContext()));
+
+  it('says the component is in a world, which has no table context, and what to read instead', () => {
+    expect(() => mount(WorldProvider, { slots: { default: () => h(ReadsTheContext) } })).toThrow(
+      /inside a world's shell.*gameState, dueSeats, timeTravelDiff, turnDeadline.*inject\(GAME_CONTEXT_KEYS\.<field>\).*useWorld\(\)/s,
+    );
   });
 });
 

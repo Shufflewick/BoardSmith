@@ -183,7 +183,7 @@ nothing, if there is nothing visible yet. Do not announce each dispatch.
 - **`closed`**: first run `npx boardsmith verify --check --chunk <slug>` (with `--project` set to
   the chunk's worktree when it was built in one), before any write (Step 3 item 5). It exits zero
   only when the chunk's last commit, on a clean tree, passed `boardsmith verify` with the chunk's
-  whole change measured: the full suite, typecheck, build, validate and the mutation check of
+  whole change measured: the full suite, typecheck, build, validate, the smoke test and the mutation check of
   everything since the chunk began. A result from `--base HEAD`, which mutates nothing, is
   refused. A non-zero exit means the claim of done is not backed by a run: re-dispatch the same chunk
   with its message in the brief, and treat the chunk as unfinished, never as closed

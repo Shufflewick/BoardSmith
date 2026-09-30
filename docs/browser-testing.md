@@ -323,11 +323,56 @@ BOARDSMITH_PLAYWRIGHT_MODULE=/abs/path/to/node_modules/playwright \
   node scripts/ordered-list-browser.mjs
 ```
 
-They are **not** part of `npx vitest run`: BoardSmith depends on no browser, and
-the suite stays hermetic. They never skip — with no Playwright reachable one says
+They are **not** part of `npx vitest run`. The suite drives Chromium only through
+the smoke check below (`src/cli/commands/smoke.test.ts` and the end-to-end
+`boardsmith verify` tests), with the browser `boardsmith install-browser` puts on
+the machine. They never skip — with no Playwright reachable one says
 how to give it one and exits non-zero, because a browser regression that silently
 passes when it did not run is the failure it exists to replace. Each starts and
 stops its own dev server, on its own port, inside the one process.
+
+## The smoke test every game has: `tests/browser/smoke.spec.ts`
+
+`boardsmith init` writes it, `boardsmith verify` runs it as its `smoke` check,
+and `boardsmith smoke` runs it alone (#453). The spec is one call:
+
+```ts
+import { defineSmokeTest } from 'boardsmith/testing/browser';
+
+defineSmokeTest({ actions: ['draw', 'play'] });
+```
+
+The walk (`src/testing/browser-smoke.ts`) drives the dev host with the same
+markers this page documents, so it keeps up with any game without knowing it:
+
+- It opens `/`, takes a seat (a table seats the first browser, a world attaches
+  it; a table showing its lobby is asked for the first open seat), and waits for
+  the game frame's `[data-testid="bs-actionbar"]`.
+- Each step it answers the open action (the panel marks it
+  `data-bs-open-action="<name>"`), presses a board control it has not pressed,
+  or takes the next `[data-bs-action]` button, preferring one not taken yet and
+  opening `[data-bs-action-group]` menus to reach the actions inside them.
+- An open action is answered one choice at a time: a price's confirm button, the
+  board's own `[data-bs-candidate]` (so the board is pressed, not only the
+  panel), a text field filled with "smoke test", then the panel's choice, add,
+  done and skip buttons.
+- A board control is a `button` or `[role="button"]` inside
+  `[data-testid="bs-board"]` that a keyboard can reach and that is not a pick's
+  candidate. It is known by its `data-bs-el-id` when it has one, else its label.
+- Actions it took are read from `boardsmith:action-resolved`, which also reports
+  one that failed. It fails on `pageerror`, console errors, responses of 400 and
+  up (or failed requests) from the dev host, error toasts, presses that never
+  land, an open action that offers nothing or does not change, an offered action
+  `actions` does not list, and a listed one it never takes.
+- It stops when its `steps` (default 60) run out, the game ends, nothing is
+  offered for 30 seconds, or every offer has been taken and five more steps
+  turned up nothing new.
+
+It walks the UI players get: the `defaultUI` entry in `src/ui/uis.ts`, not a
+`devUI`. Board tests stand in for the shell with `renderAsSeat`,
+`tableShellContext` or `worldShellContext` from `boardsmith/testing`, which give
+exactly the keys the real shell gives; `boardsmith test-step-check` reports a
+test that provides a key only one of the two shells provides.
 
 ---
 

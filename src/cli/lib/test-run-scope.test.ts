@@ -49,9 +49,9 @@ const WORLD: ProjectConfig = {
   backend: 'world',
 };
 
-describe('a scaffolded project leaves chunk worktrees out of its default test run', () => {
+describe('a scaffolded project leaves chunk worktrees and the browser smoke test out of its default test run', () => {
   for (const config of [TABLE, WORLD]) {
-    it(`${config.backend}: plain vitest run passes with a failing test under .boardsmith/worktrees/x`, async () => {
+    it(`${config.backend}: plain vitest run passes with a failing test under .boardsmith/worktrees/x and tests/browser/`, async () => {
       const project = await scaffold(config);
       // Only the configs are under test here; the scaffold's own example tests need the game
       // sources `init` writes separately, so the run is given one test of its own instead.
@@ -61,6 +61,8 @@ describe('a scaffolded project leaves chunk worktrees out of its default test ru
       await writeTree(project, {
         'tests/ok.test.ts': OK_TEST,
         '.boardsmith/worktrees/x/tests/wip.test.ts': WIP_TEST,
+        // The in-browser smoke test runs under Playwright only (#453); vitest must not collect it.
+        'tests/browser/smoke.spec.ts': WIP_TEST,
       });
       await fs.symlink(INSTALLED_MODULES, join(project, 'node_modules'), 'dir');
 
@@ -69,6 +71,7 @@ describe('a scaffolded project leaves chunk worktrees out of its default test ru
       const output = `${run.stdout}${run.stderr}`;
       expect(output).toContain('ok.test.ts');
       expect(output).not.toContain('wip.test.ts');
+      expect(output).not.toContain('smoke.spec.ts');
       expect(run.status).toBe(0);
     }, 60_000);
   }
@@ -105,6 +108,23 @@ describe('testRunScopeProblem', () => {
     expect(problem).toMatch(/vitest\.config\.ts/);
     expect(problem).toMatch(/\.boardsmith\/\*\*/);
     expect(problem).toMatch(/configDefaults\.exclude/);
+  });
+
+  it('names a vitest config that would collect the browser smoke test, once the project has one (#453)', async () => {
+    const carriesOnlyWorktrees = "export default { test: { exclude: ['.boardsmith/**'] } };\n";
+    const before = await project({ 'vitest.config.ts': carriesOnlyWorktrees });
+    expect(await testRunScopeProblem(before)).toBeUndefined();
+
+    const dir = await project({ 'vitest.config.ts': carriesOnlyWorktrees, 'tests/browser/smoke.spec.ts': '' });
+    const problem = await testRunScopeProblem(dir);
+    expect(problem).toMatch(/vitest\.config\.ts does not leave tests\/browser\/ out.*Playwright.*'tests\/browser\/\*\*'/s);
+
+    const fixed = await project({
+      'vite.config.ts': 'export default {};\n',
+      [VITEST_CONFIG_FILE]: generateVitestConfig('vite.config.ts'),
+      'tests/browser/smoke.spec.ts': '',
+    });
+    expect(await testRunScopeProblem(fixed)).toBeUndefined();
   });
 
   it('points a project with no exclusion anywhere at boardsmith doctor --fix', async () => {

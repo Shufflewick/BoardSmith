@@ -22,7 +22,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { INSTALLED_MODULES } from '../../testing/installed-modules.test-helper.js';
-import { freePort } from './free-port.test-helper.js';
+import { freePort } from '../lib/free-port.js';
 import { hostHoldings } from '../dev-host/shutdown.js';
 import { loadWorldRuntime, startWorldDevServer } from './dev-world.js';
 import { commandBuildDir } from '../lib/project-paths.js';

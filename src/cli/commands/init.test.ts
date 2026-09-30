@@ -267,6 +267,13 @@ describe('initCommand — a scaffolded project is portable and has no dangling a
     expect(existsSync(join(projectPath, link.replace(/^file:/, ''), 'src', 'engine'))).toBe(true);
   });
 
+  it("writes the in-browser smoke test, listing the table's two actions (#453)", async () => {
+    await scaffold();
+    const spec = read('tests/browser/smoke.spec.ts');
+    expect(spec).toContain("import { defineSmokeTest } from 'boardsmith/testing/browser';");
+    expect(spec).toContain("actions: ['draw', 'play'],");
+  });
+
   it('declares no manifest asset it did not create', async () => {
     await scaffold();
     const config = JSON.parse(read('boardsmith.json'));
@@ -346,6 +353,14 @@ describe('initCommand --world — a persistent world project (#168)', () => {
     ]) {
       expect(has(file), `${file} is missing`).toBe(true);
     }
+  });
+
+  it("writes the in-browser smoke test, listing the world's one player verb (#453)", async () => {
+    await scaffoldWorld();
+    const spec = read('tests/browser/smoke.spec.ts');
+    expect(spec).toContain("import { defineSmokeTest } from 'boardsmith/testing/browser';");
+    expect(spec).toContain("actions: ['tend'],");
+    expect(spec).toMatch(/add an action here in[\s/]*the same change that adds it to the rules/);
   });
 
   it('writes no table half — a world has no turn order, flow or action table', async () => {
