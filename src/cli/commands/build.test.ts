@@ -112,6 +112,12 @@ describe('deriveManifest', () => {
     expect(manifest.bot).toBeUndefined();
   });
 
+  it('leaves the "agents" role mapping out of the manifest: it says how the game is built, not what is published (#454)', () => {
+    const manifest = derive({ name: 'fixture', agents: { judgement: 'senior' } });
+
+    expect(manifest.agents).toBeUndefined();
+  });
+
   it('stamps capabilities.timedSteps from the compiled flow', () => {
     const timed = fixedDeployDefinition as GameDefinition;
     expect(derive({ name: 'fixture', idleAction: { name: 'commit' } }, timed).capabilities).toMatchObject({

@@ -27,6 +27,21 @@ Comparison happens in Step 3, below; no staged slice ever takes a live
 one's place, at that step or any other. There is no flag or path anywhere in this skill that writes
 staged output into a live location.
 
+## Model Routing
+
+The `bs-` skills name roles, never models. `${CLAUDE_SKILL_DIR}/../bs-shared/routing.md` is the one
+authority: `mechanical` (bulk edits, searches, summaries), `bounded` (implementation where failing
+tests say what done is), `judgement` (spec, investigate, red team, fidelity, anything touching a
+ruling) and `review` (once `boardsmith verify` has passed). Before every dispatch,
+`npx boardsmith agent <role>` names the agent type to dispatch: the one the project's
+`boardsmith.json` `"agents"` block maps the role to, or BoardSmith's own `bs-<role>`. Every
+dispatch prompt starts with `Work package: <id>`.
+
+Its dispatches use this skill's own name as the work package (`routing.md`). Its repair of stale chunks runs through the
+build pipeline's audit and repair, so the same review gate and escalation apply there. Step 7's
+two enumerators and reconciler are the one place a skill still pins its own agents, for the
+cross-family independence that step depends on; see Step 7.
+
 ## Invocation
 
 ```
@@ -237,8 +252,8 @@ the existing build-pipeline audit/repair loop. In short: only chunks Step 4's im
 staleness for on its own. For each, `boardsmith verify-repair`'s helpers resolve the chunk's fresh
 STAGED slice paths and route it through `build/audit.md`'s three lenses (plus the 4th
 design-review lens for `ui: touches|major` chunks) and `build/repair.md`'s bounded loop — reused
-by reference, never forked. Each verify pass opens a fresh 3-round budget per chunk, appended
-after that chunk's existing rounds, never renumbering history. Once every finding across the
+by reference, never forked. Each verify pass opens a fresh climb of the role ladder per chunk
+(`routing.md`), its rounds appended after that chunk's existing rounds, never renumbering history. Once every finding across the
 episode's rounds has a disposition, the repair-gate disposition is re-derived from the freshly
 re-checked post-repair code state — never Step 4's pre-repair snapshot — because repair MAY change
 an existing chunk's code: a chunk whose code changed during repair re-opens the human playtest

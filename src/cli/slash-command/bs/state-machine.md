@@ -364,14 +364,14 @@ about which ledger it names, so it stops the merge; write the kind in front of i
 
 ## Repair Loop Bound
 
-- Maximum **3 audit rounds** per chunk.
-- Round N+1 auditors see the existing findings ledger (stable IDs) and report **only NEW findings** — they do not re-litigate findings already recorded.
-- After round 3, any remaining findings are triaged with the user: real blocker, defer to a later chunk, or auditor was wrong (refuted).
+- The role ladder is the bound (`routing.md` "When a Step Fails: One Role Up, Never the Same Role"). An audit round with findings is a request for changes, so `repair` runs one role above whoever last changed the work, never at the same role again: after a `bounded` build, that is one repair round, at `judgement`.
+- Round N+1 auditors see the existing findings ledger (stable IDs) and report **only NEW findings** (they do not re-litigate findings already recorded), and review only the change since the round before (`boardsmith review-gate --since`).
+- When the `judgement` role's repair still leaves findings, they are triaged with the user: real blocker, defer to a later chunk, or auditor was wrong (refuted).
 
 ## Redteam Escalation
 
-- **Refuted once:** re-investigate with the specific objections attached. Maximum **one** re-investigate round.
-- **Refuted twice:** that is by definition an ambiguity. Escalate to the user as a plain-language question; the ruling is recorded in `RULINGS.md`.
+- The claims were written at `judgement`, the top role (`routing.md`), so a refuted claim or a coverage gap is never sent back for another investigate round: a failure at the top goes to the designer.
+- It reaches them as an open question at the `ask` gate, the next stop anyway, in plain language with concrete options; the ruling is recorded in `RULINGS.md`.
 - Disputes go to the human, never to more agents.
 
 ## Autonomy Scope: How, Never What (PROC-02)
@@ -445,11 +445,13 @@ rolls straight into the next chunk rather than ending the session.
 - A **genuine rules adjudication / open-question escalation** — always stops the session
   regardless of milestone status, whenever the rules themselves (not the build approach) are
   genuinely undetermined; recorded in `RULINGS.md`.
-- A **redteam refuted-twice escalation** — a claim refuted twice is by definition an ambiguity,
-  raised to the user as a plain-language question and recorded in `RULINGS.md` (see "Redteam
+- A **redteam escalation**: a refuted claim or a coverage gap, raised to the user as a
+  plain-language question at the `ask` gate and recorded in `RULINGS.md` (see "Redteam
   Escalation").
-- A **repair round-3 triage** — after 3 audit rounds any remaining findings are triaged with the
+- A **repair triage**: findings the `judgement` role's repair still leaves are triaged with the
   user: real blocker, defer, or refuted (see "Repair Loop Bound").
+- Any step that has failed at the `judgement` role, the top of the ladder (`routing.md`): the user
+  is told what failed and what was tried, and nothing more is dispatched for it until they answer.
 - The `close` sketch-tail delta approval gate — the user explicitly approves the tail's delta
   before SKETCH.md's `## Ordered Chunk List` is rewritten (never a silent rewrite).
 

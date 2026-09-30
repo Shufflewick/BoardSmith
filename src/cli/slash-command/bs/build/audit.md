@@ -30,7 +30,9 @@ truth for every rules-fidelity check.
 
 Audit runs 4 independent fresh-context agents, one per lens, plus a 5th for `ui: touches|major`
 chunks. Every lens (and the design-review agent) is dispatched in one message, so they run at the
-same time (`build-chunk.md` "Concurrency Within a Chunk"). Each lens is a SEPARATE Task-tool dispatch — fresh context, no inherited conversation,
+same time (`build-chunk.md` "Concurrency Within a Chunk"). Each lens is a SEPARATE dispatch of its
+role's agent (`routing.md`: the fidelity lens is `judgement`, the other three and the design
+review are `review`; `npx boardsmith agent <role>` names the agent type): fresh context, no inherited conversation,
 never the orchestrator's running conversation, never a peer lens's findings, and never
 `## Interpretation` (per the rule above). This is `build/redteam.md`'s "Independence:
 Fresh-Context, No-Framing Dispatch" applied one step further down the pipeline: framing from any
@@ -69,13 +71,45 @@ For `ui: touches|major` chunks, a 5th agent is dispatched via `build/design-revi
 `DESIGN.md` and frontend-design craft criteria. Its findings land in the same `## Findings
 Ledger` as the four lenses above, through the orchestrator, never a separate track.
 
+## Gate Before Dispatch: No Review Until Verify Passes
+
+No audit round starts until `boardsmith verify` has passed for the commit under review
+(`routing.md` "No Review Before Verify"). Before each round, the orchestrator commits what is
+uncommitted (the Step Checklist check-off included), runs `npx boardsmith verify --chunk <slug>`,
+then:
+
+```bash
+npx boardsmith review-gate <slug>                                   # round 1
+npx boardsmith review-gate <slug> --since <commit round N-1 reviewed>  # every later round
+```
+
+adding `--work-role mechanical --since <commit before it>` when the work under review was a
+mechanical change. A refusal means no lens is dispatched: a failing verify goes back to the step
+that made the change, one role up, with verify's own output, never to a reviewer. Open, the
+command prints the review level and the brief that fills `{verifyResult}` in every template
+below:
+
+- `full`: every lens (and the design review, for a `ui: touches|major` chunk), as below.
+- `light`: one agent of the `review` role, given the brief and all four lenses' judgement checks,
+  reviewing only the change the brief names.
+- `none`: no round. Verify is the whole gate for that change; record nothing and move on.
+
+The round is recorded as a `### Review Round N` entry (`Step: audit`, the level, `Verify: <commit>
+passed` as the brief names it, the agents) in the chunk's run log before the lenses are dispatched.
+
 ### Dispatch Templates
 
 **Fidelity lens:**
 
 ```
-You are auditing built code for {gameName}, chunk "{slug}", for RULES FIDELITY. Read the
-following rulebook slice(s): {slicePaths}. Also read RULINGS.md in this project — rulings
+Work package: {slug}
+
+You are auditing built code for {gameName}, chunk "{slug}", for RULES FIDELITY. The mechanical
+checks are done. This is what `boardsmith verify` found for the commit under review:
+
+{verifyResult}
+
+Read the following rulebook slice(s): {slicePaths}. Also read RULINGS.md in this project; rulings
 outrank the rulebook (state-machine.md "Rulings Outrank Rulebook"); the rulebook plus
 RULINGS.md together form the composite source of truth. Do NOT read this chunk's CHUNK.md
 "## Interpretation" section — you are checking the CODE against the RAW SOURCE, not against a
@@ -91,6 +125,11 @@ commit, `<path>@<commit>:<lines>`, is code this chunk replaced, as it was in tha
 with `git show <commit>:<path from the project root>`, and check the built code for what replaced it:
 
 {quotedSourcesJson}
+
+Judgement checks (the only ones you make):
+  - Does the code do what the source says there, in every case the source covers?
+  - Is each rule the source states tested for the behaviour it describes (not whether the tests
+    pass: verify did that)?
 
 Every finding quotes the exact source text it rests on and its location (rulebook section, or
 file and line when the source is code). If you believe the code is wrong but no source passage
@@ -113,8 +152,14 @@ then does `repair` act on it.
 **Visibility lens:**
 
 ```
-You are auditing built code for {gameName}, chunk "{slug}", for HIDDEN-INFORMATION LEAKS. Read
-the RAW rulebook slice(s): {slicePaths}, and read RULINGS.md in this project — rulings outrank
+Work package: {slug}
+
+You are auditing built code for {gameName}, chunk "{slug}", for HIDDEN-INFORMATION LEAKS. The
+mechanical checks are done. This is what `boardsmith verify` found for the commit under review:
+
+{verifyResult}
+
+Read the RAW rulebook slice(s): {slicePaths}, and read RULINGS.md in this project; rulings outrank
 the rulebook (state-machine.md "Rulings Outrank Rulebook"), and a house rule in RULINGS.md can
 make something public that the printed rulebook hides, or vice versa. These raw sources, NOT the
 Visibility Declaration, are the ground truth for what each seat should and should not see. Then
@@ -127,7 +172,12 @@ or missed a ruling that makes a value public), that disagreement is itself a fin
 
 {visibilityDeclarationText}
 
-Using the generated project's own test harness, run a two-seat diff via
+Judgement checks (the only ones you make):
+  - What may each seat see, per the raw slice(s) + RULINGS.md, and does the Visibility
+    Declaration agree?
+  - Does anything reach a seat that should not see it?
+
+To probe the second, using the generated project's own test harness, make a two-seat diff via
 `diffPlayerViews(testGame, seatA, seatB)` (the atomic overload — avoids the WR-02
 different-instants footgun) from `boardsmith/testing`, and check the rendered UI output with
 `assertNoHiddenInfoLeak(...)` from the same package. Report anything either check surfaces as
@@ -141,12 +191,19 @@ one entry per leak found (empty array if none).
 **Undo lens:**
 
 ```
-You are auditing built code for {gameName}, chunk "{slug}", for UNDO SANITY. Read the built
-code at: {codeFilePaths}. Do NOT read CHUNK.md "## Interpretation".
+Work package: {slug}
 
-Confirm any undoable action in this chunk restores prior state cleanly — no residual visible
-state, no desync between engine state and what either seat's view reports, no orphaned hidden
-information exposed by the undo path itself.
+You are auditing built code for {gameName}, chunk "{slug}", for UNDO SANITY. The mechanical
+checks are done. This is what `boardsmith verify` found for the commit under review:
+
+{verifyResult}
+
+Read the built code at: {codeFilePaths}. Do NOT read CHUNK.md "## Interpretation".
+
+Judgement checks (the only ones you make):
+  - Does every undoable action in this chunk restore prior state cleanly, with no residual visible
+    state, no desync between engine state and what either seat's view reports, no orphaned
+    hidden information exposed by the undo path itself?
 
 Return exactly: a list of { findingId, lens: 'undo', description, citation, severity } — one
 entry per defect found (empty array if none).
@@ -155,12 +212,21 @@ entry per defect found (empty array if none).
 **Constraints lens:**
 
 ```
+Work package: {slug}
+
 You are auditing built code for {gameName}, chunk "{slug}", against THE PROJECT'S OWN HARD
-CONSTRAINTS. Read the project's CLAUDE.md (its "Hard constraints" or "Hard Rules" section, if it
+CONSTRAINTS. The mechanical checks are done. This is what `boardsmith verify` found for the
+commit under review:
+
+{verifyResult}
+
+Read the project's CLAUDE.md (its "Hard constraints" or "Hard Rules" section, if it
 has one), design/CONSTRAINTS.md, and RULINGS.md. Then read the built code at: {codeFilePaths},
 which is every file this chunk wrote or changed. Do NOT read CHUNK.md
 "## Interpretation" or the rulebook: this lens checks the code against the project's
 constraints, not against the rules.
+
+Judgement checks (the only ones you make):
 
 1. For EVERY hard constraint in design/CONSTRAINTS.md (C1, C2, ...), give a verdict: held,
    violated, or not applicable, with a citation (file and line, or the test that proves it).
@@ -228,15 +294,30 @@ string) both sides touched and one side defines. It cannot tell whether they con
 can. `boardsmith ledger-check` fails while any verdict is pending, so no chunk closes and no
 further merge lands until this lens has ruled.
 
-The orchestrator dispatches it as its own fresh-context agent, against the main checkout, with only
-the entry's text (its chunk, the chunks built alongside, the shared files and names):
+It is a review like any other, so it waits for verify: in the main checkout, run
+`npx boardsmith verify --chunk <slug>` for the chunk just merged, then `npx boardsmith review-gate
+<slug>`, and record the round (`Step: cross-chunk`) in that chunk's run log. The orchestrator then
+dispatches it as its own fresh-context agent of the `judgement` role, against the main checkout,
+with only the gate's brief and the entry's text (its chunk, the chunks built alongside, the shared
+files and names):
 
 ```
-Chunks {chunk} and {alongside} of {gameName} were built at the same time without seeing each other,
-and have just been merged. Here is every place their changes meet: {sharedFilesAndNames}. For
-each one, read the combined code at both sides and decide whether the two chunks still agree: one
-side must not remove, rename, or change the meaning of something the other relies on (a venue one
-destroys while the other still sends players there, a counter both increment, an id both define).
+Work package: {slug}
+
+Chunks {slug} and {alongside} of {gameName} were built at the same time without seeing each other,
+and have just been merged. The mechanical checks are done. This is what `boardsmith verify` found
+for the merged commit:
+
+{verifyResult}
+
+Here is every place their changes meet: {sharedFilesAndNames}.
+
+Judgement checks (the only ones you make):
+  - For each place, read the combined code at both sides and decide whether the two chunks still
+    agree: one side must not remove, rename, or change the meaning of something the other relies
+    on (a venue one destroys while the other still sends players there, a counter both
+    increment, an id both define).
+
 Do not report style. Return exactly: { verdict: 'no conflict' | 'conflict', reason, reopen?: slug,
 evidence: [file:line, ...] }.
 ```
@@ -270,7 +351,8 @@ The visibility lens must cite the real functions, not describe the check in pros
 ## Persisting the Round — Write to the Findings Ledger BEFORE Repair Starts
 
 The orchestrator appends a `### Audit Round N` entry to CHUNK.md's `## Findings Ledger`
-(`templates/CHUNK.template.md` — cite the section by name, never restructure it) as soon as all
+(`templates/CHUNK.template.md`; cite the section by name, never restructure it), and fills the
+run log's `### Review Round N` Outcome (`clean`, or `changes requested`), as soon as all
 of this round's lens agents (and the design-review agent, if dispatched) have returned — this
 write happens **before** `repair` starts, mirroring `build/redteam.md`'s "Persisting the Round"
 write-before-next-step discipline. Each new finding gets a stable ID (e.g. `F1`, `F2`, ...) that

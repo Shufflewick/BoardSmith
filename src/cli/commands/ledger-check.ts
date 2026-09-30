@@ -18,6 +18,9 @@
  *   - run-log/<slug>.md, one per chunk (#294): every `Dispatched at` / `Finished at` is a
  *     `date -u` clock read, in order, and no later than the commit that recorded that line (or
  *     than now, for a line not yet committed). RUN.md holds no dispatch entries of its own.
+ *     Every dispatch names its role and the agent type dispatched, a failed one is retried one role
+ *     up and never at the same role, and every review round started from a passing verify
+ *     (`lib/run-log-roles.ts`, #454).
  *   - CROSS-CHUNK.md (#294): every merge of a chunk built alongside others has a ruling from the
  *     audit's cross-chunk lens, not `pending`.
  *   - RULINGS.md, DECISIONS.md and every verified `chunks/<slug>/CHUNK.md` (its sign-off
@@ -59,9 +62,10 @@ import {
 import { CHUNK_EVIDENCE_DIR, citedEvidencePaths } from '../lib/cited-evidence.js';
 import { type ChunkCommit, type PinnedCommit, chunkPins } from '../lib/chunk-commits.js';
 import { LINE_LOCATION_HINT, type LineRange, fileLines, lineRangeProblem } from '../lib/line-location.js';
-import { type LedgerEntry, parseLedgerEntries, supersessionPatterns } from '../lib/ledger-entries.js';
+import { type EntryField, type LedgerEntry, entryField, parseLedgerEntries, supersessionPatterns } from '../lib/ledger-entries.js';
 import { NUMBERED_LEDGER_SPECS, provisionalHeadings } from '../lib/ledger-allocation.js';
 import { checkCrossChunkLedger } from './cross-chunk.js';
+import { checkRunLogRoles } from '../lib/run-log-roles.js';
 
 export type LedgerFindingKind =
   | 'duplicate-number'
@@ -71,6 +75,8 @@ export type LedgerFindingKind =
   | 'filing-status-invalid'
   | 'run-timestamp'
   | 'run-log-misplaced'
+  | 'run-role'
+  | 'review-round'
   | 'cross-chunk-unreviewed'
   | 'provisional-on-main-line'
   | 'evidence-not-committed'
@@ -335,20 +341,6 @@ export function checkFilingStatus(text: string): LedgerFinding[] {
 const CLOCK_READ = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
 const CLOCK_COMMAND = '`date -u +%Y-%m-%dT%H:%M:%SZ`';
 
-interface RunField {
-  value: string;
-  line: number;
-}
-
-function runField(entry: LedgerEntry, field: string): RunField | undefined {
-  const lines = entry.body.split('\n');
-  const pattern = new RegExp(`^\\s*-\\s*${field}:[ \\t]*(.*?)\\s*$`);
-  for (let i = 0; i < lines.length; i++) {
-    const match = pattern.exec(lines[i]);
-    if (match) return { value: match[1], line: entry.bodyLine + i };
-  }
-  return undefined;
-}
 
 function isoOf(epochSeconds: number): string {
   return new Date(epochSeconds * 1000).toISOString().replace(/\.000Z$/, 'Z');
@@ -363,7 +355,7 @@ interface Clock {
  * Parses one clock-read field and holds it to the commit that recorded it (or to now, when not
  * committed). Returns the time, or undefined when it is not a clock read at all.
  */
-function readClock(name: string, field: string, f: RunField, clock: Clock, out: string[]): number | undefined {
+function readClock(name: string, field: string, f: EntryField, clock: Clock, out: string[]): number | undefined {
   if (!CLOCK_READ.test(f.value)) {
     out.push(
       `${name} "${field}: ${f.value}" (line ${f.line}) is not a clock read. Run ${CLOCK_COMMAND} ` +
@@ -386,7 +378,7 @@ function readClock(name: string, field: string, f: RunField, clock: Clock, out: 
 }
 
 /** Outcome and Finished at must agree about whether the dispatch has returned. */
-function pendingMismatch(name: string, outcome: string | undefined, finished: RunField): string | undefined {
+function pendingMismatch(name: string, outcome: string | undefined, finished: EntryField): string | undefined {
   const outcomePending = outcome === 'pending';
   const finishPending = finished.value === 'pending';
   if (outcomePending && !finishPending) {
@@ -408,11 +400,11 @@ function pendingMismatch(name: string, outcome: string | undefined, finished: Ru
 function finishProblems(
   name: string,
   entry: LedgerEntry,
-  dispatched: { field: RunField; at: number } | undefined,
+  dispatched: { field: EntryField; at: number } | undefined,
   clock: Clock,
   out: string[],
 ): void {
-  const finished = runField(entry, 'Finished at');
+  const finished = entryField(entry, 'Finished at');
   if (!finished) {
     out.push(
       `${name} (line ${entry.line}) has no "- Finished at:" field. Add "- Finished at: pending" ` +
@@ -420,7 +412,7 @@ function finishProblems(
     );
     return;
   }
-  const outcome = runField(entry, 'Outcome')?.value.split(/\s/)[0];
+  const outcome = entryField(entry, 'Outcome')?.value.split(/\s/)[0];
   const mismatch = pendingMismatch(name, outcome, finished);
   if (mismatch) {
     out.push(mismatch);
@@ -443,8 +435,8 @@ function dispatchProblems(
   entry: LedgerEntry,
   clock: Clock,
   out: string[],
-): { field: RunField; at: number } | undefined {
-  const field = runField(entry, 'Dispatched at');
+): { field: EntryField; at: number } | undefined {
+  const field = entryField(entry, 'Dispatched at');
   if (!field) {
     out.push(`${name} (line ${entry.line}) has no "- Dispatched at:" field. Add the ${CLOCK_COMMAND} read taken before it was launched.`);
     return undefined;
@@ -484,6 +476,7 @@ export function checkRunLog(
     finishProblems(name, entry, dispatched, clock, out);
     findings.push(...out.map((detail) => ({ ledger, entry: name, kind: 'run-timestamp' as const, detail })));
   }
+  findings.push(...checkRunLogRoles(text).map((f) => ({ ledger, ...f })));
   return findings;
 }
 

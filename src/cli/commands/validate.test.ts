@@ -225,6 +225,19 @@ describe('validate.ts checkMetadataIssues', () => {
     expect(issues).toEqual([]);
   });
 
+  // Which agent each role is dispatched as (#454). A mistake here would send a chunk's work to an
+  // agent type the project never meant, so validate refuses it before any dispatch does.
+  it('passes an "agents" block that maps roles to agent types', () => {
+    expect(checkMetadataIssues({ ...validConfig(), agents: { judgement: 'senior', review: 'reviewer' } })).toEqual([]);
+  });
+
+  it('refuses an "agents" block naming an unknown role, suggesting the right one', () => {
+    const issues = checkMetadataIssues({ ...validConfig(), agents: { judgment: 'senior' } });
+    expect(issues).toEqual([
+      'Unknown role "judgment" in "agents"; did you mean "judgement"? The roles are mechanical, bounded, judgement and review.',
+    ]);
+  });
+
   // The manifest no longer describes UIs — src/ui/uis.ts does. A leftover `ui`
   // key is a migration signal, so it gets a pointed message rather than a
   // generic did-you-mean (matching the playerCount/categories precedent).

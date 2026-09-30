@@ -17,9 +17,9 @@
      WHO WRITES HERE:
      - Any `ask` or `playtest` gate step, when the user makes an ambiguity call or requests a
        house rule / digital adaptation during that step.
-     - Redteam refuted-twice escalation (see state-machine.md "Redteam Escalation"): when a
-       redteam finding is refuted twice, that is by definition an ambiguity — it is escalated to
-       the user as a plain-language question, and the ruling is recorded here.
+     - Redteam escalation (see state-machine.md "Redteam Escalation"): a claim the red team
+       refuted, or a gap it found, is escalated to the user as a plain-language question at
+       `ask`, and the ruling is recorded here.
 
      Sessions fill this ledger, never restructure it. Entries are append-only — never edit or
      delete a prior entry, even if a later ruling supersedes it (supersession is itself a new

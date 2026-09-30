@@ -23,8 +23,9 @@ follow-up subagent or escalate to the user — never fall back to reading the so
 ## Independence: Fresh-Context, No-Framing Dispatch
 
 Redteam runs 3 independent fresh-context agents — 2 refuters plus 1 coverage adversary — on the
-claims list produced by `build/investigate.md`. Each of the 3 agents is a SEPARATE Task-tool
-dispatch, and all 3 are dispatched in one message, so they run at the same time: none reads
+claims list produced by `build/investigate.md`. Each of the 3 agents is a SEPARATE dispatch of
+the `judgement` role's agent (`npx boardsmith agent judgement`, `routing.md`), and all 3 are
+dispatched in one message, so they run at the same time: none reads
 another's verdict, so waiting for one before starting the next buys nothing
 (`build-chunk.md` "Concurrency Within a Chunk"). The dispatch prompt for every agent contains ONLY the raw slice path(s) and the
 numbered claims list text (the text the orchestrator read from CHUNK.md's `## Interpretation` —
@@ -42,20 +43,31 @@ to grade the investigator's confidence.
 
 ## Three Dispatch Templates
 
+Fill the slots: `{verifyResult}` is the brief `npx boardsmith review-gate <slug>` printed, word for
+word (see "Gate Before Dispatch" below); `{numberedClaimsList}` is the claims text.
+
 **Refuter × 2 (identical prompt, independent dispatch):**
 
 ```
-You are reviewing a rules interpretation for {gameName}, chunk "{slug}". Read the following
-rulebook slice(s): {slicePaths}. Also read RULINGS.md in this project — rulings outrank the
-rulebook (see state-machine.md "Rulings Outrank Rulebook"); the rulebook plus RULINGS.md
-together form the composite source of truth.
+Work package: {slug}
+
+You are reviewing a rules interpretation for {gameName}, chunk "{slug}". The mechanical checks
+are done. Every quote below was already checked, by code, to be at its cited location word for
+word, and this is what `boardsmith verify` found for the commit under review:
+
+{verifyResult}
+
+Read the following rulebook slice(s): {slicePaths}. Also read RULINGS.md in this project;
+rulings outrank the rulebook (see state-machine.md "Rulings Outrank Rulebook"); the rulebook plus
+RULINGS.md together form the composite source of truth.
 
 Here is a numbered list of factual claims. Each claim carries one or more quoted passages
 (`> ` lines) and a `Source:` naming where each passage is. For each claim, RE-OPEN every cited
 Source location yourself and read the text there, and around it, rather than the claim text (a
 location pinned to a commit, `<path>@<commit>:<lines>`, is read with
-`git show <commit>:<path from the project root>`):
-  - Is the quoted passage really at that location, word for word?
+`git show <commit>:<path from the project root>`).
+
+Judgement checks (the only ones you make):
   - Does the passage, read in its own context (plus RULINGS.md), say what the claim says? A
     claim that adds, drops, or reverses anything the passage says is refuted.
   - A claim that rests on something no quoted passage says is refuted: the source does not back
@@ -72,9 +84,19 @@ entry per claim (objection is required when verdict is 'refuted', empty otherwis
 **Coverage adversary (separate prompt, independent dispatch):**
 
 ```
+Work package: {slug}
+
 You are reviewing a rules interpretation for {gameName}, chunk "{slug}" for COMPLETENESS, not
-correctness. Read rulebook/INDEX.md and search it for rules that interact with this chunk's
-topic but are cited by no claim in the list below. Also read RULINGS.md.
+correctness. The mechanical checks are done. This is what `boardsmith verify` found for the
+commit under review:
+
+{verifyResult}
+
+Read rulebook/INDEX.md and RULINGS.md.
+
+Judgement checks (the only ones you make):
+  - Search INDEX.md for rules that interact with this chunk's topic but are cited by no claim in
+    the list below.
 
 {numberedClaimsList}
 
@@ -82,12 +104,20 @@ Return exactly: { missingInteractions: [{ ruleDescription, citation }, ...] } �
 none found.
 ```
 
-This is the concrete pattern to copy: 3 independent Task-tool dispatches, each prompt containing
-only slice paths + the numbered claims list — no investigator rationale, no framing.
+This is the concrete pattern to copy: 3 independent dispatches, each prompt containing only the
+verify brief, slice paths + the numbered claims list, and no investigator rationale, no framing.
 
-## Gate Before Dispatch: Quotes Are Checked as Code
+## Gate Before Dispatch: Verify, Then Quotes, Checked as Code
 
-Before any round's dispatch, the orchestrator runs `boardsmith claim-quote-check <slug>`. It
+No review step starts until `boardsmith verify` has passed for the commit under review
+(`routing.md` "No Review Before Verify"). Before the round's dispatch the orchestrator commits
+the chunk's work (`chunk-<slug>/step-investigate`), runs `npx boardsmith verify --chunk <slug>`,
+then `npx boardsmith review-gate <slug>`. A refusal means no reviewer is dispatched: fix what
+verify names and run both again. Open, the brief it prints fills `{verifyResult}` in all three
+prompts, and the round is recorded as a `### Review Round N` entry (`Step: redteam`) in the
+chunk's run log (`templates/RUN-LOG.template.md`) before the agents are dispatched.
+
+Before that, the orchestrator runs `boardsmith claim-quote-check <slug>`. It
 re-opens every claim's cited location and refuses a claim with no quote, a quote that is not at
 its citation, or an open question that does not show where it looked (see `build/investigate.md`
 "Quoted Claims, Checked as Code"). A non-zero exit sends the refusals back to a narrower
@@ -108,55 +138,35 @@ pass.
 
 ## Escalation Logic (cite, never restate)
 
-See `state-machine.md` "Redteam Escalation" and "Repair Loop Bound" for the governing rules —
-this file does not restate the max-1-round bound or the refuted-twice rule, it applies them:
+See `state-machine.md` "Redteam Escalation" and `routing.md` "When a Step Fails: One Role Up,
+Never the Same Role" for the governing rules; this file applies them. The claims were written at
+the `judgement` role, the top of the ladder, so a request for changes is never sent back for
+another investigate round:
 
-- **Refuted once** (one refuter, or the coverage adversary alone, flags a claim/gap): hand off
-  to `build/investigate.md`'s re-investigate behavior with the specific objection(s) attached —
-  maximum ONE re-investigate round. Re-investigation appends a superseding claim; it never
-  renumbers or edits the original (see `build/investigate.md` "Re-Investigate Round Behavior").
-- **Refuted twice** (both refuters agree a claim is refuted, or a refuter and the coverage
-  adversary flag the same claim/gap on the re-investigate round): that is by definition an
-  ambiguity. Escalate to the user — disputes go to the human, never to more agents.
+- **Any refuted claim, and any coverage gap**, goes to the designer as an open question at the
+  `ask` gate (`build/ask.md` part (b)), in plain language with concrete options. The designer's
+  answer becomes a `RULINGS.md` ruling, and the claim it settles is corrected by appending a
+  superseding claim (`build/investigate.md` "Correcting a Claim After the Designer Rules").
+  Disputes go to the human, never to more agents.
+- **Every claim stands and no gap is found:** the round clears, and the interpretation flows to
+  `ask` as it is.
 
-**Round-2 dispatch vs superseded claims:** the re-investigate round appends a superseding claim
-and leaves the refuted original untouched in place (append-only — see `build/investigate.md`
-"Re-Investigate Round Behavior"). When the round-2 agents are dispatched, the claims list
-embedded in their prompts marks every superseded claim in place — e.g.
-`7. [superseded by claim 12 — do not review] <original text>` — and the prompt instructs the
-agents that a claim marked "supersedes claim N" replaces claim N for review purposes:
-superseded claims receive **no verdict**, and re-refuting one is not a finding. Without this
-marking, fresh-context round-2 agents would correctly re-refute the original (it is still
-wrong, by design) and manufacture a spurious refuted-twice escalation on every re-investigate
-round.
-
-## Persisting the Round (write at the end of EACH round — never deferred past a re-investigate)
+## Persisting the Round (write before the ask step starts)
 
 The orchestrator appends a `### Redteam Round N` entry to CHUNK.md's `## Redteam Rounds`
-section (`templates/CHUNK.template.md`) at the end of **each** round — per-claim verdicts,
-objection text, the coverage adversary's findings, and the round's disposition. Concretely:
+section (`templates/CHUNK.template.md`) once all 3 agents have returned: per-claim verdicts,
+objection text, the coverage adversary's findings, and the round's disposition, `cleared` or
+`escalation open at ask`, **before** the ask step starts. It fills the run log's `### Review Round
+N` entry's Outcome at the same time (`clean`, or `changes requested`).
 
-- **Round 1, refuted-once path:** append `### Redteam Round 1` with disposition
-  `re-investigate dispatched` **before** dispatching the re-investigate subagent — never
-  deferred until the re-investigate round completes. A crash mid-re-investigate must not lose
-  Round 1's verdicts while the re-investigate subagent's superseding claim (written directly to
-  `## Interpretation`) survives.
-- **Round 2, or a Round 1 that clears or escalates:** append that round's entry when its 3
-  agents have returned and its escalation logic has resolved, with disposition `cleared` or
-  `escalation open at ask`, **before** the ask step starts.
-
-This is a state-file write and is what makes every round cold-resumable: a crash or session
-handoff at any seam — mid-re-investigate, or between redteam and ask — must not lose an already
-resolved round's verdicts. **Resume rule:** a session resuming at redteam (unchecked) that finds
-a round entry with disposition `re-investigate dispatched` — or a claim in `## Interpretation`
-noting "supersedes claim N" — dispatches a **round-2** review with every superseded claim marked
-(see "Round-2 dispatch vs superseded claims" above), never a fresh Round 1; without the round
-record, the resume could not know the marking applies, both refuters would re-refute the
-superseded original, and a spurious refuted-twice escalation would be manufactured through the
-crash seam. Vote-privacy (below) governs what is *shown to the user*, not what is *written to
-state* — the recorded entry is internal, and the ask step still distills it into designer
-language. After the final round's entry lands, the orchestrator checks off `redteam` on
-CHUNK.md's Step Checklist.
+This is a state-file write and is what makes the round cold-resumable: a crash or session
+handoff between redteam and ask must not lose an already resolved round's verdicts. **Resume
+rule:** a session resuming at redteam (unchecked) with no round entry for the current claims
+runs the gate again and dispatches the round; one that finds the entry already written checks off
+`redteam` and moves on, never dispatching a second round. Vote-privacy (below) governs what is
+*shown to the user*, not what is *written to state*: the recorded entry is internal, and the ask
+step still distills it into designer language. After the round's entry lands, the orchestrator
+checks off `redteam` on CHUNK.md's Step Checklist.
 
 ## Vote-Privacy
 
@@ -174,15 +184,15 @@ options, in the register a designer would use, never engine or agent vocabulary:
 
 ## Recording the Ruling
 
-The user's answer to a refuted-twice escalation is recorded as a `### Ruling N` entry in
+The user's answer to a redteam escalation is recorded as a `### Ruling N` entry in
 `RULINGS.md` — fill `templates/RULINGS.template.md`'s Decision / Citation interpreted or
 overridden / Rationale shape exactly; never restructure the header, and never overwrite or
 renumber a prior entry (RULINGS.md is append-only).
 
 ## Downstream Shape (cite, never restate)
 
-`build/investigate.md` is the upstream claims producer and the owner of re-investigate behavior
-on a refuted-once round (see its "Re-Investigate Round Behavior" section). Once a round of
-redteam clears with no unresolved refuted-twice escalations, the settled interpretation flows to
-`build/ask.md`, the downstream consumer that presents it to the user for approval. This file
+`build/investigate.md` is the upstream claims producer, and the owner of correcting a claim once
+the designer has ruled on it (see its "Correcting a Claim After the Designer Rules" section). The
+round's outcome, cleared or with escalations open, flows to `build/ask.md`, the downstream
+consumer that presents it to the user for approval. This file
 does not restate either file's structure.

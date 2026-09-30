@@ -20,7 +20,7 @@
 
      WHO WRITES HERE:
      - Any gate step that puts a question to the designer — `ask`, `playtest`, a redteam
-       refuted-twice escalation, a repair round-3 triage — writes the question the moment it is
+       escalation, a repair triage, a step that failed at the top role: writes the question the moment it is
        posed, with the Answer field left `pending`.
      - Whoever receives the designer's answer fills that entry's Answer/Answered at/Recorded in
        fields, once. Under `/bs-build-game` that is always the orchestrator, because the

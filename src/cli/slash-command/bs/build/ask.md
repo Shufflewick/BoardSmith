@@ -35,8 +35,8 @@ opening entirely and proceeds straight to Part (a) below.
 
 ## Inputs
 
-The settled interpretation that clears `build/redteam.md` with no unresolved refuted-twice
-escalations: CHUNK.md's `## Interpretation` and `## Visibility Declaration` sections (written by
+The interpretation `build/redteam.md` reviewed, with any redteam escalations it left open:
+CHUNK.md's `## Interpretation` and `## Visibility Declaration` sections (written by
 `build/investigate.md`), plus CHUNK.md's `## Redteam Rounds` section (written by the
 orchestrator at the end of each redteam round — see `build/redteam.md` "Persisting the Round").
 The ask step has no subagent — the orchestrator reads these three CHUNK.md sections itself, the
@@ -45,12 +45,13 @@ restates them below; it never opens the rulebook slices or docs behind the claim
 
 `## Redteam Rounds` is what makes this gate cold-resumable: a session resuming directly at ask
 (redteam checked, ask unchecked) consumes the **persisted** per-claim verdicts, objections, and
-round dispositions from that section — which claims were refuted and superseded, and whether any
-round's disposition reads `escalation open at ask` — never from conversation memory it does not
-have. Any round disposition of `escalation open at ask`, and any ambiguity the redteam round
-escalated to the user directly (`state-machine.md` "Redteam Escalation" — refuted-twice disputes
-go to the human, never to more agents), is surfaced as a part (b) question below; a ruling
-already recorded in RULINGS.md may already answer it.
+round dispositions from that section (which claims were refuted, which gaps were found, and
+whether the round's disposition reads `escalation open at ask`), never from conversation memory it
+does not have. Every refuted claim and every coverage gap is surfaced as a part (b) question below
+(`state-machine.md` "Redteam Escalation": the claims were written at the top role, so disputes go
+to the human, never to more agents). The Ask Triple-Gate below does not filter these out: a
+refuted claim is a failure the designer settles, not an optional ambiguity. A ruling already
+recorded in RULINGS.md may already answer it, and then the question names that ruling.
 
 ## Ask Triple-Gate (SKILLAUTO-02) — ask only when all three hold
 
@@ -190,10 +191,12 @@ existing row rather than duplicating it.
 ## House-Rule / Adaptation Choices — RULINGS.md
 
 Any house-rule or digital-adaptation choice the user makes while answering part (b) — including
-any answer to a redteam refuted-twice escalation still open when this step starts — is recorded
-as a new `### Ruling N` entry in `RULINGS.md`, filling `templates/RULINGS.template.md`'s
-Decision / Citation interpreted or overridden / Rationale shape exactly. Never restructure the
-ledger's header, and never overwrite or renumber a prior entry — RULINGS.md is append-only.
+any answer to a redteam escalation, is recorded as a new `### Ruling N` entry in `RULINGS.md`,
+filling `templates/RULINGS.template.md`'s Decision / Citation interpreted or overridden /
+Rationale shape exactly. Never restructure the ledger's header, and never overwrite or renumber a
+prior entry: RULINGS.md is append-only. A ruling that settles a refuted claim or a gap is then
+carried into the claims by an appended superseding claim (`build/investigate.md` "Correcting a
+Claim After the Designer Rules"), before `Status: approved` is written.
 
 ## Gate-Before-Write
 

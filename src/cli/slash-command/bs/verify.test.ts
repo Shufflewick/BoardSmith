@@ -1167,7 +1167,7 @@ describe('CHECK-02 no-fork guard — lens/repair prose sourced from build/*.md a
 
   it('no file under bs/verify/ restates build/repair.md\'s round-bound sentence or its three triage option labels as its own policy', () => {
     const repair = read('build/repair.md');
-    const boundSentence = 'Maximum 3 audit rounds per chunk.';
+    const boundSentence = '- The role ladder bounds the loop.';
     const triageLabels = ['Real blocker', 'Defer to a later chunk', 'Auditor was wrong (refuted)'];
     // Companion assertion: fail loudly if build/repair.md itself stops carrying this exact
     // sentence/labels, rather than let the guard below pass vacuously against a moved target.
@@ -1179,7 +1179,7 @@ describe('CHECK-02 no-fork guard — lens/repair prose sourced from build/*.md a
       const text = readFileSync(file, 'utf-8');
       expect(text).not.toContain(boundSentence);
       // All three triage labels co-occurring in one verify/ file would mean a forked restatement
-      // of the round-3 triage script; any single label alone is plausible incidental prose (e.g.
+      // of the repair triage script; any single label alone is plausible incidental prose (e.g.
       // "real blocker" used generically), so the fork signal is all three appearing together.
       const allThreePresent = triageLabels.every((label) => text.includes(label));
       expect(allThreePresent).toBe(false);

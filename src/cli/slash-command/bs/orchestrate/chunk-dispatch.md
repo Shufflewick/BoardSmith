@@ -19,8 +19,12 @@ subagents inside a run.
 
 ## Dispatch Mechanics
 
-Dispatch with the **Agent tool** — one agent per dispatch, general-purpose, full tool access,
-running in the game project directory. The subagent is told to **read the pipeline's own
+Dispatch with the **Agent tool**: one agent per dispatch, full tool access, running in the game
+project directory, as the `judgement` role's agent: a chunk touches rulings, so it is judgement
+work (`routing.md` "Which Role Each Step Uses"). Run `npx boardsmith agent judgement` and dispatch
+exactly the agent type it prints: the one the project maps the role to in `boardsmith.json`, or
+BoardSmith's own `bs-judgement`. Never name a model. The chunk's own steps are then dispatched
+role by role from inside it, as `routing.md` says. The subagent is told to **read the pipeline's own
 instructions and follow them verbatim**: `${CLAUDE_SKILL_DIR}/../bs-build-chunk/SKILL.md` for an
 ordinary chunk, `${CLAUDE_SKILL_DIR}/../bs-build-bot/SKILL.md` for the bot-opponent chunk,
 `${CLAUDE_SKILL_DIR}/../bs-insert-chunk/SKILL.md` for a sketch reshape. Hand it the resolved
@@ -114,7 +118,8 @@ five; the last two are dispatches it is never asked about:
 ## The Brief (every field required)
 
 The brief is the subagent's whole world — it has no memory of the run and no access to the
-designer. Include all of:
+designer. The first line of the brief is `Work package: <slug>`, the chunk's slug, so every
+report and log line the dispatch produces can be traced to its chunk. Then include all of:
 
 1. **Project directory** — the absolute path to the game project. Its first act is to work there.
 2. **Which pipeline to read** — the absolute path from "Dispatch Mechanics" above, with the
@@ -185,9 +190,13 @@ already owns:
   take to unblock.
 
 A `closed` return whose checkout fails `npx boardsmith verify --check --chunk <slug>` is not
-closed, whatever its `designerSummary` says: the orchestrator treats it as the ordinary case of unfinished work and
-re-dispatches the same chunk with the check's message in the brief, so the fresh subagent fixes
-what it names and runs `build/close.md` "The Done Gate" again (`build-game.md` Step 4).
+closed, whatever its `designerSummary` says. It is a failure of the chunk's dispatch at the
+`judgement` role, the top of the ladder, so it is never re-dispatched at that role on the
+orchestrator's own say-so (`routing.md` "When a Step Fails: One Role Up, Never the Same Role"):
+the orchestrator records the dispatch `failed`, stops, and puts it to the designer with the
+check's message (`build-game.md` Step 4). Once they answer, the chunk is re-dispatched with the
+answer and the check's message in the brief, so the fresh subagent fixes what it names and runs
+`build/close.md` "The Done Gate" again.
 
 A return missing a field its `outcome` requires is itself a stuck dispatch: the orchestrator does
 not guess the missing half. Re-dispatch once with the missing field named; if the second return is
@@ -200,7 +209,7 @@ The orchestrator, in this order: for a `closed` return, first runs
 before it writes anything, since any write to that
 checkout (the run log included) leaves its tree dirty and the check would refuse the chunk for the
 orchestrator's own change; then fills the chunk's `design/run-log/<slug>.md` dispatch entry's `Outcome`/`Detail`
-(`orchestrate/run-state.md` "Writing It"), recording a refused check as the chunk not closed; records any `questions` and `filings`
+(`orchestrate/run-state.md` "Writing It"), recording a refused check as `failed`; records any `questions` and `filings`
 (`orchestrate/questions.md`, `orchestrate/filings.md`), relays `designerSummary` if there is
 anything the designer can see, and then routes on `outcome` per `build-game.md` Step 4.
 

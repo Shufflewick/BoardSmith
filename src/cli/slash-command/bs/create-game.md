@@ -40,3 +40,16 @@ or shortcut any of its steps:
 Everything else — scaffold, transcription vs. interview, synthesis, sketch derivation, the
 context-economics hard rule — lives in `bs-ingest-rules` and its `bs-shared/` references. Cite
 those; never copy them here.
+
+## Model Routing
+
+The `bs-` skills name roles, never models. `${CLAUDE_SKILL_DIR}/../bs-shared/routing.md` is the one
+authority: `mechanical` (bulk edits, searches, summaries), `bounded` (implementation where failing
+tests say what done is), `judgement` (spec, investigate, red team, fidelity, anything touching a
+ruling) and `review` (once `boardsmith verify` has passed). Before every dispatch,
+`npx boardsmith agent <role>` names the agent type to dispatch: the one the project's
+`boardsmith.json` `"agents"` block maps the role to, or BoardSmith's own `bs-<role>`. Every
+dispatch prompt starts with `Work package: <id>`.
+
+This skill dispatches nothing itself; the kickoff it hands to does, under the work package
+`ingest-rules`.

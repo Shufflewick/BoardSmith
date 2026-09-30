@@ -70,23 +70,25 @@ Starts" exactly: append this round's `### Audit Round N` entry before repair beg
 its cold-resume rule for a partial or missing current-round entry. Then dispatch
 `${CLAUDE_SKILL_DIR}/../bs-shared/build/repair.md`'s bounded loop exactly as written — the two
 repair actions (fix, refute-with-citation), the three terminal dispositions
-(`fixed`/`deferred`/`refuted`), and `build/repair.md`'s own round-3 user triage with its three
-plain-language options. Cite `build/repair.md`'s "Repair Loop Bound" section for the round-count
-policy itself — this file states only that a fresh budget applies per verify-episode (below), it
-does not restate the bound's own governing sentence as a second policy statement of its own.
+(`fixed`/`deferred`/`refuted`), and `build/repair.md`'s own repair triage with its three
+plain-language options. Cite `build/repair.md`'s "Repair Loop Bound" section for the bound
+itself. This file states only that a fresh climb applies per verify-episode (below), it does not
+restate the bound's own governing sentence as a second policy statement of its own.
 
 ## 5. The round bound is per-verify-episode, not per-chunk-lifetime (decision 17)
 
-Each verify pass opens a **fresh 3-round budget** for a chunk, appended AFTER that chunk's
-existing rounds — never renumbering history. `state-machine.md` "Write Order" is the authority
+Each verify pass opens a **fresh climb of the role ladder** for a chunk (`routing.md`), with its
+rounds appended AFTER that chunk's existing rounds, never renumbering history. A stale-rule fix
+touches the rulebook's meaning, so the episode's first repair is a new dispatch at `judgement`,
+and findings its repair still leaves go to the repair triage. `state-machine.md` "Write Order" is the authority
 for round entries being append-only across a chunk's whole life; this file applies that rule to
 a new kind of round (a verify episode's), it does not re-derive the rule itself.
 
 **Why this matters concretely, not abstractly:** four of the real stale chunks in this
 milestone's own reference games — `best-seven-selection`, `table-and-draw`, `block`, `jab` —
-already carry exactly 3 recorded `### Audit Round` entries from their original build. Under a
-per-chunk-lifetime reading of the round bound, all four would receive zero lens dispatches and
-route straight to round-3 triage on arrival here — CHECK-02 would be permanently unavailable to
+already carry several recorded `### Audit Round` entries, and a repair at `judgement`, from their
+original build. Under a per-chunk-lifetime reading of the round bound, all four would receive
+zero lens dispatches and route straight to the repair triage on arrival here, and CHECK-02 would be permanently unavailable to
 exactly the chunks with the most audit history, and that fraction only grows as chunks mature.
 The bound is a loop guard against one session's audit/repair cycling forever, not a lifetime
 quota; a chunk re-checked against a changed rulebook is a new question, not a continuation of the
@@ -119,7 +121,7 @@ held and this file holds again (decision 16).
 Cite, never restate: `${CLAUDE_SKILL_DIR}/../bs-shared/build/audit.md` (the three lens templates,
 the 4th-lens rule, the no-`## Interpretation` rule, the persist-before-repair and cold-resume
 rules), `${CLAUDE_SKILL_DIR}/../bs-shared/build/repair.md` (the two repair actions, the three
-terminal dispositions, the round-3 triage), and
+terminal dispositions, the repair triage), and
 `${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md` "Write Order" and "Repair Loop Bound". This
 file adds no new lens content and no new repair-loop mechanic of its own — it is the route that
 binds a stale chunk's staged paths into the pipeline those three files already define.

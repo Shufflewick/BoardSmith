@@ -66,6 +66,8 @@ import {
 import { verifySourceFreeCheckCommand } from './commands/verify-source-free.js';
 import { verifyCloseRecordCommand } from './commands/verify-close-record.js';
 import { verifyCommand } from './commands/verify.js';
+import { reviewGateCommand } from './commands/review-gate.js';
+import { agentCommand } from './commands/agent.js';
 import { verifyExampleEmitCommand } from './commands/example-test-emit.js';
 import { verifyExampleRunCommand } from './commands/example-test-run.js';
 import { evolveBotWeightsCommand } from './commands/evolve-bot-weights.js';
@@ -185,6 +187,28 @@ export function createProgram(): Command {
     .option('--check', 'Run nothing: exit 0 only when HEAD, on a clean tree, has a passing result')
     .option('--project <dir>', 'Project directory (defaults to cwd)')
     .action((options: { base?: string; chunk?: string; check?: boolean; project?: string }) => verifyCommand(options));
+
+  // No model review starts until verify has passed for the commit under review (#454).
+  program
+    .command('review-gate <slug>')
+    .description(
+      "Refuse a model review of a chunk's work unless `boardsmith verify --chunk <slug>` passed for this commit; " +
+        'when open, print the review level and the verify brief every review prompt carries',
+    )
+    .option('--work-role <role>', 'The role that did the work under review (mechanical, bounded or judgement); only small mechanical changes skip or lighten review')
+    .option('--since <commit>', 'Review only the change since this commit: the one the last round reviewed, or where a mechanical change began')
+    .option('--project <dir>', 'Project directory (defaults to cwd)')
+    .action((slug: string, options: { workRole?: string; since?: string; project?: string }) => reviewGateCommand(slug, options));
+
+  // The bs- skills name roles, never models (#454): which agent type each role is dispatched as.
+  program
+    .command('agent <role>')
+    .description(
+      'Print the agent type to dispatch a role (mechanical, bounded, judgement, review) as: the one boardsmith.json "agents" maps it to, else bs-<role>',
+    )
+    .option('--escalate', 'The step failed at this role: print the next role up and its agent type, or say to ask the designer')
+    .option('--project <dir>', 'Project directory (defaults to cwd)')
+    .action((role: string, options: { escalate?: boolean; project?: string }) => agentCommand(role, options));
 
   // Linting
   program

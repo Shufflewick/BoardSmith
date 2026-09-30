@@ -152,6 +152,15 @@ describe('every positional CLI argument is decided to be a name or a path', () =
     'test-step-check <slug>': 'commands/test-step-check.ts',
     'parallel-check <slugs...>': 'commands/parallel-check.ts',
     'chunk-merge <slug>': 'commands/chunk-merge.ts',
+    'review-gate <slug>': 'commands/review-gate.ts',
+  };
+
+  /**
+   * Positional arguments that must be ONE OF A FIXED SET, and the module that refuses anything
+   * else before it is used. A member of the set can never be path-shaped, so no path gets through.
+   */
+  const CHOICE_ARGUMENTS: Record<string, string> = {
+    'agent <role>': 'lib/agent-roles.ts',
   };
 
   const declared = [...cliText.matchAll(/\.command\('([a-z-]+ (?:<[a-z.]+>|\[[a-z.]+\]))'\)/g)].map((m) => m[1]);
@@ -162,7 +171,7 @@ describe('every positional CLI argument is decided to be a name or a path', () =
 
   it('has classified every one of them', () => {
     const unclassified = declared.filter(
-      (arg) => !PATH_ARGUMENTS.includes(arg) && NAME_ARGUMENTS[arg] === undefined,
+      (arg) => !PATH_ARGUMENTS.includes(arg) && NAME_ARGUMENTS[arg] === undefined && CHOICE_ARGUMENTS[arg] === undefined,
     );
     // A new `.command('foo <bar>')` lands here. Decide which kind of argument
     // it is, then add it to the list above -- and if it is a name, validate it.

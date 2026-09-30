@@ -66,7 +66,8 @@ Split the seven checks across an agent-dispatched portion and a human-narrated p
 (146-RESEARCH.md Open Question 1's recommendation; Claude's Discretion per 146-CONTEXT.md — the
 split is documented here rather than left implicit):
 
-- **Agent-dispatched (checks 2, 3, 5, 6, 7):** a single fresh-context Task-tool dispatch handles
+- **Agent-dispatched (checks 2, 3, 5, 6, 7):** a single fresh-context dispatch of the `review`
+  role's agent (`npx boardsmith agent review`, `routing.md`) handles
   every check that is a screenshot, measurement, or scripted-completion check — 200% zoom, compact
   touch targets, both themes, drag-drop keyboard alternates end-to-end, and mobile layout via
   iframe-shrink. This reuses `build/design-review.md`'s "Single Fresh-Context Adversarial
@@ -79,24 +80,39 @@ split is documented here rather than left implicit):
   judgment stay outside the dispatch template, performed and reported by the human directly — a
   screen reader and colorblind perception are not things an agent dispatch can substitute for.
 
+### Gate Before Dispatch
+
+This is a review, so it waits for verify like every other (`routing.md` "No Review Before
+Verify"): commit, run `npx boardsmith verify --chunk <slug>` for this final-acceptance chunk, then
+`npx boardsmith review-gate <slug>`. A refusal means nothing is dispatched; fix what verify names
+first. Open, its brief fills `{verifyResult}` below, and the round is recorded as a `### Review
+Round N` entry (`Step: final-acceptance`) in the chunk's run log.
+
 ### Dispatch Template
 
-Fill the `{...}` slots and hand this to the Task-tool dispatch verbatim — never synthesize an
+Fill the `{...}` slots and hand this to the dispatch verbatim; never synthesize an
 ad-hoc prompt from this prose, which risks dropping the independence framing:
 
 ```
+Work package: {slug}
+
 You are the FINAL-ACCEPTANCE design-QA lens auditing the fully-built UI for {gameName}. This is a
 SEPARATE dispatch with NO inherited conversation: do NOT read the orchestrator's running
 conversation, any prior agent's framing, or any chunk's CHUNK.md "## Interpretation" — this is the
-LAST pass in the pipeline, not a reason to relax that discipline.
+LAST pass in the pipeline, not a reason to relax that discipline. The mechanical checks are done.
+This is what `boardsmith verify` found for the commit under review:
+
+{verifyResult}
 
 Read fresh: DESIGN.md (its "## Theme Block", "## Component Recipes", and "## Do / Don't"
 sections) and the finished game's UI code.
 
 Serve → capture → kill: start the dev host with `npx boardsmith dev --no-open`, wait for the
 exact string `Ready! Press Ctrl+C to stop.` (never `networkidle` — the dev host holds an open
-WebSocket connection and never reaches network idle), then run these five checks, and kill the
-dev server as an explicit numbered step before returning:
+WebSocket connection and never reaches network idle), then make these five checks, and kill the
+dev server as an explicit numbered step before returning.
+
+Judgement checks (the only ones you make):
 
 1. 200% zoom — usable, nothing clips or becomes unreachable.
 2. Compact touch targets — at the `compact` breakpoint tier, every interactive control meets the

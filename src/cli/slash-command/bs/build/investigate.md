@@ -51,7 +51,7 @@ never proposes a fix that lives under `node_modules/boardsmith`.
 
 ## Inputs to Read
 
-A fresh-context Task-tool subagent reads, for this chunk:
+A fresh-context subagent of the `judgement` role (`routing.md`) reads, for this chunk:
 
 1. The chunk's cited slices — the `rulebook/NN-topic.md` files this CHUNK.md already cites.
 2. INDEX-discovered slices — search `rulebook/INDEX.md` for this chunk's key terms and read any
@@ -64,11 +64,14 @@ A fresh-context Task-tool subagent reads, for this chunk:
 
 ## Fan-Out Dispatch
 
-Dispatch one fresh Task-tool subagent — fill `{gameName}`, `{slug}`, the resolved slice paths,
-and the resolved doc list from above; a fresh-context subagent has no inherited knowledge of
-where this chunk's sources live:
+Dispatch one fresh subagent as the `judgement` role's agent (`npx boardsmith agent judgement`),
+recorded as a `### Dispatch N` entry in the chunk's run log. Fill `{gameName}`, `{slug}`, the
+resolved slice paths, and the resolved doc list from above; a fresh-context subagent has no
+inherited knowledge of where this chunk's sources live:
 
 ```
+Work package: {slug}
+
 Investigate the rules interpretation for {gameName}, chunk "{slug}". Read the following, issuing
 the reads together rather than one after another (none depends on another):
   - Cited slices: {citedSlicePaths}
@@ -173,20 +176,23 @@ A chunk verified before #289 has claims with no quotes. The one-time `boardsmith
 chunk-gate-transition` (`build/playtest.md` "Chunks Verified Before the Gates") records each such
 claim with a hash of its text in `design/GATE-TRANSITION.md`, and from then on `claim-quote-check`
 accepts it, reported `preGate`, while its text is unchanged. A repair or re-audit of such a chunk
-owes quotes only for the claims it adds or changes: a claim appended by a re-investigate round
+owes quotes only for the claims it adds or changes: a claim appended by a correction
 needs its quote like any new claim, and a recorded claim whose text was edited is refused until it
 has one. Do not re-quote the recorded claims, and do not send the chunk back to investigate for
 them. Before the transition is recorded, the check refuses every unquoted claim of a verified chunk
 and names the command.
 
-## Re-Investigate Round Behavior (redteam refuted-once path)
+## Correcting a Claim After the Designer Rules (append, never rewrite)
 
-When `redteam.md` returns a refuted-once verdict on a claim, the re-investigate round APPENDS a
-new claim noting supersession of the objected claim — it does NOT renumber or silently rewrite
-the existing numbered list. Concretely: if claim 7 is refuted with a specific objection and
-re-investigation concludes the objection is valid, the subagent appends a new claim (e.g. claim
-12) whose text states what claim 7 should have said and explicitly notes "supersedes claim 7 per
-redteam objection," leaving claim 7's original text and number untouched in place. This keeps the
+A claim the red team refuted, or a gap it found, goes to the designer at `ask`, never back to
+another investigate round (`state-machine.md` "Redteam Escalation"). Once the designer's answer
+is recorded as a ruling, an investigate dispatch (the `judgement` role again, which the designer's
+answer allows: `routing.md`) APPENDS a new claim noting supersession of the one it corrects; it
+does NOT renumber or silently rewrite the existing numbered list. Concretely: if claim 7 is
+refuted and the designer rules on it, the subagent appends a new claim (e.g. claim 12) whose text
+states what claim 7 should have said, quotes the ruling, and explicitly notes "supersedes claim 7
+per Ruling N," leaving claim 7's original text and number untouched in place. A gap the designer
+rules in scope is appended the same way, as a new claim quoting its source. This keeps the
 append-only philosophy that governs the Revision Rounds and Findings Ledger sections of
 CHUNK.template.md consistent across every append-only section in the file — no numbered claim's
 text is ever edited or removed once written; correction always takes the form of a new, later

@@ -157,7 +157,9 @@ describe('checkFilingStatus', () => {
 function dispatch(n: number, dispatched: string, outcome: string, finished: string): string {
   return [
     `### Dispatch ${n}`,
-    '- Pipeline: build-chunk',
+    '- Work: build-chunk',
+    '- Role: judgement',
+    '- Agent: bs-judgement',
     `- Dispatched at: ${dispatched}`,
     `- Finished at: ${finished}`,
     `- Outcome: ${outcome}`,
@@ -229,6 +231,29 @@ describe('checkRunLog', () => {
   it('fails a missing Finished at field', () => {
     const text = '### Dispatch 1\n- Dispatched at: 2026-09-23T10:00:00Z\n- Outcome: pending\n';
     expect(checkRunLog(text, LOG, uncommitted, NOW)[0].detail).toMatch(/Finished at/);
+  });
+
+  it('holds each dispatch to a role and an agent type, and each review round to a passing verify (#454)', () => {
+    const text = [
+      '### Dispatch 1',
+      '- Work: build',
+      '- Dispatched at: 2026-09-23T10:00:00Z',
+      '- Finished at: pending',
+      '- Outcome: pending',
+      '',
+      '### Review Round 1',
+      '- Step: audit',
+      '- Level: full',
+      '- Verify: 0123456789ab failed',
+      '- Agents: bs-review',
+      '- Outcome: pending',
+      '',
+    ].join('\n');
+    expect(checkRunLog(text, LOG, uncommitted, NOW).map((f) => `${f.ledger}:${f.entry}:${f.kind}`)).toEqual([
+      `${LOG}:Dispatch 1:run-role`,
+      `${LOG}:Dispatch 1:run-role`,
+      `${LOG}:Review Round 1:review-round`,
+    ]);
   });
 
   it('reports a dispatch number used twice', () => {

@@ -12,8 +12,10 @@ in the pipeline where a lifecycle agent can fail a chunk for exactly that class 
 ## Single Fresh-Context Adversarial Dispatch
 
 Same independence discipline as `build/redteam.md`'s "Independence: Fresh-Context, No-Framing
-Dispatch", scaled to one dispatch instead of three: this is a SEPARATE Task-tool dispatch with
-no inherited conversation — never the orchestrator's running conversation, never
+Dispatch", scaled to one dispatch instead of three: this is a SEPARATE dispatch of the `review`
+role's agent (`npx boardsmith agent review`, `routing.md`), sent in the same audit round as the
+lenses and so only after that round's `npx boardsmith review-gate <slug>` is open
+(`build/audit.md` "Gate Before Dispatch"), with no inherited conversation: never the orchestrator's running conversation, never
 `build/investigate.md`'s or `build/ask.md`'s framing, and never CHUNK.md's `## Interpretation`.
 The agent reads `DESIGN.md` and the chunk's own built code fresh, takes its own screenshots, and
 returns findings independently. Its findings land in the SAME `## Findings Ledger`
@@ -31,10 +33,15 @@ from this prose, which risks dropping the independence framing. Use exactly this
 `{...}` slots:
 
 ```
+Work package: {slug}
+
 You are the DESIGN-REVIEW lens auditing the built UI for {gameName}, chunk "{slug}". This is a
 SEPARATE dispatch with NO inherited conversation: do NOT read the orchestrator's running
 conversation, any prior agent's framing, or CHUNK.md's "## Interpretation". You take your own
-screenshots and judge the UI independently.
+screenshots and judge the UI independently. The mechanical checks are done. This is what
+`boardsmith verify` found for the commit under review:
+
+{verifyResult}
 
 Read fresh: DESIGN.md (its "## Theme Block", "## Component Recipes", "## Do / Don't" sections)
 and this chunk's own built UI code at {codeFilePaths}.
@@ -44,8 +51,8 @@ host with `npx boardsmith dev --no-open`, wait for `Ready! Press Ctrl+C to stop.
 `networkidle`), run the breakpoint × theme capture loop (6 shots into chunks/{slug}/shots/), then
 kill the dev server before returning.
 
-Review passes: (1) token/craft against DESIGN.md; (2) cohesion diff against the prior UI chunk's
-shots/ (or establish the baseline if this is the first UI chunk).
+Judgement checks (the only ones you make): (1) token/craft against DESIGN.md; (2) cohesion diff
+against the prior UI chunk's shots/ (or establish the baseline if this is the first UI chunk).
 
 Return exactly: a list of { findingId, lens: 'design', description, citation, severity } — one
 entry per defect found (empty array if none). Use the same stable-ID shape (F1, F2, ...) the

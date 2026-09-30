@@ -125,7 +125,7 @@ full
      supersedes it (supersession is itself a new entry). -->
 
 ## Redteam Rounds
-<!-- Written by the ORCHESTRATOR at the end of each redteam round, BEFORE the ask step starts —
+<!-- Written by the ORCHESTRATOR when the redteam round's agents have returned, BEFORE the ask step starts:
      this is what makes the round's outcome cold-resumable (a crash or handoff between redteam
      and ask must not lose the verdicts). Append-only: each round is a new "### Redteam Round N"
      entry; never edit or renumber a prior round. Vote-privacy (build/redteam.md) governs what
@@ -135,9 +135,9 @@ full
 
 <!-- ### Redteam Round 1
 - claim 1 — verdicts: stands / stands — outcome: stands
-- claim 7 — verdicts: refuted / refuted — objections: <objection text> — outcome: refuted twice, escalated to user
+- claim 7: verdicts refuted / stands; objections: <objection text>; outcome: refuted, escalated to user at ask
 - coverage: <missing interactions found, or "none">
-- disposition: <cleared | re-investigate dispatched | escalation open at ask>
+- disposition: <cleared | escalation open at ask>
 -->
 
 ## Constraints Review
@@ -149,9 +149,9 @@ full
 ## Findings Ledger
 <!-- Populated by audit. Each finding gets a stable ID (e.g. F1, F2, ...) that never changes or
      gets reused. Round N+1 auditors read this ledger and report ONLY NEW findings — they do not
-     re-litigate findings already recorded here. Max 3 audit rounds total (see
-     state-machine.md "Repair Loop Bound"); after round 3, remaining findings are triaged with
-     the user: real blocker, defer to a later chunk, or auditor was wrong (refuted). -->
+     re-litigate findings already recorded here. The role ladder bounds the rounds (see
+     state-machine.md "Repair Loop Bound"): findings the judgement role's repair still leaves are
+     triaged with the user: real blocker, defer to a later chunk, or auditor was wrong (refuted). -->
 
 <!-- ### Audit Round 1
 - F1: <!-- finding --> — disposition: <!-- fixed | deferred | refuted -->

@@ -16,6 +16,20 @@ terms of hooks, weights, search, or heuristics; keep internal ids, file paths, a
 of the body; never narrate bookkeeping. Benchmark numbers are worth reporting only as what they
 tell the designer about difficulty.
 
+## Model Routing
+
+The `bs-` skills name roles, never models. `${CLAUDE_SKILL_DIR}/../bs-shared/routing.md` is the one
+authority: `mechanical` (bulk edits, searches, summaries), `bounded` (implementation where failing
+tests say what done is), `judgement` (spec, investigate, red team, fidelity, anything touching a
+ruling) and `review` (once `boardsmith verify` has passed). Before every dispatch,
+`npx boardsmith agent <role>` names the agent type to dispatch: the one the project's
+`boardsmith.json` `"agents"` block maps the role to, or BoardSmith's own `bs-<role>`. Every
+dispatch prompt starts with `Work package: <id>`.
+
+Under `/bs-build-game` this skill is dispatched as the `judgement` role's agent for the
+bot-opponent chunk, whose slug is the work package, and it ends with the same verify and review
+gates as any chunk.
+
 ## When to Run This (Late Sketch Chunk)
 
 `/bs-build-bot` is normally invoked as a **late** sketch chunk in a `/bs-ingest-rules` +

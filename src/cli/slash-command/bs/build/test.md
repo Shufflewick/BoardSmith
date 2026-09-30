@@ -397,6 +397,12 @@ items — routes this chunk back to `build` (still session group 2, `{spec, buil
 advance to `audit`. `test` and `build` stay in the same group specifically so a failing test can
 be fixed without a session handoff in between.
 
+A failure is a failure of `build` at the role that did it, so the fix never goes to the same role
+again (`routing.md` "When a Step Fails: One Role Up, Never the Same Role"): `npx boardsmith agent
+bounded --escalate` names the `judgement` agent that takes the next `build`, handed the failed
+check's output. When `build` has failed at `judgement` too, stop and put it to the designer (in
+orchestrated mode, a `repair-triage` gate) and dispatch nothing more for it until they answer.
+
 ## Downstream Shape (cite, never restate)
 
 Once every step above passes (and, for `ui: touches|major` chunks, all five a11y floor items

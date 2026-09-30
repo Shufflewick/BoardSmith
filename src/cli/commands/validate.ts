@@ -11,6 +11,7 @@ import {
   ALLOWED_NAMED_ACTION_KEYS,
   ASSET_PATH_KEYS,
 } from '../lib/config-schema.js';
+import { agentsBlockProblems } from '../lib/agent-roles.js';
 import {
   MAX_TABLE_RULES_ENCODED_BYTES,
   MAX_UPLOAD_ZIP_BYTES,
@@ -226,6 +227,9 @@ export function checkMetadataIssues(config: Record<string, unknown>): string[] {
 
   issues.push(...checkTaxonomyShape(config));
   issues.push(...checkPlatformBlockShapes(config));
+  // Which agent each role is dispatched as (#454): a wrong mapping would send work to an agent
+  // type the project never meant.
+  issues.push(...agentsBlockProblems(config.agents));
 
   // Unknown top-level keys — did-you-mean suggestions from the shared
   // allowed-key set (CLIX-02). Removed/renamed keys get pointed migration

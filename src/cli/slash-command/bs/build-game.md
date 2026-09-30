@@ -50,6 +50,24 @@ is not six progress reports about a pipeline.
 When relaying a subagent's work, relay **its** `designerSummary` — do not compose your own account
 of work you did not do (`reporting.md` "Don't Defend the Work").
 
+## Model Routing
+
+The `bs-` skills name roles, never models. `${CLAUDE_SKILL_DIR}/../bs-shared/routing.md` is the one
+authority: `mechanical` (bulk edits, searches, summaries), `bounded` (implementation where failing
+tests say what done is), `judgement` (spec, investigate, red team, fidelity, anything touching a
+ruling) and `review` (once `boardsmith verify` has passed). Before every dispatch,
+`npx boardsmith agent <role>` names the agent type to dispatch: the one the project's
+`boardsmith.json` `"agents"` block maps the role to, or BoardSmith's own `bs-<role>`. Every
+dispatch prompt starts with `Work package: <id>`.
+
+Each chunk is dispatched as the `judgement` role's agent (`orchestrate/chunk-dispatch.md`). No
+review step starts until `boardsmith verify` has passed for the commit under review, in any chunk
+the run dispatches and for the cross-chunk lens the run itself sends after a merge: each runs
+`npx boardsmith verify --chunk <slug>` and then `npx boardsmith review-gate <slug>`, which refuses,
+saying to run `boardsmith verify`, without a passing result for the current commit. A chunk that
+returns `closed` but fails its check has failed at `judgement`, the top role, so it goes to the
+designer, never straight back to another agent (Step 4).
+
 ## Context-Economics Hard Rule
 
 **The orchestrator never reads rulebook slices, BoardSmith docs, generated code, or a chunk's
@@ -158,7 +176,9 @@ Loop until there is nothing left to build or a stop condition fires
    Dispatch" says, each chunk in its own worktree, every chunk in one message. Anything else is
    built alone in the main checkout. The check decides, never a judgement call made here.
 4. **Refresh the lock**, append the `### Dispatch N` entry to each chunk's own
-   `design/run-log/<slug>.md` with `Outcome: pending`, and dispatch one fresh subagent per chunk per
+   `design/run-log/<slug>.md` with its role, agent type and `Outcome: pending`
+   (`orchestrate/run-state.md` "Writing It"), and dispatch one fresh subagent per chunk, as the
+   agent `npx boardsmith agent judgement` names, per
    `${CLAUDE_SKILL_DIR}/../bs-shared/orchestrate/chunk-dispatch.md` — its seven-field brief, its
    no-designer rule, and its return shape.
 5. **Consume each return by field name.** For a `closed` return, run Step 4's
@@ -185,9 +205,10 @@ nothing, if there is nothing visible yet. Do not announce each dispatch.
   only when the chunk's last commit, on a clean tree, passed `boardsmith verify` with the chunk's
   whole change measured: the full suite, typecheck, build, validate and the mutation check of
   everything since the chunk began. A result from `--base HEAD`, which mutates nothing, is
-  refused. A non-zero exit means the claim of done is not backed by a run: re-dispatch the same chunk
-  with its message in the brief, and treat the chunk as unfinished, never as closed
-  (`orchestrate/chunk-dispatch.md` "The Return Shape"). Then run `npx boardsmith chunk-check <slug>` (with `--project` set to the chunk's
+  refused. A non-zero exit means the claim of done is not backed by a run: treat the chunk as unfinished,
+  never as closed: its dispatch failed at `judgement`, the top role. Record it `failed`, stop, and
+  put it to the designer with the check's message; re-dispatch only with their answer in the brief
+  (`orchestrate/chunk-dispatch.md` "The Return Shape", `routing.md`). Then run `npx boardsmith chunk-check <slug>` (with `--project` set to the chunk's
   worktree when it was built in one, then `npx boardsmith chunk-merge <slug>` from the main checkout). A non-zero exit that names the
   sign-off means the chunk's verified status is not backed by the designer (or by a waiver naming
   it): treat the chunk as still at its playtest gate, never as closed. Otherwise relay the
@@ -263,6 +284,8 @@ And to the shared reference files that ship with every `bs-` skill:
 - `${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md` — status enum, consistency check, session lock,
   write order, authority, session handoff seams, git protocol
 - `${CLAUDE_SKILL_DIR}/../bs-shared/reporting.md` — how everything above is said to the designer
+- `${CLAUDE_SKILL_DIR}/../bs-shared/routing.md`: the four roles, which agent each is dispatched
+  as, no review before verify, and one role up on a failure
 - `${CLAUDE_SKILL_DIR}/../bs-shared/templates/RUN.template.md` — the run journal this skill creates
 - `${CLAUDE_SKILL_DIR}/../bs-shared/templates/QUESTIONS.template.md` — the answer cache this skill
   fills

@@ -259,10 +259,10 @@ describe('BUILD-03 — Redteam Rounds persistence + check-off discipline (CR-02 
     expect(redteam).toContain(REDTEAM_ROUNDS_HEADING);
     expect(redteam).toContain('Persisting the Round');
     expect(redteam).toMatch(/before.*the ask step starts/i);
-    // WR-08: round entries land at the end of EACH round — Round 1's entry (disposition
-    // `re-investigate dispatched`) is written BEFORE the re-investigate subagent is dispatched,
-    // never deferred past it.
-    expect(redteam).toContain('re-investigate dispatched');
+    // #454: the claims were written at the top role, so there is one round and no re-investigate
+    // round; its entry, cleared or with escalations open at ask, lands before ask starts.
+    expect(redteam).not.toContain('re-investigate dispatched');
+    expect(redteam).toMatch(/disposition, `cleared` or\s+`escalation open at ask`, \*\*before\*\* the ask step starts/);
   });
 
   it('build-chunk.md pins the per-step persist-before-next-step check-off rule', () => {
@@ -704,9 +704,10 @@ describe('BUILD-08 — repair', () => {
     expect(repair).toContain('Repair Loop Bound');
   });
 
-  it('states the max-3-round bound and the only-new-findings rule', () => {
+  it('states the role-ladder bound and the only-new-findings rule (#454)', () => {
     const repair = read('build/repair.md');
-    expect(repair).toMatch(/maximum 3 audit rounds|max(imum)? 3 rounds/i);
+    expect(repair).toContain('The role ladder bounds the loop.');
+    expect(repair).toContain('npx boardsmith agent <that role> --escalate');
     expect(repair).toMatch(/only NEW findings/i);
   });
 
@@ -715,7 +716,7 @@ describe('BUILD-08 — repair', () => {
     expect(repair).toMatch(/refute-with-citation/i);
   });
 
-  it('names the three round-3 plain-language triage options', () => {
+  it('names the three plain-language repair triage options', () => {
     const repair = read('build/repair.md');
     expect(repair).toMatch(/real blocker/i);
     expect(repair).toMatch(/defer to a later chunk/i);

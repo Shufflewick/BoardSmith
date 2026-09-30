@@ -84,7 +84,7 @@ Then the two terminal answers, and only these two:
   The affected chunks are STILL marked rules-stale; the pass stays resumable; the lock releases
   cleanly. Cite `state-machine.md` "Redteam Escalation" as the precedent for a named, honest
   terminal state rather than a silent pass-through — the same discipline that governs a
-  refuted-twice dispute there governs a deferred contradiction here. State the rule directly:
+  redteam dispute there governs a deferred contradiction here. State the rule directly:
   **never silently clean** (decision 8) — `UNADJUDICATED` is a real, reportable outcome, not a
   quiet "treat as resolved."
 
