@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { dirname, join } from 'node:path';
-import { generateMutants, runMutationCheck } from './test-step-mutation.js';
+import { generateMutants, runDiffMutationCheck, runMutationCheck } from './test-step-mutation.js';
 import { parseSource } from './test-step-ast.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { designProjectFixtures } from './design-project.test-helper.js';
@@ -245,5 +245,73 @@ it('claim 3 — the doubled score is shown', () => {
     const project = join(tree, 'project');
     await fs.mkdir(join(project, 'tests'), { recursive: true });
     await expect(check(project, "it('x', () => {});\n")).rejects.toThrow(/npm install/);
+  });
+});
+
+/**
+ * #452: `boardsmith verify` mutates the lines changed since a base commit, with no chunk and no
+ * Spec Manifest, and runs the whole suite against each mutant. What it reports is each mutant no
+ * test caught, by file and line.
+ */
+describe('runDiffMutationCheck', () => {
+  const RULES_TWO = `export function bid(high: number, offer: number): boolean {
+  return offer > high;
+}
+export function fee(price: number): number {
+  return price * 2;
+}
+`;
+
+  async function suite(project: string, files: Record<string, string>): Promise<void> {
+    for (const [path, text] of Object.entries(files)) {
+      await fs.mkdir(dirname(join(project, path)), { recursive: true });
+      await fs.writeFile(join(project, path), text);
+    }
+  }
+
+  it('runs the whole suite against each mutant and reports every mutant no test caught, by file and line', async () => {
+    const project = await makeProject({ 'vitest.config.ts': VITEST_CONFIG, 'src/rules.ts': RULES_TWO });
+    // Two test files: the one that catches the bid mutants is not the one "near" the change.
+    await suite(project, {
+      'tests/bid.test.ts': `import { it, expect } from 'vitest';
+import { bid } from '../src/rules';
+it('a higher offer wins', () => { expect(bid(3, 4)).toBe(true); });
+it('an equal offer loses', () => { expect(bid(3, 3)).toBe(false); });
+`,
+      'tests/fee.test.ts': `import { it, expect } from 'vitest';
+import { fee } from '../src/rules';
+it('a fee exists', () => { expect(typeof fee).toBe('function'); });
+`,
+    });
+
+    const result = await runDiffMutationCheck({ projectDir: project, added: new Map([['src/rules.ts', lines(2, 5)]]), log: () => {} });
+
+    expect(result.notGreen).toBeUndefined();
+    expect(result.summary.mutants).toBe(5);
+    expect(result.summary.killed).toBe(2);
+    expect(result.summary.survived).toBe(3);
+    expect(result.survivors).toEqual([
+      { file: 'src/rules.ts', line: 5, description: 'return value replaced with undefined' },
+      { file: 'src/rules.ts', line: 5, description: '* -> /' },
+      { file: 'src/rules.ts', line: 5, description: '2 -> 3' },
+    ]);
+    expect(await fs.readFile(join(project, 'src/rules.ts'), 'utf-8')).toBe(RULES_TWO);
+    await expect(fs.readdir(join(project, '.boardsmith/scratch'))).resolves.toEqual([]);
+  }, 120_000);
+
+  it('tries no mutant on a red suite, and names the failing tests', async () => {
+    const project = await makeProject({ 'vitest.config.ts': VITEST_CONFIG, 'src/rules.ts': RULES });
+    await suite(project, {
+      'tests/red.test.ts': "import { it, expect } from 'vitest';\nit('is red', () => { expect(1).toBe(2); });\n",
+    });
+    const result = await runDiffMutationCheck({ projectDir: project, added: new Map([['src/rules.ts', lines(2)]]), log: () => {} });
+    expect(result.notGreen).toEqual(['tests/red.test.ts > is red']);
+    expect(result.summary.mutants).toBe(0);
+  }, 60_000);
+
+  it('runs nothing when no changed line can be mutated', async () => {
+    const project = await makeProject({ 'vitest.config.ts': VITEST_CONFIG, 'src/rules.ts': RULES });
+    const result = await runDiffMutationCheck({ projectDir: project, added: new Map([['src/rules.ts', lines(3)]]), log: () => {} });
+    expect(result).toEqual({ summary: { files: 0, mutants: 0, killed: 0, survived: 0, timedOut: 0 }, survivors: [] });
   });
 });

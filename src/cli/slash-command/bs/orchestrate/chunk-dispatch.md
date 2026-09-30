@@ -150,7 +150,11 @@ already owns:
 - `chunk` — the slug this dispatch was for.
 - `outcome` — exactly one of:
   - `closed` — the chunk reached `close` (or the light path's equivalent) and its status is
-    `verified` or `verified (user-waived)`.
+    `verified` or `verified (user-waived)`, and its last commit passed `boardsmith verify`:
+    `npx boardsmith verify --check` exits zero in its checkout, which means that commit, on a clean
+    tree, has a passing result (the full suite, typecheck, build, validate and the mutation
+    check). A subagent never returns `closed`, and never says done or green anywhere in its
+    report, without that; the orchestrator runs the same check before it believes one.
   - `gate` — work stopped at a human gate. Requires `gate`.
   - `filing` — work stopped because a library gap or bug blocks the chunk outright. Requires
     `filings`, and the chunk is left at its last persisted step.
@@ -177,6 +181,11 @@ already owns:
   account of work it did not do.
 - `stuckDetail` — present when `outcome: stuck`: what was stuck, what was tried, and what it would
   take to unblock.
+
+A `closed` return whose checkout fails `npx boardsmith verify --check` is not closed, whatever its
+`designerSummary` says: the orchestrator treats it as the ordinary case of unfinished work and
+re-dispatches the same chunk with the check's message in the brief, so the fresh subagent runs
+`npx boardsmith verify` and fixes what it names (`build-game.md` Step 4).
 
 A return missing a field its `outcome` requires is itself a stuck dispatch: the orchestrator does
 not guess the missing half. Re-dispatch once with the missing field named; if the second return is

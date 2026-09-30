@@ -69,6 +69,17 @@ Round" both establish. **Cold-resume rule:** a crashed repair round resumes by r
 ledger — any finding still missing a disposition is unfinished repair work; a finding with a
 recorded disposition is done and is not redone or clobbered by a resuming session.
 
+## A Fix Is Not Done Until `boardsmith verify` Passes
+
+A finding recorded `fixed` changed code, and code that changed is re-checked by the same gate the
+test step ends with, never by re-running only the tests near the fix. Commit the round's fixes,
+then run `npx boardsmith verify`: the full suite, typecheck, build, validate and a mutation check
+of the changed lines, recorded for that commit. A round is not done, and the next audit round is
+not dispatched, until it exits zero on a clean tree. When it fails, the failed check says what to
+fix and what to run next; that is more repair work in this round, not a new finding. Never say a
+fix is done or the suite is green on anything else: `chunk-signoff` refuses a commit with no
+passing result, and a later step asks `npx boardsmith verify --check`.
+
 ## Round-3 User Triage — Plain Language, Never Raw
 
 After round 3, any finding still lacking a disposition is triaged with the user directly. Cite

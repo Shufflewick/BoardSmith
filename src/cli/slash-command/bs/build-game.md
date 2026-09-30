@@ -177,7 +177,12 @@ nothing, if there is nothing visible yet. Do not announce each dispatch.
 
 ## Step 4: Routing a Return
 
-- **`closed`**: first run `npx boardsmith chunk-check <slug>` (with `--project` set to the chunk's
+- **`closed`**: first run `npx boardsmith verify --check` (with `--project` set to the chunk's
+  worktree when it was built in one). It exits zero only when the chunk's last commit, on a clean
+  tree, passed `boardsmith verify`: the full suite, typecheck, build, validate and the mutation
+  check. A non-zero exit means the claim of done is not backed by a run: re-dispatch the same chunk
+  with its message in the brief, and treat the chunk as unfinished, never as closed
+  (`orchestrate/chunk-dispatch.md` "The Return Shape"). Then run `npx boardsmith chunk-check <slug>` (with `--project` set to the chunk's
   worktree when it was built in one, then `npx boardsmith chunk-merge <slug>` from the main checkout). A non-zero exit that names the
   sign-off means the chunk's verified status is not backed by the designer (or by a waiver naming
   it): treat the chunk as still at its playtest gate, never as closed. Otherwise relay the

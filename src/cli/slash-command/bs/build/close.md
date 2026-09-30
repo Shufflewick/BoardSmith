@@ -37,13 +37,17 @@ release) and no tail detailing.
    to SKETCH.md — CHUNK.md first, then SKETCH.md second, cite `state-machine.md` "Write Order".
    `close` does not repeat that write; its own bookkeeping starts at step 2 below.
 
-2. **Record the verified commit hash.** Run:
+2. **Record the verified commit hash.** Commit what `playtest` wrote, then run
+   `npx boardsmith verify --check`. It exits zero only when this commit, on a clean tree, passed
+   `boardsmith verify` (the full suite, typecheck, build, validate and the mutation check). When it
+   does not, it says what to run: run `npx boardsmith verify` and fix what it names, and this step
+   waits until `--check` exits zero. Never close a chunk, or call it done, on anything less. Then run:
 
    ```bash
    git rev-parse HEAD
    ```
 
-   and write the literal hash into CHUNK.md's `## Verified Commit Hash` section
+   and write that commit's literal hash into CHUNK.md's `## Verified Commit Hash` section
    (`templates/CHUNK.template.md`). Cite `state-machine.md` "Git Protocol" for why this hash
    matters — the bisect anchor for any later regression and the diff base for "what changed
    since the human last said yes" — and for the `chunk-<slug>/step-<name>` commit convention this

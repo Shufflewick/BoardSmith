@@ -192,6 +192,29 @@ This runs:
 To detect infinite loops or game-ending bugs, run `boardsmith simulate` (seeded
 headless batch simulation).
 
+#### Before you call a change done: `boardsmith verify`
+
+```bash
+boardsmith verify               # every check, recorded for this commit
+boardsmith verify --base v1.2   # measure the change from somewhere other than main
+boardsmith verify --check       # has this commit passed? (runs nothing)
+```
+
+`boardsmith verify` runs the full suite, `boardsmith typecheck`, `boardsmith
+build`, `boardsmith validate` and a mutation check, in that order, and keeps
+going after a failure so you see every problem at once. The mutation check
+breaks each line of code under `src/` that changed since the main branch (or
+since `--base`), one small change at a time, and runs the whole suite against
+each: a change no test notices is reported by file and line, because the tests
+would not catch that line going wrong.
+
+The result is written to `.boardsmith/verify/<commit>.json`, tied to that one
+commit and to whether the working tree was clean. A run on a tree with
+uncommitted changes does not count, so commit first. `boardsmith verify --check`
+exits 0 only when the current commit, on a clean tree, has a passing result, and
+otherwise says what to run. The `bs-` skills ask it before they record a chunk
+as done (`boardsmith chunk-signoff` refuses without it).
+
 ### 5. Build for Production
 
 ```bash
