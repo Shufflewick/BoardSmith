@@ -10,7 +10,8 @@ const MUTANT = { file: 'src/rules.ts', source: 'export const fee = (price: numbe
 
 /** A committed game project with a rule, its test, and the design records the bs- skills keep. */
 async function project(): Promise<string> {
-  const dir = join(tempTree('bs-mutant-cache-'), 'game');
+  const tree = tempTree('bs-mutant-cache-');
+  const dir = join(tree, 'game');
   await write(dir, {
     '.gitignore': '.boardsmith/\n',
     'src/rules.ts': RULES,
@@ -118,7 +119,8 @@ describe('the mutant cache: a mutant outcome is reused only when nothing it coul
   });
 
   it('measures a game in a subfolder of its repository by its own files only', async () => {
-    const root = join(tempTree('bs-mutant-cache-'), 'repo');
+    const tree = tempTree('bs-mutant-cache-');
+    const root = join(tree, 'repo');
     await write(root, {
       '.gitignore': '.boardsmith/\n',
       'games/bid/src/rules.ts': RULES,
@@ -154,7 +156,8 @@ describe('the mutant cache: a mutant outcome is reused only when nothing it coul
 
 describe('toolRevision: which BoardSmith produced an outcome', () => {
   it('names a checkout by its commit and its uncommitted changes, so an edit to BoardSmith is a new revision', async () => {
-    const root = join(tempTree('bs-mutant-cache-tool-'), 'boardsmith');
+    const tree = tempTree('bs-mutant-cache-tool-');
+    const root = join(tree, 'boardsmith');
     await write(root, { 'src/engine.ts': 'export const e = 1;\n' });
     initRepo(root);
     commitAll(root, 'engine');
@@ -177,7 +180,8 @@ describe('toolRevision: which BoardSmith produced an outcome', () => {
   });
 
   it('names an installed copy, which has no git of its own, by its version and engine revision', async () => {
-    const root = join(tempTree('bs-mutant-cache-tool-'), 'installed');
+    const tree = tempTree('bs-mutant-cache-tool-');
+    const root = join(tree, 'installed');
     await write(root, { 'package.json': '{}\n' });
     expect(await toolRevision(root)).toMatch(/^boardsmith@.+ engine \d+$/);
   });

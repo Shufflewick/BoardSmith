@@ -403,7 +403,8 @@ const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
  * this checkout's install, so nothing is fetched. It is built on a branch that adds `fee`.
  */
 async function wholeGameOnBranch(): Promise<string> {
-  const dir = join(tempTree('bs-verify-whole-game-'), 'game');
+  const tree = tempTree('bs-verify-whole-game-');
+  const dir = join(tree, 'game');
   await write(dir, {
     '.gitignore': 'node_modules\ndist/\n.boardsmith/\n',
     'package.json': JSON.stringify({ name: 'fixture', version: '1.0.0', type: 'module' }),
