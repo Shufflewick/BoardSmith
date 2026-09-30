@@ -161,8 +161,11 @@ Loop until there is nothing left to build or a stop condition fires
    `design/run-log/<slug>.md` with `Outcome: pending`, and dispatch one fresh subagent per chunk per
    `${CLAUDE_SKILL_DIR}/../bs-shared/orchestrate/chunk-dispatch.md` — its seven-field brief, its
    no-designer rule, and its return shape.
-5. **Consume each return by field name** and fill that entry's `Outcome`/`Detail`. Then route on
-   `outcome` per Step 4. A chunk built in its own worktree reaches the main checkout only through
+5. **Consume each return by field name.** For a `closed` return, run Step 4's
+   `npx boardsmith verify --check` first, before writing anything: a chunk built in the main
+   checkout shares its tree with the run log, so filling the log first would leave the tree dirty
+   and the check would refuse every closed chunk. Then fill that entry's `Outcome`/`Detail` (a
+   refused check is recorded as not closed) and route on `outcome` per Step 4. A chunk built in its own worktree reaches the main checkout only through
    `npx boardsmith chunk-merge <slug>`, one merge at a time, once it has closed; when that merge
    records cross-chunk references, the audit's cross-chunk lens runs before anything else. When
    this chunk and one merged while it was built both edited a source file, the merge itself
@@ -178,8 +181,8 @@ nothing, if there is nothing visible yet. Do not announce each dispatch.
 ## Step 4: Routing a Return
 
 - **`closed`**: first run `npx boardsmith verify --check` (with `--project` set to the chunk's
-  worktree when it was built in one). It exits zero only when the chunk's last commit, on a clean
-  tree, passed `boardsmith verify`: the full suite, typecheck, build, validate and the mutation
+  worktree when it was built in one), before any write (Step 3 item 5). It exits zero only when the
+  chunk's last commit, on a clean tree, passed `boardsmith verify`: the full suite, typecheck, build, validate and the mutation
   check. A non-zero exit means the claim of done is not backed by a run: re-dispatch the same chunk
   with its message in the brief, and treat the chunk as unfinished, never as closed
   (`orchestrate/chunk-dispatch.md` "The Return Shape"). Then run `npx boardsmith chunk-check <slug>` (with `--project` set to the chunk's

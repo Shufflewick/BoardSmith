@@ -2054,35 +2054,85 @@ describe('#452: the done gate is `boardsmith verify`', () => {
     expect(cli).toContain("'--check'");
   });
 
+  const BASE_COMMAND = "npx boardsmith verify --base \"$(git log --reverse --format=%H --grep='^chunk-<slug>/' | head -n 1)^\"";
+
+  it("state-machine.md's Git Protocol defines the chunk's verify base once, with the command that computes it", () => {
+    const protocol = flatRead('state-machine.md').split('## Git Protocol')[1].split(' ## ')[0];
+    expect(protocol).toContain(BASE_COMMAND);
+    expect(protocol).toMatch(/verify base.{0,200}commit before the chunk's first `chunk-<slug>\/` commit/);
+    expect(protocol).toMatch(/main branch.{0,300}merge base is the current commit/);
+  });
+
+  it('every step that runs the gate for chunk work passes the chunk\'s verify base, never a bare `boardsmith verify`', () => {
+    for (const file of ['build/test.md', 'build/repair.md', 'build/close.md', 'build/playtest.md']) {
+      const text = flatRead(file);
+      expect({ file, cites: /npx boardsmith verify --base <the chunk's verify base>/.test(text) }).toEqual({ file, cites: true });
+      expect({ file, bare: /`npx boardsmith verify`/.test(text) }).toEqual({ file, bare: false });
+    }
+  });
+
   it('test.md runs it as the last step, and never lists vue-tsc or the whole suite as steps of their own', () => {
     const test = flatRead('build/test.md');
-    expect(test).toMatch(/npx boardsmith verify`\. It runs.{0,80}full suite, typecheck, build, validate/);
-    expect(test).toMatch(/not done until `npx boardsmith verify` exits zero/);
+    expect(test).toMatch(/npx boardsmith verify --base <the chunk's verify base>`.{0,120} It runs.{0,80}full suite, typecheck, build, validate/);
+    expect(test).toMatch(/not done until it exits zero/);
     expect(test).not.toContain('npx vue-tsc --noEmit');
   });
 
   it('repair.md does not end a round that changed code until `boardsmith verify` passes for it', () => {
     const repair = flatRead('build/repair.md');
-    expect(repair).toContain('npx boardsmith verify');
     expect(repair).toMatch(/fixed.{0,200}boardsmith verify/);
   });
 
-  it('close.md closes only a commit `boardsmith verify --check` accepts, and records that commit', () => {
-    const close = flatRead('build/close.md');
-    expect(close).toContain('npx boardsmith verify --check');
-    expect(close).toMatch(/verify --check.{0,600}## Verified Commit Hash/);
+  it('close.md ends with the done gate: commit, verify, then --check as the last command, after every write', () => {
+    const close = read('build/close.md');
+    const sections = [...close.matchAll(/^## (.+)$/gm)].map((m) => m[1]);
+    const gate = sections.indexOf('The Done Gate');
+    expect(gate).toBe(sections.indexOf('Sketch-Tail Delta Gate') + 1);
+    expect(sections[gate + 1]).toMatch(/^Chunk-Complete Line/);
+
+    const body = close.split('\n## The Done Gate\n')[1].split('\n## ')[0].replace(/\s+/g, ' ');
+    const commit = body.indexOf('Commit everything');
+    const verify = body.indexOf("npx boardsmith verify --base <the chunk's verify base>");
+    const check = body.indexOf('npx boardsmith verify --check');
+    expect(commit).toBeGreaterThanOrEqual(0);
+    expect(verify).toBeGreaterThan(commit);
+    expect(check).toBeGreaterThan(verify);
+    expect(body).toMatch(/last command close runs.{0,200}nothing is written or committed after it/);
+    expect(body).toMatch(/outcome: closed/);
   });
 
-  it('chunk-dispatch.md: a `closed` return needs a passing result for HEAD on a clean tree', () => {
+  it('close.md says why `## Verified Commit Hash` is not the commit the done gate checks', () => {
+    const close = flatRead('build/close.md');
+    const step2 = close.split('2. **Record the verified commit hash.**')[1].split('3. **Record what this chunk was verified against.**')[0];
+    expect(step2).not.toContain('verify --check');
+    expect(close).toMatch(/cannot record its own hash/);
+    expect(close).toMatch(/## Verified Commit Hash.{0,400}The Done Gate/);
+  });
+
+  it('the light path ends with the same done gate', () => {
+    expect(flatRead('build/close.md')).toMatch(/light path.{0,400}## The Done Gate/);
+    const light = flatRead('build/playtest.md').split('## Light-Path Bookkeeping')[1];
+    expect(light).toMatch(/## The Done Gate/);
+    expect(flatRead('state-machine.md')).toMatch(/light chunks.{0,1500}`build\/close\.md` "The Done Gate"/);
+  });
+
+  it('chunk-dispatch.md: a `closed` return is the commit `verify --check` accepted, and the orchestrator checks it before writing anything', () => {
     const dispatch = flatRead('orchestrate/chunk-dispatch.md');
     expect(dispatch).toMatch(/`closed`.{0,400}boardsmith verify --check/);
     expect(dispatch).toMatch(/clean tree/);
+    const after = dispatch.split('## After the Return')[1];
+    expect(after.indexOf('npx boardsmith verify --check')).toBeGreaterThanOrEqual(0);
+    expect(after.indexOf('npx boardsmith verify --check')).toBeLessThan(after.indexOf('`Outcome`/`Detail`'));
+    expect(after).toMatch(/before it writes anything/);
   });
 
-  it('build-game.md routes a `closed` return through `boardsmith verify --check` first, and treats a refusal as not closed', () => {
+  it('build-game.md runs `boardsmith verify --check` on a `closed` return before it writes the run log, and treats a refusal as not closed', () => {
     const game = flatRead('build-game.md');
-    expect(game).toMatch(/\*\*`closed`\*\*: first run `npx boardsmith verify --check`/);
-    expect(game).toMatch(/verify --check.{0,600}never as closed/);
+    const consume = game.split('5. **Consume each return by field name')[1].split('## Step 4')[0];
+    expect(consume.indexOf('npx boardsmith verify --check')).toBeGreaterThanOrEqual(0);
+    expect(consume.indexOf('npx boardsmith verify --check')).toBeLessThan(consume.indexOf('`Outcome`/`Detail`'));
+    expect(game).toMatch(/\*\*`closed`\*\*:.{0,300}verify --check/);
+    expect(game).toMatch(/verify --check.{0,800}never as closed/);
   });
 
   it('playtest.md says a sign-off needs the work committed and verified first', () => {

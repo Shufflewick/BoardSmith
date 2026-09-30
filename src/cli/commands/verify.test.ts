@@ -266,6 +266,12 @@ describe('boardsmith verify: a claim of green is refused when a test outside the
     const { result: based } = await runVerify({ projectDir: dir, base: started, checks: CHECKS, log: () => {} });
     expect(based.passed).toBe(true);
     expect(check(based, 'mutation').counts).toMatchObject({ mutants: 3, killed: 3 });
+    // Asked for by name, a base at HEAD is a statement that nothing is being changed (the one-time
+    // gate transition builds nothing), and the result records it.
+    const { result: nothing } = await runVerify({ projectDir: dir, base: 'HEAD', checks: CHECKS, log: () => {} });
+    expect(nothing.passed).toBe(true);
+    expect(nothing.base.ref).toBe('HEAD');
+    expect(check(nothing, 'mutation').summary).toMatch(/^No code under src\/ changed since HEAD/);
   });
 });
 

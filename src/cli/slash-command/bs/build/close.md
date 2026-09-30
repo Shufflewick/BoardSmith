@@ -24,7 +24,7 @@ Verified Checklist is confirmed.
 
 The light path reuses **only** this six-item sequence. It does NOT run the `## Sketch-Tail
 Delta Gate` or `## Propose the Next Chunk` sections below — both are user-gated duties of a full
-`close`. A light-path chunk therefore defers sketch-tail re-derivation and the next-chunk
+`close`. Like every close, the light path then ends with `## The Done Gate` below. A light-path chunk therefore defers sketch-tail re-derivation and the next-chunk
 proposal to `build-chunk.md` Step 2's lazy tail-entry detailing (which derives any undetailed
 tail entry when routing next reaches it) or to the next full chunk's `close`; it never silently
 details the tail from inside `playtest`. This matches `state-machine.md` "Step Names (exact, light
@@ -37,18 +37,20 @@ release) and no tail detailing.
    to SKETCH.md — CHUNK.md first, then SKETCH.md second, cite `state-machine.md` "Write Order".
    `close` does not repeat that write; its own bookkeeping starts at step 2 below.
 
-2. **Record the verified commit hash.** Commit what `playtest` wrote, then run
-   `npx boardsmith verify --check`. It exits zero only when this commit, on a clean tree, passed
-   `boardsmith verify` (the full suite, typecheck, build, validate and the mutation check). When it
-   does not, it says what to run: run `npx boardsmith verify` and fix what it names, and this step
-   waits until `--check` exits zero. Never close a chunk, or call it done, on anything less. Then run:
+2. **Record the verified commit hash.** Commit what `playtest` wrote (the sign-off and the Status
+   line), then run:
 
    ```bash
    git rev-parse HEAD
    ```
 
    and write that commit's literal hash into CHUNK.md's `## Verified Commit Hash` section
-   (`templates/CHUNK.template.md`). Cite `state-machine.md` "Git Protocol" for why this hash
+   (`templates/CHUNK.template.md`). Its code and tests are the ones the designer signed off on,
+   which `chunk-signoff` refused to record without a passing `boardsmith verify`. It is not the
+   commit `## The Done Gate` checks at the end of close, and cannot be: a commit cannot record its
+   own hash, so the hash is always one commit behind the write that records it. The gate's commit
+   adds only close's own design records on top of this one, and the gate runs every check again on
+   it instead of taking that on trust. Cite `state-machine.md` "Git Protocol" for why this hash
    matters — the bisect anchor for any later regression and the diff base for "what changed
    since the human last said yes" — and for the `chunk-<slug>/step-<name>` commit convention this
    hash sits alongside. Do not restate that rationale or that format in new words here; cite it
@@ -169,6 +171,28 @@ user pushes back on the delta, negotiate the same way `ask.md`'s Gate-Before-Wri
 answer wins unless a hard rulebook dependency is violated, in which case name the dependency
 concretely and propose the minimal resolution.
 
+## The Done Gate
+
+Every close ends here, on the full path and on the light path alike: after the Bookkeeping
+Sequence, and on the full path after the sketch tail above is written (in orchestrated mode, the
+dispatch that carries the designer's approval of the delta). Nothing below this section writes a
+file. It runs before the chunk-complete line, which is a claim of done, and before any
+`outcome: closed` is returned.
+
+1. **Commit everything close wrote** (`chunk-<slug>/step-close`, `state-machine.md` "Git
+   Protocol"). `git status --porcelain` must then print nothing.
+2. Run `npx boardsmith verify --base <the chunk's verify base>` (the command is in
+   `state-machine.md` "Git Protocol"). It runs every check again for this commit: the full suite,
+   typecheck, build, validate and the mutation check. A mutant whose code and tests have not
+   changed since an earlier run is not run again, so after close's bookkeeping-only commits the
+   mutation check costs next to nothing.
+3. Run `npx boardsmith verify --check`. It is the last command close runs, and nothing is written
+   or committed after it, so the commit it accepted is the commit the chunk is closed on and the
+   one the orchestrator checks (`orchestrate/chunk-dispatch.md` "The Return Shape").
+
+When verify fails, the chunk is not closed and nothing here may say it is done: fix what the failed
+check names, commit, and run this gate again from step 1.
+
 ## Chunk-Complete Line (SKILLAUTO-07)
 
 Immediately after this chunk's `Status` is written `verified` (or `verified (user-waived)`) and
@@ -210,8 +234,8 @@ next-chunk proposal.
 continuation, SKILLAUTO-04/05).** Proposing the next chunk and printing its command is never the
 default end-of-close signal — the residual print-and-hand-off stop is retired. Per
 `state-machine.md` "Session Handoff Seams" → "Cross-chunk continuation", once the delta gate is
-resolved the same session **auto-advances**: it rolls straight into the next chunk, re-entering
-`build-chunk.md` Step 2, routing to the next chunk's `investigate` (Step 2 lazily details its tail
+resolved and `## The Done Gate` has passed, the same session **auto-advances**: it rolls straight
+into the next chunk, re-entering `build-chunk.md` Step 2, routing to the next chunk's `investigate` (Step 2 lazily details its tail
 entry first), and running `investigate → redteam` continuously, stopping at that chunk's `ask`
 gate (or, for a light-path next chunk, its `playtest` gate; or, for the mandated final-acceptance
 chunk, dispatch `build/final-acceptance.md`; or, when the sketch's next mandated step is
@@ -225,9 +249,9 @@ user see the next chunk (and say "stop") before its first gate, but silence mean
 a wait for re-invocation.
 
 **In orchestrated mode, close returns instead of auto-advancing** (`build-chunk.md` "Orchestrated
-Mode"): the chunk's own lifecycle is complete, so the dispatched subagent reports `outcome: closed`
-and the run's loop — not this step — dispatches the next chunk into its own fresh context. If the
-tail delta above needs approval, that is a gate returned for the designer, not a question asked here.
+Mode"): the chunk's own lifecycle is complete, so the dispatched subagent reports `outcome: closed`,
+only once `## The Done Gate` has passed and with nothing written after it, and the run's loop — not
+this step — dispatches the next chunk into its own fresh context. If the tail delta above needs approval, that is a gate returned for the designer, not a question asked here.
 
 ## Downstream Shape (cite, never restate)
 

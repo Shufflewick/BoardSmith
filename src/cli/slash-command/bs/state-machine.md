@@ -151,6 +151,8 @@ Write Order), rolls up decisions, reconciles the filings/library-gap, asset-debt
 waived-chunk ledgers against what this chunk changed (SKILLAUTO-08, see `build/close.md`
 "Bookkeeping Sequence" item 5), and — as the terminal write — releases the session lock
 (`Session Lock: none`, see "Session Lock" above and `build/close.md` "Bookkeeping Sequence").
+It then ends the way every close ends, with `build/close.md` "The Done Gate": commit, run
+`boardsmith verify` for that commit, and `boardsmith verify --check` as the last command.
 
 ## Authority
 
@@ -340,6 +342,20 @@ about which ledger it names, so it stops the merge; write the kind in front of i
 - Commit **before** `spec` starts, so work-in-progress is always distinguishable from the last verified baseline.
 - `chunk-<slug>/step-spec` is the **RED anchor**: failing tests and signature-only stubs, no implementation. `chunk-<slug>/step-build` is GREEN. Never conflate them into one commit — that erases the only durable evidence the tests preceded the code (`build/spec.md` "Git Protocol").
 - `close` records the verified commit hash in CHUNK.md — this is the bisect anchor for any later regression and the diff base for "what changed since the human last said yes."
+- **The chunk's verify base** is the commit before the chunk's first `chunk-<slug>/` commit: where
+  this chunk's work started. Every `boardsmith verify` run for chunk work (`build/test.md`,
+  `build/repair.md`, `build/playtest.md`, `build/close.md`) passes it, so its mutation check
+  covers exactly the code changed since then. Run from the chunk's checkout:
+
+  ```bash
+  npx boardsmith verify --base "$(git log --reverse --format=%H --grep='^chunk-<slug>/' | head -n 1)^"
+  ```
+
+  Never leave `--base` out for chunk work. Its default is the merge base with the main branch,
+  and a chunk built in the main checkout is on the main branch, where that merge base is the
+  current commit: no change is measured, and `boardsmith verify` fails the mutation check and
+  says to pass `--base`. When the command above prints an error naming `--base ^`, the chunk has
+  no `chunk-<slug>/` commit yet: commit its work under that convention first.
 
 ## Repair Loop Bound
 
