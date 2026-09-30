@@ -230,12 +230,14 @@ chunk-signoff <slug>` asks the same question before it records a chunk as done.
 
 #### Who does the work when the `bs-` skills build a game
 
-The `bs-` skills hand work to four roles, never to a named model: `mechanical`
+The `bs-` skills hand work to roles, never to a named model: `mechanical`
 (bulk edits, searches, summaries), `bounded` (implementation where failing tests
 say what done is), `judgement` (spec, investigate, red team, fidelity, anything
-touching a ruling) and `review` (once `boardsmith verify` has passed).
+touching a ruling), `review` (once `boardsmith verify` has passed) and
+`second-opinion` (an independent second reading, which `boardsmith validate`
+keeps on a different agent from `judgement`).
 `boardsmith claude` installs one Claude Code agent per role, `bs-mechanical`,
-`bs-bounded`, `bs-judgement` and `bs-review`, with a default model and effort. To
+`bs-bounded`, `bs-judgement`, `bs-review` and `bs-second-opinion`, with a default model and effort. To
 use other agents, map roles in `boardsmith.json`; a role left out stays on its
 `bs-` agent:
 

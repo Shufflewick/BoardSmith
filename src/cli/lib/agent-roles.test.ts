@@ -9,14 +9,14 @@ import {
   parseRole,
 } from './agent-roles.js';
 
-describe('the four roles (#454)', () => {
-  it('are mechanical, bounded, judgement and review, and only the first three climb', () => {
-    expect([...ROLES]).toEqual(['mechanical', 'bounded', 'judgement', 'review']);
+describe('the roles (#454)', () => {
+  it('are mechanical, bounded, judgement, review and second-opinion, and only the first three climb', () => {
+    expect([...ROLES]).toEqual(['mechanical', 'bounded', 'judgement', 'review', 'second-opinion']);
     expect([...ESCALATION_LADDER]).toEqual(['mechanical', 'bounded', 'judgement']);
   });
 
   it('each default to the bs- agent BoardSmith installs for it', () => {
-    expect(ROLES.map(defaultAgentType)).toEqual(['bs-mechanical', 'bs-bounded', 'bs-judgement', 'bs-review']);
+    expect(ROLES.map(defaultAgentType)).toEqual(['bs-mechanical', 'bs-bounded', 'bs-judgement', 'bs-review', 'bs-second-opinion']);
   });
 
   it('climb one rung at a time, and judgement is the top', () => {
@@ -27,8 +27,8 @@ describe('the four roles (#454)', () => {
 
   it('parseRole names every role when it refuses one, and suggests the near miss', () => {
     expect(parseRole('review')).toBe('review');
-    expect(() => parseRole('judgment')).toThrow(/Unknown role "judgment"; did you mean "judgement"\? The roles are mechanical, bounded, judgement and review\./);
-    expect(() => parseRole('senior')).toThrow(/Unknown role "senior"\. The roles are mechanical, bounded, judgement and review\./);
+    expect(() => parseRole('judgment')).toThrow(/Unknown role "judgment"; did you mean "judgement"\? The roles are mechanical, bounded, judgement, review and second-opinion\./);
+    expect(() => parseRole('senior')).toThrow(/Unknown role "senior"\. The roles are mechanical, bounded, judgement, review and second-opinion\./);
     expect(() => parseRole('../review')).toThrow(/Unknown role "\.\.\/review"/);
   });
 });
@@ -55,7 +55,7 @@ describe('the "agents" block of boardsmith.json (#454)', () => {
 
   it('refuses an unknown role, suggesting the role it is close to', () => {
     expect(agentsBlockProblems({ judgment: 'senior' })).toEqual([
-      'Unknown role "judgment" in "agents"; did you mean "judgement"? The roles are mechanical, bounded, judgement and review.',
+      'Unknown role "judgment" in "agents"; did you mean "judgement"? The roles are mechanical, bounded, judgement, review and second-opinion.',
     ]);
     expect(agentsBlockProblems({ builder: 'builder' })[0]).toMatch(/^Unknown role "builder" in "agents"\. The roles are/);
   });
@@ -66,6 +66,15 @@ describe('the "agents" block of boardsmith.json (#454)', () => {
     for (const problem of problems) {
       expect(problem).toMatch(/^"agents\.(mechanical|bounded|judgement)" must be the name of a Claude Code agent type/);
     }
+  });
+
+  it('refuses a second opinion dispatched as the same agent type as the judgement it checks', () => {
+    expect(agentsBlockProblems({ 'second-opinion': 'senior', judgement: 'senior' })).toEqual([
+      expect.stringMatching(/"agents" dispatches second-opinion and judgement as the same agent type, "senior".*independent/),
+    ]);
+    expect(agentsBlockProblems({ 'second-opinion': 'bs-judgement' })[0]).toMatch(/same agent type, "bs-judgement"/);
+    expect(agentsBlockProblems({ judgement: 'bs-second-opinion' })[0]).toMatch(/same agent type, "bs-second-opinion"/);
+    expect(agentsBlockProblems({ 'second-opinion': 'builder', judgement: 'senior' })).toEqual([]);
   });
 
   it('agentTypeFor throws the problems, so no dispatch goes to a type the config got wrong', () => {

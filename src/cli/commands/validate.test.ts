@@ -234,7 +234,7 @@ describe('validate.ts checkMetadataIssues', () => {
   it('refuses an "agents" block naming an unknown role, suggesting the right one', () => {
     const issues = checkMetadataIssues({ ...validConfig(), agents: { judgment: 'senior' } });
     expect(issues).toEqual([
-      'Unknown role "judgment" in "agents"; did you mean "judgement"? The roles are mechanical, bounded, judgement and review.',
+      'Unknown role "judgment" in "agents"; did you mean "judgement"? The roles are mechanical, bounded, judgement, review and second-opinion.',
     ]);
   });
 

@@ -48,10 +48,10 @@ describe('verify-derive-check — registration', () => {
     const parsed = JSON.parse(result.stdout);
     expect(Array.isArray(parsed.slices)).toBe(true);
     expect(parsed.slices.length).toBeGreaterThan(0);
-    expect(parsed.models).toEqual({
-      enumeratorA: 'claude-opus-5',
-      enumeratorB: 'claude-haiku-4-5-20251001',
-      reconciler: 'claude-sonnet-5',
+    expect(parsed.roles).toEqual({
+      enumeratorA: 'judgement',
+      enumeratorB: 'second-opinion',
+      reconciler: 'judgement',
     });
   });
 });

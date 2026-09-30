@@ -718,15 +718,15 @@ describe('enumerate-facts.md / reconcile-facts.md — CHECK-04\'s replacement ju
     expect(step7).toContain('boardsmith verify-derive-check --json');
   });
 
-  it('verify-game.md Step 7 names all three pinned model ids (177.1-05)', () => {
+  it('verify-game.md Step 7 dispatches the enumerators by role, never by model (#454)', () => {
     const skill = read('verify-game.md');
     const step7 = skill.slice(
       skill.indexOf('## Step 7: Derived-Line Re-Check'),
       skill.indexOf('## Step 9: Close'),
     );
-    expect(step7).toContain('claude-opus-5');
-    expect(step7).toContain('claude-haiku-4-5-20251001');
-    expect(step7).toContain('claude-sonnet-5');
+    expect(step7).toContain('`npx boardsmith agent judgement`');
+    expect(step7).toContain('`npx boardsmith agent second-opinion`');
+    expect(step7).not.toMatch(/\b(opus|sonnet|haiku)\b/i);
   });
 
   it('verify-game.md carve-out names BS-ENUMERATE-V1 and BS-RECONCILE-V1 and states TWO separate observables (177.1-05)', () => {
@@ -928,15 +928,15 @@ describe('verify-game.md — CHECK-04 routing and Reference Files (177.1-05)', (
     expect(skill).toContain('boardsmith verify-derive-record');
   });
 
-  it('Step 7 names all three pinned model ids (CONTEXT decision 4)', () => {
+  it('Step 7 names the two enumerators\' roles, which validate keeps on different agents (#454)', () => {
     const skill = read('verify-game.md');
     const step7 = skill.slice(
       skill.indexOf('## Step 7: Derived-Line Re-Check'),
       skill.indexOf('## Step 8: Worked-Example Replay'),
     );
-    expect(step7).toContain('claude-opus-5');
-    expect(step7).toContain('claude-haiku-4-5-20251001');
-    expect(step7).toContain('claude-sonnet-5');
+    expect(step7).toContain('`npx boardsmith agent judgement`');
+    expect(step7).toContain('`npx boardsmith agent second-opinion`');
+    expect(step7).not.toMatch(/\b(opus|sonnet|haiku)\b/i);
   });
 
   it('states the check is project-wide and independent of staleness/repair scoping', () => {
@@ -1167,7 +1167,7 @@ describe('CHECK-02 no-fork guard — lens/repair prose sourced from build/*.md a
 
   it('no file under bs/verify/ restates build/repair.md\'s round-bound sentence or its three triage option labels as its own policy', () => {
     const repair = read('build/repair.md');
-    const boundSentence = '- The role ladder bounds the loop.';
+    const boundSentence = 'Maximum 3 audit rounds per chunk.';
     const triageLabels = ['Real blocker', 'Defer to a later chunk', 'Auditor was wrong (refuted)'];
     // Companion assertion: fail loudly if build/repair.md itself stops carrying this exact
     // sentence/labels, rather than let the guard below pass vacuously against a moved target.
@@ -1179,7 +1179,7 @@ describe('CHECK-02 no-fork guard — lens/repair prose sourced from build/*.md a
       const text = readFileSync(file, 'utf-8');
       expect(text).not.toContain(boundSentence);
       // All three triage labels co-occurring in one verify/ file would mean a forked restatement
-      // of the repair triage script; any single label alone is plausible incidental prose (e.g.
+      // of the round-3 triage script; any single label alone is plausible incidental prose (e.g.
       // "real blocker" used generically), so the fork signal is all three appearing together.
       const allThreePresent = triageLabels.every((label) => text.includes(label));
       expect(allThreePresent).toBe(false);

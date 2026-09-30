@@ -138,35 +138,62 @@ pass.
 
 ## Escalation Logic (cite, never restate)
 
-See `state-machine.md` "Redteam Escalation" and `routing.md` "When a Step Fails: One Role Up,
-Never the Same Role" for the governing rules; this file applies them. The claims were written at
-the `judgement` role, the top of the ladder, so a request for changes is never sent back for
-another investigate round:
+See `state-machine.md` "Redteam Escalation" and "Repair Loop Bound" for the governing rules —
+this file does not restate the max-1-round bound or the refuted-twice rule, it applies them:
 
-- **Any refuted claim, and any coverage gap**, goes to the designer as an open question at the
-  `ask` gate (`build/ask.md` part (b)), in plain language with concrete options. The designer's
-  answer becomes a `RULINGS.md` ruling, and the claim it settles is corrected by appending a
-  superseding claim (`build/investigate.md` "Correcting a Claim After the Designer Rules").
-  Disputes go to the human, never to more agents.
-- **Every claim stands and no gap is found:** the round clears, and the interpretation flows to
-  `ask` as it is.
+- **Refuted once** (one refuter, or the coverage adversary alone, flags a claim/gap): hand off
+  to `build/investigate.md`'s re-investigate behavior with the specific objection(s) attached —
+  maximum ONE re-investigate round. It is dispatched at the `judgement` role again: the one named
+  exception to "never retry at the same role" (`routing.md`), because the claims were already
+  written at the top role and the designer's time is the scarcer resource. Round 2 is a review
+  like round 1: commit the re-investigation, and it waits for `npx boardsmith verify --chunk
+  <slug>` and `npx boardsmith review-gate <slug>` exactly as "Gate Before Dispatch" says, and is
+  recorded as its own `### Review Round N` entry in the run log. Re-investigation appends a superseding claim; it never
+  renumbers or edits the original (see `build/investigate.md` "Re-Investigate Round Behavior").
+- **Refuted twice** (both refuters agree a claim is refuted, or a refuter and the coverage
+  adversary flag the same claim/gap on the re-investigate round): that is by definition an
+  ambiguity. Escalate to the user — disputes go to the human, never to more agents.
 
-## Persisting the Round (write before the ask step starts)
+**Round-2 dispatch vs superseded claims:** the re-investigate round appends a superseding claim
+and leaves the refuted original untouched in place (append-only — see `build/investigate.md`
+"Re-Investigate Round Behavior"). When the round-2 agents are dispatched, the claims list
+embedded in their prompts marks every superseded claim in place — e.g.
+`7. [superseded by claim 12 — do not review] <original text>` — and the prompt instructs the
+agents that a claim marked "supersedes claim N" replaces claim N for review purposes:
+superseded claims receive **no verdict**, and re-refuting one is not a finding. Without this
+marking, fresh-context round-2 agents would correctly re-refute the original (it is still
+wrong, by design) and manufacture a spurious refuted-twice escalation on every re-investigate
+round.
+
+## Persisting the Round (write at the end of EACH round — never deferred past a re-investigate)
 
 The orchestrator appends a `### Redteam Round N` entry to CHUNK.md's `## Redteam Rounds`
-section (`templates/CHUNK.template.md`) once all 3 agents have returned: per-claim verdicts,
-objection text, the coverage adversary's findings, and the round's disposition, `cleared` or
-`escalation open at ask`, **before** the ask step starts. It fills the run log's `### Review Round
-N` entry's Outcome at the same time (`clean`, or `changes requested`).
+section (`templates/CHUNK.template.md`) at the end of **each** round — per-claim verdicts,
+objection text, the coverage adversary's findings, and the round's disposition. Concretely:
 
-This is a state-file write and is what makes the round cold-resumable: a crash or session
-handoff between redteam and ask must not lose an already resolved round's verdicts. **Resume
-rule:** a session resuming at redteam (unchecked) with no round entry for the current claims
-runs the gate again and dispatches the round; one that finds the entry already written checks off
-`redteam` and moves on, never dispatching a second round. Vote-privacy (below) governs what is
-*shown to the user*, not what is *written to state*: the recorded entry is internal, and the ask
-step still distills it into designer language. After the round's entry lands, the orchestrator
-checks off `redteam` on CHUNK.md's Step Checklist.
+- **Round 1, refuted-once path:** append `### Redteam Round 1` with disposition
+  `re-investigate dispatched` **before** dispatching the re-investigate subagent — never
+  deferred until the re-investigate round completes. A crash mid-re-investigate must not lose
+  Round 1's verdicts while the re-investigate subagent's superseding claim (written directly to
+  `## Interpretation`) survives.
+- **Round 2, or a Round 1 that clears or escalates:** append that round's entry when its 3
+  agents have returned and its escalation logic has resolved, with disposition `cleared` or
+  `escalation open at ask`, **before** the ask step starts. The run
+  log's `### Review Round N` entry for the round gets its Outcome (`clean`, or `changes
+  requested`) at the same time.
+
+This is a state-file write and is what makes every round cold-resumable: a crash or session
+handoff at any seam — mid-re-investigate, or between redteam and ask — must not lose an already
+resolved round's verdicts. **Resume rule:** a session resuming at redteam (unchecked) that finds
+a round entry with disposition `re-investigate dispatched` — or a claim in `## Interpretation`
+noting "supersedes claim N" — dispatches a **round-2** review with every superseded claim marked
+(see "Round-2 dispatch vs superseded claims" above), never a fresh Round 1; without the round
+record, the resume could not know the marking applies, both refuters would re-refute the
+superseded original, and a spurious refuted-twice escalation would be manufactured through the
+crash seam. Vote-privacy (below) governs what is *shown to the user*, not what is *written to
+state* — the recorded entry is internal, and the ask step still distills it into designer
+language. After the final round's entry lands, the orchestrator checks off `redteam` on
+CHUNK.md's Step Checklist.
 
 ## Vote-Privacy
 
@@ -184,15 +211,15 @@ options, in the register a designer would use, never engine or agent vocabulary:
 
 ## Recording the Ruling
 
-The user's answer to a redteam escalation is recorded as a `### Ruling N` entry in
+The user's answer to a refuted-twice escalation is recorded as a `### Ruling N` entry in
 `RULINGS.md` — fill `templates/RULINGS.template.md`'s Decision / Citation interpreted or
 overridden / Rationale shape exactly; never restructure the header, and never overwrite or
 renumber a prior entry (RULINGS.md is append-only).
 
 ## Downstream Shape (cite, never restate)
 
-`build/investigate.md` is the upstream claims producer, and the owner of correcting a claim once
-the designer has ruled on it (see its "Correcting a Claim After the Designer Rules" section). The
-round's outcome, cleared or with escalations open, flows to `build/ask.md`, the downstream
-consumer that presents it to the user for approval. This file
+`build/investigate.md` is the upstream claims producer and the owner of re-investigate behavior
+on a refuted-once round (see its "Re-Investigate Round Behavior" section). Once a round of
+redteam clears with no unresolved refuted-twice escalations, the settled interpretation flows to
+`build/ask.md`, the downstream consumer that presents it to the user for approval. This file
 does not restate either file's structure.

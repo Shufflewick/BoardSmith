@@ -6,7 +6,7 @@
  * users can design and build BoardSmith games directly within Claude Code conversations.
  *
  * It also installs one Claude Code agent per role the skills dispatch work to (#454):
- * bs-mechanical, bs-bounded, bs-judgement and bs-review, into the `agents/` directory beside
+ * bs-mechanical, bs-bounded, bs-judgement, bs-review and bs-second-opinion, into the `agents/` directory beside
  * `skills/`. Their default model and effort live in each agent file's frontmatter
  * (`src/cli/slash-command/agents/`); a project maps a role to another agent in boardsmith.json.
  */
@@ -342,6 +342,7 @@ export async function installClaudeCommand(options: InstallOptions = {}): Promis
   console.log(chalk.cyan('  bs-bounded') + chalk.gray('       - Implementation where failing tests say what done is'));
   console.log(chalk.cyan('  bs-judgement') + chalk.gray('     - Spec, investigate, red team, fidelity, anything touching a ruling'));
   console.log(chalk.cyan('  bs-review') + chalk.gray('        - Review, once `boardsmith verify` has passed'));
+  console.log(chalk.cyan('  bs-second-opinion') + chalk.gray(' - An independent second reading, on a different model from bs-judgement'));
   console.log(chalk.gray(`  Location: ${agentsDirFor(targetDir)}`));
   console.log(chalk.gray('  To use other agents, map roles in boardsmith.json, e.g. "agents": { "judgement": "senior" }.'));
   console.log(chalk.gray('Projects built with an older BoardSmith skill are auto-detected'));

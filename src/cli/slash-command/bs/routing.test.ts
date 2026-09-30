@@ -26,11 +26,12 @@ const ENTRY_POINTS = SKILL_NAMES.map((name) => `${name.replace(/^bs-/, '')}.md`)
 /** Every file that dispatches chunk work or routes it: none of them may name a model. */
 const ROUTING_FILES = [
   'routing.md',
-  ...ENTRY_POINTS.filter((file) => file !== 'verify-game.md'),
+  ...ENTRY_POINTS,
   ...readdirSync(BS_DIR + 'build').filter((f) => f.endsWith('.md')).map((f) => `build/${f}`),
   ...readdirSync(BS_DIR + 'orchestrate').filter((f) => f.endsWith('.md')).map((f) => `orchestrate/${f}`),
   'state-machine.md',
   'templates/RUN-LOG.template.md',
+  ...readdirSync(BS_DIR + 'verify').filter((f) => f.endsWith('.md')).map((f) => `verify/${f}`),
 ];
 
 /** A model family name, bare or inside a model id such as `claude-opus-5`. */
@@ -50,11 +51,11 @@ function workPackageTemplates(text: string): string[] {
 }
 
 describe('roles, never models (#454)', () => {
-  it('every entry-point skill has a Model Routing section naming the four roles and citing routing.md', () => {
+  it('every entry-point skill has a Model Routing section naming the roles and citing routing.md', () => {
     for (const file of ENTRY_POINTS) {
       const routing = section(read(file), 'Model Routing');
       expect(routing, `${file} must have a "## Model Routing" section`).not.toBe('');
-      for (const role of ['mechanical', 'bounded', 'judgement', 'review']) {
+      for (const role of ['mechanical', 'bounded', 'judgement', 'review', 'second-opinion']) {
         expect(routing, `${file} Model Routing must name the ${role} role`).toContain(`\`${role}\``);
       }
       expect(routing).toContain('bs-shared/routing.md');
@@ -139,12 +140,15 @@ describe('escalation: one role up, never the same role, then the designer (#454)
     expect(routing).toMatch(/never again to the same role/);
   });
 
-  it('the repair loop and red team escalation are bounded by the role ladder, not by a round count', () => {
-    const machine = flat(section(read('state-machine.md'), 'Repair Loop Bound'));
-    expect(machine).toContain('routing.md');
-    expect(machine).not.toMatch(/Maximum \*\*3 audit rounds\*\*/);
-    const redteam = flat(section(read('state-machine.md'), 'Redteam Escalation'));
-    expect(redteam).toMatch(/never sent back for another investigate round/);
+  it('names one more judgement round for a red-team re-investigation and a repair as the one exception, with its reason', () => {
+    const routing = flat(read('routing.md'));
+    expect(routing).toMatch(/\*\*The one named exception: one more `judgement` round for a red-team re-investigation and for a repair\.\*\*/);
+    expect(routing).toMatch(/`judgement`, then one `judgement` re-investigation or repair, then the designer/);
+    expect(routing).toMatch(/the designer's time is the scarcer resource/);
+    expect(routing).toMatch(/No other step gets it, and no step gets a third round/);
+    expect(flat(read('build/redteam.md'))).toMatch(/maximum ONE re-investigate round\. It is dispatched at the `judgement` role again: the one named exception/);
+    expect(flat(read('build/repair.md'))).toMatch(/gets exactly one more `judgement` round, the named exception in `routing\.md`/);
+    expect(flat(read('state-machine.md'))).toContain('Maximum **3 audit rounds** per chunk.');
   });
 });
 

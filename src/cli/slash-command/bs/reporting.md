@@ -118,6 +118,6 @@ genuinely surprise the designer, one plain sentence on why — not a paragraph.
 ## Reference
 
 `build/ask.md` "Prohibited Vocabulary" and "The Fixed 4-Part Presentation Format";
-`build/repair.md` "Repair Triage: Plain Language, Never Raw"; `build/redteam.md`
+`build/repair.md` "Round-3 User Triage — Plain Language, Never Raw"; `build/redteam.md`
 "Vote-Privacy". This file is the general rule those three already follow locally; it adds no new
 authority over what gets built, only over how it is said.

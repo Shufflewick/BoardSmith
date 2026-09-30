@@ -132,13 +132,14 @@
     "agents": {
       "x-convex-sink": false,
       "type": "object",
-      "description": "Which Claude Code agent type the bs- skills dispatch each role as, when not BoardSmith's own bs-<role> agent. The roles are mechanical (bulk edits, search, summaries), bounded (implementation where failing tests define done), judgement (spec, investigate, red team, fidelity, anything touching a ruling) and review (the review that runs once boardsmith verify has passed). A role left out is dispatched as its bs- default, which `boardsmith claude` installs. Read by `boardsmith agent`; never published: the build leaves it out of manifest.json.",
+      "description": "Which Claude Code agent type the bs- skills dispatch each role as, when not BoardSmith's own bs-<role> agent. The roles are mechanical (bulk edits, search, summaries), bounded (implementation where failing tests define done), judgement (spec, investigate, red team, fidelity, anything touching a ruling) review (the review that runs once boardsmith verify has passed) and second-opinion (an independent second reading, which must not resolve to the same agent type as judgement). A role left out is dispatched as its bs- default, which `boardsmith claude` installs. Read by `boardsmith agent`; never published: the build leaves it out of manifest.json.",
       "additionalProperties": false,
       "properties": {
         "mechanical": { "type": "string", "pattern": "^\\S+$" },
         "bounded": { "type": "string", "pattern": "^\\S+$" },
         "judgement": { "type": "string", "pattern": "^\\S+$" },
-        "review": { "type": "string", "pattern": "^\\S+$" }
+        "review": { "type": "string", "pattern": "^\\S+$" },
+        "second-opinion": { "type": "string", "pattern": "^\\S+$" }
       },
       "examples": [{ "judgement": "senior", "review": "reviewer" }]
     },

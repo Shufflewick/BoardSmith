@@ -10,7 +10,7 @@ see whether a test notices), over two to seven review rounds per chunk. And agen
 "done" or "all green" were often wrong, which only a run of those checks caught. So the checks run
 as code (`boardsmith verify`), review starts only once they pass, and the reviewer is told they did.
 
-## The Four Roles
+## The Roles
 
 The skills name roles, never models. A project decides which agent does each role (below).
 
@@ -20,6 +20,7 @@ The skills name roles, never models. A project decides which agent does each rol
 | `bounded` | Implementation where failing tests already say what done is: a chunk's `build` step, after `spec` observed its tests failing. |
 | `judgement` | `spec`, `investigate`, the red team, the fidelity lens, the cross-chunk lens, whole chunks, and anything touching a ruling or the rulebook's meaning. |
 | `review` | The review of finished work, run once `boardsmith verify` has passed for it: the audit's visibility, undo and constraints lenses, the design review, and the final-acceptance pass. |
+| `second-opinion` | An independent second reading of work the `judgement` role also does: `/bs-verify-game`'s second enumerator. Its value is that it is not the same agent, so `boardsmith validate` refuses a mapping that sends it and `judgement` to the same agent type, and its default agent runs on a different model family from `bs-judgement`'s. |
 
 The mechanical checks need no agent at all. The session that needs one runs it itself:
 `boardsmith verify`, `test-step-check`, `chunk-check`, `ledger-check`, `claim-quote-check`,
@@ -69,6 +70,8 @@ token such as `BS-DISPATCH-V3` still comes first after it).
 | `final-acceptance`'s automated design-QA dispatch | `review` | yes |
 | The cross-chunk lens after `chunk-merge` | `judgement` | yes |
 | A bulk edit, search or summary any step hands off | `mechanical` | no |
+| `/bs-verify-game` Step 7: enumerator A and the reconciler | `judgement` | no |
+| `/bs-verify-game` Step 7: enumerator B | `second-opinion` | no |
 
 The gates where the designer decides (`ask`, `playtest`, a triage) are never dispatched.
 
@@ -116,12 +119,21 @@ npx boardsmith agent <the role that failed> --escalate
 ```
 
 prints the next role and its agent type: `mechanical`, then `bounded`, then `judgement`. There is
-nothing above `judgement`, so there the command refuses, and the session **stops and asks the
-designer**: what the step was for, what failed, and what each attempt tried, in the designer's
+nothing above `judgement`, so there the command refuses. Apart from the one exception below, the
+session then **stops and asks the designer**: what the step was for, what failed, and what each attempt tried, in the designer's
 terms (`reporting.md`). Nothing more is dispatched for that step until the designer answers. In
 orchestrated mode that is a gate returned to `/bs-build-game` (`repair-triage` for a build or
 repair, the ordinary `ask` gate for a red team finding); a whole chunk that returns `closed` but
 fails its check has failed at `judgement`, and goes to the designer the same way.
+
+**The one named exception: one more `judgement` round for a red-team re-investigation and for a
+repair.** A red-team re-investigation and a repair that fail at `judgement` each get exactly one
+more round at `judgement` before the designer: `judgement`, then one `judgement`
+re-investigation or repair, then the designer. The reason: the claims, and by the time of a
+repair the work too, are already at the top role, so there is no higher role to send them to, and
+the designer's time is the scarcer resource. A single second look at the same role catches most
+of what a first pass misses, and costs the designer nothing. No other step gets it, and no step
+gets a third round.
 
 A reviewer never climbs: when it asks for changes, the step whose work it reviewed is the one that
 failed. The retry is handed the failed attempt's report and the verify output or review findings.
@@ -129,13 +141,15 @@ What applies in each step:
 
 - **`test`:** `build` ran at `bounded`. A failing verify sends `build` to `judgement`; a second
   failure goes to the designer.
-- **`audit`:** a round with findings is a request for changes to the work it reviewed. `repair`
-  runs one role above whoever last changed that work (`judgement` after a `bounded` build), then
-  commits, verifies, and goes back to review with `--since`. Findings on the `judgement` repair go
-  to the designer, as the triage in `build/repair.md` describes.
-- **`redteam`:** the claims were written at `judgement`, the top. A refuted claim or a coverage
-  gap is never sent back for another investigate round: it goes to the designer as an open
-  question at the `ask` gate, which is the next stop anyway.
+- **`audit`:** a round with findings is a request for changes to the work it reviewed. The first
+  `repair` runs one role above whoever last changed that work (`judgement` after a `bounded`
+  build), then commits, verifies, and goes back to review with `--since`. If that repair fails, it
+  gets the one more `judgement` round above; findings after that go to the designer, as the
+  round-3 triage in `build/repair.md` describes. After a `bounded` build that is three audit
+  rounds.
+- **`redteam`:** the claims were written at `judgement`. A claim refuted once, or a coverage gap,
+  gets the one re-investigate round at `judgement` above, reviewed again by a second red-team
+  round; a claim refuted twice goes to the designer (`build/redteam.md`).
 
 A gate the designer answered, an answer that reshapes the work, and a dispatch that stopped at its
 context ceiling are not failures: the re-dispatch after them keeps its role.

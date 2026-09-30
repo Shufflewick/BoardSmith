@@ -36,8 +36,9 @@ chunk puts these four rules in force for this session (`state-machine.md` "Orche
    cross-chunk continuation described below is the ordinary-session behavior, and the run's own loop
    replaces it here.
 2. **There is no designer on the other end of this context.** Never ask a question, never wait for
-   approval, never assume approval. At a human gate (`ask`, a milestone `playtest`, a repair
-   triage, a step that failed at `judgement`, `close`'s tail delta), stop and return the gate's own
+   approval, never assume approval. At a human gate (`ask`, a milestone `playtest`, a refuted-twice
+   escalation, a repair round-3 triage, a step that failed at `judgement`, `close`'s tail delta),
+   stop and return the gate's own
    composed text as the report's `gate.payload`. Gate-before-write is unchanged: nothing a gate
    authorizes is written until a later dispatch arrives carrying the designer's actual answer.
 3. **Read the brief's answered-questions digest before any gate.** Every question the designer has
@@ -58,7 +59,8 @@ than by asking — the gate still stops the work, and the human still decides.
 The `bs-` skills name roles, never models. `${CLAUDE_SKILL_DIR}/../bs-shared/routing.md` is the one
 authority: `mechanical` (bulk edits, searches, summaries), `bounded` (implementation where failing
 tests say what done is), `judgement` (spec, investigate, red team, fidelity, anything touching a
-ruling) and `review` (once `boardsmith verify` has passed). Before every dispatch,
+ruling), `review` (once `boardsmith verify` has passed) and `second-opinion` (an independent
+second reading, on a different agent from `judgement`). Before every dispatch,
 `npx boardsmith agent <role>` names the agent type to dispatch: the one the project's
 `boardsmith.json` `"agents"` block maps the role to, or BoardSmith's own `bs-<role>`. Every
 dispatch prompt starts with `Work package: <id>`.
@@ -312,14 +314,14 @@ chunk, quote both step lists verbatim — never paraphrase, never reorder:
 
 | Step | Dispatch target | Role (`routing.md`) |
 |------|------------------|------|
-| investigate | `${CLAUDE_SKILL_DIR}/../bs-shared/build/investigate.md` | `judgement` |
+| investigate | `${CLAUDE_SKILL_DIR}/../bs-shared/build/investigate.md` | `judgement` (one re-investigate round allowed) |
 | redteam | `${CLAUDE_SKILL_DIR}/../bs-shared/build/redteam.md` | `judgement`, after `review-gate` |
 | ask | `${CLAUDE_SKILL_DIR}/../bs-shared/build/ask.md` | the designer |
 | spec | `${CLAUDE_SKILL_DIR}/../bs-shared/build/spec.md` | `judgement` |
 | build | `${CLAUDE_SKILL_DIR}/../bs-shared/build/build.md` | `bounded` |
 | test | `${CLAUDE_SKILL_DIR}/../bs-shared/build/test.md` | no agent: commands |
 | audit | `${CLAUDE_SKILL_DIR}/../bs-shared/build/audit.md` | `judgement` (fidelity) and `review`, after `review-gate` |
-| repair | `${CLAUDE_SKILL_DIR}/../bs-shared/build/repair.md` | one role above the work that failed |
+| repair | `${CLAUDE_SKILL_DIR}/../bs-shared/build/repair.md` | one role above the work that failed; one more `judgement` round allowed |
 | playtest | `${CLAUDE_SKILL_DIR}/../bs-shared/build/playtest.md` | the designer |
 | revise | `${CLAUDE_SKILL_DIR}/../bs-shared/build/revise.md` | the designer's triage |
 | close | `${CLAUDE_SKILL_DIR}/../bs-shared/build/close.md` | no agent: bookkeeping |
@@ -391,7 +393,7 @@ adversarial subagents (2 refuters + 1 coverage adversary) reviewing the claims l
 of the investigator's framing. Consume the refuters' return by field name — `claimNumber`,
 `verdict`, `objection` — and the coverage adversary's return by field name —
 `missingInteractions` (itself keyed by `ruleDescription`, `citation`). Escalation logic
-(every refuted claim or gap goes to the designer at `ask`) is `${CLAUDE_SKILL_DIR}/../bs-shared/build/redteam.md`'s and
+(refuted-once re-investigate bound, refuted-twice user escalation) is `${CLAUDE_SKILL_DIR}/../bs-shared/build/redteam.md`'s and
 `${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md` "Redteam Escalation"'s to own — this router only routes the aggregated
 outcome to the next step or to the user.
 
@@ -420,8 +422,8 @@ This continuation is exactly what the **≥50% wind-down floor** (SKILLAUTO-06,
 (research the rulebook, audit findings, large reads, repairs) go to sub-agents rather than being
 read inline by the orchestrator, so the main thread's own context fills slowly enough to clear the
 50% floor before the 60% ceiling ever forces a stop.
-A refuted claim or a coverage gap from the redteam step is not a separate stop: it is put to the
-user at this same `ask` gate, as one of its questions.
+If the redteam step hit a refuted-twice escalation earlier in this group, that is its own
+human-input gate — the session stops there for the user's ruling before reaching `ask`.
 
 ## Step Groups 2–3 (dispatch prose lives in their own reference files)
 
@@ -527,8 +529,9 @@ policy — do not restate them here. In short: the boundaries are cold-resume/pe
 checkpoints, not mandatory stops; a single session runs continuously across them — and across chunk
 boundaries (after `close` it auto-advances straight into the next chunk's `investigate` and stops at
 that chunk's `ask`, per `state-machine.md` "Session Handoff Seams" → "Cross-chunk continuation") —
-and stops only at a human-input gate (`ask` approval, the `playtest` gate, a repair triage, a
-step that failed at `judgement`, or `close`'s delta gate), when an automated step hits an
+and stops only at a human-input gate (`ask` approval, a redteam refuted-twice escalation, the
+`playtest` gate, a repair round-3 triage, a step that failed at `judgement`, or `close`'s delta
+gate), when an automated step hits an
 unrecoverable/stuck state, or when context crosses the **60%-used** low-water mark (see
 `state-machine.md` "Session Handoff Seams" → "Context floor + ceiling" for the exact threshold
 rule). This is the run-while-away model (SKILLAUTO-04): below 60% the session keeps going — it does
@@ -592,7 +595,7 @@ This skill delegates its heavyweight, step-scoped prose to:
 - `${CLAUDE_SKILL_DIR}/../bs-shared/build/audit.md` — 4 fresh-context adversarial lenses (fidelity, visibility, undo,
   constraints) + design-review dispatch for UI chunks, Findings Ledger round persistence,
   `boardsmith constraint-check`
-- `${CLAUDE_SKILL_DIR}/../bs-shared/build/repair.md`: fix-or-refute-with-citation loop, role-ladder bound, repair user
+- `${CLAUDE_SKILL_DIR}/../bs-shared/build/repair.md`: fix-or-refute-with-citation loop, round-bound enforcement, round-3 user
   triage
 - `${CLAUDE_SKILL_DIR}/../bs-shared/build/design-review.md` — the UI-chunk screenshot design-review agent dispatched by audit
   for `ui: touches|major` chunks; findings land in the same Findings Ledger
@@ -613,13 +616,13 @@ And to the shared reference files that ship with every `bs-` skill:
 
 - `${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md` — status enum, step names, consistency check, session lock, write order,
   authority, session handoff seams, git protocol
-- `${CLAUDE_SKILL_DIR}/../bs-shared/routing.md`: the four roles, which agent each is dispatched as,
+- `${CLAUDE_SKILL_DIR}/../bs-shared/routing.md`: the roles, which agent each is dispatched as,
   no review before verify, and one role up on a failure
 - `${CLAUDE_SKILL_DIR}/../bs-shared/templates/CHUNK.template.md` — the file `investigate`/`redteam`/`ask` fill (claims list,
   visibility declaration, redteam rounds, Step Checklist check-offs, Status grammar; the
   findings ledger belongs to `audit`/`repair`)
 - `${CLAUDE_SKILL_DIR}/../bs-shared/templates/RULINGS.template.md` — the ledger `ask`'s house-rule choices and redteam's
-  redteam escalations append to
+  refuted-twice escalations append to
 - `${CLAUDE_SKILL_DIR}/../bs-shared/templates/CONSTRAINTS.template.md` — the project's hard constraints and
   every growing structure with its cap or ruling, filled by `audit` and read by
   `boardsmith constraint-check`

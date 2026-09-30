@@ -32,15 +32,16 @@ staged output into a live location.
 The `bs-` skills name roles, never models. `${CLAUDE_SKILL_DIR}/../bs-shared/routing.md` is the one
 authority: `mechanical` (bulk edits, searches, summaries), `bounded` (implementation where failing
 tests say what done is), `judgement` (spec, investigate, red team, fidelity, anything touching a
-ruling) and `review` (once `boardsmith verify` has passed). Before every dispatch,
+ruling), `review` (once `boardsmith verify` has passed) and `second-opinion` (an independent
+second reading, on a different agent from `judgement`). Before every dispatch,
 `npx boardsmith agent <role>` names the agent type to dispatch: the one the project's
 `boardsmith.json` `"agents"` block maps the role to, or BoardSmith's own `bs-<role>`. Every
 dispatch prompt starts with `Work package: <id>`.
 
 Its dispatches use this skill's own name as the work package (`routing.md`). Its repair of stale chunks runs through the
 build pipeline's audit and repair, so the same review gate and escalation apply there. Step 7's
-two enumerators and reconciler are the one place a skill still pins its own agents, for the
-cross-family independence that step depends on; see Step 7.
+second enumerator is the `second-opinion` role, which `boardsmith validate` keeps on a different
+agent from `judgement`, because that step depends on the two readings being independent.
 
 ## Invocation
 
@@ -252,8 +253,8 @@ the existing build-pipeline audit/repair loop. In short: only chunks Step 4's im
 staleness for on its own. For each, `boardsmith verify-repair`'s helpers resolve the chunk's fresh
 STAGED slice paths and route it through `build/audit.md`'s three lenses (plus the 4th
 design-review lens for `ui: touches|major` chunks) and `build/repair.md`'s bounded loop — reused
-by reference, never forked. Each verify pass opens a fresh climb of the role ladder per chunk
-(`routing.md`), its rounds appended after that chunk's existing rounds, never renumbering history. Once every finding across the
+by reference, never forked. Each verify pass opens a fresh 3-round budget per chunk, appended
+after that chunk's existing rounds, never renumbering history. Once every finding across the
 episode's rounds has a disposition, the repair-gate disposition is re-derived from the freshly
 re-checked post-repair code state — never Step 4's pre-repair snapshot — because repair MAY change
 an existing chunk's code: a chunk whose code changed during repair re-opens the human playtest
@@ -268,14 +269,16 @@ exclusion is enumerated PROJECT-WIDE, all of them, never scoped to stale chunks 
 Step 4's staleness verdicts and not scoped to the chunks Step 6 touched.
 
 For each slice the command reports as pending, dispatch the SAME `slices[].enumeratorPayload`
-bytes TWICE, unchanged, to two independent cross-family subagents carrying
-`${CLAUDE_SKILL_DIR}/../bs-shared/verify/enumerate-facts.md`'s `BS-ENUMERATE-V1` handshake —
-enumerator A on `claude-opus-5`, enumerator B on `claude-haiku-4-5-20251001`. The model ids come
-from the command's own `models` field, so this prose and the code cannot drift. Cross-family
-independence is load-bearing: two same-family enumerators would confirm each other's decomposition
-rather than independently reproduce the facts.
+bytes TWICE, unchanged, to two independent subagents carrying
+`${CLAUDE_SKILL_DIR}/../bs-shared/verify/enumerate-facts.md`'s `BS-ENUMERATE-V1` handshake:
+enumerator A as the agent `npx boardsmith agent judgement` names, enumerator B as the agent
+`npx boardsmith agent second-opinion` names. The roles come from the command's own `roles` field,
+so this prose and the code cannot drift. Independence is load-bearing: two enumerators that are
+the same agent would confirm each other's decomposition rather than independently reproduce the
+facts, which is why `boardsmith validate` refuses a `boardsmith.json` that maps `second-opinion`
+to the same agent type as `judgement`.
 
-Dispatch a THIRD subagent on `claude-sonnet-5` carrying
+Dispatch a THIRD subagent, as the agent `npx boardsmith agent judgement` names, carrying
 `${CLAUDE_SKILL_DIR}/../bs-shared/verify/reconcile-facts.md`'s `BS-RECONCILE-V1` handshake, the two
 enumerator returns, and `slices[].derivedLines`.
 

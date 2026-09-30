@@ -735,8 +735,8 @@ export function createProgram(): Command {
     .action(discardResult(verifyRepairStatusCommand));
 
   // CHECK-04 (177.1-CONTEXT.md decision 2): dual-enumeration derived-line check — two
-  // independently-dispatched enumerators (claude-opus-5, claude-haiku-4-5-20251001) each read a
-  // slice's quote lines, a reconciler (claude-sonnet-5) grounds their overlap and cross-checks it
+  // independently-dispatched enumerators (the judgement and second-opinion roles) each read a
+  // slice's quote lines, a reconciler (the judgement role) grounds their overlap and cross-checks it
   // against every `Derived (p.N):` line, and the CLI classifies each into one of eight verdicts
   // (corroborated / corroborated-by-composition / uncorroborated / contradicted /
   // quote-unverified / absence-corroborated / absence-contradicted / absence-unverifiable). Advisory
@@ -766,14 +766,14 @@ export function createProgram(): Command {
     )
     .option('--project <dir>', 'Project directory (defaults to cwd)')
     .requiredOption('--slice-path <path>', 'The rulebook/ slice the Derived lines live in')
-    .requiredOption('--enumerator-a <file>', "Enumerator A's structured JSON return (claude-opus-5)")
+    .requiredOption('--enumerator-a <file>', "Enumerator A's structured JSON return (the judgement role)")
     .requiredOption(
       '--enumerator-b <file>',
-      "Enumerator B's structured JSON return (claude-haiku-4-5-20251001)",
+      "Enumerator B's structured JSON return (the second-opinion role)",
     )
     .requiredOption(
       '--reconciler <file>',
-      "The reconciler's structured JSON return (claude-sonnet-5)",
+      "The reconciler's structured JSON return (the judgement role)",
     )
     .option('--json', 'Emit JSON instead of human-readable output')
     .action(discardResult(verifyDeriveRecordCommand));

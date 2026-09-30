@@ -1,6 +1,6 @@
 /**
  * `boardsmith claude` installs one Claude Code agent per role (#454): `bs-mechanical`, `bs-bounded`,
- * `bs-judgement` and `bs-review`, so a designer with only BoardSmith can dispatch every role the
+ * `bs-judgement`, `bs-review` and `bs-second-opinion`, so a designer with only BoardSmith can dispatch every role the
  * skills name.
  *
  * Every install here is real, and targets a temp tree: the global install runs with HOME set to a
@@ -55,7 +55,13 @@ describe('the role agents a global install writes into the home directory', () =
       bounded: ['sonnet', 'medium'],
       judgement: ['opus', 'medium'],
       review: ['opus', 'high'],
+      'second-opinion': ['sonnet', 'high'],
     });
+  });
+
+  it('puts the second opinion on a different model family from the judgement it checks, so the two stay independent', () => {
+    const model = (role: string) => frontmatter(readFileSync(join(agentsDir(), `bs-${role}.md`), 'utf-8')).model;
+    expect(model('second-opinion')).not.toBe(model('judgement'));
   });
 
   it('tells every agent its prompt starts with the work package, and the review agent to refuse a prompt without the verify brief', () => {

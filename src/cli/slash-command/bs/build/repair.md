@@ -16,7 +16,7 @@ silently marked "handled" without one of them, and code is never changed in orde
 finding (refuting is a citation, not a code change).
 
 `deferred` is NOT a repair action — repair cannot defer a finding on its own. It is only a user
-choice at the repair triage below (see "Repair Triage"), and it is the third terminal
+choice at the round-3 triage below (see "Round-3 User Triage"), and it is the third terminal
 disposition alongside `fixed` and `refuted` (matching `templates/CHUNK.template.md`'s
 `disposition: fixed | deferred | refuted` enum and `state-machine.md`). So there are two repair
 actions but three terminal dispositions; do not read the two-actions rule as forbidding a
@@ -34,20 +34,22 @@ explicitly and record it durably, rather than leaving it implicit:
 
 ## Repair Loop Bound (cite, never restate)
 
-Cite `state-machine.md` "Repair Loop Bound" and `routing.md` "When a Step Fails: One Role Up,
-Never the Same Role" for the governing rule. This file does not re-derive it in its own words,
-it applies it:
+Cite `state-machine.md` "Repair Loop Bound" for the governing rule — this file does not
+re-derive it in its own words, it applies it:
 
-- The role ladder bounds the loop. An audit round with findings is a request for changes, so
-  repair is dispatched one role above whoever last changed the work, never at the same role:
-  `npx boardsmith agent <that role> --escalate` names it. After a `bounded` build, repair runs at
-  `judgement`. The dispatch is a `### Dispatch N` entry in the run log with `Escalated from:`
-  naming the dispatch that failed, and its prompt starts `Work package: <slug>` and hands over the
-  round's findings.
+- Maximum 3 audit rounds per chunk.
 - Round N+1 auditors see this ledger and report only NEW findings — repair never re-litigates a
   finding already recorded in a prior round's entry.
-- Findings on the `judgement` role's repair, the top of the ladder, are triaged with the user
-  (see "Repair Triage" below); nothing more is dispatched for them until the user answers.
+- After round 3, any remaining findings are triaged with the user (see "Round-3 User Triage"
+  below).
+- Who repairs follows the role ladder (`routing.md` "When a Step Fails"). An audit round with
+  findings is a request for changes, so the first repair is dispatched one role above whoever
+  last changed the work: `npx boardsmith agent <that role> --escalate` names it, `judgement` after
+  a `bounded` build. A repair that fails at `judgement` (its verify fails, or the next audit round
+  still has findings) gets exactly one more `judgement` round, the named exception in
+  `routing.md`, and then the findings go to the round-3 triage. After a `bounded` build that is
+  the three audit rounds above. Each repair is a `### Dispatch N` entry in the run log, and its
+  prompt starts `Work package: <slug>` and hands over the round's findings.
 
 ## Same-Group Loop-Back to Audit (cite, never restate)
 
@@ -63,7 +65,7 @@ Back to `build`":
 
 Applied here: `repair` and `audit` stay in the same group specifically so a repair round that
 fixes findings can be re-checked by a fresh audit round without a session handoff in between —
-unless the round bound above has been reached, in which case repair routes to the repair
+unless the round bound above has been reached, in which case repair routes to the round-3 user
 triage instead of dispatching another audit round. The next audit round starts only through
 `npx boardsmith review-gate <slug> --since <the commit the last round reviewed>`, so it reviews
 only what the repair changed (`routing.md` "No Review Before Verify").
@@ -88,13 +90,11 @@ until it exits zero on a clean tree. When it fails, the failed check says what t
 run next; that is more repair work in this round, not a new finding. Never say a fix is done or the
 suite is green on anything else: `chunk-signoff` refuses a commit with no passing result covering
 the chunk's change, and a later step asks `npx boardsmith verify --check --chunk <slug>`. A failing
-verify is a failure of this repair at its role: the next attempt goes one role up, or, at
-`judgement`, to the repair triage (`routing.md`).
+verify is a failure of this repair at its role, handled by the ladder in "Repair Loop Bound" above.
 
-## Repair Triage: Plain Language, Never Raw
+## Round-3 User Triage — Plain Language, Never Raw
 
-Once the `judgement` role's repair has failed (its verify still fails, or the next audit round
-still has findings), any finding still lacking a disposition is triaged with the user directly. Cite
+After round 3, any finding still lacking a disposition is triaged with the user directly. Cite
 `build/redteam.md`'s "Vote-Privacy" discipline by name rather than re-deriving it, and
 `reporting.md` for the register: never show the user a raw finding text, an agent transcript, a
 severity score, or a finding id. Describe the finding as what could go wrong in their game, then

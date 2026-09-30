@@ -56,16 +56,18 @@ function dispatchableAgent(projectDir: string, config: Record<string, unknown>, 
 function escalatedRole(role: Role): Role {
   if (!(ESCALATION_LADDER as readonly string[]).includes(role)) {
     throw new Error(
-      'The review role does not climb: when a reviewer asks for changes, the step whose work it reviewed is the one that failed. ' +
-        "Run `boardsmith agent <that step's role> --escalate`.",
+      `The ${role} role does not climb: it checks another step's work, and when it finds a problem, the step whose work ` +
+        "it checked is the one that failed. Run `boardsmith agent <that step's role> --escalate`.",
     );
   }
   const next = nextRole(role as WorkRole);
   if (next === undefined) {
     throw new Error(
-      'judgement is the top role, and this step has now failed there, so no agent takes it next: stop and ask the designer. ' +
-        'Tell them, in their terms, what the step was for, what failed, and what each attempt tried, and dispatch nothing more ' +
-        'for this step until they answer.',
+      'judgement is the top role, so no role above it takes this step. The one exception (routing.md): a red-team ' +
+        're-investigation or a repair that failed at judgement for the first time gets exactly one more judgement round; ' +
+        'dispatch `boardsmith agent judgement` for it. Any other step, or one that has already had that round: stop and ask ' +
+        'the designer. Tell them, in their terms, what the step was for, what failed, and what each attempt tried, and ' +
+        'dispatch nothing more for this step until they answer.',
     );
   }
   return next;
