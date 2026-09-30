@@ -90,7 +90,8 @@ describe('resultProblem: which results vouch for HEAD', () => {
 
 describe('verifiedProblem: the one question every done claim asks', () => {
   async function project(): Promise<string> {
-    const dir = join(tempTree('bs-verify-result-'), 'game');
+    const tree = tempTree('bs-verify-result-');
+    const dir = join(tree, 'game');
     await fs.mkdir(dir, { recursive: true });
     await fs.writeFile(join(dir, '.gitignore'), '.boardsmith/\n');
     await fs.writeFile(join(dir, 'rules.ts'), 'export const x = 1;\n');
@@ -138,7 +139,8 @@ describe('verifiedProblem: the one question every done claim asks', () => {
   });
 
   it('says what to do in a directory that is not a git repository', async () => {
-    const dir = join(tempTree('bs-verify-result-'), 'loose');
+    const tree = tempTree('bs-verify-result-');
+    const dir = join(tree, 'loose');
     await fs.mkdir(dir, { recursive: true });
     expect(await verifiedProblem(dir)).toMatch(/not a git repository.*boardsmith verify/s);
   });

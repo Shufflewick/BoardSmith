@@ -22,7 +22,8 @@ async function write(dir: string, files: Record<string, string>): Promise<void> 
 
 /** A repository on `main` with one commit, holding `files`. */
 async function repo(files: Record<string, string>): Promise<string> {
-  const dir = join(tempTree('bs-verify-'), 'game');
+  const tree = tempTree('bs-verify-');
+  const dir = join(tree, 'game');
   await write(dir, { '.gitignore': '.boardsmith/\nnode_modules\n', ...files });
   initRepo(dir);
   commitAll(dir, 'base');
@@ -111,7 +112,8 @@ const TSCONFIG = JSON.stringify({
  * never touched.
  */
 async function gameOnBranch(breakBid: boolean): Promise<string> {
-  const dir = await makeChunkProject(tempTree('bs-verify-game-'), [{ slug: 'deal' }]);
+  const tree = tempTree('bs-verify-game-');
+  const dir = await makeChunkProject(tree, [{ slug: 'deal' }]);
   await write(dir, {
     // With no package.json, vitest keeps its cache in .vite/ at the project root.
     '.gitignore': '.boardsmith/\nnode_modules\n.vite/\n',
@@ -275,7 +277,8 @@ describe('the boardsmith verify command, as a user runs it', () => {
   });
 
   it('refuses a project whose .gitignore does not leave .boardsmith/ out, since its own result would dirty the tree', async () => {
-    const dir = join(tempTree('bs-verify-'), 'game');
+    const tree = tempTree('bs-verify-');
+    const dir = join(tree, 'game');
     await write(dir, { 'boardsmith.json': '{}', 'src/a.ts': '' });
     initRepo(dir);
     commitAll(dir, 'base');
