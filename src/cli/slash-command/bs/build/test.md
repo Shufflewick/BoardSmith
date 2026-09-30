@@ -292,8 +292,8 @@ here.
    sequence. A `ui: none` chunk skips this item entirely — it has no UI to check.
 
 7. **The done gate: `boardsmith verify`**. Commit the chunk's work (`chunk-<slug>/step-test`,
-   `state-machine.md` "Git Protocol"), then run `npx boardsmith verify --base <the chunk's verify base>`
-   (the command is in `state-machine.md` "Git Protocol"). It runs, in order and
+   `state-machine.md` "Git Protocol"), then run `npx boardsmith verify --chunk <slug>`
+   (`state-machine.md` "Git Protocol" says what it measures from). It runs, in order and
    without stopping at the first failure, the full suite, typecheck, build, validate and a
    mutation check of the code changed since the chunk began, and writes the result for this
    commit to `.boardsmith/verify/<commit>.json`. The full suite is the regression check: a chunk
@@ -303,7 +303,8 @@ here.
    clean tree; a failure routes the chunk back per "Failures Loop Back to `build`",
    using what each failed check names, and the gate runs again on the new commit. Never report
    this step, the chunk, or the suite as done or green without it: `chunk-signoff` refuses a chunk
-   whose commit has no passing result, and any later step asks `npx boardsmith verify --check`.
+   whose commit has no passing result covering the chunk's change, and any later step asks
+   `npx boardsmith verify --check --chunk <slug>`.
 
 ## The A11y Floor — All Five Items (UIQ-03)
 

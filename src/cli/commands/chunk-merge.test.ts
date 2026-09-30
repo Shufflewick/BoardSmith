@@ -161,7 +161,7 @@ async function buildOnBranch(slug: string, bytes: number, extra: Record<string, 
     ...extra,
   });
   // A sign-off needs the chunk's work committed and verified (#452).
-  await recordPassingVerify(worktree, `chunk-${slug}/build`);
+  await recordPassingVerify(worktree, { chunk: slug, message: `chunk-${slug}/build` });
   await recordSignoff(slug, { project: worktree, automated: 'tests/budget.test.ts passed', now: new Date('2026-09-01T02:00:00Z') });
   // Close releases the lock on the branch; the run on the main line still holds it.
   const sketch = await read(worktree, 'design/SKETCH.md');

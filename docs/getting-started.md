@@ -195,9 +195,11 @@ headless batch simulation).
 #### Before you call a change done: `boardsmith verify`
 
 ```bash
-boardsmith verify               # every check, recorded for this commit
-boardsmith verify --base v1.2   # measure the change from somewhere other than main
-boardsmith verify --check       # has this commit passed? (runs nothing)
+boardsmith verify                    # every check, recorded for this commit
+boardsmith verify --base v1.2        # measure the change from somewhere other than main
+boardsmith verify --chunk deal       # measure a bs- chunk's change from where it began
+boardsmith verify --check            # has this commit passed? (runs nothing)
+boardsmith verify --check --chunk deal   # ...with the chunk's whole change measured?
 ```
 
 `boardsmith verify` runs the full suite, `boardsmith typecheck`, `boardsmith
@@ -210,16 +212,21 @@ would not catch that line going wrong.
 
 On the main branch itself, the merge base with main is the current commit, so
 no change would be measured: there the mutation check fails unless you pass
-`--base <commit the work started from>`. A mutant whose code and tests have not
-changed since an earlier run is not run again, so verifying again after a
-commit that only touches the `bs-` skills' design records is quick.
+`--base <commit the work started from>`. For a chunk the `bs-` skills build,
+`--chunk <slug>` finds that commit itself: the one before the chunk's first
+`chunk-<slug>/` commit. A mutant whose code, tests, repository and installed
+packages have not changed since an earlier run is not run again, so verifying
+again after a commit that only touches the `bs-` skills' design records is quick.
 
 Commit first: a tree with uncommitted changes is refused before any check runs.
 The result is written to `.boardsmith/verify/<commit>.json`, tied to that one
-commit and to whether the tree stayed clean while the checks ran. `boardsmith verify --check`
-exits 0 only when the current commit, on a clean tree, has a passing result, and
-otherwise says what to run. The `bs-` skills ask it before they record a chunk
-as done (`boardsmith chunk-signoff` refuses without it).
+commit, to the base it measured from, and to whether the tree stayed clean while
+the checks ran. `boardsmith verify --check` exits 0 only when the current commit,
+on a clean tree, has a passing result, and otherwise says what to run. With
+`--chunk <slug>` it also requires that result to have measured the chunk's whole
+change: its base must be where the chunk began or a commit before that, so a
+`--base HEAD` run, which mutates nothing, does not count. `boardsmith
+chunk-signoff <slug>` asks the same question before it records a chunk as done.
 
 ### 5. Build for Production
 

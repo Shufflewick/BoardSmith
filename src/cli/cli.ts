@@ -174,13 +174,17 @@ export function createProgram(): Command {
   program
     .command('verify')
     .description(
-      'Run the full test suite, typecheck, build, validate and a mutation check of the code changed since --base, ' +
+      'Run the full test suite, typecheck, build, validate and a mutation check of the code changed since the base, ' +
         'and record the result for this commit; --check says whether HEAD has a passing result',
     )
     .option('--base <git-ref>', 'Where the change started: its merge base with HEAD is the base (default: the main branch)')
+    .option(
+      '--chunk <slug>',
+      "Measure a chunk's change from the commit before its first chunk-<slug>/ commit; with --check, accept only a result that covers it",
+    )
     .option('--check', 'Run nothing: exit 0 only when HEAD, on a clean tree, has a passing result')
     .option('--project <dir>', 'Project directory (defaults to cwd)')
-    .action((options: { base?: string; check?: boolean; project?: string }) => verifyCommand(options));
+    .action((options: { base?: string; chunk?: string; check?: boolean; project?: string }) => verifyCommand(options));
 
   // Linting
   program

@@ -17,13 +17,13 @@ import {
 } from './chunk-project.test-helper.js';
 
 
-/** Every sign-off here is made on a commit that passed `boardsmith verify` (#452), unless a test says otherwise. */
+/** Every sign-off here is made on a commit that passed `boardsmith verify --chunk <slug>` (#452), unless a test says otherwise. */
 async function signOff(slug: string, options: Parameters<typeof recordSignoff>[1]): ReturnType<typeof recordSignoff> {
-  await recordPassingVerify(options.project!);
+  await recordPassingVerify(options.project!, { chunk: slug });
   return recordSignoff(slug, options);
 }
 
-/** The transition, run on a commit that passed `boardsmith verify` (#452). */
+/** The transition, run on a commit that passed `boardsmith verify --base HEAD` (#452): it builds nothing. */
 async function transition(options: Parameters<typeof recordGateTransition>[0]): ReturnType<typeof recordGateTransition> {
   await recordPassingVerify(options.project!);
   return recordGateTransition(options);

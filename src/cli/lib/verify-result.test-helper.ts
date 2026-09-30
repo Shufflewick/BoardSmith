@@ -10,6 +10,7 @@
 import { execFileSync } from 'node:child_process';
 import { appendFileSync, existsSync, mkdirSync, promises as fs, readFileSync, realpathSync } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
+import { chunkVerifyBase } from './chunk-commits.js';
 import { VERIFY_CHECK_NAMES, buildVerifyResult, writeVerifyResult } from './verify-result.js';
 
 const IDENTITY = ['-c', 'user.name=Fixture', '-c', 'user.email=fixture@example.com', '-c', 'commit.gpgsign=false'];
@@ -62,20 +63,43 @@ export function commitAll(dir: string, message: string): string {
   return git(dir, 'rev-parse', 'HEAD').trim();
 }
 
+/** Whether `dir`'s repository has a commit yet. */
+function hasCommit(dir: string): boolean {
+  try {
+    git(dir, 'rev-parse', '--verify', '--quiet', 'HEAD^{commit}');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /**
- * Commits the project as it stands, with `message`, and records a passing `boardsmith verify`
- * result for that commit.
+ * Commits the project as it stands and records a passing `boardsmith verify` result for that
+ * commit, the way the run the bs- skills make would:
+ *
+ * - with `chunk`, as `boardsmith verify --chunk <slug>` does: the commit is one of the chunk's
+ *   (`chunk-<slug>/step-test` unless `message` says otherwise, after a first commit for the chunk to
+ *   start from when the repository has none), and the result's base is the chunk's verify base, or
+ *   `base` when given (a commit before it, say);
+ * - without, as `boardsmith verify --base HEAD` does, the run before a gate transition: the base is
+ *   the commit itself, which satisfies no chunk's sign-off.
  */
-export async function recordPassingVerify(dir: string, message = 'fixture: work to verify'): Promise<string> {
+export async function recordPassingVerify(
+  dir: string,
+  { chunk, message, base }: { chunk?: string; message?: string; base?: string } = {},
+): Promise<string> {
   initRepo(dir);
   ignoreBoardsmithDir(dir);
-  const commit = commitAll(dir, message);
+  if (chunk !== undefined && !hasCommit(dir)) commitAll(dir, 'fixture: the project before its chunks');
+  const commit = commitAll(dir, message ?? (chunk === undefined ? 'fixture: work to verify' : `chunk-${chunk}/step-test`));
+  const baseCommit = base ?? (chunk === undefined ? commit : await chunkVerifyBase(dir, chunk));
   await writeVerifyResult(
     dir,
     buildVerifyResult({
       commit,
       cleanTree: true,
-      base: { ref: 'main', commit },
+      base: { ref: chunk === undefined ? 'HEAD' : `base of chunk-${chunk}`, commit: baseCommit },
+      chunk: chunk ?? null,
       checks: VERIFY_CHECK_NAMES.map((name) => ({ name, passed: true, summary: `${name} passed` })),
     }),
   );

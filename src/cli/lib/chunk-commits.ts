@@ -73,6 +73,9 @@ export async function findChunkCommits(projectDir: string, slug: string): Promis
   return new Set((await chunkLog(projectDir, slug)).map((c) => c.hash));
 }
 
+/** The first parent of the oldest of `commits` (newest first): the code as it stood before the chunk. */
+const baseOf = (commits: Awaited<ReturnType<typeof chunkLog>>) => commits[commits.length - 1].parents[0];
+
 /**
  * The chunk's history: its own commits, newest first, then its base commit when it has one (its
  * first commit may be the repository's first). Throws when the chunk has no commit yet.
@@ -80,8 +83,27 @@ export async function findChunkCommits(projectDir: string, slug: string): Promis
 export async function chunkHistory(projectDir: string, slug: string): Promise<ChunkCommit[]> {
   const commits = await chunkLog(projectDir, slug);
   const history: ChunkCommit[] = commits.map((c) => ({ hash: c.hash, label: c.subject }));
-  const base = commits[commits.length - 1].parents[0];
+  const base = baseOf(commits);
   return base === undefined ? history : [...history, { hash: base, label: `base of chunk-${slug}` }];
+}
+
+/**
+ * The chunk's verify base: its base commit, where its work started. `boardsmith verify --chunk`
+ * measures the change from here, and a chunk's sign-off accepts only a result whose base is this
+ * commit or one before it (#452). Throws, saying what to do, when the chunk has no commit yet or
+ * its first commit is the repository's first.
+ */
+export async function chunkVerifyBase(projectDir: string, slug: string): Promise<string> {
+  const commits = await chunkLog(projectDir, slug);
+  const base = baseOf(commits);
+  if (base === undefined) {
+    throw new Error(
+      `Chunk "${slug}"'s first commit (${commits[commits.length - 1].hash.slice(0, 12)}) is the repository's first commit, ` +
+        'so there is no commit before it to measure the chunk\'s change from. Commit the project as it stood before the ' +
+        `chunk (its scaffold) first, then the chunk's work as "chunk-${slug}/step-<name>" commits.`,
+    );
+  }
+  return base;
 }
 
 /** The commit of a chunk's history a pin names, or why it names none. */

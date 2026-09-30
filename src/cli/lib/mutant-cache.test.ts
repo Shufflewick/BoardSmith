@@ -2,38 +2,60 @@ import { describe, it, expect } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
-import { BOOKKEEPING_RECORDS, mutantCachePath, openMutantCache, toolRevision } from './mutant-cache.js';
+import { BOOKKEEPING_RECORDS, gameBoardsmithRoot, mutantCachePath, openMutantCache, toolRevision } from './mutant-cache.js';
 import { commitAll, initRepo, writeFiles as write } from './verify-result.test-helper.js';
 
 const RULES = 'export const fee = (price: number) => price * 2;\n';
 const MUTANT = { file: 'src/rules.ts', source: 'export const fee = (price: number) => price / 2;\n' };
 
-/** A committed game project with a rule, its test, and the design records the bs- skills keep. */
+/** An installed BoardSmith of `version`, as npm lays one out under `node_modules`. */
+const installedBoardsmith = (version: string) => ({
+  'node_modules/boardsmith/package.json': JSON.stringify({ name: 'boardsmith', version }),
+});
+
+/** npm's record of what an install put in `node_modules`, keyed by the packages it names. */
+const installRecord = (...packages: string[]) => JSON.stringify({ packages: Object.fromEntries(packages.map((p) => [`node_modules/${p}`, {}])) });
+
+/**
+ * A committed game project with a rule, its test, the design records the bs- skills keep, an
+ * installed BoardSmith, and npm's record of the install. `node_modules` is out of git, as in a game.
+ */
 async function project(): Promise<string> {
   const tree = tempTree('bs-mutant-cache-');
   const dir = join(tree, 'game');
   await write(dir, {
-    '.gitignore': '.boardsmith/\n',
+    '.gitignore': '.boardsmith/\nnode_modules/\n',
+    'package-lock.json': '{ "lockfileVersion": 3 }\n',
     'src/rules.ts': RULES,
     'src/other.ts': 'export const other = 1;\n',
     'tests/rules.test.ts': "it('fee', () => {});\n",
     'design/SKETCH.md': 'Session Lock: none\n',
     'design/DESIGN.md': 'the look of the game\n',
     'design/chunks/deal/CHUNK.md': 'Status: built\n',
+    'node_modules/.package-lock.json': installRecord('boardsmith', 'vitest'),
+    ...installedBoardsmith('1.0.0'),
   });
   initRepo(dir);
   commitAll(dir, 'base');
   return dir;
 }
 
-/** Records `outcome` for MUTANT under `revision`, as a verify run of HEAD would, and saves it. */
-async function record(dir: string, outcome: 'killed' | 'survived', revision = 'rev-1'): Promise<void> {
-  const cache = await openMutantCache(dir, revision);
+/** Records `outcome` for MUTANT, as a verify run of HEAD would, and saves it. */
+async function record(dir: string, outcome: 'killed' | 'survived'): Promise<void> {
+  const cache = await openMutantCache(dir);
   cache.set(MUTANT, outcome);
   await cache.save();
 }
 
-const lookup = async (dir: string, revision = 'rev-1') => (await openMutantCache(dir, revision)).get(MUTANT);
+const lookup = async (dir: string) => (await openMutantCache(dir)).get(MUTANT);
+
+/** Records a killed outcome, applies `change` to `writeTo` (committing when `commit` is set), and returns the lookup. */
+async function afterChange(dir: string, writeTo: string, change: Record<string, string>, commit: string | undefined): Promise<unknown> {
+  await record(dir, 'killed');
+  await write(writeTo, change);
+  if (commit !== undefined) commitAll(writeTo, commit);
+  return { change: Object.keys(change)[0], outcome: await lookup(dir) };
+}
 
 describe('the mutant cache: a mutant outcome is reused only when nothing it could depend on changed', () => {
   it('reuses an outcome for the same mutant, code, tests and BoardSmith, and after a bookkeeping-only commit', async () => {
@@ -58,7 +80,7 @@ describe('the mutant cache: a mutant outcome is reused only when nothing it coul
     expect(await lookup(dir)).toBe('killed');
   });
 
-  it('runs the mutant again when a test, other code, a non-bookkeeping design file, or evidence changed', async () => {
+  it('runs the mutant again when a test, other code, a non-bookkeeping design file, evidence, or the lockfile changed', async () => {
     const changes: Array<Record<string, string>> = [
       { 'tests/rules.test.ts': "it('fee', () => { expect(1).toBe(1); });\n" },
       { 'tests/new.test.ts': "it('new', () => {});\n" },
@@ -66,25 +88,28 @@ describe('the mutant cache: a mutant outcome is reused only when nothing it coul
       { 'src/rules.ts': `${RULES}export const tax = 1;\n` },
       { 'design/DESIGN.md': 'a test may read this\n' },
       { 'design/chunks/deal/evidence/probe.mjs': 'export {};\n' },
-      { 'package-lock.json': '{}\n' },
+      { 'package-lock.json': '{ "lockfileVersion": 3, "packages": {} }\n' },
     ];
     for (const change of changes) {
       const dir = await project();
-      await record(dir, 'survived');
-      await write(dir, change);
-      commitAll(dir, 'change');
-      expect({ change: Object.keys(change)[0], outcome: await lookup(dir) }).toEqual({
-        change: Object.keys(change)[0],
-        outcome: undefined,
-      });
+      expect(await afterChange(dir, dir, change, 'change')).toEqual({ change: Object.keys(change)[0], outcome: undefined });
     }
   });
 
-  it('runs the mutant again under a different BoardSmith, or when the mutant itself differs', async () => {
+  it('runs the mutant again when what is installed changed, which no commit shows', async () => {
     const dir = await project();
+    const change = { 'node_modules/.package-lock.json': installRecord('boardsmith', 'vitest', 'left-pad') };
+    expect(await afterChange(dir, dir, change, undefined)).toEqual({ change: 'node_modules/.package-lock.json', outcome: undefined });
+  });
+
+  it('runs the mutant again under a different BoardSmith, the one the game loads, or when the mutant itself differs', async () => {
+    const dir = await project();
+    expect(await afterChange(dir, dir, installedBoardsmith('1.0.1'), undefined)).toEqual({
+      change: 'node_modules/boardsmith/package.json',
+      outcome: undefined,
+    });
     await record(dir, 'killed');
-    expect(await lookup(dir, 'rev-2')).toBeUndefined();
-    const cache = await openMutantCache(dir, 'rev-1');
+    const cache = await openMutantCache(dir);
     expect(cache.get({ ...MUTANT, source: 'export const fee = (price: number) => price * 3;\n' })).toBeUndefined();
     expect(cache.get({ ...MUTANT, file: 'src/other.ts' })).toBeUndefined();
   });
@@ -92,20 +117,20 @@ describe('the mutant cache: a mutant outcome is reused only when nothing it coul
   it('keeps only the outcomes the last saved run looked up or recorded, so it never grows past one run', async () => {
     const dir = await project();
     const other = { file: 'src/other.ts', source: 'export const other = 0;\n' };
-    const first = await openMutantCache(dir, 'rev-1');
+    const first = await openMutantCache(dir);
     first.set(MUTANT, 'killed');
     first.set(other, 'survived');
     await first.save();
 
-    const second = await openMutantCache(dir, 'rev-1');
+    const second = await openMutantCache(dir);
     expect(second.get(MUTANT)).toBe('killed');
     await second.save();
 
-    const third = await openMutantCache(dir, 'rev-1');
+    const third = await openMutantCache(dir);
     expect(third.get(MUTANT)).toBe('killed');
     expect(third.get(other)).toBeUndefined();
     // A run that tried no mutant (a red suite, or no code changed) learned nothing, so it keeps what is there.
-    await (await openMutantCache(dir, 'rev-1')).save();
+    await (await openMutantCache(dir)).save();
     expect(await lookup(dir)).toBe('killed');
   });
 
@@ -118,25 +143,57 @@ describe('the mutant cache: a mutant outcome is reused only when nothing it coul
     expect(await lookup(dir)).toBe('killed');
   });
 
-  it('measures a game in a subfolder of its repository by its own files only', async () => {
-    const tree = tempTree('bs-mutant-cache-');
-    const root = join(tree, 'repo');
-    await write(root, {
-      '.gitignore': '.boardsmith/\n',
-      'games/bid/src/rules.ts': RULES,
-      'games/bid/tests/rules.test.ts': "it('fee', () => {});\n",
-      'games/other/src/rules.ts': 'export const o = 1;\n',
+  describe('a game in a subfolder of its repository depends on the whole repository', () => {
+    /** A repository holding two games, with the packages installed at its root, as a workspace has them. */
+    async function repository(): Promise<{ root: string; dir: string }> {
+      const tree = tempTree('bs-mutant-cache-');
+      const root = join(tree, 'repo');
+      await write(root, {
+        '.gitignore': '.boardsmith/\nnode_modules/\n',
+        'package-lock.json': '{ "lockfileVersion": 3 }\n',
+        'tsconfig.base.json': '{ "compilerOptions": { "strict": true } }\n',
+        'design/SKETCH.md': 'a file outside the game that happens to share a bookkeeping name\n',
+        'games/bid/src/rules.ts': RULES,
+        'games/bid/tests/rules.test.ts': "it('fee', () => {});\n",
+        'games/bid/design/SKETCH.md': 'Session Lock: none\n',
+        'games/other/src/rules.ts': 'export const o = 1;\n',
+        'node_modules/.package-lock.json': installRecord('boardsmith'),
+        ...installedBoardsmith('1.0.0'),
+      });
+      initRepo(root);
+      commitAll(root, 'base');
+      return { root, dir: join(root, 'games', 'bid') };
+    }
+
+    it('reuses an outcome after a bookkeeping commit inside the game folder', async () => {
+      const { root, dir } = await repository();
+      const change = { 'games/bid/design/SKETCH.md': 'Session Lock: none\n\n1. deal - verified\n' };
+      expect(await afterChange(dir, root, change, 'chunk-deal/step-close')).toEqual({ change: Object.keys(change)[0], outcome: 'killed' });
     });
-    initRepo(root);
-    commitAll(root, 'base');
-    const dir = join(root, 'games', 'bid');
-    await record(dir, 'killed');
-    await write(root, { 'games/other/src/rules.ts': 'export const o = 2;\n' });
-    commitAll(root, 'another game changed');
-    expect(await lookup(dir)).toBe('killed');
-    await write(dir, { 'tests/rules.test.ts': "it('fee 2', () => {});\n" });
-    commitAll(root, 'this game changed');
-    expect(await lookup(dir)).toBeUndefined();
+
+    it('runs the mutant again when anything outside the game folder changed: a shared config, the root lockfile, a sibling, or a bookkeeping name outside the game', async () => {
+      const changes: Array<Record<string, string>> = [
+        { 'tsconfig.base.json': '{ "compilerOptions": { "strict": false } }\n' },
+        { 'package-lock.json': '{ "lockfileVersion": 3, "packages": {} }\n' },
+        { 'games/other/src/rules.ts': 'export const o = 2;\n' },
+        { 'design/SKETCH.md': 'changed outside the game\n' },
+      ];
+      for (const change of changes) {
+        const { root, dir } = await repository();
+        expect(await afterChange(dir, root, change, 'outside the game')).toEqual({ change: Object.keys(change)[0], outcome: undefined });
+      }
+    });
+
+    it('runs the mutant again when the install above the game, or the BoardSmith it resolves to, changed', async () => {
+      const installs: Array<Record<string, string>> = [
+        { 'node_modules/.package-lock.json': installRecord('boardsmith', 'left-pad') },
+        installedBoardsmith('2.0.0'),
+      ];
+      for (const change of installs) {
+        const { root, dir } = await repository();
+        expect(await afterChange(dir, root, change, undefined)).toEqual({ change: Object.keys(change)[0], outcome: undefined });
+      }
+    });
   });
 
   it('leaves out exactly the design records the bs- skills write after the code is verified', () => {
@@ -154,14 +211,38 @@ describe('the mutant cache: a mutant outcome is reused only when nothing it coul
   });
 });
 
+describe('gameBoardsmithRoot: the BoardSmith a game loads', () => {
+  it('is resolved from the game folder upwards, the way Node resolves an import, following a link to a checkout', async () => {
+    const tree = tempTree('bs-mutant-cache-game-');
+    const checkout = join(tree, 'boardsmith');
+    await write(checkout, { 'package.json': JSON.stringify({ name: 'boardsmith', version: '0.0.0-dev' }) });
+    const root = join(tree, 'repo');
+    await write(root, { ...installedBoardsmith('1.0.0'), 'games/bid/package.json': '{}\n' });
+    const dir = join(root, 'games', 'bid');
+    expect(await gameBoardsmithRoot(dir)).toBe(await fs.realpath(join(root, 'node_modules', 'boardsmith')));
+
+    await fs.mkdir(join(dir, 'node_modules'), { recursive: true });
+    await fs.symlink(checkout, join(dir, 'node_modules', 'boardsmith'), 'dir');
+    expect(await gameBoardsmithRoot(dir)).toBe(await fs.realpath(checkout));
+  });
+
+  it('is undefined for a game with no BoardSmith installed anywhere above it', async () => {
+    const tree = tempTree('bs-mutant-cache-game-');
+    const dir = join(tree, 'game');
+    await write(dir, { 'package.json': '{}\n' });
+    expect(await gameBoardsmithRoot(dir)).toBeUndefined();
+  });
+});
+
 describe('toolRevision: which BoardSmith produced an outcome', () => {
   it('names a checkout by its commit and its uncommitted changes, so an edit to BoardSmith is a new revision', async () => {
     const tree = tempTree('bs-mutant-cache-tool-');
     const root = join(tree, 'boardsmith');
-    await write(root, { 'src/engine.ts': 'export const e = 1;\n' });
+    await write(root, { 'package.json': JSON.stringify({ name: 'boardsmith', version: '0.0.0-dev' }), 'src/engine.ts': 'export const e = 1;\n' });
     initRepo(root);
     commitAll(root, 'engine');
     const clean = await toolRevision(root);
+    expect(clean).toMatch(/^boardsmith@0\.0\.0-dev [0-9a-f]{40} [0-9a-f]{64}$/);
     expect(await toolRevision(root)).toBe(clean);
 
     await write(root, { 'src/engine.ts': 'export const e = 2;\n' });
@@ -179,10 +260,10 @@ describe('toolRevision: which BoardSmith produced an outcome', () => {
     expect(await toolRevision(root)).not.toBe(clean);
   });
 
-  it('names an installed copy, which has no git of its own, by its version and engine revision', async () => {
+  it('names an installed copy, which has no git of its own, by its version', async () => {
     const tree = tempTree('bs-mutant-cache-tool-');
     const root = join(tree, 'installed');
-    await write(root, { 'package.json': '{}\n' });
-    expect(await toolRevision(root)).toMatch(/^boardsmith@.+ engine \d+$/);
+    await write(root, { 'package.json': JSON.stringify({ name: 'boardsmith', version: '3.1.4' }) });
+    expect(await toolRevision(root)).toBe('boardsmith@3.1.4');
   });
 });

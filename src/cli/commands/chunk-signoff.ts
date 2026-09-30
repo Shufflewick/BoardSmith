@@ -59,8 +59,10 @@ import { verifiedProblem } from '../lib/verify-result.js';
  *     information, not a refusal. An edit nothing accounts for (a signed chunk reworked without a
  *     reopen, or an edit left behind by nobody's chunk) voids every sign-off naming that file.
  *   - A sign-off is a done claim, so it is refused unless the commit checked out, on a clean
- *     tree, passed `boardsmith verify` (#452, `verifiedProblem`). Commit the chunk's work, run
- *     `boardsmith verify`, then sign off.
+ *     tree, passed `boardsmith verify` with this chunk's whole change measured (#452,
+ *     `verifiedProblem`): the result's base is the chunk's verify base or a commit before it, so a
+ *     `--base HEAD` run, which mutates nothing, does not count. Commit the chunk's work, run
+ *     `boardsmith verify --chunk <slug>`, then sign off.
  *   - A chunk verified before this gate existed gets through it once, by `boardsmith
  *     chunk-gate-transition` (#397): the designer records it in `design/GATE-TRANSITION.md`, and
  *     the chunk's block reads `Basis: transition`. That basis counts only for a chunk the ledger
@@ -954,8 +956,9 @@ export async function recordSignoff(slug: string, options: SignoffOptions): Prom
   // audit (`boardsmith constraint-check <slug>`) and run again in the accumulated suite.
   const constraints = await checkConstraints(dir, { slug });
   // #452: nobody says a chunk is done on a word. HEAD, on a clean tree, must have passed
-  // `boardsmith verify`: the full suite, typecheck, build, validate and the mutation check.
-  const unverified = await verifiedProblem(dir);
+  // `boardsmith verify` with the chunk's whole change measured: the full suite, typecheck, build,
+  // validate and the mutation check of everything since the chunk began.
+  const unverified = await verifiedProblem(dir, slug);
   const problems = [...signoffProblems(record, ctx), ...constraints.refusals, ...(unverified ? [unverified] : [])];
   if (problems.length) {
     throw new Error(`${slug} was not signed off:\n${problems.map((p) => `  - ${p}`).join('\n')}`);

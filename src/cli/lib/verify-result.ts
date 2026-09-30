@@ -2,6 +2,7 @@ import { promises as fs } from 'node:fs';
 import { join } from 'node:path';
 import { ENGINE_REVISION } from '../../contract/index.js';
 import { boardsmithPackageRoot, readBoardsmithVersion } from './boardsmith-version.js';
+import { chunkVerifyBase } from './chunk-commits.js';
 import { gitOutput as git } from './git-output.js';
 
 /**
@@ -15,6 +16,13 @@ import { gitOutput as git } from './git-output.js';
  * `chunk-gate-transition` ask: does HEAD, on a clean tree, have a passing result? A result for
  * another commit, a result made on a dirty tree, and a dirty tree now all say no, each with what to
  * run next.
+ *
+ * For a chunk (`chunk-signoff <slug>`, `verify --check --chunk <slug>`) it asks one thing more: did
+ * the result measure the chunk's whole change? Its base must be the chunk's verify base, the
+ * commit before the chunk's first `chunk-<slug>/` commit, or a commit before that. Without this,
+ * `boardsmith verify --base HEAD` (which mutates nothing, and passes) would let anyone sign a chunk
+ * off. `chunk-gate-transition` builds no chunk, so it asks only the plain question, and the
+ * `--base HEAD` result it accepts satisfies no chunk's sign-off.
  *
  * ADDING A CHECK (the in-browser smoke test, #453, is the next one): add its name to
  * `VERIFY_CHECK_NAMES` and its runner to `VERIFY_CHECKS` in `commands/verify.ts`, which the compiler
@@ -57,6 +65,8 @@ export interface VerifyResult {
   cleanTree: boolean;
   /** Where the mutation check's diff started: the ref asked for, and the merge base it resolved to. */
   base: { ref: string; commit: string };
+  /** The chunk `--chunk` named, whose verify base is `base`; null when the run was not for a chunk. */
+  chunk: string | null;
   /** The BoardSmith that ran the checks. `commit` is null for an installed copy, which has no git. */
   boardsmith: { version: string; engineRevision: number; commit: string | null };
   finishedAt: string;
@@ -84,6 +94,7 @@ export function buildVerifyResult(input: {
   commit: string;
   cleanTree: boolean;
   base: { ref: string; commit: string };
+  chunk?: string | null;
   checks: VerifyCheckResult[];
   boardsmithCommit?: string | null;
 }): VerifyResult {
@@ -92,6 +103,7 @@ export function buildVerifyResult(input: {
     commit: input.commit,
     cleanTree: input.cleanTree,
     base: input.base,
+    chunk: input.chunk ?? null,
     boardsmith: {
       version: readBoardsmithVersion(),
       engineRevision: ENGINE_REVISION,
@@ -196,11 +208,35 @@ export async function checkoutState(projectDir: string): Promise<{ commit: strin
   return { commit, clean: status.trim() === '' };
 }
 
+/** Whether `commit` is `descendant` or one of its ancestors. A commit git does not know is neither. */
+async function isAncestor(projectDir: string, commit: string, descendant: string): Promise<boolean> {
+  return git(projectDir, ['merge-base', '--is-ancestor', commit, descendant]).then(
+    () => true,
+    () => false,
+  );
+}
+
+/**
+ * Why `result` does not cover chunk `slug`'s change, or undefined when it does: its base is the
+ * chunk's verify base or a commit before it. Throws, saying what to do, when the chunk has no
+ * commit yet.
+ */
+async function chunkCoverageProblem(projectDir: string, slug: string, result: VerifyResult): Promise<string | undefined> {
+  const chunkBase = await chunkVerifyBase(projectDir, slug);
+  if (await isAncestor(projectDir, result.base.commit, chunkBase)) return undefined;
+  return (
+    `The \`boardsmith verify\` result for ${short(result.commit)} measured the change from ${result.base.ref} ` +
+    `(${short(result.base.commit)}), which is not where chunk "${slug}" started (${short(chunkBase)}) or a commit before it, ` +
+    `so its mutation check did not cover the chunk's code. Run \`boardsmith verify --chunk ${slug}\`.`
+  );
+}
+
 /**
  * Why HEAD in `projectDir` is not verified, or undefined when it is: the tree is clean and a
- * passing `boardsmith verify` result for HEAD, made on a clean tree, is on file.
+ * passing `boardsmith verify` result for HEAD, made on a clean tree, is on file. With `chunk`, the
+ * result must also have measured that chunk's whole change (`chunkCoverageProblem`).
  */
-export async function verifiedProblem(projectDir: string): Promise<string | undefined> {
+export async function verifiedProblem(projectDir: string, chunk?: string): Promise<string | undefined> {
   const state = await checkoutState(projectDir);
   if ('problem' in state) return state.problem;
   if (!state.clean) {
@@ -216,5 +252,11 @@ export async function verifiedProblem(projectDir: string): Promise<string | unde
   if (result === 'unreadable') {
     return `The \`boardsmith verify\` result for ${short(state.commit)} could not be read. Run \`boardsmith verify\` again.`;
   }
-  return resultProblem(result, state.commit);
+  const problem = resultProblem(result, state.commit);
+  if (problem !== undefined || chunk === undefined) return problem;
+  try {
+    return await chunkCoverageProblem(projectDir, chunk, result);
+  } catch (error) {
+    return (error as Error).message;
+  }
 }

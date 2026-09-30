@@ -40,6 +40,8 @@ describe('buildVerifyResult', () => {
     expect(r.commit).toBe(HEAD);
     expect(r.cleanTree).toBe(true);
     expect(r.base).toEqual({ ref: 'main', commit: 'b'.repeat(40) });
+    expect(r.chunk).toBeNull();
+    expect(result({ chunk: 'deal' }).chunk).toBe('deal');
     expect(r.checks.map((c) => c.name)).toEqual([...VERIFY_CHECK_NAMES]);
     expect(r.boardsmith.version).toMatch(/\d+\.\d+/);
     expect(typeof r.boardsmith.engineRevision).toBe('number');
@@ -151,5 +153,71 @@ describe('verifiedProblem: the one question every done claim asks', () => {
     await fs.mkdir(join(dir, '.boardsmith', 'verify'), { recursive: true });
     await fs.writeFile(verifyResultPath(dir, head), '{ not json');
     expect(await verifiedProblem(dir)).toMatch(/could not be read.*boardsmith verify/s);
+  });
+
+  /**
+   * For a chunk, the result must also have measured the chunk's whole change: its base is the
+   * chunk's verify base (the commit before its first `chunk-<slug>/` commit) or a commit before it.
+   * Otherwise `boardsmith verify --base HEAD` would give a passing result that mutated nothing.
+   */
+  describe('for a chunk, the result must cover the chunk\'s change', () => {
+    /** A project whose chunk `deal` started after two commits, and whose HEAD is a bookkeeping commit. */
+    async function chunkProject(): Promise<{ dir: string; head: string; commits: Record<string, string> }> {
+      const dir = await project();
+      const first = git(dir, 'rev-parse', 'HEAD').trim();
+      await fs.writeFile(join(dir, 'rules.ts'), 'export const x = 2;\n');
+      const chunkBase = commitAll(dir, 'setup done');
+      await fs.writeFile(join(dir, 'rules.ts'), 'export const x = 3;\n');
+      const spec = commitAll(dir, 'chunk-deal/step-spec');
+      await fs.writeFile(join(dir, 'rules.ts'), 'export const x = 4;\n');
+      commitAll(dir, 'chunk-deal/step-build');
+      const head = commitAll(dir, 'chunk-deal/step-close');
+      return { dir, head, commits: { first, chunkBase, spec } };
+    }
+
+    const recorded = async (dir: string, head: string, base: string, chunk: string | null = null) => {
+      await writeVerifyResult(dir, result({ commit: head, base: { ref: chunk ? `base of chunk-${chunk}` : 'HEAD', commit: base }, chunk }));
+    };
+
+    it('accepts a result whose base is the chunk\'s verify base', async () => {
+      const { dir, head, commits } = await chunkProject();
+      await recorded(dir, head, commits.chunkBase, 'deal');
+      expect(await verifiedProblem(dir, 'deal')).toBeUndefined();
+    });
+
+    it('accepts a result whose base is a commit before the chunk\'s verify base, since that covers the chunk\'s change too', async () => {
+      const { dir, head, commits } = await chunkProject();
+      await recorded(dir, head, commits.first);
+      expect(await verifiedProblem(dir, 'deal')).toBeUndefined();
+    });
+
+    it('refuses a result made with --base HEAD, naming the command to run', async () => {
+      const { dir, head } = await chunkProject();
+      await recorded(dir, head, head);
+      const problem = await verifiedProblem(dir, 'deal');
+      expect(problem).toMatch(/measured the change from HEAD/);
+      expect(problem).toMatch(/not where chunk "deal" started/);
+      expect(problem).toContain('Run `boardsmith verify --chunk deal`');
+    });
+
+    it('refuses a result whose base is inside the chunk\'s own commits', async () => {
+      const { dir, head, commits } = await chunkProject();
+      await recorded(dir, head, commits.spec);
+      expect(await verifiedProblem(dir, 'deal')).toContain('Run `boardsmith verify --chunk deal`');
+    });
+
+    it('still asks the plain questions first: no result, a dirty tree', async () => {
+      const { dir, head } = await chunkProject();
+      expect(await verifiedProblem(dir, 'deal')).toMatch(/No `boardsmith verify` result/);
+      await recorded(dir, head, head);
+      await fs.writeFile(join(dir, 'rules.ts'), 'export const x = 5;\n');
+      expect(await verifiedProblem(dir, 'deal')).toMatch(/uncommitted changes/);
+    });
+
+    it('says the chunk has no commit yet, and how to name one, when no commit is the chunk\'s', async () => {
+      const { dir, head } = await chunkProject();
+      await recorded(dir, head, head);
+      expect(await verifiedProblem(dir, 'combat')).toMatch(/No commit for chunk "combat" yet.*chunk-combat\/step-<name>/s);
+    });
   });
 });

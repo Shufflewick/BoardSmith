@@ -1,5 +1,5 @@
 /**
- * `boardsmith verify [--base <git-ref>]` and `boardsmith verify --check` (#452).
+ * `boardsmith verify [--base <git-ref> | --chunk <slug>]` and `boardsmith verify --check [--chunk <slug>]` (#452).
  *
  * The mechanical checks a game needs before anyone may say "done" used to be five separate
  * commands, asked for in prose, and nothing checked that a report of "all green" was backed by a
@@ -18,7 +18,10 @@
  *
  * The base is the merge base of HEAD with `--base`, or with the main branch (`main`, else `master`).
  * On the main branch itself that merge base is HEAD, which measures no change, so without `--base`
- * the mutation check fails there and says to pass the commit the work started from.
+ * the mutation check fails there and says to pass the commit the work started from. For chunk work
+ * `--chunk <slug>` sets the base to the chunk's verify base, the commit before its first
+ * `chunk-<slug>/` commit (`lib/chunk-commits.ts`), wherever the chunk is built, and records the
+ * chunk in the result.
  *
  * A tree with uncommitted changes is refused before any check runs: a result is tied to a commit.
  * The result goes to `.boardsmith/verify/<commit>.json` (`lib/verify-result.ts`), with whether the
@@ -26,16 +29,19 @@
  * when the tree changed during the run; such a run never replaces a clean passing result on file.
  *
  * `--check` runs nothing. It exits 0 only when HEAD, on a clean tree, has a passing result, and
- * otherwise says what to run. `chunk-signoff` and `chunk-gate-transition` ask the same question
- * (`verifiedProblem`) before they record a done claim.
+ * otherwise says what to run. With `--chunk <slug>` the result must also have measured that chunk's
+ * whole change: its base is the chunk's verify base or a commit before it, so a `--base HEAD` run,
+ * which mutates nothing, cannot stand in for it. `chunk-signoff <slug>` asks that question, and
+ * `chunk-gate-transition`, which builds no chunk, the plain one (`verifiedProblem`).
  */
 import { spawn } from 'node:child_process';
 import { existsSync, promises as fs } from 'node:fs';
 import { join, relative, resolve as pathResolve } from 'node:path';
 import chalk from 'chalk';
 import { boardsmithPackageRoot } from '../lib/boardsmith-version.js';
+import { chunkVerifyBase } from '../lib/chunk-commits.js';
 import { gitOutput as git } from '../lib/git-output.js';
-import { type MutantCache, openMutantCache, toolRevision } from '../lib/mutant-cache.js';
+import { type MutantCache, openMutantCache } from '../lib/mutant-cache.js';
 import { scratchDir } from '../lib/project-paths.js';
 import { testRunScopeProblem } from '../lib/test-run-scope.js';
 import { discardRecord, runVitestRecorded, testRunVerdict } from '../lib/vitest-run.js';
@@ -93,6 +99,21 @@ export async function resolveBase(projectDir: string, ref: string | undefined): 
         'Pass the branch or commit this work started from, e.g. --base main.',
     );
   }
+}
+
+/**
+ * The base a run measures from: `--chunk`'s verify base, else `resolveBase`. `given` says whether
+ * the caller named it, since a base that is HEAD by default measures nothing (`mutationNotTried`).
+ */
+async function runBase(projectDir: string, options: { base?: string; chunk?: string }): Promise<{ ref: string; commit: string; given: boolean }> {
+  if (options.chunk === undefined) return { ...(await resolveBase(projectDir, options.base)), given: options.base !== undefined };
+  if (options.base !== undefined) {
+    throw new Error(
+      `--chunk ${options.chunk} measures the change from where the chunk's work started, so --base does not apply. ` +
+        'Pass one of them.',
+    );
+  }
+  return { ref: `base of chunk-${options.chunk}`, commit: await chunkVerifyBase(projectDir, options.chunk), given: true };
 }
 
 /** Every file changed since the base, and the changed lines of each code file under `src/`. */
@@ -490,6 +511,7 @@ async function runChecks(
 export async function runVerify(options: {
   projectDir: string;
   base?: string;
+  chunk?: string;
   checks?: Readonly<Record<VerifyCheckName, CheckRunner>>;
   log?: (line: string) => void;
 }): Promise<{ result: VerifyResult; path: string | undefined }> {
@@ -497,8 +519,8 @@ export async function runVerify(options: {
   requireGameProject(projectDir);
   const head = await verifiableCommit(projectDir);
   await requireResultIgnored(projectDir);
-  const base = { ...(await resolveBase(projectDir, options.base)), given: options.base !== undefined };
-  const mutantCache = await openMutantCache(projectDir, await toolRevision(boardsmithPackageRoot()));
+  const base = await runBase(projectDir, options);
+  const mutantCache = await openMutantCache(projectDir);
   const checks = await runChecks(options.checks ?? VERIFY_CHECKS, {
     projectDir,
     head,
@@ -516,6 +538,7 @@ export async function runVerify(options: {
     commit: head,
     cleanTree,
     base: { ref: base.ref, commit: base.commit },
+    chunk: options.chunk,
     checks,
     boardsmithCommit: await currentBoardsmithCommit(),
   });
@@ -556,20 +579,23 @@ function printResult(result: VerifyResult, path: string | undefined, projectDir:
 }
 
 /**
- * `boardsmith verify [--base <ref>] [--check] [--project <dir>]`. Throws (a clean one-line message
- * through cli.ts) when it cannot run at all; sets a non-zero exit code when a check fails, when the
- * tree was not clean, or, with `--check`, when HEAD is not verified.
+ * `boardsmith verify [--base <ref> | --chunk <slug>] [--check] [--project <dir>]`. Throws (a clean
+ * one-line message through cli.ts) when it cannot run at all; sets a non-zero exit code when a
+ * check fails, when the tree was not clean, or, with `--check`, when HEAD is not verified.
  */
 export async function verifyCommand(
-  options: { base?: string; check?: boolean; project?: string },
+  options: { base?: string; chunk?: string; check?: boolean; project?: string },
   checks: Readonly<Record<VerifyCheckName, CheckRunner>> = VERIFY_CHECKS,
 ): Promise<void> {
   const projectDir = pathResolve(options.project ?? process.cwd());
   if (options.check) {
     if (options.base !== undefined) {
-      throw new Error('--check reads the result on file and runs nothing, so --base does not apply. Run `boardsmith verify --check` alone.');
+      throw new Error(
+        '--check reads the result on file and runs nothing, so --base does not apply. ' +
+          'Run `boardsmith verify --check`, with `--chunk <slug>` for a chunk.',
+      );
     }
-    const problem = await verifiedProblem(projectDir);
+    const problem = await verifiedProblem(projectDir, options.chunk);
     if (problem !== undefined) {
       console.error(chalk.red(problem));
       process.exitCode = 1;
@@ -577,11 +603,12 @@ export async function verifyCommand(
     }
     const state = await checkoutState(projectDir);
     const head = 'commit' in state ? short(state.commit) : 'HEAD';
-    console.log(chalk.green(`${head} passed \`boardsmith verify\` on a clean tree.`));
+    const covering = options.chunk === undefined ? '' : `, covering chunk "${options.chunk}"'s change`;
+    console.log(chalk.green(`${head} passed \`boardsmith verify\` on a clean tree${covering}.`));
     return;
   }
 
-  const { result, path } = await runVerify({ projectDir, base: options.base, checks });
+  const { result, path } = await runVerify({ projectDir, base: options.base, chunk: options.chunk, checks });
   printResult(result, path, projectDir);
   if (!result.passed || !result.cleanTree) process.exitCode = 1;
 }

@@ -27,9 +27,9 @@ import {
 } from './chunk-project.test-helper.js';
 
 
-/** Every sign-off here is made on a commit that passed `boardsmith verify` (#452), unless a test says otherwise. */
+/** Every sign-off here is made on a commit that passed `boardsmith verify --chunk <slug>` (#452), unless a test says otherwise. */
 async function signOff(slug: string, options: Parameters<typeof recordSignoff>[1]): ReturnType<typeof recordSignoff> {
-  await recordPassingVerify(options.project!);
+  await recordPassingVerify(options.project!, { chunk: slug });
   return recordSignoff(slug, options);
 }
 
@@ -555,7 +555,7 @@ describe('an edit to a shared file is accounted for by the chunk that made it (#
 describe('recordSignoff: a sign-off is a done claim, and needs a passing boardsmith verify for HEAD (#452)', () => {
   it('refuses a chunk whose project has no verify result for the commit checked out, touching nothing', async () => {
     const project = await makeProject([{ slug: 'deal' }]);
-    await recordPassingVerify(project);
+    await recordPassingVerify(project, { chunk: 'deal' });
     await fs.writeFile(join(project, 'src-change.ts'), 'export const more = 1;\n');
     await commitWithoutVerify(project);
     const before = await readChunk(project, 'deal');
@@ -565,7 +565,7 @@ describe('recordSignoff: a sign-off is a done claim, and needs a passing boardsm
 
   it('refuses while the working tree has uncommitted changes, even when HEAD passed', async () => {
     const project = await makeProject([{ slug: 'deal' }]);
-    await recordPassingVerify(project);
+    await recordPassingVerify(project, { chunk: 'deal' });
     await fs.writeFile(join(project, 'notes.md'), 'not committed\n');
     await expect(signOffUnverified(project)).rejects.toThrow(/uncommitted changes.*boardsmith verify/s);
   });
@@ -573,6 +573,31 @@ describe('recordSignoff: a sign-off is a done claim, and needs a passing boardsm
   it('refuses a project that is not a git repository, saying how to get a result', async () => {
     const project = await makeProject([{ slug: 'deal' }]);
     await expect(signOffUnverified(project)).rejects.toThrow(/not a git repository.*boardsmith verify/s);
+  });
+
+  /**
+   * The result must also have measured the chunk's change: `boardsmith verify --base HEAD` passes
+   * with nothing mutated, and a sign-off on that result would be a done claim no check backs.
+   */
+  it('refuses a result made with --base HEAD, and says to run boardsmith verify --chunk <slug>', async () => {
+    const project = await makeProject([{ slug: 'deal' }]);
+    await recordPassingVerify(project, { chunk: 'deal' });
+    await recordPassingVerify(project, { message: 'chunk-deal/step-close' });
+    await expect(signOffUnverified(project)).rejects.toThrow(/measured the change from HEAD.*Run `boardsmith verify --chunk deal`/s);
+  });
+
+  it('accepts a result whose base is where the chunk started', async () => {
+    const project = await makeProject([{ slug: 'deal' }]);
+    await recordPassingVerify(project, { chunk: 'deal' });
+    await expect(signOffUnverified(project)).resolves.toMatchObject({ basis: 'designer' });
+  });
+
+  it('accepts a result whose base is a commit before the chunk started', async () => {
+    const project = await makeProject([{ slug: 'deal' }]);
+    const before = await recordPassingVerify(project, { message: 'the project, before the chunk' });
+    commitAll(project, 'setup finished');
+    await recordPassingVerify(project, { chunk: 'deal', base: before });
+    await expect(signOffUnverified(project)).resolves.toMatchObject({ basis: 'designer' });
   });
 });
 

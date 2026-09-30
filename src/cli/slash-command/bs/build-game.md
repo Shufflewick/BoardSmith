@@ -162,7 +162,7 @@ Loop until there is nothing left to build or a stop condition fires
    `${CLAUDE_SKILL_DIR}/../bs-shared/orchestrate/chunk-dispatch.md` — its seven-field brief, its
    no-designer rule, and its return shape.
 5. **Consume each return by field name.** For a `closed` return, run Step 4's
-   `npx boardsmith verify --check` first, before writing anything: a chunk built in the main
+   `npx boardsmith verify --check --chunk <slug>` first, before writing anything: a chunk built in the main
    checkout shares its tree with the run log, so filling the log first would leave the tree dirty
    and the check would refuse every closed chunk. Then fill that entry's `Outcome`/`Detail` (a
    refused check is recorded as not closed) and route on `outcome` per Step 4. A chunk built in its own worktree reaches the main checkout only through
@@ -180,10 +180,12 @@ nothing, if there is nothing visible yet. Do not announce each dispatch.
 
 ## Step 4: Routing a Return
 
-- **`closed`**: first run `npx boardsmith verify --check` (with `--project` set to the chunk's
-  worktree when it was built in one), before any write (Step 3 item 5). It exits zero only when the
-  chunk's last commit, on a clean tree, passed `boardsmith verify`: the full suite, typecheck, build, validate and the mutation
-  check. A non-zero exit means the claim of done is not backed by a run: re-dispatch the same chunk
+- **`closed`**: first run `npx boardsmith verify --check --chunk <slug>` (with `--project` set to
+  the chunk's worktree when it was built in one), before any write (Step 3 item 5). It exits zero
+  only when the chunk's last commit, on a clean tree, passed `boardsmith verify` with the chunk's
+  whole change measured: the full suite, typecheck, build, validate and the mutation check of
+  everything since the chunk began. A result from `--base HEAD`, which mutates nothing, is
+  refused. A non-zero exit means the claim of done is not backed by a run: re-dispatch the same chunk
   with its message in the brief, and treat the chunk as unfinished, never as closed
   (`orchestrate/chunk-dispatch.md` "The Return Shape"). Then run `npx boardsmith chunk-check <slug>` (with `--project` set to the chunk's
   worktree when it was built in one, then `npx boardsmith chunk-merge <slug>` from the main checkout). A non-zero exit that names the
@@ -201,9 +203,9 @@ nothing, if there is nothing visible yet. Do not announce each dispatch.
   conversation; if the designer is not here to give it, the gate stays open (see "Who Answers a
   Gate"). A `playtest` gate's sign-off is recorded with `boardsmith chunk-signoff`, and a waiver
   with `boardsmith chunk-waiver`, only from what the designer said. First commit what the gate
-  wrote and run `npx boardsmith verify --base <the chunk's verify base>` (the command is in
-  `state-machine.md` "Git Protocol") in the chunk's checkout: `chunk-signoff` refuses a commit with
-  no passing result. Then **re-dispatch the same chunk** with
+  wrote and run `npx boardsmith verify --chunk <slug>` (`state-machine.md` "Git Protocol") in the
+  chunk's checkout: `chunk-signoff` refuses a commit with no passing result covering the chunk's
+  change. Then **re-dispatch the same chunk** with
   the answers in its digest — the work never happens in this thread
   (`orchestrate/chunk-dispatch.md` "After the Return").
 - **`filing`** — handle it per `${CLAUDE_SKILL_DIR}/../bs-shared/orchestrate/filings.md`: confirm,

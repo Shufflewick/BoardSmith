@@ -268,6 +268,61 @@ describe('boardsmith verify: a claim of green is refused when a test outside the
   });
 });
 
+/**
+ * `--chunk <slug>` measures from the chunk's verify base, the commit before its first
+ * `chunk-<slug>/` commit, and a chunk's sign-off accepts only a result whose base is that commit or
+ * one before it. `--base HEAD` still passes (the gate transition builds nothing), but such a result
+ * satisfies no chunk's sign-off.
+ */
+describe('boardsmith verify --chunk <slug>: the base is where the chunk started', () => {
+  it('measures the change from the commit before the chunk\'s first commit, records the chunk, and the sign-off accepts the result', async () => {
+    const dir = await gameOnBranch(false);
+    const started = git(dir, 'rev-parse', 'main').trim();
+    await write(dir, { 'design/DECISIONS.md': '## Decision 1\n' });
+    commitAll(dir, 'chunk-deal/step-playtest');
+
+    const { result } = await runVerify({ projectDir: dir, chunk: 'deal', checks: CHECKS, log: () => {} });
+
+    expect(result.passed).toBe(true);
+    expect(result.base).toEqual({ ref: 'base of chunk-deal', commit: started });
+    expect(result.chunk).toBe('deal');
+    expect(check(result, 'mutation').counts).toMatchObject({ mutants: 3, killed: 3 });
+    expect(check(result, 'mutation').summary).toMatch(/^Every one of 3 mutants of the lines changed since base of chunk-deal/);
+    await expect(signoff(dir)).resolves.toMatchObject({ basis: 'designer' });
+  });
+
+  it('a --base HEAD result passes but satisfies no chunk\'s sign-off, and --check --chunk refuses it until --chunk has run', async () => {
+    const dir = await gameOnBranch(false);
+    const { result } = await runVerify({ projectDir: dir, base: 'HEAD', checks: CHECKS, log: () => {} });
+    expect(result.passed).toBe(true);
+    expect(result.chunk).toBeNull();
+    await expect(signoff(dir)).rejects.toThrow(/measured the change from HEAD.*Run `boardsmith verify --chunk deal`/s);
+
+    const refused = await spawnCli(['verify', '--check', '--chunk', 'deal', '--project', dir]);
+    expect(refused.code).toBe(1);
+    expect(refused.stderr).toMatch(/not where chunk "deal" started.*Run `boardsmith verify --chunk deal`/s);
+
+    await runVerify({ projectDir: dir, chunk: 'deal', checks: CHECKS, log: () => {} });
+    const accepted = await spawnCli(['verify', '--check', '--chunk', 'deal', '--project', dir]);
+    expect(accepted.stderr).toBe('');
+    expect(accepted.code).toBe(0);
+    expect(accepted.stdout).toMatch(/passed `boardsmith verify` on a clean tree, covering chunk "deal"/);
+  });
+
+  it('refuses a chunk with no commit yet, saying how to name one, and refuses --chunk together with --base', async () => {
+    const dir = await gameOnBranch(false);
+    await expect(runVerify({ projectDir: dir, chunk: 'combat', checks: CHECKS, log: () => {} })).rejects.toThrow(
+      /No commit for chunk "combat" yet.*chunk-combat\/step-<name>/s,
+    );
+    await expect(runVerify({ projectDir: dir, chunk: 'deal', base: 'main', checks: CHECKS, log: () => {} })).rejects.toThrow(
+      /--chunk deal.*--base does not apply/s,
+    );
+    const both = await spawnCli(['verify', '--chunk', 'deal', '--base', 'main', '--project', dir]);
+    expect(both.code).toBe(1);
+    expect(both.stderr).toMatch(/--base does not apply/);
+  });
+});
+
 /** `checks` with a build that writes an uncommitted file into the project while verify runs. */
 function dirtiesTheTree<T extends object>(dir: string, checks: T): T {
   return {
