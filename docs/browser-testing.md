@@ -383,6 +383,7 @@ markers this page documents, so it keeps up with any game without knowing it:
   two of its corners is such a surface, and is aimed at the same way. Nothing in
   the game needs to change for this: the hook already says which choice the
   surface stands for, and `aria-disabled` already says it is refused. An empty text
+<<<<<<< HEAD
   or number field (the panel names its pick in `data-bs-pick`) is filled with the
   value the spec's `inputs` give that field, when they give one; see
   [Values the game checks](#values-the-game-checks-inputs) (#470). Otherwise an
@@ -397,6 +398,23 @@ markers this page documents, so it keeps up with any game without knowing it:
   "kindle"`).
 - A press a toast lies over waits for the toast to go, as a player would, then
   presses again.
+=======
+  field is filled with "smoke test" and an empty number field with a value its
+  own `min`, `max` and `step` accept: its least value, else 1 (#465). When the
+  game refuses that number with its own words (a `validate` message, or a
+  refusal it throws for the player to read), the walk takes the action again
+  with the next number up, three numbers in all, and neither the refusal nor the
+  error toast that repeats it is a problem (#466). A failure the engine words as
+  an error in the game's rules is a crash, and is reported at once. Each press is
+  narrated (`smoke step 4: pressing "Done" for "kindle"`).
+- A press a toast lies over reads the toast (an error toast is a problem like
+  any other), waits for it to go, as a player would, then presses again. A
+  control or panel button a redraw takes away for a moment is looked for again
+  until it comes back; one still gone after 5 seconds is reported. A control the
+  walk can only see by scrolling it out from under a bar fixed along the edge of
+  the page (the action panel) is scrolled to the middle, the top or the bottom
+  until it shows.
+>>>>>>> main
 - The walk gives up on an open action, reports it, and presses its Cancel when
   the panel offers nothing to press, when three presses in a row change nothing,
   when a press brings the panel back to a state it showed before (the walk
@@ -425,16 +443,27 @@ markers this page documents, so it keeps up with any game without knowing it:
   focused, then Enter (#457). Any other control is clicked, including a visible
   one that takes no pointer, so a control a sighted mouse player can see but not
   press fails the walk, as does one something covers, or one that goes away
-  before the press lands.
+  before the press lands. On the board the walk points the mouse itself (#468):
+  it clicks the first point of the control where the control, not something on
+  top of it, is under the pointer (so a card partly under a tray is clicked
+  where it shows), follows a control that moves when pointed at until it
+  settles, and clicks one that never stands still where it is. Just before a
+  press the walk finds the control again by what it stands for and marks that
+  element, so a redraw that moved another element into its place is not pressed
+  by mistake, and a click that would land on anything else at that instant is
+  stopped before the page sees it, as Playwright's own click does, and tried
+  again. A click that reaches nothing in the game's frame (the page around the
+  game has something over it there) fails the press rather than passing it.
 - While a modal dialog is open (`[aria-modal="true"]`, or a `<dialog>` shown
   modally), it is all a player can reach, so it is all the walk presses (#461).
   It presses each control in the dialog once, whatever its place: when one
   closes the dialog with others still unpressed (a Close that comes first), the
   walk opens the dialog again with the board control that opened it, up to
   twice per control. Once every control has been pressed, it closes the dialog
-  as a player would, with the control that closed it before, else Escape. A
-  dialog still open after Escape fails the walk: a player in it has no way back
-  to the game.
+  as a player would, with a control that closed a dialog before, else Escape. A
+  dialog that control leaves open fails the walk (a player who presses it stays
+  in the dialog), and the walk presses Escape instead; a dialog still open after
+  Escape fails it too: a player in it has no way back to the game.
 - No press or read of an element waits longer than 5 seconds, and Playwright
   bounds anything else at 15 (#464). A step that cannot go on is reported with
   its number and its deal, and ends that deal's walk; it never waits out the
@@ -479,7 +508,9 @@ defineSmokeTest({
 The walk requires every listed action across all its deals together, so the
 second seed above is there for the action the first deal does not offer. To
 find one, deal seeds in `boardsmith dev`: Table setup shows the seed of the game
-on screen and deals a new game from any seed typed there.
+on screen and deals a new game from any seed typed there. `boardsmith smoke
+--seed 17` (or `--seed 17 23`) walks those deals instead of the spec's, without
+editing it, and `--seed smoke/3` walks again the third game a failing run dealt.
 
 A world is dealt by `boardsmith dev` from the one seed it gives that world, so a
 world's spec names no `seed`, and the check fails one that does.

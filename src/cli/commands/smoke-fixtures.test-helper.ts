@@ -402,22 +402,35 @@ const lit = ref(false);
  *
  * With `closeFirst`, as one-two-punch's has it, "Close discards" comes before "Sort", and the opener
  * keeps its label, so a walk reaches "Sort" only by opening the dialog again with the same button.
+ *
+ * With `brokenCopy`, a copy of the viewer for the opponent's discards comes to the board once both
+ * of the game's actions have resolved (so the walk has taken everything, and nothing else is left
+ * for it to do): "Look through the opponent's discards" opens the dialog "Opponent's discards",
+ * whose "Close discards" marks the pile looked through but never closes the dialog, the copy's bug.
+ * Escape closes it. A walk that presses a "Close discards" because one closed a dialog before, and
+ * never notices that this one did not, presses it until it runs out of things to do, and passes.
  */
-export function boardWithDialogs(options: { rulesStayOpen: boolean; closeFirst?: boolean }): Record<string, string> {
+export function boardWithDialogs(options: { rulesStayOpen: boolean; closeFirst?: boolean; brokenCopy?: boolean }): Record<string, string> {
   const discards = ['<button type="button" @click="sorted = !sorted">Sort</button>', '<button type="button" @click="closeDiscards">Close discards</button>'];
   if (options.closeFirst) discards.reverse();
   const opener = options.closeFirst ? 'Look through discards' : "{{ looked ? 'Look through discards again' : 'Look through discards' }}";
+  const copy = options.brokenCopy
+    ? `\n    <button v-if="resolved.size >= 2" type="button" @click="show('opponent')">Look through the opponent's discards</button>`
+    : '';
+  const copyDialog = options.brokenCopy ? `\n        <button v-if="open === 'opponent'" type="button" @click="looked = true">Close discards</button>` : '';
   return {
     'src/ui/components/GameTable.vue': `<script setup lang="ts">
 import { nextTick, onMounted, onUnmounted, ref } from 'vue';
 
-const open = ref<'discards' | 'rules' | null>(null);
+const open = ref<'discards' | 'rules' | 'opponent' | null>(null);
 const looked = ref(false);
 const sorted = ref(false);
 const plans = ref<string[]>([]);
+const resolved = ref(new Set<string>());
 const dialog = ref<HTMLElement | null>(null);
+const names = { discards: 'Discards', rules: 'Rules', opponent: "Opponent's discards" };
 
-async function show(which: 'discards' | 'rules') {
+async function show(which: 'discards' | 'rules' | 'opponent') {
   open.value = which;
   await nextTick();
   dialog.value?.focus();
@@ -429,8 +442,17 @@ function closeDiscards() {
 function onKey(event: KeyboardEvent) {
   if (event.key === 'Escape' && ${options.rulesStayOpen ? "open.value !== 'rules'" : 'true'}) open.value = null;
 }
-onMounted(() => window.addEventListener('keydown', onKey));
-onUnmounted(() => window.removeEventListener('keydown', onKey));
+function onResolved(event: Event) {
+  resolved.value.add((event as CustomEvent<{ action: string }>).detail.action);
+}
+onMounted(() => {
+  window.addEventListener('keydown', onKey);
+  window.addEventListener('boardsmith:action-resolved', onResolved);
+});
+onUnmounted(() => {
+  window.removeEventListener('keydown', onKey);
+  window.removeEventListener('boardsmith:action-resolved', onResolved);
+});
 </script>
 
 <template>
@@ -438,14 +460,14 @@ onUnmounted(() => window.removeEventListener('keydown', onKey));
     <button type="button" @click="show('discards')">${opener}</button>
     <button type="button" @click="show('rules')">Read the rules</button>
     <button type="button" @click="plans.push('A')">Plan A</button>
-    <button type="button" @click="plans.push('B')">Plan B</button>
+    <button type="button" @click="plans.push('B')">Plan B</button>${copy}
     <p>Planned: {{ plans.join(', ') || 'nothing' }}</p>
     <div v-if="open" class="scrim">
-      <div ref="dialog" role="dialog" aria-modal="true" tabindex="-1" :aria-label="open === 'discards' ? 'Discards' : 'Rules'">
+      <div ref="dialog" role="dialog" aria-modal="true" tabindex="-1" :aria-label="names[open]">
         <template v-if="open === 'discards'">
           ${discards.join('\n          ')}
         </template>
-        <p v-else>Play a card or draw one.</p>
+        <p v-else-if="open === 'rules'">Play a card or draw one.</p>${copyDialog}
       </div>
     </div>
   </div>
@@ -475,6 +497,63 @@ const gone = ref(false);
 <template>
   <div class="board">
     <button v-if="!gone" type="button" @pointerenter="gone = true">Shy button</button>
+  </div>
+</template>
+
+<style scoped>
+.board { width: 320px; height: 200px; }
+</style>
+`,
+    'src/ui/uis.ts': PLAYERS_GET_THE_TABLE,
+  };
+}
+
+/**
+ * A BOARD CONTROL THAT IS DISABLED BY THE TIME IT IS PRESSED: "Timid button" is redrawn as a disabled
+ * button, a new element with the same label, the moment the pointer is over it, so the control the walk
+ * found enabled is disabled when the walk finds it again to press it, and stays so.
+ */
+export function boardWithATimidControl(): Record<string, string> {
+  return {
+    'src/ui/components/GameTable.vue': `<script setup lang="ts">
+import { ref } from 'vue';
+
+const shy = ref(false);
+</script>
+
+<template>
+  <div class="board">
+    <button v-if="!shy" type="button" @pointerenter="shy = true">Timid button</button>
+    <button v-else type="button" disabled>Timid button</button>
+  </div>
+</template>
+
+<style scoped>
+.board { width: 320px; height: 200px; }
+</style>
+`,
+    'src/ui/uis.ts': PLAYERS_GET_THE_TABLE,
+  };
+}
+
+/**
+ * A BOARD CONTROL THAT REPLACES THE GAME'S FRAME: "Start over" puts a new game frame in place of the
+ * one it is pressed in, as the page around the game does when the game restarts, so the frame the
+ * walk pressed in is gone the moment the press lands. The new frame is never handed the game, so the
+ * walk finds nothing offered in it and stops that deal.
+ */
+export function boardThatReplacesItsFrame(): Record<string, string> {
+  return {
+    'src/ui/components/GameTable.vue': `<script setup lang="ts">
+function startOver() {
+  const frame = window.parent.document.querySelector('iframe')!;
+  frame.replaceWith(frame.cloneNode() as HTMLIFrameElement);
+}
+</script>
+
+<template>
+  <div class="board">
+    <button type="button" @click="startOver">Start over</button>
   </div>
 </template>
 
@@ -613,6 +692,63 @@ describe('the fields game', () => {
  */
 export function pointerAimedGame(): Record<string, string> {
   return {
+    ...fieldRules(),
+    'src/ui/components/GameTable.vue': `<script setup lang="ts">
+import { computed, ref } from 'vue';
+import { candidateAttrs, useBoardInteraction } from 'boardsmith/ui';
+
+const board = useBoardInteraction();
+const cursor = ref({ row: 2, col: 2 });
+const name = computed(() => \`r\${cursor.value.row}c\${cursor.value.col}\`);
+const choosing = computed(() => board.currentAction === 'claim' && board.currentPickName === 'cell');
+// The board knows a candidate by its element id; the panel names each cell's candidate by the cell's name.
+const target = computed(() => board.validElements.find((candidate) => candidate.display === name.value));
+const refused = computed(() => target.value === undefined || target.value.disabled !== undefined);
+
+function aim(event: PointerEvent) {
+  const box = (event.currentTarget as HTMLElement).getBoundingClientRect();
+  const at = (offset: number, size: number) => Math.min(9, Math.max(0, Math.floor((offset / size) * 10)));
+  cursor.value = { row: at(event.clientY - box.top, box.height), col: at(event.clientX - box.left, box.width) };
+}
+function claim() {
+  if (choosing.value && target.value !== undefined && !refused.value) board.triggerElementSelect({ id: target.value.id });
+}
+</script>
+
+<template>
+  <div class="board">
+    <div
+      class="field"
+      role="button"
+      tabindex="0"
+      :aria-label="\`The field, aimed at row \${cursor.row}, column \${cursor.col}\`"
+      v-bind="choosing && target ? candidateAttrs(board.candidateLabel({ id: target.id })) : {}"
+      :aria-disabled="choosing && refused ? 'true' : undefined"
+      @pointermove="aim"
+      @click="claim"
+      @keydown.enter="claim"
+    >
+      Aimed at row {{ cursor.row }}, column {{ cursor.col }}
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.board { width: 400px; height: 400px; }
+.field { width: 400px; height: 400px; background: #ddd; }
+</style>
+`,
+    'src/ui/uis.ts': PLAYERS_GET_THE_TABLE,
+  };
+}
+
+/**
+ * THE FIELD GAME'S RULES (#468): `claim` picks one of a hundred cells (more than the panel lists,
+ * so the panel hands the pick to the board), refused on the middle row, and `rest` passes. A board
+ * for it is written by each fixture.
+ */
+function fieldRules(): Record<string, string> {
+  return {
     'src/rules/game.ts': `import { Game, Player, Space, type GameOptions } from 'boardsmith';
 import { createGameFlow } from './flow.js';
 import { createTurnActions } from './actions.js';
@@ -708,49 +844,191 @@ describe('the field game', () => {
   });
 });
 `,
+  };
+}
+
+/** What each candidate board (`candidateBoard`) does to a walk that points at it (#468). */
+type CandidateBoard = 'lifts' | 'restless' | 'partlyCovered' | 'covered' | 'toast';
+
+/** The candidate markup and styles of each `CandidateBoard`, around the three cells it offers. */
+const CANDIDATE_BOARDS: Record<CandidateBoard, { template: string; style: string }> = {
+  // Each card lifts when pointed at, moving under the pointer for a third of a second.
+  lifts: {
+    template: `<button v-for="cell in cells" :key="cell" type="button" class="card" v-bind="attrs(cell)" @click="claim(cell)">{{ cell }}</button>`,
+    style: `.card { width: 60px; height: 90px; margin: 8px; transition: transform 0.3s; } .card:hover { transform: translateY(-16px); }`,
+  },
+  // Each card sways for ever, so it never stands still.
+  restless: {
+    template: `<button v-for="cell in cells" :key="cell" type="button" class="card" v-bind="attrs(cell)" @click="claim(cell)">{{ cell }}</button>`,
+    style: `.card { width: 60px; height: 90px; margin: 8px; animation: sway 0.4s ease-in-out infinite alternate; } @keyframes sway { from { transform: translateX(0); } to { transform: translateX(8px); } }`,
+  },
+  // A tray covers the left two thirds of each card, centre included; its right edge shows.
+  partlyCovered: {
+    template: `<div v-for="cell in cells" :key="cell" class="slot"><button type="button" class="card" v-bind="attrs(cell)" @click="claim(cell)">{{ cell }}</button><div class="tray"></div></div>`,
+    style: `.slot { position: relative; width: 240px; height: 60px; margin: 8px; } .card { width: 240px; height: 60px; } .tray { position: absolute; left: 0; top: 0; width: 160px; height: 60px; background: #888; }`,
+  },
+  // A tray covers each card whole.
+  covered: {
+    template: `<div v-for="cell in cells" :key="cell" class="slot"><button type="button" class="card" v-bind="attrs(cell)" @click="claim(cell)">{{ cell }}</button><div class="tray"></div></div>`,
+    style: `.slot { position: relative; width: 240px; height: 60px; margin: 8px; } .card { width: 240px; height: 60px; } .tray { position: absolute; inset: 0; background: #888; }`,
+  },
+  // The first time the bell, or a card, is pointed at, an error toast covers the board for a second
+  // and a half, and a second one follows the moment the first goes, as a game that reports twice does.
+  toast: {
+    template: `<button type="button" class="bell" @pointerenter="warn">Ring the bell</button>
+      <button v-for="cell in cells" :key="cell" type="button" class="card" v-bind="attrs(cell)" @pointerenter="warn" @click="claim(cell)">{{ cell }}</button>
+      <div v-if="warning" class="toast error">The ravens are loud.</div>`,
+    style: `.bell, .card { width: 120px; height: 60px; margin: 8px; } .toast { position: absolute; inset: 0; background: #c33; color: #fff; }`,
+  },
+};
+
+/**
+ * A BOARD OF CANDIDATES THAT ARE HARD TO POINT AT (#468), for the field game: three cells offered
+ * as cards on the board, with `claim` handed to the board. See `CandidateBoard` for each kind.
+ */
+export function candidateBoard(kind: CandidateBoard): Record<string, string> {
+  const { template, style } = CANDIDATE_BOARDS[kind];
+  return {
+    ...fieldRules(),
     'src/ui/components/GameTable.vue': `<script setup lang="ts">
 import { computed, ref } from 'vue';
 import { candidateAttrs, useBoardInteraction } from 'boardsmith/ui';
 
 const board = useBoardInteraction();
-const cursor = ref({ row: 2, col: 2 });
-const name = computed(() => \`r\${cursor.value.row}c\${cursor.value.col}\`);
+const cells = ['r0c0', 'r1c1', 'r2c2'];
 const choosing = computed(() => board.currentAction === 'claim' && board.currentPickName === 'cell');
-// The board knows a candidate by its element id; the panel names each cell's candidate by the cell's name.
-const target = computed(() => board.validElements.find((candidate) => candidate.display === name.value));
-const refused = computed(() => target.value === undefined || target.value.disabled !== undefined);
-
-function aim(event: PointerEvent) {
-  const box = (event.currentTarget as HTMLElement).getBoundingClientRect();
-  const at = (offset: number, size: number) => Math.min(9, Math.max(0, Math.floor((offset / size) * 10)));
-  cursor.value = { row: at(event.clientY - box.top, box.height), col: at(event.clientX - box.left, box.width) };
+const targetOf = (cell: string) => board.validElements.find((candidate) => candidate.display === cell);
+const attrs = (cell: string) => {
+  const target = targetOf(cell);
+  return choosing.value && target ? candidateAttrs(board.candidateLabel({ id: target.id })) : {};
+};
+function claim(cell: string) {
+  const target = targetOf(cell);
+  if (choosing.value && target !== undefined) board.triggerElementSelect({ id: target.id });
 }
-function claim() {
-  if (choosing.value && target.value !== undefined && !refused.value) board.triggerElementSelect({ id: target.value.id });
+const warning = ref(false);
+let warned = 0;
+function warn() {
+  if (warned >= 2 || warning.value) return;
+  warned++;
+  warning.value = true;
+  setTimeout(() => {
+    warning.value = false;
+    setTimeout(() => {
+      warning.value = true;
+      setTimeout(() => (warning.value = false), 1500);
+    }, 50);
+  }, 1500);
 }
 </script>
 
 <template>
   <div class="board">
-    <div
-      class="field"
-      role="button"
-      tabindex="0"
-      :aria-label="\`The field, aimed at row \${cursor.row}, column \${cursor.col}\`"
-      v-bind="choosing && target ? candidateAttrs(board.candidateLabel({ id: target.id })) : {}"
-      :aria-disabled="choosing && refused ? 'true' : undefined"
-      @pointermove="aim"
-      @click="claim"
-      @keydown.enter="claim"
-    >
-      Aimed at row {{ cursor.row }}, column {{ cursor.col }}
-    </div>
+    ${template}
   </div>
 </template>
 
 <style scoped>
-.board { width: 400px; height: 400px; }
-.field { width: 400px; height: 400px; background: #ddd; }
+.board { position: relative; width: 420px; height: 420px; }
+${style}
+</style>
+`,
+    'src/ui/uis.ts': PLAYERS_GET_THE_TABLE,
+  };
+}
+
+/**
+ * A BOARD TALLER THAN THE PAGE (#468), with "Ring the far bell" at its foot: scrolled only as far as
+ * needed to show it, the bell sits under the action panel along the bottom of the page, as
+ * doom-machine's shield slots do, so a walk must scroll it clear of the panel to press it.
+ */
+export function boardWithAControlAtItsFoot(): Record<string, string> {
+  return {
+    'src/ui/components/GameTable.vue': `<script setup lang="ts">
+import { ref } from 'vue';
+
+const rung = ref(0);
+</script>
+
+<template>
+  <div class="board">
+    <p>Rung {{ rung }} times.</p>
+    <button type="button" class="far" @click="rung++">Ring the far bell</button>
+  </div>
+</template>
+
+<style scoped>
+.board { position: relative; width: 320px; height: 2000px; }
+.far { position: absolute; left: 20px; bottom: 4px; width: 160px; height: 24px; }
+</style>
+`,
+    'src/ui/uis.ts': PLAYERS_GET_THE_TABLE,
+  };
+}
+
+/**
+ * A PANEL THAT REDRAWS FOR A MOMENT (#468 review): "Look away" hides the panel's action buttons for
+ * two seconds, as a panel redrawing its buttons after a board press does for a moment, so the panel's
+ * buttons the walk read are not there when it first goes to press one. They come back by themselves,
+ * unless `forGood`: then the panel took back what it offered, and never shows the buttons again.
+ */
+export function boardThatHidesThePanelForAMoment(options: { forGood?: boolean } = {}): Record<string, string> {
+  const comeBack = options.forGood ? '' : `\n  setTimeout(() => buttons.forEach((button) => (button.style.display = '')), 2000);`;
+  return {
+    'src/ui/components/GameTable.vue': `<script setup lang="ts">
+function lookAway() {
+  const buttons = [...document.querySelectorAll<HTMLElement>('[data-bs-action]')];
+  for (const button of buttons) button.style.display = 'none';${comeBack}
+}
+</script>
+
+<template>
+  <div class="board">
+    <button type="button" @click="lookAway">Look away</button>
+  </div>
+</template>
+
+<style scoped>
+.board { width: 320px; height: 200px; }
+</style>
+`,
+    'src/ui/uis.ts': PLAYERS_GET_THE_TABLE,
+  };
+}
+
+/**
+ * A BOARD THAT KEEPS REORDERING ITS CONTROLS (#464 review): "North", "South" and "East" trade
+ * places every 60 milliseconds (a keyed list, so each button moves rather than being redrawn), so
+ * whichever button sat at a place when the walk looked has often moved by the time it presses. A
+ * button pressed twice says so on the console, which fails the walk; a walk that presses the button
+ * it meant to presses each once.
+ */
+export function boardThatKeepsReordering(): Record<string, string> {
+  return {
+    'src/ui/components/GameTable.vue': `<script setup lang="ts">
+import { onMounted, onUnmounted, ref } from 'vue';
+
+const order = ref(['North', 'South', 'East']);
+const pressed = new Set<string>();
+let timer: ReturnType<typeof setInterval> | undefined;
+onMounted(() => {
+  timer = setInterval(() => order.value.push(order.value.shift()!), 60);
+});
+onUnmounted(() => clearInterval(timer));
+function pressIt(name: string) {
+  if (pressed.has(name)) console.error(\`\${name} was pressed twice\`);
+  pressed.add(name);
+}
+</script>
+
+<template>
+  <div class="board">
+    <button v-for="name in order" :key="name" type="button" @click="pressIt(name)">{{ name }}</button>
+  </div>
+</template>
+
+<style scoped>
+.board { width: 320px; height: 200px; }
 </style>
 `,
     'src/ui/uis.ts': PLAYERS_GET_THE_TABLE,

@@ -10,19 +10,26 @@ import { once } from 'node:events';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { REPO_ROOT } from '../spawn-cli.test-helper.js';
 import { writeFiles } from '../lib/verify-result.test-helper.js';
+import { SMOKE_SEEDS_ENV } from '../../testing/browser-smoke-verdict.js';
 import { browserProblem, playwrightConfig, runSmoke } from './smoke.js';
 import { isRunning, smokeProject } from './smoke-project.test-helper.js';
 import {
   ACE_SEEDS,
   aceGame,
   boardWithAPointerlessControl,
+  boardWithAControlAtItsFoot,
+  boardWithATimidControl,
   boardWithAVanishingControl,
+  boardThatHidesThePanelForAMoment,
+  boardThatReplacesItsFrame,
+  boardThatKeepsReordering,
   boardWithDialogs,
+  candidateBoard,
   fieldsGame,
   greetingsGame,
   greetingsSpec,
@@ -35,6 +42,8 @@ import {
 } from './smoke-fixtures.test-helper.js';
 
 vi.setConfig({ testTimeout: 300_000, hookTimeout: 120_000 });
+
+afterEach(() => vi.unstubAllEnvs());
 
 const quiet = () => {};
 
@@ -205,7 +214,21 @@ describe('boardsmith verify: the smoke check', () => {
     },
   );
 
-  it('#460: fails a walk whose only deal does not offer a listed action, saying to choose a seed whose deal does', async () => {
+  it('#460: `boardsmith smoke --seed` deals from the seeds it names instead of the spec\'s', async () => {
+    const dir = await smokeProject(false, {
+      ...aceGame(),
+      'tests/browser/smoke.spec.ts': smokeSpec(['draw', 'play', 'showAce'], undefined, { seed: ACE_SEEDS.WITHOUT, steps: 20 }),
+    });
+    const { outcome } = await runSmoke({ projectDir: dir, log: quiet, seeds: [ACE_SEEDS.WITH] });
+
+    expect(outcome.summary).toMatch(/^Served by `boardsmith dev` from a fresh start and dealt from seed "4", a seated player took "draw", "play", "showAce"/);
+    expect(outcome.passed).toBe(true);
+  });
+
+  it('#460: fails a walk whose only deal does not offer a listed action, saying to choose a seed whose deal does, and deals from the spec\'s seed whatever seeds the environment names', async () => {
+    // A `boardsmith smoke --seed` run hands its walk the seeds in this variable; a check run inside
+    // it (a game's own test suite running `boardsmith verify`, say) must not inherit them.
+    vi.stubEnv(SMOKE_SEEDS_ENV, JSON.stringify([ACE_SEEDS.WITH]));
     const { outcome } = await smokeOf(false, {
       ...aceGame(),
       'tests/browser/smoke.spec.ts': smokeSpec(['draw', 'play', 'showAce'], undefined, { seed: ACE_SEEDS.WITHOUT, steps: 20 }),
@@ -223,7 +246,8 @@ describe('boardsmith verify: the smoke check', () => {
     expect(outcome.passed).toBe(false);
     expect(outcome.summary).toBe(
       'The smoke walk found a problem: - This game is a persistent world, which `boardsmith dev` deals from the one seed it ' +
-        'gives that world, so `seed` in tests/browser/smoke.spec.ts cannot choose its deal. Remove `seed` there.',
+        'gives that world, so `seed` in tests/browser/smoke.spec.ts cannot choose its deal. Remove `seed` there (and run ' +
+        '`boardsmith smoke` without `--seed`).',
     );
   });
 
@@ -275,6 +299,19 @@ describe('boardsmith verify: the smoke check', () => {
     ]);
   });
 
+  it('#461: fails on a dialog whose Close does nothing, though a Close closed another dialog before, and closes it with Escape', async () => {
+    const { outcome, steps } = await smokeOf(false, boardWithDialogs({ rulesStayOpen: false, brokenCopy: true }));
+
+    expect(outcome.passed).toBe(false);
+    expect(outcome.summary).toBe(
+      'The smoke walk, dealt from seed "smoke", found a problem: - The dialog "Opponent\'s discards" stayed open after the walk ' +
+        'pressed "Close discards" in it to close it, as that had closed a dialog before, so a player who presses it stays in the dialog.',
+    );
+    const closing = steps.findIndex((line) => line.endsWith('closing the dialog "Opponent\'s discards" with "Close discards"'));
+    expect(closing).toBeGreaterThan(0);
+    expect(steps[closing + 1]).toMatch(/closing the dialog "Opponent's discards" with Escape$/);
+  });
+
   it('#461: fails on a modal dialog nothing closes, since a player in it has no way back to the game', async () => {
     const { outcome } = await smokeOf(false, boardWithDialogs({ rulesStayOpen: true }));
 
@@ -292,6 +329,27 @@ describe('boardsmith verify: the smoke check', () => {
     expect(outcome.summary).toBe(
       'The smoke walk, dealt from seed "smoke", found a problem: - Pressing the board\'s "Shy button" did not work: it ' +
         'went away before the press landed.',
+    );
+  });
+
+  it('a press that replaces the game\'s frame is reported, and the walk goes on in the new frame', async () => {
+    const { outcome, steps } = await smokeOf(false, boardThatReplacesItsFrame());
+
+    expect(outcome.passed).toBe(false);
+    expect(outcome.summary).toContain(
+      '- Pressing the board\'s "Start over" replaced the game\'s page, so the walk could not see what the press did.',
+    );
+    expect(outcome.summary).not.toContain('could not go on');
+    expect(steps).toContain('smoke step 2: nothing is offered; waiting for a turn');
+  });
+
+  it('a control that is disabled by the time the walk goes to press it fails that press, saying so, rather than counting it', async () => {
+    const { outcome } = await smokeOf(false, boardWithATimidControl());
+
+    expect(outcome.passed).toBe(false);
+    expect(outcome.summary).toBe(
+      'The smoke walk, dealt from seed "smoke", found a problem: - Pressing the board\'s "Timid button" did not work: it was ' +
+        'disabled when the walk went to press it, and still was 5s later.',
     );
   });
 
@@ -341,6 +399,87 @@ describe('boardsmith verify: the smoke check', () => {
     );
     expect(outcome.summary).toMatch(/- The game showed an error: The "kindle" action could not be completed/);
     expect(steps.some((line) => line.endsWith('entering "2" for "kindle"'))).toBe(false);
+  });
+
+  describe('#468: pressing a candidate that is hard to point at', () => {
+    const claimed = /^Served by `boardsmith dev` from a fresh start and dealt from seed "smoke", a seated player took "claim", "rest"/;
+    const spec = { 'tests/browser/smoke.spec.ts': smokeSpec(['claim', 'rest']) };
+
+    it.each([
+      ['lifts when pointed at, and is followed until it settles', 'lifts'],
+      ['never stands still, and is pressed where it is', 'restless'],
+      ['is covered at its centre, and is pressed where it shows', 'partlyCovered'],
+    ] as const)('claims a card that %s', async (_, kind) => {
+      const { outcome } = await smokeOf(false, { ...candidateBoard(kind), ...spec });
+
+      expect(outcome.summary).toMatch(claimed);
+      expect(outcome.passed).toBe(true);
+    });
+
+    it('scrolls a board control out from under the action panel to press it', async () => {
+      const { outcome, steps } = await smokeOf(false, boardWithAControlAtItsFoot());
+
+      expect(outcome.passed).toBe(true);
+      expect(steps).toContain('smoke step 1: pressing the board\'s "Ring the far bell"');
+    });
+
+    it('fails a card something covers whole, saying so', async () => {
+      const { outcome } = await smokeOf(false, { ...candidateBoard('covered'), ...spec });
+
+      expect(outcome.passed).toBe(false);
+      expect(outcome.summary).toContain(
+        '- Pressing "r0c0" while answering "claim" did not work: another element covers it, so a pointer cannot reach it.',
+      );
+    });
+
+    it('reads an error toast over a control, waits for it to go, and presses again', async () => {
+      const { outcome, steps } = await smokeOf(false, { ...candidateBoard('toast'), ...spec });
+
+      // The toast is an error, so it fails the walk; the presses it covered both landed.
+      expect(outcome.summary).toBe(
+        'The smoke walk, dealt from seed "smoke", found a problem: - The game showed an error: The ravens are loud.',
+      );
+      expect(steps).toContain('smoke step 1: pressing the board\'s "Ring the bell"');
+      expect(steps.some((line) => /pressing "r0c0" for "claim"/.test(line))).toBe(true);
+    });
+  });
+
+  it('waits for a panel button that is gone for a moment to come back, and takes the action then, rather than reporting it', async () => {
+    const { outcome, steps } = await smokeOf(false, {
+      ...aceGame(),
+      ...boardThatHidesThePanelForAMoment(),
+      'tests/browser/smoke.spec.ts': smokeSpec(['draw', 'play'], undefined, { seed: ACE_SEEDS.WITHOUT, steps: 12 }),
+    });
+
+    // "draw" was taken at step 2, when its button came back: a press that had not landed would leave
+    // it untaken, and step 3 taking it again.
+    expect(steps.slice(1, 4)).toEqual([
+      'smoke step 1: pressing the board\'s "Look away"',
+      'smoke step 2: taking "draw"',
+      'smoke step 3: taking "play"',
+    ]);
+    expect(outcome.summary).toMatch(/^Served by `boardsmith dev` from a fresh start and dealt from seed "plain", a seated player took "draw", "play"/);
+    expect(outcome.passed).toBe(true);
+  });
+
+  it('reports a panel button that is gone and never comes back, since the panel took back what it offered', async () => {
+    const { outcome, steps } = await smokeOf(false, {
+      ...aceGame(),
+      ...boardThatHidesThePanelForAMoment({ forGood: true }),
+      'tests/browser/smoke.spec.ts': smokeSpec(['draw', 'play'], undefined, { seed: ACE_SEEDS.WITHOUT, steps: 4 }),
+    });
+
+    expect(steps.slice(1, 3)).toEqual(['smoke step 1: pressing the board\'s "Look away"', 'smoke step 2: taking "draw"']);
+    expect(outcome.passed).toBe(false);
+    expect(outcome.summary).toContain('- The panel showed its "draw", and it was still gone 5s later, when the walk went to press it.');
+    expect(outcome.summary).toContain('- The panel offered "draw", but the walk never took it in 4 steps.');
+  });
+
+  it('presses the board control it found, though the board moved another into its place before the press', async () => {
+    const { outcome, steps } = await smokeOf(false, boardThatKeepsReordering());
+
+    expect(outcome.passed).toBe(true);
+    expect(steps.filter((line) => /pressing the board's "(North|South|East)"/.test(line))).toHaveLength(3);
   });
 
   it(

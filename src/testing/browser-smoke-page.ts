@@ -36,15 +36,29 @@ export interface PageControl {
    * the pointer, so the walk aims before it clicks one (#468).
    */
   readonly candidate: boolean;
+  /**
+   * Whether it is on the game's board (`[data-testid="bs-board"]`), where the walk points at it
+   * itself, as a player does, rather than waiting for it to stand still (#468).
+   */
+  readonly onBoard: boolean;
+  /** Whether this look marked it as the control about to be pressed (`pageControls`'s `mark`). */
+  readonly marked: boolean;
 }
+
+/** The attribute `pageControls` marks the control about to be pressed with, by a mark of its own. */
+export const PRESS_MARK = 'data-bs-smoke-press';
 
 /**
  * The controls among `elements` a player can reach, in order. One inside the game-over card is not
  * the game's (#462): the walk sees that card as the game ending, and its Close would hide the end.
  * One inside an `inert` subtree cannot be reached by anyone, so it is not a control either (#461).
+ *
+ * With `mark`, the same look also marks the control the walk is about to press, found by the key it
+ * was found by before (at the same place when two share a key), with `data-bs-smoke-press`, so the
+ * press reaches that element wherever the page moves it, and not whatever took its place.
  */
-export function pageControls(elements: Element[]): PageControl[] {
-  const found: PageControl[] = [];
+export function pageControls(elements: Element[], mark?: { key: string; index: number; mark: string }): PageControl[] {
+  const found: Array<Omit<PageControl, 'marked'>> = [];
   elements.forEach((element, index) => {
     if (element.closest('.game-over-card, [inert]') !== null) return;
     const html = element as HTMLElement;
@@ -55,9 +69,12 @@ export function pageControls(elements: Element[]): PageControl[] {
     const enabled = html.getAttribute('aria-disabled') !== 'true' && !(html as HTMLButtonElement).disabled;
     const keyboardOnly =
       getComputedStyle(html).pointerEvents === 'none' && !html.checkVisibility({ opacityProperty: true, visibilityProperty: true });
-    found.push({ index, label, key, enabled, keyboardOnly, candidate: candidate !== null });
+    const onBoard = html.closest('[data-testid="bs-board"]') !== null;
+    found.push({ index, label, key, enabled, keyboardOnly, candidate: candidate !== null, onBoard });
   });
-  return found;
+  const pick = mark && (found.find((c) => c.key === mark.key && c.index === mark.index) ?? found.find((c) => c.key === mark.key));
+  if (mark && pick) elements[pick.index].setAttribute('data-bs-smoke-press', mark.mark);
+  return found.map((c) => ({ ...c, marked: c === pick }));
 }
 
 /** An open modal dialog, as one look at the page showed it. */
@@ -87,6 +104,61 @@ export function pageDialogs(elements: Element[]): PageDialog[] {
     found.push({ index, name: name.replace(/\s+/g, ' ').trim() });
   });
   return found;
+}
+
+/**
+ * What a click the walk made with the mouse reached (`guardClicks`, `clickReached`): the control
+ * itself, something else in the game's frame, or nothing in the frame at all.
+ */
+export type Reached = 'it' | 'other' | 'nothing';
+
+/** What `guardClicks` keeps on the frame's window for `clickReached`. */
+interface ClickGuard {
+  hit: boolean;
+  missed: boolean;
+  remove: () => void;
+}
+
+/** The window of a frame `guardClicks` has guarded. */
+type GuardedWindow = Window & { __boardsmithSmokeGuard?: ClickGuard };
+
+/**
+ * Guards the next click in `element`'s frame (#468): every pointer and mouse event that would reach
+ * anything but `element` is stopped before the page sees it, as Playwright's own click does, so a
+ * click that would land on something the page moved under the pointer does nothing and the walk can
+ * look again. Which events reached the element, and which anything else, is kept for `clickReached`.
+ */
+export function guardClicks(element: Element): void {
+  const view = element.ownerDocument.defaultView as GuardedWindow;
+  const types = ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'];
+  const guard: ClickGuard = { hit: false, missed: false, remove: () => types.forEach((type) => view.removeEventListener(type, stop, true)) };
+  function stop(event: Event): void {
+    const target = event.target as Node | null;
+    if (target !== null && (target === element || element.contains(target))) {
+      guard.hit = true;
+      return;
+    }
+    guard.missed = true;
+    event.stopImmediatePropagation();
+    event.preventDefault();
+  }
+  types.forEach((type) => view.addEventListener(type, stop, true));
+  view.__boardsmithSmokeGuard = guard;
+}
+
+/**
+ * Takes the guard `guardClicks` set off this frame and says what the click reached: the control,
+ * something else (which the guard stopped), or nothing in the frame, as when the page around the
+ * game covers the control and took the click itself. A frame with no guard is a new page: the click
+ * replaced the one that was guarded.
+ */
+export function clickReached(): Reached {
+  const view = window as GuardedWindow;
+  const guard = view.__boardsmithSmokeGuard;
+  if (guard === undefined) throw new Error("the game's page was replaced before the walk could read what the click reached");
+  guard.remove();
+  delete view.__boardsmithSmokeGuard;
+  return guard.missed ? 'other' : guard.hit ? 'it' : 'nothing';
 }
 
 /**

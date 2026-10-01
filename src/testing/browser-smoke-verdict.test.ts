@@ -10,6 +10,7 @@ import {
   DEFAULT_SMOKE_SEED,
   inputFor,
   MOST_ANSWERS,
+  recordResolved,
   SMOKE_SPEC_PATH,
   startAnswering,
   walkStopped,
@@ -18,6 +19,7 @@ import {
   smokeRecord,
   smokeSeeds,
   smokeSummary,
+  type ResolvedMemory,
   type SmokeInputView,
   type SmokeWalk,
 } from './browser-smoke-verdict.js';
@@ -48,6 +50,13 @@ describe('smokeSeeds: the deals a walk is dealt (#460)', () => {
   it('deals from the seed the spec names, or from each seed of a list, in order', () => {
     expect(smokeSeeds('opening')).toEqual(['opening']);
     expect(smokeSeeds(['opening', '7'])).toEqual(['opening', '7']);
+  });
+
+  it('deals from the seeds `boardsmith smoke --seed` names instead of the spec\'s, so any deal can be walked again', () => {
+    expect(smokeSeeds('opening', ['7', '9'])).toEqual(['7', '9']);
+    expect(() => smokeSeeds(undefined, ['7', '7'])).toThrow(
+      '`boardsmith smoke --seed` lists "7" twice, which walks the same deal twice. List each seed once.',
+    );
   });
 
   it('refuses an empty list, a blank seed and a seed listed twice, saying what to write instead', () => {
@@ -403,5 +412,89 @@ describe('#470: the values a spec gives the walk to type, in `inputs`', () => {
           `board shows, give it in \`inputs\` in ${SMOKE_SPEC_PATH}.`,
       );
     });
+  });
+});
+
+describe('recordResolved: what a resolved action leaves the walk remembering (#466)', () => {
+  function memory(): ResolvedMemory {
+    return {
+      resolved: new Map(),
+      lastResolved: undefined,
+      failed: new Set(),
+      numbered: new Set(),
+      refused: new Map(),
+      refusals: new Set(),
+      typed: new Map(),
+      moves: 0,
+    };
+  }
+  const failed = (action: string, error: string) => ({ action, success: false, error });
+
+  it('records a taken action as offered, enabled and taken, and reports one that failed, which is not taken again', () => {
+    const w = walk({});
+    const m = memory();
+    recordResolved([{ action: 'draw', success: true }, failed('play', 'No card to play.')], w, m);
+    expect([...w.taken]).toEqual(['draw']);
+    expect([...w.offered].sort()).toEqual(['draw', 'play']);
+    expect(m.resolved.get('draw')).toBe(1);
+    expect(m.lastResolved).toBe('draw');
+    expect([...m.failed]).toEqual(['play']);
+    expect(w.errors).toEqual(['The panel offered "play", and taking it failed: No card to play.']);
+  });
+
+  it('takes a failure after a typed number for the game refusing it, up to three numbers, then reports the action with how many it refused', () => {
+    const w = walk({});
+    const m = memory();
+    for (const error of ['A fire needs two logs.', 'A fire needs three logs.']) {
+      m.numbered.add('kindle');
+      recordResolved([failed('kindle', error)], w, m);
+    }
+    expect(w.errors).toEqual([]);
+    expect(m.failed.size).toBe(0);
+    expect(m.refused.get('kindle')).toBe(2);
+    expect([...m.refusals]).toEqual(['A fire needs two logs.', 'A fire needs three logs.']);
+    // The typed number is spent either way, so the next attempt types the next one up.
+    expect(m.numbered.has('kindle')).toBe(false);
+
+    m.numbered.add('kindle');
+    recordResolved([failed('kindle', 'A fire needs four logs.')], w, m);
+    expect(w.errors).toEqual([
+      'The panel offered "kindle", and taking it failed: A fire needs four logs. The game refused each of the 3 numbers the walk entered.',
+    ]);
+    expect([...m.failed]).toEqual(['kindle']);
+  });
+
+  it('clears the typed number when the action succeeds, so a later failure without one is reported, not taken for a refused number', () => {
+    const w = walk({});
+    const m = memory();
+    m.numbered.add('kindle');
+    recordResolved([{ action: 'kindle', success: true }], w, m);
+    expect(m.numbered.has('kindle')).toBe(false);
+
+    recordResolved([failed('kindle', 'The hearth is cold.')], w, m);
+    expect(w.errors).toEqual(['The panel offered "kindle", and taking it failed: The hearth is cold.']);
+    expect(m.refused.get('kindle')).toBeUndefined();
+  });
+
+  it('#470: reports a failed action with what the walk typed in it, and counts each taken action as the game moving on', () => {
+    const w = walk({ wanting: new Map([['greet', 'whom'], ['wave', 'whom']]) });
+    const m = memory();
+    m.typed.set('greet', [{ field: 'whom', value: 'Nobody', from: 'inputs' }]);
+    recordResolved([failed('greet', 'Nobody is called that.'), { action: 'wave', success: true }], w, m);
+    expect(w.errors).toEqual([actionFailed('greet', 'Nobody is called that.', [{ field: 'whom', value: 'Nobody', from: 'inputs' }], 0)]);
+    expect(m.typed.size).toBe(0);
+    // Resolved either way, so neither is waiting on an input any more; only the taken one moved the game on.
+    expect(w.wanting.size).toBe(0);
+    expect(m.moves).toBe(1);
+  });
+
+  it('never takes a failure the engine words as an error in the rules for a refused number, whatever the walk typed', () => {
+    const w = walk({});
+    const m = memory();
+    m.numbered.add('kindle');
+    recordResolved([failed('kindle', `${rulesErrorSentence('kindle')} (the hearth cracked)`)], w, m);
+    expect(w.errors).toHaveLength(1);
+    expect(w.errors[0]).toContain('taking it failed: The "kindle" action could not be completed');
+    expect(m.refused.get('kindle')).toBeUndefined();
   });
 });

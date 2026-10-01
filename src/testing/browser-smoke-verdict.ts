@@ -25,24 +25,35 @@ const REASON_MIN_WORDS = 4;
 export const DEFAULT_SMOKE_SEED = 'smoke';
 
 /**
- * The seeds a walk deals from, in order: the spec's `seed`, one seed or a list of them, else
- * {@link DEFAULT_SMOKE_SEED}. Throws, saying what to write instead, on an empty list, a blank seed
- * or a seed listed twice.
+ * The environment variable `boardsmith smoke --seed` hands the walk its seeds in, as a JSON list,
+ * so a run can deal any game again without editing the spec.
  */
-export function smokeSeeds(seed: string | readonly string[] | undefined): string[] {
-  const seeds = seed === undefined ? [DEFAULT_SMOKE_SEED] : typeof seed === 'string' ? [seed] : [...seed];
+export const SMOKE_SEEDS_ENV = 'BOARDSMITH_SMOKE_SEEDS';
+
+/**
+ * The seeds a walk deals from, in order: those `boardsmith smoke --seed` names (`chosen`), else the
+ * spec's `seed`, one seed or a list of them, else {@link DEFAULT_SMOKE_SEED}. Throws, saying what to
+ * write instead, on an empty list, a blank seed or a seed listed twice.
+ */
+export function smokeSeeds(seed: string | readonly string[] | undefined, chosen?: readonly string[]): string[] {
+  if (chosen !== undefined) return checkedSeeds([...chosen], '`boardsmith smoke --seed`');
+  return checkedSeeds(seed === undefined ? [DEFAULT_SMOKE_SEED] : typeof seed === 'string' ? [seed] : [...seed], `\`seed\` in ${SMOKE_SPEC_PATH}`);
+}
+
+/** `seeds`, which `from` gave, once none is blank or listed twice and there is one at least. */
+function checkedSeeds(seeds: string[], from: string): string[] {
   if (seeds.length === 0) {
     throw new Error(
-      `\`seed\` in ${SMOKE_SPEC_PATH} is an empty list, so the walk would deal no game. List at least one seed, or leave ` +
+      `${from} is an empty list, so the walk would deal no game. List at least one seed, or leave ` +
         `\`seed\` out to deal from "${DEFAULT_SMOKE_SEED}".`,
     );
   }
   if (seeds.some((s) => s.trim() === '')) {
-    throw new Error(`\`seed\` in ${SMOKE_SPEC_PATH} has a blank seed. A seed is any text that is not blank, such as "7" or "opening".`);
+    throw new Error(`${from} has a blank seed. A seed is any text that is not blank, such as "7" or "opening".`);
   }
   const twice = seeds.find((s, i) => seeds.indexOf(s) !== i);
   if (twice !== undefined) {
-    throw new Error(`\`seed\` in ${SMOKE_SPEC_PATH} lists "${twice}" twice, which walks the same deal twice. List each seed once.`);
+    throw new Error(`${from} lists "${twice}" twice, which walks the same deal twice. List each seed once.`);
   }
   return seeds;
 }
@@ -168,6 +179,85 @@ export interface SmokeWalk {
 }
 
 const quoted = (names: readonly string[]) => names.map((n) => `"${n}"`).join(', ');
+
+/** Records a problem on the walk, once. */
+export function note(walk: SmokeWalk, problem: string): void {
+  if (!walk.errors.includes(problem)) walk.errors.push(problem);
+}
+
+/** What the page's `boardsmith:action-resolved` events carry, in every frame. */
+export interface ResolvedAction {
+  readonly action: string;
+  readonly success: boolean;
+  readonly error?: string;
+}
+
+/** What the walk remembers of a deal that recording a resolved action reads and writes (#466). */
+export interface ResolvedMemory {
+  /** How many times each action was taken and resolved. */
+  readonly resolved: Map<string, number>;
+  /** The action resolved last, which a game that is now over ended on. */
+  lastResolved: string | undefined;
+  /** The actions that failed when taken: reported once, and not tried again while anything else is offered. */
+  readonly failed: Set<string>;
+  /** The actions the walk typed a number in on its last attempt at them. */
+  readonly numbered: Set<string>;
+  /** How many numbers the game's own rules have refused in each action, so the walk types the next one up. */
+  readonly refused: Map<string, number>;
+  /** What the game said when it refused a number, which its error toasts repeat. */
+  readonly refusals: Set<string>;
+  /** What the walk typed in each action's fields on its last attempt at it (#470), for the report if the game refuses it. */
+  readonly typed: Map<string, TypedValue[]>;
+  /** How many actions have been taken on this deal, so the walk knows when the game has moved on (#470). */
+  moves: number;
+}
+
+/** How many numbers the walk enters in an action whose game refuses them, before it reports the action (#466). */
+const NUMBER_TRIES = 3;
+
+/**
+ * Records the actions the page resolved since the walk last looked: a taken one is offered, enabled
+ * and taken, and the deal remembers it; a failed one is reported and not tried again, unless the
+ * game refused a number the walk typed in it (`refusedANumber`). A success spends the number the
+ * walk typed, so a later failure of the action is never taken for a refusal of a number it did not type.
+ * A failure is reported with what the walk typed in the action (`actionFailed`, #470). Either way the
+ * action no longer waits on an input, and a taken one counts as the game moving on.
+ */
+export function recordResolved(resolved: readonly ResolvedAction[], walk: SmokeWalk, memory: ResolvedMemory): void {
+  for (const { action, success, error } of resolved) {
+    walk.offered.add(action);
+    walk.enabled.add(action);
+    walk.wanting.delete(action);
+    const typed = memory.typed.get(action) ?? [];
+    memory.typed.delete(action);
+    if (success) {
+      memory.moves++;
+      walk.taken.add(action);
+      memory.resolved.set(action, (memory.resolved.get(action) ?? 0) + 1);
+      memory.lastResolved = action;
+      memory.numbered.delete(action);
+    } else if (!refusedANumber(action, error, memory)) {
+      memory.failed.add(action);
+      note(walk, actionFailed(action, error, typed, memory.refused.get(action) ?? 0));
+    }
+  }
+}
+
+/**
+ * Whether `action` failed because the game's own rules refused a number the walk typed in it, with
+ * tries left: then the walk takes it again with the next number up, and the refusal, and the error
+ * toast that repeats it, are the game working, not a problem (#466). A failure the engine words as an
+ * error in the game's rules (`rulesErrorSentence`) is a crash, never a refusal, whatever number the
+ * walk typed.
+ */
+function refusedANumber(action: string, error: string | undefined, memory: ResolvedMemory): boolean {
+  const refused = memory.refused.get(action) ?? 0;
+  if (!memory.numbered.delete(action) || refused >= NUMBER_TRIES - 1) return false;
+  if (error === undefined || error.startsWith(rulesErrorSentence(action))) return false;
+  memory.refused.set(action, refused + 1);
+  memory.refusals.add(error);
+  return true;
+}
 
 /** "dealt from seed "a", then from seed "b"", or the empty string for a world, which names no seed. */
 function dealtFrom(seeds: readonly string[], then = 'then'): string {

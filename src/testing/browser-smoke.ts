@@ -34,15 +34,26 @@
  * @module
  */
 import { test, type Frame, type Locator, type Page } from '@playwright/test';
-import { rulesErrorSentence } from '../engine/action/rules-error.js';
-import { MODAL_DIALOGS, numberToEnter, pageControls, pageDialogs, type PageControl } from './browser-smoke-page.js';
 import {
-  actionFailed,
+  clickReached,
+  guardClicks,
+  MODAL_DIALOGS,
+  numberToEnter,
+  pageControls,
+  pageDialogs,
+  PRESS_MARK,
+  type PageControl,
+  type Reached,
+} from './browser-smoke-page.js';
+import {
   answered,
   DEFAULT_SMOKE_SEED,
   inputFor,
+  note,
+  recordResolved,
   requiredUntaken,
   SMOKE_ANNOTATION,
+  SMOKE_SEEDS_ENV,
   SMOKE_SPEC_PATH,
   smokeFailure,
   smokeProblems,
@@ -50,6 +61,8 @@ import {
   smokeSeeds,
   startAnswering,
   walkStopped,
+  type ResolvedAction,
+  type ResolvedMemory,
   type SmokeInputs,
   type SmokeInputView,
   type SmokeWalk,
@@ -122,7 +135,8 @@ const IDLE_STEPS = 5;
  */
 export function defineSmokeTest(options: SmokeTestOptions): void {
   test('seat a player, take every offered action, press every board control', async ({ page }) => {
-    const seeds = smokeSeeds(options.seed);
+    const chosen = process.env[SMOKE_SEEDS_ENV];
+    const seeds = smokeSeeds(options.seed, chosen === undefined ? undefined : (JSON.parse(chosen) as string[]));
     const walk = newWalk(options);
     const memories: WalkMemory[] = [];
     watchForErrors(page, walk);
@@ -139,7 +153,7 @@ export function defineSmokeTest(options: SmokeTestOptions): void {
           await walkTheGame(page, walk, memories[memories.length - 1]);
         }
       } else {
-        if (options.seed !== undefined) note(walk, WORLD_TAKES_NO_SEED);
+        if (options.seed !== undefined || chosen !== undefined) note(walk, WORLD_TAKES_NO_SEED);
         memories.push(newMemory(null));
         await walkTheGame(page, walk, memories[0]);
       }
@@ -158,7 +172,7 @@ export function defineSmokeTest(options: SmokeTestOptions): void {
 /** Why a world's spec cannot name a seed. */
 const WORLD_TAKES_NO_SEED =
   `This game is a persistent world, which \`boardsmith dev\` deals from the one seed it gives that world, so \`seed\` in ` +
-  `${SMOKE_SPEC_PATH} cannot choose its deal. Remove \`seed\` there.`;
+  `${SMOKE_SPEC_PATH} cannot choose its deal. Remove \`seed\` there (and run \`boardsmith smoke\` without \`--seed\`).`;
 
 function newWalk(options: SmokeTestOptions): SmokeWalk {
   return {
@@ -206,13 +220,6 @@ function watchForErrors(page: Page, walk: SmokeWalk): void {
   });
 }
 
-/** What the page's `boardsmith:action-resolved` events carry, in every frame. */
-interface ResolvedAction {
-  action: string;
-  success: boolean;
-  error?: string;
-}
-
 /** Keeps every `boardsmith:action-resolved` event a frame fires, for {@link drainResolved}. */
 async function recordResolvedActions(page: Page): Promise<void> {
   await page.addInitScript(() => {
@@ -222,49 +229,14 @@ async function recordResolvedActions(page: Page): Promise<void> {
   });
 }
 
-/** The actions resolved in `frame` since the last call: taken ones recorded, failed ones reported. */
+/** The actions resolved in `frame` since the last call, recorded (`recordResolved`): taken ones taken, failed ones reported. */
 async function drainResolved(frame: Frame, walk: SmokeWalk, memory: WalkMemory): Promise<number> {
   const resolved = await frame.evaluate(() => {
     const log = (window as unknown as { __boardsmithSmokeResolved?: unknown[] }).__boardsmithSmokeResolved ?? [];
     return log.splice(0, log.length) as ResolvedAction[];
   });
-  for (const { action, success, error } of resolved) {
-    walk.offered.add(action);
-    walk.enabled.add(action);
-    walk.wanting.delete(action);
-    const typed = memory.typed.get(action) ?? [];
-    memory.typed.delete(action);
-    if (success) {
-      memory.moves++;
-      walk.taken.add(action);
-      memory.resolved.set(action, (memory.resolved.get(action) ?? 0) + 1);
-      memory.lastResolved = action;
-      memory.numbered.delete(action);
-    } else if (!refusedANumber(action, error, memory)) {
-      memory.failed.add(action);
-      note(walk, actionFailed(action, error, typed, memory.refused.get(action) ?? 0));
-    }
-  }
+  recordResolved(resolved, walk, memory);
   return resolved.length;
-}
-
-/** How many numbers the walk enters in an action whose game refuses them, before it reports the action (#466). */
-const NUMBER_TRIES = 3;
-
-/**
- * Whether `action` failed because the game's own rules refused a number the walk typed in it, with
- * tries left: then the walk takes it again with the next number up (`numberToEnter`), and the refusal,
- * and the error toast that repeats it, are the game working, not a problem (#466). A failure the
- * engine words as an error in the game's rules (`rulesErrorSentence`) is a crash, never a refusal,
- * whatever number the walk typed.
- */
-function refusedANumber(action: string, error: string | undefined, memory: WalkMemory): boolean {
-  const refused = memory.refused.get(action) ?? 0;
-  if (!memory.numbered.delete(action) || refused >= NUMBER_TRIES - 1) return false;
-  if (error === undefined || error.startsWith(rulesErrorSentence(action))) return false;
-  memory.refused.set(action, refused + 1);
-  memory.refusals.add(error);
-  return true;
 }
 
 /** Reports each error toast the game shows a player, once, except one repeating a refused number (#466). */
@@ -413,6 +385,10 @@ async function readOffers(frame: Frame, walk: SmokeWalk): Promise<Offers> {
  * and how it was found, so it can be found again just before it is pressed (`stillThere`).
  */
 interface Control extends PageControl {
+  /**
+   * The control's own element: the one at its place among the matches when it was found, until
+   * `stillThere` has found it again for a press and marked it, which pins it wherever the page moves it.
+   */
   readonly target: Locator;
   readonly frame: Frame;
   readonly selector: string;
@@ -424,7 +400,7 @@ interface Control extends PageControl {
  * reach, read in one look at the page, so none can go away between being found and being read (#464).
  */
 async function controlsOf(frame: Frame, selector: string, within?: Locator): Promise<Control[]> {
-  const visible = (within ?? frame).locator(selector).filter({ visible: true });
+  const visible = visibleMatches(frame, selector, within);
   return (await visible.evaluateAll(pageControls)).map((control) => ({
     ...control,
     target: visible.nth(control.index),
@@ -435,15 +411,41 @@ async function controlsOf(frame: Frame, selector: string, within?: Locator): Pro
 }
 
 /**
- * `control` as the page has it now: the page may have redrawn since it was found, putting another
- * element at its place among the matches, so it is found again by what it stands for. One the page
- * no longer has went away.
+ * `control` as the page has it now, pinned to its element: the page may have moved another element
+ * into its place among the matches since it was found, so it is found again by what it stands for
+ * and marked in the same look (`pageControls`), and the press reaches the marked element wherever the
+ * page moves it. A redraw can take it away for a moment, so it is looked for again until it comes
+ * back; one still gone after {@link PRESS_MS} went away. It must still be pressable too: one found
+ * disabled is waited for the same way, and reported if it stays so. A pick's candidate is the one
+ * exception, since what it stands for, and whether the game refuses that, can depend on where the
+ * pointer is, which `aimAndClick` settles once it has pointed at it.
  */
 async function stillThere(control: Control): Promise<Control> {
-  const now = await controlsOf(control.frame, control.selector, control.within);
-  const same = now.find((c) => c.key === control.key && c.index === control.index) ?? now.find((c) => c.key === control.key);
-  if (same === undefined) throw new Error(GONE);
-  return same;
+  const { frame, selector, within } = control;
+  const mark = String(++pressMarks);
+  const started = Date.now();
+  for (;;) {
+    const now = await visibleMatches(frame, selector, within).evaluateAll(pageControls, { key: control.key, index: control.index, mark });
+    const same = now.find((c) => c.marked);
+    if (same !== undefined && (same.enabled || control.candidate)) {
+      return { ...same, target: frame.locator(`[${PRESS_MARK}="${mark}"]`), frame, selector, within };
+    }
+    if (Date.now() - started > PRESS_MS) throw new Error(same === undefined ? GONE : DISABLED);
+    await frame.waitForTimeout(100);
+  }
+}
+
+/** The elements `selector` matches in `frame` (within `within` when given) that a player can see. */
+function visibleMatches(frame: Frame, selector: string, within?: Locator): Locator {
+  return (within ?? frame).locator(selector).filter({ visible: true });
+}
+
+/** How many controls the walk has marked to press (`stillThere`), so each mark is its own. */
+let pressMarks = 0;
+
+/** Takes the walk's press marks off the page again, so the game's page is left as the game drew it. */
+async function unmark(frame: Frame): Promise<void> {
+  await frame.locator(`[${PRESS_MARK}]`).evaluateAll((marked, name) => marked.forEach((element) => element.removeAttribute(name)), PRESS_MARK);
 }
 
 /** The first enabled control matched by the first of `selectors` that matches one, or undefined. */
@@ -461,6 +463,9 @@ const COVERED = 'another element covers it, so a pointer cannot reach it';
 /** Why a press failed when the control left the page between being found and being pressed. */
 const GONE = 'it went away before the press landed';
 
+/** Why a press failed when the control was disabled by the time the walk went to press it, and stayed so. */
+const DISABLED = `it was disabled when the walk went to press it, and still was ${PRESS_MS / 1000}s later`;
+
 /** A press that found a toast over the control, which goes by itself. */
 class UnderAToast extends Error {}
 
@@ -473,49 +478,100 @@ async function whyNotPressed(target: Locator, error: unknown): Promise<string> {
   return message.split('\n')[0];
 }
 
-/** Clicks `control` with Playwright, which waits for it to be visible, still and on top; a toast on top is an {@link UnderAToast}. */
-async function click(control: Control): Promise<void> {
-  await control.target.click({ timeout: PRESS_MS }).catch((error: unknown) => {
-    const toast = error instanceof Error && /class="[^"]*\btoast\b[^"]*"[^\n]*intercepts pointer events/.test(error.message);
-    throw toast ? new UnderAToast(COVERED) : error;
-  });
+/** `error` as an {@link UnderAToast} when it is Playwright's click finding a toast on top of the control, else itself. */
+function toastOnTop(error: unknown): unknown {
+  const toast = error instanceof Error && /class="[^"]*\btoast\b[^"]*"[^\n]*intercepts pointer events/.test(error.message);
+  return toast ? new UnderAToast(COVERED) : error;
 }
 
 /**
  * Presses `control` as a player would: with the pointer, or, for a keyboard-only control (invisible
  * and taking no pointer, `pageControls`), by focusing it and pressing Enter (#457). A pick's
- * candidate is aimed at first (`aimAndClick`, #468); any other control is clicked. A toast over the
- * control goes by itself, so the walk waits for it, as a player does, and presses again. A press
+ * candidate is aimed at first (`aimAndClick`, #468), and any other control on the board is clicked
+ * where it shows (`clickWhereReachable`): the walk points at both itself, so a card that lifts, a
+ * board that never stands still and a control partly under a tray are pressed as a player presses
+ * them. A control in the panel is clicked by Playwright. A toast over the control goes by itself, so
+ * the walk reads it, waits for it to go, as a player does, and presses again. A press
  * that does not land, because the control went away, something covers it or it never becomes
- * pressable, is reported and the walk goes on. Returns whether the press landed.
+ * pressable, is reported and the walk goes on. So is one that replaced the game's page, taking the
+ * frame the walk pressed in away with whatever the press did: the walk goes on in the frame the
+ * page shows next. Returns whether the press landed.
  */
 async function press(control: Control, what: string, walk: SmokeWalk, memory: WalkMemory): Promise<boolean> {
+  const replaced = `Pressing ${what} replaced the game's page, so the walk could not see what the press did.`;
+  // A page that redraws the control as a new element mid-press takes away the element marked for
+  // it, and one look at the control (LOOK_MS) may run out before it stands still or is uncovered:
+  // the walk finds the control again and presses that, for PRESS_MS in all. What was on top when
+  // the time ran out says whether a toast covered it.
   const pressIt = async () => {
-    const now = await stillThere(control);
-    if (now.keyboardOnly) return now.target.press('Enter', { timeout: PRESS_MS });
-    return now.candidate ? aimAndClick(now) : click(now);
+    const deadline = Date.now() + PRESS_MS;
+    for (;;) {
+      const now = await stillThere(control);
+      try {
+        return await pressOnce(now);
+      } catch (error) {
+        if (error instanceof UnderAToast || control.frame.isDetached()) throw error;
+        if (Date.now() > deadline) throw toastOnTop(error);
+        const lookRanOut = error instanceof Error && error.name === 'TimeoutError';
+        if (!lookRanOut && (await now.target.count()) > 0) throw error;
+      }
+    }
   };
   try {
-    await pressIt().catch(async (error: unknown) => {
-      if (!(error instanceof UnderAToast)) throw error;
-      // What an error toast says is read before it goes, so waiting it out hides nothing.
-      await noteErrorToasts(control.frame, walk, memory);
-      await control.frame.waitForFunction(() => document.querySelector('.toast') === null, undefined, { timeout: TOAST_WAIT_MS });
-      await pressIt();
-    });
-    return true;
+    // A toast on top is waited out on its own time, not the press's, and the press starts afresh
+    // once it has gone: a game may show a second toast as the first leaves.
+    for (let toasts = 0; ; toasts++) {
+      try {
+        await pressIt();
+        return true;
+      } catch (error) {
+        if (!(error instanceof UnderAToast) || toasts >= TOASTS_WAITED) throw error;
+        await waitOutTheToast(control.frame, walk, memory);
+      }
+    }
   } catch (error) {
-    note(walk, `Pressing ${what} did not work: ${await whyNotPressed(control.target, error)}.`);
+    note(walk, control.frame.isDetached() ? replaced : `Pressing ${what} did not work: ${await whyNotPressed(control.target, error)}.`);
     return false;
+  } finally {
+    // The marks went with the page that was replaced; the press is reported once, whichever read saw it go.
+    await unmark(control.frame).catch(() => note(walk, replaced));
   }
+}
+
+/**
+ * One attempt at pressing `control`, as `press` describes. A control off the board is clicked by
+ * Playwright, which waits for it to be visible, still and on top, for one look ({@link LOOK_MS}):
+ * a panel that redraws its buttons as new elements takes the element away, and `press` finds the
+ * control again rather than waiting on an element that is gone.
+ */
+function pressOnce(control: Control): Promise<void> {
+  if (control.keyboardOnly) return control.target.press('Enter', { timeout: PRESS_MS });
+  if (control.candidate) return aimAndClick(control);
+  return control.onBoard ? clickWhereReachable(control) : control.target.click({ timeout: LOOK_MS });
 }
 
 /** The longest a toast stays: an error toast goes after 4 seconds. */
 const TOAST_WAIT_MS = 8_000;
 
+/** How many toasts in a row the walk waits out for one press, before what is on top counts as covering the control. */
+const TOASTS_WAITED = 3;
+
 /**
- * Where on a candidate the walk points (#468), as fractions of its width and height: its centre
- * first, then a grid over the rest of it, for a candidate partly covered or refused at its centre.
+ * Waits for every toast on the page to go, as a player does before pressing what is under one. What
+ * an error toast says is read before it goes, so waiting it out hides nothing. A toast still there
+ * after {@link TOAST_WAIT_MS} covers the control for good (an {@link UnderAToast}).
+ */
+async function waitOutTheToast(frame: Frame, walk: SmokeWalk, memory: WalkMemory): Promise<void> {
+  await noteErrorToasts(frame, walk, memory);
+  await frame.waitForFunction(() => document.querySelector('.toast') === null, undefined, { timeout: TOAST_WAIT_MS }).catch(() => {
+    throw new UnderAToast(COVERED);
+  });
+}
+
+/**
+ * Where on a board control the walk points (#468), as fractions of its width and height: its centre
+ * first, then a grid over the rest of it, for a control partly covered or a candidate refused at its
+ * centre.
  */
 const AIM_POINTS: ReadonlyArray<readonly [number, number]> = [
   [0.5, 0.5],
@@ -525,24 +581,35 @@ const AIM_POINTS: ReadonlyArray<readonly [number, number]> = [
 /** What lies on top at a point of a control: the control itself, a toast, or something else. */
 type OnTop = 'it' | 'toast' | 'other';
 
-/** What lies on top at fractions (x, y) of `control`'s box, scrolled into view. */
+/**
+ * How long one look at a control the walk is pointing at may wait for it: one that went away is
+ * found again by `press` while its time lasts, rather than waited on.
+ */
+const LOOK_MS = 1_000;
+
+/** What lies on top at fractions (x, y) of `control`'s box, scrolled into view where it shows. */
 function onTopAt(control: Control, x: number, y: number): Promise<OnTop> {
   return control.target.evaluate(
     (element, [fx, fy]): OnTop => {
-      element.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-      const box = element.getBoundingClientRect();
-      const hit = element.ownerDocument.elementFromPoint(box.left + box.width * fx, box.top + box.height * fy);
-      if (hit !== null && (hit === element || element.contains(hit))) return 'it';
+      // Scrolled into view as little as it takes first, then to the middle, the top and the bottom
+      // of its scroller, as a player scrolls a control out from under a bar fixed along an edge.
+      let hit: Element | null = null;
+      for (const block of ['nearest', 'center', 'start', 'end'] as const) {
+        element.scrollIntoView({ block, inline: 'nearest' });
+        const box = element.getBoundingClientRect();
+        hit = element.ownerDocument.elementFromPoint(box.left + box.width * fx, box.top + box.height * fy);
+        if (hit !== null && (hit === element || element.contains(hit))) return 'it';
+      }
       return hit?.closest('.toast') ? 'toast' : 'other';
     },
     [x, y] as const,
-    { timeout: PRESS_MS },
+    { timeout: LOOK_MS },
   );
 }
 
 /** Where fractions (x, y) of `control`'s box are on the page. */
 async function placeOf(control: Control, x: number, y: number): Promise<{ x: number; y: number }> {
-  const box = await control.target.boundingBox({ timeout: PRESS_MS });
+  const box = await control.target.boundingBox({ timeout: LOOK_MS });
   if (box === null) throw new Error(GONE);
   return { x: box.x + box.width * x, y: box.y + box.height * y };
 }
@@ -582,12 +649,14 @@ async function framesPass(frame: Frame): Promise<void> {
  * Clicks fractions (x, y) of `control`, where the pointer was moved to `at`, provided the control is
  * still on top there. A control that pointing at it removed (#464) or covered is not pressed. One
  * that moves when pointed at (a card that lifts under the pointer) is followed until it settles, and
- * one that never settles (a board that keeps panning) is clicked where it is on the last look.
+ * one that never settles (a board that keeps panning) is clicked where it is once it has had its
+ * looks. A click that would land on anything but the control, because the page moved something
+ * else under the pointer at that instant, is stopped (`landsOnlyOn`), and the walk looks again.
  */
 async function clickAt(control: Control, at: { x: number; y: number }, x: number, y: number): Promise<void> {
   const mouse = control.frame.page().mouse;
   let pointer = at;
-  for (let looks = 1; ; looks++) {
+  for (let looks = 1; looks <= 2 * SETTLE_LOOKS; looks++) {
     await framesPass(control.frame);
     if ((await control.target.count()) === 0) throw new Error(GONE);
     const top = await onTopAt(control, x, y);
@@ -595,10 +664,48 @@ async function clickAt(control: Control, at: { x: number; y: number }, x: number
     if (top === 'other') throw new Error(COVERED);
     const now = await placeOf(control, x, y);
     const still = Math.abs(now.x - pointer.x) <= STILL_PX && Math.abs(now.y - pointer.y) <= STILL_PX;
-    if (still || looks === SETTLE_LOOKS) return mouse.click(now.x, now.y);
+    if ((still || looks >= SETTLE_LOOKS) && (await landsOnlyOn(control, () => mouse.click(now.x, now.y)))) return;
     await mouse.move(now.x, now.y);
     pointer = now;
   }
+  throw new Error('it kept moving out from under the pointer, so no click landed on it');
+}
+
+/** Why a press failed when the click reached nothing in the game's frame. */
+const OVER_THE_FRAME = "the click reached nothing in the game, so something over the game's frame (the page around it) took it";
+
+/**
+ * Runs `click` with every pointer and mouse event that would reach anything but `control` stopped
+ * before the page sees it, as Playwright's own click does (`guardClicks`), and says whether the
+ * click reached `control` (`clickReached`). A click that reached something else did nothing, so the
+ * walk can look again and click once more. One that reached nothing in the game's frame landed on
+ * whatever the page around the game has over the frame, where no look inside the frame can see it,
+ * so the control is not pressable.
+ */
+async function landsOnlyOn(control: Control, click: () => Promise<void>): Promise<boolean> {
+  await control.target.evaluate(guardClicks, undefined, { timeout: PRESS_MS });
+  let reached: Reached = 'nothing';
+  try {
+    await click();
+  } finally {
+    reached = await control.frame.evaluate(clickReached);
+  }
+  if (reached === 'nothing') throw new Error(OVER_THE_FRAME);
+  return reached === 'it';
+}
+
+/**
+ * Clicks a board control at the first of {@link AIM_POINTS} where it, not something on top of it, is
+ * under the pointer (`clickAt`), as a player clicks the part of a card a tray leaves showing.
+ */
+async function clickWhereReachable(control: Control): Promise<void> {
+  const covers = new Set<Exclude<OnTop, 'it'>>();
+  for (const [x, y] of AIM_POINTS) {
+    const at = await pointAt(control, x, y);
+    if (typeof at !== 'string') return clickAt(control, at, x, y);
+    covers.add(at);
+  }
+  unreachable(covers);
 }
 
 /** Throws why no point of a control could be pressed: a toast over it, or something else. */
@@ -637,21 +744,20 @@ async function aimAndClick(control: Control): Promise<void> {
 
 /**
  * Presses what `selector` matches first in `frame`, the panel's `what`, which the panel showed a
- * moment before. One that is no longer there is reported, not skipped: the panel took back what it
- * offered.
+ * moment before. A panel redrawing its buttons has none for a moment, so one not there is looked for
+ * again until it comes back; one still gone after {@link PRESS_MS} is reported, not skipped: the
+ * panel took back what it offered.
  */
 async function pressThePanels(frame: Frame, selector: string, what: string, walk: SmokeWalk, memory: WalkMemory): Promise<boolean> {
-  const [control] = await controlsOf(frame, selector);
-  if (control === undefined) {
-    note(walk, `The panel showed its ${what}, and it was gone when the walk went to press it.`);
-    return false;
+  const started = Date.now();
+  for (;;) {
+    const [control] = await controlsOf(frame, selector);
+    if (control !== undefined) return press(control, `the panel's ${what}`, walk, memory);
+    if (Date.now() - started > PRESS_MS) break;
+    await frame.waitForTimeout(100);
   }
-  return press(control, `the panel's ${what}`, walk, memory);
-}
-
-/** Records a problem once. */
-function note(walk: SmokeWalk, problem: string): void {
-  if (!walk.errors.includes(problem)) walk.errors.push(problem);
+  note(walk, `The panel showed its ${what}, and it was still gone ${PRESS_MS / 1000}s later, when the walk went to press it.`);
+  return false;
 }
 
 /**
@@ -750,21 +856,37 @@ const BOARD_CANDIDATES = '[data-testid="bs-board"] [data-bs-candidate]';
  * pointing at two corners of it and seeing it name two different choices: aimed elsewhere, it may
  * stand for one the game accepts, so it is pressed (`aimAndClick` finds where). A refused candidate
  * that names the same choice wherever it is pointed at is refused, and is not looked at again while
- * this action is answered.
+ * this action is answered. Each candidate is pinned to its element (`stillThere`) before the pointer
+ * moves, since pointing at it changes what it stands for, which is how it was known.
  */
 async function aimedElsewhere(answering: Answering): Promise<Control | undefined> {
-  for (const candidate of await controlsOf(answering.frame, BOARD_CANDIDATES)) {
-    if (candidate.enabled || candidate.keyboardOnly || answering.refused.has(candidate.key)) continue;
-    const named = async (x: number, y: number) =>
-      typeof (await pointAt(candidate, x, y)) === 'string' ? undefined : candidate.target.getAttribute('data-bs-candidate', { timeout: PRESS_MS });
-    const first = await named(0.1, 0.1);
-    // Pointing at it changed what it stands for, so it is read again as it stands now.
-    if (first !== undefined && first !== (await named(0.9, 0.9))) {
-      return (await controlsOf(answering.frame, BOARD_CANDIDATES)).find((c) => c.index === candidate.index);
+  const { frame, refused } = answering;
+  try {
+    for (const candidate of await controlsOf(frame, BOARD_CANDIDATES)) {
+      if (candidate.enabled || candidate.keyboardOnly || refused.has(candidate.key)) continue;
+      const pinned = await stillThere(candidate);
+      const named = async (x: number, y: number) =>
+        typeof (await pointAt(pinned, x, y)) === 'string' ? undefined : pinned.target.getAttribute('data-bs-candidate', { timeout: LOOK_MS });
+      const first = await named(0.1, 0.1);
+      if (first !== undefined && first !== (await named(0.9, 0.9))) return asItStandsNow(pinned);
+      refused.add(candidate.key);
     }
-    answering.refused.add(candidate.key);
+    return undefined;
+  } finally {
+    await unmark(frame);
   }
-  return undefined;
+}
+
+/**
+ * `control`, pinned to its element by `stillThere`, read again as that element stands now: pointing
+ * at it changed what it stands for. Its place among the matches is its target again, as `controlsOf`
+ * gives it, since the pin comes off once the pointing is done.
+ */
+async function asItStandsNow(control: Control): Promise<Control> {
+  const [now] = await control.target.evaluateAll(pageControls);
+  if (now === undefined) throw new Error(GONE);
+  const { frame, selector, within } = control;
+  return { ...control, label: now.label, key: now.key, enabled: now.enabled, target: visibleMatches(frame, selector, within).nth(control.index) };
 }
 
 /** What a spec's `inputs` function reads of the game's frame (#470): the visible text a player reads. */
@@ -903,7 +1025,7 @@ async function boardControls(frame: Frame): Promise<Control[]> {
 
 /**
  * Presses `control`, one of the board's or a dialog's, named `what`, saying so (`said`, else
- * "pressing" and `what`); counts it when the press lands.
+ * "pressing" and `what`); counts it when the press lands. Returns whether it did.
  */
 async function pressABoardControl(
   control: Control,
@@ -912,9 +1034,11 @@ async function pressABoardControl(
   memory: WalkMemory,
   step: number,
   said = `pressing ${what}`,
-): Promise<void> {
+): Promise<boolean> {
   narrate(step, `${said}${control.keyboardOnly ? ' from the keyboard' : ''}`);
-  if (await press(control, what, walk, memory)) memory.controls++;
+  const landed = await press(control, what, walk, memory);
+  if (landed) memory.controls++;
+  return landed;
 }
 
 /** Presses one board control the walk has not pressed yet. Returns false when every one was pressed. */
@@ -959,19 +1083,28 @@ async function openDialog(frame: Frame): Promise<{ name: string; target: Locator
   return top === undefined ? undefined : { name: top.name, target: dialogs.nth(top.index) };
 }
 
+/** What the last step did to the dialog found open now, as the walk remembers it (`WalkMemory`). */
+interface LastStep {
+  /** The board control the last step pressed, which opened this dialog. */
+  readonly opener: string | undefined;
+  /** The control the last step pressed to close this dialog, which did not close it. */
+  readonly didNotClose: string | undefined;
+}
+
 /**
  * While a modal dialog is open, it is all a player can reach (#461). The walk presses each control
  * in it once, whichever opening of the dialog shows it, remembering the board control that opened
  * the dialog (so `reopenADialog` can open it again for the controls one that closed it hid) and
  * which controls closed it. Once every control in it has been pressed, it closes the dialog as a
- * player would: with a control that closed it before, else with Escape, the key a modal dialog
- * closes on. A dialog still open after Escape is reported, and ends the walk: a player in it has no
- * way back to the game. Returns whether the walk goes on.
+ * player would: with a control that closed a dialog before, else with Escape, the key a modal dialog
+ * closes on. A dialog that control left open is reported, since a player who presses it stays in the
+ * dialog, and Escape is pressed instead; one still open after Escape is reported too, and ends the
+ * walk: a player in it has no way back to the game. Returns whether the walk goes on.
  */
 async function answerTheDialog(
   frame: Frame,
   dialog: { name: string; target: Locator },
-  opener: string | undefined,
+  last: LastStep,
   walk: SmokeWalk,
   memory: WalkMemory,
   step: number,
@@ -980,7 +1113,7 @@ async function answerTheDialog(
   memory.inDialog = true;
   const controls = (await controlsOf(frame, BOARD_CONTROLS, dialog.target)).filter((c) => c.enabled);
   for (const control of controls) {
-    if (!memory.dialogControls.has(control.key)) memory.dialogControls.set(control.key, opening ? opener : undefined);
+    if (!memory.dialogControls.has(control.key)) memory.dialogControls.set(control.key, opening ? last.opener : undefined);
   }
   const untried = controls.find((control) => !memory.pressed.has(`dialog:${control.key}`));
   if (untried !== undefined) {
@@ -989,11 +1122,38 @@ async function answerTheDialog(
     await pressABoardControl(untried, `"${nameOf(untried)}" in the dialog "${dialog.name}"`, walk, memory, step);
     return true;
   }
-  const closer = controls.find((control) => memory.closers.has(control.key));
+  return closeTheDialog(frame, dialog, controls, last, walk, memory, step);
+}
+
+/**
+ * Closes `dialog`, every one of its `controls` pressed, as `answerTheDialog` says: with a control that
+ * closed a dialog before, unless the last step pressed one (`last.didNotClose`) and the dialog is
+ * still open, which is reported; else with Escape. Returns whether the walk goes on.
+ */
+async function closeTheDialog(
+  frame: Frame,
+  dialog: { name: string; target: Locator },
+  controls: readonly Control[],
+  last: LastStep,
+  walk: SmokeWalk,
+  memory: WalkMemory,
+  step: number,
+): Promise<boolean> {
+  const closer = last.didNotClose === undefined ? controls.find((control) => memory.closers.has(control.key)) : undefined;
   if (closer !== undefined) {
     memory.dialogPress = closer.key;
-    await pressABoardControl(closer, `"${nameOf(closer)}" to close the dialog "${dialog.name}"`, walk, memory, step, `closing the dialog "${dialog.name}" with "${nameOf(closer)}"`);
+    const said = `closing the dialog "${dialog.name}" with "${nameOf(closer)}"`;
+    if (await pressABoardControl(closer, `"${nameOf(closer)}" to close the dialog "${dialog.name}"`, walk, memory, step, said)) {
+      memory.closing = { dialog: dialog.name, closer: nameOf(closer) };
+    }
     return true;
+  }
+  if (last.didNotClose !== undefined) {
+    note(
+      walk,
+      `The dialog "${dialog.name}" stayed open after the walk pressed "${last.didNotClose}" in it to close it, as that had closed ` +
+        'a dialog before, so a player who presses it stays in the dialog.',
+    );
   }
   memory.dialogPress = undefined;
   narrate(step, `closing the dialog "${dialog.name}" with Escape`);
@@ -1071,8 +1231,11 @@ async function waitForATurn(frame: Frame): Promise<boolean> {
     );
 }
 
-/** What the walk remembers from step to step, and from game to game, on one deal. */
-interface WalkMemory {
+/**
+ * What the walk remembers from step to step, and from game to game, on one deal: what recording a
+ * resolved action keeps (`ResolvedMemory`), and the rest.
+ */
+interface WalkMemory extends ResolvedMemory {
   /** The controls tried, by key: the board's, and each dialog opening's. */
   readonly pressed: Set<string>;
   /** How many board and dialog control presses landed. */
@@ -1081,14 +1244,8 @@ interface WalkMemory {
   readonly opened: Set<string>;
   /** How many times each action was pressed. */
   readonly times: Map<string, number>;
-  /** How many times each action was taken and resolved. */
-  readonly resolved: Map<string, number>;
   /** How many games ended right after each action resolved. */
   readonly endings: Map<string, number>;
-  /** The actions that failed when taken: reported once, and not tried again while anything else is offered. */
-  readonly failed: Set<string>;
-  /** The action resolved last, which a game that is now over ended on. */
-  lastResolved: string | undefined;
   /** How many games the walk has played on this deal, this one included. */
   games: number;
   /** The seed the spec dealt this walk from; null in a world, which `boardsmith dev` deals itself. */
@@ -1101,22 +1258,17 @@ interface WalkMemory {
   boardPress: string | undefined;
   /** The dialog control the last step pressed, which closed its dialog when the next step finds none. */
   dialogPress: string | undefined;
+  /**
+   * The dialog the last step pressed a control to close, and that control by name: one that did not
+   * close it leaves the next step finding the same dialog still open.
+   */
+  closing: { readonly dialog: string; readonly closer: string } | undefined;
   /** Every control seen in a dialog, with the board control that opened the dialog it was seen in. */
   readonly dialogControls: Map<string, string | undefined>;
   /** The dialog controls that closed their dialog when pressed. */
   readonly closers: Set<string>;
   /** How many times the walk has opened a dialog again to reach each of its controls. */
   readonly reopened: Map<string, number>;
-  /** The actions the walk typed a number in on its last attempt at them (#466). */
-  readonly numbered: Set<string>;
-  /** How many numbers the game's own rules have refused in each action, so the walk types the next one up. */
-  readonly refused: Map<string, number>;
-  /** What the game said when it refused a number, which its error toasts repeat. */
-  readonly refusals: Set<string>;
-  /** What the walk typed in each action's fields on its last attempt at it (#470), for the report if the game refuses it. */
-  readonly typed: Map<string, TypedValue[]>;
-  /** How many actions have been taken on this deal, so the walk knows when the game has moved on. */
-  moves: number;
   /** The actions put off for want of an input (#470), with how many actions had been taken then. */
   readonly putOff: Map<string, number>;
 }
@@ -1137,6 +1289,7 @@ function newMemory(seed: string | null): WalkMemory {
     inDialog: false,
     boardPress: undefined,
     dialogPress: undefined,
+    closing: undefined,
     dialogControls: new Map(),
     closers: new Set(),
     reopened: new Map(),
@@ -1199,6 +1352,27 @@ async function afterTheGame(page: Page, walk: SmokeWalk, memory: WalkMemory, ste
 }
 
 /**
+ * Answers the modal dialog open now, if any (`answerTheDialog`), with what the last step did to it:
+ * pressed the board control that opened it, or pressed a control to close it that did not. With no
+ * dialog open, a dialog control the last step pressed closed its dialog, and is remembered as a
+ * closer. Returns whether the walk goes on, or undefined when no dialog is open.
+ */
+async function answerAnOpenDialog(frame: Frame, walk: SmokeWalk, memory: WalkMemory, step: number): Promise<boolean | undefined> {
+  const { boardPress, dialogPress, closing } = memory;
+  memory.boardPress = undefined;
+  memory.dialogPress = undefined;
+  memory.closing = undefined;
+  const dialog = await openDialog(frame);
+  if (dialog !== undefined) {
+    const didNotClose = closing?.dialog === dialog.name ? closing.closer : undefined;
+    return answerTheDialog(frame, dialog, { opener: boardPress, didNotClose }, walk, memory, step);
+  }
+  if (memory.inDialog && dialogPress !== undefined) memory.closers.add(dialogPress);
+  memory.inDialog = false;
+  return undefined;
+}
+
+/**
  * One step of the walk: deal a new game after one that ended, press a control of an open modal
  * dialog (#461), press an untried board control, answer the open action, or press what the panel
  * offers. Game over is looked for first, and the game-over card's own controls are never the
@@ -1211,14 +1385,8 @@ async function walkOneStep(page: Page, frame: Frame, walk: SmokeWalk, memory: Wa
   await drainResolved(frame, walk, memory);
   await noteErrorToasts(frame, walk, memory);
   if (await frame.locator('.game-over-card').isVisible()) return afterTheGame(page, walk, memory, step);
-  // What the last step pressed: it opened a dialog found open now, or closed one found gone.
-  const { boardPress, dialogPress } = memory;
-  memory.boardPress = undefined;
-  memory.dialogPress = undefined;
-  const dialog = await openDialog(frame);
-  if (dialog !== undefined) return answerTheDialog(frame, dialog, boardPress, walk, memory, step);
-  if (memory.inDialog && dialogPress !== undefined) memory.closers.add(dialogPress);
-  memory.inDialog = false;
+  const inDialog = await answerAnOpenDialog(frame, walk, memory, step);
+  if (inDialog !== undefined) return inDialog;
   const offers = await readOffers(frame, walk);
   if (await reopenADialog(frame, walk, memory, step)) return true;
   if (await pressAnUntriedControl(frame, walk, memory, step)) return true;
