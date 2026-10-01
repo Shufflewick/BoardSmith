@@ -2173,6 +2173,13 @@ describe('#453: the in-browser smoke test is a chunk output, and part of the don
     expect(spec).toMatch(/`renderAsSeat`, `tableShellContext` or `worldShellContext`/);
   });
 
+  it('#458: tells a chunk how to list an action no walk from a fresh game reaches, and what not to declare', () => {
+    const spec = flatRead('build/spec.md');
+    expect(spec).toMatch(/names it in `unreachable` as well, with a sentence saying why/);
+    expect(spec).toMatch(/An action that ends the game, or that needs another seat to act first, is not one/);
+    expect(spec).toMatch(/takes a declared action anyway, its summary says so: remove the declaration/);
+  });
+
   it("puts the smoke test in the done gate's list of checks, with the commands to run it alone and to install its browser", () => {
     const gate = flatRead('build/test.md').split('The done gate: `boardsmith verify`')[1].split('## The A11y Floor')[0];
     expect(gate).toMatch(/full suite, typecheck, build, validate, the smoke test and a mutation check/);

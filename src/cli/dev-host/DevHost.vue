@@ -675,6 +675,8 @@ onUnmounted(() => {
               <button
                 type="button"
                 class="dev-chrome__badge dev-chrome__badge--btn"
+                data-testid="seat-switcher"
+                :data-following="String(followActive)"
                 aria-haspopup="true"
                 :aria-expanded="seatSwitcherOpen"
                 @click="seatSwitcherOpen = !seatSwitcherOpen"
@@ -686,6 +688,7 @@ onUnmounted(() => {
                 <button
                   type="button"
                   class="seat-switcher-menu__item"
+                  data-testid="follow-active-seat"
                   :class="{ 'seat-switcher-menu__item--current': followActive }"
                   @click="seatSwitcherOpen = false; toggleFollow()"
                 >
@@ -753,6 +756,7 @@ onUnmounted(() => {
                 <button
                   type="button"
                   class="btn btn--start"
+                  data-testid="new-game"
                   :class="{ 'btn--confirming': restartConfirming }"
                   @click="handleNewGameClick"
                 >
@@ -797,6 +801,7 @@ onUnmounted(() => {
               <button
                 type="button"
                 class="btn btn--start"
+                data-testid="new-game"
                 :class="{ 'btn--confirming': restartConfirming }"
                 @click="handleNewGameClick"
               >{{ restartConfirming ? 'Confirm restart?' : 'New game' }}</button>

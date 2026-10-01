@@ -16,6 +16,7 @@ import { REPO_ROOT } from '../spawn-cli.test-helper.js';
 import { writeFiles } from '../lib/verify-result.test-helper.js';
 import { browserProblem, runSmoke } from './smoke.js';
 import { isRunning, smokeProject } from './smoke-project.test-helper.js';
+import { KEYBOARD_ONLY_BOARD, PLAYERS_GET_THE_TABLE, QUIET_CLAIM_REASON, smokeSpec, TRUCE_GAME } from './smoke-fixtures.test-helper.js';
 
 vi.setConfig({ testTimeout: 300_000, hookTimeout: 120_000 });
 
@@ -36,17 +37,6 @@ onMounted(() => console.error('the table lost its deck'));
 <template>
   <div class="complaining-board">A board</div>
 </template>
-`;
-
-/** The scaffold's UI registry with its own board made the one players get, as a finished game has it. */
-const PLAYERS_GET_THE_TABLE = `import { defineGameUIs, defaultUI, devUI } from 'boardsmith/ui';
-import AutoUI from 'boardsmith/ui/auto-ui';
-import GameTable from './components/GameTable.vue';
-
-export default defineGameUIs({
-  Table: defaultUI(GameTable),
-  Auto: devUI(AutoUI),
-});
 `;
 
 /**
@@ -92,6 +82,58 @@ describe('boardsmith verify: the smoke check', () => {
     expect(outcome.summary).toMatch(
       /^The smoke walk found 2 problems: - A console error: the table lost its deck.*The game offered "play", which tests\/browser\/smoke\.spec\.ts does not list\. Add it to `actions` there\./s,
     );
+  });
+
+  it('#457: presses a keyboard-only board control (invisible, no pointer, over a surface that takes the pointer) from the keyboard', async () => {
+    const { outcome } = await smokeOf(false, KEYBOARD_ONLY_BOARD);
+
+    expect(outcome.summary).toMatch(/^Served by `boardsmith dev` from a fresh start, a seated player took "draw", "play" and pressed 1 board control, with no error\./);
+    expect(outcome.passed).toBe(true);
+  });
+
+  it(
+    '#458, #459: takes a game-ending action once and starts a new game for the rest, then stops taking it so a game can go ' +
+      'on, acts for the other seat to accept an offer, ' +
+      'completes a two-card pick in the panel and a two-to-three-card pick on the board, and does not require the action the spec declares out of reach',
+    async () => {
+      const { outcome } = await smokeOf(false, {
+        ...TRUCE_GAME,
+        'tests/browser/smoke.spec.ts': smokeSpec(['concede', 'draw', 'play', 'trade', 'offerTruce', 'acceptTruce', 'rally', 'claimTruce'], {
+          claimTruce: QUIET_CLAIM_REASON,
+        }),
+      });
+
+      expect(outcome.summary).toMatch(
+        /^Served by `boardsmith dev` from a fresh start, a seated player took "acceptTruce", "concede", "draw", "offerTruce", "play", "rally", "trade" and pressed \d+ board controls?, with no error, over [3-9] games \(a new one each time a game ended with listed actions still to take\)\. Not required, as tests\/browser\/smoke\.spec\.ts says a walk from a fresh game cannot reach them: "claimTruce"\.$/,
+      );
+      expect(outcome.passed).toBe(true);
+    },
+  );
+
+  it('#458: reports an action the spec declares out of reach that the walk took anyway, so the declaration can go', async () => {
+    const { outcome } = await smokeOf(false, {
+      ...TRUCE_GAME,
+      'tests/browser/smoke.spec.ts': smokeSpec(['concede', 'draw', 'play', 'trade', 'offerTruce', 'acceptTruce', 'rally', 'claimTruce'], {
+        acceptTruce: 'Only the other seat may accept a truce, and a walk plays one seat.',
+        claimTruce: QUIET_CLAIM_REASON,
+      }),
+    });
+
+    expect(outcome.passed).toBe(true);
+    expect(outcome.summary).toMatch(
+      /The walk took "acceptTruce", which tests\/browser\/smoke\.spec\.ts says a walk from a fresh game cannot reach: remove it from `unreachable` there, so the walk requires it\.$/,
+    );
+  });
+
+  it('fails a spec that passes without walking the game', async () => {
+    const { outcome } = await smokeOf(false, {
+      'tests/browser/smoke.spec.ts': "import { test } from '@playwright/test';\n\ntest('opens nothing', () => {});\n",
+    });
+
+    expect(outcome).toMatchObject({
+      passed: false,
+      summary: 'tests/browser/smoke.spec.ts passed without walking the game: it has no `defineSmokeTest` call, so nothing took an action.',
+    });
   });
 
   it("fails with boardsmith dev's own words when it cannot start, and stops it", async () => {

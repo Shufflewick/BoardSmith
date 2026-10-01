@@ -348,25 +348,80 @@ markers this page documents, so it keeps up with any game without knowing it:
 - It opens `/`, takes a seat (a table seats the first browser, a world attaches
   it; a table showing its lobby is asked for the first open seat), and waits for
   the game frame's `[data-testid="bs-actionbar"]`.
-- Each step it answers the open action (the panel marks it
-  `data-bs-open-action="<name>"`), presses a board control it has not pressed,
-  or takes the next `[data-bs-action]` button, preferring one not taken yet and
-  opening `[data-bs-action-group]` menus to reach the actions inside them.
+- At a table it then turns on the dev host's "Follow active seat"
+  (`[data-testid="seat-switcher"]`, then `[data-testid="follow-active-seat"]`),
+  so it acts for whichever seat is due and the bots stand down. That is how it
+  reaches an action one seat has only after another acts, such as accepting a
+  draw the other seat offered (#458). A world's dev host has no seats to follow.
+- Each step it presses a board control it has not pressed, answers the open
+  action (the panel marks it `data-bs-open-action="<name>"`), or takes the next
+  `[data-bs-action]` button, preferring one not taken yet and opening
+  `[data-bs-action-group]` menus to reach the actions inside them. A board
+  control comes first because a player can press the board while a pick is
+  open, and because a game that opens each turn's action by itself never has a
+  moment with nothing open once the walk acts for every seat.
 - An open action is answered one choice at a time: a price's confirm button, the
   board's own `[data-bs-candidate]` (so the board is pressed, not only the
   panel), a text field filled with "smoke test", then the panel's choice, add,
   done and skip buttons.
+- A multi-select pick (#459) is answered one distinct choice at a time: an
+  unticked box in the panel, or, when the panel hands the pick to the board, a
+  `[data-bs-candidate]` this pick has not chosen. Once it has at least one
+  choice and its Done button is ready, it presses Done. The pick's own min and
+  max decide through the panel: Done is ready from `min` on, every box left is
+  refused at `max`, and a pick whose `min` is its `max` has no Done and
+  completes on its last choice.
 - A board control is a `button` or `[role="button"]` inside
   `[data-testid="bs-board"]` that a keyboard can reach and that is not a pick's
   candidate. It is known by its `data-bs-el-id` when it has one, else its label.
+  One that takes no pointer by design (`pointer-events: none`), such as an
+  invisible keyboard board laid over a 3D canvas for keyboard and screen-reader
+  players, is pressed the way its players press it: focused, then Enter (#457).
+  Any other control is clicked, and one something covers fails the walk.
+- When a game ends with listed actions still to take, it presses the dev host's
+  "New game" (`[data-testid="new-game"]`, twice, to confirm) and goes on in the
+  new game (#458). An action whose taking has ended every game it was taken in,
+  such as resigning, is taken again only when the panel offers nothing else, so
+  it does not cut each game short. A world's dev host has no "New game".
 - Actions it took are read from `boardsmith:action-resolved`, which also reports
   one that failed. It fails on `pageerror`, console errors, responses of 400 and
   up (or failed requests) from the dev host, error toasts, presses that never
   land, an open action that offers nothing or does not change, an offered action
   `actions` does not list, and a listed one it never takes.
-- It stops when its `steps` (default 60) run out, the game ends, nothing is
-  offered for 30 seconds, or every offer has been taken and five more steps
+- It stops when its `steps` (default 60, counted across games) run out, a game
+  ends with every required action taken, nothing is offered for 30 seconds, or
+  every required action and every offer has been taken and five more steps
   turned up nothing new.
+
+### Actions no walk from a fresh game can reach: `unreachable`
+
+`actions` lists every action the game has. A few cannot be reached by any walk
+from a fresh game, whatever its `steps`: a claim offered only on threefold
+repetition or after fifty quiet moves, say. Such an action stays in `actions`
+and is also named in `unreachable`, with a sentence saying why:
+
+```ts
+defineSmokeTest({
+  actions: ['movePiece', 'resign', 'offerDraw', 'acceptDraw', 'claimDraw'],
+  unreachable: {
+    claimDraw:
+      'Offered only when the same position has occurred three times or fifty moves have passed without a capture ' +
+      'or pawn move, and a walk from a fresh game plays neither.',
+  },
+});
+```
+
+The walk does not require a declared action. It still takes one the panel
+offers, and fails if taking it fails. When it takes one anyway, its passing
+summary names it and says to remove the declaration, so a declaration that is
+no longer true does not stay. The check fails a declaration whose reason is not
+a sentence (fewer than four words) and one that names an action `actions` does
+not list.
+
+An action that ends the game (resign) or that needs another seat to act first
+(accept a draw) does not belong in `unreachable`: the walk starts a new game
+when one ends, and acts for every seat at a table. Taking such an action is
+reported as taking it, not excused.
 
 It walks the UI players get: the `defaultUI` entry in `src/ui/uis.ts`, not a
 `devUI`. Board tests stand in for the shell with `renderAsSeat`,

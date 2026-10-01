@@ -34,7 +34,7 @@ import { collectOutput } from '../lib/child-output.js';
 import { freePort } from '../lib/free-port.js';
 import { gitOutput as git } from '../lib/git-output.js';
 import type { VerifyCheckResult } from '../lib/verify-result.js';
-import { SMOKE_ANNOTATION, SMOKE_SPEC_PATH } from '../../testing/browser-smoke-verdict.js';
+import { SMOKE_ANNOTATION, SMOKE_SPEC_PATH, smokeSummary, type SmokeRecord } from '../../testing/browser-smoke-verdict.js';
 
 /** A check's outcome, as `boardsmith verify` records it. */
 type SmokeOutcome = Omit<VerifyCheckResult, 'name'>;
@@ -332,18 +332,18 @@ function firstTest(suites: PlaywrightSuite[]): PlaywrightTest | undefined {
   return undefined;
 }
 
-/** A passing walk's outcome, from what the walk recorded on its test. */
-function passedWalk(test: PlaywrightTest): SmokeOutcome {
-  const recorded = test.annotations?.find((a) => a.type === SMOKE_ANNOTATION)?.description ?? '{}';
-  const { taken = [], controls = 0 } = JSON.parse(recorded) as { taken?: string[]; controls?: number };
-  const took = taken.length === 0 ? 'no action' : taken.map((t) => `"${t}"`).join(', ');
-  return {
-    passed: true,
-    summary:
-      `Served by \`boardsmith dev\` from a fresh start, a seated player took ${took} ` +
-      `and pressed ${controls} board control${controls === 1 ? '' : 's'}, with no error.`,
-    counts: { actions: taken.length, controls },
-  };
+/** A passing test's outcome, from what the walk recorded on it: a spec that never walked fails. */
+function passedTest(test: PlaywrightTest): SmokeOutcome {
+  const recorded = test.annotations?.find((a) => a.type === SMOKE_ANNOTATION)?.description;
+  if (recorded === undefined) {
+    return {
+      passed: false,
+      summary: `${SMOKE_SPEC_PATH} passed without walking the game: it has no \`defineSmokeTest\` call, so nothing took an action.`,
+      next: `Make it the one call \`defineSmokeTest({ actions: [...] })\` from 'boardsmith/testing/browser', then run the check again.`,
+    };
+  }
+  const record = JSON.parse(recorded) as SmokeRecord;
+  return { passed: true, summary: smokeSummary(record), counts: { actions: record.taken.length, controls: record.controls } };
 }
 
 /** A failed walk's outcome: what the test said, else how Playwright exited. */
@@ -365,7 +365,7 @@ function saidByTheRun(report: PlaywrightReport, test: PlaywrightTest | undefined
 function verdict(report: PlaywrightReport | undefined, code: number | null, output: string): SmokeOutcome {
   if (report === undefined) return failedWalk([], code, output);
   const test = firstTest(report.suites);
-  if (test !== undefined && code === 0 && test.results[0]?.status === 'passed') return passedWalk(test);
+  if (test !== undefined && code === 0 && test.results[0]?.status === 'passed') return passedTest(test);
   return failedWalk(saidByTheRun(report, test), code, output);
 }
 

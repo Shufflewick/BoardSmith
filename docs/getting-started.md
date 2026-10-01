@@ -232,11 +232,22 @@ defineSmokeTest({ actions: ['draw', 'play'] });
 `boardsmith dev` there on a free port (a fresh game, or a world from genesis,
 leaving your own dev world alone), and runs the spec in Chromium. A player takes
 a seat, takes every action the action panel offers, answering each choice (on
-the board when the board shows it), and presses every control on the board once.
-The check fails on any uncaught page error, any console error, any failed request
-to the dev host, any offered action that fails, an offered action `actions` does
-not list, and a listed action the walk never takes. A game with no actions yet
-lists none and still has to load and seat a player without an error. The run
+the board when the board shows it), and presses every control on the board once
+(from the keyboard when the control takes no pointer by design). At a table it
+acts for every seat in turn, and starts a new game when one ends with listed
+actions still to take. The check fails on any uncaught page error, any console
+error, any failed request to the dev host, any offered action that fails, an
+offered action `actions` does not list, and a listed action the walk never takes.
+A listed action no walk from a fresh game can reach is also named in
+`unreachable`, with a sentence saying why; see
+[Browser Testing](./browser-testing.md#actions-no-walk-from-a-fresh-game-can-reach-unreachable).
+A game with no actions yet lists none and still has to load and seat a player
+without an error.
+
+The smoke test runs only under Playwright. The project's `vitest.config.ts`
+leaves `'**/tests/browser/**'` out of vitest runs, at any depth, so a copy of the
+spec in a git worktree kept inside the project is left out too. `boardsmith test`
+refuses a config without it and says the exact line to change. The run
 stops every process it started, and removes its copy, whether it passed, failed
 or was interrupted. `boardsmith smoke` runs this check alone, on the files as
 they stand, while you work.
