@@ -105,6 +105,12 @@ export type HostOutbound =
       deadlineAt: number | null;
       /** Host clock, epoch ms, when this frame was sent. */
       serverNow: number;
+      /**
+       * The seed this game was dealt from (#460), which a `restart` naming it
+       * deals again. Null for a game restored from a recorded state that names
+       * none (`boardsmith dev --seed <file>`).
+       */
+      seed: string | null;
       requestId?: string | null;
     }
   | { type: 'server_response'; requestId: string | null; result: Record<string, unknown> }
@@ -130,7 +136,8 @@ export type ClientInbound =
   | { type: 'hello' }
   | { type: 'join'; seat: number; name?: string; color?: string }
   | { type: 'leave' }
-  | { type: 'restart' }
+  /** Start a new game, dealt from `seed` when it names one (#460), else from a fresh seed. */
+  | { type: 'restart'; seed?: string }
   | { type: 'server_request'; requestId: string; op: string; payload: Record<string, unknown> }
   | { type: 'follow'; enabled: boolean }
   | { type: 'getState'; requestId?: string }
@@ -441,6 +448,8 @@ export class MultiplayerHost {
   private followerClientId: string | null = null;
   /** The active seat last shown to the follower, to re-init only on change. */
   private lastFollowerSeat: number | null = null;
+  /** The seed the running game was dealt from, which every `game_state` frame carries (#460). */
+  private dealtFrom: string | null = null;
   /**
    * Maps an in-flight requestId to the client that issued it, so the matching
    * `server_response` is routed back to the REQUESTING client — not the acting
@@ -617,7 +626,7 @@ export class MultiplayerHost {
       case 'leave':
         return this.handleLeave(clientId);
       case 'restart':
-        return this.handleRestart(clientId);
+        return this.handleRestart(clientId, msg.seed);
       case 'server_request':
         return this.handleServerRequest(clientId, msg);
       case 'follow':
@@ -637,7 +646,7 @@ export class MultiplayerHost {
     }
   }
 
-  private async handleRestart(clientId: string): Promise<void> {
+  private async handleRestart(clientId: string, seed: string | undefined): Promise<void> {
     // Defensive hardening only (T-157-06) — NOT the D11 fix. A FINISHED game
     // already passes here: LobbyPhase has no 'complete' value, so completion
     // never flips `phase` off 'playing'. The `|| !this.session` clause guards
@@ -647,16 +656,29 @@ export class MultiplayerHost {
       this.send(clientId, { type: 'error', message: 'No game in progress to restart.' });
       return;
     }
-    // A restart is a clean slate: reset follow-mode (the new game's bot seats are
-    // rebuilt by startGame) and untoggle the follower's button.
-    if (this.followerClientId !== null) {
-      const ex = this.followerClientId;
-      this.followerClientId = null;
-      this.lastFollowerSeat = null;
-      this.send(ex, { type: 'follow', enabled: false, seat: this.clientSeat.get(ex) ?? 0 });
+    const refused = seed === undefined ? undefined : this.dealRefusal(seed);
+    if (refused !== undefined) {
+      this.send(clientId, { type: 'error', message: refused });
+      return;
     }
-    // Rebuild the session with the same seats and a fresh seed.
-    await this.startGame();
+    // Rebuild the session with the same seats, dealt from the seed named or a
+    // fresh one. Follow-mode carries over (#460): the one driver of every seat
+    // drives the new game too, and no bot moves in it before the driver can.
+    await this.startGame(seed);
+  }
+
+  /** Why a game cannot be dealt from `seed`, or undefined when it can. */
+  private dealRefusal(seed: string): string | undefined {
+    if (this.opts.seedSnapshot !== undefined) {
+      return (
+        'This `boardsmith dev` starts every game from the recorded state its `--seed <file>` names, so it cannot deal ' +
+        'from a seed. Start `boardsmith dev` without `--seed` to deal from one.'
+      );
+    }
+    if (seed.trim() === '') {
+      return 'A game is dealt from a seed, any text that is not blank (such as "7" or "opening"). Type one, then deal again.';
+    }
+    return undefined;
   }
 
   /**
@@ -752,8 +774,8 @@ export class MultiplayerHost {
       }
     } else {
       for (let seat = current; seat > newCount; seat--) {
-        const info = this.seats.get(seat);
-        if (info?.clientId) this.releaseSeat(info.clientId);
+        const holder = this.seats.get(seat)?.clientId;
+        if (holder) this.dropFromTheTable(holder);
         this.seats.delete(seat);
       }
     }
@@ -794,6 +816,24 @@ export class MultiplayerHost {
     this.reinitSeat(clientId, active);
   }
 
+  /**
+   * Release the seat of a client whose seat is going away. A follower among
+   * them no longer drives the table: the restart that follows gives the seats
+   * left to their bots.
+   */
+  private dropFromTheTable(clientId: string): void {
+    if (clientId === this.followerClientId) this.stopFollowing();
+    this.releaseSeat(clientId);
+  }
+
+  /** End follow-mode for a follower leaving its seat, and tell it so. */
+  private stopFollowing(): void {
+    if (this.followerClientId === null) return;
+    this.send(this.followerClientId, { type: 'follow', enabled: false, seat: 0 });
+    this.followerClientId = null;
+    this.lastFollowerSeat = null;
+  }
+
   /** Take over a seat (works mid-game: claim an open/bot seat → it stops being bot). */
   private handleJoin(clientId: string, msg: Extract<ClientInbound, { type: 'join' }>): void {
     this.connected.add(clientId);
@@ -816,10 +856,8 @@ export class MultiplayerHost {
   private async handleLeave(clientId: string): Promise<void> {
     // Explicitly leaving ends follow-mode (unlike a transient disconnect/reload).
     if (clientId === this.followerClientId) {
-      this.followerClientId = null;
-      this.lastFollowerSeat = null;
+      this.stopFollowing();
       this.rebuildBotSeats();
-      this.send(clientId, { type: 'follow', enabled: false, seat: 0 });
     }
     const seat = this.clientSeat.get(clientId);
     this.releaseSeat(clientId);
@@ -1108,7 +1146,7 @@ export class MultiplayerHost {
 
   // extracted into `injectPersistedStore` rather than inlined here.
   // fallow-ignore-next-line complexity
-  private async startGame(): Promise<void> {
+  private async startGame(seed?: string): Promise<void> {
     // ENDGAME-02 / F-12: single-chokepoint concurrency guard. Two near-
     // simultaneous (re)start triggers (restart + configure, or two restarts)
     // would otherwise each build a live session and both broadcast — the loser
@@ -1136,15 +1174,17 @@ export class MultiplayerHost {
     );
     // Seed the live bot-seat list from the current open seats — in place, since
     // the session's bot pump holds this array reference. Mutated later as humans
-    // take over seats (removeBotSeat) or give them up (addBotSeat).
-    this.rebuildBotSeats();
+    // take over seats (removeBotSeat) or give them up (addBotSeat). A follower
+    // drives every seat, so while one follows no bot plays (#460).
+    if (this.followerClientId === null) this.rebuildBotSeats();
+    else this.botSeats.length = 0;
 
     // The start gameOptions are derived from lobby state (mirrors DevHost.buildSession):
     // a fresh seed, each seat's chosen/default color, and which seats are bot.
     const perSeatOptions = this.buildPerSeatOptions();
     const startGameOptions = {
       playerCount,
-      seed: (this.opts.makeSeed ?? defaultSeed)(),
+      seed: seed ?? (this.opts.makeSeed ?? defaultSeed)(),
       // D13/DEVHOST-01: the CURRENTLY APPLIED selection (defaults, overlaid by
       // any accepted `configure` preset/gameOptions), not the frozen
       // opts.baseGameOptions — so a selection persists across a restart. A
@@ -1235,6 +1275,7 @@ export class MultiplayerHost {
     this.phase = 'playing';
     this.starting = false;
     this.stranded = null;
+    this.dealtFrom = this.seedOf(startGameOptions.seed);
 
     // D15/DEVHOST-03: reconcile against `heldByHuman` — a seat captured as
     // human in `humanSeats` (above, BEFORE the await) that stopped being one
@@ -1248,7 +1289,7 @@ export class MultiplayerHost {
     // this is a loop-driver-only cover; `hello`'s reconnect branch removes it
     // from `botSeats` again the moment the client returns.
     for (const seat of humanSeats) {
-      if (!this.heldByHuman(seat)) this.addBotSeat(seat);
+      if (!this.heldByHuman(seat) && this.followerClientId === null) this.addBotSeat(seat);
     }
 
     // The opening seat may belong to a bot (e.g. a bot dictator that acts first);
@@ -1271,8 +1312,28 @@ export class MultiplayerHost {
     }
     for (const seat of seatsToReinit) {
       const clientId = this.seats.get(seat)?.clientId;
-      if (clientId) this.reinitSeat(clientId, seat);
+      if (clientId === this.followerClientId) this.reinitFollower();
+      else if (clientId) this.reinitSeat(clientId, seat);
     }
+  }
+
+  /**
+   * The seed a started game was dealt from: the recorded state's when the host
+   * starts every game from one (`--seed <file>`), else the one the start op had.
+   */
+  private seedOf(dealt: unknown): string | null {
+    const recorded = this.opts.seedSnapshot;
+    if (recorded === undefined) return typeof dealt === 'string' ? dealt : null;
+    const seed = recorded.seed ?? recorded.gameOptions?.seed;
+    return typeof seed === 'string' ? seed : null;
+  }
+
+  /** Show the follower the seat that is due in the game just started. */
+  private reinitFollower(): void {
+    if (this.followerClientId === null) return;
+    const active = this.effectiveActiveSeat();
+    this.lastFollowerSeat = active;
+    this.reinitSeat(this.followerClientId, active);
   }
 
   // ── Rules reload (#343) ───────────────────────────────────────────────────
@@ -1474,6 +1535,7 @@ export class MultiplayerHost {
       isDraw: meta.isDraw,
       deadlineAt: this.window?.deadlineAt ?? null,
       serverNow: this.clock.now(),
+      seed: this.dealtFrom,
     };
   }
 

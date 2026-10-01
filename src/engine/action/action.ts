@@ -1,3 +1,4 @@
+import { rulesErrorSentence } from './rules-error.js';
 import type { GameElement } from '../element/game-element.js';
 import { isElement } from '../element/game-element.js';
 import type { Player } from '../player/player.js';
@@ -86,7 +87,7 @@ function failedExecute(actionName: string, error: unknown): ActionResult {
   // An engine policy refusal was written to be read — its message IS the
   // actionable next step. Anything else is an arbitrary runtime error, and
   // goes no further than this log.
-  const generic = `The "${actionName}" action could not be completed because of an error in the game's rules. Nothing was changed.`;
+  const generic = `${rulesErrorSentence(actionName)} Nothing was changed.`;
   // A PlayerFacingError's text was written to be read, so it always travels.
   // Anything else travels only in a positively-labelled dev/test environment,
   // where the reader is the author who needs it and there is no player to leak

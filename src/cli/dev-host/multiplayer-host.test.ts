@@ -1,7 +1,7 @@
 import { beforeEach, describe, it, expect } from 'vitest';
 import { Game, Player, Action, defineFlow, actionStep, loop, eachPlayer, type GameOptions } from '../../engine/index.js';
 import { executeOp, type GameDefinitionLike } from '../../session/index.js';
-import { MultiplayerHost, type HostOutbound } from './multiplayer-host.js';
+import { MultiplayerHost, type HostOutbound, type MultiplayerHostOptions } from './multiplayer-host.js';
 import { createDevHostClientMemory } from './test-client-memory.js';
 
 /** This suite's stand-in browser memory — see test-client-memory.ts. */
@@ -78,6 +78,12 @@ function makeAltHost() {
       payload: { actionName: 'pass', args: {}, boundaryKey: clientKey(clientId) },
     });
   return { host, sent, to, has, lastOfType, pass, clear: () => (sent.length = 0) };
+}
+
+/** The follower `A` is acting as seat 2, which is due, and sees that seat's own view. */
+function expectFollowingSeatTwo(lastOfType: ReturnType<typeof makeAltHost>['lastOfType']): void {
+  expect(lastOfType('A', 'init').seat).toBe(2);
+  expect((lastOfType('A', 'game_state').view as any).state.isMyTurn).toBe(true);
 }
 
 function makeHost(opts: { designatedBotSeats?: number[] } = {}) {
@@ -396,8 +402,7 @@ describe('MultiplayerHost — follow active seat', () => {
     // Follow is restored: A is told follow is on and re-shown the ACTIVE seat (2),
     // with seat 2's own view (isMyTurn true) — not its own seat 1.
     expect(lastOfType('A', 'follow')).toMatchObject({ enabled: true, seat: 2 });
-    expect(lastOfType('A', 'init').seat).toBe(2);
-    expect((lastOfType('A', 'game_state').view as any).state.isMyTurn).toBe(true);
+    expectFollowingSeatTwo(lastOfType);
   });
 
   it('explicitly leaving ends follow-mode', async () => {
@@ -408,11 +413,30 @@ describe('MultiplayerHost — follow active seat', () => {
     expect(lastOfType('A', 'follow')).toMatchObject({ enabled: false });
   });
 
-  it('restart resets follow-mode and echoes it disabled', async () => {
-    const { host, lastOfType } = makeAltHost();
+  it.each([
+    ['a restart', { type: 'restart' }],
+    ['a configure restart', { type: 'configure', gameOptions: {} }],
+  ] as const)('#460: follow-mode survives %s: no bot acts in the new game, and the follower is shown the seat that is due', async (_, message) => {
+    const { host, lastOfType, pass, has, clear } = makeAltHost();
     await host.handleMessage('A', { type: 'hello' });
     await host.handleMessage('A', { type: 'follow', enabled: true });
-    await host.handleMessage('A', { type: 'restart' });
+    clear();
+    await host.handleMessage('A', message);
+
+    expect(has('A', 'follow')).toBe(false);
+    // A passes as seat 1; with a bot on seat 2 the game would now be over.
+    await pass('A', 'r1');
+    expect(lastOfType('A', 'game_state').isComplete).toBe(false);
+    expectFollowingSeatTwo(lastOfType);
+  });
+
+  it('#460: a configure that removes the follower\'s seat ends follow-mode, so the bots drive the seats left', async () => {
+    const { host, lastOfType } = makeHost({ designatedBotSeats: [1] }); // A lands in seat 2
+    await host.handleMessage('A', { type: 'hello' });
+    await host.handleMessage('A', { type: 'follow', enabled: true });
+
+    await host.handleMessage('A', { type: 'configure', gameOptions: { playerCount: 1 } });
+
     expect(lastOfType('A', 'follow')).toMatchObject({ enabled: false });
   });
 
@@ -630,11 +654,12 @@ describe('MultiplayerHost — debugToggle/uiSwitch relay', () => {
 // CURRENT (pre-fix) source. D11's actual bug is the DevHost/GameShell ROUTING
 // gaps covered in DevHost.restart.test.ts and GameShell.restart.test.ts.
 describe('MultiplayerHost — restart from a finished game (D11 characterization + adversarial)', () => {
-  function makeAltHostWithSeedCapture() {
+  function makeAltHostWithSeedCapture(options: Pick<MultiplayerHostOptions, 'seedSnapshot'> = {}) {
     const seeds: string[] = [];
     let seedCounter = 0;
     const sent: Array<{ clientId: string; msg: HostOutbound }> = [];
     const host = new MultiplayerHost({
+      ...options,
       playerCount: 2,
       minPlayers: 2,
       maxPlayers: def.maxPlayers,
@@ -694,6 +719,49 @@ describe('MultiplayerHost — restart from a finished game (D11 characterization
     expect(lastOfType('A', 'game_state').isComplete).toBe(false);
     expect(seeds).toHaveLength(3);
     expect(new Set(seeds).size).toBe(3); // three distinct seeds across two restarts
+  });
+
+  it('#460: a restart naming a seed deals the new game from it, and every frame says which seed its game was dealt from', async () => {
+    const { host, lastOfType, seeds } = makeAltHostWithSeedCapture();
+    await host.handleMessage('A', { type: 'hello' });
+    expect(lastOfType('A', 'game_state').seed).toBe('seed-0');
+
+    await host.handleMessage('A', { type: 'restart', seed: 'deal-7' });
+
+    expect(seeds).toEqual(['seed-0', 'deal-7']);
+    expect(lastOfType('A', 'game_state').seed).toBe('deal-7');
+    // A restart naming no seed deals a fresh one again.
+    await host.handleMessage('A', { type: 'restart' });
+    expect(seeds).toEqual(['seed-0', 'deal-7', 'seed-1']);
+  });
+
+  it('#460: refuses a blank seed, saying what a seed is, and leaves the game as it was', async () => {
+    const { host, lastOfType, seeds } = makeAltHostWithSeedCapture();
+    await host.handleMessage('A', { type: 'hello' });
+
+    await host.handleMessage('A', { type: 'restart', seed: '  ' });
+
+    expect(seeds).toEqual(['seed-0']);
+    expect(lastOfType('A', 'error').message).toBe(
+      'A game is dealt from a seed, any text that is not blank (such as "7" or "opening"). Type one, then deal again.',
+    );
+  });
+
+  it('#460: a host that starts every game from a recorded state refuses to deal from a seed, and says why', async () => {
+    const recorded = await executeOp(altDef, { playerCount: 2, seed: 'recorded' }, null, null, { type: 'start' });
+    const { host, lastOfType } = makeAltHostWithSeedCapture({
+      seedSnapshot: recorded.snapshot as NonNullable<MultiplayerHostOptions['seedSnapshot']>,
+    });
+    await host.handleMessage('A', { type: 'hello' });
+    expect(lastOfType('A', 'game_state').seed).toBe('recorded');
+
+    await host.handleMessage('A', { type: 'restart', seed: 'deal-7' });
+
+    expect(lastOfType('A', 'error').message).toBe(
+      'This `boardsmith dev` starts every game from the recorded state its `--seed <file>` names, so it cannot deal ' +
+        'from a seed. Start `boardsmith dev` without `--seed` to deal from one.',
+    );
+    expect(lastOfType('A', 'game_state').seed).toBe('recorded');
   });
 
   it('CHARACTERIZATION (already passes pre-fix): a restart with no live session (never started) is still rejected', async () => {

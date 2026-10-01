@@ -353,6 +353,13 @@ markers this page documents, so it keeps up with any game without knowing it:
   so it acts for whichever seat is due and the bots stand down. That is how it
   reaches an action one seat has only after another acts, such as accepting a
   draw the other seat offered (#458). A world's dev host has no seats to follow.
+- At a table it then deals a game from a seed (#460): it opens Table setup
+  (`[data-testid="table-setup-toggle"]`), types the seed into
+  `[data-testid="deal-seed"]`, presses `[data-testid="deal"]`, and waits until
+  `[data-testid="game-seed"]` shows that seed, which the dev host shows only once
+  the dealt game's state has reached the game frame. Follow-mode carries over a
+  new game, so no bot moves in it, and the same seed walked the same way is the
+  same game. See [Choosing the deal](#choosing-the-deal-seed).
 - Each step it presses a board control it has not pressed, answers the open
   action (the panel marks it `data-bs-open-action="<name>"`), or takes the next
   `[data-bs-action]` button, preferring one not taken yet and opening
@@ -362,8 +369,42 @@ markers this page documents, so it keeps up with any game without knowing it:
   moment with nothing open once the walk acts for every seat.
 - An open action is answered one choice at a time: a price's confirm button, the
   board's own `[data-bs-candidate]` (so the board is pressed, not only the
-  panel), a text field filled with "smoke test", then the panel's choice, add,
-  done and skip buttons.
+  panel), then the panel's choice, add, done and skip buttons.
+- A candidate is clicked the way a player clicks it: the walk moves the mouse
+  onto it (checking that it, not something on top, is under the pointer), and
+  clicks where it then stands for a choice the game accepts (#468). It does not
+  wait for a candidate to stand still, so a board that animates or pans under
+  the pointer is pressed all the same; a candidate that moves under the pointer
+  is pointed at again where it went.
+  One candidate per choice accepts the click at its centre. A placement surface
+  whose `data-bs-candidate` names whatever lies under the pointer may be
+  refused (`aria-disabled`) at its centre, so the walk aims at other points on
+  it until one is accepted. A refused candidate that names a different choice at
+  two of its corners is such a surface, and is aimed at the same way. Nothing in
+  the game needs to change for this: the hook already says which choice the
+  surface stands for, and `aria-disabled` already says it is refused. An empty text
+  field is filled with "smoke test" and an empty number field with a value its
+  own `min`, `max` and `step` accept: its least value, else 1 (#465). When the
+  game refuses that number with its own words (a `validate` message, or a
+  refusal it throws for the player to read), the walk takes the action again
+  with the next number up, three numbers in all, and neither the refusal nor the
+  error toast that repeats it is a problem (#466). A failure the engine words as
+  an error in the game's rules is a crash, and is reported at once. Each press is
+  narrated (`smoke step 4: pressing "Done" for "kindle"`).
+- A press a toast lies over reads the toast (an error toast is a problem like
+  any other), waits for it to go, as a player would, then presses again. A
+  control or panel button a redraw takes away for a moment is looked for again
+  until it comes back; one still gone after 5 seconds is reported. A control the
+  walk can only see by scrolling it out from under a bar fixed along the edge of
+  the page (the action panel) is scrolled to the middle, the top or the bottom
+  until it shows.
+- The walk gives up on an open action, reports it, and presses its Cancel when
+  the panel offers nothing to press, when three presses in a row change nothing,
+  when a press brings the panel back to a state it showed before (the walk
+  answers a state the same way each time, so that is a loop it would never leave),
+  or after 50 presses (#463). The report names the step, the deal and the presses.
+  An action given up on counts as failed: it is not taken again while the panel
+  offers anything else (#467).
 - A multi-select pick (#459) is answered one distinct choice at a time: an
   unticked box in the panel, or, when the panel hands the pick to the board, a
   `[data-bs-candidate]` this pick has not chosen. Once it has at least one
@@ -373,36 +414,97 @@ markers this page documents, so it keeps up with any game without knowing it:
   completes on its last choice.
 - A board control is a `button` or `[role="button"]` inside
   `[data-testid="bs-board"]` that a keyboard can reach and that is not a pick's
-  candidate. It is known by its `data-bs-el-id` when it has one, else its label.
+  candidate, nor inside an `inert` subtree, nor inside the game-over card (whose
+  Close would hide the end of the game from the walk, #462). It is known by its
+  `data-bs-el-id` when it has one, else its label. The walk reads the board's
+  controls in one look at the page, so none can go away between being found
+  and being read (#464).
   A keyboard-only control, one that takes no pointer (`pointer-events: none`)
   AND cannot be seen (`opacity: 0`, `visibility: hidden` or not rendered, on it
   or an ancestor), such as an invisible keyboard board laid over a 3D canvas for
   keyboard and screen-reader players, is pressed the way its players press it:
   focused, then Enter (#457). Any other control is clicked, including a visible
   one that takes no pointer, so a control a sighted mouse player can see but not
-  press fails the walk, as does one something covers.
-- When a game ends with listed actions still to take, it presses the dev host's
-  "New game" (`[data-testid="new-game"]`, twice, to confirm) and goes on in the
-  new game (#458). An action whose taking has ended every game it was taken in,
-  such as resigning, is taken again only when the panel offers nothing else, so
-  it does not cut each game short. A world's dev host has no "New game".
+  press fails the walk, as does one something covers, or one that goes away
+  before the press lands. On the board the walk points the mouse itself (#468):
+  it clicks the first point of the control where the control, not something on
+  top of it, is under the pointer (so a card partly under a tray is clicked
+  where it shows), follows a control that moves when pointed at until it
+  settles, and clicks one that never stands still where it is. Just before a
+  press the walk finds the control again by what it stands for and marks that
+  element, so a redraw that moved another element into its place is not pressed
+  by mistake, and a click that would land on anything else at that instant is
+  stopped before the page sees it, as Playwright's own click does, and tried
+  again. A click that reaches nothing in the game's frame (the page around the
+  game has something over it there) fails the press rather than passing it.
+- While a modal dialog is open (`[aria-modal="true"]`, or a `<dialog>` shown
+  modally), it is all a player can reach, so it is all the walk presses (#461).
+  It presses each control in the dialog once, whatever its place: when one
+  closes the dialog with others still unpressed (a Close that comes first), the
+  walk opens the dialog again with the board control that opened it, up to
+  twice per control. Once every control has been pressed, it closes the dialog
+  as a player would, with a control that closed a dialog before, else Escape. A
+  dialog that control leaves open fails the walk (a player who presses it stays
+  in the dialog), and the walk presses Escape instead; a dialog still open after
+  Escape fails it too: a player in it has no way back to the game.
+- No press or read of an element waits longer than 5 seconds, and Playwright
+  bounds anything else at 15 (#464). A step that cannot go on is reported with
+  its number and its deal, and ends that deal's walk; it never waits out the
+  whole run.
+- When a game ends with listed actions still to take, it deals a new game from
+  the next seed of the deal it is walking (`smoke/2`, `smoke/3`...), the same way,
+  and goes on in it (#458, #460). An action whose taking has ended every game it
+  was taken in, such as resigning, is taken again only when the panel offers
+  nothing else, so it does not cut each game short. A world has no new game.
 - Actions it took are read from `boardsmith:action-resolved`, which also reports
   one that failed. An action that failed is reported once and not tried again
   while anything else is offered, so the walk goes on to the rest of the game. It fails on `pageerror`, console errors, responses of 400 and
   up (or failed requests) from the dev host, error toasts, presses that never
   land, an open action that offers nothing or does not change, an offered action
   `actions` does not list, and a listed one it never takes.
-- It stops when its `steps` (default 60, counted across games) run out, a game
-  ends with every required action taken, nothing is offered for 30 seconds, or
-  every required action and every offer has been taken and five more steps
-  turned up nothing new.
+- It stops walking a deal when its `steps` (default 60 for each deal, counted
+  across that deal's games) run out, a game ends with every required action
+  taken, no seat is offered anything for 30 seconds, or every required action
+  and every offer has been taken and five more steps turned up nothing new. A
+  listed action it never saw offered is reported with why the walk stopped: a
+  deal that stopped because nothing was offered says so and where, since more
+  `steps` would not help it.
+- It prints each step as it goes (`smoke step 4: pressing "6S" for "play"`), so
+  `boardsmith smoke` shows exactly what the walk did, and the same seeds print
+  the same steps.
+
+### Choosing the deal: `seed`
+
+At a table, the walk deals every game from a seed: `"smoke"` unless the spec's
+`seed` names another. The seed is printed in the check's summary, pass or fail,
+and recorded with it in the verify result, so a failure is walked again exactly
+by running `boardsmith smoke` on the same spec. `seed` takes one seed or a list,
+each walked in turn, as its own deal with its own `steps`:
+
+```ts
+defineSmokeTest({
+  actions: ['draw', 'discard', 'chooseScoring', 'declareScoring', 'ready'],
+  seed: ['smoke', '17'],
+});
+```
+
+The walk requires every listed action across all its deals together, so the
+second seed above is there for the action the first deal does not offer. To
+find one, deal seeds in `boardsmith dev`: Table setup shows the seed of the game
+on screen and deals a new game from any seed typed there. `boardsmith smoke
+--seed 17` (or `--seed 17 23`) walks those deals instead of the spec's, without
+editing it, and `--seed smoke/3` walks again the third game a failing run dealt.
+
+A world is dealt by `boardsmith dev` from the one seed it gives that world, so a
+world's spec names no `seed`, and the check fails one that does.
 
 ### Actions no walk from a fresh game can reach: `unreachable`
 
 `actions` lists every action the game has. A few cannot be reached by any walk
-from a fresh game, whatever its `steps`: a claim offered only on threefold
-repetition or after fifty quiet moves, say. Such an action stays in `actions`
-and is also named in `unreachable`, with a sentence saying why:
+from a fresh game, whatever its `steps` and whatever the deal: a claim offered
+only on threefold repetition or after fifty quiet moves, say. Such an action
+stays in `actions` and is also named in `unreachable`, with a sentence saying
+why:
 
 ```ts
 defineSmokeTest({
@@ -430,6 +532,11 @@ An action that ends the game (resign) or that needs another seat to act first
 (accept a draw) does not belong in `unreachable`: the walk starts a new game
 when one ends, and acts for every seat at a table. Taking such an action is
 reported as taking it, not excused.
+
+Nor does an action that only some deals offer, such as a scoring claim offered
+only when a player is dealt cards that score. A fresh game can reach it: choose
+a seed whose deal offers it, with `seed`. Declare an action `unreachable` only
+when no deal from a fresh game offers it within the walk.
 
 It walks the UI players get: the `defaultUI` entry in `src/ui/uis.ts`, not a
 `devUI`. Board tests stand in for the shell with `renderAsSeat`,

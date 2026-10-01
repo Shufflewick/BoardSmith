@@ -97,7 +97,8 @@ describe('boardsmith verify on a whole game, as a user runs it', () => {
       ['typecheck', true, 'No type errors.'],
       ['build', true, '`boardsmith build` passed.'],
       ['validate', true, '`boardsmith validate` passed.'],
-      ['smoke', true, expect.stringMatching(/^Served by `boardsmith dev` from a fresh start, a seated player took "draw", "play"/)],
+      // #460: the verify result records the seed the walk dealt from, so the walk can be repeated exactly.
+      ['smoke', true, expect.stringMatching(/^Served by `boardsmith dev` from a fresh start and dealt from seed "smoke", a seated player took "draw", "play"/)],
       ['mutation', true, expect.stringMatching(/^Every one of 3 mutants of the lines changed since (main|master)/)],
     ]);
     expect(run.code).toBe(0);

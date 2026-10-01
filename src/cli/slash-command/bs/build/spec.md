@@ -73,10 +73,15 @@ game with `boardsmith dev` and walks it in Chromium: a seated player takes every
 offers and presses every control on the board, and the check fails on any page or console error,
 any offered action that fails, an offered action the spec does not list, and a listed one the walk
 never takes. At a table the walk acts for every seat in turn, and starts a new game when one ends
-with listed actions still to take. An action no walk from a fresh game can reach (offered only in a
-position play does not get to, such as a draw by threefold repetition) stays in `actions`, and the
-chunk names it in `unreachable` as well, with a sentence saying why: `unreachable: { claimDraw:
-'Offered only after a threefold repetition, which a walk never plays.' }`. An action that ends the
+with listed actions still to take. The walk deals every table game from a seed ("smoke" unless the
+spec's `seed` names others), so every run walks the same games and `npx boardsmith smoke` walks a
+failure again exactly. An action only some deals offer (offered only to a player dealt the right
+cards, say) is not unreachable: the chunk finds a seed whose deal offers it and lists it in `seed`,
+which takes one seed or a list walked in turn: `seed: ['smoke', '17']`. An action no walk from a
+fresh game can reach whatever the deal (offered only in a position play does not get to, such as a
+draw by threefold repetition) stays in `actions`, and the chunk names it in `unreachable` as well,
+with a sentence saying why: `unreachable: { claimDraw: 'Offered only after a threefold repetition,
+which a walk never plays.' }`. An action that ends the
 game, or that needs another seat to act first, is not one: the walk reaches both. Once the walk
 sees a declared action enabled, it must take it like any other, so a declaration never hides an
 offered action that does nothing; when it takes a declared action anyway, its summary says so:

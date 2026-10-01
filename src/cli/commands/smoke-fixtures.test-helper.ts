@@ -1,18 +1,150 @@
 /**
- * FIXTURE GAMES FOR THE SMOKE WALK (#457, #458, #459), written over the table scaffold that
+ * FIXTURE GAMES FOR THE SMOKE WALK (#457 to #468), written over the table scaffold that
  * `smokeProject` makes (its game is `dev-game`, so its classes are `DevGameGame` and
  * `DevGamePlayer`).
  */
 
-/** A smoke spec listing `actions`, with `unreachable` declared when given. */
-export function smokeSpec(actions: readonly string[], unreachable?: Record<string, string>): string {
+/** A smoke spec listing `actions`, with `unreachable`, `seed` and `steps` given when they are. */
+export function smokeSpec(
+  actions: readonly string[],
+  unreachable?: Record<string, string>,
+  more: { seed?: string | readonly string[]; steps?: number } = {},
+): string {
   const declared = unreachable === undefined ? '' : `\n  unreachable: ${JSON.stringify(unreachable, null, 2).replace(/\n/g, '\n  ')},`;
+  const seed = more.seed === undefined ? '' : `\n  seed: ${JSON.stringify(more.seed)},`;
+  const steps = more.steps === undefined ? '' : `\n  steps: ${more.steps},`;
   return `import { defineSmokeTest } from 'boardsmith/testing/browser';
 
 defineSmokeTest({
-  actions: ${JSON.stringify(actions)},${declared}
+  actions: ${JSON.stringify(actions)},${declared}${seed}${steps}
 });
 `;
+}
+
+/**
+ * Seeds for {@link aceGame} (#460): a deal from `WITHOUT` gives neither seat the ace of hearts, a
+ * deal from `WITH` gives it to seat 1. The engine's own shuffle decides it, so a change to the
+ * shuffle changes them.
+ */
+export const ACE_SEEDS = { WITHOUT: 'plain', WITH: '4' } as const;
+
+/**
+ * THE ACE GAME (#460): an action the DEAL decides. Each seat is dealt five cards from a shuffled
+ * deck; on its turn it may `draw` or `play` a card, and `showAce` is offered only to a seat that was
+ * dealt the ace of hearts, which about one deal in five does. Twenty steps never end a game, so a
+ * walk sees exactly the deal it was dealt.
+ */
+export function aceGame(): Record<string, string> {
+  return {
+    'src/rules/game.ts': `import { Game, Player, type GameOptions } from 'boardsmith';
+import { Card, Hand, Deck } from './elements.js';
+import { createGameFlow } from './flow.js';
+import { createTurnActions } from './actions.js';
+
+export class DevGamePlayer extends Player<DevGameGame, DevGamePlayer> {
+  hand!: Hand;
+  dealtTheAce = false;
+}
+
+export class DevGameGame extends Game<DevGameGame, DevGamePlayer> {
+  static PlayerClass = DevGamePlayer;
+
+  deck!: Deck;
+
+  constructor(options: GameOptions) {
+    super(options);
+    this.registerElements([Card, Hand, Deck]);
+    for (const player of this.players) {
+      const hand = this.create(Hand, \`hand-\${player.seat}\`);
+      hand.player = player;
+      hand.contentsVisibleToOwner();
+      player.hand = hand;
+    }
+    this.deck = this.create(Deck, 'deck');
+    this.deck.setOrder('stacking');
+    for (const suit of ['H', 'D', 'C', 'S'] as const) {
+      for (const rank of ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'] as const) {
+        this.deck.create(Card, \`\${rank}\${suit}\`, { suit, rank });
+      }
+    }
+    this.deck.shuffle();
+    for (const player of this.players) {
+      for (let i = 0; i < 5; i++) this.deck.first(Card)?.putInto(player.hand);
+      player.dealtTheAce = player.hand.all(Card).some((card) => card.name === 'AH');
+    }
+    for (const action of createTurnActions(this)) this.registerAction(action);
+    this.setFlow(createGameFlow(this));
+  }
+
+  override isFinished(): boolean {
+    return this.deck.count(Card) === 0;
+  }
+
+  override getWinners(): DevGamePlayer[] {
+    return [];
+  }
+}
+`,
+    'src/rules/actions.ts': `import { Action, type ActionDefinition } from 'boardsmith';
+import type { DevGameGame, DevGamePlayer } from './game.js';
+import { Card } from './elements.js';
+
+export function createTurnActions(game: DevGameGame): ActionDefinition[] {
+  return [
+    Action.create('draw')
+      .prompt('Draw a card')
+      .execute((_args, ctx) => {
+        game.deck.first(Card)?.putInto((ctx.player as DevGamePlayer).hand);
+        return { success: true };
+      }),
+    Action.create('play')
+      .prompt('Play a card')
+      .chooseFrom('card', {
+        prompt: 'Choose a card to play',
+        choices: (ctx) => [...(ctx.player as DevGamePlayer).hand.all(Card)],
+      })
+      .condition({ 'a card in hand': (ctx) => (ctx.player as DevGamePlayer).hand.count(Card) >= 1 })
+      .execute((args) => {
+        (args.card as Card).remove();
+        return { success: true };
+      }),
+    Action.create('showAce')
+      .prompt('Show the ace of hearts you were dealt')
+      .condition({ 'dealt the ace of hearts': (ctx) => (ctx.player as DevGamePlayer).dealtTheAce })
+      .execute(() => ({ success: true })),
+  ];
+}
+`,
+    'src/rules/flow.ts': `import { loop, eachPlayer, actionStep, type FlowDefinition } from 'boardsmith';
+import type { DevGameGame } from './game.js';
+
+export function createGameFlow(game: DevGameGame): FlowDefinition {
+  return {
+    root: loop({
+      name: 'game-loop',
+      while: () => !game.isFinished(),
+      maxIterations: 100,
+      do: eachPlayer({
+        name: 'player-turns',
+        do: actionStep({ name: 'turn', actions: ['draw', 'play', 'showAce'], skipIf: () => game.isFinished() }),
+      }),
+    }),
+    isComplete: () => game.isFinished(),
+    getWinners: () => game.getWinners(),
+  };
+}
+`,
+    'tests/game.test.ts': `import { describe, expect, it } from 'vitest';
+import { DevGameGame } from '../src/rules/game.js';
+
+describe('the ace game', () => {
+  it('deals five cards to each player', () => {
+    const game = new DevGameGame({ playerCount: 2, seed: 'test' });
+    expect(game.players.map((player) => player.hand.all().length)).toEqual([5, 5]);
+  });
+});
+`,
+  };
 }
 
 /** The truce game's action that no walk from a fresh game reaches, and why. */
@@ -255,6 +387,648 @@ const lit = ref(false);
 .surface { position: absolute; inset: 0; }
 .keys { position: absolute; inset: 0; pointer-events: none;${options.invisible ? ' opacity: 0;' : ''} }
 .keys button { width: 100%; height: 100%; pointer-events: none; }
+</style>
+`,
+    'src/ui/uis.ts': PLAYERS_GET_THE_TABLE,
+  };
+}
+
+/**
+ * A BOARD WITH MODAL DIALOGS (#461), as one-two-punch's discard-pile viewer is: a "Look through
+ * discards" button opens a modal dialog over the board, with "Sort" and "Close discards" in it, and
+ * once closed it reads "Look through discards again", which opens the same dialog again. "Read the
+ * rules" opens a dialog with nothing to press, which Escape closes unless `rulesStayOpen`. "Plan A"
+ * and "Plan B" sit behind both dialogs, where no player can press them while one is open.
+ *
+ * With `closeFirst`, as one-two-punch's has it, "Close discards" comes before "Sort", and the opener
+ * keeps its label, so a walk reaches "Sort" only by opening the dialog again with the same button.
+ *
+ * With `brokenCopy`, a copy of the viewer for the opponent's discards comes to the board once both
+ * of the game's actions have resolved (so the walk has taken everything, and nothing else is left
+ * for it to do): "Look through the opponent's discards" opens the dialog "Opponent's discards",
+ * whose "Close discards" marks the pile looked through but never closes the dialog, the copy's bug.
+ * Escape closes it. A walk that presses a "Close discards" because one closed a dialog before, and
+ * never notices that this one did not, presses it until it runs out of things to do, and passes.
+ */
+export function boardWithDialogs(options: { rulesStayOpen: boolean; closeFirst?: boolean; brokenCopy?: boolean }): Record<string, string> {
+  const discards = ['<button type="button" @click="sorted = !sorted">Sort</button>', '<button type="button" @click="closeDiscards">Close discards</button>'];
+  if (options.closeFirst) discards.reverse();
+  const opener = options.closeFirst ? 'Look through discards' : "{{ looked ? 'Look through discards again' : 'Look through discards' }}";
+  const copy = options.brokenCopy
+    ? `\n    <button v-if="resolved.size >= 2" type="button" @click="show('opponent')">Look through the opponent's discards</button>`
+    : '';
+  const copyDialog = options.brokenCopy ? `\n        <button v-if="open === 'opponent'" type="button" @click="looked = true">Close discards</button>` : '';
+  return {
+    'src/ui/components/GameTable.vue': `<script setup lang="ts">
+import { nextTick, onMounted, onUnmounted, ref } from 'vue';
+
+const open = ref<'discards' | 'rules' | 'opponent' | null>(null);
+const looked = ref(false);
+const sorted = ref(false);
+const plans = ref<string[]>([]);
+const resolved = ref(new Set<string>());
+const dialog = ref<HTMLElement | null>(null);
+const names = { discards: 'Discards', rules: 'Rules', opponent: "Opponent's discards" };
+
+async function show(which: 'discards' | 'rules' | 'opponent') {
+  open.value = which;
+  await nextTick();
+  dialog.value?.focus();
+}
+function closeDiscards() {
+  open.value = null;
+  looked.value = true;
+}
+function onKey(event: KeyboardEvent) {
+  if (event.key === 'Escape' && ${options.rulesStayOpen ? "open.value !== 'rules'" : 'true'}) open.value = null;
+}
+function onResolved(event: Event) {
+  resolved.value.add((event as CustomEvent<{ action: string }>).detail.action);
+}
+onMounted(() => {
+  window.addEventListener('keydown', onKey);
+  window.addEventListener('boardsmith:action-resolved', onResolved);
+});
+onUnmounted(() => {
+  window.removeEventListener('keydown', onKey);
+  window.removeEventListener('boardsmith:action-resolved', onResolved);
+});
+</script>
+
+<template>
+  <div class="board">
+    <button type="button" @click="show('discards')">${opener}</button>
+    <button type="button" @click="show('rules')">Read the rules</button>
+    <button type="button" @click="plans.push('A')">Plan A</button>
+    <button type="button" @click="plans.push('B')">Plan B</button>${copy}
+    <p>Planned: {{ plans.join(', ') || 'nothing' }}</p>
+    <div v-if="open" class="scrim">
+      <div ref="dialog" role="dialog" aria-modal="true" tabindex="-1" :aria-label="names[open]">
+        <template v-if="open === 'discards'">
+          ${discards.join('\n          ')}
+        </template>
+        <p v-else-if="open === 'rules'">Play a card or draw one.</p>${copyDialog}
+      </div>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.board { position: relative; width: 420px; height: 260px; }
+.scrim { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.6); display: grid; place-items: center; }
+</style>
+`,
+    'src/ui/uis.ts': PLAYERS_GET_THE_TABLE,
+  };
+}
+
+/**
+ * A BOARD CONTROL THAT GOES AWAY WHEN THE POINTER REACHES IT (#464): "Shy button" leaves the board
+ * the moment the pointer is over it, so a press never lands and the element is gone for good.
+ */
+export function boardWithAVanishingControl(): Record<string, string> {
+  return {
+    'src/ui/components/GameTable.vue': `<script setup lang="ts">
+import { ref } from 'vue';
+
+const gone = ref(false);
+</script>
+
+<template>
+  <div class="board">
+    <button v-if="!gone" type="button" @pointerenter="gone = true">Shy button</button>
+  </div>
+</template>
+
+<style scoped>
+.board { width: 320px; height: 200px; }
+</style>
+`,
+    'src/ui/uis.ts': PLAYERS_GET_THE_TABLE,
+  };
+}
+
+/**
+ * A BOARD CONTROL THAT IS DISABLED BY THE TIME IT IS PRESSED: "Timid button" is redrawn as a disabled
+ * button, a new element with the same label, the moment the pointer is over it, so the control the walk
+ * found enabled is disabled when the walk finds it again to press it, and stays so.
+ */
+export function boardWithATimidControl(): Record<string, string> {
+  return {
+    'src/ui/components/GameTable.vue': `<script setup lang="ts">
+import { ref } from 'vue';
+
+const shy = ref(false);
+</script>
+
+<template>
+  <div class="board">
+    <button v-if="!shy" type="button" @pointerenter="shy = true">Timid button</button>
+    <button v-else type="button" disabled>Timid button</button>
+  </div>
+</template>
+
+<style scoped>
+.board { width: 320px; height: 200px; }
+</style>
+`,
+    'src/ui/uis.ts': PLAYERS_GET_THE_TABLE,
+  };
+}
+
+/**
+ * A BOARD CONTROL THAT REPLACES THE GAME'S FRAME: "Start over" puts a new game frame in place of the
+ * one it is pressed in, as the page around the game does when the game restarts, so the frame the
+ * walk pressed in is gone the moment the press lands. The new frame is never handed the game, so the
+ * walk finds nothing offered in it and stops that deal.
+ */
+export function boardThatReplacesItsFrame(): Record<string, string> {
+  return {
+    'src/ui/components/GameTable.vue': `<script setup lang="ts">
+function startOver() {
+  const frame = window.parent.document.querySelector('iframe')!;
+  frame.replaceWith(frame.cloneNode() as HTMLIFrameElement);
+}
+</script>
+
+<template>
+  <div class="board">
+    <button type="button" @click="startOver">Start over</button>
+  </div>
+</template>
+
+<style scoped>
+.board { width: 320px; height: 200px; }
+</style>
+`,
+    'src/ui/uis.ts': PLAYERS_GET_THE_TABLE,
+  };
+}
+
+/**
+ * THE FIELDS GAME (#465 to #467): each turn a player may `code` (a text field that takes digits only,
+ * so the walk's "smoke test" never satisfies it and the action never finishes), `kindle` (a number
+ * field, "How many logs?", 1 to 5, whose own rule refuses 1), `draw` or `rest`. `code` is the panel's first offer, so a walk
+ * that went on taking an action it had given up on would never take the others. With
+ * `kindleCrashesAtOne`, `kindle` has no rule refusing 1: its rules throw on 1 log and work on 2, a
+ * bug the walk must report rather than step around (#466).
+ */
+export function fieldsGame(options: { kindleCrashesAtOne?: boolean } = {}): Record<string, string> {
+  const kindleRule = options.kindleCrashesAtOne ? '' : `
+        validate: (logs) => (logs >= 2 ? true : 'A fire needs at least two logs.'),`;
+  const kindleCrash = options.kindleCrashesAtOne ? `
+        if (args.logs === 1) throw new Error('the hearth cracked');` : '';
+  return {
+    'src/rules/game.ts': `import { Game, Player, type GameOptions } from 'boardsmith';
+import { Card, Hand, Deck } from './elements.js';
+import { createGameFlow } from './flow.js';
+import { createTurnActions } from './actions.js';
+
+export class DevGamePlayer extends Player<DevGameGame, DevGamePlayer> {
+  hand!: Hand;
+  logs = 0;
+}
+
+export class DevGameGame extends Game<DevGameGame, DevGamePlayer> {
+  static PlayerClass = DevGamePlayer;
+
+  deck!: Deck;
+
+  constructor(options: GameOptions) {
+    super(options);
+    this.registerElements([Card, Hand, Deck]);
+    for (const player of this.players) {
+      const hand = this.create(Hand, \`hand-\${player.seat}\`);
+      hand.player = player;
+      player.hand = hand;
+    }
+    this.deck = this.create(Deck, 'deck');
+    for (let i = 0; i < 40; i++) this.deck.create(Card, \`card-\${i}\`, { suit: 'H', rank: 'A' });
+    for (const action of createTurnActions(this)) this.registerAction(action);
+    this.setFlow(createGameFlow(this));
+  }
+
+  override isFinished(): boolean {
+    return this.deck.count(Card) === 0;
+  }
+
+  override getWinners(): DevGamePlayer[] {
+    return [];
+  }
+}
+`,
+    'src/rules/actions.ts': `import { Action, type ActionDefinition } from 'boardsmith';
+import type { DevGameGame, DevGamePlayer } from './game.js';
+import { Card } from './elements.js';
+
+export function createTurnActions(game: DevGameGame): ActionDefinition[] {
+  return [
+    Action.create('code')
+      .prompt('Enter the code')
+      .enterText('code', { prompt: 'The code, in digits', pattern: { regex: /^[0-9]+$/, message: 'Digits only.' } })
+      .execute(() => ({ success: true })),
+    Action.create('kindle')
+      .prompt('Kindle the fire')
+      .enterNumber('logs', {
+        prompt: 'How many logs?',
+        min: 1,
+        max: 5,
+        integer: true,${kindleRule}
+      })
+      .execute((args, ctx) => {${kindleCrash}
+        (ctx.player as DevGamePlayer).logs += args.logs as number;
+        return { success: true };
+      }),
+    Action.create('draw')
+      .prompt('Draw a card')
+      .execute((_args, ctx) => {
+        game.deck.first(Card)?.putInto((ctx.player as DevGamePlayer).hand);
+        return { success: true };
+      }),
+    Action.create('rest')
+      .prompt('Rest')
+      .execute(() => ({ success: true })),
+  ];
+}
+`,
+    'src/rules/flow.ts': `import { loop, eachPlayer, actionStep, type FlowDefinition } from 'boardsmith';
+import type { DevGameGame } from './game.js';
+
+export function createGameFlow(game: DevGameGame): FlowDefinition {
+  return {
+    root: loop({
+      name: 'game-loop',
+      while: () => !game.isFinished(),
+      maxIterations: 100,
+      do: eachPlayer({
+        name: 'player-turns',
+        do: actionStep({ name: 'turn', actions: ['code', 'kindle', 'draw', 'rest'], skipIf: () => game.isFinished() }),
+      }),
+    }),
+    isComplete: () => game.isFinished(),
+    getWinners: () => game.getWinners(),
+  };
+}
+`,
+    'tests/game.test.ts': `import { describe, expect, it } from 'vitest';
+import { DevGameGame } from '../src/rules/game.js';
+
+describe('the fields game', () => {
+  it('starts with forty cards in the deck', () => {
+    expect(new DevGameGame({ playerCount: 2, seed: 'test' }).deck.all().length).toBe(40);
+  });
+});
+`,
+  };
+}
+
+/**
+ * A POINTER-AIMED BOARD (#468), as Windup Warfare's battlefield is: `claim` picks one of a hundred
+ * cells, more than the panel lists, so it hands the pick to the board, and the board is one surface
+ * that stands for "the cell under the pointer". Moving the pointer over it re-aims it, so its
+ * `data-bs-candidate` names the cell under the pointer, refused (`aria-disabled`) on the middle row,
+ * which belongs to nobody; a click or Enter claims the cell it is aimed at. It opens aimed at a cell
+ * anyone may claim, and its centre is on the middle row.
+ */
+export function pointerAimedGame(): Record<string, string> {
+  return {
+    ...fieldRules(),
+    'src/ui/components/GameTable.vue': `<script setup lang="ts">
+import { computed, ref } from 'vue';
+import { candidateAttrs, useBoardInteraction } from 'boardsmith/ui';
+
+const board = useBoardInteraction();
+const cursor = ref({ row: 2, col: 2 });
+const name = computed(() => \`r\${cursor.value.row}c\${cursor.value.col}\`);
+const choosing = computed(() => board.currentAction === 'claim' && board.currentPickName === 'cell');
+// The board knows a candidate by its element id; the panel names each cell's candidate by the cell's name.
+const target = computed(() => board.validElements.find((candidate) => candidate.display === name.value));
+const refused = computed(() => target.value === undefined || target.value.disabled !== undefined);
+
+function aim(event: PointerEvent) {
+  const box = (event.currentTarget as HTMLElement).getBoundingClientRect();
+  const at = (offset: number, size: number) => Math.min(9, Math.max(0, Math.floor((offset / size) * 10)));
+  cursor.value = { row: at(event.clientY - box.top, box.height), col: at(event.clientX - box.left, box.width) };
+}
+function claim() {
+  if (choosing.value && target.value !== undefined && !refused.value) board.triggerElementSelect({ id: target.value.id });
+}
+</script>
+
+<template>
+  <div class="board">
+    <div
+      class="field"
+      role="button"
+      tabindex="0"
+      :aria-label="\`The field, aimed at row \${cursor.row}, column \${cursor.col}\`"
+      v-bind="choosing && target ? candidateAttrs(board.candidateLabel({ id: target.id })) : {}"
+      :aria-disabled="choosing && refused ? 'true' : undefined"
+      @pointermove="aim"
+      @click="claim"
+      @keydown.enter="claim"
+    >
+      Aimed at row {{ cursor.row }}, column {{ cursor.col }}
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.board { width: 400px; height: 400px; }
+.field { width: 400px; height: 400px; background: #ddd; }
+</style>
+`,
+    'src/ui/uis.ts': PLAYERS_GET_THE_TABLE,
+  };
+}
+
+/**
+ * THE FIELD GAME'S RULES (#468): `claim` picks one of a hundred cells (more than the panel lists,
+ * so the panel hands the pick to the board), refused on the middle row, and `rest` passes. A board
+ * for it is written by each fixture.
+ */
+function fieldRules(): Record<string, string> {
+  return {
+    'src/rules/game.ts': `import { Game, Player, Space, type GameOptions } from 'boardsmith';
+import { createGameFlow } from './flow.js';
+import { createTurnActions } from './actions.js';
+
+export class Cell extends Space<DevGameGame> {
+  row = 0;
+  col = 0;
+}
+
+export class DevGamePlayer extends Player<DevGameGame, DevGamePlayer> {
+  claimed = 0;
+}
+
+export class DevGameGame extends Game<DevGameGame, DevGamePlayer> {
+  static PlayerClass = DevGamePlayer;
+
+  rounds = 0;
+
+  constructor(options: GameOptions) {
+    super(options);
+    this.registerElements([Cell]);
+    for (let row = 0; row < 10; row++) {
+      for (let col = 0; col < 10; col++) this.create(Cell, \`r\${row}c\${col}\`, { row, col });
+    }
+    for (const action of createTurnActions(this)) this.registerAction(action);
+    this.setFlow(createGameFlow(this));
+  }
+
+  cells(): Cell[] {
+    return [...this.all(Cell)];
+  }
+
+  override isFinished(): boolean {
+    return this.rounds >= 30;
+  }
+
+  override getWinners(): DevGamePlayer[] {
+    return [];
+  }
+}
+`,
+    'src/rules/actions.ts': `import { Action, type ActionDefinition } from 'boardsmith';
+import type { Cell, DevGameGame, DevGamePlayer } from './game.js';
+
+export function createTurnActions(game: DevGameGame): ActionDefinition[] {
+  return [
+    Action.create('claim')
+      .prompt('Claim a cell')
+      .chooseElement('cell', {
+        prompt: 'Which cell?',
+        elements: () => game.cells(),
+        disabled: (cell) => ((cell as Cell).row === 5 ? 'The middle row belongs to nobody.' : false),
+      })
+      .execute((_args, ctx) => {
+        (ctx.player as DevGamePlayer).claimed++;
+        game.rounds++;
+        return { success: true };
+      }),
+    Action.create('rest')
+      .prompt('Rest')
+      .execute(() => {
+        game.rounds++;
+        return { success: true };
+      }),
+  ];
+}
+`,
+    'src/rules/flow.ts': `import { loop, eachPlayer, actionStep, type FlowDefinition } from 'boardsmith';
+import type { DevGameGame } from './game.js';
+
+export function createGameFlow(game: DevGameGame): FlowDefinition {
+  return {
+    root: loop({
+      name: 'game-loop',
+      while: () => !game.isFinished(),
+      maxIterations: 100,
+      do: eachPlayer({
+        name: 'player-turns',
+        do: actionStep({ name: 'turn', actions: ['claim', 'rest'], skipIf: () => game.isFinished() }),
+      }),
+    }),
+    isComplete: () => game.isFinished(),
+    getWinners: () => game.getWinners(),
+  };
+}
+`,
+    'tests/game.test.ts': `import { describe, expect, it } from 'vitest';
+import { DevGameGame } from '../src/rules/game.js';
+
+describe('the field game', () => {
+  it('has a hundred cells', () => {
+    expect(new DevGameGame({ playerCount: 2, seed: 'test' }).cells()).toHaveLength(100);
+  });
+});
+`,
+  };
+}
+
+/** What each candidate board (`candidateBoard`) does to a walk that points at it (#468). */
+type CandidateBoard = 'lifts' | 'restless' | 'partlyCovered' | 'covered' | 'toast';
+
+/** The candidate markup and styles of each `CandidateBoard`, around the three cells it offers. */
+const CANDIDATE_BOARDS: Record<CandidateBoard, { template: string; style: string }> = {
+  // Each card lifts when pointed at, moving under the pointer for a third of a second.
+  lifts: {
+    template: `<button v-for="cell in cells" :key="cell" type="button" class="card" v-bind="attrs(cell)" @click="claim(cell)">{{ cell }}</button>`,
+    style: `.card { width: 60px; height: 90px; margin: 8px; transition: transform 0.3s; } .card:hover { transform: translateY(-16px); }`,
+  },
+  // Each card sways for ever, so it never stands still.
+  restless: {
+    template: `<button v-for="cell in cells" :key="cell" type="button" class="card" v-bind="attrs(cell)" @click="claim(cell)">{{ cell }}</button>`,
+    style: `.card { width: 60px; height: 90px; margin: 8px; animation: sway 0.4s ease-in-out infinite alternate; } @keyframes sway { from { transform: translateX(0); } to { transform: translateX(8px); } }`,
+  },
+  // A tray covers the left two thirds of each card, centre included; its right edge shows.
+  partlyCovered: {
+    template: `<div v-for="cell in cells" :key="cell" class="slot"><button type="button" class="card" v-bind="attrs(cell)" @click="claim(cell)">{{ cell }}</button><div class="tray"></div></div>`,
+    style: `.slot { position: relative; width: 240px; height: 60px; margin: 8px; } .card { width: 240px; height: 60px; } .tray { position: absolute; left: 0; top: 0; width: 160px; height: 60px; background: #888; }`,
+  },
+  // A tray covers each card whole.
+  covered: {
+    template: `<div v-for="cell in cells" :key="cell" class="slot"><button type="button" class="card" v-bind="attrs(cell)" @click="claim(cell)">{{ cell }}</button><div class="tray"></div></div>`,
+    style: `.slot { position: relative; width: 240px; height: 60px; margin: 8px; } .card { width: 240px; height: 60px; } .tray { position: absolute; inset: 0; background: #888; }`,
+  },
+  // The first time the bell, or a card, is pointed at, an error toast covers the board for a second
+  // and a half, and a second one follows the moment the first goes, as a game that reports twice does.
+  toast: {
+    template: `<button type="button" class="bell" @pointerenter="warn">Ring the bell</button>
+      <button v-for="cell in cells" :key="cell" type="button" class="card" v-bind="attrs(cell)" @pointerenter="warn" @click="claim(cell)">{{ cell }}</button>
+      <div v-if="warning" class="toast error">The ravens are loud.</div>`,
+    style: `.bell, .card { width: 120px; height: 60px; margin: 8px; } .toast { position: absolute; inset: 0; background: #c33; color: #fff; }`,
+  },
+};
+
+/**
+ * A BOARD OF CANDIDATES THAT ARE HARD TO POINT AT (#468), for the field game: three cells offered
+ * as cards on the board, with `claim` handed to the board. See `CandidateBoard` for each kind.
+ */
+export function candidateBoard(kind: CandidateBoard): Record<string, string> {
+  const { template, style } = CANDIDATE_BOARDS[kind];
+  return {
+    ...fieldRules(),
+    'src/ui/components/GameTable.vue': `<script setup lang="ts">
+import { computed, ref } from 'vue';
+import { candidateAttrs, useBoardInteraction } from 'boardsmith/ui';
+
+const board = useBoardInteraction();
+const cells = ['r0c0', 'r1c1', 'r2c2'];
+const choosing = computed(() => board.currentAction === 'claim' && board.currentPickName === 'cell');
+const targetOf = (cell: string) => board.validElements.find((candidate) => candidate.display === cell);
+const attrs = (cell: string) => {
+  const target = targetOf(cell);
+  return choosing.value && target ? candidateAttrs(board.candidateLabel({ id: target.id })) : {};
+};
+function claim(cell: string) {
+  const target = targetOf(cell);
+  if (choosing.value && target !== undefined) board.triggerElementSelect({ id: target.id });
+}
+const warning = ref(false);
+let warned = 0;
+function warn() {
+  if (warned >= 2 || warning.value) return;
+  warned++;
+  warning.value = true;
+  setTimeout(() => {
+    warning.value = false;
+    setTimeout(() => {
+      warning.value = true;
+      setTimeout(() => (warning.value = false), 1500);
+    }, 50);
+  }, 1500);
+}
+</script>
+
+<template>
+  <div class="board">
+    ${template}
+  </div>
+</template>
+
+<style scoped>
+.board { position: relative; width: 420px; height: 420px; }
+${style}
+</style>
+`,
+    'src/ui/uis.ts': PLAYERS_GET_THE_TABLE,
+  };
+}
+
+/**
+ * A BOARD TALLER THAN THE PAGE (#468), with "Ring the far bell" at its foot: scrolled only as far as
+ * needed to show it, the bell sits under the action panel along the bottom of the page, as
+ * doom-machine's shield slots do, so a walk must scroll it clear of the panel to press it.
+ */
+export function boardWithAControlAtItsFoot(): Record<string, string> {
+  return {
+    'src/ui/components/GameTable.vue': `<script setup lang="ts">
+import { ref } from 'vue';
+
+const rung = ref(0);
+</script>
+
+<template>
+  <div class="board">
+    <p>Rung {{ rung }} times.</p>
+    <button type="button" class="far" @click="rung++">Ring the far bell</button>
+  </div>
+</template>
+
+<style scoped>
+.board { position: relative; width: 320px; height: 2000px; }
+.far { position: absolute; left: 20px; bottom: 4px; width: 160px; height: 24px; }
+</style>
+`,
+    'src/ui/uis.ts': PLAYERS_GET_THE_TABLE,
+  };
+}
+
+/**
+ * A PANEL THAT REDRAWS FOR A MOMENT (#468 review): "Look away" hides the panel's action buttons for
+ * two seconds, as a panel redrawing its buttons after a board press does for a moment, so the panel's
+ * buttons the walk read are not there when it first goes to press one. They come back by themselves,
+ * unless `forGood`: then the panel took back what it offered, and never shows the buttons again.
+ */
+export function boardThatHidesThePanelForAMoment(options: { forGood?: boolean } = {}): Record<string, string> {
+  const comeBack = options.forGood ? '' : `\n  setTimeout(() => buttons.forEach((button) => (button.style.display = '')), 2000);`;
+  return {
+    'src/ui/components/GameTable.vue': `<script setup lang="ts">
+function lookAway() {
+  const buttons = [...document.querySelectorAll<HTMLElement>('[data-bs-action]')];
+  for (const button of buttons) button.style.display = 'none';${comeBack}
+}
+</script>
+
+<template>
+  <div class="board">
+    <button type="button" @click="lookAway">Look away</button>
+  </div>
+</template>
+
+<style scoped>
+.board { width: 320px; height: 200px; }
+</style>
+`,
+    'src/ui/uis.ts': PLAYERS_GET_THE_TABLE,
+  };
+}
+
+/**
+ * A BOARD THAT KEEPS REORDERING ITS CONTROLS (#464 review): "North", "South" and "East" trade
+ * places every 60 milliseconds (a keyed list, so each button moves rather than being redrawn), so
+ * whichever button sat at a place when the walk looked has often moved by the time it presses. A
+ * button pressed twice says so on the console, which fails the walk; a walk that presses the button
+ * it meant to presses each once.
+ */
+export function boardThatKeepsReordering(): Record<string, string> {
+  return {
+    'src/ui/components/GameTable.vue': `<script setup lang="ts">
+import { onMounted, onUnmounted, ref } from 'vue';
+
+const order = ref(['North', 'South', 'East']);
+const pressed = new Set<string>();
+let timer: ReturnType<typeof setInterval> | undefined;
+onMounted(() => {
+  timer = setInterval(() => order.value.push(order.value.shift()!), 60);
+});
+onUnmounted(() => clearInterval(timer));
+function pressIt(name: string) {
+  if (pressed.has(name)) console.error(\`\${name} was pressed twice\`);
+  pressed.add(name);
+}
+</script>
+
+<template>
+  <div class="board">
+    <button v-for="name in order" :key="name" type="button" @click="pressIt(name)">{{ name }}</button>
+  </div>
+</template>
+
+<style scoped>
+.board { width: 320px; height: 200px; }
 </style>
 `,
     'src/ui/uis.ts': PLAYERS_GET_THE_TABLE,

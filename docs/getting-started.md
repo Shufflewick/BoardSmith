@@ -238,7 +238,11 @@ acts for every seat in turn, and starts a new game when one ends with listed
 actions still to take. The check fails on any uncaught page error, any console
 error, any failed request to the dev host, any offered action that fails, an
 offered action `actions` does not list, and a listed action the walk never takes.
-A listed action no walk from a fresh game can reach is also named in
+At a table every game is dealt from a seed, `"smoke"` unless the spec's `seed`
+names others, so every run walks the same games; an action only some deals offer
+is reached by choosing a seed whose deal offers it (see
+[Choosing the deal](./browser-testing.md#choosing-the-deal-seed)). A listed
+action no walk from a fresh game can reach whatever the deal is also named in
 `unreachable`, with a sentence saying why; see
 [Browser Testing](./browser-testing.md#actions-no-walk-from-a-fresh-game-can-reach-unreachable).
 A game with no actions yet lists none and still has to load and seat a player

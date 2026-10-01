@@ -3,11 +3,72 @@
  * Chromium under `boardsmith verify`; its verdict is decided here, from what it saw.
  */
 import { describe, expect, it } from 'vitest';
-import { SMOKE_SPEC_PATH, smokeProblems, smokeRecord, smokeSummary, type SmokeWalk } from './browser-smoke-verdict.js';
+import { rulesErrorSentence } from '../engine/action/rules-error.js';
+import {
+  answered,
+  DEFAULT_SMOKE_SEED,
+  MOST_ANSWERS,
+  recordResolved,
+  SMOKE_SPEC_PATH,
+  startAnswering,
+  walkStopped,
+  smokeFailure,
+  smokeProblems,
+  smokeRecord,
+  smokeSeeds,
+  smokeSummary,
+  type ResolvedMemory,
+  type SmokeWalk,
+} from './browser-smoke-verdict.js';
 
 function walk(overrides: Partial<SmokeWalk>): SmokeWalk {
-  return { listed: [], unreachable: {}, offered: new Set(), enabled: new Set(), taken: new Set(), steps: 60, errors: [], ...overrides };
+  return {
+    listed: [],
+    unreachable: {},
+    offered: new Set(),
+    enabled: new Set(),
+    taken: new Set(),
+    steps: 60,
+    errors: [],
+    seeds: [DEFAULT_SMOKE_SEED],
+    stalls: [],
+    ...overrides,
+  };
 }
+
+describe('smokeSeeds: the deals a walk is dealt (#460)', () => {
+  it('deals from one fixed seed when the spec names none, so every run walks the same game', () => {
+    expect(smokeSeeds(undefined)).toEqual([DEFAULT_SMOKE_SEED]);
+    expect(DEFAULT_SMOKE_SEED).toBe('smoke');
+  });
+
+  it('deals from the seed the spec names, or from each seed of a list, in order', () => {
+    expect(smokeSeeds('opening')).toEqual(['opening']);
+    expect(smokeSeeds(['opening', '7'])).toEqual(['opening', '7']);
+  });
+
+  it('deals from the seeds `boardsmith smoke --seed` names instead of the spec\'s, so any deal can be walked again', () => {
+    expect(smokeSeeds('opening', ['7', '9'])).toEqual(['7', '9']);
+    expect(() => smokeSeeds(undefined, ['7', '7'])).toThrow(
+      '`boardsmith smoke --seed` lists "7" twice, which walks the same deal twice. List each seed once.',
+    );
+  });
+
+  it('refuses an empty list, a blank seed and a seed listed twice, saying what to write instead', () => {
+    expect(() => smokeSeeds([])).toThrow(
+      `\`seed\` in ${SMOKE_SPEC_PATH} is an empty list, so the walk would deal no game. List at least one seed, or leave ` +
+        `\`seed\` out to deal from "${DEFAULT_SMOKE_SEED}".`,
+    );
+    for (const blank of ['', '  ', ['7', ' ']]) {
+      expect(() => smokeSeeds(blank)).toThrow(
+        `\`seed\` in ${SMOKE_SPEC_PATH} has a blank seed. A seed is any text that is not blank, such as "7" or "opening".`,
+      );
+    }
+    expect(() => smokeSeeds(['7', 'opening', '7'])).toThrow(
+      `\`seed\` in ${SMOKE_SPEC_PATH} lists "7" twice, which walks the same deal twice. List each seed once.`,
+    );
+  });
+});
 
 const REASON = 'Offered only after fifty quiet moves, which a walk from a fresh game never plays.';
 
@@ -34,10 +95,33 @@ describe('smokeProblems', () => {
   it('names a listed action the walk never saw offered, and one it saw but could not take', () => {
     expect(smokeProblems(walk({ listed: ['draw', 'score'], offered: new Set(['draw']), steps: 12 }))).toEqual([
       'The panel offered "draw", but the walk never took it in 12 steps. The errors above, if any, say why.',
-      `The walk never saw "score" offered in 12 steps from a fresh game. If a fresh game takes longer to reach it, raise ` +
-        `\`steps\` in ${SMOKE_SPEC_PATH}. If no walk from a fresh game can reach it (it needs a long game, or a position ` +
-        `play does not get to), name it in \`unreachable\` there with the reason. If the game no longer has it, remove it from \`actions\`.`,
+      `The walk never saw "score" offered in 12 steps from a fresh game dealt from seed "smoke". If a fresh game takes ` +
+        `longer to reach it, raise \`steps\` in ${SMOKE_SPEC_PATH}. If the deal decides whether it is offered (the cards a ` +
+        `player is dealt, say), choose a seed whose deal offers it, and list it in \`seed\` there. If no walk from a fresh game ` +
+        `can reach it whatever the deal (it needs a long game, or a position play does not get to), name it in ` +
+        `\`unreachable\` there with the reason. If the game no longer has it, remove it from \`actions\`.`,
     ]);
+  });
+
+  it('#460: names every deal a listed action was missed on', () => {
+    expect(smokeProblems(walk({ listed: ['score'], seeds: ['opening', '7'], steps: 12 }))).toEqual([
+      expect.stringMatching(/^The walk never saw "score" offered in 12 steps from a fresh game dealt from seed "opening", nor from seed "7"\. /),
+    ]);
+  });
+
+  it('#460: says a walk that stopped because nothing was offered stopped for that, and does not suggest more steps', () => {
+    const stalled = walk({ listed: ['draw', 'score'], offered: new Set(['draw']), taken: new Set(['draw']), stalls: [{ step: 9, seed: 'smoke', seconds: 30 }] });
+    expect(smokeProblems(stalled)).toEqual([
+      `The walk never saw "score" offered. It stopped at step 9 of the game dealt from seed "smoke", because no seat had ` +
+        'been offered anything for 30s, so more `steps` would not help. Run `boardsmith smoke` to watch where the game ' +
+        'stops offering actions: a step no seat can act in, or one waiting on something no player does. Fix that, then run it again.',
+    ]);
+  });
+
+  it('#460: says where a world walk stalled, with no seed to name', () => {
+    expect(smokeProblems(walk({ listed: ['tend'], seeds: [], stalls: [{ step: 3, seed: null, seconds: 30 }] }))[0]).toMatch(
+      /^The walk never saw "tend" offered\. It stopped at step 3, because no seat had been offered anything for 30s/,
+    );
   });
 
   describe('#458: actions the spec declares a fresh game cannot reach', () => {
@@ -103,11 +187,29 @@ describe('smokeProblems', () => {
 });
 
 describe('smokeRecord and smokeSummary: what a passing walk reports', () => {
-  it('says what was taken and pressed, in one game, with no error', () => {
+  it('says what was taken and pressed, in one game, with no error, and the seed it was dealt from', () => {
     const record = smokeRecord(walk({ listed: ['draw', 'play'], taken: new Set(['play', 'draw']) }), { controls: 1, games: 1 });
-    expect(record).toEqual({ taken: ['draw', 'play'], controls: 1, games: 1, excused: [], reachedAnyway: [] });
+    expect(record).toEqual({ seeds: ['smoke'], taken: ['draw', 'play'], controls: 1, games: 1, excused: [], reachedAnyway: [] });
     expect(smokeSummary(record)).toBe(
-      'Served by `boardsmith dev` from a fresh start, a seated player took "draw", "play" and pressed 1 board control, with no error.',
+      'Served by `boardsmith dev` from a fresh start and dealt from seed "smoke", a seated player took "draw", "play" and ' +
+        'pressed 1 board control, with no error.',
+    );
+  });
+
+  it('#460: names every seed a walk of several deals was dealt from', () => {
+    const record = smokeRecord(walk({ seeds: ['opening', '7'], listed: ['draw'], taken: new Set(['draw']) }), { controls: 0, games: 3 });
+    expect(smokeSummary(record)).toBe(
+      'Served by `boardsmith dev` from a fresh start and dealt from seed "opening", then from seed "7", a seated player ' +
+        'took "draw" and pressed 0 board controls, with no error, over 3 games (a new one each time a game ended with ' +
+        'listed actions still to take).',
+    );
+    expect(smokeSummary({ ...record, games: 2 })).not.toMatch(/over 2 games/);
+  });
+
+  it('#460: names no seed for a world, which `boardsmith dev` deals from its own', () => {
+    const record = smokeRecord(walk({ seeds: [], listed: ['tend'], taken: new Set(['tend']) }), { controls: 0, games: 1 });
+    expect(smokeSummary(record)).toBe(
+      'Served by `boardsmith dev` from a fresh start, a seated player took "tend" and pressed 0 board controls, with no error.',
     );
   });
 
@@ -118,7 +220,7 @@ describe('smokeRecord and smokeSummary: what a passing walk reports', () => {
     );
     expect(record).toMatchObject({ games: 2, excused: [{ action: 'claim', reason: REASON }], reachedAnyway: [] });
     expect(smokeSummary(record)).toBe(
-      'Served by `boardsmith dev` from a fresh start, a seated player took "move", "resign" and pressed 0 board controls, ' +
+      'Served by `boardsmith dev` from a fresh start and dealt from seed "smoke", a seated player took "move", "resign" and pressed 0 board controls, ' +
         'with no error, over 2 games (a new one each time a game ended with listed actions still to take). ' +
         `Not required, as ${SMOKE_SPEC_PATH} says a walk from a fresh game cannot reach them: "claim" ("${REASON}").`,
     );
@@ -136,5 +238,146 @@ describe('smokeRecord and smokeSummary: what a passing walk reports', () => {
           'cannot reach: remove it from `unreachable` there, so the walk requires it\\.$',
       ),
     );
+  });
+});
+
+describe('smokeFailure: what a failing walk says (#460)', () => {
+  it('names the seed it was dealt from, so `boardsmith smoke` walks the same game again', () => {
+    expect(smokeFailure(walk({}), ['A console error: boom'])).toBe(
+      'The smoke walk, dealt from seed "smoke", found a problem:\n  - A console error: boom',
+    );
+    expect(smokeFailure(walk({ seeds: ['a', 'b'] }), ['one', 'two'])).toBe(
+      'The smoke walk, dealt from seed "a", then from seed "b", found 2 problems:\n  - one\n  - two',
+    );
+    expect(smokeFailure(walk({ seeds: [] }), ['one'])).toBe('The smoke walk found a problem:\n  - one');
+  });
+});
+
+describe('answered: when the walk gives up on an open action (#463, #467)', () => {
+  const at = 'at step 7 of the game dealt from seed "smoke"';
+
+  it('goes on while each press changes the panel to something new', () => {
+    const trail = startAnswering('modify-die', at, 'Choose a die');
+    expect(answered(trail, '4', 'Raise or lower the 4?', [])).toBeUndefined();
+    expect(answered(trail, 'Raise', 'Done?', [])).toBeUndefined();
+  });
+
+  it('gives up on a panel that offers nothing to press', () => {
+    const trail = startAnswering('modify-die', at, 'Choose a die');
+    expect(answered(trail, undefined, 'Choose a die', [])).toBe(
+      `The panel opened "modify-die" ${at} and offered nothing to choose or press: Choose a die`,
+    );
+  });
+
+  it('gives up on a panel three presses leave as it was', () => {
+    const trail = startAnswering('kindle', at, 'How many logs?');
+    expect(answered(trail, 'Done', 'How many logs?', [])).toBeUndefined();
+    expect(answered(trail, 'Done', 'How many logs?', [])).toBeUndefined();
+    expect(answered(trail, 'Done', 'How many logs?', [])).toBe(
+      `The panel opened "kindle" ${at}, and pressing its choices changed nothing: How many logs?`,
+    );
+  });
+
+  it('gives up at once on a panel that comes back to a state it showed, naming the presses that went round', () => {
+    const trail = startAnswering('modify-die', at, 'Choose a die');
+    expect(answered(trail, '6', 'Lower the 6?', [])).toBeUndefined();
+    expect(answered(trail, 'Back', 'Choose a die', [])).toBe(
+      `Answering "modify-die" ${at} went round in a loop: pressing "6", "Back" brought its panel back to a state it had ` +
+        'shown before ("Choose a die"), so the action never finishes that way.',
+    );
+  });
+
+  it('does not count a state as seen again when the board picks differ', () => {
+    const trail = startAnswering('trade', at, 'Choose cards');
+    expect(answered(trail, 'AH', 'Chosen 1', ['AH'])).toBeUndefined();
+    expect(answered(trail, '2H', 'Choose cards', ['AH', '2H'])).toBeUndefined();
+  });
+
+  it(`gives up after ${MOST_ANSWERS} presses with the action still open, naming the last ones`, () => {
+    const trail = startAnswering('count', at, 'n=0');
+    for (let n = 1; n < MOST_ANSWERS; n++) expect(answered(trail, `+${n}`, `n=${n}`, [])).toBeUndefined();
+    expect(answered(trail, `+${MOST_ANSWERS}`, `n=${MOST_ANSWERS}`, [])).toMatch(
+      new RegExp(`^Answering "count" ${at.replace(/"/g, '"')} took ${MOST_ANSWERS} presses and the action was still open\\. The last ones: "\\+41", .*"\\+50"\\. Its panel: n=50$`),
+    );
+  });
+});
+
+describe('walkStopped: why a walk could not go on (#464)', () => {
+  it('names the step and the deal, and says a page that stopped answering did so', () => {
+    const timeout = Object.assign(new Error('locator.click: Timeout 5000ms exceeded.\nCall log: ...'), { name: 'TimeoutError' });
+    expect(walkStopped(timeout, 5, { step: 54, seed: 'smoke' })).toBe(
+      'The walk could not go on at step 54 of the game dealt from seed "smoke": the page did not answer within 5s ' +
+        '(locator.click: Timeout 5000ms exceeded.). Run `boardsmith smoke` to watch that step.',
+    );
+  });
+
+  it("gives any other error's first line, with no step before the walk began", () => {
+    expect(walkStopped(new Error('The dev host never showed the game.\nmore'), 5)).toBe(
+      'The walk could not go on: The dev host never showed the game.',
+    );
+    expect(walkStopped(new Error('boom'), 5, { step: 3, seed: null })).toBe('The walk could not go on at step 3: boom');
+  });
+});
+
+describe('recordResolved: what a resolved action leaves the walk remembering (#466)', () => {
+  function memory(): ResolvedMemory {
+    return { resolved: new Map(), lastResolved: undefined, failed: new Set(), numbered: new Set(), refused: new Map(), refusals: new Set() };
+  }
+  const failed = (action: string, error: string) => ({ action, success: false, error });
+
+  it('records a taken action as offered, enabled and taken, and reports one that failed, which is not taken again', () => {
+    const w = walk({});
+    const m = memory();
+    recordResolved([{ action: 'draw', success: true }, failed('play', 'No card to play.')], w, m);
+    expect([...w.taken]).toEqual(['draw']);
+    expect([...w.offered].sort()).toEqual(['draw', 'play']);
+    expect(m.resolved.get('draw')).toBe(1);
+    expect(m.lastResolved).toBe('draw');
+    expect([...m.failed]).toEqual(['play']);
+    expect(w.errors).toEqual(['The panel offered "play", and taking it failed: No card to play.']);
+  });
+
+  it('takes a failure after a typed number for the game refusing it, up to three numbers, then reports the action with how many it refused', () => {
+    const w = walk({});
+    const m = memory();
+    for (const error of ['A fire needs two logs.', 'A fire needs three logs.']) {
+      m.numbered.add('kindle');
+      recordResolved([failed('kindle', error)], w, m);
+    }
+    expect(w.errors).toEqual([]);
+    expect(m.failed.size).toBe(0);
+    expect(m.refused.get('kindle')).toBe(2);
+    expect([...m.refusals]).toEqual(['A fire needs two logs.', 'A fire needs three logs.']);
+    // The typed number is spent either way, so the next attempt types the next one up.
+    expect(m.numbered.has('kindle')).toBe(false);
+
+    m.numbered.add('kindle');
+    recordResolved([failed('kindle', 'A fire needs four logs.')], w, m);
+    expect(w.errors).toEqual([
+      'The panel offered "kindle", and taking it failed: A fire needs four logs. The game refused each of the 3 numbers the walk entered.',
+    ]);
+    expect([...m.failed]).toEqual(['kindle']);
+  });
+
+  it('clears the typed number when the action succeeds, so a later failure without one is reported, not taken for a refused number', () => {
+    const w = walk({});
+    const m = memory();
+    m.numbered.add('kindle');
+    recordResolved([{ action: 'kindle', success: true }], w, m);
+    expect(m.numbered.has('kindle')).toBe(false);
+
+    recordResolved([failed('kindle', 'The hearth is cold.')], w, m);
+    expect(w.errors).toEqual(['The panel offered "kindle", and taking it failed: The hearth is cold.']);
+    expect(m.refused.get('kindle')).toBeUndefined();
+  });
+
+  it('never takes a failure the engine words as an error in the rules for a refused number, whatever the walk typed', () => {
+    const w = walk({});
+    const m = memory();
+    m.numbered.add('kindle');
+    recordResolved([failed('kindle', `${rulesErrorSentence('kindle')} (the hearth cracked)`)], w, m);
+    expect(w.errors).toHaveLength(1);
+    expect(w.errors[0]).toContain('taking it failed: The "kindle" action could not be completed');
+    expect(m.refused.get('kindle')).toBeUndefined();
   });
 });

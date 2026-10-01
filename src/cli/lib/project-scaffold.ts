@@ -688,9 +688,20 @@ export function generateSmokeSpecTs(actions: readonly string[]): string {
 //
 // \`actions\` lists every action a player can take, by the name the rules give it. The walk must
 // take each one, and fails on one the game offers that is not listed here: add an action here in
-// the same change that adds it to the rules. An action no walk from a fresh game can reach (one
-// offered only in a position play does not get to, such as a draw by repetition) stays listed and
-// is also named in \`unreachable\`, with a sentence saying why:
+// the same change that adds it to the rules.
+//
+// At a table the walk deals every game from a seed, "smoke" unless \`seed\` names another, so every
+// run walks the same games and \`boardsmith smoke\` walks a failure again exactly. An action only
+// some deals offer (one offered only to a player dealt the right cards) is reached by
+// choosing a seed whose deal offers it. \`seed\` also takes a list, each walked in turn:
+//
+//   seed: ['smoke', '17'],
+//
+// A world is dealt by \`boardsmith dev\` from its own seed, so a world's spec names none.
+//
+// \`unreachable\` is for an action no walk from a fresh game reaches whatever the deal (one offered
+// only in a position play does not get to, such as a draw by repetition). It stays listed and is
+// also named in \`unreachable\`, with a sentence saying why:
 //
 //   unreachable: { claimDraw: 'Offered only after a threefold repetition, which a walk never plays.' },
 //
