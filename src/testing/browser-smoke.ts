@@ -860,7 +860,7 @@ async function putOff(frame: Frame, walk: SmokeWalk, memory: WalkMemory, name: s
   narrate(step, `\`inputs\` gives no value for "${field}" of "${name}" yet; cancelling it until the game moves on`);
   walk.wanting.set(name, field);
   memory.putOff.set(name, memory.moves);
-  await pressThePanels(frame, '.action-config .cancel-btn', 'Cancel', walk);
+  await pressThePanels(frame, '.action-config .cancel-btn', 'Cancel', walk, memory);
 }
 
 /**
