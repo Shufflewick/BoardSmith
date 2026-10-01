@@ -245,6 +245,12 @@ describe('a failed step: one retry at the same role, then one role up, then the 
       const text = flat(read(file));
       expect(text, file).not.toMatch(/named exception|one more `?judgement`? round|quote-fix|Escalated from/);
     }
+    const agents = readdirSync(BS_DIR + '../agents').filter((f) => f.endsWith('.md')).map((f) => `../agents/${f}`);
+    for (const file of ['build-chunk.md', 'state-machine.md', ...agents]) {
+      const text = flat(read(file));
+      expect(text, file).not.toMatch(/one role above the work that failed|another role failed|the bounded role failed\b(?! twice)/);
+    }
+    expect(flat(read('state-machine.md'))).toMatch(/Any step that has failed twice at the `judgement` role/);
     routingSays(
       /A step fails when its verify fails, when a check run on its return refuses its work \(`boardsmith claim-quote-check` refusing the claims an `investigate` or `re-investigate` wrote, `boardsmith verify-run-record` refusing a page range it transcribed\), or when its reviewer asks for changes/,
       /That is the claims' one retry at `judgement`: if the check refuses again, or the red team then refutes them, the designer decides/,

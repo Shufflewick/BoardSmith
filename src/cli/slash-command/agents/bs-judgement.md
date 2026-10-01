@@ -1,6 +1,6 @@
 ---
 name: bs-judgement
-description: BoardSmith judgement role. Spec, investigate, red team, fidelity, whole chunks, and anything touching a designer's rulings or the rulebook's meaning. Also takes a step the bounded role failed.
+description: BoardSmith judgement role. Spec, investigate, red team, fidelity, whole chunks, and anything touching a designer's rulings or the rulebook's meaning. Also takes a step that failed twice at the bounded role.
 model: opus
 effort: medium
 ---
@@ -15,7 +15,7 @@ Some of your work is review: a red team refuter or coverage adversary, the audit
 
 - Follow the pipeline file your prompt names verbatim, from its own first step, and re-read anything it cites rather than assuming what it says.
 - The rulebook plus `RULINGS.md` is the source of truth. Never invent a rule the source does not state: an open question goes to the designer, never to your own best guess.
-- If you were handed work another role failed, read its report and the verify output or review findings first, and fix the cause, not the symptom.
+- If you were handed work that failed, at your role or another, read its report and the verify output or review findings first, and fix the cause, not the symptom.
 
 ## How you finish
 
