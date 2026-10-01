@@ -23,6 +23,17 @@ do, or say plainly that there's nothing; describe the game in their own terms, n
 keep internal ids, step names, file paths, and ledger counts out of the body; never narrate
 bookkeeping. An ordinary step completion is one to three sentences.
 
+## Model Routing
+
+Which role does each piece of work, when review may start, and what happens when a step fails:
+`${CLAUDE_SKILL_DIR}/../bs-shared/routing.md`, the one authority.
+
+Its dispatches use the work package `ingest-rules`: reading and transcribing the rulebook is
+`judgement` work, and a bulk edit across the slices is `mechanical`. Each one is recorded before
+it is launched as a `### Dispatch N` entry in `design/run-log/ingest-rules.md`, created from
+`${CLAUDE_SKILL_DIR}/../bs-shared/templates/RUN-LOG.template.md`, and `boardsmith ledger-check`
+checks that log exactly as it checks a chunk's.
+
 ## Invocation
 
 ```
@@ -151,7 +162,7 @@ already bound and Step 1 has already archived it. Go straight to the transcripti
 
 Otherwise ask whether the designer has a written rulebook (PDF/images/text).
 
-- **Rulebook available** — dispatch fan-out subagents per `${CLAUDE_SKILL_DIR}/../bs-shared/ingest/transcription.md`.
+- **Rulebook available** — dispatch fan-out subagents of the `judgement` role per `${CLAUDE_SKILL_DIR}/../bs-shared/ingest/transcription.md`.
 - **No rulebook** (unpublished prototype, rules in the designer's head) — run the structured
   interview per `${CLAUDE_SKILL_DIR}/../bs-shared/ingest/interview-fallback.md`, which produces the identical `rulebook/` shape so
   every downstream step is unaffected by which path was taken.
@@ -314,6 +325,9 @@ or any `CHUNK.md`. Only after Step 6's explicit approval:
 - `ASSETS.md` and `rulebook/00-visual-survey.md` were already written at Step 3 (they record
   factual component inventory and visual evidence, not gated sketch state) — do not re-copy or
   re-write them here.
+
+- Run `npx boardsmith ledger-check`. It checks `design/run-log/ingest-rules.md`, the record of
+  every dispatch this skill made; fix what it names before continuing.
 
 Never restate template or state-machine content inline in this file or in the written project
 files beyond what each template already documents — fill the placeholders, don't reinvent the

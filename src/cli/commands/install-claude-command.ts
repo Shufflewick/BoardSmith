@@ -4,6 +4,11 @@
  * This installs the bs- skill family (bs-create-game, bs-ingest-rules, bs-build-game,
  * bs-build-chunk, bs-check-status, bs-insert-chunk, bs-build-bot, bs-verify-game) globally so
  * users can design and build BoardSmith games directly within Claude Code conversations.
+ *
+ * It also installs one Claude Code agent per role the skills dispatch work to (#454):
+ * bs-mechanical, bs-bounded, bs-judgement, bs-review and bs-second-opinion, into the `agents/` directory beside
+ * `skills/`. Their default model and effort live in each agent file's frontmatter
+ * (`src/cli/slash-command/agents/`); a project maps a role to another agent in boardsmith.json.
  */
 
 import { promises as fs } from 'node:fs';
@@ -12,6 +17,7 @@ import { fileURLToPath } from 'node:url';
 import { homedir } from 'node:os';
 import { execSync } from 'node:child_process';
 import chalk from 'chalk';
+import { ROLES, defaultAgentType } from '../lib/agent-roles.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -76,9 +82,10 @@ const SHARED_DIRS = ['build', 'ingest', 'orchestrate', 'templates', 'aspects', '
 /**
  * Shared single files copied to the ROOT of the `bs-shared/` namespace (not inside any
  * SHARED_DIRS subdirectory). These are the cross-skill authorities every entry point cites:
- * `state-machine.md` (what the pipeline does) and `reporting.md` (how it talks to the designer).
+ * `state-machine.md` (what the pipeline does), `reporting.md` (how it talks to the designer) and
+ * `routing.md` (which role each piece of work is dispatched to, and when review may start).
  */
-const SHARED_FILES = ['state-machine.md', 'reporting.md'];
+const SHARED_FILES = ['state-machine.md', 'reporting.md', 'routing.md'];
 
 /**
  * A known leaf file inside each shared dir (relative to `targetDir`). A COMPLETE install
@@ -112,6 +119,18 @@ const SHARED_LEAF_PROBES = [
   join(SHARED_ROOT, 'verify', 'translate-example.md'),
 ];
 
+/**
+ * The role agents, one per role, each installed as `<claude dir>/agents/<name>.md` from
+ * `src/cli/slash-command/agents/<name>.md`. Every name is `bs-`-prefixed, so installing and
+ * uninstalling them can never touch an agent of the user's own.
+ */
+const AGENT_FILES = ROLES.map((role) => `${defaultAgentType(role)}.md`);
+
+/** The `agents/` directory beside a `skills/` directory: both live in the same `.claude/`. */
+function agentsDirFor(skillsDir: string): string {
+  return join(dirname(skillsDir), 'agents');
+}
+
 /** Filter applied to every recursive tree copy: never ship test files. */
 function excludeTestFiles(src: string): boolean {
   return !src.endsWith('.test.ts');
@@ -128,6 +147,7 @@ function ownedPaths(targetDir: string): string[] {
     ...SKILL_ENTRY_POINTS.map(({ skillName }) => join(targetDir, skillName)),
     ...RETIRED_SKILL_NAMES.map((skillName) => join(targetDir, skillName)),
     join(targetDir, SHARED_ROOT),
+    ...AGENT_FILES.map((file) => join(agentsDirFor(targetDir), file)),
   ];
 }
 
@@ -141,6 +161,7 @@ function expectedInstallPaths(targetDir: string): string[] {
   return [
     ...SKILL_ENTRY_POINTS.map(({ skillName }) => join(targetDir, skillName, 'SKILL.md')),
     ...SHARED_LEAF_PROBES.map((leaf) => join(targetDir, leaf)),
+    ...AGENT_FILES.map((file) => join(agentsDirFor(targetDir), file)),
   ];
 }
 
@@ -219,6 +240,13 @@ async function copySkillTree(
   await fs.mkdir(join(targetDir, SHARED_ROOT), { recursive: true });
   for (const file of SHARED_FILES) {
     await fs.copyFile(join(bsDir, file), join(targetDir, SHARED_ROOT, file));
+  }
+
+  // Role agents: one file each, into the agents/ directory beside skills/.
+  const agentsDir = agentsDirFor(targetDir);
+  await fs.mkdir(agentsDir, { recursive: true });
+  for (const file of AGENT_FILES) {
+    await fs.copyFile(join(slashCommandDir, 'agents', file), join(agentsDir, file));
   }
 
   return true;
@@ -305,9 +333,18 @@ export async function installClaudeCommand(options: InstallOptions = {}): Promis
   console.log(chalk.gray('Each skill reads from a shared reference tree (build/, ingest/,'));
   console.log(
     chalk.gray(
-      'orchestrate/, templates/, aspects/, state-machine.md, reporting.md) installed under bs-shared/.'
+      'orchestrate/, templates/, aspects/, state-machine.md, reporting.md, routing.md) installed under bs-shared/.'
     )
   );
+  console.log('');
+  console.log('Role agents (the skills dispatch work by role, never by model):');
+  console.log(chalk.cyan('  bs-mechanical') + chalk.gray('    - Bulk edits, searches and summaries'));
+  console.log(chalk.cyan('  bs-bounded') + chalk.gray('       - Implementation where failing tests say what done is'));
+  console.log(chalk.cyan('  bs-judgement') + chalk.gray('     - Spec, investigate, red team, fidelity, anything touching a ruling'));
+  console.log(chalk.cyan('  bs-review') + chalk.gray('        - Review, once `boardsmith verify` has passed'));
+  console.log(chalk.cyan('  bs-second-opinion') + chalk.gray(' - An independent second reading, on a different model from bs-judgement'));
+  console.log(chalk.gray(`  Location: ${agentsDirFor(targetDir)}`));
+  console.log(chalk.gray('  To use other agents, map roles in boardsmith.json, e.g. "agents": { "judgement": "senior" }.'));
   console.log(chalk.gray('Projects built with an older BoardSmith skill are auto-detected'));
   console.log(chalk.gray('and offered a one-time conversion by bs-ingest-rules.'));
   console.log('');
@@ -329,17 +366,10 @@ export async function uninstallClaudeCommand(options: { local?: boolean } = {}):
 
   let removedAny = false;
 
-  // Only ever remove installer-owned `bs-`-prefixed roots (the SKILL_ENTRY_POINTS skill dirs +
-  // the single bs-shared/ namespace). Never a generic top-level name like `templates`/`build`, so
-  // uninstall cannot wipe an unrelated user skill that happens to share that name.
-  const itemsToRemove = [
-    ...SKILL_ENTRY_POINTS.map(({ skillName }) => skillName),
-    ...RETIRED_SKILL_NAMES,
-    SHARED_ROOT,
-  ];
-
-  for (const item of itemsToRemove) {
-    const itemPath = join(targetDir, item);
+  // Only ever remove installer-owned `bs-`-prefixed paths (`ownedPaths`: the skill dirs, the single
+  // bs-shared/ namespace and the role agents). Never a generic top-level name like
+  // `templates`/`build`, so uninstall cannot wipe an unrelated user skill or agent that shares it.
+  for (const itemPath of ownedPaths(targetDir)) {
     try {
       await fs.access(itemPath);
     } catch {

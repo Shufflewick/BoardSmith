@@ -67,6 +67,8 @@ import { verifySourceFreeCheckCommand } from './commands/verify-source-free.js';
 import { verifyCloseRecordCommand } from './commands/verify-close-record.js';
 import { verifyCommand } from './commands/verify.js';
 import { installBrowserCommand, smokeCommand } from './commands/smoke.js';
+import { reviewGateCommand } from './commands/review-gate.js';
+import { agentCommand } from './commands/agent.js';
 import { verifyExampleEmitCommand } from './commands/example-test-emit.js';
 import { verifyExampleRunCommand } from './commands/example-test-run.js';
 import { evolveBotWeightsCommand } from './commands/evolve-bot-weights.js';
@@ -201,6 +203,28 @@ export function createProgram(): Command {
     .command('install-browser')
     .description("Download the Chromium build this BoardSmith's Playwright drives, for the smoke test (one time per machine)")
     .action(installBrowserCommand);
+
+  // No model review starts until verify has passed for the commit under review (#454).
+  program
+    .command('review-gate <slug>')
+    .description(
+      "Refuse a model review of a chunk's work unless `boardsmith verify --chunk <slug>` passed for this commit; " +
+        'when open, print the review level and the verify brief every review prompt carries',
+    )
+    .option('--work-role <role>', 'The role that did the work under review (mechanical, bounded or judgement); only small mechanical changes skip or lighten review')
+    .option('--since <commit>', 'Review only the change since this commit: the one the last round reviewed, or where a mechanical change began')
+    .option('--project <dir>', 'Project directory (defaults to cwd)')
+    .action((slug: string, options: { workRole?: string; since?: string; project?: string }) => reviewGateCommand(slug, options));
+
+  // The bs- skills name roles, never models (#454): which agent type each role is dispatched as.
+  program
+    .command('agent <role>')
+    .description(
+      'Print the agent type to dispatch a role (mechanical, bounded, judgement, review, second-opinion) as: the one boardsmith.json "agents" maps it to, else bs-<role>',
+    )
+    .option('--escalate', 'The step failed at this role: print the next role up and its agent type, or say to ask the designer')
+    .option('--project <dir>', 'Project directory (defaults to cwd)')
+    .action((role: string, options: { escalate?: boolean; project?: string }) => agentCommand(role, options));
 
   // Linting
   program
@@ -727,8 +751,8 @@ export function createProgram(): Command {
     .action(discardResult(verifyRepairStatusCommand));
 
   // CHECK-04 (177.1-CONTEXT.md decision 2): dual-enumeration derived-line check — two
-  // independently-dispatched enumerators (claude-opus-5, claude-haiku-4-5-20251001) each read a
-  // slice's quote lines, a reconciler (claude-sonnet-5) grounds their overlap and cross-checks it
+  // independently-dispatched enumerators (the judgement and second-opinion roles) each read a
+  // slice's quote lines, a reconciler (the judgement role) grounds their overlap and cross-checks it
   // against every `Derived (p.N):` line, and the CLI classifies each into one of eight verdicts
   // (corroborated / corroborated-by-composition / uncorroborated / contradicted /
   // quote-unverified / absence-corroborated / absence-contradicted / absence-unverifiable). Advisory
@@ -758,14 +782,14 @@ export function createProgram(): Command {
     )
     .option('--project <dir>', 'Project directory (defaults to cwd)')
     .requiredOption('--slice-path <path>', 'The rulebook/ slice the Derived lines live in')
-    .requiredOption('--enumerator-a <file>', "Enumerator A's structured JSON return (claude-opus-5)")
+    .requiredOption('--enumerator-a <file>', "Enumerator A's structured JSON return (the judgement role)")
     .requiredOption(
       '--enumerator-b <file>',
-      "Enumerator B's structured JSON return (claude-haiku-4-5-20251001)",
+      "Enumerator B's structured JSON return (the second-opinion role)",
     )
     .requiredOption(
       '--reconciler <file>',
-      "The reconciler's structured JSON return (claude-sonnet-5)",
+      "The reconciler's structured JSON return (the judgement role)",
     )
     .option('--json', 'Emit JSON instead of human-readable output')
     .action(discardResult(verifyDeriveRecordCommand));

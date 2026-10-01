@@ -14,6 +14,7 @@ import {
 } from './ledger-check.js';
 import { checkClaimQuotes } from './claim-quotes.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
+import { buildVerifyResult, writeVerifyResult } from '../lib/verify-result.js';
 
 /**
  * `ledger-check` (#293): the mechanical integrity check for the design ledgers and the run log.
@@ -157,7 +158,9 @@ describe('checkFilingStatus', () => {
 function dispatch(n: number, dispatched: string, outcome: string, finished: string): string {
   return [
     `### Dispatch ${n}`,
-    '- Pipeline: build-chunk',
+    '- Work: build-chunk',
+    '- Role: judgement',
+    '- Agent: bs-judgement',
     `- Dispatched at: ${dispatched}`,
     `- Finished at: ${finished}`,
     `- Outcome: ${outcome}`,
@@ -170,6 +173,7 @@ const LOG = 'run-log/core-loop.md';
 const epoch = (iso: string) => Date.parse(iso) / 1000;
 const NOW = epoch('2026-09-24T00:00:00Z');
 const uncommitted = () => null;
+const noVerifyFiles = () => undefined;
 
 describe('checkRunLog', () => {
   it('passes a well-formed log whose times are no later than their commits', () => {
@@ -177,12 +181,12 @@ describe('checkRunLog', () => {
       dispatch(1, '2026-09-23T10:00:00Z', 'closed', '2026-09-23T11:00:00Z'),
       dispatch(2, '2026-09-23T11:05:00Z', 'pending', 'pending'),
     ].join('\n');
-    expect(checkRunLog(text, LOG, () => epoch('2026-09-23T12:00:00Z'), NOW)).toEqual([]);
+    expect(checkRunLog(text, LOG, () => epoch('2026-09-23T12:00:00Z'), NOW, noVerifyFiles)).toEqual([]);
   });
 
   it('fails a finish earlier than its dispatch (sotf Dispatch 73)', () => {
     const text = dispatch(73, '2026-09-23T10:03:30Z', 'closed', '2026-09-22T12:30:00Z');
-    const findings = checkRunLog(text, LOG, uncommitted, NOW);
+    const findings = checkRunLog(text, LOG, uncommitted, NOW, noVerifyFiles);
     expect(findings).toHaveLength(1);
     expect(findings[0].entry).toBe('Dispatch 73');
     expect(findings[0].detail).toMatch(/earlier than its Dispatched at/);
@@ -194,14 +198,14 @@ describe('checkRunLog', () => {
     const finishedLine = lines.findIndex((l) => l.startsWith('- Finished at:')) + 1;
     const commitTime = (line: number) =>
       line === finishedLine ? epoch('2026-09-23T10:30:00Z') : epoch('2026-09-23T12:00:00Z');
-    const findings = checkRunLog(text, LOG, commitTime, NOW);
+    const findings = checkRunLog(text, LOG, commitTime, NOW, noVerifyFiles);
     expect(findings).toHaveLength(1);
     expect(findings[0].detail).toMatch(/Finished at .* is later than the commit/);
   });
 
   it('fails an uncommitted timestamp that is in the future', () => {
     const text = dispatch(1, '2026-09-25T10:00:00Z', 'pending', 'pending');
-    expect(checkRunLog(text, LOG, uncommitted, NOW).map((f) => f.kind)).toEqual(['run-timestamp']);
+    expect(checkRunLog(text, LOG, uncommitted, NOW, noVerifyFiles).map((f) => f.kind)).toEqual(['run-timestamp']);
   });
 
   it('fails a dispatch earlier than the one logged before it', () => {
@@ -209,7 +213,7 @@ describe('checkRunLog', () => {
       dispatch(1, '2026-09-23T10:00:00Z', 'closed', '2026-09-23T11:00:00Z'),
       dispatch(2, '2026-09-22T09:00:00Z', 'pending', 'pending'),
     ].join('\n');
-    const findings = checkRunLog(text, LOG, uncommitted, NOW);
+    const findings = checkRunLog(text, LOG, uncommitted, NOW, noVerifyFiles);
     expect(findings.map((f) => f.entry)).toEqual(['Dispatch 2']);
   });
 
@@ -219,7 +223,7 @@ describe('checkRunLog', () => {
       dispatch(2, '2026-09-23T10:10:00Z', 'pending', '2026-09-23T10:20:00Z'),
       dispatch(3, 'Sept 23, 10:30', 'pending', 'pending'),
     ].join('\n');
-    expect(checkRunLog(text, LOG, uncommitted, NOW).map((f) => f.entry)).toEqual([
+    expect(checkRunLog(text, LOG, uncommitted, NOW, noVerifyFiles).map((f) => f.entry)).toEqual([
       'Dispatch 1',
       'Dispatch 2',
       'Dispatch 3',
@@ -228,7 +232,31 @@ describe('checkRunLog', () => {
 
   it('fails a missing Finished at field', () => {
     const text = '### Dispatch 1\n- Dispatched at: 2026-09-23T10:00:00Z\n- Outcome: pending\n';
-    expect(checkRunLog(text, LOG, uncommitted, NOW)[0].detail).toMatch(/Finished at/);
+    expect(checkRunLog(text, LOG, uncommitted, NOW, noVerifyFiles)[0].detail).toMatch(/Finished at/);
+  });
+
+  it('holds each dispatch to a role and an agent type, and each review round to a passing verify (#454)', () => {
+    const text = [
+      '### Dispatch 1',
+      '- Work: build',
+      '- Dispatched at: 2026-09-23T10:00:00Z',
+      '- Finished at: pending',
+      '- Outcome: pending',
+      '',
+      '### Review Round 1',
+      '- Step: audit',
+      '- Level: full',
+      '- Verify: 0123456789ab failed',
+      '- Agents: bs-review',
+      '- Outcome: pending',
+      '',
+    ].join('\n');
+    expect(checkRunLog(text, LOG, uncommitted, NOW, noVerifyFiles).map((f) => `${f.ledger}:${f.entry}:${f.kind}`)).toEqual([
+      `${LOG}:Dispatch 1:run-role`,
+      `${LOG}:Dispatch 1:run-role`,
+      `${LOG}:Review Round 1:review-round`,
+      `${LOG}:Review Round 1:review-round`,
+    ]);
   });
 
   it('reports a dispatch number used twice', () => {
@@ -236,7 +264,7 @@ describe('checkRunLog', () => {
       dispatch(1, '2026-09-23T10:00:00Z', 'closed', '2026-09-23T11:00:00Z'),
       dispatch(1, '2026-09-23T11:05:00Z', 'pending', 'pending'),
     ].join('\n');
-    expect(checkRunLog(text, LOG, uncommitted, NOW).map((f) => f.kind)).toEqual(['duplicate-number']);
+    expect(checkRunLog(text, LOG, uncommitted, NOW, noVerifyFiles).map((f) => f.kind)).toEqual(['duplicate-number']);
   });
 });
 
@@ -401,6 +429,51 @@ describe('ledgerCheck — the whole project', () => {
     const good = await project({ 'RULINGS.md': ruling(1) });
     await ledgerCheckCommand({ project: good, json: true });
     expect(process.exitCode).toBeUndefined();
+  });
+
+  it('confirms a review round\'s passing verify against the result on this machine, when there is one (#454)', async () => {
+    const commit = '0123456789abcdef0123456789abcdef01234567';
+    const roleFields = ['- Work: build', '- Role: bounded', '- Agent: bs-bounded'];
+    const log = [
+      dispatch(1, '2026-09-23T10:00:00Z', 'done', '2026-09-23T11:00:00Z').replace(/- Work: build-chunk\n- Role: judgement\n- Agent: bs-judgement/, roleFields.join('\n')),
+      '### Review Round 1',
+      '- Step: audit',
+      '- Reviewed: Dispatch 1',
+      '- Level: full',
+      `- Verify: ${commit.slice(0, 12)} passed`,
+      '- Agents: bs-review',
+      '- Outcome: clean',
+      '',
+    ].join('\n');
+    const result = (passed: boolean) =>
+      buildVerifyResult({
+        commit,
+        cleanTree: true,
+        base: { ref: 'main', commit: 'f'.repeat(40) },
+        chunk: 'core-loop',
+        checks: [{ name: 'test', passed, summary: passed ? 'all passed' : '1 failed' }],
+      });
+
+    const unverified = await project({ 'run-log/core-loop.md': log });
+    commitAt(unverified, '2026-09-23T12:00:00Z');
+    expect((await ledgerCheck(unverified)).findings).toEqual([]);
+
+    await writeVerifyResult(unverified, result(false));
+    const [finding, ...others] = (await ledgerCheck(unverified)).findings;
+    expect(others).toEqual([]);
+    expect(`${finding.ledger}:${finding.entry}:${finding.kind}`).toBe('run-log/core-loop.md:Review Round 1:review-round');
+    expect(finding.detail).toContain(`the latest verify of that commit (.boardsmith/verify/${commit}.json) failed`);
+
+    await writeVerifyResult(unverified, result(true));
+    expect((await ledgerCheck(unverified)).findings).toEqual([]);
+  });
+
+  it('refuses a chunk named like a skill that keeps its own run log, since the two would share one file (#454)', async () => {
+    const dir = await project({ 'chunks/verify-game/CHUNK.md': 'Status: proposed\n', 'chunks/trading/CHUNK.md': 'Status: proposed\n' });
+    commitAt(dir, '2026-09-23T12:00:00Z');
+    const findings = (await ledgerCheck(dir)).findings;
+    expect(findings.map((f) => `${f.ledger}:${f.entry}:${f.kind}`)).toEqual(['run-log/verify-game.md:chunk verify-game:run-log-shared']);
+    expect(findings[0].detail).toMatch(/\/bs-verify-game keeps its own dispatches in design\/run-log\/verify-game\.md.*Rename the chunk/);
   });
 
   it('refuses a project with a run log outside a git repository, saying why', async () => {

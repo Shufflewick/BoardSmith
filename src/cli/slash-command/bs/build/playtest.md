@@ -5,7 +5,7 @@ session step group — see `state-machine.md` "Session Handoff Seams"). For a **
 with visible UI**, this is the human-verification boundary: the point where the chunk's actual,
 running behavior is confirmed by a human playing it, not just described. This step has **no
 subagent** — the orchestrator narrates the numbered test script to the human directly, in the
-main session, and records their answers itself; it never dispatches a Task-tool agent for this
+main session, and records their answers itself; it never dispatches an agent for this
 step. Mirrors `build/ask.md`'s no-subagent shape exactly, not `build/redteam.md`'s or
 `build/audit.md`'s Dispatch Template pattern — playtest has no dispatch prompt of its own.
 
@@ -90,7 +90,7 @@ path — read it as conditioned on the gate above.
 This chunk's `build`/`test` steps already completed; `Status: built` is on CHUNK.md. Playtest
 hands the user ONE command they run themselves — `npx boardsmith dev` — plus the URL it prints,
 and nothing more. The skill never starts, stops, or otherwise controls that server; it is not
-a Task-tool-dispatched process, it is the user's own terminal session for as long as they want
+a process an agent was dispatched to run, it is the user's own terminal session for as long as they want
 to keep playing. If the orchestrator needs a dev server for any other step (e.g. an audit or
 design-review agent's automated capture), that server is a separate, agent-owned process that
 was already started and killed before this step began — this step never touches it.

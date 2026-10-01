@@ -3,6 +3,7 @@ import {
   designDir,
   designRulebookDir,
 } from '../lib/project-paths.js';
+import type { Role } from '../lib/agent-roles.js';
 import { promises as fs } from 'node:fs';
 import { dirname, isAbsolute, join, relative, resolve } from 'node:path';
 import chalk from 'chalk';
@@ -36,17 +37,16 @@ import {
 } from './verify-enumerate.js';
 
 /**
- * The three pinned model ids the SKILL orchestrator dispatches (177.1-CONTEXT.md decision 4) —
- * exactly what `177-22-MEASUREMENT/driver.mjs:17-19` dispatched. Cross-family independence
- * between the two enumerators was load-bearing in every CHECK-04 measurement; pinning these here
- * means an orchestrator can never silently substitute a different model and quietly weaken that
- * independence premise.
+ * The role each of the three CHECK-04 dispatches goes to (#454). The skills name roles, never
+ * models; `boardsmith agent <role>` names the agent. Independence between the two enumerators was
+ * load-bearing in every CHECK-04 measurement, so enumerator B is the `second-opinion` role, which
+ * `boardsmith validate` refuses to map to the same agent type as `judgement`.
  */
-export const DERIVE_CHECK_MODELS = Object.freeze({
-  enumeratorA: 'claude-opus-5',
-  enumeratorB: 'claude-haiku-4-5-20251001',
-  reconciler: 'claude-sonnet-5',
-} as const);
+export const DERIVE_CHECK_ROLES = Object.freeze({
+  enumeratorA: 'judgement',
+  enumeratorB: 'second-opinion',
+  reconciler: 'judgement',
+} as const satisfies Record<string, Role>);
 
 /**
  * `verify-derive-check.ts` — CHECK-04's mechanical core, RETARGETED onto the closed
@@ -651,7 +651,7 @@ export interface VerifyDeriveCheckFinding {
 
 export interface VerifyDeriveCheckResult {
   projectDir: string;
-  models: typeof DERIVE_CHECK_MODELS;
+  roles: typeof DERIVE_CHECK_ROLES;
   slices: VerifyDeriveCheckSlice[];
   findings: VerifyDeriveCheckFinding[];
   verdictCounts: Record<DeriveCheckVerdict, number>;
@@ -803,7 +803,7 @@ export async function verifyDeriveCheckCommand(
 
   const result: VerifyDeriveCheckResult = {
     projectDir,
-    models: DERIVE_CHECK_MODELS,
+    roles: DERIVE_CHECK_ROLES,
     slices,
     findings,
     verdictCounts,

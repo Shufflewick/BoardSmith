@@ -18,13 +18,15 @@ orchestrator needs about this round's outcome comes from the structured verdicts
 returns. Do not add a "let me double-check the claims against the rulebook" pass after the
 agents return — re-opening the slices silently reintroduces the exact context-exhaustion failure
 mode the fan-out design exists to avoid. If a returned verdict looks wrong, dispatch a narrower
-follow-up subagent or escalate to the user — never fall back to reading the sources yourself.
+follow-up subagent of the `judgement` role, the role of the refuter it follows up (`routing.md`),
+or escalate to the user — never fall back to reading the sources yourself.
 
 ## Independence: Fresh-Context, No-Framing Dispatch
 
 Redteam runs 3 independent fresh-context agents — 2 refuters plus 1 coverage adversary — on the
-claims list produced by `build/investigate.md`. Each of the 3 agents is a SEPARATE Task-tool
-dispatch, and all 3 are dispatched in one message, so they run at the same time: none reads
+claims list produced by `build/investigate.md`. Each of the 3 agents is a SEPARATE dispatch of
+the `judgement` role's agent (`npx boardsmith agent judgement`, `routing.md`), and all 3 are
+dispatched in one message, so they run at the same time: none reads
 another's verdict, so waiting for one before starting the next buys nothing
 (`build-chunk.md` "Concurrency Within a Chunk"). The dispatch prompt for every agent contains ONLY the raw slice path(s) and the
 numbered claims list text (the text the orchestrator read from CHUNK.md's `## Interpretation` —
@@ -42,20 +44,31 @@ to grade the investigator's confidence.
 
 ## Three Dispatch Templates
 
+Fill the slots: `{verifyResult}` is the brief `npx boardsmith review-gate <slug>` printed, word for
+word (see "Gate Before Dispatch" below); `{numberedClaimsList}` is the claims text.
+
 **Refuter × 2 (identical prompt, independent dispatch):**
 
 ```
-You are reviewing a rules interpretation for {gameName}, chunk "{slug}". Read the following
-rulebook slice(s): {slicePaths}. Also read RULINGS.md in this project — rulings outrank the
-rulebook (see state-machine.md "Rulings Outrank Rulebook"); the rulebook plus RULINGS.md
-together form the composite source of truth.
+Work package: {slug}
+
+You are reviewing a rules interpretation for {gameName}, chunk "{slug}". The mechanical checks
+are done. Every quote below was already checked, by code, to be at its cited location word for
+word, and this is what `boardsmith verify` found for the commit under review:
+
+{verifyResult}
+
+Read the following rulebook slice(s): {slicePaths}. Also read RULINGS.md in this project;
+rulings outrank the rulebook (see state-machine.md "Rulings Outrank Rulebook"); the rulebook plus
+RULINGS.md together form the composite source of truth.
 
 Here is a numbered list of factual claims. Each claim carries one or more quoted passages
 (`> ` lines) and a `Source:` naming where each passage is. For each claim, RE-OPEN every cited
 Source location yourself and read the text there, and around it, rather than the claim text (a
 location pinned to a commit, `<path>@<commit>:<lines>`, is read with
-`git show <commit>:<path from the project root>`):
-  - Is the quoted passage really at that location, word for word?
+`git show <commit>:<path from the project root>`).
+
+Judgement checks (the only ones you make):
   - Does the passage, read in its own context (plus RULINGS.md), say what the claim says? A
     claim that adds, drops, or reverses anything the passage says is refuted.
   - A claim that rests on something no quoted passage says is refuted: the source does not back
@@ -72,9 +85,19 @@ entry per claim (objection is required when verdict is 'refuted', empty otherwis
 **Coverage adversary (separate prompt, independent dispatch):**
 
 ```
+Work package: {slug}
+
 You are reviewing a rules interpretation for {gameName}, chunk "{slug}" for COMPLETENESS, not
-correctness. Read rulebook/INDEX.md and search it for rules that interact with this chunk's
-topic but are cited by no claim in the list below. Also read RULINGS.md.
+correctness. The mechanical checks are done. This is what `boardsmith verify` found for the
+commit under review:
+
+{verifyResult}
+
+Read rulebook/INDEX.md and RULINGS.md.
+
+Judgement checks (the only ones you make):
+  - Search INDEX.md for rules that interact with this chunk's topic but are cited by no claim in
+    the list below.
 
 {numberedClaimsList}
 
@@ -82,16 +105,27 @@ Return exactly: { missingInteractions: [{ ruleDescription, citation }, ...] } �
 none found.
 ```
 
-This is the concrete pattern to copy: 3 independent Task-tool dispatches, each prompt containing
-only slice paths + the numbered claims list — no investigator rationale, no framing.
+This is the concrete pattern to copy: 3 independent dispatches, each prompt containing only the
+verify brief, slice paths + the numbered claims list, and no investigator rationale, no framing.
 
-## Gate Before Dispatch: Quotes Are Checked as Code
+## Gate Before Dispatch: Verify, Then Quotes, Checked as Code
 
-Before any round's dispatch, the orchestrator runs `boardsmith claim-quote-check <slug>`. It
+No review step starts until `boardsmith verify` has passed for the commit under review
+(`routing.md` "No Review Before Verify"). Before the round's dispatch the orchestrator commits
+the chunk's work (`chunk-<slug>/step-investigate`), runs `npx boardsmith verify --chunk <slug>`,
+then `npx boardsmith review-gate <slug>`. A refusal means no reviewer is dispatched: fix what
+verify names and run both again. Open, the brief it prints fills `{verifyResult}` in all three
+prompts, and the round is recorded as a `### Review Round N` entry (`Step: redteam`,
+`Reviewed: Dispatch M` for the `investigate`, `re-investigate` or `quote-fix` dispatch that last
+wrote the claims) in the chunk's run log (`templates/RUN-LOG.template.md`) before the agents are dispatched.
+
+Before that, the orchestrator runs `boardsmith claim-quote-check <slug>`. It
 re-opens every claim's cited location and refuses a claim with no quote, a quote that is not at
 its citation, or an open question that does not show where it looked (see `build/investigate.md`
-"Quoted Claims, Checked as Code"). A non-zero exit sends the refusals back to a narrower
-investigate subagent; redteam is never dispatched on claims that fail it. The check proves the
+"Quoted Claims, Checked as Code"). A non-zero exit is a failure of the dispatch that wrote the
+claims: it gets one narrower `quote-fix`, handed only the refusals, at the `judgement` role, the
+second named exception in `routing.md`, and if the check still refuses, then the designer decides.
+Redteam is never dispatched on claims that fail it. The check proves the
 quote is THERE; the refuters judge whether it SAYS what the claim says, which is why they re-open
 the source rather than the claim text. A claim refuted because no passage backs it is resolved by
 turning it into an open question (`Q<N>.`) for the ask step, never by writing a rule the source
@@ -113,7 +147,13 @@ this file does not restate the max-1-round bound or the refuted-twice rule, it a
 
 - **Refuted once** (one refuter, or the coverage adversary alone, flags a claim/gap): hand off
   to `build/investigate.md`'s re-investigate behavior with the specific objection(s) attached —
-  maximum ONE re-investigate round. Re-investigation appends a superseding claim; it never
+  maximum ONE re-investigate round. It is dispatched at the `judgement` role again: the first named
+  exception to "never retry at the same role" (`routing.md`), because the claims were already
+  written at the top role and the designer's time is the scarcer resource. Its run log entry is
+  `Work: re-investigate`, `Escalated from: Review Round N` naming this round. Round 2 is a review
+  like round 1: commit the re-investigation, and it waits for `npx boardsmith verify --chunk
+  <slug>` and `npx boardsmith review-gate <slug>` exactly as "Gate Before Dispatch" says, and is
+  recorded as its own `### Review Round N` entry in the run log. Re-investigation appends a superseding claim; it never
   renumbers or edits the original (see `build/investigate.md` "Re-Investigate Round Behavior").
 - **Refuted twice** (both refuters agree a claim is refuted, or a refuter and the coverage
   adversary flag the same claim/gap on the re-investigate round): that is by definition an
@@ -137,13 +177,16 @@ section (`templates/CHUNK.template.md`) at the end of **each** round — per-cla
 objection text, the coverage adversary's findings, and the round's disposition. Concretely:
 
 - **Round 1, refuted-once path:** append `### Redteam Round 1` with disposition
-  `re-investigate dispatched` **before** dispatching the re-investigate subagent — never
+  `re-investigate dispatched`, and fill the run log's `### Review Round N` Outcome with `changes
+  requested`, **before** dispatching the re-investigate subagent — never
   deferred until the re-investigate round completes. A crash mid-re-investigate must not lose
   Round 1's verdicts while the re-investigate subagent's superseding claim (written directly to
   `## Interpretation`) survives.
 - **Round 2, or a Round 1 that clears or escalates:** append that round's entry when its 3
   agents have returned and its escalation logic has resolved, with disposition `cleared` or
-  `escalation open at ask`, **before** the ask step starts.
+  `escalation open at ask`, **before** the ask step starts. The run
+  log's `### Review Round N` entry for the round gets its Outcome (`clean`, or `changes
+  requested`) at the same time.
 
 This is a state-file write and is what makes every round cold-resumable: a crash or session
 handoff at any seam — mid-re-investigate, or between redteam and ask — must not lose an already

@@ -256,6 +256,39 @@ change: its base must be where the chunk began or a commit before that, so a
 `--base HEAD` run, which mutates nothing, does not count. `boardsmith
 chunk-signoff <slug>` asks the same question before it records a chunk as done.
 
+#### Who does the work when the `bs-` skills build a game
+
+The `bs-` skills hand work to roles, never to a named model: `mechanical`
+(bulk edits, searches, summaries), `bounded` (implementation where failing tests
+say what done is), `judgement` (spec, investigate, red team, fidelity, anything
+touching a ruling), `review` (once `boardsmith verify` has passed) and
+`second-opinion` (an independent second reading, which `boardsmith validate`
+keeps on a different agent from `judgement`).
+`boardsmith claude` installs one Claude Code agent per role, `bs-mechanical`,
+`bs-bounded`, `bs-judgement`, `bs-review` and `bs-second-opinion`, with a default model and effort. To
+use other agents, map roles in `boardsmith.json`; a role left out stays on its
+`bs-` agent:
+
+```json
+"agents": { "judgement": "senior", "review": "reviewer" }
+```
+
+```bash
+boardsmith agent judgement              # the agent type to dispatch the role as
+boardsmith agent bounded --escalate     # the step failed there: the next role up
+boardsmith review-gate deal             # may a model review of chunk deal start?
+```
+
+`boardsmith review-gate <slug>` refuses unless the current commit passed
+`boardsmith verify --chunk <slug>`, and otherwise prints the verify result every
+review prompt carries, so no reviewer spends its time re-running the checks. A
+step that fails its verify, whose claims `claim-quote-check` refuses, or whose
+reviewer asks for changes, goes one role up, never to the same role again, and
+after `judgement` to you, apart from three named exceptions: a red-team
+re-investigation or a repair gets one more `judgement` round, a refused quote
+gets one narrower fix, and a page range `verify-run-record` refused is
+transcribed once more.
+
 ### 5. Build for Production
 
 ```bash

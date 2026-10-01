@@ -87,6 +87,23 @@ function lineOf(text: string, index: number): number {
   return line;
 }
 
+/** One `- <Field>: <value>` line of an entry's body, and the file line it is on. */
+export interface EntryField {
+  value: string;
+  line: number;
+}
+
+/** The first `- <field>: <value>` line in `entry`'s body, or undefined when it has none. */
+export function entryField(entry: LedgerEntry, field: string): EntryField | undefined {
+  const lines = entry.body.split('\n');
+  const pattern = new RegExp(`^\\s*-\\s*${escapeRegExp(field)}:[ \\t]*(.*?)\\s*$`);
+  for (let i = 0; i < lines.length; i++) {
+    const match = pattern.exec(lines[i]);
+    if (match) return { value: match[1], line: entry.bodyLine + i };
+  }
+  return undefined;
+}
+
 /**
  * Every `### <kind> N` and `### <kind> @<slug>.<n>` entry in file order. Duplicated ids are KEPT
  * as separate entries, so a caller can see an id that was used twice instead of having one

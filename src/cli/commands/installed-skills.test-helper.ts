@@ -18,7 +18,7 @@
  * The temp tree itself belongs to `tempTree` (#236), so nothing here removes
  * it; the only teardown is the chdir, which is process state rather than disk.
  */
-import { afterAll, beforeAll } from 'vitest';
+import { afterAll, beforeAll, vi } from 'vitest';
 import { join } from 'node:path';
 import { installClaudeCommand } from './install-claude-command.js';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
@@ -74,4 +74,29 @@ export function installedSkillsTree(prefix: string): SkillsTree {
  */
 export function uninstalledSkillsTree(prefix: string): SkillsTree {
   return chdirIntoTempTree(prefix);
+}
+
+/**
+ * A global install (`boardsmith claude`, no `--local`) with HOME pointed at a temp home for the
+ * suite, so what a global install writes can be read without touching the real ~/.claude.
+ * `prefix` names the temp home. Returns the home, empty until the suite's `beforeAll` has run.
+ */
+export function globalInstallInTempHome(prefix: string): { home: () => string } {
+  let home = '';
+  let realHome: string | undefined;
+  beforeAll(async () => {
+    realHome = process.env.HOME;
+    home = tempTree(prefix);
+    process.env.HOME = home;
+    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      await installClaudeCommand({ force: true, skipLink: true });
+    } finally {
+      log.mockRestore();
+    }
+  });
+  afterAll(() => {
+    process.env.HOME = realHome;
+  });
+  return { home: () => home };
 }

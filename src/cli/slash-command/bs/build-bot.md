@@ -16,6 +16,15 @@ terms of hooks, weights, search, or heuristics; keep internal ids, file paths, a
 of the body; never narrate bookkeeping. Benchmark numbers are worth reporting only as what they
 tell the designer about difficulty.
 
+## Model Routing
+
+Which role does each piece of work, when review may start, and what happens when a step fails:
+`${CLAUDE_SKILL_DIR}/../bs-shared/routing.md`, the one authority.
+
+Under `/bs-build-game` this skill is dispatched as the `judgement` role's agent for the
+bot-opponent chunk, whose slug is the work package, and it ends with the same verify and review
+gates as any chunk.
+
 ## When to Run This (Late Sketch Chunk)
 
 `/bs-build-bot` is normally invoked as a **late** sketch chunk in a `/bs-ingest-rules` +

@@ -40,3 +40,11 @@ or shortcut any of its steps:
 Everything else — scaffold, transcription vs. interview, synthesis, sketch derivation, the
 context-economics hard rule — lives in `bs-ingest-rules` and its `bs-shared/` references. Cite
 those; never copy them here.
+
+## Model Routing
+
+Which role does each piece of work, when review may start, and what happens when a step fails:
+`${CLAUDE_SKILL_DIR}/../bs-shared/routing.md`, the one authority.
+
+This skill dispatches nothing itself; the kickoff it hands to does, under the work package
+`ingest-rules`.

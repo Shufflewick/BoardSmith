@@ -9,7 +9,7 @@ import {
   DERIVE_CHECK_VERDICTS,
   DERIVE_CHECK_LEDGER_BEGIN,
   DERIVE_CHECK_LEDGER_END,
-  DERIVE_CHECK_MODELS,
+  DERIVE_CHECK_ROLES,
   createDeriveCheckRecord,
   deriveCheckLedgerPath,
   replaceDeriveCheckVerdicts,
@@ -1725,15 +1725,16 @@ describe('verifyDeriveCheckCommand', () => {
     }
   });
 
-  it('names the three pinned model ids exactly, as string literals', async () => {
+  it('names the role of each of the three dispatches, never a model: the two enumerators on different roles (#454)', async () => {
     const project = await makeProject({ 'rulebook/01-x.md': 'Nothing to derive here.\n' });
     const result = await verifyDeriveCheckCommand({ project });
-    expect(result.models).toEqual({
-      enumeratorA: 'claude-opus-5',
-      enumeratorB: 'claude-haiku-4-5-20251001',
-      reconciler: 'claude-sonnet-5',
+    expect(result.roles).toEqual({
+      enumeratorA: 'judgement',
+      enumeratorB: 'second-opinion',
+      reconciler: 'judgement',
     });
-    expect(result.models).toEqual(DERIVE_CHECK_MODELS);
+    expect(result.roles).toEqual(DERIVE_CHECK_ROLES);
+    expect(result).not.toHaveProperty('models');
   });
 
   it('never gains a verdictCounts key outside DERIVE_CHECK_VERDICTS, and carries all eight explicitly', async () => {

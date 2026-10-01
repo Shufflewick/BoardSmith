@@ -42,6 +42,17 @@ re-derive it in its own words, it applies it:
   finding already recorded in a prior round's entry.
 - After round 3, any remaining findings are triaged with the user (see "Round-3 User Triage"
   below).
+- Who repairs follows the role ladder (`routing.md` "When a Step Fails"). An audit round with
+  findings is a request for changes, so the first repair is dispatched one role above whoever
+  last changed the work: `npx boardsmith agent <that role> --escalate` names it, `judgement` after
+  a `bounded` build. A repair that fails at `judgement` (its verify fails, or the next audit round
+  still has findings) gets exactly one more `judgement` round, the first named exception in
+  `routing.md`, and then the findings go to the round-3 triage. After a `bounded` build that is
+  the three audit rounds above; audit findings on a `build` that was already at `judgement` get
+  that one more round straight away. Each repair is a `### Dispatch N` entry in the run log
+  (`Work: repair`, `Escalated from: Review Round N` naming the audit round whose findings it
+  fixes, or `Escalated from: Dispatch N` naming the repair whose verify failed), and its prompt
+  starts `Work package: <slug>` and hands over the round's findings.
 
 ## Same-Group Loop-Back to Audit (cite, never restate)
 
@@ -58,7 +69,9 @@ Back to `build`":
 Applied here: `repair` and `audit` stay in the same group specifically so a repair round that
 fixes findings can be re-checked by a fresh audit round without a session handoff in between —
 unless the round bound above has been reached, in which case repair routes to the round-3 user
-triage instead of dispatching another audit round.
+triage instead of dispatching another audit round. The next audit round starts only through
+`npx boardsmith review-gate <slug> --since <the commit the last round reviewed>`, so it reviews
+only what the repair changed (`routing.md` "No Review Before Verify").
 
 ## Persisting Dispositions — Write Before the Next Audit Round Starts
 
@@ -79,7 +92,8 @@ lines, recorded for that commit. A round is not done, and the next audit round i
 until it exits zero on a clean tree. When it fails, the failed check says what to fix and what to
 run next; that is more repair work in this round, not a new finding. Never say a fix is done or the
 suite is green on anything else: `chunk-signoff` refuses a commit with no passing result covering
-the chunk's change, and a later step asks `npx boardsmith verify --check --chunk <slug>`.
+the chunk's change, and a later step asks `npx boardsmith verify --check --chunk <slug>`. A failing
+verify is a failure of this repair at its role, handled by the ladder in "Repair Loop Bound" above.
 
 ## Round-3 User Triage — Plain Language, Never Raw
 
@@ -95,6 +109,11 @@ present exactly three plain-language options, one per finding:
 - **Auditor was wrong (refuted)** — the finding does not actually hold; the user confirms the
   refutation in the same designer register `build/redteam.md`'s escalation example uses (a
   concrete plain-language question with concrete options), never engine or agent vocabulary.
+
+A finding the user calls a real blocker is worked by a further `repair` at the `judgement` role,
+whose run log entry records `Designer answer:` naming this triage in the Findings Ledger, since the
+work already failed at the top role and only the designer's answer lets it go on
+(`routing.md` "The Run Log").
 
 Whatever the user chooses becomes that finding's final disposition in the `## Findings Ledger`
 entry — `deferred` findings that the user routes to a later chunk are also noted in `SKETCH.md`'s

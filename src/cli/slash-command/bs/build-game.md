@@ -9,7 +9,7 @@ Cite `${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md`,
 `${CLAUDE_SKILL_DIR}/../bs-shared/reporting.md`, and the `orchestrate/` reference files rather than
 restating their rules — if you are extending this skill, link to the relevant section instead of
 copying rule text. This file is a lean **run loop**: it checks the project, resolves run state,
-dispatches each chunk into a fresh subagent (independent chunks side by side when `parallel-check` allows), conducts every human gate itself, and stops
+dispatches each chunk into a fresh subagent of the `judgement` role (independent chunks side by side when `parallel-check` allows), conducts every human gate itself, and stops
 only when it must. It does not explain the chunk pipeline, the status enum, or the session lock
 inline — `/bs-build-chunk` and `state-machine.md` own those.
 
@@ -49,6 +49,19 @@ is not six progress reports about a pipeline.
 
 When relaying a subagent's work, relay **its** `designerSummary` — do not compose your own account
 of work you did not do (`reporting.md` "Don't Defend the Work").
+
+## Model Routing
+
+Which role does each piece of work, when review may start, and what happens when a step fails:
+`${CLAUDE_SKILL_DIR}/../bs-shared/routing.md`, the one authority.
+
+Each chunk is dispatched as the `judgement` role's agent (`orchestrate/chunk-dispatch.md`). No
+review step starts until `boardsmith verify` has passed for the commit under review, in any chunk
+the run dispatches and for the cross-chunk lens the run itself sends after a merge: each runs
+`npx boardsmith verify --chunk <slug>` and then `npx boardsmith review-gate <slug>`, which refuses,
+saying to run `boardsmith verify`, without a passing result for the current commit. A chunk that
+returns `closed` but fails its check has failed at `judgement`, the top role, so it goes to the
+designer, never straight back to another agent (Step 4).
 
 ## Context-Economics Hard Rule
 
@@ -158,7 +171,9 @@ Loop until there is nothing left to build or a stop condition fires
    Dispatch" says, each chunk in its own worktree, every chunk in one message. Anything else is
    built alone in the main checkout. The check decides, never a judgement call made here.
 4. **Refresh the lock**, append the `### Dispatch N` entry to each chunk's own
-   `design/run-log/<slug>.md` with `Outcome: pending`, and dispatch one fresh subagent per chunk per
+   `design/run-log/<slug>.md` with its role, agent type and `Outcome: pending`
+   (`orchestrate/run-state.md` "Writing It"), and dispatch one fresh subagent per chunk, as the
+   agent `npx boardsmith agent judgement` names, per
    `${CLAUDE_SKILL_DIR}/../bs-shared/orchestrate/chunk-dispatch.md` — its seven-field brief, its
    no-designer rule, and its return shape.
 5. **Consume each return by field name.** For a `closed` return, run Step 4's
@@ -185,9 +200,11 @@ nothing, if there is nothing visible yet. Do not announce each dispatch.
   only when the chunk's last commit, on a clean tree, passed `boardsmith verify` with the chunk's
   whole change measured: the full suite, typecheck, build, validate, the smoke test and the mutation check of
   everything since the chunk began. A result from `--base HEAD`, which mutates nothing, is
-  refused. A non-zero exit means the claim of done is not backed by a run: re-dispatch the same chunk
-  with its message in the brief, and treat the chunk as unfinished, never as closed
-  (`orchestrate/chunk-dispatch.md` "The Return Shape"). Then run `npx boardsmith chunk-check <slug>` (with `--project` set to the chunk's
+  refused. A non-zero exit means the claim of done is not backed by a run: treat the chunk as unfinished,
+  never as closed: its dispatch failed at `judgement`, the top role. Record it `failed`, stop, and
+  put it to the designer with the check's message; re-dispatch only with their answer in the brief,
+  and with `Designer answer:` in the re-dispatch's run log entry (`orchestrate/chunk-dispatch.md`
+  "The Return Shape", `routing.md`). Then run `npx boardsmith chunk-check <slug>` (with `--project` set to the chunk's
   worktree when it was built in one, then `npx boardsmith chunk-merge <slug>` from the main checkout). A non-zero exit that names the
   sign-off means the chunk's verified status is not backed by the designer (or by a waiver naming
   it): treat the chunk as still at its playtest gate, never as closed. Otherwise relay the
@@ -233,8 +250,10 @@ The run is not finished when the last rules chunk closes.
 `${CLAUDE_SKILL_DIR}/../bs-build-bot/SKILL.md` instead of the chunk pipeline (same brief, same return
 shape). It belongs late — after game-end/scoring is verified, since an opponent needs real terminal
 states to evaluate against. If the sketch has **no** bot-opponent chunk, ask the designer once,
-before final acceptance, whether they want a computer opponent; if yes, dispatch a subagent against
-`${CLAUDE_SKILL_DIR}/../bs-insert-chunk/SKILL.md` to insert it ahead of final acceptance (which
+before final acceptance, whether they want a computer opponent; if yes, dispatch the `judgement`
+role's agent (`npx boardsmith agent judgement`) against
+`${CLAUDE_SKILL_DIR}/../bs-insert-chunk/SKILL.md`, with the bot chunk's slug as the work package
+and a `### Dispatch N` entry (`Work: insert-chunk`) in that chunk's run log, to insert it ahead of final acceptance (which
 re-validates dependency order and bumps the sketch version — never edit the ordered chunk list by
 hand), then continue the loop. If no, record the decision in `DECISIONS.md` and move on.
 
@@ -263,6 +282,8 @@ And to the shared reference files that ship with every `bs-` skill:
 - `${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md` — status enum, consistency check, session lock,
   write order, authority, session handoff seams, git protocol
 - `${CLAUDE_SKILL_DIR}/../bs-shared/reporting.md` — how everything above is said to the designer
+- `${CLAUDE_SKILL_DIR}/../bs-shared/routing.md`: the roles, which agent each is dispatched
+  as, no review before verify, and one role up on a failure
 - `${CLAUDE_SKILL_DIR}/../bs-shared/templates/RUN.template.md` — the run journal this skill creates
 - `${CLAUDE_SKILL_DIR}/../bs-shared/templates/QUESTIONS.template.md` — the answer cache this skill
   fills

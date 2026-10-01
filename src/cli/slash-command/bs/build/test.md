@@ -112,7 +112,9 @@ here.
        extraction dispatch payload (`extractionPayload`).
 
    (b) For each pending slice, dispatch that slice's `extractionPayload` UNCHANGED to a subagent
-       carrying `${CLAUDE_SKILL_DIR}/../bs-shared/verify/extract-example.md`'s
+       of the `judgement` role (`npx boardsmith agent judgement`, `routing.md`; a
+       `### Dispatch N` entry, `Work: extract-example <slice>`, in the chunk's run log) carrying
+       `${CLAUDE_SKILL_DIR}/../bs-shared/verify/extract-example.md`'s
        `BS-EXAMPLE-EXTRACT-V1` handshake, and save its return to a file UNCHANGED — the one
        `{ "examples": [...] }` object that contract returns. Never unwrap it or rebuild it.
 
@@ -124,7 +126,9 @@ here.
        never duplicated in this skill's text.
 
    (d) Dispatch each returned `payloads[].translationPayload` UNCHANGED and SEPARATELY to a
-       second subagent carrying `translate-example.md`'s `BS-EXAMPLE-TRANSLATE-V1` handshake.
+       second subagent of the `judgement` role (`npx boardsmith agent judgement`;
+       `Work: translate-example <example id>` in the run log) carrying `translate-example.md`'s
+       `BS-EXAMPLE-TRANSLATE-V1` handshake.
        Two separate dispatches, never one combined pass — a combined pass would let the model
        work backward from code it can already see, producing agreement with itself rather than a
        real test of the printed example. Save the slice's returns to ONE file: a JSON object
@@ -405,6 +409,17 @@ A failure at any step in the ordered sequence above — including any of the fiv
 items — routes this chunk back to `build` (still session group 2, `{spec, build, test}`); it does not
 advance to `audit`. `test` and `build` stay in the same group specifically so a failing test can
 be fixed without a session handoff in between.
+
+A failure is a failure of `build` at the role that did it, so the fix never goes to the same role
+again (`routing.md` "When a Step Fails: One Role Up, Never the Same Role"). The build dispatch has
+no check when it returns; its check is this step's verify. So the build's run log entry stays
+`Outcome: pending` (with `Finished at: pending`) until this step's done gate answers, and is then
+filled once: `Outcome: done` when it passes, or `Outcome: failed`, with the check that failed in
+its Detail, when it does not. After a failure, `npx boardsmith agent bounded --escalate` names the
+`judgement` agent that takes the next `build`, handed the failed check's output and recorded as a
+new `### Dispatch N` entry with `Escalated from: Dispatch N`, naming the failed build. When `build`
+has failed at `judgement` too, stop and put it to the designer (in orchestrated mode, a
+`repair-triage` gate) and dispatch nothing more for it until they answer.
 
 ## Downstream Shape (cite, never restate)
 
