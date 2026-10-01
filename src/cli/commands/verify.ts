@@ -469,14 +469,14 @@ async function verifiableCommit(projectDir: string): Promise<string> {
 }
 
 /**
- * Writes `result` unless a clean, passing result for the same commit is already on file and this
- * run says less: its tree did not stay clean, or a check failed. The commit did not change between
- * the two runs, so the passing result still says what the commit does, and a review round that
- * recorded it stays true to the file. The failing run is still printed and still exits non-zero.
- * Returns where the result was written, or undefined when it was kept out.
+ * Writes `result`, so the latest clean run of a commit is the one on file, failing or passing. The
+ * one run kept out is one whose tree did not stay clean, when a clean, passing result for the same
+ * commit is already on file: that run says nothing about the commit as committed. It is still
+ * printed and still exits non-zero. Returns where the result was written, or undefined when it was
+ * kept out.
  */
 async function recordResult(projectDir: string, result: VerifyResult): Promise<string | undefined> {
-  if (!result.cleanTree || !result.passed) {
+  if (!result.cleanTree) {
     const onFile = await readVerifyResult(projectDir, result.commit);
     if (onFile !== undefined && onFile !== 'unreadable' && resultProblem(onFile, result.commit) === undefined) return undefined;
   }
@@ -574,7 +574,7 @@ function printResult(result: VerifyResult, path: string | undefined, projectDir:
   }
   console.log(
     path === undefined
-      ? `Result: not recorded; the passing result already on file for ${short(result.commit)} stands.`
+      ? `Result: not recorded, because the tree changed while this run checked it; the clean, passing result already on file for ${short(result.commit)} stands.`
       : `Result: ${relative(projectDir, path)}`,
   );
   printVerdict(result);

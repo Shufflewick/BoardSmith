@@ -366,6 +366,20 @@ describe('the named exceptions at judgement (routing.md "When a Step Fails")', (
     ]);
   });
 
+  it('give the one re-transcription only to a range whose failure Detail names verify-run-record, not to a /bs-ingest-rules transcription', () => {
+    const range = 'transcribe rulebook.pdf pp. 9-16';
+    const retry = dispatch(2, { Work: range, ...J, 'Escalated from': 'Dispatch 1' });
+    const refusedByVerify = { Work: range, ...J, Outcome: 'failed', Detail: 'verify-run-record refused: slice not found' };
+    expect(details(log(dispatch(1, refusedByVerify), retry))).toEqual([]);
+    const ingestFailure = { Work: range, ...J, Outcome: 'failed', Detail: 'the subagent returned no slice' };
+    expect(details(log(dispatch(1, ingestFailure), retry))).toEqual([
+      expect.stringMatching(/^Dispatch 2: .*Dispatch 1's Detail does not name verify-run-record.*ask the designer/),
+    ]);
+    expect(details(log(dispatch(1, { ...ingestFailure, Detail: '' }), retry))).toEqual([
+      expect.stringMatching(/^Dispatch 2: .*Dispatch 1's Detail does not name verify-run-record.*ask the designer/),
+    ]);
+  });
+
   it('refuse an unlinked judgement repair after a review failure at judgement, naming the exception and the designer', () => {
     const text = log(
       ...buildWithFindings,
@@ -476,7 +490,7 @@ describe('a review round\'s verify, confirmed against the result on file (#454)'
 
   it('refuses a round whose result on file failed, ran on a dirty tree, cannot be read, or is ambiguous', () => {
     expect(details(text, () => ({ file, result: result(false) }))).toEqual([
-      expect.stringMatching(/^Review Round 1: Review Round 1 says "Verify: 0123456789ab passed", but the verify result on file for that commit \(\.boardsmith\/verify\/0123456789abcdef0123456789abcdef01234567\.json\) failed/),
+      expect.stringMatching(/^Review Round 1: Review Round 1 says "Verify: 0123456789ab passed", but the latest verify of that commit \(\.boardsmith\/verify\/0123456789abcdef0123456789abcdef01234567\.json\) failed\. Run `boardsmith verify` on that commit again/),
     ]);
     expect(details(text, () => ({ file, result: result(true, false) }))).toEqual([expect.stringMatching(/uncommitted changes/)]);
     expect(details(text, () => ({ file, result: 'unreadable' }))).toEqual([expect.stringMatching(/could not be read/)]);

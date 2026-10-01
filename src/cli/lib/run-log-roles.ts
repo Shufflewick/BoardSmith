@@ -89,6 +89,8 @@ interface Dispatch {
   /** The entry named by "Escalated from", e.g. `Review Round 2`; undefined for "none". */
   escalatedFrom?: string;
   designerAnswer?: string;
+  /** What the dispatch's "Detail" says; a failed transcription names `verify-run-record` there when that command refused it. */
+  detail?: string;
   /** The dispatch this one carries on from: the failed one it escalates from, or the one it resumes. */
   parent?: Dispatch;
   /**
@@ -225,6 +227,7 @@ class RunLogChecker {
       outcome: valueOf(entry, 'Outcome')?.split(/\s/)[0],
       escalatedFrom: from,
       designerAnswer: valueOf(entry, 'Designer answer'),
+      detail: valueOf(entry, 'Detail'),
     };
   }
 
@@ -471,6 +474,13 @@ function retranscriptionProblem(d: Dispatch, failure: Failure): string | undefin
       `answers verify-run-record's refusal of its own range, once (routing.md "When a Step Fails"). ${ASK_DESIGNER}`
     );
   }
+  if (!failure.failed.detail?.includes('verify-run-record')) {
+    return (
+      `${d.name} is a re-transcription of "${d.work}" escalated from ${failure.name}, but ${failure.name}'s Detail does not name ` +
+      'verify-run-record. The one re-transcription answers only a range `boardsmith verify-run-record` refused in /bs-verify-game, ' +
+      `with the refusal in Detail (routing.md "When a Step Fails"). ${ASK_DESIGNER}`
+    );
+  }
   const used = lineage(failure.failed).find((x) => x.exceptionRound);
   if (used === undefined) return undefined;
   return (
@@ -559,8 +569,8 @@ function verifyOnFileProblem(name: string, commit: string, found: VerifyOnFile):
   const why = !found.result.passed ? 'failed' : !found.result.cleanTree ? 'ran while the tree had uncommitted changes' : undefined;
   if (why === undefined) return undefined;
   return (
-    `${says} the verify result on file for that commit (${found.file}) ${why}. A review round starts only from a passing ` +
-    'verify on a clean tree, the one `boardsmith review-gate` names: record that commit, or run the round again once verify passes.'
+    `${says} the latest verify of that commit (${found.file}) ${why}. Run \`boardsmith verify\` on that commit again; ` +
+    'a review round stands on a passing verify on a clean tree, and the latest clean run of a commit is the one that counts.'
   );
 }
 

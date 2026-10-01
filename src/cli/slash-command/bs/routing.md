@@ -167,8 +167,10 @@ a question to the designer about a misplaced quote.
 When `boardsmith verify-run-record` refuses a unit of a page range `/bs-verify-game` Step 2 had
 transcribed (a staged slice whose `Source:` line names the wrong document or none, a slice not
 found in the staging directory, an empty slice), that range's `transcribe` dispatch has failed at
-`judgement`. The range gets exactly one re-transcription at `judgement`, the same range dispatched
-again after `--reset-range`; if the command refuses it again, the designer decides. The reason:
+`judgement`, and its run log Detail holds the refusal, naming `verify-run-record`. The range gets
+exactly one re-transcription at `judgement`, the same range dispatched again after `--reset-range`;
+if the command refuses it again, the designer decides. A `/bs-ingest-rules` transcription is not
+checked by that command and does not get this round. The reason:
 transcription slips are usually mechanical, a header written wrong or a write that did not
 finish, and the designer's time is scarcer, so one more pass at the same range is worth more
 than a question to the designer about a slice's header.
