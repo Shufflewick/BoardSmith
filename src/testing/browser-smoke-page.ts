@@ -41,15 +41,24 @@ export interface PageControl {
    * itself, as a player does, rather than waiting for it to stand still (#468).
    */
   readonly onBoard: boolean;
+  /** Whether this look marked it as the control about to be pressed (`pageControls`'s `mark`). */
+  readonly marked: boolean;
 }
+
+/** The attribute `pageControls` marks the control about to be pressed with, by a mark of its own. */
+export const PRESS_MARK = 'data-bs-smoke-press';
 
 /**
  * The controls among `elements` a player can reach, in order. One inside the game-over card is not
  * the game's (#462): the walk sees that card as the game ending, and its Close would hide the end.
  * One inside an `inert` subtree cannot be reached by anyone, so it is not a control either (#461).
+ *
+ * With `mark`, the same look also marks the control the walk is about to press, found by the key it
+ * was found by before (at the same place when two share a key), with `data-bs-smoke-press`, so the
+ * press reaches that element wherever the page moves it, and not whatever took its place.
  */
-export function pageControls(elements: Element[]): PageControl[] {
-  const found: PageControl[] = [];
+export function pageControls(elements: Element[], mark?: { key: string; index: number; mark: string }): PageControl[] {
+  const found: Array<Omit<PageControl, 'marked'>> = [];
   elements.forEach((element, index) => {
     if (element.closest('.game-over-card, [inert]') !== null) return;
     const html = element as HTMLElement;
@@ -63,7 +72,9 @@ export function pageControls(elements: Element[]): PageControl[] {
     const onBoard = html.closest('[data-testid="bs-board"]') !== null;
     found.push({ index, label, key, enabled, keyboardOnly, candidate: candidate !== null, onBoard });
   });
-  return found;
+  const pick = mark && (found.find((c) => c.key === mark.key && c.index === mark.index) ?? found.find((c) => c.key === mark.key));
+  if (mark && pick) elements[pick.index].setAttribute('data-bs-smoke-press', mark.mark);
+  return found.map((c) => ({ ...c, marked: c === pick }));
 }
 
 /** An open modal dialog, as one look at the page showed it. */

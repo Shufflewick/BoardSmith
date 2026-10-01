@@ -908,3 +908,42 @@ function lookAway() {
     'src/ui/uis.ts': PLAYERS_GET_THE_TABLE,
   };
 }
+
+/**
+ * A BOARD THAT KEEPS REORDERING ITS CONTROLS (#464 review): "North", "South" and "East" trade
+ * places every 60 milliseconds (a keyed list, so each button moves rather than being redrawn), so
+ * whichever button sat at a place when the walk looked has often moved by the time it presses. A
+ * button pressed twice says so on the console, which fails the walk; a walk that presses the button
+ * it meant to presses each once.
+ */
+export function boardThatKeepsReordering(): Record<string, string> {
+  return {
+    'src/ui/components/GameTable.vue': `<script setup lang="ts">
+import { onMounted, onUnmounted, ref } from 'vue';
+
+const order = ref(['North', 'South', 'East']);
+const pressed = new Set<string>();
+let timer: ReturnType<typeof setInterval> | undefined;
+onMounted(() => {
+  timer = setInterval(() => order.value.push(order.value.shift()!), 60);
+});
+onUnmounted(() => clearInterval(timer));
+function pressIt(name: string) {
+  if (pressed.has(name)) console.error(\`\${name} was pressed twice\`);
+  pressed.add(name);
+}
+</script>
+
+<template>
+  <div class="board">
+    <button v-for="name in order" :key="name" type="button" @click="pressIt(name)">{{ name }}</button>
+  </div>
+</template>
+
+<style scoped>
+.board { width: 320px; height: 200px; }
+</style>
+`,
+    'src/ui/uis.ts': PLAYERS_GET_THE_TABLE,
+  };
+}

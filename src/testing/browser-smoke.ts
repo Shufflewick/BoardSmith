@@ -34,7 +34,7 @@
  */
 import { test, type Frame, type Locator, type Page } from '@playwright/test';
 import { rulesErrorSentence } from '../engine/action/rules-error.js';
-import { MODAL_DIALOGS, numberToEnter, pageControls, pageDialogs, type PageControl } from './browser-smoke-page.js';
+import { MODAL_DIALOGS, numberToEnter, pageControls, pageDialogs, PRESS_MARK, type PageControl } from './browser-smoke-page.js';
 import {
   answered,
   DEFAULT_SMOKE_SEED,
@@ -414,20 +414,32 @@ async function controlsOf(frame: Frame, selector: string, within?: Locator): Pro
 }
 
 /**
- * `control` as the page has it now: the page may have redrawn since it was found, putting another
- * element at its place among the matches, so it is found again by what it stands for. A redraw can
- * take it away for a moment, so it is looked for again until it comes back; one still gone after
- * {@link PRESS_MS} went away.
+ * `control` as the page has it now, pinned to its element: the page may have moved another element
+ * into its place among the matches since it was found, so it is found again by what it stands for
+ * and marked in the same look (`pageControls`), and the press reaches the marked element wherever the
+ * page moves it. A redraw can take it away for a moment, so it is looked for again until it comes
+ * back; one still gone after {@link PRESS_MS} went away.
  */
 async function stillThere(control: Control): Promise<Control> {
+  const { frame, selector, within } = control;
+  const mark = String(++pressMarks);
   const started = Date.now();
   for (;;) {
-    const now = await controlsOf(control.frame, control.selector, control.within);
-    const same = now.find((c) => c.key === control.key && c.index === control.index) ?? now.find((c) => c.key === control.key);
-    if (same !== undefined) return same;
+    const visible = (within ?? frame).locator(selector).filter({ visible: true });
+    const now = await visible.evaluateAll(pageControls, { key: control.key, index: control.index, mark });
+    const same = now.find((c) => c.marked);
+    if (same !== undefined) return { ...same, target: frame.locator(`[${PRESS_MARK}="${mark}"]`), frame, selector, within };
     if (Date.now() - started > PRESS_MS) throw new Error(GONE);
-    await control.frame.waitForTimeout(100);
+    await frame.waitForTimeout(100);
   }
+}
+
+/** How many controls the walk has marked to press (`stillThere`), so each mark is its own. */
+let pressMarks = 0;
+
+/** Takes the walk's press marks off the page again, so the game's page is left as the game drew it. */
+async function unmark(frame: Frame): Promise<void> {
+  await frame.locator(`[${PRESS_MARK}]`).evaluateAll((marked, name) => marked.forEach((element) => element.removeAttribute(name)), PRESS_MARK);
 }
 
 /** The first enabled control matched by the first of `selectors` that matches one, or undefined. */
@@ -495,6 +507,8 @@ async function press(control: Control, what: string, walk: SmokeWalk, memory: Wa
   } catch (error) {
     note(walk, `Pressing ${what} did not work: ${await whyNotPressed(control.target, error)}.`);
     return false;
+  } finally {
+    await unmark(control.frame);
   }
 }
 
@@ -576,12 +590,14 @@ async function framesPass(frame: Frame): Promise<void> {
  * Clicks fractions (x, y) of `control`, where the pointer was moved to `at`, provided the control is
  * still on top there. A control that pointing at it removed (#464) or covered is not pressed. One
  * that moves when pointed at (a card that lifts under the pointer) is followed until it settles, and
- * one that never settles (a board that keeps panning) is clicked where it is on the last look.
+ * one that never settles (a board that keeps panning) is clicked where it is once it has had its
+ * looks. A click that would land on anything but the control, because the page moved something
+ * else under the pointer at that instant, reaches nothing (`landsOnlyOn`), and the walk looks again.
  */
 async function clickAt(control: Control, at: { x: number; y: number }, x: number, y: number): Promise<void> {
   const mouse = control.frame.page().mouse;
   let pointer = at;
-  for (let looks = 1; ; looks++) {
+  for (let looks = 1; looks <= 2 * SETTLE_LOOKS; looks++) {
     await framesPass(control.frame);
     if ((await control.target.count()) === 0) throw new Error(GONE);
     const top = await onTopAt(control, x, y);
@@ -589,10 +605,50 @@ async function clickAt(control: Control, at: { x: number; y: number }, x: number
     if (top === 'other') throw new Error(COVERED);
     const now = await placeOf(control, x, y);
     const still = Math.abs(now.x - pointer.x) <= STILL_PX && Math.abs(now.y - pointer.y) <= STILL_PX;
-    if (still || looks === SETTLE_LOOKS) return mouse.click(now.x, now.y);
+    if ((still || looks >= SETTLE_LOOKS) && (await landsOnlyOn(control, () => mouse.click(now.x, now.y)))) return;
     await mouse.move(now.x, now.y);
     pointer = now;
   }
+  throw new Error('it kept moving out from under the pointer, so no click landed on it');
+}
+
+/**
+ * Runs `click` with every pointer and mouse event that would reach anything but `control` stopped
+ * before the page sees it, as Playwright's own click does, and says whether the click reached
+ * `control`. A click stopped this way does nothing, so the walk can look again and click once more.
+ */
+async function landsOnlyOn(control: Control, click: () => Promise<void>): Promise<boolean> {
+  await control.target.evaluate(
+    (element) => {
+      const view = element.ownerDocument.defaultView!;
+      const types = ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'];
+      const guard = { missed: false, remove: () => types.forEach((type) => view.removeEventListener(type, stop, true)) };
+      function stop(event: Event): void {
+        const target = event.target as Node | null;
+        if (target !== null && (target === element || element.contains(target))) return;
+        guard.missed = true;
+        event.stopImmediatePropagation();
+        event.preventDefault();
+      }
+      types.forEach((type) => view.addEventListener(type, stop, true));
+      Object.defineProperty(view, '__boardsmithSmokeGuard', { value: guard, configurable: true });
+    },
+    undefined,
+    { timeout: PRESS_MS },
+  );
+  let missed = true;
+  try {
+    await click();
+  } finally {
+    missed = await control.frame.evaluate(() => {
+      const view = window as unknown as { __boardsmithSmokeGuard: { missed: boolean; remove: () => void } };
+      const guard = view.__boardsmithSmokeGuard;
+      guard.remove();
+      delete (window as unknown as Record<string, unknown>).__boardsmithSmokeGuard;
+      return guard.missed;
+    });
+  }
+  return !missed;
 }
 
 /**

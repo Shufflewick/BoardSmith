@@ -24,6 +24,7 @@ import {
   boardWithAControlAtItsFoot,
   boardWithAVanishingControl,
   boardThatHidesThePanelForAMoment,
+  boardThatKeepsReordering,
   boardWithDialogs,
   candidateBoard,
   fieldsGame,
@@ -403,6 +404,13 @@ describe('boardsmith verify: the smoke check', () => {
     expect(steps.slice(1, 3)).toEqual(['smoke step 1: pressing the board\'s "Look away"', 'smoke step 2: taking "draw"']);
     expect(outcome.summary).toMatch(/^Served by `boardsmith dev` from a fresh start and dealt from seed "plain", a seated player took "draw", "play"/);
     expect(outcome.passed).toBe(true);
+  });
+
+  it('presses the board control it found, though the board moved another into its place before the press', async () => {
+    const { outcome, steps } = await smokeOf(false, boardThatKeepsReordering());
+
+    expect(outcome.passed).toBe(true);
+    expect(steps.filter((line) => /pressing the board's "(North|South|East)"/.test(line))).toHaveLength(3);
   });
 
   it('fails a spec that passes without walking the game', async () => {

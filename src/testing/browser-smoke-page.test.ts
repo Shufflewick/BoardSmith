@@ -38,10 +38,10 @@ describe('pageControls', () => {
         <button disabled>Wait</button>
       </div>`);
     expect(pageControls(buttons(elements))).toEqual([
-      { index: 0, label: 'Draw from the deck', key: 'element:12', enabled: true, keyboardOnly: false, candidate: false, onBoard: true },
-      { index: 1, label: 'Shuffle', key: 'label:Shuffle', enabled: true, keyboardOnly: false, candidate: false, onBoard: true },
-      { index: 2, label: 'Pass now', key: 'label:Pass now', enabled: false, keyboardOnly: false, candidate: false, onBoard: true },
-      { index: 3, label: 'Wait', key: 'label:Wait', enabled: false, keyboardOnly: false, candidate: false, onBoard: true },
+      { index: 0, label: 'Draw from the deck', key: 'element:12', enabled: true, keyboardOnly: false, candidate: false, onBoard: true, marked: false },
+      { index: 1, label: 'Shuffle', key: 'label:Shuffle', enabled: true, keyboardOnly: false, candidate: false, onBoard: true, marked: false },
+      { index: 2, label: 'Pass now', key: 'label:Pass now', enabled: false, keyboardOnly: false, candidate: false, onBoard: true, marked: false },
+      { index: 3, label: 'Wait', key: 'label:Wait', enabled: false, keyboardOnly: false, candidate: false, onBoard: true, marked: false },
     ]);
   });
 
@@ -81,8 +81,24 @@ describe('pageControls', () => {
       <div inert><button>Behind</button></div>
       <button>Front</button>`);
     expect(pageControls(buttons(elements))).toEqual([
-      { index: 1, label: 'Front', key: 'label:Front', enabled: true, keyboardOnly: false, candidate: false, onBoard: false },
+      { index: 1, label: 'Front', key: 'label:Front', enabled: true, keyboardOnly: false, candidate: false, onBoard: false, marked: false },
     ]);
+  });
+});
+
+describe('pageControls marking the control to press (#464 review)', () => {
+  it('marks the control with the key it was found by, wherever it now is, and says which it marked', () => {
+    const elements = page(`<button>East</button><button>North</button><button>South</button>`);
+    const found = pageControls(buttons(elements), { key: 'label:North', index: 0, mark: '7' });
+    expect(found.filter((c) => c.marked).map((c) => c.label)).toEqual(['North']);
+    expect(document.querySelector('[data-bs-smoke-press="7"]')?.textContent).toBe('North');
+  });
+
+  it('prefers the one at the same place when two share a key, and marks none when the key is gone', () => {
+    const elements = page(`<button>Close</button><button>Close</button>`);
+    expect(pageControls(buttons(elements), { key: 'label:Close', index: 1, mark: '8' }).map((c) => c.marked)).toEqual([false, true]);
+    expect(pageControls(buttons(elements), { key: 'label:Open', index: 0, mark: '9' }).some((c) => c.marked)).toBe(false);
+    expect(document.querySelector('[data-bs-smoke-press="9"]')).toBeNull();
   });
 });
 

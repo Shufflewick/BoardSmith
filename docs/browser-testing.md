@@ -431,8 +431,11 @@ markers this page documents, so it keeps up with any game without knowing it:
   top of it, is under the pointer (so a card partly under a tray is clicked
   where it shows), follows a control that moves when pointed at until it
   settles, and clicks one that never stands still where it is. Just before a
-  press the walk finds the control again by what it stands for, so a redraw
-  that put another element in its place is not pressed by mistake.
+  press the walk finds the control again by what it stands for and marks that
+  element, so a redraw that moved another element into its place is not pressed
+  by mistake, and a click that would land on anything else at that instant is
+  stopped before the page sees it, as Playwright's own click does, and tried
+  again.
 - While a modal dialog is open (`[aria-modal="true"]`, or a `<dialog>` shown
   modally), it is all a player can reach, so it is all the walk presses (#461).
   It presses each control in the dialog once, whatever its place: when one
