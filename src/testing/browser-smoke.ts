@@ -402,10 +402,11 @@ async function readOffers(frame: Frame, walk: SmokeWalk): Promise<Offers> {
  * and how it was found, so it can be found again just before it is pressed (`stillThere`).
  */
 interface Control extends PageControl {
-  /** The control's own element: marked, once `stillThere` has found it again for a press. */
+  /**
+   * The control's own element: the one at its place among the matches when it was found, until
+   * `stillThere` has found it again for a press and marked it, which pins it wherever the page moves it.
+   */
   readonly target: Locator;
-  /** The element at the control's place among the matches when it was last found. */
-  readonly placed: Locator;
   readonly frame: Frame;
   readonly selector: string;
   readonly within: Locator | undefined;
@@ -416,11 +417,10 @@ interface Control extends PageControl {
  * reach, read in one look at the page, so none can go away between being found and being read (#464).
  */
 async function controlsOf(frame: Frame, selector: string, within?: Locator): Promise<Control[]> {
-  const visible = (within ?? frame).locator(selector).filter({ visible: true });
+  const visible = visibleMatches(frame, selector, within);
   return (await visible.evaluateAll(pageControls)).map((control) => ({
     ...control,
     target: visible.nth(control.index),
-    placed: visible.nth(control.index),
     frame,
     selector,
     within,
@@ -442,15 +442,19 @@ async function stillThere(control: Control): Promise<Control> {
   const mark = String(++pressMarks);
   const started = Date.now();
   for (;;) {
-    const visible = (within ?? frame).locator(selector).filter({ visible: true });
-    const now = await visible.evaluateAll(pageControls, { key: control.key, index: control.index, mark });
+    const now = await visibleMatches(frame, selector, within).evaluateAll(pageControls, { key: control.key, index: control.index, mark });
     const same = now.find((c) => c.marked);
     if (same !== undefined && (same.enabled || control.candidate)) {
-      return { ...same, target: frame.locator(`[${PRESS_MARK}="${mark}"]`), placed: visible.nth(same.index), frame, selector, within };
+      return { ...same, target: frame.locator(`[${PRESS_MARK}="${mark}"]`), frame, selector, within };
     }
     if (Date.now() - started > PRESS_MS) throw new Error(same === undefined ? GONE : DISABLED);
     await frame.waitForTimeout(100);
   }
+}
+
+/** The elements `selector` matches in `frame` (within `within` when given) that a player can see. */
+function visibleMatches(frame: Frame, selector: string, within?: Locator): Locator {
+  return (within ?? frame).locator(selector).filter({ visible: true });
 }
 
 /** How many controls the walk has marked to press (`stillThere`), so each mark is its own. */
@@ -491,14 +495,10 @@ async function whyNotPressed(target: Locator, error: unknown): Promise<string> {
   return message.split('\n')[0];
 }
 
-/** Clicks `control` with Playwright, which waits for it to be visible, still and on top; a toast on top is an {@link UnderAToast}. */
-async function click(control: Control): Promise<void> {
-  // By its place, found a moment ago: Playwright finds the element there again at each of its own
-  // tries, so a panel that redraws its buttons as new elements does not leave it waiting for one gone.
-  await control.placed.click({ timeout: PRESS_MS }).catch((error: unknown) => {
-    const toast = error instanceof Error && /class="[^"]*\btoast\b[^"]*"[^\n]*intercepts pointer events/.test(error.message);
-    throw toast ? new UnderAToast(COVERED) : error;
-  });
+/** `error` as an {@link UnderAToast} when it is Playwright's click finding a toast on top of the control, else itself. */
+function toastOnTop(error: unknown): unknown {
+  const toast = error instanceof Error && /class="[^"]*\btoast\b[^"]*"[^\n]*intercepts pointer events/.test(error.message);
+  return toast ? new UnderAToast(COVERED) : error;
 }
 
 /**
@@ -514,7 +514,9 @@ async function click(control: Control): Promise<void> {
  */
 async function press(control: Control, what: string, walk: SmokeWalk, memory: WalkMemory): Promise<boolean> {
   // A page that redraws the control as a new element mid-press takes away the element marked for
-  // it, so the walk finds it again and presses that, for PRESS_MS in all.
+  // it, and one look at the control (LOOK_MS) may run out before it stands still or is uncovered:
+  // the walk finds the control again and presses that, for PRESS_MS in all. What was on top when
+  // the time ran out says whether a toast covered it.
   const pressIt = async () => {
     const deadline = Date.now() + PRESS_MS;
     for (;;) {
@@ -522,8 +524,10 @@ async function press(control: Control, what: string, walk: SmokeWalk, memory: Wa
       try {
         return await pressOnce(now);
       } catch (error) {
-        const lost = !(error instanceof UnderAToast) && (await now.target.count()) === 0;
-        if (!lost || Date.now() > deadline) throw error;
+        if (error instanceof UnderAToast) throw error;
+        if (Date.now() > deadline) throw toastOnTop(error);
+        const lookRanOut = error instanceof Error && error.name === 'TimeoutError';
+        if (!lookRanOut && (await now.target.count()) > 0) throw error;
       }
     }
   };
@@ -544,11 +548,16 @@ async function press(control: Control, what: string, walk: SmokeWalk, memory: Wa
   }
 }
 
-/** One attempt at pressing `control`, as `press` describes. */
+/**
+ * One attempt at pressing `control`, as `press` describes. A control off the board is clicked by
+ * Playwright, which waits for it to be visible, still and on top, for one look ({@link LOOK_MS}):
+ * a panel that redraws its buttons as new elements takes the element away, and `press` finds the
+ * control again rather than waiting on an element that is gone.
+ */
 function pressOnce(control: Control): Promise<void> {
   if (control.keyboardOnly) return control.target.press('Enter', { timeout: PRESS_MS });
   if (control.candidate) return aimAndClick(control);
-  return control.onBoard ? clickWhereReachable(control) : click(control);
+  return control.onBoard ? clickWhereReachable(control) : control.target.click({ timeout: LOOK_MS });
 }
 
 /** The longest a toast stays: an error toast goes after 4 seconds. */
@@ -841,21 +850,37 @@ const BOARD_CANDIDATES = '[data-testid="bs-board"] [data-bs-candidate]';
  * pointing at two corners of it and seeing it name two different choices: aimed elsewhere, it may
  * stand for one the game accepts, so it is pressed (`aimAndClick` finds where). A refused candidate
  * that names the same choice wherever it is pointed at is refused, and is not looked at again while
- * this action is answered.
+ * this action is answered. Each candidate is pinned to its element (`stillThere`) before the pointer
+ * moves, since pointing at it changes what it stands for, which is how it was known.
  */
 async function aimedElsewhere(answering: Answering): Promise<Control | undefined> {
-  for (const candidate of await controlsOf(answering.frame, BOARD_CANDIDATES)) {
-    if (candidate.enabled || candidate.keyboardOnly || answering.refused.has(candidate.key)) continue;
-    const named = async (x: number, y: number) =>
-      typeof (await pointAt(candidate, x, y)) === 'string' ? undefined : candidate.target.getAttribute('data-bs-candidate', { timeout: PRESS_MS });
-    const first = await named(0.1, 0.1);
-    // Pointing at it changed what it stands for, so it is read again as it stands now.
-    if (first !== undefined && first !== (await named(0.9, 0.9))) {
-      return (await controlsOf(answering.frame, BOARD_CANDIDATES)).find((c) => c.index === candidate.index);
+  const { frame, refused } = answering;
+  try {
+    for (const candidate of await controlsOf(frame, BOARD_CANDIDATES)) {
+      if (candidate.enabled || candidate.keyboardOnly || refused.has(candidate.key)) continue;
+      const pinned = await stillThere(candidate);
+      const named = async (x: number, y: number) =>
+        typeof (await pointAt(pinned, x, y)) === 'string' ? undefined : pinned.target.getAttribute('data-bs-candidate', { timeout: LOOK_MS });
+      const first = await named(0.1, 0.1);
+      if (first !== undefined && first !== (await named(0.9, 0.9))) return asItStandsNow(pinned);
+      refused.add(candidate.key);
     }
-    answering.refused.add(candidate.key);
+    return undefined;
+  } finally {
+    await unmark(frame);
   }
-  return undefined;
+}
+
+/**
+ * `control`, pinned to its element by `stillThere`, read again as that element stands now: pointing
+ * at it changed what it stands for. Its place among the matches is its target again, as `controlsOf`
+ * gives it, since the pin comes off once the pointing is done.
+ */
+async function asItStandsNow(control: Control): Promise<Control> {
+  const [now] = await control.target.evaluateAll(pageControls);
+  if (now === undefined) throw new Error(GONE);
+  const { frame, selector, within } = control;
+  return { ...control, label: now.label, key: now.key, enabled: now.enabled, target: visibleMatches(frame, selector, within).nth(control.index) };
 }
 
 /**
