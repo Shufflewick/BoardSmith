@@ -5,6 +5,8 @@
  * decided by plain code a vitest test can hold to its wording.
  */
 
+import { rulesErrorSentence } from '../engine/action/rules-error.js';
+
 /** Where a game keeps its smoke test. `boardsmith init` writes it and `boardsmith verify` runs it. */
 export const SMOKE_SPEC_PATH = 'tests/browser/smoke.spec.ts';
 
@@ -93,6 +95,77 @@ export interface SmokeWalk {
 }
 
 const quoted = (names: readonly string[]) => names.map((n) => `"${n}"`).join(', ');
+
+/** Records a problem on the walk, once. */
+export function note(walk: SmokeWalk, problem: string): void {
+  if (!walk.errors.includes(problem)) walk.errors.push(problem);
+}
+
+/** What the page's `boardsmith:action-resolved` events carry, in every frame. */
+export interface ResolvedAction {
+  readonly action: string;
+  readonly success: boolean;
+  readonly error?: string;
+}
+
+/** What the walk remembers of a deal that recording a resolved action reads and writes (#466). */
+export interface ResolvedMemory {
+  /** How many times each action was taken and resolved. */
+  readonly resolved: Map<string, number>;
+  /** The action resolved last, which a game that is now over ended on. */
+  lastResolved: string | undefined;
+  /** The actions that failed when taken: reported once, and not tried again while anything else is offered. */
+  readonly failed: Set<string>;
+  /** The actions the walk typed a number in on its last attempt at them. */
+  readonly numbered: Set<string>;
+  /** How many numbers the game's own rules have refused in each action, so the walk types the next one up. */
+  readonly refused: Map<string, number>;
+  /** What the game said when it refused a number, which its error toasts repeat. */
+  readonly refusals: Set<string>;
+}
+
+/** How many numbers the walk enters in an action whose game refuses them, before it reports the action (#466). */
+const NUMBER_TRIES = 3;
+
+/**
+ * Records the actions the page resolved since the walk last looked: a taken one is offered, enabled
+ * and taken, and the deal remembers it; a failed one is reported and not tried again, unless the
+ * game refused a number the walk typed in it (`refusedANumber`). A success spends the number the
+ * walk typed, so a later failure of the action is never taken for a refusal of a number it did not type.
+ */
+export function recordResolved(resolved: readonly ResolvedAction[], walk: SmokeWalk, memory: ResolvedMemory): void {
+  for (const { action, success, error } of resolved) {
+    walk.offered.add(action);
+    walk.enabled.add(action);
+    if (success) {
+      walk.taken.add(action);
+      memory.resolved.set(action, (memory.resolved.get(action) ?? 0) + 1);
+      memory.lastResolved = action;
+      memory.numbered.delete(action);
+    } else if (!refusedANumber(action, error, memory)) {
+      memory.failed.add(action);
+      const refused = memory.refused.get(action) ?? 0;
+      const each = refused > 0 ? ` The game refused each of the ${refused + 1} numbers the walk entered.` : '';
+      note(walk, `The panel offered "${action}", and taking it failed: ${error ?? 'no reason given'}${each}`);
+    }
+  }
+}
+
+/**
+ * Whether `action` failed because the game's own rules refused a number the walk typed in it, with
+ * tries left: then the walk takes it again with the next number up, and the refusal, and the error
+ * toast that repeats it, are the game working, not a problem (#466). A failure the engine words as an
+ * error in the game's rules (`rulesErrorSentence`) is a crash, never a refusal, whatever number the
+ * walk typed.
+ */
+function refusedANumber(action: string, error: string | undefined, memory: ResolvedMemory): boolean {
+  const refused = memory.refused.get(action) ?? 0;
+  if (!memory.numbered.delete(action) || refused >= NUMBER_TRIES - 1) return false;
+  if (error === undefined || error.startsWith(rulesErrorSentence(action))) return false;
+  memory.refused.set(action, refused + 1);
+  memory.refusals.add(error);
+  return true;
+}
 
 /** "dealt from seed "a", then from seed "b"", or the empty string for a world, which names no seed. */
 function dealtFrom(seeds: readonly string[], then = 'then'): string {

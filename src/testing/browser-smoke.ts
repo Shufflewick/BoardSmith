@@ -33,7 +33,6 @@
  * @module
  */
 import { test, type Frame, type Locator, type Page } from '@playwright/test';
-import { rulesErrorSentence } from '../engine/action/rules-error.js';
 import {
   clickReached,
   guardClicks,
@@ -48,6 +47,8 @@ import {
 import {
   answered,
   DEFAULT_SMOKE_SEED,
+  note,
+  recordResolved,
   requiredUntaken,
   SMOKE_ANNOTATION,
   SMOKE_SEEDS_ENV,
@@ -58,6 +59,8 @@ import {
   smokeSeeds,
   startAnswering,
   walkStopped,
+  type ResolvedAction,
+  type ResolvedMemory,
   type SmokeWalk,
 } from './browser-smoke-verdict.js';
 
@@ -197,13 +200,6 @@ function watchForErrors(page: Page, walk: SmokeWalk): void {
   });
 }
 
-/** What the page's `boardsmith:action-resolved` events carry, in every frame. */
-interface ResolvedAction {
-  action: string;
-  success: boolean;
-  error?: string;
-}
-
 /** Keeps every `boardsmith:action-resolved` event a frame fires, for {@link drainResolved}. */
 async function recordResolvedActions(page: Page): Promise<void> {
   await page.addInitScript(() => {
@@ -213,47 +209,14 @@ async function recordResolvedActions(page: Page): Promise<void> {
   });
 }
 
-/** The actions resolved in `frame` since the last call: taken ones recorded, failed ones reported. */
+/** The actions resolved in `frame` since the last call, recorded (`recordResolved`): taken ones taken, failed ones reported. */
 async function drainResolved(frame: Frame, walk: SmokeWalk, memory: WalkMemory): Promise<number> {
   const resolved = await frame.evaluate(() => {
     const log = (window as unknown as { __boardsmithSmokeResolved?: unknown[] }).__boardsmithSmokeResolved ?? [];
     return log.splice(0, log.length) as ResolvedAction[];
   });
-  for (const { action, success, error } of resolved) {
-    walk.offered.add(action);
-    walk.enabled.add(action);
-    if (success) {
-      walk.taken.add(action);
-      memory.resolved.set(action, (memory.resolved.get(action) ?? 0) + 1);
-      memory.lastResolved = action;
-      memory.numbered.delete(action);
-    } else if (!refusedANumber(action, error, memory)) {
-      memory.failed.add(action);
-      const refused = memory.refused.get(action) ?? 0;
-      const each = refused > 0 ? ` The game refused each of the ${refused + 1} numbers the walk entered.` : '';
-      note(walk, `The panel offered "${action}", and taking it failed: ${error ?? 'no reason given'}${each}`);
-    }
-  }
+  recordResolved(resolved, walk, memory);
   return resolved.length;
-}
-
-/** How many numbers the walk enters in an action whose game refuses them, before it reports the action (#466). */
-const NUMBER_TRIES = 3;
-
-/**
- * Whether `action` failed because the game's own rules refused a number the walk typed in it, with
- * tries left: then the walk takes it again with the next number up (`numberToEnter`), and the refusal,
- * and the error toast that repeats it, are the game working, not a problem (#466). A failure the
- * engine words as an error in the game's rules (`rulesErrorSentence`) is a crash, never a refusal,
- * whatever number the walk typed.
- */
-function refusedANumber(action: string, error: string | undefined, memory: WalkMemory): boolean {
-  const refused = memory.refused.get(action) ?? 0;
-  if (!memory.numbered.delete(action) || refused >= NUMBER_TRIES - 1) return false;
-  if (error === undefined || error.startsWith(rulesErrorSentence(action))) return false;
-  memory.refused.set(action, refused + 1);
-  memory.refusals.add(error);
-  return true;
 }
 
 /** Reports each error toast the game shows a player, once, except one repeating a refused number (#466). */
@@ -759,11 +722,6 @@ async function pressThePanels(frame: Frame, selector: string, what: string, walk
   return false;
 }
 
-/** Records a problem once. */
-function note(walk: SmokeWalk, problem: string): void {
-  if (!walk.errors.includes(problem)) walk.errors.push(problem);
-}
-
 /**
  * One open action being answered: the walk, what it remembers, the action, the step, and the board
  * candidates this pick has chosen, since the board does not mark them.
@@ -1152,8 +1110,11 @@ async function waitForATurn(frame: Frame): Promise<boolean> {
     );
 }
 
-/** What the walk remembers from step to step, and from game to game, on one deal. */
-interface WalkMemory {
+/**
+ * What the walk remembers from step to step, and from game to game, on one deal: what recording a
+ * resolved action keeps (`ResolvedMemory`), and the rest.
+ */
+interface WalkMemory extends ResolvedMemory {
   /** The controls tried, by key: the board's, and each dialog opening's. */
   readonly pressed: Set<string>;
   /** How many board and dialog control presses landed. */
@@ -1162,14 +1123,8 @@ interface WalkMemory {
   readonly opened: Set<string>;
   /** How many times each action was pressed. */
   readonly times: Map<string, number>;
-  /** How many times each action was taken and resolved. */
-  readonly resolved: Map<string, number>;
   /** How many games ended right after each action resolved. */
   readonly endings: Map<string, number>;
-  /** The actions that failed when taken: reported once, and not tried again while anything else is offered. */
-  readonly failed: Set<string>;
-  /** The action resolved last, which a game that is now over ended on. */
-  lastResolved: string | undefined;
   /** How many games the walk has played on this deal, this one included. */
   games: number;
   /** The seed the spec dealt this walk from; null in a world, which `boardsmith dev` deals itself. */
@@ -1193,12 +1148,6 @@ interface WalkMemory {
   readonly closers: Set<string>;
   /** How many times the walk has opened a dialog again to reach each of its controls. */
   readonly reopened: Map<string, number>;
-  /** The actions the walk typed a number in on its last attempt at them (#466). */
-  readonly numbered: Set<string>;
-  /** How many numbers the game's own rules have refused in each action, so the walk types the next one up. */
-  readonly refused: Map<string, number>;
-  /** What the game said when it refused a number, which its error toasts repeat. */
-  readonly refusals: Set<string>;
 }
 
 function newMemory(seed: string | null): WalkMemory {
