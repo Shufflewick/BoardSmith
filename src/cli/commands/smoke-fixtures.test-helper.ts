@@ -1,5 +1,5 @@
 /**
- * FIXTURE GAMES FOR THE SMOKE WALK (#457, #458, #459, #460), written over the table scaffold that
+ * FIXTURE GAMES FOR THE SMOKE WALK (#457 to #467), written over the table scaffold that
  * `smokeProject` makes (its game is `dev-game`, so its classes are `DevGameGame` and
  * `DevGamePlayer`).
  */
@@ -390,5 +390,202 @@ const lit = ref(false);
 </style>
 `,
     'src/ui/uis.ts': PLAYERS_GET_THE_TABLE,
+  };
+}
+
+/**
+ * A BOARD WITH MODAL DIALOGS (#461), as one-two-punch's discard-pile viewer is: a "Look through
+ * discards" button opens a modal dialog over the board, with "Sort" and "Close discards" in it, and
+ * once closed it reads "Look through discards again", which opens the same dialog again. "Read the
+ * rules" opens a dialog with nothing to press, which Escape closes unless `rulesStayOpen`. "Plan A"
+ * and "Plan B" sit behind both dialogs, where no player can press them while one is open.
+ *
+ * A walk that presses only what a player can reach presses 9 board controls: look, sort, close,
+ * look again, sort, close, rules, then the two plans.
+ */
+export function boardWithDialogs(options: { rulesStayOpen: boolean }): Record<string, string> {
+  return {
+    'src/ui/components/GameTable.vue': `<script setup lang="ts">
+import { nextTick, onMounted, onUnmounted, ref } from 'vue';
+
+const open = ref<'discards' | 'rules' | null>(null);
+const looked = ref(false);
+const sorted = ref(false);
+const plans = ref<string[]>([]);
+const dialog = ref<HTMLElement | null>(null);
+
+async function show(which: 'discards' | 'rules') {
+  open.value = which;
+  await nextTick();
+  dialog.value?.focus();
+}
+function closeDiscards() {
+  open.value = null;
+  looked.value = true;
+}
+function onKey(event: KeyboardEvent) {
+  if (event.key === 'Escape' && ${options.rulesStayOpen ? "open.value !== 'rules'" : 'true'}) open.value = null;
+}
+onMounted(() => window.addEventListener('keydown', onKey));
+onUnmounted(() => window.removeEventListener('keydown', onKey));
+</script>
+
+<template>
+  <div class="board">
+    <button type="button" @click="show('discards')">{{ looked ? 'Look through discards again' : 'Look through discards' }}</button>
+    <button type="button" @click="show('rules')">Read the rules</button>
+    <button type="button" @click="plans.push('A')">Plan A</button>
+    <button type="button" @click="plans.push('B')">Plan B</button>
+    <p>Planned: {{ plans.join(', ') || 'nothing' }}</p>
+    <div v-if="open" class="scrim">
+      <div ref="dialog" role="dialog" aria-modal="true" tabindex="-1" :aria-label="open === 'discards' ? 'Discards' : 'Rules'">
+        <template v-if="open === 'discards'">
+          <button type="button" @click="sorted = !sorted">Sort</button>
+          <button type="button" @click="closeDiscards">Close discards</button>
+        </template>
+        <p v-else>Play a card or draw one.</p>
+      </div>
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.board { position: relative; width: 420px; height: 260px; }
+.scrim { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.6); display: grid; place-items: center; }
+</style>
+`,
+    'src/ui/uis.ts': PLAYERS_GET_THE_TABLE,
+  };
+}
+
+/**
+ * A BOARD CONTROL THAT GOES AWAY WHEN THE POINTER REACHES IT (#464): "Shy button" leaves the board
+ * the moment the pointer is over it, so a press never lands and the element is gone for good.
+ */
+export function boardWithAVanishingControl(): Record<string, string> {
+  return {
+    'src/ui/components/GameTable.vue': `<script setup lang="ts">
+import { ref } from 'vue';
+
+const gone = ref(false);
+</script>
+
+<template>
+  <div class="board">
+    <button v-if="!gone" type="button" @pointerenter="gone = true">Shy button</button>
+  </div>
+</template>
+
+<style scoped>
+.board { width: 320px; height: 200px; }
+</style>
+`,
+    'src/ui/uis.ts': PLAYERS_GET_THE_TABLE,
+  };
+}
+
+/**
+ * THE FIELDS GAME (#465, #467): each turn a player may `code` (a text field that takes digits only,
+ * so the walk's "smoke test" never satisfies it and the action never finishes), `kindle` (a number
+ * field, "How many logs?", 1 to 5), `draw` or `rest`. `code` is the panel's first offer, so a walk
+ * that went on taking an action it had given up on would never take the others.
+ */
+export function fieldsGame(): Record<string, string> {
+  return {
+    'src/rules/game.ts': `import { Game, Player, type GameOptions } from 'boardsmith';
+import { Card, Hand, Deck } from './elements.js';
+import { createGameFlow } from './flow.js';
+import { createTurnActions } from './actions.js';
+
+export class DevGamePlayer extends Player<DevGameGame, DevGamePlayer> {
+  hand!: Hand;
+  logs = 0;
+}
+
+export class DevGameGame extends Game<DevGameGame, DevGamePlayer> {
+  static PlayerClass = DevGamePlayer;
+
+  deck!: Deck;
+
+  constructor(options: GameOptions) {
+    super(options);
+    this.registerElements([Card, Hand, Deck]);
+    for (const player of this.players) {
+      const hand = this.create(Hand, \`hand-\${player.seat}\`);
+      hand.player = player;
+      player.hand = hand;
+    }
+    this.deck = this.create(Deck, 'deck');
+    for (let i = 0; i < 40; i++) this.deck.create(Card, \`card-\${i}\`, { suit: 'H', rank: 'A' });
+    for (const action of createTurnActions(this)) this.registerAction(action);
+    this.setFlow(createGameFlow(this));
+  }
+
+  override isFinished(): boolean {
+    return this.deck.count(Card) === 0;
+  }
+
+  override getWinners(): DevGamePlayer[] {
+    return [];
+  }
+}
+`,
+    'src/rules/actions.ts': `import { Action, type ActionDefinition } from 'boardsmith';
+import type { DevGameGame, DevGamePlayer } from './game.js';
+import { Card } from './elements.js';
+
+export function createTurnActions(game: DevGameGame): ActionDefinition[] {
+  return [
+    Action.create('code')
+      .prompt('Enter the code')
+      .enterText('code', { prompt: 'The code, in digits', pattern: { regex: /^[0-9]+$/, message: 'Digits only.' } })
+      .execute(() => ({ success: true })),
+    Action.create('kindle')
+      .prompt('Kindle the fire')
+      .enterNumber('logs', { prompt: 'How many logs?', min: 1, max: 5, integer: true })
+      .execute((args, ctx) => {
+        (ctx.player as DevGamePlayer).logs += args.logs as number;
+        return { success: true };
+      }),
+    Action.create('draw')
+      .prompt('Draw a card')
+      .execute((_args, ctx) => {
+        game.deck.first(Card)?.putInto((ctx.player as DevGamePlayer).hand);
+        return { success: true };
+      }),
+    Action.create('rest')
+      .prompt('Rest')
+      .execute(() => ({ success: true })),
+  ];
+}
+`,
+    'src/rules/flow.ts': `import { loop, eachPlayer, actionStep, type FlowDefinition } from 'boardsmith';
+import type { DevGameGame } from './game.js';
+
+export function createGameFlow(game: DevGameGame): FlowDefinition {
+  return {
+    root: loop({
+      name: 'game-loop',
+      while: () => !game.isFinished(),
+      maxIterations: 100,
+      do: eachPlayer({
+        name: 'player-turns',
+        do: actionStep({ name: 'turn', actions: ['code', 'kindle', 'draw', 'rest'], skipIf: () => game.isFinished() }),
+      }),
+    }),
+    isComplete: () => game.isFinished(),
+    getWinners: () => game.getWinners(),
+  };
+}
+`,
+    'tests/game.test.ts': `import { describe, expect, it } from 'vitest';
+import { DevGameGame } from '../src/rules/game.js';
+
+describe('the fields game', () => {
+  it('starts with forty cards in the deck', () => {
+    expect(new DevGameGame({ playerCount: 2, seed: 'test' }).deck.all().length).toBe(40);
+  });
+});
+`,
   };
 }

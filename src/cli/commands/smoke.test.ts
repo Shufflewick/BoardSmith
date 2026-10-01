@@ -9,17 +9,21 @@ import { spawn, execFileSync } from 'node:child_process';
 import { once } from 'node:events';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { describe, expect, it, vi } from 'vitest';
 
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { REPO_ROOT } from '../spawn-cli.test-helper.js';
 import { writeFiles } from '../lib/verify-result.test-helper.js';
-import { browserProblem, runSmoke } from './smoke.js';
+import { browserProblem, playwrightConfig, runSmoke } from './smoke.js';
 import { isRunning, smokeProject } from './smoke-project.test-helper.js';
 import {
   ACE_SEEDS,
   aceGame,
   boardWithAPointerlessControl,
+  boardWithAVanishingControl,
+  boardWithDialogs,
+  fieldsGame,
   PLAYERS_GET_THE_TABLE,
   QUIET_CLAIM_REASON,
   smokeSpec,
@@ -226,6 +230,66 @@ describe('boardsmith verify: the smoke check', () => {
     expect(outcome.summary).not.toMatch(/raise `steps`/);
   });
 
+  it(
+    '#461: while a modal dialog is open presses only what is in it, presses its controls again each time it opens, ' +
+      'and closes one with nothing to press by Escape',
+    async () => {
+      const { outcome, steps } = await smokeOf(false, boardWithDialogs({ rulesStayOpen: false }));
+
+      expect(outcome.summary).toMatch(
+        /^Served by `boardsmith dev` from a fresh start and dealt from seed "smoke", a seated player took "draw", "play" and pressed 9 board controls, with no error\./,
+      );
+      expect(steps.slice(1, 9)).toEqual([
+        'smoke step 1: pressing the board\'s "Look through discards"',
+        'smoke step 2: pressing "Sort" in the dialog "Discards"',
+        'smoke step 3: pressing "Close discards" in the dialog "Discards"',
+        'smoke step 4: pressing the board\'s "Look through discards again"',
+        'smoke step 5: pressing "Sort" in the dialog "Discards"',
+        'smoke step 6: pressing "Close discards" in the dialog "Discards"',
+        'smoke step 7: pressing the board\'s "Read the rules"',
+        'smoke step 8: closing the dialog "Rules" with Escape',
+      ]);
+    },
+  );
+
+  it('#461: fails on a modal dialog nothing closes, since a player in it has no way back to the game', async () => {
+    const { outcome } = await smokeOf(false, boardWithDialogs({ rulesStayOpen: true }));
+
+    expect(outcome.passed).toBe(false);
+    expect(outcome.summary).toContain(
+      '- The dialog "Rules" stayed open after the walk pressed everything in it and then Escape, so a player in it has no ' +
+        'way back to the game.',
+    );
+  });
+
+  it('#464: a control that goes away before a press lands fails that press at once, saying so, and the walk goes on', async () => {
+    const { outcome } = await smokeOf(false, boardWithAVanishingControl());
+
+    expect(outcome.passed).toBe(false);
+    expect(outcome.summary).toBe(
+      'The smoke walk, dealt from seed "smoke", found a problem: - Pressing the board\'s "Shy button" did not work: it ' +
+        'went away before the press landed.',
+    );
+  });
+
+  it(
+    '#465, #467: enters a number its field accepts, and gives up on an action it cannot finish once, reporting it, ' +
+      'without taking it again while the panel offers anything else',
+    async () => {
+      const { outcome, steps } = await smokeOf(false, {
+        ...fieldsGame(),
+        'tests/browser/smoke.spec.ts': smokeSpec(['code', 'kindle', 'draw', 'rest']),
+      });
+
+      expect(outcome.passed).toBe(false);
+      expect(outcome.summary).toMatch(
+        /^The smoke walk, dealt from seed "smoke", found 2 problems: - The panel opened "code" at step 2 of the game dealt from seed "smoke", and pressing its choices changed nothing: .*Digits only\. - The panel offered "code", but the walk never took it in 60 steps\. The errors above, if any, say why\.$/,
+      );
+      expect(steps).toContain('smoke step 4: entering "1" for "kindle"');
+      expect(steps.filter((line) => line.endsWith('taking "code"'))).toHaveLength(1);
+    },
+  );
+
   it('fails a spec that passes without walking the game', async () => {
     const { outcome } = await smokeOf(false, {
       'tests/browser/smoke.spec.ts': "import { test } from '@playwright/test';\n\ntest('opens nothing', () => {});\n",
@@ -280,6 +344,19 @@ describe('boardsmith verify: the smoke check', () => {
     expect(processesMentioning(`dev --port ${port}`)).toEqual([]);
     expect(processesMentioning(join(dir, '.boardsmith', 'smoke'))).toEqual([]);
     expect(existsSync(join(dir, '.boardsmith', 'smoke'))).toBe(false);
+  });
+});
+
+describe('playwrightConfig (#464)', () => {
+  it('bounds every action, read and page load the walk makes, so nothing it waits on can wait out the run', async () => {
+    const tree = tempTree('bs-smoke-config-');
+    await writeFiles(tree, { 'playwright.config.mjs': playwrightConfig(tree, 'http://127.0.0.1:5173') });
+    // Dynamic import: the config module the test just wrote.
+    const { default: config } = (await import(pathToFileURL(join(tree, 'playwright.config.mjs')).href)) as {
+      default: { use: { actionTimeout: number; navigationTimeout: number } };
+    };
+    expect(config.use.actionTimeout).toBe(15_000);
+    expect(config.use.navigationTimeout).toBe(90_000);
   });
 });
 

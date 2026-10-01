@@ -369,8 +369,17 @@ markers this page documents, so it keeps up with any game without knowing it:
   moment with nothing open once the walk acts for every seat.
 - An open action is answered one choice at a time: a price's confirm button, the
   board's own `[data-bs-candidate]` (so the board is pressed, not only the
-  panel), a text field filled with "smoke test", then the panel's choice, add,
-  done and skip buttons.
+  panel), then the panel's choice, add, done and skip buttons. An empty text
+  field is filled with "smoke test" and an empty number field with a value its
+  own `min`, `max` and `step` accept: its least value, else 1 (#465). Each press
+  is narrated (`smoke step 4: pressing "Done" for "kindle"`).
+- The walk gives up on an open action, reports it, and presses its Cancel when
+  the panel offers nothing to press, when three presses in a row change nothing,
+  when a press brings the panel back to a state it showed before (the walk
+  answers a state the same way each time, so that is a loop it would never leave),
+  or after 50 presses (#463). The report names the step, the deal and the presses.
+  An action given up on counts as failed: it is not taken again while the panel
+  offers anything else (#467).
 - A multi-select pick (#459) is answered one distinct choice at a time: an
   unticked box in the panel, or, when the panel hands the pick to the board, a
   `[data-bs-candidate]` this pick has not chosen. Once it has at least one
@@ -380,14 +389,28 @@ markers this page documents, so it keeps up with any game without knowing it:
   completes on its last choice.
 - A board control is a `button` or `[role="button"]` inside
   `[data-testid="bs-board"]` that a keyboard can reach and that is not a pick's
-  candidate. It is known by its `data-bs-el-id` when it has one, else its label.
+  candidate, nor inside an `inert` subtree, nor inside the game-over card (whose
+  Close would hide the end of the game from the walk, #462). It is known by its
+  `data-bs-el-id` when it has one, else its label. The walk reads the board's
+  controls in one look at the page, so none can go away between being found
+  and being read (#464).
   A keyboard-only control, one that takes no pointer (`pointer-events: none`)
   AND cannot be seen (`opacity: 0`, `visibility: hidden` or not rendered, on it
   or an ancestor), such as an invisible keyboard board laid over a 3D canvas for
   keyboard and screen-reader players, is pressed the way its players press it:
   focused, then Enter (#457). Any other control is clicked, including a visible
   one that takes no pointer, so a control a sighted mouse player can see but not
-  press fails the walk, as does one something covers.
+  press fails the walk, as does one something covers, or one that goes away
+  before the press lands.
+- While a modal dialog is open (`[aria-modal="true"]`, or a `<dialog>` shown
+  modally), it is all a player can reach, so it is all the walk presses (#461):
+  each control in it once for each time the dialog opens, so a dialog opened
+  again is closed again, then Escape. A dialog still open after that fails the
+  walk: a player in it has no way back to the game.
+- No press or read of an element waits longer than 5 seconds, and Playwright
+  bounds anything else at 15 (#464). A step that cannot go on is reported with
+  its number and its deal, and ends that deal's walk; it never waits out the
+  whole run.
 - When a game ends with listed actions still to take, it deals a new game from
   the next seed of the deal it is walking (`smoke/2`, `smoke/3`...), the same way,
   and goes on in it (#458, #460). An action whose taking has ended every game it

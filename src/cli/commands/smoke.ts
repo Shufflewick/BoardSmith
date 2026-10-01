@@ -281,8 +281,18 @@ async function startDev(started: Started, copy: string): Promise<string | SmokeO
   }
 }
 
+/**
+ * The longest any one action or read of an element may wait under Playwright (#464). The walk
+ * bounds its own waits more tightly; this is the floor under any it does not, so nothing waits
+ * out the whole run.
+ */
+const ACTION_LIMIT_MS = 15_000;
+
+/** The longest a page load may take: Vite prepares the game on its first load. */
+const NAVIGATION_LIMIT_MS = 90_000;
+
 /** The Playwright configuration for one run, as the module the runner loads. */
-function playwrightConfig(work: string, baseURL: string): string {
+export function playwrightConfig(work: string, baseURL: string): string {
   const config = {
     testDir: work,
     testMatch: 'smoke.spec.mjs',
@@ -292,7 +302,16 @@ function playwrightConfig(work: string, baseURL: string): string {
     workers: 1,
     retries: 0,
     reporter: [['list'], ['json', { outputFile: join(work, 'report.json') }]],
-    use: { baseURL, channel: 'chromium', headless: true, trace: 'off', screenshot: 'off', video: 'off' },
+    use: {
+      baseURL,
+      channel: 'chromium',
+      headless: true,
+      actionTimeout: ACTION_LIMIT_MS,
+      navigationTimeout: NAVIGATION_LIMIT_MS,
+      trace: 'off',
+      screenshot: 'off',
+      video: 'off',
+    },
   };
   return `export default ${JSON.stringify(config, null, 2)};\n`;
 }

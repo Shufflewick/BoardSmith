@@ -4,8 +4,12 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
+  answered,
   DEFAULT_SMOKE_SEED,
+  MOST_ANSWERS,
   SMOKE_SPEC_PATH,
+  startAnswering,
+  walkStopped,
   smokeFailure,
   smokeProblems,
   smokeRecord,
@@ -236,5 +240,71 @@ describe('smokeFailure: what a failing walk says (#460)', () => {
       'The smoke walk, dealt from seed "a", then from seed "b", found 2 problems:\n  - one\n  - two',
     );
     expect(smokeFailure(walk({ seeds: [] }), ['one'])).toBe('The smoke walk found a problem:\n  - one');
+  });
+});
+
+describe('answered: when the walk gives up on an open action (#463, #467)', () => {
+  const at = 'at step 7 of the game dealt from seed "smoke"';
+
+  it('goes on while each press changes the panel to something new', () => {
+    const trail = startAnswering('modify-die', at, 'Choose a die');
+    expect(answered(trail, '4', 'Raise or lower the 4?', [])).toBeUndefined();
+    expect(answered(trail, 'Raise', 'Done?', [])).toBeUndefined();
+  });
+
+  it('gives up on a panel that offers nothing to press', () => {
+    const trail = startAnswering('modify-die', at, 'Choose a die');
+    expect(answered(trail, undefined, 'Choose a die', [])).toBe(
+      `The panel opened "modify-die" ${at} and offered nothing to choose or press: Choose a die`,
+    );
+  });
+
+  it('gives up on a panel three presses leave as it was', () => {
+    const trail = startAnswering('kindle', at, 'How many logs?');
+    expect(answered(trail, 'Done', 'How many logs?', [])).toBeUndefined();
+    expect(answered(trail, 'Done', 'How many logs?', [])).toBeUndefined();
+    expect(answered(trail, 'Done', 'How many logs?', [])).toBe(
+      `The panel opened "kindle" ${at}, and pressing its choices changed nothing: How many logs?`,
+    );
+  });
+
+  it('gives up at once on a panel that comes back to a state it showed, naming the presses that went round', () => {
+    const trail = startAnswering('modify-die', at, 'Choose a die');
+    expect(answered(trail, '6', 'Lower the 6?', [])).toBeUndefined();
+    expect(answered(trail, 'Back', 'Choose a die', [])).toBe(
+      `Answering "modify-die" ${at} went round in a loop: pressing "6", "Back" brought its panel back to a state it had ` +
+        'shown before ("Choose a die"), so the action never finishes that way.',
+    );
+  });
+
+  it('does not count a state as seen again when the board picks differ', () => {
+    const trail = startAnswering('trade', at, 'Choose cards');
+    expect(answered(trail, 'AH', 'Chosen 1', ['AH'])).toBeUndefined();
+    expect(answered(trail, '2H', 'Choose cards', ['AH', '2H'])).toBeUndefined();
+  });
+
+  it(`gives up after ${MOST_ANSWERS} presses with the action still open, naming the last ones`, () => {
+    const trail = startAnswering('count', at, 'n=0');
+    for (let n = 1; n < MOST_ANSWERS; n++) expect(answered(trail, `+${n}`, `n=${n}`, [])).toBeUndefined();
+    expect(answered(trail, `+${MOST_ANSWERS}`, `n=${MOST_ANSWERS}`, [])).toMatch(
+      new RegExp(`^Answering "count" ${at.replace(/"/g, '"')} took ${MOST_ANSWERS} presses and the action was still open\\. The last ones: "\\+41", .*"\\+50"\\. Its panel: n=50$`),
+    );
+  });
+});
+
+describe('walkStopped: why a walk could not go on (#464)', () => {
+  it('names the step and the deal, and says a page that stopped answering did so', () => {
+    const timeout = Object.assign(new Error('locator.click: Timeout 5000ms exceeded.\nCall log: ...'), { name: 'TimeoutError' });
+    expect(walkStopped(timeout, 5, { step: 54, seed: 'smoke' })).toBe(
+      'The walk could not go on at step 54 of the game dealt from seed "smoke": the page did not answer within 5s ' +
+        '(locator.click: Timeout 5000ms exceeded.). Run `boardsmith smoke` to watch that step.',
+    );
+  });
+
+  it("gives any other error's first line, with no step before the walk began", () => {
+    expect(walkStopped(new Error('The dev host never showed the game.\nmore'), 5)).toBe(
+      'The walk could not go on: The dev host never showed the game.',
+    );
+    expect(walkStopped(new Error('boom'), 5, { step: 3, seed: null })).toBe('The walk could not go on at step 3: boom');
   });
 });

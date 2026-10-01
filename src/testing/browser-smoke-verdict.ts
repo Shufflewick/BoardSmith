@@ -233,3 +233,75 @@ export function smokeSummary(record: SmokeRecord): string {
       : '';
   return `Served by \`boardsmith dev\` from a fresh start${dealt}, a seated player took ${took} and pressed ${pressed}, with no error${games}.${excused}${reached}`;
 }
+
+/** How many presses one open action may take before the walk gives up on it (#463). */
+export const MOST_ANSWERS = 50;
+
+/** How many presses in a row may leave an open action's panel unchanged before the walk gives up on it. */
+const STUCK_AFTER = 3;
+
+/** What answering one open action has pressed and shown so far (#463). */
+export interface AnswerTrail {
+  readonly name: string;
+  /** Where the walk is, as a message says it: "at step 7 of the game dealt from seed "smoke"". */
+  readonly where: string;
+  readonly pressed: string[];
+  /** Each state its panel showed, with the board picks made by then. */
+  readonly shown: Set<string>;
+  /** The panel as it was before the last press. */
+  before: string;
+  /** How many presses in a row left the panel as it was. */
+  unchanged: number;
+}
+
+/** The trail of answering the open action `name`, whose panel shows `panel`. */
+export function startAnswering(name: string, where: string, panel: string): AnswerTrail {
+  return { name, where, pressed: [], shown: new Set([`${panel}\u0000`]), before: panel, unchanged: 0 };
+}
+
+/**
+ * Records that pressing `answer` (undefined: there was nothing to press) left the open action's
+ * panel showing `after`, with the board picks `picked` made, and says why the walk gives up on the
+ * action, or undefined to go on. It gives up when there was nothing to press, when
+ * {@link STUCK_AFTER} presses in a row changed nothing, when the panel comes back to a state it
+ * showed before with the same picks (the walk answers a state the same way each time, so it would
+ * go round that loop for ever), and after {@link MOST_ANSWERS} presses.
+ */
+export function answered(trail: AnswerTrail, answer: string | undefined, after: string, picked: readonly string[]): string | undefined {
+  const { name, where } = trail;
+  if (answer === undefined) return `The panel opened "${name}" ${where} and offered nothing to choose or press: ${after}`;
+  trail.pressed.push(answer);
+  trail.unchanged = after === trail.before ? trail.unchanged + 1 : 0;
+  if (trail.unchanged >= STUCK_AFTER) return `The panel opened "${name}" ${where}, and pressing its choices changed nothing: ${after}`;
+  const state = `${after}\u0000${[...picked].sort().join('\u0000')}`;
+  if (after !== trail.before && trail.shown.has(state)) {
+    return (
+      `Answering "${name}" ${where} went round in a loop: pressing ${quoted(trail.pressed)} brought its panel back to a ` +
+      `state it had shown before ("${after}"), so the action never finishes that way.`
+    );
+  }
+  if (trail.pressed.length >= MOST_ANSWERS) {
+    return (
+      `Answering "${name}" ${where} took ${MOST_ANSWERS} presses and the action was still open. The last ones: ` +
+      `${quoted(trail.pressed.slice(-10))}. Its panel: ${after}`
+    );
+  }
+  trail.shown.add(state);
+  trail.before = after;
+  return undefined;
+}
+
+/**
+ * Why the walk could not go on, from what stopped it and, once it was walking, the step and the seed
+ * of the game it was at. A Playwright timeout, a page that stopped answering within `waited`
+ * seconds, says so (#464).
+ */
+export function walkStopped(error: unknown, waited: number, at?: { step: number; seed: string | null }): string {
+  const where = at === undefined ? '' : ` at step ${at.step}${at.seed === null ? '' : ` of the game dealt from seed "${at.seed}"`}`;
+  const said = error instanceof Error ? error.message.split('\n')[0] : String(error);
+  const why =
+    error instanceof Error && error.name === 'TimeoutError'
+      ? `the page did not answer within ${waited}s (${said}). Run \`boardsmith smoke\` to watch that step.`
+      : said;
+  return `The walk could not go on${where}: ${why}`;
+}
