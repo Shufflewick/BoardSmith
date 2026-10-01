@@ -77,9 +77,10 @@ with listed actions still to take. An action no walk from a fresh game can reach
 position play does not get to, such as a draw by threefold repetition) stays in `actions`, and the
 chunk names it in `unreachable` as well, with a sentence saying why: `unreachable: { claimDraw:
 'Offered only after a threefold repetition, which a walk never plays.' }`. An action that ends the
-game, or that needs another seat to act first, is not one: the walk reaches both. The walk still
-takes a declared action when it is offered and fails if it fails; when it takes a declared action
-anyway, its summary says so: remove the declaration. A board test mounts with `renderAsSeat`, `tableShellContext` or `worldShellContext`
+game, or that needs another seat to act first, is not one: the walk reaches both. Once the walk
+sees a declared action enabled, it must take it like any other, so a declaration never hides an
+offered action that does nothing; when it takes a declared action anyway, its summary says so:
+remove the declaration. A board test mounts with `renderAsSeat`, `tableShellContext` or `worldShellContext`
 (boardsmith/testing), never with game-context keys provided by hand: `test-step-check` reports a
 test that provides a key only one of the two shells provides.
 

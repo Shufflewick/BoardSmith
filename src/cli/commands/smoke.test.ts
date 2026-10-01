@@ -16,7 +16,7 @@ import { REPO_ROOT } from '../spawn-cli.test-helper.js';
 import { writeFiles } from '../lib/verify-result.test-helper.js';
 import { browserProblem, runSmoke } from './smoke.js';
 import { isRunning, smokeProject } from './smoke-project.test-helper.js';
-import { KEYBOARD_ONLY_BOARD, PLAYERS_GET_THE_TABLE, QUIET_CLAIM_REASON, smokeSpec, TRUCE_GAME } from './smoke-fixtures.test-helper.js';
+import { boardWithAPointerlessControl, PLAYERS_GET_THE_TABLE, QUIET_CLAIM_REASON, smokeSpec, truceGame } from './smoke-fixtures.test-helper.js';
 
 vi.setConfig({ testTimeout: 300_000, hookTimeout: 120_000 });
 
@@ -85,10 +85,20 @@ describe('boardsmith verify: the smoke check', () => {
   });
 
   it('#457: presses a keyboard-only board control (invisible, no pointer, over a surface that takes the pointer) from the keyboard', async () => {
-    const { outcome } = await smokeOf(false, KEYBOARD_ONLY_BOARD);
+    const { outcome } = await smokeOf(false, boardWithAPointerlessControl({ invisible: true }));
 
-    expect(outcome.summary).toMatch(/^Served by `boardsmith dev` from a fresh start, a seated player took "draw", "play" and pressed 1 board control, with no error\./);
+    // 2: the lantern, and the door that only the lantern's own click handler puts on the board.
+    expect(outcome.summary).toMatch(/^Served by `boardsmith dev` from a fresh start, a seated player took "draw", "play" and pressed 2 board controls, with no error\./);
     expect(outcome.passed).toBe(true);
+  });
+
+  it('#457: fails on a visible board control a mouse cannot press, rather than pressing it from the keyboard', async () => {
+    const { outcome } = await smokeOf(false, boardWithAPointerlessControl({ invisible: false }));
+
+    expect(outcome.passed).toBe(false);
+    expect(outcome.summary).toBe(
+      'The smoke walk found a problem: - Pressing the board\'s "Light the lantern" did not work: another element covers it, so a pointer cannot reach it.',
+    );
   });
 
   it(
@@ -97,14 +107,14 @@ describe('boardsmith verify: the smoke check', () => {
       'completes a two-card pick in the panel and a two-to-three-card pick on the board, and does not require the action the spec declares out of reach',
     async () => {
       const { outcome } = await smokeOf(false, {
-        ...TRUCE_GAME,
+        ...truceGame(),
         'tests/browser/smoke.spec.ts': smokeSpec(['concede', 'draw', 'play', 'trade', 'offerTruce', 'acceptTruce', 'rally', 'claimTruce'], {
           claimTruce: QUIET_CLAIM_REASON,
         }),
       });
 
       expect(outcome.summary).toMatch(
-        /^Served by `boardsmith dev` from a fresh start, a seated player took "acceptTruce", "concede", "draw", "offerTruce", "play", "rally", "trade" and pressed \d+ board controls?, with no error, over [3-9] games \(a new one each time a game ended with listed actions still to take\)\. Not required, as tests\/browser\/smoke\.spec\.ts says a walk from a fresh game cannot reach them: "claimTruce"\.$/,
+        /^Served by `boardsmith dev` from a fresh start, a seated player took "acceptTruce", "concede", "draw", "offerTruce", "play", "rally", "trade" and pressed \d+ board controls?, with no error, over [3-9] games \(a new one each time a game ended with listed actions still to take\)\. Not required, as tests\/browser\/smoke\.spec\.ts says a walk from a fresh game cannot reach them: "claimTruce" \("Offered only after forty rounds in which nobody played a card, and the walk plays cards every round\."\)\.$/,
       );
       expect(outcome.passed).toBe(true);
     },
@@ -112,7 +122,7 @@ describe('boardsmith verify: the smoke check', () => {
 
   it('#458: reports an action the spec declares out of reach that the walk took anyway, so the declaration can go', async () => {
     const { outcome } = await smokeOf(false, {
-      ...TRUCE_GAME,
+      ...truceGame(),
       'tests/browser/smoke.spec.ts': smokeSpec(['concede', 'draw', 'play', 'trade', 'offerTruce', 'acceptTruce', 'rally', 'claimTruce'], {
         acceptTruce: 'Only the other seat may accept a truce, and a walk plays one seat.',
         claimTruce: QUIET_CLAIM_REASON,
@@ -123,6 +133,22 @@ describe('boardsmith verify: the smoke check', () => {
     expect(outcome.summary).toMatch(
       /The walk took "acceptTruce", which tests\/browser\/smoke\.spec\.ts says a walk from a fresh game cannot reach: remove it from `unreachable` there, so the walk requires it\.$/,
     );
+  });
+
+  it('#458: fails on an error raised only in a later game, after the first one ended, and walks on past it', async () => {
+    const { outcome } = await smokeOf(false, {
+      ...truceGame({ acceptTruceFails: true }),
+      'tests/browser/smoke.spec.ts': smokeSpec(['concede', 'draw', 'play', 'trade', 'offerTruce', 'acceptTruce', 'rally', 'claimTruce'], {
+        claimTruce: QUIET_CLAIM_REASON,
+      }),
+    });
+
+    expect(outcome.passed).toBe(false);
+    expect(outcome.summary).toMatch(/- The panel offered "acceptTruce", and taking it failed: .*the truce table collapsed/);
+    // The failure is reported once, and the walk goes on rather than retrying it: it still reaches
+    // "rally", which only a game that goes on after the failure offers.
+    expect(outcome.summary.match(/taking it failed/g)).toHaveLength(1);
+    expect(outcome.summary).not.toContain('"rally"');
   });
 
   it('fails a spec that passes without walking the game', async () => {

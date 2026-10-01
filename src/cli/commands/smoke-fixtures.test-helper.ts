@@ -36,8 +36,17 @@ export const QUIET_CLAIM_REASON =
  *   the game (#458: an action that needs another seat's action first);
  * - `claimTruce` is offered only after forty quiet rounds, which a walk from a fresh game never
  *   reaches (#458: an action the spec declares).
+ *
+ * A walk concedes the first game at once (`concede` is offered first), so `acceptTruce` is first
+ * taken in the second game. With `acceptTruceFails`, taking it throws: an error raised only in a
+ * later game.
  */
-export const TRUCE_GAME: Record<string, string> = {
+export function truceGame(options: { acceptTruceFails?: boolean } = {}): Record<string, string> {
+  const acceptTruce = options.acceptTruceFails
+    ? `throw new Error('the truce table collapsed');`
+    : `game.truce = true;
+        return { success: true };`;
+  return {
   'src/rules/game.ts': `import { Game, Player, type GameOptions } from 'boardsmith';
 import { Card, Hand, Deck, PlayArea } from './elements.js';
 import { createGameFlow } from './flow.js';
@@ -153,8 +162,7 @@ export function createTurnActions(game: DevGameGame): ActionDefinition[] {
         'the other side offered a truce': (ctx) => game.truceOfferedBy !== null && game.truceOfferedBy !== ctx.player.seat,
       })
       .execute(() => {
-        game.truce = true;
-        return { success: true };
+        ${acceptTruce}
       }),
     Action.create('claimTruce')
       .prompt('Claim a truce after forty quiet rounds')
@@ -199,7 +207,8 @@ describe('the truce game', () => {
   });
 });
 `,
-};
+  };
+}
 
 /** The scaffold's UI registry with its own board made the one players get, as a finished game has it. */
 export const PLAYERS_GET_THE_TABLE = `import { defineGameUIs, defaultUI, devUI } from 'boardsmith/ui';
@@ -213,36 +222,41 @@ export default defineGameUIs({
 `;
 
 /**
- * A BOARD WITH A KEYBOARD-ONLY CONTROL (#457), as chess has over its 3D canvas: a surface that
- * takes the pointer, and over it a button for keyboard and screen-reader players that is invisible
- * and takes no pointer (`opacity: 0`, `pointer-events: none`). Pressing it draws a card.
+ * A BOARD WITH A CONTROL THAT TAKES NO POINTER (#457), as chess has over its 3D canvas: a surface
+ * that takes the pointer, and over it a "lantern" button that takes no pointer
+ * (`pointer-events: none`). Pressing the lantern lights a second, ordinary button, "Walk through
+ * the door", which is the only way that one appears: a walk that presses both reports 2 board
+ * controls. With `invisible` the lantern layer has `opacity: 0`, a keyboard-only control for
+ * keyboard and screen-reader players; without it the lantern is a visible button a mouse cannot
+ * press.
  */
-export const KEYBOARD_ONLY_BOARD: Record<string, string> = {
-  'src/ui/components/GameTable.vue': `<script setup lang="ts">
-import type { UseActionControllerReturn } from 'boardsmith/ui';
+export function boardWithAPointerlessControl(options: { invisible: boolean }): Record<string, string> {
+  return {
+    'src/ui/components/GameTable.vue': `<script setup lang="ts">
+import { ref } from 'vue';
 
-const props = defineProps<{ availableActions: string[]; actionController: UseActionControllerReturn }>();
-
-function draw(): void {
-  if (props.availableActions.includes('draw')) void props.actionController.start('draw');
-}
+const lit = ref(false);
 </script>
 
 <template>
-  <div class="table">
-    <div class="surface">The table, drawn for the pointer</div>
-    <div class="keys">
-      <button type="button" aria-label="Draw a card (keyboard)" @click="draw">Draw</button>
+  <div class="room">
+    <div class="table">
+      <div class="surface">The table, drawn for the pointer</div>
+      <div class="keys">
+        <button type="button" aria-label="Light the lantern" @click="lit = true">Lantern</button>
+      </div>
     </div>
+    <button v-if="lit" type="button">Walk through the door</button>
   </div>
 </template>
 
 <style scoped>
 .table { position: relative; width: 320px; height: 200px; }
 .surface { position: absolute; inset: 0; }
-.keys { position: absolute; inset: 0; opacity: 0; pointer-events: none; }
+.keys { position: absolute; inset: 0; pointer-events: none;${options.invisible ? ' opacity: 0;' : ''} }
 .keys button { width: 100%; height: 100%; pointer-events: none; }
 </style>
 `,
-  'src/ui/uis.ts': PLAYERS_GET_THE_TABLE,
-};
+    'src/ui/uis.ts': PLAYERS_GET_THE_TABLE,
+  };
+}

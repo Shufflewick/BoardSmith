@@ -694,7 +694,8 @@ export function generateSmokeSpecTs(actions: readonly string[]): string {
 //
 //   unreachable: { claimDraw: 'Offered only after a threefold repetition, which a walk never plays.' },
 //
-// The walk does not require it, still takes it when offered, and reports it if it does.
+// The walk does not require it while it never sees it enabled. Once it is offered enabled, the walk
+// must take it like any other, and if it does, it says so: remove the declaration then.
 defineSmokeTest({
   actions: [${actions.map((name) => `'${name}'`).join(', ')}],
 });

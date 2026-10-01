@@ -374,17 +374,21 @@ markers this page documents, so it keeps up with any game without knowing it:
 - A board control is a `button` or `[role="button"]` inside
   `[data-testid="bs-board"]` that a keyboard can reach and that is not a pick's
   candidate. It is known by its `data-bs-el-id` when it has one, else its label.
-  One that takes no pointer by design (`pointer-events: none`), such as an
-  invisible keyboard board laid over a 3D canvas for keyboard and screen-reader
-  players, is pressed the way its players press it: focused, then Enter (#457).
-  Any other control is clicked, and one something covers fails the walk.
+  A keyboard-only control, one that takes no pointer (`pointer-events: none`)
+  AND cannot be seen (`opacity: 0`, `visibility: hidden` or not rendered, on it
+  or an ancestor), such as an invisible keyboard board laid over a 3D canvas for
+  keyboard and screen-reader players, is pressed the way its players press it:
+  focused, then Enter (#457). Any other control is clicked, including a visible
+  one that takes no pointer, so a control a sighted mouse player can see but not
+  press fails the walk, as does one something covers.
 - When a game ends with listed actions still to take, it presses the dev host's
   "New game" (`[data-testid="new-game"]`, twice, to confirm) and goes on in the
   new game (#458). An action whose taking has ended every game it was taken in,
   such as resigning, is taken again only when the panel offers nothing else, so
   it does not cut each game short. A world's dev host has no "New game".
 - Actions it took are read from `boardsmith:action-resolved`, which also reports
-  one that failed. It fails on `pageerror`, console errors, responses of 400 and
+  one that failed. An action that failed is reported once and not tried again
+  while anything else is offered, so the walk goes on to the rest of the game. It fails on `pageerror`, console errors, responses of 400 and
   up (or failed requests) from the dev host, error toasts, presses that never
   land, an open action that offers nothing or does not change, an offered action
   `actions` does not list, and a listed one it never takes.
@@ -411,12 +415,16 @@ defineSmokeTest({
 });
 ```
 
-The walk does not require a declared action. It still takes one the panel
-offers, and fails if taking it fails. When it takes one anyway, its passing
-summary names it and says to remove the declaration, so a declaration that is
-no longer true does not stay. The check fails a declaration whose reason is not
-a sentence (fewer than four words) and one that names an action `actions` does
-not list.
+The walk does not require a declared action it never sees enabled, and its
+passing summary quotes each such action's reason. Once it sees a declared action
+enabled (offered, not greyed out), the declaration no longer excuses it: the
+walk must take it like any other, so a declaration cannot hide an action that is
+offered and does nothing when pressed. It fails if taking one fails. When it
+takes a declared action, its passing summary names it and says to remove the
+declaration, so a declaration that is no longer true does not stay. The check
+fails a declaration whose reason is not a sentence (fewer than four words), one
+that names an action `actions` does not list, and a spec that declares every
+listed action.
 
 An action that ends the game (resign) or that needs another seat to act first
 (accept a draw) does not belong in `unreachable`: the walk starts a new game

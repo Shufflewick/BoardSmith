@@ -11,7 +11,7 @@
  *   2. takes every action the action panel offers, following the panel's own offers so it keeps
  *      up with the game: it answers each choice the panel asks for, pressing the board's own
  *      candidate for a pick the board shows, and presses every other control on the board once,
- *      from the keyboard when the control takes no pointer by design;
+ *      from the keyboard when the control is invisible and takes no pointer;
  *   3. starts a new game when a game ends with listed actions still to take, and stops taking an
  *      action again once taking it has ended every game it was taken in;
  *   4. fails on any uncaught error in the page, any console error, any failed request to the dev
@@ -40,8 +40,8 @@ export interface SmokeTestOptions {
   /**
    * The listed actions no walk from a fresh game can reach, each with a sentence saying why: one
    * offered only in a position play does not get to, such as a draw by threefold repetition. The
-   * walk does not require them, still takes one when it is offered, and fails if it fails. One it
-   * takes anyway is reported, so the declaration can be removed. An action that ends the game, or
+   * walk does not require them unless it sees one enabled, which it then must take like any other;
+   * it fails if one fails. One it takes anyway is reported, so the declaration can be removed. An action that ends the game, or
    * that needs another seat to act first, does not belong here: the walk starts a new game when a
    * game ends, and acts for every seat at a table.
    */
@@ -107,6 +107,7 @@ function newWalk(options: SmokeTestOptions): SmokeWalk {
     listed: [...options.actions],
     unreachable: { ...options.unreachable },
     offered: new Set(),
+    enabled: new Set(),
     taken: new Set(),
     steps: options.steps ?? DEFAULT_SMOKE_STEPS,
     errors: [],
@@ -167,12 +168,14 @@ async function drainResolved(frame: Frame, walk: SmokeWalk, memory: WalkMemory):
   });
   for (const { action, success, error } of resolved) {
     walk.offered.add(action);
+    walk.enabled.add(action);
     if (success) {
       walk.taken.add(action);
       memory.resolved.set(action, (memory.resolved.get(action) ?? 0) + 1);
       memory.lastResolved = action;
     } else {
-      walk.errors.push(`The panel offered "${action}", and taking it failed: ${error ?? 'no reason given'}`);
+      memory.failed.add(action);
+      note(walk, `The panel offered "${action}", and taking it failed: ${error ?? 'no reason given'}`);
     }
   }
   return resolved.length;
@@ -297,6 +300,7 @@ async function readOffers(frame: Frame, walk: SmokeWalk): Promise<Offers> {
     };
   });
   for (const name of [...offers.all, ...(offers.open ? [offers.open] : [])]) walk.offered.add(name);
+  for (const name of [...offers.enabled, ...(offers.open ? [offers.open] : [])]) walk.enabled.add(name);
   return { enabled: offers.enabled, groups: offers.groups, inGroup: offers.inGroup, open: offers.open };
 }
 
@@ -320,23 +324,31 @@ async function labelOf(target: Locator): Promise<string> {
 }
 
 /**
- * Whether `target` takes no pointer by design (`pointer-events: none`), as a keyboard board laid
- * invisibly over a canvas for keyboard and screen-reader players does. Its players press it from
- * the keyboard, so the walk does too.
+ * Whether `target` is a keyboard-only control: it takes no pointer (`pointer-events: none`) AND
+ * cannot be seen (no opacity, hidden, or not rendered, on it or an ancestor), as a keyboard board
+ * laid invisibly over a canvas for keyboard and screen-reader players is. Its players press it from
+ * the keyboard, so the walk does too. A control a sighted player can see is clicked, even when it
+ * takes no pointer, so one a mouse cannot press fails the walk.
  */
-async function takesNoPointer(target: Locator): Promise<boolean> {
-  return target.evaluate((element) => getComputedStyle(element).pointerEvents === 'none', undefined, { timeout: PRESS_MS });
+async function keyboardOnly(target: Locator): Promise<boolean> {
+  return target.evaluate(
+    (element) =>
+      getComputedStyle(element).pointerEvents === 'none' &&
+      !element.checkVisibility({ opacityProperty: true, visibilityProperty: true }),
+    undefined,
+    { timeout: PRESS_MS },
+  );
 }
 
 /**
- * Presses `target` as a player would: with the pointer, or, for a control that takes no pointer by
- * design, by focusing it and pressing Enter. A press the page does not take, because something
+ * Presses `target` as a player would: with the pointer, or, for a keyboard-only control
+ * ({@link keyboardOnly}), by focusing it and pressing Enter. A press the page does not take, because something
  * covers the control or it never becomes pressable, is reported and the walk goes on. Returns
  * whether the press landed.
  */
 async function press(target: Locator, what: string, walk: SmokeWalk): Promise<boolean> {
   try {
-    if (await takesNoPointer(target)) await target.press('Enter', { timeout: PRESS_MS });
+    if (await keyboardOnly(target)) await target.press('Enter', { timeout: PRESS_MS });
     else await target.click({ timeout: PRESS_MS });
     return true;
   } catch (error) {
@@ -466,8 +478,8 @@ async function finishOpenAction(frame: Frame, walk: SmokeWalk, memory: WalkMemor
 /**
  * The board's own controls: every button on it a keyboard can reach, other than a pick's candidate
  * (an element that is only focusable by script, such as a card in a stack, is not one). That
- * includes a control only a keyboard can reach, invisible and taking no pointer, which `press`
- * presses from the keyboard (#457). Each is known by
+ * includes a keyboard-only control, invisible and taking no pointer, which `press` presses from the
+ * keyboard (#457). Each is known by
  * the game element it stands for when it has one, since its label can change with the game
  * ("deck, 30 cards"), else by its label.
  */
@@ -492,7 +504,7 @@ async function pressAnUntriedControl(frame: Frame, walk: SmokeWalk, memory: Walk
   for (const { key, label, control } of await boardControls(frame)) {
     if (memory.pressed.has(key)) continue;
     memory.pressed.add(key);
-    narrate(step, `pressing the board's "${label}"${(await takesNoPointer(control)) ? ' from the keyboard' : ''}`);
+    narrate(step, `pressing the board's "${label}"${(await keyboardOnly(control)) ? ' from the keyboard' : ''}`);
     if (await press(control, `the board's "${label}"`, walk)) memory.controls++;
     return true;
   }
@@ -512,12 +524,20 @@ function endsTheGame(name: string, memory: WalkMemory): boolean {
 }
 
 /**
- * An action not taken yet, else a group of actions not opened yet, else the way back out of a
- * group, else the action taken least, preferring one that has not ended the game. Undefined when
- * the panel offers nothing.
+ * The required actions still to take, less those that failed when taken: the failure is already a
+ * problem, and trying them again would only spend the steps the rest of the game needs.
+ */
+function stillToTake(walk: SmokeWalk, memory: WalkMemory): string[] {
+  return requiredUntaken(walk).filter((name) => !memory.failed.has(name));
+}
+
+/**
+ * An action not taken (or failed) yet, else a group of actions not opened yet, else the way back
+ * out of a group, else the action taken least, preferring one that has neither ended the game nor
+ * failed. Undefined when the panel offers nothing.
  */
 function nextPress(offers: Offers, walk: SmokeWalk, memory: WalkMemory): NextPress {
-  const untaken = offers.enabled.find((name) => !walk.taken.has(name));
+  const untaken = offers.enabled.find((name) => !walk.taken.has(name) && !memory.failed.has(name));
   if (untaken) return { take: untaken };
   const group = offers.groups.find((label) => !memory.opened.has(label));
   if (group !== undefined) {
@@ -526,7 +546,7 @@ function nextPress(offers: Offers, walk: SmokeWalk, memory: WalkMemory): NextPre
   }
   if (offers.inGroup) return { press: '[data-bs-menu-back]' };
   const byTimes = (a: string, b: string) => (memory.times.get(a) ?? 0) - (memory.times.get(b) ?? 0);
-  const goesOn = offers.enabled.filter((name) => !endsTheGame(name, memory));
+  const goesOn = offers.enabled.filter((name) => !endsTheGame(name, memory) && !memory.failed.has(name));
   const least = [...(goesOn.length > 0 ? goesOn : offers.enabled)].sort(byTimes)[0];
   return least === undefined ? undefined : { take: least };
 }
@@ -557,6 +577,8 @@ interface WalkMemory {
   readonly resolved: Map<string, number>;
   /** How many games ended right after each action resolved. */
   readonly endings: Map<string, number>;
+  /** The actions that failed when taken: reported once, and not tried again while anything else is offered. */
+  readonly failed: Set<string>;
   /** The action resolved last, which a game that is now over ended on. */
   lastResolved: string | undefined;
   /** How many games the walk has played, this one included. */
@@ -571,6 +593,7 @@ function newMemory(): WalkMemory {
     times: new Map(),
     resolved: new Map(),
     endings: new Map(),
+    failed: new Set(),
     lastResolved: undefined,
     games: 1,
   };
@@ -605,7 +628,7 @@ async function pressWhatThePanelOffers(frame: Frame, walk: SmokeWalk, memory: Wa
 async function afterTheGame(page: Page, walk: SmokeWalk, memory: WalkMemory, step: number): Promise<boolean> {
   if (memory.lastResolved !== undefined) memory.endings.set(memory.lastResolved, (memory.endings.get(memory.lastResolved) ?? 0) + 1);
   memory.lastResolved = undefined;
-  const left = requiredUntaken(walk);
+  const left = stillToTake(walk, memory);
   if (left.length === 0) {
     narrate(step, 'the game is over');
     return false;
@@ -650,7 +673,8 @@ async function walkTheGame(page: Page, walk: SmokeWalk, memory: WalkMemory): Pro
     const seenBefore = walk.offered.size + memory.pressed.size;
     if (!(await walkOneStep(page, frame, walk, memory, step))) break;
     const nothingNew = walk.offered.size + memory.pressed.size === seenBefore;
-    const allTaken = requiredUntaken(walk).length === 0 && [...walk.offered].every((name) => walk.taken.has(name));
+    const allTaken =
+      stillToTake(walk, memory).length === 0 && [...walk.offered].every((name) => walk.taken.has(name) || memory.failed.has(name));
     idle = nothingNew && allTaken ? idle + 1 : 0;
   }
   const frame = await gameFrame(page);

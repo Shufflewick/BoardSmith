@@ -233,7 +233,7 @@ defineSmokeTest({ actions: ['draw', 'play'] });
 leaving your own dev world alone), and runs the spec in Chromium. A player takes
 a seat, takes every action the action panel offers, answering each choice (on
 the board when the board shows it), and presses every control on the board once
-(from the keyboard when the control takes no pointer by design). At a table it
+(from the keyboard when the control is invisible and takes no pointer). At a table it
 acts for every seat in turn, and starts a new game when one ends with listed
 actions still to take. The check fails on any uncaught page error, any console
 error, any failed request to the dev host, any offered action that fails, an

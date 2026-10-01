@@ -23,11 +23,14 @@ export interface SmokeWalk {
   readonly listed: readonly string[];
   /**
    * The listed actions the spec says no walk from a fresh game reaches, each with the reason. The
-   * walk does not require them, takes them when offered, and fails on one that fails.
+   * walk does not require one unless it sees it enabled: then it is required like any other, so a
+   * declaration cannot hide an action that is offered and does nothing.
    */
   readonly unreachable: Readonly<Record<string, string>>;
   /** Every action the panel offered, whether or not it could be taken. */
   readonly offered: Set<string>;
+  /** Every action the panel offered enabled (not greyed out), opened, or resolved. */
+  readonly enabled: Set<string>;
   /** Every action taken and resolved without failing. */
   readonly taken: Set<string>;
   /** The most actions the walk would take. */
@@ -38,14 +41,28 @@ export interface SmokeWalk {
 
 const quoted = (names: readonly string[]) => names.map((n) => `"${n}"`).join(', ');
 
-/** The listed actions the walk must take and has not: every one the spec does not name in `unreachable`. */
+/** Whether the spec declares `name` out of reach and the walk never saw it enabled, so it is not required. */
+function excused(walk: SmokeWalk, name: string): boolean {
+  return Object.hasOwn(walk.unreachable, name) && !walk.enabled.has(name);
+}
+
+/**
+ * The listed actions the walk must take and has not: every one except an action the spec names in
+ * `unreachable` that the walk never saw enabled.
+ */
 export function requiredUntaken(walk: SmokeWalk): string[] {
-  return walk.listed.filter((name) => !walk.taken.has(name) && !Object.hasOwn(walk.unreachable, name));
+  return walk.listed.filter((name) => !walk.taken.has(name) && !excused(walk, name));
 }
 
 /** Why the spec's `unreachable` declarations cannot stand: one names no listed action, or gives no reason. */
 function declarationProblems(walk: SmokeWalk): string[] {
   const problems: string[] = [];
+  if (walk.listed.length > 0 && walk.listed.every((name) => Object.hasOwn(walk.unreachable, name))) {
+    problems.push(
+      `${SMOKE_SPEC_PATH} names every action in \`actions\` in \`unreachable\`, so the walk would require none of them. ` +
+        'A fresh game offers at least the first action a player takes: take the ones a walk reaches out of `unreachable`.',
+    );
+  }
   for (const [name, reason] of Object.entries(walk.unreachable)) {
     if (!walk.listed.includes(name)) {
       problems.push(
@@ -93,8 +110,8 @@ export interface SmokeRecord {
   readonly controls: number;
   /** How many games the walk played: it starts a new one when a game ends with listed actions untaken. */
   readonly games: number;
-  /** The declared actions the walk did not take, and so did not require. */
-  readonly excused: string[];
+  /** The declared actions the walk neither took nor saw enabled, and so did not require, with the spec's reasons. */
+  readonly excused: Array<{ action: string; reason: string }>;
   /** The declared actions the walk took anyway, whose declaration should go. */
   readonly reachedAnyway: string[];
 }
@@ -106,7 +123,9 @@ export function smokeRecord(walk: SmokeWalk, played: { controls: number; games: 
     taken: [...walk.taken].sort(),
     controls: played.controls,
     games: played.games,
-    excused: declared.filter((name) => !walk.taken.has(name)),
+    excused: declared
+      .filter((name) => !walk.taken.has(name) && excused(walk, name))
+      .map((action) => ({ action, reason: walk.unreachable[action].trim() })),
     reachedAnyway: declared.filter((name) => walk.taken.has(name)),
   };
 }
@@ -119,7 +138,8 @@ export function smokeSummary(record: SmokeRecord): string {
     record.games > 1 ? `, over ${record.games} games (a new one each time a game ended with listed actions still to take)` : '';
   const excused =
     record.excused.length > 0
-      ? ` Not required, as ${SMOKE_SPEC_PATH} says a walk from a fresh game cannot reach them: ${quoted(record.excused)}.`
+      ? ` Not required, as ${SMOKE_SPEC_PATH} says a walk from a fresh game cannot reach them: ` +
+        `${record.excused.map(({ action, reason }) => `"${action}" ("${reason}")`).join('; ')}.`
       : '';
   const reached =
     record.reachedAnyway.length > 0
