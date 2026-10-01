@@ -2180,6 +2180,13 @@ describe('#453: the in-browser smoke test is a chunk output, and part of the don
     expect(spec).toMatch(/takes a declared action anyway, its summary says so: remove the declaration/);
   });
 
+  it('#460: tells a chunk to reach an action the deal decides by choosing a seed, not by declaring it unreachable', () => {
+    const spec = flatRead('build/spec.md');
+    expect(spec).toMatch(/The walk deals every table game from a seed \("smoke" unless the spec's `seed` names others\)/);
+    expect(spec).toMatch(/An action only some deals offer .{0,120}is not unreachable: the chunk finds a seed whose deal offers it/);
+    expect(spec).toMatch(/`seed: \['smoke', '17'\]`/);
+  });
+
   it("puts the smoke test in the done gate's list of checks, with the commands to run it alone and to install its browser", () => {
     const gate = flatRead('build/test.md').split('The done gate: `boardsmith verify`')[1].split('## The A11y Floor')[0];
     expect(gate).toMatch(/full suite, typecheck, build, validate, the smoke test and a mutation check/);

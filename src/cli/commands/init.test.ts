@@ -275,6 +275,11 @@ describe('initCommand — a scaffolded project is portable and has no dangling a
     // #458: how to name an action no walk from a fresh game reaches, with the reason it needs.
     expect(spec).toMatch(/also named in `unreachable`, with a sentence saying why/);
     expect(spec).toContain("unreachable: { claimDraw: '");
+    // #460: every game is dealt from a seed, and an action only some deals offer is reached by choosing one.
+    expect(spec).toMatch(/deals every game from a seed, "smoke" unless `seed` names another/);
+    expect(spec).toMatch(/choosing a seed whose deal offers it/);
+    expect(spec).toContain("seed: ['smoke', '17'],");
+    expect(spec).toMatch(/`unreachable` is for an action no walk from a fresh game reaches whatever the deal/);
   });
 
   it('declares no manifest asset it did not create', async () => {

@@ -1,18 +1,150 @@
 /**
- * FIXTURE GAMES FOR THE SMOKE WALK (#457, #458, #459), written over the table scaffold that
+ * FIXTURE GAMES FOR THE SMOKE WALK (#457, #458, #459, #460), written over the table scaffold that
  * `smokeProject` makes (its game is `dev-game`, so its classes are `DevGameGame` and
  * `DevGamePlayer`).
  */
 
-/** A smoke spec listing `actions`, with `unreachable` declared when given. */
-export function smokeSpec(actions: readonly string[], unreachable?: Record<string, string>): string {
+/** A smoke spec listing `actions`, with `unreachable`, `seed` and `steps` given when they are. */
+export function smokeSpec(
+  actions: readonly string[],
+  unreachable?: Record<string, string>,
+  more: { seed?: string | readonly string[]; steps?: number } = {},
+): string {
   const declared = unreachable === undefined ? '' : `\n  unreachable: ${JSON.stringify(unreachable, null, 2).replace(/\n/g, '\n  ')},`;
+  const seed = more.seed === undefined ? '' : `\n  seed: ${JSON.stringify(more.seed)},`;
+  const steps = more.steps === undefined ? '' : `\n  steps: ${more.steps},`;
   return `import { defineSmokeTest } from 'boardsmith/testing/browser';
 
 defineSmokeTest({
-  actions: ${JSON.stringify(actions)},${declared}
+  actions: ${JSON.stringify(actions)},${declared}${seed}${steps}
 });
 `;
+}
+
+/**
+ * Seeds for {@link aceGame} (#460): a deal from `WITHOUT` gives neither seat the ace of hearts, a
+ * deal from `WITH` gives it to seat 1. The engine's own shuffle decides it, so a change to the
+ * shuffle changes them.
+ */
+export const ACE_SEEDS = { WITHOUT: 'plain', WITH: '4' } as const;
+
+/**
+ * THE ACE GAME (#460): an action the DEAL decides. Each seat is dealt five cards from a shuffled
+ * deck; on its turn it may `draw` or `play` a card, and `showAce` is offered only to a seat that was
+ * dealt the ace of hearts, which about one deal in five does. Twenty steps never end a game, so a
+ * walk sees exactly the deal it was dealt.
+ */
+export function aceGame(): Record<string, string> {
+  return {
+    'src/rules/game.ts': `import { Game, Player, type GameOptions } from 'boardsmith';
+import { Card, Hand, Deck } from './elements.js';
+import { createGameFlow } from './flow.js';
+import { createTurnActions } from './actions.js';
+
+export class DevGamePlayer extends Player<DevGameGame, DevGamePlayer> {
+  hand!: Hand;
+  dealtTheAce = false;
+}
+
+export class DevGameGame extends Game<DevGameGame, DevGamePlayer> {
+  static PlayerClass = DevGamePlayer;
+
+  deck!: Deck;
+
+  constructor(options: GameOptions) {
+    super(options);
+    this.registerElements([Card, Hand, Deck]);
+    for (const player of this.players) {
+      const hand = this.create(Hand, \`hand-\${player.seat}\`);
+      hand.player = player;
+      hand.contentsVisibleToOwner();
+      player.hand = hand;
+    }
+    this.deck = this.create(Deck, 'deck');
+    this.deck.setOrder('stacking');
+    for (const suit of ['H', 'D', 'C', 'S'] as const) {
+      for (const rank of ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'] as const) {
+        this.deck.create(Card, \`\${rank}\${suit}\`, { suit, rank });
+      }
+    }
+    this.deck.shuffle();
+    for (const player of this.players) {
+      for (let i = 0; i < 5; i++) this.deck.first(Card)?.putInto(player.hand);
+      player.dealtTheAce = player.hand.all(Card).some((card) => card.name === 'AH');
+    }
+    for (const action of createTurnActions(this)) this.registerAction(action);
+    this.setFlow(createGameFlow(this));
+  }
+
+  override isFinished(): boolean {
+    return this.deck.count(Card) === 0;
+  }
+
+  override getWinners(): DevGamePlayer[] {
+    return [];
+  }
+}
+`,
+    'src/rules/actions.ts': `import { Action, type ActionDefinition } from 'boardsmith';
+import type { DevGameGame, DevGamePlayer } from './game.js';
+import { Card } from './elements.js';
+
+export function createTurnActions(game: DevGameGame): ActionDefinition[] {
+  return [
+    Action.create('draw')
+      .prompt('Draw a card')
+      .execute((_args, ctx) => {
+        game.deck.first(Card)?.putInto((ctx.player as DevGamePlayer).hand);
+        return { success: true };
+      }),
+    Action.create('play')
+      .prompt('Play a card')
+      .chooseFrom('card', {
+        prompt: 'Choose a card to play',
+        choices: (ctx) => [...(ctx.player as DevGamePlayer).hand.all(Card)],
+      })
+      .condition({ 'a card in hand': (ctx) => (ctx.player as DevGamePlayer).hand.count(Card) >= 1 })
+      .execute((args) => {
+        (args.card as Card).remove();
+        return { success: true };
+      }),
+    Action.create('showAce')
+      .prompt('Show the ace of hearts you were dealt')
+      .condition({ 'dealt the ace of hearts': (ctx) => (ctx.player as DevGamePlayer).dealtTheAce })
+      .execute(() => ({ success: true })),
+  ];
+}
+`,
+    'src/rules/flow.ts': `import { loop, eachPlayer, actionStep, type FlowDefinition } from 'boardsmith';
+import type { DevGameGame } from './game.js';
+
+export function createGameFlow(game: DevGameGame): FlowDefinition {
+  return {
+    root: loop({
+      name: 'game-loop',
+      while: () => !game.isFinished(),
+      maxIterations: 100,
+      do: eachPlayer({
+        name: 'player-turns',
+        do: actionStep({ name: 'turn', actions: ['draw', 'play', 'showAce'], skipIf: () => game.isFinished() }),
+      }),
+    }),
+    isComplete: () => game.isFinished(),
+    getWinners: () => game.getWinners(),
+  };
+}
+`,
+    'tests/game.test.ts': `import { describe, expect, it } from 'vitest';
+import { DevGameGame } from '../src/rules/game.js';
+
+describe('the ace game', () => {
+  it('deals five cards to each player', () => {
+    const game = new DevGameGame({ playerCount: 2, seed: 'test' });
+    expect(game.players.map((player) => player.hand.all().length)).toEqual([5, 5]);
+  });
+});
+`,
+  };
 }
 
 /** The truce game's action that no walk from a fresh game reaches, and why. */

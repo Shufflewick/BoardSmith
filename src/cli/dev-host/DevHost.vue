@@ -98,8 +98,29 @@ const toast = useToast();
 /** True while the "Confirm restart?" prompt is showing (first click armed it). */
 const restartConfirming = ref(false);
 let restartConfirmTimer: ReturnType<typeof setTimeout> | null = null;
-/** Set to true by newGame() before sending restart; cleared when game_state arrives. */
+/** Set to true by restartGame() before sending restart; cleared when game_state arrives. */
 const pendingRestart = ref(false);
+
+// ── Dealing from a seed (#460) ────────────────────────────────────────────────
+/** The seed the game on screen was dealt from, from the last `game_state` relayed to it. */
+const dealtFrom = ref<string | null>(null);
+/** The seed typed into Table setup to deal the next game from. */
+const dealSeedInput = ref('');
+
+/** Starts a new game dealt from the seed typed in Table setup; the host refuses a blank one. */
+function dealFromSeed(): void {
+  restartGame(dealSeedInput.value);
+}
+
+/**
+ * Asks the host for a new game, dealt from `seed` when one is given. No seed is shown until the new
+ * game's state arrives, so a page waiting for a seed never reads the game before it.
+ */
+function restartGame(seed?: string): void {
+  pendingRestart.value = true;
+  dealtFrom.value = null;
+  wsSend(seed === undefined ? { type: 'restart' } : { type: 'restart', seed });
+}
 
 /**
  * Two-click guard for the destructive "New game" action (CLAUDE.md:
@@ -120,7 +141,7 @@ function handleNewGameClick(): void {
       restartConfirmTimer = null;
     }
     restartConfirming.value = false;
-    newGame();
+    restartGame();
   }
 }
 
@@ -245,6 +266,9 @@ function onHostMessage(msg: Record<string, unknown>): void {
       };
       stepDeadlineOpen.value = msg.deadlineAt !== null && msg.deadlineAt !== undefined;
       postToGame(lastGameState);
+      // Shown only once the frame carrying it is on its way to the game, so a
+      // page that reads the seed reads the game dealt from it.
+      dealtFrom.value = (msg.seed as string | null | undefined) ?? null;
       if (pendingRestart.value) {
         pendingRestart.value = false;
         toast.info('Game restarted');
@@ -312,7 +336,7 @@ function onWindowMessage(event: MessageEvent): void {
   // server_request forward below (which would otherwise ship it to the host as
   // an unhandled op and silently drop it — the original D11 dead end).
   if (data.type === 'server_request' && data.op === 'debug:restart') {
-    newGame();
+    restartGame();
     return;
   }
   if (data.type === 'server_request') {
@@ -371,10 +395,6 @@ function takeSeat(seat: number): void {
 function leaveSeat(): void {
   wsSend({ type: 'leave' });
   mySeat.value = null;
-}
-function newGame(): void {
-  pendingRestart.value = true;
-  wsSend({ type: 'restart' });
 }
 /** Close the open timed step now, as its window elapsing would (#302). */
 function fireDeadline(): void {
@@ -777,6 +797,7 @@ onUnmounted(() => {
                 <button
                   type="button"
                   class="btn"
+                  data-testid="table-setup-toggle"
                   :class="{ 'btn--on': tableSetupOpen }"
                   :aria-expanded="tableSetupOpen"
                   @click="tableSetupOpen = !tableSetupOpen"
@@ -818,6 +839,7 @@ onUnmounted(() => {
               <button
                 type="button"
                 class="btn"
+                data-testid="table-setup-toggle"
                 :class="{ 'btn--on': tableSetupOpen }"
                 :aria-expanded="tableSetupOpen"
                 @click="tableSetupOpen = !tableSetupOpen"
@@ -851,6 +873,10 @@ onUnmounted(() => {
               <dt>bot level</dt>
               <dd>{{ cfg.botLevel || '—' }}</dd>
             </div>
+            <div class="table-setup__row">
+              <dt>Seed</dt>
+              <dd data-testid="game-seed">{{ dealtFrom ?? '' }}</dd>
+            </div>
             <template v-if="cfg.gameOptions.length">
               <div class="table-setup__group-header">Game options</div>
               <div
@@ -874,6 +900,13 @@ onUnmounted(() => {
               </div>
             </template>
           </dl>
+          <form class="table-setup__deal" data-testid="deal-form" @submit.prevent="dealFromSeed">
+            <label>
+              Deal from seed
+              <input v-model="dealSeedInput" type="text" data-testid="deal-seed" />
+            </label>
+            <button type="submit" class="btn" data-testid="deal">Deal</button>
+          </form>
         </div>
 
         <div v-if="rulesReloading" class="dev-chrome__reloading" role="status" data-testid="rules-reloading">
@@ -1394,7 +1427,7 @@ onUnmounted(() => {
   font-size: 0.8em;
 }
 
-/* ── Table setup panel (read-only) ── */
+/* ── Table setup panel: the table as it is set, and a deal from a seed ── */
 .table-setup {
   padding: 10px 16px 12px;
   border-top: 1px solid var(--bsg-line);
@@ -1444,6 +1477,28 @@ onUnmounted(() => {
   color: var(--bsg-ink);
   margin: 0;
   font-variant-numeric: tabular-nums;
+}
+
+.table-setup__deal {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  padding-top: 8px;
+  margin-top: 6px;
+  border-top: 1px solid var(--bsg-line-2);
+  font-size: 0.8rem;
+  color: var(--bsg-ink-3);
+}
+
+.table-setup__deal input {
+  margin-left: 8px;
+  font: inherit;
+  color: var(--bsg-ink);
+  background: var(--bsg-bg);
+  border: 1px solid var(--bsg-line);
+  border-radius: 4px;
+  padding: 3px 6px;
 }
 
 /* ── Phone layout: icon-only controls, … overflow for secondary ── */

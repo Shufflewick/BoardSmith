@@ -3,11 +3,58 @@
  * Chromium under `boardsmith verify`; its verdict is decided here, from what it saw.
  */
 import { describe, expect, it } from 'vitest';
-import { SMOKE_SPEC_PATH, smokeProblems, smokeRecord, smokeSummary, type SmokeWalk } from './browser-smoke-verdict.js';
+import {
+  DEFAULT_SMOKE_SEED,
+  SMOKE_SPEC_PATH,
+  smokeFailure,
+  smokeProblems,
+  smokeRecord,
+  smokeSeeds,
+  smokeSummary,
+  type SmokeWalk,
+} from './browser-smoke-verdict.js';
 
 function walk(overrides: Partial<SmokeWalk>): SmokeWalk {
-  return { listed: [], unreachable: {}, offered: new Set(), enabled: new Set(), taken: new Set(), steps: 60, errors: [], ...overrides };
+  return {
+    listed: [],
+    unreachable: {},
+    offered: new Set(),
+    enabled: new Set(),
+    taken: new Set(),
+    steps: 60,
+    errors: [],
+    seeds: [DEFAULT_SMOKE_SEED],
+    stalls: [],
+    ...overrides,
+  };
 }
+
+describe('smokeSeeds: the deals a walk is dealt (#460)', () => {
+  it('deals from one fixed seed when the spec names none, so every run walks the same game', () => {
+    expect(smokeSeeds(undefined)).toEqual([DEFAULT_SMOKE_SEED]);
+    expect(DEFAULT_SMOKE_SEED).toBe('smoke');
+  });
+
+  it('deals from the seed the spec names, or from each seed of a list, in order', () => {
+    expect(smokeSeeds('opening')).toEqual(['opening']);
+    expect(smokeSeeds(['opening', '7'])).toEqual(['opening', '7']);
+  });
+
+  it('refuses an empty list, a blank seed and a seed listed twice, saying what to write instead', () => {
+    expect(() => smokeSeeds([])).toThrow(
+      `\`seed\` in ${SMOKE_SPEC_PATH} is an empty list, so the walk would deal no game. List at least one seed, or leave ` +
+        `\`seed\` out to deal from "${DEFAULT_SMOKE_SEED}".`,
+    );
+    for (const blank of ['', '  ', ['7', ' ']]) {
+      expect(() => smokeSeeds(blank)).toThrow(
+        `\`seed\` in ${SMOKE_SPEC_PATH} has a blank seed. A seed is any text that is not blank, such as "7" or "opening".`,
+      );
+    }
+    expect(() => smokeSeeds(['7', 'opening', '7'])).toThrow(
+      `\`seed\` in ${SMOKE_SPEC_PATH} lists "7" twice, which walks the same deal twice. List each seed once.`,
+    );
+  });
+});
 
 const REASON = 'Offered only after fifty quiet moves, which a walk from a fresh game never plays.';
 
@@ -34,10 +81,33 @@ describe('smokeProblems', () => {
   it('names a listed action the walk never saw offered, and one it saw but could not take', () => {
     expect(smokeProblems(walk({ listed: ['draw', 'score'], offered: new Set(['draw']), steps: 12 }))).toEqual([
       'The panel offered "draw", but the walk never took it in 12 steps. The errors above, if any, say why.',
-      `The walk never saw "score" offered in 12 steps from a fresh game. If a fresh game takes longer to reach it, raise ` +
-        `\`steps\` in ${SMOKE_SPEC_PATH}. If no walk from a fresh game can reach it (it needs a long game, or a position ` +
-        `play does not get to), name it in \`unreachable\` there with the reason. If the game no longer has it, remove it from \`actions\`.`,
+      `The walk never saw "score" offered in 12 steps from a fresh game dealt from seed "smoke". If a fresh game takes ` +
+        `longer to reach it, raise \`steps\` in ${SMOKE_SPEC_PATH}. If the deal decides whether it is offered (the cards a ` +
+        `player is dealt, say), choose a seed whose deal offers it, and list it in \`seed\` there. If no walk from a fresh game ` +
+        `can reach it whatever the deal (it needs a long game, or a position play does not get to), name it in ` +
+        `\`unreachable\` there with the reason. If the game no longer has it, remove it from \`actions\`.`,
     ]);
+  });
+
+  it('#460: names every deal a listed action was missed on', () => {
+    expect(smokeProblems(walk({ listed: ['score'], seeds: ['opening', '7'], steps: 12 }))).toEqual([
+      expect.stringMatching(/^The walk never saw "score" offered in 12 steps from a fresh game dealt from seed "opening", nor from seed "7"\. /),
+    ]);
+  });
+
+  it('#460: says a walk that stopped because nothing was offered stopped for that, and does not suggest more steps', () => {
+    const stalled = walk({ listed: ['draw', 'score'], offered: new Set(['draw']), taken: new Set(['draw']), stalls: [{ step: 9, seed: 'smoke', seconds: 30 }] });
+    expect(smokeProblems(stalled)).toEqual([
+      `The walk never saw "score" offered. It stopped at step 9 of the game dealt from seed "smoke", because no seat had ` +
+        'been offered anything for 30s, so more `steps` would not help. Run `boardsmith smoke` to watch where the game ' +
+        'stops offering actions: a step no seat can act in, or one waiting on something no player does. Fix that, then run it again.',
+    ]);
+  });
+
+  it('#460: says where a world walk stalled, with no seed to name', () => {
+    expect(smokeProblems(walk({ listed: ['tend'], seeds: [], stalls: [{ step: 3, seed: null, seconds: 30 }] }))[0]).toMatch(
+      /^The walk never saw "tend" offered\. It stopped at step 3, because no seat had been offered anything for 30s/,
+    );
   });
 
   describe('#458: actions the spec declares a fresh game cannot reach', () => {
@@ -103,11 +173,29 @@ describe('smokeProblems', () => {
 });
 
 describe('smokeRecord and smokeSummary: what a passing walk reports', () => {
-  it('says what was taken and pressed, in one game, with no error', () => {
+  it('says what was taken and pressed, in one game, with no error, and the seed it was dealt from', () => {
     const record = smokeRecord(walk({ listed: ['draw', 'play'], taken: new Set(['play', 'draw']) }), { controls: 1, games: 1 });
-    expect(record).toEqual({ taken: ['draw', 'play'], controls: 1, games: 1, excused: [], reachedAnyway: [] });
+    expect(record).toEqual({ seeds: ['smoke'], taken: ['draw', 'play'], controls: 1, games: 1, excused: [], reachedAnyway: [] });
     expect(smokeSummary(record)).toBe(
-      'Served by `boardsmith dev` from a fresh start, a seated player took "draw", "play" and pressed 1 board control, with no error.',
+      'Served by `boardsmith dev` from a fresh start and dealt from seed "smoke", a seated player took "draw", "play" and ' +
+        'pressed 1 board control, with no error.',
+    );
+  });
+
+  it('#460: names every seed a walk of several deals was dealt from', () => {
+    const record = smokeRecord(walk({ seeds: ['opening', '7'], listed: ['draw'], taken: new Set(['draw']) }), { controls: 0, games: 3 });
+    expect(smokeSummary(record)).toBe(
+      'Served by `boardsmith dev` from a fresh start and dealt from seed "opening", then from seed "7", a seated player ' +
+        'took "draw" and pressed 0 board controls, with no error, over 3 games (a new one each time a game ended with ' +
+        'listed actions still to take).',
+    );
+    expect(smokeSummary({ ...record, games: 2 })).not.toMatch(/over 2 games/);
+  });
+
+  it('#460: names no seed for a world, which `boardsmith dev` deals from its own', () => {
+    const record = smokeRecord(walk({ seeds: [], listed: ['tend'], taken: new Set(['tend']) }), { controls: 0, games: 1 });
+    expect(smokeSummary(record)).toBe(
+      'Served by `boardsmith dev` from a fresh start, a seated player took "tend" and pressed 0 board controls, with no error.',
     );
   });
 
@@ -118,7 +206,7 @@ describe('smokeRecord and smokeSummary: what a passing walk reports', () => {
     );
     expect(record).toMatchObject({ games: 2, excused: [{ action: 'claim', reason: REASON }], reachedAnyway: [] });
     expect(smokeSummary(record)).toBe(
-      'Served by `boardsmith dev` from a fresh start, a seated player took "move", "resign" and pressed 0 board controls, ' +
+      'Served by `boardsmith dev` from a fresh start and dealt from seed "smoke", a seated player took "move", "resign" and pressed 0 board controls, ' +
         'with no error, over 2 games (a new one each time a game ended with listed actions still to take). ' +
         `Not required, as ${SMOKE_SPEC_PATH} says a walk from a fresh game cannot reach them: "claim" ("${REASON}").`,
     );
@@ -136,5 +224,17 @@ describe('smokeRecord and smokeSummary: what a passing walk reports', () => {
           'cannot reach: remove it from `unreachable` there, so the walk requires it\\.$',
       ),
     );
+  });
+});
+
+describe('smokeFailure: what a failing walk says (#460)', () => {
+  it('names the seed it was dealt from, so `boardsmith smoke` walks the same game again', () => {
+    expect(smokeFailure(walk({}), ['A console error: boom'])).toBe(
+      'The smoke walk, dealt from seed "smoke", found a problem:\n  - A console error: boom',
+    );
+    expect(smokeFailure(walk({ seeds: ['a', 'b'] }), ['one', 'two'])).toBe(
+      'The smoke walk, dealt from seed "a", then from seed "b", found 2 problems:\n  - one\n  - two',
+    );
+    expect(smokeFailure(walk({ seeds: [] }), ['one'])).toBe('The smoke walk found a problem:\n  - one');
   });
 });

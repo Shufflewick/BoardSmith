@@ -16,7 +16,15 @@ import { REPO_ROOT } from '../spawn-cli.test-helper.js';
 import { writeFiles } from '../lib/verify-result.test-helper.js';
 import { browserProblem, runSmoke } from './smoke.js';
 import { isRunning, smokeProject } from './smoke-project.test-helper.js';
-import { boardWithAPointerlessControl, PLAYERS_GET_THE_TABLE, QUIET_CLAIM_REASON, smokeSpec, truceGame } from './smoke-fixtures.test-helper.js';
+import {
+  ACE_SEEDS,
+  aceGame,
+  boardWithAPointerlessControl,
+  PLAYERS_GET_THE_TABLE,
+  QUIET_CLAIM_REASON,
+  smokeSpec,
+  truceGame,
+} from './smoke-fixtures.test-helper.js';
 
 vi.setConfig({ testTimeout: 300_000, hookTimeout: 120_000 });
 
@@ -45,17 +53,27 @@ onMounted(() => console.error('the table lost its deck'));
  */
 async function smokeOf(world: boolean, files: Record<string, string> = {}) {
   const dir = await smokeProject(world, files);
-  const { outcome, pids } = await runSmoke({ projectDir: dir, log: quiet });
+  const { outcome, pids, steps } = await smokeIn(dir);
+  return { dir, outcome, pids, steps };
+}
+
+/**
+ * Runs the smoke check on the project in `dir`, holds it to leaving nothing running and no copy
+ * behind, and returns what the walk said it did at each step, in order.
+ */
+async function smokeIn(dir: string) {
+  const said: string[] = [];
+  const { outcome, pids } = await runSmoke({ projectDir: dir, log: (line) => said.push(line) });
   expect(pids.filter(isRunning)).toEqual([]);
   expect(existsSync(join(dir, '.boardsmith', 'smoke'))).toBe(false);
-  return { dir, outcome, pids };
+  return { outcome, pids, steps: said.filter((line) => /^smoke( step \d+)?: /.test(line)) };
 }
 
 describe('boardsmith verify: the smoke check', () => {
   it('walks the table scaffold: a seated player takes both of its actions, with no error, and nothing is left running', async () => {
     const { dir, outcome, pids } = await smokeOf(false);
 
-    expect(outcome.summary).toMatch(/^Served by `boardsmith dev` from a fresh start, a seated player took "draw", "play"/);
+    expect(outcome.summary).toMatch(/^Served by `boardsmith dev` from a fresh start and dealt from seed "smoke", a seated player took "draw", "play"/);
     expect(outcome.passed).toBe(true);
     expect(outcome.counts).toMatchObject({ actions: 2 });
     expect(pids.length).toBeGreaterThanOrEqual(2);
@@ -80,7 +98,7 @@ describe('boardsmith verify: the smoke check', () => {
 
     expect(outcome).toMatchObject({ passed: false, next: expect.stringMatching(/boardsmith smoke/) });
     expect(outcome.summary).toMatch(
-      /^The smoke walk found 2 problems: - A console error: the table lost its deck.*The game offered "play", which tests\/browser\/smoke\.spec\.ts does not list\. Add it to `actions` there\./s,
+      /^The smoke walk, dealt from seed "smoke", found 2 problems: - A console error: the table lost its deck.*The game offered "play", which tests\/browser\/smoke\.spec\.ts does not list\. Add it to `actions` there\./s,
     );
   });
 
@@ -88,7 +106,7 @@ describe('boardsmith verify: the smoke check', () => {
     const { outcome } = await smokeOf(false, boardWithAPointerlessControl({ invisible: true }));
 
     // 2: the lantern, and the door that only the lantern's own click handler puts on the board.
-    expect(outcome.summary).toMatch(/^Served by `boardsmith dev` from a fresh start, a seated player took "draw", "play" and pressed 2 board controls, with no error\./);
+    expect(outcome.summary).toMatch(/^Served by `boardsmith dev` from a fresh start and dealt from seed "smoke", a seated player took "draw", "play" and pressed 2 board controls, with no error\./);
     expect(outcome.passed).toBe(true);
   });
 
@@ -97,7 +115,7 @@ describe('boardsmith verify: the smoke check', () => {
 
     expect(outcome.passed).toBe(false);
     expect(outcome.summary).toBe(
-      'The smoke walk found a problem: - Pressing the board\'s "Light the lantern" did not work: another element covers it, so a pointer cannot reach it.',
+      'The smoke walk, dealt from seed "smoke", found a problem: - Pressing the board\'s "Light the lantern" did not work: another element covers it, so a pointer cannot reach it.',
     );
   });
 
@@ -114,7 +132,7 @@ describe('boardsmith verify: the smoke check', () => {
       });
 
       expect(outcome.summary).toMatch(
-        /^Served by `boardsmith dev` from a fresh start, a seated player took "acceptTruce", "concede", "draw", "offerTruce", "play", "rally", "trade" and pressed \d+ board controls?, with no error, over [3-9] games \(a new one each time a game ended with listed actions still to take\)\. Not required, as tests\/browser\/smoke\.spec\.ts says a walk from a fresh game cannot reach them: "claimTruce" \("Offered only after forty rounds in which nobody played a card, and the walk plays cards every round\."\)\.$/,
+        /^Served by `boardsmith dev` from a fresh start and dealt from seed "smoke", a seated player took "acceptTruce", "concede", "draw", "offerTruce", "play", "rally", "trade" and pressed \d+ board controls?, with no error, over [3-9] games \(a new one each time a game ended with listed actions still to take\)\. Not required, as tests\/browser\/smoke\.spec\.ts says a walk from a fresh game cannot reach them: "claimTruce" \("Offered only after forty rounds in which nobody played a card, and the walk plays cards every round\."\)\.$/,
       );
       expect(outcome.passed).toBe(true);
     },
@@ -149,6 +167,63 @@ describe('boardsmith verify: the smoke check', () => {
     // "rally", which only a game that goes on after the failure offers.
     expect(outcome.summary.match(/taking it failed/g)).toHaveLength(1);
     expect(outcome.summary).not.toContain('"rally"');
+  });
+
+  it(
+    '#460: deals each game from the seeds the spec lists, walking each in turn, reaches an action only one deal offers, ' +
+      'and takes the same steps on a second run',
+    async () => {
+      const dir = await smokeProject(false, {
+        ...aceGame(),
+        'tests/browser/smoke.spec.ts': smokeSpec(['draw', 'play', 'showAce'], undefined, { seed: [ACE_SEEDS.WITHOUT, ACE_SEEDS.WITH], steps: 20 }),
+      });
+
+      const first = await smokeIn(dir);
+      const second = await smokeIn(dir);
+
+      expect(first.outcome.summary).toMatch(
+        /^Served by `boardsmith dev` from a fresh start and dealt from seed "plain", then from seed "4", a seated player took "draw", "play", "showAce" and pressed \d+ board controls?, with no error\./,
+      );
+      expect(first.outcome.passed).toBe(true);
+      // The steps name the cards each choice pressed, so the same steps are the same deals walked the same way.
+      expect(first.steps).toContain('smoke: dealing a game from seed "plain"');
+      expect(first.steps.some((line) => /pressing "[^"]+" for "play"/.test(line))).toBe(true);
+      expect(second.steps).toEqual(first.steps);
+    },
+  );
+
+  it('#460: fails a walk whose only deal does not offer a listed action, saying to choose a seed whose deal does', async () => {
+    const { outcome } = await smokeOf(false, {
+      ...aceGame(),
+      'tests/browser/smoke.spec.ts': smokeSpec(['draw', 'play', 'showAce'], undefined, { seed: ACE_SEEDS.WITHOUT, steps: 20 }),
+    });
+
+    expect(outcome.passed).toBe(false);
+    expect(outcome.summary).toMatch(
+      /^The smoke walk, dealt from seed "plain", found a problem: - The walk never saw "showAce" offered in 20 steps from a fresh game dealt from seed "plain"\. .*choose a seed whose deal offers it, and list it in `seed` there\./,
+    );
+  });
+
+  it('#460: fails a world spec that names a seed, since `boardsmith dev` deals a world from its own', async () => {
+    const { outcome } = await smokeOf(true, { 'tests/browser/smoke.spec.ts': smokeSpec(['tend'], undefined, { seed: '7' }) });
+
+    expect(outcome.passed).toBe(false);
+    expect(outcome.summary).toBe(
+      'The smoke walk found a problem: - This game is a persistent world, which `boardsmith dev` deals from the one seed it ' +
+        'gives that world, so `seed` in tests/browser/smoke.spec.ts cannot choose its deal. Remove `seed` there.',
+    );
+  });
+
+  it('#460: says a walk that stopped because nothing was offered for a while stopped for that, not for want of steps', async () => {
+    // A world's plot has two rows that each grow five times, so after ten tends nothing is offered
+    // until the clock ripens them, ten minutes on. "harvest" is listed and the world never offers it.
+    const { outcome } = await smokeOf(true, { 'tests/browser/smoke.spec.ts': smokeSpec(['tend', 'harvest']) });
+
+    expect(outcome.passed).toBe(false);
+    expect(outcome.summary).toMatch(
+      /- The walk never saw "harvest" offered\. It stopped at step \d+, because no seat had been offered anything for 30s, so more `steps` would not help\./,
+    );
+    expect(outcome.summary).not.toMatch(/raise `steps`/);
   });
 
   it('fails a spec that passes without walking the game', async () => {

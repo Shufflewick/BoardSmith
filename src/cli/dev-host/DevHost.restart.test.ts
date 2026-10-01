@@ -240,6 +240,48 @@ describe('DevHost — broadcast toast on restart', () => {
   });
 });
 
+// ── Dealing from a seed (#460) ───────────────────────────────────────────────
+//
+// Table setup shows the seed the game on screen was dealt from, and deals a new
+// game from a seed typed there: how a designer plays a deal again, and how the
+// smoke walk deals the same game on every run.
+describe('DevHost — dealing from a seed (#460)', () => {
+  async function openTableSetup(wrapper: VueWrapper): Promise<void> {
+    await wrapper.findAll('[data-testid="table-setup-toggle"]')[0].trigger('click');
+    await wrapper.vm.$nextTick();
+  }
+
+  it('Table setup shows the seed of the game on screen, once its state has arrived', async () => {
+    const wrapper = await mountAndActivate();
+    await openTableSetup(wrapper);
+    expect(wrapper.find('[data-testid="game-seed"]').text()).toBe('');
+
+    mockWsInstance!.simulateMessage({ type: 'game_state', view: {}, isComplete: false, winners: [], seed: 'opening' });
+    await wrapper.vm.$nextTick();
+
+    expect(wrapper.find('[data-testid="game-seed"]').text()).toBe('opening');
+  });
+
+  it('deals a new game from the seed typed there, and shows no seed until that game arrives', async () => {
+    const wrapper = await mountAndActivate();
+    await openTableSetup(wrapper);
+    const ws = mockWsInstance!;
+    ws.simulateMessage({ type: 'game_state', view: {}, isComplete: false, winners: [], seed: 'opening' });
+    ws.send.mockClear();
+
+    await wrapper.find('[data-testid="deal-seed"]').setValue('scoring-deal');
+    await wrapper.find('[data-testid="deal-form"]').trigger('submit');
+
+    const frames = ws.send.mock.calls.map((c) => JSON.parse(c[0] as string));
+    expect(frames).toEqual([{ type: 'restart', seed: 'scoring-deal' }]);
+    // The game on screen is still the old one until the new one's state arrives.
+    expect(wrapper.find('[data-testid="game-seed"]').text()).toBe('');
+    ws.simulateMessage({ type: 'game_state', view: {}, isComplete: false, winners: [], seed: 'scoring-deal' });
+    await wrapper.vm.$nextTick();
+    expect(wrapper.find('[data-testid="game-seed"]').text()).toBe('scoring-deal');
+  });
+});
+
 // ── A new game clears an error about the old one (#343) ──────────────────────
 //
 // A rules reload that cannot carry a game across tells every page, and the way

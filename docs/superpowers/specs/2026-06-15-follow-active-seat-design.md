@@ -143,10 +143,12 @@ and action panel. Parity is preserved by reuse.
   rebuild `aiSeats`, `resumeAI()` — never leave the game stuck on a gone client.
 - **Game over / execute blocks**: `activeSeats()` empty → follower sees
   own-seat/final state; toggle still functions.
-- **Restart**: resets follow-mode (fresh game = clean slate). The host clears
-  the follower and echoes `{ follow, enabled: false }` so the toolbar untoggles;
-  the agent re-enables it if it wants to drive the new game. Simpler and
-  less error-prone than re-pausing AI mid-(re)start.
+- **Restart**: follow-mode carries over (#460, which replaced the earlier
+  clean-slate reset). The new game builds no bot seats while a follower drives,
+  so no bot moves in it before the follower can, and the follower is shown the
+  seat that is due. That is what lets the smoke walk deal a game from a seed and
+  play it the same way on every run. A configure that removes the follower's
+  seat ends follow-mode, and the seats left go to their bots.
 - **Simultaneous-action steps** (`dueSeats` returns multiple): follower acts
   for the first due seat; it completes; the next becomes effective. Multiple
   `init` flips, correct result.

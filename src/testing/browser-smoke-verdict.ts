@@ -17,6 +17,44 @@ export const SMOKE_ANNOTATION = 'boardsmith-smoke';
 /** The fewest words a declared action's reason may have: a sentence, not a label. */
 const REASON_MIN_WORDS = 4;
 
+/**
+ * The seed a table's walk deals from when the spec names none (#460), so every run walks the same
+ * game and any failure can be walked again with `boardsmith smoke`.
+ */
+export const DEFAULT_SMOKE_SEED = 'smoke';
+
+/**
+ * The seeds a walk deals from, in order: the spec's `seed`, one seed or a list of them, else
+ * {@link DEFAULT_SMOKE_SEED}. Throws, saying what to write instead, on an empty list, a blank seed
+ * or a seed listed twice.
+ */
+export function smokeSeeds(seed: string | readonly string[] | undefined): string[] {
+  const seeds = seed === undefined ? [DEFAULT_SMOKE_SEED] : typeof seed === 'string' ? [seed] : [...seed];
+  if (seeds.length === 0) {
+    throw new Error(
+      `\`seed\` in ${SMOKE_SPEC_PATH} is an empty list, so the walk would deal no game. List at least one seed, or leave ` +
+        `\`seed\` out to deal from "${DEFAULT_SMOKE_SEED}".`,
+    );
+  }
+  if (seeds.some((s) => s.trim() === '')) {
+    throw new Error(`\`seed\` in ${SMOKE_SPEC_PATH} has a blank seed. A seed is any text that is not blank, such as "7" or "opening".`);
+  }
+  const twice = seeds.find((s, i) => seeds.indexOf(s) !== i);
+  if (twice !== undefined) {
+    throw new Error(`\`seed\` in ${SMOKE_SPEC_PATH} lists "${twice}" twice, which walks the same deal twice. List each seed once.`);
+  }
+  return seeds;
+}
+
+/** Where a walk stopped because no seat was offered anything for `seconds`. */
+export interface SmokeStall {
+  /** The step it stopped at, counted within its deal. */
+  readonly step: number;
+  /** The seed the game it stopped in was dealt from; null in a world, which `boardsmith dev` deals itself. */
+  readonly seed: string | null;
+  readonly seconds: number;
+}
+
 /** What a walk saw. */
 export interface SmokeWalk {
   /** The actions the spec lists. */
@@ -33,13 +71,47 @@ export interface SmokeWalk {
   readonly enabled: Set<string>;
   /** Every action taken and resolved without failing. */
   readonly taken: Set<string>;
-  /** The most actions the walk would take. */
+  /** The most actions the walk would take on each deal. */
   readonly steps: number;
   /** Every error the page showed, in the order it showed them. */
   readonly errors: string[];
+  /** The seeds the spec's deals were dealt from, in order (#460); none in a world. */
+  readonly seeds: string[];
+  /** Every deal the walk stopped early because no seat was offered anything. */
+  readonly stalls: SmokeStall[];
 }
 
 const quoted = (names: readonly string[]) => names.map((n) => `"${n}"`).join(', ');
+
+/** "dealt from seed "a", then from seed "b"", or the empty string for a world, which names no seed. */
+function dealtFrom(seeds: readonly string[], then = 'then'): string {
+  return seeds.length === 0 ? '' : `dealt from ${seeds.map((seed) => `seed "${seed}"`).join(`, ${then} from `)}`;
+}
+
+/** Why the walk never saw a listed action offered, and what to do about it. */
+function neverOffered(walk: SmokeWalk, name: string): string {
+  const [stall] = walk.stalls;
+  if (stall !== undefined) {
+    const where = stall.seed === null ? `step ${stall.step}` : `step ${stall.step} of the game dealt from seed "${stall.seed}"`;
+    return (
+      `The walk never saw "${name}" offered. It stopped at ${where}, because no seat had been offered anything for ` +
+      `${stall.seconds}s, so more \`steps\` would not help. Run \`boardsmith smoke\` to watch where the game stops offering ` +
+      'actions: a step no seat can act in, or one waiting on something no player does. Fix that, then run it again.'
+    );
+  }
+  const deals = walk.seeds.length === 0 ? '' : ` ${dealtFrom(walk.seeds, 'nor')}`;
+  const chooseASeed =
+    walk.seeds.length === 0
+      ? ''
+      : ' If the deal decides whether it is offered (the cards a player is dealt, say), choose a seed whose deal offers it, ' +
+        'and list it in `seed` there.';
+  return (
+    `The walk never saw "${name}" offered in ${walk.steps} steps from a fresh game${deals}. If a fresh game takes ` +
+    `longer to reach it, raise \`steps\` in ${SMOKE_SPEC_PATH}.${chooseASeed} If no walk from a fresh game can reach it ` +
+    `${walk.seeds.length === 0 ? '' : 'whatever the deal '}(it needs a long game, or a position play does not get to), name ` +
+    'it in `unreachable` there with the reason. If the game no longer has it, remove it from `actions`.'
+  );
+}
 
 /** Whether the spec declares `name` out of reach and the walk never saw it enabled, so it is not required. */
 function excused(walk: SmokeWalk, name: string): boolean {
@@ -93,17 +165,26 @@ export function smokeProblems(walk: SmokeWalk): string[] {
     problems.push(
       walk.offered.has(name)
         ? `The panel offered "${name}", but the walk never took it in ${walk.steps} steps. The errors above, if any, say why.`
-        : `The walk never saw "${name}" offered in ${walk.steps} steps from a fresh game. If a fresh game takes longer ` +
-            `to reach it, raise \`steps\` in ${SMOKE_SPEC_PATH}. If no walk from a fresh game can reach it (it needs a long ` +
-            `game, or a position play does not get to), name it in \`unreachable\` there with the reason. If the game no ` +
-            `longer has it, remove it from \`actions\`.`,
+        : neverOffered(walk, name),
     );
   }
   return problems;
 }
 
+/**
+ * What a walk that found `problems` fails with: the seeds it was dealt from first, so the failure
+ * can be walked again exactly with `boardsmith smoke`, then each problem on its own line.
+ */
+export function smokeFailure(walk: SmokeWalk, problems: readonly string[]): string {
+  const dealt = walk.seeds.length === 0 ? '' : `, ${dealtFrom(walk.seeds)},`;
+  const found = problems.length === 1 ? 'a problem' : `${problems.length} problems`;
+  return `The smoke walk${dealt} found ${found}:\n${problems.map((p) => `  - ${p}`).join('\n')}`;
+}
+
 /** What a passing walk did, as `boardsmith verify` reports it. */
 export interface SmokeRecord {
+  /** The seeds the spec's deals were dealt from, in order; none in a world. */
+  readonly seeds: string[];
   /** The actions taken, sorted. */
   readonly taken: string[];
   /** How many board controls were pressed. */
@@ -120,6 +201,7 @@ export interface SmokeRecord {
 export function smokeRecord(walk: SmokeWalk, played: { controls: number; games: number }): SmokeRecord {
   const declared = Object.keys(walk.unreachable).sort();
   return {
+    seeds: [...walk.seeds],
     taken: [...walk.taken].sort(),
     controls: played.controls,
     games: played.games,
@@ -134,8 +216,10 @@ export function smokeRecord(walk: SmokeWalk, played: { controls: number; games: 
 export function smokeSummary(record: SmokeRecord): string {
   const took = record.taken.length === 0 ? 'no action' : quoted(record.taken);
   const pressed = `${record.controls} board control${record.controls === 1 ? '' : 's'}`;
+  const deals = Math.max(1, record.seeds.length);
   const games =
-    record.games > 1 ? `, over ${record.games} games (a new one each time a game ended with listed actions still to take)` : '';
+    record.games > deals ? `, over ${record.games} games (a new one each time a game ended with listed actions still to take)` : '';
+  const dealt = record.seeds.length === 0 ? '' : ` and ${dealtFrom(record.seeds)}`;
   const excused =
     record.excused.length > 0
       ? ` Not required, as ${SMOKE_SPEC_PATH} says a walk from a fresh game cannot reach them: ` +
@@ -147,5 +231,5 @@ export function smokeSummary(record: SmokeRecord): string {
         `reach: remove ${record.reachedAnyway.length === 1 ? 'it' : 'them'} from \`unreachable\` there, so the walk requires ` +
         `${record.reachedAnyway.length === 1 ? 'it' : 'them'}.`
       : '';
-  return `Served by \`boardsmith dev\` from a fresh start, a seated player took ${took} and pressed ${pressed}, with no error${games}.${excused}${reached}`;
+  return `Served by \`boardsmith dev\` from a fresh start${dealt}, a seated player took ${took} and pressed ${pressed}, with no error${games}.${excused}${reached}`;
 }
