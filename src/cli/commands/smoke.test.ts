@@ -10,11 +10,12 @@ import { once } from 'node:events';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { REPO_ROOT } from '../spawn-cli.test-helper.js';
 import { writeFiles } from '../lib/verify-result.test-helper.js';
+import { SMOKE_SEEDS_ENV } from '../../testing/browser-smoke-verdict.js';
 import { browserProblem, playwrightConfig, runSmoke } from './smoke.js';
 import { isRunning, smokeProject } from './smoke-project.test-helper.js';
 import {
@@ -38,6 +39,8 @@ import {
 } from './smoke-fixtures.test-helper.js';
 
 vi.setConfig({ testTimeout: 300_000, hookTimeout: 120_000 });
+
+afterEach(() => vi.unstubAllEnvs());
 
 const quiet = () => {};
 
@@ -214,7 +217,10 @@ describe('boardsmith verify: the smoke check', () => {
     expect(outcome.passed).toBe(true);
   });
 
-  it('#460: fails a walk whose only deal does not offer a listed action, saying to choose a seed whose deal does', async () => {
+  it('#460: fails a walk whose only deal does not offer a listed action, saying to choose a seed whose deal does, and deals from the spec\'s seed whatever seeds the environment names', async () => {
+    // A `boardsmith smoke --seed` run hands its walk the seeds in this variable; a check run inside
+    // it (a game's own test suite running `boardsmith verify`, say) must not inherit them.
+    vi.stubEnv(SMOKE_SEEDS_ENV, JSON.stringify([ACE_SEEDS.WITH]));
     const { outcome } = await smokeOf(false, {
       ...aceGame(),
       'tests/browser/smoke.spec.ts': smokeSpec(['draw', 'play', 'showAce'], undefined, { seed: ACE_SEEDS.WITHOUT, steps: 20 }),

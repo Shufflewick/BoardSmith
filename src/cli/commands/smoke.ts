@@ -127,10 +127,18 @@ class Started {
     process.on('SIGTERM', this.onSignal);
   }
 
-  /** Starts `args` under this Node, with `env` added to this process's, keeping its output. Refuses once the run was interrupted. */
-  spawn(args: string[], cwd: string, env: Record<string, string> = {}): { child: ChildProcess; output: () => string } {
+  /**
+   * Starts `args` under this Node, with `env` added to this process's environment (a name given
+   * undefined is kept from the child), keeping its output. Refuses once the run was interrupted.
+   */
+  spawn(args: string[], cwd: string, env: Record<string, string | undefined> = {}): { child: ChildProcess; output: () => string } {
     if (this.interruptedBy !== undefined) throw new Error(`The smoke check was interrupted (${this.interruptedBy}).`);
-    const child = spawn(process.execPath, args, { cwd, stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, FORCE_COLOR: '0', ...env } });
+    const environment: NodeJS.ProcessEnv = { ...process.env, FORCE_COLOR: '0' };
+    for (const [name, value] of Object.entries(env)) {
+      if (value === undefined) delete environment[name];
+      else environment[name] = value;
+    }
+    const child = spawn(process.execPath, args, { cwd, stdio: ['ignore', 'pipe', 'pipe'], env: environment });
     this.children.push(child);
     return { child, output: collectOutput(child) };
   }
@@ -399,7 +407,9 @@ async function runWalk(
 ): Promise<SmokeOutcome> {
   const configPath = join(work, 'playwright.config.mjs');
   await fs.writeFile(configPath, playwrightConfig(work, baseURL));
-  const env: Record<string, string> = seeds === undefined ? {} : { [SMOKE_SEEDS_ENV]: JSON.stringify(seeds) };
+  // The walk reads its seeds from this variable alone, so a run with none to hand it must not let it
+  // inherit another run's: a check run inside a `boardsmith smoke --seed` deals from the spec's seeds.
+  const env = { [SMOKE_SEEDS_ENV]: seeds === undefined ? undefined : JSON.stringify(seeds) };
   const walk = started.spawn([join(playwrightTestDir(), 'cli.js'), 'test', '--config', configPath], copy, env);
   walk.child.stdout?.on('data', (chunk: Buffer) => chunk.toString().split('\n').filter(Boolean).forEach(log));
   const [code] = (await once(walk.child, 'exit')) as [number | null];
