@@ -392,7 +392,10 @@ async function readOffers(frame: Frame, walk: SmokeWalk): Promise<Offers> {
  * and how it was found, so it can be found again just before it is pressed (`stillThere`).
  */
 interface Control extends PageControl {
+  /** The control's own element: marked, once `stillThere` has found it again for a press. */
   readonly target: Locator;
+  /** The element at the control's place among the matches when it was last found. */
+  readonly placed: Locator;
   readonly frame: Frame;
   readonly selector: string;
   readonly within: Locator | undefined;
@@ -407,6 +410,7 @@ async function controlsOf(frame: Frame, selector: string, within?: Locator): Pro
   return (await visible.evaluateAll(pageControls)).map((control) => ({
     ...control,
     target: visible.nth(control.index),
+    placed: visible.nth(control.index),
     frame,
     selector,
     within,
@@ -428,7 +432,9 @@ async function stillThere(control: Control): Promise<Control> {
     const visible = (within ?? frame).locator(selector).filter({ visible: true });
     const now = await visible.evaluateAll(pageControls, { key: control.key, index: control.index, mark });
     const same = now.find((c) => c.marked);
-    if (same !== undefined) return { ...same, target: frame.locator(`[${PRESS_MARK}="${mark}"]`), frame, selector, within };
+    if (same !== undefined) {
+      return { ...same, target: frame.locator(`[${PRESS_MARK}="${mark}"]`), placed: visible.nth(same.index), frame, selector, within };
+    }
     if (Date.now() - started > PRESS_MS) throw new Error(GONE);
     await frame.waitForTimeout(100);
   }
@@ -471,7 +477,9 @@ async function whyNotPressed(target: Locator, error: unknown): Promise<string> {
 
 /** Clicks `control` with Playwright, which waits for it to be visible, still and on top; a toast on top is an {@link UnderAToast}. */
 async function click(control: Control): Promise<void> {
-  await control.target.click({ timeout: PRESS_MS }).catch((error: unknown) => {
+  // By its place, found a moment ago: Playwright finds the element there again at each of its own
+  // tries, so a panel that redraws its buttons as new elements does not leave it waiting for one gone.
+  await control.placed.click({ timeout: PRESS_MS }).catch((error: unknown) => {
     const toast = error instanceof Error && /class="[^"]*\btoast\b[^"]*"[^\n]*intercepts pointer events/.test(error.message);
     throw toast ? new UnderAToast(COVERED) : error;
   });
@@ -489,11 +497,19 @@ async function click(control: Control): Promise<void> {
  * pressable, is reported and the walk goes on. Returns whether the press landed.
  */
 async function press(control: Control, what: string, walk: SmokeWalk, memory: WalkMemory): Promise<boolean> {
+  // A page that redraws the control as a new element mid-press takes away the element marked for
+  // it, so the walk finds it again and presses that, for PRESS_MS in all.
   const pressIt = async () => {
-    const now = await stillThere(control);
-    if (now.keyboardOnly) return now.target.press('Enter', { timeout: PRESS_MS });
-    if (now.candidate) return aimAndClick(now);
-    return now.onBoard ? clickWhereReachable(now) : click(now);
+    const deadline = Date.now() + PRESS_MS;
+    for (;;) {
+      const now = await stillThere(control);
+      try {
+        return await pressOnce(now);
+      } catch (error) {
+        const lost = !(error instanceof UnderAToast) && (await now.target.count()) === 0;
+        if (!lost || Date.now() > deadline) throw error;
+      }
+    }
   };
   try {
     await pressIt().catch(async (error: unknown) => {
@@ -512,6 +528,13 @@ async function press(control: Control, what: string, walk: SmokeWalk, memory: Wa
   }
 }
 
+/** One attempt at pressing `control`, as `press` describes. */
+function pressOnce(control: Control): Promise<void> {
+  if (control.keyboardOnly) return control.target.press('Enter', { timeout: PRESS_MS });
+  if (control.candidate) return aimAndClick(control);
+  return control.onBoard ? clickWhereReachable(control) : click(control);
+}
+
 /** The longest a toast stays: an error toast goes after 4 seconds. */
 const TOAST_WAIT_MS = 8_000;
 
@@ -527,6 +550,12 @@ const AIM_POINTS: ReadonlyArray<readonly [number, number]> = [
 
 /** What lies on top at a point of a control: the control itself, a toast, or something else. */
 type OnTop = 'it' | 'toast' | 'other';
+
+/**
+ * How long one look at a control the walk is pointing at may wait for it: one that went away is
+ * found again by `press` while its time lasts, rather than waited on.
+ */
+const LOOK_MS = 1_000;
 
 /** What lies on top at fractions (x, y) of `control`'s box, scrolled into view where it shows. */
 function onTopAt(control: Control, x: number, y: number): Promise<OnTop> {
@@ -544,13 +573,13 @@ function onTopAt(control: Control, x: number, y: number): Promise<OnTop> {
       return hit?.closest('.toast') ? 'toast' : 'other';
     },
     [x, y] as const,
-    { timeout: PRESS_MS },
+    { timeout: LOOK_MS },
   );
 }
 
 /** Where fractions (x, y) of `control`'s box are on the page. */
 async function placeOf(control: Control, x: number, y: number): Promise<{ x: number; y: number }> {
-  const box = await control.target.boundingBox({ timeout: PRESS_MS });
+  const box = await control.target.boundingBox({ timeout: LOOK_MS });
   if (box === null) throw new Error(GONE);
   return { x: box.x + box.width * x, y: box.y + box.height * y };
 }
