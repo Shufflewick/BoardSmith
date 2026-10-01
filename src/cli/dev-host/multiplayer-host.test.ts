@@ -80,6 +80,12 @@ function makeAltHost() {
   return { host, sent, to, has, lastOfType, pass, clear: () => (sent.length = 0) };
 }
 
+/** The follower `A` is acting as seat 2, which is due, and sees that seat's own view. */
+function expectFollowingSeatTwo(lastOfType: ReturnType<typeof makeAltHost>['lastOfType']): void {
+  expect(lastOfType('A', 'init').seat).toBe(2);
+  expect((lastOfType('A', 'game_state').view as any).state.isMyTurn).toBe(true);
+}
+
 function makeHost(opts: { designatedBotSeats?: number[] } = {}) {
   const sent: Array<{ clientId: string; msg: HostOutbound }> = [];
   const host = new MultiplayerHost({
@@ -396,8 +402,7 @@ describe('MultiplayerHost — follow active seat', () => {
     // Follow is restored: A is told follow is on and re-shown the ACTIVE seat (2),
     // with seat 2's own view (isMyTurn true) — not its own seat 1.
     expect(lastOfType('A', 'follow')).toMatchObject({ enabled: true, seat: 2 });
-    expect(lastOfType('A', 'init').seat).toBe(2);
-    expect((lastOfType('A', 'game_state').view as any).state.isMyTurn).toBe(true);
+    expectFollowingSeatTwo(lastOfType);
   });
 
   it('explicitly leaving ends follow-mode', async () => {
@@ -408,19 +413,21 @@ describe('MultiplayerHost — follow active seat', () => {
     expect(lastOfType('A', 'follow')).toMatchObject({ enabled: false });
   });
 
-  it('#460: follow-mode survives a restart: no bot acts in the new game, and the follower is shown the seat that is due', async () => {
+  it.each([
+    ['a restart', { type: 'restart' }],
+    ['a configure restart', { type: 'configure', gameOptions: {} }],
+  ] as const)('#460: follow-mode survives %s: no bot acts in the new game, and the follower is shown the seat that is due', async (_, message) => {
     const { host, lastOfType, pass, has, clear } = makeAltHost();
     await host.handleMessage('A', { type: 'hello' });
     await host.handleMessage('A', { type: 'follow', enabled: true });
     clear();
-    await host.handleMessage('A', { type: 'restart' });
+    await host.handleMessage('A', message);
 
     expect(has('A', 'follow')).toBe(false);
     // A passes as seat 1; with a bot on seat 2 the game would now be over.
     await pass('A', 'r1');
     expect(lastOfType('A', 'game_state').isComplete).toBe(false);
-    expect(lastOfType('A', 'init').seat).toBe(2);
-    expect((lastOfType('A', 'game_state').view as any).state.isMyTurn).toBe(true);
+    expectFollowingSeatTwo(lastOfType);
   });
 
   it('#460: a configure that removes the follower\'s seat ends follow-mode, so the bots drive the seats left', async () => {
@@ -431,17 +438,6 @@ describe('MultiplayerHost — follow active seat', () => {
     await host.handleMessage('A', { type: 'configure', gameOptions: { playerCount: 1 } });
 
     expect(lastOfType('A', 'follow')).toMatchObject({ enabled: false });
-  });
-
-  it('#460: follow-mode survives a configure restart too, with no bot rebuilt under the follower', async () => {
-    const { host, lastOfType, pass } = makeAltHost();
-    await host.handleMessage('A', { type: 'hello' });
-    await host.handleMessage('A', { type: 'follow', enabled: true });
-    await host.handleMessage('A', { type: 'configure', gameOptions: {} });
-
-    await pass('A', 'r1');
-    expect(lastOfType('A', 'game_state').isComplete).toBe(false);
-    expect(lastOfType('A', 'init').seat).toBe(2);
   });
 
   it('with a SECOND human seated, the follower still borrows the active seat', async () => {

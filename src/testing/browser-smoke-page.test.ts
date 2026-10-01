@@ -24,7 +24,8 @@ function page(html: string): Element[] {
 }
 
 const buttons = (elements: Element[]) => elements.filter((e) => e.matches('button, [role="button"]'));
-const dialogs = (elements: Element[]) => elements.filter((e) => e.matches('[aria-modal], dialog'));
+// jsdom cannot match `dialog:modal`, so these pages hold `aria-modal` dialogs only.
+const dialogs = (elements: Element[]) => elements.filter((e) => e.matches('[aria-modal="true"]'));
 
 describe('pageControls', () => {
   it('reads each control by its label, its game element when it has one, and whether it can be pressed', () => {
@@ -85,8 +86,7 @@ describe('pageDialogs', () => {
     const elements = page(`
       <div role="dialog" aria-modal="true" aria-label="Red discards"><button>Close</button></div>
       <div role="dialog" aria-modal="true" aria-labelledby="rules-title"><h2 id="rules-title">The rules</h2></div>
-      <div role="dialog" aria-modal="true"><h3>Settings</h3></div>
-      <div role="dialog"><button>Not modal</button></div>`);
+      <div role="dialog" aria-modal="true"><h3>Settings</h3></div>`);
     expect(pageDialogs(dialogs(elements))).toEqual([
       { index: 0, name: 'Red discards' },
       { index: 1, name: 'The rules' },

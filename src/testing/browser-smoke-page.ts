@@ -63,18 +63,19 @@ interface PageDialog {
   readonly name: string;
 }
 
+/** The open modal dialogs on a page: an `aria-modal="true"` dialog, or a `<dialog>` shown modally. */
+export const MODAL_DIALOGS = '[aria-modal="true"], dialog:modal';
+
 /**
- * The modal dialogs among `elements` that are open, in order, so the last is the one on top: an
- * `aria-modal="true"` dialog, or a `<dialog>` shown modally. While one is open a player can reach
- * only what is inside it (#461). The game-over card is a modal too, but the walk sees it as the game
- * ending (#462), so it is not one of these.
+ * The open modal dialogs among `elements` (matches of {@link MODAL_DIALOGS}), in order, so the last
+ * is the one on top, each with its name. While one is open a player can reach only what is inside it
+ * (#461). The game-over card is a modal too, but the walk sees it as the game ending (#462), so it
+ * is not one of these.
  */
 export function pageDialogs(elements: Element[]): PageDialog[] {
   const found: PageDialog[] = [];
   elements.forEach((element, index) => {
     if (element.closest('.game-over-card') !== null) return;
-    const modal = element.getAttribute('aria-modal') === 'true' || (element.tagName === 'DIALOG' && element.matches(':modal'));
-    if (!modal) return;
     const labelledBy = element.ownerDocument.getElementById(element.getAttribute('aria-labelledby') ?? '');
     const heading = element.querySelector('h1, h2, h3, h4, h5, h6');
     const name = element.getAttribute('aria-label') ?? (labelledBy ?? heading)?.textContent ?? '';

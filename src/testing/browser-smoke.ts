@@ -33,7 +33,7 @@
  * @module
  */
 import { test, type Frame, type Locator, type Page } from '@playwright/test';
-import { numberToEnter, pageControls, pageDialogs, type PageControl } from './browser-smoke-page.js';
+import { MODAL_DIALOGS, numberToEnter, pageControls, pageDialogs, type PageControl } from './browser-smoke-page.js';
 import {
   answered,
   DEFAULT_SMOKE_SEED,
@@ -580,7 +580,7 @@ async function pressAnUntriedControl(frame: Frame, walk: SmokeWalk, memory: Walk
 
 /** The open modal dialog on top, if any (`pageDialogs`), and the locator that reaches it. */
 async function openDialog(frame: Frame): Promise<{ name: string; target: Locator } | undefined> {
-  const dialogs = frame.locator('[aria-modal="true"], dialog').filter({ visible: true });
+  const dialogs = frame.locator(MODAL_DIALOGS).filter({ visible: true });
   const top = (await dialogs.evaluateAll(pageDialogs)).at(-1);
   return top === undefined ? undefined : { name: top.name, target: dialogs.nth(top.index) };
 }
