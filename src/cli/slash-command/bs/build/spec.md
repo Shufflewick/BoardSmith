@@ -72,7 +72,15 @@ chunk adds each new action's name to `actions` in the game's `tests/browser/smok
 game with `boardsmith dev` and walks it in Chromium: a seated player takes every action the panel
 offers and presses every control on the board, and the check fails on any page or console error,
 any offered action that fails, an offered action the spec does not list, and a listed one the walk
-never takes. A board test mounts with `renderAsSeat`, `tableShellContext` or `worldShellContext`
+never takes. At a table the walk acts for every seat in turn, and starts a new game when one ends
+with listed actions still to take. An action no walk from a fresh game can reach (offered only in a
+position play does not get to, such as a draw by threefold repetition) stays in `actions`, and the
+chunk names it in `unreachable` as well, with a sentence saying why: `unreachable: { claimDraw:
+'Offered only after a threefold repetition, which a walk never plays.' }`. An action that ends the
+game, or that needs another seat to act first, is not one: the walk reaches both. Once the walk
+sees a declared action enabled, it must take it like any other, so a declaration never hides an
+offered action that does nothing; when it takes a declared action anyway, its summary says so:
+remove the declaration. A board test mounts with `renderAsSeat`, `tableShellContext` or `worldShellContext`
 (boardsmith/testing), never with game-context keys provided by hand: `test-step-check` reports a
 test that provides a key only one of the two shells provides.
 

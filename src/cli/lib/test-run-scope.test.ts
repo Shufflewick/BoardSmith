@@ -61,8 +61,10 @@ describe('a scaffolded project leaves chunk worktrees and the browser smoke test
       await writeTree(project, {
         'tests/ok.test.ts': OK_TEST,
         '.boardsmith/worktrees/x/tests/wip.test.ts': WIP_TEST,
-        // The in-browser smoke test runs under Playwright only (#453); vitest must not collect it.
+        // The in-browser smoke test runs under Playwright only (#453); vitest must not collect it,
+        // nor a copy of it in a git worktree kept inside the project.
         'tests/browser/smoke.spec.ts': WIP_TEST,
+        '.worktrees/x/tests/browser/smoke.spec.ts': WIP_TEST,
       });
       await fs.symlink(INSTALLED_MODULES, join(project, 'node_modules'), 'dir');
 
@@ -117,7 +119,7 @@ describe('testRunScopeProblem', () => {
 
     const dir = await project({ 'vitest.config.ts': carriesOnlyWorktrees, 'tests/browser/smoke.spec.ts': '' });
     const problem = await testRunScopeProblem(dir);
-    expect(problem).toMatch(/vitest\.config\.ts does not leave tests\/browser\/ out.*Playwright.*'tests\/browser\/\*\*'/s);
+    expect(problem).toMatch(/vitest\.config\.ts does not leave tests\/browser\/ out.*Playwright.*'\*\*\/tests\/browser\/\*\*'/s);
 
     const fixed = await project({
       'vite.config.ts': 'export default {};\n',
@@ -125,6 +127,18 @@ describe('testRunScopeProblem', () => {
       'tests/browser/smoke.spec.ts': '',
     });
     expect(await testRunScopeProblem(fixed)).toBeUndefined();
+  });
+
+  it('names a config that leaves out only the top-level tests/browser/, and gives the exact glob that replaces it', async () => {
+    const dir = await project({
+      'vitest.config.ts': "export default { test: { exclude: ['.boardsmith/**', 'tests/browser/**'] } };\n",
+      'tests/browser/smoke.spec.ts': '',
+    });
+    expect(await testRunScopeProblem(dir)).toBe(
+      "vitest.config.ts leaves out only the project's own tests/browser/, so vitest still collects the smoke test in a git " +
+        "worktree kept inside the project (.worktrees/<name>/tests/browser/). In its `test.exclude`, replace 'tests/browser/**' " +
+        "with '**/tests/browser/**', then run this again.",
+    );
   });
 
   it('points a project with no exclusion anywhere at boardsmith doctor --fix', async () => {

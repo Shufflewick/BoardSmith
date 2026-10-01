@@ -683,11 +683,19 @@ export function generateSmokeSpecTs(actions: readonly string[]): string {
 // The in-browser smoke test. \`boardsmith verify\` (and \`boardsmith smoke\`) serves this game with
 // \`boardsmith dev\` from a fresh start and walks it in Chromium: a player takes a seat, takes every
 // action the action panel offers and presses every control on the board, and any page error,
-// console error, failed request or failed action fails it.
+// console error, failed request or failed action fails it. At a table the walk acts for every seat
+// in turn, and starts a new game when one ends with listed actions still to take.
 //
 // \`actions\` lists every action a player can take, by the name the rules give it. The walk must
 // take each one, and fails on one the game offers that is not listed here: add an action here in
-// the same change that adds it to the rules.
+// the same change that adds it to the rules. An action no walk from a fresh game can reach (one
+// offered only in a position play does not get to, such as a draw by repetition) stays listed and
+// is also named in \`unreachable\`, with a sentence saying why:
+//
+//   unreachable: { claimDraw: 'Offered only after a threefold repetition, which a walk never plays.' },
+//
+// The walk does not require it while it never sees it enabled. Once it is offered enabled, the walk
+// must take it like any other, and if it does, it says so: remove the declaration then.
 defineSmokeTest({
   actions: [${actions.map((name) => `'${name}'`).join(', ')}],
 });

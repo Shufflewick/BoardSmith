@@ -5,16 +5,22 @@
  * (and `boardsmith smoke`) serves the game with `boardsmith dev` from a fresh state and runs that
  * file in Chromium, where the walk:
  *
- *   1. opens the dev host and takes a seat, at a table or in a world, as a player's browser does;
+ *   1. opens the dev host and takes a seat, at a table or in a world, as a player's browser does. At
+ *      a table it then follows the active seat (the dev host's "Follow active seat"), so it acts
+ *      for every seat in turn and reaches an action one seat has only after another acts;
  *   2. takes every action the action panel offers, following the panel's own offers so it keeps
  *      up with the game: it answers each choice the panel asks for, pressing the board's own
- *      candidate for a pick the board shows, and presses every other control on the board once;
- *   3. fails on any uncaught error in the page, any console error, any failed request to the dev
+ *      candidate for a pick the board shows, and presses every other control on the board once,
+ *      from the keyboard when the control is invisible and takes no pointer;
+ *   3. starts a new game when a game ends with listed actions still to take, and stops taking an
+ *      action again once taking it has ended every game it was taken in;
+ *   4. fails on any uncaught error in the page, any console error, any failed request to the dev
  *      host, and any offered action that then fails, and on an action the game offers that the
  *      spec does not list, or one it lists that the walk never took.
  *
  * A game with no actions yet lists none, and its walk still loads, seats a player and fails on
- * any error. Each chunk that adds an action adds its name to `actions`.
+ * any error. Each chunk that adds an action adds its name to `actions`, and names it in
+ * `unreachable` too, with the reason, when no walk from a fresh game can reach it.
  *
  * This file runs under Playwright, never under vitest. `boardsmith verify` bundles the spec with
  * this module, so the game needs no Playwright of its own: it imports only this module.
@@ -22,15 +28,24 @@
  * @module
  */
 import { test, type Frame, type Locator, type Page } from '@playwright/test';
-import { SMOKE_ANNOTATION, smokeProblems, type SmokeWalk } from './browser-smoke-verdict.js';
+import { requiredUntaken, SMOKE_ANNOTATION, smokeProblems, smokeRecord, type SmokeWalk } from './browser-smoke-verdict.js';
 
 export interface SmokeTestOptions {
   /**
    * Every action a player can take in this game, by the name its rules give it. The walk must take
-   * each one at least once, and fails on an action the game offers that is not listed here. The
-   * chunk that adds an action adds its name here.
+   * each one at least once, unless {@link unreachable} names it, and fails on an action the game
+   * offers that is not listed here. The chunk that adds an action adds its name here.
    */
   readonly actions: readonly string[];
+  /**
+   * The listed actions no walk from a fresh game can reach, each with a sentence saying why: one
+   * offered only in a position play does not get to, such as a draw by threefold repetition. The
+   * walk does not require them unless it sees one enabled, which it then must take like any other;
+   * it fails if one fails. One it takes anyway is reported, so the declaration can be removed. An action that ends the game, or
+   * that needs another seat to act first, does not belong here: the walk starts a new game when a
+   * game ends, and acts for every seat at a table.
+   */
+  readonly unreachable?: Readonly<Record<string, string>>;
   /** How many actions the walk takes at most. The default is {@link DEFAULT_SMOKE_STEPS}. */
   readonly steps?: number;
 }
@@ -63,18 +78,20 @@ const IDLE_STEPS = 5;
 export function defineSmokeTest(options: SmokeTestOptions): void {
   test('seat a player, take every offered action, press every board control', async ({ page }) => {
     const walk = newWalk(options);
+    const memory = newMemory();
     watchForErrors(page, walk);
     await recordResolvedActions(page);
-    let controls = 0;
     try {
       await page.goto('/');
       await takeASeat(page);
-      controls = await walkTheGame(page, walk, options.steps ?? DEFAULT_SMOKE_STEPS);
+      await followTheActiveSeat(page);
+      await walkTheGame(page, walk, memory);
     } catch (error) {
       // Reported after the errors the page showed first, which usually say why the walk stopped.
       note(walk, `The walk could not go on: ${error instanceof Error ? error.message.split('\n')[0] : String(error)}`);
     }
-    test.info().annotations.push({ type: SMOKE_ANNOTATION, description: JSON.stringify({ taken: [...walk.taken].sort(), controls }) });
+    const record = smokeRecord(walk, { controls: memory.controls, games: memory.games });
+    test.info().annotations.push({ type: SMOKE_ANNOTATION, description: JSON.stringify(record) });
     const problems = smokeProblems(walk);
     if (problems.length > 0) {
       throw new Error(
@@ -88,7 +105,9 @@ export function defineSmokeTest(options: SmokeTestOptions): void {
 function newWalk(options: SmokeTestOptions): SmokeWalk {
   return {
     listed: [...options.actions],
+    unreachable: { ...options.unreachable },
     offered: new Set(),
+    enabled: new Set(),
     taken: new Set(),
     steps: options.steps ?? DEFAULT_SMOKE_STEPS,
     errors: [],
@@ -142,15 +161,22 @@ async function recordResolvedActions(page: Page): Promise<void> {
 }
 
 /** The actions resolved in `frame` since the last call: taken ones recorded, failed ones reported. */
-async function drainResolved(frame: Frame, walk: SmokeWalk): Promise<number> {
+async function drainResolved(frame: Frame, walk: SmokeWalk, memory: WalkMemory): Promise<number> {
   const resolved = await frame.evaluate(() => {
     const log = (window as unknown as { __boardsmithSmokeResolved?: unknown[] }).__boardsmithSmokeResolved ?? [];
     return log.splice(0, log.length) as ResolvedAction[];
   });
   for (const { action, success, error } of resolved) {
     walk.offered.add(action);
-    if (success) walk.taken.add(action);
-    else walk.errors.push(`The panel offered "${action}", and taking it failed: ${error ?? 'no reason given'}`);
+    walk.enabled.add(action);
+    if (success) {
+      walk.taken.add(action);
+      memory.resolved.set(action, (memory.resolved.get(action) ?? 0) + 1);
+      memory.lastResolved = action;
+    } else {
+      memory.failed.add(action);
+      note(walk, `The panel offered "${action}", and taking it failed: ${error ?? 'no reason given'}`);
+    }
   }
   return resolved.length;
 }
@@ -204,6 +230,40 @@ async function takeASeat(page: Page): Promise<void> {
   });
 }
 
+/**
+ * At a table, turns on the dev host's "Follow active seat", so the page acts for whichever seat is
+ * due and the bots stand down. A world's dev host has no seats to follow, and is left as it is.
+ */
+async function followTheActiveSeat(page: Page): Promise<void> {
+  const switcher = page.getByTestId('seat-switcher');
+  if ((await switcher.count()) === 0 || (await switcher.getAttribute('data-following')) === 'true') return;
+  await switcher.click({ timeout: PRESS_MS });
+  await page.getByTestId('follow-active-seat').click({ timeout: PRESS_MS });
+  await page.locator('[data-testid="seat-switcher"][data-following="true"]').waitFor({ timeout: TURN_WAIT_MS }).catch(() => {
+    throw new Error(
+      `The dev host did not follow the active seat ${TURN_WAIT_MS / 1000}s after "Follow active seat" was pressed. ` +
+        'Run `boardsmith dev` and press it to see why.',
+    );
+  });
+}
+
+/**
+ * Starts a new game from the dev host's "New game" (pressed twice: once to arm it, once to confirm),
+ * waits for the game-over card to go, and follows the active seat again, which a restart turns off.
+ * Returns false when the dev host has no "New game", as a world's has not.
+ */
+async function startANewGame(page: Page): Promise<boolean> {
+  const newGame = page.getByTestId('new-game').filter({ visible: true }).first();
+  if ((await newGame.count()) === 0) return false;
+  await newGame.click({ timeout: PRESS_MS });
+  await newGame.click({ timeout: PRESS_MS });
+  await (await gameFrame(page)).locator('.game-over-card').waitFor({ state: 'hidden', timeout: TURN_WAIT_MS }).catch(() => {
+    throw new Error(`The game was still over ${TURN_WAIT_MS / 1000}s after "New game" was confirmed.`);
+  });
+  await followTheActiveSeat(page);
+  return true;
+}
+
 // -------------------------------------------------------------------------------------------
 // The walk
 // -------------------------------------------------------------------------------------------
@@ -240,6 +300,7 @@ async function readOffers(frame: Frame, walk: SmokeWalk): Promise<Offers> {
     };
   });
   for (const name of [...offers.all, ...(offers.open ? [offers.open] : [])]) walk.offered.add(name);
+  for (const name of [...offers.enabled, ...(offers.open ? [offers.open] : [])]) walk.enabled.add(name);
   return { enabled: offers.enabled, groups: offers.groups, inGroup: offers.inGroup, open: offers.open };
 }
 
@@ -263,13 +324,32 @@ async function labelOf(target: Locator): Promise<string> {
 }
 
 /**
- * Presses `target` as a player would. A press the page does not take, because something covers
- * the control or it never becomes pressable, is reported and the walk goes on. Returns whether the
- * press landed.
+ * Whether `target` is a keyboard-only control: it takes no pointer (`pointer-events: none`) AND
+ * cannot be seen (no opacity, hidden, or not rendered, on it or an ancestor), as a keyboard board
+ * laid invisibly over a canvas for keyboard and screen-reader players is. Its players press it from
+ * the keyboard, so the walk does too. A control a sighted player can see is clicked, even when it
+ * takes no pointer, so one a mouse cannot press fails the walk.
+ */
+async function keyboardOnly(target: Locator): Promise<boolean> {
+  return target.evaluate(
+    (element) =>
+      getComputedStyle(element).pointerEvents === 'none' &&
+      !element.checkVisibility({ opacityProperty: true, visibilityProperty: true }),
+    undefined,
+    { timeout: PRESS_MS },
+  );
+}
+
+/**
+ * Presses `target` as a player would: with the pointer, or, for a keyboard-only control
+ * ({@link keyboardOnly}), by focusing it and pressing Enter. A press the page does not take, because something
+ * covers the control or it never becomes pressable, is reported and the walk goes on. Returns
+ * whether the press landed.
  */
 async function press(target: Locator, what: string, walk: SmokeWalk): Promise<boolean> {
   try {
-    await target.click({ timeout: PRESS_MS });
+    if (await keyboardOnly(target)) await target.press('Enter', { timeout: PRESS_MS });
+    else await target.click({ timeout: PRESS_MS });
     return true;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -286,17 +366,55 @@ function note(walk: SmokeWalk, problem: string): void {
   if (!walk.errors.includes(problem)) walk.errors.push(problem);
 }
 
+/** A board candidate of the open pick that this pick has not chosen yet, recorded in `picked`. */
+async function unpickedCandidate(frame: Frame, picked: Set<string>): Promise<Locator | undefined> {
+  const candidates = frame.locator('[data-testid="bs-board"] [data-bs-candidate]').filter({ visible: true });
+  for (let i = 0; i < (await candidates.count()); i++) {
+    const candidate = candidates.nth(i);
+    const key = (await candidate.getAttribute('data-bs-el-id')) ?? (await candidate.getAttribute('data-bs-candidate')) ?? '';
+    if (picked.has(key) || (await candidate.getAttribute('aria-disabled')) === 'true') continue;
+    picked.add(key);
+    return candidate;
+  }
+  return undefined;
+}
+
 /**
- * Answers one choice of the open action `name`, as a player would: the board's own candidate
- * first (so the board's controls are pressed, not only the panel's), then the panel's choices, a
- * value for a number or text field, and the button that finishes a step. Returns false when there
- * was nothing to answer.
+ * Answers one step of an open multi-select pick (#459), as a player makes one: one more distinct
+ * choice (an unticked box in the panel, else a board candidate the pick has not chosen) until the
+ * pick has at least one and its Done button is ready, then Done. The pick's own min and max decide
+ * through the panel: Done is ready from min on, every box left is refused at max, and a pick whose
+ * min is its max has no Done at all and completes on its last choice. `picked` is the board
+ * candidates this pick has chosen, since the board does not mark them.
  */
-async function answerOneChoice(frame: Frame, walk: SmokeWalk, name: string): Promise<boolean> {
+async function answerMultiSelect(frame: Frame, walk: SmokeWalk, name: string, picked: Set<string>): Promise<boolean> {
+  const boxes = frame.locator('.action-config .multi-select-choice input[type="checkbox"]');
+  const inPanel = (await boxes.count()) > 0;
+  const chosen = inPanel ? await frame.locator('.action-config .multi-select-choice input:checked').count() : picked.size;
+  const done = await firstPressable(frame, ['.action-config .done-button']);
+  const next =
+    done !== undefined && chosen > 0
+      ? done
+      : ((inPanel
+          ? await firstPressable(frame, ['.action-config .multi-select-choice input[type="checkbox"]:not(:checked)'])
+          : await unpickedCandidate(frame, picked)) ?? done);
+  if (next === undefined) return false;
+  await press(next, `"${await labelOf(next)}" while answering "${name}"`, walk);
+  return true;
+}
+
+/**
+ * Answers one choice of the open action `name`, as a player would: a multi-select pick one choice
+ * at a time, else the board's own candidate first (so the board's controls are pressed, not only
+ * the panel's), then the panel's choices, a value for a number or text field, and the button that
+ * finishes a step. Returns false when there was nothing to answer.
+ */
+async function answerOneChoice(frame: Frame, walk: SmokeWalk, name: string, picked: Set<string>): Promise<boolean> {
   const field = await firstPressable(frame, ['.action-config .text-input input', '.action-config .text-input textarea']);
   if (field && (await field.inputValue()) === '') await field.fill('smoke test');
-  const box = await firstPressable(frame, ['.action-config .multi-select-choice input[type="checkbox"]:not(:checked)']);
-  if (box && !(await frame.locator('.action-config .multi-select-choice input:checked').count())) await box.check();
+  // An ordered list shows a count too, and is answered by its Add buttons below.
+  const multiSelect = frame.locator('.action-config .multi-select-count:not(.ordered-list-count)');
+  if ((await multiSelect.count()) > 0) return answerMultiSelect(frame, walk, name, picked);
 
   const target = await firstPressable(frame, [
     '.action-config [data-bs-confirm]',
@@ -313,10 +431,10 @@ async function answerOneChoice(frame: Frame, walk: SmokeWalk, name: string): Pro
 }
 
 /** {@link answerOneChoice}, given the time a pick's choices take to arrive from the game. */
-async function answerWhenOffered(frame: Frame, walk: SmokeWalk, name: string): Promise<boolean> {
+async function answerWhenOffered(frame: Frame, walk: SmokeWalk, name: string, picked: Set<string>): Promise<boolean> {
   const started = Date.now();
   for (;;) {
-    if (await answerOneChoice(frame, walk, name)) return true;
+    if (await answerOneChoice(frame, walk, name, picked)) return true;
     if (Date.now() - started > PRESS_MS) return false;
     await frame.waitForTimeout(100);
   }
@@ -332,19 +450,21 @@ async function openActionState(frame: Frame): Promise<string> {
  * offers nothing to choose, or does not change when its choices are pressed, is reported and
  * cancelled.
  */
-async function finishOpenAction(frame: Frame, walk: SmokeWalk, name: string): Promise<void> {
+async function finishOpenAction(frame: Frame, walk: SmokeWalk, memory: WalkMemory, name: string): Promise<void> {
+  const picked = new Set<string>();
   let unchanged = 0;
   let before = await openActionState(frame);
   while ((await readOffers(frame, walk)).open === name) {
-    const answered = await answerWhenOffered(frame, walk, name);
+    const answered = await answerWhenOffered(frame, walk, name, picked);
     await settle(frame);
     // Resolved: whatever is open now (the same action again on a later turn) is a later step's.
-    if ((await drainResolved(frame, walk)) > 0) return;
+    if ((await drainResolved(frame, walk, memory)) > 0) return;
     const after = await openActionState(frame);
     unchanged = after === before ? unchanged + 1 : 0;
     before = after;
     if (!answered || unchanged >= STUCK_AFTER) {
-      walk.errors.push(
+      note(
+        walk,
         answered
           ? `The panel opened "${name}", and pressing its choices changed nothing: ${after.replace(/\s+/g, ' ').trim()}`
           : `The panel opened "${name}" and offered nothing to choose or press: ${after.replace(/\s+/g, ' ').trim()}`,
@@ -357,7 +477,9 @@ async function finishOpenAction(frame: Frame, walk: SmokeWalk, name: string): Pr
 
 /**
  * The board's own controls: every button on it a keyboard can reach, other than a pick's candidate
- * (an element that is only focusable by script, such as a card in a stack, is not one). Each is known by
+ * (an element that is only focusable by script, such as a card in a stack, is not one). That
+ * includes a keyboard-only control, invisible and taking no pointer, which `press` presses from the
+ * keyboard (#457). Each is known by
  * the game element it stands for when it has one, since its label can change with the game
  * ("deck, 30 cards"), else by its label.
  */
@@ -378,12 +500,12 @@ async function boardControls(frame: Frame): Promise<Array<{ key: string; label: 
 }
 
 /** Presses one board control the walk has not pressed yet. Returns false when every one was pressed. */
-async function pressAnUntriedControl(frame: Frame, walk: SmokeWalk, pressed: Set<string>, step: number): Promise<boolean> {
+async function pressAnUntriedControl(frame: Frame, walk: SmokeWalk, memory: WalkMemory, step: number): Promise<boolean> {
   for (const { key, label, control } of await boardControls(frame)) {
-    if (pressed.has(key)) continue;
-    pressed.add(key);
-    narrate(step, `pressing the board's "${label}"`);
-    await press(control, `the board's "${label}"`, walk);
+    if (memory.pressed.has(key)) continue;
+    memory.pressed.add(key);
+    narrate(step, `pressing the board's "${label}"${(await keyboardOnly(control)) ? ' from the keyboard' : ''}`);
+    if (await press(control, `the board's "${label}"`, walk)) memory.controls++;
     return true;
   }
   return false;
@@ -393,19 +515,39 @@ async function pressAnUntriedControl(frame: Frame, walk: SmokeWalk, pressed: Set
 type NextPress = { press: string } | { take: string } | undefined;
 
 /**
- * An action not taken yet, else a group of actions not opened yet, else the way back out of a
- * group, else the action taken least. Undefined when the panel offers nothing.
+ * Whether taking `name` has ended every game it was taken in, as resigning does. The walk takes
+ * such an action again only when the panel offers nothing else, so it does not cut each game short.
  */
-function nextPress(offers: Offers, walk: SmokeWalk, times: Map<string, number>, opened: Set<string>): NextPress {
-  const untaken = offers.enabled.find((name) => !walk.taken.has(name));
+function endsTheGame(name: string, memory: WalkMemory): boolean {
+  const ended = memory.endings.get(name) ?? 0;
+  return ended > 0 && ended >= (memory.resolved.get(name) ?? 0);
+}
+
+/**
+ * The required actions still to take, less those that failed when taken: the failure is already a
+ * problem, and trying them again would only spend the steps the rest of the game needs.
+ */
+function stillToTake(walk: SmokeWalk, memory: WalkMemory): string[] {
+  return requiredUntaken(walk).filter((name) => !memory.failed.has(name));
+}
+
+/**
+ * An action not taken (or failed) yet, else a group of actions not opened yet, else the way back
+ * out of a group, else the action taken least, preferring one that has neither ended the game nor
+ * failed. Undefined when the panel offers nothing.
+ */
+function nextPress(offers: Offers, walk: SmokeWalk, memory: WalkMemory): NextPress {
+  const untaken = offers.enabled.find((name) => !walk.taken.has(name) && !memory.failed.has(name));
   if (untaken) return { take: untaken };
-  const group = offers.groups.find((label) => !opened.has(label));
+  const group = offers.groups.find((label) => !memory.opened.has(label));
   if (group !== undefined) {
-    opened.add(group);
+    memory.opened.add(group);
     return { press: `[data-bs-action-group=${JSON.stringify(group)}]` };
   }
   if (offers.inGroup) return { press: '[data-bs-menu-back]' };
-  const least = [...offers.enabled].sort((a, b) => (times.get(a) ?? 0) - (times.get(b) ?? 0))[0];
+  const byTimes = (a: string, b: string) => (memory.times.get(a) ?? 0) - (memory.times.get(b) ?? 0);
+  const goesOn = offers.enabled.filter((name) => !endsTheGame(name, memory) && !memory.failed.has(name));
+  const least = [...(goesOn.length > 0 ? goesOn : offers.enabled)].sort(byTimes)[0];
   return least === undefined ? undefined : { take: least };
 }
 
@@ -421,14 +563,40 @@ async function waitForATurn(frame: Frame): Promise<boolean> {
     );
 }
 
-/** What the walk remembers from step to step. */
+/** What the walk remembers from step to step, and from game to game. */
 interface WalkMemory {
-  /** The board controls pressed, by key. */
+  /** The board controls tried, by key. */
   readonly pressed: Set<string>;
+  /** How many board-control presses landed. */
+  controls: number;
   /** The panel's action groups opened, by label. */
   readonly opened: Set<string>;
   /** How many times each action was pressed. */
   readonly times: Map<string, number>;
+  /** How many times each action was taken and resolved. */
+  readonly resolved: Map<string, number>;
+  /** How many games ended right after each action resolved. */
+  readonly endings: Map<string, number>;
+  /** The actions that failed when taken: reported once, and not tried again while anything else is offered. */
+  readonly failed: Set<string>;
+  /** The action resolved last, which a game that is now over ended on. */
+  lastResolved: string | undefined;
+  /** How many games the walk has played, this one included. */
+  games: number;
+}
+
+function newMemory(): WalkMemory {
+  return {
+    pressed: new Set(),
+    controls: 0,
+    opened: new Set(),
+    times: new Map(),
+    resolved: new Map(),
+    endings: new Map(),
+    failed: new Set(),
+    lastResolved: undefined,
+    games: 1,
+  };
 }
 
 /**
@@ -436,7 +604,7 @@ interface WalkMemory {
  * nothing. Returns false when it still offers nothing, which ends the walk.
  */
 async function pressWhatThePanelOffers(frame: Frame, walk: SmokeWalk, memory: WalkMemory, offers: Offers, step: number): Promise<boolean> {
-  const next = nextPress(offers, walk, memory.times, memory.opened);
+  const next = nextPress(offers, walk, memory);
   if (next === undefined) {
     narrate(step, 'nothing is offered; waiting for a turn');
     return waitForATurn(frame);
@@ -453,50 +621,68 @@ async function pressWhatThePanelOffers(frame: Frame, walk: SmokeWalk, memory: Wa
 }
 
 /**
- * One step of the walk: answer the open action, press an untried board control, or press what the
- * panel offers. Returns false when the walk is over: the game ended, or nothing is offered.
+ * The game is over. Credits the action it ended on, then starts a new game when listed actions are
+ * still to take. Returns false when the walk is over: everything required is taken, or the dev host
+ * cannot start a new game.
  */
-async function walkOneStep(frame: Frame, walk: SmokeWalk, memory: WalkMemory, step: number): Promise<boolean> {
-  await drainResolved(frame, walk);
-  await noteErrorToasts(frame, walk);
-  if (await frame.locator('.game-over-card').isVisible()) {
+async function afterTheGame(page: Page, walk: SmokeWalk, memory: WalkMemory, step: number): Promise<boolean> {
+  if (memory.lastResolved !== undefined) memory.endings.set(memory.lastResolved, (memory.endings.get(memory.lastResolved) ?? 0) + 1);
+  memory.lastResolved = undefined;
+  const left = stillToTake(walk, memory);
+  if (left.length === 0) {
     narrate(step, 'the game is over');
     return false;
   }
+  narrate(step, `the game is over with ${left.map((name) => `"${name}"`).join(', ')} still to take; starting a new game`);
+  if (!(await startANewGame(page))) return false;
+  memory.games++;
+  return true;
+}
+
+/**
+ * One step of the walk: start a new game after one that ended, press an untried board control,
+ * answer the open action, or press what the panel offers. A board control comes before the open
+ * action because a player can press the board while a pick is open, and because the walk acts for
+ * every seat at a table, where a game that opens each turn's action by itself never has a moment
+ * with nothing open.
+ */
+async function walkOneStep(page: Page, frame: Frame, walk: SmokeWalk, memory: WalkMemory, step: number): Promise<boolean> {
+  await drainResolved(frame, walk, memory);
+  await noteErrorToasts(frame, walk);
+  if (await frame.locator('.game-over-card').isVisible()) return afterTheGame(page, walk, memory, step);
   const offers = await readOffers(frame, walk);
+  if (await pressAnUntriedControl(frame, walk, memory, step)) return true;
   if (offers.open) {
     narrate(step, `answering "${offers.open}"`);
-    await finishOpenAction(frame, walk, offers.open);
+    await finishOpenAction(frame, walk, memory, offers.open);
     return true;
   }
-  if (await pressAnUntriedControl(frame, walk, memory.pressed, step)) return true;
   return pressWhatThePanelOffers(frame, walk, memory, offers, step);
 }
 
 /**
  * Walks the game a step at a time (`walkOneStep`) until the steps run out, the walk is over, or
- * every offer has been taken and a few more steps turned up nothing new. Returns how many board
- * controls it pressed.
+ * every required action and every offer has been taken and a few more steps turned up nothing new.
  */
-async function walkTheGame(page: Page, walk: SmokeWalk, steps: number): Promise<number> {
-  const memory: WalkMemory = { pressed: new Set(), opened: new Set(), times: new Map() };
+async function walkTheGame(page: Page, walk: SmokeWalk, memory: WalkMemory): Promise<void> {
   let idle = 0;
-  for (let step = 1; step <= steps && idle < IDLE_STEPS; step++) {
+  for (let step = 1; step <= walk.steps && idle < IDLE_STEPS; step++) {
     // Looked up at every step: the dev host puts up a new frame when the game restarts.
     const frame = await gameFrame(page);
     await settle(frame);
     const seenBefore = walk.offered.size + memory.pressed.size;
-    if (!(await walkOneStep(frame, walk, memory, step))) break;
+    if (!(await walkOneStep(page, frame, walk, memory, step))) break;
     const nothingNew = walk.offered.size + memory.pressed.size === seenBefore;
-    idle = nothingNew && [...walk.offered].every((name) => walk.taken.has(name)) ? idle + 1 : 0;
+    const allTaken =
+      stillToTake(walk, memory).length === 0 && [...walk.offered].every((name) => walk.taken.has(name) || memory.failed.has(name));
+    idle = nothingNew && allTaken ? idle + 1 : 0;
   }
   const frame = await gameFrame(page);
   await settle(frame);
-  await drainResolved(frame, walk);
+  await drainResolved(frame, walk, memory);
   await noteErrorToasts(frame, walk);
   // Errors the last press raised reach the page's listeners a moment after it; let them land.
   await page.waitForTimeout(250);
-  return memory.pressed.size;
 }
 
 /** Says what the walk does at each step, for whoever watches `boardsmith smoke`. */

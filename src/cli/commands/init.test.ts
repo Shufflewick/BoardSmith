@@ -272,6 +272,9 @@ describe('initCommand — a scaffolded project is portable and has no dangling a
     const spec = read('tests/browser/smoke.spec.ts');
     expect(spec).toContain("import { defineSmokeTest } from 'boardsmith/testing/browser';");
     expect(spec).toContain("actions: ['draw', 'play'],");
+    // #458: how to name an action no walk from a fresh game reaches, with the reason it needs.
+    expect(spec).toMatch(/also named in `unreachable`, with a sentence saying why/);
+    expect(spec).toContain("unreachable: { claimDraw: '");
   });
 
   it('declares no manifest asset it did not create', async () => {
