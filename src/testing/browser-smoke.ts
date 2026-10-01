@@ -498,14 +498,17 @@ async function press(control: Control, what: string, walk: SmokeWalk, memory: Wa
     }
   };
   try {
-    await pressIt().catch(async (error: unknown) => {
-      if (!(error instanceof UnderAToast)) throw error;
-      // What an error toast says is read before it goes, so waiting it out hides nothing.
-      await noteErrorToasts(control.frame, walk, memory);
-      await control.frame.waitForFunction(() => document.querySelector('.toast') === null, undefined, { timeout: TOAST_WAIT_MS });
-      await pressIt();
-    });
-    return true;
+    // A toast on top is waited out on its own time, not the press's, and the press starts afresh
+    // once it has gone: a game may show a second toast as the first leaves.
+    for (let toasts = 0; ; toasts++) {
+      try {
+        await pressIt();
+        return true;
+      } catch (error) {
+        if (!(error instanceof UnderAToast) || toasts >= TOASTS_WAITED) throw error;
+        await waitOutTheToast(control.frame, walk, memory);
+      }
+    }
   } catch (error) {
     note(walk, control.frame.isDetached() ? replaced : `Pressing ${what} did not work: ${await whyNotPressed(control.target, error)}.`);
     return false;
@@ -529,6 +532,21 @@ function pressOnce(control: Control): Promise<void> {
 
 /** The longest a toast stays: an error toast goes after 4 seconds. */
 const TOAST_WAIT_MS = 8_000;
+
+/** How many toasts in a row the walk waits out for one press, before what is on top counts as covering the control. */
+const TOASTS_WAITED = 3;
+
+/**
+ * Waits for every toast on the page to go, as a player does before pressing what is under one. What
+ * an error toast says is read before it goes, so waiting it out hides nothing. A toast still there
+ * after {@link TOAST_WAIT_MS} covers the control for good (an {@link UnderAToast}).
+ */
+async function waitOutTheToast(frame: Frame, walk: SmokeWalk, memory: WalkMemory): Promise<void> {
+  await noteErrorToasts(frame, walk, memory);
+  await frame.waitForFunction(() => document.querySelector('.toast') === null, undefined, { timeout: TOAST_WAIT_MS }).catch(() => {
+    throw new UnderAToast(COVERED);
+  });
+}
 
 /**
  * Where on a board control the walk points (#468), as fractions of its width and height: its centre

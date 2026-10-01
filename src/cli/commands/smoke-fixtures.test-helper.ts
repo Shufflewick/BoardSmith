@@ -872,7 +872,8 @@ const CANDIDATE_BOARDS: Record<CandidateBoard, { template: string; style: string
     template: `<div v-for="cell in cells" :key="cell" class="slot"><button type="button" class="card" v-bind="attrs(cell)" @click="claim(cell)">{{ cell }}</button><div class="tray"></div></div>`,
     style: `.slot { position: relative; width: 240px; height: 60px; margin: 8px; } .card { width: 240px; height: 60px; } .tray { position: absolute; inset: 0; background: #888; }`,
   },
-  // The first time the bell, or a card, is pointed at, an error toast covers the board for a second and a half.
+  // The first time the bell, or a card, is pointed at, an error toast covers the board for a second
+  // and a half, and a second one follows the moment the first goes, as a game that reports twice does.
   toast: {
     template: `<button type="button" class="bell" @pointerenter="warn">Ring the bell</button>
       <button v-for="cell in cells" :key="cell" type="button" class="card" v-bind="attrs(cell)" @pointerenter="warn" @click="claim(cell)">{{ cell }}</button>
@@ -911,7 +912,13 @@ function warn() {
   if (warned >= 2 || warning.value) return;
   warned++;
   warning.value = true;
-  setTimeout(() => (warning.value = false), 1500);
+  setTimeout(() => {
+    warning.value = false;
+    setTimeout(() => {
+      warning.value = true;
+      setTimeout(() => (warning.value = false), 1500);
+    }, 50);
+  }, 1500);
 }
 </script>
 
