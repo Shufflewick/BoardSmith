@@ -245,7 +245,7 @@ describe('DevHost — broadcast toast on restart', () => {
 // Table setup shows the seed the game on screen was dealt from, and deals a new
 // game from a seed typed there: how a designer plays a deal again, and how the
 // smoke walk deals the same game on every run.
-describe('DevHost — dealing from a seed (#460)', () => {
+describe('DevHost: dealing from a seed (#460)', () => {
   async function openTableSetup(wrapper: VueWrapper): Promise<void> {
     await wrapper.findAll('[data-testid="table-setup-toggle"]')[0].trigger('click');
     await wrapper.vm.$nextTick();
