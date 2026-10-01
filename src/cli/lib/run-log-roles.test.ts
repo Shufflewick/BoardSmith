@@ -5,7 +5,7 @@ import { type VerifyResult, buildVerifyResult } from './verify-result.js';
 /**
  * The run log's record of who did the work and how review went (#454): each dispatch's role and
  * agent type, escalation one role at a time from a failed dispatch or a review round that asked for
- * changes, routing.md's two named exceptions at judgement, and each review round's link to the
+ * changes, routing.md's three named exceptions at judgement, and each review round's link to the
  * dispatch it reviewed and the verify result it started from.
  */
 
@@ -83,10 +83,24 @@ describe('dispatch entries', () => {
     expect(details(text)).toEqual([expect.stringMatching(/^Dispatch 3: .*Dispatch 2 failed at second-opinion.*ask the designer/)]);
   });
 
+  it('never treat the judgement and second-opinion enumerators of one slice as retries of each other', () => {
+    const slice = 'enumerate rulebook/03-scoring.md';
+    const second = { Role: 'second-opinion', Agent: 'bs-second-opinion' };
+    const text = log(
+      dispatch(1, { Work: slice, ...J, Outcome: 'failed' }),
+      dispatch(2, { Work: slice, ...second, Outcome: 'failed' }),
+      dispatch(3, { Work: slice, ...J, 'Designer answer': 'RULINGS.md Ruling 2' }),
+      dispatch(4, { Work: slice, ...second }),
+    );
+    expect(details(text)).toEqual([
+      expect.stringMatching(/^Dispatch 4: .*retries "enumerate rulebook\/03-scoring.md" at second-opinion after Dispatch 2 failed at second-opinion/),
+    ]);
+  });
+
   it('refuse an escalation that skips a role, or starts from a dispatch that did not fail or is not there', () => {
     const text = log(
-      dispatch(1, { Role: 'mechanical', Agent: 'bs-mechanical', Outcome: 'failed' }),
-      dispatch(2, { ...J, 'Escalated from': 'Dispatch 1' }),
+      dispatch(1, { Work: 'rename', Role: 'mechanical', Agent: 'bs-mechanical', Outcome: 'failed' }),
+      dispatch(2, { Work: 'rename', ...J, 'Escalated from': 'Dispatch 1' }),
       dispatch(3, { Outcome: 'done' }),
       dispatch(4, { ...J, 'Escalated from': 'Dispatch 3' }),
       dispatch(5, { 'Escalated from': 'Dispatch 9' }),
@@ -115,11 +129,39 @@ describe('dispatch entries', () => {
     ));
   });
 
+  it('say that a dispatch carrying on after a gate or context ceiling writes Escalated from: none, when it names the failure again', () => {
+    const text = log(
+      dispatch(1, { Outcome: 'failed' }),
+      dispatch(2, { ...J, 'Escalated from': 'Dispatch 1', Outcome: 'context-ceiling' }),
+      dispatch(3, { ...J, 'Escalated from': 'Dispatch 1' }),
+    );
+    expect(details(text)).toEqual([
+      expect.stringMatching(/^Dispatch 3: .*Dispatch 1 was already answered by Dispatch 2.*carries Dispatch 2's work on after .*writes "Escalated from: none"/),
+    ]);
+  });
+
   it('refuse an escalation from judgement for work that is not a named exception: after judgement the designer decides', () => {
     const text = log(dispatch(1, { Work: 'spec', ...J, Outcome: 'failed' }), dispatch(2, { Work: 'spec', ...J, 'Escalated from': 'Dispatch 1' }));
     expect(details(text)).toEqual([
-      expect.stringMatching(/^Dispatch 2: .*Dispatch 1 failed at judgement, the top role, and "spec" is not one of the named exceptions.*ask the designer/),
+      expect.stringMatching(
+        /^Dispatch 2: .*Dispatch 1 failed at judgement, the top role, and "spec" is not one of the named exceptions.*re-investigate or a repair.*quote-fix.*re-transcription of a page range verify-run-record refused.*ask the designer/,
+      ),
     ]);
+  });
+
+  it('refuse a dispatch one role up that does not name the failure it answers', () => {
+    const text = log(dispatch(1, { Outcome: 'failed' }), dispatch(2, { ...J }));
+    expect(details(text)).toEqual([
+      expect.stringMatching(/^Dispatch 2: .*does "build" at judgement after Dispatch 1 failed at bounded, without naming it.*"Escalated from: Dispatch 1"/),
+    ]);
+  });
+
+  it("let a build wait for test's verify: pending until the done gate, then failed naming the check, then a build at judgement that names it", () => {
+    const awaitingTest = dispatch(1, { Outcome: 'pending', 'Finished at': 'pending' });
+    expect(details(log(awaitingTest))).toEqual([]);
+    const failedAtTest = dispatch(1, { Outcome: 'failed', Detail: 'verify failed: mutation, 2 survivors in src/rules/trade.ts' });
+    expect(details(log(failedAtTest, dispatch(2, { ...J, 'Escalated from': 'Dispatch 1' })))).toEqual([]);
+    expect(details(log(failedAtTest, dispatch(2, { ...J })))).toEqual([expect.stringMatching(/^Dispatch 2: .*without naming it.*"Escalated from: Dispatch 1"/)]);
   });
 
   it('refuse the same work at judgement again unless the dispatch records where the designer answered', () => {
@@ -271,7 +313,7 @@ describe('the named exceptions at judgement (routing.md "When a Step Fails")', (
     ]);
   });
 
-  it('keep the two exceptions apart, and refuse a second re-investigation reached through a quote-fix', () => {
+  it('keep the exceptions apart, and refuse a second re-investigation reached through a quote-fix', () => {
     const text = log(
       ...refutedClaims,
       dispatch(2, { Work: 're-investigate', ...J, 'Escalated from': 'Review Round 1', Outcome: 'failed' }),
@@ -293,6 +335,36 @@ describe('the named exceptions at judgement (routing.md "When a Step Fails")', (
       repairOf(5, 3),
     );
     expect(details(text)).toEqual([expect.stringMatching(/^Dispatch 5: .*already had its one more judgement round \(Dispatch 3\)/)]);
+  });
+
+  it('carry an exception round across a crash: a dispatch left pending is resumed by the next of the same work at the same role', () => {
+    const text = log(
+      ...buildWithFindings,
+      repairOf(2, 1),
+      round(2, { Reviewed: 'Dispatch 2', Outcome: 'changes requested' }),
+      repairOf(3, 2, { Outcome: 'pending', 'Finished at': 'pending' }),
+      dispatch(4, { Work: 'repair', ...J }),
+      round(3, { Reviewed: 'Dispatch 4', Outcome: 'changes requested' }),
+      repairOf(5, 3),
+    );
+    expect(details(text)).toEqual([expect.stringMatching(/^Dispatch 5: .*already had its one more judgement round \(Dispatch 3\)/)]);
+  });
+
+  it('give a page range verify-run-record refused one re-transcription at judgement, the third named exception, then the designer', () => {
+    const range = 'transcribe rulebook.pdf pp. 9-16';
+    const refused = { Work: range, ...J, Outcome: 'failed', Detail: 'verify-run-record refused: Source: names cards.pdf' };
+    const text = log(
+      dispatch(1, refused),
+      dispatch(2, { ...refused, 'Escalated from': 'Dispatch 1' }),
+      dispatch(3, { Work: range, ...J, 'Escalated from': 'Dispatch 2' }),
+    );
+    expect(details(text)).toEqual([
+      expect.stringMatching(/^Dispatch 3: .*that range already had its one re-transcription \(Dispatch 2\).*ask the designer/),
+    ]);
+    const otherRange = log(dispatch(1, refused), dispatch(2, { Work: 'transcribe rulebook.pdf pp. 1-8', ...J, 'Escalated from': 'Dispatch 1' }));
+    expect(details(otherRange)).toEqual([
+      expect.stringMatching(/^Dispatch 2: .*re-transcription.*"transcribe rulebook.pdf pp. 1-8".*Dispatch 1.*"transcribe rulebook.pdf pp. 9-16"/),
+    ]);
   });
 
   it('refuse an unlinked judgement repair after a review failure at judgement, naming the exception and the designer', () => {
@@ -338,6 +410,21 @@ describe('review rounds', () => {
       /^Review Round 3: .*Dispatch 1, whose Outcome is failed.*only work that finished and passed its checks is reviewed/,
       /^Review Round 4: .*Dispatch 2, whose Outcome is pending/,
       /^Review Round 5: .*"Reviewed: the build".*"Dispatch N"/,
+    ));
+  });
+
+  it('refuse a round that names a dispatch a later finished dispatch carried on from, which would start the exception count again', () => {
+    const text = log(
+      ...buildWithFindings,
+      repairOf(2, 1),
+      round(2, { Reviewed: 'Dispatch 2', Outcome: 'changes requested' }),
+      repairOf(3, 2),
+      round(3, { Reviewed: 'Dispatch 2', Outcome: 'changes requested' }),
+      repairOf(4, 3),
+    );
+    expect(details(text)).toEqual(matching(
+      /^Review Round 3: .*reviews Dispatch 2, but Dispatch 3 carried its work on and finished.*"Reviewed: Dispatch 3"/,
+      /^Dispatch 4: .*Review Round 3, which does not name the dispatch it reviewed/,
     ));
   });
 

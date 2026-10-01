@@ -252,13 +252,41 @@ describe('escalation: one role up, never the same role, then the designer (#454)
 
   it('names one narrower quote-fix for a claim-quote-check refusal as the second named exception, with its reason, and counts the refusal as a failure', () => {
     routingSays(
-      /A step fails when its verify fails, when `boardsmith claim-quote-check` refuses the claims it wrote \(`investigate` and `re-investigate`\), or when its reviewer asks for changes/,
+      /A step fails when its verify fails, when `boardsmith claim-quote-check` refuses the claims it wrote \(`investigate` and `re-investigate`\), when `boardsmith verify-run-record` refuses a page range it transcribed, or when its reviewer asks for changes/,
       /\*\*The second named exception: one narrower `quote-fix` for a `claim-quote-check` refusal\.\*\*/,
       /quote fixes are mechanical and cheap, and the designer's time is scarcer/,
     );
     for (const file of ['build/investigate.md', 'build/redteam.md']) {
       expect(flat(read(file)), file).toMatch(/one narrower `quote-fix`.*at the `judgement` role, the second named exception in `routing\.md`.*then the designer/);
     }
+  });
+
+  it('names one re-transcription of a page range verify-run-record refused as the third named exception, with its reason, and staging-dispatch follows it', () => {
+    routingSays(
+      /Apart from the three named exceptions below/,
+      /\*\*The third named exception: one re-transcription of a page range `verify-run-record` refused\.\*\*/,
+      /transcription slips are usually mechanical/,
+      /`transcribe <range>` again after `verify-run-record` refused the range \| `judgement`, the third named exception \(below\)/,
+      /a re-transcription the command still refuses/,
+    );
+    expect(flat(read('verify/staging-dispatch.md'))).toMatch(
+      /exactly one re-transcription of that range, dispatched to the `judgement` role again: the third named exception in `routing\.md`.*`Escalated from: Dispatch N`.*stop and ask the designer/,
+    );
+  });
+
+  it('a build waits for test: its Outcome stays pending until the done gate, then fails naming the check, and the judgement build names it', () => {
+    const test = flat(read('build/test.md'));
+    expect(test).toMatch(/stays `Outcome: pending` \(with `Finished at: pending`\) until this step's done gate answers/);
+    expect(test).toMatch(/`Outcome: failed`, with the check that failed in its Detail/);
+    expect(test).toMatch(/`Escalated from: Dispatch N`, naming the failed build/);
+    expect(flat(read('templates/RUN-LOG.template.md'))).toMatch(/A `build` dispatch's Outcome and Finished at stay `pending` until `test`'s done gate answers/);
+  });
+
+  it('a dispatch that carries on after a gate, a context ceiling or a crash keeps its role and writes Escalated from: none', () => {
+    expect(flat(read('templates/RUN-LOG.template.md'))).toMatch(
+      /Escalated from: none, also when this dispatch carries on one that stopped at a gate, its context ceiling or a crash/,
+    );
+    routingSays(/a dispatch that never returned are not failures: the re-dispatch after them keeps its role, writes `Escalated from: none`, and carries on the round it resumes/);
   });
 });
 

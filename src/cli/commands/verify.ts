@@ -469,12 +469,14 @@ async function verifiableCommit(projectDir: string): Promise<string> {
 }
 
 /**
- * Writes `result` unless it was made on a tree that did not stay clean and a clean, passing result
- * for the same commit is already on file: that one still says what the commit does, so it stays.
+ * Writes `result` unless a clean, passing result for the same commit is already on file and this
+ * run says less: its tree did not stay clean, or a check failed. The commit did not change between
+ * the two runs, so the passing result still says what the commit does, and a review round that
+ * recorded it stays true to the file. The failing run is still printed and still exits non-zero.
  * Returns where the result was written, or undefined when it was kept out.
  */
 async function recordResult(projectDir: string, result: VerifyResult): Promise<string | undefined> {
-  if (!result.cleanTree) {
+  if (!result.cleanTree || !result.passed) {
     const onFile = await readVerifyResult(projectDir, result.commit);
     if (onFile !== undefined && onFile !== 'unreadable' && resultProblem(onFile, result.commit) === undefined) return undefined;
   }

@@ -91,12 +91,14 @@ describe('boardsmith agent <role> --escalate', () => {
     expect(printed).toEqual(['bounded: bs-bounded', 'judgement: senior']);
   });
 
-  it('stops at judgement and says to ask the designer, naming the two exceptions that get one more judgement round', async () => {
+  it('stops at judgement and says to ask the designer, naming the three exceptions that get one more judgement round', async () => {
     await config();
     const refusal = agentCommand('judgement', { project, escalate: true });
     await expect(refusal).rejects.toThrow(/judgement is the top role.*ask the designer/s);
+    await expect(refusal).rejects.toThrow(/Three named exceptions/);
     await expect(refusal).rejects.toThrow(/red-team re-investigation or a repair.*one more judgement round/s);
     await expect(refusal).rejects.toThrow(/claim-quote-check refusal.*one narrower quote-fix/s);
+    await expect(refusal).rejects.toThrow(/page range .*verify-run-record refused.*one re-transcription/s);
   });
 
   it('refuses to climb from review: the step it reviewed is the one that failed', async () => {

@@ -66,7 +66,7 @@ verify`, when there is no passing result for the current commit, and when open p
 brief every review prompt carries. A step that fails (its verify fails, `claim-quote-check`
 refuses its claims, or its reviewer asks for changes) goes one role up at once, never to the same
 role again (`npx boardsmith agent <role> --escalate`), and after `judgement` to the designer,
-apart from routing.md's two named exceptions. Every dispatch and review round is recorded in the
+apart from routing.md's three named exceptions. Every dispatch and review round is recorded in the
 chunk's run log.
 
 ## Context-Economics Hard Rule

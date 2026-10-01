@@ -1,4 +1,4 @@
-import { ESCALATION_LADDER, type WorkRole, nextRole } from './agent-roles.js';
+import { type WorkRole, nextRole } from './agent-roles.js';
 import { type LedgerEntry, entryField, parseLedgerEntries } from './ledger-entries.js';
 import { VERIFY_RESULT_FORMAT, type VerifyResult } from './verify-result.js';
 
@@ -27,12 +27,15 @@ import { VERIFY_RESULT_FORMAT, type VerifyResult } from './verify-result.js';
  *   - Outcome: pending | clean | changes requested
  *
  * A failure is a dispatch whose Outcome is `failed` (its verify failed, or a check run on its
- * return refused it, such as `claim-quote-check`) or a round that asked for changes to the work it
- * reviewed. Each failure is answered once: by an escalation one role up that names it, or, at the
- * top, by one of the two named exceptions or a dispatch that records the designer's answer. A
- * dispatch that does the failed work again at its role or below without naming the failure is
- * refused. A gate and a context ceiling are not failures: the dispatch after them keeps its role and
- * carries on the round it resumes, so a resumed exception round is still that round.
+ * return refused it, such as `claim-quote-check` or `verify-run-record`) or a round that asked for
+ * changes to the work it reviewed. Each failure is answered once: by an escalation one role up that
+ * names it, or, at the top, by one of the three named exceptions or a dispatch that records the
+ * designer's answer. A dispatch that does the failed work again without naming the failure is
+ * refused, at any role. A gate, a context ceiling and a crash (a dispatch left `pending`) are not
+ * failures: the next dispatch of the same work at the same role resumes it, keeps its role and
+ * carries on the round it resumes, so a resumed exception round is still that round. The
+ * `judgement` and `second-opinion` readings of one slice are separate lines of work: neither is a
+ * retry of the other.
  */
 
 interface RunLogRoleFinding {
@@ -59,11 +62,24 @@ const DISPATCH_ROLES = Object.keys(RANK);
 
 /** Outcomes of a dispatch whose work finished, and so may be reviewed. */
 const FINISHED = ['done', 'closed'];
-/** Outcomes after which the next dispatch of the same work resumes it at the same role. */
-const RESUMED = ['gate', 'context-ceiling'];
+/**
+ * Outcomes after which the next dispatch of the same work at the same role resumes it, rather than
+ * starting fresh. `pending` is a dispatch that never returned (a crash), or a `build` whose check,
+ * `test`'s verify, has not run yet.
+ */
+const RESUMED = ['pending', 'gate', 'context-ceiling'];
 
 /** The work that writes a chunk's claims, which `claim-quote-check` checks on its return. */
 const CLAIM_WORK = ['investigate', 're-investigate'];
+
+/** Whether `work` is a transcription of one page range, `transcribe <range>`, which `verify-run-record` checks. */
+const isTranscription = (work: string | undefined) => work !== undefined && work.startsWith('transcribe ');
+
+/**
+ * The line of work a dispatch belongs to, the key a retry is found by. The `second-opinion`
+ * reading of a slice is its own line: it is never a retry of the `judgement` reading, nor that of it.
+ */
+const lineOf = (work: string, role: DispatchRole | undefined) => (role === 'second-opinion' ? `${work} (second-opinion)` : work);
 
 interface Dispatch {
   name: string;
@@ -75,8 +91,11 @@ interface Dispatch {
   designerAnswer?: string;
   /** The dispatch this one carries on from: the failed one it escalates from, or the one it resumes. */
   parent?: Dispatch;
-  /** Set when this dispatch is routing.md's one more judgement round for a re-investigation or repair. */
-  secondRound?: boolean;
+  /**
+   * Set when this dispatch is one of routing.md's one-more-round exceptions: the one more judgement
+   * round for a re-investigation or repair, or the one re-transcription of a refused page range.
+   */
+  exceptionRound?: boolean;
 }
 
 interface Round {
@@ -148,9 +167,10 @@ class RunLogChecker {
   private readonly rounds = new Map<string, Round>();
   private readonly seenRounds = new Set<string>();
   private readonly failures = new Map<string, Failure>();
-  /** The latest failure each kind of work would retry, by the Work name a retry would carry. */
-  private readonly openByWork = new Map<string, Failure>();
-  private readonly latestByWork = new Map<string, Dispatch>();
+  /** The latest failure each line of work would retry, by the line (`lineOf`) a retry would be on. */
+  private readonly openByLine = new Map<string, Failure>();
+  /** The latest dispatch of each work at each role, which the next one at that role may resume. */
+  private readonly latestAtRole = new Map<string, Dispatch>();
 
   constructor(private readonly verifyOnFile: VerifyLookup) {}
 
@@ -162,9 +182,9 @@ class RunLogChecker {
     this.failures.set(failure.name, failure);
     const work = failure.failed.work;
     if (work === undefined) return;
-    this.openByWork.set(work, failure);
-    if (failure.step !== undefined) this.openByWork.set(failure.step === 'redteam' ? 're-investigate' : 'repair', failure);
-    else if (CLAIM_WORK.includes(work)) this.openByWork.set('quote-fix', failure);
+    this.openByLine.set(lineOf(work, failure.failed.role), failure);
+    if (failure.step !== undefined) this.openByLine.set(failure.step === 'redteam' ? 're-investigate' : 'repair', failure);
+    else if (CLAIM_WORK.includes(work)) this.openByLine.set('quote-fix', failure);
   }
 
   // ------------------------------------------------------------------------------------------
@@ -178,7 +198,7 @@ class RunLogChecker {
     if (problem !== undefined) out.push(problem);
     if (d.outcome === 'failed') this.register({ name: d.name, failed: d });
     this.dispatches.set(entry.id, d);
-    if (d.work !== undefined) this.latestByWork.set(d.work, d);
+    if (d.work !== undefined) this.latestAtRole.set(`${d.work} at ${d.role}`, d);
     this.report(d.name, 'run-role', out);
   }
 
@@ -221,7 +241,11 @@ class RunLogChecker {
     const failure = this.failureNamed(d.name, d.escalatedFrom!);
     if (typeof failure === 'string') return failure;
     if (failure.answeredBy !== undefined) {
-      return `${d.name} escalates from ${failure.name}, but ${failure.name} was already answered by ${failure.answeredBy}. A failure is retried once, one role up.`;
+      return (
+        `${d.name} escalates from ${failure.name}, but ${failure.name} was already answered by ${failure.answeredBy}. A failure is ` +
+        `retried once, one role up; a dispatch that carries ${failure.answeredBy}'s work on after a gate, a context ceiling or a crash ` +
+        'writes "Escalated from: none".'
+      );
     }
     const problem = this.climbProblem(d, failure);
     if (problem === undefined) {
@@ -244,7 +268,7 @@ class RunLogChecker {
     const exception = exceptionProblem(d, failure);
     if (exception !== undefined) return exception;
     if (d.role !== 'judgement') return `${d.name} is ${failure.name}'s one more round, which runs at judgement, not ${d.role}.`;
-    d.secondRound = d.work !== 'quote-fix';
+    d.exceptionRound = d.work !== 'quote-fix';
     return undefined;
   }
 
@@ -252,26 +276,19 @@ class RunLogChecker {
   private retryProblem(d: Dispatch): string | undefined {
     if (d.work === undefined || d.role === undefined) return undefined;
     this.resume(d);
-    const failure = this.retriedFailure(d.work, d.role);
-    if (failure === undefined) return undefined;
-    if (!isTop(failure.failed.role!)) return belowTopRetryProblem(d, failure);
+    const failure = this.openByLine.get(lineOf(d.work, d.role));
+    if (failure === undefined || failure.answeredBy !== undefined || failure.failed.role === undefined) return undefined;
+    if (RANK[d.role] > RANK[failure.failed.role]) return unnamedEscalationProblem(d, failure);
+    if (!isTop(failure.failed.role)) return belowTopRetryProblem(d, failure);
     if (d.designerAnswer === undefined) return topRetryProblem(d, failure);
     failure.answeredBy = d.name;
     return undefined;
   }
 
-  /** A dispatch after a gate or context ceiling of the same work, at the same role, carries on that round. */
+  /** A dispatch after a gate, context ceiling or crash of the same work, at the same role, carries on that round. */
   private resume(d: Dispatch): void {
-    const previous = this.latestByWork.get(d.work!);
-    if (previous !== undefined && previous.role === d.role && RESUMED.includes(previous.outcome ?? '')) d.parent = previous;
-  }
-
-  /** The unanswered failure that doing `work` at `role` would retry, or undefined. */
-  private retriedFailure(work: string, role: DispatchRole): Failure | undefined {
-    const failure = this.openByWork.get(work);
-    const failedRole = failure?.failed.role;
-    if (failure === undefined || failure.answeredBy !== undefined || failedRole === undefined) return undefined;
-    return RANK[role] <= RANK[failedRole] ? failure : undefined;
+    const previous = this.latestAtRole.get(`${d.work} at ${d.role}`);
+    if (previous !== undefined && RESUMED.includes(previous.outcome ?? '')) d.parent = previous;
   }
 
   // ------------------------------------------------------------------------------------------
@@ -320,7 +337,20 @@ class RunLogChecker {
           'checks is reviewed. A failed dispatch is retried one role up, never reviewed.',
       );
     }
+    const later = this.finishedCarryingOn(reviewed);
+    if (later !== undefined) {
+      out.push(
+        `${name} reviews ${reviewed.name}, but ${later.name} carried its work on and finished, so it is the latest dispatch that ` +
+          `changed the work. Write "Reviewed: ${later.name}".`,
+      );
+      return undefined;
+    }
     return reviewed;
+  }
+
+  /** The latest finished dispatch that carries on from `d` (an escalation or a resume), or undefined. */
+  private finishedCarryingOn(d: Dispatch): Dispatch | undefined {
+    return [...this.dispatches.values()].filter((x) => FINISHED.includes(x.outcome ?? '') && lineage(x).slice(1).includes(d)).at(-1);
   }
 }
 
@@ -362,6 +392,14 @@ function belowTopRetryProblem(d: Dispatch, failure: Failure): string {
   );
 }
 
+/** Why `d`, one role above `failure`, may not leave the failure unnamed: the record must show what each dispatch answers. */
+function unnamedEscalationProblem(d: Dispatch, failure: Failure): string {
+  return (
+    `${d.name} does "${d.work}" at ${d.role} after ${described(failure)}, without naming it. Write "Escalated from: ${failure.name}", ` +
+    'so the record shows which failure this dispatch answers and how many rounds the work has had.'
+  );
+}
+
 /** Why `d` may not do `failure`'s work again at the top role without naming it or the designer's answer. */
 function topRetryProblem(d: Dispatch, failure: Failure): string {
   const exception =
@@ -381,15 +419,17 @@ function lineage(d: Dispatch): Dispatch[] {
 /**
  * Why `d`, which retries `failure` after it failed at judgement, is not one of routing.md's named
  * exceptions, or undefined when it is: one more judgement round for a red-team re-investigation
- * and for a repair, and one narrower quote-fix for a `claim-quote-check` refusal.
+ * and for a repair, one narrower quote-fix for a `claim-quote-check` refusal, and one
+ * re-transcription of a page range `verify-run-record` refused.
  */
 function exceptionProblem(d: Dispatch, failure: Failure): string | undefined {
   if (d.work === 're-investigate' || d.work === 'repair') return secondRoundProblem(d, failure);
   if (d.work === 'quote-fix') return quoteFixProblem(d, failure);
+  if (isTranscription(d.work)) return retranscriptionProblem(d, failure);
   return (
     `${d.name} escalates from ${failure.name}, but ${failure.failed.name} failed at judgement, the top role, and "${d.work}" is not ` +
     'one of the named exceptions (routing.md "When a Step Fails": one more judgement round for a re-investigate or a repair, ' +
-    `one quote-fix for a claim-quote-check refusal). ${ASK_DESIGNER}`
+    `one quote-fix for a claim-quote-check refusal, one re-transcription of a page range verify-run-record refused). ${ASK_DESIGNER}`
   );
 }
 
@@ -414,11 +454,28 @@ function secondRoundProblem(d: Dispatch, failure: Failure): string | undefined {
       `(routing.md "When a Step Fails"), and ${described(failure)}. ${ASK_DESIGNER}`
     );
   }
-  const used = lineage(failure.failed).find((x) => x.secondRound);
+  const used = lineage(failure.failed).find((x) => x.exceptionRound);
   if (used === undefined) return undefined;
   return (
     `${d.name} escalates from ${failure.name}, but that work already had its one more judgement round (${used.name}). ` +
     `No step gets a third round. ${ASK_DESIGNER}`
+  );
+}
+
+/** The third named exception: one re-transcription of a page range, after `verify-run-record` refused that range. */
+function retranscriptionProblem(d: Dispatch, failure: Failure): string | undefined {
+  if (failure.step !== undefined || failure.failed.work !== d.work) {
+    const doing = failure.failed.work === d.work ? '' : ` doing "${failure.failed.work}"`;
+    return (
+      `${d.name} is a re-transcription of "${d.work}" escalated from ${failure.name}, but ${described(failure)}${doing}. A re-transcription ` +
+      `answers verify-run-record's refusal of its own range, once (routing.md "When a Step Fails"). ${ASK_DESIGNER}`
+    );
+  }
+  const used = lineage(failure.failed).find((x) => x.exceptionRound);
+  if (used === undefined) return undefined;
+  return (
+    `${d.name} escalates from ${failure.name}, but that range already had its one re-transcription (${used.name}). ` +
+    `No range is transcribed a third time. ${ASK_DESIGNER}`
   );
 }
 

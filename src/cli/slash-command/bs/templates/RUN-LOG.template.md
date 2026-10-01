@@ -27,11 +27,11 @@
      that recorded it. A hand-typed or estimated time is caught by that last comparison. It also
      fails a dispatch with no Work, Role or Agent, a role that does not exist, an escalation that
      is not exactly one role up from a failed dispatch or a review round that asked for changes, a
-     failure answered twice, failed work done again at the same role or below without naming the
-     failure, an escalation from the top role that is not one of routing.md's named exceptions, a
-     review round with no link to the finished dispatch it reviewed, and a review round that did not
-     start from a passing verify (checked against .boardsmith/verify/ when the result is on this
-     machine). -->
+     failure answered twice, failed work done again without naming the failure, an escalation from
+     the top role that is not one of routing.md's named exceptions, a review round with no link to
+     the finished dispatch it reviewed or one naming a dispatch a later finished dispatch carried on
+     from, and a review round that did not start from a passing verify (checked against
+     .boardsmith/verify/ when the result is on this machine). -->
 
 <!-- Each "### Dispatch N" section has exactly these fields:
      - Work: what was dispatched: build-chunk | build-bot | insert-chunk for a whole chunk; the
@@ -45,7 +45,9 @@
      - Role: mechanical | bounded | judgement | second-opinion (routing.md "Which Role Each Step
        Uses"; reviewers are recorded in review rounds, not here)
      - Agent: the agent type actually dispatched, as `npx boardsmith agent <role>` printed it
-     - Escalated from: none; "Dispatch M" for the failed dispatch this one retries one role up; or
+     - Escalated from: none, also when this dispatch carries on one that stopped at a gate, its
+       context ceiling or a crash (Outcome gate, context-ceiling, or still pending), which it does
+       at the same role; "Dispatch M" for the failed dispatch this one retries one role up; or
        "Review Round M" for the review round that asked for changes to the work this one redoes one
        role up (`npx boardsmith agent <role> --escalate`). At the top role it names the failure a
        named exception answers (routing.md "When a Step Fails").
@@ -60,9 +62,12 @@
      - Outcome: pending | closed | gate | filing | context-ceiling | stuck | failed for a whole
        chunk; pending | done | failed | gate | context-ceiling for a step or a bulk edit. `failed`
        means its verify failed or a check run on its return refused it (claim-quote-check, for
-       investigate and re-investigate), or, for a whole chunk, that it returned `closed` but failed
-       its check. A reviewer's request for changes is not written here: it is the review round's
-       Outcome, and the escalation names the round.
+       investigate and re-investigate; verify-run-record, for a transcribed range), or, for a whole
+       chunk, that it returned `closed` but failed its check. A `build` dispatch's Outcome and
+       Finished at stay `pending` until `test`'s done gate answers, since that verify is its check:
+       then `done`, or `failed` with the failed check in Detail, and the `build` that follows at
+       `judgement` records `Escalated from: Dispatch N`. A reviewer's request for changes is not
+       written here: it is the review round's Outcome, and the escalation names the round.
      - Detail: one line — for `gate`, which gate; for `filing`, the filing id; for `stuck`, what
        was stuck; for `failed`, which check failed; otherwise "n/a"
 

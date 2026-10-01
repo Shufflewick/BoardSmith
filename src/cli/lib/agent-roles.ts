@@ -32,7 +32,7 @@ export type Role = (typeof ROLES)[number];
  * The roles a failed step climbs, lowest first. A step that fails (its verify fails,
  * `claim-quote-check` refuses its claims, or its reviewer asks for changes) goes to the next role
  * up, never again to the same one; a step that fails at the top goes to the designer, apart from
- * routing.md's two named exceptions. `review` and `second-opinion` are not on it: when a
+ * routing.md's three named exceptions. `review` and `second-opinion` are not on it: when a
  * reviewer asks for changes, the step whose work it reviewed is the one that failed.
  */
 export const ESCALATION_LADDER = ['mechanical', 'bounded', 'judgement'] as const;

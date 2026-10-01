@@ -256,9 +256,10 @@ boardsmith review-gate deal             # may a model review of chunk deal start
 review prompt carries, so no reviewer spends its time re-running the checks. A
 step that fails its verify, whose claims `claim-quote-check` refuses, or whose
 reviewer asks for changes, goes one role up, never to the same role again, and
-after `judgement` to you, apart from two named exceptions: a red-team
-re-investigation or a repair gets one more `judgement` round, and a refused quote
-gets one narrower fix.
+after `judgement` to you, apart from three named exceptions: a red-team
+re-investigation or a repair gets one more `judgement` round, a refused quote
+gets one narrower fix, and a page range `verify-run-record` refused is
+transcribed once more.
 
 ### 5. Build for Production
 
