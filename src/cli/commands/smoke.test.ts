@@ -24,6 +24,9 @@ import {
   boardWithAVanishingControl,
   boardWithDialogs,
   fieldsGame,
+  greetingsGame,
+  greetingsSpec,
+  NOBODY_CALLED_THAT,
   pointerAimedGame,
   PLAYERS_GET_THE_TABLE,
   QUIET_CLAIM_REASON,
@@ -60,6 +63,11 @@ async function smokeOf(world: boolean, files: Record<string, string> = {}) {
   const dir = await smokeProject(world, files);
   const { outcome, pids, steps } = await smokeIn(dir);
   return { dir, outcome, pids, steps };
+}
+
+/** Runs the smoke check on the greetings game (#470), with the spec's `inputs` written as `inputs`. */
+function walkGreetings(inputs: string) {
+  return smokeOf(false, { ...greetingsGame(), 'tests/browser/smoke.spec.ts': greetingsSpec(inputs) });
 }
 
 /**
@@ -334,6 +342,70 @@ describe('boardsmith verify: the smoke check', () => {
     expect(outcome.summary).toMatch(/- The game showed an error: The "kindle" action could not be completed/);
     expect(steps.some((line) => line.endsWith('entering "2" for "kindle"'))).toBe(false);
   });
+
+  it(
+    "#470: types the value a spec's `inputs` give a field, reading the page when the spec says how, and its own text in " +
+      'any other field; one the page gives no value for yet is cancelled and taken once the game has moved on',
+    async () => {
+      const { outcome, steps } = await walkGreetings(`{
+    greet: { whom: theOther },
+    // Nothing the first time it is asked, as a page that does not show the name yet gives none.
+    wave: { whom: async (view) => (++wavesAsked === 1 ? undefined : theOther(view)) },
+    pledge: { coins: 7 },
+  }`);
+
+      expect(outcome.summary).toMatch(
+        /^Served by `boardsmith dev` from a fresh start and dealt from seed "smoke", a seated player took "draw", "greet", "note", "pledge", "wave"/,
+      );
+      expect(outcome.passed).toBe(true);
+      // What the walk typed, without the step it typed it at. It acts for each seat in turn, so the
+      // other player's name is whichever seat it is not.
+      const entered = new Set(steps.map((line) => line.replace(/^smoke step \d+: /, '').replace(/Player [12]/, 'Player N')));
+      for (const typed of [
+        'entering "Player N" for "greet", from `inputs`',
+        'entering "7" for "pledge", from `inputs`',
+        'entering "smoke test" for "note"',
+        'entering "Player N" for "wave", from `inputs`',
+      ]) {
+        expect(entered).toContain(typed);
+      }
+      expect(steps.filter((line) => line.endsWith('`inputs` gives no value for "whom" of "wave" yet; cancelling it until the game moves on'))).toHaveLength(1);
+    },
+  );
+
+  it(
+    "#470: fails on a value from the spec's `inputs` the game refuses, naming it; on a value of the walk's own the game " +
+      'refuses, saying how to give the right one; and on an action whose input never gave a value',
+    async () => {
+      const { outcome, steps } = await walkGreetings(`{
+    greet: { whom: 'Nobody' },
+    wave: { whom: () => undefined },
+  }`);
+
+      expect(outcome.passed).toBe(false);
+      expect(outcome.summary).toContain(
+        `- The panel offered "greet", and taking it failed: ${NOBODY_CALLED_THAT} The walk typed "Nobody" in its field ` +
+          '"whom", as `inputs.greet.whom` in tests/browser/smoke.spec.ts gives it.',
+      );
+      expect(outcome.summary).toContain(
+        '- The panel offered "pledge", and taking it failed: The pot takes seven coins. The game refused each of the 3 ' +
+          'numbers the walk entered. The walk typed "3" in its field "coins". If the game needs a particular value there, ' +
+          'such as a name the board shows, give it in `inputs` in tests/browser/smoke.spec.ts.',
+      );
+      expect(outcome.summary).toContain(
+        '- The panel offered "wave", but the walk never took it in 60 steps: when it last opened it, `inputs.wave.whom` in ' +
+          'tests/browser/smoke.spec.ts gave no text for its field "whom", so the walk cancelled it.',
+      );
+      expect(outcome.summary).not.toMatch(/"(note|draw)", but the walk never took it/);
+      // An action put off is tried again in turn with the others, not after every move, so however
+      // many are put off the rest of the game keeps its steps.
+      const times = (what: RegExp) => steps.filter((line) => what.test(line)).length;
+      const putOff = times(/`inputs` gives no value for "whom" of "wave" yet/);
+      expect(putOff).toBeGreaterThan(1);
+      expect(putOff).toBeLessThanOrEqual(times(/: taking "note"$/) + 1);
+      expect(putOff).toBeLessThanOrEqual(times(/: taking "draw"$/) + 1);
+    },
+  );
 
   it('fails a spec that passes without walking the game', async () => {
     const { outcome } = await smokeOf(false, {

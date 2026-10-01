@@ -756,3 +756,138 @@ function claim() {
     'src/ui/uis.ts': PLAYERS_GET_THE_TABLE,
   };
 }
+
+/** What `greet` and `wave` say when the name typed is not the other player's (#470). */
+export const NOBODY_CALLED_THAT = 'Nobody at the table is called that.';
+
+/**
+ * THE GREETINGS GAME (#470): actions whose typed value the game itself checks, as Survival of the
+ * Fittest's attack names a survivor standing in the same square. Each turn a player may `greet` or
+ * `wave` at the other player by name (a text field the game refuses unless it is the other
+ * player's name, which the players panel shows), `pledge` coins (a number field, 1 to 10, the game
+ * refuses unless it is 7), write a `note` (free text, any of it accepted) or `draw`.
+ */
+export function greetingsGame(): Record<string, string> {
+  return {
+    'src/rules/game.ts': `import { Game, Player, type GameOptions } from 'boardsmith';
+import { Card, Hand, Deck } from './elements.js';
+import { createGameFlow } from './flow.js';
+import { createTurnActions } from './actions.js';
+
+export class DevGamePlayer extends Player<DevGameGame, DevGamePlayer> {
+  hand!: Hand;
+}
+
+export class DevGameGame extends Game<DevGameGame, DevGamePlayer> {
+  static PlayerClass = DevGamePlayer;
+
+  deck!: Deck;
+
+  constructor(options: GameOptions) {
+    super(options);
+    this.registerElements([Card, Hand, Deck]);
+    for (const player of this.players) {
+      const hand = this.create(Hand, \`hand-\${player.seat}\`);
+      hand.player = player;
+      player.hand = hand;
+    }
+    this.deck = this.create(Deck, 'deck');
+    for (let i = 0; i < 40; i++) this.deck.create(Card, \`card-\${i}\`, { suit: 'H', rank: 'A' });
+    for (const action of createTurnActions(this)) this.registerAction(action);
+    this.setFlow(createGameFlow(this));
+  }
+
+  override isFinished(): boolean {
+    return this.deck.count(Card) === 0;
+  }
+
+  override getWinners(): DevGamePlayer[] {
+    return [];
+  }
+}
+`,
+    'src/rules/actions.ts': `import { Action, type ActionDefinition } from 'boardsmith';
+import type { DevGameGame, DevGamePlayer } from './game.js';
+import { Card } from './elements.js';
+
+export function createTurnActions(game: DevGameGame): ActionDefinition[] {
+  const toTheOther = (verb: string) =>
+    Action.create(verb)
+      .prompt(\`\${verb} at the other player\`)
+      .enterText('whom', { prompt: 'Their name' })
+      .execute((args, ctx) => {
+        const other = game.players.find((player) => player !== ctx.player);
+        if (args.whom !== other?.name) return { success: false, error: ${JSON.stringify(NOBODY_CALLED_THAT)} };
+        return { success: true };
+      });
+  return [
+    toTheOther('greet'),
+    toTheOther('wave'),
+    Action.create('pledge')
+      .prompt('Pledge coins')
+      .enterNumber('coins', { prompt: 'How many coins?', min: 1, max: 10, integer: true })
+      .execute((args) => (args.coins === 7 ? { success: true } : { success: false, error: 'The pot takes seven coins.' })),
+    Action.create('note')
+      .prompt('Write a note')
+      .enterText('words', { prompt: 'What does it say?' })
+      .execute(() => ({ success: true })),
+    Action.create('draw')
+      .prompt('Draw a card')
+      .execute((_args, ctx) => {
+        game.deck.first(Card)?.putInto((ctx.player as DevGamePlayer).hand);
+        return { success: true };
+      }),
+  ];
+}
+`,
+    'src/rules/flow.ts': `import { loop, eachPlayer, actionStep, type FlowDefinition } from 'boardsmith';
+import type { DevGameGame } from './game.js';
+
+export function createGameFlow(game: DevGameGame): FlowDefinition {
+  return {
+    root: loop({
+      name: 'game-loop',
+      while: () => !game.isFinished(),
+      maxIterations: 100,
+      do: eachPlayer({
+        name: 'player-turns',
+        do: actionStep({ name: 'turn', actions: ['greet', 'wave', 'pledge', 'note', 'draw'], skipIf: () => game.isFinished() }),
+      }),
+    }),
+    isComplete: () => game.isFinished(),
+    getWinners: () => game.getWinners(),
+  };
+}
+`,
+    'tests/game.test.ts': `import { describe, expect, it } from 'vitest';
+import { DevGameGame } from '../src/rules/game.js';
+
+describe('the greetings game', () => {
+  it('starts with forty cards in the deck', () => {
+    expect(new DevGameGame({ playerCount: 2, seed: 'test' }).deck.all().length).toBe(40);
+  });
+});
+`,
+  };
+}
+
+/** The players panel's name for the player other than the one the page is seated as. */
+const OTHER_PLAYER = '.player-name-row:not(:has(.you-badge)) .player-name';
+
+/**
+ * A smoke spec for {@link greetingsGame} whose `inputs` are `inputs`, written as source (#470), so a
+ * spec can give a function of the page.
+ */
+export function greetingsSpec(inputs: string): string {
+  return `import { defineSmokeTest, type SmokeInputView } from 'boardsmith/testing/browser';
+
+// The other player's name, as the players panel shows it.
+const theOther = async ({ texts }: SmokeInputView) => (await texts(${JSON.stringify(OTHER_PLAYER)}))[0];
+let wavesAsked = 0;
+
+defineSmokeTest({
+  actions: ['greet', 'wave', 'pledge', 'note', 'draw'],
+  inputs: ${inputs},
+});
+`;
+}

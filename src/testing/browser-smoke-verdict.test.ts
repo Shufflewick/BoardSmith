@@ -3,9 +3,12 @@
  * Chromium under `boardsmith verify`; its verdict is decided here, from what it saw.
  */
 import { describe, expect, it } from 'vitest';
+import { rulesErrorSentence } from '../engine/action/rules-error.js';
 import {
+  actionFailed,
   answered,
   DEFAULT_SMOKE_SEED,
+  inputFor,
   MOST_ANSWERS,
   SMOKE_SPEC_PATH,
   startAnswering,
@@ -15,6 +18,7 @@ import {
   smokeRecord,
   smokeSeeds,
   smokeSummary,
+  type SmokeInputView,
   type SmokeWalk,
 } from './browser-smoke-verdict.js';
 
@@ -29,6 +33,8 @@ function walk(overrides: Partial<SmokeWalk>): SmokeWalk {
     errors: [],
     seeds: [DEFAULT_SMOKE_SEED],
     stalls: [],
+    inputs: {},
+    wanting: new Map(),
     ...overrides,
   };
 }
@@ -306,5 +312,96 @@ describe('walkStopped: why a walk could not go on (#464)', () => {
       'The walk could not go on: The dev host never showed the game.',
     );
     expect(walkStopped(new Error('boom'), 5, { step: 3, seed: null })).toBe('The walk could not go on at step 3: boom');
+  });
+});
+
+describe('#470: the values a spec gives the walk to type, in `inputs`', () => {
+  /** A page whose elements, by selector, read as `shown`. */
+  const page = (shown: Record<string, string[]> = {}): SmokeInputView => ({ texts: async (selector) => shown[selector] ?? [] });
+
+  it('gives no value for a field the spec names none for, so the walk types its own', async () => {
+    expect(await inputFor({}, 'attack', 'target', page())).toBeUndefined();
+    expect(await inputFor({ attack: { weapon: 'axe' } }, 'attack', 'target', page())).toBeUndefined();
+    expect(await inputFor({ attack: { target: 'p2' } }, 'heal', 'target', page())).toBeUndefined();
+    // Only the spec's own keys: an action named like an object's built-in member gets nothing from it.
+    expect(await inputFor({}, 'constructor', 'name', page())).toBeUndefined();
+  });
+
+  it('gives the text or number the spec names for the field, as text to type', async () => {
+    expect(await inputFor({ attack: { target: 'p2' } }, 'attack', 'target', page())).toEqual({ value: 'p2' });
+    expect(await inputFor({ bid: { amount: 40 } }, 'bid', 'amount', page())).toEqual({ value: '40' });
+  });
+
+  it('gives what a function of the page returns, reading what a player reads there', async () => {
+    const inputs = { attack: { target: async ({ texts }: SmokeInputView) => (await texts('.nearby li'))[0] } };
+    expect(await inputFor(inputs, 'attack', 'target', page({ '.nearby li': ['p2', 'p3'] }))).toEqual({ value: 'p2' });
+  });
+
+  it('says the page gives no value yet when the function returns nothing, or blank text', async () => {
+    const inputs = { attack: { target: async ({ texts }: SmokeInputView) => (await texts('.nearby li'))[0] } };
+    expect(await inputFor(inputs, 'attack', 'target', page())).toEqual({ wanting: true });
+    expect(await inputFor({ attack: { target: () => '   ' } }, 'attack', 'target', page())).toEqual({ wanting: true });
+  });
+
+  it('says which input failed, and how, when its function throws', async () => {
+    const inputs = { attack: { target: () => { throw new Error('no such list'); } } };
+    expect(await inputFor(inputs, 'attack', 'target', page())).toEqual({
+      problem: `\`inputs.attack.target\` in ${SMOKE_SPEC_PATH} failed while the walk answered "attack": no such list`,
+    });
+  });
+
+  it('fails a spec whose inputs name an action `actions` does not list, or give blank text', () => {
+    expect(smokeProblems(walk({ listed: ['attack'], taken: new Set(['attack']), inputs: { atack: { target: 'p2' }, attack: { target: ' ' } } }))).toEqual([
+      `${SMOKE_SPEC_PATH} gives \`inputs\` for "atack", but \`actions\` does not list it. Name the action as \`actions\` ` +
+        'does, or remove it from `inputs` if the game no longer has it.',
+      `\`inputs.attack.target\` in ${SMOKE_SPEC_PATH} is blank, so the walk would type nothing there. Give the text a ` +
+        'player types in that field.',
+    ]);
+  });
+
+  it('says why the walk never took an action whose input the page never gave', () => {
+    const wanted = walk({ listed: ['attack'], offered: new Set(['attack']), enabled: new Set(['attack']), wanting: new Map([['attack', 'target']]), steps: 30 });
+    expect(smokeProblems(wanted)).toEqual([
+      `The panel offered "attack", but the walk never took it in 30 steps: when it last opened it, \`inputs.attack.target\` ` +
+        `in ${SMOKE_SPEC_PATH} gave no text for its field "target", so the walk cancelled it. Make it return the text a ` +
+        'player would type there whenever the game offers the action.',
+    ]);
+  });
+
+  describe('actionFailed: an action the game refused', () => {
+    it('says what the game said, as before, when the walk typed nothing', () => {
+      expect(actionFailed('draw', 'the deck is empty', [], 0)).toBe('The panel offered "draw", and taking it failed: the deck is empty');
+      expect(actionFailed('draw', undefined, [], 0)).toBe('The panel offered "draw", and taking it failed: no reason given');
+    });
+
+    it('names the value the spec gave, so a refused input fails the walk and says which', () => {
+      expect(actionFailed('attack', "There's no one here by that name.", [{ field: 'target', value: 'p2', from: 'inputs' }], 0)).toBe(
+        `The panel offered "attack", and taking it failed: There's no one here by that name. The walk typed "p2" in its ` +
+          `field "target", as \`inputs.attack.target\` in ${SMOKE_SPEC_PATH} gives it.`,
+      );
+    });
+
+    it('names the text the walk typed itself, and says how to give the game the text it needs', () => {
+      expect(actionFailed('attack', "There's no one here by that name.", [{ field: 'target', value: 'smoke test', from: 'walk' }], 0)).toBe(
+        `The panel offered "attack", and taking it failed: There's no one here by that name. The walk typed "smoke test" ` +
+          `in its field "target". If the game needs a particular value there, such as a name the board shows, give it in ` +
+          `\`inputs\` in ${SMOKE_SPEC_PATH}.`,
+      );
+    });
+
+    it("names what the walk typed in an action whose rules crashed, without suggesting the game wants another value", () => {
+      const crash = `${rulesErrorSentence('kindle')} Nothing was changed. (the hearth cracked)`;
+      expect(actionFailed('kindle', crash, [{ field: 'logs', value: '1', from: 'walk' }], 0)).toBe(
+        `The panel offered "kindle", and taking it failed: ${crash} The walk typed "1" in its field "logs".`,
+      );
+    });
+
+    it('says how many numbers the game refused, when it refused every one the walk tried', () => {
+      expect(actionFailed('kindle', 'Too few logs.', [{ field: 'logs', value: '3', from: 'walk' }], 2)).toBe(
+        'The panel offered "kindle", and taking it failed: Too few logs. The game refused each of the 3 numbers the walk ' +
+          `entered. The walk typed "3" in its field "logs". If the game needs a particular value there, such as a name the ` +
+          `board shows, give it in \`inputs\` in ${SMOKE_SPEC_PATH}.`,
+      );
+    });
   });
 });

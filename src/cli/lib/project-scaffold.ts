@@ -707,6 +707,15 @@ export function generateSmokeSpecTs(actions: readonly string[]): string {
 //
 // The walk does not require it while it never sees it enabled. Once it is offered enabled, the walk
 // must take it like any other, and if it does, it says so: remove the declaration then.
+//
+// The walk types "smoke test" in a text field and the least number a number field takes. A field
+// whose value the game checks (a name only another player has) gets it from \`inputs\`, by action
+// and field: the value itself, or a function of what the page shows, given \`texts(selector)\`.
+// One that returns nothing has the walk cancel the action and take it again later:
+//
+//   inputs: { attackPlayer: { target: async ({ texts }) => (await texts('.nearby li'))[0] } },
+//
+// A value the game refuses still fails the walk, as any failed action does.
 defineSmokeTest({
   actions: [${actions.map((name) => `'${name}'`).join(', ')}],
 });

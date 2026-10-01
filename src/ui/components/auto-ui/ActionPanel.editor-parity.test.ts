@@ -211,3 +211,13 @@ describe.each(CASES)('$kind keeps #235\'s distinction across an unmount', (c) =>
     second.unmount();
   });
 });
+
+describe.each(CASES)('$kind names the pick it answers (#470)', (c) => {
+  it('carries the pick name in data-bs-pick, so a smoke spec can give the walk the value that field needs', async () => {
+    const { wrapper } = await atEditor(c.action);
+    const editor = wrapper.find(`.action-config ${c.editor}`);
+    expect(editor.attributes('data-bs-pick')).toBe(c.action.selections![0]!.name);
+    expect(editor.find(c.control).exists()).toBe(true);
+    wrapper.unmount();
+  });
+});

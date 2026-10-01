@@ -4,6 +4,7 @@
  * Kept apart from `browser-smoke.ts`, which drives Chromium under Playwright, so the verdict is
  * decided by plain code a vitest test can hold to its wording.
  */
+import { rulesErrorSentence } from '../engine/action/rules-error.js';
 
 /** Where a game keeps its smoke test. `boardsmith init` writes it and `boardsmith verify` runs it. */
 export const SMOKE_SPEC_PATH = 'tests/browser/smoke.spec.ts';
@@ -55,6 +56,84 @@ interface SmokeStall {
   readonly seconds: number;
 }
 
+/**
+ * What a function in a spec's `inputs` may read of the page while the walk answers a field (#470):
+ * what a player sees there, and nothing it could press.
+ */
+export interface SmokeInputView {
+  /**
+   * The text of each visible element `selector` matches in the game's frame, in page order, as a
+   * player reads it: whitespace collapsed, blank ones left out.
+   */
+  texts(selector: string): Promise<string[]>;
+}
+
+/**
+ * The value the walk types in one text or number field (#470): the text or number itself, or a
+ * function of what the page shows, for a value only known once the game is under way (the name of
+ * a player standing in the same square). The function returns nothing when the page gives no value
+ * yet; the walk then cancels the action and takes it again once the game has moved on.
+ */
+export type SmokeInput =
+  | string
+  | number
+  | ((view: SmokeInputView) => string | number | undefined | Promise<string | number | undefined>);
+
+/** The spec's `inputs`: for each action, by the name its rules give it, the value for each of its fields, by pick name. */
+export type SmokeInputs = Readonly<Record<string, Readonly<Record<string, SmokeInput>>>>;
+
+/** What the walk typed in one field of an action, and whether the spec's `inputs` gave it or the walk chose it. */
+export interface TypedValue {
+  readonly field: string;
+  readonly value: string;
+  readonly from: 'inputs' | 'walk';
+}
+
+/** How a spec's `inputs` answer one field: a value to type, none yet, or a problem with the spec's function. */
+type InputAnswer = { readonly value: string } | { readonly wanting: true } | { readonly problem: string };
+
+/** How a message names one input in the spec: `inputs.attack.target`. */
+const inputName = (action: string, field: string) => `\`inputs.${action}.${field}\``;
+
+/**
+ * What the spec's `inputs` give for `field` of `action`, reading `view` when the input is a
+ * function: undefined when the spec gives nothing for that field, so the walk types its own value.
+ */
+export async function inputFor(inputs: SmokeInputs, action: string, field: string, view: SmokeInputView): Promise<InputAnswer | undefined> {
+  if (!Object.hasOwn(inputs, action) || !Object.hasOwn(inputs[action], field)) return undefined;
+  const input = inputs[action][field];
+  let value: string | number | undefined;
+  try {
+    value = typeof input === 'function' ? await input(view) : input;
+  } catch (error) {
+    const said = error instanceof Error ? error.message.split('\n')[0] : String(error);
+    return { problem: `${inputName(action, field)} in ${SMOKE_SPEC_PATH} failed while the walk answered "${action}": ${said}` };
+  }
+  if (value === undefined || String(value).trim() === '') return { wanting: true };
+  return { value: String(value) };
+}
+
+/**
+ * Why the walk reports that taking `action` failed: what the game said, how many numbers it refused
+ * when it refused each one the walk tried (`refused` before the last), and what the walk typed, so a
+ * refused value from the spec's `inputs` is named as such and one the walk chose says how to give
+ * the game the value it needs (#470), unless the rules crashed (`rulesErrorSentence`).
+ */
+export function actionFailed(action: string, error: string | undefined, typed: readonly TypedValue[], refused: number): string {
+  const each = refused > 0 ? ` The game refused each of the ${refused + 1} numbers the walk entered.` : '';
+  const said = typed.map(({ field, value, from }) =>
+    from === 'inputs'
+      ? ` The walk typed "${value}" in its field "${field}", as ${inputName(action, field)} in ${SMOKE_SPEC_PATH} gives it.`
+      : ` The walk typed "${value}" in its field "${field}".`,
+  );
+  // A crash in the rules is not the game asking for another value, so it gets no hint to give one.
+  const crashed = error?.startsWith(rulesErrorSentence(action)) ?? false;
+  const hint = !crashed && typed.some(({ from }) => from === 'walk')
+    ? ` If the game needs a particular value there, such as a name the board shows, give it in \`inputs\` in ${SMOKE_SPEC_PATH}.`
+    : '';
+  return `The panel offered "${action}", and taking it failed: ${error ?? 'no reason given'}${each}${said.join('')}${hint}`;
+}
+
 /** What a walk saw. */
 export interface SmokeWalk {
   /** The actions the spec lists. */
@@ -79,6 +158,13 @@ export interface SmokeWalk {
   readonly seeds: string[];
   /** Every deal the walk stopped early because no seat was offered anything. */
   readonly stalls: SmokeStall[];
+  /** The values the spec gives the walk to type, by action and field (#470). */
+  readonly inputs: SmokeInputs;
+  /**
+   * The actions the walk cancelled because the spec's `inputs` gave no value for a field yet, with
+   * that field; an action leaves it once taken.
+   */
+  readonly wanting: Map<string, string>;
 }
 
 const quoted = (names: readonly string[]) => names.map((n) => `"${n}"`).join(', ');
@@ -126,6 +212,29 @@ export function requiredUntaken(walk: SmokeWalk): string[] {
   return walk.listed.filter((name) => !walk.taken.has(name) && !excused(walk, name));
 }
 
+/** Why the spec's `inputs` cannot stand: one names no listed action, or gives blank text. */
+function inputProblems(walk: SmokeWalk): string[] {
+  const problems: string[] = [];
+  for (const [action, fields] of Object.entries(walk.inputs)) {
+    if (!walk.listed.includes(action)) {
+      problems.push(
+        `${SMOKE_SPEC_PATH} gives \`inputs\` for "${action}", but \`actions\` does not list it. Name the action as \`actions\` ` +
+          'does, or remove it from `inputs` if the game no longer has it.',
+      );
+      continue;
+    }
+    for (const [field, input] of Object.entries(fields)) {
+      if (typeof input === 'string' && input.trim() === '') {
+        problems.push(
+          `${inputName(action, field)} in ${SMOKE_SPEC_PATH} is blank, so the walk would type nothing there. Give the text a ` +
+            'player types in that field.',
+        );
+      }
+    }
+  }
+  return problems;
+}
+
 /** Why the spec's `unreachable` declarations cannot stand: one names no listed action, or gives no reason. */
 function declarationProblems(walk: SmokeWalk): string[] {
   const problems: string[] = [];
@@ -153,7 +262,7 @@ function declarationProblems(walk: SmokeWalk): string[] {
 
 /** Everything that fails the walk, errors first. An empty list is a pass. */
 export function smokeProblems(walk: SmokeWalk): string[] {
-  const problems = [...walk.errors, ...declarationProblems(walk)];
+  const problems = [...walk.errors, ...declarationProblems(walk), ...inputProblems(walk)];
   const unlisted = [...walk.offered].filter((name) => !walk.listed.includes(name)).sort();
   if (unlisted.length > 0) {
     problems.push(
@@ -162,10 +271,15 @@ export function smokeProblems(walk: SmokeWalk): string[] {
     );
   }
   for (const name of requiredUntaken(walk)) {
+    const field = walk.wanting.get(name);
     problems.push(
-      walk.offered.has(name)
-        ? `The panel offered "${name}", but the walk never took it in ${walk.steps} steps. The errors above, if any, say why.`
-        : neverOffered(walk, name),
+      !walk.offered.has(name)
+        ? neverOffered(walk, name)
+        : field !== undefined
+          ? `The panel offered "${name}", but the walk never took it in ${walk.steps} steps: when it last opened it, ` +
+            `${inputName(name, field)} in ${SMOKE_SPEC_PATH} gave no text for its field "${field}", so the walk cancelled it. ` +
+            'Make it return the text a player would type there whenever the game offers the action.'
+          : `The panel offered "${name}", but the walk never took it in ${walk.steps} steps. The errors above, if any, say why.`,
     );
   }
   return problems;
