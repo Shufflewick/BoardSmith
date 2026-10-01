@@ -404,20 +404,39 @@ async function firstPressable(frame: Frame, selectors: readonly string[]): Promi
   return undefined;
 }
 
+/** Why a press failed when something in front of a control kept the pointer from it. */
+const COVERED = 'another element covers it, so a pointer cannot reach it';
+
+/** Why a press failed when the control left the page between being found and being pressed. */
+const GONE = 'it went away before the press landed';
+
+/** A press that found a toast over the control, which goes by itself. */
+class UnderAToast extends Error {}
+
 /** Why a press did not land, as a player would put it. */
 async function whyNotPressed(target: Locator, error: unknown): Promise<string> {
-  if ((await target.count()) === 0) return 'it went away before the press landed';
+  if ((await target.count()) === 0) return GONE;
   const message = error instanceof Error ? error.message : String(error);
-  if (/intercepts pointer events/.test(message)) return 'another element covers it, so a pointer cannot reach it';
+  if (error instanceof UnderAToast || /intercepts pointer events/.test(message)) return COVERED;
   if (error instanceof Error && error.name === 'TimeoutError') return `it did not become pressable within ${PRESS_MS / 1000}s`;
   return message.split('\n')[0];
 }
 
+/** Clicks `control` with Playwright, which waits for it to be visible, still and on top; a toast on top is an {@link UnderAToast}. */
+async function click(control: Control): Promise<void> {
+  await control.target.click({ timeout: PRESS_MS }).catch((error: unknown) => {
+    const toast = error instanceof Error && /class="[^"]*\btoast\b[^"]*"[^\n]*intercepts pointer events/.test(error.message);
+    throw toast ? new UnderAToast(COVERED) : error;
+  });
+}
+
 /**
  * Presses `control` as a player would: with the pointer, or, for a keyboard-only control (invisible
- * and taking no pointer, `pageControls`), by focusing it and pressing Enter (#457). A press the page
- * does not take within {@link PRESS_MS}, because the control went away, something covers it or it
- * never becomes pressable, is reported and the walk goes on. Returns whether the press landed.
+ * and taking no pointer, `pageControls`), by focusing it and pressing Enter (#457). A pick's
+ * candidate is aimed at first (`aimAndClick`, #468); any other control is clicked. A toast over the
+ * control goes by itself, so the walk waits for it, as a player does, and presses again. A press
+ * that does not land, because the control went away, something covers it or it never becomes
+ * pressable, is reported and the walk goes on. Returns whether the press landed.
  */
 async function press(control: Control, what: string, walk: SmokeWalk): Promise<boolean> {
   const pressIt = () =>
@@ -425,11 +444,10 @@ async function press(control: Control, what: string, walk: SmokeWalk): Promise<b
       ? control.target.press('Enter', { timeout: PRESS_MS })
       : control.candidate
         ? aimAndClick(control)
-        : control.target.click({ timeout: PRESS_MS });
+        : click(control);
   try {
     await pressIt().catch(async (error: unknown) => {
-      if (!coveredByAToast(error)) throw error;
-      // A toast over the control goes by itself; a player waits for it, and so does the walk.
+      if (!(error instanceof UnderAToast)) throw error;
       await control.frame.waitForFunction(() => document.querySelector('.toast') === null, undefined, { timeout: TOAST_WAIT_MS });
       await pressIt();
     });
@@ -440,14 +458,89 @@ async function press(control: Control, what: string, walk: SmokeWalk): Promise<b
   }
 }
 
+/** The longest a toast stays: an error toast goes after 4 seconds. */
+const TOAST_WAIT_MS = 8_000;
+
 /**
- * Where on a candidate the walk aims (#468), as fractions of its width and height: its centre first,
- * then a grid over the rest of it.
+ * Where on a candidate the walk points (#468), as fractions of its width and height: its centre
+ * first, then a grid over the rest of it, for a candidate partly covered or refused at its centre.
  */
 const AIM_POINTS: ReadonlyArray<readonly [number, number]> = [
   [0.5, 0.5],
   ...[0.1, 0.3, 0.5, 0.7, 0.9].flatMap((y) => [0.1, 0.3, 0.5, 0.7, 0.9].map((x) => [x, y] as const)).filter(([x, y]) => x !== 0.5 || y !== 0.5),
 ];
+
+/** What lies on top at a point of a control: the control itself, a toast, or something else. */
+type OnTop = 'it' | 'toast' | 'other';
+
+/** What lies on top at fractions (x, y) of `control`'s box, scrolled into view. */
+function onTopAt(control: Control, x: number, y: number): Promise<OnTop> {
+  return control.target.evaluate(
+    (element, [fx, fy]): OnTop => {
+      element.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+      const box = element.getBoundingClientRect();
+      const hit = element.ownerDocument.elementFromPoint(box.left + box.width * fx, box.top + box.height * fy);
+      if (hit !== null && (hit === element || element.contains(hit))) return 'it';
+      return hit?.closest('.toast') ? 'toast' : 'other';
+    },
+    [x, y] as const,
+    { timeout: PRESS_MS },
+  );
+}
+
+/** Where fractions (x, y) of `control`'s box are on the page. */
+async function placeOf(control: Control, x: number, y: number): Promise<{ x: number; y: number }> {
+  const box = await control.target.boundingBox({ timeout: PRESS_MS });
+  if (box === null) throw new Error(GONE);
+  return { x: box.x + box.width * x, y: box.y + box.height * y };
+}
+
+/**
+ * Moves the pointer to fractions (x, y) of `control`'s box when the control is on top there, and
+ * returns where that is on the page, else what lies on top. It moves the mouse itself rather than
+ * waiting for the control to stand still, as a player does: a board that animates, or pans as the
+ * pointer moves over it, is pointed at all the same.
+ */
+async function pointAt(control: Control, x: number, y: number): Promise<{ x: number; y: number } | Exclude<OnTop, 'it'>> {
+  const top = await onTopAt(control, x, y);
+  if (top !== 'it') return top;
+  const at = await placeOf(control, x, y);
+  await control.frame.page().mouse.move(at.x, at.y);
+  return at;
+}
+
+/** How far, in pixels, a control may move under the pointer and still be where the pointer is. */
+const STILL_PX = 2;
+
+/**
+ * Clicks fractions (x, y) of `control`, where the pointer was moved to `at`, provided the control is
+ * still on top there. A control that pointing at it removed (#464) or covered is not pressed, and one
+ * that pointing at it moved (a panel that shows what a hovered choice would do) is pointed at again
+ * where it went, so the click lands on it.
+ */
+async function clickAt(control: Control, at: { x: number; y: number }, x: number, y: number): Promise<void> {
+  let pointer = at;
+  for (let looks = 0; looks < 3; looks++) {
+    if ((await control.target.count()) === 0) throw new Error(GONE);
+    const top = await onTopAt(control, x, y);
+    if (top === 'toast') throw new UnderAToast(COVERED);
+    if (top === 'other') throw new Error(COVERED);
+    const now = await placeOf(control, x, y);
+    if (Math.abs(now.x - pointer.x) <= STILL_PX && Math.abs(now.y - pointer.y) <= STILL_PX) {
+      await control.frame.page().mouse.click(pointer.x, pointer.y);
+      return;
+    }
+    await control.frame.page().mouse.move(now.x, now.y);
+    pointer = now;
+  }
+  throw new Error('it kept moving away from the pointer, so a press could not land on it');
+}
+
+/** Throws why no point of a control could be pressed: a toast over it, or something else. */
+function unreachable(covers: ReadonlySet<Exclude<OnTop, 'it'>>): never {
+  if (covers.has('toast')) throw new UnderAToast(COVERED);
+  throw new Error(COVERED);
+}
 
 /**
  * Clicks a pick's candidate as a player does: points at it, and clicks where it then stands for a
@@ -457,30 +550,24 @@ const AIM_POINTS: ReadonlyArray<readonly [number, number]> = [
  * walk aims at other points on it until one is accepted, and clicks there.
  */
 async function aimAndClick(control: Control): Promise<void> {
-  const box = await control.target.boundingBox({ timeout: PRESS_MS });
-  if (box === null) throw new Error('it is not drawn on the page');
+  const covers = new Set<Exclude<OnTop, 'it'>>();
+  let reached = false;
   for (const [x, y] of AIM_POINTS) {
-    const position = { x: box.width * x, y: box.height * y };
-    await control.target.hover({ position, timeout: PRESS_MS });
+    const at = await pointAt(control, x, y);
+    if (typeof at === 'string') {
+      covers.add(at);
+      continue;
+    }
+    reached = true;
     const accepted = await control.target.evaluate(
       (element) => element.getAttribute('aria-disabled') !== 'true' && element.hasAttribute('data-bs-candidate'),
       undefined,
       { timeout: PRESS_MS },
     );
-    if (accepted) {
-      await control.target.click({ position, timeout: PRESS_MS });
-      return;
-    }
+    if (accepted) return clickAt(control, at, x, y);
   }
-  throw new Error('wherever the pointer aims on it, it stands for a choice the game refuses');
-}
-
-/** The longest a toast stays: an error toast goes after 4 seconds. */
-const TOAST_WAIT_MS = 8_000;
-
-/** Whether a press failed because a toast lay over the control. */
-function coveredByAToast(error: unknown): boolean {
-  return error instanceof Error && /class="[^"]*\btoast\b[^"]*"[^\n]*intercepts pointer events/.test(error.message);
+  if (reached) throw new Error('wherever the pointer aims on it, it stands for a choice the game refuses');
+  unreachable(covers);
 }
 
 /** Presses what `selector` matches first in `frame`, as the panel's `what`; false when it has gone. */
@@ -590,12 +677,10 @@ const BOARD_CANDIDATES = '[data-testid="bs-board"] [data-bs-candidate]';
 async function aimedElsewhere(answering: Answering): Promise<Control | undefined> {
   for (const candidate of await controlsOf(answering.frame, BOARD_CANDIDATES)) {
     if (candidate.enabled || candidate.keyboardOnly || answering.refused.has(candidate.key)) continue;
-    const box = await candidate.target.boundingBox({ timeout: PRESS_MS });
-    const named = async (x: number, y: number) => {
-      await candidate.target.hover({ position: { x: box!.width * x, y: box!.height * y }, timeout: PRESS_MS, force: true });
-      return candidate.target.getAttribute('data-bs-candidate', { timeout: PRESS_MS });
-    };
-    if (box !== null && (await named(0.1, 0.1)) !== (await named(0.9, 0.9))) return candidate;
+    const named = async (x: number, y: number) =>
+      typeof (await pointAt(candidate, x, y)) === 'string' ? undefined : candidate.target.getAttribute('data-bs-candidate', { timeout: PRESS_MS });
+    const first = await named(0.1, 0.1);
+    if (first !== undefined && first !== (await named(0.9, 0.9))) return candidate;
     answering.refused.add(candidate.key);
   }
   return undefined;
