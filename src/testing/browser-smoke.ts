@@ -510,9 +510,12 @@ function toastOnTop(error: unknown): unknown {
  * them. A control in the panel is clicked by Playwright. A toast over the control goes by itself, so
  * the walk reads it, waits for it to go, as a player does, and presses again. A press
  * that does not land, because the control went away, something covers it or it never becomes
- * pressable, is reported and the walk goes on. Returns whether the press landed.
+ * pressable, is reported and the walk goes on. So is one that replaced the game's page, taking the
+ * frame the walk pressed in away with whatever the press did: the walk goes on in the frame the
+ * page shows next. Returns whether the press landed.
  */
 async function press(control: Control, what: string, walk: SmokeWalk, memory: WalkMemory): Promise<boolean> {
+  const replaced = `Pressing ${what} replaced the game's page, so the walk could not see what the press did.`;
   // A page that redraws the control as a new element mid-press takes away the element marked for
   // it, and one look at the control (LOOK_MS) may run out before it stands still or is uncovered:
   // the walk finds the control again and presses that, for PRESS_MS in all. What was on top when
@@ -524,7 +527,7 @@ async function press(control: Control, what: string, walk: SmokeWalk, memory: Wa
       try {
         return await pressOnce(now);
       } catch (error) {
-        if (error instanceof UnderAToast) throw error;
+        if (error instanceof UnderAToast || control.frame.isDetached()) throw error;
         if (Date.now() > deadline) throw toastOnTop(error);
         const lookRanOut = error instanceof Error && error.name === 'TimeoutError';
         if (!lookRanOut && (await now.target.count()) > 0) throw error;
@@ -541,10 +544,11 @@ async function press(control: Control, what: string, walk: SmokeWalk, memory: Wa
     });
     return true;
   } catch (error) {
-    note(walk, `Pressing ${what} did not work: ${await whyNotPressed(control.target, error)}.`);
+    note(walk, control.frame.isDetached() ? replaced : `Pressing ${what} did not work: ${await whyNotPressed(control.target, error)}.`);
     return false;
   } finally {
-    await unmark(control.frame);
+    // The marks went with the page that was replaced; the press is reported once, whichever read saw it go.
+    await unmark(control.frame).catch(() => note(walk, replaced));
   }
 }
 

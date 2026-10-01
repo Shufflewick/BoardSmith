@@ -25,6 +25,7 @@ import {
   boardWithATimidControl,
   boardWithAVanishingControl,
   boardThatHidesThePanelForAMoment,
+  boardThatReplacesItsFrame,
   boardThatKeepsReordering,
   boardWithDialogs,
   candidateBoard,
@@ -315,6 +316,17 @@ describe('boardsmith verify: the smoke check', () => {
       'The smoke walk, dealt from seed "smoke", found a problem: - Pressing the board\'s "Shy button" did not work: it ' +
         'went away before the press landed.',
     );
+  });
+
+  it('a press that replaces the game\'s frame is reported, and the walk goes on in the new frame', async () => {
+    const { outcome, steps } = await smokeOf(false, boardThatReplacesItsFrame());
+
+    expect(outcome.passed).toBe(false);
+    expect(outcome.summary).toContain(
+      '- Pressing the board\'s "Start over" replaced the game\'s page, so the walk could not see what the press did.',
+    );
+    expect(outcome.summary).not.toContain('could not go on');
+    expect(steps).toContain('smoke step 2: nothing is offered; waiting for a turn');
   });
 
   it('a control that is disabled by the time the walk goes to press it fails that press, saying so, rather than counting it', async () => {

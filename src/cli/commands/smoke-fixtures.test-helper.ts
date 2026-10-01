@@ -537,6 +537,35 @@ const shy = ref(false);
 }
 
 /**
+ * A BOARD CONTROL THAT REPLACES THE GAME'S FRAME: "Start over" puts a new game frame in place of the
+ * one it is pressed in, as the page around the game does when the game restarts, so the frame the
+ * walk pressed in is gone the moment the press lands. The new frame is never handed the game, so the
+ * walk finds nothing offered in it and stops that deal.
+ */
+export function boardThatReplacesItsFrame(): Record<string, string> {
+  return {
+    'src/ui/components/GameTable.vue': `<script setup lang="ts">
+function startOver() {
+  const frame = window.parent.document.querySelector('iframe')!;
+  frame.replaceWith(frame.cloneNode() as HTMLIFrameElement);
+}
+</script>
+
+<template>
+  <div class="board">
+    <button type="button" @click="startOver">Start over</button>
+  </div>
+</template>
+
+<style scoped>
+.board { width: 320px; height: 200px; }
+</style>
+`,
+    'src/ui/uis.ts': PLAYERS_GET_THE_TABLE,
+  };
+}
+
+/**
  * THE FIELDS GAME (#465 to #467): each turn a player may `code` (a text field that takes digits only,
  * so the walk's "smoke test" never satisfies it and the action never finishes), `kindle` (a number
  * field, "How many logs?", 1 to 5, whose own rule refuses 1), `draw` or `rest`. `code` is the panel's first offer, so a walk
