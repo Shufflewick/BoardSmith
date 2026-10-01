@@ -19,10 +19,10 @@
  *     `date -u` clock read, in order, and no later than the commit that recorded that line (or
  *     than now, for a line not yet committed). RUN.md holds no dispatch entries of its own.
  *     Every dispatch names its role and the agent type dispatched, a failed dispatch or a review round
- *     that asked for changes is answered one role up (or by routing.md's named exceptions, or the
- *     designer, at the top) and never at the same role, and every review round names the dispatch it
- *     reviewed and started from a passing verify, confirmed against `.boardsmith/verify/` when the
- *     result is on this machine (`lib/run-log-roles.ts`, #454). `ingest-rules` and `verify-game`
+ *     that asked for changes is retried once at the same role, then one role up, and after a second
+ *     failure at the top by the designer (never a third attempt at one role), and every review round
+ *     names the dispatch it reviewed and started from a passing verify, confirmed against
+ *     `.boardsmith/verify/` when the result is on this machine (`lib/run-log-roles.ts`, #454). `ingest-rules` and `verify-game`
  *     keep a run log of their own dispatches here too, so no chunk may take either name.
  *   - CROSS-CHUNK.md (#294): every merge of a chunk built alongside others has a ruling from the
  *     audit's cross-chunk lens, not `pending`.

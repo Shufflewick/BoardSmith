@@ -192,14 +192,15 @@ already owns:
 
 A `closed` return whose checkout fails `npx boardsmith verify --check --chunk <slug>` is not
 closed, whatever its `designerSummary` says. It is a failure of the chunk's dispatch at the
-`judgement` role, the top of the ladder, so it is never re-dispatched at that role on the
-orchestrator's own say-so (`routing.md` "When a Step Fails: One Role Up, Never the Same Role"):
-the orchestrator records the dispatch `failed`, stops, and puts it to the designer with the
-check's message (`build-game.md` Step 4). Once they answer, the chunk is re-dispatched with the
-answer and the check's message in the brief, so the fresh subagent fixes what it names and runs
-`build/close.md` "The Done Gate" again. That re-dispatch's run log entry records where the
-designer's answer is in `Designer answer:`; `boardsmith ledger-check` refuses a re-dispatch of
-failed work at `judgement` without it.
+`judgement` role, the top of the ladder (`routing.md` "When a Step Fails: Once More at the Same
+Role, Then One Role Up"). The orchestrator records the dispatch `failed`. On the chunk's first
+failure at `judgement` it re-dispatches the chunk once at that role, with the check's message in
+the brief, so the fresh subagent fixes what it names and runs `build/close.md` "The Done Gate"
+again; that entry writes `Retry of: Dispatch N`, naming the failed dispatch. On a second failure
+there it stops and puts it to the designer with the check's message (`build-game.md` Step 4).
+Once they answer, the chunk is re-dispatched with the answer and the check's message in the
+brief, and that entry writes `Retry of: none` and records where the designer's answer is in
+`Designer answer:`; `boardsmith ledger-check` refuses a third attempt at `judgement` without it.
 
 A return missing a field its `outcome` requires is itself a stuck dispatch: the orchestrator does
 not guess the missing half. Re-dispatch once with the missing field named; if the second return is

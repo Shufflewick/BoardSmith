@@ -275,19 +275,18 @@ use other agents, map roles in `boardsmith.json`; a role left out stays on its
 
 ```bash
 boardsmith agent judgement              # the agent type to dispatch the role as
-boardsmith agent bounded --escalate     # the step failed there: the next role up
+boardsmith agent bounded --escalate     # the step failed there twice: the next role up
 boardsmith review-gate deal             # may a model review of chunk deal start?
 ```
 
 `boardsmith review-gate <slug>` refuses unless the current commit passed
 `boardsmith verify --chunk <slug>`, and otherwise prints the verify result every
 review prompt carries, so no reviewer spends its time re-running the checks. A
-step that fails its verify, whose claims `claim-quote-check` refuses, or whose
-reviewer asks for changes, goes one role up, never to the same role again, and
-after `judgement` to you, apart from three named exceptions: a red-team
-re-investigation or a repair gets one more `judgement` round, a refused quote
-gets one narrower fix, and a page range `verify-run-record` refused is
-transcribed once more.
+step that fails its verify, whose work a check such as `claim-quote-check`
+refuses, or whose reviewer asks for changes, is retried once at the same role
+with the failure output. A second failure at that role moves it one role up
+(`mechanical`, then `bounded`, then `judgement`), and a second failure at
+`judgement` comes to you.
 
 ### 5. Build for Production
 

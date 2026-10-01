@@ -222,7 +222,7 @@ export function createProgram(): Command {
     .description(
       'Print the agent type to dispatch a role (mechanical, bounded, judgement, review, second-opinion) as: the one boardsmith.json "agents" maps it to, else bs-<role>',
     )
-    .option('--escalate', 'The step failed at this role: print the next role up and its agent type, or say to ask the designer')
+    .option('--escalate', 'The step failed twice at this role: print the next role up and its agent type, or say to ask the designer')
     .option('--project <dir>', 'Project directory (defaults to cwd)')
     .action((role: string, options: { escalate?: boolean; project?: string }) => agentCommand(role, options));
 

@@ -37,7 +37,7 @@ chunk puts these four rules in force for this session (`state-machine.md` "Orche
    replaces it here.
 2. **There is no designer on the other end of this context.** Never ask a question, never wait for
    approval, never assume approval. At a human gate (`ask`, a milestone `playtest`, a refuted-twice
-   escalation, a repair round-3 triage, a step that failed at `judgement`, `close`'s tail delta),
+   escalation, a repair round-3 triage, a step that failed twice at `judgement`, `close`'s tail delta),
    stop and return the gate's own
    composed text as the report's `gate.payload`. Gate-before-write is unchanged: nothing a gate
    authorizes is written until a later dispatch arrives carrying the designer's actual answer.
@@ -63,11 +63,11 @@ No review step starts until `boardsmith verify` has passed for the commit under 
 red team, every audit round and the final-acceptance pass each run `npx boardsmith verify --chunk
 <slug>` and then `npx boardsmith review-gate <slug>`, which refuses, saying to run `boardsmith
 verify`, when there is no passing result for the current commit, and when open prints the verify
-brief every review prompt carries. A step that fails (its verify fails, `claim-quote-check`
-refuses its claims, or its reviewer asks for changes) goes one role up at once, never to the same
-role again (`npx boardsmith agent <role> --escalate`), and after `judgement` to the designer,
-apart from routing.md's three named exceptions. Every dispatch and review round is recorded in the
-chunk's run log.
+brief every review prompt carries. A step that fails (its verify fails, a check such as
+`claim-quote-check` refuses its work, or its reviewer asks for changes) is retried once at the same
+role with the failure output; a second failure at that role goes one role up
+(`npx boardsmith agent <role> --escalate`), and a second failure at `judgement` goes to the
+designer. Every dispatch and review round is recorded in the chunk's run log.
 
 ## Context-Economics Hard Rule
 
@@ -316,7 +316,7 @@ chunk, quote both step lists verbatim — never paraphrase, never reorder:
 | build | `${CLAUDE_SKILL_DIR}/../bs-shared/build/build.md` | `bounded` |
 | test | `${CLAUDE_SKILL_DIR}/../bs-shared/build/test.md` | no agent: commands |
 | audit | `${CLAUDE_SKILL_DIR}/../bs-shared/build/audit.md` | `judgement` (fidelity) and `review`, after `review-gate` |
-| repair | `${CLAUDE_SKILL_DIR}/../bs-shared/build/repair.md` | one role above the work that failed; one more `judgement` round allowed |
+| repair | `${CLAUDE_SKILL_DIR}/../bs-shared/build/repair.md` | the role whose work failed, once; one role up after a second failure there |
 | playtest | `${CLAUDE_SKILL_DIR}/../bs-shared/build/playtest.md` | the designer |
 | revise | `${CLAUDE_SKILL_DIR}/../bs-shared/build/revise.md` | the designer's triage |
 | close | `${CLAUDE_SKILL_DIR}/../bs-shared/build/close.md` | no agent: bookkeeping |
@@ -415,7 +415,7 @@ re-invoke `/bs-build-chunk` to resume (`${CLAUDE_SKILL_DIR}/../bs-shared/state-m
 This continuation is exactly what the **≥50% wind-down floor** (SKILLAUTO-06,
 `${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md` "Context floor + ceiling") protects: the group-2 dispatches below
 (research the rulebook, audit findings, large reads, repairs) go to sub-agents rather than being
-read inline by the orchestrator (each as the role `routing.md` gives it: research at the `judgement` role, audits at the `judgement` and `review` roles, large reads at the `mechanical` role, repairs one role above the work that failed), so the main thread's own context fills slowly enough to clear the
+read inline by the orchestrator (each as the role `routing.md` gives it: research at the `judgement` role, audits at the `judgement` and `review` roles, large reads at the `mechanical` role, repairs at the role whose work failed, one role up after a second failure there), so the main thread's own context fills slowly enough to clear the
 50% floor before the 60% ceiling ever forces a stop.
 If the redteam step hit a refuted-twice escalation earlier in this group, that is its own
 human-input gate — the session stops there for the user's ruling before reaching `ask`.
@@ -525,7 +525,7 @@ checkpoints, not mandatory stops; a single session runs continuously across them
 boundaries (after `close` it auto-advances straight into the next chunk's `investigate` and stops at
 that chunk's `ask`, per `state-machine.md` "Session Handoff Seams" → "Cross-chunk continuation") —
 and stops only at a human-input gate (`ask` approval, a redteam refuted-twice escalation, the
-`playtest` gate, a repair round-3 triage, a step that failed at `judgement`, or `close`'s delta
+`playtest` gate, a repair round-3 triage, a step that failed twice at `judgement`, or `close`'s delta
 gate), when an automated step hits an
 unrecoverable/stuck state, or when context crosses the **60%-used** low-water mark (see
 `state-machine.md` "Session Handoff Seams" → "Context floor + ceiling" for the exact threshold
@@ -545,7 +545,7 @@ self-assessed "feels big" judgment, never an authoritative harness signal. The l
 main thread's own usage climbing slowly enough to clear that 50% floor before the 60% ceiling forces
 a stop is **sub-agent
 offload**: research (rulebook slices, docs), audits, large reads, and repairs are dispatched to
-sub-agents rather than performed inline (each as the role `routing.md` gives it: research at the `judgement` role, audits at the `judgement` and `review` roles, large reads at the `mechanical` role, repairs one role above the work that failed), per this file's own "Context-Economics Hard Rule" above
+sub-agents rather than performed inline (each as the role `routing.md` gives it: research at the `judgement` role, audits at the `judgement` and `review` roles, large reads at the `mechanical` role, repairs at the role whose work failed, one role up after a second failure there), per this file's own "Context-Economics Hard Rule" above
 ("the orchestrator never reads rulebook slices, BoardSmith docs, or generated code itself") — that
 rule is the mechanism the offload rides on, and it is unchanged by this floor. See
 `state-machine.md` "Session Handoff Seams" → "Context floor + ceiling" for the full framing.
@@ -612,7 +612,7 @@ And to the shared reference files that ship with every `bs-` skill:
 - `${CLAUDE_SKILL_DIR}/../bs-shared/state-machine.md` — status enum, step names, consistency check, session lock, write order,
   authority, session handoff seams, git protocol
 - `${CLAUDE_SKILL_DIR}/../bs-shared/routing.md`: the roles, which agent each is dispatched as,
-  no review before verify, and one role up on a failure
+  no review before verify, and what happens when a step fails
 - `${CLAUDE_SKILL_DIR}/../bs-shared/templates/CHUNK.template.md` — the file `investigate`/`redteam`/`ask` fill (claims list,
   visibility declaration, redteam rounds, Step Checklist check-offs, Status grammar; the
   findings ledger belongs to `audit`/`repair`)

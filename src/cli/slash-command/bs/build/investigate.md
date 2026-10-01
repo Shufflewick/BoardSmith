@@ -166,12 +166,13 @@ heading) and a code-sourced one (cite file and lines).
 The orchestrator runs `boardsmith claim-quote-check <slug>` itself once the investigate subagent
 returns, before checking off `investigate`, and before it fills that dispatch's run log Outcome.
 A non-zero exit means the claims are not done, and the investigate (or re-investigate) dispatch
-has failed at `judgement`: record its Outcome `failed` with the refusals in its Detail. It gets
-one narrower `quote-fix`, dispatched at the `judgement` role, the second named exception in
-`routing.md` (`Work: quote-fix`, `Escalated from: Dispatch N` naming the refused dispatch), handed
-only the refusals: it fixes each quote or location, or turns the claim into an open question. Run
-the check again; if it still refuses, stop and ask the designer, then the designer decides what
-happens to the claims. Never check off `investigate`, and never dispatch redteam, while it exits
+has failed at `judgement`: record its Outcome `failed` with the refusals in its Detail. The claims
+get one retry at the `judgement` role (`routing.md` "When a Step Fails"): the same Work again,
+`Retry of: Dispatch N` naming the refused dispatch, handed only the refusals, and it fixes each
+quote or location, or turns the claim into an open question. Run the check again; if it still
+refuses, stop and ask the designer, then the designer decides what happens to the claims. That
+retry is the claims' one retry at `judgement`, so a red team round that then refutes them sends
+the dispute to the designer too. Never check off `investigate`, and never dispatch redteam, while it exits
 non-zero. Open questions go to `build/ask.md` as part
 (b) questions; the agent never settles them by inventing a rule.
 
@@ -190,7 +191,7 @@ and names the command.
 ## Re-Investigate Round Behavior (redteam refuted-once path)
 
 When `redteam.md` returns a refuted-once verdict on a claim, the re-investigate round (dispatched
-at the `judgement` role again, the first named exception in `routing.md`) APPENDS a
+at the `judgement` role again, the claims' one retry in `routing.md`) APPENDS a
 new claim noting supersession of the objected claim — it does NOT renumber or silently rewrite
 the existing numbered list. Concretely: if claim 7 is refuted with a specific objection and
 re-investigation concludes the objection is valid, the subagent appends a new claim (e.g. claim

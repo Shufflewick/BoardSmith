@@ -148,8 +148,8 @@ export async function reviewGate(options: {
         `No model review may start for chunk "${options.slug}": the commit under review has no passing \`boardsmith verify\` result that covers the chunk.`,
         problem,
         `Run \`npx boardsmith verify --chunk ${options.slug}\`, fix what it names and commit until it passes, then run ` +
-          `\`boardsmith review-gate ${options.slug}\` again. A failing verify goes back to the step that made the change, one role up, ` +
-          'with no review round.',
+          `\`boardsmith review-gate ${options.slug}\` again. A failing verify goes back to the step that made the change, ` +
+          'with no review round: retried once at the same role, then one role up.',
       ].join('\n'),
     };
   }

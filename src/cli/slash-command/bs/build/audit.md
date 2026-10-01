@@ -85,7 +85,8 @@ npx boardsmith review-gate <slug> --since <commit round N-1 reviewed>  # every l
 
 adding `--work-role mechanical --since <commit before it>` when the work under review was a
 mechanical change. A refusal means no lens is dispatched: a failing verify goes back to the step
-that made the change, one role up, with verify's own output, never to a reviewer. Open, the
+that made the change, with verify's own output (`routing.md` "When a Step Fails"), never to a
+reviewer. Open, the
 command prints the review level and the brief that fills `{verifyResult}` in every template
 below:
 
