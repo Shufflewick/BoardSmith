@@ -385,10 +385,15 @@ async function readOffers(frame: Frame, walk: SmokeWalk): Promise<Offers> {
   return { enabled: offers.enabled, groups: offers.groups, inGroup: offers.inGroup, open: offers.open };
 }
 
-/** A control one look at the page found (`pageControls`), the locator that presses it, and its frame. */
+/**
+ * A control one look at the page found (`pageControls`), the locator that presses it, its frame,
+ * and how it was found, so it can be found again just before it is pressed (`stillThere`).
+ */
 interface Control extends PageControl {
   readonly target: Locator;
   readonly frame: Frame;
+  readonly selector: string;
+  readonly within: Locator | undefined;
 }
 
 /**
@@ -397,7 +402,25 @@ interface Control extends PageControl {
  */
 async function controlsOf(frame: Frame, selector: string, within?: Locator): Promise<Control[]> {
   const visible = (within ?? frame).locator(selector).filter({ visible: true });
-  return (await visible.evaluateAll(pageControls)).map((control) => ({ ...control, target: visible.nth(control.index), frame }));
+  return (await visible.evaluateAll(pageControls)).map((control) => ({
+    ...control,
+    target: visible.nth(control.index),
+    frame,
+    selector,
+    within,
+  }));
+}
+
+/**
+ * `control` as the page has it now: the page may have redrawn since it was found, putting another
+ * element at its place among the matches, so it is found again by what it stands for. One the page
+ * no longer has went away.
+ */
+async function stillThere(control: Control): Promise<Control> {
+  const now = await controlsOf(control.frame, control.selector, control.within);
+  const same = now.find((c) => c.key === control.key && c.index === control.index) ?? now.find((c) => c.key === control.key);
+  if (same === undefined) throw new Error(GONE);
+  return same;
 }
 
 /** The first enabled control matched by the first of `selectors` that matches one, or undefined. */
@@ -443,16 +466,17 @@ async function click(control: Control): Promise<void> {
  * that does not land, because the control went away, something covers it or it never becomes
  * pressable, is reported and the walk goes on. Returns whether the press landed.
  */
-async function press(control: Control, what: string, walk: SmokeWalk): Promise<boolean> {
-  const pressIt = () =>
-    control.keyboardOnly
-      ? control.target.press('Enter', { timeout: PRESS_MS })
-      : control.candidate
-        ? aimAndClick(control)
-        : click(control);
+async function press(control: Control, what: string, walk: SmokeWalk, memory: WalkMemory): Promise<boolean> {
+  const pressIt = async () => {
+    const now = await stillThere(control);
+    if (now.keyboardOnly) return now.target.press('Enter', { timeout: PRESS_MS });
+    return now.candidate ? aimAndClick(now) : click(now);
+  };
   try {
     await pressIt().catch(async (error: unknown) => {
       if (!(error instanceof UnderAToast)) throw error;
+      // What an error toast says is read before it goes, so waiting it out hides nothing.
+      await noteErrorToasts(control.frame, walk, memory);
       await control.frame.waitForFunction(() => document.querySelector('.toast') === null, undefined, { timeout: TOAST_WAIT_MS });
       await pressIt();
     });
@@ -588,11 +612,18 @@ async function aimAndClick(control: Control): Promise<void> {
   unreachable(covers);
 }
 
-/** Presses what `selector` matches first in `frame`, as the panel's `what`; false when it has gone. */
-async function pressThePanels(frame: Frame, selector: string, what: string, walk: SmokeWalk): Promise<boolean> {
+/**
+ * Presses what `selector` matches first in `frame`, the panel's `what`, which the panel showed a
+ * moment before. One that is no longer there is reported, not skipped: the panel took back what it
+ * offered.
+ */
+async function pressThePanels(frame: Frame, selector: string, what: string, walk: SmokeWalk, memory: WalkMemory): Promise<boolean> {
   const [control] = await controlsOf(frame, selector);
-  if (control === undefined) return false;
-  return press(control, `the panel's ${what}`, walk);
+  if (control === undefined) {
+    note(walk, `The panel showed its ${what}, and it was gone when the walk went to press it.`);
+    return false;
+  }
+  return press(control, `the panel's ${what}`, walk, memory);
 }
 
 /** Records a problem once. */
@@ -629,9 +660,9 @@ async function unpickedCandidate({ frame, picked }: Answering): Promise<Control 
 const nameOf = (control: Control) => (control.label === '' ? control.key : control.label);
 
 /** Presses `answer` to a choice of the open action, saying what it pressed. Returns its name. */
-async function pressAnswer(answer: Control, { walk, name, step }: Answering): Promise<string> {
+async function pressAnswer(answer: Control, { walk, memory, name, step }: Answering): Promise<string> {
   narrate(step, `pressing "${nameOf(answer)}" for "${name}"`);
-  await press(answer, `"${nameOf(answer)}" while answering "${name}"`, walk);
+  await press(answer, `"${nameOf(answer)}" while answering "${name}"`, walk, memory);
   return nameOf(answer);
 }
 
@@ -698,7 +729,10 @@ async function aimedElsewhere(answering: Answering): Promise<Control | undefined
     const named = async (x: number, y: number) =>
       typeof (await pointAt(candidate, x, y)) === 'string' ? undefined : candidate.target.getAttribute('data-bs-candidate', { timeout: PRESS_MS });
     const first = await named(0.1, 0.1);
-    if (first !== undefined && first !== (await named(0.9, 0.9))) return candidate;
+    // Pointing at it changed what it stands for, so it is read again as it stands now.
+    if (first !== undefined && first !== (await named(0.9, 0.9))) {
+      return (await controlsOf(answering.frame, BOARD_CANDIDATES)).find((c) => c.index === candidate.index);
+    }
     answering.refused.add(candidate.key);
   }
   return undefined;
@@ -749,7 +783,9 @@ async function openActionState(frame: Frame): Promise<string> {
 async function abandon(frame: Frame, walk: SmokeWalk, memory: WalkMemory, name: string, problem: string): Promise<void> {
   note(walk, problem);
   memory.failed.add(name);
-  await pressThePanels(frame, '.action-config .cancel-btn', 'Cancel', walk);
+  // An action that closed by itself, or that has no way to back out of it, has no Cancel to press.
+  const cancel = '.action-config .cancel-btn';
+  if ((await frame.locator(cancel).count()) > 0) await pressThePanels(frame, cancel, 'Cancel', walk, memory);
 }
 
 /**
@@ -797,7 +833,7 @@ async function pressABoardControl(
   said = `pressing ${what}`,
 ): Promise<void> {
   narrate(step, `${said}${control.keyboardOnly ? ' from the keyboard' : ''}`);
-  if (await press(control, what, walk)) memory.controls++;
+  if (await press(control, what, walk, memory)) memory.controls++;
 }
 
 /** Presses one board control the walk has not pressed yet. Returns false when every one was pressed. */
@@ -1031,11 +1067,11 @@ async function pressWhatThePanelOffers(frame: Frame, walk: SmokeWalk, memory: Wa
   if ('take' in next) {
     memory.times.set(next.take, (memory.times.get(next.take) ?? 0) + 1);
     narrate(step, `taking "${next.take}"`);
-    await pressThePanels(frame, `[data-bs-action=${JSON.stringify(next.take)}]`, `"${next.take}"`, walk);
+    await pressThePanels(frame, `[data-bs-action=${JSON.stringify(next.take)}]`, `"${next.take}"`, walk, memory);
     return true;
   }
   narrate(step, `opening the panel's ${next.what}`);
-  await pressThePanels(frame, next.press, next.what, walk);
+  await pressThePanels(frame, next.press, next.what, walk, memory);
   return true;
 }
 
