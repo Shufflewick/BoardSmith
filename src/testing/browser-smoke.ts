@@ -509,31 +509,44 @@ async function pointAt(control: Control, x: number, y: number): Promise<{ x: num
   return at;
 }
 
-/** How far, in pixels, a control may move under the pointer and still be where the pointer is. */
+/** How far, in pixels, a control may move between two looks and still count as where it was. */
 const STILL_PX = 2;
+
+/** How many looks, two painted frames apart, the walk gives a control to settle under the pointer. */
+const SETTLE_LOOKS = 10;
+
+/** Waits for the page to paint twice, or a second in a frame the browser does not paint. */
+async function framesPass(frame: Frame): Promise<void> {
+  await frame.evaluate(
+    () =>
+      new Promise((done) => {
+        requestAnimationFrame(() => requestAnimationFrame(done));
+        setTimeout(done, 1000);
+      }),
+  );
+}
 
 /**
  * Clicks fractions (x, y) of `control`, where the pointer was moved to `at`, provided the control is
- * still on top there. A control that pointing at it removed (#464) or covered is not pressed, and one
- * that pointing at it moved (a panel that shows what a hovered choice would do) is pointed at again
- * where it went, so the click lands on it.
+ * still on top there. A control that pointing at it removed (#464) or covered is not pressed. One
+ * that moves when pointed at (a card that lifts under the pointer) is followed until it settles, and
+ * one that never settles (a board that keeps panning) is clicked where it is on the last look.
  */
 async function clickAt(control: Control, at: { x: number; y: number }, x: number, y: number): Promise<void> {
+  const mouse = control.frame.page().mouse;
   let pointer = at;
-  for (let looks = 0; looks < 3; looks++) {
+  for (let looks = 1; ; looks++) {
+    await framesPass(control.frame);
     if ((await control.target.count()) === 0) throw new Error(GONE);
     const top = await onTopAt(control, x, y);
     if (top === 'toast') throw new UnderAToast(COVERED);
     if (top === 'other') throw new Error(COVERED);
     const now = await placeOf(control, x, y);
-    if (Math.abs(now.x - pointer.x) <= STILL_PX && Math.abs(now.y - pointer.y) <= STILL_PX) {
-      await control.frame.page().mouse.click(pointer.x, pointer.y);
-      return;
-    }
-    await control.frame.page().mouse.move(now.x, now.y);
+    const still = Math.abs(now.x - pointer.x) <= STILL_PX && Math.abs(now.y - pointer.y) <= STILL_PX;
+    if (still || looks === SETTLE_LOOKS) return mouse.click(now.x, now.y);
+    await mouse.move(now.x, now.y);
     pointer = now;
   }
-  throw new Error('it kept moving away from the pointer, so a press could not land on it');
 }
 
 /** Throws why no point of a control could be pressed: a toast over it, or something else. */
