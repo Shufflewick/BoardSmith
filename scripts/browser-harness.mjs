@@ -1,8 +1,9 @@
 /**
  * THE PLUMBING EVERY BROWSER REGRESSION SHARES.
  *
- * BoardSmith depends on no browser, so its browser regressions are deliberate
- * runs rather than part of `npx vitest run` (#227 settled that). What each of
+ * These browser regressions are deliberate runs rather than part of
+ * `npx vitest run` (#227 settled that); the suite's one browser run is
+ * `boardsmith verify`'s smoke check (#453). What each of
  * them then has to do first is identical and none of it is the behaviour under
  * test: find a Playwright somebody already installed, serve a throwaway world
  * project through the CLI's own dev host (`withFixtureWorld`, in

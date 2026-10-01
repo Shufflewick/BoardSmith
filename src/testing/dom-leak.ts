@@ -269,6 +269,77 @@ function loadWorldSeatModule(): Promise<typeof import('../ui/world/useWorldSeat.
   return worldSeatModulePromise;
 }
 
+/** A table's shell or a world's: what a stub stands in for, and what its refusals name. */
+type ShellKind = 'table' | 'world';
+
+const SHELL_NAME: Record<ShellKind, string> = { table: 'GameShell', world: 'WorldShell' };
+
+let shellProvidedKeysPromise: Promise<Record<ShellKind, ReadonlySet<symbol>>> | undefined;
+
+/**
+ * THE KEYS EACH SHELL PROVIDES THE BOARD IT MOUNTS (#453), read from the same
+ * key constants `useTableSeat` and `useWorldSeat` publish under.
+ *
+ * A stub needs its own shell's keys, which it has from the seat it built, and
+ * the other shell's, to refuse a key only the other one provides. The parity
+ * tests (`dom-leak-shell-context.test.ts`, `dom-leak-world-context.test.ts`)
+ * hold both lists equal to what the real GameShell and WorldShell are probed
+ * to provide, so a key added to a shell fails there until it is added here.
+ * Loaded when first asked for, like the seat wiring, so a test that never
+ * renders never loads Vue.
+ */
+export function shellProvidedKeys(): Promise<Record<ShellKind, ReadonlySet<symbol>>> {
+  shellProvidedKeysPromise ??= Promise.all([
+    loadBoardInteractionModule(),
+    import('../ui/composables/useGameContext.js'),
+    import('../ui/composables/useAnimationEvents.js'),
+    import('../ui/composables/useAnnouncer.js'),
+    import('../ui/composables/useGameOverReveal.js'),
+    import('../ui/world/useWorld.js'),
+  ]).then(([interaction, context, animation, announcer, gameOver, world]) => {
+    const key = (k: unknown) => k as symbol;
+    const allContext = Object.values(context.GAME_CONTEXT_KEYS).map(key);
+    const playContext = context.PLAY_CONTEXT_KEY_NAMES.map((name) => key(context.GAME_CONTEXT_KEYS[name]));
+    return {
+      table: new Set([
+        key(interaction.BOARD_INTERACTION_KEY),
+        key(animation.ANIMATION_EVENTS_KEY),
+        key(announcer.ANNOUNCER_KEY),
+        key(gameOver.GAME_OVER_HOLDS_KEY),
+        ...allContext,
+      ]),
+      world: new Set([key(interaction.BOARD_INTERACTION_KEY), ...playContext, key(world.WORLD_CONTEXT_KEY)]),
+    };
+  });
+  return shellProvidedKeysPromise;
+}
+
+/** Why a stub for `kind` will not provide `key`, which only the other shell provides. */
+function keyTheShellLacks(kind: ShellKind, caller: string, key: string): string {
+  const shell = SHELL_NAME[kind];
+  const where = kind === 'world' ? 'in a real world' : 'at a real table';
+  const instead =
+    kind === 'world'
+      ? "A world's board reads the world with useWorld() and one field of the play context with " +
+        'inject(GAME_CONTEXT_KEYS.<field>); useGameContext() reads a table\'s whole context and throws in a world.'
+      : "If this board belongs to a world, stub a world's shell with worldShellContext (or renderAsSeat with the TestWorld).";
+  return (
+    `${caller} was asked to provide ${key}, which ${shell} never provides, so a board that reads it would ` +
+    `pass this test and throw ${where}. ${instead} Remove ${key} from provide.`
+  );
+}
+
+/** Refuses any key in `provide` that the other shell provides and `kind`'s does not. */
+async function refuseKeysTheShellLacks(kind: ShellKind, provide: Record<string | symbol, unknown>, caller: string): Promise<void> {
+  const keys = await shellProvidedKeys();
+  const other: ShellKind = kind === 'table' ? 'world' : 'table';
+  for (const key of Object.getOwnPropertySymbols(provide)) {
+    if (keys[other].has(key) && !keys[kind].has(key)) {
+      throw new Error(keyTheShellLacks(kind, caller, key.description ?? key.toString()));
+    }
+  }
+}
+
 let seatRendererPromise: Promise<void> | undefined;
 
 /**
@@ -302,6 +373,7 @@ export function preloadSeatRenderer(): Promise<void> {
     loadBoardInteractionModule(),
     loadTableSeatModules(),
     loadWorldSeatModule(),
+    shellProvidedKeys(),
   ]).then(() => undefined);
   return seatRendererPromise;
 }
@@ -371,6 +443,9 @@ export interface RenderAsSeatOptions<C extends Component = Component> {
    * it: it is then the one the seat's controller drives, as the shell's is, so
    * its targets come from starting an action on the controller rather than
    * from pre-loading. Pass anything else your own board asks for.
+   *
+   * A key only the OTHER shell provides is refused (#453): a world's board
+   * handed a table's `gameState` would pass here and throw in a real world.
    */
   provide?: Record<string | symbol, unknown>;
   /**
@@ -417,6 +492,89 @@ export async function renderAsSeat<C extends Component = typeof AutoUIComponent>
 ): Promise<VueWrapper<RenderedInstance<C>>> {
   const { wrapper } = await mountForSeat(subject, seat, options);
   return wrapper;
+}
+
+/**
+ * What {@link tableShellContext} and {@link worldShellContext} take: values to
+ * provide over the shell's own, as {@link RenderAsSeatOptions.provide} takes
+ * them. A key the shell provides may be replaced (your own board interaction,
+ * or a recording action controller), and a key no shell provides (your game's
+ * own) may be added. A key only the other shell provides is refused.
+ */
+export interface ShellContextOptions {
+  provide?: Record<string | symbol, unknown>;
+}
+
+/** A seat's shell context, for a test that mounts a component itself. */
+export interface ShellContext {
+  /**
+   * Pass as `global.provide` to `mount()`. It holds exactly the keys the real
+   * shell provides the board it mounts, built by the function the shell builds
+   * them with, plus what `options.provide` added.
+   */
+  readonly provide: Record<string | symbol, unknown>;
+  /** The seat's action controller, the one `provide` holds, for a board's `actionController` prop. */
+  readonly actionController: UseActionControllerReturn;
+  /** Stops the seat's watchers. Call it once the component is unmounted. */
+  stop(): void;
+}
+
+async function shellContext(
+  subject: HiddenInfoSubject,
+  seat: number,
+  options: ShellContextOptions,
+  caller: string,
+): Promise<ShellContext> {
+  const seatContext = await stubbedSeat(subject, seat, options, caller);
+  return { provide: seatContext.provide, actionController: seatContext.controller, stop: seatContext.stop };
+}
+
+/**
+ * THE TABLE STUB (#453): what `GameShell` provides the board it mounts, for a
+ * test that mounts a component with `mount()` rather than
+ * {@link renderAsSeat}, built for `seat` of `game` by `useTableSeat`, the one
+ * function GameShell builds it with. Use it instead of providing
+ * `GAME_CONTEXT_KEYS` by hand: a hand-built context can offer what the shell
+ * does not, and the board then passes its test and throws in play.
+ *
+ * @example
+ * ```ts
+ * const shell = await tableShellContext(testGame, 1);
+ * const wrapper = mount(ScorePanel, { global: { provide: shell.provide } });
+ * // ...
+ * wrapper.unmount();
+ * shell.stop();
+ * ```
+ * @throws Outside jsdom, for a subject that is not a TestGame, and for a
+ *   provided key only a world's shell gives.
+ */
+export function tableShellContext(game: TestGame, seat: number, options: ShellContextOptions = {}): Promise<ShellContext> {
+  if (!(game instanceof TestGame)) {
+    return Promise.reject(
+      new Error('tableShellContext stubs a table seat: hand it the TestGame from createTestGame. For a world, use worldShellContext.'),
+    );
+  }
+  return shellContext(game, seat, options, 'tableShellContext');
+}
+
+/**
+ * THE WORLD STUB (#453): what `WorldShell` provides the board it mounts, built
+ * for `seat` of `world` by `useWorldSeat`, the one function WorldShell builds it
+ * with. A world provides only the shared half of the game context, never a
+ * table's `gameState`, `dueSeats`, `timeTravelDiff` or `turnDeadline`, so a
+ * component that calls `useGameContext()` throws here exactly as it does in a
+ * real world.
+ *
+ * @throws Outside jsdom, for a subject that is not a TestWorld, and for a
+ *   provided key only a table's shell gives.
+ */
+export function worldShellContext(world: TestWorld, seat: number, options: ShellContextOptions = {}): Promise<ShellContext> {
+  if (!(world instanceof TestWorld)) {
+    return Promise.reject(
+      new Error('worldShellContext stubs a world seat: hand it the TestWorld from createTestWorld. For a table, use tableShellContext.'),
+    );
+  }
+  return shellContext(world, seat, options, 'worldShellContext');
 }
 
 /** A mounted board, and everything it has failed with so far. */
@@ -471,28 +629,11 @@ async function mountForSeat<C extends Component = typeof AutoUIComponent>(
   seat: number,
   options: RenderAsSeatOptions<C> = {},
 ): Promise<MountedForSeat<C>> {
-  requireDom();
-  ensureBrowserApis();
-
   const mount = await loadMount();
   const component: Component = options.component ?? (await loadAutoUI());
 
-  // This function is the shell's stand-in, so it provides what the shell does.
-  // The interaction is the REAL one, not an inert shape: a board reads it in
-  // setup() and again on every render. A caller's own interaction replaces it,
-  // and is then the one a table's controller feeds, so the board and its
-  // controller still share one.
-  const { BOARD_INTERACTION_KEY, createBoardInteraction } = await loadBoardInteractionModule();
-  const boardInteraction =
-    (options.provide?.[BOARD_INTERACTION_KEY] as BoardInteraction | undefined) ?? createBoardInteraction();
-
-  const seatContext = await seatContextFor(subject, seat, options, boardInteraction);
-  const { gameView } = seatContext;
-  const provide: Record<string | symbol, unknown> = {
-    ...seatContext.provide,
-    ...options.provide,
-    [BOARD_INTERACTION_KEY]: boardInteraction,
-  };
+  const seatContext = await stubbedSeat(subject, seat, options, 'renderAsSeat');
+  const { gameView, provide } = seatContext;
 
   // AutoUI takes only (gameView, playerSeat); a scaffolded custom board also
   // takes (isMyTurn, availableActions, actionController, disabledActions).
@@ -557,12 +698,58 @@ interface SeatContext {
   readonly gameView: UIGameElement | null;
   /** The scaffold's contract props, before they are filtered to what the board declares. */
   readonly contract: Record<string, unknown>;
+  /** The seat's action controller, as its shell wires it. */
+  readonly controller: UseActionControllerReturn;
   /** What the board can inject, as GameShell provides it; the caller's `provide` is merged over it. */
   readonly provide: Record<string | symbol, unknown>;
   /** Opens an action on the seat's controller, for `startAction`; throws, saying why, when it cannot. */
   readonly openAction: (request: NonNullable<RenderAsSeatOptions['startAction']>) => Promise<void>;
   /** Stops whatever was wired for this mount. */
   readonly stop: () => void;
+}
+
+/**
+ * WHAT A TEST MOUNTS A SEAT'S BOARD UNDER, standing in for its shell (#406,
+ * #413, #453): the seat built the way its shell builds it (`seatContextFor`),
+ * with the caller's `provide` merged over. A key only the other shell provides
+ * is refused, since a board reading it would pass its test and throw in play.
+ *
+ * The interaction is the REAL one, not an inert shape: a board reads it in
+ * setup() and again on every render. A caller's own interaction replaces it,
+ * and is then the one a table's controller feeds, so the board and its
+ * controller still share one.
+ */
+async function stubbedSeat(
+  subject: HiddenInfoSubject,
+  seat: number,
+  options: Pick<RenderAsSeatOptions<Component>, 'provide' | 'gameViewOverride'>,
+  caller: string,
+): Promise<SeatContext> {
+  requireDom();
+  ensureBrowserApis();
+  const shell = shellOf(subject, seat, caller);
+  await refuseKeysTheShellLacks(shell.kind, options.provide ?? {}, caller);
+  const { BOARD_INTERACTION_KEY, createBoardInteraction } = await loadBoardInteractionModule();
+  const boardInteraction =
+    (options.provide?.[BOARD_INTERACTION_KEY as symbol] as BoardInteraction | undefined) ?? createBoardInteraction();
+  const seatContext = await seatContextFor(shell, seat, options, boardInteraction);
+  return {
+    ...seatContext,
+    provide: { ...seatContext.provide, ...options.provide, [BOARD_INTERACTION_KEY as symbol]: boardInteraction },
+  };
+}
+
+/** A seat's subject, as the shell it is mounted in. */
+type ShellSubject = { kind: 'table'; table: TestGame } | { kind: 'world'; world: TestWorld };
+
+/** Which shell `subject`'s seat is mounted in, or a refusal naming what `caller` takes. */
+function shellOf(subject: HiddenInfoSubject, seat: number, caller: string): ShellSubject {
+  if (subject instanceof TestGame) return { kind: 'table', table: subject };
+  if (subject instanceof TestWorld) return { kind: 'world', world: subject };
+  throw new Error(
+    `${caller} mounts a seat of a table or a world, built with createTestGame or createTestWorld, and ` +
+      `seat ${seat}'s subject is neither. Hand it the TestGame or TestWorld your test drove.`,
+  );
 }
 
 /**
@@ -583,35 +770,29 @@ interface SeatContext {
  * its seat with.
  */
 async function seatContextFor(
-  subject: HiddenInfoSubject,
+  shell: ShellSubject,
   seat: number,
-  options: RenderAsSeatOptions<Component>,
+  options: Pick<RenderAsSeatOptions<Component>, 'gameViewOverride'>,
   boardInteraction: BoardInteraction,
 ): Promise<SeatContext> {
-  if (subject instanceof TestGame) {
+  if (shell.kind === 'table') {
+    const { table } = shell;
     const seatState = buildPlayerState(
-      subject.runner,
-      subject.game.players.map((player: { name: string }) => player.name),
+      table.runner,
+      table.game.players.map((player: { name: string }) => player.name),
       seat,
       { includeActionMetadata: true },
     );
     const gameView =
       options.gameViewOverride !== undefined ? options.gameViewOverride : (seatState.view as UIGameElement);
-    return wireTableSeat(subject, seat, seatState, gameView, boardInteraction);
+    return wireTableSeat(table, seat, seatState, gameView, boardInteraction);
   }
-  if (subject instanceof TestWorld) {
-    // AWAITED, because a world's projection is a read of its store: `viewsFor`
-    // settles the bundle's own `world.view` declaration and hydrates whatever it
-    // names before it can answer.
-    const frame = await subject.getPlayerView(seat);
-    const gameView =
-      options.gameViewOverride !== undefined ? options.gameViewOverride : (frame.state as UIGameElement);
-    return wireWorldSeat(subject, seat, frame, gameView, boardInteraction);
-  }
-  throw new Error(
-    `renderAsSeat mounts a seat of a table or a world, built with createTestGame or createTestWorld, and ` +
-      `seat ${seat}'s subject is neither. Hand it the TestGame or TestWorld your test drove.`,
-  );
+  // AWAITED, because a world's projection is a read of its store: `viewsFor`
+  // settles the bundle's own `world.view` declaration and hydrates whatever it
+  // names before it can answer.
+  const frame = await shell.world.getPlayerView(seat);
+  const gameView = options.gameViewOverride !== undefined ? options.gameViewOverride : (frame.state as UIGameElement);
+  return wireWorldSeat(shell.world, seat, frame, gameView, boardInteraction);
 }
 
 /**
@@ -685,6 +866,7 @@ async function wireTableSeat(
       disabledActions: tableSeat.disabledActions.value,
       actionController: tableSeat.controller,
     },
+    controller: tableSeat.controller,
     provide: Object.fromEntries(tableSeat.provisions),
     openAction: (request) => openSeatAction(tableSeat.controller, request, seat, seatState.availableActions ?? []),
     stop: () => scope.stop(),
@@ -761,6 +943,7 @@ async function wireWorldSeat(
       disabledActions: worldSeat.play.disabledActions.value,
       actionController: worldSeat.controller,
     },
+    controller: worldSeat.controller,
     provide: Object.fromEntries(worldSeat.provisions),
     openAction: (request) =>
       openSeatAction(worldSeat.controller, request, seat, worldSeat.play.availableActions.value),

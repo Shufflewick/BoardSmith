@@ -1698,7 +1698,7 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
     </div>
 
     <!-- Configuring an action -->
-    <div v-else class="action-config">
+    <div v-else class="action-config" :data-bs-open-action="currentAction">
       <div class="config-header">
         <span class="config-title">{{ currentActionMeta?.prompt || formatActionName(currentAction) }}</span>
         <button class="cancel-btn" @click="cancelAction" aria-label="Cancel action">

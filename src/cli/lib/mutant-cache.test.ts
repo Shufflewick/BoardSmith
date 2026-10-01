@@ -1,9 +1,13 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { BOOKKEEPING_RECORDS, gameBoardsmithRoot, mutantCachePath, openMutantCache, toolRevision } from './mutant-cache.js';
 import { commitAll, initRepo, writeFiles as write } from './verify-result.test-helper.js';
+
+// Each test builds real git repositories, one `git` process per step. A hang guard, not a budget:
+// on a busy machine vitest's 5 s default fails these with nothing wrong (#360).
+vi.setConfig({ testTimeout: 60_000 });
 
 const RULES = 'export const fee = (price: number) => price * 2;\n';
 const MUTANT = { file: 'src/rules.ts', source: 'export const fee = (price: number) => price / 2;\n' };

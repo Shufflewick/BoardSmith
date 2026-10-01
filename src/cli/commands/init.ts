@@ -12,6 +12,7 @@ import {
   toDisplayName,
   type GeneratedFile,
   type ProjectConfig,
+  generateSmokeSpecTs,
 } from '../lib/project-scaffold.js';
 import {
   generateWorldA11yTestTs,
@@ -26,6 +27,7 @@ import {
   worldScaffoldStatus,
 } from '../lib/world-scaffold.js';
 import { worldEntryFiles } from '../lib/world-entry.js';
+import { SMOKE_SPEC_PATH } from '../../testing/browser-smoke-verdict.js';
 import { ingestArchiveCommand, rulebookArchivePaths } from './ingest-archive.js';
 import { installIngestHook } from '../lib/ingest-hook.js';
 import { assertGameName } from '../lib/user-name.js';
@@ -137,6 +139,7 @@ const TABLE_SCAFFOLD: ProjectScaffold = {
       { path: join('src', 'rules', 'actions.ts'), content: generateActionsTs(pascal) },
       { path: join('src', 'rules', 'flow.ts'), content: generateFlowTs(pascal) },
       { path: join('tests', 'game.test.ts'), content: generateTestTs(pascal) },
+      { path: SMOKE_SPEC_PATH, content: generateSmokeSpecTs(['draw', 'play']) },
     ];
   },
 
@@ -183,6 +186,7 @@ const WORLD_SCAFFOLD: ProjectScaffold = {
       { path: join('src', 'rules', 'index.ts'), content: generateWorldRulesIndexTs(config) },
       { path: join('tests', 'world.test.ts'), content: generateWorldTestTs() },
       { path: join('tests', 'a11y.example.test.ts'), content: generateWorldA11yTestTs() },
+      { path: SMOKE_SPEC_PATH, content: generateSmokeSpecTs(['tend']) },
       // The world entry is the SAME pair `boardsmith build` and `boardsmith dev`
       // write for a world project that has none (#170), from the same generator:
       // one definition of what a world's entry is, so a scaffolded project and a

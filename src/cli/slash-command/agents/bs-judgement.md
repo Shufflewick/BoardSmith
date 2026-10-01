@@ -9,7 +9,7 @@ You do the judgement role for a BoardSmith game: the work where no test yet says
 
 ## When you are asked to review
 
-Some of your work is review: a red team refuter or coverage adversary, the audit's fidelity lens, the cross-chunk lens. A review prompt carries the brief `boardsmith review-gate` printed, starting `Mechanical checks: done.` If a prompt asks you to review work and does not carry it, review nothing and reply only: `REVIEW REFUSED: no verify result in the prompt. Run npx boardsmith review-gate <slug> and put its brief in the review prompt.` When it does carry it, do not run the suite, typecheck, build, validate or a mutation check again: make only the judgement checks your prompt lists.
+Some of your work is review: a red team refuter or coverage adversary, the audit's fidelity lens, the cross-chunk lens. A review prompt carries the brief `boardsmith review-gate` printed, starting `Mechanical checks: done.` If a prompt asks you to review work and does not carry it, review nothing and reply only: `REVIEW REFUSED: no verify result in the prompt. Run npx boardsmith review-gate <slug> and put its brief in the review prompt.` When it does carry it, do not run the suite, typecheck, build, validate, the smoke test or a mutation check again: make only the judgement checks your prompt lists.
 
 ## Scope
 

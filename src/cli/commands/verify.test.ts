@@ -1,15 +1,15 @@
 import { describe, it, expect, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
-import { dirname, join, resolve } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { join } from 'node:path';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { INSTALLED_MODULES } from '../../testing/installed-modules.test-helper.js';
 import { spawnCli } from '../spawn-cli.test-helper.js';
 import { generateVitestConfig } from '../lib/test-run-scope.js';
-import { readVerifyResult, verifiedProblem, type VerifyResult } from '../lib/verify-result.js';
+import { readVerifyResult, verifiedProblem } from '../lib/verify-result.js';
 import { commitAll, git, initRepo, writeFiles as write } from '../lib/verify-result.test-helper.js';
 import { makeChunkProject } from './chunk-project.test-helper.js';
 import { recordSignoff } from './chunk-signoff.js';
+import { check, verifyAsAUser } from './verify-cli.test-helper.js';
 import { VERIFY_CHECKS, changedSince, resolveBase, runVerify } from './verify.js';
 
 vi.setConfig({ testTimeout: 180_000, hookTimeout: 60_000 });
@@ -155,18 +155,18 @@ async function gameOnBranch(breakBid: boolean): Promise<string> {
 }
 
 /**
- * `build` and `validate` need a whole game (a UI, a bundle); this fixture is the rules of one. They
- * stand in as passing here, so the refusal below can only come from the checks that really ran:
- * the full suite, the type check and the mutation check. The CLI test further down runs the real
- * `boardsmith verify`, all five checks, as a user would.
+ * `build`, `validate` and `smoke` need a whole game (a UI, a bundle, a page to open); this fixture
+ * is the rules of one. They stand in as passing here, so the refusal below can only come from the
+ * checks that really ran: the full suite, the type check and the mutation check. The CLI tests
+ * further down, and `verify-whole-game.test.ts`, run the real `boardsmith verify`, all six checks,
+ * as a user would.
  */
 const CHECKS = {
   ...VERIFY_CHECKS,
   build: async () => ({ passed: true, summary: 'stood in for by the fixture' }),
   validate: async () => ({ passed: true, summary: 'stood in for by the fixture' }),
+  smoke: async () => ({ passed: true, summary: 'stood in for by the fixture' }),
 };
-
-const check = (result: VerifyResult, name: string) => result.checks.find((c) => c.name === name)!;
 
 const signoff = (project: string) =>
   recordSignoff('deal', { project, by: 'Jane Designer', observed: '1,2', now: new Date('2026-09-29T12:00:00Z') });
@@ -190,6 +190,7 @@ describe('boardsmith verify: a claim of green is refused when a test outside the
       ['typecheck', true],
       ['build', true],
       ['validate', true],
+      ['smoke', true],
       ['mutation', false],
     ]);
     const test = check(result, 'test');
@@ -250,6 +251,7 @@ describe('boardsmith verify: a claim of green is refused when a test outside the
       ['typecheck', true],
       ['build', true],
       ['validate', true],
+      ['smoke', true],
       ['mutation', false],
     ]);
     const mutation = check(result, 'mutation');
@@ -395,6 +397,7 @@ function countingChecks() {
     typecheck: stub('typecheck'),
     build: stub('build'),
     validate: stub('validate'),
+    smoke: stub('smoke'),
     mutation: stub('mutation'),
   };
   return { ran, checks };
@@ -406,13 +409,13 @@ describe('boardsmith verify: a result counts only for a commit on a clean tree',
     const { ran, checks } = countingChecks();
     const { result: earlier } = await runVerify({ projectDir: dir, checks, log: () => {} });
     expect(earlier.passed).toBe(true);
-    expect(ran).toHaveLength(5);
+    expect(ran).toHaveLength(6);
 
     await write(dir, { 'notes.md': 'uncommitted\n' });
     await expect(runVerify({ projectDir: dir, checks, log: () => {} })).rejects.toThrow(
       /uncommitted changes.*Commit.*then run `boardsmith verify`/s,
     );
-    expect(ran).toHaveLength(5);
+    expect(ran).toHaveLength(6);
     const head = git(dir, 'rev-parse', 'HEAD').trim();
     expect(await readVerifyResult(dir, head)).toEqual(earlier);
   });
@@ -465,73 +468,6 @@ describe('boardsmith verify: a result counts only for a commit on a clean tree',
   });
 });
 
-const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
-
-/**
- * The smallest whole game `boardsmith build` and `boardsmith validate` both accept: rules with one
- * action, a page, a UI entry, the metadata validate asks for, and a test. `node_modules` is a
- * directory of links, `boardsmith` to this checkout and the tools validate runs through npx to
- * this checkout's install, so nothing is fetched. It is built on a branch that adds `fee`.
- */
-async function wholeGameOnBranch(): Promise<string> {
-  const tree = tempTree('bs-verify-whole-game-');
-  const dir = join(tree, 'game');
-  await write(dir, {
-    '.gitignore': 'node_modules\ndist/\n.boardsmith/\n',
-    'package.json': JSON.stringify({ name: 'fixture', version: '1.0.0', type: 'module' }),
-    'boardsmith.json': JSON.stringify({
-      name: 'fixture',
-      backend: 'table',
-      displayName: 'Fixture',
-      description: 'A test fixture',
-      audience: 'casual',
-      tags: ['card-game'],
-      playtime: { min: 1, max: 5 },
-      cooperative: false,
-    }),
-    'tsconfig.json': TSCONFIG,
-    'vitest.config.ts': generateVitestConfig(undefined),
-    'index.html': '<!DOCTYPE html><html><body><div id="app"></div></body></html>\n',
-    'src/rules/game.ts': `import { Game, Action, actionStep } from 'boardsmith';
-
-export class FixtureGame extends Game {
-  done = false;
-  constructor(options: ConstructorParameters<typeof Game>[0]) {
-    super(options);
-    this.registerAction(Action.create('pass').execute(() => { this.done = true; return { success: true }; }));
-    this.setFlow({ root: actionStep({ actions: ['pass'] }), isComplete: () => this.done });
-  }
-}
-`,
-    'src/rules/index.ts': `import { FixtureGame } from './game.js';
-export const gameDefinition = { gameClass: FixtureGame, gameType: 'fixture', displayName: 'Fixture', minPlayers: 1, maxPlayers: 1 };
-`,
-    'src/ui/uis.ts': 'export {};\n',
-    'src/ui/App.vue': '<template><div /></template>\n',
-    'tests/rules.test.ts': `import { it, expect } from 'vitest';
-import { gameDefinition } from '../src/rules/index.js';
-it('seats one player', () => { expect(gameDefinition.maxPlayers).toBe(1); });
-`,
-  });
-  const modules = join(dir, 'node_modules');
-  await fs.mkdir(join(modules, '.bin'), { recursive: true });
-  await fs.symlink(REPO, join(modules, 'boardsmith'), 'dir');
-  for (const name of ['typescript', 'vue-tsc', 'vitest']) {
-    await fs.symlink(join(INSTALLED_MODULES, name), join(modules, name), 'dir');
-  }
-  await fs.symlink('../vue-tsc/bin/vue-tsc.js', join(modules, '.bin', 'vue-tsc'));
-  await fs.symlink('../vitest/vitest.mjs', join(modules, '.bin', 'vitest'));
-  initRepo(dir);
-  commitAll(dir, 'base');
-  git(dir, 'checkout', '-q', '-b', 'fee');
-  await write(dir, {
-    'src/rules/fee.ts': 'export function fee(price: number): number {\n  return price * 2;\n}\n',
-    'tests/fee.test.ts': FEE_TEST.replace("'../src/rules'", "'../src/rules/fee.js'"),
-  });
-  commitAll(dir, 'add the fee');
-  return dir;
-}
-
 describe('the boardsmith verify command, as a user runs it', () => {
   it('--check exits non-zero and says to run boardsmith verify when HEAD has no result, and 0 once it passed', async () => {
     const dir = await gameOnBranch(false);
@@ -546,41 +482,23 @@ describe('the boardsmith verify command, as a user runs it', () => {
     expect(after.stdout).toMatch(/passed `boardsmith verify` on a clean tree/);
   });
 
-  it('runs all five real checks, writes the result and exits non-zero when one fails', async () => {
-    // The fixture has no UI, so the real build and validate fail; the run still goes on through
-    // every check rather than stopping at the first failure.
-    const dir = await gameOnBranch(false);
-    const run = await spawnCli(['verify', '--project', dir]);
+  it('runs all six real checks, writes the result and exits non-zero when one fails', async () => {
+    // The fixture has no UI and no smoke test, so the real build, validate and smoke fail; the run
+    // still goes on through every check rather than stopping at the first failure.
+    const { run, result } = await verifyAsAUser(await gameOnBranch(false));
     expect(run.code).toBe(1);
-    const head = git(dir, 'rev-parse', 'HEAD').trim();
-    const result = (await readVerifyResult(dir, head)) as VerifyResult;
     expect(result.checks.map((c) => [c.name, c.passed])).toEqual([
       ['test', true],
       ['typecheck', true],
       ['build', false],
       ['validate', false],
+      ['smoke', false],
       ['mutation', true],
     ]);
     expect(check(result, 'build').next).toBe('Run `boardsmith build` to see why.');
+    expect(check(result, 'smoke').summary).toBe('This project has no tests/browser/smoke.spec.ts, so nothing opens the game in a browser.');
     expect(run.stdout).toContain('build');
     expect(run.stdout).toContain('Run `boardsmith build` to see why.');
-  });
-
-  it('passes all five real checks on a whole game, and --check then accepts the commit', async () => {
-    const dir = await wholeGameOnBranch();
-    const run = await spawnCli(['verify', '--project', dir]);
-    const head = git(dir, 'rev-parse', 'HEAD').trim();
-    const result = (await readVerifyResult(dir, head)) as VerifyResult;
-    expect(result.checks.map((c) => [c.name, c.passed, c.summary])).toEqual([
-      ['test', true, '2 tests passed in 2 files.'],
-      ['typecheck', true, 'No type errors.'],
-      ['build', true, '`boardsmith build` passed.'],
-      ['validate', true, '`boardsmith validate` passed.'],
-      ['mutation', true, expect.stringMatching(/^Every one of 3 mutants of the lines changed since main/)],
-    ]);
-    expect(run.code).toBe(0);
-    expect(git(dir, 'status', '--porcelain')).toBe('');
-    expect((await spawnCli(['verify', '--check', '--project', dir])).code).toBe(0);
   });
 
   it('refuses a project whose .gitignore does not leave .boardsmith/ out, since its own result would dirty the tree', async () => {

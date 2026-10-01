@@ -19,7 +19,7 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 import { devProject, EXIT_WITHIN_MS, spawnDev, type DevRunEnding } from './dev-project.test-helper.js';
-import { freePort } from './free-port.test-helper.js';
+import { freePort } from '../lib/free-port.js';
 import { openWorldStore, worldStorePath } from '../dev-host/world-store.js';
 import { worldBudgets } from '../../world/index.js';
 import { commandBuildDir, scratchDir } from '../lib/project-paths.js';

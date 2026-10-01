@@ -957,7 +957,7 @@ export async function recordSignoff(slug: string, options: SignoffOptions): Prom
   const constraints = await checkConstraints(dir, { slug });
   // #452: nobody says a chunk is done on a word. HEAD, on a clean tree, must have passed
   // `boardsmith verify` with the chunk's whole change measured: the full suite, typecheck, build,
-  // validate and the mutation check of everything since the chunk began.
+  // validate, the smoke test and the mutation check of everything since the chunk began.
   const unverified = await verifiedProblem(dir, slug);
   const problems = [...signoffProblems(record, ctx), ...constraints.refusals, ...(unverified ? [unverified] : [])];
   if (problems.length) {

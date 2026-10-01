@@ -87,7 +87,7 @@ recorded disposition is done and is not redone or clobbered by a resuming sessio
 A finding recorded `fixed` changed code, and code that changed is re-checked by the same gate the
 test step ends with, never by re-running only the tests near the fix. Commit the round's fixes,
 then run `npx boardsmith verify --chunk <slug>` (`state-machine.md` "Git Protocol" says what it
-measures from): the full suite, typecheck, build, validate and a mutation check of the changed
+measures from): the full suite, typecheck, build, validate, the smoke test and a mutation check of the changed
 lines, recorded for that commit. A round is not done, and the next audit round is not dispatched,
 until it exits zero on a clean tree. When it fails, the failed check says what to fix and what to
 run next; that is more repair work in this round, not a new finding. Never say a fix is done or the

@@ -674,6 +674,27 @@ dist/
 }
 
 /**
+ * The game's in-browser smoke test (#453), which `boardsmith verify` runs in Chromium against
+ * `boardsmith dev`, listing the actions a player of the scaffolded game can take.
+ */
+export function generateSmokeSpecTs(actions: readonly string[]): string {
+  return `import { defineSmokeTest } from 'boardsmith/testing/browser';
+
+// The in-browser smoke test. \`boardsmith verify\` (and \`boardsmith smoke\`) serves this game with
+// \`boardsmith dev\` from a fresh start and walks it in Chromium: a player takes a seat, takes every
+// action the action panel offers and presses every control on the board, and any page error,
+// console error, failed request or failed action fails it.
+//
+// \`actions\` lists every action a player can take, by the name the rules give it. The walk must
+// take each one, and fails on one the game offers that is not listed here: add an action here in
+// the same change that adds it to the rules.
+defineSmokeTest({
+  actions: [${actions.map((name) => `'${name}'`).join(', ')}],
+});
+`;
+}
+
+/**
  * Generate all scaffold files for a project
  */
 export function generateScaffoldFiles(config: ProjectConfig, projectPath: string): GeneratedFile[] {

@@ -111,8 +111,13 @@ export interface GameContext extends PlayContext {
   turnDeadline: ComputedRef<TurnDeadline | null>;
 }
 
-/** The keys both backends publish. */
-const PLAY_CONTEXT_KEY_NAMES = [
+/**
+ * The keys both backends publish: a world's shell publishes these and no
+ * others of {@link GAME_CONTEXT_KEYS}.
+ *
+ * @internal
+ */
+export const PLAY_CONTEXT_KEY_NAMES = [
   'gameView', 'players', 'myPlayer', 'playerSeat', 'isMyTurn', 'availableActions',
   'actionController', 'platformRequest', 'presentation', 'debugHighlight',
 ] as const satisfies readonly (keyof PlayContext)[];
@@ -167,6 +172,30 @@ export function playContextProvisions(context: PlayContext): Array<readonly [Inj
 }
 
 /**
+ * Why `useGameContext()` cannot answer, given the fields no shell provided. A
+ * world's shell provides the shared half and never a table's own fields, so
+ * when only those are missing the component is in a world, and saying "no
+ * GameShell" would send its author looking for a shell that is right there.
+ */
+function missingContextMessage(missing: readonly string[]): string {
+  const shared: readonly string[] = PLAY_CONTEXT_KEY_NAMES;
+  if (missing.every((field) => !shared.includes(field))) {
+    return (
+      `useGameContext() reads a table's whole game context, and this component is inside a world's shell, ` +
+      `which never provides a table's own fields (missing: ${missing.join(', ')}).\n` +
+      `  In a world, read one field with inject(GAME_CONTEXT_KEYS.<field>) and the world itself with useWorld().`
+    );
+  }
+  return (
+    `useGameContext() found no GameShell above this component (missing: ${missing.join(', ')}).\n` +
+    `  The game context is published by GameShell, so a component that reads it must be ` +
+    `rendered inside one: as a board component, a custom UI, or an overlay.\n` +
+    `  In a test, mount the component with renderAsSeat, or pass tableShellContext(...).provide ` +
+    `(both from boardsmith/testing) as the mount's global.provide.`
+  );
+}
+
+/**
  * Read the whole game context inside a `GameShell`.
  *
  * Throws when there is no shell above this component, which is the only honest
@@ -188,15 +217,7 @@ export function useGameContext(): GameContext {
     (context as unknown as Record<string, unknown>)[key] = value;
   }
 
-  if (missing.length > 0) {
-    throw new Error(
-      `useGameContext() found no GameShell above this component (missing: ${missing.join(', ')}).\n` +
-      `  The game context is published by GameShell, so a component that reads it must be ` +
-      `rendered inside one — as a board component, a custom UI, or an overlay.\n` +
-      `  In a test, mount the component inside GameShell, or provide the pieces it needs ` +
-      `via GAME_CONTEXT_KEYS.`
-    );
-  }
+  if (missing.length > 0) throw new Error(missingContextMessage(missing));
 
   return context;
 }

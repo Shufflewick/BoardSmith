@@ -1,12 +1,14 @@
 /**
  * A BOARD THAT RECORDS EVERYTHING IT COULD INJECT, for the parity tests that
- * hold `renderAsSeat` to the real shells (#406 for GameShell, #413 for
- * WorldShell).
+ * hold the shell-context stubs (`renderAsSeat`, `tableShellContext`,
+ * `worldShellContext`) to the real shells (#406 for GameShell, #413 for
+ * WorldShell, #453 for both directions).
  *
- * Mount `KeyProbe` inside a shell and again with `renderAsSeat`, each through
- * `keysProbedIn`, and compare with `expectSeatGetsWhatTheShellGives`: any key
- * the shell's board can inject that `renderAsSeat`'s cannot is a board that
- * works in the shell and breaks in a test.
+ * Mount `KeyProbe` inside a shell and again under a stub, each through
+ * `keysProbedIn`, and compare with `expectSameKeysAsTheShell`: a key the
+ * shell's board can inject that the stub's cannot is a board that works in the
+ * shell and breaks in a test, and a key the stub's board can inject that the
+ * shell's cannot is a board that passes its test and breaks in the shell.
  */
 import { expect } from 'vitest';
 import { defineComponent, getCurrentInstance, h } from 'vue';
@@ -53,20 +55,48 @@ function describeKey(key: PropertyKey): string {
  */
 const SHELL_ONLY = new Set(['boardsmith:board-region-pin']);
 
+/** The keys in `from` that `other` lacks, by name, leaving out what a shell provides only for itself. */
+function keysMissingFrom(from: Set<PropertyKey>, other: Set<PropertyKey>): string[] {
+  return [...from]
+    .filter((key) => !other.has(key))
+    .map(describeKey)
+    .filter((name) => !SHELL_ONLY.has(name))
+    .sort();
+}
+
 /**
- * Fail if the shell's board could inject a key the seat's board could not.
- * `shellProvides` names keys the shell must have provided, so the comparison is
- * against something rather than an empty set.
+ * Fail unless the stub's board could inject exactly what the shell's board
+ * could. `shellProvides` names keys the shell must have provided, so the
+ * comparison is against something rather than an empty set.
  */
-export function expectSeatGetsWhatTheShellGives(
+export function expectSameKeysAsTheShell(
   shellKeys: Set<PropertyKey>,
-  seatKeys: Set<PropertyKey>,
+  stubKeys: Set<PropertyKey>,
   shellProvides: readonly string[],
 ): void {
-  const missing = [...shellKeys]
-    .filter((key) => !seatKeys.has(key))
-    .map(describeKey)
-    .filter((name) => !SHELL_ONLY.has(name));
-  expect(missing).toEqual([]);
+  expect({
+    onlyTheShellProvides: keysMissingFrom(shellKeys, stubKeys),
+    onlyTheStubProvides: keysMissingFrom(stubKeys, shellKeys),
+  }).toEqual({ onlyTheShellProvides: [], onlyTheStubProvides: [] });
   expect([...shellKeys].map(describeKey)).toEqual(expect.arrayContaining([...shellProvides]));
+}
+
+/** The shell keys in `keys`, by name, for comparing with a stub's declared list. */
+export function namesOf(keys: Iterable<PropertyKey>): string[] {
+  return [...keys]
+    .map(describeKey)
+    .filter((name) => !SHELL_ONLY.has(name))
+    .sort();
+}
+
+/**
+ * The message a stub refused with, or a sentence saying it did not refuse. A
+ * stub that resolves holds a mounted tree, which a failed `rejects` assertion
+ * would try to print whole.
+ */
+export async function refusal(attempt: Promise<unknown>): Promise<string> {
+  return attempt.then(
+    () => 'it did not refuse',
+    (error: unknown) => (error instanceof Error ? error.message : String(error)),
+  );
 }

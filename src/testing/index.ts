@@ -109,6 +109,8 @@ export {
 // DOM-leak test utility (VIS-03), which takes either of the two above (#262)
 export {
   renderAsSeat,
+  tableShellContext,
+  worldShellContext,
   assertNoHiddenInfoLeak,
   preloadSeatRenderer,
   type HiddenInfoSubject,
@@ -117,6 +119,8 @@ export {
   type HiddenInfoLeakAllowPredicate,
   type AssertNoHiddenInfoLeakOptions,
   type RenderAsSeatOptions,
+  type ShellContext,
+  type ShellContextOptions,
 } from './dom-leak.js';
 
 // Debug utilities

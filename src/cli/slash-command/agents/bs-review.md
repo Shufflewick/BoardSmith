@@ -13,7 +13,7 @@ Your prompt carries the brief `boardsmith review-gate` printed, starting `Mechan
 
 ## What is already done
 
-The brief names the commit and each check `boardsmith verify` passed for it: the full suite, typecheck, build, validate and the mutation check. Do not run them again, and do not break code to see whether a test notices.
+The brief names the commit and each check `boardsmith verify` passed for it: the full suite, typecheck, build, validate, the smoke test and the mutation check. Do not run them again, and do not break code to see whether a test notices.
 
 ## What you check
 

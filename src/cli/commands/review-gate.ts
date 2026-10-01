@@ -112,9 +112,9 @@ function reviewBrief(projectDir: string, slug: string, result: VerifyResult, fro
       `at ${short(result.base.commit)}):`,
     ...result.checks.map((check) => `- ${check.name}: ${check.summary}`),
     `The change under review: \`git diff ${short(from)}..${short(result.commit)}\`.`,
-    'Do not run the suite, typecheck, build, validate or a mutation check again, and do not break code to see whether a ' +
-      'test notices: verify did all of that for this commit. Your review is the judgement checks listed in this prompt, ' +
-      'and nothing a script can check.',
+    'Do not run the suite, typecheck, build, validate, the smoke test or a mutation check again, and do not break code ' +
+      'to see whether a test notices: verify did all of that for this commit. Your review is the judgement checks ' +
+      'listed in this prompt, and nothing a script can check.',
   ].join('\n');
 }
 

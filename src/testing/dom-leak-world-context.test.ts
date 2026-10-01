@@ -13,7 +13,7 @@
  * mounted by `renderAsSeat` is not given.
  */
 import { describe, it, expect, afterEach } from 'vitest';
-import { defineComponent, h, inject, type PropType } from 'vue';
+import { defineComponent, h, inject, ref, type PropType } from 'vue';
 import { flushPromises, mount } from '@vue/test-utils';
 
 import type { ElementJSON } from '../engine/index.js';
@@ -26,8 +26,8 @@ import { defaultUI, defineGameUIs } from '../ui/game-uis.js';
 import { createTestWorld, type TestWorld } from './test-world.js';
 import { vaultBundle } from './test-world.test-helper.js';
 import { TargetBoard } from './dom-leak.test-helper.js';
-import { assertNoHiddenInfoLeak, preloadSeatRenderer, renderAsSeat } from './dom-leak.js';
-import { expectSeatGetsWhatTheShellGives, KeyProbe, keysProbedIn } from './provided-keys.test-helper.js';
+import { assertNoHiddenInfoLeak, preloadSeatRenderer, renderAsSeat, shellProvidedKeys, worldShellContext } from './dom-leak.js';
+import { expectSameKeysAsTheShell, KeyProbe, keysProbedIn, namesOf, refusal } from './provided-keys.test-helper.js';
 
 await preloadSeatRenderer();
 
@@ -235,18 +235,58 @@ async function keysInsideWorldShell(world: TestWorld, seat: number): Promise<Set
   });
 }
 
-describe('renderAsSeat and WorldShell give a world board the same things (#413)', () => {
-  it('provides every key WorldShell provides to the board it mounts', async () => {
+/** Keys WorldShell must be seen to provide, so a comparison is against something. */
+const WORLD_SHELL_PROVIDES = ['boardsmith-world', 'bs:gameView', 'bs:actionController', 'boardInteraction'];
+
+describe('renderAsSeat and WorldShell give a world board the same things (#413, #453)', () => {
+  it('provides exactly the keys WorldShell provides to the board it mounts, no more and no fewer', async () => {
     const world = await vaultWorld();
     const shellKeys = await keysInsideWorldShell(world, SEAT);
 
     const seatKeys = await keysProbedIn('renderAsSeat', () => render(renderAsSeat(world, SEAT, { component: KeyProbe })));
 
-    expectSeatGetsWhatTheShellGives(shellKeys, seatKeys, [
-      'boardsmith-world',
-      'bs:gameView',
-      'bs:actionController',
-      'boardInteraction',
-    ]);
+    expectSameKeysAsTheShell(shellKeys, seatKeys, WORLD_SHELL_PROVIDES);
+  });
+
+  it("refuses a provided key only a table's shell gives, since a board reading it would pass here and throw in play", async () => {
+    const world = await vaultWorld();
+
+    expect(await refusal(renderAsSeat(world, SEAT, { component: KeyProbe, provide: { [GAME_CONTEXT_KEYS.gameState as symbol]: ref(null) } }))).toMatch(/bs:gameState.*WorldShell never provides/s);
+  });
+});
+
+describe('worldShellContext: the world stub is what WorldShell provides, built the same way (#453)', () => {
+  it('provides exactly the keys WorldShell provides, no more and no fewer', async () => {
+    const world = await vaultWorld();
+    const shellKeys = await keysInsideWorldShell(world, SEAT);
+
+    const stub = await worldShellContext(world, SEAT);
+    const stubKeys = await keysProbedIn('worldShellContext', async () => {
+      mounted.push(mount(KeyProbe, { global: { provide: stub.provide } }));
+    });
+
+    expectSameKeysAsTheShell(shellKeys, stubKeys, WORLD_SHELL_PROVIDES);
+    expect(namesOf(Object.getOwnPropertySymbols(stub.provide))).toEqual(namesOf((await shellProvidedKeys()).world));
+    stub.stop();
+  });
+
+  it('refuses every key only a table provides, naming it and the reader that works in a world', async () => {
+    const world = await vaultWorld();
+
+    for (const key of [GAME_CONTEXT_KEYS.gameState, GAME_CONTEXT_KEYS.dueSeats, GAME_CONTEXT_KEYS.timeTravelDiff, GAME_CONTEXT_KEYS.turnDeadline]) {
+      expect(await refusal(worldShellContext(world, SEAT, { provide: { [key as symbol]: ref(null) } }))).toMatch(
+        /worldShellContext was asked to provide bs:\w+, which WorldShell never provides.*useWorld\(\)/s,
+      );
+    }
+  });
+
+  it('lets a test replace the controller WorldShell provides, as a recording stand-in', async () => {
+    const world = await vaultWorld();
+    const recording = { execute: async () => ({ success: true }) };
+
+    const stub = await worldShellContext(world, SEAT, { provide: { [GAME_CONTEXT_KEYS.actionController as symbol]: recording } });
+
+    expect(stub.provide[GAME_CONTEXT_KEYS.actionController as symbol]).toBe(recording);
+    stub.stop();
   });
 });

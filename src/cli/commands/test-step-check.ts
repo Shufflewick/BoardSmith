@@ -15,7 +15,9 @@
  *   3. Every verb the chunk added (`Action.create('<verb>')`) is dispatched through the engine by
  *      one of the chunk's test files — calling the rules function directly does not count.
  *   4. No line the chunk added calls a guard unreachable.
- *   5. Mutation: every claim and every test is shown able to fail (`test-step-mutation.ts`).
+ *   5. No test file the chunk wrote or changed provides, by hand, a key only one shell provides
+ *      (`test-step-shell-context.ts`): it mounts with the shell-context stubs instead (#453).
+ *   6. Mutation: every claim and every test is shown able to fail (`test-step-mutation.ts`).
  *
  * "The chunk added" means the lines whose last change is one of the chunk's own
  * `chunk-<slug>/` commits, or is not committed yet (`addedImplementationLines`).
@@ -47,6 +49,7 @@ import {
 } from './test-step-ast.js';
 import { runMutationCheck, type MutationSummary } from './test-step-mutation.js';
 import { scriptRegions } from './test-step-sfc.js';
+import { findHandBuiltShellContext } from './test-step-shell-context.js';
 import { findChunkCommits } from '../lib/chunk-commits.js';
 import { chunkMdPath, relChunkMdPath } from '../lib/project-paths.js';
 import { assertBareName } from '../lib/user-name.js';
@@ -63,6 +66,7 @@ const TEST_STEP_FINDING_KINDS = Object.freeze([
   'claim-uncovered',
   'verb-not-dispatched',
   'unreachable-guard',
+  'hand-built-shell-context',
   'suite-not-green',
   'test-not-run',
   'claim-survives-mutation',
@@ -454,7 +458,48 @@ async function guardFindings(
 }
 
 /**
- * Runs checks 1-4 (see the file comment). Never runs a test; `testStepCheckCommand` runs the
+ * The test files the chunk wrote or changed: its manifest's, every file under `tests/` one of its
+ * commits touched, and any under `tests/` not committed yet.
+ */
+async function chunkTestSources(
+  projectDir: string,
+  chunkCommits: ReadonlySet<string>,
+  testFiles: ChunkTestFile[],
+): Promise<SourceFile[]> {
+  const committed = await git(projectDir, ['log', '--no-walk', '--format=', '--name-only', ...chunkCommits, '--', 'tests']);
+  const uncommitted = await git(projectDir, ['diff', 'HEAD', '--name-only', '--', 'tests']);
+  const untracked = await git(projectDir, ['ls-files', '--others', '--exclude-standard', '--', 'tests']);
+  const touched = new Set([...committed.split('\n'), ...uncommitted.split('\n'), ...untracked.split('\n')]);
+  const manifest = new Set(testFiles.map((f) => f.path));
+  return [
+    ...testFiles.map((f) => ({ path: f.path, text: f.source })),
+    ...(await testSupportSources(projectDir)).filter((f) => touched.has(f.path) && !manifest.has(f.path)),
+  ];
+}
+
+/** Check 5: no test file the chunk wrote or changed provides a one-shell key by hand. */
+async function shellContextFindings(
+  projectDir: string,
+  chunkCommits: ReadonlySet<string>,
+  testFiles: ChunkTestFile[],
+): Promise<TestStepFinding[]> {
+  return (await chunkTestSources(projectDir, chunkCommits, testFiles)).flatMap(({ path, text }) =>
+    findHandBuiltShellContext(text, path).map(({ line, key }) => ({
+      kind: 'hand-built-shell-context' as const,
+      subject: `${path}:${line}`,
+      detail:
+        `Line ${line} of ${path} provides ${key} by hand, and only one of the two shells (a table's GameShell, a ` +
+        "world's WorldShell) provides it. A board that reads it then passes this test and throws in the other " +
+        'shell, as a world board once did in play with every test green. Mount with `renderAsSeat`, or pass the ' +
+        '`provide` of `tableShellContext(...)` or `worldShellContext(...)` (all from boardsmith/testing): each gives ' +
+        'exactly what the real shell gives and refuses a key it does not. Put any value you need to replace in their ' +
+        '`provide` option.',
+    })),
+  );
+}
+
+/**
+ * Runs checks 1-5 (see the file comment). Never runs a test; `testStepCheckCommand` runs the
  * mutation check once these pass.
  */
 export async function checkTestStep(
@@ -466,7 +511,8 @@ export async function checkTestStep(
   const chunkText = await readChunk(dir, slug);
   const claims: ChunkClaims = { inForce: claimsInForce(chunkText), superseded: parseSupersededClaims(chunkText) };
   const manifest = parseSpecManifest(chunkText);
-  const added = await addedImplementationLines(dir, await findChunkCommits(dir, slug));
+  const chunkCommits = await findChunkCommits(dir, slug);
+  const added = await addedImplementationLines(dir, chunkCommits);
   const rows = await manifestRowFindings(dir, manifest, claims);
   const verbs = await chunkVerbs(dir, added);
   const findings = [
@@ -475,6 +521,7 @@ export async function checkTestStep(
     ...uncoveredClaimFindings(manifest, claims),
     ...(await verbFindings(dir, verbs, rows.testFiles)),
     ...(await guardFindings(dir, added)),
+    ...(await shellContextFindings(dir, chunkCommits, rows.testFiles)),
   ];
   return { slug, verbs, findings, testFiles: rows.testFiles, added };
 }

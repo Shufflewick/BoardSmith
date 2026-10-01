@@ -13,11 +13,13 @@
  * `renderAsSeat` is not given.
  */
 import { describe, it, expect, afterEach, vi } from 'vitest';
-import { defineComponent, h, nextTick, type Component, type PropType } from 'vue';
+import { defineComponent, h, nextTick, ref, type Component, type PropType } from 'vue';
+import { mount } from '@vue/test-utils';
 import { MoveGame } from '../session/move-game.test-helper.js';
 import { buildPlayerState } from '../session/utils.js';
 import type { UseActionControllerReturn } from '../ui/composables/useActionControllerTypes.js';
-import { useGameContext } from '../ui/composables/useGameContext.js';
+import { GAME_CONTEXT_KEYS, useGameContext } from '../ui/composables/useGameContext.js';
+import { WORLD_CONTEXT_KEY } from '../ui/world/useWorld.js';
 import { useAnnouncer } from '../ui/composables/useAnnouncer.js';
 import { useAnimationEvents } from '../ui/composables/useAnimationEvents.js';
 import { holdGameOverUntil } from '../ui/composables/useGameOverReveal.js';
@@ -27,8 +29,8 @@ import {
   mountPlatformShell,
 } from '../ui/components/GameShell.platform-mount.test-helper.js';
 import { TestGame } from './test-game.js';
-import { preloadSeatRenderer, renderAsSeat } from './dom-leak.js';
-import { expectSeatGetsWhatTheShellGives, KeyProbe, keysProbedIn } from './provided-keys.test-helper.js';
+import { preloadSeatRenderer, renderAsSeat, shellProvidedKeys, tableShellContext } from './dom-leak.js';
+import { expectSameKeysAsTheShell, KeyProbe, keysProbedIn, namesOf, refusal } from './provided-keys.test-helper.js';
 
 await preloadSeatRenderer();
 
@@ -212,19 +214,60 @@ async function keysInsideGameShell(game: TestGame<MoveGame>, seat: number): Prom
   });
 }
 
-describe('renderAsSeat and GameShell give a board the same things (#406)', () => {
-  it('provides every key GameShell provides to the board it mounts', async () => {
+/** Keys GameShell must be seen to provide, so a comparison is against something. */
+const TABLE_SHELL_PROVIDES = ['bs:gameState', 'bs:actionController', 'announcer', 'animationEvents', 'boardsmith:game-over-holds'];
+
+describe('renderAsSeat and GameShell give a board the same things (#406, #453)', () => {
+  it('provides exactly the keys GameShell provides to the board it mounts, no more and no fewer', async () => {
     const game = moveGame();
     const shellKeys = await keysInsideGameShell(game, 1);
 
     const seatKeys = await keysProbedIn('renderAsSeat', () => render(renderAsSeat(game, 1, { component: KeyProbe })));
 
-    expectSeatGetsWhatTheShellGives(shellKeys, seatKeys, [
-      'bs:gameState',
-      'bs:actionController',
-      'announcer',
-      'animationEvents',
-      'boardsmith:game-over-holds',
-    ]);
+    expectSameKeysAsTheShell(shellKeys, seatKeys, TABLE_SHELL_PROVIDES);
+  });
+
+  it("refuses a provided key only a world's shell gives, since a board reading it would pass here and throw in play", async () => {
+    expect(await refusal(renderAsSeat(moveGame(), 1, { component: KeyProbe, provide: { [WORLD_CONTEXT_KEY as symbol]: {} } }))).toMatch(/boardsmith-world.*GameShell never provides/s);
+  });
+});
+
+describe('tableShellContext: the table stub is what GameShell provides, built the same way (#453)', () => {
+  it('provides exactly the keys GameShell provides, no more and no fewer', async () => {
+    const game = moveGame();
+    const shellKeys = await keysInsideGameShell(game, 1);
+
+    const stub = await tableShellContext(game, 1);
+    const stubKeys = await keysProbedIn('tableShellContext', async () => {
+      mounted.push(mount(KeyProbe, { global: { provide: stub.provide } }));
+    });
+
+    expectSameKeysAsTheShell(shellKeys, stubKeys, TABLE_SHELL_PROVIDES);
+    expect(namesOf(Object.getOwnPropertySymbols(stub.provide))).toEqual(namesOf((await shellProvidedKeys()).table));
+    stub.stop();
+  });
+
+  it("answers useGameContext() from the seat's own state, with the seat's own controller", async () => {
+    const game = moveGame();
+    const stub = await tableShellContext(game, 1);
+    const wrapper = mount(ContextBoard, { props: { actionController: stub.actionController }, global: { provide: stub.provide } });
+    mounted.push(wrapper);
+
+    expect(wrapper.find('.board').attributes('data-actions')).toBe('move');
+    expect(wrapper.find('.board').attributes('data-same-controller')).toBe('true');
+    stub.stop();
+  });
+
+  it("refuses a key only a world's shell gives, naming it, and keeps one GameShell gives replaced", async () => {
+    const game = moveGame();
+
+    expect(await refusal(tableShellContext(game, 1, { provide: { [WORLD_CONTEXT_KEY as symbol]: {} } }))).toMatch(
+      /tableShellContext was asked to provide boardsmith-world, which GameShell never provides.*worldShellContext/s,
+    );
+
+    const presentation = ref('replaced');
+    const stub = await tableShellContext(game, 1, { provide: { [GAME_CONTEXT_KEYS.presentation as symbol]: presentation } });
+    expect(stub.provide[GAME_CONTEXT_KEYS.presentation as symbol]).toBe(presentation);
+    stub.stop();
   });
 });

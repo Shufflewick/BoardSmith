@@ -24,7 +24,7 @@ import { gitOutput as git } from './git-output.js';
  * off. `chunk-gate-transition` builds no chunk, so it asks only the plain question, and the
  * `--base HEAD` result it accepts satisfies no chunk's sign-off.
  *
- * ADDING A CHECK (the in-browser smoke test, #453, is the next one): add its name to
+ * ADDING A CHECK (the in-browser smoke test, #453, was added this way): add its name to
  * `VERIFY_CHECK_NAMES` and its runner to `VERIFY_CHECKS` in `commands/verify.ts`, which the compiler
  * then requires. Every check result has the same shape (`VerifyCheckResult`), with optional counts
  * and file-and-line findings, so nothing here changes. A result written before the check existed
@@ -35,7 +35,7 @@ import { gitOutput as git } from './git-output.js';
 export const VERIFY_RESULT_FORMAT = 1;
 
 /** Every check `boardsmith verify` runs, in the order it runs them. A passing result has all of them. */
-export const VERIFY_CHECK_NAMES = ['test', 'typecheck', 'build', 'validate', 'mutation'] as const;
+export const VERIFY_CHECK_NAMES = ['test', 'typecheck', 'build', 'validate', 'smoke', 'mutation'] as const;
 
 export type VerifyCheckName = (typeof VERIFY_CHECK_NAMES)[number];
 

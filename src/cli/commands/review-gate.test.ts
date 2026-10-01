@@ -5,6 +5,11 @@ import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { commitAll, initRepo, recordPassingVerify, writeFiles } from '../lib/verify-result.test-helper.js';
 import { LIGHT_REVIEW_LINES, SMALL_CHANGE_LINES, reviewGate, reviewGateCommand, reviewLevel } from './review-gate.js';
 
+// Each test, and the `beforeEach` that starts its repository, runs real `git` processes. A hang
+// guard, not a budget: on a busy machine vitest's 5 s test and 10 s hook defaults fail these with
+// nothing wrong (#360).
+vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
+
 /**
  * `boardsmith review-gate <slug>` (#454): no model review starts until `boardsmith verify` has
  * passed for the commit under review, and what the reviewer is told about the mechanical checks
@@ -96,11 +101,11 @@ describe('an open gate hands the reviewer the verify result', () => {
     if (!gate.open) return;
     expect(gate.level).toBe('full');
     expect(gate.brief).toContain(`Mechanical checks: done. \`boardsmith verify --chunk deal\` passed for commit ${head.slice(0, 12)} on a clean tree`);
-    for (const check of ['test', 'typecheck', 'build', 'validate', 'mutation']) {
+    for (const check of ['test', 'typecheck', 'build', 'validate', 'smoke', 'mutation']) {
       expect(gate.brief).toContain(`- ${check}: ${check} passed`);
     }
     expect(gate.brief).toContain(`.boardsmith/verify/${head}.json`);
-    expect(gate.brief).toMatch(/Do not run the suite, typecheck, build, validate or a mutation check again/);
+    expect(gate.brief).toMatch(/Do not run the suite, typecheck, build, validate, the smoke test or a mutation check again/);
   });
 
   it('scopes a re-review to the change since the commit the last round reviewed', async () => {

@@ -11,7 +11,11 @@
  *   2. typecheck  `boardsmith typecheck`
  *   3. build      `boardsmith build`
  *   4. validate   `boardsmith validate`
- *   5. mutation   every code line under `src/` changed since the base, broken one small change at a
+ *   5. smoke      `tests/browser/smoke.spec.ts` in Chromium against `boardsmith dev`, served from a
+ *                 fresh copy of the project (`smoke.ts`): a seated player takes every offered action
+ *                 and presses every board control, and any page error, console error, failed
+ *                 request or failed action fails it
+ *   6. mutation   every code line under `src/` changed since the base, broken one small change at a
  *                 time; the whole suite must fail for each (`runDiffMutationCheck`). An outcome from
  *                 an earlier run of the same code and tests is reused (`lib/mutant-cache.ts`), so a
  *                 re-verify after a bookkeeping-only commit runs no mutant again.
@@ -59,6 +63,7 @@ import {
   writeVerifyResult,
 } from '../lib/verify-result.js';
 import { isChunkCode } from './test-step-check.js';
+import { runSmoke } from './smoke.js';
 import { runDiffMutationCheck } from './test-step-mutation.js';
 import { runTypecheck } from './typecheck.js';
 
@@ -398,7 +403,7 @@ function mutationVerdict(since: string, run: Awaited<ReturnType<typeof runDiffMu
   };
 }
 
-/** 5. Every mutant of a changed code line must make the whole suite fail. */
+/** 6. Every mutant of a changed code line must make the whole suite fail. */
 async function mutationCheck(ctx: VerifyContext): Promise<CheckOutcome> {
   const since = `${ctx.base.ref} (${short(ctx.base.commit)})`;
   const notTried = mutationNotTried(ctx, since);
@@ -412,12 +417,18 @@ async function mutationCheck(ctx: VerifyContext): Promise<CheckOutcome> {
   return mutationVerdict(since, run);
 }
 
+/** 5. The game in Chromium, served by `boardsmith dev` from a fresh copy (`smoke.ts`). */
+async function smokeCheck(ctx: VerifyContext): Promise<CheckOutcome> {
+  return (await runSmoke({ projectDir: ctx.projectDir, log: ctx.log })).outcome;
+}
+
 /** Every check, by name. Adding a name to `VERIFY_CHECK_NAMES` requires its runner here. */
 export const VERIFY_CHECKS: Readonly<Record<VerifyCheckName, CheckRunner>> = Object.freeze({
   test: testCheck,
   typecheck: typecheckCheck,
   build: cliCheck('build'),
   validate: cliCheck('validate'),
+  smoke: smokeCheck,
   mutation: mutationCheck,
 });
 
