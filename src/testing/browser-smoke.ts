@@ -942,7 +942,7 @@ async function boardControls(frame: Frame): Promise<Control[]> {
 
 /**
  * Presses `control`, one of the board's or a dialog's, named `what`, saying so (`said`, else
- * "pressing" and `what`); counts it when the press lands.
+ * "pressing" and `what`); counts it when the press lands. Returns whether it did.
  */
 async function pressABoardControl(
   control: Control,
@@ -951,9 +951,11 @@ async function pressABoardControl(
   memory: WalkMemory,
   step: number,
   said = `pressing ${what}`,
-): Promise<void> {
+): Promise<boolean> {
   narrate(step, `${said}${control.keyboardOnly ? ' from the keyboard' : ''}`);
-  if (await press(control, what, walk, memory)) memory.controls++;
+  const landed = await press(control, what, walk, memory);
+  if (landed) memory.controls++;
+  return landed;
 }
 
 /** Presses one board control the walk has not pressed yet. Returns false when every one was pressed. */
@@ -998,19 +1000,28 @@ async function openDialog(frame: Frame): Promise<{ name: string; target: Locator
   return top === undefined ? undefined : { name: top.name, target: dialogs.nth(top.index) };
 }
 
+/** What the last step did to the dialog found open now, as the walk remembers it (`WalkMemory`). */
+interface LastStep {
+  /** The board control the last step pressed, which opened this dialog. */
+  readonly opener: string | undefined;
+  /** The control the last step pressed to close this dialog, which did not close it. */
+  readonly didNotClose: string | undefined;
+}
+
 /**
  * While a modal dialog is open, it is all a player can reach (#461). The walk presses each control
  * in it once, whichever opening of the dialog shows it, remembering the board control that opened
  * the dialog (so `reopenADialog` can open it again for the controls one that closed it hid) and
  * which controls closed it. Once every control in it has been pressed, it closes the dialog as a
- * player would: with a control that closed it before, else with Escape, the key a modal dialog
- * closes on. A dialog still open after Escape is reported, and ends the walk: a player in it has no
- * way back to the game. Returns whether the walk goes on.
+ * player would: with a control that closed a dialog before, else with Escape, the key a modal dialog
+ * closes on. A dialog that control left open is reported, since a player who presses it stays in the
+ * dialog, and Escape is pressed instead; one still open after Escape is reported too, and ends the
+ * walk: a player in it has no way back to the game. Returns whether the walk goes on.
  */
 async function answerTheDialog(
   frame: Frame,
   dialog: { name: string; target: Locator },
-  opener: string | undefined,
+  last: LastStep,
   walk: SmokeWalk,
   memory: WalkMemory,
   step: number,
@@ -1019,7 +1030,7 @@ async function answerTheDialog(
   memory.inDialog = true;
   const controls = (await controlsOf(frame, BOARD_CONTROLS, dialog.target)).filter((c) => c.enabled);
   for (const control of controls) {
-    if (!memory.dialogControls.has(control.key)) memory.dialogControls.set(control.key, opening ? opener : undefined);
+    if (!memory.dialogControls.has(control.key)) memory.dialogControls.set(control.key, opening ? last.opener : undefined);
   }
   const untried = controls.find((control) => !memory.pressed.has(`dialog:${control.key}`));
   if (untried !== undefined) {
@@ -1028,11 +1039,21 @@ async function answerTheDialog(
     await pressABoardControl(untried, `"${nameOf(untried)}" in the dialog "${dialog.name}"`, walk, memory, step);
     return true;
   }
-  const closer = controls.find((control) => memory.closers.has(control.key));
+  const closer = last.didNotClose === undefined ? controls.find((control) => memory.closers.has(control.key)) : undefined;
   if (closer !== undefined) {
     memory.dialogPress = closer.key;
-    await pressABoardControl(closer, `"${nameOf(closer)}" to close the dialog "${dialog.name}"`, walk, memory, step, `closing the dialog "${dialog.name}" with "${nameOf(closer)}"`);
+    const said = `closing the dialog "${dialog.name}" with "${nameOf(closer)}"`;
+    if (await pressABoardControl(closer, `"${nameOf(closer)}" to close the dialog "${dialog.name}"`, walk, memory, step, said)) {
+      memory.closing = { dialog: dialog.name, closer: nameOf(closer) };
+    }
     return true;
+  }
+  if (last.didNotClose !== undefined) {
+    note(
+      walk,
+      `The dialog "${dialog.name}" stayed open after the walk pressed "${last.didNotClose}" in it to close it, as that had closed ` +
+        'a dialog before, so a player who presses it stays in the dialog.',
+    );
   }
   memory.dialogPress = undefined;
   narrate(step, `closing the dialog "${dialog.name}" with Escape`);
@@ -1132,6 +1153,11 @@ interface WalkMemory {
   boardPress: string | undefined;
   /** The dialog control the last step pressed, which closed its dialog when the next step finds none. */
   dialogPress: string | undefined;
+  /**
+   * The dialog the last step pressed a control to close, and that control by name: one that did not
+   * close it leaves the next step finding the same dialog still open.
+   */
+  closing: { readonly dialog: string; readonly closer: string } | undefined;
   /** Every control seen in a dialog, with the board control that opened the dialog it was seen in. */
   readonly dialogControls: Map<string, string | undefined>;
   /** The dialog controls that closed their dialog when pressed. */
@@ -1162,6 +1188,7 @@ function newMemory(seed: string | null): WalkMemory {
     inDialog: false,
     boardPress: undefined,
     dialogPress: undefined,
+    closing: undefined,
     dialogControls: new Map(),
     closers: new Set(),
     reopened: new Map(),
@@ -1233,12 +1260,17 @@ async function walkOneStep(page: Page, frame: Frame, walk: SmokeWalk, memory: Wa
   await drainResolved(frame, walk, memory);
   await noteErrorToasts(frame, walk, memory);
   if (await frame.locator('.game-over-card').isVisible()) return afterTheGame(page, walk, memory, step);
-  // What the last step pressed: it opened a dialog found open now, or closed one found gone.
-  const { boardPress, dialogPress } = memory;
+  // What the last step pressed: it opened a dialog found open now, closed one found gone, or was
+  // meant to close the one found still open.
+  const { boardPress, dialogPress, closing } = memory;
   memory.boardPress = undefined;
   memory.dialogPress = undefined;
+  memory.closing = undefined;
   const dialog = await openDialog(frame);
-  if (dialog !== undefined) return answerTheDialog(frame, dialog, boardPress, walk, memory, step);
+  if (dialog !== undefined) {
+    const didNotClose = closing?.dialog === dialog.name ? closing.closer : undefined;
+    return answerTheDialog(frame, dialog, { opener: boardPress, didNotClose }, walk, memory, step);
+  }
   if (memory.inDialog && dialogPress !== undefined) memory.closers.add(dialogPress);
   memory.inDialog = false;
   const offers = await readOffers(frame, walk);

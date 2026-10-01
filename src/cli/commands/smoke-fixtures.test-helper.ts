@@ -402,22 +402,35 @@ const lit = ref(false);
  *
  * With `closeFirst`, as one-two-punch's has it, "Close discards" comes before "Sort", and the opener
  * keeps its label, so a walk reaches "Sort" only by opening the dialog again with the same button.
+ *
+ * With `brokenCopy`, a copy of the viewer for the opponent's discards comes to the board once both
+ * of the game's actions have resolved (so the walk has taken everything, and nothing else is left
+ * for it to do): "Look through the opponent's discards" opens the dialog "Opponent's discards",
+ * whose "Close discards" marks the pile looked through but never closes the dialog, the copy's bug.
+ * Escape closes it. A walk that presses a "Close discards" because one closed a dialog before, and
+ * never notices that this one did not, presses it until it runs out of things to do, and passes.
  */
-export function boardWithDialogs(options: { rulesStayOpen: boolean; closeFirst?: boolean }): Record<string, string> {
+export function boardWithDialogs(options: { rulesStayOpen: boolean; closeFirst?: boolean; brokenCopy?: boolean }): Record<string, string> {
   const discards = ['<button type="button" @click="sorted = !sorted">Sort</button>', '<button type="button" @click="closeDiscards">Close discards</button>'];
   if (options.closeFirst) discards.reverse();
   const opener = options.closeFirst ? 'Look through discards' : "{{ looked ? 'Look through discards again' : 'Look through discards' }}";
+  const copy = options.brokenCopy
+    ? `\n    <button v-if="resolved.size >= 2" type="button" @click="show('opponent')">Look through the opponent's discards</button>`
+    : '';
+  const copyDialog = options.brokenCopy ? `\n        <button v-if="open === 'opponent'" type="button" @click="looked = true">Close discards</button>` : '';
   return {
     'src/ui/components/GameTable.vue': `<script setup lang="ts">
 import { nextTick, onMounted, onUnmounted, ref } from 'vue';
 
-const open = ref<'discards' | 'rules' | null>(null);
+const open = ref<'discards' | 'rules' | 'opponent' | null>(null);
 const looked = ref(false);
 const sorted = ref(false);
 const plans = ref<string[]>([]);
+const resolved = ref(new Set<string>());
 const dialog = ref<HTMLElement | null>(null);
+const names = { discards: 'Discards', rules: 'Rules', opponent: "Opponent's discards" };
 
-async function show(which: 'discards' | 'rules') {
+async function show(which: 'discards' | 'rules' | 'opponent') {
   open.value = which;
   await nextTick();
   dialog.value?.focus();
@@ -429,8 +442,17 @@ function closeDiscards() {
 function onKey(event: KeyboardEvent) {
   if (event.key === 'Escape' && ${options.rulesStayOpen ? "open.value !== 'rules'" : 'true'}) open.value = null;
 }
-onMounted(() => window.addEventListener('keydown', onKey));
-onUnmounted(() => window.removeEventListener('keydown', onKey));
+function onResolved(event: Event) {
+  resolved.value.add((event as CustomEvent<{ action: string }>).detail.action);
+}
+onMounted(() => {
+  window.addEventListener('keydown', onKey);
+  window.addEventListener('boardsmith:action-resolved', onResolved);
+});
+onUnmounted(() => {
+  window.removeEventListener('keydown', onKey);
+  window.removeEventListener('boardsmith:action-resolved', onResolved);
+});
 </script>
 
 <template>
@@ -438,14 +460,14 @@ onUnmounted(() => window.removeEventListener('keydown', onKey));
     <button type="button" @click="show('discards')">${opener}</button>
     <button type="button" @click="show('rules')">Read the rules</button>
     <button type="button" @click="plans.push('A')">Plan A</button>
-    <button type="button" @click="plans.push('B')">Plan B</button>
+    <button type="button" @click="plans.push('B')">Plan B</button>${copy}
     <p>Planned: {{ plans.join(', ') || 'nothing' }}</p>
     <div v-if="open" class="scrim">
-      <div ref="dialog" role="dialog" aria-modal="true" tabindex="-1" :aria-label="open === 'discards' ? 'Discards' : 'Rules'">
+      <div ref="dialog" role="dialog" aria-modal="true" tabindex="-1" :aria-label="names[open]">
         <template v-if="open === 'discards'">
           ${discards.join('\n          ')}
         </template>
-        <p v-else>Play a card or draw one.</p>
+        <p v-else-if="open === 'rules'">Play a card or draw one.</p>${copyDialog}
       </div>
     </div>
   </div>

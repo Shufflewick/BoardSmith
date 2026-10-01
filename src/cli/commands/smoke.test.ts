@@ -283,6 +283,19 @@ describe('boardsmith verify: the smoke check', () => {
     ]);
   });
 
+  it('#461: fails on a dialog whose Close does nothing, though a Close closed another dialog before, and closes it with Escape', async () => {
+    const { outcome, steps } = await smokeOf(false, boardWithDialogs({ rulesStayOpen: false, brokenCopy: true }));
+
+    expect(outcome.passed).toBe(false);
+    expect(outcome.summary).toBe(
+      'The smoke walk, dealt from seed "smoke", found a problem: - The dialog "Opponent\'s discards" stayed open after the walk ' +
+        'pressed "Close discards" in it to close it, as that had closed a dialog before, so a player who presses it stays in the dialog.',
+    );
+    const closing = steps.findIndex((line) => line.endsWith('closing the dialog "Opponent\'s discards" with "Close discards"'));
+    expect(closing).toBeGreaterThan(0);
+    expect(steps[closing + 1]).toMatch(/closing the dialog "Opponent's discards" with Escape$/);
+  });
+
   it('#461: fails on a modal dialog nothing closes, since a player in it has no way back to the game', async () => {
     const { outcome } = await smokeOf(false, boardWithDialogs({ rulesStayOpen: true }));
 
