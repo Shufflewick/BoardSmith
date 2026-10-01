@@ -2132,10 +2132,14 @@ const multiSelectDoneDisabledReason = computed<DisabledReason>(() => {
              refusal on text only, #234 the number hint's wording on its own.
              There is one block now, so the next repair cannot land on half the
              editor -- and the only thing that varies with the kind is which
-             control renders and what the value is. -->
+             control renders and what the value is.
+
+             `data-bs-pick` names the pick the field answers, which is how the
+             smoke walk finds the value a spec's `inputs` gives that field (#470). -->
         <div
           v-else-if="currentPick.type === 'number' || currentPick.type === 'text'"
           :class="editorWrapperClass"
+          :data-bs-pick="currentPick.name"
         >
           <label class="selection-prompt" :for="editorInputId">
             {{ currentPick.prompt || `Enter ${currentPick.name}` }}

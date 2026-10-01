@@ -383,14 +383,19 @@ markers this page documents, so it keeps up with any game without knowing it:
   two of its corners is such a surface, and is aimed at the same way. Nothing in
   the game needs to change for this: the hook already says which choice the
   surface stands for, and `aria-disabled` already says it is refused. An empty text
-  field is filled with "smoke test" and an empty number field with a value its
-  own `min`, `max` and `step` accept: its least value, else 1 (#465). When the
-  game refuses that number with its own words (a `validate` message, or a
-  refusal it throws for the player to read), the walk takes the action again
-  with the next number up, three numbers in all, and neither the refusal nor the
-  error toast that repeats it is a problem (#466). A failure the engine words as
-  an error in the game's rules is a crash, and is reported at once. Each press is
-  narrated (`smoke step 4: pressing "Done" for "kindle"`).
+  or number field (the panel names its pick in `data-bs-pick`) is filled with the
+  value the spec's `inputs` give that field, when they give one; see
+  [Values the game checks](#values-the-game-checks-inputs) (#470). Otherwise an
+  empty text field is filled with "smoke test" and an empty number field with a
+  value its own `min`, `max` and `step` accept: its least value, else 1 (#465).
+  When the game refuses a number the walk chose with its own words (a
+  `validate` message, or a refusal it throws for the player to read), the walk
+  takes the action again with the next number up, three numbers in all, and
+  neither the refusal nor the error toast that repeats it is a problem (#466). A
+  number from `inputs` is never moved up: the game refusing it fails the walk.
+  A failure the engine words as an error in the game's rules is a crash, and is
+  reported at once. Each press is narrated (`smoke step 4: pressing "Done" for
+  "kindle"`).
 - A press a toast lies over reads the toast (an error toast is a problem like
   any other), waits for it to go, as a player would, then presses again. A
   control or panel button a redraw takes away for a moment is looked for again
@@ -537,6 +542,63 @@ Nor does an action that only some deals offer, such as a scoring claim offered
 only when a player is dealt cards that score. A fresh game can reach it: choose
 a seed whose deal offers it, with `seed`. Declare an action `unreachable` only
 when no deal from a fresh game offers it within the walk.
+
+### Values the game checks: `inputs`
+
+The walk types "smoke test" in a text field, which is right for free text (a
+note, a message). Some fields take a value the game checks, and refuses
+anything else: the name of a survivor standing in the same square, a bid only
+the rules accept. A player types that value from what the board shows, and the
+spec tells the walk how, in `inputs`, by action and then by the field's pick
+name (the name the rules give `enterText` or `enterNumber`):
+
+```ts
+import { defineSmokeTest, type SmokeInputView } from 'boardsmith/testing/browser';
+
+// Another survivor in this square, as the board's "Who else is here" list shows them.
+const someoneHere = async ({ texts }: SmokeInputView) => (await texts('.nearby li'))[0];
+
+defineSmokeTest({
+  actions: ['attackPlayer', 'healPlayer', 'shout', 'bid'],
+  inputs: {
+    attackPlayer: { target: someoneHere },
+    healPlayer: { target: someoneHere },
+    bid: { amount: 40 },
+  },
+});
+```
+
+A value is the text or number itself, or a function of the page, for a value
+known only once the game is under way. The function is given `texts(selector)`,
+the visible text of each element the selector matches in the game's frame, as
+a player reads it, blank ones left out; it can read the page, not press it. At
+a table the walk acts for every seat in turn, so "the other player's name" is
+whichever seat it is not acting for: the players panel marks the seat the page
+is in with `.you-badge`, so
+`texts('.player-name-row:not(:has(.you-badge)) .player-name')` reads the other
+seats' names. Fields `inputs` do not name keep the walk's own values.
+
+The walk fails on everything it would fail on without them:
+
+- The game refusing a value from `inputs` fails the walk, as any failed action
+  does, and the report names the value and the input it came from. A number
+  from `inputs` is not moved up and tried again, as the walk's own is: it is the
+  spec's answer.
+- When the game refuses a value the walk chose itself, the report says what it
+  typed and that a value the game needs goes in `inputs`.
+- A function that returns nothing (or blank text) says the page gives no value
+  yet: the board shows nobody in the square, say. The walk cancels the action,
+  narrates that it did, and takes it again in turn with the actions it has
+  taken before, once another action has been taken.
+  The action stays required, so an input that never gives a value fails the
+  walk, naming the input.
+- A function that throws fails the walk, naming the input. So does an input for
+  an action `actions` does not list, a blank text value, and a value for a
+  number field that is not a number.
+- An input naming a field the walk never met in its action fails the walk once
+  the walk has met any of that action's fields or taken it, naming the fields
+  it met: a misspelt pick name would otherwise leave the walk typing its own
+  value there.
 
 It walks the UI players get: the `defaultUI` entry in `src/ui/uis.ts`, not a
 `devUI`. Board tests stand in for the shell with `renderAsSeat`,

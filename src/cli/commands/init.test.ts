@@ -280,6 +280,10 @@ describe('initCommand — a scaffolded project is portable and has no dangling a
     expect(spec).toMatch(/choosing a seed whose deal offers it/);
     expect(spec).toContain("seed: ['smoke', '17'],");
     expect(spec).toMatch(/`unreachable` is for an action no walk from a fresh game reaches whatever the deal/);
+    // #470: a field whose value the game checks gets it from `inputs`, a value or a function of the page.
+    expect(spec).toMatch(/The walk types "smoke test" in a text field/);
+    expect(spec).toContain("inputs: { attackPlayer: { target: async ({ texts }) => (await texts('.nearby li'))[0] } },");
+    expect(spec).toMatch(/A value the game refuses still fails the walk/);
   });
 
   it('declares no manifest asset it did not create', async () => {

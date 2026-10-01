@@ -10,7 +10,8 @@
  *      for every seat in turn and reaches an action one seat has only after another acts;
  *   2. takes every action the action panel offers, following the panel's own offers so it keeps
  *      up with the game: it answers each choice the panel asks for, pressing the board's own
- *      candidate for a pick the board shows, and presses every other control on the board once,
+ *      candidate for a pick the board shows and typing the value the spec's `inputs` give a field
+ *      the game checks (#470), and presses every other control on the board once,
  *      from the keyboard when the control is invisible and takes no pointer. While a modal dialog
  *      is open it presses only what is in it, each control once, then closes it as a player does;
  *   3. at a table, deals each game from a seed (#460): the spec's `seed`, one or a list walked in
@@ -47,6 +48,7 @@ import {
 import {
   answered,
   DEFAULT_SMOKE_SEED,
+  inputFor,
   note,
   recordResolved,
   requiredUntaken,
@@ -61,8 +63,13 @@ import {
   walkStopped,
   type ResolvedAction,
   type ResolvedMemory,
+  type SmokeInputs,
+  type SmokeInputView,
   type SmokeWalk,
+  type TypedValue,
 } from './browser-smoke-verdict.js';
+
+export type { SmokeInput, SmokeInputs, SmokeInputView } from './browser-smoke-verdict.js';
 
 export interface SmokeTestOptions {
   /**
@@ -91,6 +98,17 @@ export interface SmokeTestOptions {
   readonly unreachable?: Readonly<Record<string, string>>;
   /** How many actions the walk takes at most on each deal. The default is {@link DEFAULT_SMOKE_STEPS}. */
   readonly steps?: number;
+  /**
+   * The values the walk types in an action's text or number fields, by action and then by pick
+   * name, for a field whose value the game checks (#470): a name only another player has, a number
+   * only the rules accept. Without one the walk types "smoke test" in a text field and the field's
+   * least number in a number field. A value is the text or number itself, or a function of what the
+   * page shows (`texts(selector)`), for a value known only once the game is under way, such as the
+   * name of a player standing in the same square. A function that returns nothing has the walk
+   * cancel the action and take it again once the game has moved on; it is still required. The game
+   * refusing a value given here fails the walk, as any failed action does.
+   */
+  readonly inputs?: SmokeInputs;
 }
 
 /** How many actions a walk takes at most on each deal, unless the spec asks for more. */
@@ -167,6 +185,9 @@ function newWalk(options: SmokeTestOptions): SmokeWalk {
     errors: [],
     seeds: [],
     stalls: [],
+    inputs: { ...options.inputs },
+    wanting: new Map(),
+    fieldsMet: new Map(),
   };
 }
 
@@ -753,6 +774,11 @@ interface Answering {
   readonly picked: Set<string>;
   /** The refused board candidates that name the same choice wherever they are pointed at (#468). */
   readonly refused: Set<string>;
+  /**
+   * Why the walk stops answering before the action resolves (#470): a field the spec's `inputs`
+   * give no value for yet, or a spec input that failed.
+   */
+  stop?: { readonly wanting: string } | { readonly problem: string };
 }
 
 /** A board candidate of the open pick that this pick has not chosen yet, recorded in `picked`. */
@@ -805,6 +831,7 @@ async function answerMultiSelect(answering: Answering): Promise<string | undefin
 async function answerOneChoice(answering: Answering): Promise<string | undefined> {
   const { frame } = answering;
   await fillAnEmptyField(answering);
+  if (answering.stop !== undefined) return undefined;
   // An ordered list shows a count too, and is answered by its Add buttons below.
   const multiSelect = frame.locator('.action-config .multi-select-count:not(.ordered-list-count)');
   if ((await multiSelect.count()) > 0) return answerMultiSelect(answering);
@@ -863,25 +890,58 @@ async function asItStandsNow(control: Control): Promise<Control> {
   return { ...control, label: now.label, key: now.key, enabled: now.enabled, target: visibleMatches(frame, selector, within).nth(control.index) };
 }
 
+/** What a spec's `inputs` function reads of the game's frame (#470): the visible text a player reads. */
+function inputView(frame: Frame): SmokeInputView {
+  return {
+    texts: async (selector) =>
+      (await frame.locator(selector).filter({ visible: true }).allInnerTexts())
+        .map((text) => text.replace(/\s+/g, ' ').trim())
+        .filter((text) => text !== ''),
+  };
+}
+
 /**
  * Fills the open action's text or number field when it is empty, as a player types before pressing
- * Done: "smoke test" in a text field, and in a number field a value its own min, max and step accept,
- * moved up past each one the game refused before (#465, #466, `numberToEnter`).
+ * Done: the value the spec's `inputs` give that field (`data-bs-pick` names it, #470), else "smoke
+ * test" in a text field, and in a number field a value its own min, max and step accept, moved up
+ * past each one the game refused before (#465, #466, `numberToEnter`). An input that gives no value
+ * yet, or fails, stops the answering (`Answering.stop`) with the field left empty.
  */
-async function fillAnEmptyField({ frame, memory, name, step }: Answering): Promise<void> {
+async function fillAnEmptyField(answering: Answering): Promise<void> {
+  const { frame, memory, name, step } = answering;
   const field = await firstPressable(frame, [
     '.action-config .text-input input',
     '.action-config .text-input textarea',
     '.action-config .number-input input[type="number"]',
   ]);
   if (field === undefined || (await field.target.inputValue({ timeout: PRESS_MS })) !== '') return;
-  const isNumber = (await field.target.getAttribute('type', { timeout: PRESS_MS })) === 'number';
-  const value = isNumber
-    ? await field.target.evaluate(numberToEnter, memory.refused.get(name) ?? 0, { timeout: PRESS_MS })
-    : 'smoke test';
-  if (isNumber) memory.numbered.add(name);
-  narrate(step, `entering "${value}" for "${name}"`);
-  await field.target.fill(value, { timeout: PRESS_MS });
+  const typed = await valueToType(answering, field);
+  if (typed === undefined) return;
+  memory.typed.set(name, [...(memory.typed.get(name) ?? []).filter((t) => t.field !== typed.field), typed]);
+  narrate(step, `entering "${typed.value}" for "${name}"${typed.from === 'inputs' ? ', from `inputs`' : ''}`);
+  await field.target.fill(typed.value, { timeout: PRESS_MS });
+}
+
+/**
+ * The value to type in the open action's empty `field`: the spec's input for its pick (#470), else
+ * the walk's own, recording the field as met (`SmokeWalk.fieldsMet`). Undefined, with the answering
+ * stopped (`Answering.stop`), when the spec's input gives no value yet or fails.
+ */
+async function valueToType(answering: Answering, field: Control): Promise<TypedValue | undefined> {
+  const { frame, walk, memory, name } = answering;
+  const pick = await field.target.evaluate((input) => input.closest('[data-bs-pick]')?.getAttribute('data-bs-pick') ?? '', undefined, {
+    timeout: PRESS_MS,
+  });
+  walk.fieldsMet.get(name)?.add(pick);
+  const kind = (await field.target.getAttribute('type', { timeout: PRESS_MS })) === 'number' ? 'number' : 'text';
+  const given = await inputFor(walk.inputs, name, pick, kind, inputView(frame));
+  if (given !== undefined) {
+    if ('value' in given) return { field: pick, value: given.value, from: 'inputs', kind };
+    answering.stop = 'wanting' in given ? { wanting: pick } : given;
+    return undefined;
+  }
+  if (kind === 'text') return { field: pick, value: 'smoke test', from: 'walk', kind };
+  return { field: pick, value: await field.target.evaluate(numberToEnter, memory.refused.get(name) ?? 0, { timeout: PRESS_MS }), from: 'walk', kind };
 }
 
 /** {@link answerOneChoice}, given the time a pick's choices take to arrive from the game. */
@@ -889,7 +949,7 @@ async function answerWhenOffered(answering: Answering): Promise<string | undefin
   const started = Date.now();
   for (;;) {
     const pressed = await answerOneChoice(answering);
-    if (pressed !== undefined || Date.now() - started > PRESS_MS) return pressed;
+    if (pressed !== undefined || answering.stop !== undefined || Date.now() - started > PRESS_MS) return pressed;
     await answering.frame.waitForTimeout(100);
   }
 }
@@ -914,6 +974,19 @@ async function abandon(frame: Frame, walk: SmokeWalk, memory: WalkMemory, name: 
 }
 
 /**
+ * Cancels the open action `name` because the spec's `inputs` give no value for its field `field`
+ * yet (#470). It is not failed: once another action has been taken, the page may show the value,
+ * so the walk takes it again in its turn among the actions taken before (`nextPress`). It stays
+ * required, so an input that never gives one fails the walk (`smokeProblems`).
+ */
+async function putOff(frame: Frame, walk: SmokeWalk, memory: WalkMemory, name: string, field: string, step: number): Promise<void> {
+  narrate(step, `\`inputs\` gives no value for "${field}" of "${name}" yet; cancelling it until the game moves on`);
+  walk.wanting.set(name, field);
+  memory.putOff.set(name, memory.moves);
+  await pressThePanels(frame, '.action-config .cancel-btn', 'Cancel', walk, memory);
+}
+
+/**
  * Fills the open action one choice at a time until it resolves or closes, and gives up on it when
  * {@link answered} says to (#463): nothing to press, no change, a loop back to a state it showed, or
  * too many presses.
@@ -922,8 +995,15 @@ async function finishOpenAction(frame: Frame, walk: SmokeWalk, memory: WalkMemor
   const answering: Answering = { frame, walk, memory, name, step, picked: new Set(), refused: new Set() };
   const where = `at step ${step}${memory.dealt === null ? '' : ` of the game dealt from seed "${memory.dealt}"`}`;
   const trail = startAnswering(name, where, await openActionState(frame));
+  memory.typed.delete(name);
+  if (!walk.fieldsMet.has(name)) walk.fieldsMet.set(name, new Set());
   while ((await readOffers(frame, walk)).open === name) {
     const answer = await answerWhenOffered(answering);
+    if (answering.stop !== undefined) {
+      return 'wanting' in answering.stop
+        ? putOff(frame, walk, memory, name, answering.stop.wanting, step)
+        : abandon(frame, walk, memory, name, answering.stop.problem);
+    }
     await settle(frame);
     // Resolved: whatever is open now (the same action again on a later turn) is a later step's.
     if ((await drainResolved(frame, walk, memory)) > 0) return;
@@ -1113,13 +1193,21 @@ function stillToTake(walk: SmokeWalk, memory: WalkMemory): string[] {
   return requiredUntaken(walk).filter((name) => !memory.failed.has(name));
 }
 
+/** Whether `name` was put off for want of an input (#470) and no action has been taken since. */
+function puttingOff(name: string, memory: WalkMemory): boolean {
+  return memory.putOff.get(name) === memory.moves;
+}
+
 /**
- * An action not taken (or failed) yet, else a group of actions not opened yet, else the way back
- * out of a group, else the action taken least, preferring one that has neither ended the game nor
- * failed. Undefined when the panel offers nothing.
+ * An action not taken, failed or put off for want of an input (#470) yet, else a group of actions
+ * not opened yet, else the way back out of a group, else the action taken least, preferring one
+ * that has neither ended the game nor failed, nor been put off with no action taken since. So an
+ * action put off is tried again in turn with the actions taken before, not after every move, and
+ * however many are put off, the rest of the game keeps its steps. Undefined when the panel offers
+ * nothing.
  */
 function nextPress(offers: Offers, walk: SmokeWalk, memory: WalkMemory): NextPress {
-  const untaken = offers.enabled.find((name) => !walk.taken.has(name) && !memory.failed.has(name));
+  const untaken = offers.enabled.find((name) => !walk.taken.has(name) && !memory.failed.has(name) && !memory.putOff.has(name));
   if (untaken) return { take: untaken };
   const group = offers.groups.find((label) => !memory.opened.has(label));
   if (group !== undefined) {
@@ -1128,7 +1216,7 @@ function nextPress(offers: Offers, walk: SmokeWalk, memory: WalkMemory): NextPre
   }
   if (offers.inGroup) return { press: '[data-bs-menu-back]', what: 'way back' };
   const byTimes = (a: string, b: string) => (memory.times.get(a) ?? 0) - (memory.times.get(b) ?? 0);
-  const goesOn = offers.enabled.filter((name) => !endsTheGame(name, memory) && !memory.failed.has(name));
+  const goesOn = offers.enabled.filter((name) => !endsTheGame(name, memory) && !memory.failed.has(name) && !puttingOff(name, memory));
   const least = [...(goesOn.length > 0 ? goesOn : offers.enabled)].sort(byTimes)[0];
   return least === undefined ? undefined : { take: least };
 }
@@ -1183,6 +1271,8 @@ interface WalkMemory extends ResolvedMemory {
   readonly closers: Set<string>;
   /** How many times the walk has opened a dialog again to reach each of its controls. */
   readonly reopened: Map<string, number>;
+  /** The actions put off for want of an input (#470), with how many actions had been taken then. */
+  readonly putOff: Map<string, number>;
 }
 
 function newMemory(seed: string | null): WalkMemory {
@@ -1205,9 +1295,11 @@ function newMemory(seed: string | null): WalkMemory {
     dialogControls: new Map(),
     closers: new Set(),
     reopened: new Map(),
-    numbered: new Set(),
     refused: new Map(),
     refusals: new Set(),
+    typed: new Map(),
+    moves: 0,
+    putOff: new Map(),
   };
 }
 
