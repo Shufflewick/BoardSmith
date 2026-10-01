@@ -5,7 +5,7 @@ import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { INSTALLED_MODULES } from '../../testing/installed-modules.test-helper.js';
 import { spawnCli } from '../spawn-cli.test-helper.js';
 import { generateVitestConfig } from '../lib/test-run-scope.js';
-import { readVerifyResult, verifiedProblem, type VerifyResult } from '../lib/verify-result.js';
+import { readVerifyResult, verifiedProblem } from '../lib/verify-result.js';
 import { commitAll, git, initRepo, writeFiles as write } from '../lib/verify-result.test-helper.js';
 import { makeChunkProject } from './chunk-project.test-helper.js';
 import { recordSignoff } from './chunk-signoff.js';
