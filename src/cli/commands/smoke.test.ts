@@ -407,16 +407,35 @@ describe('boardsmith verify: the smoke check', () => {
     });
   });
 
-  it('waits for a panel button that is gone for a moment to come back, rather than reporting it', async () => {
+  it('waits for a panel button that is gone for a moment to come back, and takes the action then, rather than reporting it', async () => {
     const { outcome, steps } = await smokeOf(false, {
       ...aceGame(),
       ...boardThatHidesThePanelForAMoment(),
       'tests/browser/smoke.spec.ts': smokeSpec(['draw', 'play'], undefined, { seed: ACE_SEEDS.WITHOUT, steps: 12 }),
     });
 
-    expect(steps.slice(1, 3)).toEqual(['smoke step 1: pressing the board\'s "Look away"', 'smoke step 2: taking "draw"']);
+    // "draw" was taken at step 2, when its button came back: a press that had not landed would leave
+    // it untaken, and step 3 taking it again.
+    expect(steps.slice(1, 4)).toEqual([
+      'smoke step 1: pressing the board\'s "Look away"',
+      'smoke step 2: taking "draw"',
+      'smoke step 3: taking "play"',
+    ]);
     expect(outcome.summary).toMatch(/^Served by `boardsmith dev` from a fresh start and dealt from seed "plain", a seated player took "draw", "play"/);
     expect(outcome.passed).toBe(true);
+  });
+
+  it('reports a panel button that is gone and never comes back, since the panel took back what it offered', async () => {
+    const { outcome, steps } = await smokeOf(false, {
+      ...aceGame(),
+      ...boardThatHidesThePanelForAMoment({ forGood: true }),
+      'tests/browser/smoke.spec.ts': smokeSpec(['draw', 'play'], undefined, { seed: ACE_SEEDS.WITHOUT, steps: 4 }),
+    });
+
+    expect(steps.slice(1, 3)).toEqual(['smoke step 1: pressing the board\'s "Look away"', 'smoke step 2: taking "draw"']);
+    expect(outcome.passed).toBe(false);
+    expect(outcome.summary).toContain('- The panel showed its "draw", and it was still gone 5s later, when the walk went to press it.');
+    expect(outcome.summary).toContain('- The panel offered "draw", but the walk never took it in 4 steps.');
   });
 
   it('presses the board control it found, though the board moved another into its place before the press', async () => {

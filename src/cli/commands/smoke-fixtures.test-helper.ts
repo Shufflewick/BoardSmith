@@ -905,15 +905,16 @@ const rung = ref(0);
 /**
  * A PANEL THAT REDRAWS FOR A MOMENT (#468 review): "Look away" hides the panel's action buttons for
  * two seconds, as a panel redrawing its buttons after a board press does for a moment, so the panel's
- * buttons the walk read are not there when it first goes to press one. They come back by themselves.
+ * buttons the walk read are not there when it first goes to press one. They come back by themselves,
+ * unless `forGood`: then the panel took back what it offered, and never shows the buttons again.
  */
-export function boardThatHidesThePanelForAMoment(): Record<string, string> {
+export function boardThatHidesThePanelForAMoment(options: { forGood?: boolean } = {}): Record<string, string> {
+  const comeBack = options.forGood ? '' : `\n  setTimeout(() => buttons.forEach((button) => (button.style.display = '')), 2000);`;
   return {
     'src/ui/components/GameTable.vue': `<script setup lang="ts">
 function lookAway() {
   const buttons = [...document.querySelectorAll<HTMLElement>('[data-bs-action]')];
-  for (const button of buttons) button.style.display = 'none';
-  setTimeout(() => buttons.forEach((button) => (button.style.display = '')), 2000);
+  for (const button of buttons) button.style.display = 'none';${comeBack}
 }
 </script>
 
