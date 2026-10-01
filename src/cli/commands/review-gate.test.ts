@@ -5,6 +5,10 @@ import { tempTree } from '../../testing/temp-tree.test-helper.js';
 import { commitAll, initRepo, recordPassingVerify, writeFiles } from '../lib/verify-result.test-helper.js';
 import { LIGHT_REVIEW_LINES, SMALL_CHANGE_LINES, reviewGate, reviewGateCommand, reviewLevel } from './review-gate.js';
 
+// Each test builds real git repositories, one `git` process per step. A hang guard, not a budget:
+// on a busy machine vitest's 5 s default fails these with nothing wrong (#360).
+vi.setConfig({ testTimeout: 60_000 });
+
 /**
  * `boardsmith review-gate <slug>` (#454): no model review starts until `boardsmith verify` has
  * passed for the commit under review, and what the reviewer is told about the mechanical checks

@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { promises as fs } from 'node:fs';
 import { join } from 'node:path';
 import { tempTree } from '../../testing/temp-tree.test-helper.js';
@@ -14,6 +14,10 @@ import {
   writeVerifyResult,
 } from './verify-result.js';
 import { commitAll, git, initRepo } from './verify-result.test-helper.js';
+
+// Each test builds real git repositories, one `git` process per step. A hang guard, not a budget:
+// on a busy machine vitest's 5 s default fails these with nothing wrong (#360).
+vi.setConfig({ testTimeout: 60_000 });
 
 const HEAD = 'a'.repeat(40);
 
