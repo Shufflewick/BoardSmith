@@ -400,10 +400,13 @@ const lit = ref(false);
  * rules" opens a dialog with nothing to press, which Escape closes unless `rulesStayOpen`. "Plan A"
  * and "Plan B" sit behind both dialogs, where no player can press them while one is open.
  *
- * A walk that presses only what a player can reach presses 9 board controls: look, sort, close,
- * look again, sort, close, rules, then the two plans.
+ * With `closeFirst`, as one-two-punch's has it, "Close discards" comes before "Sort", and the opener
+ * keeps its label, so a walk reaches "Sort" only by opening the dialog again with the same button.
  */
-export function boardWithDialogs(options: { rulesStayOpen: boolean }): Record<string, string> {
+export function boardWithDialogs(options: { rulesStayOpen: boolean; closeFirst?: boolean }): Record<string, string> {
+  const discards = ['<button type="button" @click="sorted = !sorted">Sort</button>', '<button type="button" @click="closeDiscards">Close discards</button>'];
+  if (options.closeFirst) discards.reverse();
+  const opener = options.closeFirst ? 'Look through discards' : "{{ looked ? 'Look through discards again' : 'Look through discards' }}";
   return {
     'src/ui/components/GameTable.vue': `<script setup lang="ts">
 import { nextTick, onMounted, onUnmounted, ref } from 'vue';
@@ -432,7 +435,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKey));
 
 <template>
   <div class="board">
-    <button type="button" @click="show('discards')">{{ looked ? 'Look through discards again' : 'Look through discards' }}</button>
+    <button type="button" @click="show('discards')">${opener}</button>
     <button type="button" @click="show('rules')">Read the rules</button>
     <button type="button" @click="plans.push('A')">Plan A</button>
     <button type="button" @click="plans.push('B')">Plan B</button>
@@ -440,8 +443,7 @@ onUnmounted(() => window.removeEventListener('keydown', onKey));
     <div v-if="open" class="scrim">
       <div ref="dialog" role="dialog" aria-modal="true" tabindex="-1" :aria-label="open === 'discards' ? 'Discards' : 'Rules'">
         <template v-if="open === 'discards'">
-          <button type="button" @click="sorted = !sorted">Sort</button>
-          <button type="button" @click="closeDiscards">Close discards</button>
+          ${discards.join('\n          ')}
         </template>
         <p v-else>Play a card or draw one.</p>
       </div>

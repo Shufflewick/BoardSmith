@@ -423,10 +423,14 @@ markers this page documents, so it keeps up with any game without knowing it:
   press fails the walk, as does one something covers, or one that goes away
   before the press lands.
 - While a modal dialog is open (`[aria-modal="true"]`, or a `<dialog>` shown
-  modally), it is all a player can reach, so it is all the walk presses (#461):
-  each control in it once for each time the dialog opens, so a dialog opened
-  again is closed again, then Escape. A dialog still open after that fails the
-  walk: a player in it has no way back to the game.
+  modally), it is all a player can reach, so it is all the walk presses (#461).
+  It presses each control in the dialog once, whatever its place: when one
+  closes the dialog with others still unpressed (a Close that comes first), the
+  walk opens the dialog again with the board control that opened it, up to
+  twice per control. Once every control has been pressed, it closes the dialog
+  as a player would, with the control that closed it before, else Escape. A
+  dialog still open after Escape fails the walk: a player in it has no way back
+  to the game.
 - No press or read of an element waits longer than 5 seconds, and Playwright
   bounds anything else at 15 (#464). A step that cannot go on is reported with
   its number and its deal, and ends that deal's walk; it never waits out the
