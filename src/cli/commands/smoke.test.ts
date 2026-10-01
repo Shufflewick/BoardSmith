@@ -24,6 +24,7 @@ import {
   boardWithAVanishingControl,
   boardWithDialogs,
   fieldsGame,
+  pointerAimedGame,
   PLAYERS_GET_THE_TABLE,
   QUIET_CLAIM_REASON,
   smokeSpec,
@@ -293,6 +294,17 @@ describe('boardsmith verify: the smoke check', () => {
       expect(steps.filter((line) => line.endsWith('taking "code"'))).toHaveLength(1);
     },
   );
+
+  it('#468: presses a pointer-aimed board candidate at a point it names a choice the game accepts, not at its refused centre', async () => {
+    const { outcome, steps } = await smokeOf(false, {
+      ...pointerAimedGame(),
+      'tests/browser/smoke.spec.ts': smokeSpec(['claim', 'rest']),
+    });
+
+    expect(outcome.summary).toMatch(/^Served by `boardsmith dev` from a fresh start and dealt from seed "smoke", a seated player took "claim", "rest"/);
+    expect(outcome.passed).toBe(true);
+    expect(steps.some((line) => /pressing "[^"]+" for "claim"/.test(line))).toBe(true);
+  });
 
   it('fails a spec that passes without walking the game', async () => {
     const { outcome } = await smokeOf(false, {

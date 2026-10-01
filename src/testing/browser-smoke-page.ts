@@ -31,6 +31,11 @@ export interface PageControl {
    * even when it takes no pointer, so one a mouse cannot press fails the walk.
    */
   readonly keyboardOnly: boolean;
+  /**
+   * Whether it is a pick's candidate (`data-bs-candidate`), which may stand for whatever lies under
+   * the pointer, so the walk aims before it clicks one (#468).
+   */
+  readonly candidate: boolean;
 }
 
 /**
@@ -50,7 +55,7 @@ export function pageControls(elements: Element[]): PageControl[] {
     const enabled = html.getAttribute('aria-disabled') !== 'true' && !(html as HTMLButtonElement).disabled;
     const keyboardOnly =
       getComputedStyle(html).pointerEvents === 'none' && !html.checkVisibility({ opacityProperty: true, visibilityProperty: true });
-    found.push({ index, label, key, enabled, keyboardOnly });
+    found.push({ index, label, key, enabled, keyboardOnly, candidate: candidate !== null });
   });
   return found;
 }

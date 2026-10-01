@@ -369,7 +369,16 @@ markers this page documents, so it keeps up with any game without knowing it:
   moment with nothing open once the walk acts for every seat.
 - An open action is answered one choice at a time: a price's confirm button, the
   board's own `[data-bs-candidate]` (so the board is pressed, not only the
-  panel), then the panel's choice, add, done and skip buttons. An empty text
+  panel), then the panel's choice, add, done and skip buttons.
+- A candidate is clicked the way a player clicks it: the walk points at it
+  first, and clicks where it then stands for a choice the game accepts (#468).
+  One candidate per choice accepts the click at its centre. A placement surface
+  whose `data-bs-candidate` names whatever lies under the pointer may be
+  refused (`aria-disabled`) at its centre, so the walk aims at other points on
+  it until one is accepted. A refused candidate that names a different choice at
+  two of its corners is such a surface, and is aimed at the same way. Nothing in
+  the game needs to change for this: the hook already says which choice the
+  surface stands for, and `aria-disabled` already says it is refused. An empty text
   field is filled with "smoke test" and an empty number field with a value its
   own `min`, `max` and `step` accept: its least value, else 1 (#465). When the
   game's own rules refuse that number (the action fails), the walk takes the

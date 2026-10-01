@@ -421,7 +421,11 @@ async function whyNotPressed(target: Locator, error: unknown): Promise<string> {
  */
 async function press(control: Control, what: string, walk: SmokeWalk): Promise<boolean> {
   const pressIt = () =>
-    control.keyboardOnly ? control.target.press('Enter', { timeout: PRESS_MS }) : control.target.click({ timeout: PRESS_MS });
+    control.keyboardOnly
+      ? control.target.press('Enter', { timeout: PRESS_MS })
+      : control.candidate
+        ? aimAndClick(control)
+        : control.target.click({ timeout: PRESS_MS });
   try {
     await pressIt().catch(async (error: unknown) => {
       if (!coveredByAToast(error)) throw error;
@@ -434,6 +438,41 @@ async function press(control: Control, what: string, walk: SmokeWalk): Promise<b
     note(walk, `Pressing ${what} did not work: ${await whyNotPressed(control.target, error)}.`);
     return false;
   }
+}
+
+/**
+ * Where on a candidate the walk aims (#468), as fractions of its width and height: its centre first,
+ * then a grid over the rest of it.
+ */
+const AIM_POINTS: ReadonlyArray<readonly [number, number]> = [
+  [0.5, 0.5],
+  ...[0.1, 0.3, 0.5, 0.7, 0.9].flatMap((y) => [0.1, 0.3, 0.5, 0.7, 0.9].map((x) => [x, y] as const)).filter(([x, y]) => x !== 0.5 || y !== 0.5),
+];
+
+/**
+ * Clicks a pick's candidate as a player does: points at it, and clicks where it then stands for a
+ * choice the game accepts (#468). A candidate that stands for one choice accepts the click at its
+ * centre. One that stands for whatever lies under the pointer (a placement surface whose
+ * `data-bs-candidate` follows the pointer) may be refused (`aria-disabled`) at its centre, so the
+ * walk aims at other points on it until one is accepted, and clicks there.
+ */
+async function aimAndClick(control: Control): Promise<void> {
+  const box = await control.target.boundingBox({ timeout: PRESS_MS });
+  if (box === null) throw new Error('it is not drawn on the page');
+  for (const [x, y] of AIM_POINTS) {
+    const position = { x: box.width * x, y: box.height * y };
+    await control.target.hover({ position, timeout: PRESS_MS });
+    const accepted = await control.target.evaluate(
+      (element) => element.getAttribute('aria-disabled') !== 'true' && element.hasAttribute('data-bs-candidate'),
+      undefined,
+      { timeout: PRESS_MS },
+    );
+    if (accepted) {
+      await control.target.click({ position, timeout: PRESS_MS });
+      return;
+    }
+  }
+  throw new Error('wherever the pointer aims on it, it stands for a choice the game refuses');
 }
 
 /** The longest a toast stays: an error toast goes after 4 seconds. */
@@ -467,11 +506,13 @@ interface Answering {
   readonly name: string;
   readonly step: number;
   readonly picked: Set<string>;
+  /** The refused board candidates that name the same choice wherever they are pointed at (#468). */
+  readonly refused: Set<string>;
 }
 
 /** A board candidate of the open pick that this pick has not chosen yet, recorded in `picked`. */
 async function unpickedCandidate({ frame, picked }: Answering): Promise<Control | undefined> {
-  for (const candidate of await controlsOf(frame, '[data-testid="bs-board"] [data-bs-candidate]')) {
+  for (const candidate of await controlsOf(frame, BOARD_CANDIDATES)) {
     if (picked.has(candidate.key) || !candidate.enabled) continue;
     picked.add(candidate.key);
     return candidate;
@@ -523,16 +564,41 @@ async function answerOneChoice(answering: Answering): Promise<string | undefined
   const multiSelect = frame.locator('.action-config .multi-select-count:not(.ordered-list-count)');
   if ((await multiSelect.count()) > 0) return answerMultiSelect(answering);
 
-  const target = await firstPressable(frame, [
-    '.action-config [data-bs-confirm]',
-    '[data-testid="bs-board"] [data-bs-candidate]',
-    '.action-config .board-handoff-btn',
-    '.action-config .choice-btn',
-    '.action-config .ordered-list-add',
-    '.action-config .done-button',
-    '.action-config .skip-btn',
-  ]);
+  const target =
+    (await firstPressable(frame, ['.action-config [data-bs-confirm]', BOARD_CANDIDATES])) ??
+    (await aimedElsewhere(answering)) ??
+    (await firstPressable(frame, [
+      '.action-config .board-handoff-btn',
+      '.action-config .choice-btn',
+      '.action-config .ordered-list-add',
+      '.action-config .done-button',
+      '.action-config .skip-btn',
+    ]));
   return target === undefined ? undefined : pressAnswer(target, answering);
+}
+
+/** A pick's candidates on the board. */
+const BOARD_CANDIDATES = '[data-testid="bs-board"] [data-bs-candidate]';
+
+/**
+ * A refused board candidate that stands for whatever lies under the pointer (#468), found by
+ * pointing at two corners of it and seeing it name two different choices: aimed elsewhere, it may
+ * stand for one the game accepts, so it is pressed (`aimAndClick` finds where). A refused candidate
+ * that names the same choice wherever it is pointed at is refused, and is not looked at again while
+ * this action is answered.
+ */
+async function aimedElsewhere(answering: Answering): Promise<Control | undefined> {
+  for (const candidate of await controlsOf(answering.frame, BOARD_CANDIDATES)) {
+    if (candidate.enabled || candidate.keyboardOnly || answering.refused.has(candidate.key)) continue;
+    const box = await candidate.target.boundingBox({ timeout: PRESS_MS });
+    const named = async (x: number, y: number) => {
+      await candidate.target.hover({ position: { x: box!.width * x, y: box!.height * y }, timeout: PRESS_MS, force: true });
+      return candidate.target.getAttribute('data-bs-candidate', { timeout: PRESS_MS });
+    };
+    if (box !== null && (await named(0.1, 0.1)) !== (await named(0.9, 0.9))) return candidate;
+    answering.refused.add(candidate.key);
+  }
+  return undefined;
 }
 
 /**
@@ -589,7 +655,7 @@ async function abandon(frame: Frame, walk: SmokeWalk, memory: WalkMemory, name: 
  * too many presses.
  */
 async function finishOpenAction(frame: Frame, walk: SmokeWalk, memory: WalkMemory, name: string, step: number): Promise<void> {
-  const answering: Answering = { frame, walk, memory, name, step, picked: new Set() };
+  const answering: Answering = { frame, walk, memory, name, step, picked: new Set(), refused: new Set() };
   const where = `at step ${step}${memory.dealt === null ? '' : ` of the game dealt from seed "${memory.dealt}"`}`;
   const trail = startAnswering(name, where, await openActionState(frame));
   while ((await readOffers(frame, walk)).open === name) {

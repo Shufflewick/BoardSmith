@@ -1,5 +1,5 @@
 /**
- * FIXTURE GAMES FOR THE SMOKE WALK (#457 to #467), written over the table scaffold that
+ * FIXTURE GAMES FOR THE SMOKE WALK (#457 to #468), written over the table scaffold that
  * `smokeProject` makes (its game is `dev-game`, so its classes are `DevGameGame` and
  * `DevGamePlayer`).
  */
@@ -593,5 +593,159 @@ describe('the fields game', () => {
   });
 });
 `,
+  };
+}
+
+/**
+ * A POINTER-AIMED BOARD (#468), as Windup Warfare's battlefield is: `claim` picks one of a hundred
+ * cells, more than the panel lists, so it hands the pick to the board, and the board is one surface
+ * that stands for "the cell under the pointer". Moving the pointer over it re-aims it, so its
+ * `data-bs-candidate` names the cell under the pointer, refused (`aria-disabled`) on the middle row,
+ * which belongs to nobody; a click or Enter claims the cell it is aimed at. It opens aimed at a cell
+ * anyone may claim, and its centre is on the middle row.
+ */
+export function pointerAimedGame(): Record<string, string> {
+  return {
+    'src/rules/game.ts': `import { Game, Player, Space, type GameOptions } from 'boardsmith';
+import { createGameFlow } from './flow.js';
+import { createTurnActions } from './actions.js';
+
+export class Cell extends Space<DevGameGame> {
+  row = 0;
+  col = 0;
+}
+
+export class DevGamePlayer extends Player<DevGameGame, DevGamePlayer> {
+  claimed = 0;
+}
+
+export class DevGameGame extends Game<DevGameGame, DevGamePlayer> {
+  static PlayerClass = DevGamePlayer;
+
+  rounds = 0;
+
+  constructor(options: GameOptions) {
+    super(options);
+    this.registerElements([Cell]);
+    for (let row = 0; row < 10; row++) {
+      for (let col = 0; col < 10; col++) this.create(Cell, \`r\${row}c\${col}\`, { row, col });
+    }
+    for (const action of createTurnActions(this)) this.registerAction(action);
+    this.setFlow(createGameFlow(this));
+  }
+
+  cells(): Cell[] {
+    return [...this.all(Cell)];
+  }
+
+  override isFinished(): boolean {
+    return this.rounds >= 30;
+  }
+
+  override getWinners(): DevGamePlayer[] {
+    return [];
+  }
+}
+`,
+    'src/rules/actions.ts': `import { Action, type ActionDefinition } from 'boardsmith';
+import type { Cell, DevGameGame, DevGamePlayer } from './game.js';
+
+export function createTurnActions(game: DevGameGame): ActionDefinition[] {
+  return [
+    Action.create('claim')
+      .prompt('Claim a cell')
+      .chooseElement('cell', {
+        prompt: 'Which cell?',
+        elements: () => game.cells(),
+        disabled: (cell) => ((cell as Cell).row === 5 ? 'The middle row belongs to nobody.' : false),
+      })
+      .execute((_args, ctx) => {
+        (ctx.player as DevGamePlayer).claimed++;
+        game.rounds++;
+        return { success: true };
+      }),
+    Action.create('rest')
+      .prompt('Rest')
+      .execute(() => {
+        game.rounds++;
+        return { success: true };
+      }),
+  ];
+}
+`,
+    'src/rules/flow.ts': `import { loop, eachPlayer, actionStep, type FlowDefinition } from 'boardsmith';
+import type { DevGameGame } from './game.js';
+
+export function createGameFlow(game: DevGameGame): FlowDefinition {
+  return {
+    root: loop({
+      name: 'game-loop',
+      while: () => !game.isFinished(),
+      maxIterations: 100,
+      do: eachPlayer({
+        name: 'player-turns',
+        do: actionStep({ name: 'turn', actions: ['claim', 'rest'], skipIf: () => game.isFinished() }),
+      }),
+    }),
+    isComplete: () => game.isFinished(),
+    getWinners: () => game.getWinners(),
+  };
+}
+`,
+    'tests/game.test.ts': `import { describe, expect, it } from 'vitest';
+import { DevGameGame } from '../src/rules/game.js';
+
+describe('the field game', () => {
+  it('has a hundred cells', () => {
+    expect(new DevGameGame({ playerCount: 2, seed: 'test' }).cells()).toHaveLength(100);
+  });
+});
+`,
+    'src/ui/components/GameTable.vue': `<script setup lang="ts">
+import { computed, ref } from 'vue';
+import { candidateAttrs, useBoardInteraction } from 'boardsmith/ui';
+
+const board = useBoardInteraction();
+const cursor = ref({ row: 2, col: 2 });
+const name = computed(() => \`r\${cursor.value.row}c\${cursor.value.col}\`);
+const choosing = computed(() => board.currentAction === 'claim' && board.currentPickName === 'cell');
+// The board knows a candidate by its element id; the panel names each cell's candidate by the cell's name.
+const target = computed(() => board.validElements.find((candidate) => candidate.display === name.value));
+const refused = computed(() => target.value === undefined || target.value.disabled !== undefined);
+
+function aim(event: PointerEvent) {
+  const box = (event.currentTarget as HTMLElement).getBoundingClientRect();
+  const at = (offset: number, size: number) => Math.min(9, Math.max(0, Math.floor((offset / size) * 10)));
+  cursor.value = { row: at(event.clientY - box.top, box.height), col: at(event.clientX - box.left, box.width) };
+}
+function claim() {
+  if (choosing.value && target.value !== undefined && !refused.value) board.triggerElementSelect({ id: target.value.id });
+}
+</script>
+
+<template>
+  <div class="board">
+    <div
+      class="field"
+      role="button"
+      tabindex="0"
+      :aria-label="\`The field, aimed at row \${cursor.row}, column \${cursor.col}\`"
+      v-bind="choosing && target ? candidateAttrs(board.candidateLabel({ id: target.id })) : {}"
+      :aria-disabled="choosing && refused ? 'true' : undefined"
+      @pointermove="aim"
+      @click="claim"
+      @keydown.enter="claim"
+    >
+      Aimed at row {{ cursor.row }}, column {{ cursor.col }}
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.board { width: 400px; height: 400px; }
+.field { width: 400px; height: 400px; background: #ddd; }
+</style>
+`,
+    'src/ui/uis.ts': PLAYERS_GET_THE_TABLE,
   };
 }

@@ -38,16 +38,19 @@ describe('pageControls', () => {
         <button disabled>Wait</button>
       </div>`);
     expect(pageControls(buttons(elements))).toEqual([
-      { index: 0, label: 'Draw from the deck', key: 'element:12', enabled: true, keyboardOnly: false },
-      { index: 1, label: 'Shuffle', key: 'label:Shuffle', enabled: true, keyboardOnly: false },
-      { index: 2, label: 'Pass now', key: 'label:Pass now', enabled: false, keyboardOnly: false },
-      { index: 3, label: 'Wait', key: 'label:Wait', enabled: false, keyboardOnly: false },
+      { index: 0, label: 'Draw from the deck', key: 'element:12', enabled: true, keyboardOnly: false, candidate: false },
+      { index: 1, label: 'Shuffle', key: 'label:Shuffle', enabled: true, keyboardOnly: false, candidate: false },
+      { index: 2, label: 'Pass now', key: 'label:Pass now', enabled: false, keyboardOnly: false, candidate: false },
+      { index: 3, label: 'Wait', key: 'label:Wait', enabled: false, keyboardOnly: false, candidate: false },
     ]);
   });
 
   it("knows a pick's candidate by the choice it stands for when it has no game element", () => {
     const elements = page(`<button data-bs-candidate="north">North row</button><button data-bs-candidate="x" data-bs-el-id="7">Card</button>`);
-    expect(pageControls(buttons(elements)).map((c) => c.key)).toEqual(['candidate:north', 'element:7']);
+    expect(pageControls(buttons(elements)).map((c) => [c.key, c.candidate])).toEqual([
+      ['candidate:north', true],
+      ['element:7', true],
+    ]);
   });
 
   it('#457: marks a control that takes no pointer and cannot be seen as one pressed from the keyboard', () => {
@@ -77,7 +80,7 @@ describe('pageControls', () => {
     const elements = page(`
       <div inert><button>Behind</button></div>
       <button>Front</button>`);
-    expect(pageControls(buttons(elements))).toEqual([{ index: 1, label: 'Front', key: 'label:Front', enabled: true, keyboardOnly: false }]);
+    expect(pageControls(buttons(elements))).toEqual([{ index: 1, label: 'Front', key: 'label:Front', enabled: true, keyboardOnly: false, candidate: false }]);
   });
 });
 
