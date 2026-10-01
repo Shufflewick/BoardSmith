@@ -33,6 +33,7 @@
  * @module
  */
 import { test, type Frame, type Locator, type Page } from '@playwright/test';
+import { rulesErrorSentence } from '../engine/action/rules-error.js';
 import { MODAL_DIALOGS, numberToEnter, pageControls, pageDialogs, type PageControl } from './browser-smoke-page.js';
 import {
   answered,
@@ -213,6 +214,7 @@ async function drainResolved(frame: Frame, walk: SmokeWalk, memory: WalkMemory):
       walk.taken.add(action);
       memory.resolved.set(action, (memory.resolved.get(action) ?? 0) + 1);
       memory.lastResolved = action;
+      memory.numbered.delete(action);
     } else if (!refusedANumber(action, error, memory)) {
       memory.failed.add(action);
       const refused = memory.refused.get(action) ?? 0;
@@ -229,13 +231,16 @@ const NUMBER_TRIES = 3;
 /**
  * Whether `action` failed because the game's own rules refused a number the walk typed in it, with
  * tries left: then the walk takes it again with the next number up (`numberToEnter`), and the refusal,
- * and the error toast that repeats it, are the game working, not a problem (#466).
+ * and the error toast that repeats it, are the game working, not a problem (#466). A failure the
+ * engine words as an error in the game's rules (`rulesErrorSentence`) is a crash, never a refusal,
+ * whatever number the walk typed.
  */
 function refusedANumber(action: string, error: string | undefined, memory: WalkMemory): boolean {
   const refused = memory.refused.get(action) ?? 0;
   if (!memory.numbered.delete(action) || refused >= NUMBER_TRIES - 1) return false;
+  if (error === undefined || error.startsWith(rulesErrorSentence(action))) return false;
   memory.refused.set(action, refused + 1);
-  if (error !== undefined) memory.refusals.add(error);
+  memory.refusals.add(error);
   return true;
 }
 

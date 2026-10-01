@@ -385,9 +385,11 @@ markers this page documents, so it keeps up with any game without knowing it:
   surface stands for, and `aria-disabled` already says it is refused. An empty text
   field is filled with "smoke test" and an empty number field with a value its
   own `min`, `max` and `step` accept: its least value, else 1 (#465). When the
-  game's own rules refuse that number (the action fails), the walk takes the
-  action again with the next number up, three numbers in all, and neither the
-  refusal nor the error toast that repeats it is a problem (#466). Each press is
+  game refuses that number with its own words (a `validate` message, or a
+  refusal it throws for the player to read), the walk takes the action again
+  with the next number up, three numbers in all, and neither the refusal nor the
+  error toast that repeats it is a problem (#466). A failure the engine words as
+  an error in the game's rules is a crash, and is reported at once. Each press is
   narrated (`smoke step 4: pressing "Done" for "kindle"`).
 - A press a toast lies over waits for the toast to go, as a player would, then
   presses again.

@@ -306,6 +306,21 @@ describe('boardsmith verify: the smoke check', () => {
     expect(steps.some((line) => /pressing "[^"]+" for "claim"/.test(line))).toBe(true);
   });
 
+  it('#466: reports an action whose rules crash on the number the walk entered, rather than trying the next number', async () => {
+    const { outcome, steps } = await smokeOf(false, {
+      ...fieldsGame({ kindleCrashesAtOne: true }),
+      'tests/browser/smoke.spec.ts': smokeSpec(['code', 'kindle', 'draw', 'rest']),
+    });
+
+    expect(outcome.passed).toBe(false);
+    expect(outcome.summary).toContain(
+      '- The panel offered "kindle", and taking it failed: The "kindle" action could not be completed because of an error in ' +
+        "the game's rules. Nothing was changed. (the hearth cracked)",
+    );
+    expect(outcome.summary).toMatch(/- The game showed an error: The "kindle" action could not be completed/);
+    expect(steps.some((line) => line.endsWith('entering "2" for "kindle"'))).toBe(false);
+  });
+
   it('fails a spec that passes without walking the game', async () => {
     const { outcome } = await smokeOf(false, {
       'tests/browser/smoke.spec.ts': "import { test } from '@playwright/test';\n\ntest('opens nothing', () => {});\n",

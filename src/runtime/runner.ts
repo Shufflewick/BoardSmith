@@ -1,3 +1,4 @@
+import { rulesErrorSentence } from '../engine/action/rules-error.js';
 import {
   serializeAction,
   deserializeAction,
@@ -588,8 +589,8 @@ export class GameRunner<G extends Game = Game, O extends GameOptions = GameOptio
         error: error instanceof PlayerFacingError
           ? error.message
           : isDevThrowEnabled()
-            ? `The "${actionName}" action could not be completed because of an error in the game's rules. (${error instanceof Error ? error.message : String(error)})`
-            : `The "${actionName}" action could not be completed because of an error in the game's rules.`,
+            ? `${rulesErrorSentence(actionName)} (${error instanceof Error ? error.message : String(error)})`
+            : rulesErrorSentence(actionName),
         errorCode: ErrorCode.ENGINE_ERROR,
       };
     }
