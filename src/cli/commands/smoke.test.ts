@@ -23,6 +23,7 @@ import {
   boardWithAPointerlessControl,
   boardWithAVanishingControl,
   boardWithDialogs,
+  candidateBoard,
   fieldsGame,
   pointerAimedGame,
   PLAYERS_GET_THE_TABLE,
@@ -333,6 +334,42 @@ describe('boardsmith verify: the smoke check', () => {
     );
     expect(outcome.summary).toMatch(/- The game showed an error: The "kindle" action could not be completed/);
     expect(steps.some((line) => line.endsWith('entering "2" for "kindle"'))).toBe(false);
+  });
+
+  describe('#468: pressing a candidate that is hard to point at', () => {
+    const claimed = /^Served by `boardsmith dev` from a fresh start and dealt from seed "smoke", a seated player took "claim", "rest"/;
+    const spec = { 'tests/browser/smoke.spec.ts': smokeSpec(['claim', 'rest']) };
+
+    it.each([
+      ['lifts when pointed at, and is followed until it settles', 'lifts'],
+      ['never stands still, and is pressed where it is', 'restless'],
+      ['is covered at its centre, and is pressed where it shows', 'partlyCovered'],
+    ] as const)('claims a card that %s', async (_, kind) => {
+      const { outcome } = await smokeOf(false, { ...candidateBoard(kind), ...spec });
+
+      expect(outcome.summary).toMatch(claimed);
+      expect(outcome.passed).toBe(true);
+    });
+
+    it('fails a card something covers whole, saying so', async () => {
+      const { outcome } = await smokeOf(false, { ...candidateBoard('covered'), ...spec });
+
+      expect(outcome.passed).toBe(false);
+      expect(outcome.summary).toContain(
+        '- Pressing "r0c0" while answering "claim" did not work: another element covers it, so a pointer cannot reach it.',
+      );
+    });
+
+    it('reads an error toast over a control, waits for it to go, and presses again', async () => {
+      const { outcome, steps } = await smokeOf(false, { ...candidateBoard('toast'), ...spec });
+
+      // The toast is an error, so it fails the walk; the presses it covered both landed.
+      expect(outcome.summary).toBe(
+        'The smoke walk, dealt from seed "smoke", found a problem: - The game showed an error: The ravens are loud.',
+      );
+      expect(steps).toContain('smoke step 1: pressing the board\'s "Ring the bell"');
+      expect(steps.some((line) => /pressing "r0c0" for "claim"/.test(line))).toBe(true);
+    });
   });
 
   it('fails a spec that passes without walking the game', async () => {

@@ -36,6 +36,11 @@ export interface PageControl {
    * the pointer, so the walk aims before it clicks one (#468).
    */
   readonly candidate: boolean;
+  /**
+   * Whether it is on the game's board (`[data-testid="bs-board"]`), where the walk points at it
+   * itself, as a player does, rather than waiting for it to stand still (#468).
+   */
+  readonly onBoard: boolean;
 }
 
 /**
@@ -55,7 +60,8 @@ export function pageControls(elements: Element[]): PageControl[] {
     const enabled = html.getAttribute('aria-disabled') !== 'true' && !(html as HTMLButtonElement).disabled;
     const keyboardOnly =
       getComputedStyle(html).pointerEvents === 'none' && !html.checkVisibility({ opacityProperty: true, visibilityProperty: true });
-    found.push({ index, label, key, enabled, keyboardOnly, candidate: candidate !== null });
+    const onBoard = html.closest('[data-testid="bs-board"]') !== null;
+    found.push({ index, label, key, enabled, keyboardOnly, candidate: candidate !== null, onBoard });
   });
   return found;
 }

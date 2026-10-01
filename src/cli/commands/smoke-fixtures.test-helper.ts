@@ -613,6 +613,63 @@ describe('the fields game', () => {
  */
 export function pointerAimedGame(): Record<string, string> {
   return {
+    ...fieldRules(),
+    'src/ui/components/GameTable.vue': `<script setup lang="ts">
+import { computed, ref } from 'vue';
+import { candidateAttrs, useBoardInteraction } from 'boardsmith/ui';
+
+const board = useBoardInteraction();
+const cursor = ref({ row: 2, col: 2 });
+const name = computed(() => \`r\${cursor.value.row}c\${cursor.value.col}\`);
+const choosing = computed(() => board.currentAction === 'claim' && board.currentPickName === 'cell');
+// The board knows a candidate by its element id; the panel names each cell's candidate by the cell's name.
+const target = computed(() => board.validElements.find((candidate) => candidate.display === name.value));
+const refused = computed(() => target.value === undefined || target.value.disabled !== undefined);
+
+function aim(event: PointerEvent) {
+  const box = (event.currentTarget as HTMLElement).getBoundingClientRect();
+  const at = (offset: number, size: number) => Math.min(9, Math.max(0, Math.floor((offset / size) * 10)));
+  cursor.value = { row: at(event.clientY - box.top, box.height), col: at(event.clientX - box.left, box.width) };
+}
+function claim() {
+  if (choosing.value && target.value !== undefined && !refused.value) board.triggerElementSelect({ id: target.value.id });
+}
+</script>
+
+<template>
+  <div class="board">
+    <div
+      class="field"
+      role="button"
+      tabindex="0"
+      :aria-label="\`The field, aimed at row \${cursor.row}, column \${cursor.col}\`"
+      v-bind="choosing && target ? candidateAttrs(board.candidateLabel({ id: target.id })) : {}"
+      :aria-disabled="choosing && refused ? 'true' : undefined"
+      @pointermove="aim"
+      @click="claim"
+      @keydown.enter="claim"
+    >
+      Aimed at row {{ cursor.row }}, column {{ cursor.col }}
+    </div>
+  </div>
+</template>
+
+<style scoped>
+.board { width: 400px; height: 400px; }
+.field { width: 400px; height: 400px; background: #ddd; }
+</style>
+`,
+    'src/ui/uis.ts': PLAYERS_GET_THE_TABLE,
+  };
+}
+
+/**
+ * THE FIELD GAME'S RULES (#468): `claim` picks one of a hundred cells (more than the panel lists,
+ * so the panel hands the pick to the board), refused on the middle row, and `rest` passes. A board
+ * for it is written by each fixture.
+ */
+function fieldRules(): Record<string, string> {
+  return {
     'src/rules/game.ts': `import { Game, Player, Space, type GameOptions } from 'boardsmith';
 import { createGameFlow } from './flow.js';
 import { createTurnActions } from './actions.js';
@@ -708,49 +765,86 @@ describe('the field game', () => {
   });
 });
 `,
+  };
+}
+
+/** What each candidate board (`candidateBoard`) does to a walk that points at it (#468). */
+type CandidateBoard = 'lifts' | 'restless' | 'partlyCovered' | 'covered' | 'toast';
+
+/** The candidate markup and styles of each `CandidateBoard`, around the three cells it offers. */
+const CANDIDATE_BOARDS: Record<CandidateBoard, { template: string; style: string }> = {
+  // Each card lifts when pointed at, moving under the pointer for a third of a second.
+  lifts: {
+    template: `<button v-for="cell in cells" :key="cell" type="button" class="card" v-bind="attrs(cell)" @click="claim(cell)">{{ cell }}</button>`,
+    style: `.card { width: 60px; height: 90px; margin: 8px; transition: transform 0.3s; } .card:hover { transform: translateY(-16px); }`,
+  },
+  // Each card sways for ever, so it never stands still.
+  restless: {
+    template: `<button v-for="cell in cells" :key="cell" type="button" class="card" v-bind="attrs(cell)" @click="claim(cell)">{{ cell }}</button>`,
+    style: `.card { width: 60px; height: 90px; margin: 8px; animation: sway 0.4s ease-in-out infinite alternate; } @keyframes sway { from { transform: translateX(0); } to { transform: translateX(8px); } }`,
+  },
+  // A tray covers the left two thirds of each card, centre included; its right edge shows.
+  partlyCovered: {
+    template: `<div v-for="cell in cells" :key="cell" class="slot"><button type="button" class="card" v-bind="attrs(cell)" @click="claim(cell)">{{ cell }}</button><div class="tray"></div></div>`,
+    style: `.slot { position: relative; width: 240px; height: 60px; margin: 8px; } .card { width: 240px; height: 60px; } .tray { position: absolute; left: 0; top: 0; width: 160px; height: 60px; background: #888; }`,
+  },
+  // A tray covers each card whole.
+  covered: {
+    template: `<div v-for="cell in cells" :key="cell" class="slot"><button type="button" class="card" v-bind="attrs(cell)" @click="claim(cell)">{{ cell }}</button><div class="tray"></div></div>`,
+    style: `.slot { position: relative; width: 240px; height: 60px; margin: 8px; } .card { width: 240px; height: 60px; } .tray { position: absolute; inset: 0; background: #888; }`,
+  },
+  // The first time the bell, or a card, is pointed at, an error toast covers the board for a second and a half.
+  toast: {
+    template: `<button type="button" class="bell" @pointerenter="warn">Ring the bell</button>
+      <button v-for="cell in cells" :key="cell" type="button" class="card" v-bind="attrs(cell)" @pointerenter="warn" @click="claim(cell)">{{ cell }}</button>
+      <div v-if="warning" class="toast error">The ravens are loud.</div>`,
+    style: `.bell, .card { width: 120px; height: 60px; margin: 8px; } .toast { position: absolute; inset: 0; background: #c33; color: #fff; }`,
+  },
+};
+
+/**
+ * A BOARD OF CANDIDATES THAT ARE HARD TO POINT AT (#468), for the field game: three cells offered
+ * as cards on the board, with `claim` handed to the board. See `CandidateBoard` for each kind.
+ */
+export function candidateBoard(kind: CandidateBoard): Record<string, string> {
+  const { template, style } = CANDIDATE_BOARDS[kind];
+  return {
+    ...fieldRules(),
     'src/ui/components/GameTable.vue': `<script setup lang="ts">
 import { computed, ref } from 'vue';
 import { candidateAttrs, useBoardInteraction } from 'boardsmith/ui';
 
 const board = useBoardInteraction();
-const cursor = ref({ row: 2, col: 2 });
-const name = computed(() => \`r\${cursor.value.row}c\${cursor.value.col}\`);
+const cells = ['r0c0', 'r1c1', 'r2c2'];
 const choosing = computed(() => board.currentAction === 'claim' && board.currentPickName === 'cell');
-// The board knows a candidate by its element id; the panel names each cell's candidate by the cell's name.
-const target = computed(() => board.validElements.find((candidate) => candidate.display === name.value));
-const refused = computed(() => target.value === undefined || target.value.disabled !== undefined);
-
-function aim(event: PointerEvent) {
-  const box = (event.currentTarget as HTMLElement).getBoundingClientRect();
-  const at = (offset: number, size: number) => Math.min(9, Math.max(0, Math.floor((offset / size) * 10)));
-  cursor.value = { row: at(event.clientY - box.top, box.height), col: at(event.clientX - box.left, box.width) };
+const targetOf = (cell: string) => board.validElements.find((candidate) => candidate.display === cell);
+const attrs = (cell: string) => {
+  const target = targetOf(cell);
+  return choosing.value && target ? candidateAttrs(board.candidateLabel({ id: target.id })) : {};
+};
+function claim(cell: string) {
+  const target = targetOf(cell);
+  if (choosing.value && target !== undefined) board.triggerElementSelect({ id: target.id });
 }
-function claim() {
-  if (choosing.value && target.value !== undefined && !refused.value) board.triggerElementSelect({ id: target.value.id });
+const warning = ref(false);
+let warned = 0;
+function warn() {
+  if (warned >= 2 || warning.value) return;
+  warned++;
+  warning.value = true;
+  setTimeout(() => (warning.value = false), 1500);
 }
 </script>
 
 <template>
   <div class="board">
-    <div
-      class="field"
-      role="button"
-      tabindex="0"
-      :aria-label="\`The field, aimed at row \${cursor.row}, column \${cursor.col}\`"
-      v-bind="choosing && target ? candidateAttrs(board.candidateLabel({ id: target.id })) : {}"
-      :aria-disabled="choosing && refused ? 'true' : undefined"
-      @pointermove="aim"
-      @click="claim"
-      @keydown.enter="claim"
-    >
-      Aimed at row {{ cursor.row }}, column {{ cursor.col }}
-    </div>
+    ${template}
   </div>
 </template>
 
 <style scoped>
-.board { width: 400px; height: 400px; }
-.field { width: 400px; height: 400px; background: #ddd; }
+.board { position: relative; width: 420px; height: 420px; }
+${style}
 </style>
 `,
     'src/ui/uis.ts': PLAYERS_GET_THE_TABLE,

@@ -461,8 +461,11 @@ async function click(control: Control): Promise<void> {
 /**
  * Presses `control` as a player would: with the pointer, or, for a keyboard-only control (invisible
  * and taking no pointer, `pageControls`), by focusing it and pressing Enter (#457). A pick's
- * candidate is aimed at first (`aimAndClick`, #468); any other control is clicked. A toast over the
- * control goes by itself, so the walk waits for it, as a player does, and presses again. A press
+ * candidate is aimed at first (`aimAndClick`, #468), and any other control on the board is clicked
+ * where it shows (`clickWhereReachable`): the walk points at both itself, so a card that lifts, a
+ * board that never stands still and a control partly under a tray are pressed as a player presses
+ * them. A control in the panel is clicked by Playwright. A toast over the control goes by itself, so
+ * the walk reads it, waits for it to go, as a player does, and presses again. A press
  * that does not land, because the control went away, something covers it or it never becomes
  * pressable, is reported and the walk goes on. Returns whether the press landed.
  */
@@ -470,7 +473,8 @@ async function press(control: Control, what: string, walk: SmokeWalk, memory: Wa
   const pressIt = async () => {
     const now = await stillThere(control);
     if (now.keyboardOnly) return now.target.press('Enter', { timeout: PRESS_MS });
-    return now.candidate ? aimAndClick(now) : click(now);
+    if (now.candidate) return aimAndClick(now);
+    return now.onBoard ? clickWhereReachable(now) : click(now);
   };
   try {
     await pressIt().catch(async (error: unknown) => {
@@ -491,8 +495,9 @@ async function press(control: Control, what: string, walk: SmokeWalk, memory: Wa
 const TOAST_WAIT_MS = 8_000;
 
 /**
- * Where on a candidate the walk points (#468), as fractions of its width and height: its centre
- * first, then a grid over the rest of it, for a candidate partly covered or refused at its centre.
+ * Where on a board control the walk points (#468), as fractions of its width and height: its centre
+ * first, then a grid over the rest of it, for a control partly covered or a candidate refused at its
+ * centre.
  */
 const AIM_POINTS: ReadonlyArray<readonly [number, number]> = [
   [0.5, 0.5],
@@ -576,6 +581,20 @@ async function clickAt(control: Control, at: { x: number; y: number }, x: number
     await mouse.move(now.x, now.y);
     pointer = now;
   }
+}
+
+/**
+ * Clicks a board control at the first of {@link AIM_POINTS} where it, not something on top of it, is
+ * under the pointer (`clickAt`), as a player clicks the part of a card a tray leaves showing.
+ */
+async function clickWhereReachable(control: Control): Promise<void> {
+  const covers = new Set<Exclude<OnTop, 'it'>>();
+  for (const [x, y] of AIM_POINTS) {
+    const at = await pointAt(control, x, y);
+    if (typeof at !== 'string') return clickAt(control, at, x, y);
+    covers.add(at);
+  }
+  unreachable(covers);
 }
 
 /** Throws why no point of a control could be pressed: a toast over it, or something else. */

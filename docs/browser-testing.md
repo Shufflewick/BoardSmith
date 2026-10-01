@@ -391,8 +391,10 @@ markers this page documents, so it keeps up with any game without knowing it:
   error toast that repeats it is a problem (#466). A failure the engine words as
   an error in the game's rules is a crash, and is reported at once. Each press is
   narrated (`smoke step 4: pressing "Done" for "kindle"`).
-- A press a toast lies over waits for the toast to go, as a player would, then
-  presses again.
+- A press a toast lies over reads the toast (an error toast is a problem like
+  any other), waits for it to go, as a player would, then presses again. A
+  panel button the panel showed and then took back before the press is
+  reported.
 - The walk gives up on an open action, reports it, and presses its Cancel when
   the panel offers nothing to press, when three presses in a row change nothing,
   when a press brings the panel back to a state it showed before (the walk
@@ -421,7 +423,13 @@ markers this page documents, so it keeps up with any game without knowing it:
   focused, then Enter (#457). Any other control is clicked, including a visible
   one that takes no pointer, so a control a sighted mouse player can see but not
   press fails the walk, as does one something covers, or one that goes away
-  before the press lands.
+  before the press lands. On the board the walk points the mouse itself (#468):
+  it clicks the first point of the control where the control, not something on
+  top of it, is under the pointer (so a card partly under a tray is clicked
+  where it shows), follows a control that moves when pointed at until it
+  settles, and clicks one that never stands still where it is. Just before a
+  press the walk finds the control again by what it stands for, so a redraw
+  that put another element in its place is not pressed by mistake.
 - While a modal dialog is open (`[aria-modal="true"]`, or a `<dialog>` shown
   modally), it is all a player can reach, so it is all the walk presses (#461).
   It presses each control in the dialog once, whatever its place: when one
