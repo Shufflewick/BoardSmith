@@ -23,10 +23,14 @@ const OUTSIDE_THE_CHECKOUT = '.boardsmith/**';
 /**
  * The browser tests, which run under Playwright against `boardsmith dev` (`boardsmith verify`'s
  * smoke check), never under vitest: vitest's default pattern matches `smoke.spec.ts`, and loading
- * it there fails.
+ * it there fails. The glob matches them at any depth, so the copy in a git worktree kept inside the
+ * project (`.worktrees/<name>/tests/browser/`) is left out too.
  */
 const BROWSER_TESTS_DIR = join('tests', 'browser');
-const BROWSER_TESTS = 'tests/browser/**';
+const BROWSER_TESTS = '**/tests/browser/**';
+
+/** The glob BoardSmith wrote before #453's rollout, which leaves out only the top-level directory. */
+const TOP_LEVEL_BROWSER_TESTS = 'tests/browser/**';
 
 /** The vitest config `boardsmith init` and `boardsmith doctor --fix` write. */
 export const VITEST_CONFIG_FILE = 'vitest.config.ts';
@@ -77,7 +81,8 @@ ${base}
 
 // A test run covers this checkout's tests only. Chunks built side by side are git worktrees under
 // .boardsmith/worktrees/, and vitest would otherwise collect their unfinished tests too. The
-// in-browser smoke test under tests/browser/ runs under Playwright (boardsmith verify), not here.
+// in-browser smoke test under tests/browser/ (at any depth, so a worktree's copy too) runs under
+// Playwright (boardsmith verify), not here.
 // BoardSmith's commands that run tests refuse to start without these exclusions.
 export default defineConfig(async (env) =>
   mergeConfig(typeof base === 'function' ? await base(env) : base, {
@@ -88,7 +93,8 @@ export default defineConfig(async (env) =>
 }
 
 const CARRIES_EXCLUSION = /['"`]\.boardsmith\/\*\*['"`]/;
-const CARRIES_BROWSER_EXCLUSION = /['"`]tests\/browser\/\*\*['"`]/;
+const CARRIES_BROWSER_EXCLUSION = /['"`]\*\*\/tests\/browser\/\*\*['"`]/;
+const CARRIES_TOP_LEVEL_BROWSER_EXCLUSION = /['"`]tests\/browser\/\*\*['"`]/;
 
 /**
  * Why this project's test run would collect `.boardsmith/`, as a sentence that says how to fix it,
@@ -134,6 +140,13 @@ async function browserTestsProblem(projectDir: string, config: string, text: str
     () => false,
   );
   if (!hasBrowserTests) return undefined;
+  if (CARRIES_TOP_LEVEL_BROWSER_EXCLUSION.test(text)) {
+    return (
+      `${config} leaves out only the project's own tests/browser/, so vitest still collects the smoke test in a git ` +
+      `worktree kept inside the project (.worktrees/<name>/tests/browser/). In its \`test.exclude\`, replace ` +
+      `'${TOP_LEVEL_BROWSER_TESTS}' with '${BROWSER_TESTS}', then run this again.`
+    );
+  }
   return (
     `${config} does not leave tests/browser/ out of test runs, so vitest would collect the in-browser smoke test, ` +
     `which runs only under Playwright (\`boardsmith verify\`, \`boardsmith smoke\`). Add '${BROWSER_TESTS}' to its ` +
