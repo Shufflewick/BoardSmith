@@ -40,6 +40,7 @@ import {
   DEFAULT_SMOKE_SEED,
   requiredUntaken,
   SMOKE_ANNOTATION,
+  SMOKE_SEEDS_ENV,
   SMOKE_SPEC_PATH,
   smokeFailure,
   smokeProblems,
@@ -103,7 +104,8 @@ const IDLE_STEPS = 5;
  */
 export function defineSmokeTest(options: SmokeTestOptions): void {
   test('seat a player, take every offered action, press every board control', async ({ page }) => {
-    const seeds = smokeSeeds(options.seed);
+    const chosen = process.env[SMOKE_SEEDS_ENV];
+    const seeds = smokeSeeds(options.seed, chosen === undefined ? undefined : (JSON.parse(chosen) as string[]));
     const walk = newWalk(options);
     const memories: WalkMemory[] = [];
     watchForErrors(page, walk);
@@ -120,7 +122,7 @@ export function defineSmokeTest(options: SmokeTestOptions): void {
           await walkTheGame(page, walk, memories[memories.length - 1]);
         }
       } else {
-        if (options.seed !== undefined) note(walk, WORLD_TAKES_NO_SEED);
+        if (options.seed !== undefined || chosen !== undefined) note(walk, WORLD_TAKES_NO_SEED);
         memories.push(newMemory(null));
         await walkTheGame(page, walk, memories[0]);
       }
@@ -139,7 +141,7 @@ export function defineSmokeTest(options: SmokeTestOptions): void {
 /** Why a world's spec cannot name a seed. */
 const WORLD_TAKES_NO_SEED =
   `This game is a persistent world, which \`boardsmith dev\` deals from the one seed it gives that world, so \`seed\` in ` +
-  `${SMOKE_SPEC_PATH} cannot choose its deal. Remove \`seed\` there.`;
+  `${SMOKE_SPEC_PATH} cannot choose its deal. Remove \`seed\` there (and run \`boardsmith smoke\` without \`--seed\`).`;
 
 function newWalk(options: SmokeTestOptions): SmokeWalk {
   return {

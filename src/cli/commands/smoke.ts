@@ -34,7 +34,7 @@ import { collectOutput } from '../lib/child-output.js';
 import { freePort } from '../lib/free-port.js';
 import { gitOutput as git } from '../lib/git-output.js';
 import type { VerifyCheckResult } from '../lib/verify-result.js';
-import { SMOKE_ANNOTATION, SMOKE_SPEC_PATH, smokeSummary, type SmokeRecord } from '../../testing/browser-smoke-verdict.js';
+import { SMOKE_ANNOTATION, SMOKE_SEEDS_ENV, SMOKE_SPEC_PATH, smokeSummary, type SmokeRecord } from '../../testing/browser-smoke-verdict.js';
 
 /** A check's outcome, as `boardsmith verify` records it. */
 type SmokeOutcome = Omit<VerifyCheckResult, 'name'>;
@@ -127,10 +127,10 @@ class Started {
     process.on('SIGTERM', this.onSignal);
   }
 
-  /** Starts `args` under this Node, keeping its output. Refuses once the run was interrupted. */
-  spawn(args: string[], cwd: string): { child: ChildProcess; output: () => string } {
+  /** Starts `args` under this Node, with `env` added to this process's, keeping its output. Refuses once the run was interrupted. */
+  spawn(args: string[], cwd: string, env: Record<string, string> = {}): { child: ChildProcess; output: () => string } {
     if (this.interruptedBy !== undefined) throw new Error(`The smoke check was interrupted (${this.interruptedBy}).`);
-    const child = spawn(process.execPath, args, { cwd, stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, FORCE_COLOR: '0' } });
+    const child = spawn(process.execPath, args, { cwd, stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, FORCE_COLOR: '0', ...env } });
     this.children.push(child);
     return { child, output: collectOutput(child) };
   }
@@ -389,10 +389,18 @@ function verdict(report: PlaywrightReport | undefined, code: number | null, outp
 }
 
 /** Runs the bundled spec against `baseURL` and reads the verdict. */
-async function runWalk(started: Started, copy: string, work: string, baseURL: string, log: (line: string) => void): Promise<SmokeOutcome> {
+async function runWalk(
+  started: Started,
+  copy: string,
+  work: string,
+  baseURL: string,
+  log: (line: string) => void,
+  seeds: readonly string[] | undefined,
+): Promise<SmokeOutcome> {
   const configPath = join(work, 'playwright.config.mjs');
   await fs.writeFile(configPath, playwrightConfig(work, baseURL));
-  const walk = started.spawn([join(playwrightTestDir(), 'cli.js'), 'test', '--config', configPath], copy);
+  const env: Record<string, string> = seeds === undefined ? {} : { [SMOKE_SEEDS_ENV]: JSON.stringify(seeds) };
+  const walk = started.spawn([join(playwrightTestDir(), 'cli.js'), 'test', '--config', configPath], copy, env);
   walk.child.stdout?.on('data', (chunk: Buffer) => chunk.toString().split('\n').filter(Boolean).forEach(log));
   const [code] = (await once(walk.child, 'exit')) as [number | null];
   const report = await fs
@@ -422,9 +430,10 @@ interface SmokeRun {
 
 /**
  * Runs the game's smoke test against `boardsmith dev`, from a copy of the project's files, and
- * stops everything it started before it returns (see the file comment).
+ * stops everything it started before it returns (see the file comment). With `seeds`, the walk deals
+ * from them instead of the spec's (#460).
  */
-export async function runSmoke(options: { projectDir: string; log: (line: string) => void }): Promise<SmokeRun> {
+export async function runSmoke(options: { projectDir: string; log: (line: string) => void; seeds?: readonly string[] }): Promise<SmokeRun> {
   const { projectDir, log } = options;
   const cannot = specMissing(projectDir) ?? browserProblem(await playwrightChromium());
   if (cannot) return { outcome: cannot, pids: [] };
@@ -440,19 +449,22 @@ export async function runSmoke(options: { projectDir: string; log: (line: string
     const baseURL = await startDev(started, copy);
     if (typeof baseURL !== 'string') return { outcome: baseURL, pids: started.pids };
     log(`boardsmith dev is serving a fresh copy of the game at ${baseURL}`);
-    return { outcome: await runWalk(started, copy, work, baseURL, log), pids: started.pids };
+    return { outcome: await runWalk(started, copy, work, baseURL, log, options.seeds), pids: started.pids };
   } finally {
     await started.finish(() => removeCopy(projectDir, copy));
   }
 }
 
-/** `boardsmith smoke [--project <dir>]`: the smoke check alone, on the working tree as it stands. */
-export async function smokeCommand(options: { project?: string }): Promise<void> {
+/**
+ * `boardsmith smoke [--project <dir>] [--seed <seeds...>]`: the smoke check alone, on the working
+ * tree as it stands, dealt from the seeds `--seed` names instead of the spec's when it names any.
+ */
+export async function smokeCommand(options: { project?: string; seed?: string[] }): Promise<void> {
   const projectDir = pathResolve(options.project ?? process.cwd());
   if (!existsSync(join(projectDir, 'boardsmith.json'))) {
     throw new Error(`boardsmith smoke runs a game project, and ${projectDir} has no boardsmith.json. Run it in the game's directory, or pass --project <dir>.`);
   }
-  const { outcome } = await runSmoke({ projectDir, log: (line) => console.error(chalk.dim(line)) });
+  const { outcome } = await runSmoke({ projectDir, log: (line) => console.error(chalk.dim(line)), seeds: options.seed });
   if (outcome.passed) {
     console.log(chalk.green(outcome.summary));
     return;

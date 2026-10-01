@@ -44,6 +44,13 @@ describe('smokeSeeds: the deals a walk is dealt (#460)', () => {
     expect(smokeSeeds(['opening', '7'])).toEqual(['opening', '7']);
   });
 
+  it('deals from the seeds `boardsmith smoke --seed` names instead of the spec\'s, so any deal can be walked again', () => {
+    expect(smokeSeeds('opening', ['7', '9'])).toEqual(['7', '9']);
+    expect(() => smokeSeeds(undefined, ['7', '7'])).toThrow(
+      '`boardsmith smoke --seed` lists "7" twice, which walks the same deal twice. List each seed once.',
+    );
+  });
+
   it('refuses an empty list, a blank seed and a seed listed twice, saying what to write instead', () => {
     expect(() => smokeSeeds([])).toThrow(
       `\`seed\` in ${SMOKE_SPEC_PATH} is an empty list, so the walk would deal no game. List at least one seed, or leave ` +

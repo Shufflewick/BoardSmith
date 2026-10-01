@@ -198,6 +198,17 @@ describe('boardsmith verify: the smoke check', () => {
     },
   );
 
+  it('#460: `boardsmith smoke --seed` deals from the seeds it names instead of the spec\'s', async () => {
+    const dir = await smokeProject(false, {
+      ...aceGame(),
+      'tests/browser/smoke.spec.ts': smokeSpec(['draw', 'play', 'showAce'], undefined, { seed: ACE_SEEDS.WITHOUT, steps: 20 }),
+    });
+    const { outcome } = await runSmoke({ projectDir: dir, log: quiet, seeds: [ACE_SEEDS.WITH] });
+
+    expect(outcome.summary).toMatch(/^Served by `boardsmith dev` from a fresh start and dealt from seed "4", a seated player took "draw", "play", "showAce"/);
+    expect(outcome.passed).toBe(true);
+  });
+
   it('#460: fails a walk whose only deal does not offer a listed action, saying to choose a seed whose deal does', async () => {
     const { outcome } = await smokeOf(false, {
       ...aceGame(),
@@ -216,7 +227,8 @@ describe('boardsmith verify: the smoke check', () => {
     expect(outcome.passed).toBe(false);
     expect(outcome.summary).toBe(
       'The smoke walk found a problem: - This game is a persistent world, which `boardsmith dev` deals from the one seed it ' +
-        'gives that world, so `seed` in tests/browser/smoke.spec.ts cannot choose its deal. Remove `seed` there.',
+        'gives that world, so `seed` in tests/browser/smoke.spec.ts cannot choose its deal. Remove `seed` there (and run ' +
+        '`boardsmith smoke` without `--seed`).',
     );
   });
 

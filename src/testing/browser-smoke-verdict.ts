@@ -24,24 +24,35 @@ const REASON_MIN_WORDS = 4;
 export const DEFAULT_SMOKE_SEED = 'smoke';
 
 /**
- * The seeds a walk deals from, in order: the spec's `seed`, one seed or a list of them, else
- * {@link DEFAULT_SMOKE_SEED}. Throws, saying what to write instead, on an empty list, a blank seed
- * or a seed listed twice.
+ * The environment variable `boardsmith smoke --seed` hands the walk its seeds in, as a JSON list,
+ * so a run can deal any game again without editing the spec.
  */
-export function smokeSeeds(seed: string | readonly string[] | undefined): string[] {
-  const seeds = seed === undefined ? [DEFAULT_SMOKE_SEED] : typeof seed === 'string' ? [seed] : [...seed];
+export const SMOKE_SEEDS_ENV = 'BOARDSMITH_SMOKE_SEEDS';
+
+/**
+ * The seeds a walk deals from, in order: those `boardsmith smoke --seed` names (`chosen`), else the
+ * spec's `seed`, one seed or a list of them, else {@link DEFAULT_SMOKE_SEED}. Throws, saying what to
+ * write instead, on an empty list, a blank seed or a seed listed twice.
+ */
+export function smokeSeeds(seed: string | readonly string[] | undefined, chosen?: readonly string[]): string[] {
+  if (chosen !== undefined) return checkedSeeds([...chosen], '`boardsmith smoke --seed`');
+  return checkedSeeds(seed === undefined ? [DEFAULT_SMOKE_SEED] : typeof seed === 'string' ? [seed] : [...seed], `\`seed\` in ${SMOKE_SPEC_PATH}`);
+}
+
+/** `seeds`, which `from` gave, once none is blank or listed twice and there is one at least. */
+function checkedSeeds(seeds: string[], from: string): string[] {
   if (seeds.length === 0) {
     throw new Error(
-      `\`seed\` in ${SMOKE_SPEC_PATH} is an empty list, so the walk would deal no game. List at least one seed, or leave ` +
+      `${from} is an empty list, so the walk would deal no game. List at least one seed, or leave ` +
         `\`seed\` out to deal from "${DEFAULT_SMOKE_SEED}".`,
     );
   }
   if (seeds.some((s) => s.trim() === '')) {
-    throw new Error(`\`seed\` in ${SMOKE_SPEC_PATH} has a blank seed. A seed is any text that is not blank, such as "7" or "opening".`);
+    throw new Error(`${from} has a blank seed. A seed is any text that is not blank, such as "7" or "opening".`);
   }
   const twice = seeds.find((s, i) => seeds.indexOf(s) !== i);
   if (twice !== undefined) {
-    throw new Error(`\`seed\` in ${SMOKE_SPEC_PATH} lists "${twice}" twice, which walks the same deal twice. List each seed once.`);
+    throw new Error(`${from} lists "${twice}" twice, which walks the same deal twice. List each seed once.`);
   }
   return seeds;
 }

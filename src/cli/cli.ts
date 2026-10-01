@@ -197,6 +197,7 @@ export function createProgram(): Command {
         'player, take every offered action, press every board control, and fail on any error',
     )
     .option('--project <dir>', 'Project directory (defaults to cwd)')
+    .option('--seed <seeds...>', "Deal from these seeds instead of the spec's, to walk a deal again (a table only)")
     .action(smokeCommand);
 
   program

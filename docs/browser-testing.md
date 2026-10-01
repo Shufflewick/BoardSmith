@@ -483,7 +483,9 @@ defineSmokeTest({
 The walk requires every listed action across all its deals together, so the
 second seed above is there for the action the first deal does not offer. To
 find one, deal seeds in `boardsmith dev`: Table setup shows the seed of the game
-on screen and deals a new game from any seed typed there.
+on screen and deals a new game from any seed typed there. `boardsmith smoke
+--seed 17` (or `--seed 17 23`) walks those deals instead of the spec's, without
+editing it, and `--seed smoke/3` walks again the third game a failing run dealt.
 
 A world is dealt by `boardsmith dev` from the one seed it gives that world, so a
 world's spec names no `seed`, and the check fails one that does.
