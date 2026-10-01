@@ -462,7 +462,7 @@ describe('ledgerCheck — the whole project', () => {
     const [finding, ...others] = (await ledgerCheck(unverified)).findings;
     expect(others).toEqual([]);
     expect(`${finding.ledger}:${finding.entry}:${finding.kind}`).toBe('run-log/core-loop.md:Review Round 1:review-round');
-    expect(finding.detail).toContain(`the verify result on file for that commit (.boardsmith/verify/${commit}.json) failed`);
+    expect(finding.detail).toContain(`the latest verify of that commit (.boardsmith/verify/${commit}.json) failed`);
 
     await writeVerifyResult(unverified, result(true));
     expect((await ledgerCheck(unverified)).findings).toEqual([]);
