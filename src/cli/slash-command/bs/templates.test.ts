@@ -735,8 +735,8 @@ describe('#293 — ledger templates agree with boardsmith ledger-check', () => {
     expect(checkFilingStatus(filings)).toEqual([]);
     const run = uncommented(LEDGERS['run-log/core-loop.md']);
     expect(run).toMatch(/- Finished at: \d{4}-/);
-    // The example escalates from a review round that asked for changes, so that shape is checked too.
-    expect(run).toMatch(/- Escalated from: Review Round 1/);
+    // The example retries a review round that asked for changes, so that shape is checked too.
+    expect(run).toMatch(/- Retry of: Review Round 1/);
     expect(checkRunLog(run, 'run-log/core-loop.md', () => null, NOW, () => undefined)).toEqual([]);
     expect(checkNumberedLedger(uncommented(LEDGERS['QUESTIONS.md']), 'Question', 'QUESTIONS.md')).toEqual([]);
   });

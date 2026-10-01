@@ -43,16 +43,16 @@ re-derive it in its own words, it applies it:
 - After round 3, any remaining findings are triaged with the user (see "Round-3 User Triage"
   below).
 - Who repairs follows the role ladder (`routing.md` "When a Step Fails"). An audit round with
-  findings is a request for changes, so the first repair is dispatched one role above whoever
-  last changed the work: `npx boardsmith agent <that role> --escalate` names it, `judgement` after
-  a `bounded` build. A repair that fails at `judgement` (its verify fails, or the next audit round
-  still has findings) gets exactly one more `judgement` round, the first named exception in
-  `routing.md`, and then the findings go to the round-3 triage. After a `bounded` build that is
-  the three audit rounds above; audit findings on a `build` that was already at `judgement` get
-  that one more round straight away. Each repair is a `### Dispatch N` entry in the run log
-  (`Work: repair`, `Escalated from: Review Round N` naming the audit round whose findings it
-  fixes, or `Escalated from: Dispatch N` naming the repair whose verify failed), and its prompt
-  starts `Work package: <slug>` and hands over the round's findings.
+  findings is a request for changes, a failure of the work it reviewed, so the repair is
+  dispatched at the role that last changed the work on its first failure there, and one role up on
+  its second: `npx boardsmith agent <that role> --escalate` names it. A repair whose verify fails
+  is a failure too, counted the same way. After a `bounded` build the first repair runs at
+  `bounded`, and the next at `judgement`; a second failure at `judgement` goes to the designer.
+  The round bound above still ends the loop: findings after round 3 go to the round-3 triage
+  wherever the ladder stands. Each repair is a `### Dispatch N` entry in the run log
+  (`Work: repair`, `Retry of: Review Round N` naming the audit round whose findings it fixes, or
+  `Retry of: Dispatch N` naming the repair whose verify failed), and its prompt starts
+  `Work package: <slug>` and hands over the round's findings.
 
 ## Same-Group Loop-Back to Audit (cite, never restate)
 

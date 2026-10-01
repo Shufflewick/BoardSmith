@@ -67,10 +67,8 @@ token such as `BS-DISPATCH-V3` still comes first after it).
 | `build` | `bounded` | no |
 | `audit`: the fidelity lens | `judgement` | yes |
 | `audit`: the visibility, undo and constraints lenses, and the design review | `review` | yes |
-| `repair`, and `build` again after `test`'s verify failed | one role above the role whose work failed (below) | no |
-| `re-investigate`: a red-team re-investigation | `judgement`, the first named exception (below) | no |
-| `quote-fix`: the narrower fix after `claim-quote-check` refuses the claims | `judgement`, the second named exception (below) | no |
-| `transcribe <range>` again after `verify-run-record` refused the range | `judgement`, the third named exception (below) | no |
+| `repair`, and `build` again after `test`'s verify failed | the role whose work failed, once; one role above it after a second failure there (below) | no |
+| `re-investigate`: a red-team re-investigation | `judgement`, the claims' one retry (below) | no |
 | A narrower follow-up on a returned summary that looks incomplete or wrong, where no check refused it (investigate, red team, transcription), and a follow-up amending a slice with the designer's correction | the role of the work it follows up | no |
 | `final-acceptance`'s automated design-QA dispatch | `review` | yes |
 | The cross-chunk lens after `chunk-merge` | `judgement` | yes |
@@ -124,88 +122,68 @@ names, in place of the step's full fan-out.
 **A re-review** after a repair passes `--since <the commit the last round reviewed>`, so only the
 changed parts go back to the reviewer.
 
-## When a Step Fails: One Role Up, Never the Same Role
+## When a Step Fails: Once More at the Same Role, Then One Role Up
 
-A step fails when its verify fails, when `boardsmith claim-quote-check` refuses the claims it wrote
-(`investigate` and `re-investigate`), when `boardsmith verify-run-record` refuses a page range it
-transcribed, or when its reviewer asks for changes. The retry goes to the next role up, straight
-away, never again to the same role:
+A step fails when its verify fails, when a check run on its return refuses its work
+(`boardsmith claim-quote-check` refusing the claims an `investigate` or `re-investigate` wrote,
+`boardsmith verify-run-record` refusing a page range it transcribed), or when its reviewer asks for
+changes. Then:
 
-```bash
-npx boardsmith agent <the role that failed> --escalate
-```
+- **A first failure at a role is retried once at that same role.** The same work is dispatched
+  again to the same role, handed the failed attempt's report and the failure output: verify's
+  output, the check's refusals, or the review findings.
+- **A second failure at that role moves the work one role up.**
 
-prints the next role and its agent type: `mechanical`, then `bounded`, then `judgement`. There is
-nothing above `judgement` (or beside it, for `second-opinion`), so there the command refuses. Apart
-from the three named exceptions below, the session then **stops and asks the designer**: what the
-step was for, what failed, and what each attempt tried, in the designer's terms (`reporting.md`).
-Nothing more is dispatched for that step until the designer answers. In orchestrated mode that is
-a gate returned to `/bs-build-game` (`repair-triage` for a build or repair, the ordinary `ask` gate
-for a red team finding); a whole chunk that returns `closed` but fails its check has failed at
-`judgement`, and goes to the designer the same way.
+  ```bash
+  npx boardsmith agent <the role that failed twice> --escalate
+  ```
 
-**The first named exception: one more `judgement` round for a red-team re-investigation and for a
-repair.** A red-team re-investigation and a repair that fail at `judgement` each get exactly one
-more round at `judgement` before the designer: `judgement`, then one `judgement`
-re-investigation or repair, then the designer. The reason: the claims, and by the time of a
-repair the work too, are already at the top role, so there is no higher role to send them to, and
-the designer's time is the scarcer resource. A single second look at the same role catches most
-of what a first pass misses, and costs the designer nothing. Audit findings on work already at
-`judgement` (a `build` that `test` sent up to `judgement`, then an audit round with findings)
-count as a failed repair at `judgement`: they get this one more round, as a `repair`, and the next
-failure goes to the designer.
+  prints the next role and its agent type: `mechanical`, then `bounded`, then `judgement`. The
+  work then has its own one retry at that role.
+- **A second failure at `judgement` goes to the designer.** There is nothing above `judgement` (or
+  beside it, for `second-opinion`), so there the command refuses, and the session **stops and asks
+  the designer**: what the step was for, what failed, and what each attempt tried, in the
+  designer's terms (`reporting.md`). Nothing more is dispatched for that step until the designer
+  answers. In orchestrated mode that is a gate returned to `/bs-build-game` (`repair-triage` for a
+  build or repair, the ordinary `ask` gate for a red team finding); a whole chunk that returns
+  `closed` but fails its check has failed at `judgement`, and goes to the designer once its retry
+  has failed too.
 
-**The second named exception: one narrower `quote-fix` for a `claim-quote-check` refusal.** When
-`boardsmith claim-quote-check` refuses the claims an `investigate` or `re-investigate` dispatch
-wrote, that dispatch has failed at `judgement`. It gets exactly one narrower `quote-fix` at
-`judgement`, handed only the refusals, which fixes each quote or location or turns the claim into
-an open question; if the check still refuses, the designer decides. The reason: quote fixes are
-mechanical and cheap, and the designer's time is scarcer, so one narrow retry is worth more than
-a question to the designer about a misplaced quote.
-
-**The third named exception: one re-transcription of a page range `verify-run-record` refused.**
-When `boardsmith verify-run-record` refuses a unit of a page range `/bs-verify-game` Step 2 had
-transcribed (a staged slice whose `Source:` line names the wrong document or none, a slice not
-found in the staging directory, an empty slice), that range's `transcribe` dispatch has failed at
-`judgement`, and its run log Detail holds the refusal, naming `verify-run-record`. The range gets
-exactly one re-transcription at `judgement`, the same range dispatched again after `--reset-range`;
-if the command refuses it again, the designer decides. A `/bs-ingest-rules` transcription is not
-checked by that command and does not get this round. The reason:
-transcription slips are usually mechanical, a header written wrong or a write that did not
-finish, and the designer's time is scarcer, so one more pass at the same range is worth more
-than a question to the designer about a slice's header.
-
-No other step gets these rounds, and no step gets a third round: a `re-investigate` or `repair`
-that is itself the one more round goes to the designer when it fails, and so does a `quote-fix`
-that the check still refuses, and a re-transcription the command still refuses.
+The failures are counted per line of work, whatever their kind: a verify failure, a check's
+refusal and a review round that asks for changes at the same role are all failures there, so no
+work gets a third attempt at one role. The reason: sending work up a role on its first failure
+proved costly, and a first failure is often a slip that one more pass at the same role, handed the
+failure output, fixes. A second failure at the same role is the evidence that the work needs a
+stronger one.
 
 A reviewer never climbs: when it asks for changes, the step whose work it reviewed is the one that
-failed. The retry is handed the failed attempt's report and the verify output, check refusals or
-review findings. What applies in each step:
+failed. What applies in each step:
 
-- **`investigate`:** a `claim-quote-check` refusal gets the one `quote-fix` above, then the
-  designer.
+- **`investigate`:** a `claim-quote-check` refusal is a failure of the claims at `judgement`. Their
+  retry is handed only the refusals, and fixes each quote or location or turns the claim into an
+  open question. That is the claims' one retry at `judgement`: if the check refuses again, or the
+  red team then refutes them, the designer decides.
 - **`test`:** `build` ran at `bounded`, and its check is this step's verify, so the build's run
   log entry stays `pending` until the done gate answers and is then `done` or `failed`, naming
-  the check. A failing verify sends `build` to `judgement`, escalated from the failed build; a
-  second failure goes to the designer.
-- **`audit`:** a round with findings is a request for changes to the work it reviewed. The first
-  `repair` runs one role above whoever last changed that work (`judgement` after a `bounded`
-  build), then commits, verifies, and goes back to review with `--since`. If that repair fails, or
-  the work was already at `judgement`, it gets the one more `judgement` round above; findings
-  after that go to the designer, as the round-3 triage in `build/repair.md` describes. After a
-  `bounded` build that is three audit rounds.
+  the check. A failing verify sends `build` back to `bounded` once, retrying the failed build; a
+  second failure sends it to `judgement`, and two failures there go to the designer.
+- **`audit`:** a round with findings is a request for changes to the work it reviewed. The
+  `repair` runs at the role that last changed that work if this is its first failure there, and
+  one role up if it is the second (after a `bounded` build: a `bounded` repair, then `judgement`),
+  then commits, verifies, and goes back to review with `--since`. The
+  audit round bound (`state-machine.md` "Repair Loop Bound") still holds: findings after the third
+  round go to the round-3 triage in `build/repair.md`, whatever the ladder has reached.
 - **`redteam`:** the claims were written at `judgement`. A claim refuted once, or a coverage gap,
-  gets the one re-investigate round at `judgement` above, reviewed again by a second red-team
-  round; a claim refuted twice goes to the designer (`build/redteam.md`).
-- **`/bs-verify-game` Step 2:** a page range `verify-run-record` refuses gets the one
-  re-transcription above, then the designer (`verify/staging-dispatch.md`).
+  gets one `re-investigate` at `judgement`, the claims' one retry, reviewed again by a second
+  red-team round; a claim refuted twice goes to the designer (`build/redteam.md`).
+- **`/bs-verify-game` Step 2:** a page range `verify-run-record` refuses is transcribed once more
+  at `judgement`, then goes to the designer (`verify/staging-dispatch.md`).
 
 A gate the designer answered, an answer that reshapes the work, a dispatch that stopped at its
 context ceiling and a dispatch that never returned are not failures: the re-dispatch after them
-keeps its role, writes `Escalated from: none`, and carries on the round it resumes. Nor is a
-returned summary that merely looks incomplete or wrong, with no check refusing it: its narrower
-follow-up keeps the role of the work it follows up.
+keeps its role, writes `Retry of: none`, and is the attempt it resumes, so a resumed retry is still
+the one retry. Nor is a returned summary that merely looks incomplete or wrong, with no check
+refusing it: its narrower follow-up keeps the role of the work it follows up.
 
 ## The Run Log
 
@@ -216,11 +194,11 @@ their own dispatches, in `design/run-log/ingest-rules.md` and `design/run-log/ve
 (so no chunk may be named `ingest-rules` or `verify-game`; `ledger-check` refuses one).
 
 A `### Dispatch N` entry records the work (the name in the step table above, a step name, or a
-short name for a bulk edit), the role, the agent type actually dispatched, and what it answers:
-`Escalated from: Dispatch N` for a dispatch that failed, or `Escalated from: Review Round N` for a
-round that asked for changes; at the top role that names the failure a named exception answers. A
-dispatch that does work again after it failed at the top role, once the designer has answered,
-records where their answer is in `Designer answer:`. A dispatch's Outcome is `failed` when its
+short name for a bulk edit), the role, the agent type actually dispatched, and the failure it
+retries: `Retry of: Dispatch N` for a dispatch that failed, or `Retry of: Review Round N` for a
+round that asked for changes, whether the retry is at the same role or one up. A dispatch that
+does work again after it failed twice at the top role, once the designer has answered, writes
+`Retry of: none` and records where their answer is in `Designer answer:`. A dispatch's Outcome is `failed` when its
 verify failed or a check run on its return refused it (for `build`, once `test`'s verify has run,
 since that is its check); a reviewer's request for changes is the round's Outcome, not the
 dispatch's.
@@ -232,8 +210,8 @@ reviewers asked for changes. So the number of review rounds per chunk, and what 
 from, is on file.
 
 `boardsmith ledger-check` refuses an entry that leaves a field out, names a role that does not
-exist, escalates by anything but one role, answers one failure twice, does failed work again
-without naming the failure, escalates from the top role outside the three named exceptions (or
-gives one a second time), reviews a dispatch that did not finish or one a later finished dispatch
+exist, answers one failure twice, does failed work again without naming the failure, retries a
+first failure at any role but its own, makes a third attempt at one role, moves up by anything but
+one role, dispatches more after a second failure at the top without the designer's answer, reviews a dispatch that did not finish or one a later finished dispatch
 carried on from, or records a review round that did not start from a passing verify, checked
 against `.boardsmith/verify/<commit>.json` when that result is on this machine.

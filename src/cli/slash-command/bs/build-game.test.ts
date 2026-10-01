@@ -340,7 +340,7 @@ describe('WF-06 — a run resumes cleanly after a /clear or a crash', () => {
   it('RUN-LOG.template.md is one chunk\'s log, with every dispatch field (#294)', () => {
     const template = read('templates/RUN-LOG.template.md');
     expect(template).toMatch(/^# Run Log: /m);
-    for (const field of ['Work:', 'Role:', 'Agent:', 'Escalated from:', 'Dispatched at:', 'Finished at:', 'Outcome:', 'Detail:']) {
+    for (const field of ['Work:', 'Role:', 'Agent:', 'Retry of:', 'Dispatched at:', 'Finished at:', 'Outcome:', 'Detail:']) {
       expect(template, `RUN-LOG.template.md must document \`${field}\``).toContain(field);
     }
   });

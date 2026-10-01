@@ -410,16 +410,19 @@ items — routes this chunk back to `build` (still session group 2, `{spec, buil
 advance to `audit`. `test` and `build` stay in the same group specifically so a failing test can
 be fixed without a session handoff in between.
 
-A failure is a failure of `build` at the role that did it, so the fix never goes to the same role
-again (`routing.md` "When a Step Fails: One Role Up, Never the Same Role"). The build dispatch has
+A failure is a failure of `build` at the role that did it: the first is retried once at that
+role, and a second one goes one role up (`routing.md` "When a Step Fails: Once More at the Same
+Role, Then One Role Up"). The build dispatch has
 no check when it returns; its check is this step's verify. So the build's run log entry stays
 `Outcome: pending` (with `Finished at: pending`) until this step's done gate answers, and is then
 filled once: `Outcome: done` when it passes, or `Outcome: failed`, with the check that failed in
-its Detail, when it does not. After a failure, `npx boardsmith agent bounded --escalate` names the
-`judgement` agent that takes the next `build`, handed the failed check's output and recorded as a
-new `### Dispatch N` entry with `Escalated from: Dispatch N`, naming the failed build. When `build`
-has failed at `judgement` too, stop and put it to the designer (in orchestrated mode, a
-`repair-triage` gate) and dispatch nothing more for it until they answer.
+its Detail, when it does not. After a first failure, the next `build` goes to the same role again,
+handed the failed check's output and recorded as a new `### Dispatch N` entry with
+`Retry of: Dispatch N`, naming the failed build. After a second failure at `bounded`,
+`npx boardsmith agent bounded --escalate` names the `judgement` agent that takes the next `build`,
+recorded the same way. When `build` has failed twice at `judgement` too, stop and put it to the
+designer (in orchestrated mode, a `repair-triage` gate) and dispatch nothing more for it until
+they answer.
 
 ## Downstream Shape (cite, never restate)
 

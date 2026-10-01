@@ -163,7 +163,7 @@ describe('roles, never models (#454)', () => {
       expect(row, `routing.md's step table must have a row for ${token}`).toBeDefined();
       expect(row!, `the ${token} row must name a role`).toMatch(new RegExp(`\\| \`${ROLE_NAMES}\``));
     }
-    for (const work of ['`re-investigate`', '`quote-fix`', 'follow-up']) {
+    for (const work of ['`re-investigate`', 'follow-up']) {
       expect(table, `routing.md's step table must have a row for ${work}`).toContain(work);
     }
   });
@@ -228,49 +228,40 @@ describe('no model review before verify (#454)', () => {
   });
 });
 
-describe('escalation: one role up, never the same role, then the designer (#454)', () => {
-  it('routing.md sends a failed step one role up with `boardsmith agent --escalate`, and to the designer after judgement', () => {
-    const routing = flat(read('routing.md'));
-    expect(routing).toContain('npx boardsmith agent <the role that failed> --escalate');
-    expect(routing).toMatch(/`mechanical`, then `bounded`, then `judgement`/);
-    expect(routing).toMatch(/\*\*stops and asks the designer\*\*/);
-    expect(routing).toMatch(/never again to the same role/);
+describe('a failed step: one retry at the same role, then one role up, then the designer (#454)', () => {
+  it('routing.md retries a first failure at the same role, moves a second one role up with `boardsmith agent --escalate`, and sends a second failure at judgement to the designer', () => {
+    routingSays(
+      /\*\*A first failure at a role is retried once at that same role\.\*\*.*handed the failed attempt's report and the failure output/,
+      /\*\*A second failure at that role moves the work one role up\.\*\* ```bash npx boardsmith agent <the role that failed twice> --escalate ```/,
+      /`mechanical`, then `bounded`, then `judgement`/,
+      /\*\*A second failure at `judgement` goes to the designer\.\*\*.*\*\*stops and asks the designer\*\*/,
+      /no work gets a third attempt at one role/,
+      /sending work up a role on its first failure proved costly/,
+    );
   });
 
-  it('names one more judgement round for a red-team re-investigation and a repair as the first named exception, with its reason', () => {
-    routingSays(
-      /\*\*The first named exception: one more `judgement` round for a red-team re-investigation and for a repair\.\*\*/,
-      /`judgement`, then one `judgement` re-investigation or repair, then the designer/,
-      /the designer's time is the scarcer resource/,
-      /No other step gets these rounds, and no step gets a third round/,
-      /Audit findings on work already at `judgement`.*count as a failed repair at `judgement`/,
-    );
-    expect(flat(read('build/redteam.md'))).toMatch(/maximum ONE re-investigate round\. It is dispatched at the `judgement` role again: the first named exception/);
-    expect(flat(read('build/repair.md'))).toMatch(/gets exactly one more `judgement` round, the first named exception in `routing\.md`/);
-    expect(flat(read('state-machine.md'))).toContain('Maximum **3 audit rounds** per chunk.');
-  });
-
-  it('names one narrower quote-fix for a claim-quote-check refusal as the second named exception, with its reason, and counts the refusal as a failure', () => {
-    routingSays(
-      /A step fails when its verify fails, when `boardsmith claim-quote-check` refuses the claims it wrote \(`investigate` and `re-investigate`\), when `boardsmith verify-run-record` refuses a page range it transcribed, or when its reviewer asks for changes/,
-      /\*\*The second named exception: one narrower `quote-fix` for a `claim-quote-check` refusal\.\*\*/,
-      /quote fixes are mechanical and cheap, and the designer's time is scarcer/,
-    );
-    for (const file of ['build/investigate.md', 'build/redteam.md']) {
-      expect(flat(read(file)), file).toMatch(/one narrower `quote-fix`.*at the `judgement` role, the second named exception in `routing\.md`.*then the designer/);
+  it('names no exceptions: every step, the claims, the red team and a refused page range included, follows the one rule', () => {
+    for (const file of ROUTING_FILES) {
+      const text = flat(read(file));
+      expect(text, file).not.toMatch(/named exception|one more `?judgement`? round|quote-fix|Escalated from/);
     }
-  });
-
-  it('names one re-transcription of a page range verify-run-record refused as the third named exception, with its reason, and staging-dispatch follows it', () => {
     routingSays(
-      /Apart from the three named exceptions below/,
-      /\*\*The third named exception: one re-transcription of a page range `verify-run-record` refused\.\*\*/,
-      /transcription slips are usually mechanical/,
-      /`transcribe <range>` again after `verify-run-record` refused the range \| `judgement`, the third named exception \(below\)/,
-      /a re-transcription the command still refuses/,
+      /A step fails when its verify fails, when a check run on its return refuses its work \(`boardsmith claim-quote-check` refusing the claims an `investigate` or `re-investigate` wrote, `boardsmith verify-run-record` refusing a page range it transcribed\), or when its reviewer asks for changes/,
+      /That is the claims' one retry at `judgement`: if the check refuses again, or the red team then refutes them, the designer decides/,
+      /gets one `re-investigate` at `judgement`, the claims' one retry/,
+      /a page range `verify-run-record` refuses is transcribed once more at `judgement`, then goes to the designer/,
+    );
+    expect(flat(read('build/redteam.md'))).toMatch(/maximum ONE re-investigate round\. It is dispatched at the `judgement` role again, the claims' one retry \(`routing\.md`\)/);
+    expect(flat(read('build/repair.md'))).toMatch(/at the role that last changed the work on its first failure there, and one role up on its second/);
+    expect(flat(read('state-machine.md'))).toContain('Maximum **3 audit rounds** per chunk.');
+    for (const file of ['build/investigate.md', 'build/redteam.md']) {
+      expect(flat(read(file)), file).toMatch(/one retry at the `judgement` role.*handed only the refusals.*then the designer/);
+    }
+    expect(flat(read('orchestrate/chunk-dispatch.md'))).toMatch(
+      /On the chunk's first failure at `judgement` it re-dispatches the chunk once at that role.*`Retry of: Dispatch N`.*On a second failure there it stops and puts it to the designer/,
     );
     expect(flat(read('verify/staging-dispatch.md'))).toMatch(
-      /exactly one re-transcription of that range, dispatched to the `judgement` role again: the third named exception in `routing\.md`.*`Escalated from: Dispatch N`.*stop and ask the designer/,
+      /transcribed once more, dispatched to the `judgement` role again: its one retry \(`routing\.md` "When a Step Fails"\).*`Retry of: Dispatch N`.*stop and ask the designer/,
     );
   });
 
@@ -278,22 +269,22 @@ describe('escalation: one role up, never the same role, then the designer (#454)
     const test = flat(read('build/test.md'));
     expect(test).toMatch(/stays `Outcome: pending` \(with `Finished at: pending`\) until this step's done gate answers/);
     expect(test).toMatch(/`Outcome: failed`, with the check that failed in its Detail/);
-    expect(test).toMatch(/`Escalated from: Dispatch N`, naming the failed build/);
+    expect(test).toMatch(/`Retry of: Dispatch N`, naming the failed build/);
     expect(flat(read('templates/RUN-LOG.template.md'))).toMatch(/A `build` dispatch's Outcome and Finished at stay `pending` until `test`'s done gate answers/);
   });
 
-  it('a dispatch that carries on after a gate, a context ceiling or a crash keeps its role and writes Escalated from: none', () => {
+  it('a dispatch that carries on after a gate, a context ceiling or a crash keeps its role, writes Retry of: none, and is the attempt it resumes', () => {
     expect(flat(read('templates/RUN-LOG.template.md'))).toMatch(
-      /Escalated from: none, also when this dispatch carries on one that stopped at a gate, its context ceiling or a crash/,
+      /Retry of: none, also when this dispatch carries on one that stopped at a gate, its context ceiling or a crash/,
     );
-    routingSays(/a dispatch that never returned are not failures: the re-dispatch after them keeps its role, writes `Escalated from: none`, and carries on the round it resumes/);
+    routingSays(/a dispatch that never returned are not failures: the re-dispatch after them keeps its role, writes `Retry of: none`, and is the attempt it resumes, so a resumed retry is still the one retry/);
   });
 });
 
 describe('the run log records role, agent, review rounds and the verify each round started from (#454)', () => {
   it('RUN-LOG.template.md documents every field', () => {
     const template = read('templates/RUN-LOG.template.md');
-    for (const field of ['Work:', 'Role:', 'Agent:', 'Escalated from:', 'Designer answer:', '### Review Round N', 'Reviewed:', 'Level:', 'Verify:', 'Agents:']) {
+    for (const field of ['Work:', 'Role:', 'Agent:', 'Retry of:', 'Designer answer:', '### Review Round N', 'Reviewed:', 'Level:', 'Verify:', 'Agents:']) {
       expect(template, `RUN-LOG.template.md must document \`${field}\``).toContain(field);
     }
     expect(flat(template)).toMatch(/the verify result the round started from/);
@@ -310,7 +301,7 @@ describe('the run log records role, agent, review rounds and the verify each rou
     expect(routing).toContain('`design/run-log/ingest-rules.md`');
     expect(routing).toContain('`design/run-log/verify-game.md`');
     expect(routing).toMatch(/`Reviewed: Dispatch N`/);
-    expect(routing).toMatch(/`Escalated from: Review Round N`/);
+    expect(routing).toMatch(/`Retry of: Review Round N`/);
     expect(routing).toMatch(/`Designer answer:`/);
     for (const [file, log] of [['ingest-rules.md', 'ingest-rules'], ['verify-game.md', 'verify-game']]) {
       expect(flat(read(file)), file).toContain(`\`design/run-log/${log}.md\``);

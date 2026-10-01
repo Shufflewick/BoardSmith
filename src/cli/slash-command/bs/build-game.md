@@ -60,8 +60,8 @@ review step starts until `boardsmith verify` has passed for the commit under rev
 the run dispatches and for the cross-chunk lens the run itself sends after a merge: each runs
 `npx boardsmith verify --chunk <slug>` and then `npx boardsmith review-gate <slug>`, which refuses,
 saying to run `boardsmith verify`, without a passing result for the current commit. A chunk that
-returns `closed` but fails its check has failed at `judgement`, the top role, so it goes to the
-designer, never straight back to another agent (Step 4).
+returns `closed` but fails its check has failed at `judgement`, the top role: it is re-dispatched
+once at `judgement` with the check's message, and a second failure goes to the designer (Step 4).
 
 ## Context-Economics Hard Rule
 
@@ -201,9 +201,11 @@ nothing, if there is nothing visible yet. Do not announce each dispatch.
   whole change measured: the full suite, typecheck, build, validate, the smoke test and the mutation check of
   everything since the chunk began. A result from `--base HEAD`, which mutates nothing, is
   refused. A non-zero exit means the claim of done is not backed by a run: treat the chunk as unfinished,
-  never as closed: its dispatch failed at `judgement`, the top role. Record it `failed`, stop, and
-  put it to the designer with the check's message; re-dispatch only with their answer in the brief,
-  and with `Designer answer:` in the re-dispatch's run log entry (`orchestrate/chunk-dispatch.md`
+  never as closed: its dispatch failed at `judgement`, the top role. Record it `failed`. On its
+  first failure there, re-dispatch the chunk once at `judgement` with the check's message in the
+  brief (`Retry of:` naming the failed dispatch); on a second, stop and put it to the designer
+  with the check's message, and re-dispatch only with their answer in the brief and
+  `Designer answer:` in the re-dispatch's run log entry (`orchestrate/chunk-dispatch.md`
   "The Return Shape", `routing.md`). Then run `npx boardsmith chunk-check <slug>` (with `--project` set to the chunk's
   worktree when it was built in one, then `npx boardsmith chunk-merge <slug>` from the main checkout). A non-zero exit that names the
   sign-off means the chunk's verified status is not backed by the designer (or by a waiver naming
@@ -283,7 +285,7 @@ And to the shared reference files that ship with every `bs-` skill:
   write order, authority, session handoff seams, git protocol
 - `${CLAUDE_SKILL_DIR}/../bs-shared/reporting.md` — how everything above is said to the designer
 - `${CLAUDE_SKILL_DIR}/../bs-shared/routing.md`: the roles, which agent each is dispatched
-  as, no review before verify, and one role up on a failure
+  as, no review before verify, and what happens when a step fails
 - `${CLAUDE_SKILL_DIR}/../bs-shared/templates/RUN.template.md` — the run journal this skill creates
 - `${CLAUDE_SKILL_DIR}/../bs-shared/templates/QUESTIONS.template.md` — the answer cache this skill
   fills
