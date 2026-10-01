@@ -415,14 +415,19 @@ async function controlsOf(frame: Frame, selector: string, within?: Locator): Pro
 
 /**
  * `control` as the page has it now: the page may have redrawn since it was found, putting another
- * element at its place among the matches, so it is found again by what it stands for. One the page
- * no longer has went away.
+ * element at its place among the matches, so it is found again by what it stands for. A redraw can
+ * take it away for a moment, so it is looked for again until it comes back; one still gone after
+ * {@link PRESS_MS} went away.
  */
 async function stillThere(control: Control): Promise<Control> {
-  const now = await controlsOf(control.frame, control.selector, control.within);
-  const same = now.find((c) => c.key === control.key && c.index === control.index) ?? now.find((c) => c.key === control.key);
-  if (same === undefined) throw new Error(GONE);
-  return same;
+  const started = Date.now();
+  for (;;) {
+    const now = await controlsOf(control.frame, control.selector, control.within);
+    const same = now.find((c) => c.key === control.key && c.index === control.index) ?? now.find((c) => c.key === control.key);
+    if (same !== undefined) return same;
+    if (Date.now() - started > PRESS_MS) throw new Error(GONE);
+    await control.frame.waitForTimeout(100);
+  }
 }
 
 /** The first enabled control matched by the first of `selectors` that matches one, or undefined. */
@@ -509,14 +514,19 @@ const AIM_POINTS: ReadonlyArray<readonly [number, number]> = [
 /** What lies on top at a point of a control: the control itself, a toast, or something else. */
 type OnTop = 'it' | 'toast' | 'other';
 
-/** What lies on top at fractions (x, y) of `control`'s box, scrolled into view. */
+/** What lies on top at fractions (x, y) of `control`'s box, scrolled into view where it shows. */
 function onTopAt(control: Control, x: number, y: number): Promise<OnTop> {
   return control.target.evaluate(
     (element, [fx, fy]): OnTop => {
-      element.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-      const box = element.getBoundingClientRect();
-      const hit = element.ownerDocument.elementFromPoint(box.left + box.width * fx, box.top + box.height * fy);
-      if (hit !== null && (hit === element || element.contains(hit))) return 'it';
+      // Scrolled into view as little as it takes first, then to the middle, the top and the bottom
+      // of its scroller, as a player scrolls a control out from under a bar fixed along an edge.
+      let hit: Element | null = null;
+      for (const block of ['nearest', 'center', 'start', 'end'] as const) {
+        element.scrollIntoView({ block, inline: 'nearest' });
+        const box = element.getBoundingClientRect();
+        hit = element.ownerDocument.elementFromPoint(box.left + box.width * fx, box.top + box.height * fy);
+        if (hit !== null && (hit === element || element.contains(hit))) return 'it';
+      }
       return hit?.closest('.toast') ? 'toast' : 'other';
     },
     [x, y] as const,
@@ -635,16 +645,20 @@ async function aimAndClick(control: Control): Promise<void> {
 
 /**
  * Presses what `selector` matches first in `frame`, the panel's `what`, which the panel showed a
- * moment before. One that is no longer there is reported, not skipped: the panel took back what it
- * offered.
+ * moment before. A panel redrawing its buttons has none for a moment, so one not there is looked for
+ * again until it comes back; one still gone after {@link PRESS_MS} is reported, not skipped: the
+ * panel took back what it offered.
  */
 async function pressThePanels(frame: Frame, selector: string, what: string, walk: SmokeWalk, memory: WalkMemory): Promise<boolean> {
-  const [control] = await controlsOf(frame, selector);
-  if (control === undefined) {
-    note(walk, `The panel showed its ${what}, and it was gone when the walk went to press it.`);
-    return false;
+  const started = Date.now();
+  for (;;) {
+    const [control] = await controlsOf(frame, selector);
+    if (control !== undefined) return press(control, `the panel's ${what}`, walk, memory);
+    if (Date.now() - started > PRESS_MS) break;
+    await frame.waitForTimeout(100);
   }
-  return press(control, `the panel's ${what}`, walk, memory);
+  note(walk, `The panel showed its ${what}, and it was still gone ${PRESS_MS / 1000}s later, when the walk went to press it.`);
+  return false;
 }
 
 /** Records a problem once. */

@@ -393,8 +393,11 @@ markers this page documents, so it keeps up with any game without knowing it:
   narrated (`smoke step 4: pressing "Done" for "kindle"`).
 - A press a toast lies over reads the toast (an error toast is a problem like
   any other), waits for it to go, as a player would, then presses again. A
-  panel button the panel showed and then took back before the press is
-  reported.
+  control or panel button a redraw takes away for a moment is looked for again
+  until it comes back; one still gone after 5 seconds is reported. A control the
+  walk can only see by scrolling it out from under a bar fixed along the edge of
+  the page (the action panel) is scrolled to the middle, the top or the bottom
+  until it shows.
 - The walk gives up on an open action, reports it, and presses its Cancel when
   the panel offers nothing to press, when three presses in a row change nothing,
   when a press brings the panel back to a state it showed before (the walk

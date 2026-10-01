@@ -21,7 +21,9 @@ import {
   ACE_SEEDS,
   aceGame,
   boardWithAPointerlessControl,
+  boardWithAControlAtItsFoot,
   boardWithAVanishingControl,
+  boardThatHidesThePanelForAMoment,
   boardWithDialogs,
   candidateBoard,
   fieldsGame,
@@ -363,6 +365,13 @@ describe('boardsmith verify: the smoke check', () => {
       expect(outcome.passed).toBe(true);
     });
 
+    it('scrolls a board control out from under the action panel to press it', async () => {
+      const { outcome, steps } = await smokeOf(false, boardWithAControlAtItsFoot());
+
+      expect(outcome.passed).toBe(true);
+      expect(steps).toContain('smoke step 1: pressing the board\'s "Ring the far bell"');
+    });
+
     it('fails a card something covers whole, saying so', async () => {
       const { outcome } = await smokeOf(false, { ...candidateBoard('covered'), ...spec });
 
@@ -382,6 +391,18 @@ describe('boardsmith verify: the smoke check', () => {
       expect(steps).toContain('smoke step 1: pressing the board\'s "Ring the bell"');
       expect(steps.some((line) => /pressing "r0c0" for "claim"/.test(line))).toBe(true);
     });
+  });
+
+  it('waits for a panel button that is gone for a moment to come back, rather than reporting it', async () => {
+    const { outcome, steps } = await smokeOf(false, {
+      ...aceGame(),
+      ...boardThatHidesThePanelForAMoment(),
+      'tests/browser/smoke.spec.ts': smokeSpec(['draw', 'play'], undefined, { seed: ACE_SEEDS.WITHOUT, steps: 12 }),
+    });
+
+    expect(steps.slice(1, 3)).toEqual(['smoke step 1: pressing the board\'s "Look away"', 'smoke step 2: taking "draw"']);
+    expect(outcome.summary).toMatch(/^Served by `boardsmith dev` from a fresh start and dealt from seed "plain", a seated player took "draw", "play"/);
+    expect(outcome.passed).toBe(true);
   });
 
   it('fails a spec that passes without walking the game', async () => {

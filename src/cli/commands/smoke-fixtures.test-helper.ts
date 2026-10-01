@@ -850,3 +850,61 @@ ${style}
     'src/ui/uis.ts': PLAYERS_GET_THE_TABLE,
   };
 }
+
+/**
+ * A BOARD TALLER THAN THE PAGE (#468), with "Ring the far bell" at its foot: scrolled only as far as
+ * needed to show it, the bell sits under the action panel along the bottom of the page, as
+ * doom-machine's shield slots do, so a walk must scroll it clear of the panel to press it.
+ */
+export function boardWithAControlAtItsFoot(): Record<string, string> {
+  return {
+    'src/ui/components/GameTable.vue': `<script setup lang="ts">
+import { ref } from 'vue';
+
+const rung = ref(0);
+</script>
+
+<template>
+  <div class="board">
+    <p>Rung {{ rung }} times.</p>
+    <button type="button" class="far" @click="rung++">Ring the far bell</button>
+  </div>
+</template>
+
+<style scoped>
+.board { position: relative; width: 320px; height: 2000px; }
+.far { position: absolute; left: 20px; bottom: 4px; width: 160px; height: 24px; }
+</style>
+`,
+    'src/ui/uis.ts': PLAYERS_GET_THE_TABLE,
+  };
+}
+
+/**
+ * A PANEL THAT REDRAWS FOR A MOMENT (#468 review): "Look away" hides the panel's action buttons for
+ * two seconds, as a panel redrawing its buttons after a board press does for a moment, so the panel's
+ * buttons the walk read are not there when it first goes to press one. They come back by themselves.
+ */
+export function boardThatHidesThePanelForAMoment(): Record<string, string> {
+  return {
+    'src/ui/components/GameTable.vue': `<script setup lang="ts">
+function lookAway() {
+  const buttons = [...document.querySelectorAll<HTMLElement>('[data-bs-action]')];
+  for (const button of buttons) button.style.display = 'none';
+  setTimeout(() => buttons.forEach((button) => (button.style.display = '')), 2000);
+}
+</script>
+
+<template>
+  <div class="board">
+    <button type="button" @click="lookAway">Look away</button>
+  </div>
+</template>
+
+<style scoped>
+.board { width: 320px; height: 200px; }
+</style>
+`,
+    'src/ui/uis.ts': PLAYERS_GET_THE_TABLE,
+  };
+}
