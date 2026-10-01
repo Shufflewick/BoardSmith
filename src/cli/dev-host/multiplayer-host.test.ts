@@ -1,7 +1,7 @@
 import { beforeEach, describe, it, expect } from 'vitest';
 import { Game, Player, Action, defineFlow, actionStep, loop, eachPlayer, type GameOptions } from '../../engine/index.js';
 import { executeOp, type GameDefinitionLike } from '../../session/index.js';
-import { MultiplayerHost, type HostOutbound } from './multiplayer-host.js';
+import { MultiplayerHost, type HostOutbound, type MultiplayerHostOptions } from './multiplayer-host.js';
 import { createDevHostClientMemory } from './test-client-memory.js';
 
 /** This suite's stand-in browser memory — see test-client-memory.ts. */
@@ -658,11 +658,12 @@ describe('MultiplayerHost — debugToggle/uiSwitch relay', () => {
 // CURRENT (pre-fix) source. D11's actual bug is the DevHost/GameShell ROUTING
 // gaps covered in DevHost.restart.test.ts and GameShell.restart.test.ts.
 describe('MultiplayerHost — restart from a finished game (D11 characterization + adversarial)', () => {
-  function makeAltHostWithSeedCapture() {
+  function makeAltHostWithSeedCapture(options: Pick<MultiplayerHostOptions, 'seedSnapshot'> = {}) {
     const seeds: string[] = [];
     let seedCounter = 0;
     const sent: Array<{ clientId: string; msg: HostOutbound }> = [];
     const host = new MultiplayerHost({
+      ...options,
       playerCount: 2,
       minPlayers: 2,
       maxPlayers: def.maxPlayers,
@@ -752,27 +753,19 @@ describe('MultiplayerHost — restart from a finished game (D11 characterization
 
   it('#460: a host that starts every game from a recorded state refuses to deal from a seed, and says why', async () => {
     const recorded = await executeOp(altDef, { playerCount: 2, seed: 'recorded' }, null, null, { type: 'start' });
-    const sent: Array<{ clientId: string; msg: HostOutbound }> = [];
-    const host = new MultiplayerHost({
-      playerCount: 2,
-      minPlayers: 2,
-      maxPlayers: def.maxPlayers,
-      seedSnapshot: recorded.snapshot as NonNullable<ConstructorParameters<typeof MultiplayerHost>[0]['seedSnapshot']>,
-      executeOp: (gameOptions, snap, pend, op, hostOptions) => executeOp(altDef, gameOptions, snap, pend, op, hostOptions),
-      send: (clientId, msg) => { sent.push({ clientId, msg }); rememberRendered(clientId, msg); },
+    const { host, lastOfType } = makeAltHostWithSeedCapture({
+      seedSnapshot: recorded.snapshot as NonNullable<MultiplayerHostOptions['seedSnapshot']>,
     });
     await host.handleMessage('A', { type: 'hello' });
-    const frames = () => sent.filter((e) => e.clientId === 'A' && e.msg.type === 'game_state').map((e) => e.msg as any);
-    expect(frames().at(-1).seed).toBe('recorded');
+    expect(lastOfType('A', 'game_state').seed).toBe('recorded');
 
     await host.handleMessage('A', { type: 'restart', seed: 'deal-7' });
 
-    expect(sent.filter((e) => e.msg.type === 'error').at(-1)?.msg).toMatchObject({
-      message:
-        'This `boardsmith dev` starts every game from the recorded state its `--seed <file>` names, so it cannot deal ' +
+    expect(lastOfType('A', 'error').message).toBe(
+      'This `boardsmith dev` starts every game from the recorded state its `--seed <file>` names, so it cannot deal ' +
         'from a seed. Start `boardsmith dev` without `--seed` to deal from one.',
-    });
-    expect(frames().at(-1).seed).toBe('recorded');
+    );
+    expect(lastOfType('A', 'game_state').seed).toBe('recorded');
   });
 
   it('CHARACTERIZATION (already passes pre-fix): a restart with no live session (never started) is still rejected', async () => {

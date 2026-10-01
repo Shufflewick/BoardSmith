@@ -774,11 +774,8 @@ export class MultiplayerHost {
       }
     } else {
       for (let seat = current; seat > newCount; seat--) {
-        const info = this.seats.get(seat);
-        // A follower whose seat goes no longer drives the table: the restart
-        // that follows gives the seats left to their bots.
-        if (info?.clientId && info.clientId === this.followerClientId) this.stopFollowing();
-        if (info?.clientId) this.releaseSeat(info.clientId);
+        const holder = this.seats.get(seat)?.clientId;
+        if (holder) this.dropFromTheTable(holder);
         this.seats.delete(seat);
       }
     }
@@ -817,6 +814,16 @@ export class MultiplayerHost {
     this.lastFollowerSeat = active;
     this.send(clientId, { type: 'follow', enabled: true, seat: active });
     this.reinitSeat(clientId, active);
+  }
+
+  /**
+   * Release the seat of a client whose seat is going away. A follower among
+   * them no longer drives the table: the restart that follows gives the seats
+   * left to their bots.
+   */
+  private dropFromTheTable(clientId: string): void {
+    if (clientId === this.followerClientId) this.stopFollowing();
+    this.releaseSeat(clientId);
   }
 
   /** End follow-mode for a follower leaving its seat, and tell it so. */

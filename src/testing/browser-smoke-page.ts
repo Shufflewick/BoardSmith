@@ -43,8 +43,7 @@ export function pageControls(elements: Element[]): PageControl[] {
   elements.forEach((element, index) => {
     if (element.closest('.game-over-card, [inert]') !== null) return;
     const html = element as HTMLElement;
-    const text = html.innerText ?? html.textContent ?? '';
-    const label = (html.getAttribute('aria-label') ?? html.getAttribute('title') ?? text).replace(/\s+/g, ' ').trim();
+    const label = (html.getAttribute('aria-label') ?? html.getAttribute('title') ?? html.innerText).replace(/\s+/g, ' ').trim();
     const id = html.getAttribute('data-bs-el-id');
     const candidate = html.getAttribute('data-bs-candidate');
     const key = id !== null ? `element:${id}` : candidate !== null ? `candidate:${candidate}` : `label:${label}`;
@@ -57,7 +56,7 @@ export function pageControls(elements: Element[]): PageControl[] {
 }
 
 /** An open modal dialog, as one look at the page showed it. */
-export interface PageDialog {
+interface PageDialog {
   /** Its place among the elements the locator matched. */
   readonly index: number;
   /** Its accessible name: `aria-label`, else the text `aria-labelledby` names, else its first heading. */
@@ -76,11 +75,10 @@ export function pageDialogs(elements: Element[]): PageDialog[] {
     if (element.closest('.game-over-card') !== null) return;
     const modal = element.getAttribute('aria-modal') === 'true' || (element.tagName === 'DIALOG' && element.matches(':modal'));
     if (!modal) return;
-    const labelledBy = element.getAttribute('aria-labelledby');
-    const named = labelledBy === null ? null : element.ownerDocument.getElementById(labelledBy)?.textContent ?? null;
-    const heading = element.querySelector('h1, h2, h3, h4, h5, h6')?.textContent ?? '';
-    const name = (element.getAttribute('aria-label') ?? named ?? heading).replace(/\s+/g, ' ').trim();
-    found.push({ index, name });
+    const labelledBy = element.ownerDocument.getElementById(element.getAttribute('aria-labelledby') ?? '');
+    const heading = element.querySelector('h1, h2, h3, h4, h5, h6');
+    const name = element.getAttribute('aria-label') ?? (labelledBy ?? heading)?.textContent ?? '';
+    found.push({ index, name: name.replace(/\s+/g, ' ').trim() });
   });
   return found;
 }

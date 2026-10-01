@@ -6,9 +6,16 @@
 import { beforeAll, describe, expect, it } from 'vitest';
 import { numberToEnter, pageControls, pageDialogs } from './browser-smoke-page.js';
 
-// jsdom lays nothing out, so it has no `checkVisibility`: here every element is visible.
+// jsdom lays nothing out, so it has no `checkVisibility` and no `innerText`: here every element
+// is visible, and its text as laid out is its text.
 beforeAll(() => {
   Element.prototype.checkVisibility = () => true;
+  Object.defineProperty(HTMLElement.prototype, 'innerText', {
+    configurable: true,
+    get(this: HTMLElement) {
+      return this.textContent;
+    },
+  });
 });
 
 function page(html: string): Element[] {

@@ -47,7 +47,7 @@ export function smokeSeeds(seed: string | readonly string[] | undefined): string
 }
 
 /** Where a walk stopped because no seat was offered anything for `seconds`. */
-export interface SmokeStall {
+interface SmokeStall {
   /** The step it stopped at, counted within its deal. */
   readonly step: number;
   /** The seed the game it stopped in was dealt from; null in a world, which `boardsmith dev` deals itself. */
@@ -241,7 +241,7 @@ export const MOST_ANSWERS = 50;
 const STUCK_AFTER = 3;
 
 /** What answering one open action has pressed and shown so far (#463). */
-export interface AnswerTrail {
+interface AnswerTrail {
   readonly name: string;
   /** Where the walk is, as a message says it: "at step 7 of the game dealt from seed "smoke"". */
   readonly where: string;
