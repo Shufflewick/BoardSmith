@@ -22,6 +22,7 @@ import {
   aceGame,
   boardWithAPointerlessControl,
   boardWithAControlAtItsFoot,
+  boardWithATimidControl,
   boardWithAVanishingControl,
   boardThatHidesThePanelForAMoment,
   boardThatKeepsReordering,
@@ -313,6 +314,16 @@ describe('boardsmith verify: the smoke check', () => {
     expect(outcome.summary).toBe(
       'The smoke walk, dealt from seed "smoke", found a problem: - Pressing the board\'s "Shy button" did not work: it ' +
         'went away before the press landed.',
+    );
+  });
+
+  it('a control that is disabled by the time the walk goes to press it fails that press, saying so, rather than counting it', async () => {
+    const { outcome } = await smokeOf(false, boardWithATimidControl());
+
+    expect(outcome.passed).toBe(false);
+    expect(outcome.summary).toBe(
+      'The smoke walk, dealt from seed "smoke", found a problem: - Pressing the board\'s "Timid button" did not work: it was ' +
+        'disabled when the walk went to press it, and still was 5s later.',
     );
   });
 

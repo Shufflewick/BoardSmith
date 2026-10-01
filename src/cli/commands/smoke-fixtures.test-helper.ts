@@ -509,6 +509,34 @@ const gone = ref(false);
 }
 
 /**
+ * A BOARD CONTROL THAT IS DISABLED BY THE TIME IT IS PRESSED: "Timid button" is redrawn as a disabled
+ * button, a new element with the same label, the moment the pointer is over it, so the control the walk
+ * found enabled is disabled when the walk finds it again to press it, and stays so.
+ */
+export function boardWithATimidControl(): Record<string, string> {
+  return {
+    'src/ui/components/GameTable.vue': `<script setup lang="ts">
+import { ref } from 'vue';
+
+const shy = ref(false);
+</script>
+
+<template>
+  <div class="board">
+    <button v-if="!shy" type="button" @pointerenter="shy = true">Timid button</button>
+    <button v-else type="button" disabled>Timid button</button>
+  </div>
+</template>
+
+<style scoped>
+.board { width: 320px; height: 200px; }
+</style>
+`,
+    'src/ui/uis.ts': PLAYERS_GET_THE_TABLE,
+  };
+}
+
+/**
  * THE FIELDS GAME (#465 to #467): each turn a player may `code` (a text field that takes digits only,
  * so the walk's "smoke test" never satisfies it and the action never finishes), `kindle` (a number
  * field, "How many logs?", 1 to 5, whose own rule refuses 1), `draw` or `rest`. `code` is the panel's first offer, so a walk

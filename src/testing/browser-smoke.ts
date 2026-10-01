@@ -432,7 +432,10 @@ async function controlsOf(frame: Frame, selector: string, within?: Locator): Pro
  * into its place among the matches since it was found, so it is found again by what it stands for
  * and marked in the same look (`pageControls`), and the press reaches the marked element wherever the
  * page moves it. A redraw can take it away for a moment, so it is looked for again until it comes
- * back; one still gone after {@link PRESS_MS} went away.
+ * back; one still gone after {@link PRESS_MS} went away. It must still be pressable too: one found
+ * disabled is waited for the same way, and reported if it stays so. A pick's candidate is the one
+ * exception, since what it stands for, and whether the game refuses that, can depend on where the
+ * pointer is, which `aimAndClick` settles once it has pointed at it.
  */
 async function stillThere(control: Control): Promise<Control> {
   const { frame, selector, within } = control;
@@ -442,10 +445,10 @@ async function stillThere(control: Control): Promise<Control> {
     const visible = (within ?? frame).locator(selector).filter({ visible: true });
     const now = await visible.evaluateAll(pageControls, { key: control.key, index: control.index, mark });
     const same = now.find((c) => c.marked);
-    if (same !== undefined) {
+    if (same !== undefined && (same.enabled || control.candidate)) {
       return { ...same, target: frame.locator(`[${PRESS_MARK}="${mark}"]`), placed: visible.nth(same.index), frame, selector, within };
     }
-    if (Date.now() - started > PRESS_MS) throw new Error(GONE);
+    if (Date.now() - started > PRESS_MS) throw new Error(same === undefined ? GONE : DISABLED);
     await frame.waitForTimeout(100);
   }
 }
@@ -472,6 +475,9 @@ const COVERED = 'another element covers it, so a pointer cannot reach it';
 
 /** Why a press failed when the control left the page between being found and being pressed. */
 const GONE = 'it went away before the press landed';
+
+/** Why a press failed when the control was disabled by the time the walk went to press it, and stayed so. */
+const DISABLED = `it was disabled when the walk went to press it, and still was ${PRESS_MS / 1000}s later`;
 
 /** A press that found a toast over the control, which goes by itself. */
 class UnderAToast extends Error {}
