@@ -535,6 +535,18 @@ describe('ActionPanel — disabled action buttons carry their reason', () => {
     const undo = wrapper.find('.undo-btn');
     expect(undo.attributes('aria-disabled')).toBe('true');
     expect(undo.attributes('data-bs-disabled-reason')).toBeTruthy();
+    // Marked on the panel too, so a reader (the smoke walk, #474) can wait the submission out
+    // rather than read a panel greyed for a moment as one offering nothing.
+    expect(wrapper.find('.action-panel-root').attributes('data-bs-submitting')).toBeDefined();
+    wrapper.unmount();
+  });
+
+  it('#474: does not mark the panel as submitting while nothing is in flight', () => {
+    const wrapper = mount(ActionPanel, {
+      global: { provide: { [GAME_CONTEXT_KEYS.actionController as symbol]: stubActionController() }, stubs: { Teleport: true } },
+      props: { availableActions: ['build'], actionMetadata: { build: { name: 'build', prompt: 'Build', selections: [] } }, playerSeat: 1, isMyTurn: true },
+    });
+    expect(wrapper.find('.action-panel-root').attributes('data-bs-submitting')).toBeUndefined();
     wrapper.unmount();
   });
 

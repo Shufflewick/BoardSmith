@@ -19,6 +19,7 @@ import {
   smokeRecord,
   smokeSeeds,
   smokeSummary,
+  smokeWorldSeats,
   type ResolvedMemory,
   type SmokeInputView,
   type SmokeWalk,
@@ -38,6 +39,8 @@ function walk(overrides: Partial<SmokeWalk>): SmokeWalk {
     inputs: {},
     wanting: new Map(),
     fieldsMet: new Map(),
+    greyed: new Map(),
+    seats: [],
     ...overrides,
   };
 }
@@ -76,7 +79,39 @@ describe('smokeSeeds: the deals a walk is dealt (#460)', () => {
   });
 });
 
+describe('smokeWorldSeats: the seats a world walk plays (#471)', () => {
+  it('plays the one seat the world gives the page when the spec names none', () => {
+    expect(smokeWorldSeats(undefined)).toBeUndefined();
+  });
+
+  it('plays the first seats the world gives for a count, and the seats a list names, in order', () => {
+    expect(smokeWorldSeats(2)).toEqual([1, 2]);
+    expect(smokeWorldSeats([1, 169])).toEqual([1, 169]);
+  });
+
+  it('refuses a count or a seat that is not a whole number from 1, an empty list and a seat listed twice, saying what to write', () => {
+    for (const seats of [0, 1.5, -2]) {
+      expect(() => smokeWorldSeats(seats)).toThrow(
+        `\`seats\` in ${SMOKE_SPEC_PATH} is ${seats}, which is not a number of seats. Give how many seats the walk plays, such as 2, or list them, such as [1, 4].`,
+      );
+    }
+    expect(() => smokeWorldSeats([])).toThrow(
+      `\`seats\` in ${SMOKE_SPEC_PATH} is an empty list, so the walk would play no seat. List at least one, or leave \`seats\` out to play one.`,
+    );
+    expect(() => smokeWorldSeats([1, 0])).toThrow(
+      `\`seats\` in ${SMOKE_SPEC_PATH} lists 0, which is not a seat. Seats are numbered from 1.`,
+    );
+    expect(() => smokeWorldSeats([4, 1, 4])).toThrow(`\`seats\` in ${SMOKE_SPEC_PATH} lists seat 4 twice. List each seat once.`);
+  });
+});
+
 const REASON = 'Offered only after fifty quiet moves, which a walk from a fresh game never plays.';
+
+/** What a table walk that stalled at step 9 of the deal from "smoke" reports (#473). */
+const TABLE_STALL =
+  'The game stalled at step 9 of the game dealt from seed "smoke": no seat was offered anything for 30s, and the game ' +
+  'was not over, so the players at that table could never finish it. Run `boardsmith smoke` to watch where the game ' +
+  'stops offering actions: a step no seat can act in, or one waiting on something no player does.';
 
 describe('smokeProblems', () => {
   it('passes a walk that took every listed action and saw no error', () => {
@@ -99,7 +134,7 @@ describe('smokeProblems', () => {
   });
 
   it('names a listed action the walk never saw offered, and one it saw but could not take', () => {
-    expect(smokeProblems(walk({ listed: ['draw', 'score'], offered: new Set(['draw']), steps: 12 }))).toEqual([
+    expect(smokeProblems(walk({ listed: ['draw', 'score'], offered: new Set(['draw']), enabled: new Set(['draw']), steps: 12 }))).toEqual([
       'The panel offered "draw", but the walk never took it in 12 steps. The errors above, if any, say why.',
       `The walk never saw "score" offered in 12 steps from a fresh game dealt from seed "smoke". If a fresh game takes ` +
         `longer to reach it, raise \`steps\` in ${SMOKE_SPEC_PATH}. If the deal decides whether it is offered (the cards a ` +
@@ -115,13 +150,72 @@ describe('smokeProblems', () => {
     ]);
   });
 
-  it('#460: says a walk that stopped because nothing was offered stopped for that, and does not suggest more steps', () => {
+  it('#460, #473: fails a table game that stalled, and says a listed action it never saw was missed for that, not for want of steps', () => {
     const stalled = walk({ listed: ['draw', 'score'], offered: new Set(['draw']), taken: new Set(['draw']), stalls: [{ step: 9, seed: 'smoke', seconds: 30 }] });
     expect(smokeProblems(stalled)).toEqual([
-      `The walk never saw "score" offered. It stopped at step 9 of the game dealt from seed "smoke", because no seat had ` +
-        'been offered anything for 30s, so more `steps` would not help. Run `boardsmith smoke` to watch where the game ' +
-        'stops offering actions: a step no seat can act in, or one waiting on something no player does. Fix that, then run it again.',
+      TABLE_STALL,
+      'The walk never saw "score" offered: the game stalled first (above), so more `steps` would not help. Fix the stall, then run it again.',
     ]);
+  });
+
+  it('#473: fails a table game that stalled with the game not over, though every listed action was taken', () => {
+    const stalled = walk({ listed: ['draw'], offered: new Set(['draw']), taken: new Set(['draw']), stalls: [{ step: 9, seed: 'smoke', seconds: 30 }] });
+    expect(smokeProblems(stalled)).toEqual([TABLE_STALL]);
+  });
+
+  it('#473: passes a world that offered nothing for a while once every listed action was taken, since a world may wait on its clock', () => {
+    expect(smokeProblems(walk({ listed: ['tend'], seeds: [], offered: new Set(['tend']), taken: new Set(['tend']), stalls: [{ step: 9, seed: null, seconds: 30 }] }))).toEqual([]);
+  });
+
+  it('#472: says a listed action the panel only ever showed greyed out could never be taken, with the reason the panel gave, and what to do', () => {
+    const greyed = walk({ listed: ['draw', 'bank'], offered: new Set(['draw', 'bank']), taken: new Set(['draw']), greyed: new Map([['bank', ['There is no bank in this town.']]]), steps: 12 });
+    expect(smokeProblems(greyed)).toEqual([
+      'The panel offered "bank" only greyed out in 12 steps from a fresh game dealt from seed "smoke", so the walk could ' +
+        'never take it. The panel said why: "There is no bank in this town." If a fresh game takes longer to get past ' +
+        `that, raise \`steps\` in ${SMOKE_SPEC_PATH}. If the deal decides it (the cards a player is dealt, say), choose a ` +
+        'seed whose deal lets a player take it, and list it in `seed` there. If no walk from a fresh game can reach it ' +
+        'whatever the deal (it needs a long game, or a position play does not get to), name it in `unreachable` there ' +
+        'with the reason.',
+    ]);
+  });
+
+  it('#472: in a world played from one seat, also says a second seat may be what a greyed-out action needs', () => {
+    const greyed = walk({ listed: ['wave'], seeds: [], offered: new Set(['wave']), greyed: new Map([['wave', ['Nobody else is here.']]]), steps: 12 });
+    expect(smokeProblems(greyed)).toEqual([
+      'The panel offered "wave" only greyed out in 12 steps from a fresh game, so the walk could never take it. The ' +
+        'panel said why: "Nobody else is here." If a fresh game takes longer to get past that, raise `steps` in ' +
+        `${SMOKE_SPEC_PATH}. If it needs another player there too, list the seats the walk plays in \`seats\` there, ` +
+        'choosing seats the world brings together. If no walk from a fresh game can reach it (it needs a long game, or ' +
+        'a position play does not get to), name it in `unreachable` there with the reason.',
+    ]);
+  });
+
+  it('#471: in a world played from one seat, says a second seat may be what an action never offered needs', () => {
+    expect(smokeProblems(walk({ listed: ['trade'], seeds: [], steps: 12 }))).toEqual([
+      'The walk never saw "trade" offered in 12 steps from a fresh game. If a fresh game takes longer to reach it, raise ' +
+        `\`steps\` in ${SMOKE_SPEC_PATH}. If it needs another player there too, list the seats the walk plays in \`seats\` ` +
+        'there, choosing seats the world brings together. If no walk from a fresh game can reach it (it needs a long ' +
+        'game, or a position play does not get to), name it in `unreachable` there with the reason. If the game no ' +
+        'longer has it, remove it from `actions`.',
+    ]);
+    // A walk already playing several seats is not told to add one.
+    expect(smokeProblems(walk({ listed: ['trade'], seeds: [], seats: [1, 2], steps: 12 }))[0]).not.toMatch(/seats/);
+  });
+
+  it('#472: gives every reason the panel gave at one time or another, the latest three when it gave more', () => {
+    const reasons = (greyed: string[]) =>
+      smokeProblems(walk({ listed: ['bank'], offered: new Set(['bank']), greyed: new Map([['bank', greyed]]), steps: 12 }))[0];
+    expect(reasons(['Arrive first.', 'There is no bank in this town.'])).toContain(
+      'The panel gave these reasons, the latest last: "Arrive first."; "There is no bank in this town." If a fresh game',
+    );
+    expect(reasons(['One.', 'Two.', 'Three.', 'Four.', 'Five.'])).toContain(
+      'The panel gave these reasons, the latest last: "Three."; "Four."; "Five." (and 2 more) If a fresh game',
+    );
+  });
+
+  it('#472: keeps saying an action the panel offered ready to take, and the walk never took, was offered', () => {
+    const missed = walk({ listed: ['bank'], offered: new Set(['bank']), enabled: new Set(['bank']), greyed: new Map([['bank', ['Closed for lunch.']]]), steps: 12 });
+    expect(smokeProblems(missed)).toEqual(['The panel offered "bank", but the walk never took it in 12 steps. The errors above, if any, say why.']);
   });
 
   it('#460: says where a world walk stalled, with no seed to name', () => {
@@ -195,7 +289,7 @@ describe('smokeProblems', () => {
 describe('smokeRecord and smokeSummary: what a passing walk reports', () => {
   it('says what was taken and pressed, in one game, with no error, and the seed it was dealt from', () => {
     const record = smokeRecord(walk({ listed: ['draw', 'play'], taken: new Set(['play', 'draw']) }), { controls: 1, games: 1 });
-    expect(record).toEqual({ seeds: ['smoke'], taken: ['draw', 'play'], controls: 1, games: 1, excused: [], reachedAnyway: [] });
+    expect(record).toEqual({ seeds: ['smoke'], seats: [], taken: ['draw', 'play'], controls: 1, games: 1, excused: [], reachedAnyway: [] });
     expect(smokeSummary(record)).toBe(
       'Served by `boardsmith dev` from a fresh start and dealt from seed "smoke", a seated player took "draw", "play" and ' +
         'pressed 1 board control, with no error.',
@@ -210,6 +304,15 @@ describe('smokeRecord and smokeSummary: what a passing walk reports', () => {
         'listed actions still to take).',
     );
     expect(smokeSummary({ ...record, games: 2 })).not.toMatch(/over 2 games/);
+  });
+
+  it('#471: names the seats a world walk played, when it played more than one', () => {
+    const record = smokeRecord(walk({ seeds: [], seats: [1, 4], listed: ['wave'], taken: new Set(['wave']) }), { controls: 0, games: 1 });
+    expect(record.seats).toEqual([1, 4]);
+    expect(smokeSummary(record)).toBe(
+      'Served by `boardsmith dev` from a fresh start, players at seats 1 and 4 took "wave" and pressed 0 board controls, with no error.',
+    );
+    expect(smokeSummary({ ...record, seats: [2, 7, 9] })).toMatch(/, players at seats 2, 7 and 9 took "wave"/);
   });
 
   it('#460: names no seed for a world, which `boardsmith dev` deals from its own', () => {
@@ -327,7 +430,10 @@ describe('walkStopped: why a walk could not go on (#464)', () => {
 
 describe('#470: the values a spec gives the walk to type, in `inputs`', () => {
   /** A page whose elements, by selector, read as `shown`. */
-  const page = (shown: Record<string, string[]> = {}): SmokeInputView => ({ texts: async (selector) => shown[selector] ?? [] });
+  const page = (shown: Record<string, string[]> = {}, otherSeats: number[] = []): SmokeInputView => ({
+    texts: async (selector) => shown[selector] ?? [],
+    otherSeats,
+  });
 
   it('gives no value for a field the spec names none for, so the walk types its own', async () => {
     expect(await inputFor({}, 'attack', 'target', 'text', page())).toBeUndefined();
@@ -345,6 +451,16 @@ describe('#470: the values a spec gives the walk to type, in `inputs`', () => {
   it('gives what a function of the page returns, reading what a player reads there', async () => {
     const inputs = { attack: { target: async ({ texts }: SmokeInputView) => (await texts('.nearby li'))[0] } };
     expect(await inputFor(inputs, 'attack', 'target', 'text', page({ '.nearby li': ['p2', 'p3'] }))).toEqual({ value: 'p2' });
+  });
+
+  it('#471: gives a function the other seats the walk plays, so it can name a player standing with this one', async () => {
+    const inputs = {
+      attack: {
+        target: async ({ texts, otherSeats }: SmokeInputView) => (await texts('.nearby li')).find((name) => otherSeats.some((seat) => name === `p${seat}`)),
+      },
+    };
+    expect(await inputFor(inputs, 'attack', 'target', 'text', page({ '.nearby li': ['p9', 'p4'] }, [4]))).toEqual({ value: 'p4' });
+    expect(await inputFor(inputs, 'attack', 'target', 'text', page({ '.nearby li': ['p9'] }, [4]))).toEqual({ wanting: true });
   });
 
   it('says the page gives no value yet when the function returns nothing, or blank text', async () => {

@@ -1043,7 +1043,8 @@ export const NOBODY_CALLED_THAT = 'Nobody at the table is called that.';
  * Fittest's attack names a survivor standing in the same square. Each turn a player may `greet` or
  * `wave` at the other player by name (a text field the game refuses unless it is the other
  * player's name, which the players panel shows), `pledge` coins (a number field, 1 to 10, the game
- * refuses unless it is 7), write a `note` (free text, any of it accepted) or `draw`.
+ * refuses unless it is 7), write a `note` (free text, any of it accepted) or `draw`, which the log
+ * says.
  */
 export function greetingsGame(): Record<string, string> {
   return {
@@ -1113,6 +1114,7 @@ export function createTurnActions(game: DevGameGame): ActionDefinition[] {
       .prompt('Draw a card')
       .execute((_args, ctx) => {
         game.deck.first(Card)?.putInto((ctx.player as DevGamePlayer).hand);
+        game.message('{{player}} drew a card.', { player: ctx.player });
         return { success: true };
       }),
   ];
@@ -1159,13 +1161,305 @@ const OTHER_PLAYER = '.player-name-row:not(:has(.you-badge)) .player-name';
 export function greetingsSpec(inputs: string): string {
   return `import { defineSmokeTest, type SmokeInputView } from 'boardsmith/testing/browser';
 
-// The other player's name, as the players panel shows it.
+// The other player's name, as the players panel shows it, and the lines of the game's log.
 const theOther = async ({ texts }: SmokeInputView) => (await texts(${JSON.stringify(OTHER_PLAYER)}))[0];
-let wavesAsked = 0;
+const LOG = '.game-history .message .text';
 
 defineSmokeTest({
   actions: ['greet', 'wave', 'pledge', 'note', 'draw'],
   inputs: ${inputs},
+});
+`;
+}
+
+/**
+ * THE KETTLE GAME (#473): a table that hangs. Seat 1 may `draw` once, and then the flow waits on
+ * `wait`, an action the game greys out until a kettle boils, which it never does: no seat is
+ * offered anything it can take, and the game is never over.
+ */
+export function kettleGame(): Record<string, string> {
+  return {
+    'src/rules/game.ts': `import { Game, Player, type GameOptions } from 'boardsmith';
+import { Card, Hand, Deck } from './elements.js';
+import { createGameFlow } from './flow.js';
+import { createTurnActions } from './actions.js';
+
+export class DevGamePlayer extends Player<DevGameGame, DevGamePlayer> {
+  hand!: Hand;
+}
+
+export class DevGameGame extends Game<DevGameGame, DevGamePlayer> {
+  static PlayerClass = DevGamePlayer;
+
+  deck!: Deck;
+
+  constructor(options: GameOptions) {
+    super(options);
+    this.registerElements([Card, Hand, Deck]);
+    for (const player of this.players) {
+      const hand = this.create(Hand, \`hand-\${player.seat}\`);
+      hand.player = player;
+      player.hand = hand;
+    }
+    this.deck = this.create(Deck, 'deck');
+    for (let i = 0; i < 10; i++) this.deck.create(Card, \`card-\${i}\`, { suit: 'H', rank: 'A' });
+    for (const action of createTurnActions(this)) this.registerAction(action);
+    this.setFlow(createGameFlow(this));
+  }
+}
+`,
+    'src/rules/actions.ts': `import { Action, type ActionDefinition } from 'boardsmith';
+import type { DevGameGame, DevGamePlayer } from './game.js';
+import { Card } from './elements.js';
+
+export function createTurnActions(game: DevGameGame): ActionDefinition[] {
+  return [
+    Action.create('draw')
+      .prompt('Draw a card')
+      .execute((_args, ctx) => {
+        game.deck.first(Card)?.putInto((ctx.player as DevGamePlayer).hand);
+        return { success: true };
+      }),
+    Action.create('wait')
+      .prompt('Pour the tea')
+      .disabled(() => ${JSON.stringify(KETTLE_REASON)})
+      .execute(() => ({ success: true })),
+  ];
+}
+`,
+    'src/rules/flow.ts': `import { sequence, actionStep, type FlowDefinition } from 'boardsmith';
+import type { DevGameGame } from './game.js';
+
+export function createGameFlow(game: DevGameGame): FlowDefinition {
+  return {
+    root: sequence(actionStep({ name: 'draw-once', actions: ['draw'] }), actionStep({ name: 'tea', actions: ['wait'] })),
+    isComplete: () => false,
+    getWinners: () => [],
+  };
+}
+`,
+    'tests/game.test.ts': `import { describe, expect, it } from 'vitest';
+import { DevGameGame } from '../src/rules/game.js';
+
+describe('the kettle game', () => {
+  it('starts with ten cards in the deck', () => {
+    expect(new DevGameGame({ playerCount: 2, seed: 'test' }).deck.all().length).toBe(10);
+  });
+});
+`,
+  };
+}
+
+/** Why the kettle game greys out `wait`, every time. */
+const KETTLE_REASON = 'The kettle has not boiled.';
+
+/** Why the glade world greys out `greet` for a seat standing alone. */
+export const ALONE_REASON = 'There is nobody else in this glade to greet.';
+
+/**
+ * THE GLADE WORLD (#471, #472, #474), written over the world scaffold. Three glades in a ring, and
+ * a seat `arrive`s in glade `seat % 3`, so seats 1 and 4 meet and seats 1 and 2 never do. A seat
+ * may `greet` another seat standing in its glade, by the name the board's "Who else is here" list
+ * shows, which the game checks; the list shows who the seat saw at its last `look`, as Survival of
+ * the Fittest's does, so it is empty on arrival. `greet` is greyed out, with its reason, for a seat
+ * alone. A seat may also `rest` (a slow command with nothing to choose: the panel greys every button
+ * while it is in flight) and `stroll` on to the next glade. The panel offers them in that order
+ * (arrive, greet, look, rest, stroll), so a walk that took the first untaken action strolls away
+ * before it greets anyone it did not see at first.
+ */
+export function gladeWorld(): Record<string, string> {
+  return {
+    'src/rules/elements.ts': `import { Space } from 'boardsmith';
+
+/** A glade, and one partition: the seats standing in it, in the order they arrived. */
+export class Glade extends Space {
+  visitors: number[] = [];
+}
+
+/** One seat's wanderer, and one partition: the glade it stands in (-1 before it arrives), and who it saw there. */
+export class Wanderer extends Space {
+  glade = -1;
+  seen: number[] = [];
+}
+`,
+    'src/rules/game.ts': `import { Game, Player, type GameOptions } from 'boardsmith';
+import { Glade, Wanderer } from './elements.js';
+
+export class DevGamePlayer extends Player<DevGameGame, DevGamePlayer> {}
+
+export class DevGameGame extends Game<DevGameGame, DevGamePlayer> {
+  static PlayerClass = DevGamePlayer;
+
+  constructor(options: GameOptions) {
+    super(options);
+    this.registerElements([Glade, Wanderer]);
+  }
+}
+`,
+    'src/rules/world.ts': `import { PlayerFacingError, type GameElement } from 'boardsmith';
+import { worldAction } from 'boardsmith/world';
+import type { WorldDefinition, WorldViewDeclaration } from 'boardsmith/world';
+import type { DevGameGame } from './game.js';
+import { Glade, Wanderer } from './elements.js';
+
+export const WORLD_SEATS = 8;
+
+const GLADES = 3;
+const gladePartition = (glade: number) => \`glade:\${glade}\`;
+const wandererPartition = (seat: number) => \`wanderer:\${seat}\`;
+
+function wandererOf(game: DevGameGame, seat: number): Wanderer {
+  const wanderer = game.first(Wanderer, \`wanderer-\${seat}\`);
+  if (wanderer === undefined) throw new Error(\`Seat \${seat}'s wanderer is not resident.\`);
+  return wanderer;
+}
+
+function gladeOf(game: DevGameGame, glade: number): Glade {
+  const found = game.first(Glade, \`glade-\${glade}\`);
+  if (found === undefined) throw new Error(\`Glade \${glade} is not resident.\`);
+  return found;
+}
+
+/** The glade a seat stands in, named once its wanderer is loaded; none before it arrives. */
+const whereItStands = ({ game, player }: { game: DevGameGame; player: { seat: number } }) => {
+  const glade = wandererOf(game, player.seat).glade;
+  return glade < 0 ? [] : [gladePartition(glade)];
+};
+
+export const worldGenesis: NonNullable<WorldDefinition['genesis']> = (game) => {
+  const partitions: Record<string, GameElement> = {};
+  for (let i = 0; i < GLADES; i++) partitions[gladePartition(i)] = game.create(Glade, \`glade-\${i}\`);
+  for (const player of game.players) partitions[wandererPartition(player.seat)] = game.create(Wanderer, \`wanderer-\${player.seat}\`);
+  return partitions;
+};
+
+export const worldView: WorldViewDeclaration = (seat) => [wandererPartition(seat)];
+
+const notArrived = (game: DevGameGame, seat: number) => (wandererOf(game, seat).glade < 0 ? 'Arrive first.' : false);
+
+const arrive = worldAction<DevGameGame>('arrive')
+  .prompt('Walk into your glade')
+  .needs(({ player }) => [wandererPartition(player.seat), gladePartition(player.seat % GLADES)])
+  .disabled(({ game, player }) => (wandererOf(game, player.seat).glade < 0 ? false : 'You are already here.'))
+  .execute((_args, ctx) => {
+    const wanderer = ctx.world.partition(wandererPartition(ctx.player.seat)) as Wanderer;
+    const glade = ctx.world.partition(gladePartition(ctx.player.seat % GLADES)) as Glade;
+    wanderer.glade = ctx.player.seat % GLADES;
+    glade.visitors = [...glade.visitors, ctx.player.seat];
+  });
+
+const greet = worldAction<DevGameGame>('greet')
+  .prompt('Greet someone here')
+  .needs(({ player }) => [wandererPartition(player.seat)])
+  .needs(whereItStands)
+  .disabled(({ game, player }) => {
+    const away = notArrived(game, player.seat);
+    if (away !== false) return away;
+    const glade = gladeOf(game, wandererOf(game, player.seat).glade);
+    return glade.visitors.some((seat) => seat !== player.seat) ? false : ${JSON.stringify(ALONE_REASON)};
+  })
+  .enterText('whom', { prompt: 'Who are you greeting?' })
+  .execute(({ whom }, ctx) => {
+    const glade = gladeOf(ctx.game, wandererOf(ctx.game, ctx.player.seat).glade);
+    if (!glade.visitors.some((seat) => seat !== ctx.player.seat && whom === \`seat \${seat}\`)) {
+      throw new PlayerFacingError('Nobody in this glade is called that.');
+    }
+  });
+
+const look = worldAction<DevGameGame>('look')
+  .prompt('Look around')
+  .needs(({ player }) => [wandererPartition(player.seat)])
+  .needs(whereItStands)
+  .disabled(({ game, player }) => notArrived(game, player.seat))
+  .execute((_args, ctx) => {
+    const wanderer = wandererOf(ctx.game, ctx.player.seat);
+    wanderer.seen = gladeOf(ctx.game, wanderer.glade).visitors.filter((seat) => seat !== ctx.player.seat);
+  });
+
+const rest = worldAction<DevGameGame>('rest')
+  .prompt('Rest a while')
+  .needs(({ player }) => [wandererPartition(player.seat)])
+  .disabled(({ game, player }) => notArrived(game, player.seat))
+  .execute(() => {
+    // Slow on purpose: the panel greys every button while a command is in flight (#474).
+    const until = Date.now() + 1500;
+    while (Date.now() < until) {
+      // resting
+    }
+  });
+
+const stroll = worldAction<DevGameGame>('stroll')
+  .prompt('Stroll on to the next glade')
+  .needs(({ player }) => [wandererPartition(player.seat)])
+  .needs(({ game, player }) => {
+    const glade = wandererOf(game, player.seat).glade;
+    return glade < 0 ? [] : [gladePartition(glade), gladePartition((glade + 1) % GLADES)];
+  })
+  .disabled(({ game, player }) => notArrived(game, player.seat))
+  .execute((_args, ctx) => {
+    const wanderer = wandererOf(ctx.game, ctx.player.seat);
+    const from = gladeOf(ctx.game, wanderer.glade);
+    const to = gladeOf(ctx.game, (wanderer.glade + 1) % GLADES);
+    from.visitors = from.visitors.filter((seat) => seat !== ctx.player.seat);
+    to.visitors = [...to.visitors, ctx.player.seat];
+    wanderer.glade = (wanderer.glade + 1) % GLADES;
+    wanderer.seen = [];
+  });
+
+export const worldActions: WorldDefinition['actions'] = [arrive, greet, look, rest, stroll];
+`,
+    'src/ui/components/WorldBoard.vue': `<script setup lang="ts">
+import { computed } from 'vue';
+
+const props = defineProps<{ gameView: unknown }>();
+
+interface ViewNode {
+  attributes?: { seen?: number[] };
+  children?: ViewNode[];
+}
+
+/** Who this seat saw at its last look, off its wanderer in the view. */
+function seenIn(node: ViewNode | null | undefined): number[] {
+  if (node === null || node === undefined) return [];
+  if (Array.isArray(node.attributes?.seen)) return node.attributes.seen;
+  for (const child of node.children ?? []) {
+    const found = seenIn(child);
+    if (found.length > 0) return found;
+  }
+  return [];
+}
+
+const seen = computed(() => seenIn(props.gameView as ViewNode));
+</script>
+
+<template>
+  <main class="glade">
+    <h2>Who else is here</h2>
+    <ul class="here">
+      <li v-for="seat in seen" :key="seat">seat {{ seat }}</li>
+    </ul>
+  </main>
+</template>
+`,
+  };
+}
+
+/**
+ * A smoke spec for {@link gladeWorld} playing `seats` (#471), whose `greet` names the other seat the
+ * board shows standing here.
+ */
+export function gladeSpec(more: { seats?: string; steps: number }): string {
+  return `import { defineSmokeTest, type SmokeInputView } from 'boardsmith/testing/browser';
+
+defineSmokeTest({
+  actions: ['arrive', 'greet', 'look', 'rest', 'stroll'],${more.seats === undefined ? '' : `\n  seats: ${more.seats},`}
+  inputs: {
+    greet: {
+      whom: async ({ texts, otherSeats }: SmokeInputView) =>
+        (await texts('.here li')).find((name) => otherSeats.some((seat) => name === \`seat \${seat}\`)),
+    },
+  },
+  steps: ${more.steps},
 });
 `;
 }

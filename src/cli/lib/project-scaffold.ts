@@ -699,6 +699,13 @@ export function generateSmokeSpecTs(actions: readonly string[]): string {
 //
 // A world is dealt by \`boardsmith dev\` from its own seed, so a world's spec names none.
 //
+// In a world the walk plays one seat. An action that needs another player there (one that names
+// a player standing in the same place) is reached by \`seats\`: how many seats the walk plays, or
+// which, each in a browser of its own. Choose seats the world brings together (ones that arrive in
+// the same place), and name the others in \`inputs\` from \`otherSeats\`:
+//
+//   seats: [1, 4],
+//
 // \`unreachable\` is for an action no walk from a fresh game reaches whatever the deal (one offered
 // only in a position play does not get to, such as a draw by repetition). It stays listed and is
 // also named in \`unreachable\`, with a sentence saying why:

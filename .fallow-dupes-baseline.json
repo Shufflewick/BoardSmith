@@ -713,7 +713,7 @@
     "src/ui/components/auto-ui/ActionPanel.simultaneous.test.ts:101-110|src/ui/components/auto-ui/ActionPanel.simultaneous.test.ts:74-80",
     "src/ui/components/auto-ui/ActionPanel.test.ts:135-142|src/ui/components/auto-ui/ActionPanel.test.ts:93-100",
     "src/ui/components/auto-ui/ActionPanel.test.ts:257-267|src/ui/components/auto-ui/ActionPanel.test.ts:419-428",
-    "src/ui/components/auto-ui/ActionPanel.test.ts:518-526|src/ui/components/auto-ui/ActionPanel.test.ts:541-549",
+    "src/ui/components/auto-ui/ActionPanel.test.ts:518-526|src/ui/components/auto-ui/ActionPanel.test.ts:553-561",
     "src/ui/components/auto-ui/ActionPanel.vue:1005-1010|src/ui/components/auto-ui/ActionPanel.vue:1482-1487",
     "src/ui/components/auto-ui/ActionPanel.vue:1349-1354|src/ui/composables/useBoardActionBridge.ts:229-233",
     "src/ui/components/auto-ui/AutoRenderer.loading.test.ts:14-37|src/ui/components/auto-ui/AutoUI.retry.test.ts:15-37",

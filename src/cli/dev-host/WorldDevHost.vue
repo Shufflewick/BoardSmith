@@ -383,12 +383,25 @@ onUnmounted(() => {
 
       <!-- SEAT SWITCHER: one person, several seats. -->
       <div class="world-dev__seat">
-        <button type="button" @click="seatMenuOpen = !seatMenuOpen">
+        <!-- The seat held and each seat offered carry their number, so a smoke walk
+             playing several seats (#471) takes the one its spec names. -->
+        <button
+          type="button"
+          data-testid="world-seat-switcher"
+          :data-seat="mySeat ?? undefined"
+          @click="seatMenuOpen = !seatMenuOpen"
+        >
           Seat {{ mySeat ?? '—' }} ▾
         </button>
         <ul v-if="seatMenuOpen" class="world-dev__menu">
           <li v-for="seat in seats" :key="seat">
-            <button type="button" :aria-current="seat === mySeat" @click="takeSeat(seat)">
+            <button
+              type="button"
+              data-testid="world-take-seat"
+              :data-seat="seat"
+              :aria-current="seat === mySeat"
+              @click="takeSeat(seat)"
+            >
               Seat {{ seat }}
               <em v-if="status?.presence.includes(seat)">here</em>
             </button>
