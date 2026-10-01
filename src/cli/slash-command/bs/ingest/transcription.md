@@ -15,7 +15,8 @@ from opening the file again. The single most tempting mistake in this entire ski
 "let me double-check by re-reading what I just wrote" step after a subagent returns. Do not do
 this. It silently reintroduces the exact context-exhaustion failure mode this fan-out design
 exists to avoid. If something looks wrong in a returned summary, ask the user or dispatch a
-narrower follow-up subagent — never fall back to reading the slice yourself.
+narrower follow-up subagent of the `judgement` role, the role of the transcription it follows up
+(`routing.md`) — never fall back to reading the slice yourself.
 
 ## Who transcribes — read this before choosing
 
@@ -24,7 +25,8 @@ Two paths produce slices, and **both are governed by
 file reads that contract first, in full, as an actual file read. There is no path where slices
 get written from a recollection of what a transcription prompt looks like.
 
-- **Rulebook of 4+ pages → fan-out.** Dispatch one subagent per page range, as below. Context
+- **Rulebook of 4+ pages → fan-out.** Dispatch one subagent of the `judgement` role per page
+  range, as below. Context
   economics require it: the orchestrator cannot hold a long rulebook and still run the rest of
   the skill.
 - **Rulebook of 1-3 pages → the orchestrator may transcribe inline**, without dispatching. At
@@ -55,8 +57,10 @@ reference, a separate card list), divide and dispatch EACH document the same way
 always pages of one document, and every dispatch names that one document. The total page count needed to divide
 the ranges comes from the user or from file metadata (a file listing for page images, PDF
 metadata for a PDF) — never from opening the rulebook content itself; that would violate the
-Hard Rule above. Dispatch one Task-tool subagent per page range, in parallel where the harness
-allows it. **The subagent writes the slice files itself** — the transcribed text never flows
+Hard Rule above. Dispatch one subagent per page range, in parallel where the harness allows it,
+each as the agent `npx boardsmith agent judgement` names (`routing.md`), with `Work package:
+ingest-rules` as its prompt's first line and a `### Dispatch N` entry (`Work: transcribe <document> pp. <N>-<M>`) in
+`design/run-log/ingest-rules.md`. **The subagent writes the slice files itself** — the transcribed text never flows
 back through the orchestrator's context.
 
 **Do not compose, restate, or summarize the transcription contract in the dispatch prompt.** The
@@ -91,7 +95,7 @@ recalled one. Copy the block; do not retype it from what you remember a transcri
 looking like.
 
 Fill `{rulebookPath}` with the actual path to the PDF/image files/text and `{N}`-`{M}` with the
-range — a fresh-context Task subagent has no inherited knowledge of where the source lives. Fill
+range — a fresh-context subagent has no inherited knowledge of where the source lives. Fill
 `{sourceRecord}` with that same document as `rulebook/INDEX.md` records it: the `Source:` header
 value for the rulebook, or the `## Additional Sources` row for any other document
 (`rulebook/source/<file>`). The subagent writes it as each slice's `Source:` line, which is how
@@ -150,8 +154,8 @@ section's `sectionSummary` lands, present it to the user:
 
 Wait for confirmation before moving to the next section's summary, and never accumulate several
 sections' worth of confirmations into a single end-of-rulebook checkpoint. If the user corrects
-something, dispatch a **narrow follow-up subagent** to amend the already-written slice with the
-correction (the same mechanism used for a suspect summary — see the Hard Rule above); never
+something, dispatch a **narrow follow-up subagent** of the `judgement` role to amend the
+already-written slice with the correction (the same mechanism used for a suspect summary — see the Hard Rule above); never
 "fix it yourself" by opening the slice, and never hold unconfirmed transcription text in your
 own context awaiting confirmation — the subagent wrote it, the follow-up subagent amends it.
 

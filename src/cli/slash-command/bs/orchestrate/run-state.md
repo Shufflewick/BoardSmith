@@ -74,8 +74,13 @@ Every write is append-only except the two sanctioned in-place fills the template
 entry's `Finished at`/`Outcome`/`Detail`, and the three run-level lines). Specifically:
 
 - **Before** each dispatch: append a `### Dispatch N` entry to that chunk's own `design/run-log/<slug>.md`, with `Outcome: pending`,
-  `Finished at: pending`, and a fresh `date -u +%Y-%m-%dT%H:%M:%SZ` clock read as `Dispatched at`.
-  This is what makes a mid-chunk crash visible on resume as a dispatch that never returned.
+  `Finished at: pending`, a fresh `date -u +%Y-%m-%dT%H:%M:%SZ` clock read as `Dispatched at`,
+  `Work: build-chunk` (or `build-bot`, `insert-chunk`), `Role: judgement`, `Agent:` the type
+  `npx boardsmith agent judgement` printed, and `Escalated from: none`, plus `Designer answer:`
+  when it re-dispatches a chunk that failed after the designer answered (`routing.md` "The Run
+  Log"). This is what makes a mid-chunk crash visible on resume as a
+  dispatch that never returned. The chunk's own steps and review rounds are logged in the same
+  file by the dispatched subagent.
 - **After** each dispatch returns: run `date -u +%Y-%m-%dT%H:%M:%SZ` again and fill that entry's
   `Finished at` with what it prints, together with `Outcome` and `Detail`, once. Never copy a time
   from another entry or type one; `boardsmith ledger-check` compares both times against the

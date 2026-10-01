@@ -46,7 +46,9 @@ either side. They are surfaced to the designer in Step 3's close report, not jud
 
 ## Dispatch
 
-For each pending pair, dispatch one Task-tool subagent. **Do not compose, restate, or summarize the
+For each pending pair, dispatch one subagent, as the agent `npx boardsmith agent judgement` names
+(`routing.md`), with `Work package: verify-game` as its prompt's first line and a `### Dispatch N`
+entry (`Work: classify <pair id>`) in `design/run-log/verify-game.md`. **Do not compose, restate, or summarize the
 classification contract in the dispatch prompt.** The contract lives in
 `${CLAUDE_SKILL_DIR}/../bs-shared/verify/classification-subagent.md`; the subagent reads it
 directly. Copy this pointer block byte-identical, filling the three fields from the pair's JSON:

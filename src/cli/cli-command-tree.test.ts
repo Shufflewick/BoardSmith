@@ -10,14 +10,13 @@
  * subcommand's full path is pinned here. Attaching one to the wrong parent, or
  * adding one without saying where it belongs, fails this file.
  */
-import { afterAll, beforeAll, describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { existsSync } from 'node:fs';
 import { join } from 'node:path';
 import type { Command } from 'commander';
 import { createProgram } from './cli.js';
-import { installClaudeCommand, SKILL_NAMES } from './commands/install-claude-command.js';
-import { installedSkillsTree } from './commands/installed-skills.test-helper.js';
-import { tempTree } from '../testing/temp-tree.test-helper.js';
+import { SKILL_NAMES } from './commands/install-claude-command.js';
+import { globalInstallInTempHome, installedSkillsTree } from './commands/installed-skills.test-helper.js';
 
 /** Every command below the top level, as the words a user types to reach it. */
 function subcommandPaths(command: Command, parents: string[] = []): string[] {
@@ -40,25 +39,10 @@ describe('boardsmith claude uninstall --local (#348)', () => {
   // subcommand, it takes `uninstall --local` for itself and the uninstall runs
   // globally, so HOME is a temp tree holding its own install: that mistake
   // shows up as a failure here instead of emptying the real ~/.claude.
-  let home = '';
-  let realHome: string | undefined;
-  beforeAll(async () => {
-    realHome = process.env.HOME;
-    home = tempTree('bs-cli-claude-uninstall-home-');
-    process.env.HOME = home;
-    const log = vi.spyOn(console, 'log').mockImplementation(() => {});
-    try {
-      await installClaudeCommand({ force: true, skipLink: true });
-    } finally {
-      log.mockRestore();
-    }
-  });
-  afterAll(() => {
-    process.env.HOME = realHome;
-  });
+  const tempHome = globalInstallInTempHome('bs-cli-claude-uninstall-home-');
 
   it('removes the project\'s bs- skills and leaves the global ones alone', async () => {
-    const globalRoot = join(home, '.claude', 'skills');
+    const globalRoot = join(tempHome.home(), '.claude', 'skills');
     for (const root of [skills.root, globalRoot]) {
       for (const name of SKILL_NAMES) expect(existsSync(join(root, name))).toBe(true);
     }

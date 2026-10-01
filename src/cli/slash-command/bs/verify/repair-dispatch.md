@@ -39,7 +39,10 @@ there is no fallback to live slices, silent or otherwise (decision 10).
 
 Dispatch `${CLAUDE_SKILL_DIR}/../bs-shared/build/audit.md`'s three lens templates — fidelity,
 visibility, undo — each as its own separate fresh-context dispatch, exactly as `build/audit.md`
-already specifies. **The only substitution points across all three templates are:**
+already specifies, at the same roles (the fidelity lens at the `judgement` role, visibility and
+undo at the `review` role, `routing.md`), under the chunk's slug as the work package and recorded
+in that chunk's run log, not in the verify pass's own log. The round's `Reviewed:` names the
+chunk's latest finished dispatch, the work being checked again. **The only substitution points across all three templates are:**
 
 - `{gameName}`
 - `{slug}`
@@ -49,8 +52,8 @@ already specifies. **The only substitution points across all three templates are
 - `{codeFilePaths}`
 - `{visibilityDeclarationText}` — visibility lens only.
 
-For `ui: touches|major` chunks, dispatch the 4th (design-review) lens exactly as `build/audit.md`
-already specifies — no new verify-side policy in either direction (decision 7). Its findings land
+For `ui: touches|major` chunks, dispatch the 4th (design-review) lens, at the `review` role,
+exactly as `build/audit.md` already specifies — no new verify-side policy in either direction (decision 7). Its findings land
 in the same `## Findings Ledger` as the three lenses above, through this orchestrator, never a
 separate track.
 

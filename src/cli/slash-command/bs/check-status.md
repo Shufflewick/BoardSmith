@@ -32,6 +32,15 @@ Keep requirement tags, run ids, file paths, step names, and command names other 
 command out of the body. A count belongs in the report only when it tells the designer something
 about their game.
 
+## Model Routing
+
+Which role does each piece of work, when review may start, and what happens when a step fails:
+`${CLAUDE_SKILL_DIR}/../bs-shared/routing.md`, the one authority.
+
+This skill dispatches no agent. Each chunk's run log (`design/run-log/<slug>.md`) records its
+dispatches by role and agent type and its review rounds with the verify result each started from,
+for a designer who asks how a chunk was built.
+
 ## Step 0a: Layout Check on Entry
 
 Before anything else, run:

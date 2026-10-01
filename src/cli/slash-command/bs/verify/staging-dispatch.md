@@ -98,7 +98,9 @@ content-driven call, unchanged from ingest's fan-out.
 
 ## Dispatch
 
-For each pending range (per Resume above), dispatch one Task-tool subagent. **Do not compose, restate, or
+For each pending range (per Resume above), dispatch one subagent, as the agent `npx boardsmith
+agent judgement` names (`routing.md`), with `Work package: verify-game` as its prompt's first line
+and a `### Dispatch N` entry (`Work: transcribe <range>`) in `design/run-log/verify-game.md`. **Do not compose, restate, or
 summarize the transcription contract in the dispatch prompt.** The contract lives in
 `${CLAUDE_SKILL_DIR}/../bs-shared/ingest/transcription-subagent.md`; the subagent reads it
 directly. Copy this pointer block byte-identical except the last line, filling `Write slices to:`
@@ -127,7 +129,7 @@ looking like.
 Fill `{pages}` and `{source}` from the `ranges` entry being dispatched: `{source}` is the
 archived document exactly as `INDEX.md` records it (`rulebook/source/<file>`), so `Rulebook path:`
 is that file under `design/` and `Source record:` is the value each staged slice writes as its
-`Source:` line. A fresh-context Task subagent has no inherited knowledge of where the source lives
+`Source:` line. A fresh-context subagent has no inherited knowledge of where the source lives
 or which run it belongs to.
 
 ## Recording
@@ -142,7 +144,15 @@ boardsmith verify-run-record --run-id <runId> --unit <unitId> --slice <slicePath
 using the `slicePath` field the subagent's return carries — the orchestrator records from that
 returned field, it does not open the file to check it. The command does: it refuses a staged
 slice whose `Source:` line names a different document than its range's (or none, in a project
-with several documents). On that refusal, reset and re-dispatch the range with the block above.
+with several documents), one it cannot find in the staging directory, and an empty one. A
+refusal is a failure of that range's dispatch at the `judgement` role: fill its run log entry's
+Outcome as `failed`, with the refusal in Detail. The range then gets exactly one re-transcription
+of that range, dispatched to the `judgement` role again: the third named exception in
+`routing.md` "When a Step Fails" (transcription slips are usually mechanical, and the designer's
+time is scarcer). Reset the range (`--reset-range`, exactly as Resume above does), then dispatch
+it again with the block above, as a new `### Dispatch N` entry with `Escalated from: Dispatch N`
+naming the refused dispatch. If the command refuses the range again, stop and ask the designer,
+and dispatch nothing more for that range until they answer.
 
 **Ordering rule and its reason:** `verify-run-record` itself refuses to record a slice it cannot
 find, non-empty, on disk inside the staging directory — so a record can never precede the

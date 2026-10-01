@@ -31,8 +31,8 @@ the implementation reveals. The rule constrains changing `spec`'s tests, not gro
 Every other step in this pipeline restates the Context-Economics Hard Rule
 (`build-chunk.md` "Context-Economics Hard Rule") — the orchestrator never reads rulebook slices,
 docs, or generated code itself, only the structured summaries a subagent returns. `spec` and
-`build` are the two exceptions: a fresh-context executor (main context or a dedicated Task-tool
-subagent) reads this chunk's cited raw rulebook slices directly, in addition to the approved
+`build` are the two exceptions: a fresh-context executor (a dispatched subagent of the step's role,
+`judgement` for `spec` and `bounded` for `build`, per `routing.md`) reads this chunk's cited raw rulebook slices directly, in addition to the approved
 interpretation already settled in CHUNK.md. Two dual inputs, never one alone:
 
 1. **The chunk's cited raw rulebook slices** — the actual `rulebook/NN-topic.md` text this

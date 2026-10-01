@@ -18,6 +18,12 @@
  *   - run-log/<slug>.md, one per chunk (#294): every `Dispatched at` / `Finished at` is a
  *     `date -u` clock read, in order, and no later than the commit that recorded that line (or
  *     than now, for a line not yet committed). RUN.md holds no dispatch entries of its own.
+ *     Every dispatch names its role and the agent type dispatched, a failed dispatch or a review round
+ *     that asked for changes is answered one role up (or by routing.md's named exceptions, or the
+ *     designer, at the top) and never at the same role, and every review round names the dispatch it
+ *     reviewed and started from a passing verify, confirmed against `.boardsmith/verify/` when the
+ *     result is on this machine (`lib/run-log-roles.ts`, #454). `ingest-rules` and `verify-game`
+ *     keep a run log of their own dispatches here too, so no chunk may take either name.
  *   - CROSS-CHUNK.md (#294): every merge of a chunk built alongside others has a ruling from the
  *     audit's cross-chunk lens, not `pending`.
  *   - RULINGS.md, DECISIONS.md and every verified `chunks/<slug>/CHUNK.md` (its sign-off
@@ -37,7 +43,7 @@
 
 import { promises as fs } from 'node:fs';
 import { execFile } from 'node:child_process';
-import { join as pathJoin, resolve as pathResolve } from 'node:path';
+import { join as pathJoin, relative as pathRelative, resolve as pathResolve } from 'node:path';
 import {
   CROSS_CHUNK_MD,
   DECISIONS_MD,
@@ -59,9 +65,11 @@ import {
 import { CHUNK_EVIDENCE_DIR, citedEvidencePaths } from '../lib/cited-evidence.js';
 import { type ChunkCommit, type PinnedCommit, chunkPins } from '../lib/chunk-commits.js';
 import { LINE_LOCATION_HINT, type LineRange, fileLines, lineRangeProblem } from '../lib/line-location.js';
-import { type LedgerEntry, parseLedgerEntries, supersessionPatterns } from '../lib/ledger-entries.js';
+import { type EntryField, type LedgerEntry, entryField, parseLedgerEntries, supersessionPatterns } from '../lib/ledger-entries.js';
 import { NUMBERED_LEDGER_SPECS, provisionalHeadings } from '../lib/ledger-allocation.js';
 import { checkCrossChunkLedger } from './cross-chunk.js';
+import { type VerifyLookup, type VerifyOnFile, checkRunLogRoles, reviewRoundCommits, runLogEntries } from '../lib/run-log-roles.js';
+import { readVerifyResult, verifyResultPath, verifyResultsDir } from '../lib/verify-result.js';
 
 export type LedgerFindingKind =
   | 'duplicate-number'
@@ -71,6 +79,9 @@ export type LedgerFindingKind =
   | 'filing-status-invalid'
   | 'run-timestamp'
   | 'run-log-misplaced'
+  | 'run-log-shared'
+  | 'run-role'
+  | 'review-round'
   | 'cross-chunk-unreviewed'
   | 'provisional-on-main-line'
   | 'evidence-not-committed'
@@ -335,20 +346,6 @@ export function checkFilingStatus(text: string): LedgerFinding[] {
 const CLOCK_READ = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z$/;
 const CLOCK_COMMAND = '`date -u +%Y-%m-%dT%H:%M:%SZ`';
 
-interface RunField {
-  value: string;
-  line: number;
-}
-
-function runField(entry: LedgerEntry, field: string): RunField | undefined {
-  const lines = entry.body.split('\n');
-  const pattern = new RegExp(`^\\s*-\\s*${field}:[ \\t]*(.*?)\\s*$`);
-  for (let i = 0; i < lines.length; i++) {
-    const match = pattern.exec(lines[i]);
-    if (match) return { value: match[1], line: entry.bodyLine + i };
-  }
-  return undefined;
-}
 
 function isoOf(epochSeconds: number): string {
   return new Date(epochSeconds * 1000).toISOString().replace(/\.000Z$/, 'Z');
@@ -363,7 +360,7 @@ interface Clock {
  * Parses one clock-read field and holds it to the commit that recorded it (or to now, when not
  * committed). Returns the time, or undefined when it is not a clock read at all.
  */
-function readClock(name: string, field: string, f: RunField, clock: Clock, out: string[]): number | undefined {
+function readClock(name: string, field: string, f: EntryField, clock: Clock, out: string[]): number | undefined {
   if (!CLOCK_READ.test(f.value)) {
     out.push(
       `${name} "${field}: ${f.value}" (line ${f.line}) is not a clock read. Run ${CLOCK_COMMAND} ` +
@@ -386,7 +383,7 @@ function readClock(name: string, field: string, f: RunField, clock: Clock, out: 
 }
 
 /** Outcome and Finished at must agree about whether the dispatch has returned. */
-function pendingMismatch(name: string, outcome: string | undefined, finished: RunField): string | undefined {
+function pendingMismatch(name: string, outcome: string | undefined, finished: EntryField): string | undefined {
   const outcomePending = outcome === 'pending';
   const finishPending = finished.value === 'pending';
   if (outcomePending && !finishPending) {
@@ -408,11 +405,11 @@ function pendingMismatch(name: string, outcome: string | undefined, finished: Ru
 function finishProblems(
   name: string,
   entry: LedgerEntry,
-  dispatched: { field: RunField; at: number } | undefined,
+  dispatched: { field: EntryField; at: number } | undefined,
   clock: Clock,
   out: string[],
 ): void {
-  const finished = runField(entry, 'Finished at');
+  const finished = entryField(entry, 'Finished at');
   if (!finished) {
     out.push(
       `${name} (line ${entry.line}) has no "- Finished at:" field. Add "- Finished at: pending" ` +
@@ -420,7 +417,7 @@ function finishProblems(
     );
     return;
   }
-  const outcome = runField(entry, 'Outcome')?.value.split(/\s/)[0];
+  const outcome = entryField(entry, 'Outcome')?.value.split(/\s/)[0];
   const mismatch = pendingMismatch(name, outcome, finished);
   if (mismatch) {
     out.push(mismatch);
@@ -443,8 +440,8 @@ function dispatchProblems(
   entry: LedgerEntry,
   clock: Clock,
   out: string[],
-): { field: RunField; at: number } | undefined {
-  const field = runField(entry, 'Dispatched at');
+): { field: EntryField; at: number } | undefined {
+  const field = entryField(entry, 'Dispatched at');
   if (!field) {
     out.push(`${name} (line ${entry.line}) has no "- Dispatched at:" field. Add the ${CLOCK_COMMAND} read taken before it was launched.`);
     return undefined;
@@ -454,18 +451,20 @@ function dispatchProblems(
 }
 
 /**
- * Checks one chunk's run log (`run-log/<slug>.md`, named by `ledger`). `commitTimeOfLine(n)` returns the committer time (epoch seconds) of
- * the commit that recorded line `n`, or null when that line is not committed yet; such a line is
- * held to `nowSeconds` instead. A clock read taken when the line was written can never be later
- * than the commit that recorded it.
+ * Checks one work package's run log (`run-log/<id>.md`, named by `ledger`). `commitTimeOfLine(n)`
+ * returns the committer time (epoch seconds) of the commit that recorded line `n`, or null when that
+ * line is not committed yet; such a line is held to `nowSeconds` instead. A clock read taken when
+ * the line was written can never be later than the commit that recorded it. `verifyOnFile` looks up
+ * the verify result on this machine for the commit a review round names.
  */
 export function checkRunLog(
   text: string,
   ledger: string,
   commitTimeOfLine: (line: number) => number | null,
   nowSeconds: number,
+  verifyOnFile: VerifyLookup,
 ): LedgerFinding[] {
-  const entries = parseLedgerEntries(text, 'Dispatch');
+  const entries = runLogEntries(text).filter((e) => e.kind === 'Dispatch');
   const findings = duplicateFindings(groupById(entries), 'Dispatch', ledger);
   const clock: Clock = { commitTimeOfLine, nowSeconds };
   let previous: { id: string; at: number } | undefined;
@@ -484,6 +483,7 @@ export function checkRunLog(
     finishProblems(name, entry, dispatched, clock, out);
     findings.push(...out.map((detail) => ({ ledger, entry: name, kind: 'run-timestamp' as const, detail })));
   }
+  findings.push(...checkRunLogRoles(text, verifyOnFile).map((f) => ({ ledger, ...f })));
   return findings;
 }
 
@@ -542,7 +542,57 @@ function misplacedRunLog(text: string): LedgerFinding[] {
   ];
 }
 
-/** Every chunk run log, design-relative (`run-log/<slug>.md`), sorted. */
+/**
+ * The verify results in `.boardsmith/verify/` for `commits`, each written as a review round writes
+ * it (a prefix of the full id), as a lookup. A commit with no result on this machine looks up as
+ * undefined: the check then rests on the round's own line.
+ */
+async function verifyResultsOnFile(projectDir: string, commits: string[]): Promise<VerifyLookup> {
+  let names: string[];
+  try {
+    names = (await fs.readdir(verifyResultsDir(projectDir))).filter((n) => /^[0-9a-f]{40,64}\.json$/.test(n));
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return () => undefined;
+    throw err;
+  }
+  const found = new Map<string, VerifyOnFile>();
+  for (const commit of new Set(commits)) {
+    const matches = names.filter((n) => n.startsWith(commit)).map((n) => n.slice(0, -'.json'.length));
+    if (matches.length > 1) {
+      found.set(commit, { ambiguous: matches });
+      continue;
+    }
+    if (matches.length === 0) continue;
+    const result = await readVerifyResult(projectDir, matches[0]);
+    if (result !== undefined) {
+      found.set(commit, { file: pathRelative(projectDir, verifyResultPath(projectDir, matches[0])), result });
+    }
+  }
+  return (commit) => found.get(commit);
+}
+
+/** The skills that keep a run log of their own dispatches, by the work package it is named for. */
+const SKILL_RUN_LOGS = ['ingest-rules', 'verify-game'];
+
+/**
+ * A chunk named like a skill that keeps its own run log would write its dispatches into that
+ * skill's file, and each would be checked as the other's history.
+ */
+function sharedRunLogs(slugs: string[]): LedgerFinding[] {
+  return slugs
+    .filter((slug) => SKILL_RUN_LOGS.includes(slug))
+    .map((slug) => ({
+      ledger: `${RUN_LOG_DIR}/${slug}.md`,
+      entry: `chunk ${slug}`,
+      kind: 'run-log-shared' as const,
+      detail:
+        `Chunk "${slug}" has the name of a work package that is not a chunk: /bs-${slug} keeps its own dispatches in ` +
+        `${DESIGN_DIR}/${RUN_LOG_DIR}/${slug}.md, the file this chunk's run log would be. Rename the chunk: remove it ` +
+        'and add it back under another slug with `/bs-insert-chunk`, so each work package has a run log of its own.',
+    }));
+}
+
+/** Every run log, design-relative (`run-log/<id>.md`), sorted: one per chunk, plus `ingest-rules` and `verify-game`. */
 async function runLogFiles(projectDir: string): Promise<string[]> {
   try {
     const names = await fs.readdir(designPath(projectDir, RUN_LOG_DIR));
@@ -929,6 +979,7 @@ export async function ledgerCheck(projectDir: string): Promise<LedgerCheckResult
     result.findings.push(...misplacedRunLog(run));
   }
 
+  result.findings.push(...sharedRunLogs(await chunkSlugs(projectDir)));
   const logs = await runLogFiles(projectDir);
   if (logs.length > 0) {
     await requireGitRepo(projectDir, 'compares each run log\'s timestamps against the commits that recorded them');
@@ -940,7 +991,8 @@ export async function ledgerCheck(projectDir: string): Promise<LedgerCheckResult
     result.checked.push(log);
     const rel = `${DESIGN_DIR}/${log}`;
     const commits = trackedLogs.has(rel) ? await lineCommits(projectDir, rel) : [];
-    result.findings.push(...checkRunLog(text, log, (line) => commits[line]?.time ?? null, Math.floor(Date.now() / 1000)));
+    const verifyOnFile = await verifyResultsOnFile(projectDir, reviewRoundCommits(text));
+    result.findings.push(...checkRunLog(text, log, (line) => commits[line]?.time ?? null, Math.floor(Date.now() / 1000), verifyOnFile));
   }
 
   const crossChunk = await readLedger(projectDir, CROSS_CHUNK_MD);

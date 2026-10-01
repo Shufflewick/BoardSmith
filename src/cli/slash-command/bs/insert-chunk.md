@@ -23,6 +23,14 @@ paths, status spellings, and step names out of the body; never narrate bookkeepi
 overlap is reported as what it means for their game ("this overlaps something you already tested —
 you may need to play that part again"), never as a raw diff.
 
+## Model Routing
+
+Which role does each piece of work, when review may start, and what happens when a step fails:
+`${CLAUDE_SKILL_DIR}/../bs-shared/routing.md`, the one authority.
+
+A sketch reshape touches the plan the designer approved, so under `/bs-build-game` it is
+dispatched as the `judgement` role's agent, with the work package the reshaped chunk's slug.
+
 ## Step 0a: Layout Check on Entry
 
 Before anything else, run:

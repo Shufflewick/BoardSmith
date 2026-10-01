@@ -447,6 +447,22 @@ describe('boardsmith verify: a result counts only for a commit on a clean tree',
     expect(again.path).toBeUndefined();
     expect(await readVerifyResult(dir, head)).toEqual(clean);
   });
+
+  it('lets a failing clean re-run replace a passing result for the same commit, so the latest clean run governs', async () => {
+    const dir = await gameOnBranch(false);
+    const head = git(dir, 'rev-parse', 'HEAD').trim();
+    const { checks } = countingChecks();
+    const { result: passing } = await runVerify({ projectDir: dir, checks, log: () => {} });
+    expect(passing).toMatchObject({ cleanTree: true, passed: true });
+    expect(await verifiedProblem(dir)).toBeUndefined();
+
+    const failing = { ...checks, test: async () => ({ passed: false, summary: '1 failed' }) };
+    const again = await runVerify({ projectDir: dir, checks: failing, log: () => {} });
+    expect(again.result).toMatchObject({ cleanTree: true, passed: false });
+    expect(again.path).toBe(join(dir, '.boardsmith', 'verify', `${head}.json`));
+    expect(await readVerifyResult(dir, head)).toEqual(again.result);
+    expect(await verifiedProblem(dir)).toMatch(/fail/i);
+  });
 });
 
 const REPO = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
