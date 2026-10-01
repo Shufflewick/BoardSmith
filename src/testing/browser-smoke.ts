@@ -213,17 +213,37 @@ async function drainResolved(frame: Frame, walk: SmokeWalk, memory: WalkMemory):
       walk.taken.add(action);
       memory.resolved.set(action, (memory.resolved.get(action) ?? 0) + 1);
       memory.lastResolved = action;
-    } else {
+    } else if (!refusedANumber(action, error, memory)) {
       memory.failed.add(action);
-      note(walk, `The panel offered "${action}", and taking it failed: ${error ?? 'no reason given'}`);
+      const refused = memory.refused.get(action) ?? 0;
+      const each = refused > 0 ? ` The game refused each of the ${refused + 1} numbers the walk entered.` : '';
+      note(walk, `The panel offered "${action}", and taking it failed: ${error ?? 'no reason given'}${each}`);
     }
   }
   return resolved.length;
 }
 
-/** Reports each error toast the game shows a player, once. */
-async function noteErrorToasts(frame: Frame, walk: SmokeWalk): Promise<void> {
-  for (const text of await frame.locator('.toast.error').allInnerTexts()) note(walk, `The game showed an error: ${text.trim()}`);
+/** How many numbers the walk enters in an action whose game refuses them, before it reports the action (#466). */
+const NUMBER_TRIES = 3;
+
+/**
+ * Whether `action` failed because the game's own rules refused a number the walk typed in it, with
+ * tries left: then the walk takes it again with the next number up (`numberToEnter`), and the refusal,
+ * and the error toast that repeats it, are the game working, not a problem (#466).
+ */
+function refusedANumber(action: string, error: string | undefined, memory: WalkMemory): boolean {
+  const refused = memory.refused.get(action) ?? 0;
+  if (!memory.numbered.delete(action) || refused >= NUMBER_TRIES - 1) return false;
+  memory.refused.set(action, refused + 1);
+  if (error !== undefined) memory.refusals.add(error);
+  return true;
+}
+
+/** Reports each error toast the game shows a player, once, except one repeating a refused number (#466). */
+async function noteErrorToasts(frame: Frame, walk: SmokeWalk, memory: WalkMemory): Promise<void> {
+  for (const text of await frame.locator('.toast.error').allInnerTexts()) {
+    if (![...memory.refusals].some((refusal) => text.includes(refusal))) note(walk, `The game showed an error: ${text.trim()}`);
+  }
 }
 
 // -------------------------------------------------------------------------------------------
@@ -360,24 +380,25 @@ async function readOffers(frame: Frame, walk: SmokeWalk): Promise<Offers> {
   return { enabled: offers.enabled, groups: offers.groups, inGroup: offers.inGroup, open: offers.open };
 }
 
-/** A control one look at the page found (`pageControls`), and the locator that presses it. */
+/** A control one look at the page found (`pageControls`), the locator that presses it, and its frame. */
 interface Control extends PageControl {
   readonly target: Locator;
+  readonly frame: Frame;
 }
 
 /**
- * The visible controls `locator` matches that a player can reach, read in one look at the page, so
- * none can go away between being found and being read (#464).
+ * The visible controls `selector` matches in `frame` (within `within` when given) that a player can
+ * reach, read in one look at the page, so none can go away between being found and being read (#464).
  */
-async function controlsOf(locator: Locator): Promise<Control[]> {
-  const visible = locator.filter({ visible: true });
-  return (await visible.evaluateAll(pageControls)).map((control) => ({ ...control, target: visible.nth(control.index) }));
+async function controlsOf(frame: Frame, selector: string, within?: Locator): Promise<Control[]> {
+  const visible = (within ?? frame).locator(selector).filter({ visible: true });
+  return (await visible.evaluateAll(pageControls)).map((control) => ({ ...control, target: visible.nth(control.index), frame }));
 }
 
 /** The first enabled control matched by the first of `selectors` that matches one, or undefined. */
 async function firstPressable(frame: Frame, selectors: readonly string[]): Promise<Control | undefined> {
   for (const selector of selectors) {
-    const enabled = (await controlsOf(frame.locator(selector))).find((control) => control.enabled);
+    const enabled = (await controlsOf(frame, selector)).find((control) => control.enabled);
     if (enabled) return enabled;
   }
   return undefined;
@@ -399,9 +420,15 @@ async function whyNotPressed(target: Locator, error: unknown): Promise<string> {
  * never becomes pressable, is reported and the walk goes on. Returns whether the press landed.
  */
 async function press(control: Control, what: string, walk: SmokeWalk): Promise<boolean> {
+  const pressIt = () =>
+    control.keyboardOnly ? control.target.press('Enter', { timeout: PRESS_MS }) : control.target.click({ timeout: PRESS_MS });
   try {
-    if (control.keyboardOnly) await control.target.press('Enter', { timeout: PRESS_MS });
-    else await control.target.click({ timeout: PRESS_MS });
+    await pressIt().catch(async (error: unknown) => {
+      if (!coveredByAToast(error)) throw error;
+      // A toast over the control goes by itself; a player waits for it, and so does the walk.
+      await control.frame.waitForFunction(() => document.querySelector('.toast') === null, undefined, { timeout: TOAST_WAIT_MS });
+      await pressIt();
+    });
     return true;
   } catch (error) {
     note(walk, `Pressing ${what} did not work: ${await whyNotPressed(control.target, error)}.`);
@@ -409,9 +436,17 @@ async function press(control: Control, what: string, walk: SmokeWalk): Promise<b
   }
 }
 
+/** The longest a toast stays: an error toast goes after 4 seconds. */
+const TOAST_WAIT_MS = 8_000;
+
+/** Whether a press failed because a toast lay over the control. */
+function coveredByAToast(error: unknown): boolean {
+  return error instanceof Error && /class="[^"]*\btoast\b[^"]*"[^\n]*intercepts pointer events/.test(error.message);
+}
+
 /** Presses what `selector` matches first in `frame`, as the panel's `what`; false when it has gone. */
 async function pressThePanels(frame: Frame, selector: string, what: string, walk: SmokeWalk): Promise<boolean> {
-  const [control] = await controlsOf(frame.locator(selector));
+  const [control] = await controlsOf(frame, selector);
   if (control === undefined) return false;
   return press(control, `the panel's ${what}`, walk);
 }
@@ -421,9 +456,22 @@ function note(walk: SmokeWalk, problem: string): void {
   if (!walk.errors.includes(problem)) walk.errors.push(problem);
 }
 
+/**
+ * One open action being answered: the walk, what it remembers, the action, the step, and the board
+ * candidates this pick has chosen, since the board does not mark them.
+ */
+interface Answering {
+  readonly frame: Frame;
+  readonly walk: SmokeWalk;
+  readonly memory: WalkMemory;
+  readonly name: string;
+  readonly step: number;
+  readonly picked: Set<string>;
+}
+
 /** A board candidate of the open pick that this pick has not chosen yet, recorded in `picked`. */
-async function unpickedCandidate(frame: Frame, picked: Set<string>): Promise<Control | undefined> {
-  for (const candidate of await controlsOf(frame.locator('[data-testid="bs-board"] [data-bs-candidate]'))) {
+async function unpickedCandidate({ frame, picked }: Answering): Promise<Control | undefined> {
+  for (const candidate of await controlsOf(frame, '[data-testid="bs-board"] [data-bs-candidate]')) {
     if (picked.has(candidate.key) || !candidate.enabled) continue;
     picked.add(candidate.key);
     return candidate;
@@ -431,11 +479,14 @@ async function unpickedCandidate(frame: Frame, picked: Set<string>): Promise<Con
   return undefined;
 }
 
-/** Presses `answer` to a choice of the open action `name`, saying what it pressed. Returns its label. */
-async function pressAnswer(answer: Control, walk: SmokeWalk, name: string, step: number): Promise<string> {
-  narrate(step, `pressing "${answer.label}" for "${name}"`);
-  await press(answer, `"${answer.label}" while answering "${name}"`, walk);
-  return answer.label;
+/** How the walk names a control: its label, else, for one with no words on it, what it stands for. */
+const nameOf = (control: Control) => (control.label === '' ? control.key : control.label);
+
+/** Presses `answer` to a choice of the open action, saying what it pressed. Returns its name. */
+async function pressAnswer(answer: Control, { walk, name, step }: Answering): Promise<string> {
+  narrate(step, `pressing "${nameOf(answer)}" for "${name}"`);
+  await press(answer, `"${nameOf(answer)}" while answering "${name}"`, walk);
+  return nameOf(answer);
 }
 
 /**
@@ -443,10 +494,10 @@ async function pressAnswer(answer: Control, walk: SmokeWalk, name: string, step:
  * choice (an unticked box in the panel, else a board candidate the pick has not chosen) until the
  * pick has at least one and its Done button is ready, then Done. The pick's own min and max decide
  * through the panel: Done is ready from min on, every box left is refused at max, and a pick whose
- * min is its max has no Done at all and completes on its last choice. `picked` is the board
- * candidates this pick has chosen, since the board does not mark them. Returns what it pressed.
+ * min is its max has no Done at all and completes on its last choice. Returns what it pressed.
  */
-async function answerMultiSelect(frame: Frame, walk: SmokeWalk, name: string, picked: Set<string>, step: number): Promise<string | undefined> {
+async function answerMultiSelect(answering: Answering): Promise<string | undefined> {
+  const { frame, picked } = answering;
   const inPanel = (await frame.locator('.action-config .multi-select-choice input[type="checkbox"]').count()) > 0;
   const chosen = inPanel ? await frame.locator('.action-config .multi-select-choice input:checked').count() : picked.size;
   const done = await firstPressable(frame, ['.action-config .done-button']);
@@ -455,21 +506,22 @@ async function answerMultiSelect(frame: Frame, walk: SmokeWalk, name: string, pi
       ? done
       : ((inPanel
           ? await firstPressable(frame, ['.action-config .multi-select-choice input[type="checkbox"]:not(:checked)'])
-          : await unpickedCandidate(frame, picked)) ?? done);
-  return next === undefined ? undefined : pressAnswer(next, walk, name, step);
+          : await unpickedCandidate(answering)) ?? done);
+  return next === undefined ? undefined : pressAnswer(next, answering);
 }
 
 /**
- * Answers one choice of the open action `name`, as a player would: a multi-select pick one choice
- * at a time, else the board's own candidate first (so the board's controls are pressed, not only
- * the panel's), then the panel's choices, a value for a number or text field, and the button that
+ * Answers one choice of the open action, as a player would: a multi-select pick one choice at a
+ * time, else the board's own candidate first (so the board's controls are pressed, not only the
+ * panel's), then the panel's choices, a value for a number or text field, and the button that
  * finishes a step. Returns what it pressed, or undefined when there was nothing to answer.
  */
-async function answerOneChoice(frame: Frame, walk: SmokeWalk, name: string, picked: Set<string>, step: number): Promise<string | undefined> {
-  await fillAnEmptyField(frame, step, name);
+async function answerOneChoice(answering: Answering): Promise<string | undefined> {
+  const { frame } = answering;
+  await fillAnEmptyField(answering);
   // An ordered list shows a count too, and is answered by its Add buttons below.
   const multiSelect = frame.locator('.action-config .multi-select-count:not(.ordered-list-count)');
-  if ((await multiSelect.count()) > 0) return answerMultiSelect(frame, walk, name, picked, step);
+  if ((await multiSelect.count()) > 0) return answerMultiSelect(answering);
 
   const target = await firstPressable(frame, [
     '.action-config [data-bs-confirm]',
@@ -480,35 +532,37 @@ async function answerOneChoice(frame: Frame, walk: SmokeWalk, name: string, pick
     '.action-config .done-button',
     '.action-config .skip-btn',
   ]);
-  return target === undefined ? undefined : pressAnswer(target, walk, name, step);
+  return target === undefined ? undefined : pressAnswer(target, answering);
 }
 
 /**
  * Fills the open action's text or number field when it is empty, as a player types before pressing
- * Done: "smoke test" in a text field, and in a number field a value its own min, max and step accept
- * (#465, `numberToEnter`).
+ * Done: "smoke test" in a text field, and in a number field a value its own min, max and step accept,
+ * moved up past each one the game refused before (#465, #466, `numberToEnter`).
  */
-async function fillAnEmptyField(frame: Frame, step: number, name: string): Promise<void> {
+async function fillAnEmptyField({ frame, memory, name, step }: Answering): Promise<void> {
   const field = await firstPressable(frame, [
     '.action-config .text-input input',
     '.action-config .text-input textarea',
     '.action-config .number-input input[type="number"]',
   ]);
   if (field === undefined || (await field.target.inputValue({ timeout: PRESS_MS })) !== '') return;
-  const value = (await field.target.getAttribute('type', { timeout: PRESS_MS })) === 'number'
-    ? await field.target.evaluate(numberToEnter, undefined, { timeout: PRESS_MS })
+  const isNumber = (await field.target.getAttribute('type', { timeout: PRESS_MS })) === 'number';
+  const value = isNumber
+    ? await field.target.evaluate(numberToEnter, memory.refused.get(name) ?? 0, { timeout: PRESS_MS })
     : 'smoke test';
+  if (isNumber) memory.numbered.add(name);
   narrate(step, `entering "${value}" for "${name}"`);
   await field.target.fill(value, { timeout: PRESS_MS });
 }
 
 /** {@link answerOneChoice}, given the time a pick's choices take to arrive from the game. */
-async function answerWhenOffered(frame: Frame, walk: SmokeWalk, name: string, picked: Set<string>, step: number): Promise<string | undefined> {
+async function answerWhenOffered(answering: Answering): Promise<string | undefined> {
   const started = Date.now();
   for (;;) {
-    const pressed = await answerOneChoice(frame, walk, name, picked, step);
+    const pressed = await answerOneChoice(answering);
     if (pressed !== undefined || Date.now() - started > PRESS_MS) return pressed;
-    await frame.waitForTimeout(100);
+    await answering.frame.waitForTimeout(100);
   }
 }
 
@@ -535,15 +589,15 @@ async function abandon(frame: Frame, walk: SmokeWalk, memory: WalkMemory, name: 
  * too many presses.
  */
 async function finishOpenAction(frame: Frame, walk: SmokeWalk, memory: WalkMemory, name: string, step: number): Promise<void> {
-  const picked = new Set<string>();
+  const answering: Answering = { frame, walk, memory, name, step, picked: new Set() };
   const where = `at step ${step}${memory.dealt === null ? '' : ` of the game dealt from seed "${memory.dealt}"`}`;
   const trail = startAnswering(name, where, await openActionState(frame));
   while ((await readOffers(frame, walk)).open === name) {
-    const answer = await answerWhenOffered(frame, walk, name, picked, step);
+    const answer = await answerWhenOffered(answering);
     await settle(frame);
     // Resolved: whatever is open now (the same action again on a later turn) is a later step's.
     if ((await drainResolved(frame, walk, memory)) > 0) return;
-    const problem = answered(trail, answer, await openActionState(frame), [...picked]);
+    const problem = answered(trail, answer, await openActionState(frame), [...answering.picked]);
     if (problem !== undefined) return abandon(frame, walk, memory, name, problem);
   }
 }
@@ -558,7 +612,7 @@ const BOARD_CONTROLS = ':is(button, [role="button"]):not([data-bs-candidate]):no
  * since its label can change with the game ("deck, 30 cards"), else by its label.
  */
 async function boardControls(frame: Frame): Promise<Control[]> {
-  return (await controlsOf(frame.locator(`[data-testid="bs-board"] ${BOARD_CONTROLS}`))).filter((control) => control.enabled);
+  return (await controlsOf(frame, `[data-testid="bs-board"] ${BOARD_CONTROLS}`)).filter((control) => control.enabled);
 }
 
 /** Presses `control`, one of the board's or a dialog's, named `what`, saying so; counts it when the press lands. */
@@ -572,7 +626,7 @@ async function pressAnUntriedControl(frame: Frame, walk: SmokeWalk, memory: Walk
   for (const control of await boardControls(frame)) {
     if (memory.pressed.has(control.key)) continue;
     memory.pressed.add(control.key);
-    await pressABoardControl(control, `the board's "${control.label}"`, walk, memory, step);
+    await pressABoardControl(control, `the board's "${nameOf(control)}"`, walk, memory, step);
     return true;
   }
   return false;
@@ -591,14 +645,20 @@ async function openDialog(frame: Frame): Promise<{ name: string; target: Locator
  * dialog closes on. A dialog still open after that is reported, and ends the walk: a player in it
  * has no way back to the game. Returns whether the walk goes on.
  */
-async function answerTheDialog(dialog: { name: string; target: Locator }, walk: SmokeWalk, memory: WalkMemory, step: number): Promise<boolean> {
+async function answerTheDialog(
+  frame: Frame,
+  dialog: { name: string; target: Locator },
+  walk: SmokeWalk,
+  memory: WalkMemory,
+  step: number,
+): Promise<boolean> {
   if (!memory.inDialog) memory.dialogsOpened++;
   memory.inDialog = true;
-  for (const control of (await controlsOf(dialog.target.locator(BOARD_CONTROLS))).filter((c) => c.enabled)) {
+  for (const control of (await controlsOf(frame, BOARD_CONTROLS, dialog.target)).filter((c) => c.enabled)) {
     const key = `dialog ${memory.dialogsOpened}: ${control.key}`;
     if (memory.pressed.has(key)) continue;
     memory.pressed.add(key);
-    await pressABoardControl(control, `"${control.label}" in the dialog "${dialog.name}"`, walk, memory, step);
+    await pressABoardControl(control, `"${nameOf(control)}" in the dialog "${dialog.name}"`, walk, memory, step);
     return true;
   }
   narrate(step, `closing the dialog "${dialog.name}" with Escape`);
@@ -696,6 +756,12 @@ interface WalkMemory {
   inDialog: boolean;
   /** How many times a modal dialog has opened, so each opening's controls are pressed afresh. */
   dialogsOpened: number;
+  /** The actions the walk typed a number in on its last attempt at them (#466). */
+  readonly numbered: Set<string>;
+  /** How many numbers the game's own rules have refused in each action, so the walk types the next one up. */
+  readonly refused: Map<string, number>;
+  /** What the game said when it refused a number, which its error toasts repeat. */
+  readonly refusals: Set<string>;
 }
 
 function newMemory(seed: string | null): WalkMemory {
@@ -713,6 +779,9 @@ function newMemory(seed: string | null): WalkMemory {
     games: 1,
     inDialog: false,
     dialogsOpened: 0,
+    numbered: new Set(),
+    refused: new Map(),
+    refusals: new Set(),
   };
 }
 
@@ -776,10 +845,10 @@ async function afterTheGame(page: Page, walk: SmokeWalk, memory: WalkMemory, ste
  */
 async function walkOneStep(page: Page, frame: Frame, walk: SmokeWalk, memory: WalkMemory, step: number): Promise<boolean> {
   await drainResolved(frame, walk, memory);
-  await noteErrorToasts(frame, walk);
+  await noteErrorToasts(frame, walk, memory);
   if (await frame.locator('.game-over-card').isVisible()) return afterTheGame(page, walk, memory, step);
   const dialog = await openDialog(frame);
-  if (dialog !== undefined) return answerTheDialog(dialog, walk, memory, step);
+  if (dialog !== undefined) return answerTheDialog(frame, dialog, walk, memory, step);
   memory.inDialog = false;
   const offers = await readOffers(frame, walk);
   if (await pressAnUntriedControl(frame, walk, memory, step)) return true;
@@ -818,7 +887,7 @@ async function walkTheGame(page: Page, walk: SmokeWalk, memory: WalkMemory): Pro
   const frame = await gameFrame(page);
   await settle(frame);
   await drainResolved(frame, walk, memory);
-  await noteErrorToasts(frame, walk);
+  await noteErrorToasts(frame, walk, memory);
   // Errors the last press raised reach the page's listeners a moment after it; let them land.
   await page.waitForTimeout(250);
 }

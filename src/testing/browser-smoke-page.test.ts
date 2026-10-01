@@ -107,17 +107,23 @@ describe('numberToEnter (#465)', () => {
   }
 
   it("enters the field's own least value, which its rules accept", () => {
-    expect(numberToEnter(field('min="3" max="9" step="1"'))).toBe('3');
-    expect(numberToEnter(field('min="-2" step="any"'))).toBe('-2');
+    expect(numberToEnter(field('min="3" max="9" step="1"'), 0)).toBe('3');
+    expect(numberToEnter(field('min="-2" step="any"'), 0)).toBe('-2');
   });
 
   it('enters 1 when the field sets no least value, or its most when that is below 1', () => {
-    expect(numberToEnter(field('step="1"'))).toBe('1');
-    expect(numberToEnter(field('max="0" step="1"'))).toBe('0');
+    expect(numberToEnter(field('step="1"'), 0)).toBe('1');
+    expect(numberToEnter(field('max="0" step="1"'), 0)).toBe('0');
   });
 
   it('enters a whole number for a field that takes whole numbers', () => {
-    expect(numberToEnter(field('min="0.5" max="4" step="1"'))).toBe('1');
-    expect(numberToEnter(field('min="0.5" max="4" step="any"'))).toBe('0.5');
+    expect(numberToEnter(field('min="0.5" max="4" step="1"'), 0)).toBe('1');
+    expect(numberToEnter(field('min="0.5" max="4" step="any"'), 0)).toBe('0.5');
+  });
+
+  it('#466: enters the next value up for each value the game refused, never past its most', () => {
+    expect(numberToEnter(field('min="1" max="40" step="1"'), 1)).toBe('2');
+    expect(numberToEnter(field('min="1" max="40" step="1"'), 2)).toBe('3');
+    expect(numberToEnter(field('min="1" max="2" step="1"'), 5)).toBe('2');
   });
 });

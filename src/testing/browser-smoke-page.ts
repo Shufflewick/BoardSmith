@@ -86,12 +86,11 @@ export function pageDialogs(elements: Element[]): PageDialog[] {
 
 /**
  * The value the walk enters in an empty number field (#465): the field's own least value, else 1,
- * kept within its most, and whole when the field takes whole numbers (`step="1"`). A value its own
- * rules accept, so submitting it moves the action on.
+ * whole when the field takes whole numbers (`step="1"`), plus one for each of the `refused` values
+ * the game's own rules turned down before (#466), and never past its most.
  */
-export function numberToEnter(input: HTMLInputElement): string {
+export function numberToEnter(input: HTMLInputElement, refused: number): string {
   const least = input.min === '' ? 1 : Number(input.min);
   const most = input.max === '' ? Infinity : Number(input.max);
-  const value = Math.min(input.step === '1' ? Math.ceil(least) : least, most);
-  return String(value);
+  return String(Math.min((input.step === '1' ? Math.ceil(least) : least) + refused, most));
 }

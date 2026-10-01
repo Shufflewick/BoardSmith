@@ -273,8 +273,8 @@ describe('boardsmith verify: the smoke check', () => {
   });
 
   it(
-    '#465, #467: enters a number its field accepts, and gives up on an action it cannot finish once, reporting it, ' +
-      'without taking it again while the panel offers anything else',
+    '#465 to #467: enters a number its field accepts, and the next one up when the game refuses it, and gives up on an ' +
+      'action it cannot finish once, reporting it, without taking it again while the panel offers anything else',
     async () => {
       const { outcome, steps } = await smokeOf(false, {
         ...fieldsGame(),
@@ -286,6 +286,10 @@ describe('boardsmith verify: the smoke check', () => {
         /^The smoke walk, dealt from seed "smoke", found 2 problems: - The panel opened "code" at step 2 of the game dealt from seed "smoke", and pressing its choices changed nothing: .*Digits only\. - The panel offered "code", but the walk never took it in 60 steps\. The errors above, if any, say why\.$/,
       );
       expect(steps).toContain('smoke step 4: entering "1" for "kindle"');
+      // The game refuses one log with its own message, and the walk tries two: the refusal, and
+      // the error toast that says it, are the game working, not a problem. Later fires take two at once.
+      expect(steps.filter((line) => line.endsWith('entering "1" for "kindle"'))).toHaveLength(1);
+      expect(steps.filter((line) => line.endsWith('entering "2" for "kindle"')).length).toBeGreaterThan(0);
       expect(steps.filter((line) => line.endsWith('taking "code"'))).toHaveLength(1);
     },
   );

@@ -371,8 +371,13 @@ markers this page documents, so it keeps up with any game without knowing it:
   board's own `[data-bs-candidate]` (so the board is pressed, not only the
   panel), then the panel's choice, add, done and skip buttons. An empty text
   field is filled with "smoke test" and an empty number field with a value its
-  own `min`, `max` and `step` accept: its least value, else 1 (#465). Each press
-  is narrated (`smoke step 4: pressing "Done" for "kindle"`).
+  own `min`, `max` and `step` accept: its least value, else 1 (#465). When the
+  game's own rules refuse that number (the action fails), the walk takes the
+  action again with the next number up, three numbers in all, and neither the
+  refusal nor the error toast that repeats it is a problem (#466). Each press is
+  narrated (`smoke step 4: pressing "Done" for "kindle"`).
+- A press a toast lies over waits for the toast to go, as a player would, then
+  presses again.
 - The walk gives up on an open action, reports it, and presses its Cancel when
   the panel offers nothing to press, when three presses in a row change nothing,
   when a press brings the panel back to a state it showed before (the walk

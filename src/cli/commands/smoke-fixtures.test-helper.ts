@@ -485,9 +485,9 @@ const gone = ref(false);
 }
 
 /**
- * THE FIELDS GAME (#465, #467): each turn a player may `code` (a text field that takes digits only,
+ * THE FIELDS GAME (#465 to #467): each turn a player may `code` (a text field that takes digits only,
  * so the walk's "smoke test" never satisfies it and the action never finishes), `kindle` (a number
- * field, "How many logs?", 1 to 5), `draw` or `rest`. `code` is the panel's first offer, so a walk
+ * field, "How many logs?", 1 to 5, whose own rule refuses 1), `draw` or `rest`. `code` is the panel's first offer, so a walk
  * that went on taking an action it had given up on would never take the others.
  */
 export function fieldsGame(): Record<string, string> {
@@ -542,7 +542,13 @@ export function createTurnActions(game: DevGameGame): ActionDefinition[] {
       .execute(() => ({ success: true })),
     Action.create('kindle')
       .prompt('Kindle the fire')
-      .enterNumber('logs', { prompt: 'How many logs?', min: 1, max: 5, integer: true })
+      .enterNumber('logs', {
+        prompt: 'How many logs?',
+        min: 1,
+        max: 5,
+        integer: true,
+        validate: (logs) => (logs >= 2 ? true : 'A fire needs at least two logs.'),
+      })
       .execute((args, ctx) => {
         (ctx.player as DevGamePlayer).logs += args.logs as number;
         return { success: true };
