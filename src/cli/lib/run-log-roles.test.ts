@@ -324,30 +324,29 @@ describe('the named exceptions at judgement (routing.md "When a Step Fails")', (
     expect(details(text)).toEqual([expect.stringMatching(/^Dispatch 4: .*already had its one more judgement round \(Dispatch 2\)/)]);
   });
 
-  it('carry an exception round across a context ceiling, so a resumed round is not a fresh one', () => {
-    const text = log(
+  /**
+   * A repair's one more judgement round (Dispatch 3) that stopped with `stopped`, carried on by
+   * Dispatch 4 at the same role, whose review asked for changes again, and a Dispatch 5 escalating
+   * from that round: a third round, if Dispatch 4 counts as resuming Dispatch 3.
+   */
+  const resumedExceptionRound = (stopped: Record<string, string>) =>
+    log(
       ...buildWithFindings,
       repairOf(2, 1),
       round(2, { Reviewed: 'Dispatch 2', Outcome: 'changes requested' }),
-      repairOf(3, 2, { Outcome: 'context-ceiling' }),
+      repairOf(3, 2, stopped),
       dispatch(4, { Work: 'repair', ...J }),
       round(3, { Reviewed: 'Dispatch 4', Outcome: 'changes requested' }),
       repairOf(5, 3),
     );
-    expect(details(text)).toEqual([expect.stringMatching(/^Dispatch 5: .*already had its one more judgement round \(Dispatch 3\)/)]);
+  const thirdRound = [expect.stringMatching(/^Dispatch 5: .*already had its one more judgement round \(Dispatch 3\)/)];
+
+  it('carry an exception round across a context ceiling, so a resumed round is not a fresh one', () => {
+    expect(details(resumedExceptionRound({ Outcome: 'context-ceiling' }))).toEqual(thirdRound);
   });
 
   it('carry an exception round across a crash: a dispatch left pending is resumed by the next of the same work at the same role', () => {
-    const text = log(
-      ...buildWithFindings,
-      repairOf(2, 1),
-      round(2, { Reviewed: 'Dispatch 2', Outcome: 'changes requested' }),
-      repairOf(3, 2, { Outcome: 'pending', 'Finished at': 'pending' }),
-      dispatch(4, { Work: 'repair', ...J }),
-      round(3, { Reviewed: 'Dispatch 4', Outcome: 'changes requested' }),
-      repairOf(5, 3),
-    );
-    expect(details(text)).toEqual([expect.stringMatching(/^Dispatch 5: .*already had its one more judgement round \(Dispatch 3\)/)]);
+    expect(details(resumedExceptionRound({ Outcome: 'pending', 'Finished at': 'pending' }))).toEqual(thirdRound);
   });
 
   it('give a page range verify-run-record refused one re-transcription at judgement, the third named exception, then the designer', () => {
