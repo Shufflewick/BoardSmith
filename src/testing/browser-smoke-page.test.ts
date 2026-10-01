@@ -4,7 +4,7 @@
  * Chromium over a locator's matches; here they run over the same markup in jsdom.
  */
 import { beforeAll, describe, expect, it } from 'vitest';
-import { numberToEnter, pageControls, pageDialogs } from './browser-smoke-page.js';
+import { clickReached, guardClicks, numberToEnter, pageControls, pageDialogs } from './browser-smoke-page.js';
 
 // jsdom lays nothing out, so it has no `checkVisibility` and no `innerText`: here every element
 // is visible, and its text as laid out is its text.
@@ -146,5 +146,44 @@ describe('numberToEnter (#465)', () => {
     expect(numberToEnter(field('min="1" max="40" step="1"'), 1)).toBe('2');
     expect(numberToEnter(field('min="1" max="40" step="1"'), 2)).toBe('3');
     expect(numberToEnter(field('min="1" max="2" step="1"'), 5)).toBe('2');
+  });
+});
+
+describe('guardClicks and clickReached: what a pointed click reached (#468)', () => {
+  const CLICK_EVENTS = ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'];
+
+  function dispatchClick(on: Element): void {
+    for (const type of CLICK_EVENTS) on.dispatchEvent(new MouseEvent(type, { bubbles: true, cancelable: true }));
+  }
+
+  it('says the click reached the control when its events land on it or inside it', () => {
+    document.body.innerHTML = `<button id="card"><span id="rank">7</span></button>`;
+    guardClicks(document.getElementById('card')!);
+    dispatchClick(document.getElementById('rank')!);
+    expect(clickReached()).toBe('it');
+  });
+
+  it('stops a click on anything else before the page sees it, and says the click reached something else', () => {
+    document.body.innerHTML = `<button id="card">7</button><button id="other">Pass</button>`;
+    const other = document.getElementById('other')!;
+    let pressed = 0;
+    other.addEventListener('click', () => pressed++);
+    guardClicks(document.getElementById('card')!);
+    dispatchClick(other);
+    expect(pressed).toBe(0);
+    expect(clickReached()).toBe('other');
+    // The guard is gone with its answer: the page sees its clicks again.
+    dispatchClick(other);
+    expect(pressed).toBe(1);
+  });
+
+  it('says the click reached nothing when no event reached the frame, as when the page around the game covers the control', () => {
+    document.body.innerHTML = `<button id="card">7</button>`;
+    guardClicks(document.getElementById('card')!);
+    expect(clickReached()).toBe('nothing');
+  });
+
+  it('says when the page was replaced before the click could be read, since the new page has no guard', () => {
+    expect(() => clickReached()).toThrow('the game\'s page was replaced before the walk could read what the click reached');
   });
 });

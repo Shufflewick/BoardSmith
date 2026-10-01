@@ -107,6 +107,61 @@ export function pageDialogs(elements: Element[]): PageDialog[] {
 }
 
 /**
+ * What a click the walk made with the mouse reached (`guardClicks`, `clickReached`): the control
+ * itself, something else in the game's frame, or nothing in the frame at all.
+ */
+export type Reached = 'it' | 'other' | 'nothing';
+
+/** What `guardClicks` keeps on the frame's window for `clickReached`. */
+interface ClickGuard {
+  hit: boolean;
+  missed: boolean;
+  remove: () => void;
+}
+
+/** The window of a frame `guardClicks` has guarded. */
+type GuardedWindow = Window & { __boardsmithSmokeGuard?: ClickGuard };
+
+/**
+ * Guards the next click in `element`'s frame (#468): every pointer and mouse event that would reach
+ * anything but `element` is stopped before the page sees it, as Playwright's own click does, so a
+ * click that would land on something the page moved under the pointer does nothing and the walk can
+ * look again. Which events reached the element, and which anything else, is kept for `clickReached`.
+ */
+export function guardClicks(element: Element): void {
+  const view = element.ownerDocument.defaultView as GuardedWindow;
+  const types = ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'];
+  const guard: ClickGuard = { hit: false, missed: false, remove: () => types.forEach((type) => view.removeEventListener(type, stop, true)) };
+  function stop(event: Event): void {
+    const target = event.target as Node | null;
+    if (target !== null && (target === element || element.contains(target))) {
+      guard.hit = true;
+      return;
+    }
+    guard.missed = true;
+    event.stopImmediatePropagation();
+    event.preventDefault();
+  }
+  types.forEach((type) => view.addEventListener(type, stop, true));
+  view.__boardsmithSmokeGuard = guard;
+}
+
+/**
+ * Takes the guard `guardClicks` set off this frame and says what the click reached: the control,
+ * something else (which the guard stopped), or nothing in the frame, as when the page around the
+ * game covers the control and took the click itself. A frame with no guard is a new page: the click
+ * replaced the one that was guarded.
+ */
+export function clickReached(): Reached {
+  const view = window as GuardedWindow;
+  const guard = view.__boardsmithSmokeGuard;
+  if (guard === undefined) throw new Error("the game's page was replaced before the walk could read what the click reached");
+  guard.remove();
+  delete view.__boardsmithSmokeGuard;
+  return guard.missed ? 'other' : guard.hit ? 'it' : 'nothing';
+}
+
+/**
  * The value the walk enters in an empty number field (#465): the field's own least value, else 1,
  * whole when the field takes whole numbers (`step="1"`), plus one for each of the `refused` values
  * the game's own rules turned down before (#466), and never past its most.

@@ -34,7 +34,17 @@
  */
 import { test, type Frame, type Locator, type Page } from '@playwright/test';
 import { rulesErrorSentence } from '../engine/action/rules-error.js';
-import { MODAL_DIALOGS, numberToEnter, pageControls, pageDialogs, PRESS_MARK, type PageControl } from './browser-smoke-page.js';
+import {
+  clickReached,
+  guardClicks,
+  MODAL_DIALOGS,
+  numberToEnter,
+  pageControls,
+  pageDialogs,
+  PRESS_MARK,
+  type PageControl,
+  type Reached,
+} from './browser-smoke-page.js';
 import {
   answered,
   DEFAULT_SMOKE_SEED,
@@ -621,7 +631,7 @@ async function framesPass(frame: Frame): Promise<void> {
  * that moves when pointed at (a card that lifts under the pointer) is followed until it settles, and
  * one that never settles (a board that keeps panning) is clicked where it is once it has had its
  * looks. A click that would land on anything but the control, because the page moved something
- * else under the pointer at that instant, reaches nothing (`landsOnlyOn`), and the walk looks again.
+ * else under the pointer at that instant, is stopped (`landsOnlyOn`), and the walk looks again.
  */
 async function clickAt(control: Control, at: { x: number; y: number }, x: number, y: number): Promise<void> {
   const mouse = control.frame.page().mouse;
@@ -641,43 +651,27 @@ async function clickAt(control: Control, at: { x: number; y: number }, x: number
   throw new Error('it kept moving out from under the pointer, so no click landed on it');
 }
 
+/** Why a press failed when the click reached nothing in the game's frame. */
+const OVER_THE_FRAME = "the click reached nothing in the game, so something over the game's frame (the page around it) took it";
+
 /**
  * Runs `click` with every pointer and mouse event that would reach anything but `control` stopped
- * before the page sees it, as Playwright's own click does, and says whether the click reached
- * `control`. A click stopped this way does nothing, so the walk can look again and click once more.
+ * before the page sees it, as Playwright's own click does (`guardClicks`), and says whether the
+ * click reached `control` (`clickReached`). A click that reached something else did nothing, so the
+ * walk can look again and click once more. One that reached nothing in the game's frame landed on
+ * whatever the page around the game has over the frame, where no look inside the frame can see it,
+ * so the control is not pressable.
  */
 async function landsOnlyOn(control: Control, click: () => Promise<void>): Promise<boolean> {
-  await control.target.evaluate(
-    (element) => {
-      const view = element.ownerDocument.defaultView!;
-      const types = ['pointerdown', 'mousedown', 'pointerup', 'mouseup', 'click'];
-      const guard = { missed: false, remove: () => types.forEach((type) => view.removeEventListener(type, stop, true)) };
-      function stop(event: Event): void {
-        const target = event.target as Node | null;
-        if (target !== null && (target === element || element.contains(target))) return;
-        guard.missed = true;
-        event.stopImmediatePropagation();
-        event.preventDefault();
-      }
-      types.forEach((type) => view.addEventListener(type, stop, true));
-      Object.defineProperty(view, '__boardsmithSmokeGuard', { value: guard, configurable: true });
-    },
-    undefined,
-    { timeout: PRESS_MS },
-  );
-  let missed = true;
+  await control.target.evaluate(guardClicks, undefined, { timeout: PRESS_MS });
+  let reached: Reached = 'nothing';
   try {
     await click();
   } finally {
-    missed = await control.frame.evaluate(() => {
-      const view = window as unknown as { __boardsmithSmokeGuard: { missed: boolean; remove: () => void } };
-      const guard = view.__boardsmithSmokeGuard;
-      guard.remove();
-      delete (window as unknown as Record<string, unknown>).__boardsmithSmokeGuard;
-      return guard.missed;
-    });
+    reached = await control.frame.evaluate(clickReached);
   }
-  return !missed;
+  if (reached === 'nothing') throw new Error(OVER_THE_FRAME);
+  return reached === 'it';
 }
 
 /**
