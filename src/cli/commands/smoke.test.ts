@@ -546,6 +546,33 @@ describe('boardsmith verify: the smoke check', () => {
     },
   );
 
+  it(
+    "#470: fails on a spec input that throws, one naming a field the action does not have, and a number from `inputs` " +
+      'the game refuses, which it enters once and never moves up',
+    async () => {
+      const { outcome, steps } = await walkGreetings(`{
+    greet: { whom: () => { throw new Error('the players panel moved'); } },
+    wave: { whim: theOther },
+    pledge: { coins: 3 },
+  }`);
+
+      expect(outcome.passed).toBe(false);
+      expect(outcome.summary).toContain(
+        '- `inputs.greet.whom` in tests/browser/smoke.spec.ts failed while the walk answered "greet": the players panel moved',
+      );
+      expect(outcome.summary).toContain(
+        '- `inputs.wave.whim` in tests/browser/smoke.spec.ts names a field the walk never met in "wave", whose fields it met ' +
+          'are "whom". Name the field by the pick name its rules give it.',
+      );
+      expect(outcome.summary).toContain(
+        '- The panel offered "pledge", and taking it failed: The pot takes seven coins. The walk typed "3" in its field ' +
+          '"coins", as `inputs.pledge.coins` in tests/browser/smoke.spec.ts gives it.',
+      );
+      expect(outcome.summary).not.toContain('refused each of');
+      expect(steps.filter((line) => /: entering "\d+" for "pledge"/.test(line))).toEqual([expect.stringMatching(/: entering "3" for "pledge", from `inputs`$/)]);
+    },
+  );
+
   it('fails a spec that passes without walking the game', async () => {
     const { outcome } = await smokeOf(false, {
       'tests/browser/smoke.spec.ts': "import { test } from '@playwright/test';\n\ntest('opens nothing', () => {});\n",

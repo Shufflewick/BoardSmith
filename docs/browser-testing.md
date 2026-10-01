@@ -383,7 +383,6 @@ markers this page documents, so it keeps up with any game without knowing it:
   two of its corners is such a surface, and is aimed at the same way. Nothing in
   the game needs to change for this: the hook already says which choice the
   surface stands for, and `aria-disabled` already says it is refused. An empty text
-<<<<<<< HEAD
   or number field (the panel names its pick in `data-bs-pick`) is filled with the
   value the spec's `inputs` give that field, when they give one; see
   [Values the game checks](#values-the-game-checks-inputs) (#470). Otherwise an
@@ -393,20 +392,10 @@ markers this page documents, so it keeps up with any game without knowing it:
   `validate` message, or a refusal it throws for the player to read), the walk
   takes the action again with the next number up, three numbers in all, and
   neither the refusal nor the error toast that repeats it is a problem (#466). A
-  failure the engine words as an error in the game's rules is a crash, and is
+  number from `inputs` is never moved up: the game refusing it fails the walk.
+  A failure the engine words as an error in the game's rules is a crash, and is
   reported at once. Each press is narrated (`smoke step 4: pressing "Done" for
   "kindle"`).
-- A press a toast lies over waits for the toast to go, as a player would, then
-  presses again.
-=======
-  field is filled with "smoke test" and an empty number field with a value its
-  own `min`, `max` and `step` accept: its least value, else 1 (#465). When the
-  game refuses that number with its own words (a `validate` message, or a
-  refusal it throws for the player to read), the walk takes the action again
-  with the next number up, three numbers in all, and neither the refusal nor the
-  error toast that repeats it is a problem (#466). A failure the engine words as
-  an error in the game's rules is a crash, and is reported at once. Each press is
-  narrated (`smoke step 4: pressing "Done" for "kindle"`).
 - A press a toast lies over reads the toast (an error toast is a problem like
   any other), waits for it to go, as a player would, then presses again. A
   control or panel button a redraw takes away for a moment is looked for again
@@ -414,7 +403,6 @@ markers this page documents, so it keeps up with any game without knowing it:
   walk can only see by scrolling it out from under a bar fixed along the edge of
   the page (the action panel) is scrolled to the middle, the top or the bottom
   until it shows.
->>>>>>> main
 - The walk gives up on an open action, reports it, and presses its Cancel when
   the panel offers nothing to press, when three presses in a row change nothing,
   when a press brings the panel back to a state it showed before (the walk
@@ -605,7 +593,12 @@ The walk fails on everything it would fail on without them:
   The action stays required, so an input that never gives a value fails the
   walk, naming the input.
 - A function that throws fails the walk, naming the input. So does an input for
-  an action `actions` does not list, and a blank text value.
+  an action `actions` does not list, a blank text value, and a value for a
+  number field that is not a number.
+- An input naming a field the walk never met in its action fails the walk once
+  the walk has met any of that action's fields or taken it, naming the fields
+  it met: a misspelt pick name would otherwise leave the walk typing its own
+  value there.
 
 It walks the UI players get: the `defaultUI` entry in `src/ui/uis.ts`, not a
 `devUI`. Board tests stand in for the shell with `renderAsSeat`,

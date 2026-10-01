@@ -187,6 +187,7 @@ function newWalk(options: SmokeTestOptions): SmokeWalk {
     stalls: [],
     inputs: { ...options.inputs },
     wanting: new Map(),
+    fieldsMet: new Map(),
   };
 }
 
@@ -923,24 +924,24 @@ async function fillAnEmptyField(answering: Answering): Promise<void> {
 
 /**
  * The value to type in the open action's empty `field`: the spec's input for its pick (#470), else
- * the walk's own. Undefined, with the answering stopped (`Answering.stop`), when the spec's input
- * gives no value yet or fails.
+ * the walk's own, recording the field as met (`SmokeWalk.fieldsMet`). Undefined, with the answering
+ * stopped (`Answering.stop`), when the spec's input gives no value yet or fails.
  */
 async function valueToType(answering: Answering, field: Control): Promise<TypedValue | undefined> {
   const { frame, walk, memory, name } = answering;
   const pick = await field.target.evaluate((input) => input.closest('[data-bs-pick]')?.getAttribute('data-bs-pick') ?? '', undefined, {
     timeout: PRESS_MS,
   });
-  const given = await inputFor(walk.inputs, name, pick, inputView(frame));
+  walk.fieldsMet.get(name)?.add(pick);
+  const kind = (await field.target.getAttribute('type', { timeout: PRESS_MS })) === 'number' ? 'number' : 'text';
+  const given = await inputFor(walk.inputs, name, pick, kind, inputView(frame));
   if (given !== undefined) {
-    if ('value' in given) return { field: pick, value: given.value, from: 'inputs' };
+    if ('value' in given) return { field: pick, value: given.value, from: 'inputs', kind };
     answering.stop = 'wanting' in given ? { wanting: pick } : given;
     return undefined;
   }
-  if ((await field.target.getAttribute('type', { timeout: PRESS_MS })) !== 'number') return { field: pick, value: 'smoke test', from: 'walk' };
-  // Only a number the walk chose is moved up when the game refuses it: one from `inputs` is the spec's answer.
-  memory.numbered.add(name);
-  return { field: pick, value: await field.target.evaluate(numberToEnter, memory.refused.get(name) ?? 0, { timeout: PRESS_MS }), from: 'walk' };
+  if (kind === 'text') return { field: pick, value: 'smoke test', from: 'walk', kind };
+  return { field: pick, value: await field.target.evaluate(numberToEnter, memory.refused.get(name) ?? 0, { timeout: PRESS_MS }), from: 'walk', kind };
 }
 
 /** {@link answerOneChoice}, given the time a pick's choices take to arrive from the game. */
@@ -995,6 +996,7 @@ async function finishOpenAction(frame: Frame, walk: SmokeWalk, memory: WalkMemor
   const where = `at step ${step}${memory.dealt === null ? '' : ` of the game dealt from seed "${memory.dealt}"`}`;
   const trail = startAnswering(name, where, await openActionState(frame));
   memory.typed.delete(name);
+  if (!walk.fieldsMet.has(name)) walk.fieldsMet.set(name, new Set());
   while ((await readOffers(frame, walk)).open === name) {
     const answer = await answerWhenOffered(answering);
     if (answering.stop !== undefined) {
@@ -1293,7 +1295,6 @@ function newMemory(seed: string | null): WalkMemory {
     dialogControls: new Map(),
     closers: new Set(),
     reopened: new Map(),
-    numbered: new Set(),
     refused: new Map(),
     refusals: new Set(),
     typed: new Map(),
