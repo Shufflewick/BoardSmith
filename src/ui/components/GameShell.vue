@@ -48,7 +48,7 @@ import { useZoomPreview } from '../composables/useZoomPreview';
 import { useAutoZoom, SETTLE_MS } from '../composables/useAutoZoom';
 import { useToast } from '../composables/useToast';
 import type { ControllerActionResult } from '../composables/useActionController';
-import type { GameState, FlowState } from '../../client/types.js';
+import type { GameState, PublicFlowState } from '../../client/types.js';
 import turnNotificationSound from '../assets/turn-notification.mp3';
 import { usePlatformTransport } from '../composables/usePlatformTransport.js';
 import { useLobby } from '../composables/useLobby.js';
@@ -567,7 +567,7 @@ const gameView = computed(() => {
 // passed, correctly isViewingHistory-gated `availableActions`/`isMyTurn`
 // props GameShell already computes for the auto-UI ActionPanel) now sees the
 // gap loudly (null) instead of silently-wrong live data.
-type DisplayedGameState = Omit<GameState, 'flowState'> & { flowState: FlowState | null };
+type DisplayedGameState = Omit<GameState, 'flowState'> & { flowState: PublicFlowState | null };
 const displayedState = computed<DisplayedGameState | null>(() => {
   if (timeTravelState.value) {
     return state.value ? { ...state.value, state: timeTravelState.value, flowState: null } : null;

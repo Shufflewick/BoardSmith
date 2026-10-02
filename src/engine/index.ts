@@ -213,6 +213,7 @@ export {
   turnSequence,
   orderSeatsByTurn,
   flowBoundaryKey,
+  toPublicFlowState,
   MIN_STEP_TIME_LIMIT_MS,
 } from './flow/index.js';
 
@@ -244,6 +245,7 @@ export type {
   TurnOrderConfig,
   SeatActivityState,
   BoundaryKeyState,
+  PublicFlowState,
 } from './flow/index.js';
 
 // Utilities (serialization, snapshots, replays, action helpers, dev state)

@@ -376,15 +376,27 @@ const T0 = 1_800_000_000_000;
 /** What the schedule caps see: a world with no timers pending. */
 const NO_TIMERS = { unkeyed: 0, keys: [], worldPending: 0 };
 
+/** Who holds which seat in this test's world. */
+const SEATS = new Map([
+  ['alice', 1],
+  ['bob', 2],
+]);
+
 function launch() {
-  return createWorld({
-    definition: gameDefinition,
-    seed: 'test-world',
-    seats: new Map([
-      ['alice', 1],
-      ['bob', 2],
-    ]),
-  });
+  return createWorld({ definition: gameDefinition, seed: 'test-world', seats: SEATS });
+}
+
+/**
+ * WHEN THIS SEAT LAST ACTED, as a host would stamp it.
+ *
+ * A real host keeps a watermark per seat and hands it in with every offer and
+ * every command, so a prompt can say how long a player has been away. In this
+ * test's world, recording began at \`T0\` and no seat has acted since.
+ */
+function freshActivity(player: string) {
+  const seat = SEATS.get(player);
+  if (seat === undefined) throw new Error(\`"\${player}" holds no seat in this test's world.\`);
+  return { seat, at: null, since: T0 };
 }
 
 type Runner = ReturnType<typeof launch>['runner'];
@@ -441,7 +453,7 @@ async function offersFor(runner: Runner, player: string) {
     unrecorded,
     noBoxes,
   );
-  return runner.offersFor(player, { now: T0, presence: [1] });
+  return runner.offersFor(player, { now: T0, presence: [1], activity: freshActivity(player) });
 }
 
 /**
@@ -451,6 +463,10 @@ async function offersFor(runner: Runner, player: string) {
  * in the order its author wrote them. It ends when the runner asks for nothing,
  * and it needs no ceiling, because the walk is as long as the action's own
  * steps.
+ *
+ * \`about\` is whose activity the dispatch carries: the acting seat for a
+ * player's command, and the OWNER of the event for the clock's, which is the
+ * seat whose command armed it. Null only for an event the world itself owns.
  */
 async function perform(
   runner: Runner,
@@ -458,6 +474,7 @@ async function perform(
   command: Command,
   timing: { due: number; missedCount: number } | null = null,
   arrivedAt: number = T0,
+  about: string | null = player,
 ) {
   const answered = await walkDeclaration(
     (supplied, declared) =>
@@ -482,6 +499,7 @@ async function perform(
     arrivedAt,
     allowance: NO_TIMERS,
     presence: player === null ? [] : [1],
+    activity: about === null ? null : freshActivity(about),
     // WHAT THE WALK COLLECTED, and nothing else: the loop hands back exactly
     // what this takes, so the two halves cannot come apart.
     ...answered,
@@ -492,8 +510,10 @@ describe('the world', () => {
   it('gives every seat a plot at genesis, once in the world\\'s lifetime', async () => {
     const { runner, seatCount } = launch();
     const genesis = await runner.genesis();
-    expect(Object.keys(genesis)).toHaveLength(seatCount);
-    expect(genesis[plotPartition(1)]).toBeDefined();
+    expect(Object.keys(genesis.partitions)).toHaveLength(seatCount);
+    expect(genesis.partitions[plotPartition(1)]).toBeDefined();
+    // The id counter genesis left off at, which a host stores beside the bytes.
+    expect(genesis.nextElementId).toBeGreaterThan(0);
   });
 
   it('offers a seat the rows of its own plot, as elements it can click', async () => {
@@ -550,7 +570,7 @@ describe('the world', () => {
         'alice',
         {},
         { kind: 'arrival', now: T0 },
-        [],
+        { declaredActivity: [], declaredNotices: [] },
       ),
     ).rejects.toThrow();
   });
@@ -567,6 +587,8 @@ describe('the world', () => {
       // that got no call of their own.
       { due: T0 + RIPEN_MS, missedCount: 2 },
       T0 + RIPEN_MS,
+      // Alice's tend armed this ripening, so it is hers.
+      'alice',
     );
     // ONE OCCURRENCE OF WORK, THREE OCCURRENCES OF GROWTH.
     expect(result.events).toEqual([
