@@ -509,18 +509,21 @@ export class GameElement<G extends Game = any, P extends Player = any> {
   constructor(ctx: Partial<ElementContext>) {
     this._ctx = ctx as ElementContext;
 
-    // Initialize sequence if this is the root
-    if (this._ctx.sequence === undefined) {
-      this._ctx.sequence = 0;
-    }
-
     // Initialize class registry as Map
     if (!this._ctx.classRegistry) {
       this._ctx.classRegistry = new Map();
     }
 
-    // Create tree structure with unique ID
-    const id = this._ctx.sequence++;
+    // The next creation-counter value, made into an id that carries no count
+    // (#447). `Game` sets up both before its own root element is built.
+    if (this._ctx.ids === undefined) {
+      throw new Error(
+        `Cannot construct ${this.constructor.name} outside a game: an element takes its id from ` +
+          `the game it belongs to. Create it through the game instead, for example ` +
+          `game.create(${this.constructor.name}, 'name') or space.create(${this.constructor.name}, 'name').`,
+      );
+    }
+    const id = this._ctx.ids.mint(this._ctx.sequence++);
     this._t = {
       children: [],
       id,

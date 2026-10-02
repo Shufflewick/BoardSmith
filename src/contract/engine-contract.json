@@ -1,8 +1,8 @@
 {
-  "revision": 116,
+  "revision": 117,
   "bundleProtocol": 2,
   "surfaceHash": "3d6d28a5d3c36fcd",
-  "payloadHash": "e461d77424eadcb6",
+  "payloadHash": "dc3ebe29069b1bfd",
   "formatHash": "0058593e7cc80205",
   "history": [
     {
@@ -988,6 +988,15 @@
       "payloadHash": "e461d77424eadcb6",
       "formatHash": "0058593e7cc80205",
       "summary": "visibleAttributes now names a game's own fields only: an element's and a player's engine fields (name, seat, color, colorLabel, status, owner, position, art, layout) always reach other seats, and a whitelist naming one is refused (#448)"
+    },
+    {
+      "revision": 117,
+      "date": "2026-10-02",
+      "bundleProtocol": 2,
+      "surfaceHash": "3d6d28a5d3c36fcd",
+      "payloadHash": "dc3ebe29069b1bfd",
+      "formatHash": "0058593e7cc80205",
+      "summary": "Table-game element ids are now opaque (Speck32/64 of the creation counter keyed from the seed) instead of the counter itself, so a seat cannot count creations hidden from it; a saved table state restores only into a game built from its own seed, and table snapshots saved before this cannot be restored. World ids are unchanged (#447, #482)"
     }
   ]
 }

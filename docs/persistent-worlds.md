@@ -287,7 +287,8 @@ that then refuses leaves an empty root rather than a root nothing recorded.
 #### A created root's identity is durable
 
 Nothing above is your concern as a game author, and it is written down because
-it decides what a HOST must do. Element ids come from one counter per world, and
+it decides what a HOST must do. Element ids come from one counter per world (a
+world's id IS its counter value, unlike a table game's opaque one; #482), and
 a world's ids outlive the process that minted them -- but only a fraction of the
 partitions holding them is ever resident, which is the whole point of this mode.
 So the counter cannot be rebuilt from what happens to be loaded: a host that

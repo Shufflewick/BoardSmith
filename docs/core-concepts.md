@@ -497,6 +497,29 @@ Each player receives a filtered view of the game state:
   `contentsVisibleToOwner()`
 - Server-side information is stripped
 
+### Element Ids Carry No Count
+
+Every element has a numeric `id` that never changes and that every view,
+selection, message and animation refers to it by. In a table game the id is
+**opaque**: the game's creation counter run through a block cipher keyed from
+the game's seed. Ids are unique, whole numbers from 0 to 2^32 - 1, and the same
+seed always mints the same ids, so replay, restore, undo and bot search are
+exact. What they are not is ordered: a seat cannot tell from the ids it sees
+which element was created first, or how many elements were created where it
+could not see them. Creating elements in a hidden zone is therefore safe; the
+ids of everything a seat can see stay the same however many were created out of
+its sight (#447).
+
+So never read anything into an id beyond identity: do not sort by it, compare
+it with `<`, or do arithmetic on it. Keep creation order in an attribute of your
+own when a rule needs it. A saved state can only be restored into a game built
+from the seed it was created with, and the restore refuses any other.
+
+A **world**'s ids are still its plain creation counter, because they are
+durable across wakes and a world host may change the seed on every wake. In a
+world, a seat can still count creations it could not see from the gaps in the
+ids it does (#482).
+
 ## Snapshot Mode and World Mode
 
 Everything above describes **snapshot mode**: the whole element tree is

@@ -15,6 +15,9 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { Game, Player, Piece, Space } from '../index.js';
 import type { ElementJSON } from '../index.js';
 
+/** One seed for every game here: a restore must be built from the seed its state was minted under (#447). */
+const SEED = 'seat-attributes';
+
 class Gps extends Piece<TestGame> {}
 
 /**
@@ -90,7 +93,7 @@ describe('static seatAttributes (#269)', () => {
   let character: Character;
 
   beforeEach(() => {
-    game = new TestGame({ playerCount: 2 });
+    game = new TestGame({ playerCount: 2, seed: SEED });
     character = game.create(Character, 'hero');
     character.player = game.getPlayer(1)!;
     character.create(Gps, 'gps');
@@ -183,7 +186,7 @@ describe('static seatAttributes (#269)', () => {
     // A per-seat view is restorable (the MCTS sandbox restores one). The
     // derived attribute must come back derived, not as an own property that
     // could then go stale inside the sandbox.
-    const restored = new TestGame({ playerCount: 2 });
+    const restored = new TestGame({ playerCount: 2, seed: SEED });
     restored.loadSerializedState(game.toJSONForPlayer(1) as ReturnType<Game['toJSON']>);
     const restoredCharacter = restored.first(Character, 'hero')!;
     expect(Object.prototype.hasOwnProperty.call(restoredCharacter, 'coordinates')).toBe(false);

@@ -1,4 +1,5 @@
 import { Space, type ElementEventHandler } from './space.js';
+import { opaqueElementIds, sequentialElementIds } from './element-ids.js';
 import {
   GameElement,
   hasZoneVisibility,
@@ -1054,9 +1055,12 @@ export class Game<
     const seed = options.seed ?? Math.random().toString(36).substring(2);
     const random = createGameRandom(seed);
 
-    // Initialize context with Map for class registry
+    // Initialize context with Map for class registry. Ids are keyed from the
+    // seed so they carry no count of hidden creations (#447); a world's stay
+    // sequential, see `sequentialElementIds`.
     const ctx: Partial<ElementContext> = {
       sequence: 0,
+      ids: options.worldMode === true ? sequentialElementIds : opaqueElementIds(seed),
       classRegistry: new Map(),
       random,
     };
@@ -4932,6 +4936,23 @@ export class Game<
     json: ReturnType<Game['toJSON']>,
     options?: { animationSeqFloor?: number; messageLog?: MessageEntry[] }
   ): void {
+    // Ids are keyed from the seed (#447), and the root is always the first
+    // element a game creates, so a root id that differs from this game's own
+    // says the tree was minted under another key. Adopting it would let the
+    // next element created here take an id the tree already holds.
+    if (json.id !== this._t.id) {
+      throw new Error(
+        `This game state was minted under a different seed: its root element has id ${json.id}, ` +
+          `and a game built from this seed numbers its root ${this._t.id}. Element ids are keyed ` +
+          `by the seed, so elements created after this restore could take ids the state already ` +
+          `holds.\n` +
+          `  Fix: restore it into a game constructed with the seed it was created with (a ` +
+          `snapshot carries it as gameOptions.seed). A state saved by an engine whose ids were ` +
+          `plain creation counts, from before ids were keyed by the seed, cannot be restored; ` +
+          `start that game again.`
+      );
+    }
+
     // Restore game-level state from JSON. `messages`/`settings` are adopted
     // here by reference but rebuilt into fresh objects (with element/player
     // refs and Map/Set shapes resolved) by `resolveElementReferences(this)`
@@ -5175,12 +5196,17 @@ export class Game<
   }
 
   /**
-   * Create a game from serialized JSON
+   * Create a game from serialized JSON.
+   *
+   * @param seed - The seed the serialized game was created with. Element ids
+   *   are keyed by it (#447), so a game built from any other seed could mint an
+   *   id the restored tree already holds, and the restore refuses it.
    */
   static restoreGame<G extends Game>(
     json: ReturnType<G['toJSON']>,
     GameClass: new (options: GameOptions) => G,
-    classRegistry: Map<string, ElementClass>
+    classRegistry: Map<string, ElementClass>,
+    seed: string,
   ): G {
     // Count players from serialized children (players are part of the element
     // tree). Matched structurally via isPlayerJSON — matching the class name
@@ -5200,6 +5226,7 @@ export class Game<
     const game = constructGame(GameClass, {
       playerCount,
       playerNames,
+      seed,
     });
 
     // Merge class registry
