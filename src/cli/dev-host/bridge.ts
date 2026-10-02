@@ -263,8 +263,9 @@ export function translateOp(
 
 /**
  * Shape an OpResult into the response envelope the embedded controller expects
- * for a given wire op (mirrors the DO's per-op `serverX` handlers). Read-only
- * `resolve_choices` returns the full result (choices/validElements/multiSelect).
+ * for a given wire op (mirrors the DO's per-op `serverX` handlers). Every case
+ * is an allowlist: the reply goes to the one seat that asked, and the op result
+ * it is cut from carries every seat's view and the unredacted snapshot.
  */
 export function shapeResult(
   wireOp: string,
@@ -283,7 +284,17 @@ export function shapeResult(
         message: result.message,
       };
     case 'resolve_choices':
-      return result as unknown as Record<string, unknown>;
+      // The pick's answer and nothing else (#450). The op result also carries
+      // the state envelope -- every seat's view, the spectator view and the
+      // unredacted snapshot -- and this reply goes to ONE seat.
+      if (!result.success) return { success: false, error: result.error, errorCode: result.errorCode };
+      return {
+        success: true,
+        choices: result.choices,
+        validElements: result.validElements,
+        multiSelect: result.multiSelect,
+        warnings: result.warnings,
+      };
     case 'selection_step':
       if (!result.success) return { success: false, error: result.error, errorCode: result.errorCode };
       return {
