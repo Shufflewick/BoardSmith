@@ -261,16 +261,6 @@ const RESERVED_KEY_REASONS: Record<string, string> = {
 };
 
 /**
- * Attributes the ENGINE owns on every element, whatever a game's
- * `visibleAttributes` says about them (#19).
- *
- * These are structure, not game data: identity, ownership and layout, read by
- * the engine itself (`getEffectiveOwner`, seat lookup, turn order, the
- * renderers). A redacted restore leaves them alone — withholding them would
- * not withhold a secret, it would take the tree apart. A game's own secrets
- * are never in this list.
- */
-/**
  * The attribute a per-seat view puts on an element the seat cannot see.
  *
  * `toJSONForPlayer` replaces such an element with a placeholder carrying this
@@ -307,10 +297,10 @@ export type SeatAttributeDerivation<E extends GameElement = any> = (
  * Both are authoring mistakes and both are refused at the first projection.
  */
 function assertSeatAttributeName(element: GameElement, name: string, className: string): void {
-  if (name.startsWith('_') || name.startsWith('$') || ENGINE_OWNED_ATTRIBUTES.has(name)) {
+  if (name.startsWith('_') || name.startsWith('$') || isEngineOwnedAttribute(element, name)) {
     throw new Error(
       `${className}.seatAttributes.${name} names an attribute the engine owns.\n` +
-      `  Engine-owned names (${[...ENGINE_OWNED_ATTRIBUTES].join(', ')}) and names starting with "_" or "$" ` +
+      `  Engine-owned names (${engineOwnedAttributeNames(element).join(', ')}) and names starting with "_" or "$" ` +
       `are structure the engine reads for itself.\n` +
       `  Fix: derive a different name (for example "${name}Readout").`
     );
@@ -353,12 +343,68 @@ function assertSeatAttributeSerializable(value: unknown, path: string, describe:
   }
 }
 
-const ENGINE_OWNED_ATTRIBUTES: ReadonlySet<string> = new Set([
-  // GameElement: identity, ownership, grid position, artwork.
-  'name', 'player', 'row', 'column', '$image', '$images',
-  // Player: seat identity, liveness (TurnOrder reads it) and seat colour.
-  'seat', 'status', '$type', 'color', 'colorLabel',
+/**
+ * The layout descriptors the renderers read: pure topology, never identity.
+ *
+ * Every `$`-key an engine element class declares is either in here or is one
+ * of the two value-bearing image keys (`$image`, `$images`), and
+ * `image-leak.test.ts` fails when a new one is added to neither. A hidden
+ * element's placeholder keeps exactly these, so it still lays out.
+ */
+export const LAYOUT_ATTRIBUTES: ReadonlySet<string> = new Set([
+  '$type', '$layout',
+  '$direction', '$gap', '$overlap', '$fan', '$fanAngle', '$align',
+  '$rowLabels', '$columnLabels', '$rowCoord', '$colCoord',
+  '$hexOrientation', '$coordSystem', '$qCoord', '$rCoord', '$sCoord',
+  '$hexSize',
 ]);
+
+/**
+ * Attributes the ENGINE owns on every element, whatever a game's
+ * `visibleAttributes` says about them (#19, #448).
+ *
+ * These are structure, not game data: identity, ownership, grid position,
+ * artwork and layout, read by the engine itself (`getEffectiveOwner`, seat
+ * lookup, the renderers). A visible element always carries them, a game's
+ * whitelist cannot withhold them, and a redacted restore leaves them alone:
+ * withholding them would not withhold a secret, it would take the tree apart.
+ * A game that must keep one of these from a seat hides the ELEMENT.
+ */
+const ELEMENT_ENGINE_ATTRIBUTES: ReadonlySet<string> = new Set([
+  'name', 'player', 'row', 'column', '$image', '$images', ...LAYOUT_ATTRIBUTES,
+]);
+
+/**
+ * What the engine owns on a PLAYER besides {@link ELEMENT_ENGINE_ATTRIBUTES}:
+ * seat identity, liveness (turn order reads it) and seat colour. Only on a
+ * player: a game's own element may name a field `seat` or `color` and keep it
+ * to itself.
+ *
+ * `visible-attributes-engine-fields.test.ts` holds this equal to what a bare
+ * `Player` sends, so a field the engine adds to `Player` is classified here,
+ * by a decision, before any game can withhold it by accident.
+ */
+const PLAYER_ENGINE_ATTRIBUTES: ReadonlySet<string> = new Set([
+  'seat', 'status', 'color', 'colorLabel',
+]);
+
+/**
+ * Does the ENGINE own `key` on `element`? (#19, #448)
+ *
+ * The one statement of which attributes a game's `static visibleAttributes`
+ * may not name, may not withhold, and a redacted restore may not take away.
+ */
+export function isEngineOwnedAttribute(element: GameElement, key: string): boolean {
+  return ELEMENT_ENGINE_ATTRIBUTES.has(key) || (isPlayerElement(element) && PLAYER_ENGINE_ATTRIBUTES.has(key));
+}
+
+/** Every attribute name the engine owns on `element`, for messages. */
+function engineOwnedAttributeNames(element: GameElement): string[] {
+  return [
+    ...ELEMENT_ENGINE_ATTRIBUTES,
+    ...(isPlayerElement(element) ? PLAYER_ENGINE_ATTRIBUTES : []),
+  ];
+}
 
 export class GameElement<G extends Game = any, P extends Player = any> {
   /** Element name for identification and queries */
@@ -1367,7 +1413,7 @@ export class GameElement<G extends Game = any, P extends Player = any> {
     const withheld = Object.keys(element).filter((key) => (
       !key.startsWith('_') &&
       !unserializable.has(key) &&
-      !ENGINE_OWNED_ATTRIBUTES.has(key) &&
+      !isEngineOwnedAttribute(element, key) &&
       !isKnown(key) &&
       !(key in json.attributes)
     ));

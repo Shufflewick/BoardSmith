@@ -332,7 +332,7 @@ describe("#408/#411/#413 -- which seats hold the same projection", () => {
 
   it("refuses for a class that withholds attributes from non-owners, and is right to", () => {
     class Strongbox extends Stall {
-      static override visibleAttributes = ['name'];
+      static override visibleAttributes: string[] = [];
     }
     class StrongboxPlaza extends PlazaGame {
       constructor(options: GameOptions) {

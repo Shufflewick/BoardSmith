@@ -1605,8 +1605,13 @@ export async function computePayloadHash(): Promise<string> {
     defineFlow, actionStep, simultaneousActionStep, sequence, eachPlayer,
   } = engine;
 
+  // A player that keeps one game field to itself (#448). The other seat's view
+  // of it must still carry every engine field (name, seat, colour, status), so
+  // a change to which fields a whitelist may withhold moves this hash.
   class FixturePlayer extends Player<any, any> {
+    static visibleAttributes = ['hasBid'];
     hasBid = false;
+    secretPlan = 'hold';
   }
 
   class FixtureCard extends Piece<any> {

@@ -134,12 +134,13 @@ hand.contentsVisibleToOwner();
 
 ### Attribute Visibility
 
-`static visibleAttributes` whitelists which attributes of an element are sent
-to non-owners (players other than the element's effective owner, and
-spectators). When declared, every attribute NOT in the list is redacted from
-the game view for everyone except the owner. When left `undefined` (the
-default), every attribute stays visible to everyone — this is public-by-default,
-so existing custom attributes keep working with zero configuration.
+`static visibleAttributes` whitelists which of YOUR GAME's attributes of an
+element are sent to non-owners (players other than the element's effective
+owner, and spectators). When declared, every game attribute NOT in the list is
+redacted from the game view for everyone except the owner. When left
+`undefined` (the default), every attribute stays visible to everyone — this is
+public-by-default, so existing custom attributes keep working with zero
+configuration.
 
 ```typescript
 class Card extends BaseCard {
@@ -150,12 +151,33 @@ class Card extends BaseCard {
   // Non-owners only ever see suit and rank; secretValue is stripped server-side
   static visibleAttributes = ['suit', 'rank'];
 }
+
+class MyPlayer extends Player<MyGame, MyPlayer> {
+  score = 0;
+  secretPlan = '';     // only this seat sees it
+
+  // The engine's own player fields are sent anyway; list only your own.
+  static visibleAttributes = ['score'];
+}
 ```
+
+**The list names your game's fields, never the engine's.** Every element
+always carries what the engine owns -- its `name`, owner (`player`), grid
+position (`row`, `column`), artwork (`$image`, `$images`) and layout
+(`$type`, `$direction`, ...) -- and a player also its `seat`, `color`,
+`colorLabel` and `status`. A whitelist cannot withhold them, so an opponent's
+name and colour stay on the table whatever the game lists, and a field the
+engine adds later reaches every seat without each game re-listing it. Naming
+one of them in `visibleAttributes` is refused with an error that says which,
+because such a list would read as though the game decided that field's
+audience. (A game's own field that happens to be called `seat` or `color` on
+an element that is not a player is the game's, and the list governs it.)
 
 This is attribute-level redaction, not element-level hiding — the element
 itself (and its whitelisted attributes) is still present in the view. To hide
-an entire element or an entire zone's contents, use the element/zone
-visibility controls below instead.
+an entire element or an entire zone's contents -- including where it is, who
+owns it and what it looks like -- use the element/zone visibility controls
+below instead.
 
 **A hidden ELEMENT withholds everything, not just the non-whitelisted.** An
 element the view cannot see (`showOnlyTo` / `hideFrom`, or any child of a
@@ -171,8 +193,8 @@ particular hand without seeing what it is.
 your `Game` subclass and every root field outside the list is withheld from
 every seat, on the wire and on restore. Fields the ENGINE owns on the root
 (`phase`, `settings`, `tutorialProgress` and the rest) are never swept up by
-that list: their audience is the engine's to decide, and it narrows the
-per-seat ones itself.
+that list, and naming one in it is refused: their audience is the engine's to
+decide, and it narrows the per-seat ones itself.
 
 ```typescript
 class MyGame extends Game<MyGame, MyPlayer> {

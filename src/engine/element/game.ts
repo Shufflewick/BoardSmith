@@ -1,5 +1,14 @@
 import { Space, type ElementEventHandler } from './space.js';
-import { GameElement, hasZoneVisibility, isPlayerElement, readDynamicAttribute, registerElementClass, HIDDEN_PLACEHOLDER_ATTRIBUTE } from './game-element.js';
+import {
+  GameElement,
+  hasZoneVisibility,
+  isEngineOwnedAttribute,
+  isPlayerElement,
+  readDynamicAttribute,
+  registerElementClass,
+  HIDDEN_PLACEHOLDER_ATTRIBUTE,
+  LAYOUT_ATTRIBUTES,
+} from './game-element.js';
 import { Piece } from './piece.js';
 import { Card } from './card.js';
 import { Hand } from './hand.js';
@@ -423,23 +432,42 @@ export class RandomnessForbiddenError extends PlayerFacingError {
 // ---------------------------------------------------------------------------
 
 /**
- * Allowlist of pure layout/topology $-keys that are safe to broadcast to a
- * viewer who cannot see a hidden element's identity.  All other $-keys are
- * treated as potentially sensitive and dropped (fail-safe).
- *
- * Value-bearing keys ($image, $images) are handled separately inside
- * redactHiddenElementAttrs.
- *
- * Verified against src/engine/element/ on 2026-06-20: these are the
- * complete set of layout-descriptor $-keys declared across the engine.
+ * A class's `static visibleAttributes`, checked to name only GAME attributes
+ * (#448), keyed by class so the check and the Set are built once.
  */
-const SAFE_LAYOUT_KEYS = new Set([
-  '$type', '$layout',
-  '$direction', '$gap', '$overlap', '$fan', '$fanAngle', '$align',
-  '$rowLabels', '$columnLabels', '$rowCoord', '$colCoord',
-  '$hexOrientation', '$coordSystem', '$qCoord', '$rCoord', '$sCoord',
-  '$hexSize',
-]);
+const gameAttributeWhitelists = new WeakMap<object, ReadonlySet<string>>();
+
+/**
+ * The game attributes `element`'s class lets a non-owner see.
+ *
+ * The list names the game's own fields; the engine's are sent whatever it
+ * says. Naming an engine field is refused rather than ignored: such a list
+ * reads as though the game decided that field's audience, and it did not.
+ */
+function gameAttributeWhitelist(element: GameElement, isRoot: boolean): ReadonlySet<string> {
+  const ElementClass = element.constructor as typeof GameElement;
+  const cached = gameAttributeWhitelists.get(ElementClass);
+  if (cached) return cached;
+
+  const names = ElementClass.visibleAttributes ?? [];
+  const engineName = names.find(
+    (name) => isEngineOwnedAttribute(element, name) || (isRoot && isEngineRootField(name)),
+  );
+  if (engineName !== undefined) {
+    throw new Error(
+      `${ElementClass.name}.visibleAttributes names "${engineName}", which the engine owns.\n` +
+      `  visibleAttributes lists only your game's own attributes that other seats may see. The ` +
+      `engine's fields (an element's name, owner, position, artwork and layout; a player's seat, ` +
+      `colour and status${isRoot ? '; the game root\'s own fields' : ''}) are always sent with a visible ` +
+      `element, so listing one decides nothing.\n` +
+      `  Fix: remove "${engineName}" from ${ElementClass.name}.visibleAttributes. To keep it from a ` +
+      `seat, hide the element itself (hideFrom, showOnlyTo, or a hidden zone).`,
+    );
+  }
+  const whitelist = new Set(names);
+  gameAttributeWhitelists.set(ElementClass, whitelist);
+  return whitelist;
+}
 
 /**
  * Redact identity-bearing image refs from the attributes of an element that
@@ -452,7 +480,7 @@ const SAFE_LAYOUT_KEYS = new Set([
  *   $images  → keep only { back } if present; omit $images entirely otherwise
  *   unknown $-keys → dropped (fail-safe)
  *   non-$ keys → dropped (callers seed __hidden/childCount themselves)
- *   SAFE_LAYOUT_KEYS → copied through as-is
+ *   LAYOUT_ATTRIBUTES → copied through as-is (pure topology, never identity)
  */
 function redactHiddenElementAttrs(attrs: Record<string, unknown>): Record<string, unknown> {
   const safe: Record<string, unknown> = {};
@@ -467,7 +495,7 @@ function redactHiddenElementAttrs(attrs: Record<string, unknown>): Record<string
       // If no 'back' key, omit $images entirely (not even an empty object)
       continue;
     }
-    if (SAFE_LAYOUT_KEYS.has(key)) {
+    if (LAYOUT_ATTRIBUTES.has(key)) {
       safe[key] = value;
     }
     // Unknown $-keys and all non-$ keys are dropped (fail-safe)
@@ -4607,21 +4635,25 @@ export class Game<
         const isOwner = isPlayerElement(element)
           ? element.seat === visibilityPosition
           : element.getEffectiveOwner()?.seat === visibilityPosition;
+        // Checked for every seat, the owner's included, so a list naming an
+        // engine field is refused at the first projection of any view.
+        const isRoot = element === this;
+        const whitelist = gameAttributeWhitelist(element, isRoot);
         if (!isOwner) {
-          const whitelist = new Set(ElementClass.visibleAttributes);
-          // #148: on the game ROOT, the engine's own fields are not the game's
-          // to withhold. Each already has a declared audience
-          // (GAME_ROOT_FIELD_AUDIENCE) and the seat-scoped ones are narrowed
-          // further down this method, so sweeping them off the wire with a
-          // game's whitelist withholds no secret and instead breaks the seat's
-          // own state (its `tutorialProgress` vanishing from its own view).
-          const isRoot = element === this;
           const filteredAttrs: Record<string, unknown> = {};
           for (const [key, value] of Object.entries(json.attributes ?? {})) {
-            // `_isCurrent` is framework metadata (Player.toJSON), not a
-            // developer-declared game attribute -- it must always survive
-            // filtering regardless of the whitelist.
-            if (whitelist.has(key) || key === '_isCurrent' || (isRoot && isEngineRootField(key))) {
+            // The whitelist names the GAME's attributes. The engine's own are
+            // not the game's to withhold (#148 on the root, #448 everywhere):
+            // each has an audience the engine settled, and sweeping one off
+            // the wire withholds no secret -- it takes an opponent's name and
+            // colour off the table, or a seat's own `tutorialProgress` out of
+            // its view. `_isCurrent` is framework metadata (Player.toJSON).
+            if (
+              whitelist.has(key) ||
+              key === '_isCurrent' ||
+              isEngineOwnedAttribute(element, key) ||
+              (isRoot && isEngineRootField(key))
+            ) {
               filteredAttrs[key] = value;
             }
           }

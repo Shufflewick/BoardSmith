@@ -1,8 +1,8 @@
 {
-  "revision": 115,
+  "revision": 116,
   "bundleProtocol": 2,
   "surfaceHash": "3d6d28a5d3c36fcd",
-  "payloadHash": "cae65bbab7213c58",
+  "payloadHash": "e461d77424eadcb6",
   "formatHash": "0058593e7cc80205",
   "history": [
     {
@@ -979,6 +979,15 @@
       "payloadHash": "cae65bbab7213c58",
       "formatHash": "0058593e7cc80205",
       "summary": "boardsmith pack names its tarball after the tree it packs instead of the time it ran: <version>-r<revision>-<content hash>, so packing unchanged sources gives the same file and a no-op re-vendor changes nothing (#434). No engine behaviour changed."
+    },
+    {
+      "revision": 116,
+      "date": "2026-10-02",
+      "bundleProtocol": 2,
+      "surfaceHash": "3d6d28a5d3c36fcd",
+      "payloadHash": "e461d77424eadcb6",
+      "formatHash": "0058593e7cc80205",
+      "summary": "visibleAttributes now names a game's own fields only: an element's and a player's engine fields (name, seat, color, colorLabel, status, owner, position, art, layout) always reach other seats, and a whitelist naming one is refused (#448)"
     }
   ]
 }

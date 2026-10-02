@@ -18,7 +18,7 @@ import { RedactedAttributeError } from '../errors.js';
 // substituted default is what a bot's rules read.
 
 class SecretPlayer extends Player<TestGame, SecretPlayer> {
-  static override visibleAttributes = ['seat', 'name', 'status', 'publicScore'];
+  static override visibleAttributes = ['publicScore'];
   publicScore = 0;
   /** Withheld. `0` is a real sector in the reporting game's map. */
   loc = 0;

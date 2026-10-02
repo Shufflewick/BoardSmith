@@ -11,7 +11,7 @@
  * per-seat tree (`game.toJSONForPlayer(seat)`, post-`playerView`,
  * game.ts:2671-2819) — never from a hardcoded field list ('rank'/'suit'/...)
  * and never by trusting the engine's own redaction allowlist
- * (`redactHiddenElementAttrs`'s `SAFE_LAYOUT_KEYS`) as ground truth. This
+ * (`redactHiddenElementAttrs`'s `LAYOUT_ATTRIBUTES`) as ground truth. This
  * closes two blind spots:
  *   1. Unknown/custom per-game attribute names are covered (not just a fixed
  *      identity-field list).
