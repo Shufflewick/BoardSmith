@@ -252,6 +252,8 @@ onUnmounted(() => {
 
 /* ── Popover container ────────────────────────────────────────────────────── */
 .action-help-popover {
+  /* Teleported out of the shell root, so it does not inherit the shell's font (#451). */
+  font-family: var(--bsg-font);
   /* position: fixed provided via inline :style binding (computed from trigger rect) */
   z-index: 60;
   max-width: 240px;

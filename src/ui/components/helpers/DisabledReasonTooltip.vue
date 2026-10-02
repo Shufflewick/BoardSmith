@@ -97,6 +97,8 @@ const style = computed(() => ({
 
 <style scoped>
 .bs-disabled-tip {
+  /* Teleported out of the shell root, so it does not inherit the shell's font (#451). */
+  font-family: var(--bsg-font);
   width: max-content;
   min-width: 80px;
   padding: var(--bsg-s2) var(--bsg-s3);
