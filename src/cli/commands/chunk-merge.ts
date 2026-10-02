@@ -18,15 +18,17 @@
  *      RUN.md, and may not write another chunk's run log. Real numbers are allocated here, on the
  *      combined tree, and every citation of each provisional id is rewritten.
  *   3. On the combined tree, before anything is committed, it re-runs every tree-wide check:
- *      the chunk is verified; the chunks really built alongside it were allowed to be (the
+ *      the chunk is verified; the chunks really built alongside it (not yet verified on the main
+ *      line when the branch left, or merged by chunk-merge since, #442) were allowed to be (the
  *      `parallel-check` pair rule); `ledger-check`; `constraint-check` with its measurement tests;
  *      every verified chunk's sign-off still stands for its code (`assessSignoffs`); and the
  *      project's whole test suite.
  *      Any failure aborts the merge and leaves the main line exactly as it was.
  *   3a. A source file this branch and the main line both edited since the branch left (#403) is
  *      code no designer signed off: each chunk's sign-off saw only its own side. The merge vouches
- *      for it by re-running the own checks of every chunk involved (this one and those built
- *      alongside it whose Build Manifest names the file) on the combined tree: their tests,
+ *      for it by re-running the own checks of every chunk involved (this one and those whose design
+ *      files the main line changed since the branch left, whose Build Manifest names the file) on
+ *      the combined tree: their tests,
  *      `chunk-check` and `claim-quote-check`. If all pass, it records the file, its content hash,
  *      those chunks and the merge in design/MERGE-SIGNOFFS.md, which the sign-off check accepts;
  *      if any fails, the merge is refused naming the check and the chunk. No designer is asked.
@@ -66,7 +68,7 @@ import {
 } from '../lib/ledger-allocation.js';
 import { ledgerCheck } from './ledger-check.js';
 import { type TestRunner, checkConstraints, runVitest } from './constraint-check.js';
-import { assessSignoffs, checkSignoff, chunkCodeFiles } from './chunk-signoff.js';
+import { VERIFIED, assessSignoffs, checkSignoff, chunkCodeFiles } from './chunk-signoff.js';
 import { verifiedAgainstIsCurrent } from './chunk-provenance.js';
 import { checkClaimQuotes } from './claim-quotes.js';
 import { parseSpecManifest } from './test-step-check.js';
@@ -290,8 +292,12 @@ async function allocate(
 // The combined tree: every tree-wide check, run again
 // ---------------------------------------------------------------------------------------------
 
-/** The chunks whose design files the main line changed after this branch left it. */
-async function builtAlongside(ctx: MergeContext): Promise<string[]> {
+/**
+ * The chunks whose design files the main line changed after this branch left it: any chunk whose
+ * signed code the main line may have moved since, so the merge runs its own checks when it vouches
+ * for a file it names (#403). Most of these are only bookkeeping on a chunk long since verified.
+ */
+async function touchedOnMainLine(ctx: MergeContext): Promise<string[]> {
   const design = `${ctx.prefix}${DESIGN_DIR}/`;
   const names = await git(ctx.top, ['diff', '--name-only', ctx.fork, 'HEAD', '--', `${design}chunks/`, `${design}${RUN_LOG_DIR}/`]);
   const slugs = names
@@ -302,10 +308,39 @@ async function builtAlongside(ctx: MergeContext): Promise<string[]> {
   return [...new Set(slugs)].sort();
 }
 
+const MERGE_SUBJECT = /^Merge chunk (\S+) \(/;
+
+/**
+ * Of `touched`, the chunks really built alongside this branch (#442): those not yet verified on
+ * the main line when the branch left it, so the branch never saw them finished, and those a
+ * `chunk-merge` brought in since, whatever they were at the fork. A chunk verified at the fork
+ * whose CHUNK.md or run log was only edited since (a re-sign after another chunk's merge, a
+ * Verified Against rewrite, a re-pointed claim quote) was finished before this branch began, so
+ * the branch was built seeing it.
+ */
+async function builtAlongside(ctx: MergeContext, touched: string[]): Promise<string[]> {
+  const merged = new Set(
+    (await git(ctx.top, ['log', '--first-parent', '--format=%s', `${ctx.fork}..HEAD`]))
+      .split('\n')
+      .map((subject) => MERGE_SUBJECT.exec(subject)?.[1])
+      .filter((s): s is string => s !== undefined),
+  );
+  const alongside: string[] = [];
+  for (const slug of touched) {
+    const atFork = statusOf(await showAt(ctx, ctx.fork, `chunks/${slug}/CHUNK.md`));
+    if (merged.has(slug) || !atFork.startsWith(VERIFIED)) alongside.push(slug);
+  }
+  return alongside;
+}
+
+/** A CHUNK.md's Status, or `missing` when it has none (or there is no CHUNK.md). */
+function statusOf(chunkText: string): string {
+  return /^Status:\s*(.*)$/m.exec(chunkText)?.[1].trim() ?? 'missing';
+}
+
 async function verifiedProblem(ctx: MergeContext): Promise<string[]> {
-  const text = await fs.readFile(chunkMdPath(ctx.projectDir, ctx.slug), 'utf-8').catch(() => '');
-  const status = /^Status:\s*(.*)$/m.exec(text)?.[1].trim() ?? 'missing';
-  if (status.startsWith('verified')) return [];
+  const status = statusOf(await fs.readFile(chunkMdPath(ctx.projectDir, ctx.slug), 'utf-8').catch(() => ''));
+  if (status.startsWith(VERIFIED)) return [];
   return [
     `${ctx.slug} is "${status}", not verified. A chunk's branch is merged once the chunk has closed; ` +
       `finish it on its branch first.`,
@@ -373,10 +408,10 @@ async function manifestPaths(projectDir: string, slug: string): Promise<Set<stri
 /**
  * Each source file (outside design/) that the branch changed and the main line also changed after
  * the branch left it, then each one the allocation renumbered, with the chunks, this one or one
- * built alongside it, whose Build Manifest names it. A file no such chunk names has no sign-off
- * for the merge to vouch for.
+ * the main line touched since it left (`touchedOnMainLine`), whose Build Manifest names it. A file
+ * no such chunk names has no sign-off for the merge to vouch for.
  */
-async function sharedSourceFiles(ctx: MergeContext, alongside: string[], renumbered: string[]): Promise<SharedFile[]> {
+async function sharedSourceFiles(ctx: MergeContext, touched: string[], renumbered: string[]): Promise<SharedFile[]> {
   const mainChanged = new Set((await git(ctx.top, ['diff', '--name-only', ctx.fork, 'HEAD'])).split('\n'));
   const design = `${ctx.prefix}${DESIGN_DIR}/`;
   const both = ctx.changed
@@ -388,7 +423,7 @@ async function sharedSourceFiles(ctx: MergeContext, alongside: string[], renumbe
   ];
   if (files.length === 0) return [];
   const manifests: Array<[string, Set<string>]> = [];
-  for (const slug of [ctx.slug, ...alongside]) manifests.push([slug, await manifestPaths(ctx.projectDir, slug)]);
+  for (const slug of [ctx.slug, ...touched]) manifests.push([slug, await manifestPaths(ctx.projectDir, slug)]);
   return files
     .map((file) => ({ ...file, chunks: manifests.filter(([, paths]) => paths.has(file.path)).map(([slug]) => slug).sort() }))
     .filter((file) => file.chunks.length > 0);
@@ -581,8 +616,9 @@ async function mergeLocked(ctx: MergeContext, runTests: TestRunner): Promise<Chu
     ]);
   }
   const { allocated, refusals, renumbered } = await allocate(ctx);
-  const alongside = await builtAlongside(ctx);
-  const shared = await sharedSourceFiles(ctx, alongside, renumbered);
+  const touched = await touchedOnMainLine(ctx);
+  const alongside = await builtAlongside(ctx, touched);
+  const shared = await sharedSourceFiles(ctx, touched, renumbered);
   const problems = [
     ...refusals,
     ...(await firstProblems([

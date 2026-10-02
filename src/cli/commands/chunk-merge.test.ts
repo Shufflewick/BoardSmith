@@ -228,6 +228,39 @@ describe('chunkMerge: the combined tree is checked, not the branch alone', () =>
     expect(status()).toBe('');
   });
 
+  it('does not count a chunk verified before the branch left as built alongside it, however its design files were edited since (#442)', async () => {
+    await buildOnBranch('trading', 100);
+    expect((await chunkMerge(main, 'trading', { runTests: budgetRunner })).refusals).toEqual([]);
+    // auctions cites trading's page, but leaves the main line after trading was verified there.
+    await buildOnBranch('auctions', 100);
+    // Bookkeeping on the main line: trading's CHUNK.md and run log are edited, as a re-sign or a
+    // Verified Against rewrite does. Trading's rules are what auctions saw when it left.
+    const chunk = await read(main, 'design/chunks/trading/CHUNK.md');
+    const log = await read(main, 'design/run-log/trading.md');
+    await write(main, {
+      'design/chunks/trading/CHUNK.md': `${chunk}\n<!-- re-pointed after another chunk's merge -->\n`,
+      'design/run-log/trading.md': `${log}\n- Note: re-signed\n`,
+    });
+    git(main, 'commit', '-q', '-am', 'bookkeeping on trading');
+
+    const result = await chunkMerge(main, 'auctions', { runTests: budgetRunner });
+    expect(result.refusals).toEqual([]);
+    expect(result.alongside).toEqual([]);
+    expect(status()).toBe('');
+  });
+
+  it('counts a chunk the main line verified after the branch left as built alongside it, however it reached the main line (#442)', async () => {
+    await buildOnBranch('trading', 100);
+    await buildOnBranch('auctions', 100);
+    // Not through chunk-merge: trading was still unverified on the main line when auctions left.
+    git(main, 'merge', '-q', '--no-ff', '-m', 'trading by hand', 'chunk/trading');
+
+    const result = await chunkMerge(main, 'auctions', { runTests: budgetRunner });
+    expect(result.merged).toBe(false);
+    expect(result.refusals.join('\n')).toMatch(/both cite rulebook\/04-trading\.md/);
+    expect(status()).toBe('');
+  });
+
   it("sees the branch's own commits on the combined tree, so a claim pinned to one of them holds (#435)", async () => {
     const trading = await buildOnBranch('trading', 100);
     const closed = git(trading, 'rev-parse', 'HEAD').trim();
