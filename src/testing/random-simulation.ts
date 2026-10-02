@@ -325,7 +325,7 @@ function buildRandomArgs(
   const working: Record<string, unknown> = {};
 
   for (const sel of actionDef.selections) {
-    const optional = sel.optional !== undefined && sel.optional !== false;
+    const optional = Boolean(sel.optional);
     const ctx = { game, player, args: working };
 
     if (sel.type === 'text') {

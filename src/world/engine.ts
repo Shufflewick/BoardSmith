@@ -3558,7 +3558,7 @@ function pruneRoster(
  */
 function askable(first: PickMetadata | undefined): boolean {
   if (first === undefined) return true;
-  return first.optional === true || !candidateless(first);
+  return Boolean(first.optional) || !candidateless(first);
 }
 
 /**

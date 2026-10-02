@@ -261,6 +261,12 @@ describe('auditWorldChoiceCardinality', () => {
     );
   });
 
+  it('treats an empty-string `optional` as required, as the engine does (#476)', async () => {
+    await expect(auditWorldChoiceCardinality(cardinalityWorld(['scrawl']), { seed: 'audit' })).rejects.toThrow(
+      /no seat was offered an action it could take.*'scrawl' asks for text input 'line'/s,
+    );
+  });
+
   it('stops and names the seat when the world refuses to enumerate its offers', async () => {
     await expect(auditWorldChoiceCardinality(cardinalityWorld(['flood']), { seed: 'audit' })).rejects.toThrow(
       /seat 1's offers.*250 candidates.*200/s,
